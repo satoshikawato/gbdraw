@@ -2,6 +2,7 @@ const { test, expect } = require('@playwright/test');
 const { execFileSync } = require('node:child_process');
 const { mkdirSync, readFileSync } = require('node:fs');
 const { join } = require('node:path');
+const { gunzipSync } = require('node:zlib');
 
 const importSession = async (page, bytes, name) => page.evaluate(async ({ bytes, name }) => {
   const file = new File([new Uint8Array(bytes)], name);
@@ -403,6 +404,54 @@ test('one usable member resolves without a dialog and keeps the orient plan insp
   await similarityTab.click();
   await expect(drawer.locator('[data-similarity-alignment-plan-inspector]')).toBeVisible();
   expect(errors).toEqual([]);
+  await expectNoUnhandledRejections(page);
+});
+
+test('released Session 44 schema 7 and catalog 4 load and save through the current writer', async ({ page }, testInfo) => {
+  await captureUnhandledRejections(page);
+  const source = readFileSync(
+    'gbdraw/web/gallery/sessions/HmmtDNA_basic_circular.gbdraw-session.json'
+  );
+  await page.goto('/gbdraw/web/index.html', { waitUntil: 'domcontentloaded' });
+  await page.waitForFunction(() => window.__GBDRAW_APP__);
+  await importSession(page, source, 'HmmtDNA_basic_circular.gbdraw-session.json');
+  const workers = await page.evaluate(() => window.__GBDRAW_DIAGRAM_WORKER_ACTIVITY__ || {
+    constructions: 0, instances: []
+  });
+  expect(workers.constructions).toBe(0);
+  expect(workers.instances).toHaveLength(0);
+
+  const downloadPromise = page.waitForEvent('download');
+  await page.evaluate(() => {
+    window.__GBDRAW_APP__.sessionTitle = 'released-session-44-schema-7';
+    window.__GBDRAW_APP__.saveSessionWithTitle();
+  });
+  const download = await downloadPromise;
+  const savedPath = testInfo.outputPath('released-session-44-current.gbdraw-session.json.gz');
+  await download.saveAs(savedPath);
+  const saved = JSON.parse(gunzipSync(readFileSync(savedPath)).toString('utf8'));
+  expect(saved.version).toBe(44);
+  expect(saved.renderRequest.schema).toBe(8);
+  expect(saved.editorState.featureCatalog.schema).toBe(4);
+  const previous = JSON.parse(source.toString('utf8'));
+  expect(saved.results.map(({ name }) => name)).toEqual(previous.results.map(({ name }) => name));
+  const previewEquivalent = await page.evaluate(({ before, after }) => {
+    const parser = new DOMParser();
+    const normalized = (element) => ({
+      tag: element.tagName,
+      attributes: [...element.attributes]
+        .filter(({ name }) => name !== 'baseProfile' && !name.startsWith('xmlns')) // Sanitizer removes unused declarations.
+        .map(({ name, value }) => [name, value]).sort(([a], [b]) => a.localeCompare(b)),
+      text: [...element.childNodes]
+        .filter(({ nodeType }) => nodeType === Node.TEXT_NODE)
+        .map(({ textContent }) => textContent.trim()).filter(Boolean),
+      children: [...element.children].map(normalized)
+    });
+    const original = parser.parseFromString(before, 'image/svg+xml').documentElement;
+    const retained = parser.parseFromString(after, 'image/svg+xml').documentElement;
+    return JSON.stringify(normalized(original)) === JSON.stringify(normalized(retained));
+  }, { before: previous.results[0].content, after: saved.results[0].content });
+  expect(previewEquivalent).toBe(true);
   await expectNoUnhandledRejections(page);
 });
 

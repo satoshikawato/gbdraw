@@ -30,6 +30,7 @@ from gbdraw.render.track_slot_metadata import (
 )
 from gbdraw.session_io import (
     CURRENT_AUTHORITY_SESSION_MIN_VERSION,
+    CURRENT_SESSION_VERSION,
     CURRENT_WRITER_FORBIDDEN_FEATURE_FIELDS,
     SessionBuildContext,
     SessionFileBinding,
@@ -848,21 +849,35 @@ def _project_session_adjunct_for_current_write(
                     )
                 projected_invocation["fileBindings"] = projected_bindings
         adjunct["cliInvocation"] = projected_invocation
+    editor_state_value = adjunct.get("editorState")
+    if isinstance(editor_state_value, Mapping):
+        editor_state = dict(editor_state_value)
+        catalog = editor_state.get("featureCatalog")
+        if isinstance(catalog, Mapping) and catalog.get("schema") == 3:
+            from gbdraw.web_support.feature_catalog import (
+                promote_legacy_feature_catalog,
+            )
+
+            editor_state["featureCatalog"] = promote_legacy_feature_catalog(catalog)
+            adjunct["editorState"] = editor_state
     web_file_inventory = _project_web_file_inventory(session)
+    config = adjunct.get("config")
+    if source_version < CURRENT_SESSION_VERSION and isinstance(config, Mapping):
+        migrated_config = migrate_persisted_web_state_field_names(config)
+        assert isinstance(migrated_config, Mapping)
+        config = migrated_config
+        adjunct["config"] = config
     if source_version >= CURRENT_AUTHORITY_SESSION_MIN_VERSION:
         return adjunct, web_file_inventory
 
-    config = adjunct.get("config")
     if isinstance(config, Mapping):
-        migrated_config = migrate_persisted_web_state_field_names(config)
-        assert isinstance(migrated_config, Mapping)
         source_files = session.get("files")
         has_source_file_inventory = (
             isinstance(source_files, Mapping) and bool(source_files)
         ) or web_file_inventory is not None
         migrated_config, migrated_files = (
             migrate_legacy_linear_comparison_draft_for_current_writer(
-                migrated_config,
+                config,
                 source_files
                 if isinstance(source_files, Mapping)
                 else (web_file_inventory or {}),

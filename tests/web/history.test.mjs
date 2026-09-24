@@ -514,6 +514,71 @@ const createLayoutPreferences = () => ({
 }
 
 {
+  let artifact = {
+    id: 'before',
+    identity: { fingerprint: 'a'.repeat(64), compactSignature: 'before' },
+    retainedBytes: 128,
+    fileIds: []
+  };
+  let targetDraft = { startCoordinate: 1, reverseComplementOverride: false, anchorIntent: null };
+  const history = createHistoryManager({
+    buildIntent: async () => ({ unrelated: 'pending', targetDraft }),
+    applyIntent: async (intent) => { targetDraft = intent.targetDraft; },
+    buildCheckpoint: () => ({}),
+    applyCheckpoint: async () => {},
+    captureGeneratedArtifactHandle: () => artifact,
+    restoreGeneratedArtifactHandle: async (handle) => { artifact = handle; },
+    compareGeneratedArtifactHandles: (left, right) => (
+      left.identity.fingerprint === right.identity.fingerprint
+      && left.identity.compactSignature === right.identity.compactSignature
+    )
+  });
+  const checkpointOptions = {
+    shouldCommit: (result) => result.status === 'ok',
+    captureIntentCheckpoint: () => structuredClone(targetDraft),
+    restoreIntentCheckpoint: (checkpoint) => { targetDraft = structuredClone(checkpoint); }
+  };
+  await history.initializeIntentBaseline('Atomic artifact baseline');
+  await history.runUndoableArtifactReplacement('Rotate record to feature', async () => {
+    artifact = {
+      id: 'after',
+      identity: { fingerprint: 'b'.repeat(64), compactSignature: 'after' },
+      retainedBytes: 128,
+      fileIds: []
+    };
+    targetDraft = {
+      startCoordinate: 75,
+      reverseComplementOverride: true,
+      anchorIntent: { schema: 1, recordKey: 'record-2' }
+    };
+    return { status: 'ok' };
+  }, checkpointOptions);
+  assert.equal(history.getUndoCount(), 1);
+  await history.undo();
+  assert.equal(artifact.id, 'before');
+  assert.deepEqual(targetDraft, {
+    startCoordinate: 1, reverseComplementOverride: false, anchorIntent: null
+  });
+  await history.redo();
+  assert.equal(artifact.id, 'after');
+  assert.equal(targetDraft.startCoordinate, 75);
+  assert.equal(targetDraft.reverseComplementOverride, true);
+
+  const undoCount = history.getUndoCount();
+  const failed = await history.runUndoableArtifactReplacement(
+    'Rejected record rotation',
+    async (before) => {
+      artifact = before;
+      return { status: 'stale' };
+    },
+    checkpointOptions
+  );
+  assert.deepEqual(failed, { status: 'stale' });
+  assert.equal(targetDraft.startCoordinate, 75);
+  assert.equal(history.getUndoCount(), undoCount);
+}
+
+{
   let value = 0;
   const buildState = async () => ({ value });
   const applyState = async (snapshot) => {

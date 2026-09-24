@@ -251,28 +251,28 @@ test('Gallery renders the Hepatoplasmataceae tutorial and files panels', async (
   expect(pageErrors).toEqual([]);
 });
 
-test('Gallery renders the Vibrio Harveyi-group multi-record tutorial and media', async ({ page }) => {
+test('Gallery renders the two-species Vibrio multi-record tutorial and media', async ({ page }) => {
   const pageErrors = [];
   page.on('pageerror', (error) => pageErrors.push(error.message));
 
   await page.goto(`${baseUrl}/gallery/#vibrio-harveyi-group-collinear`, { waitUntil: 'domcontentloaded' });
-  await expect(page.locator('#selected-title')).toHaveText('Vibrio Harveyi group multi-record collinearity');
+  await expect(page.locator('#selected-title')).toHaveText('Vibrio parahaemolyticus and V. alginolyticus collinearity');
 
   await page.getByRole('tab', { name: 'Tutorial' }).click();
   const tutorialPanel = page.getByRole('tabpanel', { name: 'Tutorial' });
   await expect(
-    tutorialPanel.getByRole('heading', { name: 'Compare every replicon across five Vibrio Harveyi-group assemblies' })
+    tutorialPanel.getByRole('heading', { name: 'Compare both chromosomes from two Vibrio assemblies' })
   ).toBeVisible();
-  await expect(tutorialPanel.getByRole('row', { name: /3.*NZ_CP125877\.1.*1.*3/ })).toBeVisible();
-  await expect(tutorialPanel.getByRole('row', { name: /11.*NC_022359\.1.*5.*2/ })).toBeVisible();
+  await expect(tutorialPanel.getByRole('row', { name: /1.*NC_004603\.1.*1.*1/ })).toBeVisible();
+  await expect(tutorialPanel.getByRole('row', { name: /4.*NC_022359\.1.*2.*2/ })).toBeVisible();
   await expect(tutorialPanel.getByRole('row', { name: 'CDS Rectangle' })).toBeVisible();
   await expect(tutorialPanel.getByRole('row', { name: 'Evidence scope Adjacent pairs' })).toBeVisible();
   await expect(tutorialPanel.getByRole('row', { name: 'Plot Title Blank' })).toBeVisible();
   await expect(tutorialPanel.getByRole('row', { name: 'Definition line: Organism / strain 18; Bold' })).toBeVisible();
   await expect(tutorialPanel.getByRole('row', { name: 'Definition line: Subtitle / title 16; Normal' })).toBeVisible();
-  await expect(tutorialPanel.getByText('The SB1 assembly contains two chromosomes plus plasmid p1')).toBeVisible();
+  await expect(tutorialPanel.getByText('Both assemblies contain two chromosomes')).toBeVisible();
   await expect(
-    tutorialPanel.getByText('A narrow white gap separates each record from the adjacent blocks')
+    tutorialPanel.getByText('A narrow white gap separates each record from the blocks')
   ).toBeVisible();
 
   const mediaImages = tutorialPanel.getByRole('img');
@@ -295,7 +295,7 @@ test('Gallery renders the Vibrio Harveyi-group multi-record tutorial and media',
   await page.getByRole('tab', { name: 'Files' }).click();
   const filesPanel = page.getByRole('tabpanel', { name: 'Files' });
   await expect(filesPanel.getByText('GCF_000196095.1_ASM19609v1_genomic.gbff')).toBeVisible();
-  await expect(filesPanel.getByText('GCF_030060435.1_ASM3006043v1_genomic.gbff')).toBeVisible();
+  await expect(filesPanel.getByText('GCF_000354175.2_ASM35417v2_genomic.gbff')).toBeVisible();
   const svgLink = filesPanel.getByRole('link', { name: 'Interactive SVG', exact: true });
   await expect(svgLink).toBeVisible();
   await expect(filesPanel.getByRole('link', { name: 'Session JSON (gzip)' })).toBeVisible();
@@ -313,10 +313,10 @@ test('Gallery renders the Vibrio Harveyi-group multi-record tutorial and media',
   )?.[1];
   expect(encodedMetadata).toBeTruthy();
   const metadata = JSON.parse(gunzipSync(Buffer.from(encodedMetadata, 'base64')).toString('utf8'));
-  expect(metadata.schema).toBe(3);
+  expect(metadata.schema).toBe(4);
   expect(metadata.items).toHaveLength(1);
-  expect(metadata.items[0].features).toHaveLength(24_945);
-  expect(metadata.items[0].comparisonMatches).toHaveLength(579);
+  expect(metadata.items[0].features).toHaveLength(9_375);
+  expect(metadata.items[0].comparisonMatches).toHaveLength(116);
   await page.getByRole('tab', { name: 'Preview' }).click();
   await expect(page.locator('#preview-note')).toContainText('JavaScript-enabled');
   await expect(page.locator('#demo-frame')).toHaveAttribute('title', /Interactive gbdraw SVG/);

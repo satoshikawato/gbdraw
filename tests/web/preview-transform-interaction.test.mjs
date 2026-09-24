@@ -49,6 +49,7 @@ await copyModule('app/ui.js', 'app/ui.js');
 await copyModule('app/feature-dom.js', 'app/feature-dom.js');
 await copyModule('app/feature-editor/svg-actions.js', 'app/feature-editor/svg-actions.js');
 await copyModule('services/runtime-test-hooks.js', 'services/runtime-test-hooks.js');
+await copyModule('services/feature-identity.js', 'services/feature-identity.js');
 await writeFile(
   join(tempDir, 'app', 'color-utils.js'),
   'export const resolveColorToHex = (value) => value || "#94a3b8";\n',

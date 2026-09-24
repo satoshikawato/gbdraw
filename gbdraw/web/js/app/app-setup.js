@@ -1,6 +1,10 @@
 import { createRulePreparation } from './rule-matching.js';
 import { createDefaultLosatpHitLimits } from '../services/session-active-config-contract.js';
 import { createRecordDisplayControls } from './record-display-options.js';
+import {
+  createFeatureRecordRotationAction,
+  createFeatureRecordRotationWorkflow
+} from './record-display/feature-record-rotation.js';
 import { state, createLinearSeq, normalizeLinearSeqList } from '../state.js';
 import {
   adoptCanonicalRenderArtifacts,
@@ -310,6 +314,7 @@ export const createAppSetup = () => {
     specificRulePresetLoading,
     downloadDpi,
     extractedFeatures,
+    biologicalFeatures,
     selectedFeatureIds,
     selectedFeatureAnchorId,
     featureSelectionStatus,
@@ -2152,6 +2157,8 @@ export const createAppSetup = () => {
   });
   const {
     runAnalysis: runGeneratedDiagramAnalysis,
+    runCommittedCanonicalCandidate,
+    projectCommittedRecordTransform,
     cancelRunAnalysis,
     runLabelReflow,
     refreshCircularRecordOrder,
@@ -2201,6 +2208,64 @@ export const createAppSetup = () => {
       return validateAnnotationRecordTargets(annotationSets, catalog);
     }
   });
+  const resolvePopupRotationFeature = ({ recordKey, biologicalFeatureId }) => {
+    const matchesIdentity = (feature) => (
+      String(feature?.record_key ?? feature?.recordKey ?? '') === recordKey
+      && String(
+        feature?.biological_feature_id ?? feature?.biologicalFeatureId ?? ''
+      ) === biologicalFeatureId
+    );
+    const renderedMatches = extractedFeatures.value.filter(matchesIdentity);
+    if (renderedMatches.length === 1) return renderedMatches[0];
+    const biologicalMatches = biologicalFeatures.value.filter(matchesIdentity);
+    return biologicalMatches.length === 1 ? biologicalMatches[0] : null;
+  };
+  const featureRecordRotationAction = createFeatureRecordRotationAction({
+    recordDisplayControls,
+    getCommittedSession: getCommittedCanonicalSession,
+    projectCommittedRecordTransform,
+    runCommittedCanonicalCandidate,
+    resolveCurrentFeature: resolvePopupRotationFeature,
+    isCurrentFeature: recordDisplayControls.isCurrentFeature
+  });
+  const featureRecordRotation = createFeatureRecordRotationWorkflow({
+    action: featureRecordRotationAction,
+    makeReactive: reactive,
+    onRebind: (feature, identity) => {
+      const popupFeature = clickedFeature.value?.feat;
+      if (!popupFeature) return;
+      const popupRecordKey = String(
+        popupFeature.record_key ?? popupFeature.recordKey ?? ''
+      );
+      const popupFeatureId = String(
+        popupFeature.biological_feature_id ?? popupFeature.biologicalFeatureId ?? ''
+      );
+      if (popupRecordKey !== identity.recordKey
+        || popupFeatureId !== identity.biologicalFeatureId) return;
+      clickedFeature.value.feat = feature;
+      const renderedId = String(
+        feature?.rendered_feature_svg_id
+        ?? feature?.renderedFeatureSvgId
+        ?? feature?.svg_id
+        ?? ''
+      );
+      if (renderedId) clickedFeature.value.svg_id = renderedId;
+    }
+  });
+  watch(clickedFeature, (popup) => {
+    if (popup?.feat) {
+      featureRecordRotation.open({
+        feature: popup.feat,
+        featureLabel: popup.label
+      });
+    } else {
+      featureRecordRotation.close();
+    }
+  }, { flush: 'sync' });
+  const closeFeaturePopup = () => {
+    featureRecordRotation.cancel();
+    clickedFeature.value = null;
+  };
   historySnapshots.setGeneratedArtifactRuntimeOwner({
     capture: () => ({
       ...captureGeneratedArtifactRuntimeState(),
@@ -3773,6 +3838,13 @@ export const createAppSetup = () => {
 
   return {
     recordDisplayControls,
+    featureRecordRotationDraft: featureRecordRotation.draft,
+    setFeatureRecordRotationAnchor: featureRecordRotation.setAnchor,
+    setFeatureRecordRotationOffset: featureRecordRotation.setOffset,
+    setFeatureRecordRotationOrientForward: featureRecordRotation.setOrientForward,
+    placeFeatureAtRecordEnd: featureRecordRotation.placeAtFeatureEnd,
+    applyFeatureRecordRotation: featureRecordRotation.apply,
+    closeFeaturePopup,
     featurePlacementActions: featureActions.placementActions,
     processing,
     processingStatus,

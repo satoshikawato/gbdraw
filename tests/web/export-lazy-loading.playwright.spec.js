@@ -57,7 +57,7 @@ const mountExportFixture = async (page, { interactive = false } = {}) => {
     state.selectedResultIndex.value = 0;
     state.downloadDpi.value = 96;
     state.featureCatalog.value = interactive ? {
-      schema: 3,
+      schema: 4,
       items: [{
         resultIndex: 0,
         resultName: 'lazy-export.svg',
@@ -73,13 +73,16 @@ const mountExportFixture = async (page, { interactive = false } = {}) => {
           type: 'CDS',
           start: 0,
           end: 9,
+          anchorProfile: {
+            precision: 'exact', operator: 'single', partOrder: 'source-forward', strand: 'unstranded'
+          },
           product: 'Lazy export feature'
         }],
         orthogroups: [],
         annotations: [],
         comparisonMatches: []
       }]
-    } : { schema: 3, items: [] };
+    } : { schema: 4, items: [] };
   }, { interactive });
   await expect(page.locator('.origin-top svg')).toBeAttached();
 };

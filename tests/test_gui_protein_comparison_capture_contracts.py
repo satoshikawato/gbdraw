@@ -889,7 +889,7 @@ def test_protein_popup_state_uses_catalog_commit_path() -> None:
     for fragment in (
         "kind: 'collinearityResult'",
         "typedResource: convertedPayload.collinearityResult",
-        "const candidateCatalogAdmission = admitFeatureCatalog(",
+        "const candidateCatalogAdmission = execution.catalogAdmission;",
         "catalogAdmission: candidateCatalogAdmission,",
         "collinearGroups: Array.isArray(candidateCommit.featureState.collinearGroups)",
         "generatedArtifactTransactionOwner.activate(generatedArtifactCandidate,",

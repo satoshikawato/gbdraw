@@ -9,6 +9,7 @@ const {
   generateAndWaitForResult,
   getDiagramWorkerActivity,
   openApp,
+  reveal,
   waitForAppShell
 } = require('./helpers/app-lifecycle.cjs');
 
@@ -271,7 +272,7 @@ test('Circular enabled options render without an undefined-property warning', as
   await openApp(page, { waitForPalette: false });
 
   for (const name of ['Separate Strands', 'Resolve Overlaps']) {
-    const checkbox = page.getByRole('checkbox', { name, exact: true });
+    const checkbox = await reveal(page.getByRole('checkbox', { name, exact: true, includeHidden: true }));
     await expect(checkbox).toBeEnabled();
     const label = checkbox.locator('..');
     await expect.soft(label).toHaveClass(/\btext-slate-700\b/);
@@ -283,7 +284,7 @@ test('Circular enabled options render without an undefined-property warning', as
 test('Show Depth stays disabled until a depth TSV is uploaded', async ({ page }) => {
   await openApp(page, { waitForPalette: false });
 
-  const showDepthCheckbox = page.locator('label:has-text("Show Depth") input[type="checkbox"]').first();
+  const showDepthCheckbox = await reveal(page.locator('label:has-text("Show Depth") input[type="checkbox"]').first());
   await expect(showDepthCheckbox).toBeDisabled();
   await expect(showDepthCheckbox).not.toBeChecked();
 
@@ -2154,6 +2155,7 @@ test('P3 Custom Track drafts survive fresh-page session re-save and Reset histor
     app.sessionTitle = 'p3-drafts-v40';
   }, { genbankText: recordText, nestedStyle: styleOverride });
 
+  await page.locator('summary[aria-label="Layout"]').click();
   await page.evaluate(async () => {
     const app = window.__GBDRAW_APP__;
     if (!app.circularTrackSlotsPanelOpen) app.toggleCircularTrackSlotsPanel();
@@ -2300,6 +2302,7 @@ test('P3 Custom Track drafts survive fresh-page session re-save and Reset histor
   await loadSession(initialPath);
   expect(await browserDraft()).toEqual(expectedDraft);
 
+  await page.locator('summary[aria-label="Layout"]').click();
   await page.evaluate(async () => {
     const app = window.__GBDRAW_APP__;
     if (!app.circularTrackSlotsPanelOpen) app.toggleCircularTrackSlotsPanel();
@@ -2373,6 +2376,7 @@ test('P3 Custom Track drafts survive fresh-page session re-save and Reset histor
   const thirdSession = await readSessionDownload(await thirdDownloadPromise);
   expect(p3Draft(thirdSession)).toEqual(expectedDraft);
 
+  await page.locator('summary[aria-label="Layout"]').click();
   await page.evaluate(async () => {
     const app = window.__GBDRAW_APP__;
     if (!app.circularTrackSlotsPanelOpen) app.toggleCircularTrackSlotsPanel();

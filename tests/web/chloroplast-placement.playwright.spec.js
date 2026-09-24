@@ -1,6 +1,6 @@
 const { test, expect } = require('@playwright/test');
 const fs = require('node:fs/promises');
-const { openApp } = require('./helpers/app-lifecycle.cjs');
+const { openApp, reveal } = require('./helpers/app-lifecycle.cjs');
 
 test('chloroplast multipart placement survives strand and label changes and session restore', async ({ page, browser }, testInfo) => {
   test.setTimeout(240000);
@@ -65,7 +65,7 @@ test('chloroplast multipart placement survives strand and label changes and sess
   await place('rpoC1', 'inward');
   await place('petB', 'outward');
   await generate('02-separated-placement');
-  const strands = page.getByRole('checkbox', { name: 'Separate Strands', exact: true });
+  const strands = await reveal(page.getByRole('checkbox', { name: 'Separate Strands', exact: true, includeHidden: true }));
   await strands.uncheck();
   await generate('03-combined-both');
   await page.locator('summary[aria-label="Labels"]').click();

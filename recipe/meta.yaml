@@ -19,11 +19,15 @@ requirements:
     - wheel
   run:
     - python >=3.10
+    - numpy >=1.23
     - pandas
     - fonttools
     - biopython
     - svgwrite
+    - cairosvg
     - bcbio-gff
+    - tomli
+    - losat ==0.1.0
 
 test:
   imports:
@@ -32,6 +36,8 @@ test:
     - gbdraw --help
     - gbdraw circular --help
     - gbdraw linear --help
+    - cairosvg --help
+    - losat --version
 
 about:
   home: "https://gbdraw.app/" 
@@ -39,14 +45,15 @@ about:
   doc_url: "https://github.com/satoshikawato/gbdraw/blob/main/docs/DOCS.md"
   license: "MIT"
   license_family: "MIT"
-  license_file: "LICENSE.txt"
+  license_file:
+    - "LICENSE.txt"
+    - "LICENSE_LIBERATION_FONTS.txt"
   summary: "A genome diagram generator for microbes and organelles"
   description: |
     gbdraw is a tool for generating high-quality genome diagrams.
     It supports both circular and linear formats.
     A serverless Web GUI is included and runs locally via `gbdraw gui`.
     Visit https://gbdraw.app/ for the online version.
-  fonts_license: "SIL Open Font License (OFL) Version 1.1"
 
 extra:
   recipe-maintainers:

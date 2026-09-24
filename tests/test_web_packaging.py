@@ -22,6 +22,8 @@ import pytest
 from PIL import Image
 
 from gbdraw.session_io import (
+    CURRENT_FEATURE_CATALOG_SCHEMA,
+    CURRENT_SESSION_VERSION,
     LOSAT_DERIVED_CACHE_SCHEMA,
     NUCLEOTIDE_LOSAT_CACHE_SCHEMA,
     PROTEIN_IDENTITY_MANIFEST_SCHEMA,
@@ -481,7 +483,7 @@ def test_interactive_gallery_examples_are_wired() -> None:
         "<i>Nicotiana tabacum</i> chloroplast genome regions",
         "<i>Vibrio nigripulchritudo</i> TUMSAT-TG-2018",
         "Hepatoplasmataceae collinear protein-match blocks",
-        "<i>Vibrio</i> Harveyi group multi-record collinearity",
+        "<i>Vibrio parahaemolyticus</i> and <i>V. alginolyticus</i> collinearity",
         "Hepatoplasmataceae CDS protein-similarity links",
         "Aminoglycoside biosynthetic gene clusters from <i>Streptomyces</i> spp.",
         "Majanivirus CDS protein-similarity links",
@@ -551,7 +553,7 @@ def test_interactive_gallery_examples_are_wired() -> None:
             assert 'data-popup-mode="rich"' in svg_source
             assert "data-gbdraw-original-viewbox" in svg_source
             payload = _gallery_svg_metadata(svg_source)
-            assert payload["schema"] == 3
+            assert payload["schema"] == 4
             assert len(payload["items"]) == 1
             item = payload["items"][0]
             biological_features = item["biologicalFeatures"]
@@ -693,7 +695,12 @@ def test_gallery_sessions_ship_resumable_state_without_duplicate_files(
         ), session_name
         assert "files" not in session, session_name
         assert results, session_name
-        assert feature_catalog.get("schema") == 3, session_name
+        expected_catalog_schema = (
+            CURRENT_FEATURE_CATALOG_SCHEMA
+            if session.get("version") == CURRENT_SESSION_VERSION
+            else 3
+        )
+        assert feature_catalog.get("schema") == expected_catalog_schema, session_name
         assert [
             (item.get("resultIndex"), item.get("resultName")) for item in catalog_items
         ] == [
@@ -993,20 +1000,15 @@ def test_cloudflare_bundle_includes_google_analytics_and_hosted_notice(
         not in remote_assets
     )
     assert (
-        remote_assets[
-            "gallery/sessions/vibrio-harveyi-group-collinear.gbdraw-session.json.gz"
-        ]
-        == f"{remote_base}gallery/sessions/vibrio-harveyi-group-collinear.gbdraw-session.json.gz"
+        "gallery/sessions/vibrio-harveyi-group-collinear.gbdraw-session.json.gz"
+        not in remote_assets
     )
-    assert (
-        remote_assets["gallery/examples/vibrio-harveyi-group-collinear.svg"]
-        == f"{remote_base}gallery/examples/vibrio-harveyi-group-collinear.svg"
-    )
+    assert "gallery/examples/vibrio-harveyi-group-collinear.svg" not in remote_assets
     assert all("/main/" not in url for url in remote_assets.values())
     assert not (
         bundle_path / "gallery" / "examples" / "Vnig_TUMSAT-TG-2018.svg"
     ).exists()
-    assert not (
+    assert (
         bundle_path / "gallery" / "examples" / "vibrio-harveyi-group-collinear.svg"
     ).exists()
     assert (
@@ -1015,7 +1017,7 @@ def test_cloudflare_bundle_includes_google_analytics_and_hosted_notice(
         / "sessions"
         / "Vnig_TUMSAT-TG-2018.gbdraw-session.json.gz"
     ).exists()
-    assert not (
+    assert (
         bundle_path
         / "gallery"
         / "sessions"
@@ -1192,6 +1194,17 @@ def test_conda_build_prepares_browser_wheel_before_install() -> None:
     assert "python-build" not in meta_yaml
     assert re.search(r"^\s+- setuptools\s*$", meta_yaml, re.MULTILINE)
     assert re.search(r"^\s+- wheel\s*$", meta_yaml, re.MULTILINE)
+
+
+def test_losat_installation_ownership_is_split_between_conda_and_pypi() -> None:
+    meta_yaml = (REPO_ROOT / "recipe" / "meta.yaml").read_text(encoding="utf-8")
+    pyproject = (REPO_ROOT / "pyproject.toml").read_text(encoding="utf-8")
+    install_guide = (REPO_ROOT / "docs" / "INSTALL.md").read_text(encoding="utf-8")
+
+    assert re.search(r"^\s+- losat ==0\.1\.0\s*$", meta_yaml, re.MULTILINE)
+    assert re.search(r"^\s+- losat --version\s*$", meta_yaml, re.MULTILINE)
+    assert "losat" not in pyproject.split("[project.urls]", 1)[0].lower()
+    assert "gbdraw setup-losat" in install_guide
 
 
 def test_hosted_web_uses_cloudflare_and_retains_browser_verification() -> None:

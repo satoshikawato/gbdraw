@@ -37,6 +37,8 @@ await copyModule(
   'services/orthogroup-feature-metadata.js'
 );
 await copyModule('gbdraw/web/js/services/feature-identity.js', 'services/feature-identity.js');
+await copyModule('gbdraw/web/js/services/feature-catalog.js', 'services/feature-catalog.js');
+await copyModule('gbdraw/web/js/services/runtime-test-hooks.js', 'services/runtime-test-hooks.js');
 await copyModule('gbdraw/web/js/services/text-download.js', 'services/text-download.js');
 await copyModule('gbdraw/web/js/utils/clipboard.js', 'utils/clipboard.js');
 const standaloneSource = await readFile(
@@ -1012,7 +1014,7 @@ assert.equal(
 const catalogSelectionItem = { resultIndex: 0, resultName: 'result-zero' };
 assert.equal(
   selectStandaloneCatalogItem({
-    featureCatalog: { schema: 3, items: [catalogSelectionItem] },
+    featureCatalog: { schema: 4, items: [catalogSelectionItem] },
     catalogResultIndex: '0',
     catalogResultName: 'result-zero'
   }),
@@ -1026,7 +1028,7 @@ for (const invalidCatalogIndex of [
 ]) {
   assert.equal(
     selectStandaloneCatalogItem({
-      featureCatalog: { schema: 3, items: [catalogSelectionItem] },
+      featureCatalog: { schema: 4, items: [catalogSelectionItem] },
       catalogResultIndex: invalidCatalogIndex,
       catalogResultName: 'result-zero'
     }),

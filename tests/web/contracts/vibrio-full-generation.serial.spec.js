@@ -897,7 +897,7 @@ test('real Vibrio preview regenerates after a derived-only mutation', async ({
   expect(preflightStructural.proteinRawTextValidationCount).toBeGreaterThan(0);
   expect(loadProbe.metrics.currentWriterActiveConfigRestoreCount).toBe(1);
   expect(loadProbe.metrics.activeConfigCanonicalOverwriteCount || 0).toBe(0);
-  expect(await featureCatalogSummary(page)).toEqual({ schema: 3, itemCount: 1 });
+  expect(await featureCatalogSummary(page)).toEqual({ schema: 4, itemCount: 1 });
   expect(preFirstGenerateActiveIntent.linearComparisonPlan).toEqual({
     mode: 'adjacent',
     defaultSource: 'losat',
@@ -906,7 +906,7 @@ test('real Vibrio preview regenerates after a derived-only mutation', async ({
   expect(preFirstGenerateActiveIntent.proteinSearch).toEqual({
     mode: 'collinear',
     candidateLimit: 5,
-    memberMaxHits: 5,
+    memberMaxHits: null,
     unitMode: 'auto',
     anchorMode: 'rbh',
     mergeOrientation: 'either',
@@ -916,7 +916,7 @@ test('real Vibrio preview regenerates after a derived-only mutation', async ({
     enabled: true,
     recordGap: 48
   });
-  expect(preFirstGenerateActiveIntent.linearRecordLayout.rows).toHaveLength(11);
+  expect(preFirstGenerateActiveIntent.linearRecordLayout.rows).toHaveLength(4);
   await installCanonicalRequestCapture(page);
 
   await page.evaluate(() => window.__GBDRAW_VIBRIO_GENERATE_PROBE__.reset());
@@ -996,18 +996,18 @@ test('real Vibrio preview regenerates after a derived-only mutation', async ({
   expect(capturedCanonicalRequests[0]).toMatchObject({
     schema: 7,
     mode: 'linear',
-    recordCount: 11,
+    recordCount: 4,
     comparisonCount: 2,
     comparisonKinds: ['collinearityResult', 'generatedProteinComparison'],
-    recordCardinalities: Array(11).fill('all'),
-    recordRows: [1, 1, 1, 2, 2, 3, 3, 4, 4, 5, 5],
+    recordCardinalities: Array(4).fill('all'),
+    recordRows: [1, 1, 2, 2],
     layout: {
       recordGapPx: 48
     },
     proteinSearchSettings: [{
       mode: 'none',
       candidateLimit: 5,
-      memberMaxHits: 5,
+      memberMaxHits: 0,
       unitMode: 'auto',
       anchorMode: 'rbh',
       mergeOrientation: 'either',
@@ -1025,7 +1025,7 @@ test('real Vibrio preview regenerates after a derived-only mutation', async ({
   }]);
   expect(capturedCanonicalRequests[0].layout).not.toHaveProperty('multiRecordPositions');
   expect(canonicalRequestCapture.repeatComparison).toMatchObject({ equivalent: false });
-  expect(derivedMutationBefore.memberMaxHits).toBe(5);
+  expect(derivedMutationBefore.memberMaxHits).toBeNull();
   expect(postSecondGenerateActiveIntent.proteinSearch).toEqual({
     ...preFirstGenerateActiveIntent.proteinSearch,
     memberMaxHits: 6
@@ -1097,14 +1097,11 @@ test('real Vibrio preview regenerates after a derived-only mutation', async ({
     expectedRawHelperTransport
   ]);
   const expectedRecordPlacements = [
-    [0, 0], [0, 1], [0, 2],
-    [1, 0], [1, 1],
-    [2, 0], [2, 1],
-    [3, 0], [3, 1],
-    [4, 0], [4, 1]
+    [0, 0], [0, 1],
+    [1, 0], [1, 1]
   ];
   for (const summary of [firstRecordPlacements, secondRecordPlacements]) {
-    expect(summary.uniqueRecordKeys).toBe(11);
+    expect(summary.uniqueRecordKeys).toBe(4);
     expect(summary.placements.map(({ row, column }) => [row, column])).toEqual(
       expectedRecordPlacements
     );
@@ -1113,8 +1110,8 @@ test('real Vibrio preview regenerates after a derived-only mutation', async ({
   const firstComparisonSummary = svgComparisonSummary(firstGeneratedSvg);
   const secondComparisonSummary = svgComparisonSummary(secondGeneratedSvg);
   expect(loadedComparisonSummary).toEqual({
-    comparisonGroups: 16,
-    pairwiseMatches: 579,
+    comparisonGroups: 4,
+    pairwiseMatches: 116,
     comparisonLegends: 2
   });
   expect(firstComparisonSummary).toEqual(loadedComparisonSummary);
@@ -1253,7 +1250,7 @@ test('real Vibrio preview regenerates after a derived-only mutation', async ({
     losatCacheMisses: 0
   });
   expect(firstPhaseAttribution).toMatchObject({
-    losatCacheHits: 47,
+    losatCacheHits: 12,
     losatCacheMisses: 0
   });
   const expectedUnchangedHistory = {
@@ -1365,7 +1362,7 @@ test('real Vibrio preview regenerates after a derived-only mutation', async ({
     .toBe(true);
   expect(artifactFingerprints[1]).toBe(artifactFingerprints[0]);
   expect(generatedFeatureCatalogDigest).toMatchObject({
-    schema: 3,
+    schema: 4,
     itemCount: 1
   });
   expect(generatedFeatureCatalogDigest.sha256).toMatch(/^[0-9a-f]{64}$/);

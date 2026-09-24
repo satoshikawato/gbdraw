@@ -27,6 +27,7 @@ from gbdraw.api.request_render import (
 from gbdraw.api.requests import (
     CircularBatchOutputPolicy,
     CircularBatchRequest,
+    CircularDiagramRequest,
     InMemoryRecordSource,
     LinearDiagramRequest,
     RecordInput,
@@ -75,6 +76,66 @@ _SYNTHETIC_CONSERVATION_SESSION = (
     / "sessions"
     / "synthetic_conservation.gbdraw-session.json.gz"
 )
+
+
+def test_released_session_44_schema_7_catalog_4_is_typed_readable(
+    tmp_path: Path,
+) -> None:
+    source = (
+        Path(__file__).parents[1]
+        / "gbdraw"
+        / "web"
+        / "gallery"
+        / "sessions"
+        / "HmmtDNA_basic_circular.gbdraw-session.json"
+    )
+    document = load_session_document(source)
+    assert document.version == 44
+    assert document.to_dict()["renderRequest"]["schema"] == 7
+    assert document.to_dict()["editorState"]["featureCatalog"]["schema"] == 4
+    with materialize_session(document, output_directory=tmp_path) as materialized:
+        assert isinstance(session_to_request(materialized), CircularDiagramRequest)
+
+
+def test_cli_writer_projects_released_web_config_to_session_44() -> None:
+    source = {
+        "config": {
+            "adv": {
+                "linear_show_accession": True,
+                "linear_show_length": False,
+            },
+            "recordDisplayDrafts": [
+                {
+                    "scope": "circular",
+                    "sourceUid": "source-1",
+                    "selector": "#1",
+                    "recordId": "record-1",
+                    "topologyOverride": None,
+                    "startCoordinate": 3,
+                }
+            ],
+        }
+    }
+
+    adjunct, web_file_inventory = (
+        cli_session_module._project_session_adjunct_for_current_write(
+            source,
+            source_version=41,
+        )
+    )
+
+    assert web_file_inventory is None
+    assert adjunct["config"]["adv"] == {
+        "linear_accession_visibility": "show",
+        "linear_length_visibility": "hide",
+    }
+    assert adjunct["config"]["recordDisplayDrafts"][0][
+        "reverseComplementOverride"
+    ] is None
+    assert adjunct["config"]["recordDisplayDrafts"][0]["anchorIntent"] is None
+    assert "reverseComplementOverride" not in source["config"][
+        "recordDisplayDrafts"
+    ][0]
 
 
 def test_version_39_multiline_conservation_labels_expand_at_compat_boundary() -> None:
@@ -926,6 +987,12 @@ def test_current_typed_replay_retains_web_only_conservation_fastas(
 
     rewritten_web_files = rewritten["webFiles"]
     rewritten_resources = rewritten["resources"]
+    assert rewritten["editorState"]["featureCatalog"]["schema"] == 4
+    assert all(
+        "anchorProfile" in feature
+        for item in rewritten["editorState"]["featureCatalog"]["items"]
+        for feature in item["biologicalFeatures"]
+    )
     rewritten_ids = rewritten_web_files["conservationLosatFastaSources"]
     fasta_bindings = rewritten_web_files["bindings"]["c_conservation_fastas"]
     assert rewritten_ids == [binding["resourceId"] for binding in fasta_bindings]

@@ -399,7 +399,7 @@ def _validate_interactive_handoff_tutorial(
         interactive_root.attrib.get("data-gbdraw-interactive-svg") != "true"
         or len(feature_ids) != 37
         or len(metadata) != 1
-        or metadata[0].attrib.get("data-schema") != "3"
+        or metadata[0].attrib.get("data-schema") != "4"
         or "COX1" not in interactive_source
         or "gbdraw-feature-search-controls" not in interactive_source
     ):

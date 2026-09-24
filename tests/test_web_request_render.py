@@ -418,7 +418,7 @@ def test_web_request_returns_one_base_svg_and_compact_catalog(
         f"{output_prefix}.svg"
     ]
     catalog = response["metadata"]["featureCatalog"]
-    assert catalog["schema"] == 3
+    assert catalog["schema"] == 4
     assert len(catalog["items"]) == 1
     item = catalog["items"][0]
     assert item["resultIndex"] == 0

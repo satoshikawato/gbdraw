@@ -10,8 +10,8 @@ do; release notes record when a format changed.
 
 ## Session 44: typed Similarity alignment display state
 
-Session 44 and canonical request schema 8 move Linear Similarity Group alignment
-out of generated-protein pipeline settings. The Linear request layout now owns
+The current Session 44 writer uses canonical request schema 8 to move
+Linear Similarity Group alignment out of generated-protein pipeline settings. The Linear request layout now owns
 finite `x` and `y` base translations keyed by `recordKey`, plus an optional
 resolved `SimilarityAlignmentPlan`. The plan records the exact reference feature,
 one validated decision per displayed record, its rationale, and any effective
@@ -27,16 +27,23 @@ until the historical selection can be materialized from saved stable feature and
 orthogroup metadata; a successful save writes only schema-8 plan and translation
 state. Loading a saved preview remains Worker-lazy.
 
-## Session 43: independent Linear record-label visibility
+## Session 44: feature anchors and independent record transforms
 
-Session 43 stores the selected visibility mode for Linear **Accession** and
+Session 44 stores source feature anchor capability metadata in feature catalog
+schema 4 and preserves per-record display start, absolute orientation, and
+feature-anchor provenance in one editable record-display draft. Released
+Session 42/catalog 3 documents remain readable. Exact single-part locations
+are migrated conservatively; ambiguous compound locations require Generate
+again before feature-based rotation. Development-only Session 43 is rejected.
+
+Session 44 also stores the selected visibility mode for Linear **Accession** and
 **Length / Coordinates** independently. Each field is `auto`, `show`, or `hide`.
 Auto shows the field while every effective rendered row contains one record and
 hides that field diagram-wide when any row contains two or more records.
 Disabled Record Layout ignores dormant shared-row values, and changing row
 placement does not rewrite the selected mode.
 
-The canonical request remains schema 7 and still carries effective booleans.
+Canonical request schema 8 retains the effective booleans introduced in schema 7.
 Version-42 editable `true` values migrate to Show, `false` values migrate to
 Hide, and missing booleans migrate to historical Show. A selected-mode field,
 when present, takes precedence over the retired boolean. Current writers emit
@@ -73,14 +80,18 @@ Current writers emit one session and request format:
 
 | Format | Current writer | Accepted by current readers |
 |---|---:|---|
-| gbdraw session | 44 | 27–33 and 39–44 |
+| gbdraw session | 44 | 27–33, 39–42, and 44 |
 | Canonical `renderRequest` | 8 | 1, 2, 5, 6, 7, and 8 |
-| Web file bindings | 2 | 1; 2 in sessions 41–44 |
+| Web file bindings | 2 | 1; 2 in sessions 41–42 and 44 |
+
+Previously written Session 44 documents with request schema 7 and feature
+catalog schema 4 remain readable. Current saves write request schema 8;
+the saved preview is retained until the next Generate.
 
 Session versions 34–38 and canonical request schemas 3–4 were development-only
 formats. They were never released on the supported history and are rejected.
 
-The public typed-session bridge can convert full session versions 31–33 and 39–44 to
+The public typed-session bridge can convert full session versions 31–33, 39–42, and 44 to
 a typed request. Versions 27–30 remain supported only as CLI replay inputs
 because they do not contain a canonical `renderRequest`. Use the same
 `circular` or `linear` subcommand that created the session.
@@ -141,7 +152,7 @@ explicit list becomes `selected`, and an authoritative empty explicit list
 becomes `none`. Legacy per-record uploads and custom filenames are attached to
 their original positional gap by stable record UID. CLI-only replay sessions
 do not gain a synthetic Web comparison draft. The accepted session versions
-remain 27–33 and 39–44.
+remain 27–33, 39–42, and 44.
 
 ## Retired inputs
 

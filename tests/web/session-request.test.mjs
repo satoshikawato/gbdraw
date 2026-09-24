@@ -16,6 +16,7 @@ const {
   managedConfigOverridePathsForMode,
   normalizeWebGridColumnOrdering,
   promoteCanonicalRenderRequestToCurrent,
+  projectCommittedRecordTransform,
   projectCanonicalSessionRequest
 } = await import(
   pathToFileURL(join(tempRoot, 'js', 'services', 'session-request.js'))
@@ -1958,6 +1959,173 @@ assert.deepEqual(
   materializedCanonical.webFiles.linearRecordMetadata.map((entry) => entry.recordKey),
   ['multi-source::record-1', 'multi-source::record-2']
 );
+
+const oneSourceFilesData = {
+  linearSeqs: [{
+    uid: 'one-source', gb: genbank, cardinality: 'all', losat_gencode: 1,
+    region_record_id: '', region_start: null, region_end: null, region_reverse: false
+  }],
+  linearComparisons: []
+};
+const oneSourceRows = [1, 2].map((index) => ({
+  key: JSON.stringify(['linear', 'one-source', `#${index}`]),
+  scope: 'linear', sourceUid: 'one-source', selector: `#${index}`,
+  recordId: 'duplicate', recordLength: 100, detectedTopology: 'circular',
+  reverse: false, cropped: false
+}));
+const oneSourceState = {
+  ...state,
+  recordDisplayRows: ref(oneSourceRows),
+  recordDisplayDrafts: []
+};
+const oneSourceSnapshot = resolveLinearComparisonPlan({
+  plan: { mode: 'none', defaultSource: 'losat', edges: [] },
+  sequences: oneSourceFilesData.linearSeqs
+});
+const unchangedOneSource = buildCanonicalRenderRequest({
+  state: oneSourceState,
+  filesData: oneSourceFilesData,
+  comparisonPlanSnapshot: oneSourceSnapshot
+});
+assert.equal(unchangedOneSource.renderRequest.schema, 8);
+assert.equal(unchangedOneSource.renderRequest.records.length, 1);
+assert.equal(unchangedOneSource.renderRequest.records[0].cardinality, 'all');
+
+oneSourceState.recordDisplayDrafts = [{
+  scope: 'linear', sourceUid: 'one-source', selector: '#2', recordId: 'duplicate',
+  topologyOverride: null, startCoordinate: 25, reverseComplementOverride: true,
+  anchorIntent: null
+}];
+const transformedOneSource = buildCanonicalRenderRequest({
+  state: oneSourceState,
+  filesData: oneSourceFilesData,
+  comparisonPlanSnapshot: oneSourceSnapshot
+});
+assert.deepEqual(
+  transformedOneSource.renderRequest.records.map((record) => ({
+    selector: record.selector,
+    start: record.display.startCoordinate,
+    reverse: record.presentation.reverseComplement
+  })),
+  [
+    { selector: { kind: 'recordIndex', index: 0 }, start: null, reverse: false },
+    { selector: { kind: 'recordIndex', index: 1 }, start: 25, reverse: true }
+  ]
+);
+assert.equal(
+  transformedOneSource.renderRequest.records[0].source.resourceId,
+  transformedOneSource.renderRequest.records[1].source.resourceId
+);
+assert.equal(
+  Object.values(transformedOneSource.resources).filter((resource) => resource.kind === 'genbank').length,
+  1
+);
+
+const committedBeforeProjection = structuredClone(unchangedOneSource);
+const collectionRecord = unchangedOneSource.renderRequest.records[0];
+const collectionMembers = [1, 2].map((index) => ({
+  canonicalRecordKey: collectionRecord.recordKey,
+  recordKey: `${collectionRecord.recordKey}:${index}`,
+  selector: `#${index}`,
+  recordId: 'duplicate',
+  recordLength: 100,
+  committedDisplay: structuredClone(collectionRecord.display),
+  committedReverseComplement: false
+}));
+const projectedTarget = {
+  ...collectionMembers[1],
+  scope: 'linear',
+  source: structuredClone(collectionRecord.source),
+  effectiveCircular: true,
+  cropped: false,
+  members: collectionMembers
+};
+const projected = projectCommittedRecordTransform({
+  committed: unchangedOneSource,
+  target: projectedTarget,
+  transform: { recordLength: 100, startCoordinate: 75, reverseComplement: true }
+});
+assert.deepEqual(unchangedOneSource, committedBeforeProjection);
+assert.deepEqual(projected.receipt, {
+  recordKey: 'one-source:2', canonicalRecordKey: 'one-source', recordIndex: 1,
+  materialized: true, startCoordinate: 75, reverseComplement: true
+});
+assert.deepEqual(projected.canonical.renderRequest.records.map((record) => ({
+  recordKey: record.recordKey,
+  selector: record.selector,
+  start: record.display.startCoordinate,
+  reverse: record.presentation.reverseComplement
+})), [
+  { recordKey: 'one-source:1', selector: { kind: 'recordIndex', index: 0 }, start: null, reverse: false },
+  { recordKey: 'one-source:2', selector: { kind: 'recordIndex', index: 1 }, start: 75, reverse: true }
+]);
+for (const field of ['schema', 'mode', 'grouping', 'diagramOptions', 'layout', 'comparisons', 'output']) {
+  assert.deepEqual(
+    projected.canonical.renderRequest[field],
+    unchangedOneSource.renderRequest[field],
+    `target projection preserves renderRequest.${field}`
+  );
+}
+assert.deepEqual(projected.canonical.resources, unchangedOneSource.resources);
+
+const singletonMember = collectionMembers[0];
+const singletonProjected = projectCommittedRecordTransform({
+  committed: unchangedOneSource,
+  target: {
+    ...singletonMember,
+    scope: 'linear',
+    source: structuredClone(collectionRecord.source),
+    effectiveCircular: true,
+    cropped: false,
+    members: [singletonMember]
+  },
+  transform: { recordLength: 100, startCoordinate: 41, reverseComplement: false }
+});
+assert.deepEqual(singletonProjected.receipt, {
+  recordKey: 'one-source:1', canonicalRecordKey: 'one-source', recordIndex: 0,
+  materialized: true, startCoordinate: 41, reverseComplement: false
+});
+assert.deepEqual(singletonProjected.canonical.renderRequest.records.map((record) => ({
+  recordKey: record.recordKey,
+  cardinality: record.cardinality,
+  selector: record.selector,
+  start: record.display.startCoordinate
+})), [{
+  recordKey: 'one-source:1', cardinality: 'exactly_one',
+  selector: { kind: 'recordIndex', index: 0 }, start: 41
+}]);
+
+const exactCommitted = structuredClone(projected.canonical);
+const exactTarget = {
+  ...projectedTarget,
+  canonicalRecordKey: 'one-source:2',
+  members: []
+};
+const exactProjected = projectCommittedRecordTransform({
+  committed: exactCommitted,
+  target: exactTarget,
+  transform: { recordLength: 100, startCoordinate: 20, reverseComplement: false }
+});
+assert.equal(exactProjected.receipt.materialized, false);
+assert.deepEqual(exactProjected.canonical.renderRequest.records[0], exactCommitted.renderRequest.records[0]);
+assert.equal(exactProjected.canonical.renderRequest.records[1].display.startCoordinate, 20);
+
+for (const [label, targetPatch, transformPatch, requestPatch] of [
+  ['missing', { canonicalRecordKey: 'missing' }, {}, {}],
+  ['duplicate', {}, {}, { records: [collectionRecord, structuredClone(collectionRecord)] }],
+  ['stale resource', { source: { kind: 'genbank', resourceId: 'stale' } }, {}, {}],
+  ['cropped', { cropped: true }, {}, {}],
+  ['non-circular', { effectiveCircular: false }, {}, {}],
+  ['length mismatch', {}, { recordLength: 99 }, {}]
+]) {
+  const committed = structuredClone(unchangedOneSource);
+  Object.assign(committed.renderRequest, requestPatch);
+  assert.throws(() => projectCommittedRecordTransform({
+    committed,
+    target: { ...projectedTarget, ...targetPatch },
+    transform: { recordLength: 100, startCoordinate: 75, reverseComplement: true, ...transformPatch }
+  }), undefined, label);
+}
 state.form.prefix = '';
 const linearDefaultCanonical = buildCanonicalRenderRequest({ state, filesData: linearFilesData });
 assert.equal(linearDefaultCanonical.renderRequest.grouping, 'single');
@@ -4776,10 +4944,10 @@ if (projectSessionIndex >= 0) {
     assert.equal(projectedSession.config.adv.inner_label_y_offset, 0.975);
   }
   if (sessionPath.includes('vibrio-harveyi-group-collinear')) {
-    assert.equal(projectedSession.files.linearSeqs.length, 11);
+    assert.equal(projectedSession.files.linearSeqs.length, 4);
     assert.equal(
       projectedSession.files.linearSeqs[0].gb.name,
-      'NZ_CP125875.1__GCF_030060435.1_ASM3006043v1_genomic.gbff'
+      'NC_004603.1__GCF_000196095.1_ASM19609v1_genomic.gbff'
     );
     assert.equal(projectedSession.config.adv.block_stroke_width, 0);
     assert.equal(projectedSession.config.adv.line_stroke_width, 1);

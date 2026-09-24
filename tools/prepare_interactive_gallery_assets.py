@@ -24,6 +24,7 @@ from gbdraw.web_support.feature_catalog import (
     FEATURE_CATALOG_SCHEMA,
     canonical_catalog_sequence_sources,
     materialize_catalog_nucleotide_sequence,
+    promote_legacy_feature_catalog,
     select_feature_catalog_item,
 )
 
@@ -262,19 +263,16 @@ EXAMPLES: tuple[GallerySessionExample, ...] = (
     ),
     GallerySessionExample(
         id="vibrio-harveyi-group-collinear",
-        title="<i>Vibrio</i> Harveyi group multi-record collinearity",
+        title="<i>Vibrio parahaemolyticus</i> and <i>V. alginolyticus</i> collinearity",
         tags=("Linear", "Multi-record", "Collinear groups", "LOSAT", "Interactive SVG"),
-        description="Compare all 11 replicons from five Harveyi-group Vibrio assemblies as five multi-record rows.",
+        description="Compare both chromosomes from two Harveyi-clade Vibrio assemblies as two multi-record rows.",
         workflow="Multi-record LOSATP collinear blocks",
-        input_summary="5 multi-record GenBank files; 11 replicons",
+        input_summary="2 multi-record GenBank files; 4 chromosomes",
         display_order=65,
         command_kind="runnable",
-        command_note="Run from a source checkout so the records table can read the five GBFF files under tests/test_inputs/.",
+        command_note="Run from a source checkout so the records table can read the two GBFF files under tests/test_inputs/.",
         command=VIBRIO_HARVEYI_GROUP_COMMAND,
         feature_sources=(
-            "GCF_030060435.1_ASM3006043v1_genomic.gbff",
-            "GCF_002021755.1_ASM202175v1_genomic.gbff",
-            "GCF_002906475.1_ASM290647v1_genomic.gbff",
             "GCF_000196095.1_ASM19609v1_genomic.gbff",
             "GCF_000354175.2_ASM35417v2_genomic.gbff",
         ),
@@ -456,12 +454,17 @@ def _session_feature_catalog(
     )
     if catalog is None:
         return None
+    if isinstance(catalog, dict) and catalog.get("schema") == 3:
+        return promote_legacy_feature_catalog(catalog)
     if (
         not isinstance(catalog, dict)
         or catalog.get("schema") != FEATURE_CATALOG_SCHEMA
         or not isinstance(catalog.get("items"), list)
     ):
-        raise ValueError("Session contains an invalid schema-3 feature catalog.")
+        raise ValueError(
+            "Session contains an invalid schema-3/"
+            f"schema-{FEATURE_CATALOG_SCHEMA} feature catalog."
+        )
     return catalog
 
 

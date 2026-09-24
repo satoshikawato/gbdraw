@@ -102,6 +102,21 @@ const text = bytes[0] === 0x1f && bytes[1] === 0x8b
 const document = JSON.parse(text);
 const digest = (value) => createHash('sha256').update(JSON.stringify(value)).digest('hex');
 const catalog = document.editorState?.featureCatalog;
+const catalogFeatures = (catalog?.items || []).flatMap((item) => item.biologicalFeatures || []);
+const compatibilityCatalog = catalog ? {
+  ...catalog,
+  schema: 3,
+  items: (catalog.items || []).map((item) => ({
+    ...item,
+    biologicalFeatures: (item.biologicalFeatures || []).map((feature) => {
+      const projected = { ...feature };
+      delete projected.anchorProfile;
+      delete projected.location_parts;
+      delete projected.locationParts;
+      return projected;
+    })
+  }))
+} : catalog;
 const losatEntries = document.losatCache?.entries || [];
 process.stdout.write(JSON.stringify({
   format: document.format,
@@ -110,7 +125,13 @@ process.stdout.write(JSON.stringify({
   topLevelKeys: Object.keys(document).sort(),
   resourceCount: Object.keys(document.resources || {}).length,
   resultCount: (document.results || []).length,
+  catalogSchema: catalog?.schema,
   catalogItems: (catalog?.items || []).length,
+  catalogBiologicalFeatures: catalogFeatures.length,
+  catalogAnchorProfiles: catalogFeatures.filter((feature) => feature?.anchorProfile).length,
+  catalogLocationParts: catalogFeatures.filter((feature) => (
+    Array.isArray(feature?.location_parts) || Array.isArray(feature?.locationParts)
+  )).length,
   losatEntries: losatEntries.length,
   hashes: {
     renderRequest: digest(document.renderRequest),
@@ -118,6 +139,7 @@ process.stdout.write(JSON.stringify({
     webFiles: digest(document.webFiles),
     results: digest(document.results),
     featureCatalog: digest(catalog),
+    featureCatalogCompatibility: digest(compatibilityCatalog),
     losatRawTextAuthority: digest(losatEntries
       .map((entry) => [String(entry.key || ''), String(entry.text || '')])
       .sort(([left], [right]) => left.localeCompare(right))),
@@ -379,7 +401,7 @@ test('Vibrio Session saves once within memory, responsiveness, and compatibility
   expect(orderedLifecycle).toEqual([...orderedLifecycle].sort((left, right) => left - right));
   expect(downloadCount).toBe(1);
   expect(dialogs.filter(({ message }) => message.startsWith('Compressed session size is ')))
-    .toHaveLength(1);
+    .toHaveLength(0);
   expect(after.lifecycle.find(
     ({ name }) => name === 'session-save-catalog-preparation-end'
   )?.reusedCommittedSession).toBe(true);
@@ -432,31 +454,41 @@ test('Vibrio Session saves once within memory, responsiveness, and compatibility
   const savedSummary = inspectSession(savedPath);
   expect(sourceSummary).toMatchObject({
     format: 'gbdraw-session',
-    version: 41,
+    version: 44,
     requestSchema: 7,
-    resourceCount: 12,
+    catalogSchema: 4,
+    resourceCount: 4,
     resultCount: 1,
     catalogItems: 1,
-    losatEntries: 59
+    catalogBiologicalFeatures: 18_782,
+    catalogAnchorProfiles: 18_782,
+    catalogLocationParts: 8,
+    losatEntries: 12
   });
   expect(savedSummary).toMatchObject({
     format: 'gbdraw-session',
     version: 44,
     requestSchema: 8,
-    resourceCount: 12,
+    catalogSchema: 4,
+    resourceCount: 4,
     resultCount: 1,
     catalogItems: 1,
-    losatEntries: 59
+    catalogBiologicalFeatures: 18_782,
+    catalogAnchorProfiles: 18_782,
+    catalogLocationParts: 8,
+    losatEntries: 12
   });
   for (const authority of [
     'renderRequest',
     'resources',
-    'featureCatalog',
     'losatRawTextAuthority',
     'proteinIdentityManifest'
   ]) {
     expect(savedSummary.hashes[authority], authority).toBe(sourceSummary.hashes[authority]);
   }
+  expect(savedSummary.hashes.featureCatalog).toBe(sourceSummary.hashes.featureCatalog);
+  expect(savedSummary.hashes.featureCatalogCompatibility)
+    .toBe(sourceSummary.hashes.featureCatalogCompatibility);
   const sourceSvgPath = testInfo.outputPath('source-result.svg');
   const savedSvgPath = testInfo.outputPath('saved-result.svg');
   extractResultSvg(fixturePath, sourceSvgPath);
@@ -500,7 +532,7 @@ test('Vibrio Session saves once within memory, responsiveness, and compatibility
   await freshContext.close();
 
   const crossSurface = crossSurfaceAcceptance(savedPath, testInfo.outputPath('cross-surface'));
-  expect(crossSurface.reader).toEqual({ version: 44, mode: 'linear', records: 11 });
+  expect(crossSurface.reader).toEqual({ version: 44, mode: 'linear', records: 4 });
   expect(crossSurface.cliExitCode).toBe(0);
   expect(crossSurface.cliSvgBytes).toBeGreaterThan(0);
 

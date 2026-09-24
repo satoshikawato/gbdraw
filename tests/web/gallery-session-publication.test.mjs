@@ -87,8 +87,20 @@ for (const name of sessionNames) {
 }
 
 const lambda = await loadSession('lambda_basic_linear.gbdraw-session.json');
-assert.equal(admitGallerySession(lambda).version, 44);
+const admittedLambda = admitGallerySession(lambda);
+assert.equal(admittedLambda.version, 44);
+assert.equal(admittedLambda.editorState.featureCatalog.schema, 4);
+assert.deepEqual(admittedLambda.results, lambda.results);
 assert.equal(lambda.version, 42);
+assert.equal(lambda.editorState.featureCatalog.schema, 3);
+const releasedCurrent = await loadSession('HmmtDNA_basic_circular.gbdraw-session.json');
+assert.equal(releasedCurrent.version, 44);
+assert.equal(releasedCurrent.renderRequest.schema, 7);
+assert.equal(releasedCurrent.editorState.featureCatalog.schema, 4);
+const admittedReleasedCurrent = admitGallerySession(releasedCurrent);
+assert.equal(admittedReleasedCurrent.renderRequest.schema, 8);
+assert.equal(admittedReleasedCurrent.editorState.featureCatalog.schema, 4);
+assert.deepEqual(admittedReleasedCurrent.results, releasedCurrent.results);
 const alteredProvenance = structuredClone(lambda);
 alteredProvenance.cliInvocation = {
   ...alteredProvenance.cliInvocation,
@@ -170,10 +182,10 @@ for (const field of ['cli_circular_track_order', 'cli_circular_track_slots']) {
   );
 }
 
-for (const version of [27, 30, 34, 38, 45]) {
+for (const version of [27, 30, 34, 38, 43]) {
   assert.throws(
     () => admitGallerySession({ ...lambda, version }),
-    /supports current version 44 or historical versions 31-33\/39-43/
+    /supports current version 44 or historical versions 31-33\/39-42/
   );
 }
 

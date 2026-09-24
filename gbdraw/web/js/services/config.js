@@ -118,6 +118,7 @@ import {
   isAdoptedFeatureCatalog,
   validateFeatureCatalog
 } from './feature-catalog.js';
+import { migrateLegacyRecordDisplayDrafts } from '../app/record-display-options.js';
 import {
   buildOrthogroupFeatureIndex,
   enrichFeaturesWithOrthogroups
@@ -218,7 +219,7 @@ export const SESSION_VERSION = 44;
 const CURRENT_AUTHORITY_SESSION_MIN_VERSION = 40;
 const LEGACY_LINEAR_TRACK_SLOT_SESSION_VERSION = 32;
 const SUPPORTED_SESSION_VERSIONS = new Set([
-  27, 28, 29, 30, 31, 32, 33, 39, 40, 41, 42, 43, SESSION_VERSION
+  27, 28, 29, 30, 31, 32, 33, 39, 40, 41, 42, SESSION_VERSION
 ]);
 const CURRENT_ARTIFACT_SESSION_MIN_VERSION = 39;
 const LOSAT_DERIVED_CACHE_LIMIT = 16;
@@ -1598,9 +1599,18 @@ const preflightSessionImport = (rawData) => {
   )
     ? { ...data.renderRequest, comparisons: [] }
     : data.renderRequest;
-  const currentStoredConfig = sourceSessionVersion < SESSION_VERSION
+  let currentStoredConfig = sourceSessionVersion < SESSION_VERSION
     ? withCurrentLinearLabelVisibility(data.config)
     : data.config;
+  if (sourceSessionVersion < SESSION_VERSION && isPlainObject(currentStoredConfig)
+    && Object.prototype.hasOwnProperty.call(currentStoredConfig, 'recordDisplayDrafts')) {
+    currentStoredConfig = {
+      ...currentStoredConfig,
+      recordDisplayDrafts: migrateLegacyRecordDisplayDrafts(
+        currentStoredConfig.recordDisplayDrafts
+      )
+    };
+  }
   const runtimeStoredConfig = currentSession && Object.prototype.hasOwnProperty.call(data, 'config')
     ? migrateImportedLinearTrackSlots(
         migrateImportedCircularTrackSlots(withHistoricalPairwiseMatchStyleFallback(

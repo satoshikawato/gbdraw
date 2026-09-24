@@ -630,6 +630,7 @@ test('preview similarity-group copy actions report isolated accessible outcomes'
 test('individual Feature, Label, and Legend edits update the mounted SVG', { tag: '@pr-smoke' }, async ({
   page
 }) => {
+  test.setTimeout(180000);
   const imported = await loadGallerySession(
     page,
     'HmmtDNA_basic_circular.gbdraw-session.json'
@@ -637,6 +638,7 @@ test('individual Feature, Label, and Legend edits update the mounted SVG', { tag
   expect(imported.status).toBe('ok');
   await page.locator('.drawer-toggle').click();
   await expect(page.locator('.right-drawer').getByText(/^Features \(\d+\)$/)).toBeVisible();
+  expect(await page.evaluate(() => window.__GBDRAW_APP__.runAnalysis())).toEqual({ status: 'ok' });
 
   const result = await page.evaluate(async () => {
     const app = window.__GBDRAW_APP__;
@@ -670,11 +672,31 @@ test('individual Feature, Label, and Legend edits update the mounted SVG', { tag
     app.openFeatureEditorFromList(labeledFeature, null);
     app.clickedFeature.labelVisibility = 'off';
     await app.updateClickedFeatureLabelText();
+    for (let attempt = 0; attempt < 1200; attempt += 1) {
+      currentSvg = document.querySelector('.origin-top svg');
+      const currentText = Array.from(currentSvg.querySelectorAll('text[data-label-feature-id]'))
+        .find((element) => element.getAttribute('data-label-feature-id') === labeledFeature.svg_id);
+      const currentParts = Array.from(currentSvg.querySelectorAll('[data-label-feature-id]'))
+        .filter((element) => element.getAttribute('data-label-feature-id') === labeledFeature.svg_id);
+      if (
+        currentText?.getAttribute('data-gbdraw-label-binding-schema') === '1'
+        && currentParts.length > 0
+        && currentParts.every((element) => element.getAttribute('display') === 'none')
+      ) break;
+      await new Promise((resolve) => window.setTimeout(resolve, 50));
+    }
     currentSvg = document.querySelector('.origin-top svg');
-    labelElement = currentSvg.querySelector(
-      `text[data-label-key="${CSS.escape(labelEntry.key)}"]`
-    );
+    labelElement = Array.from(currentSvg.querySelectorAll('text[data-label-feature-id]'))
+      .find((element) => element.getAttribute('data-label-feature-id') === labeledFeature.svg_id);
+    const labelParts = Array.from(currentSvg.querySelectorAll('[data-label-feature-id]'))
+      .filter((element) => element.getAttribute('data-label-feature-id') === labeledFeature.svg_id);
     const visibilityResultContent = app.results[app.selectedResultIndex]?.content || '';
+    const resultSvg = new DOMParser().parseFromString(
+      visibilityResultContent,
+      'image/svg+xml'
+    );
+    const resultLabelParts = Array.from(resultSvg.querySelectorAll('[data-label-feature-id]'))
+      .filter((element) => element.getAttribute('data-label-feature-id') === labeledFeature.svg_id);
 
     const legendIndex = app.legendEntries.findIndex((entry) => {
       if (!entry?.caption) return false;
@@ -699,6 +721,11 @@ test('individual Feature, Label, and Legend edits update the mounted SVG', { tag
         .map((override) => override?.color),
       labelText: labelElement?.textContent || '',
       labelDisplay: labelElement?.getAttribute('display') || '',
+      labelPartCount: labelParts.length,
+      labelLeaderCount: labelParts.filter((element) => element.localName === 'line').length,
+      labelPartsHidden: labelParts.every((element) => element.getAttribute('display') === 'none'),
+      resultLabelPartsHidden: resultLabelParts.length === labelParts.length
+        && resultLabelParts.every((element) => element.getAttribute('display') === 'none'),
       labelVisibilityOverride: app.labelVisibilityOverrides[labeledFeature.svg_id],
       labelOverride: app.labelTextFeatureOverrides[labeledFeature.svg_id],
       legendFill,
@@ -716,6 +743,10 @@ test('individual Feature, Label, and Legend edits update the mounted SVG', { tag
   expect(result.featureResultContent).toContain('#1234ab');
   expect(result.labelText).toBe('Drawer live label');
   expect(result.labelDisplay).toBe('none');
+  expect(result.labelPartCount).toBeGreaterThan(1);
+  expect(result.labelLeaderCount).toBeGreaterThan(0);
+  expect(result.labelPartsHidden).toBe(true);
+  expect(result.resultLabelPartsHidden).toBe(true);
   expect(result.labelVisibilityOverride).toBe('off');
   expect(result.labelOverride).toBe('Drawer live label');
   expect(result.legendFill).toBe('#ab3412');

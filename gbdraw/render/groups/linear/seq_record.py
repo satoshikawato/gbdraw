@@ -18,6 +18,8 @@ from ....features.factory import FeatureBuildResult
 from ....configurators import FeatureDrawingConfigurator
 from ....svg.ids import record_group_svg_id
 from ....layout.record_labels import source_ruler_ticks
+from ...label_binding import bind_label_part
+from .feature_identity import LinearFeatureDomIndex
 from .length_bar import (
     RULER_LABEL_OFFSET,
     RULER_TICK_LENGTH,
@@ -38,6 +40,7 @@ class SeqRecordGroup:
         feature_config: FeatureDrawingConfigurator,
         feature_layers: FeatureBuildResult,
         render_context: LinearRecordRenderContext,
+        feature_dom_index: LinearFeatureDomIndex,
         precalculated_labels: Optional[list] = None,
         draw_features: bool = True,
         label_font_size: float | None = None,
@@ -58,6 +61,7 @@ class SeqRecordGroup:
         self.length_param = self.canvas_config.length_param
         self.feature_config = feature_config
         self.feature_layers = feature_layers
+        self.feature_dom_index = feature_dom_index
         self.precalculated_labels = precalculated_labels
         self.draw_features_enabled = bool(draw_features)
         self.orthogroup_label_member_ids = orthogroup_label_member_ids
@@ -282,6 +286,15 @@ class SeqRecordGroup:
         # Process labels if enabled
         if self.show_labels and self.draw_features_enabled:
             for label in label_list:
+                source_feature_index = label.get("source_feature_index")
+                feature_id = self.feature_dom_index.by_source_index.get(
+                    (self.record_index, source_feature_index)
+                )
+                if not feature_id:
+                    raise ValueError(
+                        "Prepared linear label has no rendered feature identity."
+                    )
+                label["feature_id"] = feature_id
                 if label.get("leader_line"):
                     line_path = Line(
                         start=(label["leader_start_x"], label["leader_start_y"]),
@@ -289,6 +302,7 @@ class SeqRecordGroup:
                         stroke=self.label_stroke_color,
                         stroke_width=self.label_stroke_width,
                     )
+                    bind_label_part(line_path, feature_id)
                     feature_group.add(line_path)
                 elif not label["is_embedded"]:
                     label_middle_y = float(label["middle_y"])
@@ -306,6 +320,7 @@ class SeqRecordGroup:
                         stroke=self.label_stroke_color,
                         stroke_width=self.label_stroke_width,
                     )
+                    bind_label_part(line_path, feature_id)
                     feature_group.add(line_path)
 
         # Draw features

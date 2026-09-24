@@ -389,6 +389,6 @@ for (const change of [
   assert.throws(() => validateSessionAuthorityInventory(session, 41));
   assert.deepEqual(session, before);
 }
-for (const version of [27, 33, 39, 40, 45]) {
+for (const version of [27, 33, 39, 40, 43]) {
   assert.throws(() => validateSessionAuthorityInventory(compositeSession(), version), /requires session version 41/);
 }

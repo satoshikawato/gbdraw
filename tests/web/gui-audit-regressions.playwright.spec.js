@@ -2,7 +2,7 @@ const { test, expect } = require('@playwright/test');
 const { join } = require('node:path');
 const { readFileSync } = require('node:fs');
 const { readPdfText } = require('./helpers/pdf-text.cjs');
-const { openApp, generateAndWaitForResult } = require('./helpers/app-lifecycle.cjs');
+const { openApp, generateAndWaitForResult, reveal } = require('./helpers/app-lifecycle.cjs');
 
 const session = async (page, name = 'HmmtDNA_basic_circular.gbdraw-session.json') => {
   page.on('dialog', (dialog) => dialog.dismiss());
@@ -15,7 +15,7 @@ const annotations = (page) => page.locator('details').filter({ has: page.locator
 test('opening saved Circular record controls enables editing before another Generate', async ({ page }) => {
   test.setTimeout(180000);
   await session(page);
-  await page.getByLabel('Multi-Record Canvas', { exact: true }).uncheck();
+  await (await reveal(page.getByLabel('Multi-Record Canvas', { exact: true }))).uncheck();
   await page.locator('summary[aria-label="Circular record presentation"]').click();
   await expect(page.getByLabel('Circular record label', { exact: true })).toBeEnabled({ timeout: 180000 });
   await expect(page.getByLabel('Circular record', { exact: true })).toContainText('NC_012920.1');
@@ -143,7 +143,7 @@ for (const { method, delayedAsset, extension } of [
   const source = ['BGC0000708', 'BGC0000709'].map((id) => readFileSync(join(process.cwd(), 'tests/test_inputs', `${id}.gbk`), 'utf8')).join('\n');
   await page.getByLabel('GenBank/DDBJ File', { exact: true }).setInputFiles({ name: 'two-records.gbk', mimeType: 'text/plain', buffer: Buffer.from(source) });
   await page.waitForFunction(() => window.__GBDRAW_APP__.circularRecordList.length === 2);
-  await page.getByLabel('Multi-Record Canvas', { exact: true }).uncheck();
+  await (await reveal(page.getByLabel('Multi-Record Canvas', { exact: true }))).uncheck();
   await generateAndWaitForResult(page);
   let release;
   let requested;

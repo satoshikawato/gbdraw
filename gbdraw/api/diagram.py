@@ -3215,8 +3215,17 @@ def assemble_circular_diagram_from_records(
             record_index=record_index,
             used_ids=used_ids,
             bind_record_identity=(
-                len({record.id for record in records}) != len(records)
-                or bool(_record_transforms and any(t.start_coordinate is not None for t in _record_transforms))
+                len(records) > 1
+                and (
+                    len({record.id for record in records}) != len(records)
+                    or bool(
+                        _record_transforms
+                        and any(
+                            transform.start_coordinate is not None
+                            for transform in _record_transforms
+                        )
+                    )
+                )
             ),
         )
         for definition in copied_definitions:
