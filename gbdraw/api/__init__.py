@@ -64,12 +64,21 @@ from .options import (
     DepthTrackInput,
     LinearDiagramOptions,
     LinearMultiRecordOptions,
+    LinearRecordTranslation,
     LinearOutputOptions,
     LinearRequestTrackOptions,
     LinearTrackOptions,
 )
 from gbdraw.linear_comparison import LinearComparison
 from gbdraw.layout.linear_multi_record import LinearLayoutPlan, LinearRecordPlacement, RecordKey
+from gbdraw.layout.similarity_alignment import (
+    AlignmentAnchorIdentity,
+    AlignmentDecisionStatus,
+    AlignmentRecordDecision,
+    AlignmentResolutionRationale,
+    SimilarityAlignmentMode,
+    SimilarityAlignmentPlan,
+)
 from gbdraw.annotations import (
     AnnotationSet,
     AnnotationTrackParams,
@@ -250,6 +259,13 @@ __all__ = [
     "CircularRequestTrackOptions",
     "CircularTrackOptions",
     "LinearMultiRecordOptions",
+    "LinearRecordTranslation",
+    "AlignmentAnchorIdentity",
+    "AlignmentDecisionStatus",
+    "AlignmentRecordDecision",
+    "AlignmentResolutionRationale",
+    "SimilarityAlignmentMode",
+    "SimilarityAlignmentPlan",
     "LinearDiagramOptions",
     "LinearDiagramMetadata",
     "LinearOutputOptions",

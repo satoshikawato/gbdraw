@@ -105,6 +105,8 @@ export const createFeatureEditor = ({
     attachSvgFeatureHandlers: featureSvgActions.attachSvgFeatureHandlers,
     preparePairwiseInteractionAffordances:
       featureSvgActions.preparePairwiseInteractionAffordances,
+    previewAlignmentCandidate: featureSvgActions.previewAlignmentCandidate,
+    clearAlignmentCandidatePreview: featureSvgActions.clearAlignmentCandidatePreview,
     dispose: featureSvgActions.dispose,
     openFeatureEditorForFeature,
     refreshFeatureOverrides: ruleActions.refreshFeatureOverrides,

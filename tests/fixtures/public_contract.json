@@ -27,7 +27,7 @@
       "read_genbank",
       "read_gff"
     ],
-    "contract_sha256": "2f8515028f101bca42fed7fb958bc0bf19640be9d4ec86f8e87abed136752590"
+    "contract_sha256": "863992f788e0aeaff20d7d04b46c6561b333e916a2b0cfde46ff0aa7bb8fd2ae"
   },
   "circular_cli": {
     "actions_sha256": "7b15a18a76d918aab160088fa3a1e581ad33886bd7040c51326e5d6840363bb9",
@@ -35,7 +35,7 @@
     "representative_sha256": "8b7eb90cc57e919a4d1a0e68571cd4ed07019e62f9dcc70e2e4fd4bda8b015b4"
   },
   "linear_cli": {
-    "actions_sha256": "4a5a8c5fe77447ac3f7c51cf6bd8077e3985dd6e93aa111d90eb9c47caa0b47d",
+    "actions_sha256": "b0c70dfeaaf7412afe9bcb6c493ea4584ba2d9e6587b9fd53fa0d0fa4e3fb4fd",
     "defaults_sha256": "f5379f24358f483bf4cfaa72d8e90148ed58e5b49f9645c59cc835941affda75",
     "representative_sha256": "5178ed7283d94f6d8db0619e49941b67171bd1129718effe0fb052e3d06f30c3"
   }

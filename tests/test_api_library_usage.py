@@ -779,7 +779,6 @@ _LINEAR_ONLY_FORWARDING_CASES = [
         "collinear_max_paralog_links_per_orthogroup",
         4,
     ),
-    ("align_orthogroup_feature", "anchor", "align_orthogroup_feature", "anchor"),
 ]
 
 

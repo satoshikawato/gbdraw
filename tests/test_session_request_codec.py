@@ -37,6 +37,7 @@ from gbdraw.api.options import (
     DepthTrackInput,
     LinearDiagramOptions,
     LinearMultiRecordOptions,
+    LinearRecordTranslation,
     LinearOutputOptions,
     LinearTrackOptions,
 )
@@ -56,6 +57,14 @@ from gbdraw.api.requests import (
 )
 from gbdraw.io.record_select import parse_record_selector
 from gbdraw.io.regions import parse_region_spec
+from gbdraw.layout.similarity_alignment import (
+    AlignmentAnchorIdentity,
+    AlignmentDecisionStatus,
+    AlignmentRecordDecision,
+    AlignmentResolutionRationale,
+    SimilarityAlignmentMode,
+    SimilarityAlignmentPlan,
+)
 from gbdraw.config.models import GbdrawConfig
 from gbdraw.exceptions import ValidationError
 from gbdraw.features.shapes import resolve_feature_rendering
@@ -188,6 +197,13 @@ def _payload_for_schema(
 ) -> dict[str, Any]:
     payload = copy.deepcopy(encoded.payload)
     payload["schema"] = schema
+    if schema < 8:
+        layout = payload.get("layout") or {}
+        layout.pop("recordTranslations", None)
+        layout.pop("similarityAlignment", None)
+        for comparison in payload.get("comparisons", ()):
+            if comparison.get("kind") == "generatedProteinComparison":
+                comparison["settings"]["alignOrthogroupFeature"] = None
     if schema < 5:
         payload.pop("grouping", None)
     _remove_schema6_record_fields(payload, schema)
@@ -305,7 +321,7 @@ def test_schema6_round_trips_unresolved_record_cardinality_and_row(
         )
     )
 
-    assert CANONICAL_REQUEST_SCHEMA == 7
+    assert CANONICAL_REQUEST_SCHEMA == 8
     assert encoded.payload["records"][0]["cardinality"] == "all"
     decoded = decode_canonical_request(
         encoded.payload,
@@ -314,6 +330,203 @@ def test_schema6_round_trips_unresolved_record_cardinality_and_row(
     )
     assert decoded.records[0].cardinality is RecordCardinality.ALL
     assert decoded.records[0].presentation.grid_row == 2
+
+
+def _similarity_alignment_plan() -> SimilarityAlignmentPlan:
+    reference = AlignmentAnchorIdentity(
+        record_key="record-a",
+        biological_feature_id="feature-a",
+        source_feature_index=3,
+        stable_feature_svg_id="stable-a",
+    )
+    target = AlignmentAnchorIdentity(
+        record_key="record-b",
+        biological_feature_id="feature-b",
+        source_feature_index=5,
+        stable_feature_svg_id="stable-b",
+    )
+    return SimilarityAlignmentPlan(
+        mode=SimilarityAlignmentMode.POSITION,
+        group_id="og-1",
+        reference=reference,
+        records=(
+            AlignmentRecordDecision(
+                record_key="record-a",
+                status=AlignmentDecisionStatus.REFERENCE,
+                rationale=AlignmentResolutionRationale.REFERENCE,
+                anchor=reference,
+            ),
+            AlignmentRecordDecision(
+                record_key="record-b",
+                status=AlignmentDecisionStatus.ALIGNED,
+                rationale=AlignmentResolutionRationale.ONLY_USABLE_CANDIDATE,
+                anchor=target,
+            ),
+        ),
+    )
+
+
+def _aligned_linear_request(tmp_path: Path) -> LinearDiagramRequest:
+    return LinearDiagramRequest(
+        records=(
+            RecordInput(
+                source=GenBankInputSource(_source_file(tmp_path / "a.gbk")),
+                record_key="record-a",
+            ),
+            RecordInput(
+                source=GenBankInputSource(_source_file(tmp_path / "b.gbk")),
+                record_key="record-b",
+            ),
+        ),
+        layout=LinearMultiRecordOptions(
+            record_translations=(
+                LinearRecordTranslation("record-a", 4.5, -2),
+                LinearRecordTranslation("record-b", -8, 3.25),
+            )
+        ),
+        similarity_alignment=_similarity_alignment_plan(),
+    )
+
+
+def test_schema8_round_trips_typed_similarity_alignment_and_translations(
+    tmp_path: Path,
+) -> None:
+    encoded = encode_canonical_request(_aligned_linear_request(tmp_path))
+
+    assert encoded.payload["schema"] == 8
+    assert encoded.payload["layout"]["recordTranslations"] == [
+        {"recordKey": "record-a", "x": 4.5, "y": -2.0},
+        {"recordKey": "record-b", "x": -8.0, "y": 3.25},
+    ]
+    assert encoded.payload["layout"]["similarityAlignment"]["groupId"] == "og-1"
+    assert "alignOrthogroupFeature" not in json.dumps(encoded.payload)
+
+    decoded = decode_canonical_request(
+        encoded.payload,
+        resource_paths=_materialize_resources(encoded, tmp_path / "resources"),
+        output_directory=tmp_path / "output",
+    )
+    assert isinstance(decoded, LinearDiagramRequest)
+    assert decoded.layout == _aligned_linear_request(tmp_path).layout
+    assert decoded.similarity_alignment == _similarity_alignment_plan()
+
+
+def test_schema8_accepts_reordered_keyed_alignment_records(tmp_path: Path) -> None:
+    encoded = encode_canonical_request(_aligned_linear_request(tmp_path))
+    payload = copy.deepcopy(encoded.payload)
+    payload["records"].reverse()
+
+    decoded = decode_canonical_request(
+        payload,
+        resource_paths=_materialize_resources(encoded, tmp_path / "resources"),
+        output_directory=tmp_path / "output",
+    )
+    assert [record.record_key for record in decoded.records] == ["record-b", "record-a"]
+    assert decoded.similarity_alignment == _similarity_alignment_plan()
+
+
+@pytest.mark.parametrize(
+    ("mutation", "message"),
+    (
+        (
+            lambda layout: layout["recordTranslations"].append(
+                {"recordKey": "record-a", "x": 0, "y": 0}
+            ),
+            "duplicate record keys",
+        ),
+        (
+            lambda layout: layout["recordTranslations"][0].update(x=float("inf")),
+            "finite number",
+        ),
+        (
+            lambda layout: layout.update(unexpected=True),
+            "Unknown field",
+        ),
+        (
+            lambda layout: layout["similarityAlignment"]["records"][1].update(
+                anchor=None
+            ),
+            "invalid plan combination|inconsistent",
+        ),
+    ),
+)
+def test_schema8_rejects_invalid_similarity_layout(
+    tmp_path: Path,
+    mutation: Any,
+    message: str,
+) -> None:
+    encoded = encode_canonical_request(_aligned_linear_request(tmp_path))
+    payload = copy.deepcopy(encoded.payload)
+    mutation(payload["layout"])
+    with pytest.raises(CanonicalRequestDecodingError, match=message):
+        decode_canonical_request(
+            payload,
+            resource_paths=_materialize_resources(encoded, tmp_path / "resources"),
+            output_directory=tmp_path / "output",
+        )
+
+
+def test_schema7_decodes_alignment_string_only_as_private_legacy_state(
+    tmp_path: Path,
+) -> None:
+    request = _aligned_linear_request(tmp_path)
+    encoded = encode_canonical_request(
+        LinearDiagramRequest(records=request.records)
+    )
+    payload = _payload_for_schema(encoded, 7)
+    payload["comparisons"] = [{
+        "kind": "generatedProteinComparison",
+        "mode": "orthogroup",
+        "pairs": [],
+        "settings": {
+            "collinearityParams": None,
+            "collinearityUnitMode": "auto",
+            "collinearityAnchorMode": "rbh",
+            "collinearitySearchScope": "adjacent",
+            "collinearityColorMode": "orientation",
+            "losatpBin": "losat",
+            "ncbiBlastpBin": None,
+            "losatpThreads": None,
+            "proteinBlastpMaxHits": 5,
+            "proteinBlastpCandidateLimit": None,
+            "orthogroupMembershipMode": "anchor_core_v1",
+            "orthogroupMemberMaxHits": None,
+            "collinearInferOrthogroups": True,
+            "collinearMaxParalogLinksPerOrthogroup": 2,
+            "alignOrthogroupFeature": "og-legacy",
+        },
+    }]
+
+    decoded = decode_canonical_request(
+        payload,
+        resource_paths=_materialize_resources(encoded, tmp_path / "resources"),
+        output_directory=tmp_path / "output",
+    )
+    assert isinstance(decoded, LinearDiagramRequest)
+    assert not hasattr(decoded.options, "align_orthogroup_feature")
+    assert decoded._legacy_similarity_alignment is not None
+    assert decoded._legacy_similarity_alignment.target == "og-legacy"
+    assert decoded._legacy_similarity_alignment.source_schema == 7
+    with pytest.raises(CanonicalRequestEncodingError, match="materialized"):
+        encode_canonical_request(decoded)
+
+    malformed = copy.deepcopy(payload)
+    malformed["comparisons"][0]["settings"]["alignOrthogroupFeature"] = "  "
+    with pytest.raises(CanonicalRequestDecodingError, match="non-empty text"):
+        decode_canonical_request(
+            malformed,
+            resource_paths=_materialize_resources(encoded, tmp_path / "malformed"),
+            output_directory=tmp_path / "output",
+        )
+
+    ambiguous = copy.deepcopy(payload)
+    ambiguous["comparisons"].append(copy.deepcopy(ambiguous["comparisons"][0]))
+    with pytest.raises(CanonicalRequestDecodingError, match="Duplicate singleton"):
+        decode_canonical_request(
+            ambiguous,
+            resource_paths=_materialize_resources(encoded, tmp_path / "ambiguous"),
+            output_directory=tmp_path / "output",
+        )
 
 
 def test_schema5_defaults_record_cardinality_to_exactly_one(
@@ -2342,7 +2555,7 @@ def test_current_canonical_schema_uses_underlay_default_and_round_trips_override
 @pytest.mark.parametrize(
     ("mutator", "message"),
     [
-        (lambda payload: payload.update(schema=8), "Unsupported canonical request schema"),
+        (lambda payload: payload.update(schema=9), "Unsupported canonical request schema"),
         (lambda payload: payload.update(mode="radial"), "Unsupported canonical request mode"),
         (lambda payload: payload.pop("output"), "Missing required field"),
         (lambda payload: payload.update(futureField=True), "Unknown field"),

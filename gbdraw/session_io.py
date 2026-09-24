@@ -2720,6 +2720,7 @@ def build_session_json(
         else {}
     )
     orthogroup_state.pop("groups", None)
+    orthogroup_state.pop("selectedOrthogroupAlignmentFeature", None)
     payload["orthogroupState"] = orthogroup_state
     payload["cliInvocation"] = {
         "schema": 1,

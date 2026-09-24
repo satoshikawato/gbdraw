@@ -81,6 +81,16 @@ order, IDs, and shared information; it does not infer additional paths from its
 edges. Graph payloads store decimal count strings to avoid JavaScript integer
 rounding. Typed analysis resource schema 3 is required to read newly saved data.
 
+## Resolved Similarity Group alignment
+
+A Linear request may carry `similarity_alignment=SimilarityAlignmentPlan(...)`
+and a complete `LinearMultiRecordOptions.record_translations` sequence keyed by
+stable `recordKey`. The plan records the exact reference, one decision per
+record, rationale, and any effective orientation override. A group-ID string
+is invalid in a current request. See the [executable typed Python
+example](python-api.md#typed-linear-similarity-group-alignment) and the
+[Session reader boundary](session-and-request-compatibility.md#similarity-alignment-request-ownership).
+
 ## Depth tracks
 
 One `DepthTrackInput` represents one logical series. `source` accepts a path or `DataFrame` shared by all displayed records, or one path, `DataFrame`, or `None` per record. Linear entries may set `height`.

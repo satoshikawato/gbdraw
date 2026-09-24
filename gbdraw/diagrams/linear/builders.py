@@ -69,6 +69,8 @@ def add_record_group(
     feature_offset_y: float = 0.0,
     feature_lane_geometry: LinearFeatureLaneGeometry | None = None,
     record_transform: RecordDisplayTransform | None = None,
+    record_translation_x: float = 0.0,
+    record_translation_y: float = 0.0,
 ) -> Drawing:
     """Adds a record group to the linear canvas."""
     if placement is not None:
@@ -98,13 +100,20 @@ def add_record_group(
         record_group.attribs["data-gbdraw-slot-id"] = str(slot_id)
     if slot_renderer:
         record_group.attribs["data-gbdraw-slot-renderer"] = str(slot_renderer)
+    if record_count > 1 and placement is not None:
+        record_group.attribs["data-record-key"] = str(placement.record_key)
+        record_group.attribs["data-record-translation-x"] = str(
+            float(record_translation_x)
+        )
+        record_group.attribs["data-record-translation-y"] = str(
+            float(record_translation_y)
+        )
     if multi_record_layout:
         if placement is None:
             raise ValueError("multi_record_layout requires a resolved record placement")
         record_group.attribs["data-record-index"] = placement.record_index
         record_group.attribs["data-record-row"] = placement.row
         record_group.attribs["data-record-column"] = placement.column
-        record_group.attribs["data-record-key"] = str(placement.record_key)
     position_record_group(record_group, offset_y, offset_x, canvas_config)
     canvas.add(record_group)
     return canvas
@@ -251,6 +260,7 @@ def add_record_definition_group(
     record_index: int = 0,
     record_count: int = 1,
     record_transform: RecordDisplayTransform | None = None,
+    translation_x: float = 0.0,
 ) -> Drawing:
     """Adds a record definition group to the linear canvas.
 
@@ -295,10 +305,14 @@ def add_record_definition_group(
         )
         local_position = place_linear_definition(
             width=definition_group_obj.definition_bounding_box_width,
-            column_width=0.0, record_x=placement.x, gap=definition_gap,
+            column_width=0.0,
+            record_x=placement.x - float(translation_x), gap=definition_gap,
             keep_left=keep_definition_left_aligned, sequence_width=placement.sequence_width,
         )
-        record_definition_group.translate(canvas_config.horizontal_offset + local_position.x, header_y)
+        record_definition_group.translate(
+            canvas_config.horizontal_offset + local_position.x + float(translation_x),
+            header_y,
+        )
         canvas.add(record_definition_group)
         if split_row_definition:
             row_group_obj = DefinitionGroup(
@@ -326,12 +340,13 @@ def add_record_definition_group(
 
             row_position = place_linear_definition(
                 width=row_group_obj.definition_bounding_box_width,
-                column_width=reserved_width, record_x=placement.x, gap=definition_gap,
+                column_width=reserved_width,
+                record_x=placement.x - float(translation_x), gap=definition_gap,
                 keep_left=keep_definition_left_aligned,
             )
 
             row_group.translate(
-                canvas_config.horizontal_offset + row_position.x,
+                canvas_config.horizontal_offset + row_position.x + float(translation_x),
                 (
                     placement.axis_y
                     if definition_center_y is None
@@ -353,13 +368,14 @@ def add_record_definition_group(
     )
     definition_position = place_linear_definition(
         width=definition_group_obj.definition_bounding_box_width,
-        column_width=max(0.0, float(max_def_width)), record_x=record_offset_x,
+        column_width=max(0.0, float(max_def_width)),
+        record_x=record_offset_x - float(translation_x),
         gap=definition_gap, keep_left=keep_definition_left_aligned,
         text_anchor=definition_group_obj.linear_text_anchor,
     )
     record_definition_group = definition_group_obj.get_group()
     record_definition_group.translate(
-        canvas_config.horizontal_offset + definition_position.x,
+        canvas_config.horizontal_offset + definition_position.x + float(translation_x),
         record_offset_y if definition_center_y is None else float(definition_center_y),
     )
 

@@ -91,9 +91,9 @@ def test_session_reference_matches_current_implementation_constants() -> None:
     assert SUPPORTED_SESSION_VERSIONS == frozenset(
         {27, 28, 29, 30, 31, 32, 33, 39, 40, 41, 42, 44}
     )
-    assert SUPPORTED_CANONICAL_REQUEST_SCHEMAS == frozenset({1, 2, 5, 6, 7})
+    assert SUPPORTED_CANONICAL_REQUEST_SCHEMAS == frozenset({1, 2, 5, 6, 7, 8})
     assert "27–33, 39–42, and 44" in source
-    assert "1, 2, 5, 6, and 7" in source
+    assert "1, 2, 5, 6, 7, and 8" in source
 
 
 def test_input_reference_lists_parser_owned_table_columns() -> None:
@@ -125,6 +125,30 @@ def test_command_reference_entry_points_exist_in_current_help() -> None:
             text=True,
         )
         assert required_option in result.stdout
+
+
+def test_typed_similarity_alignment_example_runs_from_clean_directory(
+    tmp_path: Path,
+) -> None:
+    source = _read("python-api.md")
+    example = re.search(
+        r"<!-- executable:S07-PY-01:start -->\n```python\n(.*?)\n```\n"
+        r"<!-- executable:S07-PY-01:end -->",
+        source,
+        re.DOTALL,
+    )
+    assert example is not None
+    program = tmp_path / "typed_similarity_alignment.py"
+    program.write_text(example.group(1) + "\n", encoding="utf-8")
+    result = subprocess.run(
+        [sys.executable, program.name],
+        cwd=tmp_path,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert result.returncode == 0, result.stderr
+    assert result.stdout.strip() == "only_usable_candidate"
 
 
 def test_first_web_tutorial_controls_have_stable_accessible_names() -> None:

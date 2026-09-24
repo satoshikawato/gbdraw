@@ -11,7 +11,11 @@ import {
 } from '../record-groups.js';
 import { serializeCleanSvg } from '../../services/svg-serialization.js';
 
-export const createDiagramDragActions = ({ state, history = null }) => {
+export const createDiagramDragActions = ({
+  state,
+  history = null,
+  similarityAlignmentLifecycle = null
+}) => {
   const {
     results,
     selectedResultIndex,
@@ -349,6 +353,9 @@ export const createDiagramDragActions = ({ state, history = null }) => {
     cancelDiagramDragFrame();
     pendingDiagramPointer = null;
     beginDragTransaction(activeDragMode === 'record' ? 'Move record' : 'Move diagram');
+    if (activeDragMode === 'record') {
+      similarityAlignmentLifecycle?.beforeRecordDrag?.();
+    }
     diagramDragging.value = true;
     plotTitleDragging.value = false;
     diagramDragStart.x = e.clientX;
@@ -440,12 +447,18 @@ export const createDiagramDragActions = ({ state, history = null }) => {
       el.style.opacity = '1';
       el.style.willChange = '';
     });
+    const completedDragMode = activeDragMode;
     activeDragElements = [];
     activeDragOriginalTransforms = new Map();
     activeDragMode = 'group';
     activeLengthBarOffsetStart = { x: lengthBarUserOffset.x, y: lengthBarUserOffset.y };
     activePlotTitleOffsetStart = { x: plotTitleUserOffset.x, y: plotTitleUserOffset.y };
     pendingDiagramPointer = null;
+    if (completedDragMode === 'record') {
+      similarityAlignmentLifecycle?.afterRecordDrag?.({
+        moved: Math.abs(deltaX) > 1e-9 || Math.abs(deltaY) > 1e-9
+      });
+    }
     persistCurrentSvg();
     const tx = diagramDragTxPromise ? await diagramDragTxPromise : null;
     diagramDragTxPromise = null;

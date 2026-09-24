@@ -191,6 +191,87 @@ edge and wraps the complete record. See the [combined executable
 example](command-line.md#rotate-a-plastome-and-place-a-multipart-feature) and the
 [placement rules](palettes-feature-rules-labels-shapes-and-tracks.md#manual-feature-placement).
 
+## Typed Linear Similarity Group alignment
+
+`gbdraw.api.LinearDiagramRequest.similarity_alignment` accepts a complete
+`SimilarityAlignmentPlan`; `LinearMultiRecordOptions.record_translations` supplies
+one finite base X/Y translation for each stable record key. The typed API rejects
+a group-ID string or an incomplete plan. The shared Python resolver applies
+explicit choice → sole usable member → sole distinct direct RBH → Select/Skip.
+It never chooses by representative status, score, position, or multi-hop paths.
+`SimilarityAlignmentMode.POSITION` changes target X only;
+`POSITION_AND_ORIENTATION` reverses a whole target record only for known
+opposite displayed strands. Unknown strand means position-only alignment.
+
+This executable, in-memory contract example renders no public showcase file.
+In an integration, use actual group membership, current crop/display centers,
+displayed strands, and direct evidence; the two synthetic candidates here only
+show how the typed request and resolver fit together. Source feature identities
+come from the planned records, so they remain stable across record reorder.
+Save the block as `typed_similarity_alignment.py` and run
+`python typed_similarity_alignment.py` from an empty directory with gbdraw
+installed. It prints `only_usable_candidate`.
+
+<!-- executable:S07-PY-01:start -->
+```python
+from dataclasses import replace
+from Bio.Seq import Seq
+from Bio.SeqFeature import SeqFeature, SimpleLocation
+from Bio.SeqRecord import SeqRecord
+from gbdraw.api import (
+    AlignmentAnchorIdentity, InMemoryRecordSource, LinearDiagramRequest,
+    LinearMultiRecordOptions, LinearRecordTranslation, RecordInput,
+    build_request_diagram, plan_request,
+)
+from gbdraw.layout.similarity_alignment import (
+    SimilarityAlignmentCandidate, SimilarityAlignmentMode,
+    resolve_similarity_alignment,
+)
+
+
+def record(name, start):
+    item = SeqRecord(Seq('A' * 100), id=name, description=name)
+    item.annotations['topology'] = 'linear'
+    item.features = [SeqFeature(SimpleLocation(start, start + 12, strand=1),
+                                type='CDS', qualifiers={'gene': [name]})]
+    return item
+
+base = LinearDiagramRequest(records=(
+    RecordInput(InMemoryRecordSource(record('alpha', 10)), record_key='alpha'),
+    RecordInput(InMemoryRecordSource(record('beta', 40)), record_key='beta'),
+))
+provenance = plan_request(base).provenance
+anchors = []
+for key, item in zip(('alpha', 'beta'), provenance, strict=True):
+    feature = item.source_feature_catalog[0]
+    anchors.append(AlignmentAnchorIdentity(
+        key, feature.biological_feature_id, feature.source_feature_index,
+        feature.stable_feature_id,
+    ))
+plan = resolve_similarity_alignment(
+    record_keys=('alpha', 'beta'), group_id='example-group',
+    reference=anchors[0],
+    candidates=(
+        SimilarityAlignmentCandidate('example-group', anchors[0], 1, True, 16),
+        SimilarityAlignmentCandidate('example-group', anchors[1], 1, True, 46),
+    ),
+    edges=(), mode=SimilarityAlignmentMode.POSITION,
+).require_plan()
+request = replace(base, layout=LinearMultiRecordOptions(record_translations=(
+    LinearRecordTranslation('alpha'), LinearRecordTranslation('beta'),
+)), similarity_alignment=plan)
+prepared = build_request_diagram(request)
+assert prepared.drawing.tostring().startswith('<svg')
+print(plan.records[1].rationale.value)
+```
+<!-- executable:S07-PY-01:end -->
+
+Current Session round trips preserve the plan, its rationale, base translations,
+and effective orientation. An active plan survives ordinary regeneration;
+**Reset Align** uses the immediate pre-align base. Supported old Sessions enter
+an isolated reader-only compatibility path and save only the current typed
+representation. See [Session and request compatibility](session-and-request-compatibility.md#similarity-alignment-request-ownership).
+
 ## Combined rotation and placement example
 
 Use a new directory containing the four inputs obtained in the

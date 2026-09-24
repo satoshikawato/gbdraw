@@ -1831,7 +1831,8 @@ export const createRunAnalysis = ({
     requestId = 0,
     comparisonPlanSnapshot = null,
     generatedArtifactHandle = null,
-    comparisonExecution = null
+    comparisonExecution = null,
+    canonicalStateOverride = null
   } = {}) => {
     const isReflow = runMode === 'reflow';
     if (!isReflow) {
@@ -4449,9 +4450,26 @@ export const createRunAnalysis = ({
       );
       recordSessionLifecycleEvent('serialize-canonical-files-end');
       throwIfGenerationCanceled();
-      const candidateFiles = forceEmptyComparison
+      let candidateFiles = forceEmptyComparison
         ? { ...serializedFiles, linearCanonicalComparisons: [] }
         : serializedFiles;
+      if (Array.isArray(canonicalStateOverride?.linearRecordOrientations)) {
+        const orientationByRecord = new Map(
+          canonicalStateOverride.linearRecordOrientations.map((entry) => [
+            String(entry?.recordKey || ''),
+            Boolean(entry?.reverseComplement)
+          ])
+        );
+        candidateFiles = {
+          ...candidateFiles,
+          linearSeqs: (candidateFiles.linearSeqs || []).map((sequence) => ({
+            ...sequence,
+            region_reverse: orientationByRecord.has(String(sequence?.uid || ''))
+              ? orientationByRecord.get(String(sequence?.uid || ''))
+              : Boolean(sequence?.region_reverse)
+          }))
+        };
+      }
       const canonicalCircularConservation = resolvedCircularConservation.map((entry) => ({
         ...entry,
         fasta: candidateFiles.c_conservation_fastas?.[entry.sourceIndex] || null
@@ -4460,7 +4478,15 @@ export const createRunAnalysis = ({
         ...state,
         selectedOrthogroupAlignmentFeature: {
           value: workingSelectedOrthogroupAlignmentFeature
-        }
+        },
+        ...(canonicalStateOverride ? {
+          similarityAlignmentPlan: {
+            value: cloneJsonData(canonicalStateOverride.similarityAlignmentPlan)
+          },
+          linearRecordTranslations: {
+            value: cloneJsonData(canonicalStateOverride.linearRecordTranslations) || []
+          }
+        } : {})
       };
       recordSessionLifecycleEvent('canonical-request-construction-start');
       const canonical = buildCanonicalRenderRequest({
@@ -4733,6 +4759,17 @@ export const createRunAnalysis = ({
           collinearGroups: Array.isArray(candidateCommit.featureState.collinearGroups)
             ? candidateCommit.featureState.collinearGroups
             : [],
+          ...(canonicalStateOverride ? {
+            similarityAlignmentPlan: cloneJsonData(
+              canonicalStateOverride.similarityAlignmentPlan
+            ),
+            linearRecordTranslations: cloneJsonData(
+              canonicalStateOverride.linearRecordTranslations
+            ) || [],
+            linearRecordOrientations: cloneJsonData(
+              canonicalStateOverride.linearRecordOrientations
+            ) || currentOwnerSet.linearRecordOrientations
+          } : {}),
           trackSlotResolvedGeometry: generationMetadata.trackSlotGeometry || null,
           proteinIdentityManifest: workingProteinIdentityManifest,
           legacyProteinRawCandidates: workingLegacyProteinRawCandidates,
@@ -4961,7 +4998,8 @@ export const createRunAnalysis = ({
   const runAnalysis = async (
     comparisonPlanSnapshot = null,
     generatedArtifactHandle = null,
-    comparisonExecution = null
+    comparisonExecution = null,
+    canonicalStateOverride = null
   ) => {
     let outcome = null;
     processing.value = true;
@@ -4982,7 +5020,8 @@ export const createRunAnalysis = ({
         runMode: 'manual',
         comparisonPlanSnapshot,
         generatedArtifactHandle: beforeHandle || generatedArtifactHandle,
-        comparisonExecution
+        comparisonExecution,
+        canonicalStateOverride
       });
       outcome = typeof runGeneratedArtifactReplacement === 'function'
         ? await runGeneratedArtifactReplacement(

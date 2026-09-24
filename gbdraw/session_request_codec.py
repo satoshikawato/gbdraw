@@ -70,6 +70,7 @@ from .api.options import (
     DepthTrackInput,
     LinearDiagramOptions,
     LinearMultiRecordOptions,
+    LinearRecordTranslation,
     LinearOutputOptions,
     LinearRequestTrackOptions,
 )
@@ -87,12 +88,24 @@ from .api.requests import (
     RecordInput,
     RecordPresentation,
     RenderOutputRequest,
+    _LegacySimilarityAlignment,
+    _with_legacy_similarity_alignment,
+)
+from .layout.similarity_alignment import (
+    AlignmentAnchorIdentity,
+    AlignmentDecisionStatus,
+    AlignmentRecordDecision,
+    AlignmentResolutionRationale,
+    SimilarityAlignmentMode,
+    SimilarityAlignmentPlan,
 )
 
 
-CANONICAL_REQUEST_SCHEMA = 7
+CANONICAL_REQUEST_SCHEMA = 8
 DISPLAY_PLACEMENT_SCHEMA = 7
-SUPPORTED_CANONICAL_REQUEST_SCHEMAS = frozenset({1, 2, 5, 6, CANONICAL_REQUEST_SCHEMA})
+SUPPORTED_CANONICAL_REQUEST_SCHEMAS = frozenset(
+    {1, 2, 5, 6, 7, CANONICAL_REQUEST_SCHEMA}
+)
 UNKNOWN_FIELD_POLICY = "reject"
 
 
@@ -387,9 +400,9 @@ _PIPELINE_FIELDS = (
     "orthogroup_member_max_hits",
     "collinear_infer_orthogroups",
     "collinear_max_paralog_links_per_orthogroup",
-    "align_orthogroup_feature",
 )
-_COMPARISON_FIELDS = _COMPARISON_SOURCE_FIELDS | frozenset(_PIPELINE_FIELDS)
+_LEGACY_PIPELINE_FIELDS = (*_PIPELINE_FIELDS, "align_orthogroup_feature")
+_COMPARISON_FIELDS = _COMPARISON_SOURCE_FIELDS | frozenset(_LEGACY_PIPELINE_FIELDS)
 
 _TABLE_FIELDS = frozenset(
     {
@@ -598,9 +611,13 @@ def _encode_canonical_request(request: DiagramRequest) -> EncodedCanonicalReques
             unresolved_reasons.append("record-derived output prefix")
         if request.options.comparison_table_file is not None:
             unresolved_reasons.append("Linear comparison table")
+        if request._legacy_similarity_alignment is not None:
+            raise CanonicalRequestEncodingError(
+                "A legacy similarity alignment must be materialized before current encoding."
+            )
     if unresolved_reasons:
         raise CanonicalRequestEncodingError(
-            "Canonical schema 6 cannot encode unresolved request transforms; "
+            "The current canonical schema cannot encode unresolved request transforms; "
             "call gbdraw.api.resolve_request() before encoding (unresolved: "
             + ", ".join(unresolved_reasons)
             + ")."
@@ -737,6 +754,10 @@ def _decode_canonical_request(
     comparison_kwargs = _decode_comparisons(
         top["comparisons"], mode=mode, schema=schema, resource_paths=resource_paths
     )
+    legacy_similarity_alignment = comparison_kwargs.pop(
+        "_legacy_similarity_alignment",
+        None,
+    )
     options_type = (
         CircularDiagramOptions if mode == "circular" else LinearDiagramOptions
     )
@@ -764,13 +785,25 @@ def _decode_canonical_request(
                 )
             linear_layout = None
         else:
-            linear_layout = _decode_linear_layout(top["layout"], schema=schema)
-        return LinearDiagramRequest(
+            linear_layout, similarity_alignment = _decode_linear_layout(
+                top["layout"],
+                schema=schema,
+            )
+        if schema == 1:
+            similarity_alignment = None
+        request = LinearDiagramRequest(
             records=records,
             options=options,
             layout=linear_layout,
+            similarity_alignment=similarity_alignment,
             output=output,
         )
+        if legacy_similarity_alignment is not None:
+            _with_legacy_similarity_alignment(
+                request,
+                legacy_similarity_alignment,
+            )
+        return request
 
     layout = _decode_circular_layout(top["layout"], schema=schema)
     if schema in {1, 2}:
@@ -1037,18 +1070,147 @@ def _decode_region(value: object, *, path: str) -> RegionSpec | None:
     )
 
 
+def _encode_alignment_anchor(anchor: AlignmentAnchorIdentity) -> dict[str, Any]:
+    return {
+        "recordKey": anchor.record_key,
+        "biologicalFeatureId": anchor.biological_feature_id,
+        "sourceFeatureIndex": anchor.source_feature_index,
+        "stableFeatureSvgId": anchor.stable_feature_svg_id,
+    }
+
+
+def _encode_similarity_alignment_plan(
+    plan: SimilarityAlignmentPlan | None,
+) -> dict[str, Any] | None:
+    if plan is None:
+        return None
+    return {
+        "schema": plan.schema,
+        "mode": plan.mode.value,
+        "groupId": plan.group_id,
+        "reference": _encode_alignment_anchor(plan.reference),
+        "records": [
+            {
+                "recordKey": decision.record_key,
+                "status": decision.status.value,
+                "rationale": decision.rationale.value,
+                "anchor": (
+                    _encode_alignment_anchor(decision.anchor)
+                    if decision.anchor is not None
+                    else None
+                ),
+                "effectiveReverseComplement": decision.effective_reverse_complement,
+            }
+            for decision in plan.records
+        ],
+    }
+
+
+def _decode_alignment_anchor(
+    value: object,
+    *,
+    path: str,
+) -> AlignmentAnchorIdentity:
+    payload = _object(
+        value,
+        path=path,
+        required={
+            "recordKey",
+            "biologicalFeatureId",
+            "sourceFeatureIndex",
+            "stableFeatureSvgId",
+        },
+    )
+    return AlignmentAnchorIdentity(
+        record_key=payload["recordKey"],
+        biological_feature_id=payload["biologicalFeatureId"],
+        source_feature_index=payload["sourceFeatureIndex"],
+        stable_feature_svg_id=payload["stableFeatureSvgId"],
+    )
+
+
+def _decode_similarity_alignment_plan(
+    value: object,
+    *,
+    path: str,
+) -> SimilarityAlignmentPlan | None:
+    if value is None:
+        return None
+    payload = _object(
+        value,
+        path=path,
+        required={"schema", "mode", "groupId", "reference", "records"},
+    )
+    raw_records = _array(payload["records"], path=f"{path}.records")
+    decisions: list[AlignmentRecordDecision] = []
+    for index, raw in enumerate(raw_records):
+        decision_path = f"{path}.records[{index}]"
+        decision = _object(
+            raw,
+            path=decision_path,
+            required={
+                "recordKey",
+                "status",
+                "rationale",
+                "anchor",
+                "effectiveReverseComplement",
+            },
+        )
+        decisions.append(
+            AlignmentRecordDecision(
+                record_key=decision["recordKey"],
+                status=AlignmentDecisionStatus(decision["status"]),
+                rationale=AlignmentResolutionRationale(decision["rationale"]),
+                anchor=(
+                    _decode_alignment_anchor(
+                        decision["anchor"],
+                        path=f"{decision_path}.anchor",
+                    )
+                    if decision["anchor"] is not None
+                    else None
+                ),
+                effective_reverse_complement=decision[
+                    "effectiveReverseComplement"
+                ],
+            )
+        )
+    return SimilarityAlignmentPlan(
+        schema=payload["schema"],
+        mode=SimilarityAlignmentMode(payload["mode"]),
+        group_id=payload["groupId"],
+        reference=_decode_alignment_anchor(
+            payload["reference"],
+            path=f"{path}.reference",
+        ),
+        records=tuple(decisions),
+    )
+
+
 def _encode_layout(request: DiagramRequest) -> dict[str, Any]:
     if isinstance(request, CircularBatchRequest):
         return {}
     if isinstance(request, LinearDiagramRequest):
         if request.layout is None:
             return {}
-        layout: dict[str, Any] = {"recordGapPx": request.layout.record_gap_px}
-        if request.layout.multi_record_positions is not None:
-            layout["multiRecordPositions"] = list(
-                request.layout.multi_record_positions
-            )
-        return layout
+        return {
+            "recordGapPx": request.layout.record_gap_px,
+            "multiRecordPositions": (
+                list(request.layout.multi_record_positions)
+                if request.layout.multi_record_positions is not None
+                else None
+            ),
+            "recordTranslations": [
+                {
+                    "recordKey": translation.record_key,
+                    "x": translation.x,
+                    "y": translation.y,
+                }
+                for translation in request.layout.record_translations
+            ],
+            "similarityAlignment": _encode_similarity_alignment_plan(
+                request.similarity_alignment
+            ),
+        }
     if not isinstance(request, CircularDiagramRequest) or request.layout is None:
         return {}
     layout = request.layout
@@ -1116,10 +1278,64 @@ def _decode_linear_layout(
     value: object,
     *,
     schema: int,
-) -> LinearMultiRecordOptions | None:
+) -> tuple[LinearMultiRecordOptions | None, SimilarityAlignmentPlan | None]:
     layout = _object(value, path="renderRequest.layout")
     if not layout:
-        return None
+        return None, None
+    if schema >= 8:
+        _require_exact_fields(
+            layout,
+            path="renderRequest.layout",
+            required={
+                "recordGapPx",
+                "multiRecordPositions",
+                "recordTranslations",
+                "similarityAlignment",
+            },
+        )
+        raw_positions = layout["multiRecordPositions"]
+        if raw_positions is not None:
+            positions = _array(
+                raw_positions,
+                path="renderRequest.layout.multiRecordPositions",
+            )
+            if not all(isinstance(item, str) and item.strip() for item in positions):
+                raise CanonicalRequestDecodingError(
+                    "renderRequest.layout.multiRecordPositions must contain non-empty text."
+                )
+        else:
+            positions = None
+        raw_translations = _array(
+            layout["recordTranslations"],
+            path="renderRequest.layout.recordTranslations",
+        )
+        translations: list[LinearRecordTranslation] = []
+        for index, raw in enumerate(raw_translations):
+            path = f"renderRequest.layout.recordTranslations[{index}]"
+            item = _object(
+                raw,
+                path=path,
+                required={"recordKey", "x", "y"},
+            )
+            translations.append(
+                LinearRecordTranslation(
+                    record_key=item["recordKey"],
+                    x=item["x"],
+                    y=item["y"],
+                )
+            )
+        result = LinearMultiRecordOptions(
+            record_gap_px=layout["recordGapPx"],
+            multi_record_positions=(
+                tuple(positions) if positions is not None else None
+            ),
+            record_translations=tuple(translations),
+        )
+        _validate_dataclass_contract(result, path="layout", error="decode")
+        return result, _decode_similarity_alignment_plan(
+            layout["similarityAlignment"],
+            path="renderRequest.layout.similarityAlignment",
+        )
     _require_exact_fields(
         layout,
         path="renderRequest.layout",
@@ -1143,7 +1359,7 @@ def _decode_linear_layout(
         multi_record_positions=tuple(positions) if positions is not None else None,
     )
     _validate_dataclass_contract(result, path="layout", error="decode")
-    return result
+    return result, None
 
 
 _PLACEMENT_INPUT_FIELDS = frozenset({
@@ -3208,7 +3424,11 @@ def _decode_comparisons(
             )
         elif kind == "generatedProteinComparison":
             _check_singleton_kind(kind, singleton_kinds, path=path)
-            result.update(_decode_pipeline(item, path=path, schema=schema))
+            pipeline = _decode_pipeline(item, path=path, schema=schema)
+            legacy_alignment = pipeline.pop("_legacy_similarity_alignment", None)
+            if legacy_alignment is not None:
+                result["_legacy_similarity_alignment"] = legacy_alignment
+            result.update(pipeline)
         else:
             raise CanonicalRequestDecodingError(
                 f"Unsupported comparison kind at {path}: {kind!r}."
@@ -3251,7 +3471,10 @@ def _decode_pipeline(
         required.add("pairs")
     _require_exact_fields(item, path=path, required=required)
     settings = _object(item["settings"], path=f"{path}.settings")
-    setting_fields = tuple(name for name in _PIPELINE_FIELDS if name != "protein_blastp_mode")
+    pipeline_fields = _PIPELINE_FIELDS if schema >= 8 else _LEGACY_PIPELINE_FIELDS
+    setting_fields = tuple(
+        name for name in pipeline_fields if name != "protein_blastp_mode"
+    )
     field_map = {_camel(name): name for name in setting_fields}
     _require_exact_fields(
         settings, path=f"{path}.settings",
@@ -3289,6 +3512,18 @@ def _decode_pipeline(
         )
     for key, name in field_map.items():
         raw = settings.get(key, True) if name == "collinear_infer_orthogroups" else settings[key]
+        if name == "align_orthogroup_feature":
+            if raw is None:
+                continue
+            if not isinstance(raw, str) or not raw.strip() or "\0" in raw:
+                raise CanonicalRequestDecodingError(
+                    f"{path}.settings.{key} must be null or non-empty text without NUL."
+                )
+            result["_legacy_similarity_alignment"] = _LegacySimilarityAlignment(
+                target=raw,
+                source_schema=schema,
+            )
+            continue
         if name == "collinearity_params":
             decoded, legacy_max_paralog_links = _decode_collinearity_params(
                 raw,

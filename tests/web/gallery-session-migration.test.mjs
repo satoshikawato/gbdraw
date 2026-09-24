@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { webcrypto } from 'node:crypto';
+import { createHash, webcrypto } from 'node:crypto';
 import { cp, mkdtemp, readFile, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -152,7 +152,7 @@ const syntheticCliSession = {
 };
 const originalCliRequest = structuredClone(syntheticCliSession.renderRequest);
 const promotedSyntheticCli = promoteGallerySessionToCurrent(syntheticCliSession);
-assert.equal(promotedSyntheticCli.renderRequest.schema, 7);
+assert.equal(promotedSyntheticCli.renderRequest.schema, 8);
 assert.equal(promotedSyntheticCli.renderRequest.grouping, 'single');
 assert.deepEqual(promotedSyntheticCli.renderRequest.diagramOptions.output, {
   legend: 'right',
@@ -285,7 +285,7 @@ const syntheticGuiSession = {
 };
 const promotedSyntheticGui = promoteGallerySessionToCurrent(syntheticGuiSession);
 const syntheticGuiOptions = promotedSyntheticGui.renderRequest.diagramOptions;
-assert.equal(promotedSyntheticGui.renderRequest.schema, 7);
+assert.equal(promotedSyntheticGui.renderRequest.schema, 8);
 assert.equal(promotedSyntheticGui.renderRequest.grouping, 'single');
 assert.equal(promotedSyntheticGui.renderRequest.output.prefix, 'old');
 assert.equal(promotedSyntheticGui.renderRequest.output.overwrite, false);
@@ -555,7 +555,7 @@ assert.equal(Object.hasOwn(migratedCliOnly.config, 'linearRecordLayout'), false)
 const hmmt = JSON.parse(await readFile(join(repoRoot, 'tests/fixtures/sessions/HmmtDNA_ATskew.v40-schema5.json'), 'utf8'));
 const promotedHmmt = promoteGallerySessionToCurrent({ ...hmmt, version: 39 });
 const hmmtOptions = promotedHmmt.renderRequest.diagramOptions;
-assert.equal(promotedHmmt.renderRequest.schema, 7);
+assert.equal(promotedHmmt.renderRequest.schema, 8);
 assert.equal(hmmtOptions.configOverrides['labels.circular.scope'], 'outer');
 assert.equal(hmmtOptions.configOverrides['objects.definition.circular.font_size'], 28);
 assert.equal(hmmtOptions.featureShapes.repeat_region, 'underlay');
@@ -587,7 +587,95 @@ assert.match(
   /CDS\tgene/
 );
 
-const bgc = JSON.parse(await readFile(join(repoRoot, 'tests/fixtures/sessions/BGC0000708-BGC0000713.v40-schema5.json'), 'utf8'));
+const bgcFixturePath = join(
+  repoRoot,
+  'tests/fixtures/sessions/BGC0000708-BGC0000713.v40-schema5.json'
+);
+const bgcFixtureBytes = await readFile(bgcFixturePath);
+const bgcEvidence = JSON.parse(await readFile(join(
+  repoRoot,
+  'tests/fixtures/sessions/BGC0000708-BGC0000713.legacy-alignment-evidence.json'
+), 'utf8'));
+assert.equal(bgcEvidence.sourceFixture, 'BGC0000708-BGC0000713.v40-schema5.json');
+assert.equal(
+  createHash('sha256').update(bgcFixtureBytes).digest('hex'),
+  bgcEvidence.sourceFixtureSha256
+);
+assert.equal(bgcEvidence.firstParentMainCommit, '10d3a3d28b3c9faa42db01c8bd0bd36b9be8433c');
+assert.deepEqual(bgcEvidence.metadataEvidence, {
+  featureCatalogSchema: 3,
+  orthogroupId: 'og_1',
+  representativeRecordCoverage: 5,
+  hasBiologicalFeatureIds: true,
+  hasSourceFeatureIndexes: true
+});
+const v39FixturePath = join(
+  repoRoot,
+  'tests/fixtures/sessions/BGC0000708-BGC0000713.v39.gbdraw-session.json.gz'
+);
+const v39FixtureBytes = await readFile(v39FixturePath);
+const v39 = JSON.parse(gunzipSync(v39FixtureBytes).toString('utf8'));
+assert.equal(
+  createHash('sha256').update(v39FixtureBytes).digest('hex'),
+  bgcEvidence.saveBeforeMaterializationAudit.sourceFixtureSha256
+);
+assert.deepEqual(bgcEvidence.saveBeforeMaterializationAudit, {
+  sourceFixture: 'BGC0000708-BGC0000713.v39.gbdraw-session.json.gz',
+  sourceFixtureSha256: 'e2e8296807649b4da8af38fd1f13f0af211543b36cb03c8347691ff9583e0093',
+  firstParentMainCommit: '8228ffab272d6ea2a0728ae0e1d925424431b21d',
+  sessionVersion: 39,
+  requestSchema: 5,
+  featureCatalogSchema: 1,
+  legacyOrthogroupId: 'og_1',
+  representativeRecordCoverage: 5,
+  hasRecordIndexes: true,
+  hasSourceFeatureIndexes: true,
+  hasStableFeatureSvgIds: true
+});
+const promotedV39Request = promoteCanonicalRenderRequestToCurrent(
+  v39.renderRequest,
+  { legacyOrthogroupState: v39.orthogroupState }
+);
+assert.equal(promotedV39Request.schema, 8);
+assert.equal(promotedV39Request.layout.similarityAlignment.groupId, 'og_1');
+assert.deepEqual(
+  promotedV39Request.layout.similarityAlignment.records.map(
+    ({ recordKey, status, anchor }) => [recordKey, status, anchor?.sourceFeatureIndex ?? null]
+  ),
+  [
+    ['linear-seq-c3b6c54d-8b5f-4ff1-b845-12e99a4cded8', 'reference', 14],
+    ['linear-seq-b5d86214-8d43-4a75-860d-2c15175c9bef', 'aligned', 22],
+    ['linear-seq-f090a874-b21f-402e-9a2e-d6f47e6f5235', 'aligned', 10],
+    ['linear-seq-b0fb2b92-9a70-4608-9df9-d254a9e06c97', 'aligned', 44],
+    ['linear-seq-7e78644f-27b1-4822-92d7-8b24f1baf360', 'aligned', 25]
+  ]
+);
+const malformedV39State = structuredClone(v39.orthogroupState);
+const malformedV39Member = malformedV39State.groups.find(
+  ({ id }) => id === 'og_1'
+).members[0];
+delete malformedV39Member.stableFeatureSvgId;
+delete malformedV39Member.stable_feature_svg_id;
+delete malformedV39Member.featureSvgId;
+assert.throws(
+  () => promoteCanonicalRenderRequestToCurrent(
+    v39.renderRequest,
+    { legacyOrthogroupState: malformedV39State }
+  ),
+  /stable feature identity/
+);
+const ambiguousV39State = structuredClone(v39.orthogroupState);
+ambiguousV39State.groups.push(structuredClone(
+  ambiguousV39State.groups.find(({ id }) => id === 'og_1')
+));
+assert.throws(
+  () => promoteCanonicalRenderRequestToCurrent(
+    v39.renderRequest,
+    { legacyOrthogroupState: ambiguousV39State }
+  ),
+  /group is ambiguous/
+);
+const bgc = JSON.parse(bgcFixtureBytes.toString('utf8'));
 const promotedBgc = promoteGallerySessionToCurrent({ ...bgc, version: 39 });
 const bgcOptions = promotedBgc.renderRequest.diagramOptions;
 assert.deepEqual(
@@ -631,9 +719,25 @@ assert.match(
   ),
   /Core biosynthetic genes/
 );
+const expectedBgcComparisons = structuredClone(bgc.renderRequest.comparisons);
+delete expectedBgcComparisons.find(
+  (comparison) => comparison.kind === 'generatedProteinComparison'
+).settings.alignOrthogroupFeature;
+assert.deepEqual(promotedBgc.renderRequest.comparisons, expectedBgcComparisons);
+assert.equal(
+  promotedBgc.renderRequest.layout.similarityAlignment.groupId,
+  'og_1'
+);
+assert.equal(
+  Object.hasOwn(promotedBgc.orthogroupState, 'selectedOrthogroupAlignmentFeature'),
+  false
+);
 assert.deepEqual(
-  promotedBgc.renderRequest.comparisons,
-  bgc.renderRequest.comparisons
+  promotedBgc.renderRequest.layout.recordTranslations.map(
+    ({ recordKey, x, y }) => [recordKey, x, y]
+  ),
+  ['record-1', 'record-2', 'record-3', 'record-4', 'record-5']
+    .map((recordKey) => [recordKey, 0, 0])
 );
 
 const majani = await loadSession('majanivirus_orthogroup.gbdraw-session.json.gz');

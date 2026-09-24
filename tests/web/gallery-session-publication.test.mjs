@@ -62,7 +62,12 @@ for (const name of sessionNames) {
   const committedBefore = JSON.stringify(source.renderRequest);
   const result = await prepareGallerySessionForPublication(source);
   assert.equal(result.session.version, 44, name);
-  assert.equal(result.session.renderRequest.schema, 7, name);
+  assert.equal(result.session.renderRequest.schema, 8, name);
+  assert.equal(
+    Object.hasOwn(result.session.orthogroupState || {}, 'selectedOrthogroupAlignmentFeature'),
+    false,
+    name
+  );
   assert.equal(result.equivalence.equivalent, true, name);
   assert.equal(JSON.stringify(source.renderRequest), committedBefore, name);
   assert.equal(result.session.cliInvocation, source.cliInvocation, name);
@@ -88,6 +93,14 @@ assert.equal(admittedLambda.editorState.featureCatalog.schema, 4);
 assert.deepEqual(admittedLambda.results, lambda.results);
 assert.equal(lambda.version, 42);
 assert.equal(lambda.editorState.featureCatalog.schema, 3);
+const releasedCurrent = await loadSession('HmmtDNA_basic_circular.gbdraw-session.json');
+assert.equal(releasedCurrent.version, 44);
+assert.equal(releasedCurrent.renderRequest.schema, 7);
+assert.equal(releasedCurrent.editorState.featureCatalog.schema, 4);
+const admittedReleasedCurrent = admitGallerySession(releasedCurrent);
+assert.equal(admittedReleasedCurrent.renderRequest.schema, 8);
+assert.equal(admittedReleasedCurrent.editorState.featureCatalog.schema, 4);
+assert.deepEqual(admittedReleasedCurrent.results, releasedCurrent.results);
 const alteredProvenance = structuredClone(lambda);
 alteredProvenance.cliInvocation = {
   ...alteredProvenance.cliInvocation,

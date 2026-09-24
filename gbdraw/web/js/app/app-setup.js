@@ -74,6 +74,7 @@ import { createSvgStyles } from './svg-styles.js';
 import { createLegendManager } from './legend.js';
 import { createPaletteLoader } from './palettes.js';
 import { afterPaint, createRunAnalysis } from './run-analysis.js';
+import { createSimilarityAlignmentActions } from './similarity-alignment.js';
 import { normalizeUserFacingError } from '../services/error-normalization.js';
 import { formatElapsedMs, reproducibilityLabel } from './run-info.js';
 import { createLegendLayout } from './legend-layout.js';
@@ -282,7 +283,6 @@ export const createAppSetup = () => {
     losatThreadingStatus,
     orthogroups,
     featureOrthogroupIndex,
-    selectedOrthogroupAlignmentFeature,
     orthogroupNameOverrides,
     orthogroupDescriptionOverrides,
     selectedOrthogroupId,
@@ -426,6 +426,7 @@ export const createAppSetup = () => {
     fileLegendCaptions,
     filteredFeatures
   } = state;
+  let similarityAlignmentActions = null;
   const linearTypography = createLinearTypographyController({
     adv,
     linked: linearTypographyLinked
@@ -495,6 +496,15 @@ export const createAppSetup = () => {
 
   const replaceLinearComparisonPlan = (nextPlan, { invalidate = true } = {}) => {
     const normalized = normalizeLinearComparisonPlan(nextPlan);
+    const changed = normalized.mode !== linearComparisonPlan.mode
+      || normalized.defaultSource !== linearComparisonPlan.defaultSource
+      || normalized.edges.length !== linearComparisonPlan.edges.length
+      || normalized.edges.some((edge, index) => (
+        !sameLinearComparisonEdge(edge, linearComparisonPlan.edges[index])
+      ));
+    if (invalidate && changed) {
+      similarityAlignmentActions?.clearForMutation?.('comparison configuration changed.');
+    }
     linearComparisonPlan.mode = normalized.mode;
     linearComparisonPlan.defaultSource = normalized.defaultSource;
     linearComparisonPlan.edges.splice(
@@ -693,6 +703,7 @@ export const createAppSetup = () => {
     if (!selection.selectable || !selection.patch) return false;
     const nextProgram = selection.patch.losatProgram;
     if (losatProgram.value === nextProgram) return true;
+    similarityAlignmentActions?.clearForMutation?.('comparison program changed.');
     losatProgram.value = nextProgram;
     invalidateLinearComparisonArtifacts();
     return true;
@@ -706,6 +717,7 @@ export const createAppSetup = () => {
     if (!selection.selectable || !selection.patch) return false;
     const nextBlastpMode = selection.patch.blastpMode;
     if (losat.blastp?.mode === nextBlastpMode) return true;
+    similarityAlignmentActions?.clearForMutation?.('comparison mode changed.');
     const hitLimits = losat.blastp.hitLimitsByMode ||= createDefaultLosatpHitLimits();
     hitLimits[losat.blastp.mode] = {
       candidateLimit: losat.blastp.candidateLimit,
@@ -986,7 +998,7 @@ export const createAppSetup = () => {
     });
     applyLinearSeqMutation([
       ...linearSeqs.slice(0, index), ...expanded, ...linearSeqs.slice(index + 1)
-    ]);
+    ], { alignmentMutation: 'record selector changed.' });
     expanded.forEach((seq) => updateLinearRecordRow(linearRecordRows, seq.uid, row));
     return true;
   };
@@ -2058,7 +2070,15 @@ export const createAppSetup = () => {
       if (slotsEnabled) circularTrackSlotEditor.syncCircularConservationSlots();
     }
   );
-  const legendLayout = createLegendLayout({ state, legendActions, history });
+  const legendLayout = createLegendLayout({
+    state,
+    legendActions,
+    history,
+    similarityAlignmentLifecycle: {
+      beforeRecordDrag: () => similarityAlignmentActions?.beforeRecordDrag?.(),
+      afterRecordDrag: (options) => similarityAlignmentActions?.afterRecordDrag?.(options)
+    }
+  });
   legendActions.setLegendGeometryChangedHandler(legendLayout.refreshLegendGeometry);
   const shouldSyncMountedLabelEditor = () => (
     isFeatureDrawerMounted.value
@@ -2630,12 +2650,25 @@ export const createAppSetup = () => {
         };
   }
 
-  const runAnalysis = async () => {
+  const runAnalysis = async (options = null) => {
     if (mode.value === 'linear') {
       if (importedComparisonIntent.disposition === IMPORTED_COMPARISON_DISPOSITIONS.EDITABLE) {
         await materializeAutomaticLinearRecords();
       } else {
         await linearRecordSelector.refresh();
+      }
+    }
+    if (
+      !options?.skipSimilarityAlignmentValidation
+      && similarityAlignmentActions?.validateBeforeGenerate
+    ) {
+      const validation = await similarityAlignmentActions.validateBeforeGenerate();
+      if (validation?.status !== 'ok') {
+        failedGeneratePreservedResult.value = results.value.length > 0;
+        if (similarityAlignmentActions.dialogOpen.value) {
+          await focusSimilarityAlignmentDialog();
+        }
+        return validation;
       }
     }
     const comparisonPlanSnapshot = mode.value === 'linear'
@@ -2655,7 +2688,8 @@ export const createAppSetup = () => {
     const result = await runGeneratedDiagramAnalysis(
       comparisonPlanSnapshot,
       null,
-      comparisonExecution
+      comparisonExecution,
+      options?.canonicalStateOverride || null
     );
     if (result?.status === 'error' && mode.value === 'linear') {
       await focusLinearComparisonIssue();
@@ -2711,10 +2745,80 @@ export const createAppSetup = () => {
     cancelRunAnalysis();
   };
 
-  const orthogroupActions = createOrthogroupEditor({
+  const orthogroupActions = createOrthogroupEditor({ state });
+  similarityAlignmentActions = createSimilarityAlignmentActions({
     state,
-    runAnalysis
+    getOrthogroupById: orthogroupActions.getOrthogroupById,
+    getEnrichedOrthogroupMembers: orthogroupActions.getEnrichedOrthogroupMembers,
+    getCommittedRequest: getCommittedCanonicalRenderRequest,
+    runAnalysis,
+    cancelRunAnalysis,
+    runHelperOperation: runDiagramHelperOperation,
+    resolveOperation: DIAGRAM_HELPER_OPERATIONS.RESOLVE_SIMILARITY_ALIGNMENT,
+    getCurrentSvg: () => svgContainer.value?.querySelector?.('svg') || null,
+    previewCandidate: featureActions.previewAlignmentCandidate,
+    clearCandidatePreview: featureActions.clearAlignmentCandidatePreview,
+    onError: (error) => { errorLog.value = error; }
   });
+  let similarityAlignmentReturnFocus = null;
+  const rememberSimilarityAlignmentInvoker = (event) => {
+    similarityAlignmentReturnFocus = event?.currentTarget || document.activeElement || null;
+  };
+  const restoreSimilarityAlignmentFocus = async () => {
+    await nextTick();
+    const target = similarityAlignmentReturnFocus;
+    similarityAlignmentReturnFocus = null;
+    if (target?.isConnected && typeof target.focus === 'function') {
+      target.focus();
+      return;
+    }
+    document.querySelector('[data-similarity-alignment-drawer-reference]')?.focus();
+  };
+  const focusSimilarityAlignmentDialog = async () => {
+    await nextTick();
+    document.querySelector(
+      '[data-similarity-alignment-dialog] input:not(:disabled), '
+      + '[data-similarity-alignment-dialog] button:not(:disabled)'
+    )?.focus();
+  };
+  const similarityAlignmentFocusableControls = () => Array.from(
+    document.querySelectorAll(
+      '[data-similarity-alignment-dialog] '
+      + 'input:not(:disabled), [data-similarity-alignment-dialog] '
+      + 'select:not(:disabled), [data-similarity-alignment-dialog] '
+      + 'button:not(:disabled), [data-similarity-alignment-dialog] [tabindex="0"]'
+    )
+  ).filter((element) => !element.closest('[hidden], [aria-hidden="true"]'));
+  const trapSimilarityAlignmentFocus = (event) => {
+    const dialog = document.querySelector('[data-similarity-alignment-dialog]');
+    const controls = similarityAlignmentFocusableControls();
+    if (!dialog || !controls.length) return;
+    const first = controls[0];
+    const last = controls.at(-1);
+    if (event.shiftKey && (document.activeElement === first || !dialog.contains(document.activeElement))) {
+      event.preventDefault();
+      last.focus();
+    } else if (!event.shiftKey && (document.activeElement === last || !dialog.contains(document.activeElement))) {
+      event.preventDefault();
+      first.focus();
+    }
+  };
+  const startSimilarityAlignmentFromDrawer = async (groupId, mode, event = null) => {
+    rememberSimilarityAlignmentInvoker(event);
+    const outcome = await similarityAlignmentActions.startFromDrawer({ groupId, mode });
+    if (outcome.status === 'ambiguous') await focusSimilarityAlignmentDialog();
+    else similarityAlignmentReturnFocus = null;
+    return outcome;
+  };
+  const cancelSimilarityAlignmentDialog = async () => {
+    similarityAlignmentActions.cancel();
+    await restoreSimilarityAlignmentFocus();
+  };
+  const applySimilarityAlignmentDialog = async () => {
+    const outcome = await similarityAlignmentActions.applyDraft();
+    if (!similarityAlignmentActions.dialogOpen.value) await restoreSimilarityAlignmentFocus();
+    return outcome;
+  };
   const canUseClickedOrthogroupActions = computed(() => {
     const cf = clickedFeature.value;
     return Boolean(
@@ -2755,17 +2859,21 @@ export const createAppSetup = () => {
     };
   });
 
-  const alignByClickedOrthogroup = async () => {
-    const cf = clickedFeature.value;
-    if (!cf?.orthogroupId) return;
-    selectedOrthogroupAlignmentFeature.value = String(cf.orthogroupId || '').trim();
-    clickedFeature.value = null;
-    await runAnalysis();
-  };
-
-  const resetOrthogroupAlignment = async () => {
-    clickedFeature.value = null;
-    await orthogroupActions.resetOrthogroupAlignment();
+  const alignByClickedOrthogroup = async (alignmentMode = 'position', event = null) => {
+    const detail = clickedOrthogroupDetail.value;
+    if (!detail?.id) return { status: 'rejected' };
+    rememberSimilarityAlignmentInvoker(event);
+    const outcome = await similarityAlignmentActions.startFromPopup({
+      groupId: detail.id,
+      reference: detail.currentMember,
+      mode: alignmentMode
+    });
+    if (outcome.status === 'ambiguous') await focusSimilarityAlignmentDialog();
+    else {
+      similarityAlignmentReturnFocus = null;
+      if (outcome.status === 'ok') clickedFeature.value = null;
+    }
+    return outcome;
   };
 
   const highlightClickedOrthogroup = () => {
@@ -2783,6 +2891,14 @@ export const createAppSetup = () => {
     if (!orthogroupActions.selectOrthogroup(orthogroupId)) return false;
     rightDrawerActions.openRightDrawerTab('orthogroups');
     return true;
+  };
+
+  const reselectSimilarityAlignmentReference = () => {
+    const groupId = similarityAlignmentActions.repair.value?.groupId
+      || state.similarityAlignmentPlan.value?.groupId
+      || '';
+    similarityAlignmentActions.drawerReferenceKey.value = '';
+    return openOrthogroupInDrawer(groupId);
   };
 
   const openClickedOrthogroupInEditor = () => {
@@ -3490,7 +3606,11 @@ export const createAppSetup = () => {
 
   const applyLinearSeqMutation = (
     items,
-    { preserveLosatCacheInfo = false, layoutEntries = linearRecordRows } = {}
+    {
+      preserveLosatCacheInfo = false,
+      layoutEntries = linearRecordRows,
+      alignmentMutation = 'source set changed.'
+    } = {}
   ) => {
     const depthWidth = linearDepthLogicalWidth();
     const next = normalizeLinearSeqList(items);
@@ -3515,6 +3635,13 @@ export const createAppSetup = () => {
     );
     invalidateLinearComparisonArtifacts({ preserveLosatCacheInfo });
     linearReorderNotice.value = '';
+    if (alignmentMutation === 'stable-reorder') {
+      similarityAlignmentActions?.retainForStableReorder?.(
+        linearSeqs.map((sequence) => sequence.uid)
+      );
+    } else {
+      similarityAlignmentActions?.clearForMutation?.(alignmentMutation);
+    }
   };
 
   const addLinearSeq = () => {
@@ -3630,7 +3757,7 @@ export const createAppSetup = () => {
     applyLinearSeqMutation(linearSeqs.flatMap((entry) => (
       entry.uid === group.uid ? (keepSource ? [replacement] : [])
         : members.has(entry.uid) ? [] : [entry]
-    )));
+    )), { alignmentMutation: 'source replaced.' });
     if (keepSource) pendingLinearRecordExpansions.add(replacement.uid);
     if (keepSource && field === 'gb') pendingLinearMetadataInference.add(replacement.uid);
   };
@@ -3657,9 +3784,53 @@ export const createAppSetup = () => {
     return history.runUndoable('Move File', () => {
       applyLinearSeqMutation(next, {
         preserveLosatCacheInfo: true,
-        layoutEntries: plan.rows
+        layoutEntries: plan.rows,
+        alignmentMutation: 'stable-reorder'
       });
     });
+  };
+
+  const setLinearRecordSelector = (sequence, value) => {
+    if (!sequence) return false;
+    const next = String(value || '');
+    if (String(sequence.region_record_id || '') === next) return false;
+    similarityAlignmentActions?.clearForMutation?.('record selector changed.');
+    sequence.region_record_id = next;
+    return true;
+  };
+
+  const setLinearInputType = (value) => {
+    const next = value === 'gff' ? 'gff' : 'gb';
+    if (lInputType.value === next) return false;
+    similarityAlignmentActions?.clearForMutation?.('source type changed.');
+    lInputType.value = next;
+    return true;
+  };
+
+  const setLinearRecordCrop = (sequence, field, value) => {
+    if (!sequence || !['region_start', 'region_end'].includes(field)) return false;
+    const next = value === '' || value === null || value === undefined
+      ? null
+      : Number(value);
+    if (Object.is(sequence[field], next)) return false;
+    similarityAlignmentActions?.clearForMutation?.('record crop changed.');
+    sequence[field] = next;
+    return true;
+  };
+
+  const setLinearRecordOrientation = (sequence, reverseComplement) => (
+    similarityAlignmentActions?.setManualOrientation?.(sequence, reverseComplement)
+  );
+
+  const linearRecordOrientationValue = (sequence) => {
+    const recordKey = String(sequence?.uid || '');
+    const decision = state.similarityAlignmentPlan.value?.records?.find(
+      (entry) => entry.recordKey === recordKey
+    );
+    return decision?.effectiveReverseComplement === null
+      || decision?.effectiveReverseComplement === undefined
+      ? Boolean(sequence?.region_reverse)
+      : Boolean(decision.effectiveReverseComplement);
   };
 
   const resetLinearRecordDefinition = (seq) => {
@@ -3846,6 +4017,11 @@ export const createAppSetup = () => {
     linearSourceRemovalTargetName,
     linearSourceRemovalCanDelete,
     setLinearSeqPrimaryFile,
+    setLinearInputType,
+    setLinearRecordSelector,
+    setLinearRecordCrop,
+    setLinearRecordOrientation,
+    linearRecordOrientationValue,
     linearSourceMoveBlockedReason,
     canMoveLinearSource,
     moveLinearSource,
@@ -4002,7 +4178,6 @@ export const createAppSetup = () => {
     losatThreadingStatus,
     orthogroups,
     featureOrthogroupIndex,
-    selectedOrthogroupAlignmentFeature,
     orthogroupNameOverrides,
     orthogroupDescriptionOverrides,
     selectedOrthogroupId,
@@ -4011,7 +4186,6 @@ export const createAppSetup = () => {
     showRightDrawer,
     rightDrawerTab,
     orthogroupCount: orthogroupActions.orthogroupCount,
-    selectedAlignmentTargetLabel: orthogroupActions.selectedAlignmentTargetLabel,
     filteredOrthogroups: orthogroupActions.filteredOrthogroups,
     selectedOrthogroup: orthogroupActions.selectedOrthogroup,
     selectedOrthogroupMembersByRecord: orthogroupActions.selectedOrthogroupMembersByRecord,
@@ -4033,7 +4207,33 @@ export const createAppSetup = () => {
     setOrthogroupDescriptionOverride: orthogroupActions.setOrthogroupDescriptionOverride,
     resetOrthogroupRename: orthogroupActions.resetOrthogroupRename,
     highlightOrthogroupById: orthogroupActions.highlightOrthogroupById,
-    alignOrthogroupById: orthogroupActions.alignOrthogroupById,
+    similarityAlignmentDraft: similarityAlignmentActions.draft,
+    similarityAlignmentStatus: similarityAlignmentActions.status,
+    similarityAlignmentError: similarityAlignmentActions.error,
+    similarityAlignmentSummary: similarityAlignmentActions.summary,
+    similarityAlignmentNotice: similarityAlignmentActions.notice,
+    similarityAlignmentRepair: similarityAlignmentActions.repair,
+    similarityAlignmentDialogOpen: similarityAlignmentActions.dialogOpen,
+    similarityAlignmentUnresolvedCount: similarityAlignmentActions.unresolvedCount,
+    similarityAlignmentApplyDisabledReason: similarityAlignmentActions.applyDisabledReason,
+    similarityAlignmentDrawerReferenceKey: similarityAlignmentActions.drawerReferenceKey,
+    similarityAlignmentPlanInspector: similarityAlignmentActions.activePlanInspector,
+    canApplySimilarityAlignment: similarityAlignmentActions.canApply,
+    resetSimilarityAlignment: similarityAlignmentActions.resetAlignment,
+    reselectSimilarityAlignmentReference,
+    startSimilarityAlignmentFromPopup: similarityAlignmentActions.startFromPopup,
+    startSimilarityAlignmentFromDrawer,
+    similarityAlignmentDrawerReferenceOptions: similarityAlignmentActions.drawerReferenceOptions,
+    setSimilarityAlignmentDrawerReference: similarityAlignmentActions.setDrawerReference,
+    similarityAlignmentDrawerDisabledReason: similarityAlignmentActions.drawerDisabledReason,
+    selectSimilarityAlignmentCandidate: similarityAlignmentActions.selectCandidate,
+    skipSimilarityAlignmentRecord: similarityAlignmentActions.skipRecord,
+    applySimilarityAlignmentDraft: applySimilarityAlignmentDialog,
+    cancelSimilarityAlignmentDraft: cancelSimilarityAlignmentDialog,
+    cancelSimilarityAlignmentDialog,
+    trapSimilarityAlignmentFocus,
+    previewSimilarityAlignmentCandidate: similarityAlignmentActions.previewCandidate,
+    clearSimilarityAlignmentCandidatePreview: similarityAlignmentActions.clearCandidatePreview,
     isRightDrawerTabAvailable: rightDrawerActions.isRightDrawerTabAvailable,
     openRightDrawerTab: rightDrawerActions.openRightDrawerTab,
     toggleRightDrawer: rightDrawerActions.toggleRightDrawer,
@@ -4225,7 +4425,6 @@ export const createAppSetup = () => {
     alignByClickedOrthogroup,
     highlightClickedOrthogroup,
     clearOrthogroupHighlight,
-    resetOrthogroupAlignment,
     openClickedOrthogroupInEditor,
     specificRuleLegendOptions,
     updateClickedFeatureColor: updateClickedFeatureColorWithHistory,

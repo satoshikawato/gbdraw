@@ -92,6 +92,7 @@ from gbdraw.api.options import (  # type: ignore[reportMissingImports]
 from gbdraw.linear_comparison import LinearComparison
 from gbdraw.layout.linear_multi_record import record_pairs_between_adjacent_rows
 from gbdraw.layout.record_coordinates import RecordDisplayTransform
+from gbdraw.layout.similarity_alignment import SimilarityAlignmentPlan
 from gbdraw.layout.record_placement import resolve_record_row_positions
 from gbdraw.canvas import CircularCanvasConfigurator, LinearCanvasConfigurator  # type: ignore[reportMissingImports]
 from gbdraw.config.models import (  # type: ignore[reportMissingImports]
@@ -1601,7 +1602,7 @@ def assemble_linear_diagram_from_records(
     orthogroup_member_max_hits: int | None = None,
     collinear_infer_orthogroups: bool = True,
     collinear_max_paralog_links_per_orthogroup: int = 2,
-    align_orthogroup_feature: str | None = None,
+    similarity_alignment: SimilarityAlignmentPlan | None = None,
     color_table: Optional[DataFrame] = None,
     color_table_file: str | None = None,
     default_colors: DataFrame | None = None,
@@ -1645,6 +1646,7 @@ def assemble_linear_diagram_from_records(
     _resolved_placement_inputs: tuple[ResolvedPlacementInputs, ...] = (),
     _return_build_result: bool = False,
     _record_transforms: Sequence[RecordDisplayTransform] | None = None,
+    _alignment_anchor_centers: Sequence[float | None] | None = None,
 ) -> Drawing | LinearDiagramBuildResult:
     """Builds and assembles a linear diagram for the given records.
 
@@ -1749,19 +1751,11 @@ def assemble_linear_diagram_from_records(
         raise ValidationError("protein_blastp_mode cannot be used with blast_files.")
     if normalized_protein_blastp_mode != "none" and len(records) < 2:
         raise ValidationError("protein_blastp_mode requires at least two records")
-    has_precomputed_comparisons = bool(
-        blast_files
-        or linear_comparisons
-        or protein_comparisons is not None
-        or collinearity_blocks is not None
-    )
-    if (
-        align_orthogroup_feature
-        and normalized_protein_blastp_mode != "orthogroup"
-        and not has_precomputed_comparisons
+    if similarity_alignment is not None and not isinstance(
+        similarity_alignment, SimilarityAlignmentPlan
     ):
         raise ValidationError(
-            "align_orthogroup_feature requires protein_blastp_mode='orthogroup'."
+            "similarity_alignment must be SimilarityAlignmentPlan or None."
         )
     _validate_positive_optional("depth_window", depth_window)
     _validate_positive_optional("depth_step", depth_step)
@@ -2122,7 +2116,8 @@ def assemble_linear_diagram_from_records(
         linear_comparisons=resolved_linear_comparisons or None,
         linear_layout=layout,
         orthogroups=resolved_orthogroups,
-        align_orthogroup_feature=align_orthogroup_feature,
+        similarity_alignment=similarity_alignment,
+        alignment_anchor_centers=_alignment_anchor_centers,
     )
     build_result = LinearDiagramBuildResult(
         drawing=canvas,
@@ -3410,12 +3405,14 @@ def _build_linear_diagram(
     *,
     options: LinearDiagramOptions | None = None,
     layout: LinearMultiRecordOptions | None = None,
+    similarity_alignment: SimilarityAlignmentPlan | None = None,
     losatp_cache: LosatpCacheManager | None = None,
     protein_extraction: ProteinExtractionResult | None = None,
     _resolved_feature_inputs: ResolvedFeatureInputs | None = None,
     _resolved_placement_inputs: tuple[ResolvedPlacementInputs, ...] = (),
     _return_build_result: bool = False,
     _record_transforms: Sequence[RecordDisplayTransform] | None = None,
+    _alignment_anchor_centers: Sequence[float | None] | None = None,
 ) -> Drawing | LinearDiagramBuildResult:
     """Build a linear diagram using mode-specific typed options."""
 
@@ -3456,7 +3453,7 @@ def _build_linear_diagram(
         orthogroup_member_max_hits=options.orthogroup_member_max_hits,
         collinear_infer_orthogroups=options.collinear_infer_orthogroups,
         collinear_max_paralog_links_per_orthogroup=options.collinear_max_paralog_links_per_orthogroup,
-        align_orthogroup_feature=options.align_orthogroup_feature,
+        similarity_alignment=similarity_alignment,
         color_table=colors.color_table if colors else None,
         color_table_file=colors.color_table_file if colors else None,
         default_colors=colors.default_colors if colors else None,
@@ -3503,6 +3500,7 @@ def _build_linear_diagram(
         _resolved_feature_inputs=_resolved_feature_inputs,
         _resolved_placement_inputs=_resolved_placement_inputs,
         _record_transforms=_record_transforms,
+        _alignment_anchor_centers=_alignment_anchor_centers,
         _return_build_result=_return_build_result,
     )
 
@@ -3512,11 +3510,13 @@ def build_linear_diagram(
     *,
     options: LinearDiagramOptions | None = None,
     layout: LinearMultiRecordOptions | None = None,
+    similarity_alignment: SimilarityAlignmentPlan | None = None,
     losatp_cache: LosatpCacheManager | None = None,
     protein_extraction: ProteinExtractionResult | None = None,
     _resolved_feature_inputs: ResolvedFeatureInputs | None = None,
     _resolved_placement_inputs: tuple[ResolvedPlacementInputs, ...] = (),
     _record_transforms: Sequence[RecordDisplayTransform] | None = None,
+    _alignment_anchor_centers: Sequence[float | None] | None = None,
 ) -> Drawing:
     """Build a linear diagram using mode-specific typed options."""
 
@@ -3524,11 +3524,13 @@ def build_linear_diagram(
         records,
         options=options,
         layout=layout,
+        similarity_alignment=similarity_alignment,
         losatp_cache=losatp_cache,
         protein_extraction=protein_extraction,
         _resolved_feature_inputs=_resolved_feature_inputs,
         _resolved_placement_inputs=_resolved_placement_inputs,
         _record_transforms=_record_transforms,
+        _alignment_anchor_centers=_alignment_anchor_centers,
     )
     return cast(Drawing, result)
 
@@ -3538,11 +3540,13 @@ def build_linear_diagram_result(
     *,
     options: LinearDiagramOptions | None = None,
     layout: LinearMultiRecordOptions | None = None,
+    similarity_alignment: SimilarityAlignmentPlan | None = None,
     losatp_cache: LosatpCacheManager | None = None,
     protein_extraction: ProteinExtractionResult | None = None,
     _resolved_feature_inputs: ResolvedFeatureInputs | None = None,
     _resolved_placement_inputs: tuple[ResolvedPlacementInputs, ...] = (),
     _record_transforms: Sequence[RecordDisplayTransform] | None = None,
+    _alignment_anchor_centers: Sequence[float | None] | None = None,
 ) -> LinearDiagramBuildResult:
     """Build a Linear drawing with its computed analysis metadata."""
 
@@ -3550,11 +3554,13 @@ def build_linear_diagram_result(
         records,
         options=options,
         layout=layout,
+        similarity_alignment=similarity_alignment,
         losatp_cache=losatp_cache,
         protein_extraction=protein_extraction,
         _resolved_feature_inputs=_resolved_feature_inputs,
         _resolved_placement_inputs=_resolved_placement_inputs,
         _record_transforms=_record_transforms,
+        _alignment_anchor_centers=_alignment_anchor_centers,
         _return_build_result=True,
     )
     if not isinstance(result, LinearDiagramBuildResult):  # pragma: no cover

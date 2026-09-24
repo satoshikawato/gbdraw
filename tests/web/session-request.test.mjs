@@ -397,6 +397,9 @@ const state = {
   losatProgram: ref('blastn'),
   losat: { blastp: { collinearMaxUnitGap: 2 } },
   selectedOrthogroupAlignmentFeature: ref(''),
+  similarityAlignmentPlan: ref(null),
+  linearRecordTranslations: ref([]),
+  legacySimilarityAlignment: ref(null),
   linearRecordLayoutEnabled: ref(false),
   linearRecordGap: ref(24),
   linearRecordRows: [],
@@ -420,9 +423,12 @@ const stateForCanonicalProjection = (projection) => {
       config.linearComparisonPlan || createDefaultLinearComparisonPlan()
     ),
     losatProgram: ref(config.losatProgram || 'blastn'),
-    selectedOrthogroupAlignmentFeature: ref(
-      projection.pipelineState?.selectedOrthogroupAlignmentFeature || ''
-    ),
+    similarityAlignmentPlan: ref(structuredClone(
+      linearLayout.similarityAlignment || null
+    )),
+    linearRecordTranslations: ref(structuredClone(
+      linearLayout.recordTranslations || []
+    )),
     currentColors: ref(structuredClone(config.colors || {})),
     selectedPalette: ref(palette),
     paletteDefinitions: ref({ [palette]: {} }),
@@ -466,7 +472,7 @@ const filesData = { c_gb: genbank, linearSeqs: [] };
 state.form.multi_record_canvas = true;
 const canonical = buildCanonicalRenderRequest({ state, filesData });
 state.form.multi_record_canvas = false;
-assert.equal(canonical.renderRequest.schema, 7);
+assert.equal(canonical.renderRequest.schema, 8);
 assert.equal(canonical.renderRequest.mode, 'circular');
 assert.equal(canonical.renderRequest.grouping, 'grid');
 assert.equal(canonical.renderRequest.records[0].source.resourceId, 'record-1-genbank');
@@ -1981,7 +1987,7 @@ const unchangedOneSource = buildCanonicalRenderRequest({
   filesData: oneSourceFilesData,
   comparisonPlanSnapshot: oneSourceSnapshot
 });
-assert.equal(unchangedOneSource.renderRequest.schema, 7);
+assert.equal(unchangedOneSource.renderRequest.schema, 8);
 assert.equal(unchangedOneSource.renderRequest.records.length, 1);
 assert.equal(unchangedOneSource.renderRequest.records[0].cardinality, 'all');
 
@@ -2324,7 +2330,10 @@ state.linearRecordRows.splice(0, state.linearRecordRows.length,
   { uid: 'first', row: 1 }, { uid: 'second', row: 1 }, { uid: 'third', row: 2 });
 const arrangedCanonical = buildCanonicalRenderRequest({ state, filesData: linearFilesData });
 assert.deepEqual(arrangedCanonical.renderRequest.layout, {
-  recordGapPx: 30
+  recordGapPx: 30,
+  multiRecordPositions: null,
+  recordTranslations: [],
+  similarityAlignment: null
 });
 assert.deepEqual(
   arrangedCanonical.renderRequest.records.map((record) => [
@@ -2410,7 +2419,7 @@ schema5Arranged.records.forEach((record) => {
   record.presentation.gridRow = null;
 });
 const promotedArranged = promoteCanonicalRenderRequestToCurrent(schema5Arranged);
-assert.equal(promotedArranged.schema, 7);
+assert.equal(promotedArranged.schema, 8);
 assert.deepEqual(
   promotedArranged.records.map((record) => [
     record.cardinality,
@@ -2423,7 +2432,16 @@ assert.deepEqual(
     ['exactly_one', 2, null]
   ]
 );
-assert.deepEqual(promotedArranged.layout, { recordGapPx: 30 });
+assert.deepEqual(promotedArranged.layout, {
+  recordGapPx: 30,
+  multiRecordPositions: null,
+  recordTranslations: promotedArranged.records.map((record) => ({
+    recordKey: record.recordKey,
+    x: 0,
+    y: 0
+  })),
+  similarityAlignment: null
+});
 assert.equal(schema5Arranged.schema, 5, 'promotion must not mutate the imported request');
 
 state.losatProgram.value = 'blastp';
@@ -2451,7 +2469,37 @@ assert.equal(
   projectCanonicalSessionRequest(losatPairCanonical).files.linearComparisons[0].source,
   'losat'
 );
-state.selectedOrthogroupAlignmentFeature.value = 'resolved-feature-anchor';
+const resolvedPlanReference = {
+  recordKey: 'first', biologicalFeatureId: 'feature-first',
+  sourceFeatureIndex: 1, stableFeatureSvgId: 'stable-first'
+};
+state.similarityAlignmentPlan.value = {
+  schema: 1,
+  mode: 'position_and_orientation',
+  groupId: 'og-resolved',
+  reference: resolvedPlanReference,
+  records: [
+    {
+      recordKey: 'first', status: 'reference', rationale: 'reference',
+      anchor: resolvedPlanReference, effectiveReverseComplement: null
+    },
+    {
+      recordKey: 'second', status: 'skipped', rationale: 'skipped_no_candidate',
+      anchor: null, effectiveReverseComplement: null
+    },
+    {
+      recordKey: 'third', status: 'aligned', rationale: 'only_usable_candidate',
+      anchor: {
+        recordKey: 'third', biologicalFeatureId: 'feature-third',
+        sourceFeatureIndex: 2, stableFeatureSvgId: 'stable-third'
+      },
+      effectiveReverseComplement: true
+    }
+  ]
+};
+state.linearRecordTranslations.value = ['first', 'second', 'third'].map(
+  (recordKey, index) => ({ recordKey, x: index * 2, y: -index })
+);
 const resolvedProteinPlotTitlePosition = state.adv.plot_title_position;
 state.adv.plot_title_position = 'bottom';
 const resolvedProteinCanonical = buildCanonicalRenderRequest({
@@ -2491,9 +2539,10 @@ const resolvedProteinSettings = resolvedProteinCanonical.renderRequest.compariso
 assert.ok(resolvedProteinSettings);
 assert.equal(resolvedProteinSettings.mode, 'none');
 assert.deepEqual(resolvedProteinSettings.pairs, []);
-assert.equal(
-  resolvedProteinSettings.settings.alignOrthogroupFeature,
-  'resolved-feature-anchor'
+assert.equal(Object.hasOwn(resolvedProteinSettings.settings, 'alignOrthogroupFeature'), false);
+assert.deepEqual(
+  resolvedProteinCanonical.renderRequest.layout.similarityAlignment,
+  state.similarityAlignmentPlan.value
 );
 const resolvedProteinTsv = Buffer.from(
   resolvedProteinCanonical.resources[resolvedProtein.resourceId].data,
@@ -2519,15 +2568,19 @@ assert.equal(
   resolvedProteinProjection.config.losat.blastp.collinearMaxUnitGap,
   2
 );
-assert.equal(
-  resolvedProteinProjection.pipelineState.selectedOrthogroupAlignmentFeature,
-  'resolved-feature-anchor'
+assert.deepEqual(
+  resolvedProteinProjection.config.linearRecordLayout.similarityAlignment,
+  state.similarityAlignmentPlan.value
 );
 state.losatProgram.value = resolvedProteinProjection.config.losatProgram;
 state.losat = structuredClone(resolvedProteinProjection.config.losat);
 state.losat.blastp.mode = 'pairwise';
-state.selectedOrthogroupAlignmentFeature.value =
-  resolvedProteinProjection.pipelineState.selectedOrthogroupAlignmentFeature;
+state.similarityAlignmentPlan.value = structuredClone(
+  resolvedProteinProjection.config.linearRecordLayout.similarityAlignment
+);
+state.linearRecordTranslations.value = structuredClone(
+  resolvedProteinProjection.config.linearRecordLayout.recordTranslations
+);
 const resolvedProteinRoundTripCanonical = buildCanonicalRenderRequest({
   state,
   filesData: resolvedProteinProjection.files
@@ -2558,6 +2611,146 @@ assert.equal(
   resolvedProteinTsv
 );
 assert.deepEqual(roundTripGenerated, resolvedProteinSettings);
+assert.deepEqual(
+  resolvedProteinRoundTripCanonical.renderRequest.layout,
+  resolvedProteinCanonical.renderRequest.layout,
+  'current alignment display state must survive a Generate projection round trip'
+);
+const reorderedAlignmentCanonical = structuredClone(resolvedProteinCanonical);
+reorderedAlignmentCanonical.renderRequest.records.reverse();
+assert.deepEqual(
+  projectCanonicalSessionRequest(reorderedAlignmentCanonical)
+    .config.linearRecordLayout.similarityAlignment,
+  resolvedProteinCanonical.renderRequest.layout.similarityAlignment
+);
+for (const mutate of [
+  (request) => request.layout.recordTranslations.push(
+    { recordKey: 'first', x: 0, y: 0 }
+  ),
+  (request) => { request.layout.recordTranslations[0].x = Infinity; },
+  (request) => { request.layout.unknownTransform = true; },
+  (request) => { request.layout.similarityAlignment.records[2].anchor = null; }
+]) {
+  const invalid = structuredClone(resolvedProteinCanonical.renderRequest);
+  mutate(invalid);
+  assert.throws(
+    () => projectCanonicalSessionRequest({
+      renderRequest: invalid,
+      resources: resolvedProteinCanonical.resources
+    }),
+    /duplicate record keys|finite numbers|missing or unknown fields|invalid plan combination/
+  );
+}
+
+const legacyAlignmentRequest = structuredClone(losatPairCanonical.renderRequest);
+legacyAlignmentRequest.schema = 7;
+legacyAlignmentRequest.layout = { recordGapPx: 30 };
+const legacyGenerated = legacyAlignmentRequest.comparisons.find(
+  (comparison) => comparison.kind === 'generatedProteinComparison'
+);
+legacyGenerated.settings.alignOrthogroupFeature = 'og-legacy';
+const legacyProjection = projectCanonicalSessionRequest({
+  renderRequest: legacyAlignmentRequest,
+  resources: losatPairCanonical.resources
+});
+assert.deepEqual(legacyProjection.pipelineState.legacySimilarityAlignment, {
+  target: 'og-legacy',
+  sourceSchema: 7
+});
+const legacyFeatureCatalog = {
+  schema: 3,
+  items: [{
+    recordKeys: ['first', 'second', 'third'],
+    biologicalFeatures: [
+      { recordKey: 'first', biologicalFeatureId: 'legacy-first', sourceFeatureIndex: 1 },
+      { recordKey: 'third', biologicalFeatureId: 'legacy-third', sourceFeatureIndex: 3 }
+    ],
+    features: [],
+    orthogroups: [{
+      id: 'og-legacy',
+      members: [
+        { recordKey: 'first', biologicalFeatureId: 'legacy-first', representative: true },
+        { recordKey: 'third', biologicalFeatureId: 'legacy-third', representative: true }
+      ]
+    }]
+  }]
+};
+const promotedLegacyAlignment = promoteCanonicalRenderRequestToCurrent(
+  legacyAlignmentRequest,
+  { featureCatalog: legacyFeatureCatalog }
+);
+assert.equal(promotedLegacyAlignment.schema, 8);
+assert.equal(
+  Object.hasOwn(
+    promotedLegacyAlignment.comparisons.find(
+      (comparison) => comparison.kind === 'generatedProteinComparison'
+    ).settings,
+    'alignOrthogroupFeature'
+  ),
+  false
+);
+assert.equal(promotedLegacyAlignment.layout.similarityAlignment.groupId, 'og-legacy');
+assert.equal(
+  promotedLegacyAlignment.layout.similarityAlignment.reference.stableFeatureSvgId,
+  'legacy-first'
+);
+assert.deepEqual(
+  promotedLegacyAlignment.layout.similarityAlignment.records.map(
+    ({ recordKey, status }) => [recordKey, status]
+  ),
+  [['first', 'reference'], ['second', 'skipped'], ['third', 'aligned']]
+);
+const malformedLegacyAlignment = structuredClone(legacyAlignmentRequest);
+malformedLegacyAlignment.comparisons.find(
+  (comparison) => comparison.kind === 'generatedProteinComparison'
+).settings.alignOrthogroupFeature = ' ';
+assert.throws(
+  () => projectCanonicalSessionRequest({
+    renderRequest: malformedLegacyAlignment,
+    resources: losatPairCanonical.resources
+  }),
+  /non-empty text/
+);
+const ambiguousLegacyFeatureCatalog = structuredClone(legacyFeatureCatalog);
+ambiguousLegacyFeatureCatalog.items[0].orthogroups.push(structuredClone(
+  ambiguousLegacyFeatureCatalog.items[0].orthogroups[0]
+));
+assert.throws(
+  () => promoteCanonicalRenderRequestToCurrent(
+    legacyAlignmentRequest,
+    { featureCatalog: ambiguousLegacyFeatureCatalog }
+  ),
+  /group is ambiguous/
+);
+const ambiguousLegacyMembers = structuredClone(legacyFeatureCatalog);
+ambiguousLegacyMembers.items[0].biologicalFeatures.push({
+  recordKey: 'third',
+  biologicalFeatureId: 'legacy-third-duplicate',
+  sourceFeatureIndex: 4
+});
+ambiguousLegacyMembers.items[0].orthogroups[0].members.push({
+  recordKey: 'third',
+  biologicalFeatureId: 'legacy-third-duplicate',
+  representative: true
+});
+assert.throws(
+  () => promoteCanonicalRenderRequestToCurrent(
+    legacyAlignmentRequest,
+    { featureCatalog: ambiguousLegacyMembers }
+  ),
+  /ambiguous members/
+);
+const ambiguousLegacyIdentity = structuredClone(legacyFeatureCatalog);
+ambiguousLegacyIdentity.items[0].biologicalFeatures.push(structuredClone(
+  ambiguousLegacyIdentity.items[0].biologicalFeatures[0]
+));
+assert.throws(
+  () => promoteCanonicalRenderRequestToCurrent(
+    legacyAlignmentRequest,
+    { featureCatalog: ambiguousLegacyIdentity }
+  ),
+  /lacks unique saved biological identity metadata/
+);
 const selectedComparisonPlan = structuredClone(state.linearComparisonPlan);
 state.linearComparisonPlan = {
   ...createDefaultLinearComparisonPlan(),
@@ -2785,7 +2978,8 @@ assert.equal(
   false,
   'saved protein artifacts must not leak into an active nucleotide pipeline'
 );
-state.selectedOrthogroupAlignmentFeature.value = '';
+state.similarityAlignmentPlan.value = null;
+state.linearRecordTranslations.value = [];
 state.adv.plot_title_position = resolvedProteinPlotTitlePosition;
 state.losatProgram.value = 'blastn';
 state.linearComparisonPlan = {

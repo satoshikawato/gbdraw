@@ -195,7 +195,7 @@ for (const journey of ['minimal', 'grid-batch-grid']) {
       expect(generated.results).toHaveLength(1);
       expect(generated.components).toEqual(original.components);
       const { saved, session, metrics } = await save(page, testInfo, 'generated');
-      expect([session.version, session.webFiles.bindings.schema, session.renderRequest.schema]).toEqual([44, 2, 7]);
+      expect([session.version, session.webFiles.bindings.schema, session.renderRequest.schema]).toEqual([44, 2, 8]);
       const composite = session.webFiles.bindings.c_gb;
       expect(composite.kind).toBe('composite');
       expect(composite.components).toHaveLength(recordCount);

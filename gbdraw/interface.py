@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from functools import wraps
 from inspect import Parameter, signature
 from os import PathLike
@@ -39,6 +39,7 @@ from gbdraw.api.options import (
     ColorOptions as _ColorOptions,
     LinearDiagramOptions as _LinearDiagramOptions,
     LinearMultiRecordOptions as _LinearLayout,
+    LinearRecordTranslation as _LinearRecordTranslation,
     LinearOutputOptions as _LinearOutputOptions,
     LinearRequestTrackOptions as _LinearRequestTrackOptions,
     _validate_center_reserved_radius,
@@ -61,6 +62,7 @@ from gbdraw.api.render import render_to_bytes
 from gbdraw.exceptions import ExportError, ValidationError
 from gbdraw.features.placement import FeaturePlacementOverride
 from gbdraw.linear_comparison import LinearComparison
+from gbdraw.layout.similarity_alignment import SimilarityAlignmentPlan
 from gbdraw.config.models import GbdrawConfig
 from gbdraw.mode_profiles import (
     CIRCULAR_MODE_PROFILE,
@@ -368,7 +370,7 @@ class LinearComparisonOptions:
     max_paralog_links: int = (
         _LINEAR_DIAGRAM_DEFAULTS.collinear_max_paralog_links_per_orthogroup
     )
-    align_feature: str | None = None
+    similarity_alignment: SimilarityAlignmentPlan | None = None
 
 
 @dataclass(frozen=True)
@@ -905,7 +907,6 @@ def _linear_options(
         orthogroup_membership_mode=comparisons.orthogroup_membership,
         orthogroup_member_max_hits=comparisons.orthogroup_member_max_hits,
         collinear_max_paralog_links_per_orthogroup=comparisons.max_paralog_links,
-        align_orthogroup_feature=comparisons.align_feature,
     )
     return _LinearDiagramOptions(**values)
 
@@ -949,8 +950,16 @@ def _record_inputs(
     if not all(isinstance(display, RecordDisplayOptions) for display in record_displays):
         raise ValidationError("record_displays must contain only RecordDisplayOptions.")
     return tuple(
-        _RecordInput(source=_InMemoryRecordSource(record), display=display)
-        for record, display in zip(records, record_displays)
+        _RecordInput(
+            source=_InMemoryRecordSource(record),
+            display=display,
+            record_key=str(
+                record.annotations.get("gbdraw_record_key") or f"record-{index + 1}"
+            ),
+        )
+        for index, (record, display) in enumerate(
+            zip(records, record_displays, strict=True)
+        )
     )
 
 
@@ -1004,11 +1013,24 @@ def draw_linear(
     if layout is not None and not isinstance(layout, LinearLayout):
         raise ValidationError("draw_linear layout must be LinearLayout.")
     compiled = _linear_options(options, record_count=len(normalized))
+    record_inputs = _record_inputs(normalized, record_displays)
+    similarity_alignment = options.comparisons.similarity_alignment
+    resolved_layout = layout._legacy() if layout is not None else None
+    if similarity_alignment is not None:
+        resolved_layout = replace(
+            resolved_layout or _LinearLayout(),
+            record_translations=tuple(
+                _LinearRecordTranslation(record_key=record.record_key)
+                for record in record_inputs
+                if record.record_key is not None
+            ),
+        )
     prepared = _build_request_diagram(
         _LinearDiagramRequest(
-            records=_record_inputs(normalized, record_displays),
+            records=record_inputs,
             options=compiled,
-            layout=layout._legacy() if layout is not None else None,
+            layout=resolved_layout,
+            similarity_alignment=similarity_alignment,
         )
     )
     return Diagram(

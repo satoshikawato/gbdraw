@@ -270,17 +270,11 @@ def test_interactive_rejects_real_fragment_identity_conflicts(mutation):
 
 
 def test_group_alignment_projects_member_centers_before_translation():
-    from gbdraw.diagrams.linear.orthogroup_alignment import calculate_orthogroup_alignment_offsets
-    frame = hit_frame().assign(orthogroup_id="og_1", query_record_index=0, subject_record_index=1,
-                              query_feature_index=0, subject_feature_index=0,
-                              query_feature_svg_id="anchor", subject_feature_svg_id="target")
-    before = frame.copy(deep=True)
-    config = SimpleNamespace(normalize_length=False, align_center=False, alignment_width=120., longest_genome=120.)
-    offsets = calculate_orthogroup_alignment_offsets([record(), record(120, "subject")], [frame], config, "anchor",
-        record_transforms=(RecordDisplayTransform(100, 1, 1, 41, True), RecordDisplayTransform(120, 1, 1, 51, True)))
-    # Historical inclusive centers: 40.5 and 60.5; projected: 0.5 and 10.5.
-    assert offsets == {0: 0., 1: -10.}
-    pd.testing.assert_frame_equal(frame, before)
+    reference = RecordDisplayTransform(100, 1, 1, 41, True)
+    target = RecordDisplayTransform(120, 1, 1, 51, True)
+
+    assert reference.source_position_to_display_offset(40.5) == 0.5
+    assert target.source_position_to_display_offset(60.5) == 10.5
 
 
 @pytest.mark.parametrize("reverse", [False, True])

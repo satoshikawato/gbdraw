@@ -117,13 +117,20 @@ assert.equal(FakeWorker.instances.length, 1);
 assert.equal(helperWorker.messages.filter(({ type }) => type === 'init').length, 1);
 assert.equal(helperWorker.messages.filter(({ type }) => type === 'helper').length, 1);
 assert.equal(helperWorker.messages.filter(({ type }) => type === 'run').length, 0);
+await runDiagramHelperOperation(
+  DIAGRAM_HELPER_OPERATIONS.RESOLVE_SIMILARITY_ALIGNMENT,
+  { request: { schema: 1 } }
+);
+assert.equal(FakeWorker.instances.length, 1);
+assert.equal(helperWorker.messages.filter(({ type }) => type === 'init').length, 1);
+assert.equal(helperWorker.messages.filter(({ type }) => type === 'helper').length, 2);
 const rendered = await runDiagramGeneration({ request: {}, resources: {} });
 assert.equal(rendered.results[0].name, 'shared.svg');
 
 const worker = FakeWorker.instances[0];
 assert.equal(FakeWorker.instances.length, 1);
 assert.equal(worker.messages.filter(({ type }) => type === 'init').length, 1);
-assert.equal(worker.messages.filter(({ type }) => type === 'helper').length, 1);
+assert.equal(worker.messages.filter(({ type }) => type === 'helper').length, 2);
 assert.equal(worker.messages.filter(({ type }) => type === 'run').length, 1);
 assert.equal(worker.transferLists[1][0], sourceBuffer);
 

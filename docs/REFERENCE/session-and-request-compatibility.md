@@ -2,13 +2,17 @@
 
 # Session and request compatibility
 
-Current writers emit session version 44 and canonical `renderRequest` schema 7.
+Current writers emit session version 44 and canonical `renderRequest` schema 8.
 
 | Persisted format | Current writer | Accepted by current readers |
 |---|---:|---|
 | gbdraw session | 44 | 27–33, 39–42, and 44 |
-| Canonical `renderRequest` | 7 | 1, 2, 5, 6, and 7 |
+| Canonical `renderRequest` | 8 | 1, 2, 5, 6, 7, and 8 |
 | Web file bindings | 2 | 1; 2 in sessions 41–42 and 44 |
+
+Session 44 documents written with canonical request schema 7 remain readable.
+Current saves promote that request to schema 8 while retaining feature
+catalog schema 4 and the saved preview until the next Generate.
 
 Session versions 34–38 and request schemas 3–4 were development-only and are
 rejected. Do not change a version number, resource hash, or runtime binding by
@@ -72,11 +76,12 @@ loading restores the same editable state:
 Both pairs are written only when the source has a file-level default. Sessions
 written before these fields existed carry neither; those readers compare the
 resolved text against the file default instead, which reads an override that
-happens to repeat the default as inheritance. Request schema 7 is unchanged,
+happens to repeat the default as inheritance. Request schema 8 adds no field for
+these Web-only defaults,
 because these fields describe Web editing state rather than the
 render request: a reader that ignores them still renders identical output.
 
-Session 43 replaces the two editable Linear visibility booleans with independent
+Session 44 replaces the two editable Linear visibility booleans with independent
 selected modes: `linear_accession_visibility` and `linear_length_visibility`,
 each set to `auto`, `show`, or `hide`. Auto resolves from the effective rendered
 rows and is projected to the existing request-schema-7 booleans; the request and
@@ -119,9 +124,9 @@ this variant. Auxiliary files retain their ordinary resource bindings and bytes.
 Python can load and materialize a settings-only Session. CLI replay,
 `session_to_request()` and `render_session()` report that it has no biological
 render request. Existing supported full Sessions remain readable. Current
-settings-only writers emit session 43, while current readers also accept the
-released session-42 form. Readers whose maximum version is 42 reject newly
-written session-43 files.
+settings-only writers emit session 44, while current readers also accept the
+released session-42 form. Readers whose maximum version is 42
+reject newly written session-44 files.
 
 Older settings JSON without a `format` field (containing `form` or `adv`) still
 uses the legacy configuration import. It does not need a render request. This
@@ -147,11 +152,39 @@ request. Rendering that request alone does not replay saved comparison
 artifacts; use `render_session()` when those artifacts belong in the result.
 
 `render_request()` accepts current typed requests, not historical session
-envelopes. Public typed session conversion accepts full versions 31–33,
-39–42, and 44;
-versions 27–30 are CLI replay inputs only. Canonical schema 7 retains schema 6's
-input cardinality, including selectorless `all` inputs. Resolve a typed request
+envelopes. Public typed session conversion accepts full versions 31–33, 39–42, and 44;
+versions 27–30 are CLI replay inputs only. Canonical schema 8 retains schema 7's
+display values and schema 6's input cardinality, including selectorless `all`
+inputs. Resolve a typed request
 before encoding when it still contains deferred paths or collection-level transforms.
+
+## Similarity alignment request ownership
+
+For Linear requests, schema 8 stores `recordTranslations` and
+`similarityAlignment` inside `renderRequest.layout`. Every translation has one
+stable `recordKey` and finite `x` and `y` values. An active plan covers the same
+displayed record keys and identifies its exact reference and per-record outcomes.
+There is no Circular form or generic transform matrix.
+
+Schemas 1, 2, 5, 6, and 7 remain readable. Their
+`alignOrthogroupFeature` protein-setting string is isolated as reader-only legacy
+state. Current writers emit neither that field nor the former Session-only
+`orthogroupState.selectedOrthogroupAlignmentFeature` copy. Released legacy
+Sessions with saved feature-catalog and orthogroup identity metadata materialize
+that state to the schema-8 plan before a current save. Their historical group
+selection is confined to the reader; malformed or unmappable legacy values
+produce an actionable error and retain the last successful Result. Current
+requests reject group-only input. Merely loading the saved preview does not
+initialize the diagram Worker or start LOSATP.
+
+A current Session round trip retains exact reference and target identities,
+Select/Skip rationale, base translations, effective orientation, and the
+immediate pre-align Reset baseline. Ordinary Generate preserves an active plan;
+stable reorder uses `recordKey`, while source replacement, crop, selector,
+manual orientation, and record drag clear it with a visible reason. A stale
+reference requires Reselect/Clear and a stale target requires Select/Skip before
+regeneration; pending or failed repair leaves the saved preview and last
+successful Result in place. Undo/Redo restores the complete artifact.
 
 In Web **Run Info**, **Source recipe** uses the original input filenames and
 public CLI settings. Keep those original files and download any listed generated

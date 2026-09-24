@@ -401,7 +401,7 @@ def test_current_schema_round_trips_unresolved_then_materializes_session(
     )
 
     unresolved_encoded = encode_canonical_request(unresolved)
-    assert unresolved_encoded.payload["schema"] == 7
+    assert unresolved_encoded.payload["schema"] == 8
     assert unresolved_encoded.payload["records"][0]["cardinality"] == "all"
 
     resolved = resolve_request(unresolved)

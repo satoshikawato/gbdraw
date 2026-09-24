@@ -65,6 +65,7 @@ import {
 } from '../app/track-slot-validation.js';
 import { annotationOptionsPayload, normalizeAnnotationSets } from '../app/annotations/state.js';
 import { classifyOptionalPositiveNumber } from '../utils/optional-positive-number.js';
+import { materializeLegacySimilarityAlignment } from './legacy-similarity-alignment.js';
 import {
   arrowHeadLengthRatioForState,
   defaultFeatureRendering,
@@ -141,10 +142,161 @@ import { sha256Hex } from './byte-utils.js';
 import { cloneJsonData } from './json-clone.js';
 import { recordDisplayKey, requestedRecordTransform } from '../app/record-display-options.js';
 
-export const CANONICAL_REQUEST_SCHEMA = 7;
+export const CANONICAL_REQUEST_SCHEMA = 8;
 const SUPPORTED_CANONICAL_REQUEST_SCHEMAS = new Set([
-  1, 2, 5, 6, CANONICAL_REQUEST_SCHEMA
+  1, 2, 5, 6, 7, CANONICAL_REQUEST_SCHEMA
 ]);
+
+const requireExactCanonicalKeys = (value, keys, path) => {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    throw new Error(`${path} must be an object.`);
+  }
+  const expected = [...keys].sort();
+  const actual = Object.keys(value).sort();
+  if (actual.length !== expected.length || actual.some((key, index) => key !== expected[index])) {
+    throw new Error(`${path} contains missing or unknown fields.`);
+  }
+  return value;
+};
+
+const requireCanonicalText = (value, path) => {
+  if (typeof value !== 'string' || !value.trim() || value.includes('\0')) {
+    throw new Error(`${path} must be non-empty text without NUL.`);
+  }
+  return value.trim();
+};
+
+const canonicalAlignmentAnchor = (value, path) => {
+  const anchor = requireExactCanonicalKeys(value, [
+    'recordKey',
+    'biologicalFeatureId',
+    'sourceFeatureIndex',
+    'stableFeatureSvgId'
+  ], path);
+  if (anchor.sourceFeatureIndex !== null && (
+    !Number.isSafeInteger(anchor.sourceFeatureIndex) || anchor.sourceFeatureIndex < 0
+  )) throw new Error(`${path}.sourceFeatureIndex must be a non-negative integer or null.`);
+  if (anchor.stableFeatureSvgId !== null) {
+    requireCanonicalText(anchor.stableFeatureSvgId, `${path}.stableFeatureSvgId`);
+  }
+  return {
+    recordKey: requireCanonicalText(anchor.recordKey, `${path}.recordKey`),
+    biologicalFeatureId: requireCanonicalText(
+      anchor.biologicalFeatureId,
+      `${path}.biologicalFeatureId`
+    ),
+    sourceFeatureIndex: anchor.sourceFeatureIndex,
+    stableFeatureSvgId: anchor.stableFeatureSvgId === null
+      ? null
+      : anchor.stableFeatureSvgId.trim()
+  };
+};
+
+const canonicalSimilarityAlignment = (value, recordKeys, path) => {
+  if (value === null) return null;
+  const plan = requireExactCanonicalKeys(value, [
+    'schema', 'mode', 'groupId', 'reference', 'records'
+  ], path);
+  if (plan.schema !== 1) throw new Error(`${path}.schema must be 1.`);
+  if (!['position', 'position_and_orientation'].includes(plan.mode)) {
+    throw new Error(`${path}.mode is unsupported.`);
+  }
+  if (!Array.isArray(plan.records) || plan.records.length === 0) {
+    throw new Error(`${path}.records must be a non-empty array.`);
+  }
+  const reference = canonicalAlignmentAnchor(plan.reference, `${path}.reference`);
+  const records = plan.records.map((raw, index) => {
+    const decisionPath = `${path}.records[${index}]`;
+    const decision = requireExactCanonicalKeys(raw, [
+      'recordKey', 'status', 'rationale', 'anchor', 'effectiveReverseComplement'
+    ], decisionPath);
+    const recordKey = requireCanonicalText(decision.recordKey, `${decisionPath}.recordKey`);
+    const anchor = decision.anchor === null
+      ? null
+      : canonicalAlignmentAnchor(decision.anchor, `${decisionPath}.anchor`);
+    if (anchor && anchor.recordKey !== recordKey) {
+      throw new Error(`${decisionPath}.anchor belongs to another record.`);
+    }
+    if (decision.effectiveReverseComplement !== null && typeof decision.effectiveReverseComplement !== 'boolean') {
+      throw new Error(`${decisionPath}.effectiveReverseComplement must be boolean or null.`);
+    }
+    const alignedRationales = new Set([
+      'user_selected', 'only_usable_candidate', 'unique_direct_rbh'
+    ]);
+    const skippedRationales = new Set([
+      'skipped_by_user', 'skipped_no_candidate', 'skipped_unmappable'
+    ]);
+    const valid = decision.status === 'reference'
+      ? anchor !== null && decision.rationale === 'reference' &&
+        decision.effectiveReverseComplement === null
+      : decision.status === 'aligned'
+        ? anchor !== null && alignedRationales.has(decision.rationale)
+        : decision.status === 'skipped'
+          ? anchor === null && skippedRationales.has(decision.rationale) &&
+            decision.effectiveReverseComplement === null
+          : false;
+    if (!valid) throw new Error(`${decisionPath} contains an invalid plan combination.`);
+    return {
+      recordKey,
+      status: decision.status,
+      rationale: decision.rationale,
+      anchor,
+      effectiveReverseComplement: decision.effectiveReverseComplement
+    };
+  });
+  const decisionKeys = records.map((decision) => decision.recordKey);
+  if (new Set(decisionKeys).size !== decisionKeys.length) {
+    throw new Error(`${path}.records contains duplicate record keys.`);
+  }
+  const references = records.filter((decision) => decision.status === 'reference');
+  if (references.length !== 1 || references[0].recordKey !== reference.recordKey ||
+      JSON.stringify(references[0].anchor) !== JSON.stringify(reference)) {
+    throw new Error(`${path}.reference must match exactly one reference decision.`);
+  }
+  if (plan.mode === 'position' && records.some(
+    (decision) => decision.effectiveReverseComplement !== null
+  )) throw new Error(`${path} position mode cannot override orientation.`);
+  const expected = new Set(recordKeys);
+  const actual = new Set(decisionKeys);
+  if (expected.size !== actual.size || [...expected].some((key) => !actual.has(key))) {
+    throw new Error(`${path}.records does not cover the displayed record keys.`);
+  }
+  return {
+    schema: 1,
+    mode: plan.mode,
+    groupId: requireCanonicalText(plan.groupId, `${path}.groupId`),
+    reference,
+    records
+  };
+};
+
+const canonicalRecordTranslations = (value, recordKeys, path, { requireCoverage = false } = {}) => {
+  if (!Array.isArray(value)) throw new Error(`${path} must be an array.`);
+  const translations = value.map((raw, index) => {
+    const itemPath = `${path}[${index}]`;
+    const item = requireExactCanonicalKeys(raw, ['recordKey', 'x', 'y'], itemPath);
+    if (!Number.isFinite(item.x) || !Number.isFinite(item.y)) {
+      throw new Error(`${itemPath} x and y must be finite numbers.`);
+    }
+    return {
+      recordKey: requireCanonicalText(item.recordKey, `${itemPath}.recordKey`),
+      x: Number(item.x),
+      y: Number(item.y)
+    };
+  });
+  const keys = translations.map((item) => item.recordKey);
+  if (new Set(keys).size !== keys.length) {
+    throw new Error(`${path} contains duplicate record keys.`);
+  }
+  if (requireCoverage || translations.length > 0) {
+    const expected = new Set(recordKeys);
+    const actual = new Set(keys);
+    if (expected.size !== actual.size || [...expected].some((key) => !actual.has(key))) {
+      throw new Error(`${path} does not cover the displayed record keys.`);
+    }
+  }
+  return translations;
+};
 
 const canonicalRecordDisplay = (raw) => {
   if (!raw || Object.keys(raw).sort().join(',') !== 'isCircular,startCoordinate'
@@ -1506,6 +1658,7 @@ const buildTrackPlan = ({
 };
 
 const generatedProteinSettings = (state, baseline = {}) => {
+  const { alignOrthogroupFeature: _legacyAlignment, ...currentBaseline } = baseline;
   const blastp = state.losat.blastp || {};
   const blastpMode = requireCurrentProteinBlastpMode(blastp.mode);
   const positiveInteger = (value, fallback) => optionalPositiveInteger(value) ?? fallback;
@@ -1545,7 +1698,7 @@ const generatedProteinSettings = (state, baseline = {}) => {
     ? baselineCollinearity.parameters
     : {};
   return {
-    ...baseline,
+    ...currentBaseline,
     collinearityParams: {
       ...baselineCollinearity,
       kind: baselineCollinearity.kind || 'lossless',
@@ -1597,9 +1750,7 @@ const generatedProteinSettings = (state, baseline = {}) => {
         ? requireCurrentCollinearMaxParalogLinks(
             blastp.collinearMaxParalogLinksPerOrthogroup
           )
-        : positiveInteger(blastp.collinearMaxParalogLinksPerOrthogroup, 2),
-    alignOrthogroupFeature:
-      String(state.selectedOrthogroupAlignmentFeature.value || '').trim() || null
+        : positiveInteger(blastp.collinearMaxParalogLinksPerOrthogroup, 2)
   };
 };
 
@@ -1966,9 +2117,29 @@ const buildComparisons = ({
 
 const buildLayout = (state, filesData, records = []) => {
   if (state.mode.value === 'linear') {
-    if (!state.linearRecordLayoutEnabled?.value && !records.some((record) => record.presentation.gridRow != null)) return {};
+    const recordKeys = records.map((record) => requireCanonicalText(
+      record.recordKey,
+      'renderRequest.records[].recordKey'
+    ));
+    const plan = canonicalSimilarityAlignment(
+      state.similarityAlignmentPlan?.value ?? null,
+      recordKeys,
+      'renderRequest.layout.similarityAlignment'
+    );
+    const translations = canonicalRecordTranslations(
+      state.linearRecordTranslations?.value || [],
+      recordKeys,
+      'renderRequest.layout.recordTranslations',
+      { requireCoverage: plan !== null }
+    );
+    if (!state.linearRecordLayoutEnabled?.value &&
+        !records.some((record) => record.presentation.gridRow != null) &&
+        plan === null && translations.length === 0) return {};
     return {
-      recordGapPx: Math.max(0, Number(state.linearRecordGap?.value) || 0)
+      recordGapPx: Math.max(0, Number(state.linearRecordGap?.value) || 0),
+      multiRecordPositions: null,
+      recordTranslations: translations,
+      similarityAlignment: plan
     };
   }
   if (!state.form.multi_record_canvas) return {};
@@ -2010,6 +2181,17 @@ export const buildCanonicalRequestState = ({ session, projection, config,
     && JSON.stringify(activeColors) !== JSON.stringify(pythonColors(projection.config?.colors));
   if (colorOverridesChanged) delete canonicalPublicationFiles.d_color;
   const features = session?.features || {}, layout = config?.linearRecordLayout || {};
+  const canonicalLayout = projection.config?.linearRecordLayout || {};
+  const legacyAlignment = projection.pipelineState?.legacySimilarityAlignment;
+  const materializedLegacyPlan = legacyAlignment
+      ? canonicalSimilarityAlignment(materializeLegacySimilarityAlignment({
+        target: legacyAlignment.target,
+        records: session?.renderRequest?.records || [],
+        featureCatalog: session?.editorState?.featureCatalog || null,
+        legacyOrthogroupState: session?.orthogroupState || null
+      }), (session?.renderRequest?.records || []).map((record) => record.recordKey),
+      'renderRequest.layout.similarityAlignment')
+    : null;
   const palette = String(config?.palette || 'default');
   const records = session?.renderRequest?.records || [];
   const circularRecordList = records.length === 1 && !records[0]?.selector
@@ -2031,8 +2213,15 @@ export const buildCanonicalRequestState = ({ session, projection, config,
     canonicalLabelOverrideRows: publicationClone(features.labelOverrideRows || []), editableLabels: [],
     extractedFeatures: features.extractedFeatures || [],
     losatProgram: config.losatProgram || 'blastn',
-    selectedOrthogroupAlignmentFeature: session?.orthogroupState?.selectedOrthogroupAlignmentFeature || '',
-    linearRecordLayoutEnabled: Boolean(layout.enabled), linearRecordGap: layout.recordGap ?? 24
+    linearRecordLayoutEnabled: Boolean(layout.enabled),
+    linearRecordGap: layout.recordGap ?? 24,
+    similarityAlignmentPlan: materializedLegacyPlan ||
+      canonicalLayout.similarityAlignment || null,
+    linearRecordTranslations: materializedLegacyPlan
+      ? (session?.renderRequest?.records || []).map((record) => ({
+          recordKey: String(record.recordKey || ''), x: 0, y: 0
+        }))
+      : publicationClone(canonicalLayout.recordTranslations || [])
   };
   return {
     ...Object.fromEntries(Object.entries(refs).map(([key, value]) => [key, publicationRef(value)])),
@@ -2715,7 +2904,7 @@ const resolvePipelineCollinearInference = (settings, mode) =>
 
 const projectGeneratedProteinPipeline = (
   comparison,
-  { adoptCanonicalPayloads = false } = {}
+  { adoptCanonicalPayloads = false, requestSchema = CANONICAL_REQUEST_SCHEMA } = {}
 ) => {
   if (
     !comparison ||
@@ -2725,14 +2914,27 @@ const projectGeneratedProteinPipeline = (
     Array.isArray(comparison.settings)
   ) return null;
   const settings = comparison.settings;
+  if (requestSchema >= 8 && Object.hasOwn(settings, 'alignOrthogroupFeature')) {
+    throw new Error('Current canonical protein settings cannot contain legacy alignment state.');
+  }
+  let legacySimilarityAlignment = null;
+  if (requestSchema <= 7 && settings.alignOrthogroupFeature !== null &&
+      settings.alignOrthogroupFeature !== undefined) {
+    legacySimilarityAlignment = {
+      target: requireCanonicalText(
+        settings.alignOrthogroupFeature,
+        'renderRequest.comparisons[].settings.alignOrthogroupFeature'
+      ),
+      sourceSchema: requestSchema
+    };
+  }
   const parameters = settings.collinearityParams?.parameters || {};
   const mode = String(comparison.mode || 'orthogroup');
   return {
     generatedProteinComparison: adoptCanonicalPayloads
       ? comparison
       : cloneCanonicalJsonValue(comparison),
-    selectedOrthogroupAlignmentFeature:
-      String(settings.alignOrthogroupFeature || '').trim(),
+    legacySimilarityAlignment,
     config: {
       blastSource: 'losat',
       losatProgram: 'blastp',
@@ -3405,6 +3607,50 @@ export const projectCanonicalSessionRequest = ({
       .map((sourceIndex) => values?.[sourceIndex])
   );
   if (records.length === 0) throw new Error('Canonical renderRequest records are required.');
+  let similarityAlignment = null;
+  let recordTranslations = [];
+  if (renderRequest.mode === 'linear' && renderRequest.schema >= 8) {
+    const layout = renderRequest.layout || {};
+    if (Object.keys(layout).length > 0) {
+      requireExactCanonicalKeys(layout, [
+        'recordGapPx', 'multiRecordPositions', 'recordTranslations', 'similarityAlignment'
+      ], 'renderRequest.layout');
+      if (!Number.isFinite(layout.recordGapPx) || layout.recordGapPx < 0) {
+        throw new Error('renderRequest.layout.recordGapPx must be a finite non-negative number.');
+      }
+      if (layout.multiRecordPositions !== null && (
+        !Array.isArray(layout.multiRecordPositions) ||
+        layout.multiRecordPositions.some((token) => typeof token !== 'string' || !token.trim())
+      )) throw new Error(
+        'renderRequest.layout.multiRecordPositions must be null or an array of non-empty text.'
+      );
+      if (layout.multiRecordPositions?.length && sourceRecords.some(
+        (record) => record.presentation?.gridRow != null
+      )) throw new Error(
+        'Linear row placement must use record presentation or layout positions, not both.'
+      );
+      const recordKeys = sourceRecords.map((record, index) => requireCanonicalText(
+        record.recordKey,
+        `renderRequest.records[${index}].recordKey`
+      ));
+      similarityAlignment = canonicalSimilarityAlignment(
+        layout.similarityAlignment,
+        recordKeys,
+        'renderRequest.layout.similarityAlignment'
+      );
+      recordTranslations = canonicalRecordTranslations(
+        layout.recordTranslations,
+        recordKeys,
+        'renderRequest.layout.recordTranslations',
+        { requireCoverage: similarityAlignment !== null }
+      );
+    }
+  } else if (renderRequest.mode === 'linear' && (
+    Object.hasOwn(renderRequest.layout || {}, 'recordTranslations') ||
+    Object.hasOwn(renderRequest.layout || {}, 'similarityAlignment')
+  )) {
+    throw new Error('Typed similarity alignment requires canonical schema 8.');
+  }
   const grouping = canonicalGrouping(renderRequest, records);
   const sourceOutputPrefixes = canonicalOutputPrefixes(
     renderRequest,
@@ -3475,7 +3721,7 @@ export const projectCanonicalSessionRequest = ({
     (renderRequest.comparisons || []).find(
       (comparison) => comparison?.kind === 'generatedProteinComparison'
     ),
-    { adoptCanonicalPayloads }
+    { adoptCanonicalPayloads, requestSchema: renderRequest.schema }
   );
   const comparisonsContainGeneratedProteinPipeline = (
     renderRequest.comparisons || []
@@ -4221,7 +4467,10 @@ export const projectCanonicalSessionRequest = ({
       return { selector: String(token).slice(0, split), row: Number(String(token).slice(split + 1)) };
     })
   };
-  const linearLayoutRows = renderRequest.schema >= 6
+  const presentationOwnsLinearRows = renderRequest.schema >= 6 && records.some(
+    (record) => record.presentation?.gridRow != null
+  );
+  const linearLayoutRows = presentationOwnsLinearRows
     ? records.map((record, index) => ({
         uid: files.linearSeqs[index]?.uid || '',
         row: Number(record.presentation?.gridRow) || index + 1
@@ -4236,10 +4485,13 @@ export const projectCanonicalSessionRequest = ({
   const linearLayout = renderRequest.mode === 'linear' && renderRequest.schema >= 2
     ? {
         enabled: renderRequest.schema >= 6
-          ? records.some((record) => record.presentation?.gridRow != null)
+          ? presentationOwnsLinearRows ||
+            (renderRequest.layout?.multiRecordPositions || []).length > 0
           : Object.keys(renderRequest.layout || {}).length > 0,
         recordGap: renderRequest.layout?.recordGapPx ?? 24,
-        rows: linearLayoutRows
+        rows: linearLayoutRows,
+        recordTranslations,
+        similarityAlignment
       }
     : undefined;
   const projectedBlacklistText = Array.isArray(overrides.label_blacklist)
@@ -4300,8 +4552,8 @@ export const projectCanonicalSessionRequest = ({
       ? {
           generatedProteinComparison:
             projectedProteinPipeline.generatedProteinComparison,
-          selectedOrthogroupAlignmentFeature:
-            projectedProteinPipeline.selectedOrthogroupAlignmentFeature
+          legacySimilarityAlignment:
+            projectedProteinPipeline.legacySimilarityAlignment
         }
       : null
   };
@@ -4382,11 +4634,14 @@ const firstPublicationDiff = (expected, actual, path = '$') => {
   }
   return null;
 };
-export const promoteCanonicalRenderRequestToCurrent = (request) => {
+export const promoteCanonicalRenderRequestToCurrent = (
+  request,
+  { featureCatalog = null, legacyOrthogroupState = null } = {}
+) => {
   const promoted = cloneCanonicalJsonValue(request);
   if (promoted.schema === CANONICAL_REQUEST_SCHEMA) return promoted;
-  if (![5, 6].includes(promoted.schema)) {
-    throw new Error('Only canonical renderRequest schemas 5 and 6 can be promoted to schema 7.');
+  if (![5, 6, 7].includes(promoted.schema)) {
+    throw new Error('Only canonical renderRequest schemas 5, 6, and 7 can be promoted to schema 8.');
   }
   const sourceSchema = promoted.schema;
   const linearRows = promoted.mode === 'linear'
@@ -4397,16 +4652,47 @@ export const promoteCanonicalRenderRequestToCurrent = (request) => {
     : [];
   promoted.schema = CANONICAL_REQUEST_SCHEMA;
   (promoted.records || []).forEach((record, index) => {
-    record.display = { isCircular: null, startCoordinate: null };
+    if (sourceSchema < 7) record.display = { isCircular: null, startCoordinate: null };
     if (sourceSchema === 5) record.cardinality = promoted.mode === 'linear' &&
       !record.selector && !record.region
       ? 'all'
       : 'exactly_one';
     if (linearRows[index]) record.presentation.gridRow = linearRows[index];
   });
-  promoted.diagramOptions = { ...promoted.diagramOptions, featurePlacements: [] };
-  if (promoted.mode === 'linear' && promoted.layout) {
-    delete promoted.layout.multiRecordPositions;
+  if (sourceSchema < 7) {
+    promoted.diagramOptions = { ...promoted.diagramOptions, featurePlacements: [] };
+  }
+  if (promoted.mode === 'linear') {
+    const generated = (promoted.comparisons || []).find(
+      (comparison) => comparison?.kind === 'generatedProteinComparison'
+    );
+    const rawLegacy = generated?.settings?.alignOrthogroupFeature;
+    const similarityAlignment = rawLegacy === null || rawLegacy === undefined
+      ? null
+      : canonicalSimilarityAlignment(materializeLegacySimilarityAlignment({
+          target: rawLegacy,
+          records: promoted.records || [],
+          featureCatalog,
+          legacyOrthogroupState
+        }), (promoted.records || []).map((record) => record.recordKey),
+        'renderRequest.layout.similarityAlignment');
+    if (generated?.settings) delete generated.settings.alignOrthogroupFeature;
+    const hadLayout = Object.keys(promoted.layout || {}).length > 0;
+    if (hadLayout || similarityAlignment !== null) {
+      const recordGapPx = Number(promoted.layout?.recordGapPx ?? 24);
+      promoted.layout = {
+        recordGapPx: Number.isFinite(recordGapPx) && recordGapPx >= 0 ? recordGapPx : 24,
+        multiRecordPositions: null,
+        recordTranslations: (promoted.records || []).map((record) => ({
+          recordKey: String(record.recordKey || ''),
+          x: 0,
+          y: 0
+        })),
+        similarityAlignment
+      };
+    } else {
+      promoted.layout = {};
+    }
   }
   return promoted;
 };
@@ -4604,7 +4890,7 @@ export const projectCommittedRecordTransform = ({ committed, target, transform }
 };
 
 const normalizePublicationRequestAliases = (request) => {
-  const normalized = [5, 6].includes(request?.schema)
+  const normalized = [5, 6, 7].includes(request?.schema)
     ? promoteCanonicalRenderRequestToCurrent(request)
     : cloneCanonicalJsonValue(request);
   for (const comparison of normalized.comparisons || []) {

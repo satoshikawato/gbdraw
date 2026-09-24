@@ -11,6 +11,11 @@ import { getFeatureOverride } from '../../services/feature-override-identity.js'
 import { COMPARISON_LEGEND_SELECTOR } from '../legend/utils.js';
 import { recordStructuralMetric } from '../../services/runtime-test-hooks.js';
 import {
+  featureIdentity,
+  identityMatches,
+  renderedFeatureIdentity
+} from '../../services/feature-identity.js';
+import {
   FEATURE_ID_ATTRIBUTE,
   FEATURE_SELECTOR,
   buildFeatureElementIndex,
@@ -794,6 +799,10 @@ export const createFeatureSvgActions = ({
       transformPointer: null,
       reconcileHoverAfterTransform: false,
       hoverReconcileFrame: null,
+      alignmentCandidateSvgId: '',
+      alignmentCandidateRestore: null,
+      previewAlignmentCandidate: null,
+      clearAlignmentCandidatePreview: null,
       beginPreviewTransformInteraction: null,
       endPreviewTransformInteraction: null,
       cleanup: null
@@ -967,6 +976,57 @@ export const createFeatureSvgActions = ({
         handlerState.activeMatchHoverElement = null;
         handlerState.activeMatchHoverKey = '';
       };
+
+      const clearAlignmentCandidatePreview = ({ restore = true } = {}) => {
+        if (!handlerState.alignmentCandidateSvgId && !handlerState.alignmentCandidateRestore) return;
+        clearTrackedHoverStyles();
+        handlerState.alignmentCandidateSvgId = '';
+        const previous = handlerState.alignmentCandidateRestore;
+        handlerState.alignmentCandidateRestore = null;
+        if (!restore || !previous) return;
+        if (previous.featureSvgId && ensureFeatureLookup().has(previous.featureSvgId)) {
+          setHoverHighlight(previous.featureSvgId);
+          handlerState.activeHoverSvgId = previous.featureSvgId;
+          handlerState.activeHoverKey = getFeatureHoverKey(previous.featureSvgId);
+          return;
+        }
+        if (previous.matchElement?.isConnected) {
+          setMatchHover(previous.matchElement);
+          handlerState.activeMatchHoverElement = previous.matchElement;
+          handlerState.activeMatchHoverKey = getMatchHoverKey(previous.matchElement);
+        }
+      };
+
+      const previewAlignmentCandidate = (anchor) => {
+        const requested = featureIdentity(anchor);
+        if (!requested.usable) return false;
+        const matches = Array.from(ensureFeatureLookup().entries())
+          .filter(([, feature]) => {
+            const candidate = renderedFeatureIdentity(feature);
+            return candidate.usable
+              && identityMatches(requested, candidate);
+          });
+        if (matches.length !== 1) return false;
+        const restore = handlerState.alignmentCandidateRestore || {
+          featureSvgId: handlerState.activeHoverSvgId,
+          matchElement: handlerState.activeMatchHoverElement
+        };
+        if (handlerState.alignmentCandidateSvgId) {
+          clearTrackedHoverStyles();
+          handlerState.alignmentCandidateSvgId = '';
+        }
+        clearActiveFeatureHover();
+        clearActiveMatchHover();
+        hideHoverSummary();
+        handlerState.alignmentCandidateRestore = restore;
+        const [svgId] = matches[0];
+        setFeatureHover(svgId);
+        handlerState.alignmentCandidateSvgId = svgId;
+        return true;
+      };
+
+      handlerState.previewAlignmentCandidate = previewAlignmentCandidate;
+      handlerState.clearAlignmentCandidatePreview = clearAlignmentCandidatePreview;
 
       const clearPendingMatch = () => {
         if (!handlerState.pendingMatchElement) return;
@@ -1277,6 +1337,7 @@ export const createFeatureSvgActions = ({
         handlerState.reconcileHoverAfterTransform = false;
         handlerState.transformPointer = null;
         clearPendingMatch();
+        clearAlignmentCandidatePreview({ restore: false });
         clearActiveFeatureHover();
         clearActiveMatchHover();
         hideHoverSummary();
@@ -1311,6 +1372,14 @@ export const createFeatureSvgActions = ({
     hoverSummaryState.element = null;
   };
 
+  const previewAlignmentCandidate = (anchor) => (
+    delegatedFeatureHandlers?.previewAlignmentCandidate?.(anchor) || false
+  );
+
+  const clearAlignmentCandidatePreview = () => {
+    delegatedFeatureHandlers?.clearAlignmentCandidatePreview?.();
+  };
+
   const preparePairwiseInteractionAffordances = ({
     root = null,
     phase = 'preview-bind',
@@ -1338,6 +1407,8 @@ export const createFeatureSvgActions = ({
     getFeatureElements,
     getFeatureFillElements,
     openFeatureEditorForFeature,
+    previewAlignmentCandidate,
+    clearAlignmentCandidatePreview,
     preparePairwiseInteractionAffordances,
     dispose
   };

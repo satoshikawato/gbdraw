@@ -17,6 +17,7 @@ from gbdraw.exceptions import ValidationError
 from gbdraw.features.source import SourceFeatureIdentity
 from gbdraw.io.record_select import RecordSelector
 from gbdraw.io.regions import RegionSpec
+from gbdraw.layout.similarity_alignment import SimilarityAlignmentPlan
 from gbdraw.render.formats import ACCEPTED_FORMATS, normalize_format_token
 from gbdraw.render.output_paths import is_windows_reserved_filename_component
 
@@ -28,6 +29,44 @@ from .options import (
     resolve_circular_diagram_options,
     resolve_linear_diagram_options,
 )
+
+
+@dataclass(frozen=True)
+class _LegacySimilarityAlignment:
+    """Reader-only alignment value carried only by supported old schemas."""
+
+    target: str
+    source_schema: int
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.target, str) or not self.target.strip() or "\0" in self.target:
+            raise ValidationError(
+                "Legacy similarity alignment target must be non-empty text without NUL."
+            )
+        if (
+            isinstance(self.source_schema, bool)
+            or not isinstance(self.source_schema, int)
+            or self.source_schema < 1
+        ):
+            raise ValidationError(
+                "Legacy similarity alignment source schema must be a positive integer."
+            )
+        object.__setattr__(self, "target", self.target.strip())
+
+
+def _with_legacy_similarity_alignment(
+    request: "LinearDiagramRequest",
+    legacy: _LegacySimilarityAlignment,
+) -> "LinearDiagramRequest":
+    """Attach old-schema state without exposing it through current construction."""
+
+    if not isinstance(request, LinearDiagramRequest) or not isinstance(
+        legacy,
+        _LegacySimilarityAlignment,
+    ):
+        raise ValidationError("Legacy similarity alignment attachment is invalid.")
+    object.__setattr__(request, "_legacy_similarity_alignment", legacy)
+    return request
 
 
 def _materialized_path(value: str | Path, *, field_name: str) -> Path:
@@ -668,9 +707,15 @@ class LinearDiagramRequest:
     records: Sequence[RecordInput]
     options: LinearDiagramOptions = field(default_factory=LinearDiagramOptions)
     layout: LinearMultiRecordOptions | None = None
+    similarity_alignment: SimilarityAlignmentPlan | None = None
     output: RenderOutputRequest = field(default_factory=RenderOutputRequest)
     record_options: RecordCollectionOptions = field(
         default_factory=RecordCollectionOptions
+    )
+    _legacy_similarity_alignment: _LegacySimilarityAlignment | None = field(
+        default=None,
+        init=False,
+        repr=False,
     )
 
     def __post_init__(self) -> None:
@@ -687,6 +732,13 @@ class LinearDiagramRequest:
         )
         if self.layout is not None and not isinstance(self.layout, LinearMultiRecordOptions):
             raise ValidationError("Linear request layout has an unsupported type.")
+        if self.similarity_alignment is not None and not isinstance(
+            self.similarity_alignment,
+            SimilarityAlignmentPlan,
+        ):
+            raise ValidationError(
+                "Linear request similarity_alignment has an unsupported type."
+            )
         if not isinstance(self.output, RenderOutputRequest):
             raise ValidationError("Linear request output has an unsupported type.")
         if not isinstance(self.record_options, RecordCollectionOptions):
@@ -699,6 +751,30 @@ class LinearDiagramRequest:
                 "placement is supported only by circular multi-record requests."
             )
         _validate_linear_placements(records, layout=self.layout)
+        translations = (
+            self.layout.record_translations if self.layout is not None else ()
+        )
+        if translations or self.similarity_alignment is not None:
+            record_keys = tuple(record.record_key for record in records)
+            if any(record_key is None for record_key in record_keys):
+                raise ValidationError(
+                    "Similarity alignment and record translations require stable record keys."
+                )
+            expected = set(record_keys)
+            actual = {translation.record_key for translation in translations}
+            if translations and actual != expected:
+                missing = sorted(expected - actual)
+                unknown = sorted(actual - expected)
+                raise ValidationError(
+                    "Linear record translation coverage differs from the displayed "
+                    f"records (missing={missing}, unknown={unknown})."
+                )
+            if self.similarity_alignment is not None:
+                if not translations:
+                    raise ValidationError(
+                        "A similarity alignment plan requires one base translation per record."
+                    )
+                self.similarity_alignment.validate_record_coverage(record_keys)
 
 
 DiagramRequest: TypeAlias = (

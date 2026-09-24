@@ -801,6 +801,10 @@ track; provide one file to reuse it for every record, or one file per record.
 Semantic SVG track hooks identify the renderer and logical slot; internal ID
 spelling is deterministic but is not a cross-version selector contract.
 
+For the exact-reference and non-interactive ambiguity behavior of
+`--align_orthogroup_feature`, see [Strict Similarity Group
+alignment](./REFERENCE/command-line.md#strict-similarity-group-alignment).
+
 ## Linear mode
 
 <!-- BEGIN GENERATED LINEAR HELP -->
@@ -970,8 +974,8 @@ options:
                         user-visible protein IDs; requires
                         --protein_blastp_mode.
   --align_orthogroup_feature ALIGN_ORTHOGROUP_FEATURE
-                        Align linear records by the gbdraw similarity group
-                        containing this feature SVG hash or protein ID.
+                        Align linear records using this exact feature SVG hash
+                        or protein ID; Similarity Group IDs are not accepted.
   --collinear_search_scope {adjacent,all}
                         Collinear protein blastp scope: adjacent displayed
                         records/rows or all record pairs. With multi-record

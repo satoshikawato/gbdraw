@@ -19,6 +19,7 @@ from gbdraw.session_request_codec import encode_canonical_typed_resource
 from gbdraw.api.prepared import PreparedBiologicalInputCache
 from gbdraw.web_support.rule_matching import evaluate_rules_json
 from gbdraw.web_support.config_overrides import validate_web_config_overrides_json
+from gbdraw.web_support.similarity_alignment import resolve_similarity_alignment_json
 
 _WEB_LOSATP_FILTERED_HIT_CACHE = {}
 _WEB_LOSATP_CONVERTED_PAYLOAD_CACHE = {}

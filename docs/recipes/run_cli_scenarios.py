@@ -21,6 +21,7 @@ from tempfile import TemporaryDirectory
 from xml.etree import ElementTree
 
 from gbdraw.session_io import CURRENT_SESSION_VERSION
+from gbdraw.session_request_codec import CANONICAL_REQUEST_SCHEMA
 
 if __package__:
     from ._scenario_support import (
@@ -2141,7 +2142,8 @@ def _assert_session_roundtrip(
         if (
             payload.get("format") != "gbdraw-session"
             or payload.get("version") != CURRENT_SESSION_VERSION
-            or payload.get("renderRequest", {}).get("schema") != 7
+            or payload.get("renderRequest", {}).get("schema")
+            != CANONICAL_REQUEST_SCHEMA
             or payload.get("renderRequest", {}).get("mode") != "circular"
         ):
             raise RecipeContractError("H-CLI-12 session schema changed.")
@@ -2365,7 +2367,8 @@ def _assert_tutorial_interactive_handoff(workdir: Path) -> None:
     if (
         session.get("format") != "gbdraw-session"
         or session.get("version") != CURRENT_SESSION_VERSION
-        or session.get("renderRequest", {}).get("schema") != 7
+        or session.get("renderRequest", {}).get("schema")
+        != CANONICAL_REQUEST_SCHEMA
         or session.get("renderRequest", {}).get("mode") != "circular"
         or len(resources) < 2
         or not any(

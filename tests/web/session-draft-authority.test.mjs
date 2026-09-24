@@ -43,6 +43,12 @@ const {
   buildCanonicalRenderRequest,
   projectCanonicalSessionRequest
 } = await import('../../gbdraw/web/js/services/session-request.js');
+state.selectedOrthogroupAlignmentFeature.value = 'legacy-selection';
+assert.equal(
+  Object.hasOwn(buildOrthogroupStateData(), 'selectedOrthogroupAlignmentFeature'),
+  false
+);
+state.selectedOrthogroupAlignmentFeature.value = '';
 const {
   COMPOSITION_METADATA_ATTRIBUTE,
   COMPOSITION_SCHEMA_ATTRIBUTE

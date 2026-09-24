@@ -680,6 +680,26 @@ export const createHistorySnapshotService = ({
     ) ? owner : null;
   };
 
+  const captureLinearRecordOrientations = () => (
+    (Array.isArray(state.linearSeqs) ? state.linearSeqs : []).map((sequence) => ({
+      recordKey: String(sequence?.uid || ''),
+      reverseComplement: Boolean(sequence?.region_reverse)
+    })).filter(({ recordKey }) => recordKey)
+  );
+
+  const installLinearRecordOrientations = (orientations) => {
+    const byRecord = new Map(
+      (Array.isArray(orientations) ? orientations : []).map((entry) => [
+        String(entry?.recordKey || ''),
+        Boolean(entry?.reverseComplement)
+      ])
+    );
+    (Array.isArray(state.linearSeqs) ? state.linearSeqs : []).forEach((sequence) => {
+      const recordKey = String(sequence?.uid || '');
+      if (byRecord.has(recordKey)) sequence.region_reverse = byRecord.get(recordKey);
+    });
+  };
+
   const captureGeneratedArtifactOwnerSet = () => {
     const results = artifactOwnedValue(getGeneratedArtifactRef(state.results, []));
     return Object.freeze({
@@ -701,6 +721,13 @@ export const createHistorySnapshotService = ({
         getGeneratedArtifactRef(state.featureOrthogroupIndex, null)
       ),
       collinearGroups: artifactOwnedValue(getGeneratedArtifactRef(state.collinearGroups, null)),
+      similarityAlignmentPlan: artifactOwnedValue(
+        getGeneratedArtifactRef(state.similarityAlignmentPlan, null)
+      ),
+      linearRecordTranslations: artifactOwnedValue(
+        getGeneratedArtifactRef(state.linearRecordTranslations, null)
+      ),
+      linearRecordOrientations: artifactOwnedValue(captureLinearRecordOrientations()),
       trackSlotResolvedGeometry: artifactOwnedValue(
         getGeneratedArtifactRef(state.trackSlotResolvedGeometry, null)
       ),
@@ -785,6 +812,15 @@ export const createHistorySnapshotService = ({
       ownerSet.featureOrthogroupIndex || new Map()
     );
     setGeneratedArtifactRef(state.collinearGroups, ownerSet.collinearGroups || []);
+    setGeneratedArtifactRef(
+      state.similarityAlignmentPlan,
+      ownerSet.similarityAlignmentPlan ?? null
+    );
+    setGeneratedArtifactRef(
+      state.linearRecordTranslations,
+      ownerSet.linearRecordTranslations || []
+    );
+    installLinearRecordOrientations(ownerSet.linearRecordOrientations);
     setGeneratedArtifactRef(
       state.trackSlotResolvedGeometry,
       ownerSet.trackSlotResolvedGeometry ?? null
@@ -872,6 +908,8 @@ export const createHistorySnapshotService = ({
       'orthogroups',
       'featureOrthogroupIndex',
       'collinearGroups',
+      'similarityAlignmentPlan',
+      'linearRecordTranslations',
       'trackSlotResolvedGeometry',
       'proteinIdentityManifest',
       'legacyProteinRawCandidates',
@@ -927,6 +965,7 @@ export const createHistorySnapshotService = ({
         orthogroupDescriptionOverrides:
           mutableIntent.orthogroupState.orthogroupDescriptionOverrides
       },
+      alignmentState: mutableIntent.alignmentState,
       presentation: {
         resultPanelTab: mutableIntent.presentation.resultPanelTab
       }
@@ -1006,6 +1045,13 @@ export const createHistorySnapshotService = ({
       features,
       editorState,
       orthogroupState,
+      alignmentState: Object.freeze({
+        plan: cloneJsonData(getGeneratedArtifactRef(state.similarityAlignmentPlan, null)),
+        recordTranslations: cloneJsonData(
+          getGeneratedArtifactRef(state.linearRecordTranslations, [])
+        ) || [],
+        recordOrientations: captureLinearRecordOrientations()
+      }),
       presentation: Object.freeze({
         resultGenerationKey: getGeneratedArtifactRef(state.resultGenerationKey, 0),
         resultPanelTab: getGeneratedArtifactRef(state.resultPanelTab, 'preview'),
@@ -1319,6 +1365,10 @@ export const createHistorySnapshotService = ({
     return cloneJsonData({
       config,
       files: buildIntentFilesData(state, fileStore),
+      alignmentState: {
+        plan: getGeneratedArtifactRef(state.similarityAlignmentPlan, null),
+        recordTranslations: getGeneratedArtifactRef(state.linearRecordTranslations, [])
+      },
       ui: uiIntent,
       drafts: buildDraftIntentData(state),
       features: buildFeatureIntentData(features),
@@ -1334,7 +1384,10 @@ export const createHistorySnapshotService = ({
     const domains = new Set(
       Array.isArray(context.changes) && context.changes.length > 0
         ? context.changes.map((change) => change?.path?.[0]).filter(Boolean)
-        : ['config', 'files', 'ui', 'drafts', 'features', 'editorState', 'orthogroupState']
+        : [
+            'config', 'files', 'alignmentState', 'ui', 'drafts', 'features',
+            'editorState', 'orthogroupState'
+          ]
     );
     const retainedComparisonFiles = domains.has('config') && !domains.has('files')
       ? new Map(
@@ -1395,6 +1448,16 @@ export const createHistorySnapshotService = ({
 
       if (domains.has('files')) {
         applyFilesData(state, intent.files || {}, fileStore, normalizeLinearSeqList);
+      }
+      if (domains.has('alignmentState')) {
+        setGeneratedArtifactRef(
+          state.similarityAlignmentPlan,
+          cloneJsonData(intent.alignmentState?.plan) || null
+        );
+        setGeneratedArtifactRef(
+          state.linearRecordTranslations,
+          cloneJsonData(intent.alignmentState?.recordTranslations) || []
+        );
       }
       if (domains.has('drafts')) applyDraftIntentData(state, intent.drafts || {});
       if (domains.has('features')) applyFeatureIntentData(state, intent.features || {});
