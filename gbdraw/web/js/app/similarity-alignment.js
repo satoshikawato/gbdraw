@@ -483,7 +483,7 @@ const buildHelperRequest = ({ group, members, reference, mode, request, catalog,
     throw new Error('The clicked feature is not a unique member of this Similarity Group.');
   }
   const exactMember = normalizedMembers.find(({ canonicalKey }) => canonicalKey === referenceKey);
-  if (!sameJson(exactMember.payload.anchor, exactReference)) {
+  if (!anchorsAgree(exactMember.payload.anchor, exactReference)) {
     throw new Error('The reference identity conflicts with current group metadata.');
   }
 
@@ -526,7 +526,7 @@ const buildHelperRequest = ({ group, members, reference, mode, request, catalog,
     mode,
     groupId: groupStatus.value,
     records,
-    reference: exactReference,
+    reference: exactMember.payload.anchor,
     members: normalizedMembers.map(({ payload }) => payload),
     directEdges,
     choices: cloneJson(choices)
