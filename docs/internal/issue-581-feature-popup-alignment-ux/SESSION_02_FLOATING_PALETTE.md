@@ -10,9 +10,8 @@ https://github.com/satoshikawato/gbdraw/issues/581#issuecomment-5811037046、
 完全な実装境界は
 `docs/internal/issue-581-feature-popup-alignment-ux/IMPLEMENTATION_PLAN.md` にある。
 S01 のローカル選択・Apply batch 検証が完了したこと、2026-09-24 に承認された
-`A / FLOATING_GUIDE_CANVAS_PICK`（authority 候補 PD-OI-035）が
-`origin/dev` にマージされて固定実装ブランチへ取り込まれたことを確認する。
-未マージなら依存 runtime は開始しない。
+`A / FLOATING_GUIDE_CANVAS_PICK`（PD-OI-035）が PR #582 で
+`origin/dev` にマージされ、固定実装ブランチへ取り込まれたことを確認する。
 
 ## ブランチと資料
 

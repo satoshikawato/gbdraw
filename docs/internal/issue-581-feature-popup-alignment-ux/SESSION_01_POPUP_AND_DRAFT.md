@@ -9,10 +9,9 @@ gbdraw Issue #581 の第一段階として、feature popup の Record actions �
 Python Resolver が走る待機をなくす。詳細な製品結果と受入条件は
 `docs/internal/issue-581-feature-popup-alignment-ux/IMPLEMENTATION_PLAN.md` にある。
 Product Decision Owner は 2026-09-24 に `A / EDIT_DISCLOSURE` と
-`A / LOCAL_BATCH_RETRY` を承認した。authority 候補は別ブランチ
-`issue-581-product-decisions-20260924` の PD-OI-033、034 にある。
-これらが `origin/dev` にマージされ、固定実装ブランチに取り込まれたことを先に確認する。
-未マージなら依存 runtime は開始しない。
+`A / LOCAL_BATCH_RETRY` を承認した。PD-OI-033、034 は PR #582 で
+`origin/dev` @ `e52e3ea9` にマージされ、固定実装ブランチへ取り込まれた。
+開始時にこの祖先関係と作業ツリーを再確認する。
 
 ## ブランチと資料
 

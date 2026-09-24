@@ -1,11 +1,11 @@
 # Issue #581 — Feature popup と Similarity Alignment 選択 UI の総合実装計画
 
-- 状態: Product Decision ３件は 2026-09-24 に承認済み。authority-only 変更は別ブランチでローカルコミット済み。runtime は未実装。
+- 状態: Product Decision ３件は承認済みで、authority-only PR #582 は 2026-09-24 に `dev` へマージ済み。runtime は未実装。
 - 作成日: 2026-09-24
 - 対象: [Issue #581](https://github.com/satoshikawato/gbdraw/issues/581) と [2026-09-24 の設計提案コメント](https://github.com/satoshikawato/gbdraw/issues/581#issuecomment-5811037046)
 - 固定実装ブランチ: `issue-581-feature-popup-alignment-ux-20260924`
 - ブランチ作成時の base: `origin/dev` @ `8c54c14455fedebc55561c2c4dc952a44d8d78de`
-- Product authority 候補ブランチ: `issue-581-product-decisions-20260924`（commit `18903342`、未マージ）
+- Product authority: PR #582、`origin/dev` @ `e52e3ea99fbbe4cdedfe9aa2606a91163e876764`（元ブランチ `issue-581-product-decisions-20260924`）
 
 ## 1. この文書の使い方
 
@@ -57,9 +57,8 @@ diagram 再生成を行わず、radio の待機表示を生じさせないこと
 - 同文書の PD-OI-027〜029 と PD-OI-031 は orientation、active plan、Reset／History、
   Web と Python/CLI の境界を定める。PD-OI-032 は popup からの record 回転、
   対象 record だけの更新、Cancel／失敗時の Result 保全を定める。
-- 追加判断 PD-OI-033〜035 の文面は `issue-581-product-decisions-20260924` に
-  ローカルコミット済みである。2026-09-24 現在、`origin/dev` に未マージなので、
-  同ブランチ上の候補を runtime の base authority とみなさない。
+- 追加判断 PD-OI-033〜035 は PR #582 で `origin/dev` @ `e52e3ea9` にマージされ、
+  固定実装ブランチにも取り込まれた。
 - `gbdraw/layout/similarity_alignment.py` は record ごとに選択を処理する。
   Python Resolver が候補の適格性、曖昧性、plan を決める唯一の所有者である。
 - `gbdraw/web/js/app/similarity-alignment.js` は現在 `answer()` から選択ごとに
@@ -192,13 +191,12 @@ UI 追加 state は保存対象にしない。
 
 Product Decision Owner `satoshikawato` は 2026-09-24、次の３件の
 `PRODUCT_DECISION` 文面をそのまま承認した。文面の全フィールドは
-`issue-581-product-decisions-20260924` の
 `docs/internal/OPTION_INTEGRITY_PRODUCT_CONTRACT.md` に PD-OI-033〜035 として
-記録した。これは未マージの authority 候補であり、以下の表はその選択を要約する。
+記録し、PR #582 で `dev` にマージした。以下の表はその選択を要約する。
 
-| Concern | 承認された選択 | runtime 開始条件 |
+| Concern | 承認された選択 | 権威の所在 |
 | --- | --- | --- |
-| `web.feature-popup.record-actions-presentation` | `A / EDIT_DISCLOSURE`（PD-OI-033） | authority が `origin/dev` にマージ済み |
+| `web.feature-popup.record-actions-presentation` | `A / EDIT_DISCLOSURE`（PD-OI-033） | `origin/dev` @ `e52e3ea9` と固定実装ブランチ |
 | `web.similarity-alignment.choice-and-retry` | `A / LOCAL_BATCH_RETRY`（PD-OI-034） | 同上 |
 | `web.similarity-alignment.canvas-interaction` | `A / FLOATING_GUIDE_CANVAS_PICK`（PD-OI-035） | 同上 |
 
@@ -207,10 +205,9 @@ Product Decision Owner `satoshikawato` は 2026-09-24、次の３件の
 未決の outcome に依存する runtime を開始しない。Issue コメントだけを durable authority
 とみなさず、候補 authority を runtime ブランチへ直接積んで自己承認しない。
 
-authority-only 変更を先にレビュー・マージする。その後、`origin/dev` と固定実装ブランチの
-作業ツリーを確認し、マージ済み authority を固定実装ブランチへ取り込む。Issue #581
-runtime は引き続き固定実装ブランチに置く。権威変更、PR、merge、push は明示された
-許可範囲に従う。
+authority-only 変更は PR #582 で `dev` にマージ済みであり、固定実装ブランチにも
+取り込んだ。Issue #581 runtime は固定実装ブランチに置く。権威変更、PR、merge、push は
+明示された許可範囲に従う。
 
 ## 8. 設計原則と対象外
 
@@ -243,8 +240,8 @@ public docs は既存の該当ページに集約し、機能ごとの新規ペ�
 
 | Session | 状態 | HEAD／base・主な変更 | 検証・残件 |
 | --- | --- | --- | --- |
-| S00 | 判断済み・authority 候補準備済み | `origin/dev` @ `8c54c144`。別ブランチ `issue-581-product-decisions-20260924` @ `18903342` に PD-OI-033〜035 をローカルコミット。 | JSON receipt ３件の構造確認、`git diff --check`、Web 変更ゲート PASS。未マージのため S01〜S03 の依存 runtime は開始不可。 |
-| S01 | 未実施 | 変更なし | authority merge 待ち。実装・検証なし。 |
-| S02 | 未実施 | 変更なし | S01 と authority merge 待ち。実装・検証なし。 |
-| S03 | 未実施 | 変更なし | S02 と authority merge 待ち。実装・検証なし。 |
+| S00 | 完了 | PD-OI-033〜035 は authority-only PR #582 で `origin/dev` @ `e52e3ea9` へマージし、固定実装ブランチへ取り込んだ。 | JSON receipt ３件の構造確認、`git diff --check`、Web 変更ゲート PASS、PR の CI 成功。S01 開始可能。 |
+| S01 | 未実施 | 変更なし | 開始可能。実装・検証なし。 |
+| S02 | 未実施 | 変更なし | S01 待ち。実装・検証なし。 |
+| S03 | 未実施 | 変更なし | S02 待ち。実装・検証なし。 |
 | S04 | 未実施 | 変更なし | S01〜S03 待ち。受入検証なし。 |
