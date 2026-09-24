@@ -1,3 +1,5 @@
+import { featureIdentity } from './feature-identity.js';
+
 const requiredText = (value, path) => {
   if (typeof value !== 'string' || !value.trim() || value.includes('\0')) {
     throw new Error(`${path} must be non-empty text without NUL.`);
@@ -114,7 +116,8 @@ export const materializeLegacySimilarityAlignment = ({
       return {
         recordKey: requiredText(memberRecordKey(member), 'legacy member recordKey'),
         biologicalFeatureId,
-        sourceFeatureIndex: member.featureIndex,
+        // Legacy featureIndex was an orthogroup subset ordinal, not a source feature index.
+        sourceFeatureIndex: null,
         stableFeatureSvgId: biologicalFeatureId
       };
     }
@@ -188,4 +191,27 @@ export const materializeLegacySimilarityAlignment = ({
     reference,
     records: decisions
   };
+};
+
+/** Supply canonical identities only where a released legacy member has one stable mapping. */
+export const migrateLegacyOrthogroupMembers = (groups, records) => {
+  const recordKeys = (Array.isArray(records) ? records : []).map((record) => record?.recordKey);
+  return (Array.isArray(groups) ? groups : []).map((group) => ({
+    ...group,
+    members: (Array.isArray(group?.members) ? group.members : []).map((member) => {
+      const identity = featureIdentity(member);
+      if (!identity.valid || identity.recordKey.supplied || identity.biologicalId.supplied ||
+          !identity.recordIndex.supplied || !identity.sourceIndex.supplied ||
+          !identity.stableId.supplied || typeof recordKeys[identity.recordIndex.value] !== 'string' ||
+          !recordKeys[identity.recordIndex.value]) return member;
+      const { featureIndex: _legacyIndex, feature_index: _legacySnakeIndex,
+        sourceFeatureIndex: _legacySourceIndex,
+        source_feature_index: _legacySnakeSourceIndex, ...stableMember } = member;
+      return {
+        ...stableMember,
+        recordKey: recordKeys[identity.recordIndex.value],
+        biologicalFeatureId: identity.stableId.value
+      };
+    })
+  }));
 };

@@ -640,14 +640,16 @@ assert.equal(promotedV39Request.schema, 8);
 assert.equal(promotedV39Request.layout.similarityAlignment.groupId, 'og_1');
 assert.deepEqual(
   promotedV39Request.layout.similarityAlignment.records.map(
-    ({ recordKey, status, anchor }) => [recordKey, status, anchor?.sourceFeatureIndex ?? null]
+    ({ recordKey, status, anchor }) => [
+      recordKey, status, anchor?.sourceFeatureIndex ?? null, anchor?.stableFeatureSvgId
+    ]
   ),
   [
-    ['linear-seq-c3b6c54d-8b5f-4ff1-b845-12e99a4cded8', 'reference', 14],
-    ['linear-seq-b5d86214-8d43-4a75-860d-2c15175c9bef', 'aligned', 22],
-    ['linear-seq-f090a874-b21f-402e-9a2e-d6f47e6f5235', 'aligned', 10],
-    ['linear-seq-b0fb2b92-9a70-4608-9df9-d254a9e06c97', 'aligned', 44],
-    ['linear-seq-7e78644f-27b1-4822-92d7-8b24f1baf360', 'aligned', 25]
+    ['linear-seq-c3b6c54d-8b5f-4ff1-b845-12e99a4cded8', 'reference', null, 'fed46a3a6'],
+    ['linear-seq-b5d86214-8d43-4a75-860d-2c15175c9bef', 'aligned', null, 'f2f1d1779'],
+    ['linear-seq-f090a874-b21f-402e-9a2e-d6f47e6f5235', 'aligned', null, 'fb938fe90'],
+    ['linear-seq-b0fb2b92-9a70-4608-9df9-d254a9e06c97', 'aligned', null, 'f8aa98696'],
+    ['linear-seq-7e78644f-27b1-4822-92d7-8b24f1baf360', 'aligned', null, 'f20e4885e']
   ]
 );
 const malformedV39State = structuredClone(v39.orthogroupState);
