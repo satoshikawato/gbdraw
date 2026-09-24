@@ -3103,7 +3103,7 @@ test('BGC session keeps restored feature metadata selectable in the preview', as
     target.id
   );
   await expect(page.locator('.feature-popup')).toBeVisible();
-  await expect(page.locator('.feature-popup').getByRole('button', { name: /Align/ })).toBeVisible();
+  await expect(page.locator('.feature-popup').getByRole('button', { name: 'Align', exact: true })).toBeVisible();
 });
 
 test('BGC session selected feature Hide undo redo keeps visibility and legend stable', async ({ page }) => {

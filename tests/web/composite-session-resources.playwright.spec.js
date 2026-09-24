@@ -286,7 +286,7 @@ test('Session CLI sidecar preserves the six-source draft for fresh Web Load and 
     });
     await fs.writeFile(testInfo.outputPath('cli.log'), stdout + stderr);
     const replayed = JSON.parse(gunzipSync(await fs.readFile(sidecar)));
-    expect([replayed.version, replayed.webFiles.bindings.schema, replayed.renderRequest.schema]).toEqual([44, 2, 7]);
+    expect([replayed.version, replayed.webFiles.bindings.schema, replayed.renderRequest.schema]).toEqual([44, 2, 8]);
     const expected = session.webFiles.bindings.c_gb;
     const actual = replayed.webFiles.bindings.c_gb;
     expect(actual.components).toHaveLength(6);

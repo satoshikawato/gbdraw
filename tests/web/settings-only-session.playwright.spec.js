@@ -201,10 +201,10 @@ test('settings-only Load replaces existing work and rejected candidates preserve
   expect(inactive.linearSources.flat().some(Boolean)).toBe(false);
   await assertCoherent(await capture(page, testInfo, 'inactive-source'), 'mode switch preserves the full Session');
   const inactiveSave = await save(page, testInfo, 'inactive-source');
-  expect(inactiveSave.document.renderRequest).toEqual(committed);
+  expect(inactiveSave.document.renderRequest).toEqual({ ...committed, schema: 8 });
   await loadFile(page, inactiveSave.file);
   expect((await snapshot(page)).circularSources[0]).toBe(true);
-  expect((await snapshot(page)).committed.renderRequest).toEqual(committed);
+  expect((await snapshot(page)).committed.renderRequest).toEqual({ ...committed, schema: 8 });
   const full = await save(page, testInfo, 'full-control');
   const before = await snapshot(page);
   const visual = await capture(page, testInfo, 'before-rejected-loads');

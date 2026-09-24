@@ -118,10 +118,32 @@ const compatibilityCatalog = catalog ? {
   }))
 } : catalog;
 const losatEntries = document.losatCache?.entries || [];
+const request = document.renderRequest;
+const legacyRequest = request?.schema === 8
+  ? {
+      ...request,
+      schema: 7,
+      layout: { recordGapPx: request.layout?.recordGapPx },
+      comparisons: request.comparisons.map((comparison) => (
+        comparison.kind === 'generatedProteinComparison'
+          ? { ...comparison, settings: { ...comparison.settings, alignOrthogroupFeature: null } }
+          : comparison
+      ))
+    }
+  : request;
+const schema8LayoutDefaults = request?.schema === 8 &&
+  request.layout?.multiRecordPositions === null &&
+  request.layout?.similarityAlignment === null &&
+  Array.isArray(request.layout?.recordTranslations) &&
+  request.layout.recordTranslations.length === request.records.length &&
+  request.layout.recordTranslations.every((entry, index) => (
+    entry.recordKey === request.records[index].recordKey && entry.x === 0 && entry.y === 0
+  ));
 process.stdout.write(JSON.stringify({
   format: document.format,
   version: document.version,
   requestSchema: document.renderRequest?.schema,
+  schema8LayoutDefaults,
   topLevelKeys: Object.keys(document).sort(),
   resourceCount: Object.keys(document.resources || {}).length,
   resultCount: (document.results || []).length,
@@ -135,6 +157,7 @@ process.stdout.write(JSON.stringify({
   losatEntries: losatEntries.length,
   hashes: {
     renderRequest: digest(document.renderRequest),
+    legacyRenderRequest: digest(legacyRequest),
     resources: digest(document.resources),
     webFiles: digest(document.webFiles),
     results: digest(document.results),
@@ -469,6 +492,7 @@ test('Vibrio Session saves once within memory, responsiveness, and compatibility
     format: 'gbdraw-session',
     version: 44,
     requestSchema: 8,
+    schema8LayoutDefaults: true,
     catalogSchema: 4,
     resourceCount: 4,
     resultCount: 1,
@@ -478,8 +502,9 @@ test('Vibrio Session saves once within memory, responsiveness, and compatibility
     catalogLocationParts: 8,
     losatEntries: 12
   });
+  expect(savedSummary.hashes.legacyRenderRequest)
+    .toBe(sourceSummary.hashes.legacyRenderRequest);
   for (const authority of [
-    'renderRequest',
     'resources',
     'losatRawTextAuthority',
     'proteinIdentityManifest'
