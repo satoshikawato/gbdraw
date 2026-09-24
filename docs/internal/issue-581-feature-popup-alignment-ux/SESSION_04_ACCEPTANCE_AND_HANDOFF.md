@@ -15,8 +15,8 @@ S00〜S03 の実施記録、Product authority、未完了事項を読んでか�
 
 ## ブランチと必読資料
 
-- 最終修正・test・docs は **`issue-581-feature-popup-alignment-ux-20260924`** に置く。
-  branch、HEAD、upstream、作業ツリー、`origin/dev` との関係を確認する。
+- 開始時に `git fetch origin` を実行する。最終修正・test・docs は **`issue-581-feature-popup-alignment-ux-20260924`** に置き、別の runtime ブランチを作らない。
+  branch、HEAD、upstream、作業ツリー、同名 remote 先端、`origin/dev` との祖先関係を確認する。
 - `AGENTS.md`、`CLAUDE.md`、`gbdraw/web/CLAUDE.md`、
   `docs/internal/PRODUCT_IMPACT_RATCHET.md`、
   `docs/internal/ARCHITECTURE_FITNESS_FUNCTION_RATCHET.md`、
@@ -68,3 +68,5 @@ PR と merge はその時点の明示許可に従う。
 一つの Resolver、一つの選択 owner、一つの Result 経路を保つことを
 SOLID／KISS／DRY の受入条件とする。未使用の extension point、互換 branch、
 保存形式を残さないことを YAGNI の受入条件とする。
+
+S04 完了後に追加セッションを作らない。

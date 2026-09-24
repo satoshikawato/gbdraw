@@ -427,6 +427,7 @@ export const createAppSetup = () => {
     filteredFeatures
   } = state;
   let similarityAlignmentActions = null;
+  let refreshSimilarityAlignmentCanvas = () => {};
   const linearTypography = createLinearTypographyController({
     adv,
     linked: linearTypographyLinked
@@ -1265,10 +1266,12 @@ export const createAppSetup = () => {
     featureSelection.clearFeatureSelection({ clearStatus: true, syncDom: false });
   });
   watch(svgContent, () => {
+    refreshSimilarityAlignmentCanvas();
     if (!skipCaptureBaseConfig.value) {
       featureSelection.clearFeatureSelection({ clearStatus: true, syncDom: false });
     }
   });
+  watch(() => results.value[selectedResultIndex.value], () => refreshSimilarityAlignmentCanvas(), { flush: 'post' });
 
   let featureSearchDebounceId = null;
   const featureListScrollRef = ref(null);
@@ -2129,6 +2132,7 @@ export const createAppSetup = () => {
         phase: context.phase,
         rootGeneration: context.rootGeneration
       });
+      refreshSimilarityAlignmentCanvas();
       featureActions.preparePairwiseInteractionAffordances({
         root: context.root,
         phase: context.phase,
@@ -2776,6 +2780,31 @@ export const createAppSetup = () => {
     clearCandidatePreview: featureActions.clearAlignmentCandidatePreview,
     onError: (error) => { errorLog.value = error; }
   });
+  const similarityAlignmentCanvasHover = ref(null);
+  refreshSimilarityAlignmentCanvas = () => {
+    if (!similarityAlignmentActions.dialogOpen.value
+      || similarityAlignmentActions.status.value !== 'ambiguous'
+      || !similarityAlignmentActions.isDraftArtifactCurrent()) {
+      featureActions.clearAlignmentOverlay();
+      similarityAlignmentCanvasHover.value = null;
+      return;
+    }
+    const current = similarityAlignmentActions.draft.value;
+    similarityAlignmentCanvasHover.value = null;
+    featureActions.showAlignmentOverlay({
+      reference: current.response.reference,
+      ambiguities: current.ambiguities,
+      onSelect: similarityAlignmentActions.selectCandidate,
+      onHover: (recordKey, candidateKey) => {
+        similarityAlignmentCanvasHover.value = recordKey ? { recordKey, candidateKey } : null;
+      }
+    });
+  };
+  watch([
+    similarityAlignmentActions.dialogOpen,
+    () => similarityAlignmentActions.draft.value?.response,
+    similarityAlignmentActions.status
+  ], refreshSimilarityAlignmentCanvas, { flush: 'post' });
   let similarityAlignmentReturnFocus = null;
   const similarityAlignmentPaletteRef = ref(null);
   const similarityAlignmentPalettePosition = reactive({ x: null, y: null });
@@ -4296,6 +4325,7 @@ export const createAppSetup = () => {
     cancelSimilarityAlignmentDialog,
     similarityAlignmentPaletteRef,
     similarityAlignmentPaletteStyle,
+    similarityAlignmentCanvasHover,
     startSimilarityAlignmentPaletteDrag,
     previewSimilarityAlignmentCandidate: similarityAlignmentActions.previewCandidate,
     clearSimilarityAlignmentCandidatePreview: similarityAlignmentActions.clearCandidatePreview,

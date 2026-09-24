@@ -1292,6 +1292,7 @@ export const createSimilarityAlignmentActions = ({
     dialogOpen: computed(() => Boolean(
       draft.value?.ambiguities?.length && status.value !== 'idle'
     )),
+    isDraftArtifactCurrent: artifactIsCurrent,
     unresolvedCount,
     applyDisabledReason,
     canApply: computed(() => status.value === 'ambiguous' && unresolvedCount.value === 0),
