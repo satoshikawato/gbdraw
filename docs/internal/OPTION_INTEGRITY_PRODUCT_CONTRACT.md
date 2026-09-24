@@ -5,7 +5,7 @@ Status: active Product authority
 ## Authority metadata
 
 - Contract ID: `OIPC`
-- Contract revision: `11`
+- Contract revision: `12`
 - Product Decision Owner: `satoshikawato`
 - Decision date: `2026-08-28`
 - Decision source: explicit Product Decision Owner selection of one (`1`) after
@@ -26,7 +26,7 @@ Status: active Product authority
 - Additional approved decision IDs: `PD-OI-018`, `PD-OI-019`, `PD-OI-020`,
   `PD-OI-021`, `PD-OI-022`, `PD-OI-023`, `PD-OI-024`, `PD-OI-025`,
   `PD-OI-026`, `PD-OI-027`, `PD-OI-028`, `PD-OI-029`, `PD-OI-030`, and
-  `PD-OI-031`, and `PD-OI-032`
+  `PD-OI-031`, `PD-OI-032`, `PD-OI-033`, `PD-OI-034`, and `PD-OI-035`
 - Revision 3 addition: `PD-OI-018`, accepted by `satoshikawato` on
   `2026-09-13` after confirming the complete record/search outcome, no feature
   retirement, and the runtime/memory cost of complete comparisons. The initial
@@ -90,6 +90,11 @@ Status: active Product authority
   accepted residual risk. Earlier decisions retain their scope. Dependent
   runtime requires this authority merged into its base; this amendment contains
   no runtime.
+- Revision 12 additions: `PD-OI-033` through `PD-OI-035`, approved by
+  `satoshikawato` on `2026-09-24` through explicit approval of the exact three
+  `PRODUCT_DECISION` texts presented for issue `#581`. The receipts below are
+  the full scope of these additions. Dependent runtime requires this authority
+  merged into its base; this amendment contains no runtime.
 - Records remaining `EVIDENCE_REQUIRED`: none
 - Excluded records: none
 
@@ -1313,6 +1318,84 @@ corrected. Passing evidence does not make incorrect behavior normative.
   "acceptedResidualRisk": "Popup UIおよびSession catalog compatibility pathの追加に伴う限定的なUI・保守負担を受容する。この負担は既存ownerの再利用、catalog 3からcatalog 4への単一のbounded reader、390 px・keyboard acceptance、AC-01～AC-20、およびfull regression gatesで制限する。科学的意味の変更、source dataの変更、global-selection fallback、追加LOSAT executor jobは受容しない。",
   "owner": "satoshikawato",
   "decisionDate": "2026-09-22"
+}
+```
+
+### PD-OI-033: Feature-popup record-actions presentation
+
+- Concern key: `web.feature-popup.record-actions-presentation`
+- Scenario revision: `1`
+- Status: `ACCEPTED`
+- Selected outcome: `A / EDIT_DISCLOSURE`
+- Normative outcome: exactly the approved `PRODUCT_DECISION` receipt below.
+- Decision source: `satoshikawato` explicitly approved the exact text of all
+  three `PRODUCT_DECISION` receipts presented for issue `#581` on
+  `2026-09-24`. This serialization adds no terms to that approval and cannot
+  authorize dependent runtime until merged into its base.
+
+```json
+{
+  "concern": "web.feature-popup.record-actions-presentation",
+  "scenarioRevision": 1,
+  "choice": "A / EDIT_DISCLOSURE",
+  "rationale": "通常のfeature確認・編集をすぐ始められる高さに保ちつつ、record回転をpopup内から見つけて使えるようにする。richとsimpleの両popupで同じ操作を提供する。",
+  "mustPreserve": "開いたfeatureだけを対象とする回転、既存のanchor・offset・orientation・feature-end操作、適用前preview、操作できない理由の表示、keyboardと390 pxでの到達性、既存sidebar操作、成功時の一体的なResultとUndo/Redo、Cancel・失敗時の直前Resultとrecord transform。",
+  "mayRetire": "featureを開くたびに回転フォームがタブより上へ自動展開する動作、およびフォーム内Cancelがfeature popup全体を閉じる動作。",
+  "acceptedResidualRisk": "専用Recordタブより操作の分類は目立ちにくい。Editの上部に明確な見出しと開閉ボタンを置き、狭い画面とkeyboardで到達できることを確認する。",
+  "owner": "satoshikawato",
+  "decisionDate": "2026-09-24"
+}
+```
+
+### PD-OI-034: Similarity-alignment choice and retry
+
+- Concern key: `web.similarity-alignment.choice-and-retry`
+- Scenario revision: `1`
+- Status: `ACCEPTED`
+- Selected outcome: `A / LOCAL_BATCH_RETRY`
+- Normative outcome: exactly the approved `PRODUCT_DECISION` receipt below.
+- Decision source: `satoshikawato` explicitly approved the exact text of all
+  three `PRODUCT_DECISION` receipts presented for issue `#581` on
+  `2026-09-24`. This serialization adds no terms to that approval and cannot
+  authorize dependent runtime until merged into its base.
+
+```json
+{
+  "concern": "web.similarity-alignment.choice-and-retry",
+  "scenarioRevision": 1,
+  "choice": "A / LOCAL_BATCH_RETRY",
+  "rationale": "複数recordの候補を待ち時間なしに比較・選択できるようにし、生物学的な名前と座標でexact featureを識別できるようにする。検証や生成に失敗しても、入力済みの選択をやり直さずに修正できるようにする。",
+  "mustPreserve": "exact reference、recordごとに独立したSelect／Skip、曖昧な候補の明示選択、候補の適格性と最終planを決めるPython Resolver、曖昧性がない場合の自動適用、代表status・score・図上位置による自動順位付けの禁止、失敗・取消・古い応答での直前ResultとHistory、既存planの再生成・Session・Undo/Redoの意味。",
+  "mayRetire": "内部IDを候補の主見出しにする表示、候補を一つ選ぶたびにPythonへ問い合わせて入力を待機させる動作、再試行可能なApply失敗で選択を破棄する動作。内部IDは詳細表示では利用可能にする。",
+  "acceptedResidualRisk": "Apply時には一回の検証と必要な再生成を待つ。選択開始後にsource、crop、group、committed Resultが変わった場合、古い選択は適用せず、利用者に再開始を求める。",
+  "owner": "satoshikawato",
+  "decisionDate": "2026-09-24"
+}
+```
+
+### PD-OI-035: Similarity-alignment canvas interaction
+
+- Concern key: `web.similarity-alignment.canvas-interaction`
+- Scenario revision: `1`
+- Status: `ACCEPTED`
+- Selected outcome: `A / FLOATING_GUIDE_CANVAS_PICK`
+- Normative outcome: exactly the approved `PRODUCT_DECISION` receipt below.
+- Decision source: `satoshikawato` explicitly approved the exact text of all
+  three `PRODUCT_DECISION` receipts presented for issue `#581` on
+  `2026-09-24`. This serialization adds no terms to that approval and cannot
+  authorize dependent runtime until merged into its base.
+
+```json
+{
+  "concern": "web.similarity-alignment.canvas-interaction",
+  "scenarioRevision": 1,
+  "choice": "A / FLOATING_GUIDE_CANVAS_PICK",
+  "rationale": "record間の上下関係と図全体の幅を見ながら候補を比較できるようにする。参照位置のガイドと候補番号で位置を把握し、図上クリックと候補一覧のどちらからでも選択できるようにする。",
+  "mustPreserve": "図の手動pan／zoom、paletteのradioによるkeyboard選択とSkip、exact feature identityに基づく選択、描画されない候補の一覧からの選択、図上位置を根拠とする自動選択の禁止、適切なfocus操作と390 pxでの到達性、preview用表示がResult・download・Sessionへ混入しないこと。",
+  "mayRetire": "画面中央を覆う暗いbackdrop付きmodal、そのfocus trap、および候補一覧だけを選択の入口とする動作。",
+  "acceptedResidualRisk": "paletteや番号が密集した図の一部に重なることがある。paletteを移動でき、図上表示が困難な候補も常に一覧から選べるようにする。非表示または一意に描画位置を特定できないfeatureには番号を出せない場合がある。",
+  "owner": "satoshikawato",
+  "decisionDate": "2026-09-24"
 }
 ```
 
