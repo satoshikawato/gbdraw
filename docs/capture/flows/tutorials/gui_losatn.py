@@ -191,22 +191,22 @@ def capture_gui_losatn(
             "Advanced comparison and layout",
         )
 
-        execution = advanced.get_by_role(
+        execution = settings.get_by_role(
             "combobox", name="LOSAT execution", exact=True
         )
         execution.select_option("serial")
         expect(execution).to_have_value("serial")
-        total_threads = advanced.get_by_role(
+        total_threads = settings.get_by_role(
             "combobox", name="LOSAT total threads", exact=True
         )
         total_threads.select_option("1")
         expect(total_threads).to_have_value("1")
-        parallel_runs = advanced.get_by_role(
+        parallel_runs = settings.get_by_role(
             "combobox", name="LOSAT parallel runs", exact=True
         )
         parallel_runs.select_option("1")
         expect(parallel_runs).to_have_value("1")
-        threads_per_run = advanced.get_by_role(
+        threads_per_run = settings.get_by_role(
             "combobox", name="LOSAT threads per run", exact=True
         )
         expect(threads_per_run).to_be_disabled()

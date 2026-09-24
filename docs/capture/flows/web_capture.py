@@ -108,6 +108,8 @@ def _same_origin(url: str, base_url: str) -> bool:
 
 def open_browser_capture(
     browser_type: BrowserType, base_url: str, *, device_scale_factor: float = DEVICE_SCALE_FACTOR,
+    viewport: tuple[int, int] = (VIEWPORT_WIDTH, VIEWPORT_HEIGHT),
+    record_video_dir: Path | None = None,
 ) -> BrowserCapture:
     """Open the pinned browser with a fresh context and same-origin routing."""
 
@@ -128,8 +130,15 @@ def open_browser_capture(
             f"found {installed_chromium}"
         )
 
+    context_options = {}
+    if record_video_dir is not None:
+        record_video_dir.mkdir(parents=True, exist_ok=True)
+        context_options = {
+            "record_video_dir": str(record_video_dir),
+            "record_video_size": {"width": viewport[0], "height": viewport[1]},
+        }
     context = browser.new_context(
-        viewport={"width": VIEWPORT_WIDTH, "height": VIEWPORT_HEIGHT},
+        viewport={"width": viewport[0], "height": viewport[1]},
         device_scale_factor=device_scale_factor,
         locale=LOCALE,
         timezone_id=TIMEZONE_ID,
@@ -137,6 +146,7 @@ def open_browser_capture(
         reduced_motion=REDUCED_MOTION,
         service_workers="block",
         accept_downloads=True,
+        **context_options,
     )
     context.set_default_timeout(ACTION_TIMEOUT_MS)
     context.set_default_navigation_timeout(NAVIGATION_TIMEOUT_MS)

@@ -188,6 +188,7 @@ def _configure_feature_types(page: Page) -> None:
 def _configure_gallery_presentation(page: Page) -> None:
     page.get_by_label("Output Prefix", exact=True).fill("annotated_chloroplast_map")
     page.get_by_label("Species", exact=True).fill("<i>Nicotiana tabacum</i>")
+    page.get_by_label("Layout", exact=True).click()
     page.get_by_label("Track Preset", exact=True).select_option("tuckin")
     page.get_by_label("Separate Strands", exact=True).check()
     page.get_by_label("Hide GC Content", exact=True).uncheck()

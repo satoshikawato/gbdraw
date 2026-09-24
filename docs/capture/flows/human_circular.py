@@ -95,6 +95,7 @@ def apply_finished_human_settings(page: Page, *, output_prefix: str) -> None:
     species.fill(HUMAN_SPECIES_MARKUP)
     expect(species).to_have_value(HUMAN_SPECIES_MARKUP)
 
+    page.get_by_label("Layout", exact=True).click()
     track_preset = page.get_by_label("Track Preset", exact=True)
     track_preset.select_option("middle")
     expect(track_preset).to_have_value("middle")

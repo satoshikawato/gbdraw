@@ -786,13 +786,31 @@ def assert_gui_bgc_gallery_definition_presentation(report: dict[str, Any]) -> No
     blocks = report.get("definitionBlocks", [])
     if len(blocks) != 5:
         raise AssertionError(f"Expected five BGC definition blocks, found {blocks!r}")
-    x_positions = [
-        float(block["translate"][0])
+    # The accepted Gallery figure contains explicit per-record X translations
+    # after similarity alignment. Compare with that source figure rather than
+    # assuming the rendered definitions all share one final X coordinate.
+    gallery = (
+        Path(__file__).resolve().parents[3]
+        / "gbdraw/web/gallery/sources/BGC0000708-BGC0000713.svg"
+    )
+    reference = ET.parse(gallery).getroot()
+    expected_x = {
+        element.get("data-gbdraw-record-id"): sum(
+            float(match.group("x"))
+            for match in _TRANSLATE_COMPONENT_RE.finditer(element.get("transform", ""))
+        )
+        for element in reference.iter()
+        if element.get("data-gbdraw-role") == "record-definition"
+    }
+    actual_x = {
+        block.get("recordId"): float(block["translate"][0])
         for block in blocks
         if isinstance(block.get("translate"), list)
-    ]
-    if len(x_positions) != 5 or max(x_positions) - min(x_positions) > 1e-6:
-        raise AssertionError(f"BGC definitions are not locked to one column: {blocks!r}")
+    }
+    if set(actual_x) != set(expected_x) or any(
+        abs(actual_x[key] - value) > 1e-6 for key, value in expected_x.items()
+    ):
+        raise AssertionError(f"BGC definition positions differ from the accepted Gallery figure: {actual_x!r}")
 
     expected = {
         "name": (20.0, "bold", "black"),

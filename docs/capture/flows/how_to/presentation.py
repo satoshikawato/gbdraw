@@ -634,6 +634,7 @@ def _open_human_circular(page: Page, prefix: str) -> None:
     output_prefix = page.get_by_label("Output Prefix", exact=True)
     output_prefix.fill(prefix)
     expect(output_prefix).to_have_value(prefix)
+    page.get_by_label("Layout", exact=True).click()
     track_preset = page.get_by_label("Track Preset", exact=True)
     track_preset.select_option("middle")
     expect(track_preset).to_have_value("middle")

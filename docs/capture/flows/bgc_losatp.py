@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import hashlib
-import re
+import json
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable, Mapping
@@ -18,6 +18,7 @@ from assertions.svg_semantics import (
     inspect_gui_bgc_losatp_svg,
 )
 from config import (
+    REPO_ROOT,
     ACTION_TIMEOUT_MS,
     GUI_BGC_FIXTURES,
 )
@@ -472,7 +473,7 @@ def _open_orthogroup_alignment_target(page: Page, orthogroup_id: str) -> Any:
     popup = page.locator(".feature-popup")
     expect(popup).to_be_visible()
     expect(popup).to_contain_text(orthogroup_id)
-    expect(popup.get_by_role("button", name=re.compile(r"Align"))).to_be_visible()
+    expect(popup.get_by_role("button", name="Align", exact=True)).to_be_visible()
     return popup
 
 
@@ -480,19 +481,66 @@ def _align_to_orthogroup(page: Page, popup: Any, orthogroup_id: str) -> None:
     previous_run = page.evaluate(
         "() => String(window.__GBDRAW_APP__?.lastRunInfo?.startedAtIso || '')"
     )
-    popup.get_by_role("button", name=re.compile(r"Align")).click()
-    page.wait_for_function(
-        """
-        ({ orthogroupId, previousRun }) => {
-          const app = window.__GBDRAW_APP__;
-          return !app?.processing
-            && app?.selectedOrthogroupAlignmentFeature === orthogroupId
-            && String(app?.lastRunInfo?.startedAtIso || '') !== previousRun;
+    popup.get_by_role("button", name="Align", exact=True).click()
+    dialog = page.locator("[data-similarity-alignment-dialog]")
+    if dialog.count() and dialog.is_visible():
+        # The approved Gallery session records exact anchors. Resolve only those
+        # now surfaced as ambiguous by the shared alignment resolver.
+        gallery = json.loads(
+            (REPO_ROOT / "gbdraw/web/gallery/sessions/BGC0000708-BGC0000713.gbdraw-session.json")
+            .read_text(encoding="utf-8")
+        )
+        approved = gallery["renderRequest"]["layout"]["similarityAlignment"]
+        if approved["groupId"] != orthogroup_id or approved["mode"] != "position":
+            raise AssertionError("Approved BGC alignment contract changed")
+        by_record = {
+            row["recordKey"]: row["anchor"]["stableFeatureSvgId"]
+            for row in approved["records"] if row["status"] == "aligned"
         }
-        """,
-        arg={"orthogroupId": orthogroup_id, "previousRun": previous_run},
-        timeout=ACTION_TIMEOUT_MS,
-    )
+        ambiguities = page.evaluate(
+            "() => window.__GBDRAW_APP__?.similarityAlignmentDraft?.ambiguities?.map(row => row.recordKey) || []"
+        )
+        for record_key in ambiguities:
+            anchor_id = by_record.get(record_key)
+            if not anchor_id:
+                raise AssertionError(f"No approved anchor for {record_key}")
+            choice = dialog.get_by_role(
+                "radio", name=f"Select feature {anchor_id} for record {record_key}", exact=True
+            )
+            expect(choice).to_be_visible()
+            choice.check()
+        apply = dialog.get_by_role("button", name="Apply", exact=True)
+        expect(apply).to_be_enabled()
+        apply.click()
+        expect(dialog).to_be_hidden(timeout=ACTION_TIMEOUT_MS)
+    try:
+        page.wait_for_function(
+            """
+            ({ orthogroupId, previousRun }) => {
+              const app = window.__GBDRAW_APP__;
+              return !app?.processing
+                && app?.similarityAlignmentPlanInspector?.groupId === orthogroupId
+                && String(app?.lastRunInfo?.startedAtIso || '') !== previousRun;
+            }
+            """,
+            arg={"orthogroupId": orthogroup_id, "previousRun": previous_run},
+            timeout=ACTION_TIMEOUT_MS,
+        )
+    except Exception as exc:
+        debug = page.evaluate("""() => {
+          const app = window.__GBDRAW_APP__;
+          return {
+            processing: app?.processing,
+            errorLog: app?.errorLog,
+            marker: app?.lastRunInfo?.startedAtIso,
+            plan: app?.similarityAlignmentPlanInspector,
+            status: app?.similarityAlignmentStatus,
+            draft: app?.similarityAlignmentDraft,
+            legacyAlignment: app?.selectedOrthogroupAlignmentFeature
+          };
+        }""")
+        raise AssertionError(f"BGC alignment did not settle: {debug!r}") from exc
+
 
 
 def _download_text_button(
@@ -706,7 +754,8 @@ def capture_bgc_losatp(
             else assert_gui_bgc_collinear_svg
         )
         final_report = generate_and_inspect(
-            page, inspect_gui_bgc_losatp_svg, validator
+            page, inspect_gui_bgc_losatp_svg,
+            assert_gui_bgc_similarity_groups_svg if align_orthogroup_id is not None else validator,
         )
         if mode == "orthogroup":
             group_count = int(
@@ -802,7 +851,7 @@ def capture_bgc_losatp(
             final_report = inspect_gui_bgc_losatp_svg(result_region)
             validator(final_report)
             aligned_state = page.evaluate(
-                "() => window.__GBDRAW_APP__?.selectedOrthogroupAlignmentFeature"
+                "() => window.__GBDRAW_APP__?.similarityAlignmentPlanInspector?.groupId"
             )
             if aligned_state != align_orthogroup_id:
                 raise AssertionError(

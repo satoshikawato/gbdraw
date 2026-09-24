@@ -131,6 +131,7 @@ def capture_first_circular(
             page, output_paths["03-publication-label.png"], "Circular"
         )
 
+        page.get_by_label("Layout", exact=True).click()
         track_preset = page.get_by_label("Track Preset", exact=True)
         track_preset.select_option("middle")
         expect(track_preset).to_have_value("middle")
