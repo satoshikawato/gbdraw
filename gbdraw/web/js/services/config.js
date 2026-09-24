@@ -51,6 +51,7 @@ import {
   requireLinearLabelVisibilityMode
 } from '../app/linear-label-visibility.js';
 import { isCliInvocationSessionExportable } from '../app/run-info.js';
+import { migrateLegacyOrthogroupMembers } from './legacy-similarity-alignment.js';
 import {
   normalizeCircularPlotTitlePosition,
   normalizeLinearPlotTitlePosition
@@ -2739,8 +2740,11 @@ const applyProteinIdentityManifest = (manifest, { adoptCurrent = false } = {}) =
   adoptedProteinIdentityManifest = adoptCurrent ? manifest : null;
 };
 
-export const applyOrthogroupStateData = (orthogroupState = {}) => {
-  const groups = Array.isArray(orthogroupState.groups) ? orthogroupState.groups : [];
+export const applyOrthogroupStateData = (orthogroupState = {}, { legacyRecords = null } = {}) => {
+  const storedGroups = Array.isArray(orthogroupState.groups) ? orthogroupState.groups : [];
+  const groups = legacyRecords
+    ? migrateLegacyOrthogroupMembers(storedGroups, legacyRecords)
+    : storedGroups;
   const groupIds = groups
     .map((group) => String(group?.id || '').trim())
     .filter(Boolean);
@@ -4513,7 +4517,8 @@ export const importSession = async (e, options = {}) => {
               features.orthogroupDescriptionOverrides ||
               data.config?.webEdits?.orthogroupDescriptionOverrides ||
               {}
-        }
+        },
+      { legacyRecords: sourceSessionVersion <= 39 ? data.renderRequest?.records : null }
     );
     applyEditorStateData(restoredEditorState, {
       normalized: currentSchemaSession,

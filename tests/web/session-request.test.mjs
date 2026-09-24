@@ -21,6 +21,9 @@ const {
 } = await import(
   pathToFileURL(join(tempRoot, 'js', 'services', 'session-request.js'))
 );
+const { migrateLegacyOrthogroupMembers } = await import(
+  pathToFileURL(join(tempRoot, 'js', 'services', 'legacy-similarity-alignment.js'))
+);
 const { linearRecordLayoutHasSharedRow } = await import(
   pathToFileURL(join(tempRoot, 'js', 'app', 'linear-record-layout.js'))
 );
@@ -2641,6 +2644,21 @@ for (const mutate of [
     /duplicate record keys|finite numbers|missing or unknown fields|invalid plan combination/
   );
 }
+
+const oldGroups = [{ id: 'og-legacy', members: [
+  { recordIndex: 0, featureIndex: 2, stableFeatureSvgId: 'stable-1', featureSvgId: 'stable-1' },
+  { recordIndex: 1, featureIndex: 3, stableFeatureSvgId: 'stable-2', featureSvgId: 'conflict' },
+  { recordIndex: 8, featureIndex: 4, stableFeatureSvgId: 'out-of-range' }
+] }];
+const migratedGroups = migrateLegacyOrthogroupMembers(oldGroups, [
+  { recordKey: 'first' }, { recordKey: 'second' }
+]);
+assert.deepEqual(migratedGroups[0].members[0], {
+  recordIndex: 0, stableFeatureSvgId: 'stable-1', featureSvgId: 'stable-1',
+  recordKey: 'first', biologicalFeatureId: 'stable-1'
+});
+assert.deepEqual(migratedGroups[0].members.slice(1), oldGroups[0].members.slice(1));
+assert.equal(oldGroups[0].members[0].recordKey, undefined);
 
 const legacyAlignmentRequest = structuredClone(losatPairCanonical.renderRequest);
 legacyAlignmentRequest.schema = 7;
