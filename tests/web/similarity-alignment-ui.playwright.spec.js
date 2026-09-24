@@ -26,7 +26,9 @@ const expectNoUnhandledRejections = async (page) => {
 const artifactSnapshot = (page) => page.evaluate(async () => {
   const { state } = await import('./js/state.js');
   const history = window.__GBDRAW_HISTORY__;
+  const { getCommittedCanonicalSession } = await import('./js/services/config.js');
   return {
+    session: JSON.parse(JSON.stringify(getCommittedCanonicalSession())),
     plan: JSON.parse(JSON.stringify(state.similarityAlignmentPlan.value)),
     request: structuredClone(state.lastCommittedRequest?.value || null),
     results: state.results.value.map(({ name, content }) => ({ name, content })),
@@ -34,15 +36,7 @@ const artifactSnapshot = (page) => page.evaluate(async () => {
   };
 });
 
-test('Similarity alignment UI completes exact-reference, ambiguity, focus, summary, and narrow journeys', async ({ page, browser }, testInfo) => {
-  test.setTimeout(600000);
-  const pageErrors = [];
-  const consoleErrors = [];
-  page.on('pageerror', (error) => pageErrors.push(String(error?.message || error)));
-  page.on('console', (message) => {
-    if (message.type() === 'error') consoleErrors.push(message.text());
-  });
-  await captureUnhandledRejections(page);
+const loadAmbiguousSession = async (page, testInfo) => {
   const directory = testInfo.outputPath('inparalog-fixture');
   mkdirSync(directory, { recursive: true });
   execFileSync('python', ['-c',
@@ -76,6 +70,216 @@ test('Similarity alignment UI completes exact-reference, ambiguity, focus, summa
     return JSON.stringify(document);
   }, source));
   await importSession(page, session, 'similarity-alignment-inparalog.gbdraw-session.json');
+};
+
+test('alignment canvas guide and candidates stay transient and share palette choices', async ({ page }, testInfo) => {
+  test.setTimeout(180000);
+  await loadAmbiguousSession(page, testInfo);
+  await page.evaluate(() => { window.__GBDRAW_APP__.sessionTitle = 's03-canvas-overlay'; });
+  if (!await page.evaluate(() => window.__GBDRAW_APP__.showRightDrawer)) {
+    await page.locator('.drawer-toggle').click();
+  }
+  const drawer = page.locator('.right-drawer');
+  await drawer.getByRole('button', { name: 'Similarity groups' }).click();
+  await drawer.locator('button').filter({
+    has: page.locator('.font-mono', { hasText: /^og_1$/ })
+  }).click();
+  const referenceSelect = drawer.getByLabel('Exact reference record and feature');
+  const referenceKey = await page.evaluate(() => (
+    window.__GBDRAW_APP__.similarityAlignmentDrawerReferenceOptions('og_1')
+      .find(({ anchor }) => anchor.recordKey === 'record_b')?.key || ''
+  ));
+  await referenceSelect.selectOption(referenceKey);
+  const align = drawer.getByRole('button', { name: 'Align & orient', exact: true });
+  const before = await artifactSnapshot(page);
+  await align.click();
+  const dialog = page.getByRole('dialog', { name: 'Select alignment anchors' });
+  await expect(dialog).toBeVisible({ timeout: 180000 });
+  const overlay = page.locator('[data-similarity-alignment-canvas]');
+  const guide = overlay.locator('.gbdraw-alignment-guide');
+  const badges = overlay.locator('.gbdraw-alignment-badge');
+  await expect(guide).toBeVisible();
+  await expect(badges).toHaveCount(2);
+  await expect(badges.nth(0)).toHaveText('1');
+  await expect(badges.nth(1)).toHaveText('2');
+  await expect(dialog.getByRole('radio', { name: /Select .*bp, strand/ }).first().locator('xpath=ancestor::label')).toContainText('1');
+
+  const geometry = () => page.evaluate(async () => {
+    const { getFeatureFillElements } = await import('./js/app/feature-dom.js');
+    const app = window.__GBDRAW_APP__;
+    const svg = document.querySelector('.gbdraw-preview-surface svg');
+    const draft = app.similarityAlignmentDraft;
+    const center = (anchor) => {
+      const feature = app.extractedFeatures.find((item) => (
+        item.recordKey === anchor.recordKey
+        && item.biologicalFeatureId === anchor.biologicalFeatureId
+      ));
+      const [element] = getFeatureFillElements(svg, feature.svg_id);
+      const rect = element.getBoundingClientRect();
+      return { x: (rect.left + rect.right) / 2, y: (rect.top + rect.bottom) / 2 };
+    };
+    const reference = center(draft.response.reference);
+    const line = document.querySelector('.gbdraw-alignment-guide');
+    const candidateErrors = draft.ambiguities[0].candidates.map((candidate, index) => {
+      const badge = document.querySelectorAll('.gbdraw-alignment-badge')[index];
+      if (badge.hidden) return null;
+      const point = center(candidate.anchor);
+      const rect = badge.getBoundingClientRect();
+      return Math.max(Math.abs(point.x - (rect.left + rect.right) / 2),
+        Math.abs(point.y - (rect.top + rect.bottom) / 2));
+    }).filter((value) => value !== null);
+    return {
+      guideError: Math.abs(reference.x - line.getBoundingClientRect().left),
+      candidateErrors,
+      visibleBadges: candidateErrors.length
+    };
+  });
+  await expect.poll(async () => (await geometry()).visibleBadges).toBe(2);
+  expect((await geometry()).guideError).toBeLessThan(2);
+  expect(Math.max(...(await geometry()).candidateErrors)).toBeLessThan(2);
+  const geometryIsAligned = async () => {
+    const measured = await geometry();
+    return measured.visibleBadges > 0 && measured.guideError < 2
+      && measured.candidateErrors.every((error) => error < 2);
+  };
+  await page.screenshot({ path: testInfo.outputPath('canvas-overlay.png'), fullPage: true });
+
+  const header = await dialog.locator('header').boundingBox();
+  await page.mouse.move(header.x + 25, header.y + 20);
+  await page.mouse.down();
+  await page.mouse.move(50, 45, { steps: 4 });
+  await page.mouse.up();
+  const firstRadio = dialog.getByRole('radio', { name: /Select .*bp, strand/ }).first();
+  const secondRadio = dialog.getByRole('radio', { name: /Select .*bp, strand/ }).nth(1);
+  const firstRow = firstRadio.locator('xpath=ancestor::label');
+  await badges.first().hover();
+  await expect(firstRow).toHaveClass(/ring-2/);
+  const firstSvgId = await page.evaluate(() => {
+    const app = window.__GBDRAW_APP__;
+    const anchor = app.similarityAlignmentDraft.ambiguities[0].candidates[0].anchor;
+    return app.extractedFeatures.find((item) => item.recordKey === anchor.recordKey
+      && item.biologicalFeatureId === anchor.biologicalFeatureId).svg_id;
+  });
+  const firstFeature = page.locator('[data-gbdraw-feature-id="' + firstSvgId + '"]').first();
+  await firstFeature.dispatchEvent('mouseover');
+  await expect(firstRow).toHaveClass(/ring-2/);
+  await firstFeature.dispatchEvent('click', { clientX: -100, clientY: -100 });
+  await expect(firstRadio).toBeChecked();
+  await expect(page.locator('.feature-popup[role="dialog"]')).toHaveCount(0);
+  await badges.nth(1).click();
+  await expect(secondRadio).toBeChecked();
+  const secondRow = secondRadio.locator('xpath=ancestor::label');
+  await firstFeature.dispatchEvent('mouseover');
+  await secondRow.dispatchEvent('mouseenter');
+  await expect.poll(() => firstFeature.evaluate((element) => element.style.opacity))
+    .not.toBe('0.7');
+  await secondRow.dispatchEvent('mouseleave');
+  await expect.poll(() => firstFeature.evaluate((element) => element.style.opacity))
+    .toBe('0.7');
+  await expect(secondRadio).toBeChecked();
+  const referenceSvgId = await page.evaluate(() => {
+    const app = window.__GBDRAW_APP__;
+    const anchor = app.similarityAlignmentDraft.response.reference;
+    return app.extractedFeatures.find((item) => item.recordKey === anchor.recordKey
+      && item.biologicalFeatureId === anchor.biologicalFeatureId).svg_id;
+  });
+  await page.locator('[data-gbdraw-feature-id="' + referenceSvgId + '"]').first()
+    .dispatchEvent('click', { clientX: -100, clientY: -100 });
+  await expect(page.locator('.feature-popup[role="dialog"]')).toBeVisible();
+  await page.evaluate(() => window.__GBDRAW_APP__.closeFeaturePopup());
+  expect(await artifactSnapshot(page)).toEqual(before);
+
+  const canvas = page.locator('.gbdraw-preview-surface').locator('..');
+  const zoomBefore = await page.evaluate(() => window.__GBDRAW_APP__.zoom);
+  await canvas.dispatchEvent('wheel', { deltaY: -80 });
+  await expect.poll(() => page.evaluate(() => window.__GBDRAW_APP__.zoom)).toBeGreaterThan(zoomBefore);
+  await expect.poll(geometryIsAligned).toBe(true);
+  const panBefore = await page.evaluate(() => window.__GBDRAW_APP__.canvasPan.x);
+  const canvasBox = await canvas.boundingBox();
+  await page.mouse.move(canvasBox.x + 240, canvasBox.y + 220);
+  await page.mouse.down();
+  await page.mouse.move(canvasBox.x + 270, canvasBox.y + 220, { steps: 3 });
+  await page.mouse.up();
+  await expect.poll(() => page.evaluate(() => window.__GBDRAW_APP__.canvasPan.x))
+    .toBeGreaterThan(panBefore);
+  await expect.poll(geometryIsAligned).toBe(true);
+  const scrollAfter = await canvas.evaluate((element) => { element.scrollLeft += 40; return element.scrollLeft; });
+  expect(scrollAfter).toBeGreaterThan(0);
+  await expect.poll(geometryIsAligned).toBe(true);
+  await page.setViewportSize({ width: 1600, height: 900 });
+  await expect.poll(geometryIsAligned).toBe(true);
+
+  await page.evaluate((svgId) => {
+    document.querySelectorAll('[data-gbdraw-feature-id="' + CSS.escape(svgId) + '"]')
+      .forEach((element) => element.setAttribute('display', 'none'));
+    window.dispatchEvent(new Event('resize'));
+  }, firstSvgId);
+  await expect(badges.first()).toBeHidden();
+  await firstRadio.check();
+  await expect(firstRadio).toBeChecked();
+  await page.evaluate((svgId) => {
+    document.querySelectorAll('[data-gbdraw-feature-id="' + CSS.escape(svgId) + '"]')
+      .forEach((element) => element.removeAttribute('display'));
+    window.dispatchEvent(new Event('resize'));
+  }, firstSvgId);
+  expect(JSON.stringify(await artifactSnapshot(page))).not.toContain('gbdraw-alignment-');
+  expect(await page.evaluate(() => document.querySelector('.gbdraw-preview-surface svg').outerHTML))
+    .not.toContain('gbdraw-alignment-');
+  const svgDownloadPromise = page.waitForEvent('download');
+  await page.evaluate(() => window.__GBDRAW_APP__.downloadSVG());
+  const svgDownload = await svgDownloadPromise;
+  const svgPath = testInfo.outputPath('canvas-overlay-export.svg');
+  await svgDownload.saveAs(svgPath);
+  expect(readFileSync(svgPath, 'utf8')).not.toContain('gbdraw-alignment-');
+  const sessionDownloadPromise = page.waitForEvent('download');
+  await page.evaluate(() => window.__GBDRAW_APP__.saveSessionWithTitle());
+  const sessionDownload = await sessionDownloadPromise;
+  const sessionPath = testInfo.outputPath('canvas-overlay-session.json.gz');
+  await sessionDownload.saveAs(sessionPath);
+  expect(gunzipSync(readFileSync(sessionPath)).toString('utf8'))
+    .not.toContain('gbdraw-alignment-');
+
+  await dialog.getByRole('button', { name: 'Cancel', exact: true }).click();
+  await expect(overlay).toHaveCount(0);
+  expect(await artifactSnapshot(page)).toEqual(before);
+  await align.click();
+  await expect(dialog).toBeVisible({ timeout: 180000 });
+  await page.evaluate(async () => {
+    const { state } = await import('./js/state.js');
+    window.__S03Result = state.results.value[state.selectedResultIndex.value];
+    state.results.value = [{ ...window.__S03Result }];
+  });
+  await expect(overlay).toHaveCount(0);
+  await page.evaluate(async () => {
+    const { state } = await import('./js/state.js');
+    state.results.value = [];
+  });
+  await expect(overlay).toHaveCount(0);
+  await dialog.getByRole('button', { name: 'Cancel', exact: true }).click();
+  await page.evaluate(async () => {
+    const { state } = await import('./js/state.js');
+    state.results.value = [window.__S03Result];
+    delete window.__S03Result;
+  });
+  await expect(page.locator('.gbdraw-preview-surface svg')).toBeVisible();
+  await align.click();
+  await expect(dialog).toBeVisible({ timeout: 180000 });
+  await dialog.getByRole('radio', { name: /Select .*bp, strand/ }).first().check();
+  await dialog.getByRole('button', { name: 'Apply', exact: true }).click();
+  await expect(dialog).toBeHidden({ timeout: 180000 });
+  await expect(overlay).toHaveCount(0);
+});
+
+test('Similarity alignment UI completes exact-reference, ambiguity, focus, summary, and narrow journeys', async ({ page, browser }, testInfo) => {
+  test.setTimeout(600000);
+  const pageErrors = [];
+  const consoleErrors = [];
+  page.on('pageerror', (error) => pageErrors.push(String(error?.message || error)));
+  page.on('console', (message) => {
+    if (message.type() === 'error') consoleErrors.push(message.text());
+  });
+  await captureUnhandledRejections(page);
+  await loadAmbiguousSession(page, testInfo);
 
   if (!await page.evaluate(() => window.__GBDRAW_APP__.showRightDrawer)) {
     await page.locator('.drawer-toggle').click();
@@ -104,12 +308,64 @@ test('Similarity alignment UI completes exact-reference, ambiguity, focus, summa
   await expect(alignOrient).toBeEnabled();
 
   const beforeCancel = await artifactSnapshot(page);
+  const diagramWidthBefore = (await page.locator('.gbdraw-preview-surface').boundingBox()).width;
   await alignOrient.click();
   const dialog = page.getByRole('dialog', { name: 'Select alignment anchors' });
   await expect(dialog).toBeVisible({ timeout: 180000 });
   await expect(dialog).toHaveAttribute('aria-describedby', 'similarity-alignment-dialog-description');
-  await expect(dialog).toContainText('inparalog');
-  await expect(dialog).toContainText(/\d+\.\.\d+ · strand [+-]/);
+  await expect(dialog).not.toHaveAttribute('aria-modal', 'true');
+  expect(await dialog.evaluate((element) => element.contains(document.activeElement))).toBe(true);
+  expect((await page.locator('.gbdraw-preview-surface').boundingBox()).width).toBe(diagramWidthBefore);
+  await expect(page.locator('[data-similarity-alignment-count]')).toContainText('0 / 1 records selected');
+  const paletteHeader = dialog.locator('header');
+  const headerBox = await paletteHeader.boundingBox();
+  await page.mouse.move(headerBox.x + 35, headerBox.y + 20);
+  await page.mouse.down();
+  await page.mouse.move(-200, -200, { steps: 5 });
+  await page.mouse.up();
+  let paletteBox = await dialog.boundingBox();
+  expect(paletteBox.x).toBeGreaterThanOrEqual(11);
+  expect(paletteBox.y).toBeGreaterThanOrEqual(11);
+  await page.mouse.move(paletteBox.x + 35, paletteBox.y + 20);
+  await page.mouse.down();
+  await page.mouse.move(2000, 2000, { steps: 5 });
+  await page.mouse.up();
+  paletteBox = await dialog.boundingBox();
+  expect(paletteBox.x + paletteBox.width).toBeLessThanOrEqual(1589);
+  expect(paletteBox.y + paletteBox.height).toBeLessThanOrEqual(989);
+  await page.setViewportSize({ width: 900, height: 650 });
+  paletteBox = await dialog.boundingBox();
+  expect(paletteBox.x + paletteBox.width).toBeLessThanOrEqual(889);
+  expect(paletteBox.y + paletteBox.height).toBeLessThanOrEqual(639);
+  await page.setViewportSize({ width: 1600, height: 1000 });
+  const canvasBox = await page.locator('.gbdraw-preview-surface').locator('..').boundingBox();
+  const beforeViewport = await page.evaluate(() => ({
+    zoom: window.__GBDRAW_APP__.zoom,
+    panX: window.__GBDRAW_APP__.canvasPan.x
+  }));
+  await page.mouse.move(canvasBox.x + 24, canvasBox.y + 100);
+  await page.mouse.wheel(0, -100);
+  await expect.poll(() => page.evaluate(() => window.__GBDRAW_APP__.zoom))
+    .toBeGreaterThan(beforeViewport.zoom);
+  await page.mouse.down();
+  await page.mouse.move(canvasBox.x + 64, canvasBox.y + 100, { steps: 4 });
+  await page.mouse.up();
+  await expect.poll(() => page.evaluate(() => window.__GBDRAW_APP__.canvasPan.x))
+    .toBeGreaterThan(beforeViewport.panX);
+  await page.evaluate(() => {
+    const app = window.__GBDRAW_APP__;
+    app.linearSourceRemovalDialog.sourceUid = app.linearSeqs[0].uid;
+    app.linearSourceRemovalDialog.origin = 'card';
+    app.linearSourceRemovalDialog.open = true;
+  });
+  const removalDialog = page.getByRole('dialog', { name: 'Clear or delete File?' });
+  await expect(removalDialog).toBeVisible();
+  await removalDialog.getByRole('button', { name: 'Cancel' }).focus();
+  await page.keyboard.press('Escape');
+  await expect(removalDialog).toBeHidden();
+  await expect(dialog).toBeVisible();
+  expect(await artifactSnapshot(page)).toEqual(beforeCancel);
+  await expect(dialog).toContainText(/\d[\d,]*\.\.\d[\d,]* bp \([+-]\)/);
   await expect(dialog).toContainText('Direct evidence: None');
   await expect(dialog).not.toContainText(/score/i);
   const apply = dialog.getByRole('button', { name: 'Apply', exact: true });
@@ -118,13 +374,12 @@ test('Similarity alignment UI completes exact-reference, ambiguity, focus, summa
   await expect(page.locator('#similarity-alignment-apply-reason')).toContainText(
     'require Select or Skip'
   );
-  expect(await dialog.evaluate((element) => element.contains(document.activeElement))).toBe(true);
   await page.screenshot({
     path: testInfo.outputPath('desktop-ambiguity.png'),
     fullPage: true
   });
 
-  const firstCandidate = dialog.getByRole('radio', { name: /Select feature/ }).first();
+  const firstCandidate = dialog.getByRole('radio', { name: /Select .*bp, strand/ }).first();
   const candidateAnchor = await page.evaluate(() => (
     window.__GBDRAW_APP__.similarityAlignmentDraft.ambiguities[0].candidates[0].anchor
   ));
@@ -150,20 +405,33 @@ test('Similarity alignment UI completes exact-reference, ambiguity, focus, summa
   await dialog.getByRole('heading', { name: 'Select alignment anchors' }).hover();
   await expect.poll(async () => (await previewState()).candidate.includes('0.7')).toBe(false);
 
-  const cancel = dialog.getByRole('button', { name: 'Cancel', exact: true });
-  await cancel.focus();
-  await page.keyboard.press('Tab');
-  expect(await dialog.evaluate((element) => element.contains(document.activeElement))).toBe(true);
-  await page.keyboard.press('Shift+Tab');
-  await dialog.getByRole('radio', { name: /Skip record/ }).check();
+  await dialog.getByRole('radio', { name: /Skip / }).focus();
+  await page.keyboard.press('Space');
   await expect(dialog).toContainText('Selected: Skip');
   await expect(apply).toBeEnabled();
-  await dialog.locator('input[type="radio"]:checked').press('Escape');
+  await apply.focus();
+  await page.keyboard.press('Tab');
+  expect(await dialog.evaluate((element) => element.contains(document.activeElement))).toBe(false);
+  await page.keyboard.press('Escape');
   await expect(dialog).toBeHidden();
   await expect(alignOrient).toBeFocused();
   expect(await artifactSnapshot(page)).toEqual(beforeCancel);
 
-  await page.setViewportSize({ width: 720, height: 740 });
+  await alignOrient.click();
+  await expect(dialog).toBeVisible({ timeout: 180000 });
+  await dialog.getByRole('radio', { name: /Select .*bp, strand/ }).first().check();
+  const staleOutcome = await page.evaluate(async () => {
+    const { state } = await import('./js/state.js');
+    state.selectedOrthogroupId.value = 'another-group';
+    const outcome = await window.__GBDRAW_APP__.applySimilarityAlignmentDraft();
+    state.selectedOrthogroupId.value = 'og_1';
+    return outcome;
+  });
+  expect(staleOutcome.status).toBe('stale');
+  await expect(dialog).toBeHidden();
+  expect(await artifactSnapshot(page)).toEqual(beforeCancel);
+
+  await page.setViewportSize({ width: 390, height: 740 });
   await drawer.getByRole('button', { name: 'Similarity groups' }).click();
   const b0FeatureId = await page.evaluate(() => {
     const feature = window.__GBDRAW_APP__.extractedFeatures.find(
@@ -184,17 +452,26 @@ test('Similarity alignment UI completes exact-reference, ambiguity, focus, summa
   await popupAlign.scrollIntoViewIfNeeded();
   await popupAlign.click();
   await expect(dialog).toBeVisible({ timeout: 180000 });
-  await dialog.getByRole('radio', { name: /Select feature/ }).first().check();
+  await page.setViewportSize({ width: 390, height: 500 });
+  const paletteBody = dialog.locator('.custom-scrollbar').first();
+  expect(await paletteBody.evaluate((element) => element.scrollHeight > element.clientHeight)).toBe(true);
+  await paletteBody.evaluate((element) => { element.scrollTop = element.scrollHeight; });
+  expect(await paletteBody.evaluate((element) => element.scrollTop)).toBeGreaterThan(0);
+  await page.setViewportSize({ width: 390, height: 740 });
+  await dialog.getByRole('radio', { name: /Select .*bp, strand/ }).first().check();
   await expect(apply).toBeEnabled();
   await apply.scrollIntoViewIfNeeded();
   const applyBox = await apply.boundingBox();
   expect(applyBox).not.toBeNull();
   expect(applyBox.x).toBeGreaterThanOrEqual(0);
-  expect(applyBox.x + applyBox.width).toBeLessThanOrEqual(720);
+  expect(applyBox.x + applyBox.width).toBeLessThanOrEqual(390);
   expect(applyBox.y + applyBox.height).toBeLessThanOrEqual(740);
+  const narrowPaletteBox = await dialog.boundingBox();
+  expect(narrowPaletteBox.x).toBeGreaterThanOrEqual(0);
+  expect(narrowPaletteBox.x + narrowPaletteBox.width).toBeLessThanOrEqual(390);
   await page.screenshot({
     path: testInfo.outputPath('narrow-ambiguity.png'),
-    fullPage: true
+    fullPage: false
   });
   await dialog.locator('input[type="radio"]:checked').press('Escape');
   await expect(dialog).toBeHidden();
@@ -211,7 +488,7 @@ test('Similarity alignment UI completes exact-reference, ambiguity, focus, summa
   );
   await align.click();
   await expect(dialog).toBeVisible({ timeout: 180000 });
-  await dialog.getByRole('radio', { name: /Select feature/ }).first().check();
+  await dialog.getByRole('radio', { name: /Select .*bp, strand/ }).first().check();
   await expect(apply).toBeEnabled();
   await apply.click();
 
@@ -301,6 +578,32 @@ test('Similarity alignment UI completes exact-reference, ambiguity, focus, summa
   const freshInspector = freshPage.locator('[data-similarity-alignment-plan-inspector]');
   await expect(freshInspector).toBeVisible();
   await expect(freshInspector).toContainText('Selected by user');
+  const regenerate = await freshPage.evaluate(async () => {
+    const app = window.__GBDRAW_APP__;
+    const historyBefore = window.__GBDRAW_HISTORY__.getUndoCount();
+    const result = await app.runAnalysis();
+    return {
+      result,
+      notice: app.similarityAlignmentNotice,
+      historyBefore,
+      historyAfter: window.__GBDRAW_HISTORY__.getUndoCount()
+    };
+  });
+  expect(regenerate.result).toEqual({ status: 'blocked', reason: 'stale-reference' });
+  expect(regenerate.notice).toContain('saved Similarity Group is no longer available');
+  expect(regenerate.historyAfter).toBe(regenerate.historyBefore);
+  expect(await freshPage.evaluate(async () => {
+    const { state } = await import('./js/state.js');
+    return {
+      plan: JSON.parse(JSON.stringify(state.similarityAlignmentPlan.value)),
+      translations: JSON.parse(JSON.stringify(state.linearRecordTranslations.value)),
+      results: state.results.value.map(({ name, content }) => ({ name, content }))
+    };
+  })).toEqual({
+    plan: savedState.plan,
+    translations: savedState.translations,
+    results: savedState.results
+  });
   const historyBeforeReset = await freshPage.evaluate(
     () => window.__GBDRAW_HISTORY__.getUndoCount()
   );
@@ -493,7 +796,9 @@ test('released v40 alignment materializes by stable feature identity without a W
     const translations = materializeRecordTranslations(svg, base, recordKeys, plan);
     const malformed = structuredClone(plan);
     malformed.records[0].anchor.biologicalFeatureId = 'missing-feature';
+    malformed.records[0].anchor.stableFeatureSvgId = 'missing-feature';
     malformed.reference.biologicalFeatureId = 'missing-feature';
+    malformed.reference.stableFeatureSvgId = 'missing-feature';
     let malformedError = '';
     try {
       materializeRecordTranslations(svg, base, recordKeys, malformed);
