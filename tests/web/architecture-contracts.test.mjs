@@ -1404,6 +1404,7 @@ test('steady-state topology removes legacy main producers without changing final
     'losat-distribution.yml',
     'release.yml',
     'test.yml',
+    'walkthrough-video.yml',
     'web-base-policy.yml'
   ]);
   assert.doesNotMatch(TEST_WORKFLOW, /needs: web-change-budget/);

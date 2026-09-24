@@ -55,6 +55,30 @@ def _provenance() -> dict:
     }
 
 
+def _walkthrough(args: argparse.Namespace) -> None:
+    from video.walkthrough_render import check_walkthrough, render_walkthrough
+    if args.command == 'walkthrough':
+        _require_empty(args.out)
+        # Only recording needs the browser; rendering reads the saved bundle.
+        from video.walkthrough import record_walkthrough
+        manifest_path = record_walkthrough(args.out)
+        manifest = json.loads(manifest_path.read_text(encoding='utf-8'))
+        manifest['provenance'] = {
+            'git_head': _version('git', 'rev-parse', 'HEAD'),
+            'git_diff_sha256': hashlib.sha256(_version('git', 'diff', '--binary').encode()).hexdigest(),
+            'wheel_sha256': sha256(next((REPO_ROOT / 'gbdraw/web').glob('gbdraw-*-py3-none-any.whl'))),
+            'recorder_sha256': sha256(REPO_ROOT / 'docs/capture/video/walkthrough.py'),
+            'platform': platform.platform(), 'python': sys.version.split()[0],
+            'playwright': version('playwright'),
+        }
+        manifest_path.write_text(json.dumps(manifest, indent=2), encoding='utf-8')
+        render_walkthrough(args.out, args.out)
+    elif args.command == 'walkthrough-render':
+        _require_empty(args.out)
+        render_walkthrough(args.recording, args.out)
+    print(json.dumps(check_walkthrough(args.out), indent=2))
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     commands = parser.add_subparsers(dest='command', required=True)
@@ -69,7 +93,17 @@ def main() -> None:
     check.add_argument('--out', type=Path, required=True)
     check.add_argument('--visual', action='store_true')
     check.add_argument('--baseline', type=Path, default=REPO_ROOT / 'docs/videos/meet-gbdraw/reference-frames')
+    walkthrough = commands.add_parser('walkthrough', help='Record, render, and check the hands-on walkthrough')
+    walkthrough.add_argument('--out', type=Path, required=True)
+    walkthrough_render = commands.add_parser('walkthrough-render', help='Re-render a recorded walkthrough')
+    walkthrough_render.add_argument('--recording', type=Path, required=True)
+    walkthrough_render.add_argument('--out', type=Path, required=True)
+    walkthrough_check = commands.add_parser('walkthrough-check')
+    walkthrough_check.add_argument('--out', type=Path, required=True)
     args = parser.parse_args()
+    if args.command.startswith('walkthrough'):
+        _walkthrough(args)
+        return
     if args.command == 'build':
         _require_empty(args.out)
         # Browser dependencies stay behind the build command. Render and check

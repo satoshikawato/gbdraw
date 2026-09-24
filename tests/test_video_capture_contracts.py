@@ -59,3 +59,36 @@ def test_contained_file_rejects_symlink_escape(tmp_path: Path) -> None:
     (root / 'link.bin').symlink_to(outside)
     with pytest.raises(ValueError, match='escaped file'):
         contained_file(root, 'link.bin')
+
+
+def test_walkthrough_time_map_compresses_only_marked_waits() -> None:
+    from video.walkthrough_render import TimeMap
+
+    events = [
+        {'t': 2.0, 'kind': 'speed_start', 'factor': None, 'target': 1.0},
+        {'t': 10.0, 'kind': 'speed_end'},
+        {'t': 12.0, 'kind': 'speed_start', 'factor': 3.0, 'target': None},
+        {'t': 15.0, 'kind': 'speed_end'},
+    ]
+    mapping = TimeMap.build(events, 0.0, 20.0)
+    assert mapping.out(2.0) == pytest.approx(2.0)
+    assert mapping.out(10.0) == pytest.approx(3.0)  # 8 s wait shown in 1 s
+    assert mapping.out(15.0) == pytest.approx(6.0)  # 3 s at 3x
+    assert mapping.duration == pytest.approx(11.0)
+    for moment in (0.5, 4.0, 11.0, 13.5, 19.0):
+        assert mapping.source(mapping.out(moment)) == pytest.approx(moment)
+    assert mapping.factor(mapping.out(4.0)) == pytest.approx(8.0)
+
+
+def test_walkthrough_camera_eases_and_stays_inside_the_page() -> None:
+    from video.walkthrough_render import Camera, TimeMap
+
+    events = [
+        {'t': 0.0, 'kind': 'camera', 'cx': 960, 'cy': 540, 'zoom': 1.0, 'duration': 0},
+        {'t': 1.0, 'kind': 'camera', 'cx': 10, 'cy': 10, 'zoom': 2.0, 'duration': 1.0},
+    ]
+    camera = Camera(events, TimeMap.build([], 0.0, 5.0), (1920, 1080))
+    assert camera.at(0.5) == pytest.approx((960, 540, 1.0))
+    assert camera.at(3.0) == pytest.approx((480, 270, 2.0))  # clamped to the top-left corner
+    x, y, zoom = camera.at(1.5)
+    assert 480 < x < 960 and 270 < y < 540 and 1.0 < zoom < 2.0

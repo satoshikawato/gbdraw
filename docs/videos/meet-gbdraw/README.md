@@ -68,3 +68,29 @@ The D-loop is an actual Region Annotations import. `docs/capture/video/human_edi
 - If `render` reports a hash mismatch, do not edit the captured PNG/SVG/WebM in place. Capture a fresh source bundle or restore the verified file.
 - If `check --visual` fails, open the named current and baseline frames at full size, then inspect the changed diagram or caption. Use another independently built and reviewed `reports/review-frames` directory as the baseline.
 - Every `build` and `render` needs a new output directory; this keeps evidence from separate runs distinct. MP4 and WebP files under `build/` are gitignored.
+
+## Hands-on walkthrough
+
+A second, longer video (about 2 minutes) shows the real Web app being used at a human pace: load `HmmtDNA.gbk`, generate the map, turn on labels, switch CDS labels to gene symbols, add four functional color rules, mark the origin-spanning D-loop, inspect a feature, and export the SVG. It is rebuilt from the current code with one command:
+
+```bash
+python tools/prepare_browser_wheel.py
+python docs/capture/build_video.py walkthrough --out build/videos/walkthrough/run-001
+```
+
+The command records the journey, renders `final/gbdraw-walkthrough.mp4` (1920×1080, 30 fps, H.264, silent), `final/gbdraw-walkthrough.en.srt`, and `final/poster.png`, and then decodes and checks the MP4. It fails if the exported SVG lacks the 13 gene symbols, the four functional colors and legend entries, or the D-loop. The **Walkthrough video** GitHub Actions workflow runs the same command for every published release and on manual dispatch, and uploads the outputs as a workflow artifact.
+
+How it works:
+
+- `docs/capture/video/walkthrough.py` drives the local, network-isolated app with an eased pointer, typed input, and wheel scrolling. Chromium runs with `--force-device-scale-factor=2`, so its screencast delivers 3840×2160 frames. The pointer path, clicks, camera cues, captions, toasts, and waits are saved in `raw/walkthrough/events.json`. The downloaded SVG is then re-rendered at increasing magnification for the closing vector zoom.
+- `docs/capture/video/walkthrough_render.py` composes the saved bundle without a browser. It places the app in a window over the gbdraw background, eases the camera between logged targets, draws the pointer and click ripples, and writes captions below the window with the app's vendored Inter font. Generation waits and the three repeated color rules are fast-forwarded. A `▶▶` badge marks every fast-forwarded span, and `reports/walkthrough-report.json` lists them.
+- The recording hides only the floating feature-search palette, which would otherwise cover the result. Native `<select>` menus and color pickers are not painted by headless Chromium, so those controls change value in place after the pointer clicks them.
+
+To change captions, camera framing, or pacing without recording again, edit `walkthrough_render.py` (or the cues in `events.json` of a copy) and run:
+
+```bash
+python docs/capture/build_video.py walkthrough-render \
+  --recording build/videos/walkthrough/run-001 --out build/videos/walkthrough/render-002
+```
+
+Changing the journey itself, including caption text, means editing `_journey` in `walkthrough.py` and running `walkthrough` again in a new directory. The rendering font is converted from `gbdraw/web/vendor/fonts/inter/*.woff2`, which requires the `brotli` Python package.

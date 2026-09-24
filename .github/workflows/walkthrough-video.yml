@@ -1,0 +1,46 @@
+name: Walkthrough video
+
+permissions:
+  contents: read
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+
+concurrency:
+  group: walkthrough-video-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  walkthrough:
+    name: Record and render the Web walkthrough
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - name: Checkout exact source
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install recording dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ffmpeg
+          python -m pip install -e ".[dev]" brotli
+          python -m playwright install --with-deps chromium
+          python tools/prepare_browser_wheel.py
+      - name: Record, render, and check
+        run: python docs/capture/build_video.py walkthrough --out build/videos/walkthrough/ci
+      - name: Upload walkthrough
+        uses: actions/upload-artifact@v4
+        with:
+          name: gbdraw-walkthrough-${{ github.event.release.tag_name || github.sha }}
+          path: |
+            build/videos/walkthrough/ci/final/
+            build/videos/walkthrough/ci/reports/
+            build/videos/walkthrough/ci/raw/walkthrough/walkthrough.json
+          retention-days: 30
