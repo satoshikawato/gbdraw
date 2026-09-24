@@ -51,6 +51,7 @@ GALLERY = (
 )
 GALLERY_SOURCES = REPO_ROOT / "gbdraw/web/gallery/sources"
 FINALE_SIZE = (1600, 900)
+FINALE_PORTRAIT_SIZE = (936, 1060)
 MENU_ROWS = 8
 FINALE_FRAMES = 105
 FINALE_ZOOM = 7.0
@@ -69,6 +70,21 @@ _TEXT_BOUNDS = """
   const right = Math.max(...boxes.map((box) => box.right));
   const bottom = Math.max(...boxes.map((box) => box.bottom));
   return {x: left, y: top, width: right - left, height: bottom - top, count: boxes.length};
+}
+"""
+
+_FEATURE_BOUNDS = """
+() => {
+  const region = document.querySelector('[role="region"][aria-label="Result Preview"]');
+  const boxes = Array.from(region ? region.querySelectorAll('svg [data-gbdraw-feature-id]') : [])
+    .map((node) => node.getBoundingClientRect())
+    .filter((box) => box.width > 0 || box.height > 0);
+  if (!boxes.length) return null;
+  const left = Math.min(...boxes.map((box) => box.left));
+  const top = Math.min(...boxes.map((box) => box.top));
+  const right = Math.max(...boxes.map((box) => box.right));
+  const bottom = Math.max(...boxes.map((box) => box.bottom));
+  return {x: Math.round(left), y: Math.round(top), width: Math.round(right - left), height: Math.round(bottom - top)};
 }
 """
 
@@ -148,13 +164,22 @@ class Recorder:
     def caption(self, step: int | None, title: str = "", subtitle: str = "") -> None:
         self.event("caption", step=step, title=title, subtitle=subtitle)
 
-    def camera(self, rect: dict | None = None, zoom: float = 1.0, duration: float = 0.9) -> None:
-        """Frame ``rect`` (CSS px) at ``zoom``; no rect frames the whole page."""
+    def camera(self, rect: dict | None = None, zoom: float = 1.0, duration: float = 0.9,
+               *, portrait: dict | None = None) -> None:
+        """Frame ``rect`` (CSS px) at ``zoom``; no rect frames the whole page.
+
+        The drawn diagram's bounds are logged as the subject, so tall outputs
+        can frame the map where the wide output shows the whole page.
+        ``portrait`` overrides the tall framing explicitly.
+        """
 
         if rect is None:
             rect = {"x": 0, "y": 0, "width": VIEWPORT[0], "height": VIEWPORT[1]}
         cx, cy = _center(rect)
-        self.event("camera", cx=round(cx, 1), cy=round(cy, 1), zoom=zoom, duration=duration)
+        subject = self.page.evaluate(_FEATURE_BOUNDS)
+        self.event("camera", cx=round(cx, 1), cy=round(cy, 1), zoom=zoom, duration=duration,
+                   rect={key: round(rect[key], 1) for key in ("x", "y", "width", "height")},
+                   subject=subject, portrait=portrait)
 
     def focus(self, locator: Locator, zoom: float = 2.0, duration: float = 0.9) -> None:
         self.camera(locator.bounding_box(), zoom, duration)
@@ -330,7 +355,8 @@ def _journey(rec: Recorder, downloads: Path) -> Path:
     page = rec.page
     preview = page.get_by_role("region", name="Result Preview", exact=True)
 
-    rec.camera(duration=0)
+    # Tall outputs open on the settings column and the empty preview beside it.
+    rec.camera(duration=0, portrait={"x": 0, "y": 0, "width": 820, "height": 930})
     rec.caption(1, "Open gbdraw.app", "The whole app runs in your browser")
     rec.hold(1.8)
     upload = page.get_by_role("button", name="Choose GenBank/DDBJ File", exact=True)
@@ -527,12 +553,11 @@ def _inspect_export(svg: Path) -> dict:
     return report
 
 
-def _render_finale(browser, svg: Path, out: Path) -> dict:
+def _render_finale(browser, svg: Path, out: Path, size: tuple[int, int]) -> dict:
     """Zoom into the exported file itself; every frame is a fresh vector raster."""
 
     out.mkdir(parents=True, exist_ok=True)
-    context = browser.new_context(viewport={"width": FINALE_SIZE[0], "height": FINALE_SIZE[1]},
-                                  device_scale_factor=1)
+    context = browser.new_context(viewport={"width": size[0], "height": size[1]}, device_scale_factor=1)
     try:
         page = context.new_page()
         page.set_content('<html><body style="margin:0;background:#fff;overflow:hidden">'
@@ -571,7 +596,7 @@ def _render_finale(browser, svg: Path, out: Path) -> dict:
             page.evaluate("(box) => document.querySelector('svg').setAttribute('viewBox', box)",
                           f"{fx:.3f} {fy:.3f} {w:.3f} {h:.3f}")
             page.screenshot(path=str(out / f"{index:04d}.png"))
-        return {"frames": FINALE_FRAMES, "zoom": FINALE_ZOOM, "size": list(FINALE_SIZE)}
+        return {"frames": FINALE_FRAMES, "zoom": FINALE_ZOOM, "size": list(size)}
     finally:
         context.close()
 
@@ -638,7 +663,8 @@ def record_walkthrough(run: Path) -> Path:
         report = _inspect_export(exported)
         browser = playwright.chromium.launch(headless=True)
         try:
-            finale = _render_finale(browser, exported, raw / "finale")
+            finale = {name: _render_finale(browser, exported, raw / name, size)
+                      for name, size in (("finale", FINALE_SIZE), ("finale-portrait", FINALE_PORTRAIT_SIZE))}
             _rasterize(browser, exported, raw / "final-figure.png")
             gallery = []
             for stem, label in GALLERY:

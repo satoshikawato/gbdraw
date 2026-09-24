@@ -44,11 +44,29 @@ def test_walkthrough_camera_eases_and_stays_inside_the_page() -> None:
         {'t': 0.0, 'kind': 'camera', 'cx': 960, 'cy': 540, 'zoom': 1.0, 'duration': 0},
         {'t': 1.0, 'kind': 'camera', 'cx': 10, 'cy': 10, 'zoom': 2.0, 'duration': 1.0},
     ]
-    camera = Camera(events, TimeMap.build([], 0.0, 5.0), (1920, 1080))
-    assert camera.at(0.5) == pytest.approx((960, 540, 1.0))
-    assert camera.at(3.0) == pytest.approx((480, 270, 2.0))  # clamped to the top-left corner
-    x, y, zoom = camera.at(1.5)
-    assert 480 < x < 960 and 270 < y < 540 and 1.0 < zoom < 2.0
+    camera = Camera(events, TimeMap.build([], 0.0, 5.0), (1920, 1080), 16 / 9, False)
+    assert camera.at(0.5) == pytest.approx((960, 540, 1080))
+    assert camera.at(3.0) == pytest.approx((480, 270, 540))  # clamped to the top-left corner
+    x, y, height = camera.at(1.5)
+    assert 480 < x < 960 and 270 < y < 540 and 540 < height < 1080
+
+
+def test_portrait_camera_frames_the_diagram_for_whole_page_shots() -> None:
+    page = {'x': 0, 'y': 0, 'width': 1920, 'height': 1080}
+    diagram = {'x': 900, 'y': 150, 'width': 800, 'height': 800}
+    button = {'x': 1500, 'y': 70, 'width': 60, 'height': 20}
+    events = [
+        {'t': 0.0, 'kind': 'camera', 'cx': 960, 'cy': 540, 'zoom': 1.0, 'duration': 0,
+         'rect': page, 'subject': diagram, 'portrait': None},
+        {'t': 2.0, 'kind': 'camera', 'cx': 1530, 'cy': 80, 'zoom': 2.1, 'duration': 0,
+         'rect': button, 'subject': diagram, 'portrait': None},
+    ]
+    camera = Camera(events, TimeMap.build([], 0.0, 5.0), (1920, 1080), 936 / 1060, True)
+    x, y, height = camera.at(1.0)
+    assert (x, y) == pytest.approx((1300, 540)) and height == pytest.approx(1080)
+    x, y, height = camera.at(3.0)
+    assert height == pytest.approx(1080 / 2.6)  # small targets stop at the maximum zoom
+    assert y == pytest.approx(height / 2)       # and stay inside the page
 
 
 def test_highlight_moments_skim_waits_but_not_fast_forwards() -> None:
