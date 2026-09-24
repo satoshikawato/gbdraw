@@ -737,6 +737,13 @@
             stroke-opacity: 1 !important;
             stroke-width: 2.5px !important;
             paint-order: stroke fill markers;
+        }
+        .gbdraw-preview-surface :is(
+            path[data-gbdraw-match-id],
+            path[data-gbdraw-pairwise-match-id],
+            path[data-match-kind],
+            path[data-pairwise-match-style]
+        ) {
             outline: none;
         }
         .gbdraw-preview-surface :is(

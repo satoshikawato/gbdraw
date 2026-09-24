@@ -44,6 +44,7 @@ export const STANDALONE_INTERACTIVE_STYLE = `
 }
 .gbdraw-interactive-pairwise-match {
   cursor: pointer;
+  outline: none;
   transition: opacity 120ms ease, filter 120ms ease, stroke 120ms ease, stroke-width 120ms ease, stroke-opacity 120ms ease;
 }
 .gbdraw-interactive-pairwise-match.gbdraw-interactive-pairwise-match--hover {
@@ -62,7 +63,6 @@ export const STANDALONE_INTERACTIVE_STYLE = `
   stroke-opacity: 1;
   stroke-width: 2.5;
   paint-order: stroke fill markers;
-  outline: none;
 }
 .gbdraw-interactive-pairwise-match:focus-visible {
   outline: 2px solid #2563eb;
