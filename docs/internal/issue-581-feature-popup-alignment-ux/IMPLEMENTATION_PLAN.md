@@ -1,6 +1,6 @@
 # Issue #581 — Feature popup と Similarity Alignment 選択 UI の総合実装計画
 
-- 状態: Product Decision ３件は承認済みで、authority-only PR #582 は 2026-09-24 に `dev` へマージ済み。S01 runtime は実装・検証済み。S02〜S04 は未実施。
+- 状態: Product Decision ３件は承認済みで、authority-only PR #582 は 2026-09-24 に `dev` へマージ済み。S01・S02 runtime は実装・検証済み。S03・S04 は未実施。
 - 作成日: 2026-09-24
 - 対象: [Issue #581](https://github.com/satoshikawato/gbdraw/issues/581) と [2026-09-24 の設計提案コメント](https://github.com/satoshikawato/gbdraw/issues/581#issuecomment-5811037046)
 - 固定実装ブランチ: `issue-581-feature-popup-alignment-ux-20260924`
@@ -242,6 +242,6 @@ public docs は既存の該当ページに集約し、機能ごとの新規ペ�
 | --- | --- | --- | --- |
 | S00 | 完了 | PD-OI-033〜035 は authority-only PR #582 で `origin/dev` @ `e52e3ea9` へマージし、固定実装ブランチへ取り込んだ。 | JSON receipt ３件の構造確認、`git diff --check`、Web 変更ゲート PASS、PR の CI 成功。S01 開始可能。 |
 | S01 | 完了 | 開始 HEAD `28e043d5`（固定ブランチ、`origin/dev` @ `e52e3ea9` を祖先に含む）。Edit 内の Record actions 開閉欄、Cancel 後の popup／Result 保持、生物学的候補表示、record 単位のローカル Select／Skip、Apply 時の一括 Python 検証、再試行可能な失敗後の選択保持を実装。既存 owner／canonical path と Session writer は維持。 | JS focused 33 件、Python Resolver 39 件、Chromium focused 4 件が PASS。Ruff、`git diff --check`、Web change gate PASS（通常の architecture review 要）。広めのブラウザ実行では S01 と無関係な released v40 の legacy materialization ケースで期待エラーが空となり FAIL。S02 開始可、S03／S04 は未実施。 |
-| S02 | 未実施 | 変更なし | S01 完了。開始可能。 |
-| S03 | 未実施 | 変更なし | S02 待ち。実装・検証なし。 |
+| S02 | 完了 | 開始 HEAD `729dde98`（固定ブランチ、`origin/dev` @ `e52e3ea9` を祖先に含む）。全画面 backdrop・`aria-modal`・Tab trap を除去。既存 dialog の名前／説明を維持し、初回 radio focus、接続中の invoker への focus return、Escape 優先順位を実装。header drag と viewport／resize clamp、幅 26rem・高さ制限と本体 scroll を transient UI に追加。S01 選択 owner、Python Resolver、Result／History／Session 経路は維持。 | Node／Python Playwright 可用。Chromium で desktop 1600×1000、390×740、短い 390×500 の表示・scroll、drag／resize clamp、Tab／keyboard Skip／Escape／focus return、背景 pan／zoom、Session／Result／History 不変、group 変更後の stale Apply 拒否を確認。focused JS 33 件、Python 39 件 PASS。Ruff、`git diff --check`、Web gate PASS（通常の architecture review 要）。ブラウザ spec 4 件中 3 件 PASS、1 件は S01 でも観測された未変更の released v40 legacy materialization ケースで期待エラーが空となる既知の FAIL。S02 の production 差分は `index.html` と `app-setup.js` の palette 表示・focus のみで、当該 legacy materializer と assertion は未変更。S03 開始可。 |
+| S03 | 未実施 | 変更なし | S02 完了。開始可能。実装・検証なし。 |
 | S04 | 未実施 | 変更なし | S01〜S03 待ち。受入検証なし。 |

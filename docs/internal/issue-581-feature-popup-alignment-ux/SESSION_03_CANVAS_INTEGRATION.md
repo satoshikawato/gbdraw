@@ -14,8 +14,10 @@ S01 の local draft と S02 の non-modal palette が完了し、承認済み
 
 ## ブランチと資料
 
-- runtime 作業は **`issue-581-feature-popup-alignment-ux-20260924`** に積む。
-  branch、HEAD、upstream、worktree、総合計画第10節を確認する。
+- 開始時に `git fetch origin` を実行する。runtime 作業は
+  **`issue-581-feature-popup-alignment-ux-20260924`** に積み、別の runtime ブランチを
+  作らない。branch、HEAD、upstream、worktree、同名 remote 先端、`origin/dev` との
+  祖先関係、総合計画第10節を確認する。
 - `AGENTS.md`、`CLAUDE.md`、`gbdraw/web/CLAUDE.md`、
   `docs/internal/OPTION_INTEGRITY_PRODUCT_CONTRACT.md` の PD-OI-026〜029、031、034〜035、
   `docs/internal/ARCHITECTURE_FITNESS_FUNCTION_RATCHET.md` と S00 の判断を読む。
@@ -72,6 +74,5 @@ branch へ `git push origin HEAD:refs/heads/issue-581-feature-popup-alignment-ux
 開始前と push 前に branch、upstream、作業ツリー、remote の状態を確認する。
 
 回答の最後に、次の S04 `SESSION_04_ACCEPTANCE_AND_HANDOFF.md` を新規参加者が単独で実行できる
-完全な INSTRUCTION PROMPT として提示する。そのプロンプトにも、同じ固定ブランチで
-作業・検証・コミット・push まで行い、さらに次セッション用の完全なプロンプトを
-回答末尾に提示する指示を含める。S04 が完了した場合は追加セッションを作らない。
+完全な INSTRUCTION PROMPT として提示する。その S04 プロンプトにも、同じ固定ブランチで
+作業・検証・コミット・push まで行うことを明記する。S04 完了後に追加セッションは作らない。

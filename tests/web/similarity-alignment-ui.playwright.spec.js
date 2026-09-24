@@ -26,7 +26,9 @@ const expectNoUnhandledRejections = async (page) => {
 const artifactSnapshot = (page) => page.evaluate(async () => {
   const { state } = await import('./js/state.js');
   const history = window.__GBDRAW_HISTORY__;
+  const { getCommittedCanonicalSession } = await import('./js/services/config.js');
   return {
+    session: JSON.parse(JSON.stringify(getCommittedCanonicalSession())),
     plan: JSON.parse(JSON.stringify(state.similarityAlignmentPlan.value)),
     request: structuredClone(state.lastCommittedRequest?.value || null),
     results: state.results.value.map(({ name, content }) => ({ name, content })),
@@ -104,10 +106,63 @@ test('Similarity alignment UI completes exact-reference, ambiguity, focus, summa
   await expect(alignOrient).toBeEnabled();
 
   const beforeCancel = await artifactSnapshot(page);
+  const diagramWidthBefore = (await page.locator('.gbdraw-preview-surface').boundingBox()).width;
   await alignOrient.click();
   const dialog = page.getByRole('dialog', { name: 'Select alignment anchors' });
   await expect(dialog).toBeVisible({ timeout: 180000 });
   await expect(dialog).toHaveAttribute('aria-describedby', 'similarity-alignment-dialog-description');
+  await expect(dialog).not.toHaveAttribute('aria-modal', 'true');
+  expect(await dialog.evaluate((element) => element.contains(document.activeElement))).toBe(true);
+  expect((await page.locator('.gbdraw-preview-surface').boundingBox()).width).toBe(diagramWidthBefore);
+  await expect(page.locator('[data-similarity-alignment-count]')).toContainText('0 / 1 records selected');
+  const paletteHeader = dialog.locator('header');
+  const headerBox = await paletteHeader.boundingBox();
+  await page.mouse.move(headerBox.x + 35, headerBox.y + 20);
+  await page.mouse.down();
+  await page.mouse.move(-200, -200, { steps: 5 });
+  await page.mouse.up();
+  let paletteBox = await dialog.boundingBox();
+  expect(paletteBox.x).toBeGreaterThanOrEqual(11);
+  expect(paletteBox.y).toBeGreaterThanOrEqual(11);
+  await page.mouse.move(paletteBox.x + 35, paletteBox.y + 20);
+  await page.mouse.down();
+  await page.mouse.move(2000, 2000, { steps: 5 });
+  await page.mouse.up();
+  paletteBox = await dialog.boundingBox();
+  expect(paletteBox.x + paletteBox.width).toBeLessThanOrEqual(1589);
+  expect(paletteBox.y + paletteBox.height).toBeLessThanOrEqual(989);
+  await page.setViewportSize({ width: 900, height: 650 });
+  paletteBox = await dialog.boundingBox();
+  expect(paletteBox.x + paletteBox.width).toBeLessThanOrEqual(889);
+  expect(paletteBox.y + paletteBox.height).toBeLessThanOrEqual(639);
+  await page.setViewportSize({ width: 1600, height: 1000 });
+  const canvasBox = await page.locator('.gbdraw-preview-surface').locator('..').boundingBox();
+  const beforeViewport = await page.evaluate(() => ({
+    zoom: window.__GBDRAW_APP__.zoom,
+    panX: window.__GBDRAW_APP__.canvasPan.x
+  }));
+  await page.mouse.move(canvasBox.x + 24, canvasBox.y + 100);
+  await page.mouse.wheel(0, -100);
+  await expect.poll(() => page.evaluate(() => window.__GBDRAW_APP__.zoom))
+    .toBeGreaterThan(beforeViewport.zoom);
+  await page.mouse.down();
+  await page.mouse.move(canvasBox.x + 64, canvasBox.y + 100, { steps: 4 });
+  await page.mouse.up();
+  await expect.poll(() => page.evaluate(() => window.__GBDRAW_APP__.canvasPan.x))
+    .toBeGreaterThan(beforeViewport.panX);
+  await page.evaluate(() => {
+    const app = window.__GBDRAW_APP__;
+    app.linearSourceRemovalDialog.sourceUid = app.linearSeqs[0].uid;
+    app.linearSourceRemovalDialog.origin = 'card';
+    app.linearSourceRemovalDialog.open = true;
+  });
+  const removalDialog = page.getByRole('dialog', { name: 'Clear or delete File?' });
+  await expect(removalDialog).toBeVisible();
+  await removalDialog.getByRole('button', { name: 'Cancel' }).focus();
+  await page.keyboard.press('Escape');
+  await expect(removalDialog).toBeHidden();
+  await expect(dialog).toBeVisible();
+  expect(await artifactSnapshot(page)).toEqual(beforeCancel);
   await expect(dialog).toContainText(/\d[\d,]*\.\.\d[\d,]* bp \([+-]\)/);
   await expect(dialog).toContainText('Direct evidence: None');
   await expect(dialog).not.toContainText(/score/i);
@@ -117,7 +172,6 @@ test('Similarity alignment UI completes exact-reference, ambiguity, focus, summa
   await expect(page.locator('#similarity-alignment-apply-reason')).toContainText(
     'require Select or Skip'
   );
-  expect(await dialog.evaluate((element) => element.contains(document.activeElement))).toBe(true);
   await page.screenshot({
     path: testInfo.outputPath('desktop-ambiguity.png'),
     fullPage: true
@@ -149,20 +203,33 @@ test('Similarity alignment UI completes exact-reference, ambiguity, focus, summa
   await dialog.getByRole('heading', { name: 'Select alignment anchors' }).hover();
   await expect.poll(async () => (await previewState()).candidate.includes('0.7')).toBe(false);
 
-  const cancel = dialog.getByRole('button', { name: 'Cancel', exact: true });
-  await cancel.focus();
-  await page.keyboard.press('Tab');
-  expect(await dialog.evaluate((element) => element.contains(document.activeElement))).toBe(true);
-  await page.keyboard.press('Shift+Tab');
-  await dialog.getByRole('radio', { name: /Skip / }).check();
+  await dialog.getByRole('radio', { name: /Skip / }).focus();
+  await page.keyboard.press('Space');
   await expect(dialog).toContainText('Selected: Skip');
   await expect(apply).toBeEnabled();
-  await dialog.locator('input[type="radio"]:checked').press('Escape');
+  await apply.focus();
+  await page.keyboard.press('Tab');
+  expect(await dialog.evaluate((element) => element.contains(document.activeElement))).toBe(false);
+  await page.keyboard.press('Escape');
   await expect(dialog).toBeHidden();
   await expect(alignOrient).toBeFocused();
   expect(await artifactSnapshot(page)).toEqual(beforeCancel);
 
-  await page.setViewportSize({ width: 720, height: 740 });
+  await alignOrient.click();
+  await expect(dialog).toBeVisible({ timeout: 180000 });
+  await dialog.getByRole('radio', { name: /Select .*bp, strand/ }).first().check();
+  const staleOutcome = await page.evaluate(async () => {
+    const { state } = await import('./js/state.js');
+    state.selectedOrthogroupId.value = 'another-group';
+    const outcome = await window.__GBDRAW_APP__.applySimilarityAlignmentDraft();
+    state.selectedOrthogroupId.value = 'og_1';
+    return outcome;
+  });
+  expect(staleOutcome.status).toBe('stale');
+  await expect(dialog).toBeHidden();
+  expect(await artifactSnapshot(page)).toEqual(beforeCancel);
+
+  await page.setViewportSize({ width: 390, height: 740 });
   await drawer.getByRole('button', { name: 'Similarity groups' }).click();
   const b0FeatureId = await page.evaluate(() => {
     const feature = window.__GBDRAW_APP__.extractedFeatures.find(
@@ -183,17 +250,26 @@ test('Similarity alignment UI completes exact-reference, ambiguity, focus, summa
   await popupAlign.scrollIntoViewIfNeeded();
   await popupAlign.click();
   await expect(dialog).toBeVisible({ timeout: 180000 });
+  await page.setViewportSize({ width: 390, height: 500 });
+  const paletteBody = dialog.locator('.custom-scrollbar').first();
+  expect(await paletteBody.evaluate((element) => element.scrollHeight > element.clientHeight)).toBe(true);
+  await paletteBody.evaluate((element) => { element.scrollTop = element.scrollHeight; });
+  expect(await paletteBody.evaluate((element) => element.scrollTop)).toBeGreaterThan(0);
+  await page.setViewportSize({ width: 390, height: 740 });
   await dialog.getByRole('radio', { name: /Select .*bp, strand/ }).first().check();
   await expect(apply).toBeEnabled();
   await apply.scrollIntoViewIfNeeded();
   const applyBox = await apply.boundingBox();
   expect(applyBox).not.toBeNull();
   expect(applyBox.x).toBeGreaterThanOrEqual(0);
-  expect(applyBox.x + applyBox.width).toBeLessThanOrEqual(720);
+  expect(applyBox.x + applyBox.width).toBeLessThanOrEqual(390);
   expect(applyBox.y + applyBox.height).toBeLessThanOrEqual(740);
+  const narrowPaletteBox = await dialog.boundingBox();
+  expect(narrowPaletteBox.x).toBeGreaterThanOrEqual(0);
+  expect(narrowPaletteBox.x + narrowPaletteBox.width).toBeLessThanOrEqual(390);
   await page.screenshot({
     path: testInfo.outputPath('narrow-ambiguity.png'),
-    fullPage: true
+    fullPage: false
   });
   await dialog.locator('input[type="radio"]:checked').press('Escape');
   await expect(dialog).toBeHidden();

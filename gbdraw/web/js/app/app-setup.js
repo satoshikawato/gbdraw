@@ -2777,6 +2777,51 @@ export const createAppSetup = () => {
     onError: (error) => { errorLog.value = error; }
   });
   let similarityAlignmentReturnFocus = null;
+  const similarityAlignmentPaletteRef = ref(null);
+  const similarityAlignmentPalettePosition = reactive({ x: null, y: null });
+  let similarityAlignmentPaletteDrag = null;
+  const clampSimilarityAlignmentPalette = () => {
+    const palette = similarityAlignmentPaletteRef.value;
+    if (!palette) return;
+    const margin = 12;
+    const maxX = Math.max(margin, window.innerWidth - palette.offsetWidth - margin);
+    const maxY = Math.max(margin, window.innerHeight - palette.offsetHeight - margin);
+    similarityAlignmentPalettePosition.x = Math.min(
+      Math.max(similarityAlignmentPalettePosition.x ?? maxX, margin), maxX
+    );
+    similarityAlignmentPalettePosition.y = Math.min(
+      Math.max(similarityAlignmentPalettePosition.y ?? margin, margin), maxY
+    );
+  };
+  const similarityAlignmentPaletteStyle = computed(() => ({
+    left: similarityAlignmentPalettePosition.x === null ? undefined : `${similarityAlignmentPalettePosition.x}px`,
+    right: similarityAlignmentPalettePosition.x === null ? undefined : 'auto',
+    top: similarityAlignmentPalettePosition.y === null ? undefined : `${similarityAlignmentPalettePosition.y}px`
+  }));
+  const moveSimilarityAlignmentPalette = (event) => {
+    if (!similarityAlignmentPaletteDrag) return;
+    similarityAlignmentPalettePosition.x = event.clientX - similarityAlignmentPaletteDrag.x;
+    similarityAlignmentPalettePosition.y = event.clientY - similarityAlignmentPaletteDrag.y;
+    clampSimilarityAlignmentPalette();
+    event.preventDefault();
+  };
+  const stopSimilarityAlignmentPaletteDrag = () => {
+    similarityAlignmentPaletteDrag = null;
+    document.removeEventListener('pointermove', moveSimilarityAlignmentPalette);
+    document.removeEventListener('pointerup', stopSimilarityAlignmentPaletteDrag);
+    document.removeEventListener('pointercancel', stopSimilarityAlignmentPaletteDrag);
+  };
+  const startSimilarityAlignmentPaletteDrag = (event) => {
+    if (event.button !== 0 || event.target.closest('button, a, input, select, textarea')) return;
+    const rect = similarityAlignmentPaletteRef.value?.getBoundingClientRect();
+    if (!rect) return;
+    similarityAlignmentPaletteDrag = { x: event.clientX - rect.left, y: event.clientY - rect.top };
+    document.addEventListener('pointermove', moveSimilarityAlignmentPalette);
+    document.addEventListener('pointerup', stopSimilarityAlignmentPaletteDrag);
+    document.addEventListener('pointercancel', stopSimilarityAlignmentPaletteDrag);
+    event.preventDefault();
+    event.stopPropagation();
+  };
   const rememberSimilarityAlignmentInvoker = (event) => {
     similarityAlignmentReturnFocus = event?.currentTarget || document.activeElement || null;
   };
@@ -2788,37 +2833,38 @@ export const createAppSetup = () => {
       target.focus();
       return;
     }
-    document.querySelector('[data-similarity-alignment-drawer-reference]')?.focus();
   };
   const focusSimilarityAlignmentDialog = async () => {
     await nextTick();
+    clampSimilarityAlignmentPalette();
     document.querySelector(
-      '[data-similarity-alignment-dialog] input:not(:disabled), '
-      + '[data-similarity-alignment-dialog] button:not(:disabled)'
+      '[data-similarity-alignment-dialog] input[type="radio"]:not(:disabled)'
     )?.focus();
   };
-  const similarityAlignmentFocusableControls = () => Array.from(
-    document.querySelectorAll(
-      '[data-similarity-alignment-dialog] '
-      + 'input:not(:disabled), [data-similarity-alignment-dialog] '
-      + 'select:not(:disabled), [data-similarity-alignment-dialog] '
-      + 'button:not(:disabled), [data-similarity-alignment-dialog] [tabindex="0"]'
-    )
-  ).filter((element) => !element.closest('[hidden], [aria-hidden="true"]'));
-  const trapSimilarityAlignmentFocus = (event) => {
-    const dialog = document.querySelector('[data-similarity-alignment-dialog]');
-    const controls = similarityAlignmentFocusableControls();
-    if (!dialog || !controls.length) return;
-    const first = controls[0];
-    const last = controls.at(-1);
-    if (event.shiftKey && (document.activeElement === first || !dialog.contains(document.activeElement))) {
-      event.preventDefault();
-      last.focus();
-    } else if (!event.shiftKey && (document.activeElement === last || !dialog.contains(document.activeElement))) {
-      event.preventDefault();
-      first.focus();
-    }
+  const handleSimilarityAlignmentEscape = (event) => {
+    if (event.key !== 'Escape' || !similarityAlignmentActions.dialogOpen.value) return;
+    if (document.querySelector('[data-linear-source-removal-dialog]')
+      || event.target?.closest?.('.fixed.inset-0')) return;
+    event.preventDefault();
+    event.stopImmediatePropagation();
+    void cancelSimilarityAlignmentDialog();
   };
+  watch(similarityAlignmentActions.dialogOpen, (open) => {
+    if (open) return;
+    stopSimilarityAlignmentPaletteDrag();
+    similarityAlignmentPalettePosition.x = null;
+    similarityAlignmentPalettePosition.y = null;
+    void restoreSimilarityAlignmentFocus();
+  });
+  onMounted(() => {
+    document.addEventListener('keydown', handleSimilarityAlignmentEscape, true);
+    window.addEventListener('resize', clampSimilarityAlignmentPalette);
+  });
+  onUnmounted(() => {
+    stopSimilarityAlignmentPaletteDrag();
+    document.removeEventListener('keydown', handleSimilarityAlignmentEscape, true);
+    window.removeEventListener('resize', clampSimilarityAlignmentPalette);
+  });
   const startSimilarityAlignmentFromDrawer = async (groupId, mode, event = null) => {
     rememberSimilarityAlignmentInvoker(event);
     const outcome = await similarityAlignmentActions.startFromDrawer({ groupId, mode });
@@ -2828,11 +2874,9 @@ export const createAppSetup = () => {
   };
   const cancelSimilarityAlignmentDialog = async () => {
     similarityAlignmentActions.cancel();
-    await restoreSimilarityAlignmentFocus();
   };
   const applySimilarityAlignmentDialog = async () => {
     const outcome = await similarityAlignmentActions.applyDraft();
-    if (!similarityAlignmentActions.dialogOpen.value) await restoreSimilarityAlignmentFocus();
     return outcome;
   };
   const canUseClickedOrthogroupActions = computed(() => {
@@ -4250,7 +4294,9 @@ export const createAppSetup = () => {
     applySimilarityAlignmentDraft: applySimilarityAlignmentDialog,
     cancelSimilarityAlignmentDraft: cancelSimilarityAlignmentDialog,
     cancelSimilarityAlignmentDialog,
-    trapSimilarityAlignmentFocus,
+    similarityAlignmentPaletteRef,
+    similarityAlignmentPaletteStyle,
+    startSimilarityAlignmentPaletteDrag,
     previewSimilarityAlignmentCandidate: similarityAlignmentActions.previewCandidate,
     clearSimilarityAlignmentCandidatePreview: similarityAlignmentActions.clearCandidatePreview,
     isRightDrawerTabAvailable: rightDrawerActions.isRightDrawerTabAvailable,
