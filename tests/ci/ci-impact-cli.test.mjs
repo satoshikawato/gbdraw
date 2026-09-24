@@ -110,6 +110,18 @@ test('PR planning uses a three-dot diff and direct base evidence', async () => {
   assert.deepEqual(outcome.plan.requiredJobs, ['recipes-standard']);
 });
 
+test('Product Contract documentation PR selects only Web policy validation', async () => {
+  const outcome = await buildImpactPlan({
+    configuration: configuration(),
+    token: 'test-token',
+    runGitImpl: () => gitResult('M', 'docs/internal/OPTION_INTEGRITY_PRODUCT_CONTRACT.md'),
+    verifyWorkflowEvidenceImpl: async () => successfulEvidence()
+  });
+  assert.equal(outcome.plan.impact, 'policy-documentation');
+  assert.equal(outcome.plan.decision, 'selective');
+  assert.deepEqual(outcome.plan.requiredJobs, ['web-change-budget']);
+});
+
 test('dev and Gallery planning use a two-commit diff and direct parent evidence', async () => {
   for (const [profile, workflowPath, aggregateName] of [
     ['dev', '.github/workflows/test.yml', 'Dev staging / gate'],
@@ -141,7 +153,8 @@ test('dev and Gallery planning use a two-commit diff and direct parent evidence'
 test('dev metadata and documentation changes select only changed surfaces', async () => {
   for (const [path, impact, requiredJobs] of [
     ['.agents/skills/example/SKILL.md', 'metadata', []],
-    ['docs/FAQ.md', 'documentation', ['recipes-standard']]
+    ['docs/FAQ.md', 'documentation', ['recipes-standard']],
+    ['docs/internal/OPTION_INTEGRITY_PRODUCT_CONTRACT.md', 'policy-documentation', ['web-change-budget']]
   ]) {
     let evidenceArguments;
     const outcome = await buildImpactPlan({
@@ -169,7 +182,8 @@ test('dev metadata and documentation changes select only changed surfaces', asyn
 test('Gallery metadata and documentation changes skip browser and performance', async () => {
   for (const [path, impact] of [
     ['.agents/skills/example/SKILL.md', 'metadata'],
-    ['docs/FAQ.md', 'documentation']
+    ['docs/FAQ.md', 'documentation'],
+    ['docs/internal/OPTION_INTEGRITY_PRODUCT_CONTRACT.md', 'policy-documentation']
   ]) {
     let evidenceArguments;
     const outcome = await buildImpactPlan({
@@ -278,9 +292,25 @@ test('dev direct-parent staging failures force the current run to full', async (
   }
 });
 
-test('rapid dev pushes fall back to full while the direct parent is running or cancelled', async () => {
+test('documentation-only PRs fail closed without launching runtime jobs when base evidence is unavailable', async () => {
+  for (const path of [
+    'docs/TUTORIALS/1_Intro.md',
+    'docs/internal/OPTION_INTEGRITY_PRODUCT_CONTRACT.md'
+  ]) {
+    await assert.rejects(buildImpactPlan({
+      configuration: configuration(),
+      token: 'test-token',
+      runGitImpl: () => gitResult('M', path),
+      verifyWorkflowEvidenceImpl: async () => {
+        throw new PromotionReadinessError('NO_MATCHING_RUN', 'Base staging run is missing.');
+      }
+    }), { code: 'DOCUMENTATION_BASE_EVIDENCE_UNAVAILABLE' }, path);
+  }
+});
+
+test('documentation-only dev pushes fail closed when the direct parent is unfinished', async () => {
   for (const state of ['in progress', 'cancelled']) {
-    const outcome = await buildImpactPlan({
+    await assert.rejects(buildImpactPlan({
       configuration: configuration({
         CI_IMPACT_PROFILE: 'dev',
         CI_IMPACT_EVENT_NAME: 'push'
@@ -288,41 +318,27 @@ test('rapid dev pushes fall back to full while the direct parent is running or c
       token: 'test-token',
       runGitImpl: () => gitResult('M', 'docs/FAQ.md'),
       verifyWorkflowEvidenceImpl: async () => {
-        throw new PromotionReadinessError(
-          'RUN_NOT_SUCCESSFUL',
-          `Direct parent run is ${state}.`
-        );
+        throw new PromotionReadinessError('RUN_NOT_SUCCESSFUL', `Direct parent run is ${state}.`);
       }
-    });
-    assert.equal(outcome.plan.impact, 'documentation', state);
-    assert.equal(outcome.plan.decision, 'full', state);
-    assert.equal(outcome.plan.basis, 'INHERITED_EVIDENCE_UNAVAILABLE', state);
+    }), { code: 'DOCUMENTATION_BASE_EVIDENCE_UNAVAILABLE' }, state);
   }
 });
 
-test('Gallery direct-parent evidence failures fall back to both Gallery jobs', async () => {
-  for (const [code, state] of [
-    ['NO_MATCHING_RUN', 'missing'],
-    ['RUN_NOT_SUCCESSFUL', 'in progress'],
-    ['RUN_NOT_SUCCESSFUL', 'cancelled'],
-    ['RUN_NOT_SUCCESSFUL', 'failure'],
-    ['API_REQUEST_FAILED', 'API error']
+test('documentation-only Gallery pushes fail closed without browser or performance jobs', async () => {
+  for (const code of [
+    'NO_MATCHING_RUN', 'RUN_NOT_SUCCESSFUL', 'API_REQUEST_FAILED'
   ]) {
-    const outcome = await buildImpactPlan({
+    await assert.rejects(buildImpactPlan({
       configuration: configuration({
         CI_IMPACT_PROFILE: 'gallery',
         CI_IMPACT_EVENT_NAME: 'push'
       }),
       token: 'test-token',
-      runGitImpl: () => gitResult('M', 'docs/FAQ.md'),
+      runGitImpl: () => gitResult('M', 'docs/internal/OPTION_INTEGRITY_PRODUCT_CONTRACT.md'),
       verifyWorkflowEvidenceImpl: async () => {
-        throw new PromotionReadinessError(code, `Direct parent Gallery run is ${state}.`);
+        throw new PromotionReadinessError(code, `Direct parent Gallery run failed: ${code}`);
       }
-    });
-    assert.equal(outcome.plan.impact, 'documentation', state);
-    assert.equal(outcome.plan.decision, 'full', state);
-    assert.equal(outcome.plan.basis, 'INHERITED_EVIDENCE_UNAVAILABLE', state);
-    assert.deepEqual(outcome.plan.requiredJobs, ['browser', 'performance'], state);
+    }), { code: 'DOCUMENTATION_BASE_EVIDENCE_UNAVAILABLE' }, code);
   }
 });
 

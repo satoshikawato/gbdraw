@@ -62,6 +62,9 @@ test('root Markdown and docs tree are documentation', () => {
   assert.equal(classifyPath('README.md').impact, 'documentation');
   assert.equal(classifyPath('NEW_PLAN.md').impact, 'documentation');
   assert.equal(classifyPath('docs/internal/policy.md').impact, 'documentation');
+  assert.equal(classifyPath('docs/TUTORIALS/1_Intro.md').impact, 'documentation');
+  assert.equal(classifyPath('docs/internal/PRODUCT_DECISION_PACKET_TEMPLATE.md').impact, 'documentation');
+  assert.equal(classifyPath('docs/internal/PRODUCT_IMPACT_RATCHET_FINAL_ACCEPTANCE_2026-08-27.md').impact, 'documentation');
   assert.equal(classifyPath('nested/README.md').impact, 'full');
   assert.equal(classifyPath('README.MD').impact, 'full');
 });
@@ -77,7 +80,7 @@ test('subsystem paths classify without making unknown production paths selective
     ['gbdraw/web/js/services/losat.js', 'losat-integration'],
     ['tests/test_regression.py', 'tests-only'],
     ['.github/workflows/test.yml', 'ci-only'],
-    ['docs/internal/PRODUCT_IMPACT_RATCHET.md', 'ci-only'],
+    ['docs/internal/PRODUCT_IMPACT_RATCHET.md', 'policy-documentation'],
     ['pyproject.toml', 'packaging'],
     ['package-lock.json', 'packaging'],
     ['tools/helper.mjs', 'full'],
@@ -85,6 +88,19 @@ test('subsystem paths classify without making unknown production paths selective
     ['gbdraw/web/new-runtime.bin', 'full'],
     ['future/unknown.file', 'full']
   ]) assert.equal(classifyPath(path).impact, impact, path);
+});
+
+test('only exact normative policy documents receive the policy-documentation route', () => {
+  for (const path of [
+    'docs/internal/ARCHITECTURE_FITNESS_FUNCTION_RATCHET.md',
+    'docs/internal/OPTION_INTEGRITY_PRODUCT_CONTRACT.md',
+    'docs/internal/PRODUCT_IMPACT_RATCHET.md',
+    'docs/internal/SELECTIVE_CI.md',
+    'docs/internal/WEB_CHANGE_POLICY.md'
+  ]) {
+    assert.equal(classifyPath(path).impact, 'policy-documentation', path);
+  }
+  assert.equal(classifyPath('docs/internal/OPTION_INTEGRITY_PRODUCT_CONTRACT_COPY.md').impact, 'documentation');
 });
 
 test('mixed changes preserve the capability union', () => {
@@ -144,6 +160,12 @@ test('profile job registries are exact and centralized', () => {
     profile: 'pr', impact: 'documentation', decision: 'selective'
   }), ['recipes-standard']);
   assert.deepEqual(requiredJobsFor({
+    profile: 'pr', impact: 'policy-documentation', decision: 'selective'
+  }), ['web-change-budget']);
+  assert.deepEqual(requiredJobsFor({
+    profile: 'dev', impact: 'policy-documentation', decision: 'selective'
+  }), ['web-change-budget']);
+  assert.deepEqual(requiredJobsFor({
     profile: 'pr', impact: 'full', decision: 'full'
   }), [
     'web-change-budget',
@@ -180,6 +202,9 @@ test('profile job registries are exact and centralized', () => {
   }), []);
   assert.deepEqual(requiredJobsFor({
     profile: 'gallery', impact: 'documentation', decision: 'selective'
+  }), []);
+  assert.deepEqual(requiredJobsFor({
+    profile: 'gallery', impact: 'policy-documentation', decision: 'selective'
   }), []);
   assert.deepEqual(requiredJobsFor({
     profile: 'gallery', impact: 'full', decision: 'full'
@@ -244,6 +269,22 @@ test('mixed capabilities and both rename endpoints contribute independent requir
   assert.ok(jobsForPaths([{ status: 'D', paths: [paths[0]] }]).includes('core-pr'));
   assert.throws(() => jobsForPaths([{ status: 'R100', paths: [paths[0], 'future/engine.py'] }]), /full coverage/);
   assert.throws(() => jobsForPaths([{ status: 'D', paths: ['gbdraw/unknown.py'] }]), /full coverage/);
+});
+
+test('documentation-only edits, copies, renames, and deletes use only documentation jobs', () => {
+  const changes = [
+    { status: 'M', paths: ['docs/internal/OPTION_INTEGRITY_PRODUCT_CONTRACT.md'] },
+    { status: 'M', paths: ['docs/TUTORIALS/1_Intro.md'] },
+    { status: 'R100', paths: ['docs/old.md', 'docs/new.md'] },
+    { status: 'D', paths: ['docs/retired.md'] }
+  ];
+  assert.deepEqual(jobsForPaths(changes), ['web-change-budget', 'recipes-standard']);
+  assert.deepEqual(jobsForPaths([changes[0]]), ['web-change-budget']);
+  assert.deepEqual(jobsForPaths([changes[1]]), ['recipes-standard']);
+  assert.deepEqual(jobsForPaths([{
+    status: 'R100',
+    paths: ['docs/internal/OPTION_INTEGRITY_PRODUCT_CONTRACT.md', 'docs/internal/retired-contract.md']
+  }]), ['web-change-budget', 'recipes-standard']);
 });
 
 test('control-plane, dependency, unknown and test-only changes cannot select partial coverage', () => {
