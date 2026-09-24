@@ -1,6 +1,6 @@
 # Issue #581 — Feature popup と Similarity Alignment 選択 UI の総合実装計画
 
-- 状態: Product Decision ３件は承認済みで、authority-only PR #582 は 2026-09-24 に `dev` へマージ済み。S01・S02 runtime は実装・検証済み。S03・S04 は未実施。
+- 状態: Product Decision ３件は承認済みで、authority-only PR #582 は 2026-09-24 に `dev` へマージ済み。S01〜S04 の実装・統合受入は完了。
 - 作成日: 2026-09-24
 - 対象: [Issue #581](https://github.com/satoshikawato/gbdraw/issues/581) と [2026-09-24 の設計提案コメント](https://github.com/satoshikawato/gbdraw/issues/581#issuecomment-5811037046)
 - 固定実装ブランチ: `issue-581-feature-popup-alignment-ux-20260924`
@@ -243,7 +243,44 @@ public docs は既存の該当ページに集約し、機能ごとの新規ペ�
 | S00 | 完了 | PD-OI-033〜035 は authority-only PR #582 で `origin/dev` @ `e52e3ea9` へマージし、固定実装ブランチへ取り込んだ。 | JSON receipt ３件の構造確認、`git diff --check`、Web 変更ゲート PASS、PR の CI 成功。S01 開始可能。 |
 | S01 | 完了 | 開始 HEAD `28e043d5`（固定ブランチ、`origin/dev` @ `e52e3ea9` を祖先に含む）。Edit 内の Record actions 開閉欄、Cancel 後の popup／Result 保持、生物学的候補表示、record 単位のローカル Select／Skip、Apply 時の一括 Python 検証、再試行可能な失敗後の選択保持を実装。既存 owner／canonical path と Session writer は維持。 | JS focused 33 件、Python Resolver 39 件、Chromium focused 4 件が PASS。Ruff、`git diff --check`、Web change gate PASS（通常の architecture review 要）。広めのブラウザ実行では S01 と無関係な released v40 の legacy materialization ケースで期待エラーが空となり FAIL。S02 開始可、S03／S04 は未実施。 |
 | S02 | 完了 | 開始 HEAD `729dde98`（固定ブランチ、`origin/dev` @ `e52e3ea9` を祖先に含む）。全画面 backdrop・`aria-modal`・Tab trap を除去。既存 dialog の名前／説明を維持し、初回 radio focus、接続中の invoker への focus return、Escape 優先順位を実装。header drag と viewport／resize clamp、幅 26rem・高さ制限と本体 scroll を transient UI に追加。S01 選択 owner、Python Resolver、Result／History／Session 経路は維持。 | Node／Python Playwright 可用。Chromium で desktop 1600×1000、390×740、短い 390×500 の表示・scroll、drag／resize clamp、Tab／keyboard Skip／Escape／focus return、背景 pan／zoom、Session／Result／History 不変、group 変更後の stale Apply 拒否を確認。focused JS 33 件、Python 39 件 PASS。Ruff、`git diff --check`、Web gate PASS（通常の architecture review 要）。ブラウザ spec 4 件中 3 件 PASS、1 件は S01 でも観測された未変更の released v40 legacy materialization ケースで期待エラーが空となる既知の FAIL。S02 の production 差分は `index.html` と `app-setup.js` の palette 表示・focus のみで、当該 legacy materializer と assertion は未変更。S03 開始可。 |
-| S03 | 完了 | 開始 HEAD `d66e0a1e`（固定ブランチ、承認済み PD-OI-035 を含む `origin/dev` @ `e52e3ea9` が祖先。開始時の最新 `origin/dev` @ `3ca9ab75` は後続の文書専用変更）。既存 `svg-actions.js` が exact rendered identity と単一 block geometry で guide／badge、双方向 hover、候補 click 優先、transform／scroll／resize／Result 置換後の cleanup を所有。`app-setup.js` は palette state との接続のみ、`similarity-alignment.js` は既存の唯一の Select／Skip と artifact 判定を保持。overlay は SVG 外の preview DOM に限定。owner／canonical path／compatibility path の超過は前後とも 0。 | realistic 2 候補 fixture の Chromium test と既存 alignment journey が PASS。目視 screenshot で参照中心の guide と番号を確認。直接 click、radio、双方向 hover、通常 hover 復元、pan／zoom／scroll／resize、非表示候補、popup 競合、Cancel／Apply／Result identity 置換と除去、SVG download／gzip Session への非混入を確認。focused JS 33 件、Python 39 件、Ruff、`git diff --check` PASS。Web gate PASS（通常の architecture／size review 要）。S04 開始可。 |
-| S04 | 未実施 | 変更なし | S00〜S03 完了。統合受入を開始可能。 |
+| S03 | 完了 | 開始 HEAD `d66e0a1e`（固定ブランチ、承認済み PD-OI-035 を含む `origin/dev` @ `e52e3ea9` が祖先。開始時の最新 `origin/dev` @ `3ca9ab75` は後続の CI impact 変更）。既存 `svg-actions.js` が exact rendered identity と単一 block geometry で guide／badge、双方向 hover、候補 click 優先、transform／scroll／resize／Result 置換後の cleanup を所有。`app-setup.js` は palette state との接続のみ、`similarity-alignment.js` は既存の唯一の Select／Skip と artifact 判定を保持。overlay は SVG 外の preview DOM に限定。owner／canonical path／compatibility path の超過は前後とも 0。 | realistic 2 候補 fixture の Chromium test と既存 alignment journey が PASS。目視 screenshot で参照中心の guide と番号を確認。直接 click、radio、双方向 hover、通常 hover 復元、pan／zoom／scroll／resize、非表示候補、popup 競合、Cancel／Apply／Result identity 置換と除去、SVG download／gzip Session への非混入を確認。focused JS 33 件、Python 39 件、Ruff、`git diff --check` PASS。Web gate PASS（通常の architecture／size review 要）。S04 開始可。 |
+| S04 | 完了 | 開始 HEAD `a42af441`。最終 HEAD は固定ブランチ `refs/heads/issue-581-feature-popup-alignment-ux-20260924` の本 S04 1 コミット（親 `a42af441`。push 後の SHA は最終 handoff に記録）。Web reference と既存 browser contract ２件を更新。production・生成物の S04 差分はない。 | focused JS 33 件、Python 39 件、Issue #581 Chromium 11 件、比較 browser shard 8 件が PASS。Ruff と Web gate も PASS。全体 non-slow pytest の初回は 6,225 pass／17 skip／1 fail（旧 popup 手順の test timeout）で、手順修正後の同 shard は 8/8 PASS。詳細は下記。 |
 
 S03 の architecture scope: 前後とも SVG geometry／event lifecycle は `app/feature-editor/svg-actions.js`、choice は `app/similarity-alignment.js`、接続は `app/app-setup.js` が所有する。radio／canvas の両入口は同じ `selectCandidate → local draft → applyDraft → Python Resolver → Result` に収束する。superseded owner／production path／compatibility path はなく、変更範囲の OE／PE／CB は 0 → 0。
+
+S04 の実行記録（固定ブランチ、base `e52e3ea9`）:
+
+- `git fetch origin` 後、開始時の branch／upstream／remote 先端は固定名で一致し、
+  `e52e3ea9`（PD-OI-033〜035 の merged authority）は HEAD と `origin/dev` の祖先。
+  最新 `origin/dev` @ `3ca9ab75` は固定ブランチの祖先ではないが、追加差分は
+  CI impact の文書・test・tool の更新で、Issue #581 の runtime／authority を変更しない。
+- `node --test tests/web/similarity-alignment-actions.test.mjs tests/web/feature-popup-record-rotation.test.mjs`:
+  33 passed。`pytest tests/test_similarity_alignment.py tests/test_similarity_alignment_web_adapter.py -v`:
+  39 passed。`npx playwright test tests/web/similarity-alignment-ui.playwright.spec.js
+  tests/web/interactive-svg-v3.playwright.spec.js --workers=1 --retries=0`: 11 passed。
+  `npm run test:web:comparison-contracts -- --shard=2/2`: 8 passed。
+  `pytest tests/test_documentation_reference_contracts.py -q`: 12 passed。
+- `pytest tests/ -v -m 'not slow'`: 6,225 passed、17 skipped、11 deselected、1 failed。
+  失敗は比較 browser contract が初期閉状態の Record actions を展開せず、非表示の
+  anchor 入力を待って 300 秒で timeout したもの。既存 test の操作を明示展開へ
+  更新し、同じ shard 全８件を再実行して PASS。残りの Python suite は再利用可能な
+  成功証拠で、production 変更はない。
+- `ruff check gbdraw/`、`node tools/check-web-change-budget.mjs --base e52e3ea99fbbe4cdedfe9aa2606a91163e876764`、
+  `git diff --check`: PASS。Web gate は Gate PASS／Review REQUIRED（通常の
+  architecture review）を報告。desktop と 390 px の実ブラウザ capture を目視確認。
+- Product Impact の独立した要件を照合: PD-OI-033 の rich／simple disclosure と
+  target-only／Cancel、PD-OI-034 の exact reference／ローカル Select・Skip／一括
+  Resolver／retry、PD-OI-035 の non-modal palette／canvas hover・click／preview
+  overlay 非混入はそれぞれ維持。PD-OI-026〜032 の Resolver 順位、active plan、
+  Reset／History／Session も変更なし。未決の Product outcome はない。
+- Architecture の変更範囲は S01〜S03 のまま、choice は
+  `app/similarity-alignment.js`、SVG geometry／event lifecycle は
+  `app/feature-editor/svg-actions.js`、接続は `app/app-setup.js`。
+  radio／canvas は同じ選択入口から Python Resolver と既存 Result へ収束し、
+  superseded path は残らない。OE／PE／CB は 0 → 0。S04 は新しい owner、path、
+  compatibility branch、保存形式を追加しない。
+- 残る検証上の制限: browser の ambiguity fixture は生成済み比較を除いているため、
+  Session 再読込後の Fresh Generate は欠けた Similarity Group を
+  `stale-reference` として拒否する。その際の Result／History 保全を実ブラウザで確認。
+  valid active plan の通常 Generate 検証は JS 契約と Python rendering 回帰で確認。
+  reference SVG、Gallery screenshot、public figure は変更しない。

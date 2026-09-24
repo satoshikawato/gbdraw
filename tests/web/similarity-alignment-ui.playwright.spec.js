@@ -578,6 +578,32 @@ test('Similarity alignment UI completes exact-reference, ambiguity, focus, summa
   const freshInspector = freshPage.locator('[data-similarity-alignment-plan-inspector]');
   await expect(freshInspector).toBeVisible();
   await expect(freshInspector).toContainText('Selected by user');
+  const regenerate = await freshPage.evaluate(async () => {
+    const app = window.__GBDRAW_APP__;
+    const historyBefore = window.__GBDRAW_HISTORY__.getUndoCount();
+    const result = await app.runAnalysis();
+    return {
+      result,
+      notice: app.similarityAlignmentNotice,
+      historyBefore,
+      historyAfter: window.__GBDRAW_HISTORY__.getUndoCount()
+    };
+  });
+  expect(regenerate.result).toEqual({ status: 'blocked', reason: 'stale-reference' });
+  expect(regenerate.notice).toContain('saved Similarity Group is no longer available');
+  expect(regenerate.historyAfter).toBe(regenerate.historyBefore);
+  expect(await freshPage.evaluate(async () => {
+    const { state } = await import('./js/state.js');
+    return {
+      plan: JSON.parse(JSON.stringify(state.similarityAlignmentPlan.value)),
+      translations: JSON.parse(JSON.stringify(state.linearRecordTranslations.value)),
+      results: state.results.value.map(({ name, content }) => ({ name, content }))
+    };
+  })).toEqual({
+    plan: savedState.plan,
+    translations: savedState.translations,
+    results: savedState.results
+  });
   const historyBeforeReset = await freshPage.evaluate(
     () => window.__GBDRAW_HISTORY__.getUndoCount()
   );
@@ -770,7 +796,9 @@ test('released v40 alignment materializes by stable feature identity without a W
     const translations = materializeRecordTranslations(svg, base, recordKeys, plan);
     const malformed = structuredClone(plan);
     malformed.records[0].anchor.biologicalFeatureId = 'missing-feature';
+    malformed.records[0].anchor.stableFeatureSvgId = 'missing-feature';
     malformed.reference.biologicalFeatureId = 'missing-feature';
+    malformed.reference.stableFeatureSvgId = 'missing-feature';
     let malformedError = '';
     try {
       materializeRecordTranslations(svg, base, recordKeys, malformed);

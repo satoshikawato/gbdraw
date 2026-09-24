@@ -3616,6 +3616,7 @@ test('@comparison-contract record rotation adds zero LOSATP source jobs and surv
   await search.fill('UpperA_a');
   await search.press('Enter');
   await page.getByRole('button', { name: 'Open active feature', exact: true }).click();
+  await page.getByRole('button', { name: /Record actions · Rotate record/ }).click();
   const actions = page.getByRole('region', { name: 'Record actions' });
   await actions.getByLabel('Record rotation anchor').selectOption('midpoint');
   await actions.getByLabel('Record rotation signed offset').fill('2');
