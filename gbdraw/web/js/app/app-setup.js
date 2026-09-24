@@ -496,6 +496,15 @@ export const createAppSetup = () => {
 
   const replaceLinearComparisonPlan = (nextPlan, { invalidate = true } = {}) => {
     const normalized = normalizeLinearComparisonPlan(nextPlan);
+    const changed = normalized.mode !== linearComparisonPlan.mode
+      || normalized.defaultSource !== linearComparisonPlan.defaultSource
+      || normalized.edges.length !== linearComparisonPlan.edges.length
+      || normalized.edges.some((edge, index) => (
+        !sameLinearComparisonEdge(edge, linearComparisonPlan.edges[index])
+      ));
+    if (invalidate && changed) {
+      similarityAlignmentActions?.clearForMutation?.('comparison configuration changed.');
+    }
     linearComparisonPlan.mode = normalized.mode;
     linearComparisonPlan.defaultSource = normalized.defaultSource;
     linearComparisonPlan.edges.splice(
@@ -694,6 +703,7 @@ export const createAppSetup = () => {
     if (!selection.selectable || !selection.patch) return false;
     const nextProgram = selection.patch.losatProgram;
     if (losatProgram.value === nextProgram) return true;
+    similarityAlignmentActions?.clearForMutation?.('comparison program changed.');
     losatProgram.value = nextProgram;
     invalidateLinearComparisonArtifacts();
     return true;
@@ -707,6 +717,7 @@ export const createAppSetup = () => {
     if (!selection.selectable || !selection.patch) return false;
     const nextBlastpMode = selection.patch.blastpMode;
     if (losat.blastp?.mode === nextBlastpMode) return true;
+    similarityAlignmentActions?.clearForMutation?.('comparison mode changed.');
     const hitLimits = losat.blastp.hitLimitsByMode ||= createDefaultLosatpHitLimits();
     hitLimits[losat.blastp.mode] = {
       candidateLimit: losat.blastp.candidateLimit,

@@ -64,13 +64,15 @@ test('uncached protein LOSAT helpers and render share one lazy Worker runtime', 
     return {
       program: app.losatProgram,
       blastpMode: app.losat.blastp.mode,
-      cacheEntries: state.losatCache.value.size
+      cacheEntries: state.losatCache.value.size,
+      activeAlignmentPlan: state.similarityAlignmentPlan.value
     };
   });
   expect(proteinMode).toEqual({
     program: 'blastp',
     blastpMode: 'pairwise',
-    cacheEntries: 0
+    cacheEntries: 0,
+    activeAlignmentPlan: null
   });
 
   const generated = await page.evaluate(async () => {
