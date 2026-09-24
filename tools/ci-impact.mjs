@@ -321,6 +321,13 @@ export const buildImpactPlan = async ({
     });
   } catch (error) {
     if (!(error instanceof PromotionReadinessError)) throw error;
+    if (classification.capabilities.every((capability) => (
+      ['documentation', 'policy-documentation'].includes(capability)
+    ))) {
+      fail('DOCUMENTATION_BASE_EVIDENCE_UNAVAILABLE',
+        'Documentation-only changes cannot inherit the required baseline CI evidence.',
+        { evidenceCode: error.code });
+    }
     return Object.freeze({
       plan: createImpactPlan(planFields({
         configuration,
