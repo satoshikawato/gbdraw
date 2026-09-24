@@ -302,10 +302,27 @@ reciprocal-best-hit (RBH) member connected to the reference, then **Select** or
 symmetric. A missing member leaves its record unchanged. A hidden member is
 usable if its center maps into the crop; a feature whose center is outside the
 crop is not. Representative status, score, edge count, viewport position, and
-multi-hop paths never break a tie. The ambiguity dialog shows feature ID,
-coordinates, strand, role, and direct evidence; it previews the candidate on
-the canvas and requires a choice for each ambiguous record. **Cancel** and
-**Escape** leave the current Result intact.
+multi-hop paths never break a tie.
+
+When ambiguity remains, **Select alignment anchors** opens as a movable
+palette over the preview. Each record has a readable name, and each numbered
+candidate shows its gene, locus tag, or product when available, plus source
+coordinates and strand. If these names are absent, the feature type and
+coordinates identify it. Expand **Details** for the internal ID, role, and direct evidence. A thin
+line marks the reference center; numbered badges mark candidates that can be
+located on the preview. Hovering a candidate or its feature highlights the
+other, and clicking the feature or its badge selects the same radio choice.
+Candidates without a visible badge remain selectable in the palette. You can
+pan and zoom the diagram while choosing; the guide and badges are preview-only
+and are not included in downloads or saved Sessions.
+
+Choose **Select** or **Skip** for every ambiguous record, then click **Apply**.
+Individual choices update locally; Apply validates the complete set once before
+generating a Result. A validation or generation error keeps the choices for
+correction and retry. If the source, crop, group, or committed Result changes
+while the palette is open, start the selection again. **Cancel** and **Escape**
+leave the current Result intact and return focus to the initiating control when
+it is still present. The palette does not trap keyboard focus.
 
 **Align** changes target X only; it preserves Y and every record's orientation.
 **Align & orient** compares the current displayed anchor strands. It reverses
@@ -409,12 +426,13 @@ non-circular topology or unknown length disables the start control with a reason
 Turning **Circular record** off retains the inactive start draft; turning it back
 on restores that value.
 
-To rotate directly from one feature, open its popup and use the separate
-**Record actions** section. Choose its 5′ end, midpoint, or 3′ end, enter a
-signed offset in source base pairs in the feature's biological direction, and
-optionally orient the feature forward. The preview and saved transform use the
-original 1-based source coordinate; reverse complement changes display
-orientation but does not renumber the source sequence.
+To rotate a record from a feature, open its popup. Expand **Record actions**
+near the top of **Edit**. The section is closed when the popup opens,
+in both rich and simple layouts. Choose the feature's 5′ end, midpoint, or 3′
+end. Enter a signed offset in source base pairs in the feature's biological
+direction, and optionally orient the feature forward. The preview and saved
+transform use the original 1-based source coordinate; reverse complement changes
+display orientation but does not renumber the source sequence.
 **Place this feature at the end** uses the outgoing boundary after the feature;
 it is distinct from placing the feature's 3′ base at the display start. The
 preview reports the new 1-based source coordinate and resulting orientation.
@@ -423,12 +441,13 @@ cropped sources and locations whose exact traversal or outgoing boundary cannot
 be established remain unavailable with a reason.
 Select **Apply and regenerate** to update only that feature's record and the
 current Result as one undoable action. Other pending form edits remain pending.
-Cancel, a failed render, or a stale/replaced source keeps the previous Result
-and record transform. Undo and Redo restore the Result and record transform
-together; Save Session and a fresh Load preserve the last successful absolute
-transform and its feature-placement provenance. Operation-specific messages
-explain unavailable actions for non-circular, cropped, fuzzy, unordered,
-mixed-strand, or otherwise unsafe targets.
+**Cancel** inside Record actions resets and closes that section while keeping
+the feature popup open. Cancel, a failed render, or a stale/replaced source
+keeps the previous Result and record transform. Undo and Redo restore the
+Result and record transform together; Save Session and a fresh Load preserve
+the last successful absolute transform and its feature-placement provenance.
+Operation-specific messages explain unavailable actions for non-circular,
+cropped, fuzzy, unordered, mixed-strand, or otherwise unsafe targets.
 
 Open the feature popup and choose **Feature placement**: Auto, Main, or an
 available directional lane 1. Bulk selection uses **Selected feature placements**.

@@ -299,7 +299,7 @@ test('drawer does not offer duplicate canonical feature identities as exact refe
   );
 });
 
-test('ambiguity is immutable and Select returns to the same resolver before explicit Apply', async () => {
+test('Select stays local until one explicit batch resolver Apply', async () => {
   let generationCalls = 0;
   const fixture = create({
     members: [reference, targetA, targetB],
@@ -325,20 +325,20 @@ test('ambiguity is immutable and Select returns to the same resolver before expl
   assert.equal(fixture.state.similarityAlignmentPlan.value, null);
 
   const selected = anchor('record-b', 'target-b', 2);
-  assert.deepEqual(await fixture.actions.selectCandidate('record-b', selected), {
-    status: 'ready'
-  });
-  assert.equal(fixture.helperCalls.length, 2);
+  assert.deepEqual(fixture.actions.selectCandidate('record-b', selected), { status: 'selected' });
+  assert.equal(fixture.helperCalls.length, 1);
+  assert.equal(generationCalls, 0);
+  assert.equal(fixture.actions.canApply.value, true);
+  assert.equal(fixture.actions.draft.value.response.plan, null);
+  assert.deepEqual(await fixture.actions.applyDraft(), { status: 'ok' });
   assert.deepEqual(fixture.helperCalls[1].payload.request.choices, [{
     recordKey: 'record-b', kind: 'select', anchor: selected
   }]);
-  assert.equal(generationCalls, 0);
-  assert.equal(fixture.actions.canApply.value, true);
-  assert.deepEqual(await fixture.actions.applyDraft(), { status: 'ok' });
+  assert.equal(fixture.helperCalls.length, 2);
   assert.equal(generationCalls, 1);
 });
 
-test('Skip returns to the Python resolver and does not synthesize a plan in JavaScript', async () => {
+test('Skip remains local and Apply uses the Python plan', async () => {
   const fixture = create({
     members: [reference, targetA, targetB],
     helper: async (_operation, { request }, call) => {
@@ -357,8 +357,11 @@ test('Skip returns to the Python resolver and does not synthesize a plan in Java
     }
   });
   await fixture.actions.startFromPopup({ groupId: 'og-1', reference });
-  assert.deepEqual(await fixture.actions.skipRecord('record-b'), { status: 'ready' });
-  assert.equal(fixture.actions.draft.value.response.plan.records[1].rationale, 'skipped_by_user');
+  assert.deepEqual(fixture.actions.skipRecord('record-b'), { status: 'selected' });
+  assert.equal(fixture.helperCalls.length, 1);
+  assert.equal(fixture.actions.draft.value.response.plan, null);
+  assert.deepEqual(await fixture.actions.applyDraft(), { status: 'ok' });
+  assert.equal(fixture.helperCalls.length, 2);
 });
 
 test('dialog state retains every resolver-reported ambiguity, facts, choices, and Apply reason', async () => {
@@ -440,22 +443,32 @@ test('dialog state retains every resolver-reported ambiguity, facts, choices, an
     key: JSON.stringify(anchor('record-b', 'target-a', 1)),
     anchor: anchor('record-b', 'target-a', 1),
     featureIdentifier: 'target-a',
-    coordinates: '101..130',
+    label: 'CDS',
+    coordinates: '101..130 bp',
     displayedStrand: '-',
     representative: true,
     role: 'anchor',
     directEvidence: ['COORTHOLOG']
   });
 
+  assert.deepEqual(await actions.applyDraft(), { status: 'rejected' });
+  assert.equal(helperCalls.length, 1);
   await actions.selectCandidate('record-b', anchor('record-b', 'target-b', 2));
   assert.equal(actions.draft.value.ambiguities.length, 2);
   assert.deepEqual(actions.draft.value.ambiguities[0].choice, {
     kind: 'select', candidateKey: JSON.stringify(anchor('record-b', 'target-b', 2))
   });
   assert.match(actions.applyDisabledReason.value, /1 ambiguous record/);
+  await actions.selectCandidate('record-b', anchor('record-b', 'target-a', 1));
+  await actions.selectCandidate('record-b', anchor('record-b', 'target-b', 2));
   await actions.skipRecord('record-c');
+  await actions.selectCandidate('record-c', anchor('record-c', 'target-d', 5));
+  await actions.skipRecord('record-c');
+  assert.equal(helperCalls.length, 1);
   assert.equal(actions.canApply.value, true);
   assert.equal(actions.applyDisabledReason.value, '');
+  assert.deepEqual(await actions.applyDraft(), { status: 'ok' });
+  assert.equal(helperCalls.length, 2);
   assert.deepEqual(helperCalls.at(-1).choices.map(({ recordKey, kind }) => [recordKey, kind]), [
     ['record-b', 'select'], ['record-c', 'skip']
   ]);
@@ -821,5 +834,113 @@ test('stale target blocks Generate and requires Select or Skip without replacing
   });
   assert.equal(fixture.actions.dialogOpen.value, true);
   assert.deepEqual(fixture.state.results.value, [{ name: 'committed.svg' }]);
-  assert.deepEqual(await fixture.actions.skipRecord('record-b'), { status: 'ready' });
+  assert.deepEqual(await fixture.actions.skipRecord('record-b'), { status: 'selected' });
+});
+
+test('failed validation and generation preserve local choices for retry', async () => {
+  let validationAttempts = 0;
+  let generationAttempts = 0;
+  const fixture = create({
+    members: [reference, targetA, targetB],
+    helper: async (_operation, { request }, call) => {
+      if (call === 1) return { result: ambiguityResponse(request) };
+      validationAttempts += 1;
+      if (validationAttempts === 1) throw new Error('Resolver temporarily unavailable');
+      const response = resolvedResponse(request, request.choices[0].anchor);
+      response.records[1].rationale = 'user_selected';
+      response.plan.records[1].rationale = 'user_selected';
+      return { result: response };
+    },
+    runAnalysis: async () => {
+      generationAttempts += 1;
+      return generationAttempts === 1
+        ? { status: 'error', error: new Error('Generation temporarily unavailable') }
+        : { status: 'ok' };
+    }
+  });
+  await fixture.actions.startFromPopup({ groupId: 'og-1', reference });
+  const selected = anchor('record-b', 'target-b', 2);
+  fixture.actions.selectCandidate('record-b', selected);
+  assert.deepEqual(await fixture.actions.applyDraft(), { status: 'error' });
+  assert.match(fixture.actions.error.value.message, /Resolver temporarily unavailable/);
+  assert.equal(fixture.actions.canApply.value, true);
+  assert.equal(generationAttempts, 0);
+  assert.deepEqual(await fixture.actions.applyDraft(), { status: 'error' });
+  assert.match(fixture.actions.error.value.message, /Generation temporarily unavailable/);
+  assert.equal(fixture.actions.canApply.value, true);
+  assert.equal(fixture.actions.draft.value.ambiguities[0].choice.candidateKey, JSON.stringify(selected));
+  assert.deepEqual(fixture.state.results.value, [{ name: 'committed.svg' }]);
+  assert.deepEqual(await fixture.actions.applyDraft(), { status: 'ok' });
+  assert.equal(fixture.helperCalls.length, 4);
+  assert.equal(generationAttempts, 2);
+  assert.equal(fixture.actions.draft.value, null);
+});
+
+test('changed committed Result rejects an old local draft before batch validation', async () => {
+  const fixture = create({
+    members: [reference, targetA, targetB],
+    helper: async (_operation, { request }) => ({ result: ambiguityResponse(request) })
+  });
+  await fixture.actions.startFromPopup({ groupId: 'og-1', reference });
+  fixture.actions.skipRecord('record-b');
+  fixture.state.results.value = [{ name: 'newly-committed.svg' }];
+  assert.deepEqual(await fixture.actions.applyDraft(), { status: 'stale' });
+  assert.equal(fixture.helperCalls.length, 1);
+  assert.equal(fixture.actions.draft.value, null);
+  assert.match(fixture.actions.error.value.message, /Start alignment again/);
+});
+
+test('candidate labels use biological metadata and displayed record names', async () => {
+  const fixture = create({
+    members: [reference, { ...targetA, gene: 'tnpA', locus_tag: 'ABC_00120' },
+      { ...targetB, product: 'transposase' }],
+    helper: async (_operation, { request }) => ({ result: ambiguityResponse(request) })
+  });
+  fixture.state.linearSeqs[1].definition = 'Bacillus chromosome B';
+  await fixture.actions.startFromPopup({ groupId: 'og-1', reference });
+  const record = fixture.actions.draft.value.ambiguities[0];
+  assert.equal(record.recordLabel, 'Bacillus chromosome B');
+  assert.equal(record.candidates[0].label, 'tnpA · ABC_00120');
+  assert.equal(record.candidates[1].label, 'transposase');
+  assert.equal(record.candidates[0].coordinates, '101..130 bp');
+});
+
+test('switching the selected Similarity Group invalidates an open draft', async () => {
+  const fixture = create({
+    members: [reference, targetA, targetB],
+    helper: async (_operation, { request }) => ({ result: ambiguityResponse(request) })
+  });
+  fixture.state.selectedOrthogroupId = ref('og-1');
+  await fixture.actions.startFromPopup({ groupId: 'og-1', reference });
+  fixture.actions.skipRecord('record-b');
+  fixture.state.selectedOrthogroupId.value = 'og-2';
+  assert.deepEqual(await fixture.actions.applyDraft(), { status: 'stale' });
+  assert.equal(fixture.helperCalls.length, 1);
+});
+
+test('Cancel during batch validation ignores the late Python response', async () => {
+  let finishValidation;
+  let generationCalls = 0;
+  const fixture = create({
+    members: [reference, targetA, targetB],
+    helper: async (_operation, { request }, call) => call === 1
+      ? { result: ambiguityResponse(request) }
+      : new Promise((resolve) => { finishValidation = () => {
+        const response = resolvedResponse(request, request.choices[0].anchor);
+        response.records[1].rationale = 'user_selected';
+        response.plan.records[1].rationale = 'user_selected';
+        resolve({ result: response });
+      }; }),
+    runAnalysis: async () => { generationCalls += 1; return { status: 'ok' }; }
+  });
+  await fixture.actions.startFromPopup({ groupId: 'og-1', reference });
+  fixture.actions.selectCandidate('record-b', anchor('record-b', 'target-a', 1));
+  const applying = fixture.actions.applyDraft();
+  while (!finishValidation) await Promise.resolve();
+  fixture.actions.cancel();
+  finishValidation();
+  assert.deepEqual(await applying, { status: 'stale' });
+  assert.equal(generationCalls, 0);
+  assert.equal(fixture.actions.draft.value, null);
+  assert.deepEqual(fixture.state.results.value, [{ name: 'committed.svg' }]);
 });
