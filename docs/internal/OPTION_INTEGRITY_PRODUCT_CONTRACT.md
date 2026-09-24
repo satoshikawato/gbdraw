@@ -5,7 +5,7 @@ Status: active Product authority
 ## Authority metadata
 
 - Contract ID: `OIPC`
-- Contract revision: `12`
+- Contract revision: `13`
 - Product Decision Owner: `satoshikawato`
 - Decision date: `2026-08-28`
 - Decision source: explicit Product Decision Owner selection of one (`1`) after
@@ -95,6 +95,12 @@ Status: active Product authority
   `PRODUCT_DECISION` texts presented for issue `#581`. The receipts below are
   the full scope of these additions. Dependent runtime requires this authority
   merged into its base; this amendment contains no runtime.
+- Revision 13 changes: `PD-OI-026`, `PD-OI-027`, `PD-OI-031`, and `PD-OI-034`
+  are replaced for scenario revision `2`, selected by `satoshikawato` on
+  `2026-09-24` through four complete `PRODUCT_DECISION` responses for issue
+  `#586`. The receipts below are the full scope of these replacements. Earlier
+  unaffected decisions retain their scope. Dependent runtime requires this
+  authority merged into its base; this amendment contains no runtime.
 - Records remaining `EVIDENCE_REQUIRED`: none
 - Excluded records: none
 
@@ -985,98 +991,74 @@ corrected. Passing evidence does not make incorrect behavior normative.
 }
 ```
 
-### PD-OI-026: Deterministic Similarity Group anchor resolution
+### PD-OI-026: Deterministic Similarity Group anchor suggestions
 
 - Concern key: `diagram-generation.similarity-alignment.anchor-resolution`
-- Scenario revision: `1`
+- Scenario revision: `2`
+- Supersedes: `PD-OI-026`, scenario revision `1` (`A / EXPLICIT_DETERMINISTIC_RESOLUTION`).
 - Status: `ACCEPTED`
-- Selected outcome: `A / EXPLICIT_DETERMINISTIC_RESOLUTION`
-- Normative outcome:
-  1. The reference anchor is the exact feature selected by the user, identified
-     by stable record and biological-feature identity. A source feature index
-     may disambiguate repeated source identifiers, but must not replace stable
-     identity.
-  2. Each non-reference record resolves independently in this order: an
-     explicit user selection; the only usable member candidate; the only
-     distinct usable candidate connected directly to the reference by RBH
-     evidence; otherwise explicit Select or Skip. A record with no usable
-     candidate is left unchanged.
-  3. RBH direction is normalized so query/subject ordering does not change the
-     result. Multiple distinct direct-RBH candidates are ambiguous. Coortholog
-     status, representative status, confidence score, supporting-edge count,
-     and multi-hop evidence do not break ties.
-  4. A candidate is usable only when it is a member of the selected group, its
-     stable record and feature identity resolves uniquely, and its feature
-     center maps into the current crop and display coordinates. A hidden feature
-     can be usable; a feature whose center is outside the crop is unusable even
-     when another part overlaps the crop.
-  5. Resolution does not depend on viewport, scroll position, feature
-     visibility, ribbon display or geometry, source coordinate order, or
-     rendering heuristics. Every resolved or skipped record retains a
-     deterministic rationale.
-- Decision source: The complete `PRODUCT_DECISION` response from
-  `satoshikawato` dated `2026-09-22` for issue `#561`, reproduced below.
-  The receipt preserves the supplied fields without extending its rationale,
-  preservation, retirement, risk, owner, or date. This is a reviewable
-  serialization in the existing static authority document, not a new decision
-  store or a `BD-###` record. It cannot authorize dependent runtime until
-  merged into that runtime's base.
+- Selected outcome: `A / AUTO_PRESELECTED_SUGGESTIONS`
+- Normative outcome: The exact selected reference and stable record and
+  biological-feature identities govern independent target resolution. The
+  shared Python resolver retains only-usable-candidate and unique-direct-RBH
+  automatic resolution, and offers a disclosed, transient
+  unique-representative or deterministic-candidate-1 recommendation for
+  ambiguity. Every usable target can replace its preselection or Skip before
+  final Python validation; missing, unusable, and skipped records keep their
+  position and orientation. Recommendations do not depend on viewport, scroll,
+  ribbon geometry, confidence score, supporting-edge count, or multi-hop
+  evidence.
+- Decision source: The complete signed `PRODUCT_DECISION` response from
+  `satoshikawato` dated `2026-09-24` for issue `#586`, reproduced below.
+  This serialization adds no terms to the supplied receipt and becomes
+  runtime authority only after merge into the runtime base.
 
 ```json
 {
   "concern": "diagram-generation.similarity-alignment.anchor-resolution",
-  "scenarioRevision": 1,
-  "choice": "A / EXPLICIT_DETERMINISTIC_RESOLUTION",
-  "rationale": "Similarity Group alignment must use the exact feature selected by the user and must not convert inparalog ambiguity into an arbitrary visual choice. Automatic resolution is permitted only when there is one usable candidate or one distinct candidate connected directly to the reference by RBH evidence.",
-  "mustPreserve": "The exact clicked reference; stable record and feature identity; explicit user selections; unchanged position and orientation for records with no usable candidate or an explicit Skip; deterministic rationale for every resolved or skipped record; and independence from viewport, visibility, ribbon geometry, representative status, confidence score, and edge count.",
-  "mayRetire": "Group-ID-only representative selection; score-based member fallback; coordinate or rendering heuristics; and multi-hop evidence as an automatic selection rule.",
-  "acceptedResidualRisk": "Ambiguous records require explicit Select or Skip, and a feature whose center cannot be mapped into the current crop is treated as unusable even when another part overlaps the crop.",
+  "scenarioRevision": 2,
+  "choice": "A / AUTO_PRESELECTED_SUGGESTIONS",
+  "rationale": "Similarity Group alignment should remain reviewable without requiring one repetitive click for every ambiguous record. A deterministic recommendation gives users an immediately applicable draft while exact identity, visible recommendation reasons, Select, Skip, and final Python validation preserve transparency and control.",
+  "mustPreserve": "The exact selected reference; stable record and biological-feature identity; only-usable-candidate and unique-direct-RBH automatic resolution; independent treatment of every displayed record; unchanged position and orientation for missing, unusable, or skipped records; visible recommendation reasons; the ability to replace every recommendation or select Skip; final validation by the shared Python resolver; and independence from viewport, scroll, ribbon geometry, confidence score, supporting-edge count, and multi-hop evidence.",
+  "mayRetire": "The initial unselected state for every ambiguous record; the requirement to click every ambiguous record before Apply; and the prohibition on using a unique representative or deterministic candidate 1 as a disclosed transient recommendation.",
+  "acceptedResidualRisk": "A recommended candidate is a convenience heuristic rather than proof of biological superiority, and a user may Apply without inspecting every preselection. The palette must disclose the recommendation basis, permit replacement or Skip, and commit nothing before validated Apply.",
   "owner": "satoshikawato",
-  "decisionDate": "2026-09-22"
+  "decisionDate": "2026-09-24"
 }
 ```
 
-### PD-OI-027: Separate Similarity Group position and orientation semantics
+### PD-OI-027: Single Align with per-record orientation
 
 - Concern key: `diagram-generation.similarity-alignment.transform-semantics`
-- Scenario revision: `1`
+- Scenario revision: `2`
+- Supersedes: `PD-OI-027`, scenario revision `1` (`A / SEPARATE_POSITION_AND_ORIENTATION`).
 - Status: `ACCEPTED`
-- Selected outcome: `A / SEPARATE_POSITION_AND_ORIENTATION`
-- Normative outcome:
-  1. The reference record's position and orientation remain unchanged.
-     `Align` changes each resolved target's horizontal position only; it
-     preserves the target's vertical position and effective orientation.
-  2. `Align & orient` first determines effective orientations, then aligns
-     anchor centers. It reverses a target's whole displayed record only when
-     both reference and target anchor strands are known and opposite. If either
-     strand is unknown, it performs position alignment only and preserves the
-     target's orientation.
-  3. Whole-record reversal keeps text readable. The visible reverse indicator
-     is derived from effective orientation rather than maintained as an
-     independent flag.
-  4. The resulting anchor-center translation is exact and idempotent. Repeating
-     the same operation with the same inputs does not accumulate an offset.
-     Every displayed record is handled independently, including multiple
-     records assigned to the same row.
-- Decision source: The complete `PRODUCT_DECISION` response from
-  `satoshikawato` dated `2026-09-22` for issue `#561`, reproduced below.
-  The receipt preserves the supplied fields without extending its rationale,
-  preservation, retirement, risk, owner, or date. This is a reviewable
-  serialization in the existing static authority document, not a new decision
-  store or a `BD-###` record. It cannot authorize dependent runtime until
-  merged into that runtime's base.
+- Selected outcome: `A / SINGLE_ALIGN_PER_RECORD_ORIENTATION`
+- Normative outcome: One alignment review lets each target independently
+  preserve orientation or request matching the reference direction.
+  Preservation is the default. Whole-record reversal occurs only for an
+  explicit per-record match request when both displayed anchor strands are
+  known and opposite; unknown strands preserve orientation. The reference
+  position and orientation and every target's vertical position remain
+  unchanged. Alignment of anchor centers is exact and idempotent, text remains
+  readable, and the visible rev indication reflects effective source-relative
+  orientation. Apply validates and commits atomically.
+- Decision source: The complete signed `PRODUCT_DECISION` response from
+  `satoshikawato` dated `2026-09-24` for issue `#586`, reproduced below.
+  This serialization adds no terms to the supplied receipt and becomes
+  runtime authority only after merge into the runtime base.
 
 ```json
 {
   "concern": "diagram-generation.similarity-alignment.transform-semantics",
-  "scenarioRevision": 1,
-  "choice": "A / SEPARATE_POSITION_AND_ORIENTATION",
-  "rationale": "Position alignment and orientation are different user intents and must remain separately controllable. Alignment must be exact and idempotent without changing vertical placement or inferring orientation from unknown strand data.",
-  "mustPreserve": "The reference record's position and orientation; target Y positions in position-only Align; existing orientation in position-only Align; whole-record reverse display only when Align & orient has been selected and both anchor strands are known and opposite; readable text; a persistent rev indicator derived from effective orientation; and independent treatment of every displayed record, including multiple records in one row.",
-  "mayRetire": "Any alignment behavior that changes orientation without explicit Align & orient intent or guesses orientation when either anchor strand is unknown.",
-  "acceptedResidualRisk": "When either strand is unknown, position is aligned but orientation is not changed, so the resulting visual direction may remain different from other records.",
+  "scenarioRevision": 2,
+  "choice": "A / SINGLE_ALIGN_PER_RECORD_ORIENTATION",
+  "rationale": "Anchor selection and orientation should be reviewed together so users can preserve or match orientation independently for each record instead of committing to one global orientation mode before seeing the candidates.",
+  "mustPreserve": "The reference record's position and orientation; every target's vertical position; current orientation unless Match reference direction is explicitly enabled for that record; whole-record reversal only when both displayed anchor strands are known and opposite; orientation preservation for unknown strands; readable text; effective source-relative rev indication; exact idempotent anchor-center alignment; independent handling of every displayed record; and atomic validated Apply.",
+  "mayRetire": "Separate Align and Align & orient actions; one global orientation mode for all targets; and orientation intent that becomes fixed before the review palette opens.",
+  "acceptedResidualRisk": "Always opening the review palette adds one confirmation step, and record-level controls add visual density. Orientation defaults to preservation, unknown strands cannot trigger reversal, and the palette must state each record's effective outcome before Apply.",
   "owner": "satoshikawato",
-  "decisionDate": "2026-09-22"
+  "decisionDate": "2026-09-24"
 }
 ```
 
@@ -1206,43 +1188,38 @@ corrected. Passing evidence does not make incorrect behavior normative.
 }
 ```
 
-### PD-OI-031: Initial Similarity Group alignment surface scope
+### PD-OI-031: Single Similarity Group alignment review surface
 
 - Concern key: `diagram-generation.similarity-alignment.surface-scope`
-- Scenario revision: `1`
+- Scenario revision: `2`
+- Supersedes: `PD-OI-031`, scenario revision `1` (`A / WEB_TYPED_CORE_STRICT_CLI`).
 - Status: `ACCEPTED`
-- Selected outcome: `A / WEB_TYPED_CORE_STRICT_CLI`
-- Normative outcome:
-  1. The Web Similarity Groups workflow provides exact reference selection,
-     `Align`, `Align & orient`, per-record Select and Skip for ambiguity, and
-     a reviewable resolution summary.
-  2. The Python surface accepts a typed, fully resolved alignment plan and uses
-     the shared resolution and validation semantics.
-  3. The CLI accepts an exact reference and runs only when every target record
-     resolves uniquely under the shared rules. Remaining ambiguity produces an
-     actionable error. New CLI and Python requests do not infer a representative
-     from a group ID.
-  4. The initial scope does not add an anchor TSV format, an equivalent
-     Collinear-mode alignment UI, or smart, scored, or multi-hop selection.
-- Decision source: The complete `PRODUCT_DECISION` response from
-  `satoshikawato` dated `2026-09-22` for issue `#561`, reproduced below.
-  The receipt preserves the supplied fields without extending its rationale,
-  preservation, retirement, risk, owner, or date. This is a reviewable
-  serialization in the existing static authority document, not a new decision
-  store or a `BD-###` record. It cannot authorize dependent runtime until
-  merged into that runtime's base.
+- Selected outcome: `A / SINGLE_REVIEW_ALIGNMENT_SURFACE`
+- Normative outcome: The Web exposes one Align entry point from the exact
+  feature popup and Similarity Groups drawer, always opening one review
+  surface for anchor and per-record orientation choices, Select, Skip, and a
+  resolution summary. Typed Python consumes fully resolved plans through
+  shared validation; CLI accepts exact references and rejects unresolved
+  ambiguity with actionable errors. Collinear alignment controls, anchor TSV,
+  scored inference, and multi-hop automatic selection remain unsupported and
+  are disclosed accurately. The review remains keyboard- and narrow-viewport
+  accessible and offers an immediately applicable default draft.
+- Decision source: The complete signed `PRODUCT_DECISION` response from
+  `satoshikawato` dated `2026-09-24` for issue `#586`, reproduced below.
+  This serialization adds no terms to the supplied receipt and becomes
+  runtime authority only after merge into the runtime base.
 
 ```json
 {
   "concern": "diagram-generation.similarity-alignment.surface-scope",
-  "scenarioRevision": 1,
-  "choice": "A / WEB_TYPED_CORE_STRICT_CLI",
-  "rationale": "The initial release should provide the complete interactive journey where ambiguity can be resolved, while all programmatic surfaces share the same typed plan and validation semantics. Adding a new TSV format or Collinear editing workflow is not required to deliver the Similarity Group use case.",
-  "mustPreserve": "A complete Web Similarity Groups workflow with exact reference selection, Align, Align & orient, Select, and Skip; a typed Python API for resolved plans; CLI support for exact references when every record resolves uniquely; actionable CLI errors for ambiguity; shared resolution and validation rules across surfaces; and accurate disclosure of deferred or unsupported scopes.",
-  "mayRetire": "Group-ID-only implicit representative selection for new CLI and Python alignment requests.",
-  "acceptedResidualRisk": "CLI does not provide an interactive ambiguity picker, and the first implementation does not add an anchor TSV format or equivalent Collinear-mode UI.",
+  "scenarioRevision": 2,
+  "choice": "A / SINGLE_REVIEW_ALIGNMENT_SURFACE",
+  "rationale": "The Web workflow should expose one predictable Align entry point and one review surface containing anchor and orientation choices, while programmatic surfaces continue to consume strict typed plans.",
+  "mustPreserve": "Exact reference selection in the feature popup and Similarity Groups drawer; Select and Skip; a reviewable resolution summary; typed fully resolved Python plans; strict CLI rejection of unresolved ambiguity; shared Python validation; actionable errors; and accurate disclosure that Collinear alignment controls, anchor TSV, scored inference, and multi-hop automatic selection remain unsupported.",
+  "mayRetire": "Separate Web Align and Align & orient buttons; automatic application without opening the review palette; and the requirement to choose global orientation intent at the initiating surface.",
+  "acceptedResidualRisk": "A review step is required even when every anchor resolves uniquely. The palette must open promptly, remain keyboard- and narrow-viewport accessible, and provide an immediately applicable default draft.",
   "owner": "satoshikawato",
-  "decisionDate": "2026-09-22"
+  "decisionDate": "2026-09-24"
 }
 ```
 
@@ -1347,27 +1324,36 @@ corrected. Passing evidence does not make incorrect behavior normative.
 }
 ```
 
-### PD-OI-034: Similarity-alignment choice and retry
+### PD-OI-034: Preselected local batch alignment review and retry
 
 - Concern key: `web.similarity-alignment.choice-and-retry`
-- Scenario revision: `1`
+- Scenario revision: `2`
+- Supersedes: `PD-OI-034`, scenario revision `1` (`A / LOCAL_BATCH_RETRY`).
 - Status: `ACCEPTED`
-- Selected outcome: `A / LOCAL_BATCH_RETRY`
-- Normative outcome: exactly the approved `PRODUCT_DECISION` receipt below.
-- Decision source: `satoshikawato` explicitly approved the exact text of all
-  three `PRODUCT_DECISION` receipts presented for issue `#581` on
-  `2026-09-24`. This serialization adds no terms to that approval and cannot
-  authorize dependent runtime until merged into its base.
+- Selected outcome: `A / PRESELECTED_LOCAL_BATCH_REVIEW`
+- Normative outcome: The Web presents an editable preselected draft across all
+  target records, with independent Select or Skip and orientation choices,
+  visible biological candidate details, recommendation reasons, and effective
+  orientation outcomes. Local edits, including canvas interaction, issue no
+  per-choice Worker job. One final Apply sends a batch for Python validation
+  and complete generation; a retryable failure retains the draft. Failure,
+  Cancel, stale, or superseded work preserves the last Result and History.
+  Existing plan regeneration, Session, Reset, and Undo/Redo meanings remain in
+  force.
+- Decision source: The complete signed `PRODUCT_DECISION` response from
+  `satoshikawato` dated `2026-09-24` for issue `#586`, reproduced below.
+  This serialization adds no terms to the supplied receipt and becomes
+  runtime authority only after merge into the runtime base.
 
 ```json
 {
   "concern": "web.similarity-alignment.choice-and-retry",
-  "scenarioRevision": 1,
-  "choice": "A / LOCAL_BATCH_RETRY",
-  "rationale": "複数recordの候補を待ち時間なしに比較・選択できるようにし、生物学的な名前と座標でexact featureを識別できるようにする。検証や生成に失敗しても、入力済みの選択をやり直さずに修正できるようにする。",
-  "mustPreserve": "exact reference、recordごとに独立したSelect／Skip、曖昧な候補の明示選択、候補の適格性と最終planを決めるPython Resolver、曖昧性がない場合の自動適用、代表status・score・図上位置による自動順位付けの禁止、失敗・取消・古い応答での直前ResultとHistory、既存planの再生成・Session・Undo/Redoの意味。",
-  "mayRetire": "内部IDを候補の主見出しにする表示、候補を一つ選ぶたびにPythonへ問い合わせて入力を待機させる動作、再試行可能なApply失敗で選択を破棄する動作。内部IDは詳細表示では利用可能にする。",
-  "acceptedResidualRisk": "Apply時には一回の検証と必要な再生成を待つ。選択開始後にsource、crop、group、committed Resultが変わった場合、古い選択は適用せず、利用者に再開始を求める。",
+  "scenarioRevision": 2,
+  "choice": "A / PRESELECTED_LOCAL_BATCH_REVIEW",
+  "rationale": "Users should be able to review all target records, accept deterministic defaults, and adjust anchors or orientation without per-choice Worker delays. One final Apply should validate and generate the complete result.",
+  "mustPreserve": "Exact reference identity; record-independent Select and Skip; Python ownership of candidate eligibility and the final plan; local no-Worker editing of anchor and orientation choices; one batch validation at Apply; correction and retry without losing the draft; visible biological names, coordinates, strand, representative status, and direct evidence; last-Result and History preservation after failure, Cancel, stale, or superseded work; canvas interaction; and existing plan regeneration, Session, Reset, and Undo/Redo meanings.",
+  "mayRetire": "The zero-selected initial draft; mandatory per-record selection before Apply; automatic application when no ambiguity exists; separate global orientation actions; and discarding review state after a retryable Apply failure.",
+  "acceptedResidualRisk": "Apply still waits for one resolver validation and any required regeneration, and automatically selected ambiguous anchors may be accepted without individual inspection. Recommendation reasons and effective orientation outcomes must remain visible and editable until Apply.",
   "owner": "satoshikawato",
   "decisionDate": "2026-09-24"
 }
