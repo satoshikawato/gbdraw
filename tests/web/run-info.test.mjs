@@ -693,6 +693,40 @@ const linearCanonical = canonical({
 });
 
 {
+  const positioned = structuredClone(linearCanonical);
+  positioned.renderRequest.schema = 8;
+  positioned.renderRequest.records.forEach((record) => {
+    record.display = { isCircular: null, startCoordinate: null };
+  });
+  positioned.renderRequest.layout = {
+    recordGapPx: 24,
+    multiRecordPositions: ['#1@1', '#2@2'],
+    recordTranslations: [],
+    similarityAlignment: null
+  };
+  const directPositions = await buildSourceRecipe(positioned);
+  assert.equal(directPositions.available, true, directPositions.unavailableReason);
+  assertCliParserAccepts(directPositions);
+  assert.deepEqual(directPositions.args.filter((arg) => /^#[12]@/.test(arg)), ['#1@1', '#2@2']);
+  positioned.renderRequest.records[0].presentation.gridColumn = 1;
+  const tablePositions = await buildSourceRecipe(positioned);
+  assert.equal(tablePositions.available, true, tablePositions.unavailableReason);
+  assert.match(tablePositions.generatedFiles.find((file) => file.name === 'records.tsv').data, /alpha\.gbk.*\t1\t1\t\t\n/);
+  positioned.renderRequest.layout.recordTranslations = [
+    { recordKey: 'alpha', x: 1, y: 0 }, { recordKey: 'beta', x: 0, y: 0 }
+  ];
+  const shifted = await buildSourceRecipe(positioned);
+  assert.equal(shifted.available, false);
+  assert.match(shifted.unavailableReason, /record translations/);
+  const partialRows = structuredClone(linearCanonical);
+  partialRows.renderRequest.records[0].presentation.gridRow = 2;
+  const partialRecipe = await buildSourceRecipe(partialRows);
+  assert.equal(partialRecipe.available, true, partialRecipe.unavailableReason);
+  assert.ok(partialRecipe.args.includes('#1@2'));
+  assert.equal(partialRecipe.args.includes('#2@2'), false);
+}
+
+{
   const direct = await buildSourceRecipe(linearCanonical);
   assert.equal(direct.available, true);
   assertCliParserAccepts(direct);

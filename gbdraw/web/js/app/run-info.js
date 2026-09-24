@@ -508,12 +508,31 @@ const validateCurrentSemanticCoverage = (request) => {
   }
 
   const layoutFields = request.mode === 'linear'
-    ? ['recordGapPx']
+    ? ['recordGapPx', 'multiRecordPositions', 'recordTranslations', 'similarityAlignment']
     : [
         'multiRecordSizeMode', 'multiRecordMinRadiusRatio', 'multiRecordColumnGapRatio',
         'multiRecordRowGapRatio', 'multiRecordPositions'
       ];
   coverObject(coverage, request.layout || {}, 'layout', layoutFields);
+  if (request.mode === 'linear') {
+    const translations = request.layout?.recordTranslations;
+    if (translations != null) {
+      if (!Array.isArray(translations) || (translations.length !== 0 && translations.length !== request.records.length) ||
+          translations.some((item, index) => (
+            !isPlainObject(item) || Object.keys(item).sort().join(',') !== 'recordKey,x,y' ||
+            item.recordKey !== request.records[index].recordKey || item.x !== 0 || item.y !== 0
+          ))) {
+        throw new SourceRecipeUnavailable(
+          'Source recipe unavailable: nonzero or incomplete record translations have no current CLI projection.'
+        );
+      }
+    }
+    if (request.layout?.similarityAlignment != null) {
+      throw new SourceRecipeUnavailable(
+        'Source recipe unavailable: a resolved similarity alignment has no current CLI projection.'
+      );
+    }
+  }
   (Array.isArray(request.comparisons) ? request.comparisons : []).forEach((comparison, index) => {
     const path = `comparisons[${index}]`;
     if (comparison?.kind !== 'nucleotideBlast') {
@@ -559,10 +578,12 @@ const sourceSpec = (record) => {
   );
 };
 
-const circularLayoutRows = (request, records) => {
-  const positions = Array.isArray(request.layout?.multiRecordPositions)
-    ? request.layout.multiRecordPositions
-    : [];
+const layoutRows = (request, records) => {
+  const positions = request.layout?.multiRecordPositions;
+  if (positions == null) return [];
+  if (!Array.isArray(positions)) {
+    throw new SourceRecipeUnavailable('Source recipe unavailable: record placement is invalid.');
+  }
   if (positions.length === 0) return [];
   const rows = Array(records.length).fill(null);
   positions.forEach((position) => {
@@ -592,14 +613,14 @@ const circularLayoutRows = (request, records) => {
       rows[recordIndex] !== null
     ) {
       throw new SourceRecipeUnavailable(
-        'Source recipe unavailable: circular record placement cannot be projected into a records table.'
+        'Source recipe unavailable: record placement cannot be projected into a records table.'
       );
     }
     rows[recordIndex] = row;
   });
   if (rows.some((row) => row === null)) {
     throw new SourceRecipeUnavailable(
-      'Source recipe unavailable: circular record placement is incomplete for a records table.'
+      'Source recipe unavailable: record placement is incomplete for a records table.'
     );
   }
   return rows;
@@ -659,6 +680,13 @@ const appendInputArgs = async (args, request, files) => {
       }
     }
   }
+  const requestedRows = layoutRows(request, records);
+  records.forEach((record, index) => {
+    const presentationRow = gridCoordinate(record.presentation?.gridRow);
+    if (presentationRow !== '' && requestedRows.length && presentationRow !== requestedRows[index]) {
+      throw new SourceRecipeUnavailable('Source recipe unavailable: record row placement conflicts with the layout.');
+    }
+  });
   const recordsTableRequired = hasDuplicateSources || circularSelectorNeedsTable || recordNeedsTable;
   if (request.schema >= 6 && recordsTableRequired) {
     for (const [index, record] of records.entries()) {
@@ -699,9 +727,7 @@ const appendInputArgs = async (args, request, files) => {
   }
 
   if (recordsTableRequired) {
-    const layoutRows = request.mode === 'circular'
-      ? circularLayoutRows(request, records)
-      : [];
+    const requestedTableRows = requestedRows;
     const columns = inputKind === 'genbank'
       ? ['gbk', 'record_label', 'record_subtitle', 'record_id', 'region', 'reverse_complement', 'order', 'row', 'column', ...(request.schema >= 7 ? ['topology', 'display_start'] : [])]
       : ['gff', 'fasta', 'record_label', 'record_subtitle', 'record_id', 'region', 'reverse_complement', 'order', 'row', 'column', ...(request.schema >= 7 ? ['topology', 'display_start'] : [])];
@@ -720,7 +746,7 @@ const appendInputArgs = async (args, request, files) => {
           : '',
         reverse_complement: region ? '0' : (record.presentation?.reverseComplement ? '1' : '0'),
         order: index + 1,
-        row: gridCoordinate(record.presentation?.gridRow) || layoutRows[index] || '',
+        row: gridCoordinate(record.presentation?.gridRow) || requestedTableRows[index] || '',
         column: gridCoordinate(record.presentation?.gridColumn),
         topology: record.display?.isCircular == null ? '' : record.display.isCircular ? 'circular' : 'linear',
         display_start: record.display?.startCoordinate ?? ''
@@ -763,12 +789,12 @@ const appendInputArgs = async (args, request, files) => {
         `${record.region.reverseComplement ? ':rc' : ''}`
     );
   });
-  const rows = records.map((record) => Number(record.presentation?.gridRow));
-  if (rows.some((row) => Number.isInteger(row) && row > 0)) {
-    rows.forEach((row, index) => {
-      if (Number.isInteger(row) && row > 0) args.push('--multi_record_position', `#${index + 1}@${row}`);
-    });
-  }
+  const rows = requestedRows.length
+    ? requestedRows
+    : records.map((record) => gridCoordinate(record.presentation?.gridRow));
+  rows.forEach((row, index) => {
+    if (row !== '') args.push('--multi_record_position', `#${index + 1}@${row}`);
+  });
   return false;
 };
 

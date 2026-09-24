@@ -1301,7 +1301,7 @@ test('Automatic Linear renders every record from one GenBank source and survives
     cardCount: 2,
     selector: 'AutomaticA',
     grouping: 'single',
-    schema: 7,
+    schema: 8,
     cardinalities: ['exactly_one', 'exactly_one'],
     rows: [1, 1],
     selectors: [{ kind: 'recordId', value: 'AutomaticA' }, { kind: 'recordId', value: 'AutomaticB' }],

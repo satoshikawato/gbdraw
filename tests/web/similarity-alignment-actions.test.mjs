@@ -778,6 +778,38 @@ test('ordinary Generate validation preserves a current plan without running gene
   assert.equal(fixture.state.similarityAlignmentPlan.value.groupId, 'og-1');
 });
 
+test('saved stable reference accepts a current source index without changing exact identity', async () => {
+  const fixture = create({
+    helper: async (_operation, { request }) => ({ result: resolvedResponse(request) })
+  });
+  const plan = resolvedResponse({
+    ...renderRequest,
+    mode: 'position',
+    groupId: 'og-1',
+    reference: anchor('record-a', 'clicked-inparalog', 4)
+  }).plan;
+  plan.reference.sourceFeatureIndex = null;
+  plan.records[0].anchor.sourceFeatureIndex = null;
+  plan.records[1].anchor.sourceFeatureIndex = null;
+  fixture.state.similarityAlignmentPlan.value = plan;
+
+  assert.deepEqual(await fixture.actions.validateBeforeGenerate(), { status: 'ok' });
+  assert.equal(fixture.state.similarityAlignmentPlan.value.reference.sourceFeatureIndex, null);
+  assert.equal(fixture.helperCalls[0].payload.request.reference.sourceFeatureIndex, 4);
+  assert.equal(fixture.helperCalls[0].payload.request.members[0].anchor.sourceFeatureIndex, 4);
+  assert.equal(fixture.helperCalls[0].payload.request.reference.stableFeatureSvgId,
+    fixture.helperCalls[0].payload.request.members[0].anchor.stableFeatureSvgId);
+
+  const conflicting = structuredClone(plan);
+  conflicting.reference.stableFeatureSvgId = 'different-stable-feature';
+  conflicting.records[0].anchor.stableFeatureSvgId = 'different-stable-feature';
+  fixture.state.similarityAlignmentPlan.value = conflicting;
+  assert.deepEqual(await fixture.actions.validateBeforeGenerate(), {
+    status: 'blocked', reason: 'stale-reference'
+  });
+  assert.equal(fixture.helperCalls.length, 1);
+});
+
 test('stale reference blocks Generate and offers explicit reference repair or Reset', async () => {
   const fixture = create({ helper: async () => { throw new Error('must not resolve'); } });
   const plan = resolvedResponse({
