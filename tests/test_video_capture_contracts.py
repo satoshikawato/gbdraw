@@ -92,3 +92,20 @@ def test_walkthrough_camera_eases_and_stays_inside_the_page() -> None:
     assert camera.at(3.0) == pytest.approx((480, 270, 2.0))  # clamped to the top-left corner
     x, y, zoom = camera.at(1.5)
     assert 480 < x < 960 and 270 < y < 540 and 1.0 < zoom < 2.0
+
+
+def test_highlight_moments_skim_waits_but_not_fast_forwards() -> None:
+    from video.walkthrough_render import FPS, TimeMap, _moments
+
+    events = [
+        {'t': 1.0, 'kind': 'speed_start', 'factor': None, 'target': 1.0},
+        {'t': 5.0, 'kind': 'speed_end'},
+        {'t': 6.0, 'kind': 'speed_start', 'factor': 3.0, 'target': None},
+        {'t': 9.0, 'kind': 'speed_end'},
+    ]
+    mapping = TimeMap.build(events, 0.0, 12.0)
+    assert [kind for *_, kind in mapping.segments] == ['wait', 'fast']
+    moments = _moments(mapping, 0.0, mapping.duration, 1.0, 2.0)
+    # 1 s + 1 s wait at 2x + 1 s + 1 s fast-forward + 3 s at normal pace.
+    assert len(moments) / FPS == pytest.approx(0.5 + 6.0, abs=0.05)
+    assert moments == tuple(sorted(moments))

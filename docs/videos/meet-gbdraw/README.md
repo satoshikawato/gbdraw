@@ -71,20 +71,21 @@ The D-loop is an actual Region Annotations import. `docs/capture/video/human_edi
 
 ## Hands-on walkthrough
 
-A second, longer video (about 2 minutes) shows the real Web app being used at a human pace: load `HmmtDNA.gbk`, generate the map, turn on labels, switch CDS labels to gene symbols, add four functional color rules, mark the origin-spanning D-loop, inspect a feature, and export the SVG. It is rebuilt from the current code with one command:
+One recording of the real Web app produces two videos. The walkthrough (about 2 minutes) shows the app used at a human pace: load `HmmtDNA.gbk`, generate the map, turn on labels, switch CDS labels to gene symbols, add four functional color rules, mark the origin-spanning D-loop, inspect a feature, and export the SVG. The highlights (about 45 seconds) open with six Gallery figures and then cut the same recording down to the key moments at 1.4× speed. Both are rebuilt from the current code with one command:
 
 ```bash
 python tools/prepare_browser_wheel.py
 python docs/capture/build_video.py walkthrough --out build/videos/walkthrough/run-001
 ```
 
-The command records the journey, renders `final/gbdraw-walkthrough.mp4` (1920×1080, 30 fps, H.264, silent), `final/gbdraw-walkthrough.en.srt`, and `final/poster.png`, and then decodes and checks the MP4. It fails if the exported SVG lacks the 13 gene symbols, the four functional colors and legend entries, or the D-loop. The **Walkthrough video** GitHub Actions workflow runs the same command for every published release and on manual dispatch, and uploads the outputs as a workflow artifact.
+The command records the journey, renders `final/gbdraw-walkthrough.mp4` and `final/gbdraw-highlights.mp4` (1920×1080, 30 fps, H.264, silent), a subtitle file for each, and `final/poster.png`, and then decodes and checks both MP4s. It fails if the exported SVG lacks the 13 gene symbols, the four functional colors and legend entries, or the D-loop. The **Walkthrough video** GitHub Actions workflow runs the same command for every published release and on manual dispatch, and uploads the outputs as a workflow artifact.
 
 How it works:
 
-- `docs/capture/video/walkthrough.py` drives the local, network-isolated app with an eased pointer, typed input, and wheel scrolling. Chromium runs with `--force-device-scale-factor=2`, so its screencast delivers 3840×2160 frames. The pointer path, clicks, camera cues, captions, toasts, and waits are saved in `raw/walkthrough/events.json`. The downloaded SVG is then re-rendered at increasing magnification for the closing vector zoom.
+- `docs/capture/video/walkthrough.py` drives the local, network-isolated app with an eased pointer, typed input, and wheel scrolling. Chromium runs with `--force-device-scale-factor=2`, so its screencast delivers 3840×2160 frames. The settings column is widened to 450 px before recording so short form fields show their values. The pointer path, clicks, camera cues, captions, toasts, waits, and named marks are saved in `raw/walkthrough/events.json`. The downloaded SVG is then re-rendered at increasing magnification for the closing vector zoom, and the six Gallery source SVGs in `gbdraw/web/gallery/sources/` are rendered for the highlights montage.
 - `docs/capture/video/walkthrough_render.py` composes the saved bundle without a browser. It places the app in a window over the gbdraw background, eases the camera between logged targets, draws the pointer and click ripples, and writes captions below the window with the app's vendored Inter font. Generation waits and the three repeated color rules are fast-forwarded. A `▶▶` badge marks every fast-forwarded span, and `reports/walkthrough-report.json` lists them.
-- The recording hides only the floating feature-search palette, which would otherwise cover the result. Native `<select>` menus and color pickers are not painted by headless Chromium, so those controls change value in place after the pointer clicks them.
+- The highlights are defined in `HIGHLIGHTS` in `walkthrough_render.py` as spans between named marks (for example `labels` to `crowded`), so a new recording with different timings yields the same story. Generation waits play 2.5× faster again in the highlights, and the badge appears only at 2× or more.
+- The recording hides only the floating feature-search palette, which would otherwise cover the result. Headless Chromium does not paint native `<select>` menus or color pickers, so the recorder logs each select's real option list and each chosen color, and the editor draws the menu or color popover while the pointer picks it.
 
 To change captions, camera framing, or pacing without recording again, edit `walkthrough_render.py` (or the cues in `events.json` of a copy) and run:
 

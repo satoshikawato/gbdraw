@@ -17,7 +17,9 @@ from pathlib import Path
 
 from playwright.sync_api import Locator, Page, expect, sync_playwright
 
-from config import ACTION_TIMEOUT_MS
+from PIL import Image, ImageChops
+
+from config import ACTION_TIMEOUT_MS, REPO_ROOT
 from flows.how_to.presentation import HUMAN_MITOCHONDRION_PATH
 from flows.web_capture import (
     generate_and_wait_for_result,
@@ -36,7 +38,20 @@ FUNCTIONAL_RULES = (
     ("^ATP", "#f59e0b", "ATP synthase"),
     ("^CYTB$", "#8b5cf6", "Cytochrome b"),
 )
+# Wider than the default column so short form fields (for example the region
+# label) show their whole value.
+SETTINGS_RIGHT_EDGE = 450
+GALLERY = (
+    ("Vnig_TUMSAT-TG-2018", "Multi-replicon genomes"),
+    ("hepatoplasmataceae_collinear", "Collinear genome comparisons"),
+    ("BGC0000708-BGC0000713", "Biosynthetic gene clusters"),
+    ("tobacco-chloroplast", "Plastomes with inverted repeats"),
+    ("majanivirus_orthogroup", "Protein-similarity links"),
+    ("HmmtDNA_ATskew", "GC and AT skew tracks"),
+)
+GALLERY_SOURCES = REPO_ROOT / "gbdraw/web/gallery/sources"
 FINALE_SIZE = (1600, 900)
+MENU_ROWS = 8
 FINALE_FRAMES = 105
 FINALE_ZOOM = 7.0
 
@@ -101,11 +116,11 @@ class Recorder:
         cdp = self.page.context.new_cdp_session(self.page)
 
         def on_frame(params: dict) -> None:
+            cdp.send("Page.screencastFrameAck", {"sessionId": params["sessionId"]})
             name = f"{len(self.frames):05d}.jpg"
             (self.frames_dir / name).write_bytes(base64.b64decode(params["data"]))
             stamp = params.get("metadata", {}).get("timestamp") or time.time()
             self.frames.append([round(stamp - self._origin, 4), name])
-            cdp.send("Page.screencastFrameAck", {"sessionId": params["sessionId"]})
 
         cdp.on("Page.screencastFrame", on_frame)
         self._origin = time.time()
@@ -146,6 +161,11 @@ class Recorder:
 
     def toast(self, text: str, icon: str) -> None:
         self.event("toast", text=text, icon=icon)
+
+    def mark(self, name: str) -> None:
+        """Name a moment so edits can cut the recording by meaning, not by time."""
+
+        self.event("mark", name=name)
 
     def fast_forward(self, *, factor: float | None = None, target: float | None = None) -> None:
         self.event("speed_start", factor=factor, target=target)
@@ -204,24 +224,47 @@ class Recorder:
         self.hold(pause)
 
     def choose(self, select: Locator, value: str) -> None:
-        """Select an option; headless Chromium never paints native popups."""
+        """Select an option.
 
-        x, y = _center(select.bounding_box())
+        Headless Chromium never paints native popups, so the option list and
+        the chosen row are logged for the editor to draw.
+        """
+
+        box = select.bounding_box()
+        options = select.evaluate(
+            "(node, value) => ({labels: Array.from(node.options).map((o) => o.label.trim()),"
+            " selected: Array.from(node.options).findIndex((o) => o.value === value)})", value)
+        if options["selected"] < 0:
+            raise AssertionError(f"{value!r} is not an option of the select")
+        labels, selected = options["labels"], options["selected"]
+        rows = min(MENU_ROWS, len(labels))
+        first = min(max(0, selected - rows // 2), len(labels) - rows)
+        x, y = _center(box)
         self._press(x, y, real=False)
-        self.hold(0.25)
+        self.event("menu", x=box["x"], y=box["y"], width=box["width"], height=box["height"],
+                   options=labels, selected=selected, window=[first, rows], duration=1.05)
+        self.hold(0.2)
+        # Point at the chosen row of the drawn menu (22 CSS px rows below the box).
+        row_y = box["y"] + box["height"] + 6 + (selected - first + 0.5) * 22
+        self._press(box["x"] + min(box["width"], 120) * 0.5, row_y, real=False)
         select.select_option(value)
         expect(select).to_have_value(value)
-        self.hold(0.35)
+        self.hold(0.45)
 
     def pick_color(self, swatch: Locator, value: str) -> None:
-        x, y = _center(swatch.bounding_box())
+        box = swatch.bounding_box()
+        x, y = _center(box)
         self._press(x, y, real=False)
-        self.hold(0.2)
+        self.event("swatch", x=box["x"], y=box["y"], width=box["width"], height=box["height"],
+                   value=value, duration=0.8)
+        self.hold(0.45)
         swatch.fill(value)
-        self.hold(0.3)
+        self.hold(0.45)
 
     def type(self, field: Locator, text: str, *, delay: float = 0.075) -> None:
         self.click(field, pause=0.12)
+        if not field.evaluate("node => node === document.activeElement"):
+            raise AssertionError(f"Clicking {field} did not focus it")
         if field.input_value():
             self.page.keyboard.press("Control+A")
         for char in text:
@@ -241,18 +284,27 @@ class Recorder:
             return
         self.move_to(area["x"] + area["width"] * 0.62, area["y"] + area["height"] * 0.5)
         goal = area["y"] + area["height"] * anchor
-        previous = None
-        for _ in range(120):
+        previous, stalled = None, 0
+        for _ in range(240):
             box = locator.bounding_box()
             delta = box["y"] - goal
             position = scroller.evaluate("node => node.scrollTop")
-            if abs(delta) < 45 or position == previous:
+            if abs(delta) < 45:
+                break
+            # Smooth scrolling can lag a wheel event, so only a run of
+            # unchanged positions means the end of the column.
+            stalled = stalled + 1 if position == previous else 0
+            if stalled >= 6:
                 break
             previous = position
-            step = max(-120.0, min(120.0, delta))
+            # Small wheel steps keep each screencast frame's jump short.
+            step = max(-70.0, min(70.0, delta))
             self.page.mouse.wheel(0, step)
-            self.page.wait_for_timeout(45)
+            self.page.wait_for_timeout(40)
         self.hold(0.35)
+        box = locator.bounding_box()
+        if not (low - 40 <= box["y"] and box["y"] + min(box["height"], 80) <= high + 40):
+            raise AssertionError(f"Could not scroll {locator} into the settings view: {box}")
 
     def generate(self, *, target: float = 1.4) -> None:
         def press(button: Locator) -> None:
@@ -283,6 +335,7 @@ def _journey(rec: Recorder, downloads: Path) -> Path:
     rec.hold(1.8)
     upload = page.get_by_role("button", name="Choose GenBank/DDBJ File", exact=True)
     rec.caption(1, "Load a GenBank file", "Human mitochondrial genome, NC_012920.1")
+    rec.mark("upload")
     rec.focus(upload, zoom=2.1)
     rec.move_to(620, 380)
     rec.hold(0.5)
@@ -293,6 +346,7 @@ def _journey(rec: Recorder, downloads: Path) -> Path:
     expect(page.get_by_role("group", name="GenBank/DDBJ File selection", exact=True)).to_contain_text(
         HUMAN_MITOCHONDRION_PATH.name)
     rec.hold(0.4)
+    rec.mark("loaded")
     selection = page.get_by_role("group", name="GenBank/DDBJ File selection", exact=True).bounding_box()
     rec.camera({"x": selection["x"], "y": selection["y"], "width": selection["width"],
                 "height": selection["height"] + 260}, zoom=2.1)
@@ -301,9 +355,11 @@ def _journey(rec: Recorder, downloads: Path) -> Path:
 
     rec.caption(2, "Generate the map", "The first run starts Python inside the browser")
     button = page.get_by_role("button", name="Generate Diagram", exact=True)
+    rec.mark("generate")
     rec.focus(button, zoom=1.9)
     rec.hold(0.5)
     rec.generate(target=1.8)
+    rec.mark("generated")
     rec.camera(duration=1.1)
     rec.move_to(1500, 700)
     rec.hold(1.2)
@@ -318,6 +374,7 @@ def _journey(rec: Recorder, downloads: Path) -> Path:
     rec.click(labels, left=70, pause=0.5)
     mode = page.locator("#circular-label-mode")
     rec.reveal(mode)
+    rec.mark("labels")
     rec.focus(mode, zoom=2.1)
     rec.choose(mode, "out")
     rec.generate()
@@ -325,6 +382,7 @@ def _journey(rec: Recorder, downloads: Path) -> Path:
     rec.hold(1.4)
     rec.caption(3, "Long product names crowd the map", "")
     right = rec.text_bounds(r"^NADH dehydrogenase subunit [12]$")
+    rec.mark("crowded")
     rec.camera(right, zoom=1.8, duration=1.1)
     rec.move_to(1700, 480)
     rec.hold(2.4)
@@ -333,13 +391,16 @@ def _journey(rec: Recorder, downloads: Path) -> Path:
     order = page.locator('input[placeholder="product,gene,locus_tag"]')
     rec.camera(page.locator(".settings-scroll").bounding_box(), zoom=2.0)
     rec.reveal(order)
+    rec.mark("priority")
     rec.focus(order, zoom=2.2)
     rec.choose(order.locator("xpath=preceding-sibling::select[1]"), "CDS")
+    rec.mark("priority-type")
     rec.type(order, "gene")
     rec.click(order.locator("xpath=following-sibling::button[1]"), pause=0.6)
     rec.generate()
     rec.camera(duration=1.0)
     rec.hold(1.0)
+    rec.mark("genes")
     rec.camera(right, zoom=1.8, duration=1.1)
     rec.hold(2.2)
     rec.camera(duration=1.0)
@@ -355,6 +416,7 @@ def _journey(rec: Recorder, downloads: Path) -> Path:
     rule_box = regex.locator('xpath=ancestor::div[contains(@class,"bg-slate-50")][1]')
     for index, (pattern, color, legend) in enumerate(FUNCTIONAL_RULES):
         rec.reveal(rule_box, anchor=0.45)
+        rec.mark(f"rule-{index + 1}")
         rec.focus(rule_box, zoom=2.2, duration=0.6)
         if index == 1:
             rec.fast_forward(factor=3.0)
@@ -368,9 +430,11 @@ def _journey(rec: Recorder, downloads: Path) -> Path:
         rec.click(rule_box.locator("button").last, pause=0.45)
     rec.normal_speed()
     rec.hold(0.5)
+    rec.mark("colors")
     rec.generate()
     rec.camera(duration=1.0)
     rec.hold(1.2)
+    rec.mark("legend")
     legend_box = rec.text_bounds(r"^(NADH dehydrogenase|Cytochrome c oxidase|ATP synthase|Cytochrome b)$")
     rec.camera(legend_box, zoom=1.9, duration=1.1)
     rec.hold(2.0)
@@ -390,15 +454,18 @@ def _journey(rec: Recorder, downloads: Path) -> Path:
     rec.click(add_span, pause=0.4)
     start = page.locator('input[placeholder="Start (1-based)"]')
     rec.reveal(start)
+    rec.mark("coordinates")
     rec.focus(start, zoom=2.3)
     rec.type(start, "16024")
     rec.type(page.locator('input[placeholder="End (inclusive)"]'), "576")
     rec.type(page.locator('input[placeholder="Label"]'), "D-loop")
+    rec.mark("bracket")
     rec.choose(page.locator('select:has(option[value="bracket"])'), "bracket")
     rec.generate()
     rec.camera(duration=1.0)
     rec.hold(1.0)
     dloop = page.locator('[role="region"][aria-label="Result Preview"] svg [data-gbdraw-annotation-id]').first
+    rec.mark("dloop")
     rec.focus(dloop, zoom=2.4, duration=1.2)
     rec.move_to(*_center(dloop.bounding_box()))
     rec.hold(2.6)
@@ -409,9 +476,11 @@ def _journey(rec: Recorder, downloads: Path) -> Path:
     point = page.evaluate(_LARGEST_FEATURE, "#ef4444")
     if point is None:
         raise AssertionError("No functionally colored cytochrome c oxidase feature was drawn")
+    rec.mark("popup")
     rec.click_point(point["x"], point["y"], pause=0.4)
     popup = page.get_by_role("dialog", name=re.compile(r"^Feature details"))
     expect(popup).to_be_visible()
+    rec.mark("popup-open")
     box = popup.bounding_box()
     rec.camera({"x": min(box["x"], point["x"]) - 40, "y": box["y"] - 40,
                 "width": max(box["x"] + box["width"], point["x"]) - min(box["x"], point["x"]) + 80,
@@ -423,6 +492,7 @@ def _journey(rec: Recorder, downloads: Path) -> Path:
 
     rec.caption(7, "Export a vector SVG", "PNG and PDF are one click away")
     svg_button = page.get_by_role("button", name="SVG", exact=True)
+    rec.mark("export")
     rec.focus(svg_button, zoom=2.1)
     rec.hold(0.4)
     with page.expect_download(timeout=ACTION_TIMEOUT_MS) as info:
@@ -434,6 +504,7 @@ def _journey(rec: Recorder, downloads: Path) -> Path:
     exported = downloads / download.suggested_filename
     download.save_as(exported)
     rec.toast(f"{exported.name} downloaded ({exported.stat().st_size // 1024} KB)", "download")
+    rec.mark("downloaded")
     rec.hold(2.2)
     return exported
 
@@ -505,18 +576,29 @@ def _render_finale(browser, svg: Path, out: Path) -> dict:
         context.close()
 
 
-def _rasterize(browser, svg: Path, png: Path) -> None:
-    context = browser.new_context(viewport={"width": 1400, "height": 1000}, device_scale_factor=2)
+def _rasterize(browser, svg: Path, png: Path, size: tuple[int, int] = (1400, 1000), scale: float = 2) -> None:
+    """Render a static SVG in Chromium, then trim the white margin."""
+
+    context = browser.new_context(viewport={"width": size[0], "height": size[1]}, device_scale_factor=scale)
     try:
         page = context.new_page()
         page.set_content('<html><body style="margin:0;background:#fff">'
-                         '<img id="f" style="width:1400px;height:1000px;object-fit:contain"></body></html>')
+                         f'<img id="f" style="width:{size[0]}px;height:{size[1]}px;object-fit:contain"></body></html>')
         url = "data:image/svg+xml;base64," + base64.b64encode(svg.read_bytes()).decode("ascii")
         page.locator("#f").evaluate("(img, url) => { img.src = url; }", url)
         page.wait_for_function("() => document.querySelector('#f').complete && document.querySelector('#f').naturalWidth > 0")
         page.screenshot(path=str(png))
     finally:
         context.close()
+    with Image.open(png) as image:
+        rgb = image.convert("RGB")
+    bbox = ImageChops.difference(rgb, Image.new("RGB", rgb.size, "white")).point(
+        lambda value: 255 if value > 12 else 0).getbbox()
+    if bbox is None:
+        raise AssertionError(f"{svg.name} rendered blank")
+    pad = round(24 * scale)
+    rgb.crop((max(0, bbox[0] - pad), max(0, bbox[1] - pad),
+              min(rgb.width, bbox[2] + pad), min(rgb.height, bbox[3] + pad))).save(png)
 
 
 def record_walkthrough(run: Path) -> Path:
@@ -540,6 +622,11 @@ def record_walkthrough(run: Path) -> Path:
             circular = page.get_by_role("button", name="Circular", exact=True)
             circular.click()
             expect(circular).to_have_attribute("aria-pressed", "true")
+            handle = page.get_by_title("Drag to resize", exact=True).bounding_box()
+            page.mouse.move(*_center(handle))
+            page.mouse.down()
+            page.mouse.move(SETTINGS_RIGHT_EDGE, _center(handle)[1], steps=8)
+            page.mouse.up()
             page.wait_for_function("() => document.fonts.status === 'loaded'")
             recorder = Recorder(page, raw)
             recorder.start()
@@ -553,6 +640,14 @@ def record_walkthrough(run: Path) -> Path:
         try:
             finale = _render_finale(browser, exported, raw / "finale")
             _rasterize(browser, exported, raw / "final-figure.png")
+            gallery = []
+            for stem, label in GALLERY:
+                source = GALLERY_SOURCES / f"{stem}.svg"
+                target = raw / "gallery" / f"{stem}.png"
+                target.parent.mkdir(exist_ok=True)
+                _rasterize(browser, source, target, size=(1600, 1000), scale=1.5)
+                gallery.append({"path": str(target.relative_to(raw)), "label": label,
+                                "source": str(source.relative_to(REPO_ROOT)), "source_sha256": sha256(source)})
         finally:
             browser.close()
     (raw / "frames.json").write_text(json.dumps(recorder.frames), encoding="utf-8")
@@ -563,7 +658,7 @@ def record_walkthrough(run: Path) -> Path:
         "source": {"path": HUMAN_MITOCHONDRION_PATH.name, "sha256": sha256(HUMAN_MITOCHONDRION_PATH)},
         "export": {"path": str(exported.relative_to(raw)), "sha256": sha256(exported), "semantics": report},
         "frames": len(recorder.frames), "events": len(recorder.events),
-        "duration": recorder.events[-1]["t"], "finale": finale,
+        "duration": recorder.events[-1]["t"], "finale": finale, "gallery": gallery,
     }
     path = raw / "walkthrough.json"
     path.write_text(json.dumps(manifest, indent=2), encoding="utf-8")
