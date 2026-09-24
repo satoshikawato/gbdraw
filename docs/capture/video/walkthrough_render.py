@@ -34,7 +34,7 @@ RADIUS = 18
 INTRO_SECONDS = 3.4
 OUTRO_SECONDS = 5.0
 FADE_SECONDS = 0.5
-FINALE_CAPTION = (7, "Vector output stays sharp at any zoom", "The downloaded SVG, magnified 7×")
+FINALE_CAPTION = (8, "Vector output stays sharp at any zoom", "The downloaded SVG, magnified 7×")
 MONTAGE_CAPTION = (None, "Genome diagrams for microbes and organelles",
                    "Highlights from a live session in the gbdraw web app, sped up")
 INTRO_LINES = ("From a GenBank file to a publication-ready genome map",
@@ -670,12 +670,11 @@ class Edit:
 HIGHLIGHTS = (
     ("upload", -0.3, "loaded", 1.2),
     ("generate", 0.0, "generated", 2.0),
+    ("layout", -0.2, "layout-done", 2.0),
     ("labels", -0.2, "crowded", 2.2),
     ("priority-type", -0.2, "genes", 2.6),
     ("rule-4", -0.1, "legend", 2.4),
-    ("bracket", -0.2, "bracket-chosen", 0.3),
-    ("add-track", -0.2, "track-added", 0.5),
-    ("move-click", -0.3, "dloop", 2.6),  # the last of the Move outward clicks
+    ("bracket", -0.2, "dloop", 2.6),
     ("export", -0.1, "downloaded", 1.4),
 )
 HIGHLIGHT_SPEED = 1.4

@@ -8,6 +8,10 @@
     "Human mitochondrial genome, NC_012920.1": "人类线粒体基因组 NC_012920.1",
     "Generate the map": "生成图谱",
     "The first run starts Python inside the browser": "首次运行会在浏览器中启动 Python",
+    "Choose a track layout": "选择轨道布局",
+    "Layout › Track Preset: Middle": "Layout › Track Preset: Middle",
+    "Put both strands on one track": "正负链放在同一条轨道上",
+    "Layout › Separate Strands": "Layout › Separate Strands",
     "Show feature labels": "显示特征标签",
     "Labels › Label Mode: Out": "Labels › Label Mode: Out",
     "Long product names crowd the map": "完整的产物名称让图谱很拥挤",
@@ -17,8 +21,6 @@
     "Colors › Specific rules match the gene qualifier": "Colors › Specific rules 按 gene 限定符匹配",
     "Mark a region, even across the origin": "标注区域，跨越起点也可以",
     "Region Annotations › D-loop, 16,024–576": "Region Annotations › D-loop，16,024–576",
-    "Give it its own track inside the circle": "放到圆内的独立轨道上",
-    "Layout › Custom Track Slots": "Layout › Custom Track Slots",
     "Click any feature for details": "点击任意特征查看详情",
     "Export a vector SVG": "导出矢量 SVG",
     "PNG and PDF are one click away": "PNG 和 PDF 也只需一键",
@@ -43,6 +45,9 @@
     "fast": "快进"
   },
   "patterns": [
-    {"match": "^(?P<file>.+) downloaded \\((?P<size>\\d+ KB)\\)$", "replace": "已下载 {file}（{size}）"}
+    {
+      "match": "^(?P<file>.+) downloaded \\((?P<size>\\d+ KB)\\)$",
+      "replace": "已下载 {file}（{size}）"
+    }
   ]
 }

@@ -2,7 +2,7 @@
 
 One recording of the real Web app produces three videos:
 
-- **Walkthrough** (1920×1080, about 2 minutes): load `HmmtDNA.gbk`, generate the map, turn on labels, switch CDS labels to gene symbols, add four functional color rules, mark the origin-spanning D-loop, inspect a feature, and export the SVG, all at a human pace.
+- **Walkthrough** (1920×1080, about 2 minutes): load `HmmtDNA.gbk`, generate the map, switch the track preset to Middle and put both strands on one track, turn on labels, switch CDS labels to gene symbols, add four functional color rules, mark the origin-spanning D-loop, inspect a feature, and export the SVG, all at a human pace.
 - **Highlights** (1920×1080, about 45 seconds): six Gallery figures, then the key moments of the same recording at 1.4× speed.
 - **Vertical highlights** (1080×1920, same cut) for TikTok, RedNote, and other phone feeds. Captions sit above the app window and the brand below it, clear of the top 400 px and bottom 430 px where those apps draw their own controls. The camera re-frames each shot for the tall window: whole-page shots show the diagram, and close-ups follow the control being used.
 

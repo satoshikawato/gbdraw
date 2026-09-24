@@ -286,13 +286,6 @@ class Recorder:
         swatch.fill(value)
         self.hold(0.45)
 
-    def check(self, box: Locator) -> None:
-        """Tick a checkbox with a real click unless it is already ticked."""
-
-        if not box.is_checked():
-            self.click(box, pause=0.3)
-        expect(box).to_be_checked()
-
     def type(self, field: Locator, text: str, *, delay: float = 0.075) -> None:
         self.click(field, pause=0.12)
         if not field.evaluate("node => node === document.activeElement"):
@@ -399,7 +392,29 @@ def _journey(rec: Recorder, downloads: Path) -> Path:
     rec.camera(preview.bounding_box(), zoom=1.12, duration=1.6)
     rec.hold(2.2)
 
-    rec.caption(3, "Show feature labels", "Labels › Label Mode: Out")
+    rec.caption(3, "Choose a track layout", "Layout \u203a Track Preset: Middle")
+    layout = page.get_by_label("Layout", exact=True)
+    rec.camera(page.locator(".settings-scroll").bounding_box(), zoom=2.0)
+    rec.reveal(layout)
+    rec.mark("layout")
+    rec.focus(layout, zoom=2.0)
+    rec.click(layout, left=70, pause=0.5)
+    preset = page.get_by_label("Track Preset", exact=True)
+    rec.reveal(preset)
+    rec.focus(preset, zoom=2.2)
+    rec.choose(preset, "middle")
+    rec.caption(3, "Put both strands on one track", "Layout \u203a Separate Strands")
+    strands = page.get_by_label("Separate Strands", exact=True)
+    rec.focus(strands, zoom=2.2, duration=0.6)
+    rec.click(strands, pause=0.5)
+    expect(strands).not_to_be_checked()
+    rec.generate()
+    rec.mark("layout-done")
+    rec.camera(duration=1.0)
+    rec.move_to(1500, 700)
+    rec.hold(2.4)
+
+    rec.caption(4, "Show feature labels", "Labels › Label Mode: Out")
     labels = page.get_by_label("Labels", exact=True)
     rec.camera(page.locator(".settings-scroll").bounding_box(), zoom=2.0)
     rec.reveal(labels)
@@ -413,14 +428,14 @@ def _journey(rec: Recorder, downloads: Path) -> Path:
     rec.generate()
     rec.camera(duration=1.0)
     rec.hold(1.4)
-    rec.caption(3, "Long product names crowd the map", "")
+    rec.caption(4, "Long product names crowd the map", "")
     right = rec.text_bounds(r"^NADH dehydrogenase subunit [12]$")
     rec.mark("crowded")
     rec.camera(right, zoom=1.8, duration=1.1)
     rec.move_to(1700, 480)
     rec.hold(2.4)
 
-    rec.caption(3, "Prefer short gene symbols", "Qualifier priority: CDS › gene")
+    rec.caption(4, "Prefer short gene symbols", "Qualifier priority: CDS › gene")
     order = page.locator('input[placeholder="product,gene,locus_tag"]')
     rec.camera(page.locator(".settings-scroll").bounding_box(), zoom=2.0)
     rec.reveal(order)
@@ -439,7 +454,7 @@ def _journey(rec: Recorder, downloads: Path) -> Path:
     rec.camera(duration=1.0)
     rec.hold(1.0)
 
-    rec.caption(4, "Color genes by function", "Colors › Specific rules match the gene qualifier")
+    rec.caption(5, "Color genes by function", "Colors › Specific rules match the gene qualifier")
     colors = page.get_by_label("Colors", exact=True)
     rec.camera(page.locator(".settings-scroll").bounding_box(), zoom=2.0)
     rec.reveal(colors)
@@ -474,7 +489,7 @@ def _journey(rec: Recorder, downloads: Path) -> Path:
     rec.camera(duration=1.0)
     rec.hold(0.8)
 
-    rec.caption(5, "Mark a region, even across the origin", "Region Annotations › D-loop, 16,024–576")
+    rec.caption(6, "Mark a region, even across the origin", "Region Annotations › D-loop, 16,024–576")
     region = page.get_by_label("Region Annotations", exact=True)
     rec.camera(page.locator(".settings-scroll").bounding_box(), zoom=2.0)
     rec.reveal(region)
@@ -494,9 +509,6 @@ def _journey(rec: Recorder, downloads: Path) -> Path:
     rec.type(page.locator('input[placeholder="Label"]'), "D-loop")
     rec.mark("bracket")
     rec.choose(page.locator('select:has(option[value="bracket"])'), "bracket")
-    rec.mark("bracket-chosen")
-    rec.hold(0.4)
-    _inner_region_track(rec)
     rec.generate()
     rec.camera(duration=1.0)
     rec.hold(1.0)
@@ -508,7 +520,7 @@ def _journey(rec: Recorder, downloads: Path) -> Path:
     rec.camera(duration=1.0)
     rec.hold(0.6)
 
-    rec.caption(6, "Click any feature for details", "")
+    rec.caption(7, "Click any feature for details", "")
     point = page.evaluate(_LARGEST_FEATURE, "#ef4444")
     if point is None:
         raise AssertionError("No functionally colored cytochrome c oxidase feature was drawn")
@@ -526,7 +538,7 @@ def _journey(rec: Recorder, downloads: Path) -> Path:
     rec.camera(duration=0.9)
     rec.hold(0.6)
 
-    rec.caption(7, "Export a vector SVG", "PNG and PDF are one click away")
+    rec.caption(8, "Export a vector SVG", "PNG and PDF are one click away")
     svg_button = page.get_by_role("button", name="SVG", exact=True)
     rec.mark("export")
     rec.focus(svg_button, zoom=2.1)
@@ -545,79 +557,6 @@ def _journey(rec: Recorder, downloads: Path) -> Path:
     return exported
 
 
-def _slot(page: Page, slot_id: str) -> Locator:
-    return page.get_by_role("group", name=f"Circular track slot {slot_id}", exact=True)
-
-
-def _slot_order(page: Page) -> list[str]:
-    return page.locator('[role="group"][aria-label^="Circular track slot "]').evaluate_all(
-        "els => els.map((e) => e.getAttribute('aria-label').replace('Circular track slot ', ''))")
-
-
-def _inner_region_track(rec: Recorder) -> None:
-    """Place the D-loop on its own track just inside the axis (as in T-GUI-10)."""
-
-    page = rec.page
-    rec.caption(5, "Give it its own track inside the circle", "Layout › Custom Track Slots")
-    layout = page.get_by_label("Layout", exact=True)
-    rec.camera(page.locator(".settings-scroll").bounding_box(), zoom=2.0)
-    rec.reveal(layout)
-    rec.mark("slots")
-    rec.focus(layout, zoom=2.0)
-    rec.click(layout, left=70, pause=0.4)
-    toggle = page.get_by_role("button", name=re.compile(r"Custom Track Slots$"))
-    rec.reveal(toggle)
-    rec.click(toggle, pause=0.4)
-    custom = page.get_by_role("checkbox", name="Use custom stack", exact=True)
-    rec.focus(custom, zoom=2.2)
-    rec.check(custom)
-    renderer = page.get_by_label("New circular track renderer", exact=True)
-    rec.reveal(renderer)
-    rec.mark("add-track")
-    rec.focus(renderer, zoom=2.2)
-    rec.choose(renderer, "annotations")
-    rec.click(page.get_by_role("button", name=re.compile(r"Add track$")), pause=0.5)
-    rec.mark("track-added")
-    slot = _slot(page, "annotations")
-    expect(slot).to_be_visible()
-    rec.reveal(slot, anchor=0.3)
-    rec.focus(slot, zoom=2.1)
-    rec.choose(slot.get_by_label("Annotation set", exact=True), "annotations")
-    rec.choose(slot.get_by_label("Annotation placement", exact=True), "inside")
-    # Match the tutorial's track details quickly: width, labels, overflow,
-    # padding, and features on the axis. Ticks stay inside so their labels
-    # do not collide with the outer tRNA labels this map keeps.
-    rec.fast_forward(factor=3.0)
-    rec.type(slot.get_by_title("Width", exact=True), "24px")
-    rec.check(slot.get_by_label("Show annotation labels", exact=True))
-    rec.choose(slot.locator('select:has(option[value="compress"])'), "compress")
-    rec.type(slot.locator('input[type="number"]').last, "1")
-    features = _slot(page, "features")
-    rec.reveal(features, anchor=0.3)
-    rec.focus(features, zoom=2.1, duration=0.6)
-    rec.choose(features.locator("select").last, "split")
-    rec.normal_speed()
-    slot = _slot(page, "annotations")
-    rec.reveal(slot, anchor=0.4)
-    rec.mark("move-outward")
-    rec.focus(slot, zoom=2.1)
-    for _ in range(6):
-        order = _slot_order(page)
-        if order.index("annotations") == order.index("features") + 1:
-            break
-        # Each move lifts the row, so bring it back into view before clicking.
-        rec.reveal(slot, anchor=0.4)
-        rec.focus(slot, zoom=2.1, duration=0.5)
-        rec.mark("move-click")
-        rec.click(slot.get_by_title("Move outward", exact=True), pause=0.45)
-        if _slot_order(page) == order:
-            raise AssertionError(f"Move outward did not move the D-loop track: {order}")
-    order = _slot_order(page)
-    if order[:3] != ["features", "annotations", "ticks"]:
-        raise AssertionError(f"Unexpected track order: {order}")
-    rec.hold(0.4)
-
-
 def _inspect_export(svg: Path) -> dict:
     text = svg.read_text(encoding="utf-8")
     labels = set(re.findall(r">([^<>]{1,60})</(?:text|textPath)>", text))
@@ -629,13 +568,9 @@ def _inspect_export(svg: Path) -> dict:
         "functional_fills": sorted({color for _, color, _ in FUNCTIONAL_RULES} & fills),
         "legend": sorted({legend for *_, legend in FUNCTIONAL_RULES} & labels),
         "dloop": "D-loop" in labels,
-        # The D-loop must be drawn by the custom inner track, not the automatic lane.
-        "dloop_track": bool(re.search(
-            r'data-gbdraw-slot-id="annotations" data-gbdraw-slot-renderer="annotations"', text)),
     }
     if (set(report["gene_symbols"]) != genes or report["product_labels_present"]
-            or len(report["functional_fills"]) != 4 or len(report["legend"]) != 4 or not report["dloop"]
-            or not report["dloop_track"]):
+            or len(report["functional_fills"]) != 4 or len(report["legend"]) != 4 or not report["dloop"]):
         raise AssertionError(f"Exported SVG lacks the recorded edits: {report}")
     return report
 
