@@ -26,7 +26,7 @@ from flows.web_capture import (
     open_browser_capture,
     wait_for_app_shell,
 )
-from video.model import sha256
+from video.walkthrough_render import sha256
 from web_server import CaptureWebServer
 
 

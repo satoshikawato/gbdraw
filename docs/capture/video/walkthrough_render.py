@@ -8,6 +8,8 @@ revised from one recording.
 from __future__ import annotations
 
 import bisect
+import functools
+import hashlib
 import json
 import math
 import subprocess
@@ -17,7 +19,6 @@ from pathlib import Path
 from fontTools.ttLib import TTFont
 from PIL import Image, ImageDraw, ImageFilter, ImageFont
 
-from video.model import sha256
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 INTER = REPO_ROOT / "gbdraw/web/vendor/fonts/inter"
@@ -34,6 +35,14 @@ FINALE_CAPTION = (7, "Vector output stays sharp at any zoom", "The downloaded SV
 INK = (241, 245, 249)
 MUTED = (148, 170, 196)
 ACCENT = (59, 130, 246)
+
+
+def sha256(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as stream:
+        for block in iter(lambda: stream.read(1024 * 1024), b""):
+            digest.update(block)
+    return digest.hexdigest()
 
 
 def _ease(value: float) -> float:
@@ -237,6 +246,7 @@ def _cursor() -> tuple[Image.Image, tuple[int, int]]:
     return final, hotspot
 
 
+@functools.lru_cache(maxsize=8)
 def _white_logo(width: int) -> Image.Image:
     logo = Image.open(LOGO).convert("RGBA")
     alpha = logo.getchannel("A")

@@ -34,7 +34,7 @@ jobs:
           python -m playwright install --with-deps chromium
           python tools/prepare_browser_wheel.py
       - name: Record, render, and check
-        run: python docs/capture/build_video.py walkthrough --out build/videos/walkthrough/ci
+        run: python docs/capture/build_video.py build --out build/videos/walkthrough/ci
       - name: Upload walkthrough
         uses: actions/upload-artifact@v4
         with:

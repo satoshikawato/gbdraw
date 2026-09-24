@@ -1,69 +1,28 @@
-"""Input-boundary checks for the reproducible Meet gbdraw video."""
+"""Timing and edit contracts for the recorded gbdraw walkthrough videos."""
 
 from __future__ import annotations
 
-import json
+import re
 import sys
 from pathlib import Path
 
 import pytest
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'docs' / 'capture'))
-from video.model import contained_file, load_assets, load_storyboard, sha256  # noqa: E402
+CAPTURE_ROOT = Path(__file__).resolve().parents[1] / 'docs' / 'capture'
+sys.path.insert(0, str(CAPTURE_ROOT))
+from video.walkthrough_render import FPS, HIGHLIGHTS, Camera, TimeMap, _moments  # noqa: E402
 
 
-STORYBOARD = Path(__file__).resolve().parents[1] / 'docs/videos/meet-gbdraw/storyboard.json'
-
-
-def test_approved_storyboard_has_13_scenes_and_1140_frames() -> None:
-    rows = load_storyboard(STORYBOARD)['scenes']
-    assert len(rows) == 13
-    assert rows[-1]['start_frame'] + rows[-1]['frames'] == 1140
-
-
-@pytest.mark.parametrize('mutation', [
-    lambda data: data['scenes'][1].update(id='intro'),
-    lambda data: data['scenes'][0].update(frames=59),
-    lambda data: data['scenes'][2].update(assets=['unknown.figure']),
-])
-def test_storyboard_rejects_invalid_timeline(tmp_path: Path, mutation) -> None:
-    data = json.loads(STORYBOARD.read_text(encoding='utf-8'))
-    mutation(data)
-    path = tmp_path / 'storyboard.json'
-    path.write_text(json.dumps(data), encoding='utf-8')
-    with pytest.raises(ValueError):
-        load_storyboard(path)
-
-
-def test_asset_bundle_rejects_escape_and_changed_bytes(tmp_path: Path) -> None:
-    source = tmp_path / 'figure.png'
-    source.write_bytes(b'approved figure')
-    manifest = tmp_path / 'assets.json'
-    asset = {'kind': 'image', 'path': 'figure.png', 'sha256': sha256(source)}
-    manifest.write_text(json.dumps({'schema_version': 1, 'assets': {'human.circular': asset}}), encoding='utf-8')
-    load_assets(manifest, complete=False)
-    source.write_bytes(b'changed figure')
-    with pytest.raises(ValueError, match='checksum mismatch'):
-        load_assets(manifest, complete=False)
-    asset['path'] = '../figure.png'
-    manifest.write_text(json.dumps({'schema_version': 1, 'assets': {'human.circular': asset}}), encoding='utf-8')
-    with pytest.raises(ValueError, match='Unsafe relative path'):
-        load_assets(manifest, complete=False)
-
-
-def test_contained_file_rejects_symlink_escape(tmp_path: Path) -> None:
-    outside = tmp_path.parent / 'outside-video-asset.bin'
-    outside.write_bytes(b'outside')
-    root = tmp_path / 'bundle'
-    root.mkdir()
-    (root / 'link.bin').symlink_to(outside)
-    with pytest.raises(ValueError, match='escaped file'):
-        contained_file(root, 'link.bin')
+def test_highlights_cut_only_at_marks_the_journey_records() -> None:
+    source = (CAPTURE_ROOT / 'video' / 'walkthrough.py').read_text(encoding='utf-8')
+    marks = set(re.findall(r'rec\.mark\("([^"]+)"\)', source))
+    if 'rec.mark(f"rule-{index + 1}")' in source:
+        marks |= {f'rule-{index}' for index in range(1, 5)}
+    wanted = {name for first, _, last, _ in HIGHLIGHTS for name in (first, last)}
+    assert wanted <= marks, sorted(wanted - marks)
 
 
 def test_walkthrough_time_map_compresses_only_marked_waits() -> None:
-    from video.walkthrough_render import TimeMap
-
     events = [
         {'t': 2.0, 'kind': 'speed_start', 'factor': None, 'target': 1.0},
         {'t': 10.0, 'kind': 'speed_end'},
@@ -81,8 +40,6 @@ def test_walkthrough_time_map_compresses_only_marked_waits() -> None:
 
 
 def test_walkthrough_camera_eases_and_stays_inside_the_page() -> None:
-    from video.walkthrough_render import Camera, TimeMap
-
     events = [
         {'t': 0.0, 'kind': 'camera', 'cx': 960, 'cy': 540, 'zoom': 1.0, 'duration': 0},
         {'t': 1.0, 'kind': 'camera', 'cx': 10, 'cy': 10, 'zoom': 2.0, 'duration': 1.0},
@@ -95,8 +52,6 @@ def test_walkthrough_camera_eases_and_stays_inside_the_page() -> None:
 
 
 def test_highlight_moments_skim_waits_but_not_fast_forwards() -> None:
-    from video.walkthrough_render import FPS, TimeMap, _moments
-
     events = [
         {'t': 1.0, 'kind': 'speed_start', 'factor': None, 'target': 1.0},
         {'t': 5.0, 'kind': 'speed_end'},
