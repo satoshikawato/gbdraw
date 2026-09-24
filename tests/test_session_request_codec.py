@@ -62,7 +62,6 @@ from gbdraw.layout.similarity_alignment import (
     AlignmentDecisionStatus,
     AlignmentRecordDecision,
     AlignmentResolutionRationale,
-    SimilarityAlignmentMode,
     SimilarityAlignmentPlan,
 )
 from gbdraw.config.models import GbdrawConfig
@@ -346,7 +345,6 @@ def _similarity_alignment_plan() -> SimilarityAlignmentPlan:
         stable_feature_svg_id="stable-b",
     )
     return SimilarityAlignmentPlan(
-        mode=SimilarityAlignmentMode.POSITION,
         group_id="og-1",
         reference=reference,
         records=(
@@ -361,6 +359,7 @@ def _similarity_alignment_plan() -> SimilarityAlignmentPlan:
                 status=AlignmentDecisionStatus.ALIGNED,
                 rationale=AlignmentResolutionRationale.ONLY_USABLE_CANDIDATE,
                 anchor=target,
+                effective_reverse_complement=False,
             ),
         ),
     )
@@ -398,7 +397,12 @@ def test_schema8_round_trips_typed_similarity_alignment_and_translations(
         {"recordKey": "record-a", "x": 4.5, "y": -2.0},
         {"recordKey": "record-b", "x": -8.0, "y": 3.25},
     ]
-    assert encoded.payload["layout"]["similarityAlignment"]["groupId"] == "og-1"
+    alignment = encoded.payload["layout"]["similarityAlignment"]
+    assert alignment["schema"] == 2
+    assert "mode" not in alignment
+    assert alignment["groupId"] == "og-1"
+    assert alignment["records"][1]["orientationPolicy"] == "preserve"
+    assert alignment["records"][1]["effectiveReverseComplement"] is False
     assert "alignOrthogroupFeature" not in json.dumps(encoded.payload)
 
     decoded = decode_canonical_request(
@@ -447,6 +451,36 @@ def test_schema8_accepts_reordered_keyed_alignment_records(tmp_path: Path) -> No
                 anchor=None
             ),
             "invalid plan combination|inconsistent",
+        ),
+        (
+            lambda layout: layout["similarityAlignment"]["records"][1].pop(
+                "orientationPolicy"
+            ),
+            "orientationPolicy",
+        ),
+        (
+            lambda layout: layout["similarityAlignment"]["records"][1].update(
+                orientationPolicy="smart"
+            ),
+            "orientation policy",
+        ),
+        (
+            lambda layout: layout["similarityAlignment"]["records"][1].update(
+                effectiveReverseComplement=None
+            ),
+            "inconsistent",
+        ),
+        (
+            lambda layout: layout["similarityAlignment"].update(mode="position"),
+            "mode",
+        ),
+        (
+            lambda layout: layout["similarityAlignment"].update(schema=1),
+            "schema must be 2",
+        ),
+        (
+            lambda layout: layout["similarityAlignment"]["records"].pop(),
+            "coverage",
         ),
     ),
 )

@@ -156,6 +156,7 @@ export const materializeLegacySimilarityAlignment = ({
         status: 'reference',
         rationale: 'reference',
         anchor: reference,
+        orientationPolicy: 'preserve',
         effectiveReverseComplement: null
       };
     }
@@ -174,19 +175,22 @@ export const materializeLegacySimilarityAlignment = ({
       status: 'skipped',
       rationale: 'skipped_no_candidate',
       anchor: null,
+      orientationPolicy: 'preserve',
       effectiveReverseComplement: null
     };
+    const record = records.find((item) => item.recordKey === recordKey);
     return {
       recordKey,
       status: 'aligned',
       rationale: 'only_usable_candidate',
       anchor: anchorFor(member),
-      effectiveReverseComplement: null
+      orientationPolicy: 'preserve',
+      effectiveReverseComplement: Boolean(record?.presentation?.reverseComplement)
+        !== Boolean(record?.region?.reverseComplement)
     };
   });
   return {
-    schema: 1,
-    mode: 'position',
+    schema: 2,
     groupId: requiredText(group.id, 'legacy orthogroup id'),
     reference,
     records: decisions

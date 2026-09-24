@@ -198,10 +198,14 @@ example](command-line.md#rotate-a-plastome-and-place-a-multipart-feature) and th
 one finite base X/Y translation for each stable record key. The typed API rejects
 a group-ID string or an incomplete plan. The shared Python resolver applies
 explicit choice → sole usable member → sole distinct direct RBH → Select/Skip.
-It never chooses by representative status, score, position, or multi-hop paths.
-`SimilarityAlignmentMode.POSITION` changes target X only;
-`POSITION_AND_ORIENTATION` reverses a whole target record only for known
-opposite displayed strands. Unknown strand means position-only alignment.
+When multiple candidates remain, it returns a transient recommendation: the
+unique representative, or candidate 1 in stable identity order. This does not
+commit a plan; callers still submit an explicit Select or Skip. Selection never
+uses score, position, or multi-hop paths. Each selected target defaults to
+`AlignmentOrientationPolicy.PRESERVE`. An explicit `MATCH_REFERENCE` choice
+reverses the whole target only when both displayed anchor strands are known and
+opposite. The schema-2 plan stores each target's requested policy and effective
+source-relative reverse-complement result.
 
 This executable, in-memory contract example renders no public showcase file.
 In an integration, use actual group membership, current crop/display centers,
@@ -224,8 +228,7 @@ from gbdraw.api import (
     build_request_diagram, plan_request,
 )
 from gbdraw.layout.similarity_alignment import (
-    SimilarityAlignmentCandidate, SimilarityAlignmentMode,
-    resolve_similarity_alignment,
+    SimilarityAlignmentCandidate, resolve_similarity_alignment,
 )
 
 
@@ -255,7 +258,7 @@ plan = resolve_similarity_alignment(
         SimilarityAlignmentCandidate('example-group', anchors[0], 1, True, 16),
         SimilarityAlignmentCandidate('example-group', anchors[1], 1, True, 46),
     ),
-    edges=(), mode=SimilarityAlignmentMode.POSITION,
+    edges=(),
 ).require_plan()
 request = replace(base, layout=LinearMultiRecordOptions(record_translations=(
     LinearRecordTranslation('alpha'), LinearRecordTranslation('beta'),

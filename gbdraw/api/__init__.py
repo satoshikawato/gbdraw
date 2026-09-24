@@ -76,7 +76,7 @@ from gbdraw.layout.similarity_alignment import (
     AlignmentDecisionStatus,
     AlignmentRecordDecision,
     AlignmentResolutionRationale,
-    SimilarityAlignmentMode,
+    AlignmentOrientationPolicy,
     SimilarityAlignmentPlan,
 )
 from gbdraw.annotations import (
@@ -264,7 +264,7 @@ __all__ = [
     "AlignmentDecisionStatus",
     "AlignmentRecordDecision",
     "AlignmentResolutionRationale",
-    "SimilarityAlignmentMode",
+    "AlignmentOrientationPolicy",
     "SimilarityAlignmentPlan",
     "LinearDiagramOptions",
     "LinearDiagramMetadata",

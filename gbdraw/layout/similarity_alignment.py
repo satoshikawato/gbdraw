@@ -8,7 +8,7 @@ turning a completed plan into render geometry.
 from __future__ import annotations
 
 from collections.abc import Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from enum import Enum
 from math import isfinite
 from numbers import Real
@@ -16,12 +16,23 @@ from numbers import Real
 from gbdraw.exceptions import ValidationError
 
 
-SIMILARITY_ALIGNMENT_PLAN_SCHEMA = 1
+SIMILARITY_ALIGNMENT_PLAN_SCHEMA = 2
 
 
-class SimilarityAlignmentMode(str, Enum):
-    POSITION = "position"
-    POSITION_AND_ORIENTATION = "position_and_orientation"
+class AlignmentOrientationPolicy(str, Enum):
+    PRESERVE = "preserve"
+    MATCH_REFERENCE = "match_reference"
+
+
+class AlignmentOrientationEffect(str, Enum):
+    PRESERVE = "preserve"
+    REVERSE_WHOLE_RECORD = "reverse_whole_record"
+    PRESERVE_UNKNOWN_STRAND = "preserve_unknown_strand"
+
+
+class AlignmentRecommendationReason(str, Enum):
+    UNIQUE_REPRESENTATIVE = "unique_representative"
+    DETERMINISTIC_CANDIDATE_1 = "deterministic_candidate_1"
 
 
 class AlignmentDecisionStatus(str, Enum):
@@ -155,6 +166,9 @@ class SimilarityAlignmentCandidate:
     effective_reverse_complement: bool = False
     representative: bool = False
     role: str = ""
+    source_start: int | None = None
+    source_end: int | None = None
+    display_name: str | None = None
 
     def __post_init__(self) -> None:
         object.__setattr__(
@@ -193,6 +207,20 @@ class SimilarityAlignmentCandidate:
         if not isinstance(self.role, str) or "\0" in self.role:
             raise ValidationError("Candidate role must be text without NUL.")
         object.__setattr__(self, "role", self.role.strip())
+        if (self.source_start is None) != (self.source_end is None):
+            raise ValidationError("Candidate source coordinates must both be supplied or omitted.")
+        if self.source_start is not None and (
+            isinstance(self.source_start, bool)
+            or not isinstance(self.source_start, int)
+            or self.source_start < 0
+            or isinstance(self.source_end, bool)
+            or not isinstance(self.source_end, int)
+            or self.source_end < self.source_start
+        ):
+            raise ValidationError("Candidate source coordinates must be ordered non-negative integers.")
+        object.__setattr__(
+            self, "display_name", _optional_text(self.display_name, "display_name")
+        )
 
     def is_usable_for(self, group_id: str) -> bool:
         return (
@@ -233,10 +261,18 @@ class AlignmentRecordChoice:
     record_key: str
     kind: AlignmentChoiceKind
     anchor: AlignmentAnchorIdentity | None = None
+    orientation_policy: AlignmentOrientationPolicy = AlignmentOrientationPolicy.PRESERVE
 
     def __post_init__(self) -> None:
         object.__setattr__(
             self, "record_key", _required_text(self.record_key, "record_key")
+        )
+        object.__setattr__(
+            self,
+            "orientation_policy",
+            _enum_value(
+                self.orientation_policy, AlignmentOrientationPolicy, "orientation policy"
+            ),
         )
         object.__setattr__(
             self,
@@ -252,6 +288,8 @@ class AlignmentRecordChoice:
                 )
         elif self.anchor is not None:
             raise ValidationError("A Skip choice must not contain an anchor.")
+        elif self.orientation_policy is not AlignmentOrientationPolicy.PRESERVE:
+            raise ValidationError("A Skip choice must preserve orientation.")
 
 
 @dataclass(frozen=True)
@@ -262,6 +300,7 @@ class AlignmentRecordDecision:
     status: AlignmentDecisionStatus
     rationale: AlignmentResolutionRationale
     anchor: AlignmentAnchorIdentity | None = None
+    orientation_policy: AlignmentOrientationPolicy = AlignmentOrientationPolicy.PRESERVE
     effective_reverse_complement: bool | None = None
 
     def __post_init__(self) -> None:
@@ -278,6 +317,13 @@ class AlignmentRecordDecision:
             "rationale",
             _enum_value(
                 self.rationale, AlignmentResolutionRationale, "decision rationale"
+            ),
+        )
+        object.__setattr__(
+            self,
+            "orientation_policy",
+            _enum_value(
+                self.orientation_policy, AlignmentOrientationPolicy, "orientation policy"
             ),
         )
         if self.effective_reverse_complement is not None and not isinstance(
@@ -303,24 +349,36 @@ class AlignmentRecordDecision:
                 and self.anchor.record_key == self.record_key
                 and self.rationale is AlignmentResolutionRationale.REFERENCE
                 and self.effective_reverse_complement is None
+                and self.orientation_policy is AlignmentOrientationPolicy.PRESERVE
             )
         elif self.status is AlignmentDecisionStatus.ALIGNED:
             valid = (
                 isinstance(self.anchor, AlignmentAnchorIdentity)
                 and self.anchor.record_key == self.record_key
                 and self.rationale in aligned_rationales
+                and isinstance(self.effective_reverse_complement, bool)
             )
         else:
             valid = (
                 self.anchor is None
                 and self.rationale in skipped_rationales
                 and self.effective_reverse_complement is None
+                and self.orientation_policy is AlignmentOrientationPolicy.PRESERVE
             )
         if not valid:
             raise ValidationError(
                 "Alignment decision status, rationale, anchor, and orientation "
-                "override are inconsistent."
+                "policy/effect are inconsistent."
             )
+
+    @property
+    def review_reason(self) -> AlignmentResolutionRationale | None:
+        if self.rationale in (
+            AlignmentResolutionRationale.ONLY_USABLE_CANDIDATE,
+            AlignmentResolutionRationale.UNIQUE_DIRECT_RBH,
+        ):
+            return self.rationale
+        return None
 
 
 @dataclass(frozen=True)
@@ -330,6 +388,8 @@ class AmbiguousAlignmentRecord:
     record_key: str
     candidates: tuple[SimilarityAlignmentCandidate, ...]
     direct_rbh_candidates: tuple[AlignmentAnchorIdentity, ...] = ()
+    recommended_anchor: AlignmentAnchorIdentity = field(init=False)
+    recommendation_reason: AlignmentRecommendationReason = field(init=False)
 
     def __post_init__(self) -> None:
         object.__setattr__(
@@ -382,13 +442,51 @@ class AmbiguousAlignmentRecord:
             "direct_rbh_candidates",
             tuple(sorted(direct, key=lambda item: item.sort_key)),
         )
+        representatives = tuple(item for item in candidates if item.representative)
+        if len(representatives) == 1:
+            recommended = representatives[0]
+            reason = AlignmentRecommendationReason.UNIQUE_REPRESENTATIVE
+        else:
+            recommended = candidates[0]
+            reason = AlignmentRecommendationReason.DETERMINISTIC_CANDIDATE_1
+        object.__setattr__(self, "recommended_anchor", recommended.anchor)
+        object.__setattr__(self, "recommendation_reason", reason)
+
+
+@dataclass(frozen=True)
+class AlignmentReviewCandidate:
+    """Python-owned facts for one candidate in a local review row."""
+
+    candidate: SimilarityAlignmentCandidate
+    usable: bool
+    direct_evidence: tuple[str, ...]
+    match_reference_effective_reverse_complement: bool
+    match_reference_effect: AlignmentOrientationEffect
+
+
+@dataclass(frozen=True)
+class AlignmentReviewRow:
+    record_key: str
+    candidates: tuple[AlignmentReviewCandidate, ...]
+
+    def __post_init__(self) -> None:
+        object.__setattr__(
+            self, "record_key", _required_text(self.record_key, "record_key")
+        )
+        rows = tuple(self.candidates)
+        if any(
+            not isinstance(row, AlignmentReviewCandidate)
+            or row.candidate.anchor.record_key != self.record_key
+            for row in rows
+        ):
+            raise ValidationError("Review candidates must belong to their record.")
+        object.__setattr__(self, "candidates", rows)
 
 
 @dataclass(frozen=True)
 class SimilarityAlignmentPlan:
     """Immutable, fully resolved Similarity Group alignment intent."""
 
-    mode: SimilarityAlignmentMode
     group_id: str
     reference: AlignmentAnchorIdentity
     records: tuple[AlignmentRecordDecision, ...]
@@ -403,14 +501,7 @@ class SimilarityAlignmentPlan:
             raise ValidationError(
                 f"Similarity alignment plan schema must be {SIMILARITY_ALIGNMENT_PLAN_SCHEMA}."
             )
-        object.__setattr__(
-            self,
-            "mode",
-            _enum_value(self.mode, SimilarityAlignmentMode, "alignment mode"),
-        )
-        object.__setattr__(
-            self, "group_id", _required_text(self.group_id, "group_id")
-        )
+        object.__setattr__(self, "group_id", _required_text(self.group_id, "group_id"))
         if not isinstance(self.reference, AlignmentAnchorIdentity):
             raise ValidationError("Plan reference must be AlignmentAnchorIdentity.")
         records = tuple(self.records)
@@ -436,12 +527,6 @@ class SimilarityAlignmentPlan:
             raise ValidationError(
                 "Plan reference must have exactly one matching reference decision."
             )
-        if self.mode is SimilarityAlignmentMode.POSITION and any(
-            record.effective_reverse_complement is not None for record in records
-        ):
-            raise ValidationError(
-                "Position-only alignment cannot override record orientation."
-            )
         object.__setattr__(self, "records", records)
 
     def validate_record_coverage(self, record_keys: Sequence[str]) -> None:
@@ -461,81 +546,68 @@ AlignmentResolutionRecord = AlignmentRecordDecision | AmbiguousAlignmentRecord
 
 @dataclass(frozen=True)
 class SimilarityAlignmentResolution:
-    """Complete per-record resolver output, possibly awaiting explicit choices."""
+    """Per-record outcome and review facts, possibly awaiting explicit choices."""
 
-    mode: SimilarityAlignmentMode
     group_id: str
     reference: AlignmentAnchorIdentity
+    reference_candidate: SimilarityAlignmentCandidate
     records: tuple[AlignmentResolutionRecord, ...]
+    review_rows: tuple[AlignmentReviewRow, ...]
 
     def __post_init__(self) -> None:
-        object.__setattr__(
-            self,
-            "mode",
-            _enum_value(self.mode, SimilarityAlignmentMode, "alignment mode"),
-        )
-        object.__setattr__(
-            self, "group_id", _required_text(self.group_id, "group_id")
-        )
+        object.__setattr__(self, "group_id", _required_text(self.group_id, "group_id"))
         if not isinstance(self.reference, AlignmentAnchorIdentity):
-            raise ValidationError(
-                "Resolution reference must be AlignmentAnchorIdentity."
-            )
+            raise ValidationError("Resolution reference must be AlignmentAnchorIdentity.")
+        if (
+            not isinstance(self.reference_candidate, SimilarityAlignmentCandidate)
+            or self.reference_candidate.anchor != self.reference
+            or not self.reference_candidate.is_usable_for(self.group_id)
+        ):
+            raise ValidationError("Resolution reference facts are inconsistent.")
         records = tuple(self.records)
         if not records or any(
             not isinstance(record, (AlignmentRecordDecision, AmbiguousAlignmentRecord))
             for record in records
         ):
-            raise ValidationError(
-                "Resolution records must contain decisions or ambiguities."
-            )
+            raise ValidationError("Resolution records must contain decisions or ambiguities.")
         keys = [record.record_key for record in records]
         if len(set(keys)) != len(keys):
             raise ValidationError("Resolution contains duplicate record outcomes.")
         references = [
-            record
-            for record in records
+            record for record in records
             if isinstance(record, AlignmentRecordDecision)
             and record.status is AlignmentDecisionStatus.REFERENCE
         ]
         if len(references) != 1 or references[0].anchor != self.reference:
-            raise ValidationError(
-                "Resolution requires exactly one matching reference outcome."
-            )
+            raise ValidationError("Resolution requires exactly one matching reference outcome.")
+        rows = tuple(self.review_rows)
+        if (
+            len(rows) != len(records)
+            or any(not isinstance(row, AlignmentReviewRow) for row in rows)
+            or tuple(row.record_key for row in rows) != tuple(keys)
+            or any(row.candidates for row in rows if row.record_key == self.reference.record_key)
+        ):
+            raise ValidationError("Resolution review rows must cover each record in order.")
         if any(
             isinstance(record, AmbiguousAlignmentRecord)
-            and any(
-                candidate.group_id != self.group_id
-                for candidate in record.candidates
-            )
+            and any(candidate.group_id != self.group_id for candidate in record.candidates)
             for record in records
         ):
-            raise ValidationError(
-                "Ambiguous candidates must belong to the selected group."
-            )
-        if self.mode is SimilarityAlignmentMode.POSITION and any(
-            isinstance(record, AlignmentRecordDecision)
-            and record.effective_reverse_complement is not None
-            for record in records
-        ):
-            raise ValidationError(
-                "Position-only alignment cannot override record orientation."
-            )
+            raise ValidationError("Ambiguous candidates must belong to the selected group.")
         object.__setattr__(self, "records", records)
+        object.__setattr__(self, "review_rows", rows)
 
     @property
     def ambiguities(self) -> tuple[AmbiguousAlignmentRecord, ...]:
         return tuple(
-            record
-            for record in self.records
+            record for record in self.records
             if isinstance(record, AmbiguousAlignmentRecord)
         )
 
     @property
     def decisions(self) -> tuple[AlignmentRecordDecision, ...]:
         return tuple(
-            record
-            for record in self.records
+            record for record in self.records
             if isinstance(record, AlignmentRecordDecision)
         )
 
@@ -544,7 +616,6 @@ class SimilarityAlignmentResolution:
         if self.ambiguities:
             return None
         return SimilarityAlignmentPlan(
-            mode=self.mode,
             group_id=self.group_id,
             reference=self.reference,
             records=self.decisions,
@@ -561,36 +632,36 @@ class SimilarityAlignmentResolution:
         return plan
 
 
-def _orientation_override(
-    mode: SimilarityAlignmentMode,
+def _orientation_result(
+    policy: AlignmentOrientationPolicy,
     reference: SimilarityAlignmentCandidate,
     target: SimilarityAlignmentCandidate,
-) -> bool | None:
-    if (
-        mode is SimilarityAlignmentMode.POSITION_AND_ORIENTATION
-        and reference.displayed_strand is not None
-        and target.displayed_strand is not None
-        and reference.displayed_strand != target.displayed_strand
-    ):
-        return not target.effective_reverse_complement
-    return None
+) -> tuple[bool, AlignmentOrientationEffect]:
+    base = target.effective_reverse_complement
+    if policy is AlignmentOrientationPolicy.PRESERVE:
+        return base, AlignmentOrientationEffect.PRESERVE
+    if reference.displayed_strand is None or target.displayed_strand is None:
+        return base, AlignmentOrientationEffect.PRESERVE_UNKNOWN_STRAND
+    if reference.displayed_strand != target.displayed_strand:
+        return not base, AlignmentOrientationEffect.REVERSE_WHOLE_RECORD
+    return base, AlignmentOrientationEffect.PRESERVE
 
 
 def _aligned_decision(
     candidate: SimilarityAlignmentCandidate,
     rationale: AlignmentResolutionRationale,
     *,
-    mode: SimilarityAlignmentMode,
+    policy: AlignmentOrientationPolicy,
     reference: SimilarityAlignmentCandidate,
 ) -> AlignmentRecordDecision:
+    effective, _effect = _orientation_result(policy, reference, candidate)
     return AlignmentRecordDecision(
         record_key=candidate.anchor.record_key,
         status=AlignmentDecisionStatus.ALIGNED,
         rationale=rationale,
         anchor=candidate.anchor,
-        effective_reverse_complement=_orientation_override(
-            mode, reference, candidate
-        ),
+        orientation_policy=policy,
+        effective_reverse_complement=effective,
     )
 
 
@@ -662,6 +733,64 @@ def _direct_rbh_candidates(
     )
 
 
+def _direct_evidence_kinds(
+    *,
+    group_id: str,
+    reference: AlignmentAnchorIdentity,
+    candidate: AlignmentAnchorIdentity,
+    edges: tuple[AlignmentEvidenceEdge, ...],
+) -> tuple[str, ...]:
+    return tuple(
+        sorted(
+            {
+                edge.edge_kind
+                for edge in edges
+                if edge.group_id == group_id
+                and (
+                    (
+                        edge.query.canonical_key == reference.canonical_key
+                        and edge.subject.canonical_key == candidate.canonical_key
+                    )
+                    or (
+                        edge.subject.canonical_key == reference.canonical_key
+                        and edge.query.canonical_key == candidate.canonical_key
+                    )
+                )
+            }
+        )
+    )
+
+
+def _review_row(
+    *,
+    record_key: str,
+    group_id: str,
+    reference: SimilarityAlignmentCandidate,
+    candidates: tuple[SimilarityAlignmentCandidate, ...],
+    edges: tuple[AlignmentEvidenceEdge, ...],
+) -> AlignmentReviewRow:
+    rows = []
+    for candidate in candidates:
+        matched, effect = _orientation_result(
+            AlignmentOrientationPolicy.MATCH_REFERENCE, reference, candidate
+        )
+        rows.append(
+            AlignmentReviewCandidate(
+                candidate=candidate,
+                usable=candidate.is_usable_for(group_id),
+                direct_evidence=_direct_evidence_kinds(
+                    group_id=group_id,
+                    reference=reference.anchor,
+                    candidate=candidate.anchor,
+                    edges=edges,
+                ),
+                match_reference_effective_reverse_complement=matched,
+                match_reference_effect=effect,
+            )
+        )
+    return AlignmentReviewRow(record_key=record_key, candidates=tuple(rows))
+
+
 def resolve_similarity_alignment(
     *,
     record_keys: Sequence[str],
@@ -670,7 +799,6 @@ def resolve_similarity_alignment(
     candidates: Sequence[SimilarityAlignmentCandidate],
     edges: Sequence[AlignmentEvidenceEdge] = (),
     choices: Sequence[AlignmentRecordChoice] = (),
-    mode: SimilarityAlignmentMode = SimilarityAlignmentMode.POSITION,
 ) -> SimilarityAlignmentResolution:
     """Resolve one exact anchor decision for every displayed record.
 
@@ -681,9 +809,6 @@ def resolve_similarity_alignment(
     order = _record_order(record_keys)
     known_records = set(order)
     resolved_group_id = _required_text(group_id, "group_id")
-    resolved_mode = _enum_value(
-        mode, SimilarityAlignmentMode, "alignment mode"
-    )
     if not isinstance(reference, AlignmentAnchorIdentity):
         raise ValidationError("reference must be AlignmentAnchorIdentity.")
     if reference.record_key not in known_records:
@@ -771,8 +896,10 @@ def resolve_similarity_alignment(
         choice_by_record[choice.record_key] = choice
 
     records: list[AlignmentResolutionRecord] = []
+    review_rows: list[AlignmentReviewRow] = []
     for record_key in order:
         if record_key == reference_candidate.anchor.record_key:
+            review_rows.append(AlignmentReviewRow(record_key, ()))
             records.append(
                 AlignmentRecordDecision(
                     record_key=record_key,
@@ -792,6 +919,15 @@ def resolve_similarity_alignment(
                     and candidate.group_id == resolved_group_id
                 ),
                 key=lambda item: item.anchor.sort_key,
+            )
+        )
+        review_rows.append(
+            _review_row(
+                record_key=record_key,
+                group_id=resolved_group_id,
+                reference=reference_candidate,
+                candidates=group_candidates,
+                edges=edge_values,
             )
         )
         usable = tuple(
@@ -827,7 +963,7 @@ def resolve_similarity_alignment(
                 _aligned_decision(
                     selected,
                     AlignmentResolutionRationale.USER_SELECTED,
-                    mode=resolved_mode,
+                    policy=choice.orientation_policy,
                     reference=reference_candidate,
                 )
             )
@@ -851,7 +987,7 @@ def resolve_similarity_alignment(
                 _aligned_decision(
                     usable[0],
                     AlignmentResolutionRationale.ONLY_USABLE_CANDIDATE,
-                    mode=resolved_mode,
+                    policy=AlignmentOrientationPolicy.PRESERVE,
                     reference=reference_candidate,
                 )
             )
@@ -868,7 +1004,7 @@ def resolve_similarity_alignment(
                 _aligned_decision(
                     direct_rbh[0],
                     AlignmentResolutionRationale.UNIQUE_DIRECT_RBH,
-                    mode=resolved_mode,
+                    policy=AlignmentOrientationPolicy.PRESERVE,
                     reference=reference_candidate,
                 )
             )
@@ -884,10 +1020,11 @@ def resolve_similarity_alignment(
         )
 
     resolution = SimilarityAlignmentResolution(
-        mode=resolved_mode,
         group_id=resolved_group_id,
         reference=reference_candidate.anchor,
+        reference_candidate=reference_candidate,
         records=tuple(records),
+        review_rows=tuple(review_rows),
     )
     actual_order = tuple(record.record_key for record in resolution.records)
     if actual_order != order:
@@ -902,11 +1039,15 @@ __all__ = [
     "AlignmentEvidenceEdge",
     "AlignmentRecordChoice",
     "AlignmentRecordDecision",
+    "AlignmentOrientationEffect",
+    "AlignmentOrientationPolicy",
+    "AlignmentRecommendationReason",
     "AlignmentResolutionRationale",
+    "AlignmentReviewCandidate",
+    "AlignmentReviewRow",
     "AmbiguousAlignmentRecord",
     "SIMILARITY_ALIGNMENT_PLAN_SCHEMA",
     "SimilarityAlignmentCandidate",
-    "SimilarityAlignmentMode",
     "SimilarityAlignmentPlan",
     "SimilarityAlignmentResolution",
     "resolve_similarity_alignment",

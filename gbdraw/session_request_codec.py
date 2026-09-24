@@ -96,7 +96,6 @@ from .layout.similarity_alignment import (
     AlignmentDecisionStatus,
     AlignmentRecordDecision,
     AlignmentResolutionRationale,
-    SimilarityAlignmentMode,
     SimilarityAlignmentPlan,
 )
 
@@ -1086,7 +1085,6 @@ def _encode_similarity_alignment_plan(
         return None
     return {
         "schema": plan.schema,
-        "mode": plan.mode.value,
         "groupId": plan.group_id,
         "reference": _encode_alignment_anchor(plan.reference),
         "records": [
@@ -1099,6 +1097,7 @@ def _encode_similarity_alignment_plan(
                     if decision.anchor is not None
                     else None
                 ),
+                "orientationPolicy": decision.orientation_policy.value,
                 "effectiveReverseComplement": decision.effective_reverse_complement,
             }
             for decision in plan.records
@@ -1139,7 +1138,7 @@ def _decode_similarity_alignment_plan(
     payload = _object(
         value,
         path=path,
-        required={"schema", "mode", "groupId", "reference", "records"},
+        required={"schema", "groupId", "reference", "records"},
     )
     raw_records = _array(payload["records"], path=f"{path}.records")
     decisions: list[AlignmentRecordDecision] = []
@@ -1153,6 +1152,7 @@ def _decode_similarity_alignment_plan(
                 "status",
                 "rationale",
                 "anchor",
+                "orientationPolicy",
                 "effectiveReverseComplement",
             },
         )
@@ -1169,6 +1169,7 @@ def _decode_similarity_alignment_plan(
                     if decision["anchor"] is not None
                     else None
                 ),
+                orientation_policy=decision["orientationPolicy"],
                 effective_reverse_complement=decision[
                     "effectiveReverseComplement"
                 ],
@@ -1176,7 +1177,6 @@ def _decode_similarity_alignment_plan(
         )
     return SimilarityAlignmentPlan(
         schema=payload["schema"],
-        mode=SimilarityAlignmentMode(payload["mode"]),
         group_id=payload["groupId"],
         reference=_decode_alignment_anchor(
             payload["reference"],

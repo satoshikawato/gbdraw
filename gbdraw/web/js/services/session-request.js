@@ -195,12 +195,9 @@ const canonicalAlignmentAnchor = (value, path) => {
 const canonicalSimilarityAlignment = (value, recordKeys, path) => {
   if (value === null) return null;
   const plan = requireExactCanonicalKeys(value, [
-    'schema', 'mode', 'groupId', 'reference', 'records'
+    'schema', 'groupId', 'reference', 'records'
   ], path);
-  if (plan.schema !== 1) throw new Error(`${path}.schema must be 1.`);
-  if (!['position', 'position_and_orientation'].includes(plan.mode)) {
-    throw new Error(`${path}.mode is unsupported.`);
-  }
+  if (plan.schema !== 2) throw new Error(`${path}.schema must be 2.`);
   if (!Array.isArray(plan.records) || plan.records.length === 0) {
     throw new Error(`${path}.records must be a non-empty array.`);
   }
@@ -208,7 +205,8 @@ const canonicalSimilarityAlignment = (value, recordKeys, path) => {
   const records = plan.records.map((raw, index) => {
     const decisionPath = `${path}.records[${index}]`;
     const decision = requireExactCanonicalKeys(raw, [
-      'recordKey', 'status', 'rationale', 'anchor', 'effectiveReverseComplement'
+      'recordKey', 'status', 'rationale', 'anchor', 'orientationPolicy',
+      'effectiveReverseComplement'
     ], decisionPath);
     const recordKey = requireCanonicalText(decision.recordKey, `${decisionPath}.recordKey`);
     const anchor = decision.anchor === null
@@ -216,6 +214,9 @@ const canonicalSimilarityAlignment = (value, recordKeys, path) => {
       : canonicalAlignmentAnchor(decision.anchor, `${decisionPath}.anchor`);
     if (anchor && anchor.recordKey !== recordKey) {
       throw new Error(`${decisionPath}.anchor belongs to another record.`);
+    }
+    if (!['preserve', 'match_reference'].includes(decision.orientationPolicy)) {
+      throw new Error(`${decisionPath}.orientationPolicy is unsupported.`);
     }
     if (decision.effectiveReverseComplement !== null && typeof decision.effectiveReverseComplement !== 'boolean') {
       throw new Error(`${decisionPath}.effectiveReverseComplement must be boolean or null.`);
@@ -228,11 +229,14 @@ const canonicalSimilarityAlignment = (value, recordKeys, path) => {
     ]);
     const valid = decision.status === 'reference'
       ? anchor !== null && decision.rationale === 'reference' &&
+        decision.orientationPolicy === 'preserve' &&
         decision.effectiveReverseComplement === null
       : decision.status === 'aligned'
-        ? anchor !== null && alignedRationales.has(decision.rationale)
+        ? anchor !== null && alignedRationales.has(decision.rationale) &&
+          typeof decision.effectiveReverseComplement === 'boolean'
         : decision.status === 'skipped'
           ? anchor === null && skippedRationales.has(decision.rationale) &&
+            decision.orientationPolicy === 'preserve' &&
             decision.effectiveReverseComplement === null
           : false;
     if (!valid) throw new Error(`${decisionPath} contains an invalid plan combination.`);
@@ -241,6 +245,7 @@ const canonicalSimilarityAlignment = (value, recordKeys, path) => {
       status: decision.status,
       rationale: decision.rationale,
       anchor,
+      orientationPolicy: decision.orientationPolicy,
       effectiveReverseComplement: decision.effectiveReverseComplement
     };
   });
@@ -253,17 +258,13 @@ const canonicalSimilarityAlignment = (value, recordKeys, path) => {
       JSON.stringify(references[0].anchor) !== JSON.stringify(reference)) {
     throw new Error(`${path}.reference must match exactly one reference decision.`);
   }
-  if (plan.mode === 'position' && records.some(
-    (decision) => decision.effectiveReverseComplement !== null
-  )) throw new Error(`${path} position mode cannot override orientation.`);
   const expected = new Set(recordKeys);
   const actual = new Set(decisionKeys);
   if (expected.size !== actual.size || [...expected].some((key) => !actual.has(key))) {
     throw new Error(`${path}.records does not cover the displayed record keys.`);
   }
   return {
-    schema: 1,
-    mode: plan.mode,
+    schema: 2,
     groupId: requireCanonicalText(plan.groupId, `${path}.groupId`),
     reference,
     records
