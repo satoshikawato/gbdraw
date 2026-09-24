@@ -12,17 +12,22 @@ import functools
 import hashlib
 import json
 import math
+import os
+import re
 import subprocess
 from dataclasses import dataclass
 from pathlib import Path
 
-from fontTools.ttLib import TTFont
+from fontTools.ttLib import TTCollection, TTFont
 from PIL import Image, ImageDraw, ImageFilter, ImageFont
 
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 INTER = REPO_ROOT / "gbdraw/web/vendor/fonts/inter"
 LOGO = REPO_ROOT / "gbdraw/web/assets/gbdraw-logo-title.png"
+TRANSLATIONS = REPO_ROOT / "docs/videos/meet-gbdraw"
+NOTO_CJK = Path("/usr/share/fonts/opentype/noto")
+FONT_CACHE = Path.home() / ".cache/gbdraw-video-fonts"
 
 FPS = 30
 RADIUS = 18
@@ -30,6 +35,10 @@ INTRO_SECONDS = 3.4
 OUTRO_SECONDS = 5.0
 FADE_SECONDS = 0.5
 FINALE_CAPTION = (7, "Vector output stays sharp at any zoom", "The downloaded SVG, magnified 7×")
+MONTAGE_CAPTION = (None, "Genome diagrams for microbes and organelles",
+                   "Highlights from a live session in the gbdraw web app, sped up")
+INTRO_LINES = ("From a GenBank file to a publication-ready genome map",
+               "A live session in the gbdraw web app. Waits are fast-forwarded and marked.")
 INK = (241, 245, 249)
 MUTED = (148, 170, 196)
 ACCENT = (59, 130, 246)
@@ -74,7 +83,7 @@ def _ease(value: float) -> float:
     return value * value * (3 - 2 * value)
 
 
-def _fonts(work: Path) -> dict[str, Path]:
+def _fonts(work: Path) -> dict[int, tuple[Path, int]]:
     """Convert the app's vendored Inter WOFF2 files once per render."""
 
     fonts = {}
@@ -84,26 +93,93 @@ def _fonts(work: Path) -> dict[str, Path]:
             font = TTFont(INTER / f"inter-latin-{weight}-normal.woff2")
             font.flavor = None
             font.save(target)
-        fonts[weight] = target
+        fonts[weight] = (target, 0)
     return fonts
 
 
+def _cjk_fonts() -> dict[int, tuple[Path, int]]:
+    """Find Noto Sans SC: a font directory, the user cache, or fonts-noto-cjk."""
+
+    roots = [Path(os.environ["GBDRAW_VIDEO_FONT_DIR"])] if os.environ.get("GBDRAW_VIDEO_FONT_DIR") else []
+    faces: dict[int, tuple[Path, int]] = {}
+    for root in roots + [FONT_CACHE]:
+        for weight, name in ((400, "Regular"), (500, "Medium"), (700, "Bold")):
+            path = root / f"NotoSansSC-{name}.otf"
+            if path.is_file():
+                faces[weight] = (path, 0)
+        if 400 in faces:
+            break
+    else:
+        for weight, name in ((400, "Regular"), (500, "Medium"), (700, "Bold")):
+            path = NOTO_CJK / f"NotoSansCJK-{name}.ttc"
+            if path.is_file():
+                collection = TTCollection(str(path), lazy=True)
+                index = next(i for i, font in enumerate(collection.fonts)
+                             if "SC" in font["name"].getDebugName(1))
+                faces[weight] = (path, index)
+    if 400 not in faces:
+        raise FileNotFoundError(
+            "Chinese captions need Noto Sans SC: install fonts-noto-cjk, or put "
+            "NotoSansSC-Regular/Medium/Bold.otf in GBDRAW_VIDEO_FONT_DIR or ~/.cache/gbdraw-video-fonts")
+    faces.setdefault(500, faces[400])
+    faces.setdefault(700, faces[500])
+    faces[600] = faces[700]
+    return faces
+
+
 class Type:
-    def __init__(self, fonts: dict[str, Path]) -> None:
+    def __init__(self, fonts: dict[int, tuple[Path, int]]) -> None:
         self._fonts = fonts
         self._cache: dict = {}
-        self._cmap = set(TTFont(fonts[400]).getBestCmap())
+        path, index = fonts[400]
+        self._cmap = set(TTFont(str(path), fontNumber=index, lazy=True).getBestCmap())
+        self.name = path.name
 
     def font(self, weight: int, size: int) -> ImageFont.FreeTypeFont:
         key = (weight, size)
         if key not in self._cache:
-            self._cache[key] = ImageFont.truetype(str(self._fonts[weight]), size)
+            path, index = self._fonts[weight]
+            self._cache[key] = ImageFont.truetype(str(path), size, index=index)
         return self._cache[key]
 
     def check(self, text: str) -> None:
         missing = {char for char in text if ord(char) not in self._cmap and char not in "\n"}
         if missing:
-            raise ValueError(f"Inter latin subset lacks glyphs {sorted(missing)!r} in {text!r}")
+            raise ValueError(f"{self.name} lacks glyphs {sorted(missing)!r} in {text!r}")
+
+
+class Language:
+    """On-screen text for one language; English is the recorded source text."""
+
+    def __init__(self, code: str) -> None:
+        self.code = code
+        self.strings: dict[str, str] = {}
+        self.patterns: list[tuple[re.Pattern, str]] = []
+        if code != "en":
+            data = json.loads((TRANSLATIONS / f"captions.{code}.json").read_text(encoding="utf-8"))
+            self.strings = data["strings"]
+            self.patterns = [(re.compile(row["match"]), row["replace"]) for row in data["patterns"]]
+
+    @property
+    def suffix(self) -> str:
+        return "" if self.code == "en" else f".{self.code}"
+
+    def type(self, work: Path) -> Type:
+        return Type(_fonts(work) if self.code == "en" else _cjk_fonts())
+
+    def __call__(self, text: str) -> str:
+        if self.code == "en" or not text:
+            return text
+        if text in self.strings:
+            return self.strings[text]
+        for pattern, template in self.patterns:
+            match = pattern.match(text)
+            if match:
+                return template.format(**match.groupdict())
+        raise KeyError(f"No {self.code} text for {text!r}; add it to captions.{self.code}.json")
+
+
+LANGUAGES = ("en", "zh-Hans")
 
 
 # -- timeline ---------------------------------------------------------------
@@ -303,9 +379,10 @@ def _white_logo(width: int) -> Image.Image:
 class Overlay:
     """Pre-rendered captions, toasts, and badges, blended per frame."""
 
-    def __init__(self, type_: Type, layout: Layout) -> None:
+    def __init__(self, type_: Type, layout: Layout, lang: Language) -> None:
         self.type = type_
         self.layout = layout
+        self.lang = lang
         self._cache: dict = {}
         self.brand = self._brand()
 
@@ -329,16 +406,23 @@ class Overlay:
         draw.text(((logo.width - text_width) / 2 + 2, logo.height + 6), text, font=font, fill=MUTED + (255,))
         return layer
 
+    # Latin runs wrap as words; any other character (for example CJK) may
+    # break on its own, except closing punctuation, which stays on its line.
+    _TOKENS = re.compile(r"[A-Za-z0-9][\w.,:/()%+\-–'’]*\s*|\s+|.")
+    _NO_LINE_START = set("，。、；：？！）」』》〉”’·…")
+
     def _wrap(self, text: str, font: ImageFont.FreeTypeFont, width: float) -> list[str]:
         draw = ImageDraw.Draw(Image.new("RGBA", (1, 1)))
         lines, line = [], ""
-        for word in text.split():
-            trial = f"{line} {word}".strip()
-            if line and draw.textlength(trial, font=font) > width:
-                lines.append(line)
-                line = word
+        for token in self._TOKENS.findall(text):
+            trial = line + token
+            if (line.strip() and token.strip() and token not in self._NO_LINE_START
+                    and draw.textlength(trial.rstrip(), font=font) > width):
+                lines.append(line.rstrip())
+                line = token.lstrip()
             else:
                 line = trial
+        line = line.rstrip()
         return lines + [line] if line else lines
 
     def caption(self, step: int | None, title: str, subtitle: str) -> Image.Image:
@@ -417,7 +501,7 @@ class Overlay:
         return self._cache[key]
 
     def badge(self, factor: float) -> Image.Image:
-        text = f"{factor:.0f}\u00d7" if factor >= 2 else "fast"
+        text = f"{factor:.0f}\u00d7" if factor >= 2 else self.lang("fast")
         key = ("badge", text)
         if key in self._cache:
             return self._cache[key]
@@ -589,7 +673,9 @@ HIGHLIGHTS = (
     ("labels", -0.2, "crowded", 2.2),
     ("priority-type", -0.2, "genes", 2.6),
     ("rule-4", -0.1, "legend", 2.4),
-    ("bracket", -0.2, "dloop", 2.6),
+    ("bracket", -0.2, "bracket-chosen", 0.3),
+    ("add-track", -0.2, "track-added", 0.5),
+    ("move-click", -0.3, "dloop", 2.6),  # the last of the Move outward clicks
     ("export", -0.1, "downloaded", 1.4),
 )
 HIGHLIGHT_SPEED = 1.4
@@ -632,12 +718,13 @@ def highlights_edit(recording: Recording, finale_frames: int) -> Edit:
 # -- composition ------------------------------------------------------------
 
 class Composer:
-    def __init__(self, recording: Recording, type_: Type, layout: Layout) -> None:
+    def __init__(self, recording: Recording, type_: Type, layout: Layout, lang: Language) -> None:
         raw = recording.raw
         self.recording = recording
         self.layout = layout
+        self.lang = lang
         self.type = type_
-        self.overlay = Overlay(type_, layout)
+        self.overlay = Overlay(type_, layout, lang)
         self.camera = Camera(recording.events, recording.timemap, recording.viewport, layout.aspect, layout.portrait)
         self.background = _background(layout.size)
         self.base, self.mask = _card_layers(self.background, layout.card)
@@ -725,7 +812,8 @@ class Composer:
 
     def _caption(self, canvas: Image.Image, caption: tuple, alpha: float, rise: int) -> None:
         card = self.layout.card
-        layer = self.overlay.caption(*caption)
+        step, title, subtitle = caption
+        layer = self.overlay.caption(step, self.lang(title), self.lang(subtitle))
         if self.layout.portrait:
             # Bottom-aligned just above the window, so one- and two-line titles sit alike.
             position = (card[0], card[1] - 26 - layer.height + rise)
@@ -748,7 +836,7 @@ class Composer:
             age = moment - start
             if 0 <= age < 2.8:
                 alpha = min(_ease(age / 0.3), _ease((2.8 - age) / 0.4))
-                layer = self.overlay.toast(text, icon)
+                layer = self.overlay.toast(self.lang(text), icon)
                 card = self.layout.card
                 x = card[0] + (card[2] - layer.width) // 2
                 y = card[1] + card[3] - layer.height - 32
@@ -796,16 +884,16 @@ class Composer:
                              Image.Resampling.LANCZOS)
         canvas.alpha_composite(_fade(scaled, p), (round(middle - scaled.width / 2),
                                                   300 - (scaled.height - logo.height) // 2))
-        self._text(canvas, "From a GenBank file to a publication-ready genome map", 600, 46, INK,
+        self._text(canvas, self.lang(INTRO_LINES[0]), 600, 46, INK,
                    _ease((t - 0.5) / 0.6), (middle, 580), center=True)
-        self._text(canvas, "A live session in the gbdraw web app. Waits are fast-forwarded and marked.", 400, 28,
-                   MUTED, _ease((t - 0.9) / 0.6), (middle, 656), center=True)
+        self._text(canvas, self.lang(INTRO_LINES[1]), 400, 28, MUTED, _ease((t - 0.9) / 0.6), (middle, 656), center=True)
         return canvas.convert("RGB")
 
     def _gallery_card(self, index: int, size: tuple[int, int]) -> Image.Image:
         key = ("gallery", index, size)
         if key not in self._static:
             figure, label = self.gallery[index]
+            label = self.lang(label)
             width, height = size
             card = Image.new("RGBA", size, (255, 255, 255, 255))
             fitted = figure.copy()
@@ -841,9 +929,7 @@ class Composer:
             x = card[0] + (index % columns) * (width + gap) + (width - scaled.width) // 2
             y = card[1] + (index // columns) * (height + gap) + (height - scaled.height) // 2
             canvas.alpha_composite(_fade(scaled, p), (x, y))
-        self._caption(canvas, (None, "Genome diagrams for microbes and organelles",
-                               "Highlights from a live session in the gbdraw web app, sped up"),
-                      _ease((t - 0.8) / 0.5), 0)
+        self._caption(canvas, MONTAGE_CAPTION, _ease((t - 0.8) / 0.5), 0)
         self._brand(canvas)
         return canvas.convert("RGB")
 
@@ -880,7 +966,7 @@ class Composer:
             canvas.alpha_composite(_fade(logo, _ease((t - 0.3) / 0.7)), ((width - logo.width) // 2, y))
             y += logo.height + 30
             for text, weight, size, color, delay in self.OUTRO_ROWS:
-                self._text(canvas, text, weight, size, color, _ease((t - delay) / 0.5), (width / 2, y),
+                self._text(canvas, self.lang(text), weight, size, color, _ease((t - delay) / 0.5), (width / 2, y),
                            center=True, rise=0)
                 y += size + (30 if weight == 700 else 16)
             return canvas.convert("RGB")
@@ -891,7 +977,7 @@ class Composer:
         canvas.alpha_composite(_fade(logo, _ease((t - 0.3) / 0.7)), (right, 250))
         y = 250 + logo.height + 50
         for text, weight, size, color, delay in self.OUTRO_ROWS:
-            self._text(canvas, text, weight, size, color, _ease((t - delay) / 0.5), (right, y), rise=0)
+            self._text(canvas, self.lang(text), weight, size, color, _ease((t - delay) / 0.5), (right, y), rise=0)
             y += size + (34 if weight == 700 else 22)
         return canvas.convert("RGB")
 
@@ -936,6 +1022,7 @@ class Composer:
                     step = title = subtitle = None
                 text = None
                 if title:
+                    title, subtitle = self.lang(title), self.lang(subtitle)
                     head = f"{step}. {title}" if edit.numbered and step else title
                     text = head + (f"\n{subtitle}" if subtitle else "")
                 second = (position + local) / FPS
@@ -980,12 +1067,20 @@ def _encode(frames, video: Path, review: Path, layout: Layout) -> int:
     return count
 
 
-# (edit, layout, file stem)
+# (edit, layout, file stem); every stem is rendered once per language.
 OUTPUTS = (
     ("walkthrough", LANDSCAPE, "gbdraw-walkthrough"),
     ("highlights", LANDSCAPE, "gbdraw-highlights"),
     ("highlights", PORTRAIT, "gbdraw-highlights-vertical"),
 )
+COVERS = (("poster", LANDSCAPE.size), ("cover-vertical", PORTRAIT.size), ("cover-3x4", (1080, 1440)))
+
+
+def _outputs():
+    for code in LANGUAGES:
+        lang = Language(code)
+        for name, layout, stem in OUTPUTS:
+            yield lang, name, layout, f"{stem}{lang.suffix}"
 
 
 def render_walkthrough(run: Path, out: Path) -> Path:
@@ -996,11 +1091,13 @@ def render_walkthrough(run: Path, out: Path) -> Path:
     for path in (final, reports, work):
         path.mkdir(parents=True, exist_ok=True)
     recording = Recording(raw)
-    type_ = Type(_fonts(work))
-    composers = {layout.name: Composer(recording, type_, layout) for layout in (LANDSCAPE, PORTRAIT)}
+    composers: dict = {}
     report = {"recording_manifest_sha256": sha256(raw / "walkthrough.json"), "videos": {}}
-    for name, layout, stem in OUTPUTS:
-        composer = composers[layout.name]
+    for lang, name, layout, stem in _outputs():
+        key = (lang.code, layout.name)
+        if key not in composers:
+            composers[key] = Composer(recording, lang.type(work), layout, lang)
+        composer = composers[key]
         edit = composer.edits[name]
         video = final / f"{stem}.mp4"
         frames = _encode(composer.frames(edit), video, reports / "review-frames" / stem, layout)
@@ -1008,7 +1105,7 @@ def render_walkthrough(run: Path, out: Path) -> Path:
             raise AssertionError(f"{stem} encoded {frames} frames")
         srt = [f"{number}\n{_srt_time(a)} --> {_srt_time(b)}\n{text}\n"
                for number, (a, b, text) in enumerate(composer.captions(edit), 1)]
-        (final / f"{stem}.en.srt").write_text("\n".join(srt), encoding="utf-8")
+        (final / f"{stem}{'.en' if lang.code == 'en' else ''}.srt").write_text("\n".join(srt), encoding="utf-8")
         timeline, position = [], 0
         for piece in edit.pieces:
             timeline.append({"kind": piece.kind, "at": round(position / FPS, 3),
@@ -1016,18 +1113,20 @@ def render_walkthrough(run: Path, out: Path) -> Path:
                              "speed": piece.speed})
             position += piece.frames
         report["videos"][stem] = {
-            "video": str(video.relative_to(out)), "video_sha256": sha256(video),
+            "video": str(video.relative_to(out)), "video_sha256": sha256(video), "language": lang.code,
             "size": list(layout.size), "audio": layout.audio,
             "frames": frames, "seconds": round(frames / FPS, 3), "timeline": timeline,
         }
-    landscape, portrait = composers["landscape"], composers["portrait"]
-    landscape._outro_frame(landscape.edits["walkthrough"].pieces[-1].frames - 1).save(final / "poster.png")
-    cover = portrait._outro_frame(portrait.edits["highlights"].pieces[-1].frames - 1)
-    cover.save(final / "cover-vertical.png")
-    # RedNote prefers a 3:4 cover; keep the window area and centre it.
-    card = PORTRAIT.card
-    top = card[1] + card[3] // 2 - 720
-    cover.crop((0, top, 1080, top + 1440)).save(final / "cover-3x4.png")
+    for code in LANGUAGES:
+        suffix = Language(code).suffix
+        landscape, portrait = composers[(code, "landscape")], composers[(code, "portrait")]
+        landscape._outro_frame(landscape.edits["walkthrough"].pieces[-1].frames - 1).save(final / f"poster{suffix}.png")
+        cover = portrait._outro_frame(portrait.edits["highlights"].pieces[-1].frames - 1)
+        cover.save(final / f"cover-vertical{suffix}.png")
+        # RedNote prefers a 3:4 cover; keep the window area and centre it.
+        card = PORTRAIT.card
+        top = card[1] + card[3] // 2 - 720
+        cover.crop((0, top, 1080, top + 1440)).save(final / f"cover-3x4{suffix}.png")
     report["fast_forward"] = [{"start": round(a, 2), "end": round(b, 2), "factor": round(f, 2), "kind": kind}
                               for a, b, f, kind in recording.timemap.segments]
     (reports / "walkthrough-report.json").write_text(json.dumps(report, indent=2), encoding="utf-8")
@@ -1039,7 +1138,7 @@ def check_walkthrough(out: Path) -> dict:
 
     report = json.loads((out / "reports" / "walkthrough-report.json").read_text(encoding="utf-8"))
     summary = {"status": "PASS", "videos": {}, "fast_forward": report["fast_forward"]}
-    for _, layout, stem in OUTPUTS:
+    for lang, _, layout, stem in _outputs():
         row = report["videos"][stem]
         video = out / row["video"]
         if sha256(video) != row["video_sha256"]:
@@ -1058,12 +1157,14 @@ def check_walkthrough(out: Path) -> dict:
                 or (layout.audio and streams["audio"].get("codec_name") != "aac"):
             raise AssertionError(f"{video.name} contract failed: {probe}")
         subprocess.run(["ffmpeg", "-v", "error", "-i", str(video), "-f", "null", "-"], check=True)
-        if not (out / "final" / f"{stem}.en.srt").is_file():
-            raise AssertionError(f"Missing {stem}.en.srt")
+        subtitles = out / "final" / f"{stem}{'.en' if lang.code == 'en' else ''}.srt"
+        if not subtitles.is_file():
+            raise AssertionError(f"Missing {subtitles.name}")
         summary["videos"][stem] = {"video": row["video"], "size": row["size"], "seconds": row["seconds"]}
-    for name, size in (("poster.png", LANDSCAPE.size), ("cover-vertical.png", PORTRAIT.size),
-                       ("cover-3x4.png", (1080, 1440))):
-        with Image.open(out / "final" / name) as image:
-            if image.size != size:
-                raise AssertionError(f"{name} is {image.size}, expected {size}")
+    for code in LANGUAGES:
+        for name, size in COVERS:
+            path = out / "final" / f"{name}{Language(code).suffix}.png"
+            with Image.open(path) as image:
+                if image.size != size:
+                    raise AssertionError(f"{path.name} is {image.size}, expected {size}")
     return summary

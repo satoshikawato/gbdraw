@@ -29,7 +29,7 @@ jobs:
       - name: Install recording dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y ffmpeg
+          sudo apt-get install -y ffmpeg fonts-noto-cjk
           python -m pip install -e ".[dev]" brotli
           python -m playwright install --with-deps chromium
           python tools/prepare_browser_wheel.py

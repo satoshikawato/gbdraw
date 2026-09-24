@@ -286,6 +286,13 @@ class Recorder:
         swatch.fill(value)
         self.hold(0.45)
 
+    def check(self, box: Locator) -> None:
+        """Tick a checkbox with a real click unless it is already ticked."""
+
+        if not box.is_checked():
+            self.click(box, pause=0.3)
+        expect(box).to_be_checked()
+
     def type(self, field: Locator, text: str, *, delay: float = 0.075) -> None:
         self.click(field, pause=0.12)
         if not field.evaluate("node => node === document.activeElement"):
@@ -487,6 +494,9 @@ def _journey(rec: Recorder, downloads: Path) -> Path:
     rec.type(page.locator('input[placeholder="Label"]'), "D-loop")
     rec.mark("bracket")
     rec.choose(page.locator('select:has(option[value="bracket"])'), "bracket")
+    rec.mark("bracket-chosen")
+    rec.hold(0.4)
+    _inner_region_track(rec)
     rec.generate()
     rec.camera(duration=1.0)
     rec.hold(1.0)
@@ -535,6 +545,79 @@ def _journey(rec: Recorder, downloads: Path) -> Path:
     return exported
 
 
+def _slot(page: Page, slot_id: str) -> Locator:
+    return page.get_by_role("group", name=f"Circular track slot {slot_id}", exact=True)
+
+
+def _slot_order(page: Page) -> list[str]:
+    return page.locator('[role="group"][aria-label^="Circular track slot "]').evaluate_all(
+        "els => els.map((e) => e.getAttribute('aria-label').replace('Circular track slot ', ''))")
+
+
+def _inner_region_track(rec: Recorder) -> None:
+    """Place the D-loop on its own track just inside the axis (as in T-GUI-10)."""
+
+    page = rec.page
+    rec.caption(5, "Give it its own track inside the circle", "Layout › Custom Track Slots")
+    layout = page.get_by_label("Layout", exact=True)
+    rec.camera(page.locator(".settings-scroll").bounding_box(), zoom=2.0)
+    rec.reveal(layout)
+    rec.mark("slots")
+    rec.focus(layout, zoom=2.0)
+    rec.click(layout, left=70, pause=0.4)
+    toggle = page.get_by_role("button", name=re.compile(r"Custom Track Slots$"))
+    rec.reveal(toggle)
+    rec.click(toggle, pause=0.4)
+    custom = page.get_by_role("checkbox", name="Use custom stack", exact=True)
+    rec.focus(custom, zoom=2.2)
+    rec.check(custom)
+    renderer = page.get_by_label("New circular track renderer", exact=True)
+    rec.reveal(renderer)
+    rec.mark("add-track")
+    rec.focus(renderer, zoom=2.2)
+    rec.choose(renderer, "annotations")
+    rec.click(page.get_by_role("button", name=re.compile(r"Add track$")), pause=0.5)
+    rec.mark("track-added")
+    slot = _slot(page, "annotations")
+    expect(slot).to_be_visible()
+    rec.reveal(slot, anchor=0.3)
+    rec.focus(slot, zoom=2.1)
+    rec.choose(slot.get_by_label("Annotation set", exact=True), "annotations")
+    rec.choose(slot.get_by_label("Annotation placement", exact=True), "inside")
+    # Match the tutorial's track details quickly: width, labels, overflow,
+    # padding, and features on the axis. Ticks stay inside so their labels
+    # do not collide with the outer tRNA labels this map keeps.
+    rec.fast_forward(factor=3.0)
+    rec.type(slot.get_by_title("Width", exact=True), "24px")
+    rec.check(slot.get_by_label("Show annotation labels", exact=True))
+    rec.choose(slot.locator('select:has(option[value="compress"])'), "compress")
+    rec.type(slot.locator('input[type="number"]').last, "1")
+    features = _slot(page, "features")
+    rec.reveal(features, anchor=0.3)
+    rec.focus(features, zoom=2.1, duration=0.6)
+    rec.choose(features.locator("select").last, "split")
+    rec.normal_speed()
+    slot = _slot(page, "annotations")
+    rec.reveal(slot, anchor=0.4)
+    rec.mark("move-outward")
+    rec.focus(slot, zoom=2.1)
+    for _ in range(6):
+        order = _slot_order(page)
+        if order.index("annotations") == order.index("features") + 1:
+            break
+        # Each move lifts the row, so bring it back into view before clicking.
+        rec.reveal(slot, anchor=0.4)
+        rec.focus(slot, zoom=2.1, duration=0.5)
+        rec.mark("move-click")
+        rec.click(slot.get_by_title("Move outward", exact=True), pause=0.45)
+        if _slot_order(page) == order:
+            raise AssertionError(f"Move outward did not move the D-loop track: {order}")
+    order = _slot_order(page)
+    if order[:3] != ["features", "annotations", "ticks"]:
+        raise AssertionError(f"Unexpected track order: {order}")
+    rec.hold(0.4)
+
+
 def _inspect_export(svg: Path) -> dict:
     text = svg.read_text(encoding="utf-8")
     labels = set(re.findall(r">([^<>]{1,60})</(?:text|textPath)>", text))
@@ -546,9 +629,13 @@ def _inspect_export(svg: Path) -> dict:
         "functional_fills": sorted({color for _, color, _ in FUNCTIONAL_RULES} & fills),
         "legend": sorted({legend for *_, legend in FUNCTIONAL_RULES} & labels),
         "dloop": "D-loop" in labels,
+        # The D-loop must be drawn by the custom inner track, not the automatic lane.
+        "dloop_track": bool(re.search(
+            r'data-gbdraw-slot-id="annotations" data-gbdraw-slot-renderer="annotations"', text)),
     }
     if (set(report["gene_symbols"]) != genes or report["product_labels_present"]
-            or len(report["functional_fills"]) != 4 or len(report["legend"]) != 4 or not report["dloop"]):
+            or len(report["functional_fills"]) != 4 or len(report["legend"]) != 4 or not report["dloop"]
+            or not report["dloop_track"]):
         raise AssertionError(f"Exported SVG lacks the recorded edits: {report}")
     return report
 
@@ -578,7 +665,7 @@ def _render_finale(browser, svg: Path, out: Path, size: tuple[int, int]) -> dict
               const scale = Math.min(rect.width / base[2], rect.height / base[3]);
               const offX = (rect.width - base[2] * scale) / 2, offY = (rect.height - base[3] * scale) / 2;
               const target = Array.from(svg.querySelectorAll('text, textPath'))
-                .find((node) => node.textContent === 'tRNA-Pro') || svg.querySelector('[data-gbdraw-annotation-id]');
+                .find((node) => node.textContent === 'D-loop') || svg.querySelector('[data-gbdraw-annotation-id]');
               const box = target.getBoundingClientRect();
               return {base, cx: base[0] + (box.left + box.width / 2 - offX) / scale,
                       cy: base[1] + (box.top + box.height / 2 - offY) / scale};

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import ast
 import re
 import sys
 from pathlib import Path
@@ -10,7 +11,8 @@ import pytest
 
 CAPTURE_ROOT = Path(__file__).resolve().parents[1] / 'docs' / 'capture'
 sys.path.insert(0, str(CAPTURE_ROOT))
-from video.walkthrough_render import FPS, HIGHLIGHTS, Camera, TimeMap, _moments  # noqa: E402
+from video import walkthrough_render  # noqa: E402
+from video.walkthrough_render import FPS, HIGHLIGHTS, Camera, Language, TimeMap, _moments  # noqa: E402
 
 
 def test_highlights_cut_only_at_marks_the_journey_records() -> None:
@@ -82,3 +84,34 @@ def test_highlight_moments_skim_waits_but_not_fast_forwards() -> None:
     # 1 s + 1 s wait at 2x + 1 s + 1 s fast-forward + 3 s at normal pace.
     assert len(moments) / FPS == pytest.approx(0.5 + 6.0, abs=0.05)
     assert moments == tuple(sorted(moments))
+
+
+def _screen_text() -> set[str]:
+    """Every English string the recorder or renderer can put on screen."""
+
+    tree = ast.parse((CAPTURE_ROOT / 'video' / 'walkthrough.py').read_text(encoding='utf-8'))
+    strings: set[str] = {'HmmtDNA.gbk', 'NC_012920.1.svg downloaded (89 KB)', 'fast'}
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute) and node.func.attr == 'caption':
+            strings |= {arg.value for arg in node.args if isinstance(arg, ast.Constant) and isinstance(arg.value, str)}
+        if isinstance(node, ast.Assign) and any(getattr(t, 'id', '') == 'GALLERY' for t in node.targets):
+            strings |= {row.elts[1].value for row in node.value.elts}
+    render = walkthrough_render
+    strings |= {text for text in (*render.FINALE_CAPTION[1:], *render.MONTAGE_CAPTION[1:], *render.INTRO_LINES)}
+    strings |= {row[0] for row in render.Composer.OUTRO_ROWS}
+    return {text for text in strings if text}
+
+
+def test_every_screen_text_has_a_chinese_version() -> None:
+    lang = Language('zh-Hans')
+    missing = sorted(text for text in _screen_text() if _translate(lang, text) is None)
+    assert not missing, missing
+    unused = sorted(set(lang.strings) - _screen_text())
+    assert not unused, unused
+
+
+def _translate(lang: Language, text: str) -> str | None:
+    try:
+        return lang(text)
+    except KeyError:
+        return None

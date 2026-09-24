@@ -6,7 +6,7 @@ One recording of the real Web app produces three videos:
 - **Highlights** (1920×1080, about 45 seconds): six Gallery figures, then the key moments of the same recording at 1.4× speed.
 - **Vertical highlights** (1080×1920, same cut) for TikTok, RedNote, and other phone feeds. Captions sit above the app window and the brand below it, clear of the top 400 px and bottom 430 px where those apps draw their own controls. The camera re-frames each shot for the tall window: whole-page shots show the diagram, and close-ups follow the control being used.
 
-Both end with the exported SVG magnified 7× and a gbdraw.app card.
+All three end with the exported SVG magnified 7× and a gbdraw.app card, and each is rendered in English and in Simplified Chinese (`*.zh-Hans.mp4`).
 
 ## Build
 
@@ -21,7 +21,7 @@ The command records the journey, renders `final/gbdraw-walkthrough.mp4`, `final/
 
 The **Walkthrough video** GitHub Actions workflow runs the same command for every published release and on manual dispatch, and uploads the outputs as a workflow artifact for 30 days.
 
-Requirements: the repository's `dev` extra (Python Playwright 1.61.0 and its Chromium), FFmpeg with libx264, and the `brotli` Python package, which converts the app's vendored Inter WOFF2 fonts for the captions.
+Requirements: the repository's `dev` extra (Python Playwright 1.61.0 and its Chromium), FFmpeg with libx264, the `brotli` Python package (it converts the app's vendored Inter WOFF2 fonts for English text), and Noto Sans SC for Chinese text. The renderer looks for `NotoSansSC-{Regular,Medium,Bold}.otf` in `$GBDRAW_VIDEO_FONT_DIR` or `~/.cache/gbdraw-video-fonts/`, and then for the `fonts-noto-cjk` package (`/usr/share/fonts/opentype/noto/NotoSansCJK-*.ttc`), which the workflow installs.
 
 ## How it works
 
@@ -29,6 +29,10 @@ Requirements: the repository's `dev` extra (Python Playwright 1.61.0 and its Chr
 - `docs/capture/video/walkthrough_render.py` composes the saved bundle without a browser. It places the app in a window over the gbdraw background, eases the camera between logged targets, draws the pointer and click ripples, and writes captions below the window. Generation waits and the three repeated color rules are fast-forwarded, and a `▶▶` badge marks each fast-forwarded span. `reports/walkthrough-report.json` lists the spans and each video's timeline.
 - The highlights are defined in `HIGHLIGHTS` as spans between named marks (for example `labels` to `crowded`), so a new recording with different timings still tells the same story. Generation waits play 2.5× faster again in the highlights, and the badge appears there only at 2× or more.
 - The recording hides only the floating feature-search palette, which would otherwise cover the result. Headless Chromium does not paint native `<select>` menus or color pickers, so the recorder logs each select's real option list and each chosen color, and the editor draws the menu or color popover while the pointer picks it.
+
+## Chinese text
+
+`captions.zh-Hans.json` maps each English on-screen string to its Simplified Chinese text, plus a pattern for the download toast. Web UI names such as `Labels › Label Mode` stay in English because the app itself is English. Rendering stops with the missing string if the journey or renderer shows text the file lacks, and `tests/test_video_capture_contracts.py` checks that every string has a translation and that no translation is unused. Have a native speaker review changes to this file.
 
 ## Editing
 
