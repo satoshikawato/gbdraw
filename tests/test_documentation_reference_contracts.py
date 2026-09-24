@@ -127,6 +127,30 @@ def test_command_reference_entry_points_exist_in_current_help() -> None:
         assert required_option in result.stdout
 
 
+def test_typed_similarity_alignment_example_runs_from_clean_directory(
+    tmp_path: Path,
+) -> None:
+    source = _read("python-api.md")
+    example = re.search(
+        r"<!-- executable:S07-PY-01:start -->\n```python\n(.*?)\n```\n"
+        r"<!-- executable:S07-PY-01:end -->",
+        source,
+        re.DOTALL,
+    )
+    assert example is not None
+    program = tmp_path / "typed_similarity_alignment.py"
+    program.write_text(example.group(1) + "\n", encoding="utf-8")
+    result = subprocess.run(
+        [sys.executable, program.name],
+        cwd=tmp_path,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert result.returncode == 0, result.stderr
+    assert result.stdout.strip() == "only_usable_candidate"
+
+
 def test_first_web_tutorial_controls_have_stable_accessible_names() -> None:
     index = (REPO_ROOT / "gbdraw" / "web" / "index.html").read_text(encoding="utf-8")
     reference = _read("web-app.md")

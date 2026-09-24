@@ -167,8 +167,20 @@ Schemas 1, 2, 5, 6, and 7 remain readable. Their
 state. Current writers emit neither that field nor the former Session-only
 `orthogroupState.selectedOrthogroupAlignmentFeature` copy. Released legacy
 Sessions with saved feature-catalog and orthogroup identity metadata materialize
-that state to the schema-8 plan before a current save. Merely loading the saved
-preview does not initialize the diagram Worker.
+that state to the schema-8 plan before a current save. Their historical group
+selection is confined to the reader; malformed or unmappable legacy values
+produce an actionable error and retain the last successful Result. Current
+requests reject group-only input. Merely loading the saved preview does not
+initialize the diagram Worker or start LOSATP.
+
+A current Session round trip retains exact reference and target identities,
+Select/Skip rationale, base translations, effective orientation, and the
+immediate pre-align Reset baseline. Ordinary Generate preserves an active plan;
+stable reorder uses `recordKey`, while source replacement, crop, selector,
+manual orientation, and record drag clear it with a visible reason. A stale
+reference requires Reselect/Clear and a stale target requires Select/Skip before
+regeneration; pending or failed repair leaves the saved preview and last
+successful Result in place. Undo/Redo restores the complete artifact.
 
 In Web **Run Info**, **Source recipe** uses the original input filenames and
 public CLI settings. Keep those original files and download any listed generated

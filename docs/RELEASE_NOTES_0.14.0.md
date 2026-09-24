@@ -82,6 +82,24 @@ configurations draw `repeat_region` as an underlay behind foreground features;
 use `repeat_region=rectangle` to request the earlier appearance. Supported older
 sessions retain their previous effective repeat shape.
 
+## Linear Similarity Group alignment
+
+The Web feature popup aligns from the exact clicked feature, and the Similarity
+Groups drawer requires an exact reference. A unique usable member or unique
+direct RBH resolves automatically; ambiguous inparalogs require **Select** or
+**Skip**. **Align** changes X only; **Align & orient** also reverses targets
+with known opposite displayed strands. Missing members stay in place. The
+summary, plan inspector, and source-relative **rev** indicator make the
+result inspectable. Ordinary Generate and stable reorder preserve the plan;
+Reset Align restores the immediate pre-align geometry, and Undo/Redo restores
+the complete artifact. The typed Python request accepts a resolved plan, while
+the CLI accepts an exact reference only when target choices are unambiguous.
+See [Web alignment](./REFERENCE/web-app.md#similarity-group-alignment-in-linear-view),
+[CLI behavior](./REFERENCE/command-line.md#strict-similarity-group-alignment),
+and [typed Python usage](./REFERENCE/python-api.md#typed-linear-similarity-group-alignment).
+Collinear alignment controls, anchor TSV, and smart or synteny propagation are
+deferred.
+
 ## Session / replay / save compatibility
 
 Current writers emit session version 44 and canonical `renderRequest` schema 8.

@@ -21,10 +21,11 @@ const createWatchHarness = () => {
   return { watch, registrations, flush };
 };
 
-const createState = ({ open = false, tab = 'features', groups = [] } = {}) => ({
+const createState = ({ open = false, tab = 'features', groups = [], plan = null } = {}) => ({
   showRightDrawer: ref(open),
   rightDrawerTab: ref(tab),
-  orthogroups: ref(groups)
+  orthogroups: ref(groups),
+  similarityAlignmentPlan: ref(plan)
 });
 
 test('unavailable and unknown tabs resolve to Features instead of becoming no-ops', () => {
@@ -109,4 +110,21 @@ test('close preserves a valid selection, reset clears it, and rollback restores 
     showRightDrawer: true,
     rightDrawerTab: 'features'
   });
+});
+
+test('an active alignment keeps its inspector and Reset tab reachable without group rows', () => {
+  const state = createState({ tab: 'orthogroups', plan: { schema: 1 } });
+  const harness = createWatchHarness();
+  const drawer = createRightDrawerController({ state, watch: harness.watch });
+
+  assert.equal(drawer.isRightDrawerTabAvailable('orthogroups'), true);
+  assert.equal(drawer.openRightDrawerTab('orthogroups'), 'orthogroups');
+  state.orthogroups.value = [];
+  harness.flush();
+  assert.equal(state.rightDrawerTab.value, 'orthogroups');
+
+  state.similarityAlignmentPlan.value = null;
+  harness.flush();
+  assert.equal(drawer.isRightDrawerTabAvailable('orthogroups'), false);
+  assert.equal(state.rightDrawerTab.value, 'features');
 });

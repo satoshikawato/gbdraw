@@ -286,6 +286,53 @@ See [Comparison programs, thresholds, and result
 semantics](comparison-programs-thresholds-and-results.md) for search boundaries,
 filters, direction, and interpretation.
 
+## Similarity Group alignment in Linear view
+
+Generate a Linear diagram with **LOSATP → Similarity groups**, then choose
+**Align** or **Align & orient** from a feature popup. That exact clicked
+feature is the reference, even when it is not the group representative; its
+record does not move. The Similarity Groups drawer offers the same actions
+after you select an exact reference record and feature. Group selection alone
+cannot choose a reference.
+
+For each other displayed record, resolution uses this order: an explicit
+**Select** choice, exactly one usable group member, exactly one distinct direct
+reciprocal-best-hit (RBH) member connected to the reference, then **Select** or
+**Skip** if multiple candidates remain. RBH query/subject direction is
+symmetric. A missing member leaves its record unchanged. A hidden member is
+usable if its center maps into the crop; a feature whose center is outside the
+crop is not. Representative status, score, edge count, viewport position, and
+multi-hop paths never break a tie. The ambiguity dialog shows feature ID,
+coordinates, strand, role, and direct evidence; it previews the candidate on
+the canvas and requires a choice for each ambiguous record. **Cancel** and
+**Escape** leave the current Result intact.
+
+**Align** changes target X only; it preserves Y and every record's orientation.
+**Align & orient** compares the current displayed anchor strands. It reverses
+the whole target record only for known opposite strands, keeps text readable,
+and then aligns the post-reversal anchor center. Unknown or mixed strands use
+position-only alignment. Skipped and missing records and unselected inparalogs
+keep their positions, orientations, memberships, and comparison links. The
+operation summary counts aligned, unchanged, skipped, missing, and reversed
+records. The active-plan inspector shows exact anchors and selection reasons;
+**rev** beside a record name reflects its effective orientation relative to
+the source.
+
+The active plan survives ordinary **Generate Diagram** after style, label, or
+canvas changes and survives a stable record reorder. Source replacement,
+crop, selector, manual orientation, and manual record drag clear it with a
+visible reason. A stale reference blocks Generate until **Reselect** or
+**Clear**; a stale target requires **Select** or **Skip**. Neither replaces the
+last successful Result while repair is pending. **Reset Align** restores the
+geometry immediately before the latest Align and clears that plan. For Align A,
+then Align B, Reset B restores the geometry after A without restoring A's plan;
+**Undo** restores the complete preceding artifact, and **Redo** reapplies the
+reset. Apply, Reset, and manual clear each use one normal History transaction.
+
+Alignment changes display only and does not rerun LOSATP or group inference.
+Collinear-mode alignment controls, anchor TSV input, smart alignment, synteny
+propagation, and multi-hop inference are outside this workflow.
+
 ## Preview, search, and editor
 
 **Result Preview** exposes records, feature and quantitative tracks,

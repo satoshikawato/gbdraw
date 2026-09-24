@@ -8,9 +8,10 @@ const normalizedOrthogroupCount = (value) => {
   return Number.isFinite(count) && count > 0 ? count : 0;
 };
 
-const orthogroupCountFromState = (state) => uniqueOrthogroupEntries(
-  state.orthogroups?.value
-).length;
+const orthogroupTabContentCountFromState = (state) => (
+  uniqueOrthogroupEntries(state.orthogroups?.value).length
+  + Number(Boolean(state.similarityAlignmentPlan?.value))
+);
 
 const isRightDrawerTabAvailable = (tab, orthogroupCount = 0) => {
   if (ALWAYS_AVAILABLE_TABS.has(tab)) return true;
@@ -30,7 +31,7 @@ export const captureRightDrawerState = (state) => ({
 
 const reconcileRightDrawerState = (
   state,
-  orthogroupCount = orthogroupCountFromState(state)
+  orthogroupCount = orthogroupTabContentCountFromState(state)
 ) => {
   const resolvedTab = resolveRightDrawerTab(
     state.rightDrawerTab.value,
@@ -45,7 +46,7 @@ const reconcileRightDrawerState = (
 const openRightDrawerState = (
   state,
   tab = state.rightDrawerTab.value,
-  orthogroupCount = orthogroupCountFromState(state)
+  orthogroupCount = orthogroupTabContentCountFromState(state)
 ) => {
   const resolvedTab = resolveRightDrawerTab(tab, orthogroupCount);
   state.rightDrawerTab.value = resolvedTab;
@@ -65,7 +66,7 @@ export const resetRightDrawerState = (state) => {
 export const restoreRightDrawerState = (
   state,
   snapshot,
-  orthogroupCount = orthogroupCountFromState(state)
+  orthogroupCount = orthogroupTabContentCountFromState(state)
 ) => {
   state.rightDrawerTab.value = resolveRightDrawerTab(
     snapshot?.rightDrawerTab,
@@ -75,7 +76,7 @@ export const restoreRightDrawerState = (
 };
 
 export const createRightDrawerController = ({ state, watch }) => {
-  const currentOrthogroupCount = () => orthogroupCountFromState(state);
+  const currentOrthogroupCount = () => orthogroupTabContentCountFromState(state);
   const isTabAvailable = (tab) => isRightDrawerTabAvailable(
     tab,
     currentOrthogroupCount()

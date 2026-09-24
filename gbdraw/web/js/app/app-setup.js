@@ -279,7 +279,6 @@ export const createAppSetup = () => {
     losatThreadingStatus,
     orthogroups,
     featureOrthogroupIndex,
-    selectedOrthogroupAlignmentFeature,
     orthogroupNameOverrides,
     orthogroupDescriptionOverrides,
     selectedOrthogroupId,
@@ -2670,7 +2669,7 @@ export const createAppSetup = () => {
     cancelRunAnalysis();
   };
 
-  const orthogroupActions = createOrthogroupEditor({ state, runAnalysis });
+  const orthogroupActions = createOrthogroupEditor({ state });
   similarityAlignmentActions = createSimilarityAlignmentActions({
     state,
     getOrthogroupById: orthogroupActions.getOrthogroupById,
@@ -2799,11 +2798,6 @@ export const createAppSetup = () => {
       if (outcome.status === 'ok') clickedFeature.value = null;
     }
     return outcome;
-  };
-
-  const resetOrthogroupAlignment = async () => {
-    clickedFeature.value = null;
-    await orthogroupActions.resetOrthogroupAlignment();
   };
 
   const highlightClickedOrthogroup = () => {
@@ -4101,7 +4095,6 @@ export const createAppSetup = () => {
     losatThreadingStatus,
     orthogroups,
     featureOrthogroupIndex,
-    selectedOrthogroupAlignmentFeature,
     orthogroupNameOverrides,
     orthogroupDescriptionOverrides,
     selectedOrthogroupId,
@@ -4110,7 +4103,6 @@ export const createAppSetup = () => {
     showRightDrawer,
     rightDrawerTab,
     orthogroupCount: orthogroupActions.orthogroupCount,
-    selectedAlignmentTargetLabel: orthogroupActions.selectedAlignmentTargetLabel,
     filteredOrthogroups: orthogroupActions.filteredOrthogroups,
     selectedOrthogroup: orthogroupActions.selectedOrthogroup,
     selectedOrthogroupMembersByRecord: orthogroupActions.selectedOrthogroupMembersByRecord,
@@ -4350,7 +4342,6 @@ export const createAppSetup = () => {
     alignByClickedOrthogroup,
     highlightClickedOrthogroup,
     clearOrthogroupHighlight,
-    resetOrthogroupAlignment,
     openClickedOrthogroupInEditor,
     specificRuleLegendOptions,
     updateClickedFeatureColor: updateClickedFeatureColorWithHistory,

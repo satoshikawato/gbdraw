@@ -53,6 +53,9 @@ def _strip_additive_semantic_attributes(svg_text: str) -> str:
         "data-gbdraw-record-index",
         "data-gbdraw-slot-id",
         "data-gbdraw-slot-renderer",
+        "data-record-key",
+        "data-record-translation-x",
+        "data-record-translation-y",
     ):
         svg_text = re.sub(rf'\s{attribute}="[^"]*"', "", svg_text)
     return svg_text

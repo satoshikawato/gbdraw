@@ -12,11 +12,21 @@ const importSession = async (page, bytes, name) => page.evaluate(async ({ bytes,
   return result.status;
 }, { bytes: [...bytes], name });
 
+const captureUnhandledRejections = (page) => page.addInitScript(() => {
+  window.__GBDRAW_UNHANDLED_REJECTIONS__ = [];
+  window.addEventListener('unhandledrejection', (event) => {
+    window.__GBDRAW_UNHANDLED_REJECTIONS__.push(String(event.reason?.message || event.reason));
+  });
+});
+const expectNoUnhandledRejections = async (page) => {
+  expect(await page.evaluate(() => window.__GBDRAW_UNHANDLED_REJECTIONS__)).toEqual([]);
+};
+
 const artifactSnapshot = (page) => page.evaluate(async () => {
   const { state } = await import('./js/state.js');
   const history = window.__GBDRAW_HISTORY__;
   return {
-    plan: structuredClone(state.similarityAlignmentPlan.value),
+    plan: JSON.parse(JSON.stringify(state.similarityAlignmentPlan.value)),
     request: structuredClone(state.lastCommittedRequest?.value || null),
     results: state.results.value.map(({ name, content }) => ({ name, content })),
     history: [history.getUndoCount(), history.getRedoCount(), history.revision.value]
@@ -25,6 +35,13 @@ const artifactSnapshot = (page) => page.evaluate(async () => {
 
 test('Similarity alignment UI completes exact-reference, ambiguity, focus, summary, and narrow journeys', async ({ page, browser }, testInfo) => {
   test.setTimeout(600000);
+  const pageErrors = [];
+  const consoleErrors = [];
+  page.on('pageerror', (error) => pageErrors.push(String(error?.message || error)));
+  page.on('console', (message) => {
+    if (message.type() === 'error') consoleErrors.push(message.text());
+  });
+  await captureUnhandledRejections(page);
   const directory = testInfo.outputPath('inparalog-fixture');
   mkdirSync(directory, { recursive: true });
   execFileSync('python', ['-c',
@@ -153,12 +170,12 @@ test('Similarity alignment UI completes exact-reference, ambiguity, focus, summa
     );
     return feature.svg_id;
   });
-  await page.locator(`[data-gbdraw-feature-id="${b0FeatureId}"]`).first().dispatchEvent('click', {
-    clientX: 240,
-    clientY: 260
-  });
+  const b0Feature = page.locator(`[data-gbdraw-feature-id="${b0FeatureId}"]`).first();
+  await b0Feature.dispatchEvent('click', { clientX: -100, clientY: -100 });
   const popup = page.locator('.feature-popup[role="dialog"]');
   await expect(popup).toBeVisible();
+  await expect(popup).toContainText('b0');
+  await expect(popup.getByRole('button', { name: 'Reset', exact: true })).toHaveCount(0);
   const popupAlign = popup.getByRole('button', { name: 'Align', exact: true });
   const popupAlignOrient = popup.getByRole('button', { name: 'Align & orient', exact: true });
   await expect(popupAlign).toHaveAttribute('title', /keep every record orientation unchanged/);
@@ -211,9 +228,9 @@ test('Similarity alignment UI completes exact-reference, ambiguity, focus, summa
   if (!await page.evaluate(() => window.__GBDRAW_APP__.showRightDrawer)) {
     await page.locator('.drawer-toggle').click();
   }
-  await page.evaluate(() => {
-    window.__GBDRAW_APP__.rightDrawerTab = 'orthogroups';
-  });
+  const similarityTab = drawer.getByRole('button', { name: 'Similarity groups' });
+  await expect(similarityTab).toBeEnabled();
+  await similarityTab.click();
   const inspector = drawer.locator('[data-similarity-alignment-plan-inspector]');
   await expect(inspector).toBeVisible();
   await expect(inspector).toContainText('Exact reference:');
@@ -224,8 +241,8 @@ test('Similarity alignment UI completes exact-reference, ambiguity, focus, summa
   const savedState = await page.evaluate(async () => {
     const { state } = await import('./js/state.js');
     return {
-      plan: structuredClone(state.similarityAlignmentPlan.value),
-      translations: structuredClone(state.linearRecordTranslations.value),
+      plan: JSON.parse(JSON.stringify(state.similarityAlignmentPlan.value)),
+      translations: JSON.parse(JSON.stringify(state.linearRecordTranslations.value)),
       orientations: state.linearSeqs.map(({ uid, region_reverse: reverse }) => ({
         recordKey: uid, reverse: Boolean(reverse)
       })),
@@ -241,6 +258,7 @@ test('Similarity alignment UI completes exact-reference, ambiguity, focus, summa
 
   const freshContext = await browser.newContext();
   const freshPage = await freshContext.newPage();
+  await captureUnhandledRejections(freshPage);
   const freshErrors = [];
   freshPage.on('pageerror', (error) => freshErrors.push(String(error?.message || error)));
   await freshPage.goto(new URL('/gbdraw/web/index.html', page.url()).href, {
@@ -255,8 +273,8 @@ test('Similarity alignment UI completes exact-reference, ambiguity, focus, summa
   const freshState = await freshPage.evaluate(async () => {
     const { state } = await import('./js/state.js');
     return {
-      plan: structuredClone(state.similarityAlignmentPlan.value),
-      translations: structuredClone(state.linearRecordTranslations.value),
+      plan: JSON.parse(JSON.stringify(state.similarityAlignmentPlan.value)),
+      translations: JSON.parse(JSON.stringify(state.linearRecordTranslations.value)),
       orientations: state.linearSeqs.map(({ uid, region_reverse: reverse }) => ({
         recordKey: uid, reverse: Boolean(reverse)
       })),
@@ -285,26 +303,111 @@ test('Similarity alignment UI completes exact-reference, ambiguity, focus, summa
   const historyBeforeReset = await freshPage.evaluate(
     () => window.__GBDRAW_HISTORY__.getUndoCount()
   );
-  expect(await freshPage.evaluate(
-    () => window.__GBDRAW_APP__.resetSimilarityAlignment()
-  )).toMatchObject({ status: 'ok' });
-  expect(await freshPage.evaluate(async () => {
+  await freshPage.locator('[data-similarity-alignment-reset]').click();
+  await expect.poll(() => freshPage.evaluate(async () => {
     const { state } = await import('./js/state.js');
     return {
       plan: state.similarityAlignmentPlan.value,
-      translations: structuredClone(state.linearRecordTranslations.value),
+      translations: JSON.parse(JSON.stringify(state.linearRecordTranslations.value)),
       history: window.__GBDRAW_HISTORY__.getUndoCount()
     };
-  })).toEqual({
+  }), { timeout: 180000 }).toEqual({
     plan: null,
     translations: savedState.translations,
     history: historyBeforeReset + 1
   });
+  await freshPage.getByRole('button', { name: 'Undo', exact: true }).click();
+  await expect.poll(() => freshPage.evaluate(async () => {
+    const { state } = await import('./js/state.js');
+    return JSON.parse(JSON.stringify(state.similarityAlignmentPlan.value));
+  })).toEqual(savedState.plan);
+  await freshPage.getByRole('button', { name: 'Redo', exact: true }).click();
+  await expect.poll(() => freshPage.evaluate(async () => {
+    const { state } = await import('./js/state.js');
+    return state.similarityAlignmentPlan.value;
+  })).toBeNull();
+  expect(pageErrors).toEqual([]);
+  expect(consoleErrors).toEqual([]);
   expect(freshErrors).toEqual([]);
+  await expectNoUnhandledRejections(page);
+  await expectNoUnhandledRejections(freshPage);
   await freshContext.close();
 });
 
+test('one usable member resolves without a dialog and keeps the orient plan inspectable', async ({ page }, testInfo) => {
+  test.setTimeout(180000);
+  await captureUnhandledRejections(page);
+  const directory = testInfo.outputPath('one-candidate-fixture');
+  mkdirSync(directory, { recursive: true });
+  execFileSync('python', ['-c',
+    'import sys; from pathlib import Path; from tests.test_api_session import _record_local_collinear_session; _record_local_collinear_session(Path(sys.argv[1]))',
+    directory
+  ], { cwd: process.cwd(), stdio: 'pipe' });
+  const source = readFileSync(join(directory, 'mixed.gbdraw-session.json'), 'utf8');
+  const errors = [];
+  page.on('pageerror', (error) => errors.push(String(error?.message || error)));
+  await page.goto('/gbdraw/web/index.html', { waitUntil: 'domcontentloaded' });
+  await page.waitForFunction(() => window.__GBDRAW_APP__);
+  const session = Buffer.from(await page.evaluate(async (raw) => {
+    const { projectCanonicalSessionRequest } = await import('./js/services/session-request.js');
+    const document = JSON.parse(raw);
+    document.renderRequest.comparisons = [];
+    document.editorState.featureCatalog.items.forEach((item) => {
+      const secondCopy = item.biologicalFeatures.find((feature) => (
+        feature.qualifiers?.protein_id?.[0] === 'a1'
+      ))?.biologicalFeatureId;
+      const group = item.orthogroups.find(({ id }) => id === 'og_1');
+      if (!secondCopy || !group) throw new Error('The one-candidate fixture is incomplete.');
+      group.members = group.members.filter(({ biologicalFeatureId }) => (
+        biologicalFeatureId !== secondCopy
+      ));
+      group.orthologEdges = [];
+    });
+    document.config = projectCanonicalSessionRequest({
+      renderRequest: document.renderRequest,
+      resources: document.resources,
+      webFiles: document.webFiles
+    }).config;
+    document.config.linearComparisonPlan = {
+      mode: 'adjacent', defaultSource: 'losat', edges: []
+    };
+    document.config.losatProgram = 'blastp';
+    document.config.losat = { blastp: { mode: 'orthogroup' } };
+    return JSON.stringify(document);
+  }, source));
+  await importSession(page, session, 'one-candidate.gbdraw-session.json');
+
+  if (!await page.evaluate(() => window.__GBDRAW_APP__.showRightDrawer)) {
+    await page.locator('.drawer-toggle').click();
+  }
+  const drawer = page.locator('.right-drawer');
+  await drawer.getByRole('button', { name: 'Similarity groups' }).click();
+  await drawer.locator('button').filter({
+    has: page.locator('.font-mono', { hasText: /^og_1$/ })
+  }).click();
+  const reference = await page.evaluate(() => (
+    window.__GBDRAW_APP__.similarityAlignmentDrawerReferenceOptions('og_1')
+      .find(({ anchor }) => anchor.recordKey === 'record_b')?.key || ''
+  ));
+  expect(reference).not.toBe('');
+  await drawer.getByLabel('Exact reference record and feature').selectOption(reference);
+  await drawer.getByRole('button', { name: 'Align & orient', exact: true }).click();
+  await expect.poll(() => page.evaluate(async () => {
+    const { state } = await import('./js/state.js');
+    return state.similarityAlignmentPlan.value?.mode || null;
+  }), { timeout: 120000 }).toBe('position_and_orientation');
+  await expect(page.getByRole('dialog', { name: 'Select alignment anchors' })).toBeHidden();
+  await expect(page.locator('[data-similarity-alignment-summary]')).toContainText('1 aligned');
+  const similarityTab = drawer.getByRole('button', { name: 'Similarity groups' });
+  await expect(similarityTab).toBeEnabled();
+  await similarityTab.click();
+  await expect(drawer.locator('[data-similarity-alignment-plan-inspector]')).toBeVisible();
+  expect(errors).toEqual([]);
+  await expectNoUnhandledRejections(page);
+});
+
 test('released v40 alignment materializes by stable feature identity without a Worker', async ({ page }) => {
+  await captureUnhandledRejections(page);
   const source = readFileSync(
     'tests/fixtures/sessions/BGC0000708-BGC0000713.v40-schema5.json',
     'utf8'
@@ -367,4 +470,5 @@ test('released v40 alignment materializes by stable feature identity without a W
   expect(observed.malformedError).toMatch(/cannot bind alignment record "record-1"/);
   expect(observed.workers.constructions).toBe(0);
   expect(observed.workers.instances).toHaveLength(0);
+  await expectNoUnhandledRejections(page);
 });

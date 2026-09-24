@@ -5070,14 +5070,6 @@
                             <p id="clicked-alignment-orient-action-description" class="col-span-2 text-[10px] text-slate-500 -mt-1">
                                 <strong>Align &amp; orient</strong> may reverse a target record when displayed anchor strands are known and opposite.
                             </p>
-                            <button type="button" @click="resetOrthogroupAlignment"
-                                    :disabled="!selectedOrthogroupAlignmentFeature"
-                                    class="col-span-2 px-2 py-2 rounded-lg text-xs font-medium flex items-center justify-center gap-1"
-                                    :class="selectedOrthogroupAlignmentFeature ? 'bg-slate-100 hover:bg-slate-200 text-slate-700' : 'bg-slate-100 text-slate-300 cursor-not-allowed'"
-                                    title="Reset similarity-group alignment">
-                                <i class="ph ph-arrow-counter-clockwise"></i>
-                                <span>Reset</span>
-                            </button>
                         </div>
                         <div v-if="clickedOrthogroupDetail" class="border-y border-slate-100 py-3">
                             <div class="flex items-center justify-between mb-2">
@@ -6726,9 +6718,6 @@
                                     title="Align record positions to the selected exact feature and reverse targets whose displayed anchor strand is opposite"
                                     class="text-xs px-2 py-1.5 bg-indigo-600 hover:bg-indigo-700 disabled:bg-slate-200 disabled:text-slate-400 disabled:cursor-not-allowed text-white rounded flex items-center justify-center gap-1">
                                 <i class="ph ph-arrows-horizontal" aria-hidden="true"></i> Align &amp; orient
-                            </button>
-                            <button @click="resetOrthogroupAlignment" :disabled="!selectedOrthogroupAlignmentFeature" :class="['text-xs px-2 py-1.5 rounded flex items-center justify-center gap-1', selectedOrthogroupAlignmentFeature ? 'bg-slate-100 hover:bg-slate-200 text-slate-700' : 'bg-slate-100 text-slate-300 cursor-not-allowed']">
-                                <i class="ph ph-arrow-counter-clockwise"></i> Reset Align
                             </button>
                             <button @click="resetOrthogroupRename(selectedOrthogroup.id)" class="text-xs px-2 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded flex items-center justify-center gap-1">
                                 <i class="ph ph-text-aa"></i> Reset Rename

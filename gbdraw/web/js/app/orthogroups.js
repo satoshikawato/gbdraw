@@ -263,7 +263,7 @@ const renderedFeatureIdForMember = (member, renderedIndex) => {
   return matches.length === 1 ? matches[0].renderedId.value : '';
 };
 
-export const createOrthogroupEditor = ({ state, runAnalysis }) => {
+export const createOrthogroupEditor = ({ state }) => {
   const {
     orthogroups,
     orthogroupNameOverrides,
@@ -271,7 +271,6 @@ export const createOrthogroupEditor = ({ state, runAnalysis }) => {
     selectedOrthogroupId,
     orthogroupSearch,
     orthogroupSortMode,
-    selectedOrthogroupAlignmentFeature,
     clickedFeature,
     showRightDrawer,
     rightDrawerTab,
@@ -415,13 +414,6 @@ export const createOrthogroupEditor = ({ state, runAnalysis }) => {
   };
 
   const orthogroupCount = computed(() => resolvableOrthogroupEntries().length);
-
-  const selectedAlignmentTargetLabel = computed(() => {
-    const target = normalizeText(selectedOrthogroupAlignmentFeature.value);
-    if (!target) return '';
-    const group = getOrthogroupById(target);
-    return group ? `${resolveOrthogroupName(group)} (${target})` : target;
-  });
 
   const filteredOrthogroups = computed(() => {
     const query = normalizeLower(orthogroupSearch.value);
@@ -742,15 +734,8 @@ export const createOrthogroupEditor = ({ state, runAnalysis }) => {
     });
   };
 
-  const resetOrthogroupAlignment = async () => {
-    if (!selectedOrthogroupAlignmentFeature.value) return;
-    selectedOrthogroupAlignmentFeature.value = '';
-    if (typeof runAnalysis === 'function') await runAnalysis();
-  };
-
   return {
     orthogroupCount,
-    selectedAlignmentTargetLabel,
     filteredOrthogroups,
     selectedOrthogroup,
     selectedOrthogroupMembersByRecord,
@@ -776,6 +761,5 @@ export const createOrthogroupEditor = ({ state, runAnalysis }) => {
     resetOrthogroupRename,
     highlightOrthogroupById,
     clearOrthogroupHighlight,
-    resetOrthogroupAlignment
   };
 };
