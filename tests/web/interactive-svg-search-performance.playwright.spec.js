@@ -266,6 +266,11 @@ with open(sys.argv[1], 'w', encoding='utf-8') as handle:
     pointerType: 'mouse'
   });
   await expect(firstMatch).not.toHaveClass(/gbdraw-interactive-pairwise-match--pending/);
+  expect(await firstMatch.evaluate((element) => ({
+    focused: element === document.activeElement,
+    focusVisible: element.matches(':focus-visible'),
+    outlineStyle: getComputedStyle(element).outlineStyle
+  }))).toEqual({ focused: true, focusVisible: false, outlineStyle: 'none' });
   await page.mouse.move(1, 1);
   await page.mouse.up();
 

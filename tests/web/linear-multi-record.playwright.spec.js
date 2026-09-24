@@ -450,6 +450,22 @@ test('Pairwise pointer feedback commits selection and preserves keyboard focus',
   const pairwiseMatch = page.getByRole('button', { name: 'Pairwise match 4', exact: true });
   await expect(firstOgMatch).toBeVisible();
 
+  await page.evaluate(() => {
+    const button = document.createElement('button');
+    button.id = 'match-focus-modality-probe';
+    button.textContent = 'focus';
+    button.style.cssText = 'position:fixed;top:0;left:0;z-index:99999;padding:8px';
+    document.body.appendChild(button);
+  });
+  await page.locator('#match-focus-modality-probe').click();
+  await page.locator('#match-focus-modality-probe').evaluate((button) => button.remove());
+  await firstOgMatch.evaluate((element) => element.focus());
+  expect(await firstOgMatch.evaluate((element) => ({
+    focused: element === document.activeElement,
+    focusVisible: element.matches(':focus-visible'),
+    outlineStyle: getComputedStyle(element).outlineStyle
+  }))).toEqual({ focused: true, focusVisible: false, outlineStyle: 'none' });
+
   await firstOgMatch.dispatchEvent('pointerdown', {
     bubbles: true,
     button: 0,
