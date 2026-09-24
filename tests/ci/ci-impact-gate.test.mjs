@@ -70,6 +70,7 @@ test('gate accepts metadata, documentation, and full PR routes', () => {
   const routes = [
     plan({ impact: 'metadata' }),
     plan(),
+    plan({ impact: 'policy-documentation' }),
     plan({
       impact: 'full',
       decision: 'full',
@@ -80,6 +81,7 @@ test('gate accepts metadata, documentation, and full PR routes', () => {
   assert.deepEqual(routes.map(({ requiredJobs }) => requiredJobs), [
     [],
     ['recipes-standard'],
+    ['web-change-budget'],
     [
       'web-change-budget',
       'core-pr',
@@ -105,6 +107,7 @@ test('gate accepts metadata, documentation, and full dev staging routes', () => 
   const routes = [
     devPlan({ impact: 'metadata' }),
     devPlan(),
+    devPlan({ impact: 'policy-documentation' }),
     devPlan({
       impact: 'full',
       decision: 'full',
@@ -115,6 +118,7 @@ test('gate accepts metadata, documentation, and full dev staging routes', () => 
   assert.deepEqual(routes.map(({ requiredJobs }) => requiredJobs), [
     [],
     ['recipes-standard'],
+    ['web-change-budget'],
     [
       'web-change-budget',
       'core',
@@ -136,6 +140,7 @@ test('Gallery gate accepts both light routes and requires both full jobs', () =>
   const routes = [
     galleryPlan({ impact: 'metadata' }),
     galleryPlan(),
+    galleryPlan({ impact: 'policy-documentation' }),
     galleryPlan({
       impact: 'full',
       decision: 'full',
@@ -146,13 +151,14 @@ test('Gallery gate accepts both light routes and requires both full jobs', () =>
   assert.deepEqual(routes.map(({ requiredJobs }) => requiredJobs), [
     [],
     [],
+    [],
     ['browser', 'performance']
   ]);
   routes.forEach((impactPlan) => {
     assert.equal(validate(impactPlan, needsFor(impactPlan)).ok, true);
   });
 
-  const full = routes[2];
+  const full = routes[3];
   for (const jobId of ['browser', 'performance']) {
     for (const result of ['skipped', 'failure', 'cancelled']) {
       const needs = needsFor(full);

@@ -4,7 +4,7 @@ export const IMPACT_PLAN_SCHEMA_VERSION = 2;
 
 // Ordered only for the summary label. Routing unions every affected capability.
 export const IMPACT_CLASSES = freeze([
-  'metadata', 'documentation', 'tests-only', 'python-core', 'renderer',
+  'metadata', 'documentation', 'policy-documentation', 'tests-only', 'python-core', 'renderer',
   'web-runtime', 'session-persistence', 'gallery', 'losat-integration',
   'packaging', 'ci-only', 'full'
 ]);
@@ -33,6 +33,7 @@ const PROFILE_REQUIRED_JOBS = freeze({
 const PR_CAPABILITY_JOBS = freeze({
   metadata: freeze([]),
   documentation: freeze(['recipes-standard']),
+  'policy-documentation': freeze(['web-change-budget']),
   'tests-only': PR_JOBS,
   'python-core': freeze(['web-change-budget', 'core-pr', 'lint', 'web-contracts-pr', 'web-pr-smoke']),
   renderer: freeze(['web-change-budget', 'core-pr', 'lint', 'web-contracts-pr', 'web-pr-smoke']),
@@ -49,11 +50,18 @@ const PR_CAPABILITY_JOBS = freeze({
 // Control-plane, dependency, and unknown changes cannot inherit a narrower route.
 export const requiresFullCoverage = (profile, capabilities) => profile === 'release'
   || capabilities.some((capability) => ['full', 'ci-only', 'packaging', 'tests-only'].includes(capability))
-  || (profile !== 'pr' && capabilities.some((capability) => !['metadata', 'documentation'].includes(capability)));
+  || (profile !== 'pr' && capabilities.some((capability) => !['metadata', 'documentation', 'policy-documentation'].includes(capability)));
 const orderedCapabilities = (capabilities) => IMPACT_CLASSES.filter((capability) => capabilities.includes(capability));
 const primaryImpact = (capabilities) => capabilities.at(-1);
 const FULL_OBJECT_ID = /^(?:[0-9a-f]{40}|[0-9a-f]{64})$/i;
 const ROOT_MARKDOWN = /^[^/]+\.md$/;
+const POLICY_DOCUMENTS = new Set([
+  'docs/internal/ARCHITECTURE_FITNESS_FUNCTION_RATCHET.md',
+  'docs/internal/OPTION_INTEGRITY_PRODUCT_CONTRACT.md',
+  'docs/internal/PRODUCT_IMPACT_RATCHET.md',
+  'docs/internal/SELECTIVE_CI.md',
+  'docs/internal/WEB_CHANGE_POLICY.md'
+]);
 const METADATA_DIRECTORIES = freeze(['.agents', '.claude', '.codex', '.cursor']);
 const METADATA_FILES = new Set([
   '.github/pull_request_template.md',
@@ -132,13 +140,12 @@ const isValidRepositoryPath = (path) => typeof path === 'string'
 export const classifyPath = (path) => {
   const classified = (impact, reason) => freeze({ path, impact, reason });
   if (!isValidRepositoryPath(path)) return classified('full', 'INVALID_REPOSITORY_PATH');
-  // Policy documents are executable authority even though they are Markdown.
+  if (POLICY_DOCUMENTS.has(path)) return classified('policy-documentation', 'POLICY_DOCUMENT');
   if (path.startsWith('.github/workflows/') || path.startsWith('tests/ci/')
       || /^tools\/(?:ci-impact|check-web|web-(?:architecture|product|change)|check-promotion)/.test(path)
       || /^tests\/web\/(?:architecture|product-impact|promotion-readiness).*\.test\.mjs$/.test(path)
-      || /^playwright.*\.config\.js$/.test(path)
-      || /^docs\/internal\/(?:WEB_CHANGE_POLICY|ARCHITECTURE_FITNESS_FUNCTION_RATCHET|PRODUCT_|OPTION_INTEGRITY_PRODUCT_CONTRACT|SELECTIVE_CI)/.test(path)) {
-    return classified('ci-only', 'CI_OR_POLICY_AUTHORITY');
+      || /^playwright.*\.config\.js$/.test(path)) {
+    return classified('ci-only', 'CI_CONTROL_PLANE');
   }
   if (METADATA_FILES.has(path)) return classified('metadata', 'METADATA_FILE_ALLOWLIST');
   if (METADATA_DIRECTORIES.some((directory) => path.startsWith(`${directory}/`))) {
@@ -263,7 +270,9 @@ export const requiredJobsFor = ({ profile, impact, decision, capabilities = [imp
   if (decision === 'full') return freeze([...all]);
   const selected = profile === 'pr'
     ? capabilities.flatMap((capability) => PR_CAPABILITY_JOBS[capability])
-    : profile === 'dev' && capabilities.includes('documentation') ? ['recipes-standard'] : [];
+    : profile === 'dev'
+      ? capabilities.flatMap((capability) => PR_CAPABILITY_JOBS[capability] || [])
+      : [];
   return freeze(all.filter((job) => selected.includes(job)));
 };
 

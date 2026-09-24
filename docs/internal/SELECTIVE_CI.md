@@ -49,7 +49,8 @@ registry unions their contributions, then emits unique jobs in registry order.
 | Capability | Representative paths | Selective PR jobs |
 | --- | --- | --- |
 | `metadata` | Existing development-tool allowlist, `.gitignore`, citation/licenses | No test job |
-| `documentation` | Root Markdown and `docs/`, excluding policy authority | Recipes |
+| `documentation` | Root Markdown and `docs/`, excluding the five exact policy documents below | Recipes |
+| `policy-documentation` | Architecture, Web, Product Impact, Option Integrity, and selective CI policy documents | Web change budget |
 | `python-core` | Known Python core/API/config/I/O owners and data | Architecture, core, lint, Web contracts, browser smoke |
 | `renderer` | Render/SVG/diagram/canvas/features/labels/layout owners | Architecture, core, lint, Web contracts, browser smoke |
 | `web-runtime` | `gbdraw/web/index.html`, first-party JS | Architecture, Web contracts, browser smoke |
@@ -58,8 +59,14 @@ registry unions their contributions, then emits unique jobs in registry order.
 | `losat-integration` | Comparison owners, LOSAT JS/workers/Wasm | Architecture, core, lint, Web contracts, browser smoke |
 | `tests-only` | Shared fixtures/harness and unclassified tests | Full PR tier |
 | `packaging` | Dependencies, manifests, vendored runtime, packaging tools | Full PR tier |
-| `ci-only` | Workflows, planner/tests, Playwright configuration, architecture/Product authority | Full PR tier |
+| `ci-only` | Workflows, planner/tests, and Playwright configuration | Full PR tier |
 | `full` | Unknown or invalid paths | Full PR tier |
+
+The `policy-documentation` paths are exactly `docs/internal/ARCHITECTURE_FITNESS_FUNCTION_RATCHET.md`,
+`docs/internal/OPTION_INTEGRITY_PRODUCT_CONTRACT.md`,
+`docs/internal/PRODUCT_IMPACT_RATCHET.md`, `docs/internal/SELECTIVE_CI.md`,
+and `docs/internal/WEB_CHANGE_POLICY.md`. Other `docs/` paths remain ordinary
+documentation, including working templates and acceptance reports.
 
 The full PR job IDs are `web-change-budget`, `core-pr`, `recipes-standard`,
 `gallery`, `lint`, `web-contracts-pr`, and `web-pr-smoke`.
@@ -85,16 +92,22 @@ malformed/empty diffs or missing Git objects fail closed.
 ### Evidence required for selection
 
 A narrower PR route requires successful exact-SHA `Dev staging / gate` evidence
-at the PR base. No older successful SHA can substitute. API failures, missing or
-unfinished runs, cancellation, and failed/malformed evidence select the complete
-PR tier. `architecture-change`, control-plane changes, dependencies, unknown
-paths, unclassified/shared test inputs, and explicit dispatches also require the full relevant tier.
+at the PR base. No older successful SHA can substitute. For changes consisting
+only of documentation and policy-documentation, missing, unfinished, failed, or
+unavailable baseline evidence fails planning without starting runtime test jobs.
+This prevents a failed baseline from becoming successful inherited evidence after
+a documentation-only commit. For other light changes, unavailable evidence still
+selects the complete tier. `architecture-change`, control-plane changes,
+dependencies, unknown paths, unclassified/shared test inputs, and explicit
+dispatches also require the full relevant tier.
 
 Every runtime/subsystem change runs complete integrated dev and Gallery coverage.
-Only metadata/documentation changes can inherit direct-parent staging evidence:
-metadata runs no test jobs, documentation runs recipes in `Tests`, and neither
-reruns Gallery publication when exact parent Gallery readiness is successful.
-Consecutive pushes whose direct parent is unfinished/cancelled run the full tier.
+Metadata, documentation, and policy-documentation can inherit direct-parent
+staging evidence. Metadata runs no test jobs; ordinary documentation runs recipes;
+policy documentation runs Web change budget in `Tests`. Documentation-only Gallery
+publication skips browser and performance when direct-parent Gallery readiness is
+successful. A missing or unfinished direct-parent result fails documentation-only
+planning rather than running the full tier.
 
 ## Smoke inventory and regression retention
 
