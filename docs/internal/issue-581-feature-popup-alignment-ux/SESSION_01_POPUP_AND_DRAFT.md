@@ -8,8 +8,11 @@ gbdraw Issue #581 の第一段階として、feature popup の Record actions �
 問題を直し、Similarity Alignment の候補を生物学的に読めるようにし、候補 click のたびに
 Python Resolver が走る待機をなくす。詳細な製品結果と受入条件は
 `docs/internal/issue-581-feature-popup-alignment-ux/IMPLEMENTATION_PLAN.md` にある。
-S00 の Product preflight と必要な authority が、今回触る outcome を許していることを
-先に確認する。未決の outcome に依存する変更は行わず、独立部分の作業を続ける。
+Product Decision Owner は 2026-09-24 に `A / EDIT_DISCLOSURE` と
+`A / LOCAL_BATCH_RETRY` を承認した。authority 候補は別ブランチ
+`issue-581-product-decisions-20260924` の PD-OI-033、034 にある。
+これらが `origin/dev` にマージされ、固定実装ブランチに取り込まれたことを先に確認する。
+未マージなら依存 runtime は開始しない。
 
 ## ブランチと資料
 
@@ -17,7 +20,7 @@ S00 の Product preflight と必要な authority が、今回触る outcome を�
   別の runtime ブランチを作らない。開始時に branch、HEAD、upstream、worktree、
   最新 `origin/dev` との差と総合計画第10節を確認する。
 - `AGENTS.md`、`CLAUDE.md`、`gbdraw/web/CLAUDE.md`、
-  `docs/internal/OPTION_INTEGRITY_PRODUCT_CONTRACT.md` の PD-OI-026〜029、031、032、
+  `docs/internal/OPTION_INTEGRITY_PRODUCT_CONTRACT.md` の PD-OI-026〜029、031〜034、
   `docs/internal/PRODUCT_IMPACT_RATCHET.md`、
   `docs/internal/ARCHITECTURE_FITNESS_FUNCTION_RATCHET.md` を読む。
 - `gbdraw/web/js/app/similarity-alignment.js`、
@@ -65,4 +68,16 @@ S00 の Product preflight と必要な authority が、今回触る outcome を�
 SOLID のため owner を増やさず、KISS のため existing workflow を使い、DRY のため
 選択と Apply の一経路に収束させ、YAGNI のため ranking、debounce、保存 state、
 第二の Resolver を作らない。英語の proposed commit title と短い summary を示す。
-push／PR はこのセッションで明示的に許可された場合だけ行う。
+
+## コミット・push と次セッションへの引き継ぎ
+
+本依頼は担当分のコミットと同名 remote work branch への push を明示的に許可する。
+このセッションの作業は固定ブランチ `issue-581-feature-popup-alignment-ux-20260924` 内で完了する。
+検証と差分監査の後、担当分を英語の題名で１コミットにまとめ、同名の remote work
+branch へ `git push origin HEAD:refs/heads/issue-581-feature-popup-alignment-ux-20260924` で push する。
+開始前と push 前に branch、upstream、作業ツリー、remote の状態を確認する。
+
+回答の最後に、次の S02 `SESSION_02_FLOATING_PALETTE.md` を新規参加者が単独で実行できる
+完全な INSTRUCTION PROMPT として提示する。そのプロンプトにも、同じ固定ブランチで
+作業・検証・コミット・push まで行い、さらに次セッション用の完全なプロンプトを
+回答末尾に提示する指示を含める。S04 が完了した場合は追加セッションを作らない。

@@ -9,7 +9,8 @@ gbdraw Issue #581 の feature popup 改善と Similarity Alignment palette を�
 https://github.com/satoshikawato/gbdraw/issues/581、設計提案は
 https://github.com/satoshikawato/gbdraw/issues/581#issuecomment-5811037046、
 全受入条件は `docs/internal/issue-581-feature-popup-alignment-ux/IMPLEMENTATION_PLAN.md`
-にある。S00〜S03 の実施記録、Product authority、未完了事項を読んでから始める。
+にある。2026-09-24 承認の PD-OI-033〜035 が `origin/dev` にマージされたことを確認し、
+S00〜S03 の実施記録、Product authority、未完了事項を読んでから始める。
 未決 Product outcome があれば、その依存部分を完了と報告しない。
 
 ## ブランチと必読資料
@@ -54,11 +55,15 @@ https://github.com/satoshikawato/gbdraw/issues/581#issuecomment-5811037046、
 
 ## 最終監査と報告
 
+本依頼は担当分のコミットと同名 remote work branch への push を明示的に許可する。
 production、test、docs、generated diff を別々に一度ずつ監査する。Product Impact の
 各効果と AND-of-OR requirement、architecture owner/path の変化を確認し、superseded
 path を残さない。総合計画第10節を更新し、実際の command、結果、残る制限、
-最終 HEAD を記録する。英語の proposed commit title と短い summary を示す。
-push、PR、merge はその時点の明示許可に従う。
+最終 HEAD を記録する。固定ブランチ `issue-581-feature-popup-alignment-ux-20260924` 内で担当分を英語の題名で
+１コミットにまとめ、同名の remote work branch へ
+`git push origin HEAD:refs/heads/issue-581-feature-popup-alignment-ux-20260924` で push する。
+開始前と push 前に branch、upstream、作業ツリー、remote の状態を確認する。
+PR と merge はその時点の明示許可に従う。
 
 一つの Resolver、一つの選択 owner、一つの Result 経路を保つことを
 SOLID／KISS／DRY の受入条件とする。未使用の extension point、互換 branch、

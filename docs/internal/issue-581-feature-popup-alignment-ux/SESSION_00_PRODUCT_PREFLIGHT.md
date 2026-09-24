@@ -12,6 +12,14 @@ Resolver を呼んで選択が止まる問題を扱う。[設計提案コメン�
 
 このセッションは製品結果と権威の確認だけを行う。runtime code は変更しない。
 
+2026-09-24 に Product Decision Owner `satoshikawato` は３件の完全な
+`PRODUCT_DECISION` 文面をそのまま承認した。`A / EDIT_DISCLOSURE`、
+`A / LOCAL_BATCH_RETRY`、`A / FLOATING_GUIDE_CANVAS_PICK` である。
+`issue-581-product-decisions-20260924` の commit `18903342` は、これらを
+PD-OI-033〜035 として authority-only 文書に記録したローカル候補である。
+`origin/dev` にマージされるまで依存 runtime を開始しない。承認済み３件を
+再判断に戻さず、追加の material な結果差だけを新たに審査する。
+
 ## ブランチと必読資料
 
 - 固定 Issue #581 実装ブランチは `issue-581-feature-popup-alignment-ux-20260924`。
@@ -23,7 +31,8 @@ Resolver を呼んで選択が止まる問題を扱う。[設計提案コメン�
   `docs/internal/PRODUCT_DECISION_PACKET_TEMPLATE.md`、
   `docs/internal/ARCHITECTURE_FITNESS_FUNCTION_RATCHET.md`、
   `docs/internal/OPTION_INTEGRITY_PRODUCT_CONTRACT.md` の
-  PD-OI-026〜029、031、032、`tools/web-product-impact-map.json`、
+  PD-OI-026〜029、031、032 と authority 候補の PD-OI-033〜035、
+  `tools/web-product-impact-map.json`、
   `tools/web-product-decisions.json` を読む。
 - Issue #581 の本文・全 comments と最新 `origin/dev` の該当 code/test を確認し、
   base の accepted authority と単なる提案・実装事実を分ける。
@@ -40,15 +49,14 @@ Resolver を呼んで選択が止まる問題を扱う。[設計提案コメン�
 2. 各 concern を `IMPLEMENT_EXISTING_AUTHORITY`、`EVIDENCE_REQUIRED`、
    `PRODUCT_DECISION_REQUIRED`、`NOT_ALLOWED` の一つに分類し、他の分類が不適切な理由を書く。
    既存の PD-OI-026 の exact 選択と独立性、PD-OI-032 の record 回転契約を維持する。
-3. 証拠や判断が必要な concern には総合計画の隣に Decision Pack を作り、
+3. 承認済み３件の外で新たに証拠や判断が必要な concern には総合計画の隣に Decision Pack を作り、
    stable な結果選択肢、維持・追加・失う効果、Decision route、contract、証拠の限界、
    Product Decision Owner 用 `PRODUCT_DECISION` response template を記す。
    Issue コメントを正式な receipt に読み替えない。rationale、may retire、risk、
    owner、date を推測して埋めない。
-4. 明示的な human receipt が既に存在する場合だけ、指示どおりの既存 authority 経路で
-   authority-only 変更を準備する。candidate authority と依存 runtime を同じ候補で
-   承認させない。durable base authority が必要なら最新 `origin/dev` から別の
-   authority-only ブランチを作り、merge 後に固定 runtime ブランチへ反映する。
+4. 承認済み３件を記録した authority-only commit `18903342` の内容と最新 base を
+   確認する。candidate authority と依存 runtime を同じ候補で承認させない。
+   authority が `origin/dev` にマージされた後にだけ、固定 runtime ブランチへ反映する。
    push、PR、merge は別途明示許可がある範囲だけ実施する。
 5. 結果、根拠、残る判断、S01〜S03 の各開始可否を総合計画の実施記録へ記入する。
 

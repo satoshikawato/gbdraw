@@ -1,10 +1,11 @@
 # Issue #581 — Feature popup と Similarity Alignment 選択 UI の総合実装計画
 
-- 状態: 計画策定。runtime は未実装。
+- 状態: Product Decision ３件は 2026-09-24 に承認済み。authority-only 変更は別ブランチでローカルコミット済み。runtime は未実装。
 - 作成日: 2026-09-24
 - 対象: [Issue #581](https://github.com/satoshikawato/gbdraw/issues/581) と [2026-09-24 の設計提案コメント](https://github.com/satoshikawato/gbdraw/issues/581#issuecomment-5811037046)
 - 固定実装ブランチ: `issue-581-feature-popup-alignment-ux-20260924`
 - ブランチ作成時の base: `origin/dev` @ `8c54c14455fedebc55561c2c4dc952a44d8d78de`
+- Product authority 候補ブランチ: `issue-581-product-decisions-20260924`（commit `18903342`、未マージ）
 
 ## 1. この文書の使い方
 
@@ -18,7 +19,7 @@
 `main`、`dev`、他 Issue のブランチで作業しない。開始時にブランチ、HEAD、
 upstream、作業ツリー、`origin/dev` との祖先関係を確認する。別の runtime ブランチは
 作らない。新しい `origin/dev` が公開されても、既存差分を確認せずに rebase しない。
-Product authority だけを先にマージする必要がある場合の例外は第7節に記す。
+Product authority だけを先にマージするための別ブランチは第7節に記す。
 
 計画の一次資料は上記 Issue とコメントである。実装時には更新の有無を再確認し、
 本書の記述だけを最新の製品判断として扱わない。
@@ -56,6 +57,9 @@ diagram 再生成を行わず、radio の待機表示を生じさせないこと
 - 同文書の PD-OI-027〜029 と PD-OI-031 は orientation、active plan、Reset／History、
   Web と Python/CLI の境界を定める。PD-OI-032 は popup からの record 回転、
   対象 record だけの更新、Cancel／失敗時の Result 保全を定める。
+- 追加判断 PD-OI-033〜035 の文面は `issue-581-product-decisions-20260924` に
+  ローカルコミット済みである。2026-09-24 現在、`origin/dev` に未マージなので、
+  同ブランチ上の候補を runtime の base authority とみなさない。
 - `gbdraw/layout/similarity_alignment.py` は record ごとに選択を処理する。
   Python Resolver が候補の適格性、曖昧性、plan を決める唯一の所有者である。
 - `gbdraw/web/js/app/similarity-alignment.js` は現在 `answer()` から選択ごとに
@@ -86,9 +90,8 @@ diagram 再生成を行わず、radio の待機表示を生じさせないこと
 - Anchor／offset／orientation／feature-end の計算、target-only Apply、History、
   Session、sidebar 側の挙動は既存 owner を使う。別の回転 engine を作らない。
 
-専用 `Record` tab は Issue コメントに記載された別案である。初期提案は、simple と rich の
-両方でフォームを一つに保てる `Edit` 内の折り畳み欄とする。採否は第7節の
-Product preflight で確定する。
+専用 `Record` tab は Issue コメントに記載された別案である。`Edit` 内の折り畳み欄は
+承認された `A / EDIT_DISCLOSURE` に対応する。実装に進む条件は第7節に記す。
 
 ### 4.2 候補の表示
 
@@ -114,7 +117,7 @@ Product preflight で確定する。
   `applyPlan()` を呼ぶ。曖昧さが残る／応答不整合なら生成しない。
 - Python 検証失敗・生成失敗では選択と baseline を保ち、理由を表示して再試行を許す。
   成功、明示 Cancel、外部状態の無効化では既存の状態所有者が後始末する。
-- パレット中に source、crop、record selection、group、committed Result が変化した場合、
+- パレット中に source、crop、group、committed Result が変化した場合、
   開始時の artifact と一致するか検証する。古い選択を適用せず、再開始の理由を示す。
   pan／zoom はこの検証を無効にしない。
 - 曖昧 record がない場合の既存の自動適用、exact reference、orientation、
@@ -187,33 +190,27 @@ UI 追加 state は保存対象にしない。
 
 ## 7. Product Impact とブランチ運用
 
-S00 は変更ごとに、既存の明確な権威で実装可能か、決定的な証拠が必要か、複数の有効な
-製品結果が残るかを `PRODUCT_IMPACT_RATCHET.md` の区分で判定する。特に
-「Edit 内の欄か Record tab か」「modal のままか non-modal palette か」
-「outside interaction が変更を生んだときの継続」「失敗後の draft」の
-利用者に見える差を確認する。Issue コメントは設計提案であり、それだけを
-base にある durable authority とみなさない。
+Product Decision Owner `satoshikawato` は 2026-09-24、次の３件の
+`PRODUCT_DECISION` 文面をそのまま承認した。文面の全フィールドは
+`issue-581-product-decisions-20260924` の
+`docs/internal/OPTION_INTEGRITY_PRODUCT_CONTRACT.md` に PD-OI-033〜035 として
+記録した。これは未マージの authority 候補であり、以下の表はその選択を要約する。
 
-計画策定時点で、少なくとも次の結果差は Product Decision 候補である。下表は選択済みの
-権威ではない。S00 で最新 base の権威と証拠を照合し、判断が必要な concern だけを
-正式な Decision Pack として提示する。
-
-| 暫定 concern | 比較すべき結果 | 判断を要する理由 |
+| Concern | 承認された選択 | runtime 開始条件 |
 | --- | --- | --- |
-| popup Record actions | Edit 内の初期閉鎖欄／専用 Record tab | コメントが両案を許し、発見しやすさと popup 内の移動が異なる。 |
-| alignment 選択中の UI | non-modal palette＋図上選択・ガイド／modal のまま候補表示と応答だけ改善 | 背景図を操作できる範囲、focus、候補選択の入口が異なる。 |
-| Apply 失敗・背景変更後の継続 | 下書きを保って再試行または明示再開始／下書きを破棄して最初から開始 | 次にできる操作と選択をやり直す負担が異なる。古い plan の適用は禁止する。 |
+| `web.feature-popup.record-actions-presentation` | `A / EDIT_DISCLOSURE`（PD-OI-033） | authority が `origin/dev` にマージ済み |
+| `web.similarity-alignment.choice-and-retry` | `A / LOCAL_BATCH_RETRY`（PD-OI-034） | 同上 |
+| `web.similarity-alignment.canvas-interaction` | `A / FLOATING_GUIDE_CANVAS_PICK`（PD-OI-035） | 同上 |
 
-Product 判断が必要な場合は `PRODUCT_DECISION_PACKET_TEMPLATE.md` を使い、
-結果に基づく安定した選択肢、維持・失う効果、Decision route、証拠、未決事項、
-`PRODUCT_DECISION` response template を提示する。開発者は rationale、retirement、
-accepted risk を補完しない。未決の outcome に依存する runtime は開始しない。
+既存の PD-OI-026〜032 と承認済み３件の全文を実装前に照合する。新たな material な
+製品結果差が見つかった場合は `PRODUCT_IMPACT_RATCHET.md` に従って調査し、
+未決の outcome に依存する runtime を開始しない。Issue コメントだけを durable authority
+とみなさず、候補 authority を runtime ブランチへ直接積んで自己承認しない。
 
-durable authority が必要なら、authority-only 変更を最新 `origin/dev` 由来の別ブランチで
-先にマージする。候補 authority をこの runtime ブランチへ直接積んで同じ候補の
-runtime を自己承認しない。authority が `origin/dev` に入った後、その事実と
-作業ツリーを確認して固定ブランチへ取り込む。取り込み後も Issue #581 runtime は
-固定ブランチに置く。権威変更、PR、merge、push は各セッションの明示的な許可範囲に従う。
+authority-only 変更を先にレビュー・マージする。その後、`origin/dev` と固定実装ブランチの
+作業ツリーを確認し、マージ済み authority を固定実装ブランチへ取り込む。Issue #581
+runtime は引き続き固定実装ブランチに置く。権威変更、PR、merge、push は明示された
+許可範囲に従う。
 
 ## 8. 設計原則と対象外
 
@@ -246,8 +243,8 @@ public docs は既存の該当ページに集約し、機能ごとの新規ペ�
 
 | Session | 状態 | HEAD／base・主な変更 | 検証・残件 |
 | --- | --- | --- | --- |
-| S00 | 未着手 |  |  |
-| S01 | 未着手 |  |  |
-| S02 | 未着手 |  |  |
-| S03 | 未着手 |  |  |
-| S04 | 未着手 |  |  |
+| S00 | 判断済み・authority 候補準備済み | `origin/dev` @ `8c54c144`。別ブランチ `issue-581-product-decisions-20260924` @ `18903342` に PD-OI-033〜035 をローカルコミット。 | JSON receipt ３件の構造確認、`git diff --check`、Web 変更ゲート PASS。未マージのため S01〜S03 の依存 runtime は開始不可。 |
+| S01 | 未実施 | 変更なし | authority merge 待ち。実装・検証なし。 |
+| S02 | 未実施 | 変更なし | S01 と authority merge 待ち。実装・検証なし。 |
+| S03 | 未実施 | 変更なし | S02 と authority merge 待ち。実装・検証なし。 |
+| S04 | 未実施 | 変更なし | S01〜S03 待ち。受入検証なし。 |

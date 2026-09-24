@@ -9,8 +9,10 @@ floating palette に変更する。設計提案は
 https://github.com/satoshikawato/gbdraw/issues/581#issuecomment-5811037046、
 完全な実装境界は
 `docs/internal/issue-581-feature-popup-alignment-ux/IMPLEMENTATION_PLAN.md` にある。
-S01 のローカル選択・Apply batch 検証が完了し、S00 が palette outcome を実装可能と
-判定したことを確認する。未決の Product Decision を UI 実装で先取りしない。
+S01 のローカル選択・Apply batch 検証が完了したこと、2026-09-24 に承認された
+`A / FLOATING_GUIDE_CANVAS_PICK`（authority 候補 PD-OI-035）が
+`origin/dev` にマージされて固定実装ブランチへ取り込まれたことを確認する。
+未マージなら依存 runtime は開始しない。
 
 ## ブランチと資料
 
@@ -18,8 +20,8 @@ S01 のローカル選択・Apply batch 検証が完了し、S00 が palette out
   branch、HEAD、upstream、worktree、総合計画第10節、S01 の diff と test を確認する。
 - `AGENTS.md`、`CLAUDE.md`、`gbdraw/web/CLAUDE.md`、
   `docs/internal/PRODUCT_IMPACT_RATCHET.md`、
-  `docs/internal/ARCHITECTURE_FITNESS_FUNCTION_RATCHET.md` と、S00 で確定した
-  Product authority を読む。
+  `docs/internal/ARCHITECTURE_FITNESS_FUNCTION_RATCHET.md` と、
+  `docs/internal/OPTION_INTEGRITY_PRODUCT_CONTRACT.md` の PD-OI-026、033〜035 を読む。
 - `gbdraw/web/index.html` の現行 dialog、`gbdraw/web/js/app/app-setup.js` の
   focus trap／return、`gbdraw/web/js/app/similarity-alignment.js` の state、
   既存の popup drag、responsive layout、関連 browser tests を読む。
@@ -58,5 +60,16 @@ S01 のローカル選択・Apply batch 検証が完了し、S00 が palette out
 SOLID: palette は表示・focus のみ所有し、alignment controller が選択を所有する。
 KISS/DRY: 既存 Vue template と drag の小さい再利用範囲で済ませる。
 YAGNI: layout framework、永続化、第二の modal 管理器は作らない。
-英語の proposed commit title と短い summary を示す。push／PR はこのセッションで
-明示的に許可された場合だけ行う。
+
+## コミット・push と次セッションへの引き継ぎ
+
+本依頼は担当分のコミットと同名 remote work branch への push を明示的に許可する。
+このセッションの作業は固定ブランチ `issue-581-feature-popup-alignment-ux-20260924` 内で完了する。
+検証と差分監査の後、担当分を英語の題名で１コミットにまとめ、同名の remote work
+branch へ `git push origin HEAD:refs/heads/issue-581-feature-popup-alignment-ux-20260924` で push する。
+開始前と push 前に branch、upstream、作業ツリー、remote の状態を確認する。
+
+回答の最後に、次の S03 `SESSION_03_CANVAS_INTEGRATION.md` を新規参加者が単独で実行できる
+完全な INSTRUCTION PROMPT として提示する。そのプロンプトにも、同じ固定ブランチで
+作業・検証・コミット・push まで行い、さらに次セッション用の完全なプロンプトを
+回答末尾に提示する指示を含める。S04 が完了した場合は追加セッションを作らない。

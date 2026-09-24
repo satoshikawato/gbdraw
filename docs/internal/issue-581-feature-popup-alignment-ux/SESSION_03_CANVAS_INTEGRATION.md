@@ -8,15 +8,16 @@ gbdraw Issue #581 の floating alignment palette に対して、参照 feature �
 縦ガイド、番号付き候補、palette と図の双方向 hover／選択を追加する。利用者は元の
 Linear 比較図を見たまま exact candidate を選べる。製品意味、対象外、受入条件は
 `docs/internal/issue-581-feature-popup-alignment-ux/IMPLEMENTATION_PLAN.md` にある。
-S01 の local draft と S02 の non-modal palette、必要な Product authority が完了してから
-着手する。
+S01 の local draft と S02 の non-modal palette が完了し、承認済み
+`A / FLOATING_GUIDE_CANVAS_PICK` の PD-OI-035 が `origin/dev` にマージされて
+固定実装ブランチへ取り込まれてから着手する。
 
 ## ブランチと資料
 
 - runtime 作業は **`issue-581-feature-popup-alignment-ux-20260924`** に積む。
   branch、HEAD、upstream、worktree、総合計画第10節を確認する。
 - `AGENTS.md`、`CLAUDE.md`、`gbdraw/web/CLAUDE.md`、
-  `docs/internal/OPTION_INTEGRITY_PRODUCT_CONTRACT.md` の PD-OI-026〜029、031、
+  `docs/internal/OPTION_INTEGRITY_PRODUCT_CONTRACT.md` の PD-OI-026〜029、031、034〜035、
   `docs/internal/ARCHITECTURE_FITNESS_FUNCTION_RATCHET.md` と S00 の判断を読む。
 - `gbdraw/web/js/app/feature-editor/svg-actions.js` の identity lookup、hover、
   preview transform interaction、`gbdraw/web/js/app/app-setup.js` の wiring、
@@ -61,5 +62,16 @@ S01 の local draft と S02 の non-modal palette、必要な Product authority 
 SOLID: SVG interaction owner が geometry と event lifecycle を持ち、controller が
 choice を持つ。KISS/DRY: lookup と hover を再利用し、radio と canvas は一つの
 action に収束する。YAGNI: 汎用 annotation engine や scoring を追加しない。
-英語の proposed commit title と短い summary を示す。push／PR はこのセッションで
-明示的に許可された場合だけ行う。
+
+## コミット・push と次セッションへの引き継ぎ
+
+本依頼は担当分のコミットと同名 remote work branch への push を明示的に許可する。
+このセッションの作業は固定ブランチ `issue-581-feature-popup-alignment-ux-20260924` 内で完了する。
+検証と差分監査の後、担当分を英語の題名で１コミットにまとめ、同名の remote work
+branch へ `git push origin HEAD:refs/heads/issue-581-feature-popup-alignment-ux-20260924` で push する。
+開始前と push 前に branch、upstream、作業ツリー、remote の状態を確認する。
+
+回答の最後に、次の S04 `SESSION_04_ACCEPTANCE_AND_HANDOFF.md` を新規参加者が単独で実行できる
+完全な INSTRUCTION PROMPT として提示する。そのプロンプトにも、同じ固定ブランチで
+作業・検証・コミット・push まで行い、さらに次セッション用の完全なプロンプトを
+回答末尾に提示する指示を含める。S04 が完了した場合は追加セッションを作らない。
