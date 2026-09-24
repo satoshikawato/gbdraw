@@ -108,8 +108,7 @@ test('Similarity alignment UI completes exact-reference, ambiguity, focus, summa
   const dialog = page.getByRole('dialog', { name: 'Select alignment anchors' });
   await expect(dialog).toBeVisible({ timeout: 180000 });
   await expect(dialog).toHaveAttribute('aria-describedby', 'similarity-alignment-dialog-description');
-  await expect(dialog).toContainText('inparalog');
-  await expect(dialog).toContainText(/\d+\.\.\d+ · strand [+-]/);
+  await expect(dialog).toContainText(/\d[\d,]*\.\.\d[\d,]* bp \([+-]\)/);
   await expect(dialog).toContainText('Direct evidence: None');
   await expect(dialog).not.toContainText(/score/i);
   const apply = dialog.getByRole('button', { name: 'Apply', exact: true });
@@ -124,7 +123,7 @@ test('Similarity alignment UI completes exact-reference, ambiguity, focus, summa
     fullPage: true
   });
 
-  const firstCandidate = dialog.getByRole('radio', { name: /Select feature/ }).first();
+  const firstCandidate = dialog.getByRole('radio', { name: /Select .*bp, strand/ }).first();
   const candidateAnchor = await page.evaluate(() => (
     window.__GBDRAW_APP__.similarityAlignmentDraft.ambiguities[0].candidates[0].anchor
   ));
@@ -155,7 +154,7 @@ test('Similarity alignment UI completes exact-reference, ambiguity, focus, summa
   await page.keyboard.press('Tab');
   expect(await dialog.evaluate((element) => element.contains(document.activeElement))).toBe(true);
   await page.keyboard.press('Shift+Tab');
-  await dialog.getByRole('radio', { name: /Skip record/ }).check();
+  await dialog.getByRole('radio', { name: /Skip / }).check();
   await expect(dialog).toContainText('Selected: Skip');
   await expect(apply).toBeEnabled();
   await dialog.locator('input[type="radio"]:checked').press('Escape');
@@ -184,7 +183,7 @@ test('Similarity alignment UI completes exact-reference, ambiguity, focus, summa
   await popupAlign.scrollIntoViewIfNeeded();
   await popupAlign.click();
   await expect(dialog).toBeVisible({ timeout: 180000 });
-  await dialog.getByRole('radio', { name: /Select feature/ }).first().check();
+  await dialog.getByRole('radio', { name: /Select .*bp, strand/ }).first().check();
   await expect(apply).toBeEnabled();
   await apply.scrollIntoViewIfNeeded();
   const applyBox = await apply.boundingBox();
@@ -211,7 +210,7 @@ test('Similarity alignment UI completes exact-reference, ambiguity, focus, summa
   );
   await align.click();
   await expect(dialog).toBeVisible({ timeout: 180000 });
-  await dialog.getByRole('radio', { name: /Select feature/ }).first().check();
+  await dialog.getByRole('radio', { name: /Select .*bp, strand/ }).first().check();
   await expect(apply).toBeEnabled();
   await apply.click();
 

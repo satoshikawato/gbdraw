@@ -3,6 +3,7 @@ import {
   orthogroupIdStatus
 } from '../services/feature-identity.js';
 import { materializeRecordTranslations } from './legend-layout/composition-actions.js';
+import { isInternalProteinDisplayId } from './feature-utils.js';
 
 const { computed, ref } = window.Vue;
 
@@ -73,10 +74,23 @@ const deepFreeze = (value) => {
   return Object.freeze(value);
 };
 
-const candidateView = (candidate, request) => {
+const displayText = (...values) => values
+  .flatMap((value) => Array.isArray(value) ? value : [value])
+  .map((value) => String(value ?? '').trim())
+  .find((value) => value && !isInternalProteinDisplayId(value)) || '';
+
+const candidateView = (candidate, request, displayFacts = new Map()) => {
   const key = anchorKey(candidate.anchor);
   const member = request.members.find(({ anchor }) => anchorKey(anchor) === key);
   if (!member) throw new Error('Alignment candidate has no current member facts.');
+  const facts = displayFacts.get(key) || {};
+  const feature = facts.sequenceFeature || {};
+  const gene = displayText(feature.gene, facts.gene, feature.qualifiers?.gene);
+  const locusTag = displayText(feature.locus_tag, feature.locusTag,
+    facts.locus_tag, facts.locusTag, feature.qualifiers?.locus_tag);
+  const product = displayText(feature.product, facts.product, feature.qualifiers?.product);
+  const type = displayText(feature.type, facts.type) || 'CDS';
+  const coordinates = `${(Number(member.sourceStart) + 1).toLocaleString('en-US')}..${Number(member.sourceEnd).toLocaleString('en-US')} bp`;
   const evidence = request.directEdges
     .filter(({ query, subject }) => (
       sameJson(query, request.reference) && sameJson(subject, candidate.anchor)
@@ -86,41 +100,28 @@ const candidateView = (candidate, request) => {
   return {
     key,
     anchor: candidate.anchor,
-    featureIdentifier: candidate.anchor.biologicalFeatureId,
-    coordinates: `${Number(member.sourceStart) + 1}..${Number(member.sourceEnd)}`,
+    label: [gene, locusTag].filter(Boolean).join(' · ') || product || type,
+    coordinates,
     displayedStrand: strandLabel(candidate.displayedStrand),
+    featureIdentifier: candidate.anchor.biologicalFeatureId,
     representative: candidate.representative,
     role: candidate.role || 'member',
     directEvidence: evidence.length ? evidence : ['None']
   };
 };
 
-const ambiguityViews = (response, request, previous = []) => {
-  const byRecord = new Map(previous.map((entry) => [entry.recordKey, entry]));
+const ambiguityViews = (response, request, displayFacts = new Map(), recordLabels = new Map()) => (
   response.records
     .filter(({ kind }) => kind === 'ambiguous')
-    .forEach((ambiguity) => {
-      byRecord.set(ambiguity.recordKey, {
-        recordKey: ambiguity.recordKey,
-        candidates: ambiguity.candidates.map((candidate) => candidateView(candidate, request))
-      });
-    });
-  const choices = new Map(request.choices.map((choice) => [choice.recordKey, choice]));
-  return request.records
-    .filter(({ recordKey }) => byRecord.has(recordKey))
-    .map(({ recordKey }) => {
-      const view = byRecord.get(recordKey);
-      const choice = choices.get(recordKey) || null;
-      return {
-        ...view,
-        choice: choice && choice.kind === 'select'
-          ? { kind: 'select', candidateKey: anchorKey(choice.anchor) }
-          : choice && choice.kind === 'skip'
-            ? { kind: 'skip', candidateKey: null }
-            : null
-      };
-    });
-};
+    .map((ambiguity) => ({
+      recordKey: ambiguity.recordKey,
+      recordLabel: recordLabels.get(ambiguity.recordKey) || `Record ${request.records.findIndex(
+        ({ recordKey }) => recordKey === ambiguity.recordKey
+      ) + 1}`,
+      candidates: ambiguity.candidates.map((candidate) => candidateView(candidate, request, displayFacts)),
+      choice: null
+    }))
+);
 
 const successfulSummary = (plan) => {
   const aligned = plan.records.filter(({ status }) => status === 'aligned').length;
@@ -644,6 +645,9 @@ export const createSimilarityAlignmentActions = ({
   let activeApply = null;
   let activeBaseline = null;
   let reportedAmbiguities = [];
+  let displayFacts = new Map();
+  let recordLabels = new Map();
+  let artifactStamp = null;
   let materializedRecordDrag = false;
   let pendingRecordDragBaseline = null;
 
@@ -658,10 +662,38 @@ export const createSimilarityAlignmentActions = ({
     draft.value = null;
     activeRequest = null;
     reportedAmbiguities = [];
+    displayFacts = new Map();
+    recordLabels = new Map();
+    artifactStamp = null;
     if (typeof clearCandidatePreview === 'function') clearCandidatePreview();
   };
 
   const currentRequest = () => getCommittedRequest();
+  const captureArtifact = (groupId) => ({
+    records: JSON.stringify(currentRequest()?.records || []),
+    group: JSON.stringify(getOrthogroupById(groupId)),
+    selectedGroup: state.selectedOrthogroupId?.value,
+    catalog: state.featureCatalog?.value,
+    result: state.results?.value?.[state.selectedResultIndex?.value ?? 0],
+    svg: currentSvg()
+  });
+  const artifactIsCurrent = () => {
+    if (!artifactStamp || !activeRequest) return false;
+    const current = captureArtifact(activeRequest.groupId);
+    return current.records === artifactStamp.records
+      && current.group === artifactStamp.group
+      && current.selectedGroup === artifactStamp.selectedGroup
+      && current.catalog === artifactStamp.catalog
+      && current.result === artifactStamp.result
+      && current.svg === artifactStamp.svg;
+  };
+  const rejectStaleDraft = () => {
+    clearDraft();
+    activeBaseline = null;
+    status.value = 'idle';
+    publishError(new Error('The diagram, source, crop, or Similarity Group changed. Start alignment again.'));
+    return { status: 'stale' };
+  };
 
   const currentRecordKeys = () => (
     (Array.isArray(currentRequest()?.records) ? currentRequest().records : [])
@@ -763,10 +795,14 @@ export const createSimilarityAlignmentActions = ({
       status.value = 'idle';
       return { status: 'ok' };
     }
-    clearDraft();
-    activeBaseline = null;
-    status.value = 'idle';
-    if (outcome?.error) publishError(outcome.error);
+    if (draft.value?.ambiguities?.length) {
+      status.value = 'ambiguous';
+    } else {
+      clearDraft();
+      activeBaseline = null;
+      status.value = 'idle';
+    }
+    publishError(outcome?.error || new Error('Alignment generation failed. Retry Apply.'));
     return { status: outcome?.status || 'error' };
   };
 
@@ -789,7 +825,7 @@ export const createSimilarityAlignmentActions = ({
     }
     activeRequest = request;
     error.value = null;
-    reportedAmbiguities = ambiguityViews(response, request, reportedAmbiguities);
+    reportedAmbiguities = ambiguityViews(response, request, displayFacts, recordLabels);
     if (response.status === 'resolved') {
       draft.value = deepFreeze({
         response,
@@ -831,15 +867,25 @@ export const createSimilarityAlignmentActions = ({
       const group = getOrthogroupById(id);
       if (!group) throw new Error('The selected Similarity Group is unavailable.');
       activeBaseline = baseline({ materializePlan: true });
+      const members = getEnrichedOrthogroupMembers(group);
       const request = buildHelperRequest({
         group,
-        members: getEnrichedOrthogroupMembers(group),
+        members,
         reference,
         mode,
         request: activeBaseline.request,
         catalog: state.featureCatalog?.value,
         choices: []
       });
+      displayFacts = new Map(members.map((member) => [
+        anchorKey(anchorFromSource(member, 'Alignment member')), member
+      ]));
+      recordLabels = new Map(request.records.map(({ recordKey }, index) => {
+        const sequence = (state.linearSeqs || []).find((entry) => String(entry?.uid) === recordKey);
+        return [recordKey, displayText(sequence?.definition, sequence?.accession,
+          sequence?.gb?.name, sequence?.gff?.name) || `Record ${index + 1}`];
+      }));
+      artifactStamp = captureArtifact(request.groupId);
       return resolveRequest(request, expectedActionId, { autoApply: true });
     } catch (cause) {
       if (expectedActionId !== actionId) return { status: 'stale' };
@@ -850,8 +896,8 @@ export const createSimilarityAlignmentActions = ({
     }
   };
 
-  const answer = async (recordKey, kind, anchor = null) => {
-    if (!activeRequest || !draft.value || !['ambiguous', 'ready'].includes(status.value)) {
+  const answer = (recordKey, kind, anchor = null) => {
+    if (!activeRequest || !draft.value || status.value !== 'ambiguous') {
       return { status: 'rejected' };
     }
     const ambiguity = reportedAmbiguities.find((record) => record.recordKey === recordKey);
@@ -865,11 +911,53 @@ export const createSimilarityAlignmentActions = ({
     } else if (kind !== 'skip') {
       return { status: 'rejected' };
     }
-    const expectedActionId = ++actionId;
-    const choices = activeRequest.choices.filter((choice) => choice.recordKey !== recordKey);
+    const choices = draft.value.choices.filter((choice) => choice.recordKey !== recordKey);
     choices.push({ recordKey, kind, anchor: selectedAnchor });
-    const request = deepFreeze({ ...cloneJson(activeRequest), choices });
-    return resolveRequest(request, expectedActionId, { autoApply: false });
+    const byRecord = new Map(choices.map((choice) => [choice.recordKey, choice]));
+    draft.value = deepFreeze({
+      ...draft.value,
+      choices,
+      ambiguities: reportedAmbiguities.map((record) => {
+        const choice = byRecord.get(record.recordKey);
+        return {
+          ...record,
+          choice: choice?.kind === 'select'
+            ? { kind: 'select', candidateKey: anchorKey(choice.anchor) }
+            : choice?.kind === 'skip'
+              ? { kind: 'skip', candidateKey: null }
+              : null
+        };
+      })
+    });
+    error.value = null;
+    return { status: 'selected' };
+  };
+
+  const applyDraft = async () => {
+    if (!activeRequest || status.value !== 'ambiguous' || unresolvedCount.value > 0) {
+      return { status: 'rejected' };
+    }
+    if (!artifactIsCurrent()) return rejectStaleDraft();
+    const expectedActionId = actionId;
+    const request = deepFreeze({ ...cloneJson(activeRequest), choices: cloneJson(draft.value.choices) });
+    status.value = 'resolving';
+    let response;
+    try {
+      const helper = await runHelperOperation(resolveOperation, { request });
+      if (expectedActionId !== actionId) return { status: 'stale' };
+      response = validateResolution(helper?.result, request);
+      if (response.status !== 'resolved' || !response.plan) {
+        throw new Error('The resolver did not resolve every record. Review the choices and retry.');
+      }
+      if (!artifactIsCurrent()) return rejectStaleDraft();
+    } catch (cause) {
+      if (expectedActionId !== actionId) return { status: 'stale' };
+      status.value = 'ambiguous';
+      publishError(cause);
+      return { status: 'error' };
+    }
+    error.value = null;
+    return applyPlan(response.plan, request, expectedActionId);
   };
 
   const cancel = () => {
@@ -1031,12 +1119,14 @@ export const createSimilarityAlignmentActions = ({
           : [];
       ambiguities.push({
         recordKey,
+        recordLabel: `Record ${request.records.findIndex((entry) => entry.recordKey === recordKey) + 1}`,
         candidates: candidates.map((candidate) => candidateView(candidate, repairRequest)),
         choice: null
       });
     }
     activeRequest = repairRequest;
     activeBaseline = baseline();
+    artifactStamp = captureArtifact(repairRequest.groupId);
     reportedAmbiguities = ambiguities;
     draft.value = deepFreeze({
       response,
@@ -1184,8 +1274,8 @@ export const createSimilarityAlignmentActions = ({
     if (unresolvedCount.value > 0) {
       return `${unresolvedCount.value} ambiguous record${unresolvedCount.value === 1 ? '' : 's'} still require Select or Skip.`;
     }
-    if (status.value !== 'ready' || !draft.value?.response?.plan) {
-      return 'Resolve every ambiguous record before applying.';
+    if (status.value !== 'ambiguous') {
+      return 'Select or Skip each ambiguous record before applying.';
     }
     return '';
   });
@@ -1204,7 +1294,7 @@ export const createSimilarityAlignmentActions = ({
     )),
     unresolvedCount,
     applyDisabledReason,
-    canApply: computed(() => status.value === 'ready' && Boolean(draft.value?.response?.plan)),
+    canApply: computed(() => status.value === 'ambiguous' && unresolvedCount.value === 0),
     validateBeforeGenerate,
     resetAlignment,
     clearForMutation: clearCommittedPlan,
@@ -1227,11 +1317,7 @@ export const createSimilarityAlignmentActions = ({
     drawerDisabledReason,
     selectCandidate: (recordKey, anchor) => answer(recordKey, 'select', anchor),
     skipRecord: (recordKey) => answer(recordKey, 'skip'),
-    applyDraft: () => (
-      status.value === 'ready' && draft.value?.response?.plan && activeRequest
-        ? applyPlan(draft.value.response.plan, activeRequest, actionId)
-        : Promise.resolve({ status: 'rejected' })
-    ),
+    applyDraft,
     cancel,
     previewCandidate: (anchor) => {
       if (typeof previewCandidate === 'function') previewCandidate(anchor);

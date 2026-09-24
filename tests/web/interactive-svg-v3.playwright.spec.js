@@ -89,6 +89,9 @@ test('feature popup record rotation works by pointer and keyboard in rich and si
   await search.fill('tRNA');
   await search.press('Enter');
   await page.getByRole('button', { name: 'Open active feature', exact: true }).click();
+  const disclosure = page.getByRole('button', { name: /Record actions · Rotate record/ });
+  await expect(disclosure).toHaveAttribute('aria-expanded', 'false');
+  await disclosure.click();
   const actions = page.getByRole('region', { name: 'Record actions' });
   await expect(actions).toBeVisible();
   await expect(actions).toContainText('Coordinates refer to the original record.');
@@ -97,6 +100,11 @@ test('feature popup record rotation works by pointer and keyboard in rich and si
 
   await actions.getByLabel('Record rotation anchor').selectOption('midpoint');
   await actions.getByLabel('Record rotation signed offset').fill('2');
+  await disclosure.click();
+  await expect(actions).toBeHidden();
+  await disclosure.click();
+  await expect(actions.getByLabel('Record rotation anchor')).toHaveValue('midpoint');
+  await expect(actions.getByLabel('Record rotation signed offset')).toHaveValue('2');
   const expectedStart = await page.evaluate(() => (
     window.__GBDRAW_APP__.featureRecordRotationDraft.startCoordinate
   ));
@@ -144,7 +152,7 @@ test('feature popup record rotation works by pointer and keyboard in rich and si
     };
   });
   expect(committed).toMatchObject({
-    schema: 7,
+    schema: 8,
     startCoordinate: expectedStart,
     prefix: before.prefix,
     history: before.history + 1
@@ -186,6 +194,10 @@ test('feature popup record rotation works by pointer and keyboard in rich and si
   expect(bounds.x).toBeGreaterThanOrEqual(0);
   expect(bounds.x + bounds.width).toBeLessThanOrEqual(390);
 
+  const simpleDisclosure = simplePopup.getByRole('button', { name: /Record actions · Rotate record/ });
+  await expect(simpleDisclosure).toHaveAttribute('aria-expanded', 'false');
+  await simpleDisclosure.focus();
+  await page.keyboard.press('Enter');
   const simpleActions = simplePopup.getByRole('region', { name: 'Record actions' });
   const anchor = simpleActions.getByLabel('Record rotation anchor');
   await anchor.focus();
@@ -201,11 +213,12 @@ test('feature popup record rotation works by pointer and keyboard in rich and si
   const cancel = simpleActions.getByRole('button', { name: 'Cancel', exact: true });
   await cancel.focus();
   await page.keyboard.press('Enter');
-  await expect(simplePopup).toBeHidden();
-
-  await page.getByRole('button', { name: 'Open active feature', exact: true }).click();
-  const staleActions = page.locator('.feature-popup--simple')
-    .getByRole('region', { name: 'Record actions' });
+  await expect(simplePopup).toBeVisible();
+  await expect(simpleDisclosure).toHaveAttribute('aria-expanded', 'false');
+  await expect(simpleActions).toBeHidden();
+  expect(await page.evaluate(() => window.__GBDRAW_APP__.svgContent)).toBe(transformedSvg);
+  await simpleDisclosure.click();
+  const staleActions = simplePopup.getByRole('region', { name: 'Record actions' });
   const staleBefore = await page.evaluate(async () => {
     const { state } = await import('/gbdraw/web/js/state.js');
     const target = window.__GBDRAW_APP__.featureRecordRotationDraft.identity;
@@ -252,7 +265,7 @@ test('feature popup record rotation works by pointer and keyboard in rich and si
   const savedPath = await (await pendingSave).path();
   const saved = JSON.parse(gunzipSync(fs.readFileSync(savedPath)));
   expect(saved.version).toBe(44);
-  expect(saved.renderRequest.schema).toBe(7);
+  expect(saved.renderRequest.schema).toBe(8);
   expect(saved.renderRequest.records[0].display.startCoordinate).toBe(expectedStart);
   expect(saved.config.recordDisplayDrafts[0].anchorIntent).toMatchObject({
     schema: 1,
@@ -309,6 +322,7 @@ test('same-file record rotation keeps chromosome targets independent', async ({ 
     await search.fill(query);
     await search.press('Enter');
     await page.getByRole('button', { name: 'Open active feature', exact: true }).click();
+    await page.getByRole('button', { name: /Record actions · Rotate record/ }).click();
     const actions = page.getByRole('region', { name: 'Record actions' });
     await expect(actions).toBeVisible();
     await actions.getByLabel('Record rotation anchor').selectOption(anchor);
@@ -395,6 +409,7 @@ test('both modes record rotation resolves the same circular source anchor', asyn
     await search.fill('anchor_gene');
     await search.press('Enter');
     await page.getByRole('button', { name: 'Open active feature', exact: true }).click();
+    await page.getByRole('button', { name: /Record actions · Rotate record/ }).click();
     const actions = page.getByRole('region', { name: 'Record actions' });
     await actions.getByLabel('Record rotation anchor').selectOption('midpoint');
     await actions.getByLabel('Record rotation signed offset').fill('-11');
@@ -423,7 +438,7 @@ test('both modes record rotation resolves the same circular source anchor', asyn
         svg: window.__GBDRAW_APP__.svgContent
       };
     }, expected.identity.recordKey);
-    expect(accepted.schema).toBe(7);
+    expect(accepted.schema).toBe(8);
     expect(accepted.startCoordinate).toBe(expected.startCoordinate);
     expect(accepted.anchorIntent).toMatchObject({
       schema: 1,

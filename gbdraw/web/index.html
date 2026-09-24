@@ -4990,8 +4990,57 @@
                             </select>
                             <span class="block text-slate-500">Applied on the next successful Generate.</span>
                         </label>
-                        <section v-if="featureRecordRotationDraft.active"
-                                 class="mb-3 rounded-lg border border-slate-200 bg-slate-50 p-3"
+                        <div v-if="adv.rich_feature_popup" class="grid grid-cols-4 gap-1 bg-slate-100 rounded-lg p-1 mb-3" data-nodrag="true">
+                            <button type="button"
+                                    @click="clickedFeature.activeTab = 'edit'"
+                                    :class="[
+                                      'min-w-0 px-2 py-1.5 text-xs rounded-md flex items-center justify-center gap-1',
+                                      clickedFeature.activeTab === 'edit' ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-500 hover:text-slate-700'
+                                    ]">
+                                <i class="ph ph-sliders-horizontal shrink-0"></i>
+                                <span class="truncate">Edit</span>
+                            </button>
+                            <button type="button"
+                                    @click="clickedFeature.activeTab = 'details'"
+                                    :class="[
+                                      'min-w-0 px-2 py-1.5 text-xs rounded-md flex items-center justify-center gap-1',
+                                      clickedFeature.activeTab === 'details' ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-500 hover:text-slate-700'
+                                    ]">
+                                <i class="ph ph-identification-card shrink-0"></i>
+                                <span class="truncate">Details</span>
+                            </button>
+                            <button type="button"
+                                    @click="clickedFeature.activeTab = 'qualifiers'"
+                                    :class="[
+                                      'min-w-0 px-2 py-1.5 text-xs rounded-md flex items-center justify-center gap-1',
+                                      clickedFeature.activeTab === 'qualifiers' ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-500 hover:text-slate-700'
+                                    ]">
+                                <i class="ph ph-list-bullets shrink-0"></i>
+                                <span class="truncate">Qualifiers</span>
+                            </button>
+                            <button type="button"
+                                    @click="clickedFeature.activeTab = 'sequence'"
+                                    :class="[
+                                      'min-w-0 px-2 py-1.5 text-xs rounded-md flex items-center justify-center gap-1',
+                                      clickedFeature.activeTab === 'sequence' ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-500 hover:text-slate-700'
+                                    ]">
+                                <i class="ph ph-text-columns shrink-0"></i>
+                                <span class="truncate">Sequence</span>
+                            </button>
+                        </div>
+                        <div class="feature-popup-body custom-scrollbar" data-nodrag="true">
+                        <div v-if="!adv.rich_feature_popup || clickedFeature.activeTab === 'edit'" class="feature-popup-grid">
+                        <div v-if="clickedFeature?.feat" class="col-span-full mb-2" data-nodrag="true">
+                            <button type="button" @click="toggleRecordActions"
+                                    :aria-expanded="recordActionsExpanded"
+                                    aria-controls="feature-record-actions"
+                                    class="flex w-full items-center justify-between rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-left text-xs font-semibold text-slate-700 hover:bg-slate-100">
+                                <span>Record actions · Rotate record using this feature</span>
+                                <i :class="recordActionsExpanded ? 'ph ph-caret-up' : 'ph ph-caret-down'" aria-hidden="true"></i>
+                            </button>
+                        </div>
+                        <section id="feature-record-actions" v-if="recordActionsExpanded && featureRecordRotationDraft.active"
+                                 class="col-span-full mb-3 rounded-lg border border-slate-200 bg-slate-50 p-3"
                                  aria-labelledby="feature-record-actions-heading"
                                  data-nodrag="true">
                             <div class="flex flex-wrap items-start justify-between gap-2 mb-2">
@@ -5086,7 +5135,7 @@
                                :class="featureRecordRotationDraft.statusKind === 'error' ? 'text-red-700' : featureRecordRotationDraft.statusKind === 'success' ? 'text-emerald-700' : 'text-slate-500'">{{ featureRecordRotationDraft.status }}</p>
                             <div class="mt-3 flex flex-wrap justify-end gap-2">
                                 <button type="button"
-                                        @click="closeFeaturePopup"
+                                        @click.stop="cancelRecordActions"
                                         :disabled="featureRecordRotationDraft.pending"
                                         class="rounded-md border border-slate-300 bg-white px-3 py-2 text-xs font-medium text-slate-700 hover:bg-slate-100 disabled:text-slate-400">Cancel</button>
                                 <button type="button"
@@ -5098,46 +5147,6 @@
                                 </button>
                             </div>
                         </section>
-                        <div v-if="adv.rich_feature_popup" class="grid grid-cols-4 gap-1 bg-slate-100 rounded-lg p-1 mb-3" data-nodrag="true">
-                            <button type="button"
-                                    @click="clickedFeature.activeTab = 'edit'"
-                                    :class="[
-                                      'min-w-0 px-2 py-1.5 text-xs rounded-md flex items-center justify-center gap-1',
-                                      clickedFeature.activeTab === 'edit' ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-500 hover:text-slate-700'
-                                    ]">
-                                <i class="ph ph-sliders-horizontal shrink-0"></i>
-                                <span class="truncate">Edit</span>
-                            </button>
-                            <button type="button"
-                                    @click="clickedFeature.activeTab = 'details'"
-                                    :class="[
-                                      'min-w-0 px-2 py-1.5 text-xs rounded-md flex items-center justify-center gap-1',
-                                      clickedFeature.activeTab === 'details' ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-500 hover:text-slate-700'
-                                    ]">
-                                <i class="ph ph-identification-card shrink-0"></i>
-                                <span class="truncate">Details</span>
-                            </button>
-                            <button type="button"
-                                    @click="clickedFeature.activeTab = 'qualifiers'"
-                                    :class="[
-                                      'min-w-0 px-2 py-1.5 text-xs rounded-md flex items-center justify-center gap-1',
-                                      clickedFeature.activeTab === 'qualifiers' ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-500 hover:text-slate-700'
-                                    ]">
-                                <i class="ph ph-list-bullets shrink-0"></i>
-                                <span class="truncate">Qualifiers</span>
-                            </button>
-                            <button type="button"
-                                    @click="clickedFeature.activeTab = 'sequence'"
-                                    :class="[
-                                      'min-w-0 px-2 py-1.5 text-xs rounded-md flex items-center justify-center gap-1',
-                                      clickedFeature.activeTab === 'sequence' ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-500 hover:text-slate-700'
-                                    ]">
-                                <i class="ph ph-text-columns shrink-0"></i>
-                                <span class="truncate">Sequence</span>
-                            </button>
-                        </div>
-                        <div class="feature-popup-body custom-scrollbar" data-nodrag="true">
-                        <div v-if="!adv.rich_feature_popup || clickedFeature.activeTab === 'edit'" class="feature-popup-grid">
                         <div class="space-y-3">
                         <div v-if="canUseClickedOrthogroupActions" class="grid grid-cols-2 gap-2">
                             <button type="button" @click="openClickedOrthogroupInEditor"
@@ -6892,13 +6901,13 @@
                                   :key="`alignment-ambiguity-${record.recordKey}`"
                                   class="rounded-lg border border-slate-200 p-3">
                             <legend class="px-1 text-sm font-semibold text-slate-700">
-                                Record <span class="font-mono">{{ record.recordKey }}</span>
+                                <span :title="record.recordKey">{{ record.recordLabel }}</span>
                             </legend>
                             <p class="mb-3 text-[11px] text-slate-500">
                                 {{ record.choice ? (record.choice.kind === 'skip' ? 'Selected: Skip' : 'Selected: exact feature') : 'Select or Skip is required.' }}
                             </p>
                             <div class="grid gap-2 sm:grid-cols-2">
-                                <label v-for="candidate in record.candidates"
+                                <label v-for="(candidate, candidateIndex) in record.candidates"
                                        :key="candidate.key"
                                        :class="[
                                          'block cursor-pointer rounded-lg border p-3 text-xs transition-colors focus-within:ring-2 focus-within:ring-blue-300',
@@ -6917,20 +6926,22 @@
                                                :checked="record.choice?.kind === 'select' && record.choice.candidateKey === candidate.key"
                                                :disabled="['resolving', 'applying'].includes(similarityAlignmentStatus)"
                                                @change="selectSimilarityAlignmentCandidate(record.recordKey, candidate.anchor)"
-                                               :aria-label="`Select feature ${candidate.featureIdentifier} for record ${record.recordKey}`"
+                                               :aria-label="`Select ${candidate.label}, ${candidate.coordinates}, strand ${candidate.displayedStrand} for ${record.recordLabel}`"
                                                class="mt-0.5 border-slate-300 text-blue-600 focus:ring-blue-500">
                                         <span class="min-w-0 flex-1">
-                                            <span class="flex flex-wrap items-center gap-1">
-                                                <span class="font-mono font-semibold text-slate-800 break-all">{{ candidate.featureIdentifier }}</span>
-                                                <span v-if="candidate.representative" class="rounded bg-slate-100 px-1.5 py-0.5 text-[9px] font-semibold text-slate-600">representative</span>
-                                                <span class="rounded bg-emerald-50 px-1.5 py-0.5 text-[9px] text-emerald-700">{{ candidate.role }}</span>
+                                            <span class="flex flex-wrap items-center gap-1 min-w-0">
+                                                <span class="shrink-0 rounded bg-blue-100 px-1.5 py-0.5 font-semibold text-blue-800">{{ candidateIndex + 1 }}</span>
+                                                <span class="min-w-0 break-words font-semibold text-slate-800" :title="candidate.label">{{ candidate.label }}</span>
                                             </span>
-                                            <span class="mt-1 block font-mono text-[10px] text-slate-500">
-                                                {{ candidate.coordinates }} · strand {{ candidate.displayedStrand }}
+                                            <span class="mt-1 block font-mono text-[10px] text-slate-600">
+                                                {{ candidate.coordinates }} ({{ candidate.displayedStrand }})
                                             </span>
-                                            <span class="mt-1 block text-[10px] text-slate-500">
-                                                Direct evidence: {{ candidate.directEvidence.join(', ') }}
-                                            </span>
+                                            <details class="mt-1 text-[10px] text-slate-500" @click.stop>
+                                                <summary class="cursor-pointer">Details</summary>
+                                                <div class="mt-1 break-all">Internal ID: {{ candidate.featureIdentifier }}</div>
+                                                <div>Role: {{ candidate.role }} · Representative: {{ candidate.representative ? 'yes' : 'no' }}</div>
+                                                <div>Direct evidence: {{ candidate.directEvidence.join(', ') }}</div>
+                                            </details>
                                         </span>
                                     </span>
                                 </label>
@@ -6945,7 +6956,7 @@
                                        :checked="record.choice?.kind === 'skip'"
                                        :disabled="['resolving', 'applying'].includes(similarityAlignmentStatus)"
                                        @change="skipSimilarityAlignmentRecord(record.recordKey)"
-                                       :aria-label="`Skip record ${record.recordKey}`"
+                                       :aria-label="`Skip ${record.recordLabel}`"
                                        class="border-slate-300 text-amber-600 focus:ring-amber-500">
                                 <span><strong>Skip</strong> — leave this record's position and orientation unchanged.</span>
                             </label>
@@ -6957,8 +6968,9 @@
                     <p id="similarity-alignment-apply-reason"
                        class="mb-2 text-xs"
                        :class="canApplySimilarityAlignment ? 'text-emerald-700' : 'text-amber-700'">
-                        {{ canApplySimilarityAlignment ? 'Every ambiguous record is resolved. The plan is ready to apply.' : similarityAlignmentApplyDisabledReason }}
+                        {{ canApplySimilarityAlignment ? 'All choices selected. Apply will validate them with the Python resolver.' : similarityAlignmentApplyDisabledReason }}
                     </p>
+                    <p v-if="similarityAlignmentError" role="alert" class="mb-2 text-xs text-red-700" data-similarity-alignment-error>{{ similarityAlignmentError.message }}</p>
                     <div class="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
                         <button type="button"
                                 @click="cancelSimilarityAlignmentDialog"

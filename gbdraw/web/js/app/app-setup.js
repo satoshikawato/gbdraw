@@ -2263,7 +2263,9 @@ export const createAppSetup = () => {
       if (renderedId) clickedFeature.value.svg_id = renderedId;
     }
   });
+  const recordActionsExpanded = ref(false);
   watch(clickedFeature, (popup) => {
+    recordActionsExpanded.value = false;
     if (popup?.feat) {
       featureRecordRotation.open({
         feature: popup.feat,
@@ -2275,7 +2277,21 @@ export const createAppSetup = () => {
   }, { flush: 'sync' });
   const closeFeaturePopup = () => {
     featureRecordRotation.cancel();
+    recordActionsExpanded.value = false;
     clickedFeature.value = null;
+  };
+  const toggleRecordActions = () => {
+    if (!recordActionsExpanded.value && !featureRecordRotation.draft.active && clickedFeature.value?.feat) {
+      featureRecordRotation.open({
+        feature: clickedFeature.value.feat,
+        featureLabel: clickedFeature.value.label
+      });
+    }
+    recordActionsExpanded.value = !recordActionsExpanded.value;
+  };
+  const cancelRecordActions = () => {
+    featureRecordRotation.cancel();
+    recordActionsExpanded.value = false;
   };
   historySnapshots.setGeneratedArtifactRuntimeOwner({
     capture: () => ({
@@ -3850,6 +3866,9 @@ export const createAppSetup = () => {
   return {
     recordDisplayControls,
     featureRecordRotationDraft: featureRecordRotation.draft,
+    recordActionsExpanded,
+    toggleRecordActions,
+    cancelRecordActions,
     setFeatureRecordRotationAnchor: featureRecordRotation.setAnchor,
     setFeatureRecordRotationOffset: featureRecordRotation.setOffset,
     setFeatureRecordRotationOrientForward: featureRecordRotation.setOrientForward,
