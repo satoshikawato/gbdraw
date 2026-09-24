@@ -138,7 +138,10 @@ export const materializeLegacySimilarityAlignment = ({
         biological.sourceFeatureIndex >= 0
         ? biological.sourceFeatureIndex
         : null,
-      stableFeatureSvgId: null
+      stableFeatureSvgId: requiredText(
+        biological.stableFeatureId || member.biologicalFeatureId,
+        'legacy member stable feature identity'
+      )
     };
   };
   const reference = anchorFor(selectedMember);

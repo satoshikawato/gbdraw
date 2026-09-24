@@ -149,7 +149,8 @@ LAMBDA_BASIC_COMMAND = (
 )
 
 BGC_COMMAND = (
-    "gbdraw linear --protein_blastp_mode orthogroup -f interactive_svg "
+    "gbdraw linear --protein_blastp_mode orthogroup "
+    "--align_orthogroup_feature CAG38695.1 -f interactive_svg "
     "--gbk BGC0000708.gbk BGC0000709.gbk BGC0000711.gbk BGC0000712.gbk BGC0000713.gbk "
     "-k CDS,rRNA,tRNA,tmRNA,ncRNA,repeat_region -p orange "
     "-d BGC0000708-BGC0000713_default_colors.tsv "
@@ -305,7 +306,10 @@ EXAMPLES: tuple[GallerySessionExample, ...] = (
         input_summary="5 GenBank + 3 color/label TSV files",
         display_order=80,
         command_kind="runnable",
-        command_note="Files provides the five MIBiG records and all three repository-managed TSV files used by the command.",
+        command_note=(
+            "Files provides the five MIBiG records and three TSV files. "
+            "The saved Session retains the reviewed alignment and comparison result."
+        ),
         command=BGC_COMMAND,
     ),
     GallerySessionExample(

@@ -13,12 +13,12 @@
   ],
   "files": {
     "gallery/examples.json": {
-      "bytes": 20623,
-      "sha256": "beca97d82b0aecd67eff90305e1d7ef72b243d18f98ea97fcce1fc8283bb642d"
+      "bytes": 20690,
+      "sha256": "d4aaab743e5619c813f170e1625ed7431d9e25f0ce36fca5844c1f08eec99455"
     },
     "gallery/examples/BGC0000708-BGC0000713.svg": {
-      "bytes": 1156331,
-      "sha256": "3d5177ccf3d24bdbe13ce0f70b87df4b6521517c8ee61db2cc6becf8e77874dc"
+      "bytes": 1136874,
+      "sha256": "a89e247dafb2997670da094e3aabf89f661dd37d6f1e861240af0d8469d1f076"
     },
     "gallery/examples/HmmtDNA_ATskew.svg": {
       "bytes": 485142,
@@ -57,8 +57,8 @@
       "sha256": "09ae1958d451d4db0e3715eb8bf8b40968d757c044aa963c3950cea125b7d0a0"
     },
     "gallery/sessions/BGC0000708-BGC0000713.gbdraw-session.json": {
-      "bytes": 2852337,
-      "sha256": "1b28451017c8458a812ab0c02a7293edd976597f40716fc4524142fbb76d3054"
+      "bytes": 2891095,
+      "sha256": "6d2d62e4ffb3140da9fdd4a8608971774167a68c7fc1ae6bd73953963fe310a1"
     },
     "gallery/sessions/HmmtDNA_ATskew.gbdraw-session.json": {
       "bytes": 315442,
@@ -97,8 +97,8 @@
       "sha256": "a7f99f4ee92e152b253ac00ec63612dcb9a3cc7f270acd69a937f0e5af64e8b9"
     },
     "gallery/sources/BGC0000708-BGC0000713.svg": {
-      "bytes": 244938,
-      "sha256": "a8baaa15c7a6c5e4613dd6a3df0b608049dca548de66a0ab2e8a70fdbb13f4c2"
+      "bytes": 245416,
+      "sha256": "09924af968ee212c0d2ab267c6483205f004aa9c4885f4827964fecd1a1ce3ae"
     },
     "gallery/sources/HmmtDNA_ATskew.svg": {
       "bytes": 134013,
@@ -137,8 +137,8 @@
       "sha256": "926e2e3ef1bc197170f4e1776fd6d04590a6987417fc151b927969f55157a1ab"
     },
     "gallery/thumbnails/BGC0000708-BGC0000713.webp": {
-      "bytes": 17788,
-      "sha256": "153c387db6a8214f0ffcc90bbcd399e9fdbeb30d8c3c6fde9a233c899935db3c"
+      "bytes": 17980,
+      "sha256": "8d20765e58bb2b218a6bbc09de31df921bc691d7bc53308f0f4c6225f2bf5f0c"
     },
     "gallery/thumbnails/HmmtDNA_ATskew.webp": {
       "bytes": 22428,

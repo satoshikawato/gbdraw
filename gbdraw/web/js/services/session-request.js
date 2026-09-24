@@ -1658,6 +1658,7 @@ const buildTrackPlan = ({
 };
 
 const generatedProteinSettings = (state, baseline = {}) => {
+  const { alignOrthogroupFeature: _legacyAlignment, ...currentBaseline } = baseline;
   const blastp = state.losat.blastp || {};
   const blastpMode = requireCurrentProteinBlastpMode(blastp.mode);
   const positiveInteger = (value, fallback) => optionalPositiveInteger(value) ?? fallback;
@@ -1697,7 +1698,7 @@ const generatedProteinSettings = (state, baseline = {}) => {
     ? baselineCollinearity.parameters
     : {};
   return {
-    ...baseline,
+    ...currentBaseline,
     collinearityParams: {
       ...baselineCollinearity,
       kind: baselineCollinearity.kind || 'lossless',

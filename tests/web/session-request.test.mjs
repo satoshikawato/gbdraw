@@ -2690,6 +2690,10 @@ assert.equal(
   false
 );
 assert.equal(promotedLegacyAlignment.layout.similarityAlignment.groupId, 'og-legacy');
+assert.equal(
+  promotedLegacyAlignment.layout.similarityAlignment.reference.stableFeatureSvgId,
+  'legacy-first'
+);
 assert.deepEqual(
   promotedLegacyAlignment.layout.similarityAlignment.records.map(
     ({ recordKey, status }) => [recordKey, status]

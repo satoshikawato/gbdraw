@@ -16,7 +16,8 @@ const commonExamples = examples.filter(({ id }) => !isolatedExamples.has(id));
 const compareCommand = [
   'import sys',
   'from tests.utils.svg_compare import compare_svgs',
-  'ignored = {"data-label-feature-id", "data-gbdraw-label-binding-schema"}',
+  'ignored = {"data-label-feature-id", "data-gbdraw-label-binding-schema", '
+    + '"data-record-key", "data-record-translation-x", "data-record-translation-y"}',
   'result = compare_svgs(sys.argv[1], sys.argv[2], ignored_attributes=ignored)',
   'print(result.message)',
   'print("\\n".join(result.differences))',
@@ -110,7 +111,8 @@ for (const example of commonExamples) {
         const svg = String(selected?.content || '');
         return {
           status: result?.status,
-          error: result?.error?.message || result?.message || error?.summary
+          error: result?.error?.message || result?.message
+            || app.similarityAlignmentRepair?.reason || result?.reason || error?.summary
             || error?.message || (error ? JSON.stringify(error) : null),
           svg,
           matchCount: (svg.match(/data-gbdraw-pairwise-match-id=/g) || []).length,

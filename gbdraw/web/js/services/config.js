@@ -1642,6 +1642,17 @@ const preflightSessionImport = (rawData) => {
       })
     : null;
   if (currentSession) recordSessionLifecycleEvent('canonical-request-projection-end');
+  if (canonicalProjection?.pipelineState?.legacySimilarityAlignment) {
+    const promotedRequest = promoteCanonicalRenderRequestToCurrent(data.renderRequest, {
+      featureCatalog: data.editorState?.featureCatalog || null,
+      legacyOrthogroupState: data.orthogroupState || null
+    });
+    canonicalProjection.config.linearRecordLayout = {
+      ...canonicalProjection.config.linearRecordLayout,
+      recordTranslations: promotedRequest.layout.recordTranslations,
+      similarityAlignment: promotedRequest.layout.similarityAlignment
+    };
+  }
   let restoredConfig = canonicalProjection
     ? sourceSessionVersion >= CURRENT_AUTHORITY_SESSION_MIN_VERSION
       ? cloneJsonData(canonicalProjection.config)

@@ -1007,6 +1007,25 @@ const frozenV39Session = () => JSON.parse(gunzipSync(readFileSync(new URL(
   import.meta.url
 ))));
 
+test('released schema-7 alignment materializes exact typed anchors on import', async () => {
+  const source = JSON.parse(readFileSync(new URL(
+    '../test_inputs/BGC0000708-BGC0000713.gbdraw-session.json',
+    import.meta.url
+  )));
+  const file = new Blob([JSON.stringify(source)], { type: 'application/json' });
+  const result = await importSession({ target: { files: [file], value: 'selected' } });
+
+  assert.equal(result.status, 'ok');
+  assert.equal(state.similarityAlignmentPlan.value.groupId, 'og_1');
+  assert.deepEqual(state.similarityAlignmentPlan.value.reference, {
+    recordKey: source.renderRequest.records[0].recordKey,
+    biologicalFeatureId: 'fed46a3a6',
+    sourceFeatureIndex: 14,
+    stableFeatureSvgId: 'fed46a3a6'
+  });
+  assert.equal(state.linearRecordTranslations.value.length, 5);
+});
+
 test('visible protein cache entries from the frozen v39 session recover stable edge identities', async () => {
   alerts.length = 0;
   const sessionData = frozenV39Session();
