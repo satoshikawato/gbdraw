@@ -1,6 +1,11 @@
 # Product Decision Pack — record-owned orientation for Similarity Group alignment
 
-Status: proposed receipts awaiting exact-text approval. This pack is a
+Status: approved. The Product Decision Owner (`satoshikawato`) explicitly
+approved the five receipt texts below exactly as written on 2026-09-26.
+Commit `61eec6c5` on the authority-only branch
+`authority/similarity-alignment-orientation-owner-20260926` serializes them
+as contract revision 16; it becomes runtime authority only after merge into
+`origin/dev`. This pack is a
 developer-preflight input under the
 [Product Impact Ratchet](../PRODUCT_IMPACT_RATCHET.md). It is not runtime
 authority. Active authority is the
@@ -85,9 +90,8 @@ projection, reads owner 1.
 | `PD-OI-035` r2 | Canvas and 390 px review interaction. | Unchanged. |
 | Persisted formats | The typed alignment plan (`layout.similarityAlignment`) and `gbdraw/layout/similarity_alignment.py` are absent from `origin/main` and tag `0.13.0`. Only the legacy `alignOrthogroupFeature` string exists there. | No compatibility reader is required for the plan field change. |
 
-Classification: **PRODUCT_DECISION_REQUIRED**. The outcome has been selected
-(below). The remaining requirement is an explicit approval of the exact
-receipt texts.
+Classification: **PRODUCT_DECISION_REQUIRED**, resolved by the owner's
+selection and exact-text approval below.
 
 ## Selected outcome
 
@@ -106,15 +110,13 @@ following outcome and authorized revising the affected records:
 - **Reset Align does not restore record orientation.** Undo restores the
   complete previous artifact, including orientation.
 
-The owner has not yet approved the exact receipt wording. Codex or any other
-agent must serialize only the owner's explicit approval of the texts below, or
-the owner's explicit edits.
+On the same date the owner approved the exact receipt wording below without
+edits. Serialize only these texts; do not ask for approval again.
 
-## Product Decision Owner response — proposed wording
+## Product Decision Owner response — approved wording
 
-The following five texts are **unsigned proposals**. `Owner` and
-`Decision date` name the proposed signer and preparation date; they do not
-assert that approval has occurred.
+The following five texts were approved exactly as written by `satoshikawato`
+on 2026-09-26.
 
 ```text
 PRODUCT_DECISION

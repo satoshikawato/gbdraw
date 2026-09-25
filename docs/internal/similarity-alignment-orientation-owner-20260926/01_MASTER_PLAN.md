@@ -3,7 +3,9 @@
 Status: planning committed; implementation not started.
 Implementation branch: `fix/similarity-alignment-orientation-owner-20260926`
 Branch base at creation: `origin/dev@22cbcca96f2ef5e20bb45fe397ba4232fb158574`, fetched 2026-09-26.
-Product authority: pending. See [00_DECISION_PACK.md](00_DECISION_PACK.md) and Session 00.
+Product authority: receipts approved on 2026-09-26 and serialized as commit `61eec6c5` on
+`authority/similarity-alignment-orientation-owner-20260926` (contract revision 16); merge into
+`origin/dev` is pending. See [00_DECISION_PACK.md](00_DECISION_PACK.md) and Session 00.
 
 ## 1. Background and problem
 
@@ -355,7 +357,7 @@ performs the final consistency sweep.
 
 | Session | Instruction file | Scope | Start condition |
 | --- | --- | --- | --- |
-| 00 | [SESSION_00_AUTHORITY.md](SESSION_00_AUTHORITY.md) | Exact-text approval and authority-only serialization of `PD-OI-027/028/029/031/034` | Now |
+| 00 | [SESSION_00_AUTHORITY.md](SESSION_00_AUTHORITY.md) | Verify and publish the approved authority-only serialization of `PD-OI-027/028/029/031/034`; approval and serialization are done | Now |
 | 01 | [SESSION_01_ERROR_REPORTING.md](SESSION_01_ERROR_REPORTING.md) | Underlying error shown once; in-browser confirmation of the root cause | Now (independent of authority) |
 | 02 | [SESSION_02_PLAN_CONTRACT.md](SESSION_02_PLAN_CONTRACT.md) | Orientation removed from plan and render; strand facts; contract readers; Gallery refresh; API docs | Authority merged into `origin/dev` and then into the fix branch; Session 01 committed |
 | 03 | [SESSION_03_ORIENTATION_WORKFLOW.md](SESSION_03_ORIENTATION_WORKFLOW.md) | One Match option; orientation through record state; manual Reverse keeps plan; Reset | Session 02 committed |
