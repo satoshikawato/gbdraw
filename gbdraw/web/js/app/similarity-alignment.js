@@ -463,7 +463,7 @@ const strandValue = (value, path) => {
   throw new Error(`${path} has an invalid source strand.`);
 };
 
-const recordLengths = (catalog) => {
+const recordLengths = (catalog, recordCatalog, linearSeqs) => {
   const lengths = new Map();
   (Array.isArray(catalog?.items) ? catalog.items : []).forEach((item) => {
     const keys = Array.isArray(item?.recordKeys) ? item.recordKeys : [];
@@ -476,10 +476,26 @@ const recordLengths = (catalog) => {
       }
     });
   });
+  if (recordCatalog?.status === 'ready') {
+    const discovered = new Map();
+    (recordCatalog.records || []).forEach((record) => {
+      const index = record?.sourceIndex;
+      if (!Number.isSafeInteger(index) || index < 0) return;
+      discovered.set(index, discovered.has(index) ? null : record);
+    });
+    discovered.forEach((record, index) => {
+      const key = String(linearSeqs?.[index]?.uid || '');
+      if (key && record && Number.isSafeInteger(record.recordLength)
+          && record.recordLength > 0 && !lengths.has(key)) {
+        lengths.set(key, record.recordLength);
+      }
+    });
+  }
   return lengths;
 };
 
-const buildHelperRequest = ({ group, members, reference, request, catalog, choices }) => {
+const buildHelperRequest = ({ group, members, reference, request, catalog,
+  recordCatalog, linearSeqs, choices }) => {
   const groupStatus = orthogroupIdStatus(group);
   if (!groupStatus.valid || !groupStatus.supplied) {
     throw new Error('The selected Similarity Group identity is invalid.');
@@ -488,7 +504,7 @@ const buildHelperRequest = ({ group, members, reference, request, catalog, choic
   if (!request || request.mode !== 'linear' || !Array.isArray(request.records)) {
     throw new Error('Generate a Linear diagram before aligning a Similarity Group.');
   }
-  const lengths = recordLengths(catalog);
+  const lengths = recordLengths(catalog, recordCatalog, linearSeqs);
   const records = request.records.map((record, index) => {
     const recordKey = text(record?.recordKey, `renderRequest.records[${index}].recordKey`);
     const region = record?.region === null || record?.region === undefined
@@ -680,6 +696,7 @@ export const createSimilarityAlignmentActions = ({
   getOrthogroupById,
   getEnrichedOrthogroupMembers,
   getCommittedRequest,
+  getRecordCatalog = null,
   runAnalysis,
   cancelRunAnalysis = null,
   runHelperOperation,
@@ -916,6 +933,8 @@ export const createSimilarityAlignmentActions = ({
         group, members, reference,
         request: activeBaseline.request,
         catalog: state.featureCatalog?.value,
+        recordCatalog: getRecordCatalog?.(),
+        linearSeqs: state.linearSeqs,
         choices: []
       });
       displayFacts = new Map(members.map((member) => [
@@ -1201,6 +1220,8 @@ export const createSimilarityAlignmentActions = ({
         reference: plan.reference,
         request: currentRequest(),
         catalog: state.featureCatalog?.value,
+        recordCatalog: getRecordCatalog?.(),
+        linearSeqs: state.linearSeqs,
         choices: planChoices(plan)
       });
     } catch (cause) {
