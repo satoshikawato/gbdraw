@@ -1,6 +1,6 @@
 # Web Gallery operation screenshot register
 
-Last updated: 2026-09-23
+Last updated: 2026-09-25
 
 This register records task-specific decisions for Gallery operation media.
 Capture metadata remains the executable source of truth in each tutorial JSON.

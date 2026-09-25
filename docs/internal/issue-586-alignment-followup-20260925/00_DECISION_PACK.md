@@ -1,8 +1,8 @@
 # Product Decision Pack — unambiguous Similarity Group alignment
 
-Status: Choice A selected by the requester on 2026-09-25; the complete proposed response texts remain unsigned pending explicit Product Decision Owner approval of their wording.
+Status: Historical preflight packet. The Product Decision Owner subsequently approved the four complete Choice A receipts; commit `b772359b` serialized them and `origin/dev@69134e28` merged the authority.
 
-This pack is a developer-preflight input under the [Product Impact Ratchet](../PRODUCT_IMPACT_RATCHET.md). It is not runtime authority. Choice A is selected for implementation planning; its four complete candidate response texts remain proposals, not signed decisions.
+This pack is a developer-preflight input under the [Product Impact Ratchet](../PRODUCT_IMPACT_RATCHET.md). It is not runtime authority. The candidate response texts below preserve the preapproval decision route; the active revision-3 authority is in the [Option Integrity Product Contract](../OPTION_INTEGRITY_PRODUCT_CONTRACT.md).
 
 ## Identity
 

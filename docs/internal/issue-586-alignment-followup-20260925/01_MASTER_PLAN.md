@@ -1,9 +1,9 @@
 # Similarity Alignment auto-apply and Definition column regression — master plan
 
-Status: planning complete; no runtime change in this plan branch.
+Status: implementation present on the fixed branch; Session 04 acceptance record below.
 Implementation branch: fix/similarity-alignment-auto-apply-definition-column-20260925
 Branch base at creation: origin/dev@ac067f9b5482b480a1edca983709e3321f75157f, fetched 2026-09-25.
-Product outcome: Choice A in 00_DECISION_PACK.md was selected by the requester on 2026-09-25. The four proposed PRODUCT_DECISION texts are candidate wording; selection of A alone is not the complete signed receipt required by PRODUCT_IMPACT_RATCHET.md. Do not serialize them as accepted authority until the Product Decision Owner explicitly approves the complete text or supplies edits.
+Product outcome: Choice A in 00_DECISION_PACK.md was selected by the requester on 2026-09-25. The Product Decision Owner subsequently approved the complete four receipts, serialized in `b772359b` and merged into `origin/dev@69134e28` before dependent runtime changes.
 
 ## 1. Purpose and scope
 
@@ -118,3 +118,113 @@ Desktop and 390-pixel palette screenshots were inspected. The generated
 browser wheel remains ignored, and no reference SVG or unrelated worktree
 file was changed. Session 04 owns integrated geometry, persistence,
 full-suite, and build acceptance.
+
+## 9. Session 04 integrated acceptance record (2026-09-25)
+
+Sections 1–7 retain the original implementation plan and its then-pending
+authority gate. This record describes the verified implementation branch.
+
+- Branch: `fix/similarity-alignment-auto-apply-definition-column-20260925`,
+  upstream `origin/fix/similarity-alignment-auto-apply-definition-column-20260925`;
+  fetched `origin/dev@69134e28` is an ancestor. Authority commit
+  `b772359b` (PD-OI-026/027/031/034 revision 3, complete Choice A) was merged
+  into that base by `69134e28`, then into this branch by `6e17ac35`.
+- Implementation commits: `015d1257` (plan), `2092dee4` (Definition column),
+  `86aa03d9` (automatic resolved application), and `7d42f3e7` (explicit
+  popup/drawer review and public wording). No unmerged authority candidate
+  was used as runtime authority.
+- Normal Align applies Python's validated resolved plan with one helper and one
+  successful Result/History action, without mounting the palette. Only-usable,
+  unique-direct-RBH, missing, and unusable targets retain their Python
+  decisions. Genuine ambiguity and either explicit review action open the
+  same complete, preselected draft; Select, Skip, Match reference direction,
+  and canvas selection remain available. Failed automatic render opens that
+  retained draft for correction and Apply retry. Failed Apply, Cancel, stale
+  completion, duplicate starts, and supersession preserve the last Result.
+  Session save/load, regeneration, source-relative orientation, Reset,
+  Undo/Redo, and export cleanliness are covered by the focused Chromium and
+  unit journeys.
+- Chromium SVG measurement on the regenerated five-record Streptomyces Gallery
+  Session with manual x inputs `[-85, 40, -35, 75, 15]` and Lock on: all five
+  transformed Definition left edges were exactly `16 px`; final sequence
+  translations spanned `-303.35` to `+35.34 px`. The nearest sequence began
+  at `593 px`, and the widest Definition ended at `572.09 px`, leaving
+  `20.91 px` against the configured `20 px` gap. The separate four-record
+  Chromium contract measured two-row and mixed three-row cases, Lock off,
+  record-local labels, save/load, and regeneration; locked edge spread was at
+  most `1 px`, and sequence clearance was at least `19 px` including browser
+  measurement tolerance.
+- The five-record Gallery Session regenerated with five species labels, gene
+  colors, quantitative comparison ribbons, scale, legend, and title. The
+  3200×1200 desktop capture was inspected at readable scale; the 390×740
+  popup and review captures showed legible labels, exact reference, both
+  actions, candidate reason, Apply, and Cancel within the viewport. The
+  palette occupies `x=12..378 px` at 390 px and intentionally overlays the
+  figure while open; closing restores the preview, and the desktop palette
+  can be moved. This bounded mobile overlap is the accepted PD-OI-035 residual
+  risk. The Session 04 prompt's literal requirement that the open palette not
+  obscure the 390 px preview remains unmet; removing that overlap would need
+  a reviewed mobile interaction outcome that preserves the PD-OI-035 canvas,
+  keyboard, and candidate-selection requirements.
+
+| Gate | Result |
+| --- | --- |
+| Focused four-file Python command in Session 04 | 184 passed |
+| `node --test tests/web/similarity-alignment-actions.test.mjs` | 28 passed |
+| Requested two-spec Chromium command, one worker | 43 passed |
+| Gallery tutorial and Session regeneration Chromium specs | 25 passed |
+| Gallery JSON, strict operation capture check, and Gallery JS syntax | passed; 19 media/operations checked |
+| Gallery manifest and published Session verification | passed after refresh |
+| Clean-directory H-CLI-07 and tutorial-9 arrow reproduction tests | 1 passed; 2 passed |
+| Embedded Chromium comparison contracts with Node Playwright on PATH | 2 passed |
+| `ruff check gbdraw/` | passed |
+| `node tests/web/architecture-contracts.test.mjs` | 137 passed |
+| `node tools/check-web-change-budget.mjs --base origin/dev` (full working tree) | Gate PASS, Review REQUIRED for the reviewed BGC Session artifact |
+| `python tools/update_cli_reference_help.py --check` | passed |
+| `python -m pytest tests/ -v -m "not slow"` | 6,287 passed, 17 skipped, 11 deselected in 13:18 |
+| Read-only `TestOutputComparison` | 16 passed |
+| `python -m build` and `git diff --check` | passed |
+
+Owner/path evidence: before this follow-up the Web controller always built a
+review draft and the Definition painter/collision pass each reapplied record x
+to the locked origin. After it, the existing `layout/similarity_alignment.py`
+resolver/validator still decides biology; one `app/similarity-alignment.js`
+controller branches on its validated status and reuses `runAnalysis` and the
+existing Result/History admission. `layout/linear.py` owns one placement rule,
+called by both `diagrams/linear/assemble.py` collision planning and
+`diagrams/linear/builders.py` painting after final translations. Current
+request/Session projection remains in `services/session-request.js`; no new
+schema, compatibility reader, Worker path, dependency, or CSP rule was added.
+The superseded unconditional-review path and duplicate locked-column offsets
+were removed. OE, PE, and CB do not increase; no exception packet applies.
+Product preflight is `IMPLEMENT_EXISTING_AUTHORITY` under the merged revision-3
+Choice A and unchanged PD-OI-024; no outcome remains unresolved. Reverting
+the Web behavior would require matching Product authority to be restored first;
+the independent Definition correction can be managed separately.
+
+Production, tests, public/internal documentation, and generated media were
+reviewed separately. The new popup WebP was compared to the old crop at equal
+displayed size and passed strict capture verification. The Web reference and
+BGC tutorial describe automatic Align, ambiguity, and optional review. The
+first full-suite run exposed two generated SVGs from before the Definition
+correction and an external browser-test PATH issue. The clean-directory
+H-CLI-07 recipe regenerated `docs/images/h-cli-07/cli_losatp_groups.svg`;
+`tools/reproduce_examples.py` regenerated the public tutorial-9 arrow figure;
+and `tools/refresh_gallery_sessions.py` regenerated the BGC Gallery Session,
+source and interactive SVGs, thumbnail, and artifact manifest. For the H-CLI
+and tutorial figures and BGC source, structural comparison found only four
+Definition transforms changed in each; the BGC Session also updated the
+corresponding collision-band coordinates. The owner-wide Gallery refresh
+rewrote nine other interactive SVGs solely to place the existing `outline:
+none` style on the base pairwise-match selector rather than its hover rule;
+no geometry or content changed in those nine. The Gallery manifest and
+published Session verification pass. The H-CLI figure, tutorial-9 figure,
+and BGC thumbnail were rendered and visually inspected, and the Gallery
+Chromium checks passed after refresh. The browser-contract subprocess passed
+with the existing Node Playwright binary on PATH. No SVG under
+`tests/reference_outputs/` or `examples/gbdraw_social_preview.png` was
+changed. The generated browser wheel (SHA-256
+`552abef4f9d89319e4aa31f9f4e576acd77311104e16b5e40ba613b58567c306`)
+and build outputs remain ignored; unrelated untracked video-plan files in the
+original checkout were preserved. No offline bundle audit was triggered:
+dependencies, privacy, bundle composition, and Worker lifecycle are unchanged.
