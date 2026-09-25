@@ -39,7 +39,6 @@ from gbdraw.layout.similarity_alignment import (
     AlignmentEvidenceEdge,
     AmbiguousAlignmentRecord,
     SimilarityAlignmentCandidate,
-    SimilarityAlignmentMode,
     SimilarityAlignmentPlan,
     resolve_similarity_alignment,
 )
@@ -225,11 +224,11 @@ def materialize_similarity_alignment_display(
     plan.validate_record_coverage(record_keys)
     decisions = {decision.record_key: decision for decision in plan.records}
     effective_records: list[SeqRecord] = []
-    for record, provenance in zip(
-        collection.records, collection.provenance, strict=True
+    for record, provenance, transform in zip(
+        collection.records, collection.provenance, collection.transforms, strict=True
     ):
         decision = decisions[provenance.record_key]
-        base_orientation = provenance.presentation.reverse_complement
+        base_orientation = transform.source_step == -1
         effective_orientation = (
             decision.effective_reverse_complement
             if decision.effective_reverse_complement is not None
@@ -417,7 +416,6 @@ def resolve_cli_similarity_alignment_plan(
         reference=reference.anchor,
         candidates=group_candidates,
         edges=edges,
-        mode=SimilarityAlignmentMode.POSITION,
     )
     if resolution.ambiguities:
         details = "; ".join(
@@ -485,9 +483,14 @@ def _similarity_candidate_from_orthogroup_member(
         center_mappable=display_center is not None,
         display_center=display_center,
         identity_is_unique=identity_is_unique,
-        effective_reverse_complement=provenance.presentation.reverse_complement,
+        effective_reverse_complement=(
+            collection.transforms[member.record_index].source_step == -1
+        ),
         representative=member.representative,
         role=str(member.role),
+        source_start=member.start,
+        source_end=member.end,
+        display_name=member.gene or member.product or member.label or member.protein_id,
     )
 
 

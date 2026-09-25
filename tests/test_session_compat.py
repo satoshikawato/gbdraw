@@ -218,6 +218,16 @@ def test_released_legacy_alignment_session_promotes_to_current_typed_state(
         assert request._legacy_similarity_alignment.target == "og_1"
         assert request.similarity_alignment is not None
         assert request.similarity_alignment.group_id == "og_1"
+        assert request.similarity_alignment.schema == 2
+        assert all(
+            decision.orientation_policy.value == "preserve"
+            for decision in request.similarity_alignment.records
+        )
+        assert all(
+            isinstance(decision.effective_reverse_complement, bool)
+            for decision in request.similarity_alignment.records
+            if decision.status.value == "aligned"
+        )
         assert request.layout is not None
         assert [
             (item.record_key, item.x, item.y)
@@ -236,6 +246,9 @@ def test_released_legacy_alignment_session_promotes_to_current_typed_state(
     serialized = json.dumps(payload)
     assert current.version == CURRENT_SESSION_VERSION
     assert payload["renderRequest"]["schema"] == CANONICAL_REQUEST_SCHEMA
+    typed_plan = payload["renderRequest"]["layout"]["similarityAlignment"]
+    assert typed_plan["schema"] == 2
+    assert "mode" not in typed_plan
     assert "alignOrthogroupFeature" not in serialized
     assert "align_orthogroup_feature" not in serialized
     assert "selectedOrthogroupAlignmentFeature" not in serialized

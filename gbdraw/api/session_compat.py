@@ -21,13 +21,13 @@ from gbdraw.analysis.protein_colinearity import (
     validate_legacy_protein_raw_candidate_envelope,
     validate_protein_raw_entry_references,
 )
+from gbdraw.core.record_metadata import _read_coord_map
 from gbdraw.exceptions import ValidationError
 from gbdraw.layout.similarity_alignment import (
     AlignmentAnchorIdentity,
     AlignmentDecisionStatus,
     AlignmentRecordDecision,
     AlignmentResolutionRationale,
-    SimilarityAlignmentMode,
     SimilarityAlignmentPlan,
 )
 from gbdraw.session_io import (
@@ -59,7 +59,9 @@ from .request_render import (
 )
 from .requests import (
     DiagramRequest,
+    InMemoryRecordSource,
     LinearDiagramRequest,
+    RecordInput,
     _LegacySimilarityAlignment,
     _with_legacy_similarity_alignment,
 )
@@ -737,6 +739,18 @@ def _legacy_alignment_record_member(
     return matching[0] if matching else None
 
 
+def _legacy_effective_reverse(record: RecordInput) -> bool:
+    source_reverse = (
+        _read_coord_map(record.source.record)[1] == -1
+        if isinstance(record.source, InMemoryRecordSource) else False
+    )
+    return (
+        source_reverse
+        ^ record.presentation.reverse_complement
+        ^ (record.region.reverse_complement if record.region else False)
+    )
+
+
 def _legacy_similarity_alignment_plan(
     request: LinearDiagramRequest,
     session_artifacts: Mapping[str, Any],
@@ -799,13 +813,17 @@ def _legacy_similarity_alignment_plan(
                 status=status,
                 rationale=rationale,
                 anchor=anchor,
+                effective_reverse_complement=(
+                    _legacy_effective_reverse(record)
+                    if status is AlignmentDecisionStatus.ALIGNED
+                    else None
+                ),
             )
         )
     return SimilarityAlignmentPlan(
-        SimilarityAlignmentMode.POSITION,
-        group_id,
-        reference,
-        tuple(decisions),
+        group_id=group_id,
+        reference=reference,
+        records=tuple(decisions),
     )
 
 

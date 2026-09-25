@@ -1691,22 +1691,24 @@ test('neutral conservation replay delegates lazy resources to the shared reader'
     const alignmentReference = alignmentAnchor('multi', 'reference-feature', 0);
     const alignmentTarget = alignmentAnchor('middle', 'target-feature', 1);
     const alignmentPlan = {
-      schema: 1,
-      mode: 'position',
+      schema: 2,
       groupId: 'og-web-action',
       reference: alignmentReference,
       records: [
         {
           recordKey: 'multi', status: 'reference', rationale: 'reference',
-          anchor: alignmentReference, effectiveReverseComplement: null
+          anchor: alignmentReference, orientationPolicy: 'preserve',
+          effectiveReverseComplement: null
         },
         {
           recordKey: 'middle', status: 'aligned', rationale: 'only_usable_candidate',
-          anchor: alignmentTarget, effectiveReverseComplement: null
+          anchor: alignmentTarget, orientationPolicy: 'preserve',
+          effectiveReverseComplement: true
         },
         {
           recordKey: 'third', status: 'skipped', rationale: 'skipped_no_candidate',
-          anchor: null, effectiveReverseComplement: null
+          anchor: null, orientationPolicy: 'preserve',
+          effectiveReverseComplement: null
         }
       ]
     };

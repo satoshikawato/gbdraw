@@ -84,21 +84,27 @@ sessions retain their previous effective repeat shape.
 
 ## Linear Similarity Group alignment
 
-The Web feature popup aligns from the exact clicked feature, and the Similarity
-Groups drawer requires an exact reference. A unique usable member or unique
-direct RBH resolves automatically; ambiguous inparalogs require **Select** or
-**Skip**. **Align** changes X only; **Align & orient** also reverses targets
-with known opposite displayed strands. Missing members stay in place. The
-summary, plan inspector, and source-relative **rev** indicator make the
-result inspectable. Ordinary Generate and stable reorder preserve the plan;
-Reset Align restores the immediate pre-align geometry, and Undo/Redo restores
-the complete artifact. The typed Python request accepts a resolved plan, while
-the CLI accepts an exact reference only when target choices are unambiguous.
-See [Web alignment](./REFERENCE/web-app.md#similarity-group-alignment-in-linear-view),
+The Web feature popup and Similarity Groups drawer each provide one **Align…**
+action for an exact reference feature. Every valid action opens a review palette
+before changing the diagram. Python preselects usable anchors with visible
+reasons; ambiguous recommendations use a unique representative or stable
+candidate 1 as a convenience heuristic. Each target can replace its anchor,
+choose **Skip**, and independently enable **Match reference direction**. The
+palette shows the effective orientation before Apply. Local edits start no
+Worker job; Apply validates the full draft and generates one Result. Errors keep
+the draft for correction and retry; Cancel and stale work leave the last Result
+and History intact.
+
+A successful Apply stores a fully resolved schema-2 plan with each record's
+requested and effective orientation. Ordinary Generate and stable reorder
+preserve it. Reset Align restores the immediate pre-align geometry; Undo/Redo
+restores the complete artifact. The typed Python request accepts a resolved
+plan, while the CLI accepts an exact reference only when target choices are
+unambiguous. See [Web alignment](./REFERENCE/web-app.md#similarity-group-alignment-in-linear-view),
 [CLI behavior](./REFERENCE/command-line.md#strict-similarity-group-alignment),
 and [typed Python usage](./REFERENCE/python-api.md#typed-linear-similarity-group-alignment).
-Collinear alignment controls, anchor TSV, and smart or synteny propagation are
-deferred.
+Collinear alignment controls, anchor TSV, scored inference, support-count
+ranking, and multi-hop automatic selection are unsupported.
 
 ## Session / replay / save compatibility
 
@@ -106,9 +112,11 @@ Current writers emit session version 44 and canonical `renderRequest` schema 8.
 Save Session also preserves settings before the first source is loaded. Supported
 older Sessions and legacy settings JSON remain readable; settings-only Sessions
 need a biological source before rendering.
-Schema 8 stores Linear Similarity alignment as an exact typed plan and finite
-per-record X/Y base translations. The old protein-setting string remains a
-reader-only compatibility input and is not written by current Sessions.
+Schema 8 stores Linear Similarity alignment as an exact nested schema-2 plan
+and finite per-record X/Y base translations. The Session version and request
+schema did not change for this nested plan update. The old protein-setting
+string remains a reader-only compatibility input and is not written by current
+Sessions.
 These persisted-format numbers are separate from the package version. The
 [session and request compatibility reference](./REFERENCE/session-and-request-compatibility.md)
 owns the accepted-reader table and migration details.

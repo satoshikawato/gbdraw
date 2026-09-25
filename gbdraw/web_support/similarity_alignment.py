@@ -12,6 +12,8 @@ from gbdraw.layout.similarity_alignment import (
     AlignmentEvidenceEdge,
     AlignmentRecordChoice,
     AlignmentRecordDecision,
+    AlignmentReviewCandidate,
+    AlignmentReviewRow,
     AmbiguousAlignmentRecord,
     SimilarityAlignmentCandidate,
     SimilarityAlignmentPlan,
@@ -19,8 +21,18 @@ from gbdraw.layout.similarity_alignment import (
 )
 
 
-def _object(value: object, keys: set[str], path: str) -> Mapping[str, Any]:
-    if not isinstance(value, Mapping) or set(value) != keys:
+def _object(
+    value: object,
+    keys: set[str],
+    path: str,
+    *,
+    optional: set[str] = frozenset(),
+) -> Mapping[str, Any]:
+    if (
+        not isinstance(value, Mapping)
+        or not keys.issubset(value)
+        or not set(value).issubset(keys | optional)
+    ):
         raise ValidationError(f"{path} has invalid fields.")
     return value
 
@@ -100,6 +112,9 @@ def _record_fact(value: object, path: str) -> dict[str, Any]:
     presentation = _object(
         raw["presentation"], {"reverseComplement"}, f"{path}.presentation"
     )
+    presentation_reverse = _boolean(
+        presentation["reverseComplement"], f"{path}.presentation.reverseComplement"
+    )
     region = raw["region"]
     normalized_region = None
     if region is not None:
@@ -113,6 +128,8 @@ def _record_fact(value: object, path: str) -> dict[str, Any]:
         assert start is not None and end is not None
         if start > end:
             raise ValidationError(f"{path}.region start must not exceed end.")
+        if record_length is not None and end > record_length:
+            raise ValidationError(f"{path}.region exceeds recordLength.")
         normalized_region = {
             "start": start,
             "end": end,
@@ -120,16 +137,15 @@ def _record_fact(value: object, path: str) -> dict[str, Any]:
                 region["reverseComplement"], f"{path}.region.reverseComplement"
             ),
         }
+    if normalized_region is not None and normalized_region["reverseComplement"] and presentation_reverse:
+        raise ValidationError(
+            f"{path} cannot reverse complement both region and presentation."
+        )
     return {
         "recordKey": _text(raw["recordKey"], f"{path}.recordKey"),
         "recordLength": record_length,
         "region": normalized_region,
-        "presentation": {
-            "reverseComplement": _boolean(
-                presentation["reverseComplement"],
-                f"{path}.presentation.reverseComplement",
-            )
-        },
+        "presentation": {"reverseComplement": presentation_reverse},
     }
 
 
@@ -154,6 +170,7 @@ def _member_candidate(
             "role",
         },
         path,
+        optional={"displayName"},
     )
     if _text(raw["groupId"], f"{path}.groupId") != group_id:
         raise ValidationError(f"{path} belongs to another Similarity Group.")
@@ -176,41 +193,39 @@ def _member_candidate(
         raise ValidationError(f"{path}.role must be text without NUL.")
 
     region = record["region"]
-    effective_reverse = (
-        region["reverseComplement"]
-        if region is not None
-        else record["presentation"]["reverseComplement"]
-    )
+    record_length = record["recordLength"]
+    presentation_reverse = record["presentation"]["reverseComplement"]
+    region_reverse = region["reverseComplement"] if region is not None else False
+    effective_reverse = presentation_reverse ^ region_reverse
     source_center = (start + end) / 2
-    if region is None:
-        center_mappable = True
-        record_length = record["recordLength"]
-        display_center = (
+    if presentation_reverse and record_length is None:
+        presented_center = None
+    else:
+        presented_center = (
             float(record_length) - source_center
-            if effective_reverse and record_length is not None
-            else source_center
+            if presentation_reverse else source_center
         )
+    if region is None:
+        display_center = presented_center
     else:
         region_start = region["start"] - 1
         region_end = region["end"]
-        center_mappable = region_start <= source_center <= region_end
         display_center = None
-        if center_mappable:
+        if presented_center is not None and region_start <= presented_center <= region_end:
             display_center = (
-                region_end - source_center
-                if effective_reverse
-                else source_center - region_start
+                region_end - presented_center
+                if region_reverse else presented_center - region_start
             )
     displayed_strand = (
-        None
-        if source_strand is None
+        None if source_strand is None
         else source_strand * (-1 if effective_reverse else 1)
     )
+    display_name = raw.get("displayName", anchor.biological_feature_id)
     return SimilarityAlignmentCandidate(
         group_id=group_id,
         anchor=anchor,
         displayed_strand=displayed_strand,
-        center_mappable=center_mappable,
+        center_mappable=display_center is not None,
         display_center=display_center,
         identity_is_unique=_boolean(
             raw["identityIsUnique"], f"{path}.identityIsUnique"
@@ -219,6 +234,9 @@ def _member_candidate(
         effective_reverse_complement=effective_reverse,
         representative=_boolean(raw["representative"], f"{path}.representative"),
         role=role.strip(),
+        source_start=start,
+        source_end=end,
+        display_name=_text(display_name, f"{path}.displayName"),
     )
 
 
@@ -231,43 +249,73 @@ def _serialize_anchor(anchor: AlignmentAnchorIdentity) -> dict[str, object]:
     }
 
 
-def _serialize_decision(decision: AlignmentRecordDecision) -> dict[str, object]:
+def _serialize_review_candidate(row: AlignmentReviewCandidate) -> dict[str, object]:
+    candidate = row.candidate
+    return {
+        "anchor": _serialize_anchor(candidate.anchor),
+        "displayName": candidate.display_name,
+        "sourceStart": candidate.source_start,
+        "sourceEnd": candidate.source_end,
+        "displayCenter": candidate.display_center,
+        "displayedStrand": candidate.displayed_strand,
+        "hidden": candidate.hidden,
+        "representative": candidate.representative,
+        "role": candidate.role,
+        "usable": row.usable,
+        "directEvidence": list(row.direct_evidence),
+        "orientation": {
+            "preserve": {
+                "effect": "preserve",
+                "effectiveReverseComplement": candidate.effective_reverse_complement,
+            },
+            "match_reference": {
+                "effect": row.match_reference_effect.value,
+                "effectiveReverseComplement": (
+                    row.match_reference_effective_reverse_complement
+                ),
+            },
+        },
+    }
+
+
+def _serialize_decision(
+    decision: AlignmentRecordDecision,
+    row: AlignmentReviewRow,
+) -> dict[str, object]:
     return {
         "kind": "decision",
         "recordKey": decision.record_key,
         "status": decision.status.value,
         "rationale": decision.rationale.value,
+        "reviewReason": (
+            decision.review_reason.value if decision.review_reason else None
+        ),
         "anchor": _serialize_anchor(decision.anchor) if decision.anchor else None,
+        "orientationPolicy": decision.orientation_policy.value,
         "effectiveReverseComplement": decision.effective_reverse_complement,
+        "candidates": [_serialize_review_candidate(item) for item in row.candidates],
     }
 
 
 def _serialize_ambiguity(
     ambiguity: AmbiguousAlignmentRecord,
+    row: AlignmentReviewRow,
 ) -> dict[str, object]:
     return {
         "kind": "ambiguous",
         "recordKey": ambiguity.record_key,
-        "candidates": [
-            {
-                "anchor": _serialize_anchor(candidate.anchor),
-                "displayedStrand": candidate.displayed_strand,
-                "hidden": candidate.hidden,
-                "representative": candidate.representative,
-                "role": candidate.role,
-            }
-            for candidate in ambiguity.candidates
-        ],
+        "candidates": [_serialize_review_candidate(item) for item in row.candidates],
         "directRbhCandidates": [
             _serialize_anchor(anchor) for anchor in ambiguity.direct_rbh_candidates
         ],
+        "recommendedAnchor": _serialize_anchor(ambiguity.recommended_anchor),
+        "recommendationReason": ambiguity.recommendation_reason.value,
     }
 
 
 def _serialize_plan(plan: SimilarityAlignmentPlan) -> dict[str, object]:
     return {
         "schema": plan.schema,
-        "mode": plan.mode.value,
         "groupId": plan.group_id,
         "reference": _serialize_anchor(plan.reference),
         "records": [
@@ -276,8 +324,8 @@ def _serialize_plan(plan: SimilarityAlignmentPlan) -> dict[str, object]:
                 "status": decision.status.value,
                 "rationale": decision.rationale.value,
                 "anchor": _serialize_anchor(decision.anchor)
-                if decision.anchor
-                else None,
+                if decision.anchor else None,
+                "orientationPolicy": decision.orientation_policy.value,
                 "effectiveReverseComplement": decision.effective_reverse_complement,
             }
             for decision in plan.records
@@ -292,7 +340,6 @@ def resolve_similarity_alignment_payload(payload: object) -> dict[str, object]:
         payload,
         {
             "schema",
-            "mode",
             "groupId",
             "records",
             "reference",
@@ -302,8 +349,8 @@ def resolve_similarity_alignment_payload(payload: object) -> dict[str, object]:
         },
         "request",
     )
-    if raw["schema"] != 1:
-        raise ValidationError("request.schema must be 1.")
+    if type(raw["schema"]) is not int or raw["schema"] != 2:
+        raise ValidationError("request.schema must be 2.")
     group_id = _text(raw["groupId"], "request.groupId")
     records = [
         _record_fact(value, f"request.records[{index}]")
@@ -327,9 +374,7 @@ def resolve_similarity_alignment_payload(payload: object) -> dict[str, object]:
     edges = []
     for index, value in enumerate(_list(raw["directEdges"], "request.directEdges")):
         path = f"request.directEdges[{index}]"
-        edge = _object(
-            value, {"groupId", "query", "subject", "edgeKind"}, path
-        )
+        edge = _object(value, {"groupId", "query", "subject", "edgeKind"}, path)
         edge_group_id = _text(edge["groupId"], f"{path}.groupId")
         query = _anchor(edge["query"], f"{path}.query")
         subject = _anchor(edge["subject"], f"{path}.subject")
@@ -348,15 +393,17 @@ def resolve_similarity_alignment_payload(payload: object) -> dict[str, object]:
     choices = []
     for index, value in enumerate(_list(raw["choices"], "request.choices")):
         path = f"request.choices[{index}]"
-        choice = _object(value, {"recordKey", "kind", "anchor"}, path)
+        choice = _object(value, {"recordKey", "kind", "anchor", "orientationPolicy"}, path)
         choices.append(
             AlignmentRecordChoice(
                 record_key=_text(choice["recordKey"], f"{path}.recordKey"),
                 kind=_text(choice["kind"], f"{path}.kind"),
                 anchor=(
                     _anchor(choice["anchor"], f"{path}.anchor")
-                    if choice["anchor"] is not None
-                    else None
+                    if choice["anchor"] is not None else None
+                ),
+                orientation_policy=_text(
+                    choice["orientationPolicy"], f"{path}.orientationPolicy"
                 ),
             )
         )
@@ -367,20 +414,22 @@ def resolve_similarity_alignment_payload(payload: object) -> dict[str, object]:
         candidates=candidates,
         edges=edges,
         choices=choices,
-        mode=_text(raw["mode"], "request.mode"),
     )
     plan = resolution.plan
     return {
-        "schema": 1,
+        "schema": 2,
         "status": "ambiguous" if resolution.ambiguities else "resolved",
-        "mode": resolution.mode.value,
         "groupId": resolution.group_id,
         "reference": _serialize_anchor(resolution.reference),
+        "referenceDisplayedStrand": resolution.reference_candidate.displayed_strand,
+        "referenceDisplayCenter": resolution.reference_candidate.display_center,
         "records": [
-            _serialize_ambiguity(record)
+            _serialize_ambiguity(record, row)
             if isinstance(record, AmbiguousAlignmentRecord)
-            else _serialize_decision(record)
-            for record in resolution.records
+            else _serialize_decision(record, row)
+            for record, row in zip(
+                resolution.records, resolution.review_rows, strict=True
+            )
         ],
         "plan": _serialize_plan(plan) if plan is not None else None,
     }

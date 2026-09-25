@@ -489,6 +489,9 @@ def test_web_resolved_protein_writer_preserves_typed_alignment_layout(
     assert not hasattr(request.options, "align_orthogroup_feature")
     assert request.similarity_alignment is not None
     assert request.similarity_alignment.group_id == "og-resolved"
+    assert request.similarity_alignment.schema == 2
+    assert request.similarity_alignment.records[2].orientation_policy.value == "match_reference"
+    assert request.similarity_alignment.records[2].effective_reverse_complement is True
     assert request.layout is not None
     assert [item.record_key for item in request.layout.record_translations] == [
         "first",

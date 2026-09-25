@@ -3,976 +3,521 @@ import test from 'node:test';
 
 const ref = (value) => ({ value });
 globalThis.window = {
-  Vue: {
-    ref,
-    computed: (getter) => ({ get value() { return getter(); } })
-  }
+  Vue: { ref, computed: (getter) => ({ get value() { return getter(); } }) }
 };
-
 const { createSimilarityAlignmentActions } = await import(
   '../../gbdraw/web/js/app/similarity-alignment.js'
 );
 
 const anchor = (recordKey, biologicalFeatureId, sourceFeatureIndex) => ({
-  recordKey,
-  biologicalFeatureId,
-  sourceFeatureIndex,
+  recordKey, biologicalFeatureId, sourceFeatureIndex,
   stableFeatureSvgId: `stable-${biologicalFeatureId}`
 });
-
-const reference = {
-  ...anchor('record-a', 'clicked-inparalog', 4),
-  recordIndex: 0,
-  featureIndex: 4,
-  stableFeatureSvgId: 'stable-clicked-inparalog',
-  start: 10,
-  end: 40,
-  strand: '+',
-  proteinId: 'protein-a',
-  sourceProteinId: 'protein-a',
-  representative: false,
-  role: 'inparalog'
-};
-const targetA = {
-  ...anchor('record-b', 'target-a', 1),
-  recordIndex: 1,
-  featureIndex: 1,
-  stableFeatureSvgId: 'stable-target-a',
-  start: 100,
-  end: 130,
-  strand: '-',
-  proteinId: 'protein-b1',
-  sourceProteinId: 'protein-b1',
-  representative: true,
-  role: 'anchor'
-};
-const targetB = {
-  ...anchor('record-b', 'target-b', 2),
-  recordIndex: 1,
-  featureIndex: 2,
-  stableFeatureSvgId: 'stable-target-b',
-  start: 160,
-  end: 190,
-  strand: '+',
-  proteinId: 'protein-b2',
-  sourceProteinId: 'protein-b2',
-  representative: false,
-  role: 'inparalog'
-};
-const targetC = {
-  ...anchor('record-c', 'target-c', 3),
-  recordIndex: 2,
-  featureIndex: 3,
-  stableFeatureSvgId: 'stable-target-c',
-  start: 210,
-  end: 250,
-  strand: '-',
-  proteinId: 'protein-c1',
-  sourceProteinId: 'protein-c1',
-  representative: false,
-  role: 'coortholog'
-};
-const targetD = {
-  ...anchor('record-c', 'target-d', 5),
-  recordIndex: 2,
-  featureIndex: 5,
-  stableFeatureSvgId: 'stable-target-d',
-  start: 260,
-  end: 290,
-  strand: '+',
-  proteinId: 'protein-c2',
-  sourceProteinId: 'protein-c2',
-  representative: true,
-  role: 'anchor'
-};
-
+const member = (recordKey, id, index, strand, representative = false) => ({
+  ...anchor(recordKey, id, index), recordIndex: recordKey === 'a' ? 0 : recordKey === 'b' ? 1 : 2,
+  featureIndex: index, start: 10 + index * 10, end: 30 + index * 10,
+  strand, proteinId: id, sourceProteinId: id, representative, role: 'member',
+  gene: `gene-${id}`
+});
+const reference = member('a', 'clicked', 4, '+');
+const otherReference = member('a', 'other', 7, '+', true);
+const targetA = member('b', 'target-a', 1, '-', true);
+const targetB = member('b', 'target-b', 2, '+');
+const targetC = member('c', 'target-c', 3, null);
 const renderRequest = {
-  mode: 'linear',
-  records: [
-    { recordKey: 'record-a', region: null, presentation: { reverseComplement: false } },
-    { recordKey: 'record-b', region: null, presentation: { reverseComplement: false } }
-  ]
+  mode: 'linear', records: ['a', 'b', 'c'].map((recordKey) => ({
+    recordKey, region: null, presentation: { reverseComplement: false }
+  }))
 };
-
 const state = () => ({
-  featureCatalog: ref({
-    items: [{
-      recordKeys: ['record-a', 'record-b'],
-      sequenceSources: [{ sequence: 'A'.repeat(300) }, { sequence: 'C'.repeat(300) }]
-    }]
-  }),
+  featureCatalog: ref({ items: [{
+    recordKeys: ['a', 'b', 'c'],
+    sequenceSources: [{ sequence: 'A'.repeat(300) }, { sequence: 'C'.repeat(300) },
+      { sequence: 'G'.repeat(300) }]
+  }] }),
+  selectedOrthogroupId: ref('og-1'),
   similarityAlignmentPlan: ref(null),
   linearRecordTranslations: ref([]),
-  linearSeqs: [
-    { uid: 'record-a', region_reverse: false },
-    { uid: 'record-b', region_reverse: false }
-  ],
-  results: ref([{ name: 'committed.svg' }])
+  linearSeqs: ['a', 'b', 'c'].map((uid) => ({ uid, region_reverse: false })),
+  results: ref([{ name: 'prior.svg' }])
 });
-
-const decision = (recordKey, status, rationale, selectedAnchor = null) => ({
-  kind: 'decision',
-  recordKey,
-  status,
-  rationale,
-  anchor: selectedAnchor,
-  effectiveReverseComplement: null
-});
-
-const planDecision = ({ kind: _kind, ...value }) => value;
-
-const resolvedResponse = (request, selected = anchor('record-b', 'target-a', 1)) => {
-  const records = [
-    decision('record-a', 'reference', 'reference', request.reference),
-    decision('record-b', 'aligned', 'only_usable_candidate', selected)
-  ];
+const deferred = () => {
+  let resolve;
+  const promise = new Promise((done) => { resolve = done; });
+  return { promise, resolve };
+};
+const serializedCandidate = (item, request) => {
+  const displayedStrand = item.sourceStrand;
+  const referenceStrand = request.members.find(({ anchor: selected }) => (
+    selected.recordKey === request.reference.recordKey
+    && selected.biologicalFeatureId === request.reference.biologicalFeatureId
+  ))?.sourceStrand;
+  const opposite = displayedStrand !== null && referenceStrand !== null
+    && displayedStrand !== referenceStrand;
   return {
-    schema: 1,
-    status: 'resolved',
-    mode: request.mode,
-    groupId: request.groupId,
-    reference: request.reference,
-    records,
-    plan: {
-      schema: 1,
-      mode: request.mode,
-      groupId: request.groupId,
-      reference: request.reference,
-      records: records.map(planDecision)
+    anchor: item.anchor, displayName: item.anchor.biologicalFeatureId,
+    sourceStart: item.sourceStart, sourceEnd: item.sourceEnd,
+    displayCenter: (item.sourceStart + item.sourceEnd) / 2,
+    displayedStrand, hidden: false, representative: item.representative,
+    role: item.role, usable: true, directEvidence: [],
+    orientation: {
+      preserve: { effect: 'preserve', effectiveReverseComplement: false },
+      match_reference: {
+        effect: displayedStrand === null ? 'preserve_unknown_strand'
+          : opposite ? 'reverse_whole_record' : 'preserve',
+        effectiveReverseComplement: opposite
+      }
     }
   };
 };
-
-const ambiguityResponse = (request) => ({
-  schema: 1,
-  status: 'ambiguous',
-  mode: request.mode,
-  groupId: request.groupId,
-  reference: request.reference,
-  records: [
-    decision('record-a', 'reference', 'reference', request.reference),
-    {
-      kind: 'ambiguous',
-      recordKey: 'record-b',
-      candidates: [targetA, targetB].map((member) => ({
-        anchor: anchor(member.recordKey, member.biologicalFeatureId, member.sourceFeatureIndex),
-        displayedStrand: member.strand === '-' ? -1 : 1,
-        hidden: false,
-        representative: member.representative,
-        role: member.role
-      })),
-      directRbhCandidates: []
+const responseFor = (request, { ambiguous = false, missing = false } = {}) => {
+  const records = request.records.map(({ recordKey }) => {
+    if (recordKey === request.reference.recordKey) return {
+      kind: 'decision', recordKey, status: 'reference', rationale: 'reference',
+      reviewReason: null, anchor: request.reference,
+      orientationPolicy: 'preserve', effectiveReverseComplement: null, candidates: []
+    };
+    const candidates = request.members.filter((item) => item.anchor.recordKey === recordKey)
+      .map((item) => serializedCandidate(item, request));
+    const choice = request.choices.find((item) => item.recordKey === recordKey);
+    if (choice) {
+      const selected = candidates.find(({ anchor: candidate }) => (
+        JSON.stringify(candidate) === JSON.stringify(choice.anchor)
+      ));
+      return {
+        kind: 'decision', recordKey,
+        status: choice.kind === 'select' ? 'aligned' : 'skipped',
+        rationale: choice.kind === 'select' ? 'user_selected' : 'skipped_by_user',
+        reviewReason: null, anchor: selected?.anchor || null,
+        orientationPolicy: choice.orientationPolicy,
+        effectiveReverseComplement: selected
+          ? selected.orientation[choice.orientationPolicy].effectiveReverseComplement : null,
+        candidates
+      };
     }
-  ],
-  plan: null
-});
-
-const group = (members = [reference, targetA], orthologEdges = [], relatedEdges = []) => ({
-  id: 'og-1',
-  members,
-  orthologEdges,
-  relatedEdges
-});
-
+    if (!candidates.length || missing && recordKey === 'c') return {
+      kind: 'decision', recordKey, status: 'skipped',
+      rationale: 'skipped_no_candidate', reviewReason: null, anchor: null,
+      orientationPolicy: 'preserve', effectiveReverseComplement: null, candidates: []
+    };
+    if (ambiguous && recordKey === 'b') return {
+      kind: 'ambiguous', recordKey, candidates, directRbhCandidates: [],
+      recommendedAnchor: candidates[0].anchor,
+      recommendationReason: 'unique_representative'
+    };
+    return {
+      kind: 'decision', recordKey, status: 'aligned',
+      rationale: 'only_usable_candidate', reviewReason: 'only_usable_candidate',
+      anchor: candidates[0].anchor, orientationPolicy: 'preserve',
+      effectiveReverseComplement: false, candidates
+    };
+  });
+  const status = records.some(({ kind }) => kind === 'ambiguous') ? 'ambiguous' : 'resolved';
+  return {
+    schema: 2, status, groupId: request.groupId, reference: request.reference,
+    referenceDisplayedStrand: 1, referenceDisplayCenter: 65, records,
+    plan: status === 'resolved' ? {
+      schema: 2, groupId: request.groupId, reference: request.reference,
+      records: records.map(({ recordKey, status: decisionStatus, rationale, anchor: chosen,
+        orientationPolicy, effectiveReverseComplement }) => ({
+        recordKey, status: decisionStatus, rationale, anchor: chosen,
+        orientationPolicy, effectiveReverseComplement
+      }))
+    } : null
+  };
+};
 const create = ({
-  members = [reference, targetA],
-  orthologEdges = [],
-  relatedEdges = [],
-  helper,
-  runAnalysis = async () => ({ status: 'ok' }),
-  cancelRunAnalysis = () => {},
-  previewCandidate = null,
-  clearCandidatePreview = null,
-  getCurrentSvg = null
+  members = [reference, targetA, targetC], helper = (_operation, { request }) => ({
+    result: responseFor(request)
+  }), generation = async () => ({ status: 'ok' }), onError = null,
+  previewCandidate = null, clearCandidatePreview = null,
+  getCommittedRequest = () => renderRequest
 } = {}) => {
   const controllerState = state();
-  const currentGroup = group(members, orthologEdges, relatedEdges);
+  const currentGroup = { id: 'og-1', members, orthologEdges: [] };
   const helperCalls = [];
+  const generationCalls = [];
+  let svg = null;
   const actions = createSimilarityAlignmentActions({
     state: controllerState,
     getOrthogroupById: (id) => id === currentGroup.id ? currentGroup : null,
     getEnrichedOrthogroupMembers: () => currentGroup.members,
-    getCommittedRequest: () => renderRequest,
-    runAnalysis,
-    cancelRunAnalysis,
-    getCurrentSvg,
-    previewCandidate,
-    clearCandidatePreview,
-    resolveOperation: 'resolveSimilarityAlignment',
+    getCommittedRequest,
+    getCurrentSvg: () => svg,
+    runAnalysis: async (options) => {
+      generationCalls.push(structuredClone(options));
+      const outcome = await generation(options);
+      if (outcome.status === 'ok') {
+        controllerState.similarityAlignmentPlan.value = options.canonicalStateOverride.similarityAlignmentPlan;
+        controllerState.results.value = [{ name: 'aligned.svg' }];
+        svg = null;
+      }
+      return outcome;
+    },
+    cancelRunAnalysis: () => {},
     runHelperOperation: async (operation, payload) => {
       helperCalls.push({ operation, payload: structuredClone(payload) });
       return helper(operation, payload, helperCalls.length);
-    }
+    },
+    resolveOperation: 'resolveSimilarityAlignment', onError,
+    previewCandidate, clearCandidatePreview
   });
-  return { actions, state: controllerState, helperCalls };
+  return { actions, state: controllerState, helperCalls, generationCalls, currentGroup };
 };
+const startPopup = (fixture, selected = reference) => fixture.actions.startFromPopup({
+  groupId: 'og-1', reference: selected
+});
 
-test('popup sends its exact clicked reference and auto-resolved Apply uses one generation transaction', async () => {
-  let generationCalls = 0;
-  let observedOverride = null;
-  const fixture = create({
-    orthologEdges: [{
-      orthogroupId: 'og-1',
-      queryProteinId: 'protein-a',
-      subjectProteinId: 'protein-b1',
-      queryRecordIndex: 0,
-      subjectRecordIndex: 1,
-      edgeKind: 'rbh'
-    }],
-    relatedEdges: [{ edgeKind: 'path-only-evidence-must-not-cross-helper' }],
-    helper: async (_operation, { request }) => ({ result: resolvedResponse(request) }),
-    runAnalysis: async ({ canonicalStateOverride }) => {
-      generationCalls += 1;
-      observedOverride = canonicalStateOverride;
-      assert.equal(fixture.state.similarityAlignmentPlan.value, null);
-      assert.deepEqual(fixture.state.results.value, [{ name: 'committed.svg' }]);
-      return { status: 'ok' };
-    }
-  });
+test('busy is synchronous, duplicate starts are ignored, and exact popup reference survives', async () => {
+  const pending = deferred();
+  const fixture = create({ members: [reference, otherReference, targetA, targetC],
+    helper: (_operation, { request }) => pending.promise.then(() => ({ result: responseFor(request) })) });
+  const operation = startPopup(fixture);
+  assert.equal(fixture.actions.status.value, 'resolving');
+  assert.equal(fixture.actions.busy.value, true);
+  assert.deepEqual(await startPopup(fixture, otherReference), { status: 'busy' });
+  assert.equal(fixture.helperCalls.length, 1);
+  assert.deepEqual(fixture.helperCalls[0].payload.request.reference,
+    anchor('a', 'clicked', 4));
+  pending.resolve();
+  assert.deepEqual(await operation, { status: 'reviewing' });
+  assert.equal(fixture.actions.busy.value, false);
+  assert.equal(fixture.generationCalls.length, 0);
+});
 
-  assert.deepEqual(await fixture.actions.startFromPopup({
-    groupId: 'og-1', reference, mode: 'position'
-  }), { status: 'ok' });
-  assert.equal(generationCalls, 1);
-  assert.equal(fixture.helperCalls[0].operation, 'resolveSimilarityAlignment');
-  assert.deepEqual(fixture.helperCalls[0].payload.request.reference, anchor(
-    'record-a', 'clicked-inparalog', 4
+test('drawer preserves its selected exact member and opens the same review', async () => {
+  const fixture = create({ members: [reference, otherReference, targetA, targetC] });
+  const option = fixture.actions.drawerReferenceOptions('og-1').find(({ anchor: a }) => (
+    a.biologicalFeatureId === 'other'
   ));
-  assert.deepEqual(fixture.helperCalls[0].payload.request.directEdges, [{
-    groupId: 'og-1',
-    query: anchor('record-a', 'clicked-inparalog', 4),
-    subject: anchor('record-b', 'target-a', 1),
-    edgeKind: 'rbh'
-  }]);
-  assert.deepEqual(observedOverride.linearRecordTranslations, [
-    { recordKey: 'record-a', x: 0, y: 0 },
-    { recordKey: 'record-b', x: 0, y: 0 }
-  ]);
-  assert.equal(observedOverride.similarityAlignmentPlan.groupId, 'og-1');
-  assert.equal(fixture.actions.dialogOpen.value, false);
+  fixture.actions.setDrawerReference('og-1', option.key);
+  assert.deepEqual(await fixture.actions.startFromDrawer({ groupId: 'og-1' }),
+    { status: 'reviewing' });
+  assert.deepEqual(fixture.helperCalls[0].payload.request.reference,
+    anchor('a', 'other', 7));
 });
 
-test('drawer rejects a group-only action before helper or generation', async () => {
-  const fixture = create({
-    helper: async () => { throw new Error('must not run'); },
-    runAnalysis: async () => { throw new Error('must not generate'); }
-  });
-
-  assert.deepEqual(await fixture.actions.startFromDrawer({ groupId: 'og-1' }), {
-    status: 'rejected'
-  });
-  assert.equal(fixture.helperCalls.length, 0);
-  assert.equal(fixture.state.similarityAlignmentPlan.value, null);
-});
-
-test('drawer requires and resolves one exact reference before either explicit action', async () => {
-  const fixture = create({
-    helper: async (_operation, { request }) => ({ result: resolvedResponse(request) })
-  });
-  const options = fixture.actions.drawerReferenceOptions('og-1');
-  assert.equal(options.length, 2);
-  assert.match(options[0].label, /record-a.*clicked-inparalog.*11\.\.40.*\(\+\)/);
-  assert.match(fixture.actions.drawerDisabledReason('og-1'), /Select an exact reference/);
-  assert.equal(fixture.actions.setDrawerReference('og-1', options[0].key), true);
-  assert.equal(fixture.actions.drawerDisabledReason('og-1'), '');
-  assert.deepEqual(await fixture.actions.startFromDrawer({
-    groupId: 'og-1', mode: 'position_and_orientation'
-  }), { status: 'ok' });
-  assert.equal(fixture.helperCalls[0].payload.request.mode, 'position_and_orientation');
-  assert.deepEqual(fixture.helperCalls[0].payload.request.reference, options[0].anchor);
-});
-
-test('drawer does not offer duplicate canonical feature identities as exact references', () => {
-  const fixture = create({
-    members: [reference, {
-      ...reference,
-      sourceFeatureIndex: 5,
-      featureIndex: 5,
-      stableFeatureSvgId: 'stable-duplicate-clicked-inparalog'
-    }, targetA],
-    helper: async () => { throw new Error('must not resolve'); }
-  });
-
-  assert.deepEqual(
-    fixture.actions.drawerReferenceOptions('og-1').map(({ anchor: value }) => value),
-    [anchor('record-b', 'target-a', 1)]
-  );
-});
-
-test('Select stays local until one explicit batch resolver Apply', async () => {
-  let generationCalls = 0;
-  const fixture = create({
-    members: [reference, targetA, targetB],
-    helper: async (_operation, { request }, call) => {
-      if (call === 1) return { result: ambiguityResponse(request) };
-      const selected = request.choices[0].anchor;
-      const response = resolvedResponse(request, selected);
-      response.records[1].rationale = 'user_selected';
-      response.plan.records[1].rationale = 'user_selected';
-      return { result: response };
-    },
-    runAnalysis: async () => {
-      generationCalls += 1;
-      return { status: 'ok' };
-    }
-  });
-
-  assert.deepEqual(await fixture.actions.startFromPopup({
-    groupId: 'og-1', reference, mode: 'position'
-  }), { status: 'ambiguous' });
-  assert.equal(Object.isFrozen(fixture.actions.draft.value), true);
-  assert.equal(generationCalls, 0);
-  assert.equal(fixture.state.similarityAlignmentPlan.value, null);
-
-  const selected = anchor('record-b', 'target-b', 2);
-  assert.deepEqual(fixture.actions.selectCandidate('record-b', selected), { status: 'selected' });
-  assert.equal(fixture.helperCalls.length, 1);
-  assert.equal(generationCalls, 0);
-  assert.equal(fixture.actions.canApply.value, true);
-  assert.equal(fixture.actions.draft.value.response.plan, null);
-  assert.deepEqual(await fixture.actions.applyDraft(), { status: 'ok' });
-  assert.deepEqual(fixture.helperCalls[1].payload.request.choices, [{
-    recordKey: 'record-b', kind: 'select', anchor: selected
-  }]);
-  assert.equal(fixture.helperCalls.length, 2);
-  assert.equal(generationCalls, 1);
-});
-
-test('Skip remains local and Apply uses the Python plan', async () => {
-  const fixture = create({
-    members: [reference, targetA, targetB],
-    helper: async (_operation, { request }, call) => {
-      if (call === 1) return { result: ambiguityResponse(request) };
-      assert.deepEqual(request.choices, [{ recordKey: 'record-b', kind: 'skip', anchor: null }]);
-      const records = [
-        decision('record-a', 'reference', 'reference', request.reference),
-        decision('record-b', 'skipped', 'skipped_by_user', null)
-      ];
-      return { result: {
-        schema: 1, status: 'resolved', mode: request.mode, groupId: request.groupId,
-        reference: request.reference, records,
-        plan: { schema: 1, mode: request.mode, groupId: request.groupId,
-          reference: request.reference, records: records.map(planDecision) }
-      } };
-    }
-  });
-  await fixture.actions.startFromPopup({ groupId: 'og-1', reference });
-  assert.deepEqual(fixture.actions.skipRecord('record-b'), { status: 'selected' });
-  assert.equal(fixture.helperCalls.length, 1);
-  assert.equal(fixture.actions.draft.value.response.plan, null);
-  assert.deepEqual(await fixture.actions.applyDraft(), { status: 'ok' });
-  assert.equal(fixture.helperCalls.length, 2);
-});
-
-test('dialog state retains every resolver-reported ambiguity, facts, choices, and Apply reason', async () => {
-  const threeRecordRequest = {
-    ...renderRequest,
-    records: [
-      ...renderRequest.records,
-      { recordKey: 'record-c', region: null, presentation: { reverseComplement: false } }
-    ]
-  };
-  const currentGroup = group(
-    [reference, targetA, targetB, targetC, targetD],
-    [{
-      orthogroupId: 'og-1', queryProteinId: 'protein-a', subjectProteinId: 'protein-b1',
-      queryRecordIndex: 0, subjectRecordIndex: 1, edgeKind: 'coortholog'
-    }]
-  );
-  const helperCalls = [];
-  const controllerState = state();
-  const responseFor = (request) => {
-    const decisions = [decision('record-a', 'reference', 'reference', request.reference)];
-    const records = [decisions[0]];
-    for (const [recordKey, candidates] of [
-      ['record-b', [targetA, targetB]], ['record-c', [targetC, targetD]]
-    ]) {
-      const choice = request.choices.find((entry) => entry.recordKey === recordKey);
-      if (choice) {
-        const resolved = choice.kind === 'skip'
-          ? decision(recordKey, 'skipped', 'skipped_by_user', null)
-          : decision(recordKey, 'aligned', 'user_selected', choice.anchor);
-        decisions.push(resolved);
-        records.push(resolved);
-      } else {
-        records.push({
-          kind: 'ambiguous', recordKey,
-          candidates: candidates.map((member) => ({
-            anchor: anchor(member.recordKey, member.biologicalFeatureId, member.sourceFeatureIndex),
-            displayedStrand: member.strand === '-' ? -1 : 1,
-            hidden: false, representative: member.representative, role: member.role
-          })),
-          directRbhCandidates: []
-        });
-      }
-    }
-    return {
-      schema: 1,
-      status: records.some(({ kind }) => kind === 'ambiguous') ? 'ambiguous' : 'resolved',
-      mode: request.mode,
-      groupId: request.groupId,
-      reference: request.reference,
-      records,
-      plan: records.some(({ kind }) => kind === 'ambiguous') ? null : {
-        schema: 1, mode: request.mode, groupId: request.groupId,
-        reference: request.reference, records: decisions.map(planDecision)
-      }
-    };
-  };
-  const actions = createSimilarityAlignmentActions({
-    state: controllerState,
-    getOrthogroupById: () => currentGroup,
-    getEnrichedOrthogroupMembers: () => currentGroup.members,
-    getCommittedRequest: () => threeRecordRequest,
-    runAnalysis: async () => ({ status: 'ok' }),
-    resolveOperation: 'resolveSimilarityAlignment',
-    runHelperOperation: async (_operation, { request }) => {
-      helperCalls.push(structuredClone(request));
-      return { result: responseFor(request) };
-    }
-  });
-
-  await actions.startFromPopup({ groupId: 'og-1', reference });
-  assert.equal(actions.dialogOpen.value, true);
-  assert.equal(actions.canApply.value, false);
-  assert.match(actions.applyDisabledReason.value, /2 ambiguous records/);
-  assert.deepEqual(actions.draft.value.ambiguities.map(({ recordKey }) => recordKey), [
-    'record-b', 'record-c'
-  ]);
-  assert.deepEqual(actions.draft.value.ambiguities[0].candidates[0], {
-    key: JSON.stringify(anchor('record-b', 'target-a', 1)),
-    anchor: anchor('record-b', 'target-a', 1),
-    featureIdentifier: 'target-a',
-    label: 'CDS',
-    coordinates: '101..130 bp',
-    displayedStrand: '-',
-    representative: true,
-    role: 'anchor',
-    directEvidence: ['COORTHOLOG']
-  });
-
-  assert.deepEqual(await actions.applyDraft(), { status: 'rejected' });
-  assert.equal(helperCalls.length, 1);
-  await actions.selectCandidate('record-b', anchor('record-b', 'target-b', 2));
-  assert.equal(actions.draft.value.ambiguities.length, 2);
-  assert.deepEqual(actions.draft.value.ambiguities[0].choice, {
-    kind: 'select', candidateKey: JSON.stringify(anchor('record-b', 'target-b', 2))
-  });
-  assert.match(actions.applyDisabledReason.value, /1 ambiguous record/);
-  await actions.selectCandidate('record-b', anchor('record-b', 'target-a', 1));
-  await actions.selectCandidate('record-b', anchor('record-b', 'target-b', 2));
-  await actions.skipRecord('record-c');
-  await actions.selectCandidate('record-c', anchor('record-c', 'target-d', 5));
-  await actions.skipRecord('record-c');
-  assert.equal(helperCalls.length, 1);
-  assert.equal(actions.canApply.value, true);
-  assert.equal(actions.applyDisabledReason.value, '');
-  assert.deepEqual(await actions.applyDraft(), { status: 'ok' });
-  assert.equal(helperCalls.length, 2);
-  assert.deepEqual(helperCalls.at(-1).choices.map(({ recordKey, kind }) => [recordKey, kind]), [
-    ['record-b', 'select'], ['record-c', 'skip']
-  ]);
-});
-
-test('successful Apply publishes the five-count live summary and source-relative plan inspector', async () => {
-  let appliedPlan = null;
-  const controllerState = state();
-  const actions = createSimilarityAlignmentActions({
-    state: controllerState,
-    getOrthogroupById: () => group(),
-    getEnrichedOrthogroupMembers: () => [reference, targetA],
-    getCommittedRequest: () => ({
-      ...renderRequest,
-      records: [renderRequest.records[0], {
-        ...renderRequest.records[1], presentation: { reverseComplement: false }
-      }]
-    }),
-    runAnalysis: async ({ canonicalStateOverride }) => {
-      appliedPlan = structuredClone(canonicalStateOverride.similarityAlignmentPlan);
-      controllerState.similarityAlignmentPlan.value = structuredClone(appliedPlan);
-      return { status: 'ok' };
-    },
-    resolveOperation: 'resolveSimilarityAlignment',
-    runHelperOperation: async (_operation, { request }) => {
-      const response = resolvedResponse(request);
-      response.records[1].effectiveReverseComplement = true;
-      response.plan.records[1].effectiveReverseComplement = true;
-      return { result: response };
-    }
-  });
-  assert.deepEqual(await actions.startFromPopup({
-    groupId: 'og-1', reference, mode: 'position_and_orientation'
-  }), { status: 'ok' });
-  assert.deepEqual(actions.summary.value, {
-    aligned: 1, unchanged: 1, explicitlySkipped: 0, noCandidate: 0, reversed: 1,
-    text: 'Alignment applied: 1 aligned, 1 unchanged, 0 explicitly skipped, 0 no-candidate, 1 reversed.'
-  });
-  assert.equal(appliedPlan.mode, 'position_and_orientation');
-  assert.equal(actions.activePlanInspector.value.reference.label, 'clicked-inparalog');
-  assert.deepEqual(
-    actions.activePlanInspector.value.records.map(({ anchorLabel, rationaleLabel, reversedFromSource }) => (
-      [anchorLabel, rationaleLabel, reversedFromSource]
-    )),
-    [
-      ['clicked-inparalog', 'Exact reference', false],
-      ['target-a', 'Only usable candidate', true]
-    ]
-  );
-});
-
-test('plan inspector shows Skip rationale and derives rev from effective source orientation', () => {
-  const controllerState = state();
-  controllerState.similarityAlignmentPlan.value = {
-    schema: 1,
-    mode: 'position',
-    groupId: 'og-1',
-    reference: anchor('record-a', 'clicked-inparalog', 4),
-    records: [
-      planDecision(decision(
-        'record-a', 'reference', 'reference', anchor('record-a', 'clicked-inparalog', 4)
-      )),
-      planDecision(decision('record-b', 'skipped', 'skipped_by_user', null))
-    ]
-  };
-  const actions = createSimilarityAlignmentActions({
-    state: controllerState,
-    getOrthogroupById: () => group(),
-    getEnrichedOrthogroupMembers: () => [reference, targetA],
-    getCommittedRequest: () => ({
-      ...renderRequest,
-      records: [renderRequest.records[0], {
-        ...renderRequest.records[1], presentation: { reverseComplement: true }
-      }]
-    }),
-    runAnalysis: async () => ({ status: 'ok' }),
-    resolveOperation: 'resolveSimilarityAlignment',
-    runHelperOperation: async () => { throw new Error('must not resolve'); }
-  });
-
-  assert.deepEqual(
-    actions.activePlanInspector.value.records.map((record) => ({
-      anchor: record.anchorLabel,
-      rationale: record.rationaleLabel,
-      rev: record.reversedFromSource
-    })),
-    [
-      { anchor: 'clicked-inparalog', rationale: 'Exact reference', rev: false },
-      { anchor: 'Skip', rationale: 'Skipped by user', rev: true }
-    ]
-  );
-});
-
-test('candidate preview delegates to the highlighting owner and Cancel restores it', async () => {
-  const previewed = [];
-  let clears = 0;
-  const fixture = create({
-    members: [reference, targetA, targetB],
-    helper: async (_operation, { request }) => ({ result: ambiguityResponse(request) }),
-    previewCandidate: (value) => previewed.push(value),
-    clearCandidatePreview: () => { clears += 1; }
-  });
-  await fixture.actions.startFromPopup({ groupId: 'og-1', reference });
-  fixture.actions.previewCandidate(anchor('record-b', 'target-b', 2));
-  assert.deepEqual(previewed, [anchor('record-b', 'target-b', 2)]);
-  fixture.actions.cancel();
-  assert.ok(clears >= 2);
-  assert.equal(fixture.actions.dialogOpen.value, false);
-});
-
-test('Cancel and stale helper completion discard drafts without changing the committed artifact', async () => {
-  let resolveHelper;
-  let generationCalls = 0;
-  const fixture = create({
-    helper: async (_operation, { request }) => new Promise((resolve) => {
-      resolveHelper = () => resolve({ result: ambiguityResponse(request) });
-    }),
-    runAnalysis: async () => { generationCalls += 1; return { status: 'ok' }; }
-  });
-  const pending = fixture.actions.startFromPopup({ groupId: 'og-1', reference });
-  await Promise.resolve();
-  assert.deepEqual(fixture.actions.cancel(), { status: 'canceled' });
-  resolveHelper();
-  assert.deepEqual(await pending, { status: 'stale' });
-  assert.equal(fixture.actions.draft.value, null);
-  assert.equal(fixture.state.similarityAlignmentPlan.value, null);
-  assert.deepEqual(fixture.state.results.value, [{ name: 'committed.svg' }]);
-  assert.equal(generationCalls, 0);
-});
-
-for (const failedStatus of ['error', 'canceled']) {
-  test(`render ${failedStatus} discards the draft and preserves canonical state`, async () => {
-    const fixture = create({
-      helper: async (_operation, { request }) => ({ result: resolvedResponse(request) }),
-      runAnalysis: async () => ({ status: failedStatus })
-    });
-    assert.deepEqual(await fixture.actions.startFromPopup({ groupId: 'og-1', reference }), {
-      status: failedStatus
-    });
-    assert.equal(fixture.state.similarityAlignmentPlan.value, null);
-    assert.deepEqual(fixture.state.results.value, [{ name: 'committed.svg' }]);
-    assert.equal(fixture.actions.draft.value, null);
-  });
-}
-
-test('unknown helper response values are rejected without generation', async () => {
-  let generationCalls = 0;
-  const fixture = create({
-    helper: async (_operation, { request }) => {
-      const response = resolvedResponse(request);
-      response.records[1].status = 'ranked';
-      return { result: response };
-    },
-    runAnalysis: async () => { generationCalls += 1; return { status: 'ok' }; }
-  });
-  assert.deepEqual(await fixture.actions.startFromPopup({ groupId: 'og-1', reference }), {
-    status: 'error'
-  });
-  assert.equal(generationCalls, 0);
-  assert.equal(fixture.state.similarityAlignmentPlan.value, null);
-});
-
-test('Worker error discards the draft and preserves the committed artifact', async () => {
-  let generationCalls = 0;
-  const fixture = create({
-    helper: async () => { throw new Error('injected alignment helper failure'); },
-    runAnalysis: async () => { generationCalls += 1; return { status: 'ok' }; }
-  });
-  assert.deepEqual(await fixture.actions.startFromPopup({ groupId: 'og-1', reference }), {
-    status: 'error'
-  });
-  assert.match(fixture.actions.error.value.message, /injected alignment helper failure/);
-  assert.equal(fixture.actions.draft.value, null);
-  assert.equal(generationCalls, 0);
-  assert.deepEqual(fixture.state.results.value, [{ name: 'committed.svg' }]);
-});
-
-test('a newer action cancels an in-flight Apply before publishing its own draft', async () => {
-  let finishApply;
-  let cancelCalls = 0;
-  const fixture = create({
-    members: [reference, targetA, targetB],
-    helper: async (_operation, { request }, call) => ({
-      result: call === 1 ? resolvedResponse(request) : ambiguityResponse(request)
-    }),
-    runAnalysis: async () => new Promise((resolve) => { finishApply = resolve; }),
-    cancelRunAnalysis: () => { cancelCalls += 1; }
-  });
-
-  const first = fixture.actions.startFromPopup({ groupId: 'og-1', reference });
-  while (typeof finishApply !== 'function') await Promise.resolve();
-  const second = fixture.actions.startFromPopup({ groupId: 'og-1', reference });
-  assert.equal(cancelCalls, 1);
-  finishApply({ status: 'canceled' });
-  assert.deepEqual(await first, { status: 'stale' });
-  assert.deepEqual(await second, { status: 'ambiguous' });
-  assert.equal(fixture.actions.status.value, 'ambiguous');
-  assert.equal(fixture.state.similarityAlignmentPlan.value, null);
-  assert.deepEqual(fixture.state.results.value, [{ name: 'committed.svg' }]);
-});
-
-test('Reset removes only the active overlay and restores its immediate base values', async () => {
-  let observedOverride = null;
-  const fixture = create({
-    helper: async () => { throw new Error('must not resolve'); },
-    runAnalysis: async ({ canonicalStateOverride }) => {
-      observedOverride = structuredClone(canonicalStateOverride);
-      fixture.state.similarityAlignmentPlan.value = canonicalStateOverride.similarityAlignmentPlan;
-      fixture.state.linearRecordTranslations.value = structuredClone(
-        canonicalStateOverride.linearRecordTranslations
-      );
-      return { status: 'ok' };
-    }
-  });
-  fixture.state.linearRecordTranslations.value = [
-    { recordKey: 'record-a', x: 11, y: 2 },
-    { recordKey: 'record-b', x: -7, y: 3 }
-  ];
-  fixture.state.similarityAlignmentPlan.value = resolvedResponse({
-    ...renderRequest,
-    mode: 'position',
-    groupId: 'og-1',
-    reference: anchor('record-a', 'clicked-inparalog', 4)
-  }).plan;
-
-  assert.deepEqual(await fixture.actions.resetAlignment(), { status: 'ok' });
-  assert.equal(observedOverride.similarityAlignmentPlan, null);
-  assert.deepEqual(observedOverride.linearRecordTranslations, [
-    { recordKey: 'record-a', x: 11, y: 2 },
-    { recordKey: 'record-b', x: -7, y: 3 }
-  ]);
-  assert.match(fixture.actions.notice.value, /immediate pre-align baseline/);
-  assert.deepEqual(await fixture.actions.resetAlignment(), { status: 'noop' });
-});
-
-test('manual orientation materializes effective orientation before clearing the plan', () => {
-  const fixture = create({ helper: async () => { throw new Error('must not resolve'); } });
-  const response = resolvedResponse({
-    ...renderRequest,
-    mode: 'position_and_orientation',
-    groupId: 'og-1',
-    reference: anchor('record-a', 'clicked-inparalog', 4)
-  });
-  response.plan.records[1].effectiveReverseComplement = true;
-  fixture.state.similarityAlignmentPlan.value = response.plan;
-
-  assert.equal(fixture.actions.setManualOrientation(fixture.state.linearSeqs[1], false), true);
-  assert.equal(fixture.state.similarityAlignmentPlan.value, null);
-  assert.equal(fixture.state.linearSeqs[1].region_reverse, false);
-  assert.match(fixture.actions.notice.value, /record orientation changed/);
-});
-
-test('stable reorder remaps the plan and translations by record key', () => {
-  const fixture = create({ helper: async () => { throw new Error('must not resolve'); } });
-  fixture.state.similarityAlignmentPlan.value = resolvedResponse({
-    ...renderRequest,
-    mode: 'position',
-    groupId: 'og-1',
-    reference: anchor('record-a', 'clicked-inparalog', 4)
-  }).plan;
-  fixture.state.linearRecordTranslations.value = [
-    { recordKey: 'record-a', x: 1, y: 2 },
-    { recordKey: 'record-b', x: 3, y: 4 }
-  ];
-
-  fixture.actions.retainForStableReorder(['record-b', 'record-a']);
-  assert.deepEqual(
-    fixture.state.similarityAlignmentPlan.value.records.map(({ recordKey }) => recordKey),
-    ['record-b', 'record-a']
-  );
-  assert.deepEqual(
-    fixture.state.linearRecordTranslations.value.map(({ recordKey }) => recordKey),
-    ['record-b', 'record-a']
-  );
-});
-
-test('source, crop, and selector invalidation publish their semantic reason', () => {
-  const fixture = create({ helper: async () => { throw new Error('must not resolve'); } });
-  const plan = resolvedResponse({
-    ...renderRequest,
-    mode: 'position',
-    groupId: 'og-1',
-    reference: anchor('record-a', 'clicked-inparalog', 4)
-  }).plan;
-  for (const reason of ['source replaced.', 'record crop changed.', 'record selector changed.']) {
-    fixture.state.similarityAlignmentPlan.value = structuredClone(plan);
-    assert.equal(fixture.actions.clearForMutation(reason), true);
-    assert.equal(fixture.state.similarityAlignmentPlan.value, null);
-    assert.equal(fixture.actions.notice.value, `Alignment cleared: ${reason}`);
+test('resolved and ambiguous initial responses always open an applicable Python-selected draft', async () => {
+  for (const ambiguous of [false, true]) {
+    const fixture = create({ members: [reference, targetA, targetB, targetC],
+      helper: (_operation, { request }) => ({ result: responseFor(request, { ambiguous }) }) });
+    assert.deepEqual(await startPopup(fixture), { status: 'reviewing' });
+    assert.equal(fixture.actions.dialogOpen.value, true);
+    assert.equal(fixture.actions.canApply.value, true);
+    assert.equal(fixture.actions.unresolvedCount.value, 0);
+    assert.deepEqual(fixture.actions.draft.value.rows.map(({ recordKey }) => recordKey), ['b', 'c']);
+    assert.equal(fixture.actions.draft.value.rows[0].choice.candidateKey,
+      JSON.stringify(anchor('b', 'target-a', 1)));
+    assert.equal(fixture.actions.draft.value.rows[0].reason,
+      ambiguous ? 'unique_representative' : 'only_usable_candidate');
+    assert.equal(fixture.actions.draft.value.rows[0].orientationPolicy, 'preserve');
+    assert.equal(fixture.actions.draft.value.reference.featureIdentifier, 'clicked');
+    assert.equal(fixture.actions.draft.value.reference.coordinates, '51..70 bp');
+    assert.equal(fixture.actions.draft.value.rows[0].recommendedKey,
+      fixture.actions.draft.value.rows[0].choice.candidateKey);
+    assert.match(fixture.actions.draft.value.rows[0].recommendationReasonLabel, /candidate/);
+    assert.equal(fixture.generationCalls.length, 0);
   }
 });
 
-test('ordinary Generate validation preserves a current plan without running generation or LOSATP', async () => {
-  const fixture = create({
-    helper: async (_operation, { request }) => ({ result: resolvedResponse(request) }),
-    runAnalysis: async () => { throw new Error('validation must not generate'); }
-  });
-  fixture.state.similarityAlignmentPlan.value = resolvedResponse({
-    ...renderRequest,
-    mode: 'position',
-    groupId: 'og-1',
-    reference: anchor('record-a', 'clicked-inparalog', 4)
-  }).plan;
-
-  assert.deepEqual(await fixture.actions.validateBeforeGenerate(), { status: 'ok' });
-  assert.equal(fixture.helperCalls.length, 1);
-  assert.equal(fixture.state.similarityAlignmentPlan.value.groupId, 'og-1');
-});
-
-test('saved stable reference accepts a current source index without changing exact identity', async () => {
-  const fixture = create({
-    helper: async (_operation, { request }) => ({ result: resolvedResponse(request) })
-  });
-  const plan = resolvedResponse({
-    ...renderRequest,
-    mode: 'position',
-    groupId: 'og-1',
-    reference: anchor('record-a', 'clicked-inparalog', 4)
-  }).plan;
-  plan.reference.sourceFeatureIndex = null;
-  plan.records[0].anchor.sourceFeatureIndex = null;
-  plan.records[1].anchor.sourceFeatureIndex = null;
-  fixture.state.similarityAlignmentPlan.value = plan;
-
-  assert.deepEqual(await fixture.actions.validateBeforeGenerate(), { status: 'ok' });
-  assert.equal(fixture.state.similarityAlignmentPlan.value.reference.sourceFeatureIndex, null);
-  assert.equal(fixture.helperCalls[0].payload.request.reference.sourceFeatureIndex, 4);
-  assert.equal(fixture.helperCalls[0].payload.request.members[0].anchor.sourceFeatureIndex, 4);
-  assert.equal(fixture.helperCalls[0].payload.request.reference.stableFeatureSvgId,
-    fixture.helperCalls[0].payload.request.members[0].anchor.stableFeatureSvgId);
-
-  const conflicting = structuredClone(plan);
-  conflicting.reference.stableFeatureSvgId = 'different-stable-feature';
-  conflicting.records[0].anchor.stableFeatureSvgId = 'different-stable-feature';
-  fixture.state.similarityAlignmentPlan.value = conflicting;
-  assert.deepEqual(await fixture.actions.validateBeforeGenerate(), {
-    status: 'blocked', reason: 'stale-reference'
-  });
-  assert.equal(fixture.helperCalls.length, 1);
-});
-
-test('stale reference blocks Generate and offers explicit reference repair or Reset', async () => {
-  const fixture = create({ helper: async () => { throw new Error('must not resolve'); } });
-  const plan = resolvedResponse({
-    ...renderRequest,
-    mode: 'position',
-    groupId: 'og-1',
-    reference: anchor('record-a', 'clicked-inparalog', 4)
-  }).plan;
-  plan.reference = anchor('record-a', 'removed-reference', 99);
-  plan.records[0].anchor = plan.reference;
-  // Vue exposes committed plans through a reactive Proxy; the controller's
-  // canonical JSON boundary must not feed that Proxy to structuredClone.
-  fixture.state.similarityAlignmentPlan.value = new Proxy(plan, {});
-
-  assert.deepEqual(await fixture.actions.validateBeforeGenerate(), {
-    status: 'blocked', reason: 'stale-reference'
-  });
-  assert.equal(fixture.actions.repair.value.kind, 'reference');
-  assert.match(fixture.actions.notice.value, /needs repair/);
-});
-
-test('stale target blocks Generate and requires Select or Skip without replacing Result', async () => {
-  let call = 0;
-  const fixture = create({
-    members: [reference, targetA, targetB],
-    helper: async (_operation, { request }) => {
-      call += 1;
-      if (call === 1) return { result: ambiguityResponse(request) };
-      const records = [
-        decision('record-a', 'reference', 'reference', request.reference),
-        decision('record-b', 'skipped', 'skipped_by_user', null)
-      ];
-      return { result: {
-        schema: 1, status: 'resolved', mode: request.mode, groupId: request.groupId,
-        reference: request.reference, records,
-        plan: {
-          schema: 1, mode: request.mode, groupId: request.groupId,
-          reference: request.reference, records: records.map(planDecision)
-        }
-      } };
-    }
-  });
-  const plan = resolvedResponse({
-    ...renderRequest,
-    mode: 'position',
-    groupId: 'og-1',
-    reference: anchor('record-a', 'clicked-inparalog', 4)
-  }).plan;
-  plan.records[1].anchor = anchor('record-b', 'removed-target', 77);
-  fixture.state.similarityAlignmentPlan.value = new Proxy(plan, {});
-
-  assert.deepEqual(await fixture.actions.validateBeforeGenerate(), {
-    status: 'blocked', reason: 'stale-target'
-  });
-  assert.equal(fixture.actions.dialogOpen.value, true);
-  assert.deepEqual(fixture.state.results.value, [{ name: 'committed.svg' }]);
-  assert.deepEqual(await fixture.actions.skipRecord('record-b'), { status: 'selected' });
-});
-
-test('failed validation and generation preserve local choices for retry', async () => {
-  let validationAttempts = 0;
-  let generationAttempts = 0;
-  const fixture = create({
-    members: [reference, targetA, targetB],
-    helper: async (_operation, { request }, call) => {
-      if (call === 1) return { result: ambiguityResponse(request) };
-      validationAttempts += 1;
-      if (validationAttempts === 1) throw new Error('Resolver temporarily unavailable');
-      const response = resolvedResponse(request, request.choices[0].anchor);
-      response.records[1].rationale = 'user_selected';
-      response.plan.records[1].rationale = 'user_selected';
-      return { result: response };
-    },
-    runAnalysis: async () => {
-      generationAttempts += 1;
-      return generationAttempts === 1
-        ? { status: 'error', error: new Error('Generation temporarily unavailable') }
-        : { status: 'ok' };
-    }
-  });
-  await fixture.actions.startFromPopup({ groupId: 'og-1', reference });
-  const selected = anchor('record-b', 'target-b', 2);
-  fixture.actions.selectCandidate('record-b', selected);
-  assert.deepEqual(await fixture.actions.applyDraft(), { status: 'error' });
-  assert.match(fixture.actions.error.value.message, /Resolver temporarily unavailable/);
-  assert.equal(fixture.actions.canApply.value, true);
-  assert.equal(generationAttempts, 0);
-  assert.deepEqual(await fixture.actions.applyDraft(), { status: 'error' });
-  assert.match(fixture.actions.error.value.message, /Generation temporarily unavailable/);
-  assert.equal(fixture.actions.canApply.value, true);
-  assert.equal(fixture.actions.draft.value.ambiguities[0].choice.candidateKey, JSON.stringify(selected));
-  assert.deepEqual(fixture.state.results.value, [{ name: 'committed.svg' }]);
+test('missing target is explicitly unchanged and complete Apply includes every target', async () => {
+  const fixture = create({ members: [reference, targetA],
+    helper: (_operation, { request }) => ({ result: responseFor(request, { missing: true }) }) });
+  await startPopup(fixture);
+  assert.equal(fixture.actions.draft.value.rows[1].unchanged, true);
+  assert.equal(fixture.actions.draft.value.rows[1].reason, 'skipped_no_candidate');
+  assert.deepEqual(fixture.actions.skipRecord('c'), { status: 'rejected' });
+  assert.equal(fixture.actions.draft.value.rows[1].reason, 'skipped_no_candidate');
   assert.deepEqual(await fixture.actions.applyDraft(), { status: 'ok' });
-  assert.equal(fixture.helperCalls.length, 4);
-  assert.equal(generationAttempts, 2);
+  assert.equal(fixture.helperCalls.length, 2);
+  assert.equal(fixture.generationCalls.length, 1);
+  assert.deepEqual(fixture.helperCalls[1].payload.request.choices.map(({ recordKey, kind }) =>
+    [recordKey, kind]), [['b', 'select'], ['c', 'skip']]);
+  assert.equal(fixture.state.similarityAlignmentPlan.value.schema, 2);
+  assert.deepEqual(fixture.state.results.value, [{ name: 'aligned.svg' }]);
+});
+
+test('candidate, canvas, Skip, and orientation use local edits with zero Worker jobs', async () => {
+  const fixture = create({ members: [reference, targetA, targetB, targetC],
+    helper: (_operation, { request }) => ({ result: responseFor(request, { ambiguous: true }) }) });
+  await startPopup(fixture);
+  const count = fixture.helperCalls.length;
+  assert.deepEqual(fixture.actions.selectCandidate('b', anchor('b', 'target-b', 2)),
+    { status: 'selected' });
+  assert.equal(fixture.actions.draft.value.rows[0].choice.candidateKey,
+    JSON.stringify(anchor('b', 'target-b', 2)));
+  assert.deepEqual(fixture.actions.setOrientation('b', 'match_reference'),
+    { status: 'selected' });
+  assert.equal(fixture.actions.draft.value.rows[0].orientationEffect, 'preserve');
+  fixture.actions.skipRecord('b');
+  assert.equal(fixture.actions.draft.value.rows[0].orientationPolicy, 'preserve');
+  fixture.actions.selectCandidate('b', anchor('b', 'target-a', 1));
+  fixture.actions.setOrientation('b', 'match_reference');
+  assert.equal(fixture.actions.draft.value.rows[0].orientationEffect, 'reverse_whole_record');
+  fixture.actions.setOrientation('c', 'match_reference');
+  assert.equal(fixture.actions.draft.value.rows[1].orientationEffect, 'preserve_unknown_strand');
+  assert.equal(fixture.helperCalls.length, count);
+  assert.equal(fixture.generationCalls.length, 0);
+});
+
+test('Apply validates one explicit batch and commits through one generation call', async () => {
+  const fixture = create({ members: [reference, targetA, targetB, targetC],
+    helper: (_operation, { request }) => ({ result: responseFor(request, { ambiguous: true }) }) });
+  await startPopup(fixture);
+  fixture.actions.setOrientation('b', 'match_reference');
+  assert.deepEqual(await fixture.actions.applyDraft(), { status: 'ok' });
+  assert.equal(fixture.helperCalls.length, 2);
+  assert.equal(fixture.generationCalls.length, 1);
+  assert.deepEqual(fixture.helperCalls[1].payload.request.choices, [
+    { recordKey: 'b', kind: 'select', anchor: anchor('b', 'target-a', 1),
+      orientationPolicy: 'match_reference' },
+    { recordKey: 'c', kind: 'select', anchor: anchor('c', 'target-c', 3),
+      orientationPolicy: 'preserve' }
+  ]);
+  assert.equal(fixture.state.similarityAlignmentPlan.value.records[1].effectiveReverseComplement, true);
+  assert.equal(fixture.actions.status.value, 'idle');
+});
+
+test('duplicate Apply while validation is pending starts one batch', async () => {
+  const pending = deferred();
+  const fixture = create({ helper: (_operation, { request }, count) => (
+    count === 2 ? pending.promise.then(() => ({ result: responseFor(request) }))
+      : { result: responseFor(request) }
+  ) });
+  await startPopup(fixture);
+  const operation = fixture.actions.applyDraft();
+  assert.equal(fixture.actions.status.value, 'applying');
+  assert.equal(fixture.actions.busy.value, true);
+  assert.deepEqual(await fixture.actions.applyDraft(), { status: 'rejected' });
+  assert.deepEqual(await startPopup(fixture), { status: 'busy' });
+  pending.resolve();
+  assert.deepEqual(await operation, { status: 'ok' });
+  assert.equal(fixture.helperCalls.length, 2);
+  assert.equal(fixture.generationCalls.length, 1);
+});
+
+test('validation and generation failures preserve editable draft and prior artifact', async () => {
+  for (const failure of ['validation', 'generation']) {
+    let fail = true;
+    const fixture = create({
+      helper: (_operation, { request }, count) => {
+        if (failure === 'validation' && count > 1 && fail) throw new Error('Invalid choice. Select another.');
+        return { result: responseFor(request) };
+      },
+      generation: async () => failure === 'generation' && fail
+        ? { status: 'error', error: new Error('Generation failed. Retry Apply.') }
+        : { status: 'ok' }
+    });
+    await startPopup(fixture);
+    const before = fixture.actions.draft.value;
+    assert.equal((await fixture.actions.applyDraft()).status, 'error');
+    assert.equal(fixture.actions.status.value, 'reviewing');
+    assert.equal(fixture.actions.draft.value, before);
+    assert.deepEqual(fixture.state.results.value, [{ name: 'prior.svg' }]);
+    assert.equal(fixture.state.similarityAlignmentPlan.value, null);
+    assert.match(fixture.actions.error.value.message, /Select another|Retry Apply/);
+    fail = false;
+    fixture.actions.skipRecord('b');
+    assert.deepEqual(await fixture.actions.applyDraft(), { status: 'ok' });
+  }
+});
+
+test('Cancel preserves committed diagram, plan, and Result', async () => {
+  const fixture = create();
+  await startPopup(fixture);
+  const previous = fixture.state.results.value;
+  assert.deepEqual(fixture.actions.cancel(), { status: 'canceled' });
   assert.equal(fixture.actions.draft.value, null);
+  assert.equal(fixture.state.similarityAlignmentPlan.value, null);
+  assert.equal(fixture.state.results.value, previous);
+  assert.equal(fixture.generationCalls.length, 0);
 });
 
-test('changed committed Result rejects an old local draft before batch validation', async () => {
-  const fixture = create({
-    members: [reference, targetA, targetB],
-    helper: async (_operation, { request }) => ({ result: ambiguityResponse(request) })
-  });
-  await fixture.actions.startFromPopup({ groupId: 'og-1', reference });
-  fixture.actions.skipRecord('record-b');
-  fixture.state.results.value = [{ name: 'newly-committed.svg' }];
-  assert.deepEqual(await fixture.actions.applyDraft(), { status: 'stale' });
-  assert.equal(fixture.helperCalls.length, 1);
-  assert.equal(fixture.actions.draft.value, null);
-  assert.match(fixture.actions.error.value.message, /Start alignment again/);
-});
-
-test('candidate labels use biological metadata and displayed record names', async () => {
-  const fixture = create({
-    members: [reference, { ...targetA, gene: 'tnpA', locus_tag: 'ABC_00120' },
-      { ...targetB, product: 'transposase' }],
-    helper: async (_operation, { request }) => ({ result: ambiguityResponse(request) })
-  });
-  fixture.state.linearSeqs[1].definition = 'Bacillus chromosome B';
-  await fixture.actions.startFromPopup({ groupId: 'og-1', reference });
-  const record = fixture.actions.draft.value.ambiguities[0];
-  assert.equal(record.recordLabel, 'Bacillus chromosome B');
-  assert.equal(record.candidates[0].label, 'tnpA · ABC_00120');
-  assert.equal(record.candidates[1].label, 'transposase');
-  assert.equal(record.candidates[0].coordinates, '101..130 bp');
-});
-
-test('switching the selected Similarity Group invalidates an open draft', async () => {
-  const fixture = create({
-    members: [reference, targetA, targetB],
-    helper: async (_operation, { request }) => ({ result: ambiguityResponse(request) })
-  });
-  fixture.state.selectedOrthogroupId = ref('og-1');
-  await fixture.actions.startFromPopup({ groupId: 'og-1', reference });
-  fixture.actions.skipRecord('record-b');
-  fixture.state.selectedOrthogroupId.value = 'og-2';
-  assert.deepEqual(await fixture.actions.applyDraft(), { status: 'stale' });
-  assert.equal(fixture.helperCalls.length, 1);
-});
-
-test('Cancel during batch validation ignores the late Python response', async () => {
-  let finishValidation;
-  let generationCalls = 0;
-  const fixture = create({
-    members: [reference, targetA, targetB],
-    helper: async (_operation, { request }, call) => call === 1
-      ? { result: ambiguityResponse(request) }
-      : new Promise((resolve) => { finishValidation = () => {
-        const response = resolvedResponse(request, request.choices[0].anchor);
-        response.records[1].rationale = 'user_selected';
-        response.plan.records[1].rationale = 'user_selected';
-        resolve({ result: response });
-      }; }),
-    runAnalysis: async () => { generationCalls += 1; return { status: 'ok' }; }
-  });
-  await fixture.actions.startFromPopup({ groupId: 'og-1', reference });
-  fixture.actions.selectCandidate('record-b', anchor('record-b', 'target-a', 1));
-  const applying = fixture.actions.applyDraft();
-  while (!finishValidation) await Promise.resolve();
+test('stale initial resolution and canceled Apply cannot publish late completions', async () => {
+  const initial = deferred();
+  const resolving = create({ helper: (_operation, { request }) => initial.promise.then(() => ({
+    result: responseFor(request)
+  })) });
+  const first = startPopup(resolving);
+  resolving.actions.cancel();
+  initial.resolve();
+  assert.deepEqual(await first, { status: 'stale' });
+  assert.equal(resolving.actions.draft.value, null);
+  const apply = deferred();
+  const fixture = create({ helper: (_operation, { request }, count) => count === 2
+    ? apply.promise.then(() => ({ result: responseFor(request) }))
+    : { result: responseFor(request) } });
+  await startPopup(fixture);
+  const second = fixture.actions.applyDraft();
   fixture.actions.cancel();
-  finishValidation();
-  assert.deepEqual(await applying, { status: 'stale' });
-  assert.equal(generationCalls, 0);
-  assert.equal(fixture.actions.draft.value, null);
-  assert.deepEqual(fixture.state.results.value, [{ name: 'committed.svg' }]);
+  apply.resolve();
+  assert.deepEqual(await second, { status: 'stale' });
+  assert.equal(fixture.generationCalls.length, 0);
+  assert.deepEqual(fixture.state.results.value, [{ name: 'prior.svg' }]);
+});
+
+test('changed committed Result rejects an old draft before validation', async () => {
+  const fixture = create();
+  await startPopup(fixture);
+  fixture.state.results.value = [{ name: 'new.svg' }];
+  assert.deepEqual(await fixture.actions.applyDraft(), { status: 'stale' });
+  assert.equal(fixture.helperCalls.length, 1);
+  assert.deepEqual(fixture.state.results.value, [{ name: 'new.svg' }]);
+});
+
+test('active schema-2 plan validates on regeneration and supports Reset and stable reorder', async () => {
+  const fixture = create();
+  await startPopup(fixture);
+  await fixture.actions.applyDraft();
+  assert.equal(fixture.actions.activePlanInspector.value.modeLabel, 'Align');
+  const calls = fixture.helperCalls.length;
+  assert.deepEqual(await fixture.actions.validateBeforeGenerate(), { status: 'ok' });
+  assert.equal(fixture.helperCalls.length, calls + 1);
+  fixture.actions.retainForStableReorder(['c', 'a', 'b']);
+  assert.deepEqual(fixture.state.similarityAlignmentPlan.value.records.map(({ recordKey }) => recordKey),
+    ['c', 'a', 'b']);
+  assert.deepEqual((await fixture.actions.resetAlignment()).status, 'ok');
+  assert.equal(fixture.state.similarityAlignmentPlan.value, null);
+});
+
+test('Python recommendation and direct-RBH reason control initial selection', async () => {
+  const ambiguous = create({ members: [reference, targetA, targetB, targetC],
+    helper: (_operation, { request }) => {
+      const response = responseFor(request, { ambiguous: true });
+      response.records[1].recommendedAnchor = anchor('b', 'target-b', 2);
+      response.records[1].recommendationReason = 'deterministic_candidate_1';
+      return { result: response };
+    } });
+  await startPopup(ambiguous);
+  assert.equal(ambiguous.actions.draft.value.rows[0].choice.candidateKey,
+    JSON.stringify(anchor('b', 'target-b', 2)));
+  assert.equal(ambiguous.actions.draft.value.rows[0].reason, 'deterministic_candidate_1');
+  const direct = create({ helper: (_operation, { request }) => {
+    const response = responseFor(request);
+    response.records[1].rationale = 'unique_direct_rbh';
+    response.records[1].reviewReason = 'unique_direct_rbh';
+    response.plan.records[1].rationale = 'unique_direct_rbh';
+    return { result: response };
+  } });
+  await startPopup(direct);
+  assert.equal(direct.actions.draft.value.rows[0].reason, 'unique_direct_rbh');
+});
+
+test('stale active target enters the same repair draft and needs an explicit new choice', async () => {
+  const fixture = create();
+  await startPopup(fixture);
+  await fixture.actions.applyDraft();
+  const priorResult = fixture.state.results.value;
+  fixture.currentGroup.members.splice(1, 1, targetB);
+  assert.deepEqual(await fixture.actions.validateBeforeGenerate(),
+    { status: 'blocked', reason: 'stale-target' });
+  assert.equal(fixture.actions.status.value, 'reviewing');
+  assert.equal(fixture.actions.unresolvedCount.value, 1);
+  assert.equal(fixture.actions.canApply.value, false);
+  assert.equal(fixture.state.results.value, priorResult);
+  assert.equal(fixture.actions.selectCandidate('b', anchor('b', 'target-b', 2)).status,
+    'selected');
+  assert.equal(fixture.actions.canApply.value, true);
+  assert.deepEqual(await fixture.actions.applyDraft(), { status: 'ok' });
+  assert.equal(fixture.state.similarityAlignmentPlan.value.records[1].anchor.biologicalFeatureId,
+    'target-b');
+});
+
+test('drawer requires a unique exact reference before starting the Worker', async () => {
+  const fixture = create();
+  assert.match(fixture.actions.drawerDisabledReason('og-1'), /Select an exact reference/);
+  assert.deepEqual(await fixture.actions.startFromDrawer({ groupId: 'og-1' }),
+    { status: 'rejected' });
+  assert.equal(fixture.helperCalls.length, 0);
+  const duplicate = create({ members: [reference, { ...reference }, targetA] });
+  assert.deepEqual(duplicate.actions.drawerReferenceOptions('og-1')
+    .filter(({ anchor: selected }) => selected.biologicalFeatureId === 'clicked'), []);
+});
+
+test('malformed Python projection and initial Worker errors leave the prior Result intact', async () => {
+  for (const helper of [
+    (_operation, { request }) => ({ result: { ...responseFor(request), schema: 1 } }),
+    () => { throw new Error('Python resolver unavailable. Retry Align.'); }
+  ]) {
+    const fixture = create({ helper });
+    const prior = fixture.state.results.value;
+    assert.equal((await startPopup(fixture)).status, 'error');
+    assert.equal(fixture.actions.status.value, 'idle');
+    assert.equal(fixture.actions.draft.value, null);
+    assert.equal(fixture.state.results.value, prior);
+    assert.equal(fixture.generationCalls.length, 0);
+    assert.ok(fixture.actions.error.value);
+  }
+});
+
+test('candidate preview delegates to the existing owner and Cancel clears it', async () => {
+  const previewed = [];
+  let cleared = 0;
+  const fixture = create({ previewCandidate: (value) => previewed.push(value),
+    clearCandidatePreview: () => { cleared += 1; } });
+  await startPopup(fixture);
+  fixture.actions.previewCandidate(anchor('b', 'target-a', 1));
+  assert.deepEqual(previewed, [anchor('b', 'target-a', 1)]);
+  fixture.actions.cancel();
+  assert.ok(cleared >= 1);
+});
+
+test('manual orientation and invalidating edits clear an active plan with a notice', async () => {
+  const fixture = create();
+  await startPopup(fixture);
+  await fixture.actions.applyDraft();
+  assert.equal(fixture.actions.setManualOrientation(fixture.state.linearSeqs[1], true), true);
+  assert.equal(fixture.state.similarityAlignmentPlan.value, null);
+  assert.equal(fixture.state.linearSeqs[1].region_reverse, true);
+  assert.match(fixture.actions.notice.value, /orientation changed/);
+  await startPopup(fixture);
+  await fixture.actions.applyDraft();
+  assert.equal(fixture.actions.clearForMutation('record crop changed.'), true);
+  assert.equal(fixture.state.similarityAlignmentPlan.value, null);
+  assert.match(fixture.actions.notice.value, /record crop changed/);
+});
+
+test('missing saved reference blocks regeneration while preserving plan and Result', async () => {
+  const fixture = create();
+  await startPopup(fixture);
+  await fixture.actions.applyDraft();
+  const previous = fixture.state.results.value;
+  const plan = fixture.state.similarityAlignmentPlan.value;
+  fixture.currentGroup.members.splice(0, 1);
+  assert.deepEqual(await fixture.actions.validateBeforeGenerate(),
+    { status: 'blocked', reason: 'stale-reference' });
+  assert.equal(fixture.state.results.value, previous);
+  assert.equal(fixture.state.similarityAlignmentPlan.value, plan);
+  assert.equal(fixture.actions.repair.value.kind, 'reference');
+});
+
+test('a committed schema-2 plan regenerates after its transient groups leave the catalog', async () => {
+  let committed = renderRequest;
+  const fixture = create({ getCommittedRequest: () => committed });
+  await startPopup(fixture);
+  await fixture.actions.applyDraft();
+  const plan = fixture.state.similarityAlignmentPlan.value;
+  committed = { ...renderRequest, layout: { similarityAlignment: structuredClone(plan) } };
+  fixture.currentGroup.id = 'no-longer-in-catalog';
+  const calls = fixture.helperCalls.length;
+  assert.deepEqual(await fixture.actions.validateBeforeGenerate(), { status: 'ok' });
+  assert.equal(fixture.helperCalls.length, calls);
+  assert.equal(fixture.state.similarityAlignmentPlan.value, plan);
+  fixture.actions.retainForStableReorder(['c', 'a', 'b']);
+  assert.deepEqual(await fixture.actions.validateBeforeGenerate(), { status: 'ok' });
+  committed.layout.similarityAlignment.records[1].anchor.biologicalFeatureId = 'different';
+  assert.deepEqual(await fixture.actions.validateBeforeGenerate(),
+    { status: 'blocked', reason: 'stale-reference' });
+});
+
+test('candidate labels retain biological metadata and displayed record names', async () => {
+  const fixture = create({ members: [reference, targetA, targetB, targetC],
+    helper: (_operation, { request }) => ({ result: responseFor(request, { ambiguous: true }) }) });
+  fixture.state.linearSeqs[1].definition = 'Genome B';
+  await startPopup(fixture);
+  const row = fixture.actions.draft.value.rows[0];
+  assert.equal(row.recordLabel, 'Genome B');
+  assert.equal(row.candidates[0].label, 'gene-target-a');
+  assert.equal(row.candidates[0].coordinates, '21..40 bp');
+  assert.equal(row.candidates[0].displayedStrand, '-');
 });

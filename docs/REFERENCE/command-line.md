@@ -164,16 +164,20 @@ filtering, cache identity, and the limits of each result type.
 In `gbdraw linear`, select `--protein_blastp_mode orthogroup` and pass
 `--align_orthogroup_feature` an exact feature SVG hash or protein ID from the
 chosen reference record. A Similarity Group ID is rejected. The CLI uses the
-same candidate rules as Web: the sole usable member wins; with multiple
-members, only one distinct direct RBH to the exact reference can win. Missing
-members keep their record placement. Representative status, score, coordinates,
-and multi-hop paths do not select a member. Alignment changes X only and does
-not reverse records. If a record still has multiple candidates, the command
-reports that record and its exact candidate IDs as an error; it never prompts
-or silently chooses. Supply an unambiguous input or use Web **Select**/**Skip**.
+shared resolver: the sole usable member wins; with multiple members, only one
+distinct direct reciprocal-best-hit (RBH) member connected to that exact
+reference can win. RBH direction is symmetric. Missing or unusable members keep
+their original position and orientation. Selected target anchor centers align
+horizontally; the reference and every target's vertical position stay fixed.
+The CLI preserves every record's orientation.
+
+If a record still has multiple candidates, the command reports that record
+and its exact candidate IDs as an error. It never prompts or silently accepts
+a recommendation. Supply an unambiguous input or use Web **Select**/**Skip**.
 The same completed protein analysis supplies both resolution and rendering;
-Align does not start another LOSATP search. There is no anchor TSV or
-Collinear-mode alignment flag.
+Align does not start another LOSATP search. Collinear alignment controls,
+anchor TSV, scored inference, support-count ranking, and multi-hop automatic
+selection are unsupported.
 
 ## Sessions and output
 

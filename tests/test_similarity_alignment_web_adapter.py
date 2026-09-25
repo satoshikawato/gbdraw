@@ -45,8 +45,7 @@ def _member(
 def _request() -> dict[str, object]:
     reference = _anchor("record-a", "reference", 0)
     return {
-        "schema": 1,
-        "mode": "position",
+        "schema": 2,
         "groupId": "og-1",
         "records": [
             {
@@ -57,7 +56,7 @@ def _request() -> dict[str, object]:
             },
             {
                 "recordKey": "record-b",
-                "recordLength": 200,
+                "recordLength": 400,
                 "region": {"start": 101, "end": 300, "reverseComplement": True},
                 "presentation": {"reverseComplement": False},
             },
@@ -84,8 +83,7 @@ def test_web_adapter_projects_crop_facts_and_returns_canonical_plan() -> None:
 
     assert result["status"] == "resolved"
     assert result["plan"] == {
-        "schema": 1,
-        "mode": "position",
+        "schema": 2,
         "groupId": "og-1",
         "reference": _anchor("record-a", "reference", 0),
         "records": [
@@ -94,6 +92,7 @@ def test_web_adapter_projects_crop_facts_and_returns_canonical_plan() -> None:
                 "status": "reference",
                 "rationale": "reference",
                 "anchor": _anchor("record-a", "reference", 0),
+                "orientationPolicy": "preserve",
                 "effectiveReverseComplement": None,
             },
             {
@@ -101,7 +100,8 @@ def test_web_adapter_projects_crop_facts_and_returns_canonical_plan() -> None:
                 "status": "aligned",
                 "rationale": "only_usable_candidate",
                 "anchor": _anchor("record-b", "target", 1),
-                "effectiveReverseComplement": None,
+                "orientationPolicy": "preserve",
+                "effectiveReverseComplement": True,
             },
         ],
     }
@@ -121,7 +121,8 @@ def test_web_adapter_returns_ambiguity_then_uses_explicit_skip() -> None:
     assert ambiguous["records"][1]["kind"] == "ambiguous"  # type: ignore[index]
 
     request["choices"] = [
-        {"recordKey": "record-b", "kind": "skip", "anchor": None}
+        {"recordKey": "record-b", "kind": "skip", "anchor": None,
+         "orientationPolicy": "preserve"}
     ]
     resolved = resolve_similarity_alignment_payload(request)
     assert resolved["status"] == "resolved"
@@ -142,3 +143,96 @@ def test_web_adapter_rejects_unknown_fields_and_unmappable_reference() -> None:
     }
     with pytest.raises(ValidationError, match="exact reference.*current crop"):
         resolve_similarity_alignment_payload(cropped)
+
+
+def test_web_projection_discloses_candidate_evidence_and_orientation_facts() -> None:
+    request = _request()
+    request["members"][1]["displayName"] = "target gene"  # type: ignore[index]
+    result = resolve_similarity_alignment_payload(request)
+    row = result["records"][1]
+    assert row["reviewReason"] == "only_usable_candidate"
+    assert row["anchor"] == _anchor("record-b", "target", 1)
+    assert row["orientationPolicy"] == "preserve"
+    candidate = row["candidates"][0]
+    assert candidate["displayName"] == "target gene"
+    assert (candidate["sourceStart"], candidate["sourceEnd"]) == (140, 170)
+    assert candidate["displayCenter"] == 145.0
+    assert candidate["displayedStrand"] == 1
+    assert candidate["representative"] is False
+    assert candidate["directEvidence"] == ["rbh"]
+    assert candidate["orientation"] == {
+        "preserve": {"effect": "preserve", "effectiveReverseComplement": True},
+        "match_reference": {"effect": "preserve", "effectiveReverseComplement": True},
+    }
+    assert result["referenceDisplayedStrand"] == 1
+    assert result["referenceDisplayCenter"] == 25.0
+
+
+def test_web_recommendation_is_transient_and_explicit_match_is_validated() -> None:
+    request = _request()
+    request["directEdges"] = []
+    request["members"][1]["sourceStrand"] = 1  # type: ignore[index]
+    replacement = _member(
+        "record-b", "other", 2, start=190, end=220, strand=1
+    )
+    replacement["representative"] = True
+    request["members"].append(replacement)  # type: ignore[union-attr]
+    unresolved = resolve_similarity_alignment_payload(request)
+    row = unresolved["records"][1]
+    assert row["recommendationReason"] == "unique_representative"
+    assert row["recommendedAnchor"] == _anchor("record-b", "other", 2)
+    assert row["candidates"][0]["orientation"]["match_reference"] == {
+        "effect": "reverse_whole_record",
+        "effectiveReverseComplement": False,
+    }
+    assert unresolved["plan"] is None
+
+    request["choices"] = [{
+        "recordKey": "record-b", "kind": "select",
+        "anchor": _anchor("record-b", "target", 1),
+        "orientationPolicy": "match_reference",
+    }]
+    selected = resolve_similarity_alignment_payload(request)
+    assert selected["plan"]["schema"] == 2
+    assert selected["plan"]["records"][1]["anchor"] == _anchor("record-b", "target", 1)
+    assert selected["plan"]["records"][1]["orientationPolicy"] == "match_reference"
+    assert selected["plan"]["records"][1]["effectiveReverseComplement"] is False
+
+
+def test_web_rejects_incomplete_choice_and_invalid_crop() -> None:
+    request = _request()
+    request["choices"] = [{
+        "recordKey": "record-b", "kind": "skip", "anchor": None,
+    }]
+    with pytest.raises(ValidationError, match="invalid fields"):
+        resolve_similarity_alignment_payload(request)
+    request["choices"][0]["orientationPolicy"] = "match_reference"  # type: ignore[index]
+    with pytest.raises(ValidationError, match="Skip choice must preserve"):
+        resolve_similarity_alignment_payload(request)
+
+    cropped = _request()
+    cropped["records"][1]["recordLength"] = 200  # type: ignore[index]
+    with pytest.raises(ValidationError, match="exceeds recordLength"):
+        resolve_similarity_alignment_payload(cropped)
+
+
+def test_web_crop_after_presentation_reverse_uses_source_coordinates() -> None:
+    request = _request()
+    target_record = request["records"][1]
+    target_record["presentation"]["reverseComplement"] = True
+    target_record["region"]["reverseComplement"] = False
+    request["members"][1]["sourceStrand"] = 1
+    result = resolve_similarity_alignment_payload(request)
+    candidate = result["records"][1]["candidates"][0]
+    # Source center 155 maps to 245 after the 400-bp presentation reversal,
+    # then to 145 in the 101..300 crop.
+    assert candidate["displayCenter"] == 145.0
+    assert candidate["displayedStrand"] == -1
+    assert candidate["orientation"]["match_reference"] == {
+        "effect": "reverse_whole_record",
+        "effectiveReverseComplement": False,
+    }
+
+    target_record["region"]["reverseComplement"] = True
+    with pytest.raises(ValidationError, match="both region and presentation"):
+        resolve_similarity_alignment_payload(request)

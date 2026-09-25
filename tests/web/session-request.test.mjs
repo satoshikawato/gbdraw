@@ -2477,18 +2477,19 @@ const resolvedPlanReference = {
   sourceFeatureIndex: 1, stableFeatureSvgId: 'stable-first'
 };
 state.similarityAlignmentPlan.value = {
-  schema: 1,
-  mode: 'position_and_orientation',
+  schema: 2,
   groupId: 'og-resolved',
   reference: resolvedPlanReference,
   records: [
     {
       recordKey: 'first', status: 'reference', rationale: 'reference',
-      anchor: resolvedPlanReference, effectiveReverseComplement: null
+      anchor: resolvedPlanReference, orientationPolicy: 'preserve',
+      effectiveReverseComplement: null
     },
     {
       recordKey: 'second', status: 'skipped', rationale: 'skipped_no_candidate',
-      anchor: null, effectiveReverseComplement: null
+      anchor: null, orientationPolicy: 'preserve',
+      effectiveReverseComplement: null
     },
     {
       recordKey: 'third', status: 'aligned', rationale: 'only_usable_candidate',
@@ -2496,6 +2497,7 @@ state.similarityAlignmentPlan.value = {
         recordKey: 'third', biologicalFeatureId: 'feature-third',
         sourceFeatureIndex: 2, stableFeatureSvgId: 'stable-third'
       },
+      orientationPolicy: 'match_reference',
       effectiveReverseComplement: true
     }
   ]
@@ -2632,7 +2634,9 @@ for (const mutate of [
   ),
   (request) => { request.layout.recordTranslations[0].x = Infinity; },
   (request) => { request.layout.unknownTransform = true; },
-  (request) => { request.layout.similarityAlignment.records[2].anchor = null; }
+  (request) => { request.layout.similarityAlignment.records[2].anchor = null; },
+  (request) => { delete request.layout.similarityAlignment.records[2].orientationPolicy; },
+  (request) => { request.layout.similarityAlignment.schema = 1; }
 ]) {
   const invalid = structuredClone(resolvedProteinCanonical.renderRequest);
   mutate(invalid);
@@ -2641,7 +2645,7 @@ for (const mutate of [
       renderRequest: invalid,
       resources: resolvedProteinCanonical.resources
     }),
-    /duplicate record keys|finite numbers|missing or unknown fields|invalid plan combination/
+    /duplicate record keys|finite numbers|missing or unknown fields|invalid plan combination|schema must be 2/
   );
 }
 

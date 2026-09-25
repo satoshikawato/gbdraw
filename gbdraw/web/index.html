@@ -1075,7 +1075,7 @@
                 ) !important;
             }
 
-            footer {
+            footer[data-app-footer] {
                 height: auto !important;
                 padding: 0.5rem 0.75rem calc(5.25rem + env(safe-area-inset-bottom)) !important;
                 flex-wrap: wrap !important;
@@ -4671,6 +4671,20 @@
                     <p>Current changes were not applied.</p>
                 </div>
 
+                <div v-if="similarityAlignmentBusy"
+                     role="status"
+                     aria-live="polite"
+                     aria-atomic="true"
+                     data-similarity-alignment-status
+                     class="-mx-4 border-b border-blue-100 bg-blue-50 px-5 py-2 text-xs text-blue-900 shrink-0">
+                    {{ similarityAlignmentStatus === 'resolving' ? 'Resolving similarity alignment…' : 'Applying similarity alignment…' }}
+                </div>
+                <div v-if="similarityAlignmentError && !similarityAlignmentDialogOpen"
+                     role="alert"
+                     data-similarity-alignment-start-error
+                     class="-mx-4 border-b border-red-200 bg-red-50 px-5 py-2 text-xs text-red-900 shrink-0">
+                    {{ similarityAlignmentError.message }} Review the exact reference and try Align… again.
+                </div>
                 <div v-if="similarityAlignmentSummary"
                      data-similarity-alignment-summary
                      role="status"
@@ -5213,29 +5227,17 @@
                             </button>
                             <button type="button"
                                     data-history-managed
-                                    @click="alignByClickedOrthogroup('position', $event)"
-                                    :disabled="!clickedOrthogroupDetail?.currentMember"
+                                    @click="alignByClickedOrthogroup($event)"
+                                    :disabled="!clickedOrthogroupDetail?.currentMember || similarityAlignmentBusy"
+                                    :aria-busy="similarityAlignmentBusy"
                                     aria-describedby="clicked-alignment-action-description"
                                     class="px-2 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-slate-200 disabled:text-slate-400 disabled:cursor-not-allowed text-white rounded-lg text-xs font-medium flex items-center justify-center gap-1"
-                                    title="Align record positions to this exact feature; keep every record orientation unchanged">
+                                    title="Review alignment to this exact feature">
                                 <i class="ph ph-arrows-left-right" aria-hidden="true"></i>
-                                <span>Align</span>
-                            </button>
-                            <button type="button"
-                                    data-history-managed
-                                    @click="alignByClickedOrthogroup('position_and_orientation', $event)"
-                                    :disabled="!clickedOrthogroupDetail?.currentMember"
-                                    aria-describedby="clicked-alignment-orient-action-description"
-                                    class="px-2 py-2 bg-indigo-600 hover:bg-indigo-700 disabled:bg-slate-200 disabled:text-slate-400 disabled:cursor-not-allowed text-white rounded-lg text-xs font-medium flex items-center justify-center gap-1"
-                                    title="Align record positions to this exact feature and reverse targets whose displayed anchor strand is opposite">
-                                <i class="ph ph-arrows-horizontal" aria-hidden="true"></i>
-                                <span>Align &amp; orient</span>
+                                <span>{{ similarityAlignmentStatus === 'resolving' ? 'Resolving…' : similarityAlignmentStatus === 'applying' ? 'Applying…' : 'Align…' }}</span>
                             </button>
                             <p id="clicked-alignment-action-description" class="col-span-2 text-[10px] text-slate-500">
-                                <strong>Align</strong> changes target X positions only; record orientation is unchanged.
-                            </p>
-                            <p id="clicked-alignment-orient-action-description" class="col-span-2 text-[10px] text-slate-500 -mt-1">
-                                <strong>Align &amp; orient</strong> may reverse a target record when displayed anchor strands are known and opposite.
+                                Review anchor and orientation choices before Apply.
                             </p>
                         </div>
                         <div v-if="clickedOrthogroupDetail" class="border-y border-slate-100 py-3">
@@ -6870,21 +6872,14 @@
                             </button>
                             <button type="button"
                                     data-history-managed
-                                    @click="startSimilarityAlignmentFromDrawer(selectedOrthogroup.id, 'position', $event)"
-                                    :disabled="Boolean(similarityAlignmentDrawerDisabledReason(selectedOrthogroup.id))"
+                                    @click="startSimilarityAlignmentFromDrawer(selectedOrthogroup.id, $event)"
+                                    :disabled="Boolean(similarityAlignmentDrawerDisabledReason(selectedOrthogroup.id)) || similarityAlignmentBusy"
+                                    :aria-busy="similarityAlignmentBusy"
                                     aria-describedby="similarity-alignment-drawer-reason"
-                                    title="Align record positions to the selected exact feature; keep every record orientation unchanged"
-                                    class="text-xs px-2 py-1.5 bg-blue-600 hover:bg-blue-700 disabled:bg-slate-200 disabled:text-slate-400 disabled:cursor-not-allowed text-white rounded flex items-center justify-center gap-1">
-                                <i class="ph ph-arrows-left-right" aria-hidden="true"></i> Align
-                            </button>
-                            <button type="button"
-                                    data-history-managed
-                                    @click="startSimilarityAlignmentFromDrawer(selectedOrthogroup.id, 'position_and_orientation', $event)"
-                                    :disabled="Boolean(similarityAlignmentDrawerDisabledReason(selectedOrthogroup.id))"
-                                    aria-describedby="similarity-alignment-drawer-reason"
-                                    title="Align record positions to the selected exact feature and reverse targets whose displayed anchor strand is opposite"
-                                    class="text-xs px-2 py-1.5 bg-indigo-600 hover:bg-indigo-700 disabled:bg-slate-200 disabled:text-slate-400 disabled:cursor-not-allowed text-white rounded flex items-center justify-center gap-1">
-                                <i class="ph ph-arrows-horizontal" aria-hidden="true"></i> Align &amp; orient
+                                    title="Review alignment to the selected exact feature"
+                                    class="col-span-2 text-xs px-2 py-1.5 bg-blue-600 hover:bg-blue-700 disabled:bg-slate-200 disabled:text-slate-400 disabled:cursor-not-allowed text-white rounded flex items-center justify-center gap-1">
+                                <i class="ph ph-arrows-left-right" aria-hidden="true"></i>
+                                {{ similarityAlignmentStatus === 'resolving' ? 'Resolving…' : similarityAlignmentStatus === 'applying' ? 'Applying…' : 'Align…' }}
                             </button>
                             <button @click="resetOrthogroupRename(selectedOrthogroup.id)" class="text-xs px-2 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded flex items-center justify-center gap-1">
                                 <i class="ph ph-text-aa"></i> Reset Rename
@@ -6901,7 +6896,7 @@
         </div>
     </main>
 
-    <footer class="bg-slate-50 border-t border-slate-200 px-4 py-2 text-sm text-slate-500 flex items-center justify-center gap-6 shrink-0 h-8">
+    <footer data-app-footer class="bg-slate-50 border-t border-slate-200 px-4 py-2 text-sm text-slate-500 flex items-center justify-center gap-6 shrink-0 h-8">
         <span>
             <strong>Disclaimer:</strong> This tool is provided "as is" without warranty of any kind.
         </span>
@@ -6928,111 +6923,147 @@
                         @pointerdown="startSimilarityAlignmentPaletteDrag">
                     <div class="flex items-start justify-between gap-4">
                         <div>
-                            <h2 id="similarity-alignment-dialog-title" class="text-base font-bold text-slate-800">
+                            <h2 id="similarity-alignment-dialog-title" tabindex="-1"
+                                class="text-base font-bold text-slate-800 focus-visible:outline focus-visible:outline-2 focus-visible:outline-blue-600">
                                 Select alignment anchors
                             </h2>
                             <p id="similarity-alignment-dialog-description" class="mt-1 text-xs leading-relaxed text-slate-600">
-                                Only records reported ambiguous by the shared resolver appear here. Select one exact feature or Skip each record. Representative status and direct evidence are facts, not an automatic ranking.
+                                Review every target record. Python selected the initial anchors; you can Select another or Skip. Orientation is preserved unless you choose to match the reference direction.
                             </p>
                             <p class="mt-2 text-xs font-semibold text-blue-700" data-similarity-alignment-count>
-                                {{ (similarityAlignmentDraft?.ambiguities.length || 0) - similarityAlignmentUnresolvedCount }} / {{ similarityAlignmentDraft?.ambiguities.length || 0 }} records selected
+                                {{ similarityAlignmentDraft?.rows.length || 0 }} target records · {{ similarityAlignmentUnresolvedCount }} need a choice
                             </p>
                         </div>
                         <button type="button"
                                 @click="cancelSimilarityAlignmentDialog"
                                 aria-label="Cancel similarity alignment"
-                                class="shrink-0 rounded p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-700">
+                                class="shrink-0 rounded p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-blue-600">
                             <i class="ph ph-x text-lg" aria-hidden="true"></i>
                         </button>
                     </div>
                 </header>
 
-                <div class="min-h-0 flex-1 overflow-y-auto p-3 custom-scrollbar sm:p-5">
+                <div class="min-h-0 min-w-0 flex-1 overflow-x-hidden overflow-y-auto p-3 custom-scrollbar sm:p-5">
                     <div class="space-y-4">
-                        <fieldset v-for="record in (similarityAlignmentDraft?.ambiguities || [])"
-                                  :key="`alignment-ambiguity-${record.recordKey}`"
-                                  class="rounded-lg border border-slate-200 p-3">
-                            <legend class="px-1 text-sm font-semibold text-slate-700">
-                                <span :title="record.recordKey">{{ record.recordLabel }}</span>
+                        <section class="min-w-0 rounded-lg border border-blue-200 bg-blue-50 p-3 text-xs text-slate-700"
+                                 data-similarity-alignment-reference
+                                 aria-label="Exact alignment reference">
+                            <h3 class="font-semibold text-blue-900">Exact reference</h3>
+                            <p class="mt-1 break-all font-semibold">{{ similarityAlignmentDraft?.reference.label }}</p>
+                            <p class="mt-1 break-all">Record: {{ similarityAlignmentDraft?.reference.recordLabel }} ({{ similarityAlignmentDraft?.reference.recordKey }})</p>
+                            <p class="mt-1 break-all">Feature ID: {{ similarityAlignmentDraft?.reference.featureIdentifier }}</p>
+                            <p class="mt-1">Coordinates: {{ similarityAlignmentDraft?.reference.coordinates }} · Strand: {{ similarityAlignmentDraft?.reference.displayedStrand }}</p>
+                        </section>
+                        <fieldset v-for="record in (similarityAlignmentDraft?.rows || [])"
+                                  :key="'alignment-review-' + record.recordKey"
+                                  class="min-w-0 rounded-lg border border-slate-200 p-3"
+                                  :data-alignment-record-key="record.recordKey">
+                            <legend class="max-w-full break-all px-1 text-sm font-semibold text-slate-700">
+                                {{ record.recordLabel }}
                             </legend>
-                            <p class="mb-3 text-[11px] text-slate-500">
-                                {{ record.choice ? (record.choice.kind === 'skip' ? 'Selected: Skip' : 'Selected: exact feature') : 'Select or Skip is required.' }}
+                            <p class="mb-2 break-all text-[11px] text-slate-500">Record ID: {{ record.recordKey }}</p>
+                            <p class="mb-2 text-xs font-medium text-slate-700">
+                                {{ record.choice?.kind === 'select' ? 'Selected anchor' : record.choice?.kind === 'skip' ? 'Unchanged: ' + record.reasonLabel : 'Select or Skip is required.' }}
                             </p>
-                            <div class="grid gap-2">
+                            <p v-if="record.recommendedKey" class="mb-3 text-[11px] leading-relaxed text-slate-600"
+                               data-similarity-alignment-reason>
+                                Python suggested {{ record.candidates.find(candidate => candidate.key === record.recommendedKey)?.label }}:
+                                {{ record.recommendationReasonLabel }}
+                            </p>
+                            <div v-if="record.candidates.length" class="grid min-w-0 gap-2">
                                 <label v-for="(candidate, candidateIndex) in record.candidates"
                                        :key="candidate.key"
                                        :class="[
-                                         'block cursor-pointer rounded-lg border p-3 text-xs transition-colors focus-within:ring-2 focus-within:ring-blue-300',
+                                         'block min-w-0 cursor-pointer rounded-lg border p-3 text-xs transition-colors focus-within:ring-2 focus-within:ring-blue-500',
                                          record.choice?.kind === 'select' && record.choice.candidateKey === candidate.key
                                            ? 'border-blue-500 bg-blue-50'
                                            : 'border-slate-200 bg-white hover:border-blue-300 hover:bg-blue-50/50',
                                          similarityAlignmentCanvasHover?.recordKey === record.recordKey && similarityAlignmentCanvasHover?.candidateKey === candidate.key ? 'ring-2 ring-blue-500 border-blue-500 bg-blue-50' : '',
-                                         ['resolving', 'applying'].includes(similarityAlignmentStatus) ? 'cursor-wait opacity-60' : ''
+                                         similarityAlignmentBusy ? 'cursor-wait opacity-60' : ''
                                        ]"
                                        @mouseenter="previewSimilarityAlignmentCandidate(candidate.anchor)"
                                        @mouseleave="clearSimilarityAlignmentCandidatePreview"
                                        @focusin="previewSimilarityAlignmentCandidate(candidate.anchor)"
                                        @focusout="clearSimilarityAlignmentCandidatePreview">
-                                    <span class="flex items-start gap-2">
+                                    <span class="flex min-w-0 items-start gap-2">
                                         <input type="radio"
-                                               :name="`alignment-choice-${record.recordKey}`"
+                                               :name="'alignment-choice-' + record.recordKey"
                                                :checked="record.choice?.kind === 'select' && record.choice.candidateKey === candidate.key"
-                                               :disabled="['resolving', 'applying'].includes(similarityAlignmentStatus)"
+                                               :disabled="similarityAlignmentBusy"
                                                @change="selectSimilarityAlignmentCandidate(record.recordKey, candidate.anchor)"
-                                               :aria-label="`Select ${candidate.label}, ${candidate.coordinates}, strand ${candidate.displayedStrand} for ${record.recordLabel}`"
+                                               :aria-label="'Select ' + candidate.label + ', ' + candidate.coordinates + ', strand ' + candidate.displayedStrand + ' for ' + record.recordLabel"
                                                class="mt-0.5 border-slate-300 text-blue-600 focus:ring-blue-500">
                                         <span class="min-w-0 flex-1">
                                             <span class="flex flex-wrap items-center gap-1 min-w-0">
                                                 <span class="shrink-0 rounded bg-blue-100 px-1.5 py-0.5 font-semibold text-blue-800">{{ candidateIndex + 1 }}</span>
-                                                <span class="min-w-0 break-words font-semibold text-slate-800" :title="candidate.label">{{ candidate.label }}</span>
+                                                <span class="shrink-0 text-[10px] font-semibold text-blue-800">{{ record.choice?.candidateKey === candidate.key ? 'Selected' : 'Select' }}</span>
+                                                <span class="min-w-0 break-all font-semibold text-slate-800" :title="candidate.label">{{ candidate.label }}</span>
+                                                <span v-if="record.choice?.candidateKey === candidate.key && record.recommendedKey === candidate.key"
+                                                      class="rounded bg-emerald-100 px-1.5 py-0.5 font-semibold text-emerald-900">Recommended</span>
                                             </span>
                                             <span class="mt-1 block font-mono text-[10px] text-slate-600">
-                                                {{ candidate.coordinates }} ({{ candidate.displayedStrand }})
+                                                {{ candidate.coordinates }} · Strand {{ candidate.displayedStrand }}
                                             </span>
-                                            <details class="mt-1 text-[11px] text-slate-600" @click.stop>
-                                                <summary class="cursor-pointer">Details</summary>
-                                                <div class="mt-1 break-all">Internal ID: {{ candidate.featureIdentifier }}</div>
-                                                <div>Role: {{ candidate.role }} · Representative: {{ candidate.representative ? 'yes' : 'no' }}</div>
-                                                <div>Direct evidence: {{ candidate.directEvidence.join(', ') }}</div>
-                                            </details>
+                                            <span class="mt-1 block break-all text-[11px] text-slate-600">
+                                                {{ candidate.representative ? 'Representative' : 'Not representative' }} ·
+                                                Direct evidence: {{ candidate.directEvidence.join(', ') }}
+                                            </span>
+                                            <span class="mt-1 block break-all text-[10px] text-slate-500">
+                                                Internal ID: {{ candidate.featureIdentifier }}
+                                            </span>
                                         </span>
                                     </span>
                                 </label>
                             </div>
-                            <label :class="[
-                                     'mt-2 flex cursor-pointer items-center gap-2 rounded-lg border p-3 text-xs focus-within:ring-2 focus-within:ring-blue-300',
+                            <label v-if="record.candidates.length" :class="[
+                                     'mt-2 flex cursor-pointer items-center gap-2 rounded-lg border p-3 text-xs focus-within:ring-2 focus-within:ring-amber-500',
                                      record.choice?.kind === 'skip' ? 'border-amber-400 bg-amber-50' : 'border-slate-200 bg-white hover:border-amber-300',
-                                     ['resolving', 'applying'].includes(similarityAlignmentStatus) ? 'cursor-wait opacity-60' : ''
+                                     similarityAlignmentBusy ? 'cursor-wait opacity-60' : ''
                                    ]">
                                 <input type="radio"
-                                       :name="`alignment-choice-${record.recordKey}`"
+                                       :name="'alignment-choice-' + record.recordKey"
                                        :checked="record.choice?.kind === 'skip'"
-                                       :disabled="['resolving', 'applying'].includes(similarityAlignmentStatus)"
+                                       :disabled="similarityAlignmentBusy"
                                        @change="skipSimilarityAlignmentRecord(record.recordKey)"
-                                       :aria-label="`Skip ${record.recordLabel}`"
+                                       :aria-label="'Skip ' + record.recordLabel"
                                        class="border-slate-300 text-amber-600 focus:ring-amber-500">
                                 <span><strong>Skip</strong> — leave this record's position and orientation unchanged.</span>
                             </label>
+                            <p v-else class="text-xs text-slate-600">No usable candidate. This record stays unchanged.</p>
+                            <label v-if="record.choice?.kind === 'select'" class="mt-3 flex items-center gap-2 text-xs text-slate-700 focus-within:ring-2 focus-within:ring-blue-500">
+                                <input type="checkbox"
+                                       :checked="record.orientationPolicy === 'match_reference'"
+                                       :disabled="similarityAlignmentBusy"
+                                       :aria-label="'Match reference direction for ' + record.recordLabel"
+                                       @change="setSimilarityAlignmentOrientation(record.recordKey, $event.target.checked ? 'match_reference' : 'preserve')">
+                                Match reference direction
+                            </label>
+                            <p class="mt-2 text-[11px] text-slate-600" data-similarity-alignment-orientation>
+                                Effective orientation: {{ record.orientationEffect === 'reverse_whole_record' ? 'reverse whole record' : record.orientationEffect === 'preserve_unknown_strand' ? 'preserve because a strand is unknown' : 'preserve' }}
+                            </p>
                         </fieldset>
                     </div>
                 </div>
-
                 <footer class="shrink-0 border-t border-slate-200 bg-slate-50 px-4 py-3 sm:px-5">
                     <p id="similarity-alignment-apply-reason"
                        class="mb-2 text-xs"
                        :class="canApplySimilarityAlignment ? 'text-emerald-700' : 'text-amber-700'">
-                        {{ canApplySimilarityAlignment ? 'All choices selected. Apply will validate them with the Python resolver.' : similarityAlignmentApplyDisabledReason }}
+                        {{ canApplySimilarityAlignment ? 'Apply validates the complete draft with Python, then regenerates the diagram.' : similarityAlignmentApplyDisabledReason }}
                     </p>
-                    <p v-if="similarityAlignmentError" role="alert" class="mb-2 text-xs text-red-700" data-similarity-alignment-error>{{ similarityAlignmentError.message }}</p>
+                    <p v-if="similarityAlignmentError" role="alert" tabindex="-1"
+                       class="mb-2 break-all text-xs text-red-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-red-700"
+                       data-similarity-alignment-error>
+                        {{ similarityAlignmentError.message }} Review the choices and retry Apply.
+                    </p>
                     <div class="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
                         <button type="button"
                                 @click="cancelSimilarityAlignmentDialog"
-                                class="btn btn-secondary min-w-28 py-2 text-xs font-bold">Cancel</button>
+                                class="btn btn-secondary min-w-28 py-2 text-xs font-bold focus-visible:outline focus-visible:outline-2 focus-visible:outline-blue-600">Cancel</button>
                         <button type="button"
                                 @click="applySimilarityAlignmentDraft"
                                 :disabled="!canApplySimilarityAlignment"
                                 aria-describedby="similarity-alignment-apply-reason"
-                                class="btn btn-primary min-w-28 py-2 text-xs font-bold disabled:cursor-not-allowed disabled:opacity-50">
+                                class="btn btn-primary min-w-28 py-2 text-xs font-bold disabled:cursor-not-allowed disabled:opacity-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-blue-600">
                             <span v-if="similarityAlignmentStatus === 'applying'">Applying…</span>
                             <span v-else>Apply</span>
                         </button>

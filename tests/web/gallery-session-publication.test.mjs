@@ -63,6 +63,18 @@ for (const name of sessionNames) {
   const result = await prepareGallerySessionForPublication(source);
   assert.equal(result.session.version, 44, name);
   assert.equal(result.session.renderRequest.schema, 8, name);
+  const plan = result.session.renderRequest.layout?.similarityAlignment;
+  if (plan) {
+    assert.equal(plan.schema, 2, name);
+    assert.equal(Object.hasOwn(plan, 'mode'), false, name);
+    assert.deepEqual(new Set(plan.records.map(({ recordKey }) => recordKey)),
+      new Set(result.session.renderRequest.records.map(({ recordKey }) => recordKey)), name);
+    for (const decision of plan.records) {
+      assert.ok(['preserve', 'match_reference'].includes(decision.orientationPolicy), name);
+      assert.equal(decision.status === 'aligned',
+        typeof decision.effectiveReverseComplement === 'boolean', name);
+    }
+  }
   assert.equal(
     Object.hasOwn(result.session.orthogroupState || {}, 'selectedOrthogroupAlignmentFeature'),
     false,

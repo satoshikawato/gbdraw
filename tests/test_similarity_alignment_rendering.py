@@ -54,7 +54,7 @@ from gbdraw.layout.similarity_alignment import (
     AlignmentDecisionStatus,
     AlignmentRecordDecision,
     AlignmentResolutionRationale,
-    SimilarityAlignmentMode,
+    AlignmentOrientationPolicy,
     SimilarityAlignmentPlan,
 )
 from gbdraw.io.regions import parse_region_spec
@@ -99,11 +99,10 @@ def _plan(
     reference: AlignmentAnchorIdentity,
     target: AlignmentAnchorIdentity,
     *,
-    orient_target: bool | None = None,
-    mode: SimilarityAlignmentMode = SimilarityAlignmentMode.POSITION,
+    orient_target: bool = False,
+    orientation_policy: AlignmentOrientationPolicy = AlignmentOrientationPolicy.PRESERVE,
 ) -> SimilarityAlignmentPlan:
     return SimilarityAlignmentPlan(
-        mode=mode,
         group_id="og-1",
         reference=reference,
         records=(
@@ -118,6 +117,7 @@ def _plan(
                 AlignmentDecisionStatus.ALIGNED,
                 AlignmentResolutionRationale.ONLY_USABLE_CANDIDATE,
                 target,
+                orientation_policy,
                 orient_target,
             ),
         ),
@@ -192,7 +192,6 @@ def test_absolute_translation_formula_preserves_reference_skipped_and_every_y() 
     target = AlignmentAnchorIdentity("target", "target")
     skipped_key = "missing"
     plan = SimilarityAlignmentPlan(
-        SimilarityAlignmentMode.POSITION,
         "og-1",
         reference,
         (
@@ -207,6 +206,7 @@ def test_absolute_translation_formula_preserves_reference_skipped_and_every_y() 
                 AlignmentDecisionStatus.ALIGNED,
                 AlignmentResolutionRationale.ONLY_USABLE_CANDIDATE,
                 target,
+                effective_reverse_complement=False,
             ),
             AlignmentRecordDecision(
                 skipped_key,
@@ -259,7 +259,7 @@ def test_planning_derives_effective_orientation_once_then_projects_centers() -> 
         _anchor(first, "first"),
         _anchor(second, "second"),
         orient_target=True,
-        mode=SimilarityAlignmentMode.POSITION_AND_ORIENTATION,
+        orientation_policy=AlignmentOrientationPolicy.MATCH_REFERENCE,
     )
     request = _request(first, second, plan)
 
@@ -287,7 +287,7 @@ def test_session_request_replacement_does_not_reapply_effective_orientation() ->
             _anchor(first, "first"),
             _anchor(second, "second"),
             orient_target=True,
-            mode=SimilarityAlignmentMode.POSITION_AND_ORIENTATION,
+            orientation_policy=AlignmentOrientationPolicy.MATCH_REFERENCE,
         ),
     )
     planned = plan_linear_request(request)
@@ -320,16 +320,14 @@ def test_effective_orientation_is_absolute_against_record_presentation(
 ) -> None:
     first = _record("first", 100, 20, 30)
     second = _record("second", 120, 60, 70)
-    mode = (
-        SimilarityAlignmentMode.POSITION
-        if override is None
-        else SimilarityAlignmentMode.POSITION_AND_ORIENTATION
-    )
     plan = _plan(
         _anchor(first, "first"),
         _anchor(second, "second"),
-        orient_target=override,
-        mode=mode,
+        orient_target=base_orientation if override is None else override,
+        orientation_policy=(
+            AlignmentOrientationPolicy.PRESERVE
+            if override is None else AlignmentOrientationPolicy.MATCH_REFERENCE
+        ),
     )
     request = LinearDiagramRequest(
         records=(
@@ -408,6 +406,61 @@ def test_crop_and_circular_display_offset_are_applied_before_anchor_translation(
     )
     displayed = plan_linear_request(display_request)
     assert displayed.alignment_anchor_centers[1] == pytest.approx(15.0)
+
+
+def test_match_direction_after_reverse_crop_preserves_readable_geometry() -> None:
+    reference = _record("reference", 100, 20, 30, strand=1)
+    target = _record("target", 120, 60, 70, strand=1)
+    target.features[0].qualifiers["gene"] = ["readable-target"]
+    plan = _plan(
+        _anchor(reference, "first"),
+        _anchor(target, "second"),
+        orient_target=False,
+        orientation_policy=AlignmentOrientationPolicy.MATCH_REFERENCE,
+    )
+    request = LinearDiagramRequest(
+        records=(
+            RecordInput(InMemoryRecordSource(reference), record_key="first"),
+            RecordInput(
+                InMemoryRecordSource(target), record_key="second",
+                region=parse_region_spec("target:41-100:rc"),
+            ),
+        ),
+        options=LinearDiagramOptions(
+            selected_features_set=("CDS",),
+            output=LinearOutputOptions(legend="none"),
+            config_overrides={
+                "labels.linear.scope": "all",
+                "canvas.show_gc": False,
+                "canvas.show_skew": False,
+            },
+        ),
+        layout=LinearMultiRecordOptions(
+            record_translations=(
+                LinearRecordTranslation("first", 5, 4),
+                LinearRecordTranslation("second", 90, -3),
+            )
+        ),
+        similarity_alignment=plan,
+    )
+    first = plan_linear_request(request)
+    second = plan_linear_request(request)
+    assert first.transforms[1].source_step == 1
+    assert first.alignment_anchor_centers == pytest.approx((25, 25))
+    assert first.alignment_anchor_centers == second.alignment_anchor_centers
+    assert str(first.records[1].seq) == str(second.records[1].seq)
+    assert first.transforms[1] == second.transforms[1]
+    feature = first.records[1].features[0]
+    assert (int(feature.location.start), int(feature.location.end)) == (20, 30)
+    assert feature.location.strand == 1
+
+    svg = build_request_diagram(request).drawing.tostring()
+    root = ElementTree.fromstring(svg)
+    labels = [item for item in root.iter() if item.tag.endswith("text")
+              and item.text == "readable-target"]
+    assert labels
+    assert all("scale(-1" not in item.attrib.get("transform", "") for item in labels)
+    assert build_request_diagram(request).drawing.tostring() == svg
 
 
 @pytest.mark.parametrize(

@@ -1047,7 +1047,7 @@ def _refresh_one_session(
                 "-f",
                 "interactive_svg",
                 "-o",
-                "out",
+                session_path.name.split(".gbdraw-session", 1)[0],
                 "--session_output",
                 str(replayed_path),
             ],
