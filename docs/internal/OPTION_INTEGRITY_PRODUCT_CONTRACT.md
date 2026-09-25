@@ -5,7 +5,7 @@ Status: active Product authority
 ## Authority metadata
 
 - Contract ID: `OIPC`
-- Contract revision: `15`
+- Contract revision: `16`
 - Product Decision Owner: `satoshikawato`
 - Decision date: `2026-08-28`
 - Decision source: explicit Product Decision Owner selection of one (`1`) after
@@ -113,6 +113,14 @@ Status: active Product authority
   `PRODUCT_DECISION` response on `2026-09-25`. The receipt below is the full
   scope of this replacement. Other decisions retain their scope. This
   amendment contains no runtime.
+- Revision 16 changes: `PD-OI-027`, `PD-OI-028`, `PD-OI-029`, `PD-OI-031`,
+  and `PD-OI-034` are replaced for scenario revisions `4`, `2`, `2`, `4`,
+  and `4`. `satoshikawato` explicitly approved the five complete
+  `PRODUCT_DECISION` texts as written on `2026-09-26` for the record-owned
+  orientation follow-up to issue `#586`. The receipts below are the full
+  scope of these replacements. `PD-OI-026`, `PD-OI-030`, `PD-OI-035`, and
+  other decisions retain their scope. Dependent runtime requires this
+  authority merged into its base; this amendment contains no runtime.
 - Records remaining `EVIDENCE_REQUIRED`: none
 - Excluded records: none
 
@@ -1039,120 +1047,90 @@ corrected. Passing evidence does not make incorrect behavior normative.
 }
 ```
 
-### PD-OI-027: Preserved default orientation with explicit review controls
+### PD-OI-027: Record-owned orientation with one review match option
 
 - Concern key: `diagram-generation.similarity-alignment.transform-semantics`
-- Scenario revision: `3`
-- Supersedes: `PD-OI-027`, scenario revision `2` (`A / SINGLE_ALIGN_PER_RECORD_ORIENTATION`).
+- Scenario revision: `4`
+- Supersedes: `PD-OI-027`, scenario revision `3` (`A / PRESERVE_DEFAULT_WITH_EXPLICIT_REVIEW_ORIENTATION`).
 - Status: `ACCEPTED`
-- Selected outcome: `A / PRESERVE_DEFAULT_WITH_EXPLICIT_REVIEW_ORIENTATION`
-- Normative outcome: Immediate resolved alignment preserves each target
-  orientation by default. Explicit review lets the user request Match
-  reference direction per record before commitment. Whole-record reversal
-  requires known opposite displayed anchor strands; unknown strands preserve
-  direction. The reference position and orientation and every target vertical
-  position remain unchanged. Alignment is exact and idempotent, text stays
-  readable, the rev indication reflects source-relative orientation, and the
-  validated result commits atomically.
-- Decision source: The complete four Choice A `PRODUCT_DECISION` texts
-  explicitly approved by `satoshikawato` on `2026-09-25` for the issue
-  `#586` follow-up, with this concern's receipt reproduced below. This
-  serialization adds no terms to the approved receipt and becomes runtime
-  authority only after merge into the runtime base.
+- Selected outcome: `A / RECORD_OWNED_ORIENTATION_WITH_REVIEW_MATCH`
+- Normative outcome: exactly the approved `PRODUCT_DECISION` receipt below.
+- Decision source: The complete five `PRODUCT_DECISION` texts for the
+  record-owned orientation follow-up to issue `#586`, explicitly approved
+  as written by `satoshikawato` on `2026-09-26`, with this concern's
+  receipt reproduced below. This serialization adds no terms to the
+  approved receipt and becomes runtime authority only after merge into
+  the runtime base.
 
 ```json
 {
   "concern": "diagram-generation.similarity-alignment.transform-semantics",
-  "scenarioRevision": 3,
-  "choice": "A / PRESERVE_DEFAULT_WITH_EXPLICIT_REVIEW_ORIENTATION",
-  "rationale": "Immediate alignment should preserve current orientation by default, while users who need direction matching can explicitly open a review before committing that choice.",
-  "mustPreserve": "The reference record's position and orientation; every target's vertical position; preservation of current orientation unless Match reference direction is explicitly enabled for that record in review; whole-record reversal only with known opposite displayed anchor strands; preservation for unknown strands; readable text; accurate source-relative rev indication; exact idempotent anchor-center alignment; independent records; and atomic validated commitment.",
-  "mayRetire": "Showing per-record orientation controls before every Python-resolved default alignment. No orientation policy or reversal rule is retired.",
-  "acceptedResidualRisk": "A user who chooses the default Align may need to Undo or Reset and use explicit review to change orientation. The review action must be visible at both entry points and state its effective per-record outcome.",
+  "scenarioRevision": 4,
+  "choice": "A / RECORD_OWNED_ORIENTATION_WITH_REVIEW_MATCH",
+  "rationale": "Record orientation must have one owner so that features, labels, annotations, and comparison ribbons always follow the same direction. An alignment chooses anchors and positions; matching the reference direction is a one-time change to record orientation made through the same path as a manual Reverse.",
+  "mustPreserve": "Each record's current orientation by default; one explicit Match reference direction option in the opened review, initially off; reversal on Apply only of aligned targets whose selected anchor has a known displayed strand opposite to the reference anchor; unchanged orientation for targets with an unknown strand and for skipped, missing, and unusable targets, with each target's resulting direction shown before Apply; the reference record's position and orientation; every target's vertical position; exact idempotent anchor-center alignment in the resulting orientation; comparison ribbons, features, labels, and annotations drawn in their record's orientation; readable text; an accurate source-relative rev indication; and one atomic validated commitment of orientation and alignment.",
+  "mayRetire": "Per-record Match reference direction controls in the review; storage of an orientation policy or effective orientation inside the alignment plan; reversal of records during rendering from alignment-plan data.",
+  "acceptedResidualRisk": "Match reference direction applies to every eligible target in the review. A user who wants a different direction for one record changes that record's Reverse setting after Apply; the alignment is kept and recalculated.",
   "owner": "satoshikawato",
-  "decisionDate": "2026-09-25"
+  "decisionDate": "2026-09-26"
 }
 ```
 
-### PD-OI-028: Active Similarity Group alignment-plan lifecycle
+### PD-OI-028: Orientation-independent active alignment plan
 
 - Concern key: `diagram-generation.similarity-alignment.plan-lifecycle`
-- Scenario revision: `1`
+- Scenario revision: `2`
+- Supersedes: `PD-OI-028`, scenario revision `1` (`A / PERSISTED_ACTIVE_ALIGNMENT_PLAN`).
 - Status: `ACCEPTED`
-- Selected outcome: `A / PERSISTED_ACTIVE_ALIGNMENT_PLAN`
-- Normative outcome:
-  1. A successful alignment creates an active alignment plan that survives
-     regeneration after style, label, and canvas-size changes. It also survives
-     record reordering when every stable record identity remains resolvable.
-  2. Manual record movement, manual orientation changes, source replacement,
-     crop changes, and record-selector changes clear the active plan and notify
-     the user. Clearing does not silently discard the current effective
-     geometry.
-  3. The active plan is validated before regeneration. A stale reference blocks
-     regeneration and requires reference reselection or Clear Alignment. A stale
-     target requires explicit reselection or Skip for that record.
-  4. No representative, same-coordinate feature, or other anchor is substituted
-     automatically. The last successful Result remains visible while stale
-     anchors are repaired.
-- Decision source: The complete `PRODUCT_DECISION` response from
-  `satoshikawato` dated `2026-09-22` for issue `#561`, reproduced below.
-  The receipt preserves the supplied fields without extending its rationale,
-  preservation, retirement, risk, owner, or date. This is a reviewable
-  serialization in the existing static authority document, not a new decision
-  store or a `BD-###` record. It cannot authorize dependent runtime until
-  merged into that runtime's base.
+- Selected outcome: `A / ORIENTATION_INDEPENDENT_ACTIVE_PLAN`
+- Normative outcome: exactly the approved `PRODUCT_DECISION` receipt below.
+- Decision source: The complete five `PRODUCT_DECISION` texts for the
+  record-owned orientation follow-up to issue `#586`, explicitly approved
+  as written by `satoshikawato` on `2026-09-26`, with this concern's
+  receipt reproduced below. This serialization adds no terms to the
+  approved receipt and becomes runtime authority only after merge into
+  the runtime base.
 
 ```json
 {
   "concern": "diagram-generation.similarity-alignment.plan-lifecycle",
-  "scenarioRevision": 1,
-  "choice": "A / PERSISTED_ACTIVE_ALIGNMENT_PLAN",
-  "rationale": "A saved alignment is continuing display intent and must survive ordinary regeneration, while edits that invalidate its record or coordinate assumptions must terminate it explicitly rather than silently applying stale anchors.",
-  "mustPreserve": "Alignment after style, label, and canvas-size changes; preservation across record reorder when stable record identities remain; explicit clearing and notification after manual record movement, manual orientation changes, source replacement, crop changes, or record-selector changes; validation before regeneration; the last successful Result while a stale plan is repaired; and explicit reselect, Skip, or Clear actions without automatic anchor substitution.",
-  "mayRetire": "One-shot alignment that silently disappears on regeneration and silent continuation of an active plan after an invalidating edit.",
-  "acceptedResidualRisk": "Stale references block regeneration until reselected or cleared, and stale target anchors require explicit reselection or Skip.",
+  "scenarioRevision": 2,
+  "choice": "A / ORIENTATION_INDEPENDENT_ACTIVE_PLAN",
+  "rationale": "An active plan identifies anchors, not directions. A manual orientation change leaves every anchor valid, so keeping the plan spares the user a second alignment after reversing a record.",
+  "mustPreserve": "Survival of the active plan across regeneration after style, label, and canvas-size changes, and across record reorder when stable record identities remain; survival across manual record orientation changes, with the same anchors aligned in the new orientation when the diagram is next generated; explicit clearing and notification after manual record movement, source replacement, crop changes, or record-selector changes; validation before regeneration; the last successful Result while a stale plan is repaired; and explicit reselect, Skip, or Clear actions without automatic anchor substitution.",
+  "mayRetire": "Clearing the active plan when the user manually changes a record's orientation.",
+  "acceptedResidualRisk": "After a manual orientation change, the reversed record moves horizontally on the next generation so that its anchor stays aligned. A user who wanted the previous position uses Undo or Reset Align.",
   "owner": "satoshikawato",
-  "decisionDate": "2026-09-22"
+  "decisionDate": "2026-09-26"
 }
 ```
 
-### PD-OI-029: Immediate-baseline Reset and artifact history
+### PD-OI-029: Pre-align position Reset and artifact history
 
 - Concern key: `diagram-generation.similarity-alignment.reset-and-history`
-- Scenario revision: `1`
+- Scenario revision: `2`
+- Supersedes: `PD-OI-029`, scenario revision `1` (`A / IMMEDIATE_PREALIGN_BASELINE`).
 - Status: `ACCEPTED`
-- Selected outcome: `A / IMMEDIATE_PREALIGN_BASELINE`
-- Normative outcome:
-  1. Each successful `Align` or `Align & orient` replaces the preceding active
-     plan and records the effective position and orientation immediately before
-     that operation as its reset baseline.
-  2. `Reset Align` restores that immediate baseline and clears the active
-     alignment plan. It does not traverse a separate alignment-specific
-     history.
-  3. Apply, Reset, and manual clearing each commit as one atomic artifact-history
-     transaction. Normal Undo restores the complete prior artifact, including
-     any prior active plan.
-  4. Failed, canceled, superseded, or stale alignment work commits no history
-     entry.
-- Decision source: The complete `PRODUCT_DECISION` response from
-  `satoshikawato` dated `2026-09-22` for issue `#561`, reproduced below.
-  The receipt preserves the supplied fields without extending its rationale,
-  preservation, retirement, risk, owner, or date. This is a reviewable
-  serialization in the existing static authority document, not a new decision
-  store or a `BD-###` record. It cannot authorize dependent runtime until
-  merged into that runtime's base.
+- Selected outcome: `A / IMMEDIATE_PREALIGN_POSITION_BASELINE`
+- Normative outcome: exactly the approved `PRODUCT_DECISION` receipt below.
+- Decision source: The complete five `PRODUCT_DECISION` texts for the
+  record-owned orientation follow-up to issue `#586`, explicitly approved
+  as written by `satoshikawato` on `2026-09-26`, with this concern's
+  receipt reproduced below. This serialization adds no terms to the
+  approved receipt and becomes runtime authority only after merge into
+  the runtime base.
 
 ```json
 {
   "concern": "diagram-generation.similarity-alignment.reset-and-history",
-  "scenarioRevision": 1,
-  "choice": "A / IMMEDIATE_PREALIGN_BASELINE",
-  "rationale": "Reset must have a local and predictable meaning after sequential alignments, and alignment operations should reuse the application's artifact history rather than introduce a second history model.",
-  "mustPreserve": "The position and orientation immediately before each Align as that operation's baseline; replacement of the prior active plan by a new Align; restoration of the immediate baseline by Reset Align; one atomic history transaction for Apply, Reset, and manual clearing; normal Undo of the complete prior artifact; and no committed history entry after failed, canceled, superseded, or stale work.",
-  "mayRetire": "Reset behavior that only clears the selected target without restoring its immediate baseline and any alignment-specific deep-history stack.",
-  "acceptedResidualRisk": "Reset restores the preceding geometry but clears the active alignment plan; restoring an older active plan requires normal Undo rather than Reset Align.",
+  "scenarioRevision": 2,
+  "choice": "A / IMMEDIATE_PREALIGN_POSITION_BASELINE",
+  "rationale": "Reset Align removes the alignment's positioning. Record orientation is ordinary record state that Reset Align does not change; normal Undo restores the complete previous artifact, including orientation.",
+  "mustPreserve": "Replacement of the preceding active plan by a new Align; restoration by Reset Align of the record positions immediately before that Align, together with clearing of the active plan; one atomic history transaction for Apply, Reset, and manual clearing; normal Undo of the complete prior artifact, including record orientation and any prior active plan; and no committed history entry after failed, canceled, superseded, or stale work.",
+  "mayRetire": "Restoration of record orientation by Reset Align, including orientation changed by Match reference direction.",
+  "acceptedResidualRisk": "After an Apply with Match reference direction, Reset Align leaves the reversed records reversed. Returning to the previous orientation requires Undo or the record's Reverse setting.",
   "owner": "satoshikawato",
-  "decisionDate": "2026-09-22"
+  "decisionDate": "2026-09-26"
 }
 ```
 
@@ -1200,38 +1178,32 @@ corrected. Passing evidence does not make incorrect behavior normative.
 }
 ```
 
-### PD-OI-031: Automatic resolved alignment with explicit review
+### PD-OI-031: Automatic resolved alignment with explicit review and one match option
 
 - Concern key: `diagram-generation.similarity-alignment.surface-scope`
-- Scenario revision: `3`
-- Supersedes: `PD-OI-031`, scenario revision `2` (`A / SINGLE_REVIEW_ALIGNMENT_SURFACE`).
+- Scenario revision: `4`
+- Supersedes: `PD-OI-031`, scenario revision `3` (`A / AUTO_APPLY_RESOLVED_WITH_EXPLICIT_REVIEW`).
 - Status: `ACCEPTED`
-- Selected outcome: `A / AUTO_APPLY_RESOLVED_WITH_EXPLICIT_REVIEW`
-- Normative outcome: The Web normal Align action applies a Python-resolved
-  plan without a candidate palette. Ambiguity opens the full review. A named,
-  accessible explicit review action at both exact-reference entry points opens
-  the full review before commitment even for resolved plans, with Select,
-  Skip, per-record orientation, candidate details, and a summary. Typed Python
-  plans and shared validation remain authoritative; CLI rejects unresolved
-  ambiguity. Unsupported Collinear controls, anchor TSV, scored inference, and
-  multi-hop automatic selection remain accurately disclosed.
-- Decision source: The complete four Choice A `PRODUCT_DECISION` texts
-  explicitly approved by `satoshikawato` on `2026-09-25` for the issue
-  `#586` follow-up, with this concern's receipt reproduced below. This
-  serialization adds no terms to the approved receipt and becomes runtime
-  authority only after merge into the runtime base.
+- Selected outcome: `A / AUTO_APPLY_RESOLVED_WITH_EXPLICIT_REVIEW_SINGLE_MATCH`
+- Normative outcome: exactly the approved `PRODUCT_DECISION` receipt below.
+- Decision source: The complete five `PRODUCT_DECISION` texts for the
+  record-owned orientation follow-up to issue `#586`, explicitly approved
+  as written by `satoshikawato` on `2026-09-26`, with this concern's
+  receipt reproduced below. This serialization adds no terms to the
+  approved receipt and becomes runtime authority only after merge into
+  the runtime base.
 
 ```json
 {
   "concern": "diagram-generation.similarity-alignment.surface-scope",
-  "scenarioRevision": 3,
-  "choice": "A / AUTO_APPLY_RESOLVED_WITH_EXPLICIT_REVIEW",
-  "rationale": "A fully resolved alignment should complete without making the user inspect and Apply candidate choices that require no decision, while an explicit review action retains control when the user wants to inspect or change the result before commitment.",
-  "mustPreserve": "The exact selected reference from the feature popup and Similarity Groups drawer; a full, accessible review with Select, Skip, per-record orientation, candidate details, and resolution summary when Python reports ambiguity or the user explicitly requests review; typed fully resolved plans, shared Python validation, strict CLI ambiguity rejection, actionable errors, and accurate unsupported-feature disclosure.",
-  "mayRetire": "Mandatory opening of the full review and manual Apply for a Python-resolved default alignment; the single-action-only Web entry surface, to permit a named explicit review action.",
-  "acceptedResidualRisk": "The default resolved alignment may commit before a user notices that they wanted to change direction or Skip. The explicit review action must be discoverable and accessible, and Undo/Reset must remain reliable.",
+  "scenarioRevision": 4,
+  "choice": "A / AUTO_APPLY_RESOLVED_WITH_EXPLICIT_REVIEW_SINGLE_MATCH",
+  "rationale": "A fully resolved alignment should complete without an unnecessary review, and an opened review should offer direction matching as one clear option instead of repeating it for every target.",
+  "mustPreserve": "The exact selected reference from the feature popup and Similarity Groups drawer; automatic application of a Python-resolved default alignment; a full, accessible review with Select, Skip, candidate details, a resolution summary, one Match reference direction option, and each target's resulting direction when Python reports ambiguity or the user explicitly requests review; typed fully resolved plans, shared Python validation, strict CLI ambiguity rejection, actionable errors that state the underlying failure, and accurate unsupported-feature disclosure.",
+  "mayRetire": "Per-record orientation controls in the review.",
+  "acceptedResidualRisk": "The review cannot match the direction of only some targets. Per-record exceptions use the record's Reverse setting after Apply.",
   "owner": "satoshikawato",
-  "decisionDate": "2026-09-25"
+  "decisionDate": "2026-09-26"
 }
 ```
 
@@ -1336,39 +1308,32 @@ corrected. Passing evidence does not make incorrect behavior normative.
 }
 ```
 
-### PD-OI-034: Automatic resolved alignment with review and retry
+### PD-OI-034: Automatic resolved alignment with review, retry, and one match option
 
 - Concern key: `web.similarity-alignment.choice-and-retry`
-- Scenario revision: `3`
-- Supersedes: `PD-OI-034`, scenario revision `2` (`A / PRESELECTED_LOCAL_BATCH_REVIEW`).
+- Scenario revision: `4`
+- Supersedes: `PD-OI-034`, scenario revision `3` (`A / AUTO_APPLY_RESOLVED_WITH_REVIEW_RETRY`).
 - Status: `ACCEPTED`
-- Selected outcome: `A / AUTO_APPLY_RESOLVED_WITH_REVIEW_RETRY`
-- Normative outcome: The Web applies a Python-resolved default plan without
-  presenting and revalidating an unchanged draft. Ambiguity and explicit
-  review retain a complete locally editable draft, independent Select or Skip
-  and orientation choices, candidate facts, recommendation reasons, canvas
-  interaction, and one batch Python validation at Apply. Automatic render
-  failure exposes the retained draft and actionable retry without partial
-  commitment. Failure, Cancel, stale, or superseded work preserves the last
-  Result and History; plan regeneration, Session, Reset, and Undo/Redo
-  meanings remain in force.
-- Decision source: The complete four Choice A `PRODUCT_DECISION` texts
-  explicitly approved by `satoshikawato` on `2026-09-25` for the issue
-  `#586` follow-up, with this concern's receipt reproduced below. This
-  serialization adds no terms to the approved receipt and becomes runtime
-  authority only after merge into the runtime base.
+- Selected outcome: `A / AUTO_APPLY_RESOLVED_WITH_REVIEW_RETRY_SINGLE_MATCH`
+- Normative outcome: exactly the approved `PRODUCT_DECISION` receipt below.
+- Decision source: The complete five `PRODUCT_DECISION` texts for the
+  record-owned orientation follow-up to issue `#586`, explicitly approved
+  as written by `satoshikawato` on `2026-09-26`, with this concern's
+  receipt reproduced below. This serialization adds no terms to the
+  approved receipt and becomes runtime authority only after merge into
+  the runtime base.
 
 ```json
 {
   "concern": "web.similarity-alignment.choice-and-retry",
-  "scenarioRevision": 3,
-  "choice": "A / AUTO_APPLY_RESOLVED_WITH_REVIEW_RETRY",
-  "rationale": "The Web should spend interaction time on genuine ambiguity or requested review, using Python's resolved plan immediately when every target has a deterministic outcome.",
-  "mustPreserve": "Independent target choices, Python ownership of eligibility and final validation, local no-Worker draft editing in review, one batch validation for an edited draft, correction and retry without losing the draft, visible candidate facts and effective orientation in review, last Result and History after failure, Cancel, stale, or superseded work, canvas interaction during review, and existing plan regeneration, Session, Reset, and Undo/Redo meanings. An automatic render failure must expose the retained draft and actionable retry path without a partial commit.",
-  "mayRetire": "Presenting and applying an editable draft on every Python-resolved default alignment; a second resolver call solely to confirm an unchanged resolved draft.",
-  "acceptedResidualRisk": "The default resolved path commits without an individual pre-commit inspection. A visible explicit review action and reliable Undo/Reset must cover users who need a different anchor, Skip, or direction.",
+  "scenarioRevision": 4,
+  "choice": "A / AUTO_APPLY_RESOLVED_WITH_REVIEW_RETRY_SINGLE_MATCH",
+  "rationale": "The Web should keep automatic application of resolved plans and local review editing, with one draft-level direction option replacing per-target orientation choices.",
+  "mustPreserve": "Independent Select or Skip choices per target and one draft-level Match reference direction option; Python ownership of candidate eligibility, strand facts, and final validation; local no-Worker draft editing in review; one batch validation for an edited draft; correction and retry without losing the draft, with the underlying failure message shown; visible candidate facts and each target's resulting direction before Apply; the last Result, record orientations, and History after failure, Cancel, stale, or superseded work; canvas interaction during review; exposure of the retained draft and retry after an automatic render failure without a partial commit; and plan regeneration, Session, Reset, and Undo/Redo meanings as defined by the current plan-lifecycle and reset-and-history decisions.",
+  "mayRetire": "Independent per-target orientation choices in the draft.",
+  "acceptedResidualRisk": "The draft cannot match the direction of only some targets. Per-record exceptions use the record's Reverse setting after Apply.",
   "owner": "satoshikawato",
-  "decisionDate": "2026-09-25"
+  "decisionDate": "2026-09-26"
 }
 ```
 
