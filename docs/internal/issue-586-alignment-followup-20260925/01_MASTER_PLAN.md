@@ -168,11 +168,13 @@ authority gate. This record describes the verified implementation branch.
   simultaneous canvas selection and manual pan/zoom at 390 px while open.
   The revised Session 04 criterion requires legible and reachable palette
   controls and candidate list, with the preview restored on close. The exact
-  receipt is serialized in local authority-only commit `5f3f1445` from
-  `origin/dev@69134e28`; it has not been merged into the runtime base.
-  Existing Chromium 390 px screenshots and browser checks support this
-  documentation correction; no runtime, test, or figure bytes changed.
-  Final authority-backed acceptance remains pending that merge.
+  receipt was serialized in authority-only commit `5f3f1445`, merged into
+  `origin/dev@cfe28a86` through PR #593, and included in the fixed branch
+  at merge commit `f26eb1f2`. Existing Chromium 390 px screenshots and
+  browser checks support this documentation correction; no runtime, test,
+  or figure bytes changed. The Product-authority prerequisite is satisfied.
+  CI repair PR #595 merged as `3fd6f7be`; its exact-SHA push-triggered
+  `Dev staging / gate` and the subsequent authority PR #593 checks passed.
 
 | Gate | Result |
 | --- | --- |
@@ -207,9 +209,10 @@ were removed. OE, PE, and CB do not increase; no exception packet applies.
 Product preflight for the implemented automatic alignment and Definition
 placement remains `IMPLEMENT_EXISTING_AUTHORITY` under the merged revision-3
 Choice A and unchanged PD-OI-024. The 390 px acceptance wording follows the
-owner's PD-OI-035 revision-2 receipt, with runtime-base authority pending its
-separate merge. No runtime is changed under that unmerged authority. Reverting
-the Web behavior would require matching Product authority to be restored first;
+owner's PD-OI-035 revision-2 receipt, merged into the runtime base through
+PR #593 before this final acceptance update. No runtime was changed to revise
+the 390 px criterion. Reverting the Web behavior would require matching Product
+authority to be restored first;
 the independent Definition correction can be managed separately.
 
 Production, tests, public/internal documentation, and generated media were
