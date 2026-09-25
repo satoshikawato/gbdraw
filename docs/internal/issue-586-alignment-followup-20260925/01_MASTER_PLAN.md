@@ -90,3 +90,31 @@ Final gates after focused failures are fixed: ruff check gbdraw/; node tests/web
 The fix is complete only when every accepted behavior above is demonstrated, Definition blocks share a measured left edge after unequal alignment translations, the explicit review action remains accessible, no required gate is failing, and the authority is on the runtime base. Review production, tests, docs, and generated diffs separately. Record exact commits, commands, results, visual observations, architecture owner/path evidence, Product authority, and any remaining risk here or in a session handoff. Preserve unrelated files and do not stage the pre-existing untracked directory.
 
 Planning commit only: this master plan, the Decision Pack, and Sessions 00–04. No runtime source, tests, generated wheel, reference SVG, or Gallery asset belongs in the planning commit.
+
+## 8. Session 03 review entry record
+
+The named work branch contains merged Choice A authority
+`origin/dev@69134e28` and Session 02 controller commit `86aa03d9`.
+This session adds a visible **Review alignment options…** button beside
+**Align…** in the exact-feature popup and Similarity Groups drawer. Both
+pass their existing exact reference and group through `app-setup.js` to
+the one `similarity-alignment.js` controller with `mode: 'review'`.
+The controller, Python resolver, Worker, draft, Result/History admission,
+Session schema, and transient canvas overlay owners are unchanged.
+The normal resolved path still applies without mounting the palette;
+ambiguity and explicit review open the same complete palette. This
+implements PD-OI-026/027/031/034 revision 3, including the jointly
+required resolved, ambiguous, explicit-review, and retry continuations.
+
+The Web reference now distinguishes those paths. The BGC Gallery
+tutorial names both actions, and its popup image was recaptured from the
+restored Session using the supported capture tool. Node controller/drawer:
+32 passed; Python resolver/Web adapter: 85 passed; Chromium alignment:
+7 passed, with the final resolved-path automatic failure/retry check
+rerun and passed; Gallery Chromium: 23 passed; documentation contracts:
+12 passed; strict Gallery capture check, Ruff, CLI help, architecture
+contracts, Web change-budget gate, and diff whitespace check passed.
+Desktop and 390-pixel palette screenshots were inspected. The generated
+browser wheel remains ignored, and no reference SVG or unrelated worktree
+file was changed. Session 04 owns integrated geometry, persistence,
+full-suite, and build acceptance.

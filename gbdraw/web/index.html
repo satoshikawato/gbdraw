@@ -4683,7 +4683,7 @@
                      role="alert"
                      data-similarity-alignment-start-error
                      class="-mx-4 border-b border-red-200 bg-red-50 px-5 py-2 text-xs text-red-900 shrink-0">
-                    {{ similarityAlignmentError.message }} Review the exact reference and try Align… again.
+                    {{ similarityAlignmentError.message }} Check the exact reference and try again.
                 </div>
                 <div v-if="similarityAlignmentSummary"
                      data-similarity-alignment-summary
@@ -5236,8 +5236,17 @@
                                 <i class="ph ph-arrows-left-right" aria-hidden="true"></i>
                                 <span>{{ similarityAlignmentStatus === 'resolving' ? 'Resolving…' : similarityAlignmentStatus === 'applying' ? 'Applying…' : 'Align…' }}</span>
                             </button>
+                            <button type="button"
+                                    data-history-managed
+                                    data-similarity-alignment-popup-review
+                                    @click="alignByClickedOrthogroup($event, 'review')"
+                                    :disabled="!clickedOrthogroupDetail?.currentMember || similarityAlignmentBusy"
+                                    :aria-busy="similarityAlignmentBusy"
+                                    aria-describedby="clicked-alignment-action-description"
+                                    class="col-span-2 px-2 py-2 bg-slate-100 hover:bg-slate-200 disabled:text-slate-400 disabled:cursor-not-allowed text-slate-700 rounded-lg text-xs font-medium focus-visible:outline focus-visible:outline-2 focus-visible:outline-blue-600"
+                                    title="Review alignment options for this exact feature">Review alignment options…</button>
                             <p id="clicked-alignment-action-description" class="col-span-2 text-[10px] text-slate-500">
-                                Resolved targets align immediately. Ambiguous targets open a review.
+                                Align applies resolved targets immediately; ambiguity opens review. Review alignment options… lets you inspect or change anchors, Skip, and direction before applying.
                             </p>
                         </div>
                         <div v-if="clickedOrthogroupDetail" class="border-y border-slate-100 py-3">
@@ -6881,6 +6890,15 @@
                                 <i class="ph ph-arrows-left-right" aria-hidden="true"></i>
                                 {{ similarityAlignmentStatus === 'resolving' ? 'Resolving…' : similarityAlignmentStatus === 'applying' ? 'Applying…' : 'Align…' }}
                             </button>
+                            <button type="button"
+                                    data-history-managed
+                                    data-similarity-alignment-drawer-review
+                                    @click="startSimilarityAlignmentFromDrawer(selectedOrthogroup.id, $event, 'review')"
+                                    :disabled="Boolean(similarityAlignmentDrawerDisabledReason(selectedOrthogroup.id)) || similarityAlignmentBusy"
+                                    :aria-busy="similarityAlignmentBusy"
+                                    aria-describedby="similarity-alignment-drawer-reason"
+                                    title="Review alignment options for the selected exact feature"
+                                    class="col-span-2 text-xs px-2 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded focus-visible:outline focus-visible:outline-2 focus-visible:outline-blue-600 disabled:text-slate-400 disabled:cursor-not-allowed">Review alignment options…</button>
                             <button @click="resetOrthogroupRename(selectedOrthogroup.id)" class="text-xs px-2 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded flex items-center justify-center gap-1">
                                 <i class="ph ph-text-aa"></i> Reset Rename
                             </button>

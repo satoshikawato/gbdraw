@@ -293,20 +293,27 @@ Generate a Linear diagram with **LOSATP → Similarity groups**, then choose
 even when it is not the group representative; its record does not move. The
 Similarity Groups drawer offers the same action after you select an exact
 reference record and feature. Group selection alone cannot choose a reference.
-The action shows **Resolving…** while it prepares the review.
+Both controls show **Resolving…** while Python determines the target anchors.
+When every target has a deterministic resolution, **Align…** applies that plan
+with current orientations preserved and shows the Result summary without
+opening a palette. A missing or unusable target remains unchanged. If
+generation fails, the complete draft opens for correction and retry.
 
-The movable **Select alignment anchors** review palette opens for every valid
-alignment, including one with no ambiguous records. It lists every other displayed record
-in diagram order. The Python resolver automatically selects the only usable
+Choose **Review alignment options…** beside **Align…** in either entry point to
+inspect or change anchors, **Skip**, or **Match reference direction** before
+commitment, even when every target resolves. The exact same selected reference
+is used. Ambiguous targets also open the movable **Select alignment anchors**
+palette automatically from **Align…**. It lists every other displayed record in
+diagram order. The Python resolver automatically selects the only usable
 candidate or the unique direct reciprocal-best-hit (RBH) candidate. For a
 remaining ambiguity, it recommends the unique representative or candidate 1
 in stable identity order. Each row states its recommendation reason: **only
 usable candidate**, **unique direct RBH**, **unique representative**, or
 **deterministic candidate 1**. Recommendations are convenience heuristics, not
 proof that an anchor is biologically superior. You can replace any selected
-anchor or choose **Skip** before Apply. A missing or unusable member stays
-unchanged. A hidden member is usable when its center maps into the displayed
-crop; one outside the crop is not. RBH query/subject direction is symmetric.
+anchor or choose **Skip** before Apply. A hidden member is usable when its center
+maps into the displayed crop; one outside the crop is not. RBH query/subject
+direction is symmetric.
 
 Each candidate shows its biological name or feature ID, source coordinates,
 strand, representative status, direct evidence, and the internal feature ID.

@@ -709,14 +709,15 @@
     },
     {
       "title": "Generate and align to og_1",
-      "body": "Click Generate Diagram to create the initial comparison. In the preview, click the livE CDS assigned to og_1 and choose Align; the web app regenerates the diagram with the cached LOSATP results.",
+      "body": "Click Generate Diagram to create the initial comparison. In the preview, click the livE CDS assigned to og_1 and choose Align…; resolved targets align immediately using cached LOSATP results. Choose Review alignment options… first if you want to inspect or change anchors, Skip, or direction. Ambiguity opens that review automatically.",
       "operations": [
         {
           "title": "Align the og_1 feature",
+          "dataDependent": true,
           "media": {
             "src": "./media/BGC0000708-BGC0000713/manual-08-01-align-og1.webp",
-            "alt": "The livE feature assigned to og_1 beside its feature popup with Align available.",
-            "caption": "Click the livE CDS in og_1, then choose Align to align the records on that group."
+            "alt": "The livE feature in og_1 beside its feature popup with Align… and Review alignment options… available.",
+            "caption": "Click the livE CDS in og_1, then choose Align… for resolved automatic alignment or Review alignment options… to inspect choices first."
           },
           "capture": {
             "source": "webapp",
@@ -732,7 +733,7 @@
               },
               {
                 "type": "click",
-                "selector": "[data-gbdraw-feature-id='fed46a3a6']"
+                "selector": "[data-gbdraw-feature-id='fed46a3a6_record_1']"
               },
               {
                 "type": "waitForSelector",
@@ -740,7 +741,7 @@
               },
               {
                 "type": "evaluate",
-                "script": "const app = window.__GBDRAW_APP__; const target = document.querySelector(\"[data-gbdraw-feature-id='fed46a3a6']\"); const rect = target?.getBoundingClientRect(); if (app?.clickedFeature) app.clickedFeature.activeTab = 'edit'; if (app?.clickedFeaturePos && rect) { app.clickedFeaturePos.x = Math.min(window.innerWidth - 744, rect.right + 32); app.clickedFeaturePos.y = Math.max(24, rect.top - 80); }"
+                "script": "const app = window.__GBDRAW_APP__; const target = document.querySelector(\"[data-gbdraw-feature-id='fed46a3a6_record_1']\"); const rect = target?.getBoundingClientRect(); if (app?.clickedFeature) app.clickedFeature.activeTab = 'edit'; if (app?.featurePopupSize) app.featurePopupSize.width = 500; if (app?.clickedFeaturePos && rect) { app.clickedFeaturePos.x = Math.min(window.innerWidth - 524, rect.right + 16); app.clickedFeaturePos.y = Math.max(24, rect.top - 80); }"
               },
               {
                 "type": "wait",
@@ -748,22 +749,24 @@
               },
               {
                 "type": "waitForFunction",
-                "script": "() => { const app = window.__GBDRAW_APP__; const text = document.querySelector('.feature-popup')?.textContent || ''; return app?.clickedFeature?.svg_id === 'fed46a3a6' && text.includes('livE') && text.includes('Align'); }"
+                "script": "() => { const app = window.__GBDRAW_APP__; const text = document.querySelector('.feature-popup')?.textContent || ''; return app?.clickedFeature?.svg_id === 'fed46a3a6_record_1' && text.includes('livE') && text.includes('Align'); }"
               },
               {
                 "type": "evaluate",
-                "script": "const popup = document.querySelector('.feature-popup'); const body = popup?.querySelector('.feature-popup-body'); const actions = body?.querySelector('.feature-popup-grid > .space-y-3 > .grid.grid-cols-2.gap-2'); if (!popup || !actions) throw new Error('Compact Align popup controls not found.'); popup.children[0]?.setAttribute('data-capture', 'align-popup-header'); popup.children[1]?.setAttribute('data-capture', 'align-popup-tabs'); actions.setAttribute('data-capture', 'align-popup-actions');"
+                "script": "const popup = document.querySelector('.feature-popup'); const body = popup?.querySelector('.feature-popup-body'); const actions = body?.querySelector('.feature-popup-grid > .space-y-3 > .grid.grid-cols-2.gap-2'); if (!popup || !actions) throw new Error('Compact Align popup controls not found.'); popup.children[0]?.querySelector('.min-w-0')?.setAttribute('data-capture', 'align-popup-identity'); actions.setAttribute('data-capture', 'align-popup-actions');"
               }
             ],
-            "clipSelectors": ["[data-gbdraw-feature-id='fed46a3a6']", "[data-capture='align-popup-header']", "[data-capture='align-popup-tabs']", "[data-capture='align-popup-actions']"],
-            "highlightSelector": "[data-gbdraw-feature-id='fed46a3a6']",
+            "clipSelectors": ["[data-gbdraw-feature-id='fed46a3a6_record_1']", "[data-capture='align-popup-identity']", "[data-capture='align-popup-actions']"],
+            "highlightSelector": "[data-gbdraw-feature-id='fed46a3a6_record_1']",
             "cropPadding": {
               "top": 24,
               "right": 24,
               "bottom": 24,
               "left": 24
             },
-            "waitForSelector": ".feature-popup"
+            "waitForSelector": ".feature-popup",
+            "assertAppState": {"mode": "linear", "linearSeqs.length": 5, "clickedFeature.feat.gene": "livE"},
+            "visibleText": ["livE", "Align…", "Review alignment options…"]
           }
         },
         {
@@ -847,7 +850,7 @@
               },
               {
                 "type": "click",
-                "selector": "[data-gbdraw-feature-id='fed46a3a6']"
+                "selector": "[data-gbdraw-feature-id='fed46a3a6_record_1']"
               },
               {
                 "type": "waitForSelector",
@@ -855,7 +858,7 @@
               },
               {
                 "type": "evaluate",
-                "script": "const app = window.__GBDRAW_APP__; const target = document.querySelector(\"[data-gbdraw-feature-id='fed46a3a6']\"); const rect = target?.getBoundingClientRect(); if (app?.clickedFeature) app.clickedFeature.activeTab = 'qualifiers'; if (app?.clickedFeaturePos && rect) { app.clickedFeaturePos.x = Math.min(window.innerWidth - 744, rect.right + 32); app.clickedFeaturePos.y = Math.max(24, rect.top - 80); }"
+                "script": "const app = window.__GBDRAW_APP__; const target = document.querySelector(\"[data-gbdraw-feature-id='fed46a3a6_record_1']\"); const rect = target?.getBoundingClientRect(); if (app?.clickedFeature) app.clickedFeature.activeTab = 'qualifiers'; if (app?.clickedFeaturePos && rect) { app.clickedFeaturePos.x = Math.min(window.innerWidth - 744, rect.right + 32); app.clickedFeaturePos.y = Math.max(24, rect.top - 80); }"
               },
               {
                 "type": "wait",
@@ -863,7 +866,7 @@
               },
               {
                 "type": "waitForFunction",
-                "script": "() => { const app = window.__GBDRAW_APP__; const feature = app?.clickedFeature; const text = document.querySelector('.feature-popup')?.textContent || ''; return feature?.svg_id === 'fed46a3a6' && feature?.feat?.gene === 'livE' && feature?.feat?.qualifiers?.gene_kind?.includes('biosynthetic') && text.includes('gene_kind'); }"
+                "script": "() => { const app = window.__GBDRAW_APP__; const feature = app?.clickedFeature; const text = document.querySelector('.feature-popup')?.textContent || ''; return feature?.svg_id === 'fed46a3a6_record_1' && feature?.feat?.gene === 'livE' && feature?.feat?.qualifiers?.gene_kind?.includes('biosynthetic') && text.includes('gene_kind'); }"
               },
               {
                 "type": "evaluate",
@@ -878,8 +881,8 @@
                 "script": "const popup = document.querySelector('.feature-popup'); const leaf = (key) => Array.from(popup?.querySelectorAll('*') || []).find((node) => node.children.length === 0 && node.textContent?.trim() === key); const geneRow = leaf('gene')?.closest('.border-b'); const geneKindRow = leaf('gene_kind')?.closest('.border-b'); if (!popup || !geneRow || !geneKindRow) throw new Error('Compact qualifier rows not found.'); popup.children[0]?.setAttribute('data-capture', 'qualifier-popup-header'); popup.children[1]?.setAttribute('data-capture', 'qualifier-popup-tabs'); geneRow.setAttribute('data-capture', 'qualifier-gene-row'); geneKindRow.setAttribute('data-capture', 'qualifier-gene-kind-row');"
               }
             ],
-            "clipSelectors": ["[data-gbdraw-feature-id='fed46a3a6']", "[data-capture='qualifier-popup-header']", "[data-capture='qualifier-popup-tabs']", "[data-capture='qualifier-gene-row']", "[data-capture='qualifier-gene-kind-row']"],
-            "highlightSelector": "[data-gbdraw-feature-id='fed46a3a6']",
+            "clipSelectors": ["[data-gbdraw-feature-id='fed46a3a6_record_1']", "[data-capture='qualifier-popup-header']", "[data-capture='qualifier-popup-tabs']", "[data-capture='qualifier-gene-row']", "[data-capture='qualifier-gene-kind-row']"],
+            "highlightSelector": "[data-gbdraw-feature-id='fed46a3a6_record_1']",
             "cropPadding": {
               "top": 24,
               "right": 24,

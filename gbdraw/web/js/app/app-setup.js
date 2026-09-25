@@ -2902,10 +2902,10 @@ export const createAppSetup = () => {
     } else await restoreSimilarityAlignmentFocus();
     return outcome;
   };
-  const startSimilarityAlignmentFromDrawer = async (groupId, event = null) => {
+  const startSimilarityAlignmentFromDrawer = async (groupId, event = null, mode = 'align') => {
     rememberSimilarityAlignmentInvoker(event);
     return finishSimilarityAlignmentStart(
-      await similarityAlignmentActions.startFromDrawer({ groupId })
+      await similarityAlignmentActions.startFromDrawer({ groupId, mode })
     );
   };
   const cancelSimilarityAlignmentDialog = async () => {
@@ -2959,13 +2959,14 @@ export const createAppSetup = () => {
     };
   });
 
-  const alignByClickedOrthogroup = async (event = null) => {
+  const alignByClickedOrthogroup = async (event = null, mode = 'align') => {
     const detail = clickedOrthogroupDetail.value;
     if (!detail?.id) return { status: 'rejected' };
     rememberSimilarityAlignmentInvoker(event);
     const outcome = await similarityAlignmentActions.startFromPopup({
       groupId: detail.id,
-      reference: detail.currentMember
+      reference: detail.currentMember,
+      mode
     });
     return finishSimilarityAlignmentStart(outcome);
   };
