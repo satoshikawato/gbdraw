@@ -2699,10 +2699,10 @@ export const createAppSetup = () => {
       draftResolution: comparisonPlanSnapshot
     });
     if (!comparisonExecution.ok) {
-      errorLog.value = new Error(comparisonExecution.message);
+      errorLog.value = normalizeUserFacingError(new Error(comparisonExecution.message));
       failedGeneratePreservedResult.value = results.value.length > 0;
       if (mode.value === 'linear') await focusLinearComparisonIssue();
-      return { status: 'error' };
+      return { status: 'error', error: errorLog.value };
     }
     cancelDefinitionUpdate();
     const result = await runGeneratedDiagramAnalysis(

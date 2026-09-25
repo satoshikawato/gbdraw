@@ -214,7 +214,7 @@ test('Arrow controls render in both modes and survive a session round trip', asy
 
   await headRatio.fill('0');
   const invalidRun = await runDiagram(page);
-  expect(invalidRun.result).toEqual({ status: 'error' });
+  expect(invalidRun.result.status).toBe('error');
   expect(invalidRun.errorSummary).toContain(
     'Arrow head length ratio must be Auto or a positive finite number.'
   );

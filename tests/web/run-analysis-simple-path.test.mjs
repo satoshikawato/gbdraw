@@ -790,7 +790,9 @@ test('audit-5 owner: direct simple createRunAnalysis path is worker-only and cat
 
   workerResponses.push(response(result('missing.svg', 'missing'), undefined));
   const metricsBeforePreActivationFailure = { ...structuralMetrics };
-  assert.deepEqual(await runner.runAnalysis(), { status: 'error' });
+  const failedRun = await runner.runAnalysis();
+  assert.equal(failedRun.status, 'error');
+  assert.equal(failedRun.error, state.errorLog.value);
   assert.equal(state.failedGeneratePreservedResult.value, true);
   assert.match(
     state.errorLog.value?.summary || '',
@@ -822,7 +824,7 @@ test('audit-5 owner: direct simple createRunAnalysis path is worker-only and cat
     rejectedAdmissionResult,
     validCatalog(rejectedAdmissionResult.name)
   ));
-  assert.deepEqual(await runner.runAnalysis(), { status: 'error' });
+  assert.equal((await runner.runAnalysis()).status, 'error');
   failCandidateAdmission = false;
   assert.match(
     state.errorLog.value?.summary || '',
@@ -847,7 +849,7 @@ test('audit-5 owner: direct simple createRunAnalysis path is worker-only and cat
     result('malformed.svg', 'malformed'),
     { schema: 2, items: [] }
   ));
-  assert.deepEqual(await runner.runAnalysis(), { status: 'error' });
+  assert.equal((await runner.runAnalysis()).status, 'error');
   assert.equal(state.failedGeneratePreservedResult.value, true);
   assert.match(
     state.errorLog.value?.summary || '',
@@ -866,7 +868,7 @@ test('audit-5 owner: direct simple createRunAnalysis path is worker-only and cat
     lateFailureResult,
     validCatalog(lateFailureResult.name)
   ));
-  assert.deepEqual(await runner.runAnalysis(), { status: 'error' });
+  assert.equal((await runner.runAnalysis()).status, 'error');
   failArtifactAdoption = false;
   assert.match(
     state.errorLog.value?.summary || '',
@@ -966,7 +968,7 @@ test('audit-5 owner: direct simple createRunAnalysis path is worker-only and cat
     ok: false,
     error: { name: 'Error', message: 'injected record discovery helper failure' }
   });
-  assert.deepEqual(await runner.runAnalysis(), { status: 'error' });
+  assert.equal((await runner.runAnalysis()).status, 'error');
   assert.equal(
     workerMessages.filter(({ type }) => type === 'helper').length,
     workerHelperCountBeforeDiscoveryFailure + 1
@@ -1006,7 +1008,7 @@ test('audit-5 owner: direct simple createRunAnalysis path is worker-only and cat
     ok: false,
     error: { name: 'Error', message: 'injected depth record discovery failure' }
   });
-  assert.deepEqual(await runner.runAnalysis(), { status: 'error' });
+  assert.equal((await runner.runAnalysis()).status, 'error');
   assert.equal(
     workerMessages.filter(({ type }) => type === 'run').length,
     workerRunCountBeforeDiscoveryFailure
@@ -1369,7 +1371,7 @@ test('neutral conservation replay delegates lazy resources to the shared reader'
       primaryFile: invalidFile,
       pairedFile: null
     });
-    assert.deepEqual(await runner.runAnalysis(), { status: 'error' });
+    assert.equal((await runner.runAnalysis()).status, 'error');
     assert.match(
       state.errorLog.value?.summary || '',
       /A File-like object with arrayBuffer\(\) or text\(\) is required/
@@ -1589,7 +1591,7 @@ test('neutral conservation replay delegates lazy resources to the shared reader'
       failedLinearResult,
       validCatalog(failedLinearResult.name)
     ));
-    assert.deepEqual(await runner.runAnalysis(comparisonPlanSnapshot), { status: 'error' });
+    assert.equal((await runner.runAnalysis(comparisonPlanSnapshot)).status, 'error');
     failLateArtifactAdoption = false;
     state.losat.blastn.task = 'megablast';
     assert.match(
@@ -1780,7 +1782,7 @@ test('neutral conservation replay delegates lazy resources to the shared reader'
         },
         linearRecordTranslations: alignmentTranslations
       }),
-      { status: 'error' }
+      { status: 'error', error: state.errorLog.value }
     );
     failLateArtifactAdoption = false;
     assert.match(
@@ -2113,7 +2115,7 @@ test('Linear mode none ignores dormant comparison state while active depth and a
   );
 
   annotationValidationError = 'injected annotation target failure';
-  assert.deepEqual(await runner.runAnalysis(comparisonPlanSnapshot), { status: 'error' });
+  assert.equal((await runner.runAnalysis(comparisonPlanSnapshot)).status, 'error');
   assert.match(state.errorLog.value?.summary || '', /injected annotation target failure/);
   assert.equal(serializeCalls, 1, 'invalid annotations must fail before serialization');
   assert.equal(
@@ -2149,7 +2151,7 @@ test('Linear mode none ignores dormant comparison state while active depth and a
   prepareLinearRecordCatalogImpl = async () => {
     throw new Error('injected record catalog failure');
   };
-  assert.deepEqual(await runner.runAnalysis(comparisonPlanSnapshot), { status: 'error' });
+  assert.equal((await runner.runAnalysis(comparisonPlanSnapshot)).status, 'error');
   assert.match(state.errorLog.value?.summary || '', /injected record catalog failure/);
   assert.equal(state.processing.value, false);
 

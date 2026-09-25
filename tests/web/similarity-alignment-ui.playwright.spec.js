@@ -767,7 +767,9 @@ test('Apply error retains draft, focuses retry guidance, and accepts correction'
   await dialog.getByRole('button', { name: 'Apply', exact: true }).click();
   const error = dialog.locator('[data-similarity-alignment-error]');
   await expect(error).toBeVisible({ timeout: 180000 });
-  await expect(error).toContainText('retry Apply');
+  await expect(error).toHaveText('Linear track layout must be one of: above, middle, below.');
+  await expect(page.getByRole('alert', { name: 'Generation Error' })
+    .locator('.text-sm.font-semibold')).toHaveText('Linear track layout must be one of: above, middle, below.');
   await expect(error).toBeFocused();
   await expect(dialog.getByRole('button', { name: 'Apply', exact: true })).toBeEnabled();
   await page.setViewportSize({ width: 390, height: 500 });
@@ -966,7 +968,9 @@ test('one usable member applies directly through one Worker resolve and one Hist
   await normalAlign.click();
   await expect(resolvedReview).toBeVisible({ timeout: 180000 });
   const retryError = resolvedReview.locator('[data-similarity-alignment-error]');
-  await expect(retryError).toContainText('retry Apply');
+  await expect(retryError).toHaveText('Linear track layout must be one of: above, middle, below.');
+  await expect(page.getByRole('alert', { name: 'Generation Error' })
+    .locator('.text-sm.font-semibold')).toHaveText('Linear track layout must be one of: above, middle, below.');
   await expect(retryError).toBeFocused();
   await expect(resolvedReview.locator('[data-alignment-record-key]')).toHaveCount(1);
   const failed = await artifactSnapshot(page);

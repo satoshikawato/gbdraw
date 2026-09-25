@@ -1089,7 +1089,7 @@ test('Normalize Record Lengths rejects a shared Linear row and remains recoverab
       normalizeLength: app.form.normalize_length
     };
   });
-  expect(invalid.result).toEqual({ status: 'error' });
+  expect(invalid.result.status).toBe('error');
   expect([invalid.errorSummary, ...invalid.errorDetails].join(' ')).toMatch(
     /Normalize Record Lengths.*same Linear row/i
   );
@@ -2589,7 +2589,7 @@ ORIGIN
   await expect(page.getByText('Choose the record that this annotation targets.')).toBeVisible();
 
   const rejected = await page.evaluate(() => window.__GBDRAW_APP__.runAnalysis());
-  expect(rejected).toEqual({ status: 'error' });
+  expect(rejected.status).toBe('error');
   await expect(page.getByText('Choose a target record for region annotation review/region_1.')).toBeVisible();
 
   await selector.selectOption({ label: '#2 · RecB · 12 bp' });

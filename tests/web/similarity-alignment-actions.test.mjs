@@ -37,6 +37,7 @@ const state = () => ({
   }] }),
   selectedOrthogroupId: ref('og-1'),
   similarityAlignmentPlan: ref(null),
+  errorLog: ref(null),
   linearRecordTranslations: ref([]),
   linearSeqs: ['a', 'b', 'c'].map((uid) => ({ uid, region_reverse: false })),
   results: ref([{ name: 'prior.svg' }])
@@ -147,6 +148,7 @@ const create = ({
     runAnalysis: async (options) => {
       generationCalls.push(structuredClone(options));
       const outcome = await generation(options);
+      if (outcome.error?.summary) controllerState.errorLog.value = outcome.error;
       if (outcome.status === 'ok') {
         controllerState.similarityAlignmentPlan.value = options.canonicalStateOverride.similarityAlignmentPlan;
         controllerState.results.value = [{ name: 'aligned.svg' }];
@@ -159,7 +161,8 @@ const create = ({
       helperCalls.push({ operation, payload: structuredClone(payload) });
       return helper(operation, payload, helperCalls.length);
     },
-    resolveOperation: 'resolveSimilarityAlignment', onError,
+    resolveOperation: 'resolveSimilarityAlignment',
+    onError: (error) => { controllerState.errorLog.value = error; onError?.(error); },
     previewCandidate, clearCandidatePreview
   });
   return { actions, state: controllerState, helperCalls, generationCalls, currentGroup };
@@ -274,15 +277,17 @@ test('explicit review of a resolved response keeps the full local draft without 
 
 test('automatic generation failure opens the resolved draft for one Apply retry', async () => {
   let fail = true;
+  const renderError = { summary: 'Comparison source feature index conflicts with its view feature ID.', details: [] };
   const fixture = create({ generation: async () => fail
-    ? { status: 'error', error: new Error('Render failed.') }
+    ? { status: 'error', error: renderError }
     : { status: 'ok' } });
   const previous = fixture.state.results.value;
   assert.deepEqual(await startAlign(fixture), { status: 'error' });
   assert.equal(fixture.actions.status.value, 'reviewing');
   assert.equal(fixture.actions.dialogOpen.value, true);
   assert.equal(fixture.actions.draft.value.response.status, 'resolved');
-  assert.match(fixture.actions.error.value.message, /Render failed/);
+  assert.equal(fixture.actions.error.value.message, renderError.summary);
+  assert.equal(fixture.state.errorLog.value, renderError);
   assert.equal(fixture.state.results.value, previous);
   assert.equal(fixture.state.similarityAlignmentPlan.value, null);
   fail = false;
@@ -448,13 +453,14 @@ test('duplicate Apply while validation is pending starts one batch', async () =>
 test('validation and generation failures preserve editable draft and prior artifact', async () => {
   for (const failure of ['validation', 'generation']) {
     let fail = true;
+    const renderError = { summary: 'Comparison source feature index conflicts with its view feature ID.', details: [] };
     const fixture = create({
       helper: (_operation, { request }, count) => {
         if (failure === 'validation' && count > 1 && fail) throw new Error('Invalid choice. Select another.');
         return { result: responseFor(request) };
       },
       generation: async () => failure === 'generation' && fail
-        ? { status: 'error', error: new Error('Generation failed. Retry Apply.') }
+        ? { status: 'error', error: renderError }
         : { status: 'ok' }
     });
     await startReview(fixture);
@@ -464,7 +470,12 @@ test('validation and generation failures preserve editable draft and prior artif
     assert.equal(fixture.actions.draft.value, before);
     assert.deepEqual(fixture.state.results.value, [{ name: 'prior.svg' }]);
     assert.equal(fixture.state.similarityAlignmentPlan.value, null);
-    assert.match(fixture.actions.error.value.message, /Select another|Retry Apply/);
+    if (failure === 'generation') {
+      assert.equal(fixture.actions.error.value.message, renderError.summary);
+      assert.equal(fixture.state.errorLog.value, renderError);
+    } else {
+      assert.match(fixture.actions.error.value.message, /Select another/);
+    }
     fail = false;
     fixture.actions.skipRecord('b');
     assert.deepEqual(await fixture.actions.applyDraft(), { status: 'ok' });

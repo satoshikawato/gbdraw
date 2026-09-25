@@ -1981,7 +1981,7 @@ export const createRunAnalysis = ({
         if (activeLosatAbortController === generationAbortController) {
           activeLosatAbortController = null;
         }
-        return { status: 'error' };
+        return isReflow ? { status: 'error' } : { status: 'error', error: errorLog.value };
       }
       linearRecordCatalog = prepared?.catalog || null;
     }
@@ -2017,7 +2017,7 @@ export const createRunAnalysis = ({
           if (activeLosatAbortController === generationAbortController) {
             activeLosatAbortController = null;
           }
-          return { status: 'error' };
+          return { status: 'error', error: errorLog.value };
         }
       }
     }
@@ -2032,7 +2032,7 @@ export const createRunAnalysis = ({
       if (activeLosatAbortController === generationAbortController) {
         activeLosatAbortController = null;
       }
-      return { status: 'error' };
+      return isReflow ? { status: 'error' } : { status: 'error', error: errorLog.value };
     }
     const previousSelectedResultIndex = selectedResultIndex.value;
     const editableLabelsSnapshot = Array.isArray(editableLabels.value)
@@ -4667,7 +4667,7 @@ export const createRunAnalysis = ({
         }
         await restoreCommittedArtifact();
         errorLog.value = formatPythonError(canonicalExecution.engineError);
-        return { status: 'error' };
+        return { status: 'error', error: errorLog.value };
       }
       const {
         generationResponse,
@@ -4980,7 +4980,7 @@ export const createRunAnalysis = ({
       }
       await restoreCommittedArtifact();
       errorLog.value = formatJsError(e);
-      return { status: 'error' };
+      return { status: 'error', error: errorLog.value };
     } finally {
       if (isReflow) {
         labelReflowProcessing.value = false;

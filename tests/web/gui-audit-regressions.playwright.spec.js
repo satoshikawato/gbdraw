@@ -263,7 +263,7 @@ test('invalid annotation coordinates preserve the draft and the last successful 
   const oldResult = await page.evaluate(() => window.__GBDRAW_APP__.results[0].content);
   await panel.getByPlaceholder('Start (1-based)', { exact: true }).fill('1.5');
   await panel.getByPlaceholder('Start (1-based)', { exact: true }).press('Tab');
-  expect(await page.evaluate(() => window.__GBDRAW_APP__.runAnalysis())).toEqual({ status: 'error' });
+  expect((await page.evaluate(() => window.__GBDRAW_APP__.runAnalysis())).status).toBe('error');
   expect(await page.evaluate(() => window.__GBDRAW_APP__.errorLog)).toMatchObject({ summary: expect.stringContaining('positive integers') });
   expect(await page.evaluate(() => window.__GBDRAW_APP__.results[0].content)).toBe(oldResult);
   await panel.getByPlaceholder('Start (1-based)', { exact: true }).fill('1');

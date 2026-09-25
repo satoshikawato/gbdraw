@@ -136,7 +136,7 @@ test('G1-G3 rejected candidates preserve A and dormant category intent and manua
     expect(a.original).not.toContain('Retained annotation');
     const input = page.getByLabel('GenBank/DDBJ File', { exact: true });
     await input.setInputFiles({ name: 'corrupt.gb', mimeType: 'text/plain', buffer: Buffer.from('not a GenBank record') });
-    expect(await page.evaluate(() => window.__GBDRAW_APP__.runAnalysis())).toEqual({ status: 'error' });
+    expect((await page.evaluate(() => window.__GBDRAW_APP__.runAnalysis())).status).toBe('error');
     const rejected = await inspect(page);
     expect(rejected).toEqual(a);
     await upload(page, 'lambda', false);

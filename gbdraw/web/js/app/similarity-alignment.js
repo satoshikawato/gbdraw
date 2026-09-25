@@ -889,7 +889,8 @@ export const createSimilarityAlignmentActions = ({
     }
     if (retryResponse) installReviewDraft(retryResponse, request);
     else status.value = 'reviewing';
-    publishError(outcome?.error || new Error('Alignment generation failed. Review the draft and retry Apply.'));
+    if (outcome?.error?.summary) error.value = { message: outcome.error.summary };
+    else publishError(outcome?.error || new Error('Alignment generation failed. Review the draft and retry Apply.'));
     return { status: outcome?.status || 'error' };
   };
 

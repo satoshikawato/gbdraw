@@ -1181,7 +1181,7 @@ test('structured comparison errors open and focus their owning disclosure', asyn
       edgeKey
     };
   });
-  expect(missingUpload.result).toEqual({ status: 'error' });
+  expect(missingUpload.result.status).toBe('error');
   expect(missingUpload.issueCodes).toContain('missing-upload');
   await expect(selectedPairs(page)).toHaveAttribute('open', '');
   await expect(comparisonCard(page).getByRole('status')).toContainText('comparison issue');
@@ -1212,7 +1212,7 @@ test('structured comparison errors open and focus their owning disclosure', asyn
       issueCodes: app.linearComparisonResolution.errors.map((issue) => issue.code)
     };
   });
-  expect(selectedCollinear.result).toEqual({ status: 'error' });
+  expect(selectedCollinear.result.status).toBe('error');
   expect(selectedCollinear.issueCodes).toContain('selected-losat-requires-pairwise');
   await expect(comparisonSettings(page)).toHaveAttribute('open', '');
   await expect(page.getByRole('combobox', { name: 'LOSATP mode' })).toBeFocused();

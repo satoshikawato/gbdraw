@@ -94,7 +94,7 @@ test('V6/V7 shared biological targets and manual matchers survive while rejected
     });
     const before = await snapshot(page);
     await upload(page, { name: 'corrupt.gb', mimeType: 'text/plain', buffer: Buffer.from('invalid GenBank source') });
-    expect(await page.evaluate(() => window.__GBDRAW_APP__.runAnalysis())).toEqual({ status: 'error' });
+    expect((await page.evaluate(() => window.__GBDRAW_APP__.runAnalysis())).status).toBe('error');
     const failed = await snapshot(page);
     expect(failed.featureVisibility).toEqual(before.featureVisibility);
     expect(failed.visibilityRules).toEqual(before.visibilityRules);
