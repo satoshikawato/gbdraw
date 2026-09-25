@@ -1181,7 +1181,7 @@ def _record_collision_bands(
     row_definition_width: float,
     definition_gap: float,
     text_anchor: str = "middle",
-    translation_x: float = 0.0,
+    definition_column_left: float = 0.0,
 ) -> tuple[CollisionBand, ...]:
     """Build alignment-local collision domains for one placed record."""
 
@@ -1209,15 +1209,10 @@ def _record_collision_bands(
     if local_band is not None and local_width > 0.0:
         placement = place_linear_definition(
             width=local_width, column_width=definition_column_width,
-            record_x=x - float(translation_x),
+            record_x=x,
             gap=max(0.0, float(definition_gap)), keep_left=keep_definition_left_aligned,
             text_anchor=text_anchor, sequence_width=width if multi_record_enabled else None,
-        )
-        placement = replace(
-            placement,
-            x=placement.x + float(translation_x),
-            left=placement.left + float(translation_x),
-            right=placement.right + float(translation_x),
+            column_left=definition_column_left,
         )
         bands.append(
             CollisionBand(
@@ -1234,14 +1229,9 @@ def _record_collision_bands(
     if row_band is not None and actual_row_width > 0.0:
         placement = place_linear_definition(
             width=actual_row_width, column_width=row_definition_width,
-            record_x=x - float(translation_x),
+            record_x=x,
             gap=max(0.0, float(definition_gap)), keep_left=keep_definition_left_aligned,
-        )
-        placement = replace(
-            placement,
-            x=placement.x + float(translation_x),
-            left=placement.left + float(translation_x),
-            right=placement.right + float(translation_x),
+            column_left=definition_column_left,
         )
         bands.append(
             CollisionBand(
@@ -2190,11 +2180,6 @@ def assemble_linear_diagram(
             record_offsets_x.append(record_offset_x)
 
     definition_column_width = max_def_width
-    if canvas_config.keep_definition_left_aligned and record_offsets_x:
-        definition_column_width = max(
-            0.0,
-            float(max_def_width) - min(record_offsets_x),
-        )
 
     record_offsets: list[float] = [0.0 for _record in records]
     record_collision_bands: list[tuple[CollisionBand, ...]] = [
@@ -2519,6 +2504,9 @@ def assemble_linear_diagram(
         )
         record_offsets_x[record_index] = record_placements[record_index].x
         record_offsets[record_index] = record_placements[record_index].axis_y
+    # Resolve one locked column after every alignment and record translation.
+    definition_column_left = min(placement.x for placement in record_placements.values())
+    for record_index, placement in record_placements.items():
         record_collision_bands[record_index] = _record_collision_bands(
             plan=record_vertical_plans[record_index],
             definition_geometry=record_definition_geometries[record_index],
@@ -2532,7 +2520,7 @@ def assemble_linear_diagram(
             definition_column_width=definition_column_width,
             row_definition_width=row_definition_width,
             definition_gap=float(canvas_config.definition_gap),
-            translation_x=translation_x,
+            definition_column_left=definition_column_left,
         )
     painted_content_bottom = max(
         (
@@ -2968,7 +2956,7 @@ def assemble_linear_diagram(
                 record_index=record_index,
                 record_count=total_records,
                 record_transform=(record_transforms[record_index] if record_transforms is not None else None),
-                translation_x=final_translations[record_index][0],
+                definition_column_left=definition_column_left,
             )
             continue
 
