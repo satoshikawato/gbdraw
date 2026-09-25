@@ -292,24 +292,47 @@ test('dev direct-parent staging failures force the current run to full', async (
   }
 });
 
-test('documentation-only PRs fail closed without launching runtime jobs when base evidence is unavailable', async () => {
+test('documentation-only PRs run the full tier when exact base staging has no matching run', async () => {
   for (const path of [
     'docs/TUTORIALS/1_Intro.md',
     'docs/internal/OPTION_INTEGRITY_PRODUCT_CONTRACT.md'
   ]) {
-    await assert.rejects(buildImpactPlan({
+    const outcome = await buildImpactPlan({
       configuration: configuration(),
       token: 'test-token',
       runGitImpl: () => gitResult('M', path),
       verifyWorkflowEvidenceImpl: async () => {
         throw new PromotionReadinessError('NO_MATCHING_RUN', 'Base staging run is missing.');
       }
-    }), { code: 'DOCUMENTATION_BASE_EVIDENCE_UNAVAILABLE' }, path);
+    });
+    assert.equal(outcome.plan.decision, 'full', path);
+    assert.equal(outcome.plan.basis, 'INHERITED_EVIDENCE_UNAVAILABLE', path);
+    assert.equal(outcome.plan.inheritedEvidence, null, path);
+    assert.equal(outcome.evidenceFailure.code, 'NO_MATCHING_RUN', path);
+    assert.deepEqual(outcome.plan.requiredJobs, [
+      'web-change-budget', 'core-pr', 'recipes-standard', 'gallery',
+      'lint', 'web-contracts-pr', 'web-pr-smoke'
+    ], path);
   }
 });
 
-test('documentation-only dev pushes fail closed when the direct parent is unfinished', async () => {
-  for (const state of ['in progress', 'cancelled']) {
+test('documentation-only PRs fail closed for failed, unfinished, or unavailable evidence', async () => {
+  for (const code of [
+    'RUN_NOT_SUCCESSFUL', 'AGGREGATE_JOB_NOT_SUCCESSFUL', 'API_REQUEST_FAILED'
+  ]) {
+    await assert.rejects(buildImpactPlan({
+      configuration: configuration(),
+      token: 'test-token',
+      runGitImpl: () => gitResult('M', 'docs/internal/OPTION_INTEGRITY_PRODUCT_CONTRACT.md'),
+      verifyWorkflowEvidenceImpl: async () => {
+        throw new PromotionReadinessError(code, `Base staging evidence unavailable: ${code}`);
+      }
+    }), { code: 'DOCUMENTATION_BASE_EVIDENCE_UNAVAILABLE' }, code);
+  }
+});
+
+test('documentation-only dev pushes fail closed without a successful direct parent', async () => {
+  for (const code of ['NO_MATCHING_RUN', 'RUN_NOT_SUCCESSFUL']) {
     await assert.rejects(buildImpactPlan({
       configuration: configuration({
         CI_IMPACT_PROFILE: 'dev',
@@ -318,9 +341,9 @@ test('documentation-only dev pushes fail closed when the direct parent is unfini
       token: 'test-token',
       runGitImpl: () => gitResult('M', 'docs/FAQ.md'),
       verifyWorkflowEvidenceImpl: async () => {
-        throw new PromotionReadinessError('RUN_NOT_SUCCESSFUL', `Direct parent run is ${state}.`);
+        throw new PromotionReadinessError(code, `Direct parent staging unavailable: ${code}`);
       }
-    }), { code: 'DOCUMENTATION_BASE_EVIDENCE_UNAVAILABLE' }, state);
+    }), { code: 'DOCUMENTATION_BASE_EVIDENCE_UNAVAILABLE' }, code);
   }
 });
 
