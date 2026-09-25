@@ -309,8 +309,8 @@ unchanged. A hidden member is usable when its center maps into the displayed
 crop; one outside the crop is not. RBH query/subject direction is symmetric.
 
 Each candidate shows its biological name or feature ID, source coordinates,
-strand, representative status, and direct evidence. Expand **Details** for the
-internal identity and role. A thin line marks the reference center; numbered
+strand, representative status, direct evidence, and the internal feature ID.
+A thin line marks the reference center; numbered
 badges locate visible candidates in the preview. Hovering a candidate or its
 feature highlights the other. Clicking a feature or badge makes the same local
 choice as its row control. Candidates without a visible badge remain selectable
