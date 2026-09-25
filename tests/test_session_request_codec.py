@@ -3,6 +3,7 @@ from __future__ import annotations
 import ast
 import copy
 import json
+from dataclasses import replace
 from pathlib import Path
 from typing import Any
 
@@ -60,6 +61,7 @@ from gbdraw.io.regions import parse_region_spec
 from gbdraw.layout.similarity_alignment import (
     AlignmentAnchorIdentity,
     AlignmentDecisionStatus,
+    AlignmentOrientationPolicy,
     AlignmentRecordDecision,
     AlignmentResolutionRationale,
     SimilarityAlignmentPlan,
@@ -413,6 +415,43 @@ def test_schema8_round_trips_typed_similarity_alignment_and_translations(
     assert isinstance(decoded, LinearDiagramRequest)
     assert decoded.layout == _aligned_linear_request(tmp_path).layout
     assert decoded.similarity_alignment == _similarity_alignment_plan()
+
+
+def test_schema8_round_trips_requested_match_and_effective_reversal(
+    tmp_path: Path,
+) -> None:
+    base = _aligned_linear_request(tmp_path)
+    assert base.similarity_alignment is not None
+    original = base.similarity_alignment
+    target = replace(
+        original.records[1],
+        orientation_policy=AlignmentOrientationPolicy.MATCH_REFERENCE,
+        effective_reverse_complement=True,
+    )
+    request = replace(
+        base,
+        similarity_alignment=replace(original, records=(original.records[0], target)),
+    )
+    encoded = encode_canonical_request(request)
+    decoded = decode_canonical_request(
+        encoded.payload,
+        resource_paths=_materialize_resources(encoded, tmp_path / "resources"),
+        output_directory=tmp_path / "output",
+    )
+    assert decoded.similarity_alignment == request.similarity_alignment
+    assert encoded.payload["layout"]["similarityAlignment"]["records"][1] == {
+        "recordKey": "record-b",
+        "status": "aligned",
+        "rationale": "only_usable_candidate",
+        "anchor": {
+            "recordKey": "record-b",
+            "biologicalFeatureId": "feature-b",
+            "sourceFeatureIndex": 5,
+            "stableFeatureSvgId": "stable-b",
+        },
+        "orientationPolicy": "match_reference",
+        "effectiveReverseComplement": True,
+    }
 
 
 def test_schema8_accepts_reordered_keyed_alignment_records(tmp_path: Path) -> None:

@@ -289,66 +289,69 @@ filters, direction, and interpretation.
 ## Similarity Group alignment in Linear view
 
 Generate a Linear diagram with **LOSATP → Similarity groups**, then choose
-**Align** or **Align & orient** from a feature popup. That exact clicked
-feature is the reference, even when it is not the group representative; its
-record does not move. The Similarity Groups drawer offers the same actions
-after you select an exact reference record and feature. Group selection alone
-cannot choose a reference.
+**Align…** from a feature popup. The exact clicked feature is the reference,
+even when it is not the group representative; its record does not move. The
+Similarity Groups drawer offers the same action after you select an exact
+reference record and feature. Group selection alone cannot choose a reference.
+The action shows **Resolving…** while it prepares the review.
 
-For each other displayed record, resolution uses this order: an explicit
-**Select** choice, exactly one usable group member, exactly one distinct direct
-reciprocal-best-hit (RBH) member connected to the reference, then **Select** or
-**Skip** if multiple candidates remain. RBH query/subject direction is
-symmetric. A missing member leaves its record unchanged. A hidden member is
-usable if its center maps into the crop; a feature whose center is outside the
-crop is not. Representative status, score, edge count, viewport position, and
-multi-hop paths never break a tie.
+The movable **Select alignment anchors** review palette opens for every valid
+alignment, including one with no ambiguous records. It lists every other displayed record
+in diagram order. The Python resolver automatically selects the only usable
+candidate or the unique direct reciprocal-best-hit (RBH) candidate. For a
+remaining ambiguity, it recommends the unique representative or candidate 1
+in stable identity order. Each row states its recommendation reason: **only
+usable candidate**, **unique direct RBH**, **unique representative**, or
+**deterministic candidate 1**. Recommendations are convenience heuristics, not
+proof that an anchor is biologically superior. You can replace any selected
+anchor or choose **Skip** before Apply. A missing or unusable member stays
+unchanged. A hidden member is usable when its center maps into the displayed
+crop; one outside the crop is not. RBH query/subject direction is symmetric.
 
-When ambiguity remains, **Select alignment anchors** opens as a movable
-palette over the preview. Each record has a readable name, and each numbered
-candidate shows its gene, locus tag, or product when available, plus source
-coordinates and strand. If these names are absent, the feature type and
-coordinates identify it. Expand **Details** for the internal ID, role, and direct evidence. A thin
-line marks the reference center; numbered badges mark candidates that can be
-located on the preview. Hovering a candidate or its feature highlights the
-other, and clicking the feature or its badge selects the same radio choice.
-Candidates without a visible badge remain selectable in the palette. You can
-pan and zoom the diagram while choosing; the guide and badges are preview-only
-and are not included in downloads or saved Sessions.
+Each candidate shows its biological name or feature ID, source coordinates,
+strand, representative status, and direct evidence. Expand **Details** for the
+internal identity and role. A thin line marks the reference center; numbered
+badges locate visible candidates in the preview. Hovering a candidate or its
+feature highlights the other. Clicking a feature or badge makes the same local
+choice as its row control. Candidates without a visible badge remain selectable
+in the palette. You can pan and zoom while reviewing. The guide, badges, and
+recommendation markers are preview-only and are absent from downloads and saved
+Sessions.
 
-Choose **Select** or **Skip** for every ambiguous record, then click **Apply**.
-Individual choices update locally; Apply validates the complete set once before
-generating a Result. A validation or generation error keeps the choices for
-correction and retry. If the source, crop, group, or committed Result changes
-while the palette is open, start the selection again. **Cancel** and **Escape**
-leave the current Result intact and return focus to the initiating control when
-it is still present. The palette does not trap keyboard focus.
+Every usable row also has **Match reference direction**, initially off. The row
+shows whether Apply will preserve direction, reverse the whole target, or
+preserve it because a required displayed strand is unknown. Matching reverses
+only when both displayed anchor strands are known and opposite. The reference
+and every target's vertical position stay fixed; selected target anchor centers
+align horizontally after any reversal. Text stays readable. Skipped and missing
+records and unselected inparalogs keep their positions, orientations,
+memberships, and comparison links. **rev** beside a record name reports its
+effective direction relative to the source.
 
-**Align** changes target X only; it preserves Y and every record's orientation.
-**Align & orient** compares the current displayed anchor strands. It reverses
-the whole target record only for known opposite strands, keeps text readable,
-and then aligns the post-reversal anchor center. Unknown or mixed strands use
-position-only alignment. Skipped and missing records and unselected inparalogs
-keep their positions, orientations, memberships, and comparison links. The
-operation summary counts aligned, unchanged, skipped, missing, and reversed
-records. The active-plan inspector shows exact anchors and selection reasons;
-**rev** beside a record name reflects its effective orientation relative to
-the source.
+Anchor and orientation edits are local; they start no Worker job. **Apply** sends
+the complete choices for one Python validation and diagram generation, then
+commits the Result and History together. A validation or generation error keeps
+the draft so you can correct it and retry. **Cancel** or **Escape** commits
+nothing and returns focus to the initiating control when it is still present.
+If the source, crop, group, or committed Result changes during review, start
+again. The palette does not trap keyboard focus. The operation summary counts
+aligned, unchanged, skipped, missing, and reversed records; the active-plan
+inspector lists exact anchors and selection reasons.
 
 The active plan survives ordinary **Generate Diagram** after style, label, or
 canvas changes and survives a stable record reorder. Source replacement,
 crop, selector, manual orientation, and manual record drag clear it with a
 visible reason. A stale reference blocks Generate until **Reselect** or
-**Clear**; a stale target requires **Select** or **Skip**. Neither replaces the
-last successful Result while repair is pending. **Reset Align** restores the
-geometry immediately before the latest Align and clears that plan. For Align A,
-then Align B, Reset B restores the geometry after A without restoring A's plan;
+**Clear**; a stale target requires **Select** or **Skip**. Pending or failed
+repair keeps the last successful Result visible. **Reset Align** restores the
+geometry immediately before the latest Apply and clears that plan. For Apply A,
+then Apply B, Reset B restores the geometry after A without restoring A's plan;
 **Undo** restores the complete preceding artifact, and **Redo** reapplies the
-reset. Apply, Reset, and manual clear each use one normal History transaction.
+reset. Each successful Apply, Reset, or manual clear uses one History action.
 
 Alignment changes display only and does not rerun LOSATP or group inference.
-Collinear-mode alignment controls, anchor TSV input, smart alignment, synteny
-propagation, and multi-hop inference are outside this workflow.
+Collinear alignment controls, anchor TSV, scored inference, support-count
+ranking, and multi-hop automatic selection are unsupported.
 
 ## Preview, search, and editor
 

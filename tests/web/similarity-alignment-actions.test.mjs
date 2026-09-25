@@ -130,7 +130,8 @@ const create = ({
   members = [reference, targetA, targetC], helper = (_operation, { request }) => ({
     result: responseFor(request)
   }), generation = async () => ({ status: 'ok' }), onError = null,
-  previewCandidate = null, clearCandidatePreview = null
+  previewCandidate = null, clearCandidatePreview = null,
+  getCommittedRequest = () => renderRequest
 } = {}) => {
   const controllerState = state();
   const currentGroup = { id: 'og-1', members, orthologEdges: [] };
@@ -141,7 +142,7 @@ const create = ({
     state: controllerState,
     getOrthogroupById: (id) => id === currentGroup.id ? currentGroup : null,
     getEnrichedOrthogroupMembers: () => currentGroup.members,
-    getCommittedRequest: () => renderRequest,
+    getCommittedRequest,
     getCurrentSvg: () => svg,
     runAnalysis: async (options) => {
       generationCalls.push(structuredClone(options));
@@ -488,6 +489,25 @@ test('missing saved reference blocks regeneration while preserving plan and Resu
   assert.equal(fixture.state.results.value, previous);
   assert.equal(fixture.state.similarityAlignmentPlan.value, plan);
   assert.equal(fixture.actions.repair.value.kind, 'reference');
+});
+
+test('a committed schema-2 plan regenerates after its transient groups leave the catalog', async () => {
+  let committed = renderRequest;
+  const fixture = create({ getCommittedRequest: () => committed });
+  await startPopup(fixture);
+  await fixture.actions.applyDraft();
+  const plan = fixture.state.similarityAlignmentPlan.value;
+  committed = { ...renderRequest, layout: { similarityAlignment: structuredClone(plan) } };
+  fixture.currentGroup.id = 'no-longer-in-catalog';
+  const calls = fixture.helperCalls.length;
+  assert.deepEqual(await fixture.actions.validateBeforeGenerate(), { status: 'ok' });
+  assert.equal(fixture.helperCalls.length, calls);
+  assert.equal(fixture.state.similarityAlignmentPlan.value, plan);
+  fixture.actions.retainForStableReorder(['c', 'a', 'b']);
+  assert.deepEqual(await fixture.actions.validateBeforeGenerate(), { status: 'ok' });
+  committed.layout.similarityAlignment.records[1].anchor.biologicalFeatureId = 'different';
+  assert.deepEqual(await fixture.actions.validateBeforeGenerate(),
+    { status: 'blocked', reason: 'stale-reference' });
 });
 
 test('candidate labels retain biological metadata and displayed record names', async () => {

@@ -2634,7 +2634,9 @@ for (const mutate of [
   ),
   (request) => { request.layout.recordTranslations[0].x = Infinity; },
   (request) => { request.layout.unknownTransform = true; },
-  (request) => { request.layout.similarityAlignment.records[2].anchor = null; }
+  (request) => { request.layout.similarityAlignment.records[2].anchor = null; },
+  (request) => { delete request.layout.similarityAlignment.records[2].orientationPolicy; },
+  (request) => { request.layout.similarityAlignment.schema = 1; }
 ]) {
   const invalid = structuredClone(resolvedProteinCanonical.renderRequest);
   mutate(invalid);
@@ -2643,7 +2645,7 @@ for (const mutate of [
       renderRequest: invalid,
       resources: resolvedProteinCanonical.resources
     }),
-    /duplicate record keys|finite numbers|missing or unknown fields|invalid plan combination/
+    /duplicate record keys|finite numbers|missing or unknown fields|invalid plan combination|schema must be 2/
   );
 }
 

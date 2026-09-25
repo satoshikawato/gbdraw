@@ -546,6 +546,7 @@ test('Similarity alignment UI completes exact-reference, ambiguity, focus, summa
   await align.click();
   await expect(dialog).toBeVisible({ timeout: 180000 });
   await dialog.getByRole('radio', { name: /Select .*bp, strand/ }).first().check();
+  await dialog.getByRole('checkbox', { name: /Match reference direction for/ }).check();
   await expect(apply).toBeEnabled();
   await apply.click();
 
@@ -584,6 +585,8 @@ test('Similarity alignment UI completes exact-reference, ambiguity, focus, summa
       results: state.results.value.map(({ name, content }) => ({ name, content }))
     };
   });
+  expect(savedState.plan.records.find(({ status }) => status === 'aligned'))
+    .toMatchObject({ orientationPolicy: 'match_reference' });
   await page.evaluate(() => { window.__GBDRAW_APP__.sessionTitle = 's06-active-alignment'; });
   const downloadPromise = page.waitForEvent('download', { timeout: 180000 });
   await page.evaluate(() => window.__GBDRAW_APP__.saveSessionWithTitle());
@@ -646,9 +649,9 @@ test('Similarity alignment UI completes exact-reference, ambiguity, focus, summa
       historyAfter: window.__GBDRAW_HISTORY__.getUndoCount()
     };
   });
-  expect(regenerate.result).toEqual({ status: 'blocked', reason: 'stale-reference' });
-  expect(regenerate.notice).toContain('saved Similarity Group is no longer available');
-  expect(regenerate.historyAfter).toBe(regenerate.historyBefore);
+  expect(regenerate.result).toEqual({ status: 'ok' });
+  expect(regenerate.notice).not.toContain('needs repair');
+  expect(regenerate.historyAfter).toBe(regenerate.historyBefore + 1);
   expect(await freshPage.evaluate(async () => {
     const { state } = await import('./js/state.js');
     return {

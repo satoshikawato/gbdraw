@@ -199,13 +199,16 @@ one finite base X/Y translation for each stable record key. The typed API reject
 a group-ID string or an incomplete plan. The shared Python resolver applies
 explicit choice → sole usable member → sole distinct direct RBH → Select/Skip.
 When multiple candidates remain, it returns a transient recommendation: the
-unique representative, or candidate 1 in stable identity order. This does not
-commit a plan; callers still submit an explicit Select or Skip. Selection never
-uses score, position, or multi-hop paths. Each selected target defaults to
+unique representative, or candidate 1 in stable identity order. A recommendation
+is a convenience heuristic, not biological proof; callers still submit an
+explicit Select or Skip. Selection never uses score, support count, viewport
+position, or multi-hop paths. Each selected target defaults to
 `AlignmentOrientationPolicy.PRESERVE`. An explicit `MATCH_REFERENCE` choice
 reverses the whole target only when both displayed anchor strands are known and
 opposite. The schema-2 plan stores each target's requested policy and effective
-source-relative reverse-complement result.
+source-relative reverse-complement result. Collinear alignment controls, anchor
+TSV, scored inference, support-count ranking, and multi-hop automatic selection
+are unsupported.
 
 This executable, in-memory contract example renders no public showcase file.
 In an integration, use actual group membership, current crop/display centers,
@@ -214,7 +217,7 @@ show how the typed request and resolver fit together. Source feature identities
 come from the planned records, so they remain stable across record reorder.
 Save the block as `typed_similarity_alignment.py` and run
 `python typed_similarity_alignment.py` from an empty directory with gbdraw
-installed. It prints `only_usable_candidate`.
+installed. It prints `only_usable_candidate match_reference True`.
 
 <!-- executable:S07-PY-01:start -->
 ```python
@@ -228,20 +231,21 @@ from gbdraw.api import (
     build_request_diagram, plan_request,
 )
 from gbdraw.layout.similarity_alignment import (
+    AlignmentChoiceKind, AlignmentOrientationPolicy, AlignmentRecordChoice,
     SimilarityAlignmentCandidate, resolve_similarity_alignment,
 )
 
 
-def record(name, start):
+def record(name, start, strand=1):
     item = SeqRecord(Seq('A' * 100), id=name, description=name)
     item.annotations['topology'] = 'linear'
-    item.features = [SeqFeature(SimpleLocation(start, start + 12, strand=1),
+    item.features = [SeqFeature(SimpleLocation(start, start + 12, strand=strand),
                                 type='CDS', qualifiers={'gene': [name]})]
     return item
 
 base = LinearDiagramRequest(records=(
     RecordInput(InMemoryRecordSource(record('alpha', 10)), record_key='alpha'),
-    RecordInput(InMemoryRecordSource(record('beta', 40)), record_key='beta'),
+    RecordInput(InMemoryRecordSource(record('beta', 40, -1)), record_key='beta'),
 ))
 provenance = plan_request(base).provenance
 anchors = []
@@ -251,27 +255,38 @@ for key, item in zip(('alpha', 'beta'), provenance, strict=True):
         key, feature.biological_feature_id, feature.source_feature_index,
         feature.stable_feature_id,
     ))
+candidates = (
+    SimilarityAlignmentCandidate('example-group', anchors[0], 1, True, 16),
+    SimilarityAlignmentCandidate('example-group', anchors[1], -1, True, 46),
+)
+initial = resolve_similarity_alignment(
+    record_keys=('alpha', 'beta'), group_id='example-group',
+    reference=anchors[0], candidates=candidates,
+).require_plan()
 plan = resolve_similarity_alignment(
     record_keys=('alpha', 'beta'), group_id='example-group',
-    reference=anchors[0],
-    candidates=(
-        SimilarityAlignmentCandidate('example-group', anchors[0], 1, True, 16),
-        SimilarityAlignmentCandidate('example-group', anchors[1], 1, True, 46),
-    ),
-    edges=(),
+    reference=anchors[0], candidates=candidates,
+    choices=(AlignmentRecordChoice(
+        'beta', AlignmentChoiceKind.SELECT, anchors[1],
+        AlignmentOrientationPolicy.MATCH_REFERENCE,
+    ),),
 ).require_plan()
+assert plan.schema == 2
+assert plan.records[1].effective_reverse_complement is True
 request = replace(base, layout=LinearMultiRecordOptions(record_translations=(
     LinearRecordTranslation('alpha'), LinearRecordTranslation('beta'),
 )), similarity_alignment=plan)
 prepared = build_request_diagram(request)
 assert prepared.drawing.tostring().startswith('<svg')
-print(plan.records[1].rationale.value)
+print(initial.records[1].rationale.value,
+      plan.records[1].orientation_policy.value,
+      plan.records[1].effective_reverse_complement)
 ```
 <!-- executable:S07-PY-01:end -->
 
-Current Session round trips preserve the plan, its rationale, base translations,
-and effective orientation. An active plan survives ordinary regeneration;
-**Reset Align** uses the immediate pre-align base. Supported old Sessions enter
+Current Session round trips preserve the exact plan, its rationale, requested
+policy, effective orientation, and base translations. An active plan survives
+ordinary regeneration; **Reset Align** uses the immediate pre-align base. Supported old Sessions enter
 an isolated reader-only compatibility path and save only the current typed
 representation. See [Session and request compatibility](session-and-request-compatibility.md#similarity-alignment-request-ownership).
 

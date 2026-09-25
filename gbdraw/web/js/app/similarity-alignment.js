@@ -51,6 +51,15 @@ const nullableInteger = (value, path) => {
 
 const sameJson = (left, right) => JSON.stringify(left) === JSON.stringify(right);
 
+const sameKeyedPlan = (left, right) => {
+  if (left?.schema !== 2 || right?.schema !== 2 ||
+      !Array.isArray(left.records) || !Array.isArray(right.records)) return false;
+  const keyed = (plan) => ({ ...plan, records: [...plan.records].sort(
+    (a, b) => String(a?.recordKey || '').localeCompare(String(b?.recordKey || ''))
+  ) });
+  return sameJson(keyed(left), keyed(right));
+};
+
 const anchorKey = (anchor) => JSON.stringify(anchor);
 
 const strandLabel = (strand) => (
@@ -1174,7 +1183,15 @@ export const createSimilarityAlignmentActions = ({
       return { status: 'ok' };
     }
     const group = getOrthogroupById(plan.groupId);
-    if (!group) return markStaleReference('The saved Similarity Group is no longer available.');
+    if (!group) {
+      // A saved Result can retain its exact plan after comparison groups have
+      // left the editor catalog. The typed render still validates every anchor.
+      if (sameKeyedPlan(plan, currentRequest()?.layout?.similarityAlignment)) {
+        repair.value = null;
+        return { status: 'ok' };
+      }
+      return markStaleReference('The saved Similarity Group is no longer available.');
+    }
     const members = getEnrichedOrthogroupMembers(group);
     let request;
     try {
