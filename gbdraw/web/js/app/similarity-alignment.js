@@ -842,7 +842,16 @@ export const createSimilarityAlignmentActions = ({
     return true;
   };
 
-  const applyPlan = async (plan, request, expectedActionId) => {
+  const installReviewDraft = (response, request) => {
+    draft.value = deepFreeze({
+      response,
+      reference: referenceView(response, request, displayFacts, recordLabels),
+      rows: reviewRows(response, request, displayFacts, recordLabels)
+    });
+    status.value = 'reviewing';
+  };
+
+  const applyPlan = async (plan, request, expectedActionId, retryResponse = null) => {
     if (expectedActionId !== actionId) return { status: 'stale' };
     if (!artifactIsCurrent()) return rejectStaleDraft();
     const recordKeys = request.records.map(({ recordKey }) => recordKey);
@@ -878,12 +887,13 @@ export const createSimilarityAlignmentActions = ({
       status.value = 'idle';
       return { status: 'ok' };
     }
-    status.value = 'reviewing';
+    if (retryResponse) installReviewDraft(retryResponse, request);
+    else status.value = 'reviewing';
     publishError(outcome?.error || new Error('Alignment generation failed. Review the draft and retry Apply.'));
     return { status: outcome?.status || 'error' };
   };
 
-  const resolveRequest = async (request, expectedActionId) => {
+  const resolveRequest = async (request, expectedActionId, mode) => {
     let response;
     try {
       const helper = await runHelperOperation(resolveOperation, { request });
@@ -900,16 +910,15 @@ export const createSimilarityAlignmentActions = ({
     }
     activeRequest = request;
     error.value = null;
-    draft.value = deepFreeze({
-      response,
-      reference: referenceView(response, request, displayFacts, recordLabels),
-      rows: reviewRows(response, request, displayFacts, recordLabels)
-    });
-    status.value = 'reviewing';
+    if (mode === 'align' && response.status === 'resolved') {
+      status.value = 'applying';
+      return applyPlan(response.plan, request, expectedActionId, response);
+    }
+    installReviewDraft(response, request);
     return { status: 'reviewing' };
   };
 
-  const start = async ({ groupId, reference, source }) => {
+  const start = async ({ groupId, reference, source, mode = 'align' }) => {
     if (busy.value) return { status: 'busy' };
     const id = String(groupId || '').trim();
     if (!reference) {
@@ -947,7 +956,7 @@ export const createSimilarityAlignmentActions = ({
       }));
       activeRequest = request;
       artifactStamp = captureArtifact(request.groupId);
-      return resolveRequest(request, expectedActionId);
+      return resolveRequest(request, expectedActionId, mode);
     } catch (cause) {
       if (expectedActionId !== actionId) return { status: 'stale' };
       clearDraft();

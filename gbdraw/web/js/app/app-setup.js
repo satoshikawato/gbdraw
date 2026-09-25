@@ -2893,12 +2893,20 @@ export const createAppSetup = () => {
     document.removeEventListener('keydown', handleSimilarityAlignmentEscape, true);
     window.removeEventListener('resize', clampSimilarityAlignmentPalette);
   });
+  const finishSimilarityAlignmentStart = async (outcome) => {
+    if (similarityAlignmentActions.dialogOpen.value) {
+      if (similarityAlignmentActions.error.value) {
+        await nextTick();
+        document.querySelector('[data-similarity-alignment-error]')?.focus();
+      } else await focusSimilarityAlignmentDialog();
+    } else await restoreSimilarityAlignmentFocus();
+    return outcome;
+  };
   const startSimilarityAlignmentFromDrawer = async (groupId, event = null) => {
     rememberSimilarityAlignmentInvoker(event);
-    const outcome = await similarityAlignmentActions.startFromDrawer({ groupId });
-    if (outcome.status === 'reviewing') await focusSimilarityAlignmentDialog();
-    else if (['error', 'rejected'].includes(outcome.status)) await restoreSimilarityAlignmentFocus();
-    return outcome;
+    return finishSimilarityAlignmentStart(
+      await similarityAlignmentActions.startFromDrawer({ groupId })
+    );
   };
   const cancelSimilarityAlignmentDialog = async () => {
     similarityAlignmentActions.cancel();
@@ -2959,9 +2967,7 @@ export const createAppSetup = () => {
       groupId: detail.id,
       reference: detail.currentMember
     });
-    if (outcome.status === 'reviewing') await focusSimilarityAlignmentDialog();
-    else if (['error', 'rejected'].includes(outcome.status)) await restoreSimilarityAlignmentFocus();
-    return outcome;
+    return finishSimilarityAlignmentStart(outcome);
   };
 
   const highlightClickedOrthogroup = () => {

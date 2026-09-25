@@ -5232,12 +5232,12 @@
                                     :aria-busy="similarityAlignmentBusy"
                                     aria-describedby="clicked-alignment-action-description"
                                     class="px-2 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-slate-200 disabled:text-slate-400 disabled:cursor-not-allowed text-white rounded-lg text-xs font-medium flex items-center justify-center gap-1"
-                                    title="Review alignment to this exact feature">
+                                    title="Align to this exact feature">
                                 <i class="ph ph-arrows-left-right" aria-hidden="true"></i>
                                 <span>{{ similarityAlignmentStatus === 'resolving' ? 'Resolving…' : similarityAlignmentStatus === 'applying' ? 'Applying…' : 'Align…' }}</span>
                             </button>
                             <p id="clicked-alignment-action-description" class="col-span-2 text-[10px] text-slate-500">
-                                Review anchor and orientation choices before Apply.
+                                Resolved targets align immediately. Ambiguous targets open a review.
                             </p>
                         </div>
                         <div v-if="clickedOrthogroupDetail" class="border-y border-slate-100 py-3">
@@ -6876,7 +6876,7 @@
                                     :disabled="Boolean(similarityAlignmentDrawerDisabledReason(selectedOrthogroup.id)) || similarityAlignmentBusy"
                                     :aria-busy="similarityAlignmentBusy"
                                     aria-describedby="similarity-alignment-drawer-reason"
-                                    title="Review alignment to the selected exact feature"
+                                    title="Align to the selected exact feature"
                                     class="col-span-2 text-xs px-2 py-1.5 bg-blue-600 hover:bg-blue-700 disabled:bg-slate-200 disabled:text-slate-400 disabled:cursor-not-allowed text-white rounded flex items-center justify-center gap-1">
                                 <i class="ph ph-arrows-left-right" aria-hidden="true"></i>
                                 {{ similarityAlignmentStatus === 'resolving' ? 'Resolving…' : similarityAlignmentStatus === 'applying' ? 'Applying…' : 'Align…' }}

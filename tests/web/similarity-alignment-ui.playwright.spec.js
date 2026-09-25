@@ -307,7 +307,7 @@ test('Similarity alignment UI completes exact-reference, ambiguity, focus, summa
   const beforeCancel = await artifactSnapshot(page);
   const diagramWidthBefore = (await page.locator('.gbdraw-preview-surface').boundingBox()).width;
   const immediate = await page.evaluate(async () => {
-    const button = document.querySelector('button[title="Review alignment to the selected exact feature"]');
+    const button = document.querySelector('button[title="Align to the selected exact feature"]');
     button.click();
     await window.Vue.nextTick();
     return {
@@ -482,10 +482,10 @@ test('Similarity alignment UI completes exact-reference, ambiguity, focus, summa
   await popupAlign.scrollIntoViewIfNeeded();
   const popupImmediate = await page.evaluate(async () => {
     const popupButton = document.querySelector(
-      '.feature-popup button[title="Review alignment to this exact feature"]'
+      '.feature-popup button[title="Align to this exact feature"]'
     );
     const drawerButton = document.querySelector(
-      'button[title="Review alignment to the selected exact feature"]'
+      'button[title="Align to the selected exact feature"]'
     );
     popupButton.click();
     await window.Vue.nextTick();
@@ -785,7 +785,7 @@ test('Apply error retains draft, focuses retry guidance, and accepts correction'
   await expect(page.locator('[data-similarity-alignment-summary]')).toContainText('explicitly skipped');
 });
 
-test('one usable member opens an immediately applicable review', async ({ page }, testInfo) => {
+test('one usable member applies directly through one Worker resolve and one History action', async ({ page }, testInfo) => {
   test.setTimeout(180000);
   await captureUnhandledRejections(page);
   const directory = testInfo.outputPath('one-candidate-fixture');
@@ -842,17 +842,43 @@ test('one usable member opens an immediately applicable review', async ({ page }
   ));
   expect(reference).not.toBe('');
   await drawer.getByLabel('Exact reference record and feature').selectOption(reference);
+  const before = await artifactSnapshot(page);
+  await page.evaluate(() => {
+    window.__alignmentWorkerResolves = 0;
+    window.__alignmentPaletteMounts = 0;
+    const postMessage = Worker.prototype.postMessage;
+    Worker.prototype.postMessage = function (message, transfer) {
+      if (message?.type === 'helper' && message.operation === 'resolveSimilarityAlignment') {
+        window.__alignmentWorkerResolves += 1;
+      }
+      return postMessage.call(this, message, transfer);
+    };
+    new MutationObserver((changes) => {
+      for (const change of changes) {
+        for (const node of change.addedNodes) {
+          if (node.nodeType === Node.ELEMENT_NODE && (
+            node.matches('[data-similarity-alignment-dialog]')
+            || node.querySelector('[data-similarity-alignment-dialog]')
+          )) window.__alignmentPaletteMounts += 1;
+        }
+      }
+    }).observe(document.body, { childList: true, subtree: true });
+  });
   await drawer.getByRole('button', { name: 'Align…', exact: true }).click();
-  const dialog = page.getByRole('dialog', { name: 'Select alignment anchors' });
-  await expect(dialog).toBeVisible({ timeout: 120000 });
-  await expect(dialog.getByRole('button', { name: 'Apply', exact: true })).toBeEnabled();
-  await dialog.getByRole('button', { name: 'Apply', exact: true }).click();
-  await expect(dialog).toBeHidden({ timeout: 120000 });
+  await expect(page.getByRole('dialog', { name: 'Select alignment anchors' })).toHaveCount(0);
   await expect.poll(() => page.evaluate(async () => {
     const { state } = await import('./js/state.js');
     return state.similarityAlignmentPlan.value?.schema || null;
   }), { timeout: 120000 }).toBe(2);
   await expect(page.locator('[data-similarity-alignment-summary]')).toContainText('1 aligned');
+  const after = await artifactSnapshot(page);
+  expect(after.results).not.toEqual(before.results);
+  expect(after.history[0]).toBe(before.history[0] + 1);
+  expect(after.history[1]).toBe(0);
+  expect(await page.evaluate(() => ({
+    resolves: window.__alignmentWorkerResolves,
+    paletteMounts: window.__alignmentPaletteMounts
+  }))).toEqual({ resolves: 1, paletteMounts: 0 });
   const similarityTab = drawer.getByRole('button', { name: 'Similarity groups' });
   await expect(similarityTab).toBeEnabled();
   await similarityTab.click();
