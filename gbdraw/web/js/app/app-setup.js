@@ -2866,9 +2866,7 @@ export const createAppSetup = () => {
   const focusSimilarityAlignmentDialog = async () => {
     await nextTick();
     clampSimilarityAlignmentPalette();
-    document.querySelector(
-      '[data-similarity-alignment-dialog] input[type="radio"]:not(:disabled)'
-    )?.focus();
+    document.getElementById('similarity-alignment-dialog-title')?.focus();
   };
   const handleSimilarityAlignmentEscape = (event) => {
     if (event.key !== 'Escape' || !similarityAlignmentActions.dialogOpen.value) return;
@@ -2898,7 +2896,7 @@ export const createAppSetup = () => {
     rememberSimilarityAlignmentInvoker(event);
     const outcome = await similarityAlignmentActions.startFromDrawer({ groupId });
     if (outcome.status === 'reviewing') await focusSimilarityAlignmentDialog();
-    else similarityAlignmentReturnFocus = null;
+    else if (['error', 'rejected'].includes(outcome.status)) await restoreSimilarityAlignmentFocus();
     return outcome;
   };
   const cancelSimilarityAlignmentDialog = async () => {
@@ -2906,6 +2904,10 @@ export const createAppSetup = () => {
   };
   const applySimilarityAlignmentDialog = async () => {
     const outcome = await similarityAlignmentActions.applyDraft();
+    if (outcome.status === 'error') {
+      await nextTick();
+      document.querySelector('[data-similarity-alignment-error]')?.focus();
+    }
     return outcome;
   };
   const canUseClickedOrthogroupActions = computed(() => {
@@ -2957,10 +2959,7 @@ export const createAppSetup = () => {
       reference: detail.currentMember
     });
     if (outcome.status === 'reviewing') await focusSimilarityAlignmentDialog();
-    else {
-      similarityAlignmentReturnFocus = null;
-      if (outcome.status === 'ok') clickedFeature.value = null;
-    }
+    else if (['error', 'rejected'].includes(outcome.status)) await restoreSimilarityAlignmentFocus();
     return outcome;
   };
 

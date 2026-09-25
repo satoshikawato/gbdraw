@@ -306,10 +306,35 @@ test('Similarity alignment UI completes exact-reference, ambiguity, focus, summa
 
   const beforeCancel = await artifactSnapshot(page);
   const diagramWidthBefore = (await page.locator('.gbdraw-preview-surface').boundingBox()).width;
-  await align.click();
+  const immediate = await page.evaluate(async () => {
+    const button = document.querySelector('button[title="Review alignment to the selected exact feature"]');
+    button.click();
+    await window.Vue.nextTick();
+    return {
+      text: button.textContent.trim(),
+      disabled: button.disabled,
+      busy: button.getAttribute('aria-busy'),
+      live: document.querySelector('[data-similarity-alignment-status]')?.textContent.trim()
+    };
+  });
+  expect(immediate).toMatchObject({
+    text: 'Resolving…', disabled: true, busy: 'true',
+    live: 'Resolving similarity alignment…'
+  });
   const dialog = page.getByRole('dialog', { name: 'Select alignment anchors' });
   await expect(dialog).toBeVisible({ timeout: 180000 });
+  await expect(dialog.getByRole('heading', { name: 'Select alignment anchors' })).toBeFocused();
   await expect(dialog).toHaveAttribute('aria-describedby', 'similarity-alignment-dialog-description');
+  const referenceCard = dialog.locator('[data-similarity-alignment-reference]');
+  await expect(referenceCard).toContainText('b0');
+  await expect(referenceCard).toContainText('record_b');
+  await expect(referenceCard).toContainText('121..419 bp');
+  await expect(referenceCard).toContainText('Strand: +');
+  await expect(dialog.locator('[data-alignment-record-key]')).toHaveCount(1);
+  await expect(dialog.locator('[data-similarity-alignment-reason]')).toContainText(
+    'The only representative candidate.'
+  );
+  await expect(dialog.getByText('Recommended', { exact: true })).toHaveCount(1);
   await expect(dialog).not.toHaveAttribute('aria-modal', 'true');
   expect(await dialog.evaluate((element) => element.contains(document.activeElement))).toBe(true);
   expect((await page.locator('.gbdraw-preview-surface').boundingBox()).width).toBe(diagramWidthBefore);
@@ -362,7 +387,7 @@ test('Similarity alignment UI completes exact-reference, ambiguity, focus, summa
   await expect(removalDialog).toBeHidden();
   await expect(dialog).toBeVisible();
   expect(await artifactSnapshot(page)).toEqual(beforeCancel);
-  await expect(dialog).toContainText(/\d[\d,]*\.\.\d[\d,]* bp \([+-]\)/);
+  await expect(dialog).toContainText(/\d[\d,]*\.\.\d[\d,]* bp · Strand [+-]/);
   await expect(dialog).toContainText('Direct evidence: None');
   await expect(dialog).not.toContainText(/score/i);
   const apply = dialog.getByRole('button', { name: 'Apply', exact: true });
@@ -401,10 +426,20 @@ test('Similarity alignment UI completes exact-reference, ambiguity, focus, summa
   expect((await previewState()).candidate).toContain('0.7');
   await dialog.getByRole('heading', { name: 'Select alignment anchors' }).hover();
   await expect.poll(async () => (await previewState()).candidate.includes('0.7')).toBe(false);
+  const replacementCandidate = dialog.getByRole('radio', { name: /Select .*bp, strand/ }).nth(1);
+  await replacementCandidate.check();
+  await expect(replacementCandidate).toBeChecked();
+  await expect(dialog.getByText('Recommended', { exact: true })).toHaveCount(0);
+  await expect(dialog.locator('[data-similarity-alignment-reason]')).toContainText(
+    'The only representative candidate.'
+  );
+  await firstCandidate.check();
+  await expect(dialog.getByText('Recommended', { exact: true })).toHaveCount(1);
 
   await dialog.getByRole('radio', { name: /Skip / }).focus();
   await page.keyboard.press('Space');
   await expect(dialog).toContainText('Unchanged');
+  await expect(dialog.getByText('Recommended', { exact: true })).toHaveCount(0);
   await expect(apply).toBeEnabled();
   await apply.focus();
   await page.keyboard.press('Tab');
@@ -445,11 +480,38 @@ test('Similarity alignment UI completes exact-reference, ambiguity, focus, summa
   const popupAlign = popup.getByRole('button', { name: 'Align…', exact: true });
   await expect(popupAlign).toHaveAttribute('title', /Review alignment/);
   await popupAlign.scrollIntoViewIfNeeded();
-  await popupAlign.click();
+  const popupImmediate = await page.evaluate(async () => {
+    const popupButton = document.querySelector(
+      '.feature-popup button[title="Review alignment to this exact feature"]'
+    );
+    const drawerButton = document.querySelector(
+      'button[title="Review alignment to the selected exact feature"]'
+    );
+    popupButton.click();
+    await window.Vue.nextTick();
+    return {
+      popupText: popupButton.textContent.trim(),
+      popupDisabled: popupButton.disabled,
+      popupBusy: popupButton.getAttribute('aria-busy'),
+      drawerDisabled: drawerButton.disabled,
+      drawerBusy: drawerButton.getAttribute('aria-busy')
+    };
+  });
+  expect(popupImmediate).toEqual({
+    popupText: 'Resolving…', popupDisabled: true, popupBusy: 'true',
+    drawerDisabled: true, drawerBusy: 'true'
+  });
   await expect(dialog).toBeVisible({ timeout: 180000 });
   await page.setViewportSize({ width: 390, height: 500 });
   const paletteBody = dialog.locator('.custom-scrollbar').first();
   expect(await paletteBody.evaluate((element) => element.scrollHeight > element.clientHeight)).toBe(true);
+  expect(await paletteBody.evaluate((element) => element.scrollWidth <= element.clientWidth)).toBe(true);
+  expect(await dialog.locator('footer').evaluate(
+    (element) => parseFloat(getComputedStyle(element).paddingBottom)
+  )).toBeLessThan(24);
+  await expect(dialog.locator('[data-similarity-alignment-reference]')).toBeVisible();
+  await expect(dialog.locator('[data-similarity-alignment-reason]')).toBeVisible();
+  await expect(dialog.getByRole('checkbox', { name: /Match reference direction for/ })).toBeVisible();
   await paletteBody.evaluate((element) => { element.scrollTop = element.scrollHeight; });
   expect(await paletteBody.evaluate((element) => element.scrollTop)).toBeGreaterThan(0);
   await page.setViewportSize({ width: 390, height: 740 });
@@ -631,6 +693,93 @@ test('Similarity alignment UI completes exact-reference, ambiguity, focus, summa
   await expectNoUnhandledRejections(page);
   await expectNoUnhandledRejections(freshPage);
   await freshContext.close();
+});
+
+const openAlignmentFromDrawer = async (page) => {
+  if (!await page.evaluate(() => window.__GBDRAW_APP__.showRightDrawer)) {
+    await page.locator('.drawer-toggle').click();
+  }
+  const drawer = page.locator('.right-drawer');
+  await drawer.getByRole('button', { name: 'Similarity groups' }).click();
+  await drawer.locator('button').filter({
+    has: page.locator('.font-mono', { hasText: /^og_1$/ })
+  }).click();
+  const reference = await page.evaluate(() => (
+    window.__GBDRAW_APP__.similarityAlignmentDrawerReferenceOptions('og_1')
+      .find(({ anchor }) => anchor.recordKey === 'record_b')?.key || ''
+  ));
+  await drawer.getByLabel('Exact reference record and feature').selectOption(reference);
+  await drawer.getByRole('button', { name: 'Align…', exact: true }).click();
+  const dialog = page.getByRole('dialog', { name: 'Select alignment anchors' });
+  await expect(dialog).toBeVisible({ timeout: 180000 });
+  return dialog;
+};
+
+test('review reports Python-projected reversal and unknown-strand preservation', async ({ page }, testInfo) => {
+  test.setTimeout(180000);
+  await loadAmbiguousSession(page, testInfo);
+  for (const [strand, expected] of [
+    [-1, 'reverse whole record'],
+    [null, 'preserve because a strand is unknown']
+  ]) {
+    await page.evaluate(async (nextStrand) => {
+      const { state } = await import('./js/state.js');
+      const group = state.orthogroups.value.find(({ id }) => id === 'og_1');
+      group.members.filter(({ recordKey }) => recordKey === 'record_a')
+        .forEach((member) => { member.strand = nextStrand; });
+    }, strand);
+    const dialog = await openAlignmentFromDrawer(page);
+    const checkbox = dialog.getByRole('checkbox', {
+      name: /Match reference direction for record-1.gbk/
+    });
+    await expect(checkbox).not.toBeChecked();
+    await checkbox.focus();
+    await page.keyboard.press('Space');
+    await expect(checkbox).toBeChecked();
+    await expect(dialog.locator('[data-similarity-alignment-orientation]')).toContainText(expected);
+    await expect(dialog.getByRole('button', { name: 'Apply', exact: true })).toBeEnabled();
+    await dialog.getByRole('button', { name: 'Cancel', exact: true }).click();
+    await expect(dialog).toBeHidden();
+  }
+});
+
+test('Apply error retains draft, focuses retry guidance, and accepts correction', async ({ page }, testInfo) => {
+  test.setTimeout(180000);
+  await loadAmbiguousSession(page, testInfo);
+  const dialog = await openAlignmentFromDrawer(page);
+  const before = await artifactSnapshot(page);
+  const priorLayout = await page.evaluate(() => {
+    const app = window.__GBDRAW_APP__;
+    const prior = app.form.linear_track_layout;
+    app.form.linear_track_layout = '__invalid_alignment_retry_fixture__';
+    return prior;
+  });
+  await dialog.getByRole('button', { name: 'Apply', exact: true }).click();
+  const error = dialog.locator('[data-similarity-alignment-error]');
+  await expect(error).toBeVisible({ timeout: 180000 });
+  await expect(error).toContainText('retry Apply');
+  await expect(error).toBeFocused();
+  await expect(dialog.getByRole('button', { name: 'Apply', exact: true })).toBeEnabled();
+  await page.setViewportSize({ width: 390, height: 500 });
+  const errorBox = await error.boundingBox();
+  expect(errorBox.x).toBeGreaterThanOrEqual(0);
+  expect(errorBox.x + errorBox.width).toBeLessThanOrEqual(390);
+  await expect(dialog.getByRole('button', { name: 'Cancel', exact: true })).toBeVisible();
+  await expect(dialog.getByRole('button', { name: 'Apply', exact: true })).toBeVisible();
+  expect(await dialog.locator('.custom-scrollbar').evaluate(
+    (element) => element.scrollWidth <= element.clientWidth
+  )).toBe(true);
+  const afterFailure = await artifactSnapshot(page);
+  expect(afterFailure.results).toEqual(before.results);
+  expect(afterFailure.history.slice(0, 2)).toEqual(before.history.slice(0, 2));
+  await page.evaluate((layout) => {
+    window.__GBDRAW_APP__.form.linear_track_layout = layout;
+  }, priorLayout);
+  await dialog.getByRole('radio', { name: /Skip / }).check();
+  await expect(error).toBeHidden();
+  await dialog.getByRole('button', { name: 'Apply', exact: true }).click();
+  await expect(dialog).toBeHidden({ timeout: 180000 });
+  await expect(page.locator('[data-similarity-alignment-summary]')).toContainText('explicitly skipped');
 });
 
 test('one usable member opens an immediately applicable review', async ({ page }, testInfo) => {

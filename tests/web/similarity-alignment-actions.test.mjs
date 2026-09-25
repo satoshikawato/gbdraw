@@ -210,6 +210,11 @@ test('resolved and ambiguous initial responses always open an applicable Python-
     assert.equal(fixture.actions.draft.value.rows[0].reason,
       ambiguous ? 'unique_representative' : 'only_usable_candidate');
     assert.equal(fixture.actions.draft.value.rows[0].orientationPolicy, 'preserve');
+    assert.equal(fixture.actions.draft.value.reference.featureIdentifier, 'clicked');
+    assert.equal(fixture.actions.draft.value.reference.coordinates, '51..70 bp');
+    assert.equal(fixture.actions.draft.value.rows[0].recommendedKey,
+      fixture.actions.draft.value.rows[0].choice.candidateKey);
+    assert.match(fixture.actions.draft.value.rows[0].recommendationReasonLabel, /candidate/);
     assert.equal(fixture.generationCalls.length, 0);
   }
 });
@@ -219,6 +224,8 @@ test('missing target is explicitly unchanged and complete Apply includes every t
     helper: (_operation, { request }) => ({ result: responseFor(request, { missing: true }) }) });
   await startPopup(fixture);
   assert.equal(fixture.actions.draft.value.rows[1].unchanged, true);
+  assert.equal(fixture.actions.draft.value.rows[1].reason, 'skipped_no_candidate');
+  assert.deepEqual(fixture.actions.skipRecord('c'), { status: 'rejected' });
   assert.equal(fixture.actions.draft.value.rows[1].reason, 'skipped_no_candidate');
   assert.deepEqual(await fixture.actions.applyDraft(), { status: 'ok' });
   assert.equal(fixture.helperCalls.length, 2);

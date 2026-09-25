@@ -68,10 +68,10 @@ const rationaleLabels = Object.freeze({
 });
 
 const reviewReasonLabels = Object.freeze({
-  only_usable_candidate: 'Only usable candidate',
-  unique_direct_rbh: 'Unique direct RBH',
-  unique_representative: 'Unique representative',
-  deterministic_candidate_1: 'Deterministic candidate 1'
+  only_usable_candidate: 'The only usable candidate in this record.',
+  unique_direct_rbh: 'The only candidate with a direct reciprocal best hit.',
+  unique_representative: 'The only representative candidate.',
+  deterministic_candidate_1: 'The first candidate in Python’s stable order.'
 });
 
 const cloneJson = (value) => {
@@ -90,22 +90,26 @@ const displayText = (...values) => values
   .map((value) => String(value ?? '').trim())
   .find((value) => value && !isInternalProteinDisplayId(value)) || '';
 
-const candidateView = (candidate, request, displayFacts = new Map()) => {
-  const key = anchorKey(candidate.anchor);
-  const member = request.members.find(({ anchor }) => anchorKey(anchor) === key);
-  if (!member) throw new Error('Alignment candidate has no current member facts.');
-  const facts = displayFacts.get(key) || {};
+const featureLabel = (anchor, displayFacts, fallback = '') => {
+  const facts = displayFacts.get(anchorKey(anchor)) || {};
   const feature = facts.sequenceFeature || {};
   const gene = displayText(feature.gene, facts.gene, feature.qualifiers?.gene);
   const locusTag = displayText(feature.locus_tag, feature.locusTag,
     facts.locus_tag, facts.locusTag, feature.qualifiers?.locus_tag);
   const product = displayText(feature.product, facts.product, feature.qualifiers?.product);
-  const type = displayText(feature.type, facts.type) || 'CDS';
+  return [gene, locusTag].filter(Boolean).join(' · ')
+    || product || displayText(fallback) || anchor.biologicalFeatureId;
+};
+
+const candidateView = (candidate, request, displayFacts = new Map()) => {
+  const key = anchorKey(candidate.anchor);
+  const member = request.members.find(({ anchor }) => anchorKey(anchor) === key);
+  if (!member) throw new Error('Alignment candidate has no current member facts.');
   const coordinates = `${(candidate.sourceStart + 1).toLocaleString('en-US')}..${candidate.sourceEnd.toLocaleString('en-US')} bp`;
   return {
     key,
     anchor: candidate.anchor,
-    label: [gene, locusTag].filter(Boolean).join(' · ') || product || candidate.displayName || type,
+    label: featureLabel(candidate.anchor, displayFacts, candidate.displayName),
     coordinates,
     displayedStrand: strandLabel(candidate.displayedStrand),
     featureIdentifier: candidate.anchor.biologicalFeatureId,
@@ -114,6 +118,20 @@ const candidateView = (candidate, request, displayFacts = new Map()) => {
     directEvidence: candidate.directEvidence.length ? candidate.directEvidence : ['None'],
     orientation: candidate.orientation,
     usable: candidate.usable
+  };
+};
+
+const referenceView = (response, request, displayFacts, recordLabels) => {
+  const member = request.members.find(({ anchor }) => sameJson(anchor, response.reference));
+  if (!member) throw new Error('Alignment reference has no current member facts.');
+  return {
+    label: featureLabel(response.reference, displayFacts),
+    featureIdentifier: response.reference.biologicalFeatureId,
+    recordLabel: recordLabels.get(response.reference.recordKey) || response.reference.recordKey,
+    recordKey: response.reference.recordKey,
+    coordinates: (member.sourceStart + 1).toLocaleString('en-US') + '..'
+      + member.sourceEnd.toLocaleString('en-US') + ' bp',
+    displayedStrand: strandLabel(response.referenceDisplayedStrand)
   };
 };
 
@@ -126,6 +144,8 @@ const reviewRows = (response, request, displayFacts, recordLabels) => response.r
     const reason = record.kind === 'ambiguous'
       ? record.recommendationReason
       : record.status === 'skipped' ? record.rationale : record.reviewReason;
+    const recommendedKey = selectedAnchor && REVIEW_REASONS.has(reason)
+      ? anchorKey(selectedAnchor) : null;
     return {
       recordKey: record.recordKey,
       recordLabel: recordLabels.get(record.recordKey) || `Record ${request.records.findIndex(
@@ -136,6 +156,8 @@ const reviewRows = (response, request, displayFacts, recordLabels) => response.r
       reason,
       reasonLabel: reason
         ? reviewReasonLabels[reason] || rationaleLabels[reason] : 'Unchanged',
+      recommendedKey,
+      recommendationReasonLabel: recommendedKey ? reviewReasonLabels[reason] : null,
       choice: selectedAnchor
         ? { kind: 'select', candidateKey: anchorKey(selectedAnchor) }
         : { kind: 'skip', candidateKey: null },
@@ -854,6 +876,7 @@ export const createSimilarityAlignmentActions = ({
     error.value = null;
     draft.value = deepFreeze({
       response,
+      reference: referenceView(response, request, displayFacts, recordLabels),
       rows: reviewRows(response, request, displayFacts, recordLabels)
     });
     status.value = 'reviewing';
@@ -924,6 +947,7 @@ export const createSimilarityAlignmentActions = ({
         reason: 'user_selected', reasonLabel: 'Selected by user',
         unchanged: false, repairRequired: false };
     } else if (update.kind === 'skip') {
+      if (!row.candidates.length) return { status: 'rejected' };
       next = { ...row, choice: { kind: 'skip', candidateKey: null },
         orientationPolicy: 'preserve', orientationEffect: 'preserve',
         reason: 'skipped_by_user', reasonLabel: 'Skipped by user',
@@ -1128,7 +1152,10 @@ export const createSimilarityAlignmentActions = ({
         ? { ...row, choice: null, repairRequired: true }
         : row
     ));
-    draft.value = deepFreeze({ response, rows, repair: true });
+    draft.value = deepFreeze({
+      response, reference: referenceView(response, repairRequest, displayFacts, recordLabels),
+      rows, repair: true
+    });
     repair.value = deepFreeze({
       kind: 'targets',
       groupId: plan.groupId,
