@@ -2770,6 +2770,7 @@ export const createAppSetup = () => {
     state,
     getOrthogroupById: orthogroupActions.getOrthogroupById,
     getEnrichedOrthogroupMembers: orthogroupActions.getEnrichedOrthogroupMembers,
+    getRecordCatalog: getAnnotationRecordCatalog,
     getCommittedRequest: getCommittedCanonicalRenderRequest,
     runAnalysis,
     cancelRunAnalysis,
