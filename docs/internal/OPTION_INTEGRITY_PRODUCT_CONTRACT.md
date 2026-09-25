@@ -5,7 +5,7 @@ Status: active Product authority
 ## Authority metadata
 
 - Contract ID: `OIPC`
-- Contract revision: `14`
+- Contract revision: `15`
 - Product Decision Owner: `satoshikawato`
 - Decision date: `2026-08-28`
 - Decision source: explicit Product Decision Owner selection of one (`1`) after
@@ -107,6 +107,11 @@ Status: active Product authority
   `2026-09-25` for the issue `#586` follow-up. The receipts below are the
   full scope of these replacements. Other decisions retain their scope.
   Dependent runtime requires this authority merged into its base; this
+  amendment contains no runtime.
+- Revision 15 change: `PD-OI-035` is replaced for scenario revision `2`.
+  `satoshikawato` supplied the complete `A / RETAIN_MOBILE_PALETTE_COVERAGE`
+  `PRODUCT_DECISION` response on `2026-09-25`. The receipt below is the full
+  scope of this replacement. Other decisions retain their scope. This
   amendment contains no runtime.
 - Records remaining `EVIDENCE_REQUIRED`: none
 - Excluded records: none
@@ -1370,26 +1375,26 @@ corrected. Passing evidence does not make incorrect behavior normative.
 ### PD-OI-035: Similarity-alignment canvas interaction
 
 - Concern key: `web.similarity-alignment.canvas-interaction`
-- Scenario revision: `1`
+- Scenario revision: `2`
+- Supersedes: `PD-OI-035`, scenario revision `1` (`A / FLOATING_GUIDE_CANVAS_PICK`).
 - Status: `ACCEPTED`
-- Selected outcome: `A / FLOATING_GUIDE_CANVAS_PICK`
+- Selected outcome: `A / RETAIN_MOBILE_PALETTE_COVERAGE`
 - Normative outcome: exactly the approved `PRODUCT_DECISION` receipt below.
-- Decision source: `satoshikawato` explicitly approved the exact text of all
-  three `PRODUCT_DECISION` receipts presented for issue `#581` on
-  `2026-09-24`. This serialization adds no terms to that approval and cannot
-  authorize dependent runtime until merged into its base.
+- Decision source: The complete `PRODUCT_DECISION` response supplied by
+  `satoshikawato` on `2026-09-25` for the issue `#586` follow-up. This
+  serialization adds no terms to that response.
 
 ```json
 {
   "concern": "web.similarity-alignment.canvas-interaction",
-  "scenarioRevision": 1,
-  "choice": "A / FLOATING_GUIDE_CANVAS_PICK",
-  "rationale": "record間の上下関係と図全体の幅を見ながら候補を比較できるようにする。参照位置のガイドと候補番号で位置を把握し、図上クリックと候補一覧のどちらからでも選択できるようにする。",
-  "mustPreserve": "図の手動pan／zoom、paletteのradioによるkeyboard選択とSkip、exact feature identityに基づく選択、描画されない候補の一覧からの選択、図上位置を根拠とする自動選択の禁止、適切なfocus操作と390 pxでの到達性、preview用表示がResult・download・Sessionへ混入しないこと。",
-  "mayRetire": "画面中央を覆う暗いbackdrop付きmodal、そのfocus trap、および候補一覧だけを選択の入口とする動作。",
-  "acceptedResidualRisk": "paletteや番号が密集した図の一部に重なることがある。paletteを移動でき、図上表示が困難な候補も常に一覧から選べるようにする。非表示または一意に描画位置を特定できないfeatureには番号を出せない場合がある。",
+  "scenarioRevision": 2,
+  "choice": "A / RETAIN_MOBILE_PALETTE_COVERAGE",
+  "rationale": "390 px の画面では、候補の根拠と Select・Skip・Apply・Cancel を読んで操作できることを優先する。レビュー中に図を同時に見る必要がある場合は、レビューを閉じてプレビューを確認する。",
+  "mustPreserve": "正確な feature identity に基づく選択、候補一覧からの keyboard radio 選択と Skip、390 px での操作と適切な focus、描画されない候補の一覧からの選択、図上位置だけによる自動選択の禁止、デスクトップでの canvas 選択と手動 pan／zoom、レビューを閉じた後のプレビュー、ガイド・番号・draft が Result・download・Session に混入しないこと。",
+  "mayRetire": "390 px でパレットを開いている間の、プレビューを遮らずに表示する Session 04 の受け入れ条件、および同時に図上候補選択・手動 pan／zoom を行えること。",
+  "acceptedResidualRisk": "390×740 px ではパレットが x=12–378、y=12–728 を占め、開いている間はプレビューの大部分を確認・操作できない。候補一覧による選択は可能だが、図を再確認するにはレビューを閉じる必要がある。",
   "owner": "satoshikawato",
-  "decisionDate": "2026-09-24"
+  "decisionDate": "2026-09-25"
 }
 ```
 

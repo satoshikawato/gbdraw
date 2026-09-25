@@ -92,22 +92,22 @@ malformed/empty diffs or missing Git objects fail closed.
 ### Evidence required for selection
 
 A narrower PR route requires successful exact-SHA `Dev staging / gate` evidence
-at the PR base. No older successful SHA can substitute. For changes consisting
-only of documentation and policy-documentation, missing, unfinished, failed, or
-unavailable baseline evidence fails planning without starting runtime test jobs.
-This prevents a failed baseline from becoming successful inherited evidence after
-a documentation-only commit. For other light changes, unavailable evidence still
-selects the complete tier. `architecture-change`, control-plane changes,
-dependencies, unknown paths, unclassified/shared test inputs, and explicit
-dispatches also require the full relevant tier.
+at the PR base. No older successful SHA can substitute. When a PR contains only
+documentation or policy-documentation paths and has no matching base staging run,
+it runs the complete PR tier without inherited evidence. Failed or unfinished
+base runs and API failures still stop documentation-only planning; they cannot
+become successful inherited evidence after a documentation-only commit. For other
+light changes, unavailable evidence selects the complete tier.
+`architecture-change`, control-plane changes, dependencies, unknown paths,
+unclassified/shared test inputs, and explicit dispatches require the full tier.
 
 Every runtime/subsystem change runs complete integrated dev and Gallery coverage.
 Metadata, documentation, and policy-documentation can inherit direct-parent
 staging evidence. Metadata runs no test jobs; ordinary documentation runs recipes;
 policy documentation runs Web change budget in `Tests`. Documentation-only Gallery
 publication skips browser and performance when direct-parent Gallery readiness is
-successful. A missing or unfinished direct-parent result fails documentation-only
-planning rather than running the full tier.
+successful. A missing or unfinished direct-parent result still fails
+documentation-only Gallery planning rather than running the full tier.
 
 ## Smoke inventory and regression retention
 
