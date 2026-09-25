@@ -7,7 +7,11 @@ import { isInternalProteinDisplayId } from './feature-utils.js';
 
 const { computed, ref } = window.Vue;
 
-const MODES = new Set(['position', 'position_and_orientation']);
+const ORIENTATION_POLICIES = new Set(['preserve', 'match_reference']);
+const REVIEW_REASONS = new Set([
+  'only_usable_candidate', 'unique_direct_rbh',
+  'unique_representative', 'deterministic_candidate_1'
+]);
 const STATUSES = new Set(['reference', 'aligned', 'skipped']);
 const RATIONALES = new Set([
   'reference',
@@ -63,6 +67,13 @@ const rationaleLabels = Object.freeze({
   skipped_unmappable: 'Candidate center outside the displayed crop'
 });
 
+const reviewReasonLabels = Object.freeze({
+  only_usable_candidate: 'Only usable candidate',
+  unique_direct_rbh: 'Unique direct RBH',
+  unique_representative: 'Unique representative',
+  deterministic_candidate_1: 'Deterministic candidate 1'
+});
+
 const cloneJson = (value) => {
   if (value === undefined) return undefined;
   return JSON.parse(JSON.stringify(value));
@@ -90,40 +101,54 @@ const candidateView = (candidate, request, displayFacts = new Map()) => {
     facts.locus_tag, facts.locusTag, feature.qualifiers?.locus_tag);
   const product = displayText(feature.product, facts.product, feature.qualifiers?.product);
   const type = displayText(feature.type, facts.type) || 'CDS';
-  const coordinates = `${(Number(member.sourceStart) + 1).toLocaleString('en-US')}..${Number(member.sourceEnd).toLocaleString('en-US')} bp`;
-  const evidence = request.directEdges
-    .filter(({ query, subject }) => (
-      sameJson(query, request.reference) && sameJson(subject, candidate.anchor)
-      || sameJson(subject, request.reference) && sameJson(query, candidate.anchor)
-    ))
-    .map(({ edgeKind }) => edgeKind.toUpperCase());
+  const coordinates = `${(candidate.sourceStart + 1).toLocaleString('en-US')}..${candidate.sourceEnd.toLocaleString('en-US')} bp`;
   return {
     key,
     anchor: candidate.anchor,
-    label: [gene, locusTag].filter(Boolean).join(' · ') || product || type,
+    label: [gene, locusTag].filter(Boolean).join(' · ') || product || candidate.displayName || type,
     coordinates,
     displayedStrand: strandLabel(candidate.displayedStrand),
     featureIdentifier: candidate.anchor.biologicalFeatureId,
     representative: candidate.representative,
     role: candidate.role || 'member',
-    directEvidence: evidence.length ? evidence : ['None']
+    directEvidence: candidate.directEvidence.length ? candidate.directEvidence : ['None'],
+    orientation: candidate.orientation,
+    usable: candidate.usable
   };
 };
 
-const ambiguityViews = (response, request, displayFacts = new Map(), recordLabels = new Map()) => (
-  response.records
-    .filter(({ kind }) => kind === 'ambiguous')
-    .map((ambiguity) => ({
-      recordKey: ambiguity.recordKey,
-      recordLabel: recordLabels.get(ambiguity.recordKey) || `Record ${request.records.findIndex(
-        ({ recordKey }) => recordKey === ambiguity.recordKey
+const reviewRows = (response, request, displayFacts, recordLabels) => response.records
+  .filter(({ recordKey }) => recordKey !== response.reference.recordKey)
+  .map((record) => {
+    const selectedAnchor = record.kind === 'ambiguous'
+      ? record.recommendedAnchor
+      : record.status === 'aligned' ? record.anchor : null;
+    const reason = record.kind === 'ambiguous'
+      ? record.recommendationReason
+      : record.status === 'skipped' ? record.rationale : record.reviewReason;
+    return {
+      recordKey: record.recordKey,
+      recordLabel: recordLabels.get(record.recordKey) || `Record ${request.records.findIndex(
+        ({ recordKey }) => recordKey === record.recordKey
       ) + 1}`,
-      candidates: ambiguity.candidates.map((candidate) => candidateView(candidate, request, displayFacts)),
-      choice: null
-    }))
-);
+      candidates: record.candidates.filter(({ usable }) => usable)
+        .map((candidate) => candidateView(candidate, request, displayFacts)),
+      reason,
+      reasonLabel: reason
+        ? reviewReasonLabels[reason] || rationaleLabels[reason] : 'Unchanged',
+      choice: selectedAnchor
+        ? { kind: 'select', candidateKey: anchorKey(selectedAnchor) }
+        : { kind: 'skip', candidateKey: null },
+      orientationPolicy: 'preserve',
+      orientationEffect: selectedAnchor
+        ? record.candidates.find(({ anchor }) => sameJson(anchor, selectedAnchor))?.orientation.preserve.effect
+        : 'preserve',
+      unchanged: !selectedAnchor,
+      repairRequired: false
+    };
+  });
 
-const successfulSummary = (plan) => {
+const successfulSummary = (plan, request) => {
   const aligned = plan.records.filter(({ status }) => status === 'aligned').length;
   const explicitlySkipped = plan.records.filter(
     ({ rationale }) => rationale === 'skipped_by_user'
@@ -132,9 +157,13 @@ const successfulSummary = (plan) => {
     rationale === 'skipped_no_candidate' || rationale === 'skipped_unmappable'
   )).length;
   const unchanged = plan.records.filter(({ status }) => status === 'reference').length;
-  const reversed = plan.records.filter(
-    ({ effectiveReverseComplement }) => effectiveReverseComplement !== null
-  ).length;
+  const base = new Map(request.records.map((record) => [
+    record.recordKey, baseReverseComplement(record)
+  ]));
+  const reversed = plan.records.filter((decision) => (
+    decision.status === 'aligned'
+    && decision.effectiveReverseComplement !== base.get(decision.recordKey)
+  )).length;
   return deepFreeze({
     aligned,
     unchanged,
@@ -154,15 +183,14 @@ const baseReverseComplement = (record) => Boolean(
 );
 
 const inspectActivePlan = (plan, request) => {
-  if (!plan || plan.schema !== 1 || !Array.isArray(plan.records)) return null;
+  if (!plan || plan.schema !== 2 || !Array.isArray(plan.records)) return null;
   const records = new Map(
     (Array.isArray(request?.records) ? request.records : [])
       .map((record) => [String(record?.recordKey || ''), record])
   );
   return deepFreeze({
     groupId: plan.groupId,
-    mode: plan.mode,
-    modeLabel: plan.mode === 'position_and_orientation' ? 'Align & orient' : 'Align',
+    modeLabel: 'Align',
     reference: {
       ...plan.reference,
       label: plan.reference.biologicalFeatureId
@@ -219,126 +247,137 @@ const validateAnchor = (value, path) => {
   };
 };
 
+const validateCandidate = (value, path, recordKey) => {
+  const raw = exactObject(value, [
+    'anchor', 'displayName', 'sourceStart', 'sourceEnd', 'displayCenter',
+    'displayedStrand', 'hidden', 'representative', 'role', 'usable',
+    'directEvidence', 'orientation'
+  ], path);
+  const anchor = validateAnchor(raw.anchor, `${path}.anchor`);
+  if (anchor.recordKey !== recordKey || typeof raw.displayName !== 'string'
+    || !Number.isSafeInteger(raw.sourceStart) || !Number.isSafeInteger(raw.sourceEnd)
+    || raw.sourceStart < 0 || raw.sourceEnd < raw.sourceStart
+    || (raw.displayCenter !== null && !Number.isFinite(raw.displayCenter))
+    || ![null, -1, 1].includes(raw.displayedStrand)
+    || typeof raw.hidden !== 'boolean' || typeof raw.representative !== 'boolean'
+    || typeof raw.usable !== 'boolean' || typeof raw.role !== 'string'
+    || !Array.isArray(raw.directEvidence)
+    || raw.directEvidence.some((evidence) => typeof evidence !== 'string')) {
+    throw new Error(`${path} contains invalid candidate facts.`);
+  }
+  const orientation = exactObject(raw.orientation, ['preserve', 'match_reference'], `${path}.orientation`);
+  for (const policy of ORIENTATION_POLICIES) {
+    const outcome = exactObject(orientation[policy], [
+      'effect', 'effectiveReverseComplement'
+    ], `${path}.orientation.${policy}`);
+    if (!['preserve', 'reverse_whole_record', 'preserve_unknown_strand'].includes(outcome.effect)
+      || typeof outcome.effectiveReverseComplement !== 'boolean') {
+      throw new Error(`${path}.orientation.${policy} is invalid.`);
+    }
+  }
+  return { ...raw, anchor, orientation };
+};
+
 const validateDecision = (value, path) => {
   const raw = exactObject(value, [
-    'kind',
-    'recordKey',
-    'status',
-    'rationale',
-    'anchor',
-    'effectiveReverseComplement'
+    'kind', 'recordKey', 'status', 'rationale', 'reviewReason', 'anchor',
+    'orientationPolicy', 'effectiveReverseComplement', 'candidates'
   ], path);
-  if (raw.kind !== 'decision' || !STATUSES.has(raw.status) || !RATIONALES.has(raw.rationale)) {
+  if (raw.kind !== 'decision' || !STATUSES.has(raw.status)
+    || !RATIONALES.has(raw.rationale) || !ORIENTATION_POLICIES.has(raw.orientationPolicy)
+    || (raw.reviewReason !== null && !REVIEW_REASONS.has(raw.reviewReason))) {
     throw new Error(`${path} contains an unknown decision value.`);
   }
   const recordKey = text(raw.recordKey, `${path}.recordKey`);
   const anchor = raw.anchor === null ? null : validateAnchor(raw.anchor, `${path}.anchor`);
-  if (anchor && anchor.recordKey !== recordKey) {
-    throw new Error(`${path}.anchor belongs to another record.`);
+  const candidates = raw.candidates.map((candidate, index) => (
+    validateCandidate(candidate, `${path}.candidates[${index}]`, recordKey)
+  ));
+  if (anchor && anchor.recordKey !== recordKey) throw new Error(`${path}.anchor belongs to another record.`);
+  if (raw.effectiveReverseComplement !== null
+    && typeof raw.effectiveReverseComplement !== 'boolean') {
+    throw new Error(`${path}.effectiveReverseComplement is invalid.`);
   }
-  const orientation = raw.effectiveReverseComplement;
-  if (orientation !== null && typeof orientation !== 'boolean') {
-    throw new Error(`${path}.effectiveReverseComplement must be boolean or null.`);
-  }
-  const alignedRationales = new Set([
-    'user_selected', 'only_usable_candidate', 'unique_direct_rbh'
-  ]);
-  const skippedRationales = new Set([
-    'skipped_by_user', 'skipped_no_candidate', 'skipped_unmappable'
-  ]);
+  const alignedRationales = new Set(['user_selected', 'only_usable_candidate', 'unique_direct_rbh']);
+  const skippedRationales = new Set(['skipped_by_user', 'skipped_no_candidate', 'skipped_unmappable']);
   const valid = raw.status === 'reference'
-    ? anchor !== null && raw.rationale === 'reference' && orientation === null
+    ? anchor !== null && raw.rationale === 'reference' && raw.reviewReason === null
+      && raw.orientationPolicy === 'preserve' && raw.effectiveReverseComplement === null
     : raw.status === 'aligned'
       ? anchor !== null && alignedRationales.has(raw.rationale)
-      : anchor === null && skippedRationales.has(raw.rationale) && orientation === null;
+        && typeof raw.effectiveReverseComplement === 'boolean'
+        && candidates.some((candidate) => candidate.usable && sameJson(candidate.anchor, anchor))
+        && raw.reviewReason === (raw.rationale === 'user_selected' ? null : raw.rationale)
+      : anchor === null && skippedRationales.has(raw.rationale)
+        && raw.reviewReason === null && raw.orientationPolicy === 'preserve'
+        && raw.effectiveReverseComplement === null;
   if (!valid) throw new Error(`${path} contains an invalid decision combination.`);
-  return {
-    kind: 'decision',
-    recordKey,
-    status: raw.status,
-    rationale: raw.rationale,
-    anchor,
-    effectiveReverseComplement: orientation
-  };
-};
-
-const validateCandidate = (value, path, recordKey) => {
-  const raw = exactObject(value, [
-    'anchor', 'displayedStrand', 'hidden', 'representative', 'role'
-  ], path);
-  const anchor = validateAnchor(raw.anchor, `${path}.anchor`);
-  if (
-    anchor.recordKey !== recordKey
-    || ![null, -1, 1].includes(raw.displayedStrand)
-    || typeof raw.hidden !== 'boolean'
-    || typeof raw.representative !== 'boolean'
-    || typeof raw.role !== 'string'
-    || raw.role.includes('\0')
-  ) throw new Error(`${path} contains invalid candidate facts.`);
-  return {
-    anchor,
-    displayedStrand: raw.displayedStrand,
-    hidden: raw.hidden,
-    representative: raw.representative,
-    role: raw.role.trim()
-  };
+  return { ...raw, anchor, candidates };
 };
 
 const validateAmbiguity = (value, path) => {
   const raw = exactObject(value, [
-    'kind', 'recordKey', 'candidates', 'directRbhCandidates'
+    'kind', 'recordKey', 'candidates', 'directRbhCandidates',
+    'recommendedAnchor', 'recommendationReason'
   ], path);
-  if (raw.kind !== 'ambiguous' || !Array.isArray(raw.candidates) || raw.candidates.length < 2) {
-    throw new Error(`${path} is not a valid ambiguity.`);
-  }
+  if (raw.kind !== 'ambiguous' || !Array.isArray(raw.candidates)
+    || raw.candidates.length < 2 || !['unique_representative', 'deterministic_candidate_1']
+      .includes(raw.recommendationReason)) throw new Error(`${path} is not a valid ambiguity.`);
   const recordKey = text(raw.recordKey, `${path}.recordKey`);
   const candidates = raw.candidates.map((candidate, index) => (
     validateCandidate(candidate, `${path}.candidates[${index}]`, recordKey)
   ));
-  const candidateKeys = new Set(candidates.map(({ anchor }) => JSON.stringify(anchor)));
-  if (candidateKeys.size !== candidates.length || !Array.isArray(raw.directRbhCandidates)) {
-    throw new Error(`${path} contains duplicate candidates or invalid direct evidence.`);
+  const keys = new Set(candidates.map(({ anchor }) => anchorKey(anchor)));
+  const recommendedAnchor = validateAnchor(raw.recommendedAnchor, `${path}.recommendedAnchor`);
+  if (keys.size !== candidates.length || !candidates.some((candidate) => (
+    candidate.usable && sameJson(candidate.anchor, recommendedAnchor)
+  )) || !Array.isArray(raw.directRbhCandidates)) {
+    throw new Error(`${path} contains invalid candidates or recommendation.`);
   }
   const directRbhCandidates = raw.directRbhCandidates.map((anchor, index) => (
     validateAnchor(anchor, `${path}.directRbhCandidates[${index}]`)
   ));
-  if (directRbhCandidates.some((anchor) => !candidateKeys.has(JSON.stringify(anchor)))) {
-    throw new Error(`${path} direct evidence does not identify a candidate.`);
+  if (directRbhCandidates.some((anchor) => !keys.has(anchorKey(anchor)))) {
+    throw new Error(`${path} contains unknown direct evidence.`);
   }
-  return { kind: 'ambiguous', recordKey, candidates, directRbhCandidates };
+  return { ...raw, recordKey, candidates, directRbhCandidates, recommendedAnchor };
 };
 
 const validatePlan = (value, response, path) => {
-  const raw = exactObject(value, ['schema', 'mode', 'groupId', 'reference', 'records'], path);
-  if (raw.schema !== 1 || raw.mode !== response.mode || raw.groupId !== response.groupId) {
+  const raw = exactObject(value, ['schema', 'groupId', 'reference', 'records'], path);
+  if (raw.schema !== 2 || raw.groupId !== response.groupId || !Array.isArray(raw.records)
+    || !sameJson(validateAnchor(raw.reference, `${path}.reference`), response.reference)) {
     throw new Error(`${path} does not match its resolution.`);
   }
-  const reference = validateAnchor(raw.reference, `${path}.reference`);
-  if (!sameJson(reference, response.reference) || !Array.isArray(raw.records)) {
-    throw new Error(`${path}.reference or records are invalid.`);
-  }
-  const records = raw.records.map((decision, index) => {
-    const normalized = validateDecision(
-      { ...decision, kind: 'decision' },
-      `${path}.records[${index}]`
-    );
-    const { kind: _kind, ...planDecision } = normalized;
-    return planDecision;
+  const records = raw.records.map((record, index) => {
+    const decision = response.records[index];
+    const fields = exactObject(record, [
+      'recordKey', 'status', 'rationale', 'anchor', 'orientationPolicy',
+      'effectiveReverseComplement'
+    ], `${path}.records[${index}]`);
+    if (!decision || decision.kind !== 'decision'
+      || !sameJson(fields, {
+        recordKey: decision.recordKey, status: decision.status,
+        rationale: decision.rationale, anchor: decision.anchor,
+        orientationPolicy: decision.orientationPolicy,
+        effectiveReverseComplement: decision.effectiveReverseComplement
+      })) throw new Error(`${path} differs from helper decisions.`);
+    return fields;
   });
-  return { schema: 1, mode: raw.mode, groupId: raw.groupId, reference, records };
+  return { schema: 2, groupId: raw.groupId, reference: raw.reference, records };
 };
 
 const validateResolution = (value, request) => {
   const raw = exactObject(value, [
-    'schema', 'status', 'mode', 'groupId', 'reference', 'records', 'plan'
+    'schema', 'status', 'groupId', 'reference', 'referenceDisplayedStrand',
+    'referenceDisplayCenter', 'records', 'plan'
   ], 'alignment helper response');
-  if (
-    raw.schema !== 1
-    || !['resolved', 'ambiguous'].includes(raw.status)
-    || raw.mode !== request.mode
-    || raw.groupId !== request.groupId
-    || !Array.isArray(raw.records)
-  ) throw new Error('Alignment helper response does not match its request.');
+  if (raw.schema !== 2 || !['resolved', 'ambiguous'].includes(raw.status)
+    || raw.groupId !== request.groupId || !Array.isArray(raw.records)
+    || ![null, -1, 1].includes(raw.referenceDisplayedStrand)
+    || !Number.isFinite(raw.referenceDisplayCenter)) {
+    throw new Error('Alignment helper response does not match its request.');
+  }
   const reference = validateAnchor(raw.reference, 'alignment helper response.reference');
   if (!sameJson(reference, request.reference)) {
     throw new Error('Alignment helper response changed the exact reference.');
@@ -350,38 +389,36 @@ const validateResolution = (value, request) => {
         ? validateAmbiguity(record, `alignment helper response.records[${index}]`)
         : (() => { throw new Error('Alignment helper response contains an unknown record kind.'); })()
   ));
+  const referenceDecision = records.find(({ recordKey }) => recordKey === reference.recordKey);
+  if (referenceDecision?.kind !== 'decision' || referenceDecision.status !== 'reference'
+    || !sameJson(referenceDecision.anchor, reference)
+    || records.filter(({ status }) => status === 'reference').length !== 1) {
+    throw new Error('Alignment helper response changed the exact reference decision.');
+  }
   const expectedKeys = request.records.map(({ recordKey }) => recordKey);
-  if (
-    records.length !== expectedKeys.length
-    || records.some((record, index) => record.recordKey !== expectedKeys[index])
-  ) throw new Error('Alignment helper response changed displayed-record coverage.');
-  const knownAnchors = new Set(request.members.map(({ anchor }) => JSON.stringify(anchor)));
+  if (records.length !== expectedKeys.length
+    || records.some((record, index) => record.recordKey !== expectedKeys[index])) {
+    throw new Error('Alignment helper response changed displayed-record coverage.');
+  }
+  const known = new Set(request.members.map(({ anchor }) => anchorKey(anchor)));
   if (records.some((record) => (
     record.kind === 'decision'
-      ? record.anchor !== null && !knownAnchors.has(JSON.stringify(record.anchor))
-      : record.candidates.some(({ anchor }) => !knownAnchors.has(JSON.stringify(anchor)))
+      ? record.anchor !== null && !known.has(anchorKey(record.anchor))
+      : record.candidates.some(({ anchor }) => !known.has(anchorKey(anchor)))
   ))) throw new Error('Alignment helper response contains an unknown group member.');
-  const ambiguities = records.filter(({ kind }) => kind === 'ambiguous');
-  if ((raw.status === 'ambiguous') !== (ambiguities.length > 0)) {
+  const ambiguous = records.some(({ kind }) => kind === 'ambiguous');
+  if ((raw.status === 'ambiguous') !== ambiguous) {
     throw new Error('Alignment helper response status does not match its records.');
   }
   const response = {
-    schema: 1,
-    status: raw.status,
-    mode: raw.mode,
-    groupId: raw.groupId,
-    reference,
-    records,
-    plan: null
+    schema: 2, status: raw.status, groupId: raw.groupId, reference,
+    referenceDisplayedStrand: raw.referenceDisplayedStrand,
+    referenceDisplayCenter: raw.referenceDisplayCenter,
+    records, plan: null
   };
   if (raw.status === 'resolved') {
     if (raw.plan === null) throw new Error('Resolved alignment helper response has no plan.');
     response.plan = validatePlan(raw.plan, response, 'alignment helper response.plan');
-    const planRecords = response.plan.records;
-    const decisions = records.map(({ kind: _kind, ...decision }) => decision);
-    if (!sameJson(planRecords, decisions)) {
-      throw new Error('Resolved plan differs from the helper decisions.');
-    }
   } else if (raw.plan !== null) {
     throw new Error('Ambiguous alignment helper response must not contain a plan.');
   }
@@ -411,12 +448,12 @@ const recordLengths = (catalog) => {
   return lengths;
 };
 
-const buildHelperRequest = ({ group, members, reference, mode, request, catalog, choices }) => {
+const buildHelperRequest = ({ group, members, reference, request, catalog, choices }) => {
   const groupStatus = orthogroupIdStatus(group);
   if (!groupStatus.valid || !groupStatus.supplied) {
     throw new Error('The selected Similarity Group identity is invalid.');
   }
-  if (!MODES.has(mode)) throw new Error('The requested alignment mode is unsupported.');
+
   if (!request || request.mode !== 'linear' || !Array.isArray(request.records)) {
     throw new Error('Generate a Linear diagram before aligning a Similarity Group.');
   }
@@ -522,8 +559,7 @@ const buildHelperRequest = ({ group, members, reference, mode, request, catalog,
       };
     });
   return deepFreeze({
-    schema: 1,
-    mode,
+    schema: 2,
     groupId: groupStatus.value,
     records,
     reference: exactMember.payload.anchor,
@@ -635,6 +671,7 @@ export const createSimilarityAlignmentActions = ({
 
   const draft = ref(null);
   const status = ref('idle');
+  const busy = computed(() => status.value === 'resolving' || status.value === 'applying');
   const error = ref(null);
   const summary = ref(null);
   const notice = ref('');
@@ -644,7 +681,6 @@ export const createSimilarityAlignmentActions = ({
   let activeRequest = null;
   let activeApply = null;
   let activeBaseline = null;
-  let reportedAmbiguities = [];
   let displayFacts = new Map();
   let recordLabels = new Map();
   let artifactStamp = null;
@@ -661,7 +697,6 @@ export const createSimilarityAlignmentActions = ({
   const clearDraft = () => {
     draft.value = null;
     activeRequest = null;
-    reportedAmbiguities = [];
     displayFacts = new Map();
     recordLabels = new Map();
     artifactStamp = null;
@@ -761,7 +796,7 @@ export const createSimilarityAlignmentActions = ({
 
   const applyPlan = async (plan, request, expectedActionId) => {
     if (expectedActionId !== actionId) return { status: 'stale' };
-    status.value = 'applying';
+    if (!artifactIsCurrent()) return rejectStaleDraft();
     const recordKeys = request.records.map(({ recordKey }) => recordKey);
     const promise = runAnalysis({
       skipSimilarityAlignmentValidation: true,
@@ -786,7 +821,7 @@ export const createSimilarityAlignmentActions = ({
     }
     if (expectedActionId !== actionId) return { status: 'stale' };
     if (outcome?.status === 'ok') {
-      summary.value = successfulSummary(plan);
+      summary.value = successfulSummary(plan, request);
       repair.value = null;
       notice.value = '';
       activeBaseline = null;
@@ -795,58 +830,38 @@ export const createSimilarityAlignmentActions = ({
       status.value = 'idle';
       return { status: 'ok' };
     }
-    if (draft.value?.ambiguities?.length) {
-      status.value = 'ambiguous';
-    } else {
-      clearDraft();
-      activeBaseline = null;
-      status.value = 'idle';
-    }
-    publishError(outcome?.error || new Error('Alignment generation failed. Retry Apply.'));
+    status.value = 'reviewing';
+    publishError(outcome?.error || new Error('Alignment generation failed. Review the draft and retry Apply.'));
     return { status: outcome?.status || 'error' };
   };
 
-  const resolveRequest = async (request, expectedActionId, { autoApply }) => {
-    status.value = 'resolving';
+  const resolveRequest = async (request, expectedActionId) => {
     let response;
     try {
-      const helper = await runHelperOperation(
-        resolveOperation,
-        { request }
-      );
+      const helper = await runHelperOperation(resolveOperation, { request });
       if (expectedActionId !== actionId) return { status: 'stale' };
       response = validateResolution(helper?.result, request);
+      if (!artifactIsCurrent()) return rejectStaleDraft();
     } catch (cause) {
       if (expectedActionId !== actionId) return { status: 'stale' };
       clearDraft();
+      activeBaseline = null;
       status.value = 'idle';
       publishError(cause);
       return { status: 'error' };
     }
     activeRequest = request;
     error.value = null;
-    reportedAmbiguities = ambiguityViews(response, request, displayFacts, recordLabels);
-    if (response.status === 'resolved') {
-      draft.value = deepFreeze({
-        response,
-        choices: request.choices,
-        ambiguities: reportedAmbiguities
-      });
-      status.value = 'ready';
-      return autoApply
-        ? applyPlan(response.plan, request, expectedActionId)
-        : { status: 'ready' };
-    }
     draft.value = deepFreeze({
       response,
-      choices: request.choices,
-      ambiguities: reportedAmbiguities
+      rows: reviewRows(response, request, displayFacts, recordLabels)
     });
-    status.value = 'ambiguous';
-    return { status: 'ambiguous' };
+    status.value = 'reviewing';
+    return { status: 'reviewing' };
   };
 
-  const start = async ({ groupId, reference, mode = 'position', source }) => {
+  const start = async ({ groupId, reference, source }) => {
+    if (busy.value) return { status: 'busy' };
     const id = String(groupId || '').trim();
     if (!reference) {
       publishError(new Error(
@@ -857,22 +872,16 @@ export const createSimilarityAlignmentActions = ({
       return { status: 'rejected' };
     }
     const expectedActionId = ++actionId;
-    if (activeApply) {
-      if (typeof cancelRunAnalysis === 'function') cancelRunAnalysis();
-      await activeApply;
-    }
     clearDraft();
     error.value = null;
+    status.value = 'resolving';
     try {
       const group = getOrthogroupById(id);
       if (!group) throw new Error('The selected Similarity Group is unavailable.');
       activeBaseline = baseline({ materializePlan: true });
       const members = getEnrichedOrthogroupMembers(group);
       const request = buildHelperRequest({
-        group,
-        members,
-        reference,
-        mode,
+        group, members, reference,
         request: activeBaseline.request,
         catalog: state.featureCatalog?.value,
         choices: []
@@ -885,10 +894,12 @@ export const createSimilarityAlignmentActions = ({
         return [recordKey, displayText(sequence?.definition, sequence?.accession,
           sequence?.gb?.name, sequence?.gff?.name) || `Record ${index + 1}`];
       }));
+      activeRequest = request;
       artifactStamp = captureArtifact(request.groupId);
-      return resolveRequest(request, expectedActionId, { autoApply: true });
+      return resolveRequest(request, expectedActionId);
     } catch (cause) {
       if (expectedActionId !== actionId) return { status: 'stale' };
+      clearDraft();
       status.value = 'idle';
       activeBaseline = null;
       publishError(cause);
@@ -896,68 +907,75 @@ export const createSimilarityAlignmentActions = ({
     }
   };
 
-  const answer = (recordKey, kind, anchor = null) => {
-    if (!activeRequest || !draft.value || status.value !== 'ambiguous') {
+  const editRow = (recordKey, update) => {
+    if (!activeRequest || !draft.value || status.value !== 'reviewing') {
       return { status: 'rejected' };
     }
-    const ambiguity = reportedAmbiguities.find((record) => record.recordKey === recordKey);
-    if (!ambiguity) return { status: 'rejected' };
-    let selectedAnchor = null;
-    if (kind === 'select') {
-      selectedAnchor = validateAnchor(anchor, 'Selected alignment candidate');
-      if (!ambiguity.candidates.some((candidate) => sameJson(candidate.anchor, selectedAnchor))) {
+    const row = draft.value.rows.find((entry) => entry.recordKey === recordKey);
+    if (!row) return { status: 'rejected' };
+    let next = row;
+    if (update.kind === 'select') {
+      const selectedAnchor = validateAnchor(update.anchor, 'Selected alignment candidate');
+      const candidate = row.candidates.find(({ anchor }) => sameJson(anchor, selectedAnchor));
+      if (!candidate) return { status: 'rejected' };
+      next = { ...row, choice: { kind: 'select', candidateKey: candidate.key },
+        orientationPolicy: row.orientationPolicy,
+        orientationEffect: candidate.orientation[row.orientationPolicy].effect,
+        reason: 'user_selected', reasonLabel: 'Selected by user',
+        unchanged: false, repairRequired: false };
+    } else if (update.kind === 'skip') {
+      next = { ...row, choice: { kind: 'skip', candidateKey: null },
+        orientationPolicy: 'preserve', orientationEffect: 'preserve',
+        reason: 'skipped_by_user', reasonLabel: 'Skipped by user',
+        unchanged: true, repairRequired: false };
+    } else if (update.kind === 'orientation') {
+      if (!ORIENTATION_POLICIES.has(update.policy) || row.choice?.kind !== 'select') {
         return { status: 'rejected' };
       }
-    } else if (kind !== 'skip') {
-      return { status: 'rejected' };
-    }
-    const choices = draft.value.choices.filter((choice) => choice.recordKey !== recordKey);
-    choices.push({ recordKey, kind, anchor: selectedAnchor });
-    const byRecord = new Map(choices.map((choice) => [choice.recordKey, choice]));
+      const candidate = row.candidates.find(({ key }) => key === row.choice.candidateKey);
+      next = { ...row, orientationPolicy: update.policy,
+        orientationEffect: candidate.orientation[update.policy].effect };
+    } else return { status: 'rejected' };
     draft.value = deepFreeze({
       ...draft.value,
-      choices,
-      ambiguities: reportedAmbiguities.map((record) => {
-        const choice = byRecord.get(record.recordKey);
-        return {
-          ...record,
-          choice: choice?.kind === 'select'
-            ? { kind: 'select', candidateKey: anchorKey(choice.anchor) }
-            : choice?.kind === 'skip'
-              ? { kind: 'skip', candidateKey: null }
-              : null
-        };
-      })
+      rows: draft.value.rows.map((entry) => entry === row ? next : entry)
     });
     error.value = null;
     return { status: 'selected' };
   };
 
   const applyDraft = async () => {
-    if (!activeRequest || status.value !== 'ambiguous' || unresolvedCount.value > 0) {
+    if (!activeRequest || status.value !== 'reviewing' || unresolvedCount.value > 0) {
       return { status: 'rejected' };
     }
     if (!artifactIsCurrent()) return rejectStaleDraft();
     const expectedActionId = actionId;
-    const request = deepFreeze({ ...cloneJson(activeRequest), choices: cloneJson(draft.value.choices) });
-    status.value = 'resolving';
-    let response;
+    const choices = draft.value.rows.map((row) => {
+      const candidate = row.candidates.find(({ key }) => key === row.choice?.candidateKey);
+      return {
+        recordKey: row.recordKey,
+        kind: row.choice.kind,
+        anchor: row.choice.kind === 'select' ? candidate.anchor : null,
+        orientationPolicy: row.choice.kind === 'select' ? row.orientationPolicy : 'preserve'
+      };
+    });
+    const request = deepFreeze({ ...cloneJson(activeRequest), choices });
+    status.value = 'applying';
     try {
       const helper = await runHelperOperation(resolveOperation, { request });
       if (expectedActionId !== actionId) return { status: 'stale' };
-      response = validateResolution(helper?.result, request);
+      const response = validateResolution(helper?.result, request);
       if (response.status !== 'resolved' || !response.plan) {
         throw new Error('The resolver did not resolve every record. Review the choices and retry.');
       }
       if (!artifactIsCurrent()) return rejectStaleDraft();
+      return applyPlan(response.plan, request, expectedActionId);
     } catch (cause) {
       if (expectedActionId !== actionId) return { status: 'stale' };
-      status.value = 'ambiguous';
+      status.value = 'reviewing';
       publishError(cause);
       return { status: 'error' };
     }
-    error.value = null;
-    return applyPlan(response.plan, request, expectedActionId);
   };
 
   const cancel = () => {
@@ -1066,7 +1084,8 @@ export const createSimilarityAlignmentActions = ({
       .map((decision) => ({
         recordKey: decision.recordKey,
         kind: decision.status === 'aligned' ? 'select' : 'skip',
-        anchor: decision.status === 'aligned' ? decision.anchor : null
+        anchor: decision.status === 'aligned' ? decision.anchor : null,
+        orientationPolicy: decision.status === 'aligned' ? decision.orientationPolicy : 'preserve'
       }))
   );
 
@@ -1101,45 +1120,21 @@ export const createSimilarityAlignmentActions = ({
       if (expectedActionId !== actionId) return { status: 'stale' };
       return markStaleReference(cause?.message || cause);
     }
-    const byRecord = new Map(response.records.map((record) => [record.recordKey, record]));
-    const ambiguities = [];
-    for (const recordKey of request.records.map((record) => record.recordKey)) {
-      if (!staleRecordKeys.has(recordKey)) continue;
-      const result = byRecord.get(recordKey);
-      const candidates = result?.kind === 'ambiguous'
-        ? result.candidates
-        : result?.kind === 'decision' && result.status === 'aligned'
-          ? [{
-              anchor: result.anchor,
-              displayedStrand: null,
-              hidden: false,
-              representative: false,
-              role: ''
-            }]
-          : [];
-      ambiguities.push({
-        recordKey,
-        recordLabel: `Record ${request.records.findIndex((entry) => entry.recordKey === recordKey) + 1}`,
-        candidates: candidates.map((candidate) => candidateView(candidate, repairRequest)),
-        choice: null
-      });
-    }
     activeRequest = repairRequest;
     activeBaseline = baseline();
     artifactStamp = captureArtifact(repairRequest.groupId);
-    reportedAmbiguities = ambiguities;
-    draft.value = deepFreeze({
-      response,
-      choices: repairRequest.choices,
-      ambiguities,
-      repair: true
-    });
+    const rows = reviewRows(response, repairRequest, displayFacts, recordLabels).map((row) => (
+      staleRecordKeys.has(row.recordKey)
+        ? { ...row, choice: null, repairRequired: true }
+        : row
+    ));
+    draft.value = deepFreeze({ response, rows, repair: true });
     repair.value = deepFreeze({
       kind: 'targets',
       groupId: plan.groupId,
       reason: 'One or more saved target anchors are no longer usable. Select or Skip each target.'
     });
-    status.value = 'ambiguous';
+    status.value = 'reviewing';
     publishNotice(`Alignment needs repair: ${repair.value.reason}`);
     return { status: 'blocked', reason: 'stale-target' };
   };
@@ -1160,7 +1155,6 @@ export const createSimilarityAlignmentActions = ({
         group,
         members,
         reference: plan.reference,
-        mode: plan.mode,
         request: currentRequest(),
         catalog: state.featureCatalog?.value,
         choices: planChoices(plan)
@@ -1263,39 +1257,34 @@ export const createSimilarityAlignmentActions = ({
   };
 
   const unresolvedCount = computed(() => (
-    Array.isArray(draft.value?.ambiguities)
-      ? draft.value.ambiguities.filter(({ choice }) => choice === null).length
-      : 0
+    draft.value?.rows?.filter(({ choice }) => choice === null).length || 0
   ));
 
   const applyDisabledReason = computed(() => {
     if (status.value === 'applying') return 'Applying the alignment plan.';
-    if (status.value === 'resolving') return 'Checking the current Select and Skip choices.';
+    if (status.value === 'resolving') return 'Resolving the current alignment.';
     if (unresolvedCount.value > 0) {
-      return `${unresolvedCount.value} ambiguous record${unresolvedCount.value === 1 ? '' : 's'} still require Select or Skip.`;
+      return `${unresolvedCount.value} record${unresolvedCount.value === 1 ? '' : 's'} still require Select or Skip.`;
     }
-    if (status.value !== 'ambiguous') {
-      return 'Select or Skip each ambiguous record before applying.';
-    }
+    if (status.value !== 'reviewing') return 'Open an alignment review before applying.';
     return '';
   });
 
   return {
     draft,
     status,
+    busy,
     error,
     summary,
     notice,
     repair,
     drawerReferenceKey,
     activePlanInspector,
-    dialogOpen: computed(() => Boolean(
-      draft.value?.ambiguities?.length && status.value !== 'idle'
-    )),
+    dialogOpen: computed(() => Boolean(draft.value && status.value !== 'idle')),
     isDraftArtifactCurrent: artifactIsCurrent,
     unresolvedCount,
     applyDisabledReason,
-    canApply: computed(() => status.value === 'ambiguous' && unresolvedCount.value === 0),
+    canApply: computed(() => status.value === 'reviewing' && unresolvedCount.value === 0),
     validateBeforeGenerate,
     resetAlignment,
     clearForMutation: clearCommittedPlan,
@@ -1316,8 +1305,9 @@ export const createSimilarityAlignmentActions = ({
       return Boolean(option);
     },
     drawerDisabledReason,
-    selectCandidate: (recordKey, anchor) => answer(recordKey, 'select', anchor),
-    skipRecord: (recordKey) => answer(recordKey, 'skip'),
+    selectCandidate: (recordKey, anchor) => editRow(recordKey, { kind: 'select', anchor }),
+    skipRecord: (recordKey) => editRow(recordKey, { kind: 'skip' }),
+    setOrientation: (recordKey, policy) => editRow(recordKey, { kind: 'orientation', policy }),
     applyDraft,
     cancel,
     previewCandidate: (anchor) => {

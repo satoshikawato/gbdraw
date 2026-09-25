@@ -5213,29 +5213,17 @@
                             </button>
                             <button type="button"
                                     data-history-managed
-                                    @click="alignByClickedOrthogroup('position', $event)"
-                                    :disabled="!clickedOrthogroupDetail?.currentMember"
+                                    @click="alignByClickedOrthogroup($event)"
+                                    :disabled="!clickedOrthogroupDetail?.currentMember || similarityAlignmentBusy"
+                                    :aria-busy="similarityAlignmentBusy"
                                     aria-describedby="clicked-alignment-action-description"
                                     class="px-2 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-slate-200 disabled:text-slate-400 disabled:cursor-not-allowed text-white rounded-lg text-xs font-medium flex items-center justify-center gap-1"
-                                    title="Align record positions to this exact feature; keep every record orientation unchanged">
+                                    title="Review alignment to this exact feature">
                                 <i class="ph ph-arrows-left-right" aria-hidden="true"></i>
-                                <span>Align</span>
-                            </button>
-                            <button type="button"
-                                    data-history-managed
-                                    @click="alignByClickedOrthogroup('position_and_orientation', $event)"
-                                    :disabled="!clickedOrthogroupDetail?.currentMember"
-                                    aria-describedby="clicked-alignment-orient-action-description"
-                                    class="px-2 py-2 bg-indigo-600 hover:bg-indigo-700 disabled:bg-slate-200 disabled:text-slate-400 disabled:cursor-not-allowed text-white rounded-lg text-xs font-medium flex items-center justify-center gap-1"
-                                    title="Align record positions to this exact feature and reverse targets whose displayed anchor strand is opposite">
-                                <i class="ph ph-arrows-horizontal" aria-hidden="true"></i>
-                                <span>Align &amp; orient</span>
+                                <span>{{ similarityAlignmentStatus === 'resolving' ? 'Resolving…' : similarityAlignmentStatus === 'applying' ? 'Applying…' : 'Align…' }}</span>
                             </button>
                             <p id="clicked-alignment-action-description" class="col-span-2 text-[10px] text-slate-500">
-                                <strong>Align</strong> changes target X positions only; record orientation is unchanged.
-                            </p>
-                            <p id="clicked-alignment-orient-action-description" class="col-span-2 text-[10px] text-slate-500 -mt-1">
-                                <strong>Align &amp; orient</strong> may reverse a target record when displayed anchor strands are known and opposite.
+                                Review anchor and orientation choices before Apply.
                             </p>
                         </div>
                         <div v-if="clickedOrthogroupDetail" class="border-y border-slate-100 py-3">
@@ -6870,21 +6858,14 @@
                             </button>
                             <button type="button"
                                     data-history-managed
-                                    @click="startSimilarityAlignmentFromDrawer(selectedOrthogroup.id, 'position', $event)"
-                                    :disabled="Boolean(similarityAlignmentDrawerDisabledReason(selectedOrthogroup.id))"
+                                    @click="startSimilarityAlignmentFromDrawer(selectedOrthogroup.id, $event)"
+                                    :disabled="Boolean(similarityAlignmentDrawerDisabledReason(selectedOrthogroup.id)) || similarityAlignmentBusy"
+                                    :aria-busy="similarityAlignmentBusy"
                                     aria-describedby="similarity-alignment-drawer-reason"
-                                    title="Align record positions to the selected exact feature; keep every record orientation unchanged"
-                                    class="text-xs px-2 py-1.5 bg-blue-600 hover:bg-blue-700 disabled:bg-slate-200 disabled:text-slate-400 disabled:cursor-not-allowed text-white rounded flex items-center justify-center gap-1">
-                                <i class="ph ph-arrows-left-right" aria-hidden="true"></i> Align
-                            </button>
-                            <button type="button"
-                                    data-history-managed
-                                    @click="startSimilarityAlignmentFromDrawer(selectedOrthogroup.id, 'position_and_orientation', $event)"
-                                    :disabled="Boolean(similarityAlignmentDrawerDisabledReason(selectedOrthogroup.id))"
-                                    aria-describedby="similarity-alignment-drawer-reason"
-                                    title="Align record positions to the selected exact feature and reverse targets whose displayed anchor strand is opposite"
-                                    class="text-xs px-2 py-1.5 bg-indigo-600 hover:bg-indigo-700 disabled:bg-slate-200 disabled:text-slate-400 disabled:cursor-not-allowed text-white rounded flex items-center justify-center gap-1">
-                                <i class="ph ph-arrows-horizontal" aria-hidden="true"></i> Align &amp; orient
+                                    title="Review alignment to the selected exact feature"
+                                    class="col-span-2 text-xs px-2 py-1.5 bg-blue-600 hover:bg-blue-700 disabled:bg-slate-200 disabled:text-slate-400 disabled:cursor-not-allowed text-white rounded flex items-center justify-center gap-1">
+                                <i class="ph ph-arrows-left-right" aria-hidden="true"></i>
+                                {{ similarityAlignmentStatus === 'resolving' ? 'Resolving…' : similarityAlignmentStatus === 'applying' ? 'Applying…' : 'Align…' }}
                             </button>
                             <button @click="resetOrthogroupRename(selectedOrthogroup.id)" class="text-xs px-2 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded flex items-center justify-center gap-1">
                                 <i class="ph ph-text-aa"></i> Reset Rename
@@ -6932,10 +6913,10 @@
                                 Select alignment anchors
                             </h2>
                             <p id="similarity-alignment-dialog-description" class="mt-1 text-xs leading-relaxed text-slate-600">
-                                Only records reported ambiguous by the shared resolver appear here. Select one exact feature or Skip each record. Representative status and direct evidence are facts, not an automatic ranking.
+                                Review every target record. Python selected the initial anchors; you can Select another or Skip. Orientation is preserved unless you choose to match the reference direction.
                             </p>
                             <p class="mt-2 text-xs font-semibold text-blue-700" data-similarity-alignment-count>
-                                {{ (similarityAlignmentDraft?.ambiguities.length || 0) - similarityAlignmentUnresolvedCount }} / {{ similarityAlignmentDraft?.ambiguities.length || 0 }} records selected
+                                {{ similarityAlignmentDraft?.rows.length || 0 }} target records · {{ similarityAlignmentUnresolvedCount }} need a choice
                             </p>
                         </div>
                         <button type="button"
@@ -6949,14 +6930,14 @@
 
                 <div class="min-h-0 flex-1 overflow-y-auto p-3 custom-scrollbar sm:p-5">
                     <div class="space-y-4">
-                        <fieldset v-for="record in (similarityAlignmentDraft?.ambiguities || [])"
-                                  :key="`alignment-ambiguity-${record.recordKey}`"
+                        <fieldset v-for="record in (similarityAlignmentDraft?.rows || [])"
+                                  :key="`alignment-review-${record.recordKey}`"
                                   class="rounded-lg border border-slate-200 p-3">
                             <legend class="px-1 text-sm font-semibold text-slate-700">
                                 <span :title="record.recordKey">{{ record.recordLabel }}</span>
                             </legend>
                             <p class="mb-3 text-[11px] text-slate-500">
-                                {{ record.choice ? (record.choice.kind === 'skip' ? 'Selected: Skip' : 'Selected: exact feature') : 'Select or Skip is required.' }}
+                                {{ record.choice ? (record.choice.kind === 'skip' ? `Unchanged: ${record.reasonLabel}` : `Selected: ${record.reasonLabel}`) : 'Select or Skip is required.' }}
                             </p>
                             <div class="grid gap-2">
                                 <label v-for="(candidate, candidateIndex) in record.candidates"
@@ -7013,6 +6994,16 @@
                                        class="border-slate-300 text-amber-600 focus:ring-amber-500">
                                 <span><strong>Skip</strong> — leave this record's position and orientation unchanged.</span>
                             </label>
+                            <label v-if="record.choice?.kind === 'select'" class="mt-3 flex items-center gap-2 text-xs text-slate-700">
+                                <input type="checkbox"
+                                       :checked="record.orientationPolicy === 'match_reference'"
+                                       :disabled="similarityAlignmentBusy"
+                                       @change="setSimilarityAlignmentOrientation(record.recordKey, $event.target.checked ? 'match_reference' : 'preserve')">
+                                Match reference direction
+                            </label>
+                            <p class="mt-1 text-[11px] text-slate-600">
+                                Orientation: {{ record.orientationEffect === 'reverse_whole_record' ? 'reverse whole record' : record.orientationEffect === 'preserve_unknown_strand' ? 'preserve (strand unknown)' : 'preserve' }}
+                            </p>
                         </fieldset>
                     </div>
                 </div>
@@ -7021,7 +7012,7 @@
                     <p id="similarity-alignment-apply-reason"
                        class="mb-2 text-xs"
                        :class="canApplySimilarityAlignment ? 'text-emerald-700' : 'text-amber-700'">
-                        {{ canApplySimilarityAlignment ? 'All choices selected. Apply will validate them with the Python resolver.' : similarityAlignmentApplyDisabledReason }}
+                        {{ canApplySimilarityAlignment ? 'Apply validates the complete draft with Python, then regenerates the diagram.' : similarityAlignmentApplyDisabledReason }}
                     </p>
                     <p v-if="similarityAlignmentError" role="alert" class="mb-2 text-xs text-red-700" data-similarity-alignment-error>{{ similarityAlignmentError.message }}</p>
                     <div class="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">

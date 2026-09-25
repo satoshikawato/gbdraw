@@ -369,6 +369,8 @@ const divergentSession = JSON.parse(await readFile(
   'gbdraw/web/gallery/sessions/BGC0000708-BGC0000713.gbdraw-session.json',
   'utf8'
 ));
+// This test isolates comparison draft behavior from the unreleased schema-1 Gallery plan.
+divergentSession.renderRequest.layout.similarityAlignment = null;
 const committedComparisonCount = divergentSession.renderRequest.comparisons.length;
 assert.ok(committedComparisonCount > 0);
 divergentSession.config.linearComparisonPlan = {
