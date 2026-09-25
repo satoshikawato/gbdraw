@@ -159,13 +159,20 @@ authority gate. This record describes the verified implementation branch.
   3200×1200 desktop capture was inspected at readable scale; the 390×740
   popup and review captures showed legible labels, exact reference, both
   actions, candidate reason, Apply, and Cancel within the viewport. The
-  palette occupies `x=12..378 px` at 390 px and intentionally overlays the
-  figure while open; closing restores the preview, and the desktop palette
-  can be moved. This bounded mobile overlap is the accepted PD-OI-035 residual
-  risk. The Session 04 prompt's literal requirement that the open palette not
-  obscure the 390 px preview remains unmet; removing that overlap would need
-  a reviewed mobile interaction outcome that preserves the PD-OI-035 canvas,
-  keyboard, and candidate-selection requirements.
+  palette occupies `x=12..378 px` and `y=12..728 px` at 390×740 px and
+  covers most of the figure while open. The list controls remain reachable;
+  closing restores the preview, and desktop canvas selection, manual pan/zoom,
+  and palette movement remain available. The Product Decision Owner selected
+  `A / RETAIN_MOBILE_PALETTE_COVERAGE` for PD-OI-035 scenario revision 2,
+  explicitly retiring the literal unobscured-preview requirement and
+  simultaneous canvas selection and manual pan/zoom at 390 px while open.
+  The revised Session 04 criterion requires legible and reachable palette
+  controls and candidate list, with the preview restored on close. The exact
+  receipt is serialized in local authority-only commit `5f3f1445` from
+  `origin/dev@69134e28`; it has not been merged into the runtime base.
+  Existing Chromium 390 px screenshots and browser checks support this
+  documentation correction; no runtime, test, or figure bytes changed.
+  Final authority-backed acceptance remains pending that merge.
 
 | Gate | Result |
 | --- | --- |
@@ -197,8 +204,11 @@ request/Session projection remains in `services/session-request.js`; no new
 schema, compatibility reader, Worker path, dependency, or CSP rule was added.
 The superseded unconditional-review path and duplicate locked-column offsets
 were removed. OE, PE, and CB do not increase; no exception packet applies.
-Product preflight is `IMPLEMENT_EXISTING_AUTHORITY` under the merged revision-3
-Choice A and unchanged PD-OI-024; no outcome remains unresolved. Reverting
+Product preflight for the implemented automatic alignment and Definition
+placement remains `IMPLEMENT_EXISTING_AUTHORITY` under the merged revision-3
+Choice A and unchanged PD-OI-024. The 390 px acceptance wording follows the
+owner's PD-OI-035 revision-2 receipt, with runtime-base authority pending its
+separate merge. No runtime is changed under that unmerged authority. Reverting
 the Web behavior would require matching Product authority to be restored first;
 the independent Definition correction can be managed separately.
 
