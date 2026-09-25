@@ -260,7 +260,7 @@ def add_record_definition_group(
     record_index: int = 0,
     record_count: int = 1,
     record_transform: RecordDisplayTransform | None = None,
-    translation_x: float = 0.0,
+    definition_column_left: float = 0.0,
 ) -> Drawing:
     """Adds a record definition group to the linear canvas.
 
@@ -306,11 +306,12 @@ def add_record_definition_group(
         local_position = place_linear_definition(
             width=definition_group_obj.definition_bounding_box_width,
             column_width=0.0,
-            record_x=placement.x - float(translation_x), gap=definition_gap,
+            record_x=placement.x, gap=definition_gap,
             keep_left=keep_definition_left_aligned, sequence_width=placement.sequence_width,
+            column_left=definition_column_left,
         )
         record_definition_group.translate(
-            canvas_config.horizontal_offset + local_position.x + float(translation_x),
+            canvas_config.horizontal_offset + local_position.x,
             header_y,
         )
         canvas.add(record_definition_group)
@@ -341,12 +342,13 @@ def add_record_definition_group(
             row_position = place_linear_definition(
                 width=row_group_obj.definition_bounding_box_width,
                 column_width=reserved_width,
-                record_x=placement.x - float(translation_x), gap=definition_gap,
+                record_x=placement.x, gap=definition_gap,
                 keep_left=keep_definition_left_aligned,
+                column_left=definition_column_left,
             )
 
             row_group.translate(
-                canvas_config.horizontal_offset + row_position.x + float(translation_x),
+                canvas_config.horizontal_offset + row_position.x,
                 (
                     placement.axis_y
                     if definition_center_y is None
@@ -369,13 +371,14 @@ def add_record_definition_group(
     definition_position = place_linear_definition(
         width=definition_group_obj.definition_bounding_box_width,
         column_width=max(0.0, float(max_def_width)),
-        record_x=record_offset_x - float(translation_x),
+        record_x=record_offset_x,
         gap=definition_gap, keep_left=keep_definition_left_aligned,
         text_anchor=definition_group_obj.linear_text_anchor,
+        column_left=definition_column_left,
     )
     record_definition_group = definition_group_obj.get_group()
     record_definition_group.translate(
-        canvas_config.horizontal_offset + definition_position.x + float(translation_x),
+        canvas_config.horizontal_offset + definition_position.x,
         record_offset_y if definition_center_y is None else float(definition_center_y),
     )
 

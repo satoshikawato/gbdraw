@@ -2893,12 +2893,20 @@ export const createAppSetup = () => {
     document.removeEventListener('keydown', handleSimilarityAlignmentEscape, true);
     window.removeEventListener('resize', clampSimilarityAlignmentPalette);
   });
-  const startSimilarityAlignmentFromDrawer = async (groupId, event = null) => {
-    rememberSimilarityAlignmentInvoker(event);
-    const outcome = await similarityAlignmentActions.startFromDrawer({ groupId });
-    if (outcome.status === 'reviewing') await focusSimilarityAlignmentDialog();
-    else if (['error', 'rejected'].includes(outcome.status)) await restoreSimilarityAlignmentFocus();
+  const finishSimilarityAlignmentStart = async (outcome) => {
+    if (similarityAlignmentActions.dialogOpen.value) {
+      if (similarityAlignmentActions.error.value) {
+        await nextTick();
+        document.querySelector('[data-similarity-alignment-error]')?.focus();
+      } else await focusSimilarityAlignmentDialog();
+    } else await restoreSimilarityAlignmentFocus();
     return outcome;
+  };
+  const startSimilarityAlignmentFromDrawer = async (groupId, event = null, mode = 'align') => {
+    rememberSimilarityAlignmentInvoker(event);
+    return finishSimilarityAlignmentStart(
+      await similarityAlignmentActions.startFromDrawer({ groupId, mode })
+    );
   };
   const cancelSimilarityAlignmentDialog = async () => {
     similarityAlignmentActions.cancel();
@@ -2951,17 +2959,16 @@ export const createAppSetup = () => {
     };
   });
 
-  const alignByClickedOrthogroup = async (event = null) => {
+  const alignByClickedOrthogroup = async (event = null, mode = 'align') => {
     const detail = clickedOrthogroupDetail.value;
     if (!detail?.id) return { status: 'rejected' };
     rememberSimilarityAlignmentInvoker(event);
     const outcome = await similarityAlignmentActions.startFromPopup({
       groupId: detail.id,
-      reference: detail.currentMember
+      reference: detail.currentMember,
+      mode
     });
-    if (outcome.status === 'reviewing') await focusSimilarityAlignmentDialog();
-    else if (['error', 'rejected'].includes(outcome.status)) await restoreSimilarityAlignmentFocus();
-    return outcome;
+    return finishSimilarityAlignmentStart(outcome);
   };
 
   const highlightClickedOrthogroup = () => {

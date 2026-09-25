@@ -1,9 +1,15 @@
 # Web Gallery operation screenshot register
 
-Last updated: 2026-09-23
+Last updated: 2026-09-25
 
 This register records task-specific decisions for Gallery operation media.
 Capture metadata remains the executable source of truth in each tutorial JSON.
+
+## Optional Similarity Group alignment review (#586)
+
+| Tutorial | Operation media | Decision | Required capture state | Status |
+| --- | --- | --- | --- | --- |
+| `BGC0000708-BGC0000713` | `manual-08-01-align-og1.webp` | Recapture | Exact BGC Session; clicked livE feature in og_1; popup shows both **Align…** and **Review alignment options…** in one crop | Recaptured at DSF 3, quality 94; old/new reviewed at equal display size; current controls and clicked feature verified |
 
 ## Two-species Vibrio collinearity example
 

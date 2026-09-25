@@ -291,8 +291,10 @@ test('Similarity alignment UI completes exact-reference, ambiguity, focus, summa
   }).click();
 
   const align = drawer.getByRole('button', { name: 'Align…', exact: true });
+  const drawerReview = drawer.getByRole('button', { name: 'Review alignment options…' });
   const referenceSelect = drawer.getByLabel('Exact reference record and feature');
   await expect(align).toBeDisabled();
+  await expect(drawerReview).toBeDisabled();
   await expect(page.locator('#similarity-alignment-drawer-reason')).toContainText(
     'Select an exact reference record and feature'
   );
@@ -303,11 +305,12 @@ test('Similarity alignment UI completes exact-reference, ambiguity, focus, summa
   expect(b0Reference).not.toBe('');
   await referenceSelect.selectOption(b0Reference);
   await expect(align).toBeEnabled();
+  await expect(drawerReview).toBeEnabled();
 
   const beforeCancel = await artifactSnapshot(page);
   const diagramWidthBefore = (await page.locator('.gbdraw-preview-surface').boundingBox()).width;
   const immediate = await page.evaluate(async () => {
-    const button = document.querySelector('button[title="Review alignment to the selected exact feature"]');
+    const button = document.querySelector('button[title="Align to the selected exact feature"]');
     button.click();
     await window.Vue.nextTick();
     return {
@@ -478,28 +481,32 @@ test('Similarity alignment UI completes exact-reference, ambiguity, focus, summa
   await expect(popup).toContainText('b0');
   await expect(popup.getByRole('button', { name: 'Reset', exact: true })).toHaveCount(0);
   const popupAlign = popup.getByRole('button', { name: 'Align…', exact: true });
-  await expect(popupAlign).toHaveAttribute('title', /Review alignment/);
-  await popupAlign.scrollIntoViewIfNeeded();
+  await expect(popupAlign).toHaveAttribute('title', /Align to this exact feature/);
+  const popupReview = popup.getByRole('button', { name: 'Review alignment options…' });
+  await expect(popupReview).toBeVisible();
+  await popupReview.scrollIntoViewIfNeeded();
   const popupImmediate = await page.evaluate(async () => {
-    const popupButton = document.querySelector(
-      '.feature-popup button[title="Review alignment to this exact feature"]'
+    const review = document.querySelector('[data-similarity-alignment-popup-review]');
+    const alignButton = document.querySelector(
+      '.feature-popup button[title="Align to this exact feature"]'
     );
     const drawerButton = document.querySelector(
-      'button[title="Review alignment to the selected exact feature"]'
+      'button[title="Align to the selected exact feature"]'
     );
-    popupButton.click();
+    review.click();
     await window.Vue.nextTick();
     return {
-      popupText: popupButton.textContent.trim(),
-      popupDisabled: popupButton.disabled,
-      popupBusy: popupButton.getAttribute('aria-busy'),
+      reviewText: review.textContent.trim(),
+      reviewDisabled: review.disabled,
+      reviewBusy: review.getAttribute('aria-busy'),
+      alignDisabled: alignButton.disabled,
       drawerDisabled: drawerButton.disabled,
       drawerBusy: drawerButton.getAttribute('aria-busy')
     };
   });
   expect(popupImmediate).toEqual({
-    popupText: 'Resolving…', popupDisabled: true, popupBusy: 'true',
-    drawerDisabled: true, drawerBusy: 'true'
+    reviewText: 'Review alignment options…', reviewDisabled: true, reviewBusy: 'true',
+    alignDisabled: true, drawerDisabled: true, drawerBusy: 'true'
   });
   await expect(dialog).toBeVisible({ timeout: 180000 });
   await page.setViewportSize({ width: 390, height: 500 });
@@ -532,7 +539,7 @@ test('Similarity alignment UI completes exact-reference, ambiguity, focus, summa
   });
   await dialog.locator('input[type="radio"]:checked').press('Escape');
   await expect(dialog).toBeHidden();
-  await expect(popupAlign).toBeFocused();
+  await expect(popupReview).toBeFocused();
   await popup.getByRole('button', { name: 'Close feature popup' }).click();
 
   await page.evaluate(() => {
@@ -785,7 +792,7 @@ test('Apply error retains draft, focuses retry guidance, and accepts correction'
   await expect(page.locator('[data-similarity-alignment-summary]')).toContainText('explicitly skipped');
 });
 
-test('one usable member opens an immediately applicable review', async ({ page }, testInfo) => {
+test('one usable member applies directly through one Worker resolve and one History action', async ({ page }, testInfo) => {
   test.setTimeout(180000);
   await captureUnhandledRejections(page);
   const directory = testInfo.outputPath('one-candidate-fixture');
@@ -842,18 +849,137 @@ test('one usable member opens an immediately applicable review', async ({ page }
   ));
   expect(reference).not.toBe('');
   await drawer.getByLabel('Exact reference record and feature').selectOption(reference);
-  await drawer.getByRole('button', { name: 'Align…', exact: true }).click();
-  const dialog = page.getByRole('dialog', { name: 'Select alignment anchors' });
-  await expect(dialog).toBeVisible({ timeout: 120000 });
-  await expect(dialog.getByRole('button', { name: 'Apply', exact: true })).toBeEnabled();
-  await dialog.getByRole('button', { name: 'Apply', exact: true }).click();
-  await expect(dialog).toBeHidden({ timeout: 120000 });
+  const before = await artifactSnapshot(page);
+  const drawerReview = drawer.getByRole('button', { name: 'Review alignment options…' });
+  const normalAlign = drawer.getByRole('button', { name: 'Align…', exact: true });
+  await expect(drawerReview).toBeEnabled();
+  await expect(normalAlign).toBeEnabled();
+  await drawerReview.focus();
+  const immediateReview = await page.evaluate(async () => {
+    const review = document.querySelector('[data-similarity-alignment-drawer-review]');
+    const align = document.querySelector('button[title="Align to the selected exact feature"]');
+    review.click();
+    await window.Vue.nextTick();
+    return {
+      reviewBusy: review.getAttribute('aria-busy'), reviewDisabled: review.disabled,
+      alignBusy: align.getAttribute('aria-busy'), alignDisabled: align.disabled,
+      live: document.querySelector('[data-similarity-alignment-status]')?.textContent.trim()
+    };
+  });
+  expect(immediateReview).toEqual({
+    reviewBusy: 'true', reviewDisabled: true, alignBusy: 'true', alignDisabled: true,
+    live: 'Resolving similarity alignment…'
+  });
+  const resolvedReview = page.getByRole('dialog', { name: 'Select alignment anchors' });
+  await expect(resolvedReview).toBeVisible({ timeout: 180000 });
+  await expect(resolvedReview.getByRole('heading', { name: 'Select alignment anchors' })).toBeFocused();
+  await expect(resolvedReview.locator('[data-similarity-alignment-reference]')).toContainText('b0');
+  await expect(resolvedReview.locator('[data-alignment-record-key]')).toHaveCount(1);
+  await expect(resolvedReview.getByRole('button', { name: 'Apply', exact: true })).toBeEnabled();
+  const matchDirection = resolvedReview.getByRole('checkbox', { name: /Match reference direction for/ });
+  await matchDirection.check();
+  await expect(matchDirection).toBeChecked();
+  await resolvedReview.getByRole('radio', { name: /Skip / }).check();
+  await expect(resolvedReview).toContainText('Unchanged');
+  await resolvedReview.getByRole('radio', { name: /Select .*bp, strand/ }).first().check();
+  await resolvedReview.getByRole('button', { name: 'Cancel', exact: true }).click();
+  await expect(drawerReview).toBeFocused();
+  expect(await artifactSnapshot(page)).toEqual(before);
+
+  await page.setViewportSize({ width: 390, height: 740 });
+  const b0FeatureId = await page.evaluate(() => window.__GBDRAW_APP__.extractedFeatures
+    .find(({ protein_id: proteinId }) => proteinId === 'b0').svg_id);
+  await page.locator(`[data-gbdraw-feature-id="${b0FeatureId}"]`).first()
+    .dispatchEvent('click', { clientX: -100, clientY: -100 });
+  const popup = page.locator('.feature-popup[role="dialog"]');
+  await expect(popup).toBeVisible();
+  const popupReview = popup.getByRole('button', { name: 'Review alignment options…' });
+  await popupReview.scrollIntoViewIfNeeded();
+  await popupReview.focus();
+  await popupReview.press('Enter');
+  await expect(resolvedReview).toBeVisible({ timeout: 180000 });
+  await expect(resolvedReview.locator('[data-similarity-alignment-reference]')).toContainText('b0');
+  const narrowBox = await resolvedReview.boundingBox();
+  expect(narrowBox.x).toBeGreaterThanOrEqual(0);
+  expect(narrowBox.x + narrowBox.width).toBeLessThanOrEqual(390);
+  await page.keyboard.press('Escape');
+  await expect(resolvedReview).toBeHidden();
+  await expect(popupReview).toBeFocused();
+  await popup.getByRole('button', { name: 'Close feature popup' }).click();
+  expect(await artifactSnapshot(page)).toEqual(before);
+  await page.setViewportSize({ width: 1600, height: 1000 });
+
+  await page.evaluate(() => {
+    window.__alignmentWorkerResolves = 0;
+    window.__alignmentPaletteMounts = 0;
+    const postMessage = Worker.prototype.postMessage;
+    Worker.prototype.postMessage = function (message, transfer) {
+      if (message?.type === 'helper' && message.operation === 'resolveSimilarityAlignment') {
+        window.__alignmentWorkerResolves += 1;
+      }
+      return postMessage.call(this, message, transfer);
+    };
+    new MutationObserver((changes) => {
+      for (const change of changes) {
+        for (const node of change.addedNodes) {
+          if (node.nodeType === Node.ELEMENT_NODE && (
+            node.matches('[data-similarity-alignment-dialog]')
+            || node.querySelector('[data-similarity-alignment-dialog]')
+          )) window.__alignmentPaletteMounts += 1;
+        }
+      }
+    }).observe(document.body, { childList: true, subtree: true });
+  });
+  await normalAlign.click();
+  await expect(page.getByRole('dialog', { name: 'Select alignment anchors' })).toHaveCount(0);
   await expect.poll(() => page.evaluate(async () => {
     const { state } = await import('./js/state.js');
     return state.similarityAlignmentPlan.value?.schema || null;
   }), { timeout: 120000 }).toBe(2);
   await expect(page.locator('[data-similarity-alignment-summary]')).toContainText('1 aligned');
+  const after = await artifactSnapshot(page);
+  expect(after.results).not.toEqual(before.results);
+  expect(after.history[0]).toBe(before.history[0] + 1);
+  expect(after.history[1]).toBe(0);
+  expect(await page.evaluate(() => ({
+    resolves: window.__alignmentWorkerResolves,
+    paletteMounts: window.__alignmentPaletteMounts
+  }))).toEqual({ resolves: 1, paletteMounts: 0 });
+
+  await importSession(page, session, 'one-candidate-retry.gbdraw-session.json');
+  if (!await page.evaluate(() => window.__GBDRAW_APP__.showRightDrawer)) {
+    await page.locator('.drawer-toggle').click();
+  }
   const similarityTab = drawer.getByRole('button', { name: 'Similarity groups' });
+  await similarityTab.click();
+  await drawer.locator('button').filter({
+    has: page.locator('.font-mono', { hasText: /^og_1$/ })
+  }).click();
+  await drawer.getByLabel('Exact reference record and feature').selectOption(reference);
+  const committed = await artifactSnapshot(page);
+  const priorLayout = await page.evaluate(() => {
+    const app = window.__GBDRAW_APP__;
+    const prior = app.form.linear_track_layout;
+    app.form.linear_track_layout = '__invalid_alignment_retry_fixture__';
+    return prior;
+  });
+  await normalAlign.click();
+  await expect(resolvedReview).toBeVisible({ timeout: 180000 });
+  const retryError = resolvedReview.locator('[data-similarity-alignment-error]');
+  await expect(retryError).toContainText('retry Apply');
+  await expect(retryError).toBeFocused();
+  await expect(resolvedReview.locator('[data-alignment-record-key]')).toHaveCount(1);
+  const failed = await artifactSnapshot(page);
+  expect(failed.results).toEqual(committed.results);
+  expect(failed.history.slice(0, 2)).toEqual(committed.history.slice(0, 2));
+  await page.evaluate((layout) => {
+    window.__GBDRAW_APP__.form.linear_track_layout = layout;
+  }, priorLayout);
+  await resolvedReview.getByRole('radio', { name: /Skip / }).check();
+  await resolvedReview.getByRole('button', { name: 'Apply', exact: true }).click();
+  await expect(resolvedReview).toBeHidden({ timeout: 180000 });
+  await expect(page.locator('[data-similarity-alignment-summary]')).toContainText('explicitly skipped');
+
   await expect(similarityTab).toBeEnabled();
   await similarityTab.click();
   await expect(drawer.locator('[data-similarity-alignment-plan-inspector]')).toBeVisible();

@@ -245,9 +245,11 @@ test('Released Linear session preserves its subtitles and preview until Generate
 
 test('Linear Lock Definition Column applies common centers and left edges after Generate', async ({ page }) => {
   test.setTimeout(120000);
+  await installDiagramRequestObserver(page);
   await openApp(page);
   await page.evaluate(() => { window.__GBDRAW_APP__.mode = 'linear'; });
-  const source = ['A', 'B', 'C', 'D'].map((id, i) => makeComparisonGenbank(id, 'atg', i < 2 ? 100 : 60)).join('');
+  const source = ['A', 'B', 'C', 'D'].map((id) =>
+    makeDefinitionGenbank(id, `                     /plasmid="${id}"\n`)).join('');
   await page.locator('[data-linear-source-card] input[type="file"]').first().setInputFiles({
     name: 'definition-rows.gb', mimeType: 'text/plain', buffer: Buffer.from(source)
   });
@@ -256,7 +258,7 @@ test('Linear Lock Definition Column applies common centers and left edges after 
     const app = window.__GBDRAW_APP__;
     Object.assign(app.form, { align_center: true, legend: 'none', show_gc: false, show_skew: false, show_labels_linear: 'none' });
     Object.assign(app.adv, {
-      linear_show_replicon: false,
+      linear_show_replicon: true,
       linear_accession_visibility: 'hide',
       linear_length_visibility: 'hide'
     });
@@ -266,6 +268,10 @@ test('Linear Lock Definition Column applies common centers and left edges after 
       seq.record_subtitle = i < 2 ? 'A1' : 'B';
       app.setLinearRecordRow(seq.uid, i < 2 ? 1 : 2);
     });
+    const { state } = await import('/gbdraw/web/js/state.js');
+    state.linearRecordTranslations.value = app.linearSeqs.map((seq, index) => ({
+      recordKey: seq.uid, x: [-85, 40, -35, 75][index], y: 0
+    }));
   });
   const measure = () => page.evaluate(async () => {
     const host = document.createElement('div');
@@ -280,27 +286,49 @@ test('Linear Lock Definition Column applies common centers and left edges after 
       const right = new DOMPoint(b.x + b.width, b.y).matrixTransform(m).x;
       return { left, right, center: (left + right) / 2 };
     };
-    const headings = [...svg.querySelectorAll('g[data-gbdraw-role="record-definition-row"]')].map(g => {
-      const index = g.dataset.gbdrawRecordIndex;
-      const axis = svg.querySelector(`g[data-record-index="${index}"]`);
-      const axisX = new DOMPoint(0, 0).matrixTransform(svg.getCTM().inverse().multiply(axis.getCTM())).x;
-      return { ...box(g), axisX, lines: [...g.querySelectorAll('text')].map(box) };
+    const axes = [...svg.querySelectorAll('g[data-record-index]')].map(axis => {
+      const line = axis.querySelector(':scope > line');
+      if (!line) throw new Error('Missing displayed sequence axis');
+      return { index: axis.dataset.recordIndex, translation: Number(axis.dataset.recordTranslationX),
+        ...box(line) };
     });
+    const headings = [...svg.querySelectorAll('g[data-gbdraw-role="record-definition-row"]')].map(g => ({
+      index: g.dataset.gbdrawRecordIndex, ...box(g), lines: [...g.querySelectorAll('text')].map(box)
+    }));
+    const locals = [...svg.querySelectorAll('g[data-gbdraw-role="record-definition"]')]
+      .filter(g => g.querySelector('text'))
+      .map(g => ({ index: g.dataset.gbdrawRecordIndex, ...box(g) }));
     host.remove();
-    return headings;
+    return { axes, headings, locals };
   });
   for (const locked of [false, true]) {
     await page.getByRole('checkbox', { name: 'Lock Definition Column', exact: true }).setChecked(locked);
     expect(await page.evaluate(() => window.__GBDRAW_APP__.runAnalysis())).toEqual({ status: 'ok' });
-    const headings = await measure();
+    const { axes, headings, locals } = await measure();
+    expect(axes.map(axis => axis.translation)).toEqual([-85, 40, -35, 75]);
     expect(headings).toHaveLength(2);
+    expect(locals).toHaveLength(4);
     const coord = box => locked ? box.left : box.center;
-    const delta = locked ? 0 : headings[1].axisX - headings[0].axisX;
+    const leaders = headings.map(heading => axes.find(axis => axis.index === heading.index));
+    const delta = locked ? 0 : leaders[1].left - leaders[0].left;
     expect(Math.abs(coord(headings[1]) - coord(headings[0]) - delta)).toBeLessThanOrEqual(1);
     for (const heading of headings) {
       expect(heading.lines).toHaveLength(2);
       expect(Math.abs(coord(heading.lines[0]) - coord(heading.lines[1]))).toBeLessThanOrEqual(1);
-      expect(heading.axisX - heading.right).toBeGreaterThanOrEqual(19);
+    }
+    if (locked) {
+      const nearestSequence = Math.min(...axes.map(axis => axis.left));
+      const widestHeadingRight = Math.max(...headings.map(heading => heading.right));
+      expect(nearestSequence - widestHeadingRight).toBeGreaterThanOrEqual(19);
+    } else {
+      for (const heading of headings) {
+        const sequence = axes.find(axis => axis.index === heading.index);
+        expect(sequence.left - heading.right).toBeGreaterThanOrEqual(19);
+      }
+    }
+    for (const local of locals) {
+      const sequence = axes.find(axis => axis.index === local.index);
+      expect(Math.abs(local.center - sequence.center)).toBeLessThanOrEqual(1);
     }
   }
   const beforeSave = await measure();
@@ -314,6 +342,24 @@ test('Linear Lock Definition Column applies common centers and left edges after 
   expect(await measure()).toEqual(beforeSave);
   expect(await page.evaluate(() => window.__GBDRAW_APP__.runAnalysis())).toEqual({ status: 'ok' });
   expect(await measure()).toEqual(beforeSave);
+  await page.evaluate(() => {
+    const app = window.__GBDRAW_APP__;
+    [1, 2, 2, 3].forEach((row, index) => app.setLinearRecordRow(app.linearSeqs[index].uid, row));
+    app.linearSeqs[1].definition = 'Aeromonas sp.';
+    app.linearSeqs[1].record_subtitle = 'B';
+  });
+  expect(await page.evaluate(() => window.__GBDRAW_APP__.runAnalysis())).toEqual({ status: 'ok' });
+  const mixed = await measure();
+  expect(mixed.headings).toHaveLength(3);
+  expect(mixed.locals).toHaveLength(4);
+  for (const local of mixed.locals) {
+    const sequence = mixed.axes.find(axis => axis.index === local.index);
+    expect(Math.abs(local.center - sequence.center)).toBeLessThanOrEqual(1);
+  }
+  expect(Math.max(...mixed.headings.map(heading => heading.left))
+    - Math.min(...mixed.headings.map(heading => heading.left))).toBeLessThanOrEqual(1);
+  expect(Math.min(...mixed.axes.map(axis => axis.left))
+    - Math.max(...mixed.headings.map(heading => heading.right))).toBeGreaterThanOrEqual(19);
 });
 
 const linearRecordCard = (page, uid) => (

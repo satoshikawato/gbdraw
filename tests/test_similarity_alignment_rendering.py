@@ -538,6 +538,37 @@ def test_final_placements_align_anchors_and_bounds_do_not_clip(
     assert all(math.isfinite(x) for x, _y in rendered_translations.values())
 
 
+def test_similarity_alignment_keeps_locked_definitions_in_one_column() -> None:
+    first = _record("first", 100, 10, 20)
+    second = _record("second", 200, 150, 170)
+    request = _request(
+        first,
+        second,
+        _plan(_anchor(first, "first"), _anchor(second, "second")),
+        translations=(
+            LinearRecordTranslation("first", 45.0),
+            LinearRecordTranslation("second", 80.0),
+        ),
+        overrides={"canvas.linear.keep_definition_left_aligned": True},
+    )
+    root = ElementTree.fromstring(build_request_diagram(request).drawing.tostring())
+    namespace = {"svg": "http://www.w3.org/2000/svg"}
+    groups = root.findall("svg:g", namespace)
+
+    def x(group):
+        return sum(float(value) for value in re.findall(
+            r"translate\(\s*([-+0-9.eE]+)", group.attrib.get("transform", "")))
+
+    axes = [group for group in groups if group.attrib.get("data-record-key")]
+    definitions = [group for group in groups
+                   if group.attrib.get("data-gbdraw-role") == "record-definition"]
+    assert len(axes) == len(definitions) == 2
+    translations = [float(axis.attrib["data-record-translation-x"]) for axis in axes]
+    assert min(translations) < 0 < max(translations)
+    assert x(definitions[0]) == pytest.approx(x(definitions[1]))
+    assert x(definitions[0]) < min(x(axis) for axis in axes)
+
+
 def test_final_translation_is_shared_by_every_record_geometry_consumer() -> None:
     first = _record("first", 100, 10, 20)
     second = _record("second", 200, 150, 170)

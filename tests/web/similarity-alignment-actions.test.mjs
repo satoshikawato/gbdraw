@@ -164,18 +164,167 @@ const create = ({
   });
   return { actions, state: controllerState, helperCalls, generationCalls, currentGroup };
 };
-const startPopup = (fixture, selected = reference) => fixture.actions.startFromPopup({
+const startReview = (fixture, selected = reference) => fixture.actions.startFromPopup({
+  groupId: 'og-1', reference: selected, mode: 'review'
+});
+const startAlign = (fixture, selected = reference) => fixture.actions.startFromPopup({
   groupId: 'og-1', reference: selected
+});
+
+test('normal Align applies only-usable and unusable targets with one helper and one Result', async () => {
+  const applying = deferred();
+  const fixture = create({ members: [reference, targetA, targetC],
+    helper: (_operation, { request }) => {
+      const response = responseFor(request);
+      const unusable = response.records[2];
+      unusable.status = 'skipped';
+      unusable.rationale = 'skipped_unmappable';
+      unusable.reviewReason = null;
+      unusable.anchor = null;
+      unusable.effectiveReverseComplement = null;
+      unusable.candidates[0].usable = false;
+      unusable.candidates[0].displayCenter = null;
+      Object.assign(response.plan.records[2], {
+        status: 'skipped', rationale: 'skipped_unmappable', anchor: null,
+        effectiveReverseComplement: null
+      });
+      return { result: response };
+    },
+    generation: () => applying.promise });
+  const priorResult = fixture.state.results.value;
+  const operation = startAlign(fixture);
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(fixture.actions.status.value, 'applying');
+  assert.equal(fixture.actions.dialogOpen.value, false);
+  assert.equal(fixture.actions.draft.value, null);
+  assert.equal(fixture.actions.summary.value, null);
+  assert.equal(fixture.state.results.value, priorResult);
+  assert.equal(fixture.helperCalls.length, 1);
+  assert.deepEqual(await startAlign(fixture), { status: 'busy' });
+  applying.resolve({ status: 'ok' });
+  assert.deepEqual(await operation, { status: 'ok' });
+  assert.equal(fixture.helperCalls.length, 1);
+  assert.equal(fixture.generationCalls.length, 1);
+  assert.equal(fixture.actions.dialogOpen.value, false);
+  assert.equal(fixture.state.similarityAlignmentPlan.value.records[1].rationale,
+    'only_usable_candidate');
+  assert.equal(fixture.state.similarityAlignmentPlan.value.records[2].rationale,
+    'skipped_unmappable');
+  assert.deepEqual(fixture.actions.summary.value && [
+    fixture.actions.summary.value.aligned, fixture.actions.summary.value.noCandidate,
+    fixture.actions.summary.value.reversed
+  ], [1, 1, 0]);
+  assert.notEqual(fixture.state.results.value, priorResult);
+});
+
+test('normal Align keeps a missing target unchanged in the resolved plan', async () => {
+  const fixture = create({ members: [reference, targetA],
+    helper: (_operation, { request }) => ({ result: responseFor(request, { missing: true }) }) });
+  assert.deepEqual(await startAlign(fixture), { status: 'ok' });
+  assert.equal(fixture.actions.dialogOpen.value, false);
+  assert.equal(fixture.helperCalls.length, 1);
+  assert.equal(fixture.state.similarityAlignmentPlan.value.records[2].rationale,
+    'skipped_no_candidate');
+  assert.equal(fixture.actions.summary.value.noCandidate, 1);
+});
+
+test('normal Align uses Python unique-direct-RBH plan without a review or second helper', async () => {
+  const fixture = create({ members: [reference, targetA, targetB, targetC],
+    helper: (_operation, { request }) => {
+      assert.equal(request.members.filter(({ anchor: item }) => item.recordKey === 'b').length, 2);
+      assert.equal(request.directEdges.length, 1);
+      const response = responseFor(request);
+      response.records[1].rationale = 'unique_direct_rbh';
+      response.records[1].reviewReason = 'unique_direct_rbh';
+      response.records[1].candidates[0].directEvidence = ['rbh'];
+      response.plan.records[1].rationale = 'unique_direct_rbh';
+      return { result: response };
+    } });
+  fixture.currentGroup.orthologEdges.push({
+    orthogroupId: 'og-1', queryRecordIndex: 0, queryProteinId: 'clicked',
+    subjectRecordIndex: 1, subjectProteinId: 'target-a', edgeKind: 'rbh'
+  });
+  assert.deepEqual(await startAlign(fixture), { status: 'ok' });
+  assert.equal(fixture.helperCalls.length, 1);
+  assert.equal(fixture.generationCalls.length, 1);
+  assert.equal(fixture.actions.draft.value, null);
+  assert.equal(fixture.state.similarityAlignmentPlan.value.records[1].rationale,
+    'unique_direct_rbh');
+});
+
+test('normal Align opens complete review for genuine Python ambiguity', async () => {
+  const fixture = create({ members: [reference, targetA, targetB, targetC],
+    helper: (_operation, { request }) => ({ result: responseFor(request, { ambiguous: true }) }) });
+  assert.deepEqual(await startAlign(fixture), { status: 'reviewing' });
+  assert.equal(fixture.generationCalls.length, 0);
+  assert.equal(fixture.actions.draft.value.rows[0].reason, 'unique_representative');
+  assert.equal(fixture.actions.draft.value.rows[0].choice.candidateKey,
+    JSON.stringify(anchor('b', 'target-a', 1)));
+  assert.equal(fixture.actions.canApply.value, true);
+});
+
+test('explicit review of a resolved response keeps the full local draft without generation', async () => {
+  const fixture = create();
+  assert.deepEqual(await startReview(fixture), { status: 'reviewing' });
+  assert.equal(fixture.actions.draft.value.response.status, 'resolved');
+  assert.equal(fixture.actions.draft.value.rows[0].reason, 'only_usable_candidate');
+  assert.equal(fixture.helperCalls.length, 1);
+  assert.equal(fixture.generationCalls.length, 0);
+});
+
+test('automatic generation failure opens the resolved draft for one Apply retry', async () => {
+  let fail = true;
+  const fixture = create({ generation: async () => fail
+    ? { status: 'error', error: new Error('Render failed.') }
+    : { status: 'ok' } });
+  const previous = fixture.state.results.value;
+  assert.deepEqual(await startAlign(fixture), { status: 'error' });
+  assert.equal(fixture.actions.status.value, 'reviewing');
+  assert.equal(fixture.actions.dialogOpen.value, true);
+  assert.equal(fixture.actions.draft.value.response.status, 'resolved');
+  assert.match(fixture.actions.error.value.message, /Render failed/);
+  assert.equal(fixture.state.results.value, previous);
+  assert.equal(fixture.state.similarityAlignmentPlan.value, null);
+  fail = false;
+  assert.deepEqual(await fixture.actions.applyDraft(), { status: 'ok' });
+  assert.equal(fixture.helperCalls.length, 2);
+  assert.equal(fixture.generationCalls.length, 2);
+  assert.equal(fixture.actions.dialogOpen.value, false);
+  assert.equal(fixture.actions.summary.value.aligned, 2);
+});
+
+test('canceled or stale resolved completion cannot install a plan or Result', async () => {
+  const pendingHelper = deferred();
+  const resolving = create({ helper: (_operation, { request }) => pendingHelper.promise.then(
+    () => ({ result: responseFor(request) })
+  ) });
+  const first = startAlign(resolving);
+  resolving.actions.cancel();
+  pendingHelper.resolve();
+  assert.deepEqual(await first, { status: 'stale' });
+  assert.equal(resolving.generationCalls.length, 0);
+  const pendingGeneration = deferred();
+  const applying = create({ generation: () => pendingGeneration.promise });
+  const prior = applying.state.results.value;
+  const second = startAlign(applying);
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(applying.actions.status.value, 'applying');
+  applying.actions.cancel();
+  pendingGeneration.resolve({ status: 'canceled' });
+  assert.deepEqual(await second, { status: 'stale' });
+  assert.equal(applying.state.results.value, prior);
+  assert.equal(applying.state.similarityAlignmentPlan.value, null);
+  assert.equal(applying.actions.summary.value, null);
 });
 
 test('busy is synchronous, duplicate starts are ignored, and exact popup reference survives', async () => {
   const pending = deferred();
   const fixture = create({ members: [reference, otherReference, targetA, targetC],
     helper: (_operation, { request }) => pending.promise.then(() => ({ result: responseFor(request) })) });
-  const operation = startPopup(fixture);
+  const operation = startReview(fixture);
   assert.equal(fixture.actions.status.value, 'resolving');
   assert.equal(fixture.actions.busy.value, true);
-  assert.deepEqual(await startPopup(fixture, otherReference), { status: 'busy' });
+  assert.deepEqual(await startReview(fixture, otherReference), { status: 'busy' });
   assert.equal(fixture.helperCalls.length, 1);
   assert.deepEqual(fixture.helperCalls[0].payload.request.reference,
     anchor('a', 'clicked', 4));
@@ -191,17 +340,17 @@ test('drawer preserves its selected exact member and opens the same review', asy
     a.biologicalFeatureId === 'other'
   ));
   fixture.actions.setDrawerReference('og-1', option.key);
-  assert.deepEqual(await fixture.actions.startFromDrawer({ groupId: 'og-1' }),
+  assert.deepEqual(await fixture.actions.startFromDrawer({ groupId: 'og-1', mode: 'review' }),
     { status: 'reviewing' });
   assert.deepEqual(fixture.helperCalls[0].payload.request.reference,
     anchor('a', 'other', 7));
 });
 
-test('resolved and ambiguous initial responses always open an applicable Python-selected draft', async () => {
+test('explicit review opens an applicable Python-selected draft for either response status', async () => {
   for (const ambiguous of [false, true]) {
     const fixture = create({ members: [reference, targetA, targetB, targetC],
       helper: (_operation, { request }) => ({ result: responseFor(request, { ambiguous }) }) });
-    assert.deepEqual(await startPopup(fixture), { status: 'reviewing' });
+    assert.deepEqual(await startReview(fixture), { status: 'reviewing' });
     assert.equal(fixture.actions.dialogOpen.value, true);
     assert.equal(fixture.actions.canApply.value, true);
     assert.equal(fixture.actions.unresolvedCount.value, 0);
@@ -223,7 +372,7 @@ test('resolved and ambiguous initial responses always open an applicable Python-
 test('missing target is explicitly unchanged and complete Apply includes every target', async () => {
   const fixture = create({ members: [reference, targetA],
     helper: (_operation, { request }) => ({ result: responseFor(request, { missing: true }) }) });
-  await startPopup(fixture);
+  await startReview(fixture);
   assert.equal(fixture.actions.draft.value.rows[1].unchanged, true);
   assert.equal(fixture.actions.draft.value.rows[1].reason, 'skipped_no_candidate');
   assert.deepEqual(fixture.actions.skipRecord('c'), { status: 'rejected' });
@@ -240,7 +389,7 @@ test('missing target is explicitly unchanged and complete Apply includes every t
 test('candidate, canvas, Skip, and orientation use local edits with zero Worker jobs', async () => {
   const fixture = create({ members: [reference, targetA, targetB, targetC],
     helper: (_operation, { request }) => ({ result: responseFor(request, { ambiguous: true }) }) });
-  await startPopup(fixture);
+  await startReview(fixture);
   const count = fixture.helperCalls.length;
   assert.deepEqual(fixture.actions.selectCandidate('b', anchor('b', 'target-b', 2)),
     { status: 'selected' });
@@ -263,7 +412,7 @@ test('candidate, canvas, Skip, and orientation use local edits with zero Worker 
 test('Apply validates one explicit batch and commits through one generation call', async () => {
   const fixture = create({ members: [reference, targetA, targetB, targetC],
     helper: (_operation, { request }) => ({ result: responseFor(request, { ambiguous: true }) }) });
-  await startPopup(fixture);
+  await startReview(fixture);
   fixture.actions.setOrientation('b', 'match_reference');
   assert.deepEqual(await fixture.actions.applyDraft(), { status: 'ok' });
   assert.equal(fixture.helperCalls.length, 2);
@@ -284,12 +433,12 @@ test('duplicate Apply while validation is pending starts one batch', async () =>
     count === 2 ? pending.promise.then(() => ({ result: responseFor(request) }))
       : { result: responseFor(request) }
   ) });
-  await startPopup(fixture);
+  await startReview(fixture);
   const operation = fixture.actions.applyDraft();
   assert.equal(fixture.actions.status.value, 'applying');
   assert.equal(fixture.actions.busy.value, true);
   assert.deepEqual(await fixture.actions.applyDraft(), { status: 'rejected' });
-  assert.deepEqual(await startPopup(fixture), { status: 'busy' });
+  assert.deepEqual(await startReview(fixture), { status: 'busy' });
   pending.resolve();
   assert.deepEqual(await operation, { status: 'ok' });
   assert.equal(fixture.helperCalls.length, 2);
@@ -308,7 +457,7 @@ test('validation and generation failures preserve editable draft and prior artif
         ? { status: 'error', error: new Error('Generation failed. Retry Apply.') }
         : { status: 'ok' }
     });
-    await startPopup(fixture);
+    await startReview(fixture);
     const before = fixture.actions.draft.value;
     assert.equal((await fixture.actions.applyDraft()).status, 'error');
     assert.equal(fixture.actions.status.value, 'reviewing');
@@ -324,7 +473,7 @@ test('validation and generation failures preserve editable draft and prior artif
 
 test('Cancel preserves committed diagram, plan, and Result', async () => {
   const fixture = create();
-  await startPopup(fixture);
+  await startReview(fixture);
   const previous = fixture.state.results.value;
   assert.deepEqual(fixture.actions.cancel(), { status: 'canceled' });
   assert.equal(fixture.actions.draft.value, null);
@@ -338,7 +487,7 @@ test('stale initial resolution and canceled Apply cannot publish late completion
   const resolving = create({ helper: (_operation, { request }) => initial.promise.then(() => ({
     result: responseFor(request)
   })) });
-  const first = startPopup(resolving);
+  const first = startReview(resolving);
   resolving.actions.cancel();
   initial.resolve();
   assert.deepEqual(await first, { status: 'stale' });
@@ -347,7 +496,7 @@ test('stale initial resolution and canceled Apply cannot publish late completion
   const fixture = create({ helper: (_operation, { request }, count) => count === 2
     ? apply.promise.then(() => ({ result: responseFor(request) }))
     : { result: responseFor(request) } });
-  await startPopup(fixture);
+  await startReview(fixture);
   const second = fixture.actions.applyDraft();
   fixture.actions.cancel();
   apply.resolve();
@@ -358,7 +507,7 @@ test('stale initial resolution and canceled Apply cannot publish late completion
 
 test('changed committed Result rejects an old draft before validation', async () => {
   const fixture = create();
-  await startPopup(fixture);
+  await startReview(fixture);
   fixture.state.results.value = [{ name: 'new.svg' }];
   assert.deepEqual(await fixture.actions.applyDraft(), { status: 'stale' });
   assert.equal(fixture.helperCalls.length, 1);
@@ -367,7 +516,7 @@ test('changed committed Result rejects an old draft before validation', async ()
 
 test('active schema-2 plan validates on regeneration and supports Reset and stable reorder', async () => {
   const fixture = create();
-  await startPopup(fixture);
+  await startReview(fixture);
   await fixture.actions.applyDraft();
   assert.equal(fixture.actions.activePlanInspector.value.modeLabel, 'Align');
   const calls = fixture.helperCalls.length;
@@ -388,7 +537,7 @@ test('Python recommendation and direct-RBH reason control initial selection', as
       response.records[1].recommendationReason = 'deterministic_candidate_1';
       return { result: response };
     } });
-  await startPopup(ambiguous);
+  await startReview(ambiguous);
   assert.equal(ambiguous.actions.draft.value.rows[0].choice.candidateKey,
     JSON.stringify(anchor('b', 'target-b', 2)));
   assert.equal(ambiguous.actions.draft.value.rows[0].reason, 'deterministic_candidate_1');
@@ -399,13 +548,13 @@ test('Python recommendation and direct-RBH reason control initial selection', as
     response.plan.records[1].rationale = 'unique_direct_rbh';
     return { result: response };
   } });
-  await startPopup(direct);
+  await startReview(direct);
   assert.equal(direct.actions.draft.value.rows[0].reason, 'unique_direct_rbh');
 });
 
 test('stale active target enters the same repair draft and needs an explicit new choice', async () => {
   const fixture = create();
-  await startPopup(fixture);
+  await startReview(fixture);
   await fixture.actions.applyDraft();
   const priorResult = fixture.state.results.value;
   fixture.currentGroup.members.splice(1, 1, targetB);
@@ -441,7 +590,7 @@ test('malformed Python projection and initial Worker errors leave the prior Resu
   ]) {
     const fixture = create({ helper });
     const prior = fixture.state.results.value;
-    assert.equal((await startPopup(fixture)).status, 'error');
+    assert.equal((await startReview(fixture)).status, 'error');
     assert.equal(fixture.actions.status.value, 'idle');
     assert.equal(fixture.actions.draft.value, null);
     assert.equal(fixture.state.results.value, prior);
@@ -455,7 +604,7 @@ test('candidate preview delegates to the existing owner and Cancel clears it', a
   let cleared = 0;
   const fixture = create({ previewCandidate: (value) => previewed.push(value),
     clearCandidatePreview: () => { cleared += 1; } });
-  await startPopup(fixture);
+  await startReview(fixture);
   fixture.actions.previewCandidate(anchor('b', 'target-a', 1));
   assert.deepEqual(previewed, [anchor('b', 'target-a', 1)]);
   fixture.actions.cancel();
@@ -464,13 +613,13 @@ test('candidate preview delegates to the existing owner and Cancel clears it', a
 
 test('manual orientation and invalidating edits clear an active plan with a notice', async () => {
   const fixture = create();
-  await startPopup(fixture);
+  await startReview(fixture);
   await fixture.actions.applyDraft();
   assert.equal(fixture.actions.setManualOrientation(fixture.state.linearSeqs[1], true), true);
   assert.equal(fixture.state.similarityAlignmentPlan.value, null);
   assert.equal(fixture.state.linearSeqs[1].region_reverse, true);
   assert.match(fixture.actions.notice.value, /orientation changed/);
-  await startPopup(fixture);
+  await startReview(fixture);
   await fixture.actions.applyDraft();
   assert.equal(fixture.actions.clearForMutation('record crop changed.'), true);
   assert.equal(fixture.state.similarityAlignmentPlan.value, null);
@@ -479,7 +628,7 @@ test('manual orientation and invalidating edits clear an active plan with a noti
 
 test('missing saved reference blocks regeneration while preserving plan and Result', async () => {
   const fixture = create();
-  await startPopup(fixture);
+  await startReview(fixture);
   await fixture.actions.applyDraft();
   const previous = fixture.state.results.value;
   const plan = fixture.state.similarityAlignmentPlan.value;
@@ -494,7 +643,7 @@ test('missing saved reference blocks regeneration while preserving plan and Resu
 test('a committed schema-2 plan regenerates after its transient groups leave the catalog', async () => {
   let committed = renderRequest;
   const fixture = create({ getCommittedRequest: () => committed });
-  await startPopup(fixture);
+  await startReview(fixture);
   await fixture.actions.applyDraft();
   const plan = fixture.state.similarityAlignmentPlan.value;
   committed = { ...renderRequest, layout: { similarityAlignment: structuredClone(plan) } };
@@ -514,7 +663,7 @@ test('candidate labels retain biological metadata and displayed record names', a
   const fixture = create({ members: [reference, targetA, targetB, targetC],
     helper: (_operation, { request }) => ({ result: responseFor(request, { ambiguous: true }) }) });
   fixture.state.linearSeqs[1].definition = 'Genome B';
-  await startPopup(fixture);
+  await startReview(fixture);
   const row = fixture.actions.draft.value.rows[0];
   assert.equal(row.recordLabel, 'Genome B');
   assert.equal(row.candidates[0].label, 'gene-target-a');
