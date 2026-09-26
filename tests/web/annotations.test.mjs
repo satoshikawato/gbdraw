@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { cp, mkdtemp, writeFile } from 'node:fs/promises';
+import { readFile, cp, mkdtemp, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
@@ -27,7 +27,7 @@ const {
   setAnnotationRecordValue
 } = await load('app/annotations/record-selector.js');
 const { validateAnnotationRecordTargets } = await load('app/annotations/validation.js');
-const { encodeAnnotationTable, parseAnnotationTable } = await load('app/annotations/table-codec.js');
+const { encodeAnnotationTable, parseAnnotationTable, parseAnnotationTableWithNotice } = await load('app/annotations/table-codec.js');
 const { createAnnotationEditor } = await load('app/annotations.js');
 const { buildLinearTrackSlotSpec, normalizeLinearTrackSlots } = await load('app/linear-track-slots.js');
 const { buildCircularTrackSlotSpec, normalizeCircularTrackSlots } = await load('app/circular-track-slots.js');
@@ -69,8 +69,8 @@ test('invalid annotation coordinates cannot be silently clamped or truncated', (
   assert.equal(parseAnnotationTable('set_id\tid\tmark\tstart\tend\ns\ta\thighlight\t10\t30\n')[0].annotations[0].target.start, 10);
 });
 
-test('TSV cannot silently replace unknown annotation choices or ignore misspelled columns', () => {
-  for (const [column, value] of [['coordinate_space', 'typo'], ['lane', '-1'], ['lane', '1.5'], ['fill_colour', 'red']]) {
+test('TSV cannot silently replace invalid known annotation choices', () => {
+  for (const [column, value] of [['coordinate_space', 'typo'], ['lane', '-1'], ['lane', '1.5']]) {
     assert.throws(() => parseAnnotationTable(`set_id\tid\tmark\tstart\tend\t${column}\ns\ta\tband\t1\t8\t${value}\n`));
   }
   const local = parseAnnotationTable('set_id\tid\tmark\tstart\tend\tcoordinate_space\ns\ta\tBAND\t1\t8\tLOCAL\n')[0].annotations[0];
@@ -442,3 +442,105 @@ const circularSlot = normalizeCircularTrackSlots([{
 assert.equal(circularSlot.side, 'outside');
 assert.match(buildCircularTrackSlotSpec(circularSlot), /set_id=review/);
 assert.match(buildCircularTrackSlotSpec(circularSlot), /overflow=compress/);
+
+const importCases = JSON.parse(await readFile(join(process.cwd(), 'tests/fixtures/annotations/tsv-import-cases.json'), 'utf8'));
+for (const entry of importCases) {
+  test(`Annotation TSV parity: ${entry.name}`, () => {
+    if (!entry.valid) {
+      assert.throws(() => parseAnnotationTable(entry.table));
+      assert.throws(() => parseAnnotationTableWithNotice(entry.table));
+      return;
+    }
+    const parsed = parseAnnotationTableWithNotice(entry.table);
+    assert.deepEqual(parsed.sets, parseAnnotationTable(entry.control));
+    assert.deepEqual(parseAnnotationTable(entry.table), parsed.sets);
+    assert.equal(Array.isArray(parsed.sets), true);
+    if (entry.ignored.length) {
+      for (const name of entry.ignored) assert.ok(parsed.notice.includes(name));
+      assert.match(parsed.notice, /not saved in Sessions or TSV re-export/);
+    } else assert.equal(parsed.notice, '');
+    assert.ok(!JSON.stringify(parsed).includes('PRIVATE-CELL'));
+    const encoded = encodeAnnotationTable(parsed.sets);
+    for (const name of entry.ignored) assert.ok(!encoded.split('\n')[0].split('\t').includes(name));
+  });
+}
+
+test('file import commits once, separates notices, and preserves draft/Result on failure or stale completion', async () => {
+  const state = { annotationSets: [createAnnotationSet({ id: 'before', annotations: [
+    { id: 'old', target: coordinateTarget({ start: 1, end: 3 }), mark: 'band' }
+  ] })], results: [{ content: '<svg/>', warnings: ['resolved warning'] }] };
+  const notices = [];
+  const editor = createAnnotationEditor({ state, onImportNotice: (notice) => notices.push(notice) });
+  const alerts = [];
+  const oldAlert = globalThis.alert;
+  globalThis.alert = (message) => alerts.push(message);
+  let commits = 0;
+  const splice = state.annotationSets.splice.bind(state.annotationSets);
+  Object.defineProperty(state.annotationSets, 'splice', { value: (...args) => { commits++; return splice(...args); } });
+  const good = importCases[0];
+  const input = { files: [{ text: async () => good.table }], value: 'annotations.tsv' };
+  try {
+    const result = structuredClone(state.results);
+    await editor.importAnnotationTableFile({ target: input });
+    assert.equal(commits, 1);
+    assert.deepEqual(state.annotationSets, parseAnnotationTable(good.control));
+    assert.equal(notices.filter(Boolean).length, 1);
+    assert.deepEqual(state.results, result);
+    for (const entry of importCases.filter((entry) => !entry.valid)) {
+      const before = JSON.stringify(state);
+      input.files = [{ text: async () => entry.table }];
+      await editor.importAnnotationTableFile({ target: input });
+      assert.equal(JSON.stringify(state), before);
+      assert.equal(commits, 1);
+      assert.equal(notices.at(-1), '');
+    }
+    const before = JSON.stringify(state);
+    input.files = [{ text: async () => { throw new Error('read failure'); } }];
+    await editor.importAnnotationTableFile({ target: input });
+    assert.equal(JSON.stringify(state), before);
+    assert.match(alerts.at(-1), /read failure/);
+    let finish;
+    input.files = [{ text: () => new Promise((resolve) => { finish = resolve; }) }];
+    const pending = editor.importAnnotationTableFile({ target: input });
+    state.annotationSets[0].annotations[0].label = 'newer draft edit';
+    const edited = JSON.stringify(state);
+    finish(good.table);
+    await pending;
+    assert.equal(JSON.stringify(state), edited);
+    assert.equal(commits, 1);
+    assert.equal(notices.at(-1), '');
+    let finishResultRead;
+    input.files = [{ text: () => new Promise((resolve) => { finishResultRead = resolve; }) }];
+    const staleResult = editor.importAnnotationTableFile({ target: input });
+    state.results.splice(0, 1, { content: '<svg>new result</svg>', warnings: [] });
+    const replacedResult = JSON.stringify(state);
+    finishResultRead(good.table);
+    await staleResult;
+    assert.equal(JSON.stringify(state), replacedResult);
+    assert.equal(commits, 1);
+    state.results.splice(0, 1, ...result);
+    let finishOld;
+    input.files = [{ text: () => new Promise((resolve) => { finishOld = resolve; }) }];
+    const obsolete = editor.importAnnotationTableFile({ target: input });
+    input.files = [{ text: async () => good.control }];
+    await editor.importAnnotationTableFile({ target: input });
+    const current = JSON.stringify(state);
+    finishOld(good.table);
+    await obsolete;
+    assert.equal(JSON.stringify(state), current);
+    assert.equal(commits, 2);
+    assert.equal(notices.at(-1), '');
+    assert.deepEqual(state.results, result);
+  } finally {
+    if (oldAlert === undefined) delete globalThis.alert;
+    else globalThis.alert = oldAlert;
+  }
+});
+
+test('record reconciliation failure cannot partially replace an imported draft', () => {
+  const state = { annotationSets: [createAnnotationSet({ id: 'original' })] };
+  const before = JSON.stringify(state);
+  const editor = createAnnotationEditor({ state, getRecordCatalog: () => { throw new Error('catalog unavailable'); } });
+  assert.throws(() => editor.importAnnotationTable(importCases[0].table), /catalog unavailable/);
+  assert.equal(JSON.stringify(state), before);
+});

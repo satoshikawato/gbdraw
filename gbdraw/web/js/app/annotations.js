@@ -1,6 +1,6 @@
 import { createAnnotationSet, createDefaultAnnotationStyle, normalizeAnnotationSets, uniqueAnnotationSetId } from './annotations/state.js';
 import { coordinateTarget, featureTarget, featureTargetsFromSelection } from './annotations/target-actions.js';
-import { encodeAnnotationTable, parseAnnotationTable } from './annotations/table-codec.js';
+import { encodeAnnotationTable, parseAnnotationTableWithNotice } from './annotations/table-codec.js';
 import {
   createAnnotationRecordSelector,
   reconcileAnnotationRecordBindings
@@ -15,15 +15,15 @@ const nextAnnotationId = (annotations, prefix) => {
   return `${prefix}_${index}`;
 };
 
-export const createAnnotationEditor = ({ state, getRecordCatalog }) => {
+export const createAnnotationEditor = ({ state, getRecordCatalog, onImportNotice }) => {
   const recordSelector = createAnnotationRecordSelector({ getCatalog: getRecordCatalog });
   const reconcileRecords = (sets = state.annotationSets) => {
     reconcileAnnotationRecordBindings(sets, getRecordCatalog?.());
     return sets;
   };
   const replaceSets = (sets) => {
-    state.annotationSets.splice(0, state.annotationSets.length, ...normalizeAnnotationSets(sets));
-    reconcileRecords();
+    const candidate = reconcileRecords(normalizeAnnotationSets(sets));
+    state.annotationSets.splice(0, state.annotationSets.length, ...candidate);
   };
   const addAnnotationSet = (base = 'annotations') => {
     const set = createAnnotationSet({ id: uniqueAnnotationSetId(state.annotationSets, base) });
@@ -92,7 +92,13 @@ export const createAnnotationEditor = ({ state, getRecordCatalog }) => {
       : coordinateTarget({ start: 1, end: 1 });
     item.target.record = record;
   };
-  const importAnnotationTable = (text) => replaceSets(parseAnnotationTable(text));
+  const importAnnotationTable = (text) => {
+    onImportNotice?.('');
+    const { sets, notice } = parseAnnotationTableWithNotice(text);
+    replaceSets(sets);
+    onImportNotice?.(notice);
+  };
+  let importSequence = 0;
   const canDownloadAnnotationTable = () => state.annotationSets.some((set) => set.annotations.length > 0);
   const downloadAnnotationTable = () => {
     if (!canDownloadAnnotationTable()) return;
@@ -102,17 +108,28 @@ export const createAnnotationEditor = ({ state, getRecordCatalog }) => {
     const input = event?.target;
     const file = input?.files?.[0];
     if (!file) return;
+    const sequence = ++importSequence;
+    onImportNotice?.('');
     const setsBeforeRead = [...state.annotationSets];
+    const draftBeforeRead = JSON.stringify(state.annotationSets);
+    const resultsBeforeRead = [...(state.results?.value ?? state.results ?? [])];
+    const isCurrent = () => {
+      const currentResults = state.results?.value ?? state.results ?? [];
+      return sequence === importSequence && input.files?.[0] === file
+      && setsBeforeRead.length === state.annotationSets.length
+      && setsBeforeRead.every((set, index) => set === state.annotationSets[index])
+      && draftBeforeRead === JSON.stringify(state.annotationSets)
+      && resultsBeforeRead.length === currentResults.length
+      && resultsBeforeRead.every((result, index) => result === currentResults[index]);
+    };
     try {
       const text = await readFileText(file);
-      if (input.files?.[0] !== file
-        || setsBeforeRead.length !== state.annotationSets.length
-        || setsBeforeRead.some((set, index) => set !== state.annotationSets[index])) return;
+      if (!isCurrent()) return;
       importAnnotationTable(text);
     } catch (error) {
-      if (input.files?.[0] === file) alert(`Could not import annotations: ${error.message}`);
+      if (isCurrent()) alert(`Could not import annotations: ${error.message}`);
     } finally {
-      if (input.files?.[0] === file) input.value = '';
+      if (sequence === importSequence && input.files?.[0] === file) input.value = '';
     }
   };
   return {

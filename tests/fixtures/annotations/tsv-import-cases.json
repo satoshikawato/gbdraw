@@ -1,0 +1,170 @@
+[
+  {
+    "name": "auxiliary columns",
+    "valid": true,
+    "table": "set_id\tid\tmark\tstart\tend\tstroke\tstroke_width\tfill\tfill_opacity\tlabel\tnotes\tgene_desc\tpmid\tfill_colour\ns\ta\tband\t1\t8\t#123456\t2\t#abcdef\t0.3\tRegion\tPRIVATE-CELL\tPRIVATE-GENE\t12345\tred\n",
+    "control": "set_id\tid\tmark\tstart\tend\tstroke\tstroke_width\tfill\tfill_opacity\tlabel\ns\ta\tband\t1\t8\t#123456\t2\t#abcdef\t0.3\tRegion\n",
+    "ignored": [
+      "notes",
+      "gene_desc",
+      "pmid",
+      "fill_colour"
+    ]
+  },
+  {
+    "name": "BOM and trimmed headers",
+    "valid": true,
+    "table": "\ufeff set_id \t id \tmark\tstart\tend\n s \t a \t BAND \t1\t8\n",
+    "control": "set_id\tid\tmark\tstart\tend\ns\ta\tband\t1\t8\n",
+    "ignored": []
+  },
+  {
+    "name": "typo alone",
+    "valid": true,
+    "table": "set_id\tid\tmark\tstart\tend\tfill_colour\ns\ta\tband\t1\t8\tred\n",
+    "control": "set_id\tid\tmark\tstart\tend\ns\ta\tband\t1\t8\n",
+    "ignored": [
+      "fill_colour"
+    ]
+  },
+  {
+    "name": "missing required",
+    "valid": false,
+    "table": "set_id\tidd\tmark\tstart\tend\ns\ta\tband\t1\t8\n"
+  },
+  {
+    "name": "duplicate known",
+    "valid": false,
+    "table": "set_id\tid\t id \tmark\tstart\tend\ns\ta\tb\tband\t1\t8\n"
+  },
+  {
+    "name": "duplicate unknown",
+    "valid": false,
+    "table": "set_id\tid\tmark\tstart\tend\tnotes\t notes \ns\ta\tband\t1\t8\tx\ty\n"
+  },
+  {
+    "name": "BOM duplicate",
+    "valid": false,
+    "table": "set_id\tid\t\ufeffid\tmark\tstart\tend\ns\ta\tb\tband\t1\t8\n"
+  },
+  {
+    "name": "short row",
+    "valid": false,
+    "table": "set_id\tid\tmark\tstart\tend\tnotes\ns\ta\tband\t1\t8\n"
+  },
+  {
+    "name": "extra cell",
+    "valid": false,
+    "table": "set_id\tid\tmark\tstart\tend\ns\ta\tband\t1\t8\tx\n"
+  },
+  {
+    "name": "empty ID",
+    "valid": false,
+    "table": "set_id\tid\tmark\tstart\tend\ns\t\tband\t1\t8\n"
+  },
+  {
+    "name": "late invalid row",
+    "valid": false,
+    "table": "set_id\tid\tmark\tstart\tend\tnotes\ns\ta\tband\t1\t8\tPRIVATE-CELL\ns\tb\tbogus\t2\t9\tPRIVATE-CELL\n"
+  },
+  {
+    "name": "invalid mark=typo",
+    "valid": false,
+    "table": "set_id\tid\tmark\tstart\tend\tnotes\ns\ta\ttypo\t1\t8\tPRIVATE-CELL\n"
+  },
+  {
+    "name": "invalid coordinate_space=typo",
+    "valid": false,
+    "table": "set_id\tid\tmark\tstart\tend\tnotes\tcoordinate_space\ns\ta\tband\t1\t8\tPRIVATE-CELL\ttypo\n"
+  },
+  {
+    "name": "invalid start=1.5",
+    "valid": false,
+    "table": "set_id\tid\tmark\tstart\tend\tnotes\ns\ta\tband\t1.5\t8\tPRIVATE-CELL\n"
+  },
+  {
+    "name": "invalid start=0",
+    "valid": false,
+    "table": "set_id\tid\tmark\tstart\tend\tnotes\ns\ta\tband\t0\t8\tPRIVATE-CELL\n"
+  },
+  {
+    "name": "invalid lane=-1",
+    "valid": false,
+    "table": "set_id\tid\tmark\tstart\tend\tnotes\tlane\ns\ta\tband\t1\t8\tPRIVATE-CELL\t-1\n"
+  },
+  {
+    "name": "invalid lane=1.5",
+    "valid": false,
+    "table": "set_id\tid\tmark\tstart\tend\tnotes\tlane\ns\ta\tband\t1\t8\tPRIVATE-CELL\t1.5\n"
+  },
+  {
+    "name": "invalid wraps_origin=maybe",
+    "valid": false,
+    "table": "set_id\tid\tmark\tstart\tend\tnotes\twraps_origin\ns\ta\tband\t1\t8\tPRIVATE-CELL\tmaybe\n"
+  },
+  {
+    "name": "invalid hatch_cross=maybe",
+    "valid": false,
+    "table": "set_id\tid\tmark\tstart\tend\tnotes\thatch_cross\ns\ta\tband\t1\t8\tPRIVATE-CELL\tmaybe\n"
+  },
+  {
+    "name": "invalid stroke_width=abc",
+    "valid": false,
+    "table": "set_id\tid\tmark\tstart\tend\tnotes\tstroke_width\ns\ta\tband\t1\t8\tPRIVATE-CELL\tabc\n"
+  },
+  {
+    "name": "invalid stroke_width=0",
+    "valid": false,
+    "table": "set_id\tid\tmark\tstart\tend\tnotes\tstroke_width\ns\ta\tband\t1\t8\tPRIVATE-CELL\t0\n"
+  },
+  {
+    "name": "invalid fill_opacity=2",
+    "valid": false,
+    "table": "set_id\tid\tmark\tstart\tend\tnotes\tfill_opacity\ns\ta\tband\t1\t8\tPRIVATE-CELL\t2\n"
+  },
+  {
+    "name": "invalid label_offset=-1",
+    "valid": false,
+    "table": "set_id\tid\tmark\tstart\tend\tnotes\tlabel_offset\ns\ta\tband\t1\t8\tPRIVATE-CELL\t-1\n"
+  },
+  {
+    "name": "invalid hatch_spacing=0",
+    "valid": false,
+    "table": "set_id\tid\tmark\tstart\tend\tnotes\thatch_spacing\ns\ta\tband\t1\t8\tPRIVATE-CELL\t0\n"
+  },
+  {
+    "name": "invalid label_font_size=Infinity",
+    "valid": false,
+    "table": "set_id\tid\tmark\tstart\tend\tnotes\tlabel_font_size\ns\ta\tband\t1\t8\tPRIVATE-CELL\tInfinity\n"
+  },
+  {
+    "name": "invalid stroke_dasharray=2,-1",
+    "valid": false,
+    "table": "set_id\tid\tmark\tstart\tend\tnotes\tstroke_dasharray\ns\ta\tband\t1\t8\tPRIVATE-CELL\t2,-1\n"
+  },
+  {
+    "name": "invalid line_cap=bad",
+    "valid": false,
+    "table": "set_id\tid\tmark\tstart\tend\tnotes\tline_cap\ns\ta\tband\t1\t8\tPRIVATE-CELL\tbad\n"
+  },
+  {
+    "name": "invalid fill=#zzzzzz",
+    "valid": false,
+    "table": "set_id\tid\tmark\tstart\tend\tnotes\tfill\ns\ta\tband\t1\t8\tPRIVATE-CELL\t#zzzzzz\n"
+  },
+  {
+    "name": "invalid fill=notacolor",
+    "valid": false,
+    "table": "set_id\tid\tmark\tstart\tend\tnotes\tfill\ns\ta\tband\t1\t8\tPRIVATE-CELL\tnotacolor\n"
+  },
+  {
+    "name": "duplicate annotation ID",
+    "valid": false,
+    "table": "set_id\tid\tmark\tstart\tend\ns\ta\tband\t1\t8\ns\ta\tline\t2\t9\n"
+  },
+  {
+    "name": "invalid numeric style syntax",
+    "valid": false,
+    "table": "set_id\tid\tmark\tstart\tend\tstroke_width\ns\ta\tband\t1\t8\t0x10\n"
+  }
+]

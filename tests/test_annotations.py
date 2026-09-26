@@ -1,5 +1,10 @@
 from __future__ import annotations
 
+import csv
+import io
+import json
+from pathlib import Path
+
 import pandas as pd
 import pytest
 from Bio.Seq import Seq
@@ -16,6 +21,7 @@ from gbdraw.annotations import (
     RegionAnnotation,
     RegionAnnotationStyle,
     annotation_sets_from_dataframe,
+    read_annotation_table,
     annotation_track_params_from_mapping,
     assign_annotation_lanes,
     effective_annotation_style,
@@ -179,10 +185,47 @@ def test_table_groups_sets_in_first_appearance_order() -> None:
     assert [item.id for item in sets[0].annotations] == ["one", "three"]
 
 
-def test_table_rejects_unknown_columns_with_context() -> None:
-    table = pd.DataFrame([{"set_id": "s", "id": "a", "mark": "line", "start": 1, "end": 2, "typo": 1}])
-    with pytest.raises(ValidationError, match="unknown columns.*typo"):
-        annotation_sets_from_dataframe(table)
+TSV_IMPORT_CASES = json.loads(
+    (Path(__file__).parent / "fixtures/annotations/tsv-import-cases.json").read_text()
+)
+
+
+@pytest.mark.parametrize("case", TSV_IMPORT_CASES, ids=lambda case: case["name"])
+def test_annotation_tsv_import_parity(case, tmp_path, caplog) -> None:
+    path = tmp_path / "annotations.tsv"
+    path.write_text(case["table"], encoding="utf-8")
+    rows = list(csv.reader(io.StringIO(case["table"]), delimiter="\t"))
+    if case["valid"]:
+        controls = list(csv.reader(io.StringIO(case["control"]), delimiter="\t"))
+        expected = annotation_sets_from_dataframe(pd.DataFrame(controls[1:], columns=controls[0]))
+        assert read_annotation_table(path) == expected
+        assert annotation_sets_from_dataframe(pd.DataFrame(rows[1:], columns=rows[0])) == expected
+        notices = [record.message for record in caplog.records if "Ignored annotation table columns:" in record.message]
+        assert len(notices) == (2 if case["ignored"] else 0)
+        for notice in notices:
+            assert all(name in notice for name in case["ignored"])
+            assert "not saved in Sessions or TSV re-export" in notice
+        assert "PRIVATE-CELL" not in caplog.text and "PRIVATE-GENE" not in caplog.text
+        assert all(not annotation.metadata for item in expected for annotation in item.annotations)
+    else:
+        with pytest.raises(ValidationError):
+            read_annotation_table(path)
+        if all(len(row) == len(rows[0]) for row in rows[1:]):
+            with pytest.raises(ValidationError):
+                annotation_sets_from_dataframe(pd.DataFrame(rows[1:], columns=rows[0]))
+        assert "Ignored annotation table columns:" not in caplog.text
+        assert "PRIVATE-CELL" not in caplog.text
+
+
+def test_annotation_file_preserves_quoted_cells_and_blank_lines(tmp_path) -> None:
+    path = tmp_path / "quoted.tsv"
+    path.write_text('\n\t\t\nset_id\tid\tmark\tstart\tend\tlabel\n\ns\ta\tband\t1\t8\t"quoted\tlabel"\n')
+    assert read_annotation_table(path)[0].annotations[0].label == "quoted\tlabel"
+
+
+def test_annotation_file_read_failure_has_context(tmp_path) -> None:
+    with pytest.raises(ValidationError, match="Unable to read annotation table"):
+        read_annotation_table(tmp_path / "missing.tsv")
 
 
 def test_lane_assignment_is_deterministic_and_separates_overlap() -> None:

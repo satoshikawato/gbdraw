@@ -1343,7 +1343,11 @@ export const createAppSetup = () => {
   const circularConservationFastaInput = ref(null);
   const circularTrackSlotEditor = createCircularTrackSlotEditor({ state });
   const linearTrackSlotEditor = createLinearTrackSlotEditor({ state });
-  const annotationEditor = createAnnotationEditor({ state, getRecordCatalog: getAnnotationRecordCatalog });
+  const annotationImportNotice = ref('');
+  const annotationEditor = createAnnotationEditor({
+    state, getRecordCatalog: getAnnotationRecordCatalog,
+    onImportNotice: (notice) => { annotationImportNotice.value = notice; }
+  });
   watch(
     () => {
       const catalog = getAnnotationRecordCatalog();
@@ -2387,6 +2391,7 @@ export const createAppSetup = () => {
         })
       });
       if (result?.status === 'ok' || result?.status === 'legacy') {
+        annotationImportNotice.value = '';
         historySnapshots.clearGeneratedArtifactIdentity({
           retainedBytes: result?.status === 'ok'
             ? Number(result.decompressedCharacters || 0) * 2
@@ -3993,6 +3998,7 @@ export const createAppSetup = () => {
     addSelectedFeatureAnnotations: annotationEditor.addSelectedFeatures,
     removeAnnotation: annotationEditor.removeAnnotation,
     setAnnotationTargetKind: annotationEditor.setAnnotationTargetKind,
+    annotationImportNotice,
     importAnnotationTableFile: undoableAction('Import annotations', annotationEditor.importAnnotationTableFile),
     renameAnnotation: annotationEditor.renameAnnotation,
     setAnnotationStyle: annotationEditor.setAnnotationStyle,
