@@ -1,5 +1,11 @@
 # INSTRUCTION PROMPT — S00: 承認済み仕様の durable registration
 
+この prompt は実施済み S00 の履歴として保持する。以後の admission 作業には
+使用しない。全候補の隔離 failure、docs/evidence → contract-only の統合順序と
+publication 境界は [MASTER_PLAN](../MASTER_PLAN.md) と
+[S00 admission report](../SESSION_RESULTS/S00_ADMISSION.md) に従う。
+元 S00 の push 指示は新しい候補・branch の publication 許可ではない。
+
 あなたは gbdraw issue #600 の **S00** 担当です。この prompt の担当範囲を実装・検証し、
 指定ブランチへ commit/push するところまで完了してください。他の session の作業は開始しない。
 会話ログや未公開の提案を前提にせず、下記の committed files を入力に使ってください。

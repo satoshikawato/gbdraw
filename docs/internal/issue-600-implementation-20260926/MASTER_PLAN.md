@@ -55,7 +55,8 @@ Web editor / Session
 - **ISP / DIP:** 既存 request/result、immutable bundle、typed Worker helper の小さい
   境界を使う。別 generation pipeline や class 階層を増やさない。
 - **KISS:** strict/lenient toggle、fuzzy header correction、broadcast、multi-swatch
-  renderer、汎用単位変換を追加しない。文書とセッションも１つの実装ブランチへ収束する。
+  renderer、汎用単位変換を追加しない。runtime セッションは１つの実装ブランチへ収束し、
+  admission に必要な docs/evidence と static authority だけを先行して分離する。
 - **DRY:** Python の caption normalizer を native/Web で共用する。Web の pixel parser
   を validator/normalizer/payload で共用し、旧同義 parser を同じ変更で除去する。
   生物学的 matching を JS に複製しない。承認本文は別ファイル、acceptance は本書が owner。
@@ -72,9 +73,26 @@ Web editor / Session
 順で実行する。同じ remote branch に対する実装 writer は常に１セッションだけ。
 独立した４つの関心を、共有 branch の競合回避のために逐次実装する。
 
+S00 の登録済み候補 `4eb3179757780b71bb8e73357f3e5f6182dcb006` は、trusted-base
+checker の全 changed-path 隔離に失敗した。commit を分けるだけでは admission を
+満たさない。後続 delivery は次の２候補をこの順で個別に dev へ統合する。
+
+1. `docs/issue-600-admission-evidence-20260926`: 本計画、承認記録、baseline evidence、
+   historical S00 report、admission report、runtime 未実装を明示する CLI 文書。
+   static Product Contract は base のまま。
+2. `docs/issue-600-contract-authority-20260926`: 上記文書が実際の origin/dev にあることを
+   確認してから、static Product Contract だけを変更する。report、CLI、runtime、checker、
+   workflow、test を同じ比較範囲に含めない。
+
+ローカルで２番目を１番目の上に準備することは検証用の順序再現であり、１番目を
+trusted base にしない。実際の docs 統合後に fetch し、dev inventory、採番と全 receipt、
+base 内の参照文書を再確認して、その dev SHA の checker で authority 候補を検証する。
+この後続セッションはローカル候補作成まで。push、PR 作成、merge は別の明示承認が必要。
+詳細と検証結果は [S00 admission report](SESSION_RESULTS/S00_ADMISSION.md) に記録する。
+
 | Session / Instruction prompt | 開始条件 | 担当と終了条件 |
 | --- | --- | --- |
-| [S00 — authority](sessions/S00_AUTHORITY.md) | 本書と承認記録を取得 | ４ concern を別 record として静的契約へ登録。authority-only commit を push。dev 統合は別の maintainer 境界 |
+| [S00 — authority](sessions/S00_AUTHORITY.md) | 本書と承認記録を取得 | 登録済み。後続の docs/evidence → contract-only delivery と trusted-base 検証を経て、別承認で dev 統合 |
 | [S01 — TSV](sessions/S01_TSV_IMPORT.md) | ４ outcome の durable authority が origin/dev に存在 | BUG-08、TSV-01～03、focused/browser tests と session report を commit/push |
 | [S02 — selector](sessions/S02_SELECTOR_RESOLUTION.md) | S01 の pushed completion | BUG-09、SEL-01～05、resolver/reporting を通して commit/push |
 | [S03 — colors](sessions/S03_COLOR_CAPTIONS.md) | S02 の pushed completion | BUG-10、CLR-01～05、normalization/admission/live/native を一体実装し commit/push |
@@ -83,11 +101,10 @@ Web editor / Session
 
 Product concern を４つの独立 record として維持することと、authority-only delivery を
 １セッションで行うことは別である。policy の証拠置換順序を無視して１ runtime PR に
-authority を混ぜない。S00 の diff は計画/evidence/authority だけであり、runtime を含めない。
-この時点の work branch を authority-only 候補として dev に統合した後、同じ名前の
-work branch を再取得して runtime commits を進められる。S00 の authority-only 統合時は
-この remote work branch を残す。自動削除された場合は maintainer が同名 branch を
-統合済み dev から復元し、remote に計画と authority があることを確認してから S01 を開始する。
+authority を混ぜない。元 S00 remote branch と成果は保持し、全 branch を authority-only
+候補として dev に統合しない。上記２候補の個別統合後、runtime writer は元の実装 branch
+へ統合済み dev を取り込み、４仕様と承認記録の完全一致を確認してから S01 を開始する。
+既存履歴を reset や force-push で置換しない。
 
 S00 終了時に authority が dev に未統合なら、S01～04 を開始しない。
 S00 の candidate file は自身の runtime を承認できない。
@@ -117,11 +134,17 @@ git for-each-ref --format='%(upstream)' refs/heads/fix/issue-600-annotations-sty
 開始時に remote work branch SHA を記録し、前 session の report と実コードを読む。
 base dev の取得は freshness/authority 確認のためであり、work branch を新しい dev tip
 から作り直して計画や前 session の commits を失ってはいけない。
+S00 admission の２候補だけは上記順序のため最新 origin/dev から別名 branch を作り、
+元 S00 branch を保持する。この分離を runtime セッションの履歴置換に使わない。
 S01 は authority を含む `origin/dev` を取り込み、以後も material base change のみ
 適切に統合して必要な checks を行う。許可のない force-push/reset/cherry-pick による
 他 session の履歴置換は行わない。
 
 ### 3.2 各セッション終了時の commit / push
+
+以下は runtime セッションの指定 branch 向け手順。S00 admission のローカル候補に
+元 S00 の push 許可を流用しない。外部操作は branch、SHA、順序、検証結果を完成させて
+から別途承認を得る。contract-only 候補の report は docs/evidence 側か外部 handoff に置く。
 
 **担当実装・focused verification・必要な fixes・session report を完成させ、同名の
 remote work branch に commit と push を行ってから終了する。** 未検証の draft を
