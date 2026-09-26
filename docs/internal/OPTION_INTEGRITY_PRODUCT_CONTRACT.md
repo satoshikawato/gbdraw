@@ -5,7 +5,7 @@ Status: active Product authority
 ## Authority metadata
 
 - Contract ID: `OIPC`
-- Contract revision: `19`
+- Contract revision: `20`
 - Product Decision Owner: `satoshikawato`
 - Decision date: `2026-08-28`
 - Decision source: explicit Product Decision Owner selection of one (`1`) after
@@ -154,6 +154,15 @@ Status: active Product authority
   have this authority merged into its base. Issue `#598` BUG-17 is excluded
   from implementation at the owner's instruction, with no circular-rotation
   authority change.
+- Revision 20 change: `PD-OI-039` is replaced for scenario revision `2`.
+  `satoshikawato` explicitly approved the complete nine-field
+  `A / EXCLUSIVE_DIRECTIONS_WITHOUT_MATCH` receipt on `2026-09-26`
+  (UTF-8 receipt SHA-256
+  `06a9d2fe9b1d1406f6f8e04c23a9ca031133b9fae24b0683403ec2c6cae55270`).
+  Only the old Match affordance is additionally retired to reconcile issue
+  `#598` with issue `#602`. All independent `PD-OI-035`/`PD-OI-039`
+  requirements and all four accepted issue `#598` decisions retain their
+  scope. This authority-only amendment contains no runtime.
 - Records remaining `EVIDENCE_REQUIRED`: none
 - Excluded records: none
 
@@ -1385,7 +1394,7 @@ corrected. Passing evidence does not make incorrect behavior normative.
   正確な feature identity に基づく選択、候補一覧からの keyboard radio 選択と Skip、390 px での操作と適切な focus、描画されない候補の一覧からの選択、図上位置だけによる自動選択の禁止、デスクトップでの canvas 選択と手動 pan／zoom、レビューを閉じた後のプレビュー、ガイド・番号・draft が Result・download・Session に混入しないこと。
 
   The compact review presentation, visible canvas and simultaneous canvas
-  interaction are governed by `PD-OI-039`, scenario revision `1`, in full.
+  interaction are governed by `PD-OI-039`, scenario revision `2`, in full.
   This record and `PD-OI-039` are jointly required; presentation does not
   replace identity, keyboard/Skip, non-rendered-candidate, desktop canvas,
   focus, or overlay-exclusion guarantees. No candidate may be selected from
@@ -1393,7 +1402,8 @@ corrected. Passing evidence does not make incorrect behavior normative.
   are retained in Git history, not as an active coverage exception.
 - Decision source: the signed issue `#602` response for
   `web.similarity-alignment.review-presentation`, scenario revision `1`,
-  reproduced in `PD-OI-039`, supplies exactly the rationale, preservation,
+  retained in Git history and preserved by `PD-OI-039` scenario revision `2`,
+  supplies exactly the rationale, preservation,
   limited retirement, accepted residual risk, owner, and date for this
   limited supersession. No separate human choice or rationale is inferred
   for the canvas-interaction concern. Other transform, plan, Reset, History,
@@ -1488,34 +1498,41 @@ corrected. Passing evidence does not make incorrect behavior normative.
 }
 ```
 
-### PD-OI-039: Compact Similarity-alignment review presentation
+### PD-OI-039: Compact review with exclusive alignment directions
 
 - Concern key: `web.similarity-alignment.review-presentation`
-- Scenario revision: `1`
+- Scenario revision: `2`
 - Status: `ACCEPTED`
-- Selected outcome: `A / DOCKED-COMPACT-ALIGNMENT-REVIEW`
-- Supersession scope: replaces only the scenario-2 mobile coverage
-  exception and close-review continuation in `PD-OI-035`; its independent
-  guarantees remain jointly required in scenario revision `3`. Narrow free
-  drag and concurrent Editor opening during review may retire only as stated
-  in this receipt. Wide drag and non-modal canvas interaction remain required.
-- Normative outcome: exactly the signed `PRODUCT_DECISION` receipt below.
-- Decision source: the complete issue `#602` response signed in full by
-  `satoshikawato` on `2026-09-26`. This serialization preserves all nine
-  supplied fields without translation or extension. It is not a new decision
-  store or a `BD-###` record and cannot authorize dependent runtime until
-  merged into its base.
+- Selected outcome: `A / EXCLUSIVE_DIRECTIONS_WITHOUT_MATCH`
+- Supersedes: `PD-OI-039`, scenario revision `1`
+  (`A / DOCKED-COMPACT-ALIGNMENT-REVIEW`), replacing its Match retention
+  with the explicitly approved exclusive direction controls. All independent
+  identity, keyboard/Skip, non-rendered-candidate, canvas, focus, Editor,
+  validation/retry, artifact, Session and History requirements remain.
+  The scenario-2 mobile coverage exception and close-review continuation in
+  `PD-OI-035` remain superseded; its scenario-3 independent guarantees remain
+  jointly required. Narrow free drag and concurrent Editor opening during
+  review may retire only as stated in this receipt. Wide drag and non-modal
+  canvas interaction remain required.
+- Normative outcome: exactly the complete approved `PRODUCT_DECISION` receipt
+  below. The four issue `#598` decisions are unchanged.
+- Decision source: `satoshikawato` selected A and explicitly approved all nine
+  fields of the displayed receipt on `2026-09-26`, then authorized this
+  authority-only update through dev. Receipt UTF-8 SHA-256:
+  `06a9d2fe9b1d1406f6f8e04c23a9ca031133b9fae24b0683403ec2c6cae55270`.
+  This serialization adds no retirement or risk terms to that approval.
+  Dependent runtime requires the supersession merged into its base.
 - Acceptance contracts: `OIC-006`, `OIC-013`, `OIC-014`, `OIC-026`.
 
 ```json
 {
   "concern": "web.similarity-alignment.review-presentation",
-  "scenarioRevision": 1,
-  "choice": "A / DOCKED-COMPACT-ALIGNMENT-REVIEW",
-  "rationale": "狭いPreviewでもalignment候補をcanvasで確認できるよう、reviewを図の下段に固定し、候補比較へ操作を集中させる。",
-  "mustPreserve": "PD-OI-031/034と現行transform/plan/reset/historyのすべての結果。resolvedの通常自動Apply、ambiguousと明示reviewのlocal draft、独立Select/Skip、候補根拠とreference identity、1つのMatch reference directionと各targetの結果方向、canvas操作、local編集でWorkerを呼ばないこと、Applyの共有Python batch validationとatomic Result/History。失敗時draft/error/retry、Cancel/stale/superseded時の以前のResult/orientation/History、Session/regeneration/Export、focus復帰を維持する。390×844/740では利用可能幅全体かつ高さ200px以上のcanvasを確保し、候補listをscroll、Apply/Cancelを到達可能にする。狭いreview開始時はEditorをownerで閉じ、tabを保持し、review中は理由付きでopenをdisable、終了後は明示reopen可能。wideのdragと非モーダルcanvasを維持する。",
-  "mayRetire": "狭いPreviewでreviewを自由にdragする操作、およびreview中にEditorを同時openする継続だけ。候補や方向の選択、Apply前draft、failure/retryは退役しない。",
-  "acceptedResidualRisk": "狭いreviewではlist scrollが増え、自由に位置を動かせなくなる。開始時Editorは閉じるがtabは保持し、終了後再openできる。位置変更で候補draftやResultを変えないことをbrowserで確認する。",
+  "scenarioRevision": 2,
+  "choice": "A / EXCLUSIVE_DIRECTIONS_WITHOUT_MATCH",
+  "rationale": "狭いPreviewでもalignment候補をcanvasで確認できるよう、reviewを図の下段に固定し、候補比較へ操作を集中させる。表示方向はIssue #598のKeep/right/left/Customへ統一し、reference相対のMatch操作による結果との混同を避ける。",
+  "mustPreserve": "PD-OI-031/034と現行transform/plan/reset/historyのすべての結果。resolvedの通常自動Apply、ambiguousと明示reviewのlocal draft、独立Select/Skip、候補根拠とreference identity、Issue #598で承認済みの排他的Keep/right/left/Custom、referenceを含むselected known-strand anchorsの方向選択と各recordのbefore/after矢印、unknown/skipped/missing/unusableの理由付き不変、canvas操作、local編集でWorkerを呼ばないこと、Applyの共有Python batch validationとatomic Result/History。失敗時draft/error/retry、Cancel/stale/superseded時の以前のResult/orientation/History、Session/regeneration/Export、focus復帰を維持する。390×844/740では利用可能幅全体かつ高さ200px以上のcanvasを確保し、候補listをscroll、Apply/Cancelを到達可能にする。狭いreview開始時はEditorをownerで閉じ、tabを保持し、review中は理由付きでopenをdisable、終了後は明示reopen可能。wideのdragと非モーダルcanvasを維持する。",
+  "mayRetire": "旧Match reference direction checkbox・flag・操作affordance。狭いPreviewでreviewを自由にdragする操作、およびreview中にEditorを同時openする継続。これ以外のPD-OI-035/039の独立要求とIssue #598の承認済み4決定は退役しない。",
+  "acceptedResidualRisk": "狭いreviewではlist scrollが増え、自由に位置を動かせなくなる。開始時Editorは閉じるがtabは保持し、終了後再openできる。位置変更で候補draftやResultを変えないことをbrowserで確認する。旧Match利用者はright/leftまたはCustomで表示方向を明示的に選ぶ必要がある。",
   "owner": "satoshikawato",
   "decisionDate": "2026-09-26"
 }
