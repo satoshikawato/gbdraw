@@ -824,6 +824,9 @@ test('Align A then B resets to B before, including reference and only affected l
   // Model the ordinary Generate owner committing those manual directions.
   f.generationCalls.at(-1).canonical.renderRequest.records[0].presentation.reverseComplement=true;
   f.generationCalls.at(-1).canonical.renderRequest.records[2].presentation.reverseComplement=true;
+  f.generationCalls.at(-1).canonical.renderRequest.records[0].presentation.label='<i>Exact displayed record</i>';
+  f.state.linearSeqs[0].definition='Source-only name';
+  assert.equal(f.actions.resetPreview.value.targets[0].label,'Exact displayed record');
   assert.equal(f.actions.resetPreview.value.targets[0].laterManualEdit,true);
   assert.equal((await f.actions.resetAlignment('positions-and-directions')).status,'ok');
   assert.deepEqual(f.state.linearSeqs.map(row=>row.region_reverse),[...afterA.slice(0,2),true]);

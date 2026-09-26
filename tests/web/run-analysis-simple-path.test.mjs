@@ -727,6 +727,8 @@ test('audit-5 owner: direct simple createRunAnalysis path is worker-only and cat
     targetLosatExecutorJobs += jobs.length;
     return [];
   };
+  state.errorLog.value = { summary: 'Previous candidate failed; retry remains available.' };
+  state.failedGeneratePreservedResult.value = true;
   assert.deepEqual(await runner.runCommittedCanonicalCandidate({
     canonical: targetCandidate,
     captureIntentCheckpoint: () => structuredClone(targetIntent),
@@ -741,6 +743,8 @@ test('audit-5 owner: direct simple createRunAnalysis path is worker-only and cat
   }), { status: 'ok' });
   delete globalThis.__GBDRAW_LOSAT_EXECUTOR__;
   assert.equal(targetLosatExecutorJobs, 0);
+  assert.equal(state.errorLog.value, null);
+  assert.equal(state.failedGeneratePreservedResult.value, false);
   assert.equal(generationHistory.getUndoCount(), historyCountBeforeTarget + 1);
   assert.equal(state.form.prefix, 'unrelated-pending-prefix');
   assert.equal(targetIntent.startCoordinate, 3);
@@ -755,6 +759,8 @@ test('audit-5 owner: direct simple createRunAnalysis path is worker-only and cat
   await generationHistory.redo();
   assert.deepEqual(state.results.value, [targetResult]);
   assert.equal(targetIntent.startCoordinate, 3);
+  assert.equal(state.errorLog.value, null);
+  assert.equal(state.failedGeneratePreservedResult.value, false);
   committedState = committedFeatureState();
   committedExtractedFeatureIdentity = state.extractedFeatures.value;
   committedBiologicalFeatureIdentity = state.biologicalFeatures.value;
