@@ -864,6 +864,9 @@
             justify-content: center;
             flex-wrap: wrap;
         }
+        .preview-editor-layout {
+            display: contents;
+        }
         @media (max-width: 760px) {
             .feature-popup-grid {
                 grid-template-columns: minmax(0, 1fr);
@@ -1006,9 +1009,9 @@
 
             .result-pane {
                 flex: none;
-                height: 72dvh !important;
-                min-height: 26rem !important;
-                overflow: hidden !important;
+                height: auto !important;
+                min-height: 0 !important;
+                overflow: visible !important;
             }
 
             .preview-toolbar {
@@ -1086,25 +1089,34 @@
             }
         }
 
-        /* Narrow Preview: keep the Editor in a side lane and let search scroll
-           above the naturally wrapped controls, including in landscape. */
+        /* One Preview and Editor: compact canvases have a full-width dock.
+           Search precedes the canvas so page scroll can expose the dock below
+           the sticky header and above Generate, including on short screens. */
         @container (max-width: 40rem) {
             .result-pane > [aria-label="Result Preview"] {
+                flex: none;
                 min-height: 0;
                 overflow: clip;
                 --editor-toggle-width: 2.25rem;
-                --right-drawer-width: min(var(--right-drawer-max-width), calc(100% - var(--editor-toggle-width)));
+                --compact-preview-space: calc(100dvh - 21rem - env(safe-area-inset-bottom));
             }
             [aria-label="Result Preview"] > .card-header {
                 padding-right: calc(var(--editor-toggle-width) + 0.75rem);
             }
-            .preview-viewport {
+            .preview-editor-layout {
                 display: grid;
-                grid-template-rows: minmax(0, 1fr) auto;
+                position: relative;
+                grid-template-columns: minmax(0, 1fr);
+                grid-template-rows: auto minmax(200px, calc(var(--compact-preview-space) * 0.5)) auto;
                 gap: 0.5rem;
-                padding: 0.5rem;
-                min-height: 0;
+                min-width: 0;
                 isolation: isolate;
+            }
+            .preview-editor-layout:has(.right-drawer[aria-hidden="false"]) {
+                grid-template-rows: auto minmax(200px, calc(var(--compact-preview-space) * 0.5)) auto clamp(11rem, calc(var(--compact-preview-space) * 0.4), 18rem);
+            }
+            .preview-viewport {
+                display: contents;
             }
             .preview-feature-search {
                 position: relative;
@@ -1112,27 +1124,39 @@
                 inset: auto !important;
                 width: auto;
                 min-height: 0;
-                max-height: 100% !important;
+                max-height: 12rem !important;
                 overflow: auto;
-                align-self: start;
+                transform: none !important;
+                margin-right: var(--editor-toggle-width);
+            }
+            .preview-viewport .preview-canvas {
+                position: relative;
+                grid-area: 2 / 1;
+                inset: auto;
+                min-width: 0;
+                min-height: 0;
             }
             .preview-viewport .preview-controls {
                 position: relative;
-                grid-area: 2 / 1;
+                grid-area: 3 / 1;
                 inset: auto !important;
                 transform: none !important;
                 justify-content: center;
                 flex-wrap: wrap;
+                gap: 0.25rem;
             }
-            /* The open drawer covers the underlying controls in this narrow
-               region. Keep whole hit targets behind its edge. */
-            .preview-viewport .preview-controls--drawer-open,
-            .preview-viewport:has(.preview-controls--drawer-open) .preview-feature-search {
-                transform: translateX(max(calc(var(--editor-toggle-width) - 0.5rem), calc(100% - var(--right-drawer-max-width) + 0.5rem))) !important;
+            .preview-controls > button {
+                padding: 0.5rem;
+            }
+            .preview-controls > button span {
+                display: none;
+            }
+            .preview-controls [aria-label="Reset zoom"] {
+                width: 3rem;
             }
             .preview-viewport .preview-canvas-padding {
                 position: relative;
-                grid-area: 1 / 1;
+                grid-area: 2 / 1;
                 inset: auto;
                 transform: none;
                 place-self: end center;
@@ -1140,14 +1164,36 @@
                 overflow: auto;
                 z-index: 31;
             }
+            .preview-editor-layout .right-drawer {
+                position: relative;
+                grid-area: 4 / 1;
+                inset: auto;
+                width: 100% !important;
+                min-height: 0;
+                border-left: 0;
+                border-top: 1px solid #e2e8f0;
+                transform: none;
+            }
+            .right-drawer[aria-hidden="true"] {
+                display: none;
+            }
+            .right-drawer > .flex-1 {
+                overflow-y: auto;
+            }
+            .right-drawer > .flex-1 > .overflow-y-auto {
+                height: 8rem;
+                min-height: 8rem;
+                flex: none;
+            }
             .drawer-toggle {
                 top: 0.5rem !important;
                 bottom: auto !important;
+                right: 0;
                 width: var(--editor-toggle-width);
                 transform: none !important;
             }
             .drawer-toggle[aria-expanded="true"] {
-                right: var(--right-drawer-width);
+                right: 0;
                 transform: none !important;
             }
         }
@@ -4610,7 +4656,7 @@
              @mousedown="startResizing"
              title="Drag to resize"></div>
 
-        <div class="result-pane flex-1 space-y-4 flex flex-col h-full overflow-hidden min-w-0">
+        <div class="result-pane flex-1 space-y-4 flex flex-col h-full overflow-y-auto min-w-0">
             <section data-generation-application-feedback aria-label="Generation application status" class="rounded border border-slate-200 bg-white px-3 py-2 text-xs text-slate-700 shrink-0">
                 <p><strong>{{ generationApplicationFeedback.label }}</strong> · {{ generationApplicationFeedback.message }}</p>
                 <p v-if="generationApplicationFeedback.unknownMessage" class="mt-1 text-amber-800">{{ generationApplicationFeedback.unknownMessage }}</p>
@@ -4737,6 +4783,7 @@
                     {{ similarityAlignmentNotice }}
                 </div>
 
+                <div class="preview-editor-layout">
                 <div v-show="resultPanelTab === 'preview'" class="preview-viewport relative flex-grow overflow-hidden bg-slate-50/30">
 
                     <div v-if="svgContent"
@@ -5022,7 +5069,7 @@
                         <p class="text-[9px] text-slate-400 mt-2 text-center">Add space around the diagram</p>
                     </div>
 
-                    <div class="absolute inset-0 overflow-auto flex p-2 custom-scrollbar"
+                    <div class="preview-canvas absolute inset-0 overflow-auto flex p-2 custom-scrollbar"
                          ref="canvasContainerRef"
                          style="cursor: grab;"
                          @wheel.prevent="handleWheel"
@@ -6934,6 +6981,7 @@
                             </button>
                         </div>
                     </div>
+                </div>
                 </div>
             </div>
 
