@@ -16,3 +16,4 @@ BUG-01 は2026-09-26のユーザー指示で対象外とし、専用の計画・
 既存の shared checkout や別タスクの branch/worktree を切り替えない。
 Product outcome は承認済み。runtime 開始には必要な authority の dev への統合と性能方式の検証が必要である。
 この計画を保存する初回コミットには実行時コードや有効 authority の変更は含まれない。
+Product authority二件はPR #610でdevへ統合済み。現在のreadinessは [AUTHORITY_INTEGRATION_RESULT.md](./results/AUTHORITY_INTEGRATION_RESULT.md) を参照。Worker permissionはS01のtransport/path確認後に別PRで統合する。

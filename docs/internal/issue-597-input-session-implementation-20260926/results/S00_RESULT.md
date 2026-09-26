@@ -1,5 +1,7 @@
 # S00 — Approved authority candidates and BUG-01 scope removal
 
+この文書はS00実行時点の履歴である。その後のProduct authority統合・dev取り込みは [AUTHORITY_INTEGRATION_RESULT.md](./AUTHORITY_INTEGRATION_RESULT.md) を参照。
+
 日付: 2026-09-26。**候補準備完了、devへのauthority統合は未完了**。
 BUG-02 / BUG-20 の候補準備と、ユーザー追加指示によるBUG-01計画削除を実施した。
 S01、runtime実装、authority用別PR作成・push・mergeは未実施。

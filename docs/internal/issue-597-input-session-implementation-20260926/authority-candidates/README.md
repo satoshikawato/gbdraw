@@ -1,6 +1,9 @@
 # Authority integration candidates — BUG-02 / BUG-20
 
-候補準備は完了。dev の authority 統合は未完了。
+Product authority二件はPR #610でdevへ統合済み（OIPC revision 21、PD-OI-044/045）。Worker permissionはS01の方式/path確認待ち。
+統合SHAと現在のreadinessは [AUTHORITY_INTEGRATION_RESULT.md](../results/AUTHORITY_INTEGRATION_RESULT.md) を参照。
+
+以下はS00時点の候補準備記録。Product patchは当時のrevision 19に対する履歴artifactであり、統合済みdevへ再適用しない。permission patchはS01後の確認に使う。
 このディレクトリは inert patch と検証手順を保存する。active authority、第二の decision registry、runtime ではない。
 BUG-01 はユーザーの2026-09-26の指示で今回の計画から除外した。
 

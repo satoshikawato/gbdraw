@@ -60,6 +60,7 @@ S00 は `tools/web-product-impact-map.json`、`tools/web-product-decisions.json`
 | `web.session-operation-consistency` / 1 | `EXCLUSIVE_SEMANTIC_SESSION_OPERATION` | [Session operation](./decisions/03_SESSION_OPERATIONS.md) |
 
 Product approval は failing security/scientific/performance/architecture gate を免除しない。
+Product二件はPR #610でdevへ統合済み。OIPC revision 21の `PD-OI-044` / `PD-OI-045` が正規authorityで、dev merge SHAは `af5d942af60353dda199aa487da9152a3576b3fe`。Worker permissionはS01のtransport/path確認後に別PRで統合する。詳細は [統合結果](./results/AUTHORITY_INTEGRATION_RESULT.md)。
 認識済み authority への統合候補を S00 で準備する。maintainerによる別PRのdev mergeと、そのtrusted baseへの反映は runtime 開始条件。
 未承認の outcome が新たに必要なら、影響する範囲だけ Product preflight/Decision Pack を作る。
 既に承認された2件の範囲を広げたり、例外判断をその承認から推定したりしない。

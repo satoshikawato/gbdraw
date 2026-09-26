@@ -9,7 +9,8 @@
 remoteの最新 `fix/issue-597-input-session-20260926` をこのsession専用の独立checkoutへclone/fetchして使ってください。
 shared checkoutをswitch/reset/cleanせず、別の新規実装branchを使わないでください。
 `AGENTS.md`、`CLAUDE.md`、`gbdraw/web/CLAUDE.md`、[MASTER_PLAN.md](../MASTER_PLAN.md)、
-共通作業規約、[承認済みdecisions](../README.md)、前提sessionの`results/Sxx_RESULT.md`を読んでください。
+共通作業規約、[承認済みdecisions](../README.md)、`results/S00_RESULT.md`、
+[AUTHORITY_INTEGRATION_RESULT.md](../results/AUTHORITY_INTEGRATION_RESULT.md)を読んでください。
 Product outcomesは承認済みで、再選択を求めません。authority-before-runtime等の別条件は維持してください。
 
 ## 目的
@@ -18,7 +19,8 @@ Product outcomesは承認済みで、再選択を求めません。authority-bef
 
 ## 開始条件
 
-S00 result。必要authority未mergeでも独立measurementは進められる。基準runtimeのsource fingerprintを固定する。
+S00 resultとauthority統合記録。Product authority二件はPR #610でdevへ統合・implementationへ取り込み済み。merge SHA `af5d942af60353dda199aa487da9152a3576b3fe` が取得devと作業HEADのancestorであり、PD-OI-044/045と二件のreceiptが一致することを確認する。Worker permissionは本sessionのtransport/path確認後に別PRで統合する。基準runtimeのsource fingerprintを固定する。
+対象はBUG-02とBUG-20のみ。BUG-01/source collection/新bindings形式は対象外。
 
 ## 所有範囲
 
