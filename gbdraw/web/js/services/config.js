@@ -1710,6 +1710,11 @@ const preflightSessionImport = (rawData) => {
   if (!canonicalProjection && restoredConfig) {
     hydrateMissingMultiRecordPositionsFromCliInvocation(restoredConfig, data.cliInvocation);
   }
+  // Saved omission means historical OFF, independently of fresh/reset defaults.
+  restoredConfig = {
+    ...restoredConfig,
+    form: { keep_definition_left_aligned: false, ...restoredConfig?.form }
+  };
   const hasCurrentStoredUnmanagedOverrides = currentSession
     && isPlainObject(runtimeStoredConfig)
     && Object.prototype.hasOwnProperty.call(

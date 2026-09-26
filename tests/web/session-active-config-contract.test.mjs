@@ -139,3 +139,20 @@ assert.throws(
   }),
   /config\.adv.*cli_circular_track_slots/
 );
+
+assert.equal(createDefaultForm().keep_definition_left_aligned, true);
+assert.equal(createDefaultAdv('linear').linear_show_replicon, false);
+for (const locked of [false, true]) {
+  assert.doesNotThrow(() => validateCurrentWriterActiveConfig({
+    mode: 'linear', storedConfig: {
+      ...storedConfig, form: { ...storedConfig.form, keep_definition_left_aligned: locked }
+    }
+  }));
+}
+for (const malformed of [null, 'false', 'true', 0, 1, [], {}, undefined]) {
+  assert.throws(() => validateCurrentWriterActiveConfig({
+    mode: 'linear', storedConfig: {
+      ...storedConfig, form: { ...storedConfig.form, keep_definition_left_aligned: malformed }
+    }
+  }), /keep_definition_left_aligned must be a boolean/);
+}

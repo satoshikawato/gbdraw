@@ -1,5 +1,5 @@
 const { test, expect } = require('@playwright/test');
-const { readFileSync } = require('node:fs');
+const { readFileSync, writeFileSync } = require('node:fs');
 const { join, resolve } = require('node:path');
 const { gunzipSync } = require('node:zlib');
 const { createHash } = require('node:crypto');
@@ -62,9 +62,9 @@ ${origin}
 `;
 };
 
-const makeDefinitionGenbank = (id, qualifiers = '') => makeComparisonGenbank(id)
+const makeDefinitionGenbank = (id, qualifiers = '', repeats = 100) => makeComparisonGenbank(id, 'atg', repeats)
   .replace(/FEATURES[^\n]*\n/, `FEATURES             Location/Qualifiers
-     source          1..300
+     source          1..${3 * repeats}
                      /organism="Aeromonas hydrophila"
                      /strain="A1"
 ${qualifiers}`);
@@ -209,14 +209,21 @@ test('Linear automatic replicon names follow Generate and preserve saved subtitl
   expect(await page.evaluate(() => window.__GBDRAW_APP__.linearSeqs[0].record_subtitle)).toBe('');
 });
 
-test('Released Linear session preserves its subtitles and preview until Generate', async ({ page }) => {
+for (const [fixture, locked] of [
+  ['BGC0000708-BGC0000713.v40-schema5.json', true],
+  ['lambda_basic_linear.v40-schema5.json', false],
+  ['rendered-v27.v40-schema6.json.gz', false]
+]) {
+test(`Released Linear ${fixture} preserves Lock, subtitles, and preview until Generate`, async ({ page }, testInfo) => {
   test.setTimeout(120000);
-  const fixturePath = join(repoRoot, 'tests/fixtures/sessions/BGC0000708-BGC0000713.v40-schema5.json');
-  const session = JSON.parse(readFileSync(fixturePath, 'utf8'));
-  const subtitles = session.renderRequest.records.map(record => record.presentation.subtitle);
+  const fixturePath = join(repoRoot, 'tests/fixtures/sessions', fixture);
+  const bytes = readFileSync(fixturePath);
+  const session = JSON.parse(fixture.endsWith('.gz') ? gunzipSync(bytes) : bytes);
+  const subtitles = session.renderRequest.records.map(record => record.presentation?.subtitle || '');
   await installDiagramRequestObserver(page);
   await openApp(page);
   await loadDefinitionSession(page, fixturePath);
+  expect(await page.evaluate(() => window.__GBDRAW_APP__.form.keep_definition_left_aligned)).toBe(locked);
   // Normal ingestion removes XML headers and adds editor metadata. Compare all
   // displayed primitives, text, and geometry instead of serialized SVG bytes.
   const previews = await page.evaluate(saved => {
@@ -236,44 +243,48 @@ test('Released Linear session preserves its subtitles and preview until Generate
   expect(await page.evaluate(() => window.__GBDRAW_APP__.linearSeqs.map(s => s.record_subtitle))).toEqual(subtitles);
   await page.evaluate(() => {
     window.__GBDRAW_APP__.adv.linear_show_replicon = false;
-    window.__GBDRAW_APP__.form.keep_definition_left_aligned = false;
   });
   expect(await page.evaluate(() => window.__GBDRAW_APP__.runAnalysis())).toEqual({ status: 'ok' });
-  expect((await definitionLines(page)).filter(line => line.kind === 'subtitle').map(line => line.text)).toEqual(subtitles);
+  expect((await definitionLines(page)).filter(line => line.kind === 'subtitle').map(line => line.text)).toEqual(subtitles.filter(Boolean));
   expect((await definitionLines(page)).filter(line => line.kind === 'replicon')).toEqual([]);
+  if (fixture.startsWith('BGC')) {
+    expect(await page.evaluate(async () => {
+      const { state } = await import('/gbdraw/web/js/state.js');
+      return state.similarityAlignmentPlan.value?.schema;
+    })).toBe(2);
+    await page.evaluate(async () => {
+      const app = window.__GBDRAW_APP__;
+      app.adv.linear_accession_visibility = 'hide';
+      app.adv.linear_length_visibility = 'hide';
+      await app.setLinearRecordLayoutEnabled(true);
+    });
+    const measurements = [];
+    for (const rows of [[1, 2, 3, 4, 5], [1, 1, 1, 2, 2], [1, 2, 2, 3, 4]]) {
+      await page.evaluate(rows => {
+        const app = window.__GBDRAW_APP__;
+        app.linearSeqs.forEach((seq, index) => {
+          app.setLinearRecordRow(seq.uid, rows[index]);
+          seq.definition = rows[index] === 1 ? 'Streptomyces comparison' : 'Streptomyces sp.';
+          seq.record_subtitle = rows[index] === 1 ? 'Reference cluster' : 'Target';
+        });
+      }, rows);
+      for (const locked of [false, true]) {
+        await page.getByRole('checkbox', { name: 'Lock Definition Column', exact: true }).setChecked(locked);
+        expect(await page.evaluate(() => window.__GBDRAW_APP__.runAnalysis())).toEqual({ status: 'ok' });
+        const geometry = await measureDefinitionColumns(page);
+        expect(geometry.headings).toHaveLength(new Set(rows).size);
+        expectDefinitionColumns(geometry, locked, 20);
+        expect(await page.evaluate(() => window.__GBDRAW_DIAGRAM_RUNS__.at(-1).layout.similarityAlignment.schema)).toBe(2);
+        measurements.push({ rows, locked, ...geometry });
+      }
+    }
+    writeFileSync(testInfo.outputPath('similarity-definition-measurements.json'), JSON.stringify(measurements, null, 2));
+  }
 });
 
-test('Linear Lock Definition Column applies common centers and left edges after Generate', async ({ page }) => {
-  test.setTimeout(120000);
-  await installDiagramRequestObserver(page);
-  await openApp(page);
-  await page.evaluate(() => { window.__GBDRAW_APP__.mode = 'linear'; });
-  const source = ['A', 'B', 'C', 'D'].map((id) =>
-    makeDefinitionGenbank(id, `                     /plasmid="${id}"\n`)).join('');
-  await page.locator('[data-linear-source-card] input[type="file"]').first().setInputFiles({
-    name: 'definition-rows.gb', mimeType: 'text/plain', buffer: Buffer.from(source)
-  });
-  await expect.poll(() => page.evaluate(() => window.__GBDRAW_APP__.linearSeqs.length)).toBe(4);
-  await page.evaluate(async () => {
-    const app = window.__GBDRAW_APP__;
-    Object.assign(app.form, { align_center: true, legend: 'none', show_gc: false, show_skew: false, show_labels_linear: 'none' });
-    Object.assign(app.adv, {
-      linear_show_replicon: true,
-      linear_accession_visibility: 'hide',
-      linear_length_visibility: 'hide'
-    });
-    await app.setLinearRecordLayoutEnabled(true);
-    app.linearSeqs.forEach((seq, i) => {
-      seq.definition = i < 2 ? 'Aeromonas hydrophila' : 'Aeromonas sp.';
-      seq.record_subtitle = i < 2 ? 'A1' : 'B';
-      app.setLinearRecordRow(seq.uid, i < 2 ? 1 : 2);
-    });
-    const { state } = await import('/gbdraw/web/js/state.js');
-    state.linearRecordTranslations.value = app.linearSeqs.map((seq, index) => ({
-      recordKey: seq.uid, x: [-85, 40, -35, 75][index], y: 0
-    }));
-  });
-  const measure = () => page.evaluate(async () => {
+}
+
+const measureDefinitionColumns = (page) => page.evaluate(async () => {
     const host = document.createElement('div');
     host.style.cssText = 'position:absolute;left:-10000px;visibility:hidden';
     host.innerHTML = window.__GBDRAW_APP__.results[0].content;
@@ -286,80 +297,197 @@ test('Linear Lock Definition Column applies common centers and left edges after 
       const right = new DOMPoint(b.x + b.width, b.y).matrixTransform(m).x;
       return { left, right, center: (left + right) / 2 };
     };
-    const axes = [...svg.querySelectorAll('g[data-record-index]')].map(axis => {
+    const axes = [...svg.querySelectorAll('g[data-gbdraw-record-index]:not([data-gbdraw-definition-part])')].map(axis => {
       const line = axis.querySelector(':scope > line');
       if (!line) throw new Error('Missing displayed sequence axis');
-      return { index: axis.dataset.recordIndex, translation: Number(axis.dataset.recordTranslationX),
+      return { index: axis.dataset.gbdrawRecordIndex, translation: Number(axis.dataset.recordTranslationX),
         ...box(line) };
     });
-    const headings = [...svg.querySelectorAll('g[data-gbdraw-role="record-definition-row"]')].map(g => ({
+    const headings = [...svg.querySelectorAll('g[data-gbdraw-role^="record-definition"]')].filter(g => g.querySelector(':scope > text[data-definition-line-kind="name"]')).map(g => ({
       index: g.dataset.gbdrawRecordIndex, ...box(g), lines: [...g.querySelectorAll('text')].map(box)
     }));
     const locals = [...svg.querySelectorAll('g[data-gbdraw-role="record-definition"]')]
-      .filter(g => g.querySelector('text'))
+      .filter(g => g.querySelector('text') && !g.querySelector(':scope > text[data-definition-line-kind="name"]'))
       .map(g => ({ index: g.dataset.gbdrawRecordIndex, ...box(g) }));
     host.remove();
     return { axes, headings, locals };
   });
+
+const expectDefinitionColumns = (geometry, locked, gap) => {
+  const { axes, headings, locals } = geometry;
+  expect(headings.length).toBeGreaterThan(0);
+  const coord = box => locked ? box.left : box.center;
+  const first = headings[0];
+  const firstAxis = axes.find(axis => axis.index === first.index);
+  for (const heading of headings) {
+    const sequence = axes.find(axis => axis.index === heading.index);
+    const shift = locked ? 0 : sequence.left - firstAxis.left;
+    expect(Math.abs(coord(heading) - coord(first) - shift)).toBeLessThanOrEqual(1);
+    for (const line of heading.lines) {
+      expect(Math.abs(coord(line) - coord(heading.lines[0]))).toBeLessThanOrEqual(1);
+    }
+    expect(sequence.left - heading.right).toBeGreaterThanOrEqual(gap - 1);
+  }
+  if (locked) {
+    const nearestGap = Math.min(...axes.map(axis => axis.left))
+      - Math.max(...headings.map(heading => heading.right));
+    expect(nearestGap).toBeGreaterThanOrEqual(gap - 1);
+    expect(nearestGap).toBeLessThanOrEqual(gap + 1);
+  }
+  for (const local of locals) {
+    const sequence = axes.find(axis => axis.index === local.index);
+    expect(Math.abs(local.center - sequence.center)).toBeLessThanOrEqual(1);
+  }
+};
+
+test('Web fresh/reset Lock ON preserves explicit drafts, Result on Load, and regeneration', async ({ page }, testInfo) => {
+  test.setTimeout(120000);
+  await installDiagramRequestObserver(page);
+  await openApp(page);
+  await page.getByRole('button', { name: 'Linear', exact: true }).click();
+  const lock = page.getByRole('checkbox', { name: 'Lock Definition Column', exact: true });
+  await expect(lock).toBeChecked();
+  const help = page.locator('#linear-definition-lock-help');
+  await expect(help).toBeVisible();
+  await expect(help).toContainText('ON aligns definitions in a common left column');
+  await expect(help).toContainText('OFF centers them in a common column width and follows row offsets');
+  await expect(help).toContainText('Changes apply on Generate');
+  await expect(lock).toHaveAttribute('aria-describedby', 'linear-definition-lock-help');
+  await lock.uncheck();
+  page.once('dialog', dialog => dialog.accept());
+  await page.getByRole('button', { name: 'Reset Settings', exact: true }).click();
+  await expect(lock).toBeChecked();
+  await page.locator('[data-linear-source-card] input[type="file"]').first().setInputFiles({
+    name: 'definition-draft.gb', mimeType: 'text/plain',
+    buffer: Buffer.from(makeDefinitionGenbank('A') + makeDefinitionGenbank('B', '', 60))
+  });
+  await expect.poll(() => page.evaluate(() => window.__GBDRAW_APP__.linearSeqs.length)).toBe(2);
+  await page.evaluate(async () => {
+    const app = window.__GBDRAW_APP__;
+    Object.assign(app.form, { align_center: true, legend: 'none', show_gc: false, show_skew: false });
+    await app.setLinearRecordLayoutEnabled(true);
+    app.linearSeqs.forEach((seq, index) => app.setLinearRecordRow(seq.uid, index + 1));
+    app.linearSeqs[0].definition = 'Aeromonas hydrophila';
+    app.linearSeqs[1].definition = 'Short';
+  });
+  expect(await page.evaluate(() => window.__GBDRAW_APP__.runAnalysis())).toEqual({ status: 'ok' });
   for (const locked of [false, true]) {
-    await page.getByRole('checkbox', { name: 'Lock Definition Column', exact: true }).setChecked(locked);
+    const before = await measureDefinitionColumns(page);
+    const requestBefore = await page.evaluate(async () => (await import('/gbdraw/web/js/services/config.js')).getCommittedCanonicalRenderRequest());
+    await lock.setChecked(locked);
+    expect(await measureDefinitionColumns(page)).toEqual(before);
+    await page.evaluate(() => { window.__GBDRAW_APP__.sessionTitle = 'definition-draft'; });
+    const download = page.waitForEvent('download');
+    expect(await page.evaluate(() => window.__GBDRAW_APP__.saveSessionWithTitle())).toMatchObject({ status: 'saved' });
+    const savedPath = await (await download).path();
+    const saved = JSON.parse(gunzipSync(readFileSync(savedPath)));
+    expect(saved.config.form.keep_definition_left_aligned).toBe(locked);
+    expect(saved.renderRequest).toEqual(requestBefore);
+    await page.reload();
+    await waitForAppShell(page);
+    await loadDefinitionSession(page, savedPath);
+    await expect(lock).toBeChecked({ checked: locked });
+    expect(await measureDefinitionColumns(page)).toEqual(before);
+    expect(await page.evaluate(() => window.__GBDRAW_DIAGRAM_RUNS__.length)).toBe(0);
+    expect(await page.evaluate(async () => (await import('/gbdraw/web/js/services/config.js')).getCommittedCanonicalRenderRequest())).toEqual(requestBefore);
     expect(await page.evaluate(() => window.__GBDRAW_APP__.runAnalysis())).toEqual({ status: 'ok' });
-    const { axes, headings, locals } = await measure();
-    expect(axes.map(axis => axis.translation)).toEqual([-85, 40, -35, 75]);
-    expect(headings).toHaveLength(2);
-    expect(locals).toHaveLength(4);
-    const coord = box => locked ? box.left : box.center;
-    const leaders = headings.map(heading => axes.find(axis => axis.index === heading.index));
-    const delta = locked ? 0 : leaders[1].left - leaders[0].left;
-    expect(Math.abs(coord(headings[1]) - coord(headings[0]) - delta)).toBeLessThanOrEqual(1);
-    for (const heading of headings) {
-      expect(heading.lines).toHaveLength(2);
-      expect(Math.abs(coord(heading.lines[0]) - coord(heading.lines[1]))).toBeLessThanOrEqual(1);
-    }
-    if (locked) {
-      const nearestSequence = Math.min(...axes.map(axis => axis.left));
-      const widestHeadingRight = Math.max(...headings.map(heading => heading.right));
-      expect(nearestSequence - widestHeadingRight).toBeGreaterThanOrEqual(19);
-    } else {
-      for (const heading of headings) {
-        const sequence = axes.find(axis => axis.index === heading.index);
-        expect(sequence.left - heading.right).toBeGreaterThanOrEqual(19);
-      }
-    }
-    for (const local of locals) {
-      const sequence = axes.find(axis => axis.index === local.index);
-      expect(Math.abs(local.center - sequence.center)).toBeLessThanOrEqual(1);
+    const regenerated = await measureDefinitionColumns(page);
+    writeFileSync(testInfo.outputPath(`roundtrip-${locked}.json`), JSON.stringify(regenerated, null, 2));
+    expectDefinitionColumns(regenerated, locked, 20);
+    expect(await page.evaluate(() => window.__GBDRAW_DIAGRAM_RUNS__.at(-1).diagramOptions.configOverrides[
+      'canvas.linear.keep_definition_left_aligned'
+    ])).toBe(locked);
+    for (const malformed of [null, 'false', 0, {}]) {
+      const invalid = structuredClone(saved);
+      invalid.config.form.keep_definition_left_aligned = malformed;
+      const stable = await measureDefinitionColumns(page);
+      const runs = await page.evaluate(() => window.__GBDRAW_DIAGRAM_RUNS__.length);
+      page.once('dialog', dialog => dialog.accept());
+      const outcome = await page.evaluate(async raw => {
+        const result = await window.__GBDRAW_APP__.importSession({
+          target: { files: [new File([raw], 'malformed.gbdraw-session.json')], value: 'selected' }
+        });
+        return { status: result.status, error: result.error?.message };
+      }, JSON.stringify(invalid));
+      expect(outcome.status).toBe('error');
+      expect(outcome.error).toMatch(/keep_definition_left_aligned must be a boolean/);
+      await expect(lock).toBeChecked({ checked: locked });
+      expect(await measureDefinitionColumns(page)).toEqual(stable);
+      expect(await page.evaluate(() => window.__GBDRAW_DIAGRAM_RUNS__.length)).toBe(runs);
     }
   }
-  const beforeSave = await measure();
-  await page.evaluate(() => { window.__GBDRAW_APP__.sessionTitle = 'definition-columns'; });
+  const beforeReset = await measureDefinitionColumns(page);
+  await lock.uncheck();
+  page.once('dialog', dialog => dialog.accept());
+  await page.getByRole('button', { name: 'Reset Settings', exact: true }).click();
+  await expect(lock).toBeChecked();
+  expect(await measureDefinitionColumns(page)).toEqual(beforeReset);
+  await page.setViewportSize({ width: 390, height: 844 });
+  await help.scrollIntoViewIfNeeded();
+  await expect(help).toBeVisible();
+  await help.locator('..').screenshot({ path: testInfo.outputPath('definition-lock-help.png') });
+});
+
+test('Linear Lock Definition Column measures single, shared, and mixed rows after unequal translations', async ({ page }, testInfo) => {
+  test.setTimeout(120000);
+  await openApp(page);
+  await page.evaluate(() => { window.__GBDRAW_APP__.mode = 'linear'; });
+  const source = ['A', 'B', 'C', 'D'].map((id, index) =>
+    makeDefinitionGenbank(id, `                     /plasmid="${id}"\n`, 100 - 20 * index)).join('');
+  await page.locator('[data-linear-source-card] input[type="file"]').first().setInputFiles({
+    name: 'definition-rows.gb', mimeType: 'text/plain', buffer: Buffer.from(source)
+  });
+  await expect.poll(() => page.evaluate(() => window.__GBDRAW_APP__.linearSeqs.length)).toBe(4);
+  await page.evaluate(async () => {
+    const app = window.__GBDRAW_APP__;
+    Object.assign(app.form, { legend: 'none', show_gc: false, show_skew: false, show_labels_linear: 'none' });
+    Object.assign(app.adv, { linear_show_replicon: true, linear_accession_visibility: 'hide', linear_length_visibility: 'hide' });
+    await app.setLinearRecordLayoutEnabled(true);
+    const { state } = await import('/gbdraw/web/js/state.js');
+    state.unmanagedConfigOverrides['canvas.linear.definition_gap'] = 37;
+    state.linearRecordTranslations.value = app.linearSeqs.map((seq, index) => ({
+      recordKey: seq.uid, x: [-85, 40, -35, 75][index], y: 0
+    }));
+  });
+  const measurements = [];
+  for (const rows of [[1, 2, 3, 4], [1, 1, 2, 2], [1, 2, 2, 3]]) {
+    await page.evaluate(rows => {
+      const app = window.__GBDRAW_APP__;
+      app.linearSeqs.forEach((seq, index) => {
+        app.setLinearRecordRow(seq.uid, rows[index]);
+        seq.definition = rows[index] === 1 ? 'Aeromonas hydrophila' : 'Aeromonas sp.';
+        seq.record_subtitle = rows[index] === 1 ? 'A1' : 'B';
+      });
+    }, rows);
+    for (const centered of [false, true]) {
+      await page.evaluate(centered => { window.__GBDRAW_APP__.form.align_center = centered; }, centered);
+      for (const locked of [false, true]) {
+        await page.getByRole('checkbox', { name: 'Lock Definition Column', exact: true }).setChecked(locked);
+        expect(await page.evaluate(() => window.__GBDRAW_APP__.runAnalysis())).toEqual({ status: 'ok' });
+        const geometry = await measureDefinitionColumns(page);
+        expect(geometry.axes.map(axis => axis.translation)).toEqual([-85, 40, -35, 75]);
+        expect(geometry.headings).toHaveLength(new Set(rows).size);
+        const shared = new Set(rows).size < rows.length;
+        expect(geometry.locals).toHaveLength(shared ? 4 : 0);
+        for (const heading of geometry.headings) expect(heading.lines).toHaveLength(shared ? 2 : 3);
+        expectDefinitionColumns(geometry, locked, 37);
+        measurements.push({ rows, centered, locked, ...geometry });
+      }
+    }
+  }
+  writeFileSync(testInfo.outputPath('definition-column-measurements.json'), JSON.stringify(measurements, null, 2));
+  const beforeSave = await measureDefinitionColumns(page);
+  writeFileSync(testInfo.outputPath('locked-definition.svg'), await page.evaluate(() => window.__GBDRAW_APP__.results[0].content));
+  await page.evaluate(() => { window.__GBDRAW_APP__.sessionTitle = 'translated-definition-columns'; });
   const download = page.waitForEvent('download');
-  await page.evaluate(() => window.__GBDRAW_APP__.saveSessionWithTitle());
+  expect(await page.evaluate(() => window.__GBDRAW_APP__.saveSessionWithTitle())).toMatchObject({ status: 'saved' });
   const saved = await (await download).path();
   await page.reload();
   await waitForAppShell(page);
   await loadDefinitionSession(page, saved);
-  expect(await measure()).toEqual(beforeSave);
+  expect(await measureDefinitionColumns(page)).toEqual(beforeSave);
   expect(await page.evaluate(() => window.__GBDRAW_APP__.runAnalysis())).toEqual({ status: 'ok' });
-  expect(await measure()).toEqual(beforeSave);
-  await page.evaluate(() => {
-    const app = window.__GBDRAW_APP__;
-    [1, 2, 2, 3].forEach((row, index) => app.setLinearRecordRow(app.linearSeqs[index].uid, row));
-    app.linearSeqs[1].definition = 'Aeromonas sp.';
-    app.linearSeqs[1].record_subtitle = 'B';
-  });
-  expect(await page.evaluate(() => window.__GBDRAW_APP__.runAnalysis())).toEqual({ status: 'ok' });
-  const mixed = await measure();
-  expect(mixed.headings).toHaveLength(3);
-  expect(mixed.locals).toHaveLength(4);
-  for (const local of mixed.locals) {
-    const sequence = mixed.axes.find(axis => axis.index === local.index);
-    expect(Math.abs(local.center - sequence.center)).toBeLessThanOrEqual(1);
-  }
-  expect(Math.max(...mixed.headings.map(heading => heading.left))
-    - Math.min(...mixed.headings.map(heading => heading.left))).toBeLessThanOrEqual(1);
-  expect(Math.min(...mixed.axes.map(axis => axis.left))
-    - Math.max(...mixed.headings.map(heading => heading.right))).toBeGreaterThanOrEqual(19);
+  expect(await measureDefinitionColumns(page)).toEqual(beforeSave);
 });
 
 const linearRecordCard = (page, uid) => (

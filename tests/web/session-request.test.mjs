@@ -5097,3 +5097,15 @@ if (roundTripSessionIndex >= 0) {
   const noDraft = projectCanonicalSessionRequest({ ...frozen, webFiles: { bindings: { schema: 2, c_gb: null } } });
   assert.equal(noDraft.files.c_gb, null);
 }
+
+// The Web factory changes fresh intent only; persisted request omission stays OFF.
+for (const [fixture, locked] of [
+  ['lambda_basic_linear.v40-schema5.json', false],
+  ['BGC0000708-BGC0000713.v40-schema5.json', true],
+  ['rendered-v27.v40-schema6.json.gz', false]
+]) {
+  const bytes = await readFile(join(repoRoot, 'tests/fixtures/sessions', fixture));
+  const session = JSON.parse(fixture.endsWith('.gz') ? gunzipSync(bytes) : bytes);
+  const projection = projectCanonicalSessionRequest(session);
+  assert.equal(projection.config.form.keep_definition_left_aligned, locked, fixture);
+}
