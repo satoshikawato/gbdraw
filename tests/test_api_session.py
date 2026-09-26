@@ -475,7 +475,7 @@ def test_web_resolved_protein_writer_preserves_typed_alignment_layout(
             "renderRequest": canonical["renderRequest"],
             "resources": canonical["resources"],
             "results": [],
-            "editorState": {"featureCatalog": None},
+            "editorState": {"featureCatalog": None, "alignmentResetReceipt": None},
         }
     )
 

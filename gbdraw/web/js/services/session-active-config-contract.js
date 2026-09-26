@@ -1,3 +1,6 @@
+import { adoptCurrentSessionResources, createSessionResourceFileView, readSessionResourceBytes } from './session-resource-backing.js';
+import { sha256Hex, textToBytes } from './byte-utils.js';
+import { canonicalRecordReverseComplement } from '../app/record-display-options.js';
 import { createDefaultLinearDefinitionLineStyles } from '../app/definition-line-style-state.js'; import { CIRCULAR_TRACK_RENDERERS, createDefaultCircularTrackSlots } from '../app/circular-track-slots.js';
 import { LEGACY_LINEAR_TRACK_SLOT_SCHEMA_VERSION, LINEAR_TRACK_RENDERERS, LINEAR_TRACK_SLOT_SCHEMA_VERSION, createDefaultLinearTrackSlots } from '../app/linear-track-slots.js'; import { validateTrackSlotBindingInvariants } from '../app/track-slot-validation.js';
 import { requireCurrentCircularMultiRecordSizeMode, requireCurrentCollinearAnchorMode, requireCurrentCollinearColorMode, requireCurrentCollinearMaxConflicts, requireCurrentCollinearMaxDiagonalDrift, requireCurrentCollinearMaxParalogLinks, requireCurrentCollinearMaxUnitGap, requireCurrentCollinearMergeOrientation, requireCurrentCollinearMinAnchors, requireCurrentCollinearInferOrthogroups, requireCurrentCollinearSearchScope, requireCurrentCollinearUnitMode, requireCurrentLinearLabelPlacement, requireCurrentLinearTrackLayout, requireCurrentOrthogroupMemberMaxHits, requireCurrentOrthogroupMembershipMode, requireCurrentProteinBlastpCandidateLimit, requireCurrentProteinBlastpMaxHits, requireCurrentProteinBlastpMode, requireCurrentWebStateFieldNames } from '../app/current-option-values.js'; import { DEFAULT_ARROW_SHAFT_WIDTH_RATIO, createDefaultFeatureRenderings } from '../utils/feature-rendering.js';
@@ -210,4 +213,100 @@ export const validateCurrentWriterActiveConfig = ({ mode, storedConfig: config }
     }
   }
   validateImportedCircularTrackSlots(config); validateImportedLinearTrackSlots(config);
+};
+
+// Artifact metadata admission is shared by Session, History and Align/Reset.
+// The binding deliberately excludes current orientation, translations, labels and
+// row order: manual Reverse, style and stable reorder do not rewrite history.
+const sortedValue = (value) => Array.isArray(value)
+  ? value.map(sortedValue)
+  : isObject(value) ? Object.fromEntries(Object.keys(value).sort()
+    .map((key) => [key, sortedValue(value[key])])) : value;
+
+export const validateAlignmentResetReceiptShape = (receipt, request) => {
+  if (receipt === null || receipt === undefined) return null;
+  const invalid = () => { throw new Error('Alignment reset receipt is malformed or stale.'); };
+  if (!isObject(receipt)
+    || Object.keys(receipt).sort().join(',') !== 'binding,directions,referenceDeltaX'
+    || !/^[0-9a-f]{64}$/.test(receipt.binding)
+    || !Array.isArray(receipt.directions)
+    || request?.mode !== 'linear' || !request.layout?.similarityAlignment) invalid();
+  const plan = request.layout.similarityAlignment;
+  const eligible = new Set(plan.records.filter(({ status }) => status !== 'skipped')
+    .map(({ recordKey }) => recordKey));
+  const keys = new Set();
+  receipt.directions.forEach((delta) => {
+    if (!isObject(delta) || Object.keys(delta).sort().join(',') !== 'after,before,recordKey'
+      || !eligible.has(delta.recordKey) || keys.has(delta.recordKey)
+      || typeof delta.before !== 'boolean' || typeof delta.after !== 'boolean'
+      || delta.before === delta.after) invalid();
+    keys.add(delta.recordKey);
+  });
+  const delta = receipt.referenceDeltaX;
+  if (delta !== null && (!isObject(delta)
+    || Object.keys(delta).sort().join(',') !== 'deltaX,recordKey'
+    || delta.recordKey !== plan.reference.recordKey
+    || typeof delta.deltaX !== 'number' || !Number.isFinite(delta.deltaX)
+    || delta.deltaX === 0)) invalid();
+  return receipt;
+};
+
+const resetBinding = async (canonical) => {
+  const request = canonical?.renderRequest;
+  if (request?.mode !== 'linear' || !request.layout?.similarityAlignment) {
+    throw new Error('Alignment reset receipt requires an active canonical plan.');
+  }
+  const table = adoptCurrentSessionResources(canonical.resources);
+  const fingerprints = new Map();
+  const sourceIdentity = async (source) => {
+    const identity = {};
+    for (const [key, value] of Object.entries(source)) {
+      if (key === 'kind') identity[key] = value;
+      else {
+        if (!fingerprints.has(value)) fingerprints.set(value, sha256Hex(
+          await readSessionResourceBytes(createSessionResourceFileView(table, value))
+        ));
+        identity[key] = await fingerprints.get(value);
+      }
+    }
+    return identity;
+  };
+  const records = await Promise.all(request.records.map(async (record) => ({
+    recordKey: record.recordKey, source: await sourceIdentity(record.source),
+    selector: record.selector,
+    region: record.region ? { start: record.region.start, end: record.region.end } : null,
+    display: record.display
+  })));
+  const plan = { ...request.layout.similarityAlignment,
+    records: [...request.layout.similarityAlignment.records].sort(
+      (a, b) => a.recordKey < b.recordKey ? -1 : a.recordKey > b.recordKey ? 1 : 0) };
+  records.sort((a, b) => a.recordKey < b.recordKey ? -1 : a.recordKey > b.recordKey ? 1 : 0);
+  return sha256Hex(textToBytes(JSON.stringify(sortedValue({ plan, records }))));
+};
+
+export const validateSimilarityAlignmentResetReceipt = async (receipt, canonical) => {
+  const validated = validateAlignmentResetReceiptShape(receipt, canonical?.renderRequest);
+  if (validated && validated.binding !== await resetBinding(canonical)) {
+    throw new Error('Alignment reset receipt source or plan binding changed.');
+  }
+  return validated;
+};
+
+export const buildSimilarityAlignmentResetReceipt = async ({ before, after }) => {
+  const previous = new Map(before.renderRequest.records.map((record) => [record.recordKey, record]));
+  const directions = after.renderRequest.records.flatMap((record) => {
+    const old = previous.get(record.recordKey);
+    if (!old) throw new Error('Alignment reset receipt record binding changed.');
+    const beforeReverse = canonicalRecordReverseComplement(old);
+    const afterReverse = canonicalRecordReverseComplement(record);
+    return beforeReverse === afterReverse ? []
+      : [{ recordKey: record.recordKey, before: beforeReverse, after: afterReverse }];
+  });
+  const referenceKey = after.renderRequest.layout.similarityAlignment.reference.recordKey;
+  const x = (canonical) => canonical.renderRequest.layout.recordTranslations
+    .find(({ recordKey }) => recordKey === referenceKey)?.x ?? 0;
+  const deltaX = x(after) - x(before);
+  const receipt = { binding: await resetBinding(after), directions,
+    referenceDeltaX: deltaX === 0 ? null : { recordKey: referenceKey, deltaX } };
+  return validateSimilarityAlignmentResetReceipt(receipt, after);
 };
