@@ -1,0 +1,213 @@
+{
+  "mainFirstParentHead": "4556e04e929a4a85ad28d1833ce7304bd764881c",
+  "refs": {
+    "origin/main": {
+      "sha": "4556e04e929a4a85ad28d1833ce7304bd764881c",
+      "namespaces": {
+        "session": {
+          "path": "gbdraw/web/js/services/config.js",
+          "blob": "b1fad467ec7ecbb77eaaee8c019437e7a280e7b6",
+          "sha256": "7225c878b37539935a664130bb49c81fb62aadc08771201c91a61820617e103e",
+          "values": {
+            "SESSION_VERSION": 42
+          }
+        },
+        "request": {
+          "path": "gbdraw/web/js/services/session-request.js",
+          "blob": "fbbf6d2634f6cdfbffa87f903ffb30a000a28e5f",
+          "sha256": "2ee7934e02da8d6345bae39c3b3ec9f394451febf6d22d3b28e8cd6b0c0b0a14",
+          "values": {
+            "CANONICAL_REQUEST_SCHEMA": 7
+          }
+        },
+        "bindings": {
+          "path": "gbdraw/web/js/services/session-resources.js",
+          "blob": "677d31392e1ea774a4234b809759e6d1fdd6d8cd",
+          "sha256": "19e71c626cd8aa8f41d7608f0a1e1bf0bfdd308728bbc6dda8d94b1c12c5fea0",
+          "values": {
+            "writerSchema": 2
+          }
+        },
+        "catalog": {
+          "path": "gbdraw/web/js/services/feature-catalog.js",
+          "blob": "77bf0de017fd810a46ef61ed55d24090e04e379a",
+          "sha256": "ac838acb98ad6f5725ad227008cec1367ace47617a40195326ea6fb0d20dcb10",
+          "values": {
+            "FEATURE_CATALOG_SCHEMA": 3
+          }
+        },
+        "cache": {
+          "path": "gbdraw/web/js/app/losat-cache.js",
+          "blob": "73db2e0b002f591bf2254e4316521c536996856a",
+          "sha256": "c36c46e615be45a27e112d28500bd5c2965a03acc1d70b03153e24c93507e4a3",
+          "values": {
+            "PROTEIN_LOSAT_CACHE_SCHEMA": 4,
+            "NUCLEOTIDE_LOSAT_CACHE_SCHEMA": 2,
+            "LOSAT_DERIVED_CACHE_SCHEMA": 3,
+            "PROTEIN_IDENTITY_MANIFEST_SCHEMA": 2
+          }
+        }
+      }
+    },
+    "0.13.0": {
+      "sha": "8be9e3a5a2e1bc4cd983b502716ae44330396f28",
+      "namespaces": {
+        "session": {
+          "path": "gbdraw/web/js/services/config.js",
+          "blob": "a399fda01184e777248ffad17fdb44a28d84d055",
+          "sha256": "e776a1071d1352672ff6d7f6fd1c2e1704d8cd822041db4c6c9c5687ac1f60a1",
+          "values": {
+            "SESSION_VERSION": 30
+          }
+        },
+        "request": {
+          "path": "gbdraw/web/js/services/session-request.js",
+          "present": false
+        },
+        "bindings": {
+          "path": "gbdraw/web/js/services/session-resources.js",
+          "present": false
+        },
+        "catalog": {
+          "path": "gbdraw/web/js/services/feature-catalog.js",
+          "present": false
+        },
+        "cache": {
+          "path": "gbdraw/web/js/app/losat-cache.js",
+          "present": false
+        }
+      }
+    },
+    "HEAD": {
+      "sha": "9584ed904c7d1ee93f5a07ea4f3a2a465b061724",
+      "namespaces": {
+        "session": {
+          "path": "gbdraw/web/js/services/config.js",
+          "blob": "7bfb7c7316fcf7096814a4b5e352495d6518be33",
+          "sha256": "1a265800c844cd277251ee466301fa8cfe781bd5b4838ca17b3be85476b40273",
+          "values": {
+            "SESSION_VERSION": 44
+          }
+        },
+        "request": {
+          "path": "gbdraw/web/js/services/session-request.js",
+          "blob": "c4a880ad555946c883f9598ee1e25804e471fdd8",
+          "sha256": "589b9eb042f390954daf4a7b97adfa54f43aa881f14b9487b1902fe7e7fc8412",
+          "values": {
+            "CANONICAL_REQUEST_SCHEMA": 8
+          }
+        },
+        "bindings": {
+          "path": "gbdraw/web/js/services/session-resources.js",
+          "blob": "677d31392e1ea774a4234b809759e6d1fdd6d8cd",
+          "sha256": "19e71c626cd8aa8f41d7608f0a1e1bf0bfdd308728bbc6dda8d94b1c12c5fea0",
+          "values": {
+            "writerSchema": 2
+          }
+        },
+        "catalog": {
+          "path": "gbdraw/web/js/services/feature-catalog.js",
+          "blob": "a995820b1e6083a904e19e03bf5fb6047851c342",
+          "sha256": "738e8423964f8b8bc070d5b68f883d62e730f15b26c46f88a0cadc2d39eff814",
+          "values": {
+            "FEATURE_CATALOG_SCHEMA": 4
+          }
+        },
+        "cache": {
+          "path": "gbdraw/web/js/app/losat-cache.js",
+          "blob": "73db2e0b002f591bf2254e4316521c536996856a",
+          "sha256": "c36c46e615be45a27e112d28500bd5c2965a03acc1d70b03153e24c93507e4a3",
+          "values": {
+            "PROTEIN_LOSAT_CACHE_SCHEMA": 4,
+            "NUCLEOTIDE_LOSAT_CACHE_SCHEMA": 2,
+            "LOSAT_DERIVED_CACHE_SCHEMA": 3,
+            "PROTEIN_IDENTITY_MANIFEST_SCHEMA": 2
+          }
+        }
+      }
+    }
+  },
+  "positiveFixtures": [
+    {
+      "path": "tests/fixtures/sessions/BGC0000708-BGC0000713.v39.gbdraw-session.json.gz",
+      "compressedSha256": "e2e8296807649b4da8af38fd1f13f0af211543b36cb03c8347691ff9583e0093",
+      "expandedSha256": "9407365a3d5684490f1e72d81826101e661b9c0c362ec0b4e0b164af8e1b50b5",
+      "witnessCommit": "17e2c9dee32724219aa7c96a02d183280ffbe438",
+      "onMainFirstParent": true,
+      "containingTags": [],
+      "version": 39,
+      "requestSchema": 5,
+      "bindingsSchema": null,
+      "catalogSchema": null,
+      "cacheSchemas": [
+        4
+      ],
+      "releasedWitnessVerified": true
+    },
+    {
+      "path": "tests/fixtures/sessions/single.v41-bindings1.json",
+      "compressedSha256": "fc12a25ac9b6aa8358ce5e0c9614bfb5a9e068949c369a799dfe8936ee93a06a",
+      "expandedSha256": "fc12a25ac9b6aa8358ce5e0c9614bfb5a9e068949c369a799dfe8936ee93a06a",
+      "witnessCommit": "4e8c93804186f9c4b163b584bd81d759b1b3522d",
+      "onMainFirstParent": true,
+      "containingTags": [],
+      "version": 41,
+      "requestSchema": 7,
+      "bindingsSchema": 1,
+      "catalogSchema": null,
+      "cacheSchemas": [],
+      "releasedWitnessVerified": true
+    },
+    {
+      "path": "tests/fixtures/sessions/settings-only.v42.json.gz",
+      "compressedSha256": "bd11fa0406d40d09c72ff20500a49a3c74be781dbfa9253a4c3c696f28b2d34c",
+      "expandedSha256": "c2b2cd7746fed960d765c1072d89e6c1cd45072c60f0c67f461fdf5aee9d9252",
+      "witnessCommit": "3548fe14baf1fe3f9bfa83dcef5f34337523e8c8",
+      "onMainFirstParent": false,
+      "containingTags": [],
+      "version": 42,
+      "requestSchema": null,
+      "bindingsSchema": 2,
+      "catalogSchema": null,
+      "cacheSchemas": [],
+      "releasedWitnessVerified": false,
+      "mainFixtureWitnesses": [
+        "3fd508410d492e20d9963e41d808e9e7078d4d2c"
+      ],
+      "releasedFixtureBytesVerified": true
+    },
+    {
+      "path": "tests/fixtures/sessions/HmmtDNA_basic_circular.v44-schema7.json.gz",
+      "compressedSha256": "80cba6d6f782a2dc095edf9aaa64ab5cd8316bf8d93db21dcf7fb8baf8f5046f",
+      "expandedSha256": "d5758ff5fbd22c3a9ecb277f716b88c7766d7aeda81a7d2e45ca68ff9c88985e",
+      "witnessCommit": "4d1cf93514d0f75fa7a0ee32c1c4b2f176e03682",
+      "onMainFirstParent": false,
+      "containingTags": [],
+      "version": 44,
+      "requestSchema": 7,
+      "bindingsSchema": null,
+      "catalogSchema": 4,
+      "cacheSchemas": [],
+      "releasedWitnessVerified": false,
+      "mainFixtureWitnesses": [],
+      "releasedFixtureBytesVerified": false
+    }
+  ],
+  "sourceFingerprints": {
+    "gbdraw/web/js/services/config.js": "1a265800c844cd277251ee466301fa8cfe781bd5b4838ca17b3be85476b40273",
+    "gbdraw/web/js/services/session-request.js": "589b9eb042f390954daf4a7b97adfa54f43aa881f14b9487b1902fe7e7fc8412",
+    "gbdraw/web/js/services/session-resources.js": "19e71c626cd8aa8f41d7608f0a1e1bf0bfdd308728bbc6dda8d94b1c12c5fea0",
+    "gbdraw/web/js/services/feature-catalog.js": "738e8423964f8b8bc070d5b68f883d62e730f15b26c46f88a0cadc2d39eff814",
+    "gbdraw/web/js/app/losat-cache.js": "c36c46e615be45a27e112d28500bd5c2965a03acc1d70b03153e24c93507e4a3",
+    "gbdraw/web/js/app/run-analysis.js": "13b571e8a7a80102d8f64decff456ad1ba8e0319b196fc3f79a50112dc53e49d",
+    "gbdraw/web/js/app/watchers.js": "44e51a76de1325acefd4f0a2bb3741ca1dbefcd9273cef0a866f33ea02018482",
+    "gbdraw/web/js/app/record-discovery.js": "d77a9d970d00b8b3e699f1532fc1341f47145728084fe5148ab894496900be43",
+    "gbdraw/web/js/services/session-file.js": "864ccb104f6fb900af95b209a38bda8d7a35226379261028d60651c789ab461e",
+    "gbdraw/web/js/services/svg-result-ingestion.js": "0f2d64a54dc13d66215222b180e51cc78b33ba36ee99ed5b89bb2f7f2f6eeb2f",
+    "gbdraw/web/js/services/svg-sanitization.js": "2af1286593815e384dcc0e2752ed01d5ee7bc183ba10ed419674b62bbc859185",
+    "tools/web-change-policy.json": "fee8541705ea8bce25939c8aef2f727f64b2cfb1ff2bea12114471452df9b47f",
+    "tools/check-web-change-budget.mjs": "c7888ffb9c6d136284b567712f6e11a474e6b08f54d4daaee7d78e1a402d7f1c",
+    "tools/web-architecture-detectors.mjs": "e05a4d4ffa394db8af69f27d82e4673e0e0c2533ba6b0cd7b43dd16e4e227274",
+    "docs/internal/OPTION_INTEGRITY_PRODUCT_CONTRACT.md": "62e3a9c08ceb64acc349ace81a97a9c87dc45db4d18187a3b78e6e131b2dc595"
+  }
+}

@@ -1,0 +1,142 @@
+{
+  "/tmp/issue597-s01-final-pipeline-j3R30y/pipeline-metrics.json": {
+    "sha256": "6c0556dec52ad96d26fd002543e5fa052f0e27198c987a93d12c5f03e0a51074",
+    "bytes": 1222890
+  },
+  "/tmp/issue597-s01-final-transport-j3R30y/transport-metrics.json": {
+    "sha256": "743ad8a75c0b9cd9f988bc9ecd007ac5f101b3bc3fa7884883a683aa1797f3f7",
+    "bytes": 458717
+  },
+  "/tmp/issue597-s01-discovery-current-j3R30y.log": {
+    "sha256": "76f6610dffed838067a0e2320c54588222dacfa682355df27f39df3f1c602bc0",
+    "bytes": 298
+  },
+  "/tmp/issue597-s01-discovery-final-j3R30y.log": {
+    "sha256": "76f6610dffed838067a0e2320c54588222dacfa682355df27f39df3f1c602bc0",
+    "bytes": 298
+  },
+  "/tmp/issue597-s01-discovery-j3R30y.log": {
+    "sha256": "14c91fb8ccae5eca1130739c4104b0284e24d134794327e738a7722c6f26608a",
+    "bytes": 1230
+  },
+  "/tmp/issue597-s01-extra-node-j3R30y.log": {
+    "sha256": "e1aaac17da7cbbebe144a97b7c6cc86670d359c671fa6934eb57bab71a7b534f",
+    "bytes": 8380
+  },
+  "/tmp/issue597-s01-final-pipeline-j3R30y.log": {
+    "sha256": "232d6c0cc1f8755404d843718e92d649b95ae8b71eae9a1fe520cec9c77f4d77",
+    "bytes": 114
+  },
+  "/tmp/issue597-s01-final-real-semantic-0-j3R30y.log": {
+    "sha256": "6382577ee8d01f08db2a979b8e4b352907f2e7df2a4fc9e022c2d1984a27146a",
+    "bytes": 1247
+  },
+  "/tmp/issue597-s01-final-real-semantic-1-j3R30y.log": {
+    "sha256": "f822a502ce0d632bc559ab676aa2c6a9706496f46a0d6b3774e4f5a39326858a",
+    "bytes": 268
+  },
+  "/tmp/issue597-s01-final-real-semantic-2-j3R30y.log": {
+    "sha256": "f822a502ce0d632bc559ab676aa2c6a9706496f46a0d6b3774e4f5a39326858a",
+    "bytes": 268
+  },
+  "/tmp/issue597-s01-final-sequential-j3R30y.log": {
+    "sha256": "d28b01f9a082d536ef39849430f2594e75379bf92d8db000637da1030d7b3ec0",
+    "bytes": 50
+  },
+  "/tmp/issue597-s01-final-transport-j3R30y.log": {
+    "sha256": "ea16ad42900830a0085703285839fc04d7d8e06a06a4b09cef50cb8754bb92b4",
+    "bytes": 120
+  },
+  "/tmp/issue597-s01-final-verification-sequential-j3R30y.log": {
+    "sha256": "7e99fe8203f0bd9085b22ceb09b33ec30653fc15cb8142ddc5bbe0fab3f72927",
+    "bytes": 292
+  },
+  "/tmp/issue597-s01-final-vibrio-pipeline-j3R30y.log": {
+    "sha256": "22d95ff727e4b9cb65ead6dc2c5d62d8a9c8e79a053d91b0bcf4c0359e2c963d",
+    "bytes": 60
+  },
+  "/tmp/issue597-s01-final-vibrio-semantic-0-j3R30y.log": {
+    "sha256": "ba4e8232b0a713192301b52dae5f4c19ccc8627be91244bd461a93936b28e660",
+    "bytes": 451
+  },
+  "/tmp/issue597-s01-final-vibrio-semantic-1-j3R30y.log": {
+    "sha256": "f822a502ce0d632bc559ab676aa2c6a9706496f46a0d6b3774e4f5a39326858a",
+    "bytes": 268
+  },
+  "/tmp/issue597-s01-final-vibrio-semantic-2-j3R30y.log": {
+    "sha256": "f822a502ce0d632bc559ab676aa2c6a9706496f46a0d6b3774e4f5a39326858a",
+    "bytes": 268
+  },
+  "/tmp/issue597-s01-final-vibrio-transport-j3R30y.log": {
+    "sha256": "3d7ce972e046c42b557223189105d1be49a81f14f1398e8c374852a71a847f22",
+    "bytes": 63
+  },
+  "/tmp/issue597-s01-fixture-j3R30y.log": {
+    "sha256": "e9ed588d766abeb8496143b02146e71a720a31657cd2281df59a2a8a2717bd2d",
+    "bytes": 1793
+  },
+  "/tmp/issue597-s01-fixture-losat-j3R30y.log": {
+    "sha256": "46d0629cfd68870f45cf0efaeb9c1d066cb49fdf476dd76855769a37ede3b4f8",
+    "bytes": 8334
+  },
+  "/tmp/issue597-s01-fixture-retry-j3R30y.log": {
+    "sha256": "c8a989412d50315460fc80c2de07b1d7545c927292a150d75a98062a434eb8f5",
+    "bytes": 8792
+  },
+  "/tmp/issue597-s01-fixture-verified-j3R30y.log": {
+    "sha256": "4ec18b2142d2127a775f198b3b65415ff81593a7f7aba51351d8fe8bb0957bb8",
+    "bytes": 686
+  },
+  "/tmp/issue597-s01-focused-node-final-j3R30y.log": {
+    "sha256": "4f4e43c1bc4101b78d9199cf5bb92dd041fbad2addecd592d852ec30f9791088",
+    "bytes": 2524
+  },
+  "/tmp/issue597-s01-permission-j3R30y.log": {
+    "sha256": "748c11d56d27a68cb38e43547879d95db1eb67a1a2dd0dde49287a97020aec28",
+    "bytes": 141
+  },
+  "/tmp/issue597-s01-policy-final-j3R30y.log": {
+    "sha256": "4cd080a18c85a6be4e10e719e875378fec1343d32d111b6b85a143e203f7ad02",
+    "bytes": 6036
+  },
+  "/tmp/issue597-s01-policy-j3R30y.log": {
+    "sha256": "4cd080a18c85a6be4e10e719e875378fec1343d32d111b6b85a143e203f7ad02",
+    "bytes": 6036
+  },
+  "/tmp/issue597-s01-python-tests-j3R30y.log": {
+    "sha256": "7271cbd6475bc94f79388bd9e9c7aae8903e14d2628cc94b5c100b71b82b83d7",
+    "bytes": 515
+  },
+  "/tmp/issue597-s01-ruff-production-j3R30y.log": {
+    "sha256": "82b3e6a6c090a57601d22943bd23fca9218d1031dbe5a7b754092f9a156b4f18",
+    "bytes": 19
+  },
+  "/tmp/issue597-s01-transport-j3R30y.log": {
+    "sha256": "3d7ce972e046c42b557223189105d1be49a81f14f1398e8c374852a71a847f22",
+    "bytes": 63
+  },
+  "/tmp/issue597-s01-vibrio-pipeline-j3R30y.log": {
+    "sha256": "22d95ff727e4b9cb65ead6dc2c5d62d8a9c8e79a053d91b0bcf4c0359e2c963d",
+    "bytes": 60
+  },
+  "/tmp/issue597-s01-vibrio-reload-j3R30y.log": {
+    "sha256": "3b3810e8ce4e53f7c30852fc79298e89a88af065f4bfe4e6c9ddfcf8a2140164",
+    "bytes": 403
+  },
+  "/tmp/issue597-s01-vibrio-replay-j3R30y.log": {
+    "sha256": "5e4cf31d34b96cd46931bb78e61877ba705c5ce713dc1924c66b4f9189697d67",
+    "bytes": 283
+  },
+  "recipes": {
+    "tools/characterize_issue597_s01.py": "5d25002d7c0cc2da61e97861f1967172732552f69d1d5acc725b1ae5f792c907",
+    "tools/inspect_issue597_s01_contracts.py": "f6245603343ef90d94340cf51d270cfed73297c8ff2c86e8ef5bc299215f5064",
+    "tools/inspect_issue597_s01_namespaces.py": "372d321ba5e9da758d6dc394e13f61f451a7dd9a156776211340424e58a86efc",
+    "tools/measure_issue597_s01.py": "c2ea0bbfc389fa0da1f4440a7d164961729814020097096daa4e0fe9cd48a6e7",
+    "tools/prepare_issue597_s01_fixture.py": "2880aee6db3659f4e354e74336fa996f1af8e377a98b9722e172ac9cff0dd417",
+    "tools/verify_issue597_s01_outputs.py": "138b5b2e2c591e3b52fb3cfd65ec789efb4ca75cebbd2390007410b66cb24199"
+  },
+  "permissionCandidate": {
+    "docs/internal/issue-597-input-session-implementation-20260926/authority-candidates/02-import-worker-permission.patch": "fff1b56ceb6ee3baf2e6a7f1e82a6e95e5856a1c533c70d58a764d93d9b65f78",
+    "docs/internal/issue-597-input-session-implementation-20260926/authority-candidates/verify_candidate.py": "9beb0fceb66037dc35812d8583d4a034d3604ade5a9b04dba2f9be85e8bee142"
+  }
+}

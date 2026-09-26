@@ -1,4 +1,4 @@
-"""Verify one inert S00 patch after application to a clean dev worktree."""
+"""Verify a candidate in a clean dev worktree or on a temporary policy copy."""
 
 from copy import deepcopy
 import json
@@ -6,6 +6,7 @@ from pathlib import Path
 import re
 import subprocess
 import sys
+import tempfile
 
 
 def require(condition, message):
@@ -13,7 +14,9 @@ def require(condition, message):
         raise SystemExit(message)
 
 
-mode, worktree_arg = sys.argv[1:]
+inert = '--inert' in sys.argv[1:]
+mode, worktree_arg = [arg for arg in sys.argv[1:] if arg != '--inert']
+require(not inert or mode == 'privileged', '--inert supports the permission candidate only')
 require(mode in ('product', 'privileged'), 'Use: verify_candidate.py product|privileged <dev-worktree>')
 worktree = Path(worktree_arg).resolve()
 plan = Path(__file__).resolve().parent.parent
@@ -25,10 +28,21 @@ def git(*args):
 
 target = ('docs/internal/OPTION_INTEGRITY_PRODUCT_CONTRACT.md'
           if mode == 'product' else 'tools/web-change-policy.json')
-require(git('diff', '--name-only', 'HEAD').splitlines() == [target], 'Unexpected changed paths')
-require(not git('ls-files', '--others', '--exclude-standard').strip(), 'Unexpected untracked files')
+if not inert:
+    require(git('diff', '--name-only', 'HEAD').splitlines() == [target], 'Unexpected changed paths')
+    require(not git('ls-files', '--others', '--exclude-standard').strip(), 'Unexpected untracked files')
 base = git('show', f'HEAD:{target}')
-candidate = (worktree / target).read_text()
+if inert:
+    patch = plan / 'authority-candidates/02-import-worker-permission.patch'
+    subprocess.run(['git', 'apply', '--check', str(patch)], cwd=worktree, check=True)
+    with tempfile.TemporaryDirectory(prefix='issue597-permission-copy-') as directory:
+        copy = Path(directory) / target
+        copy.parent.mkdir(parents=True)
+        copy.write_text(base)
+        subprocess.run(['git', 'apply', str(patch)], cwd=directory, check=True)
+        candidate = copy.read_text()
+else:
+    candidate = (worktree / target).read_text()
 
 if mode == 'product':
     fields = {
@@ -77,7 +91,9 @@ else:
     expected = deepcopy(before)
     expected['allowedPrivilegedOwners']['Diagram Worker'].append('services/session-import-client.js')
     expected['allowedPrivilegedOwners']['Diagram Worker'].sort()
-    require(after == expected, 'Permission exceeds the one constructor owner')
+    expected['allowedPrivilegedImporters']['services/session-file.js'].append('workers/session-import-worker.js')
+    expected['allowedPrivilegedImporters']['services/session-file.js'].sort()
+    require(after == expected, 'Permission exceeds one constructor owner and one codec import edge')
     # These source strings are detector probes; they never construct a Worker.
     probe = r'''
 import assert from 'node:assert/strict';
@@ -85,22 +101,27 @@ import { readFileSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
 import { detectPrivilegedWebCapabilities } from './tools/web-architecture-detectors.mjs';
 const sources = {
-  'services/session-file.js': "import { readSessionFile } from './session-import-client.js';",
+  'services/config.js': "import { readSessionFile } from './session-import-client.js';",
   'services/session-import-client.js': "export const readSessionFile = () => new Worker(new URL('../workers/session-import-worker.js', import.meta.url), { type: 'module' });",
-  'workers/session-import-worker.js': 'self.onmessage = async ({ data }) => self.postMessage(JSON.parse(await data.text()));'
+  'workers/session-import-worker.js': "import { readSessionText } from '../services/session-file.js'; self.onmessage = async ({ data }) => self.postMessage(JSON.parse(await readSessionText(data.file)));"
 };
 const detected = detectPrivilegedWebCapabilities(sources);
 assert.deepEqual(detected.operatorMatchesByCapability['Diagram Worker'], [{ path: 'services/session-import-client.js', count: 1 }]);
 for (const [name, matches] of Object.entries(detected.operatorMatchesByCapability)) {
   if (name !== 'Diagram Worker') assert.deepEqual(matches, []);
 }
-assert.equal(Object.values(detected.importersByTarget).flat().length, 0);
+assert.deepEqual(detected.importersByTarget['services/session-file.js'], ['workers/session-import-worker.js']);
+assert.equal(Object.values(detected.importersByTarget).flat().length, 1);
 const base = JSON.parse(execFileSync('git', ['show', 'HEAD:tools/web-change-policy.json'], { encoding: 'utf8' }));
 const candidate = JSON.parse(readFileSync('tools/web-change-policy.json', 'utf8'));
 assert.equal(base.allowedPrivilegedOwners['Diagram Worker'].includes('services/session-import-client.js'), false);
 assert.equal(candidate.allowedPrivilegedOwners['Diagram Worker'].includes('services/session-import-client.js'), true);
 assert.equal(candidate.allowedPrivilegedOwners['Diagram Worker'].includes('services/other-worker-client.js'), false);
-console.log('Detector probe: one constructor owner; zero privileged import edges; unrelated owner denied');
+assert.equal(base.allowedPrivilegedImporters['services/session-file.js'].includes('workers/session-import-worker.js'), false);
+assert.equal(candidate.allowedPrivilegedImporters['services/session-file.js'].includes('workers/session-import-worker.js'), true);
+console.log('Detector probe: one constructor owner; one codec import edge; unrelated owner denied');
 '''
+    if inert:
+        probe = probe.replace("JSON.parse(readFileSync('tools/web-change-policy.json', 'utf8'))", json.dumps(after))
     subprocess.run(['node', '--input-type=module'], input=probe, text=True, cwd=worktree, check=True)
 print(f'{mode}: candidate shape and single target path PASS')

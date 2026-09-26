@@ -22,3 +22,10 @@ S03以降はstatus仕様が変更されるため、基準観察を改ざんせ�
 過去の30 Node checksはsession-file/session-request/session-active-files/record-display-options/record-metadata-inference。
 real large Save/Load、transport/heap、GFF/DDBJ variantsはS01以降で実測する。
 このevidence directoryを新しいauthorityまたは第二のruntime fixture ownerにしない。
+
+## S01 measurements
+
+S01 の追加基準観察・namespace・authority・実測値は `S01-*.json`、
+再現 commands と各 metric の定義は [S01_REPRODUCTION.md](./S01_REPRODUCTION.md)、
+方式の判定と未達条件は [S01_RESULT.md](../results/S01_RESULT.md) に保存する。
+上記の元観察は履歴として保持し、新しい authority として扱わない。

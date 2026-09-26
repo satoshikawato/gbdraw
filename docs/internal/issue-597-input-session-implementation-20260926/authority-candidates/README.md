@@ -1,111 +1,74 @@
 # Authority integration candidates — BUG-02 / BUG-20
 
-Product authority二件はPR #610でdevへ統合済み（OIPC revision 21、PD-OI-044/045）。Worker permissionはS01の方式/path確認待ち。
-統合SHAと現在のreadinessは [AUTHORITY_INTEGRATION_RESULT.md](../results/AUTHORITY_INTEGRATION_RESULT.md) を参照。
+Product authority 二件は PR #610 / dev merge `af5d942af60353dda199aa487da9152a3576b3fe` に統合済み。
+OIPC revision 21、PD-OI-044/045 と二件の receipt は S01 で全18項目の一致を確認した。
+[AUTHORITY_INTEGRATION_RESULT.md](../results/AUTHORITY_INTEGRATION_RESULT.md) と
+[S01_RESULT.md](../results/S01_RESULT.md) を参照。Product 選択の再承認は不要。
 
-以下はS00時点の候補準備記録。Product patchは当時のrevision 19に対する履歴artifactであり、統合済みdevへ再適用しない。permission patchはS01後の確認に使う。
-このディレクトリは inert patch と検証手順を保存する。active authority、第二の decision registry、runtime ではない。
-BUG-01 はユーザーの2026-09-26の指示で今回の計画から除外した。
+このディレクトリは inert 候補であり、active authority や runtime ではない。
+`01-product-contract.patch` は S00 時点の revision 19 に対する履歴 artifact。
+統合済み dev へ再適用しない。旧検証・Product integration 手順は [S00_RESULT.md](../results/S00_RESULT.md) に保存している。
+BUG-01、新 bindings、S02 は scope 外のままである。
 
-## 正規保存先と候補
+## S01 で確認した最小 permission
 
-調査した trusted base は `origin/dev` = `302dfa1136c95ab50ddef606ad835ec4087b95b2`。
+[02-import-worker-permission.patch](./02-import-worker-permission.patch) の適用先は
+`tools/web-change-policy.json` **一ファイルのみ**。constructor owner 一件と codec importer 一件を追加する。
+S00 の「importer 追加なし」という予定を、実際の disposable Worker の codec 共用に合わせて更新した。
 
-| 責任 | 候補 | authority-only PR の全変更path | 内容 |
-| --- | --- | --- | --- |
-| Product outcome | [01-product-contract.patch](./01-product-contract.patch) | `docs/internal/OPTION_INTEGRITY_PRODUCT_CONTRACT.md` のみ | OIPC revision 19 → 20。`PD-OI-044` / `PD-OI-045` に二件の完全な receipt を忠実に追加。 |
-| Worker constructor の許可 | [02-import-worker-permission.patch](./02-import-worker-permission.patch) | `tools/web-change-policy.json` のみ | `allowedPrivilegedOwners["Diagram Worker"]` に `services/session-import-client.js` 一件だけ追加。 |
-
-`tools/web-product-impact-map.json` は canonical render request と saved Session regeneration の二 concern を持つ。
-今回の `diagram-generation.circular-transform-discoverability` と `web.session-operation-consistency` は未mappedで、
-`tools/web-product-decisions.json` の active decisions も空である。
-Product Impact Ratchet の unmapped static authority 経路に従い、既存 OIPC に追加する。
-`BD-###`、map concern、scenario、detector、workflow、architecture rule を新設しない。
-既存 `PD-OI-010` の一件 crop 条件、`PD-OI-019` の fresh canvas default、
-`PD-OI-016` / OIPC-C07 の failure isolation は置き換えず、二件の receipt と合わせて維持する。
-
-候補の provenance は元承認記録を含む commit `51a786086dc2777e5fa375e5f94d8b7ac7deeedc`、
-承認者・日付・承認原文・承認対象 digest に固定した。判断の再承認は不要。
-候補の番号と revision はこの dev base に対する割当であり、merge 時に競合していれば最新devの未使用番号へ調整し、
-二件の全9項目を維持して再検証する。先行 authority を上書きしない。
-
-## 最小 permission の根拠
-
-既存 `tools/web-architecture-detectors.mjs` の `Diagram Worker` operator は `new Worker` を検出する。
-これは detector 上の分類名であり、Session import に Python runtime を追加する意味ではない。
-予定構成は一方向の `config.js → session-file.js → session-import-client.js → session-import-worker.js`。
-constructor と cancellation/stale/settlement/teardown は一 client が所有し、Worker は JSON/gzip codec のみを担当する。
-
-| Subject / edge | 現行detectorの結果 | 候補で必要な許可 |
+| Subject / edge | 現行 detector | 必要な候補 |
 | --- | --- | --- |
-| `services/session-import-client.js` の一 `new Worker(...)` | `Diagram Worker` owner 一件 | 上記一件 |
-| `session-file.js → session-import-client.js` | target は既存 privileged import target の集合外 | 追加なし |
-| client の `new URL('../workers/session-import-worker.js', import.meta.url)` | privileged import edge ではない | 追加なし |
-| Worker 内の File read / gzip decode / JSON parse / reply | 既存 privileged operator を使わない | 追加なし |
+| `services/session-import-client.js` の一 `new Worker` | Diagram Worker owner | allowedPrivilegedOwners に一件 |
+| `workers/session-import-worker.js → services/session-file.js` | privileged import edge | session-file の allowedPrivilegedImporters に一件 |
+| `config.js → session-import-client.js` | target は privileged target 集合外 | 追加なし |
+| client の Worker URL | privileged import edge ではない | 追加なし |
 
-client/worker は `session-file.js`、config、History、canonical request、SVG admission、Pyodide helper を逆importしない。
-特に codec 共用のために Worker から `session-file.js` をimportする並行ownerや循環経路を作らない。
-既存の `services/session-file.js` の importer (`services/config.js`) と全54 importer permissions は不変。
-operator permissions は48 → 49、追加一件・削除ゼロ。
-`Session` permission、worker file の blanket permission、new importer key は追加しない。
-これは予定構成の detector probe であり、完成runtimeの適合・応答性・memoryの証拠ではない。
-S01がtransportと最終pathを確定した後、実際のsubjectsを再確認してpermission-only候補をreviewする。
-別subjectが必要になればその具体的scopeを別deliveryで扱い、gateやdetectorを緩めない。
+runtime の予定は `config.js → session-import-client.js → session-import-worker.js → session-file.js`。
+`session-file.js` は既存の純粋な File/gzip/fatal UTF-8/size-limit codec owner として残し、client を逆 import しない。
+config は Save の既存 codec import を維持する。client が operation ID、stale rejection、error、settlement、termination を所有する。
+Worker は config、History、request、SVG admission、Python helper を import しない。
+codec validation を複製せず、reply は未信頼の plain candidate として既存 preflight/adoption に渡す。
 
-## 適用・検証
+現行 permissions は operator 48 → 候補49、importer 54 → 候補55。
+追加二件、削除ゼロ。別 owner、Session operator、blanket Worker permission、new importer key、detector/checker の変更はない。
+S01 で active policy は変更していない。方式の性能判断は S01 結果だけを参照し、permission 候補の存在を性能 PASS と扱わない。
 
-この session は別PR・別branchへのpush・mergeを行っていない。
-maintainer は候補commitを参照し、最新 `origin/dev` から責任別の新規branchを作る。
-Product例: `product/issue-597-authority-dev-20260926` → PR base `dev`。
-permission例: `policy/issue-597-session-import-worker-20260926` → PR base `dev`。
-implementation branch をbaseにせず、そのcommitsをcherry-pickしない。各patchの一targetだけをstageする。
+## 候補の再検証
 
-再現にはこの計画branchの独立checkoutと、そのcloneに属する検証専用dev worktreeを使う。
-次のcommandsはローカルの検証用で、remoteへは書き込まない。
+S01 の独立 checkout で、active policy を変更せず次を実行した。
+`--inert` は一時 directory の policy **コピー**にだけ patch を適用し、既存 detector と形状を検証する。
+
+```bash
+ISSUE597_CANDIDATES="$PWD/docs/internal/issue-597-input-session-implementation-20260926/authority-candidates"
+git apply --check "$ISSUE597_CANDIDATES/02-import-worker-permission.patch"
+python "$ISSUE597_CANDIDATES/verify_candidate.py" privileged "$PWD" --inert
+```
+
+結果: 一 constructor owner、一 codec import edge、候補の一 target / 二 permission 以外の差分ゼロ。
+別 owner は不許可。active policy SHA は測定 source / fetched dev と同一。
+この局所検証は authority PR の review / merge や trusted CI gate の代わりではない。
+
+## 別 authority PR の開始条件
+
+S01 結果で transport の成立とこの paths を確認してから、maintainer が最新 `origin/dev` を base に
+permission-only branch / PR を用意する。implementation branch の docs/tests commits を cherry-pick しない。
+この session では authority PR の作成・push・merge を行っていない。
 
 ```bash
 git fetch origin dev:refs/remotes/origin/dev
-ISSUE597_CANDIDATES="$PWD/docs/internal/issue-597-input-session-implementation-20260926/authority-candidates"
-ISSUE597_DEV_WORKTREE=$(mktemp -d /tmp/gbdraw-issue597-authority-check.XXXXXX)
-git worktree add --detach "$ISSUE597_DEV_WORKTREE" origin/dev
-cd "$ISSUE597_DEV_WORKTREE"
-git status --short --branch
-git apply --check "$ISSUE597_CANDIDATES/01-product-contract.patch"
-git apply "$ISSUE597_CANDIDATES/01-product-contract.patch"
-python "$ISSUE597_CANDIDATES/verify_candidate.py" product "$PWD"
-git diff --check
-node tools/check-web-change-budget.mjs --base origin/dev
-git apply --reverse "$ISSUE597_CANDIDATES/01-product-contract.patch"
-git status --short
+git switch --no-track -c policy/issue-597-session-import-worker-20260926 origin/dev
 git apply --check "$ISSUE597_CANDIDATES/02-import-worker-permission.patch"
 git apply "$ISSUE597_CANDIDATES/02-import-worker-permission.patch"
 python "$ISSUE597_CANDIDATES/verify_candidate.py" privileged "$PWD"
 git diff --check
 node tools/check-web-change-budget.mjs --base origin/dev
-git apply --reverse "$ISSUE597_CANDIDATES/02-import-worker-permission.patch"
-node --test tests/web/architecture-ratchet-fixtures.test.mjs tests/web/product-impact-ratchet-fixtures.test.mjs
-git status --short
-cd -
-git worktree remove "$ISSUE597_DEV_WORKTREE"
 ```
 
-二つのpatchを同じauthority PRへまとめない。OIPC変更は一pathだけの分離がcheckerで要求される。
-各candidateの実測結果は Gate PASS / Review REQUIRED。53 focused checks は全pass。
-Review REQUIRED はhuman reviewの条件であり、dev mergeを済ませたという意味ではない。
-最新baseのrevision/ID/schemaが変わったら、適用だけ成功しても旧検証を再利用しない。
+この手順は**将来の別 authority delivery**向けであり、S01 implementation checkout では実行しない。
+その PR は上記 policy 一ファイルだけを stage し、review / merge SHA を記録する。
+最新 base の subjects / policy が変われば候補の適用成功だけで旧 evidence を再利用しない。
+必要な mapped contract が変わる場合は既存 evidence-only → authority-ref-only → runtime の順序を維持する。
 
-## 統合順序と未完了条件
-
-1. Product-only patchを最新devの別PRでreview・mergeし、`PD-OI-044` / `PD-OI-045` の実際のIDとdev merge SHAを記録する。
-2. S01はauthority未mergeでも独立measurementを実施できる。transport/pathの選定と性能・heap・転送evidenceを保存する。
-3. そのpathを確認してpermission-only patchを別PRでreview・mergeし、dev merge SHAを記録する。S05開始前の必須条件。
-4. runtime前にclean implementation checkoutで `git fetch origin`、必要SHAのdev ancestryを確認し、`git merge --no-edit origin/dev` で取り込む。S03はdiscovery authority、S04はSession authority、S05はpermissionとS01方式に依存する。
-5. mapped contract変更が実際に必要なら evidence-only merge → authority ref-only merge → runtime の順序に追加する。現時点で二つの新concernのmap/contract変更は不要で、既存canonical request/admissionのowner/edgeは維持する。
-
-checkerのexact-path enforcement、static Product Contract、privileged owner機構は既にdevにあるため、checker-only laneは現時点で不要。
-将来checker mechanics変更が必要と判明した場合は checker-only → authority-only → runtime を守る。
-Product/permission merge SHAはいずれも **未取得・未統合**。
-候補を作成・検証・implementation branchへpushしても、dependent runtime開始条件は満たさない。
-S00でbrowser性能、codec、UI、runtimeを検証済みとは報告しない。
-
-詳細な検証・開始SHA・差分review・dev未取り込みのboundaryは [S00_RESULT.md](../results/S00_RESULT.md) に記録する。
+Worker permission の dev merge SHA は **未取得・未統合**。
+S05 は S01 の方式成立、permission-only dev merge と implementation への取り込み、既存 gate PASS を必要とする。
+Product authority は統合済みであり、その判断を再選択しない。

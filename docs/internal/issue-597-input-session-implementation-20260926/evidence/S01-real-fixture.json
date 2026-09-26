@@ -1,0 +1,176 @@
+{
+  "sourceHead": "9584ed904c7d1ee93f5a07ea4f3a2a465b061724",
+  "sources": [
+    {
+      "path": "tests/test_inputs/GCF_000196095.1_ASM19609v1_genomic.gbff",
+      "sha256": "c785f2feed7dbef0a7ad881aef4a43860f65318e1a44db66b032fc65c9cc34dc",
+      "records": [
+        {
+          "id": "NC_004603.1",
+          "length": 3288558,
+          "sequenceSha256": "36140bf561d897dce3f26c66aa1d1572bcaf6592c6a981567a5e84bf6d34a973",
+          "features": 6091,
+          "translatedCDS": 2874
+        },
+        {
+          "id": "NC_004605.1",
+          "length": 1877212,
+          "sequenceSha256": "820f41d6fba3bdde50369330728d8379ac4428bca5b77e4ca270dee162f5d8d3",
+          "features": 3353,
+          "translatedCDS": 1635
+        }
+      ]
+    },
+    {
+      "path": "tests/test_inputs/GCF_000354175.2_ASM35417v2_genomic.gbff",
+      "sha256": "4357443d248ab3d5c08b1854dcbcca1f59adbf064640fd99d5504f6ee4d59096",
+      "records": [
+        {
+          "id": "NC_022349.1",
+          "length": 3334467,
+          "sequenceSha256": "3b7f2132c040e0f8cb8c38e63098ada036bf29376d5a5d951b1414385fbaec98",
+          "features": 6143,
+          "translatedCDS": 2917
+        },
+        {
+          "id": "NC_022359.1",
+          "length": 1812170,
+          "sequenceSha256": "2860a0c7aa5b529244e9c0f961a54e7f5fbccbac556eb6dcd0142581a0b11607",
+          "features": 3199,
+          "translatedCDS": 1554
+        }
+      ]
+    },
+    {
+      "path": "tests/test_inputs/GCF_000801275.2_ASM80127v1_genomic.gbff",
+      "sha256": "a11f12277c34c46e2161f354e50ef39bdca4c5b618dd1905c1829ba20b35d5d1",
+      "records": [
+        {
+          "id": "NC_022528.1",
+          "length": 4109740,
+          "sequenceSha256": "20e5a23be3b8da43009549cb6666153d200d2e35def29df64ba58923aa8970dd",
+          "features": 7484,
+          "translatedCDS": 3578
+        },
+        {
+          "id": "NC_022543.1",
+          "length": 2212415,
+          "sequenceSha256": "6ae2edc312d439d79af01db1d98263b58dd4e1e6bb587d790af77b78a33a3970",
+          "features": 3995,
+          "translatedCDS": 1975
+        }
+      ]
+    },
+    {
+      "path": "tests/test_inputs/GCF_002021755.1_ASM202175v1_genomic.gbff",
+      "sha256": "483ecea116a7399b87a37040b49095a26f5e8c02b4931c607364a0a46e07321f",
+      "records": [
+        {
+          "id": "NZ_CP019959.1",
+          "length": 3567557,
+          "sequenceSha256": "3138bcf3f187f9738d8ca6ed034ead54f7a9f43b13c2cbf7c6b8aba58d76fb55",
+          "features": 6456,
+          "translatedCDS": 3055
+        },
+        {
+          "id": "NZ_CP019960.1",
+          "length": 2322648,
+          "sequenceSha256": "bad0c5a5ad9bfd74dca333e9c449d8aa41fd00c04a27d52364792bb21853c732",
+          "features": 4120,
+          "translatedCDS": 2034
+        }
+      ]
+    },
+    {
+      "path": "tests/test_inputs/GCF_002906475.1_ASM290647v1_genomic.gbff",
+      "sha256": "6238c42c332f9e0ef65ea6d9f6e5da41d7a5a13d1eb135aeb2b14b700d643908",
+      "records": [
+        {
+          "id": "NZ_CP026321.1",
+          "length": 3469516,
+          "sequenceSha256": "33f0a16060b299a7dac7c61fa610b935d14aea18b732ab56dbb7e3b2cfb8c44d",
+          "features": 6329,
+          "translatedCDS": 2990
+        },
+        {
+          "id": "NZ_CP026322.1",
+          "length": 1956059,
+          "sequenceSha256": "c9f4f8d88fc2d82243506b71648aae8340c569becc3d9575ddd2f8a1f87159b2",
+          "features": 3536,
+          "translatedCDS": 1733
+        }
+      ]
+    },
+    {
+      "path": "tests/test_inputs/GCF_015097735.1_ASM1509773v1_genomic.gbff",
+      "sha256": "a2f696d584451866032339eb17de4eadad55372a36bc87b9eb85583a482ad027",
+      "records": [
+        {
+          "id": "NZ_AP024087.1",
+          "length": 4072236,
+          "sequenceSha256": "f93b9843ef1cc1dc5550870a34bb3b7f375d72eec478e167792f1cb6a39d7d64",
+          "features": 7494,
+          "translatedCDS": 3582
+        },
+        {
+          "id": "NZ_AP024088.1",
+          "length": 2160687,
+          "sequenceSha256": "a2b0d91e00ee51b73aadb847c5e73ea3ecdedf56316eb0a488cf4389a0996063",
+          "features": 3901,
+          "translatedCDS": 1931
+        }
+      ]
+    }
+  ],
+  "combinedSha256": "93fc27fc1ba27f21e513079b506244b072d5f836889acc0dfb5feca5fe7df67c",
+  "command": [
+    "/home/kawato/micromamba/bin/python",
+    "-m",
+    "gbdraw.cli",
+    "linear",
+    "--records_table",
+    "/tmp/issue597-s01-data-j3R30y/records.tsv",
+    "--protein_blastp_mode",
+    "collinear",
+    "--collinear_search_scope",
+    "all",
+    "--protein_blastp_candidate_limit",
+    "5",
+    "--collinear_min_anchors",
+    "3",
+    "--collinear_max_unit_gap",
+    "2",
+    "--collinear_max_diagonal_drift",
+    "2",
+    "--losatp_bin",
+    "/tmp/issue597-s01-data-j3R30y/.cache/gbdraw/losat/0.1.0/x86_64-unknown-linux-gnu/LOSAT",
+    "--losatp_threads",
+    "8",
+    "--feature_shape",
+    "CDS=rectangle",
+    "--legend",
+    "bottom",
+    "--scale_style",
+    "ruler",
+    "--ruler_on_axis",
+    "--separate_strands",
+    "-o",
+    "/tmp/issue597-s01-data-j3R30y/real-full-pairwise",
+    "-f",
+    "svg",
+    "--session_output",
+    "/tmp/issue597-s01-data-j3R30y/real-full-pairwise.gbdraw-session.json.gz",
+    "--overwrite"
+  ],
+  "runtimeVersion": "losat 0.1.0",
+  "runtimeSha256": "fb01e0f6561a57f58772d154d68a4a190626c3029186995db353ef7486cb4fb4",
+  "releaseLockSha256": "72da7f7ac6371788e862093686a49a9abccf3142fc6f8f22fb78ce8e92cfde04",
+  "fixtureSha256": "a60cce6ecb8a0c499f2d801feabc65b122c78793dafcc15644b46c6ef1ecc98f",
+  "compressedBytes": 134471293,
+  "expandedBytes": 466767621,
+  "records": 12,
+  "biologicalFeatures": 62089,
+  "directedPairs": 132,
+  "selfPairs": 12,
+  "cacheEntries": 144
+}

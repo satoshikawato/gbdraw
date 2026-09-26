@@ -1,0 +1,40 @@
+{
+  "head": "9584ed904c7d1ee93f5a07ea4f3a2a465b061724",
+  "dev": "af5d942af60353dda199aa487da9152a3576b3fe",
+  "mergeSha": "af5d942af60353dda199aa487da9152a3576b3fe",
+  "revision": 21,
+  "receipts": [
+    {
+      "id": "PD-OI-044",
+      "fieldsEqual": [
+        "concern",
+        "scenarioRevision",
+        "choice",
+        "rationale",
+        "mustPreserve",
+        "mayRetire",
+        "acceptedResidualRisk",
+        "owner",
+        "decisionDate"
+      ],
+      "sha256": "9f3589dec70a8f86b4718b68cb4dd4b3ef9ad83b6ab93935a437879d64eb539a",
+      "approvedOutcomeDigest": "57debd7625f007c99849b8de5f992508b369b7a2277c01ed1ff51e7c95354d93"
+    },
+    {
+      "id": "PD-OI-045",
+      "fieldsEqual": [
+        "concern",
+        "scenarioRevision",
+        "choice",
+        "rationale",
+        "mustPreserve",
+        "mayRetire",
+        "acceptedResidualRisk",
+        "owner",
+        "decisionDate"
+      ],
+      "sha256": "8b9c8d7f185b2c1e65113d1a97062bf96661e2265b8e20e01c39e8583057e859",
+      "approvedOutcomeDigest": "7cef6306aefc5ff935d949efef7f76964eae2d24df8281c6ca371df5c2e87633"
+    }
+  ]
+}
