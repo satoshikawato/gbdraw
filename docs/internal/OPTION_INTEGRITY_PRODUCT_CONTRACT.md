@@ -5,7 +5,7 @@ Status: active Product authority
 ## Authority metadata
 
 - Contract ID: `OIPC`
-- Contract revision: `18`
+- Contract revision: `19`
 - Product Decision Owner: `satoshikawato`
 - Decision date: `2026-08-28`
 - Decision source: explicit Product Decision Owner selection of one (`1`) after
@@ -27,7 +27,8 @@ Status: active Product authority
   `PD-OI-021`, `PD-OI-022`, `PD-OI-023`, `PD-OI-024`, `PD-OI-025`,
   `PD-OI-026`, `PD-OI-027`, `PD-OI-028`, `PD-OI-029`, `PD-OI-030`,
   `PD-OI-031`, `PD-OI-032`, `PD-OI-033`, `PD-OI-034`, `PD-OI-035`,
-  `PD-OI-036`, `PD-OI-037`, `PD-OI-038`, and `PD-OI-039`
+  `PD-OI-036`, `PD-OI-037`, `PD-OI-038`, `PD-OI-039`, `PD-OI-040`,
+  `PD-OI-041`, `PD-OI-042`, and `PD-OI-043`
 - Revision 3 addition: `PD-OI-018`, accepted by `satoshikawato` on
   `2026-09-13` after confirming the complete record/search outcome, no feature
   retirement, and the runtime/memory cost of complete comparisons. The initial
@@ -134,7 +135,16 @@ Status: active Product authority
   unaffected outcomes retain their scope. This amendment contains no runtime;
   dependent runtime requires all five outcomes and the limited supersession
   merged into its base.
-- Revision 18 changes: `PD-OI-027`, `PD-OI-029`, `PD-OI-031`, and
+- Revision 18 additions: `PD-OI-040` through `PD-OI-043`, approved by
+  `satoshikawato` on `2026-09-26` as the four complete Choice A outcomes for
+  issue `#600`. The approval receipt is 「すべて推奨案で承認します。」 and
+  its complete scope is retained in
+  [`APPROVED_PRODUCT_DECISIONS.md`](./issue-600-implementation-20260926/APPROVED_PRODUCT_DECISIONS.md).
+  The four independent records below preserve every supplied receipt field
+  and outcome without additional retirement or risk terms. Earlier decisions
+  retain their scope. This amendment contains no runtime; dependent runtime
+  requires these records merged into its base.
+- Revision 19 changes: `PD-OI-027`, `PD-OI-029`, `PD-OI-031`, and
   `PD-OI-034` are replaced for scenario revisions `5`, `3`, `5`, and `5`.
   `satoshikawato` explicitly approved the four complete issue `#598` receipts
   on `2026-09-26`. They define exclusive displayed-direction modes and
@@ -1506,6 +1516,146 @@ corrected. Passing evidence does not make incorrect behavior normative.
   "mustPreserve": "PD-OI-031/034と現行transform/plan/reset/historyのすべての結果。resolvedの通常自動Apply、ambiguousと明示reviewのlocal draft、独立Select/Skip、候補根拠とreference identity、1つのMatch reference directionと各targetの結果方向、canvas操作、local編集でWorkerを呼ばないこと、Applyの共有Python batch validationとatomic Result/History。失敗時draft/error/retry、Cancel/stale/superseded時の以前のResult/orientation/History、Session/regeneration/Export、focus復帰を維持する。390×844/740では利用可能幅全体かつ高さ200px以上のcanvasを確保し、候補listをscroll、Apply/Cancelを到達可能にする。狭いreview開始時はEditorをownerで閉じ、tabを保持し、review中は理由付きでopenをdisable、終了後は明示reopen可能。wideのdragと非モーダルcanvasを維持する。",
   "mayRetire": "狭いPreviewでreviewを自由にdragする操作、およびreview中にEditorを同時openする継続だけ。候補や方向の選択、Apply前draft、failure/retryは退役しない。",
   "acceptedResidualRisk": "狭いreviewではlist scrollが増え、自由に位置を動かせなくなる。開始時Editorは閉じるがtabは保持し、終了後再openできる。位置変更で候補draftやResultを変えないことをbrowserで確認する。",
+  "owner": "satoshikawato",
+  "decisionDate": "2026-09-26"
+}
+```
+
+### PD-OI-040: Annotation TSV auxiliary columns
+
+- Concern key: `annotations.table-auxiliary-columns`
+- Scenario revision: `1`
+- Status: `ACCEPTED`
+- Selected outcome: `A / AUX_COLUMNS_WARN_IGNORE`
+- Normative outcome: Web/CLI/Python の Annotation TSV は任意の未知 header を受理し、その列を捨てて既知列のみ import する。１表につき列名を集約して「無視され、Session/TSV 再出力に保存されない」と通知。fill_colour 等の typo も未知列として通知する。header にない余剰 cell、必須欠落・正規化後重複・不正な既知値は全 import 拒否。
+- User access / feedback: Web import 操作直後に読み上げ可能な status と列名一覧。CLI logger の集約 warning。通知には cell contents を含めない。
+- Session / regeneration: annotation 値のみ保存。Load で未知列復元や自動 Generate をしない。再生成は既知列だけの import と同じ。
+- Export / artifact: TSV writer は既存 column inventory のみ。付加列の lossless export はしない。SVG に未知 metadata を入れない。
+- Failure / recovery: import は成功、利用者は通知を確認して編集・Generate へ進める。誤字だった場合は原 TSV を修正して再 import。known-invalid 時は直前 state のまま。
+- Approval receipt: 「すべて推奨案で承認します。」, selecting exactly this
+  complete Choice A outcome, approved by `satoshikawato` on `2026-09-26`.
+- Decision source: The complete outcome and `PRODUCT_DECISION` receipt in
+  [`APPROVED_PRODUCT_DECISIONS.md`](./issue-600-implementation-20260926/APPROVED_PRODUCT_DECISIONS.md),
+  reproduced without inferred rationale, preservation, retirement, or risk
+  terms. This is an inert serialization in the existing static authority;
+  it cannot authorize dependent runtime until merged into its base.
+- Acceptance IDs: `TSV-01`, `TSV-02`, `TSV-03`; their definitions remain owned by
+  [`MASTER_PLAN.md`](./issue-600-implementation-20260926/MASTER_PLAN.md).
+
+```json
+{
+  "concern": "annotations.table-auxiliary-columns",
+  "scenarioRevision": 1,
+  "choice": "A / AUX_COLUMNS_WARN_IGNORE",
+  "rationale": "生物学的な annotation に使う列の意味を検証しつつ、解析 TSV の付加 metadata だけで作図を止めない。取り込まれない列を明示し、利用者が誤字や非保存を判断できるようにする。",
+  "mustPreserve": "既知 annotation の値、行/集合順序、strict typed schema、valid-input export、失敗時の既存 draft/Result。 unknown field を typed annotation に通さない。必須列、duplicate、target/known enum/数値/style を検証する。malformed row を付加列と誤認しない。未知列の cell contents を console に出さない。",
+  "mayRetire": "Annotation TSV に対する「unknown header はすべて fatal」の契約のみ。records/track 等の他の表の unknown policy は退役しない。",
+  "acceptedResidualRisk": "optional typo が無視され、デフォルト style になる可能性。列名と非保存の通知、known-required/known-value strict 検証で範囲を制限。",
+  "owner": "satoshikawato",
+  "decisionDate": "2026-09-26"
+}
+```
+
+### PD-OI-041: Unmatched annotation feature selectors
+
+- Concern key: `annotations.feature-selector-miss`
+- Scenario revision: `1`
+- Status: `ACCEPTED`
+- Selected outcome: `A / MISSING_SELECTOR_SKIP_ROW_WARN`
+- Normative outcome: binding 成功済みの annotation に１件でも未一致 feature selector があれば、その record に対する annotation 行全体を skip し、code/set/annotation/record 識別と欠落件数を持つ warning を返す。他の行/record は継続。全注釈 missing でも genome 図は正常に返し、skip 件数を表示する。
+- User access / feedback: Generate 成功後の status に skip 件数と row/record 識別を表示。CLI warning、API の structured warning を提供。未一致の qualifier 値を console に dump しない。
+- Session / regeneration: selector と row を保存し、次回はそのときの record に再解決。Session Load で自動 Generate をしない。保存 preview は保持する。
+- Export / artifact: SVG/PNG/PDF に skipped mark を出さない。annotation TSV は元 row を含み、次の入力で再利用できる。empty mark の legend は作らない。request に含まれた explicit slot と Web の既存自動 projection の配置/gap は維持し、skip を理由に縮小しない。Python が resolved marks から新規 auto slot を作る場合は empty set の slot を作らない。
+- Failure / recovery: 成功図を確認して selector を修正・削除・別 record を明示して再 Generate できる。構造エラー時は直前 Result/draft を保ち修正へ。
+- Approval receipt: 「すべて推奨案で承認します。」, selecting exactly this
+  complete Choice A outcome, approved by `satoshikawato` on `2026-09-26`.
+- Decision source: The complete outcome and `PRODUCT_DECISION` receipt in
+  [`APPROVED_PRODUCT_DECISIONS.md`](./issue-600-implementation-20260926/APPROVED_PRODUCT_DECISIONS.md),
+  reproduced without inferred rationale, preservation, retirement, or risk
+  terms. This is an inert serialization in the existing static authority;
+  it cannot authorize dependent runtime until merged into its base.
+- Acceptance IDs: `SEL-01`, `SEL-02`, `SEL-03`, `SEL-04`, `SEL-05`; their definitions remain owned by
+  [`MASTER_PLAN.md`](./issue-600-implementation-20260926/MASTER_PLAN.md).
+
+```json
+{
+  "concern": "annotations.feature-selector-miss",
+  "scenarioRevision": 1,
+  "choice": "A / MISSING_SELECTOR_SKIP_ROW_WARN",
+  "rationale": "gene の欠落で比較図全体を失敗させず、複数 anchor で指定した annotation の意味も保つ。部分的な範囲の図示を自動で選ばず、欠落行のスキップを利用者に明示する。",
+  "mustPreserve": "完全一致行の geometry、既存 record 意味、coordinate policy、crop/reverse/rotation、他の注釈、failure/cancel/stale 隔離。 record 欠落/曖昧/index 範囲外、multi-record の record 省略、malformed selector は fatal。coordinate clip/skip/error、transform、selector matching の意味を維持。任意 exception を skip にしない。",
+  "mayRetire": "feature selector miss の blanket fatal だけ。record/syntax/coordinate error の fatal は維持。",
+  "acceptedResidualRisk": "gene typo でも図が成功する。skip を表示することで隠れた欠落を防ぐ。一部 anchor が正しくてもその行の有用な mark は表示されない。request に含まれた注釈 slot は空き領域として残り得る。",
+  "owner": "satoshikawato",
+  "decisionDate": "2026-09-26"
+}
+```
+
+### PD-OI-042: Specific-color caption disambiguation
+
+- Concern key: `styles.specific-color-caption-multiplicity`
+- Scenario revision: `1`
+- Status: `ACCEPTED`
+- Selected outcome: `A / CAPTION_AUTO_DISAMBIGUATE_SOLID_ROWS`
+- Normative outcome: 同 caption・異色 rule を受け付け、全色に lowercase normalized hex を付けた caption を canonical rule として採用する（例 Transporter [#112233] / Transporter [#445566]）。同名同色は共有、空 caption は凡例なし。既存 literal caption/legend key に衝突する場合は予約後に決定的な追加 suffix で区別。first/last-wins は廃止。各実際に使用された色を別の solid 凡例行で示す。
+- User access / feedback: import/manual edit の正常完了時に caption 変更を通知。利用者は生成した solid 行を既存 editor から編集できる。
+- Session / regeneration: admitted caption は普通の文字列として保存。Load は preview/draft を保ち自動 Generate しない。過去の同名異色 draft は次の rule edit/Generate の通常 preparation で通知付き正規化。
+- Export / artifact: 新 TSV は区別した canonical caption。SVG/PNG/PDF は各色の solid 行。元ファイルの同名 caption のままの lossless 復元は約束しない。
+- Failure / recovery: 自動区別後すぐ図を使える。必要なら caption を編集して再生成。stale/preparation failure は直前 rules/Result に戻す。
+- Approval receipt: 「すべて推奨案で承認します。」, selecting exactly this
+  complete Choice A outcome, approved by `satoshikawato` on `2026-09-26`.
+- Decision source: The complete outcome and `PRODUCT_DECISION` receipt in
+  [`APPROVED_PRODUCT_DECISIONS.md`](./issue-600-implementation-20260926/APPROVED_PRODUCT_DECISIONS.md),
+  reproduced without inferred rationale, preservation, retirement, or risk
+  terms. This is an inert serialization in the existing static authority;
+  it cannot authorize dependent runtime until merged into its base.
+- Acceptance IDs: `CLR-01`, `CLR-02`, `CLR-03`, `CLR-04`, `CLR-05`; their definitions remain owned by
+  [`MASTER_PLAN.md`](./issue-600-implementation-20260926/MASTER_PLAN.md).
+
+```json
+{
+  "concern": "styles.specific-color-caption-multiplicity",
+  "scenarioRevision": 1,
+  "choice": "A / CAPTION_AUTO_DISAMBIGUATE_SOLID_ROWS",
+  "rationale": "近い色を使う rule を拒否せず、実際の各色を凡例に表示する。今回は既存 solid 行を再利用する自動 caption 区別を採用し、複数 swatch 用の renderer・editor・保存形式を追加せずに fresh/live/native の意味を揃える。",
+  "mustPreserve": "feature 色、rule 順序/precedence、同名同色共有、single-color caption、unused rule の凡例除外、既存 solid editor・保存 preview・failure/History 契約。 rule order/regex/precedence/visibility を変えない。使用色の忠実な図示、stable identity、file/manual provenance、Result rollback、既存 SVG sanitizer を維持。",
+  "mayRetire": "caption 衝突による Web 拒否、過去の last-wins/上書き。退役は specific-color rule の同名異色 scope に限定。",
+  "acceptedResidualRisk": "凡例が長くなり元の同名文字列は変わる。multi-swatch grouping を望む利用者には複数行になる。hex suffix、既存 edit、layout 再計測で扱いを明確にする。",
+  "owner": "satoshikawato",
+  "decisionDate": "2026-09-26"
+}
+```
+
+### PD-OI-043: Pure pixel track text inputs
+
+- Concern key: `tracks.pixel-text-input-domain`
+- Scenario revision: `1`
+- Status: `ACCEPTED`
+- Selected outcome: `A / PIXEL_TEXT_OPTIONAL_PX`
+- Normative outcome: 純 pixel track geometry（Linear height/spacing、Circular inner_gap_px/outer_gap_px）の文字列入口は finite decimal/exponent と optional px（大文字小文字・前後空白可）を受理。trim 後空欄/null は auto。10、10px、10PX、10 px は同値。height は正、gap/spacing は非負。不正文字列/単位/非有限を拒否し、draft で保持して row error を出す。
+- User access / feedback: 対象 field の help/placeholder を「px optional」に統一。field 名と正/非負条件を row error と CLI error で示す。
+- Session / regeneration: 現行 canonical 型だけ保存。同値 input は同じ geometry。Load は既存 preview を保つ。text acceptance は新 migration ではない。
+- Export / artifact: 同値 input の SVG/download は同じ。TSV/CLI の書き出しは既存 canonical 数値形式でよい。
+- Failure / recovery: row error の値を編集して再 submission。失敗時に直前 Result を保つ。
+- Approval receipt: 「すべて推奨案で承認します。」, selecting exactly this
+  complete Choice A outcome, approved by `satoshikawato` on `2026-09-26`.
+- Decision source: The complete outcome and `PRODUCT_DECISION` receipt in
+  [`APPROVED_PRODUCT_DECISIONS.md`](./issue-600-implementation-20260926/APPROVED_PRODUCT_DECISIONS.md),
+  reproduced without inferred rationale, preservation, retirement, or risk
+  terms. This is an inert serialization in the existing static authority;
+  it cannot authorize dependent runtime until merged into its base.
+- Acceptance IDs: `PX-01`, `PX-02`, `PX-03`; their definitions remain owned by
+  [`MASTER_PLAN.md`](./issue-600-implementation-20260926/MASTER_PLAN.md).
+
+```json
+{
+  "concern": "tracks.pixel-text-input-domain",
+  "scenarioRevision": 1,
+  "choice": "A / PIXEL_TEXT_OPTIONAL_PX",
+  "rationale": "利用者が pixel 値を単位付きで paste できるようにし、検証・正規化・request の値を揃える。物理 pixel と factor scalar は分けたまま、保存形式を増やさずに入力の一貫性を改善する。",
+  "mustPreserve": "既存 valid 数値、Linear px acceptance、auto、physical pixel 意味、現行 typed request/Session、Circular radius/width factor/%、retired key 拒否。 typed JSON の gaps は数値、Linear は既存 ScalarSpec。Circular ratio/% semantics を保つ。不正値を null/0 化しない。不要な arbitrary CSS unit conversion を作らない。",
+  "mayRetire": "pure pixel 対象の without-a-unit restriction と、invalid→null/zero の黙示的変換。一般 dimension input の制限は退役しない。",
+  "acceptedResidualRisk": "trim空欄はauto。decimal/exponent以外のJS Number形式を使っていた入力は拒否され得るが、Pythonと一致しない隠れた入力経路を支持しない。scope は listed slot fields に限る。",
   "owner": "satoshikawato",
   "decisionDate": "2026-09-26"
 }
