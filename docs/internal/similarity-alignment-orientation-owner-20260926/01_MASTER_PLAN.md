@@ -658,3 +658,32 @@ Proposed Session 04 commit title: **Verify record-owned Similarity Group alignme
 Summary: Correct public direction/reset descriptions and the source-relative `rev`
 indicator, complete real-render acceptance and export/Session checks, and record
 final gates and ownership evidence.
+
+#### PR admission follow-up — current Gallery inference settings
+
+PR [#603](https://github.com/satoshikawato/gbdraw/pull/603) exposed one stale
+assertion in `tests/web/gallery-session-migration.test.mjs`: the majanivirus
+Gallery Session had been refreshed from version 41 to version 44 in Session 02,
+and the current writer explicitly stores `collinearInferOrthogroups: true`.
+The old test still expected that setting to be absent. The failed CI job is
+[Web contracts](https://github.com/satoshikawato/gbdraw/actions/runs/36219904930/job/108343312128).
+
+The test now verifies the current explicit value. A cloned request with the
+setting removed retains the historical implicit-default comparison: both the
+current and implicit forms must compare equal to `true`, differ from `false`,
+and remain unmodified. No production, authority, request writer, or generated
+artifact changed in this follow-up.
+
+`PYTHONPATH=/tmp/gbdraw-session04 node tests/web/gallery-session-migration.test.mjs`
+passed. The complete fast Web JavaScript suite used by CI also passed **538
+checks**, with no failures. It ran `node --test` on the sorted
+`tests/web/*.test.mjs` paths, excluding `architecture-contracts.test.mjs` and
+`gallery-session-publication.test.mjs`, exactly as the CI job selects them.
+Logs: `/tmp/session04-pr603-gallery-migration.log` and
+`/tmp/session04-pr603-fast-web-contracts.log`. Production and generated
+artifacts are unchanged, so the preceding Python, Chromium, architecture,
+CLI, build, and Gallery evidence remains applicable. `git diff --check` passed.
+
+Follow-up commit title: **Update Gallery migration assertions for refreshed sessions**.
+Summary: Verify the current explicit inference setting while retaining the
+implicit-default compatibility and request-integrity checks.
