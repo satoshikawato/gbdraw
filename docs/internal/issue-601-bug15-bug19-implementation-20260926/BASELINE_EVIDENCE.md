@@ -60,3 +60,26 @@ GBDRAW_WEB_TEST_PORT=8791 node node_modules/@playwright/test/cli.js test -c play
 wheelはgitignored test asset。cache-bustとtracked outputは変更しない。
 probeはsynthetic inputだけを使い、Worker importのためselfを用意するがmessage handlerを起動しない。
 実装後の新evidenceを初期baselineへ上書きしない。
+
+## S00による補足（2026-09-26）
+
+[S00結果](./SESSION_00_RESULT.md)と[pinned inventory](./evidence/s00-inventory.json)を参照する。
+最新remoteから開始したSHAはbe4000ede35ea5692d7a88d46c0130ffec992f5f、確認したdevは
+af5d942af60353dda199aa487da9152a3576b3fe。上記調査SHAを含む三地点の
+gbdraw/tests/tools/.github tree objectはそれぞれ同一である。
+
+通常のAlign Applyはapp-setupからmanual runAnalysisへ接続され、現行コードでは原因を返す。
+5bcdd4f5の既存修正はdevに含まれる。原因を返さない残存箇所は
+runCommittedCanonicalCandidateInternalのengine-error/catchであり、通常Alignの現行再現証拠とは区別する。
+Alignのsummary-only表示、原因欠落時のgeneric fallback、structured transportの欠落は別に残る。
+
+[Python owner probe](./evidence/s00-regex-probe.py)と[結果](./evidence/s00-regex-probe.json)では、
+Color/Label/whitelist/visibilityのnative ownerがPython固有構文を受理し、空・無関係catalogでも
+不正構文を拒否した。[JS probe](./evidence/s00-js-probe.mjs)と[結果](./evidence/s00-js-probe.json)は
+Search/standaloneのJS方言、visibilityのcache-miss hash fallbackによるJS再compile、
+非syntaxの準備失敗にもInvalid ruleを表示して入力を戻すfield actionを確認した。
+最後のfield actionは準備失敗をstubした証拠であり、実Workerの失敗再現ではない。
+
+41 Node・9 Python・2 Chromiumは保存済みbaselineのまま保持する。
+source/inputとNode/Python versionは比較できるが、原browser binary・公開buildの同一性までは確認していない。
+S00のfunction probeも、後続runtime実装の受入や原監査のclosureを証明しない。
