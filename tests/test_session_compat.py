@@ -82,12 +82,10 @@ def test_released_session_44_schema_7_catalog_4_is_typed_readable(
     tmp_path: Path,
 ) -> None:
     source = (
-        Path(__file__).parents[1]
-        / "gbdraw"
-        / "web"
-        / "gallery"
+        Path(__file__).parent
+        / "fixtures"
         / "sessions"
-        / "HmmtDNA_basic_circular.gbdraw-session.json"
+        / "HmmtDNA_basic_circular.v44-schema7.json.gz"
     )
     document = load_session_document(source)
     assert document.version == 44
@@ -219,15 +217,6 @@ def test_released_legacy_alignment_session_promotes_to_current_typed_state(
         assert request.similarity_alignment is not None
         assert request.similarity_alignment.group_id == "og_1"
         assert request.similarity_alignment.schema == 2
-        assert all(
-            decision.orientation_policy.value == "preserve"
-            for decision in request.similarity_alignment.records
-        )
-        assert all(
-            isinstance(decision.effective_reverse_complement, bool)
-            for decision in request.similarity_alignment.records
-            if decision.status.value == "aligned"
-        )
         assert request.layout is not None
         assert [
             (item.record_key, item.x, item.y)
@@ -249,6 +238,10 @@ def test_released_legacy_alignment_session_promotes_to_current_typed_state(
     typed_plan = payload["renderRequest"]["layout"]["similarityAlignment"]
     assert typed_plan["schema"] == 2
     assert "mode" not in typed_plan
+    assert all(
+        set(decision) == {"recordKey", "status", "rationale", "anchor"}
+        for decision in typed_plan["records"]
+    )
     assert "alignOrthogroupFeature" not in serialized
     assert "align_orthogroup_feature" not in serialized
     assert "selectedOrthogroupAlignmentFeature" not in serialized

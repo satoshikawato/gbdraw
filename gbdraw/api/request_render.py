@@ -113,7 +113,7 @@ from .record_planning import (
     resolve_implicit_record_output_prefix,
     resolve_linear_options,
     resolve_record_inputs,
-    materialize_similarity_alignment_display,
+    project_similarity_alignment_centers,
 )
 from .render import preflight_output_paths, save_figure_to
 from .requests import (
@@ -1545,20 +1545,17 @@ def plan_linear_request(
                 options=resolved_options,
             )
         )
-        effective_collection, alignment_anchor_centers = (
-            materialize_similarity_alignment_display(
-                collection,
-                materialized_request.similarity_alignment,
-            )
+        alignment_anchor_centers = project_similarity_alignment_centers(
+            collection, materialized_request.similarity_alignment
         )
     return LinearRequestPlan(
         request=materialized_request,
-        records=effective_collection.records,
+        records=collection.records,
         layout=resolved_layout,
         inputs=inputs,
-        provenance=effective_collection.provenance,
-        displays=effective_collection.displays,
-        transforms=effective_collection.transforms,
+        provenance=collection.provenance,
+        displays=collection.displays,
+        transforms=collection.transforms,
         alignment_anchor_centers=alignment_anchor_centers,
     )
 

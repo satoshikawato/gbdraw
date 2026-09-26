@@ -155,9 +155,7 @@ export const materializeLegacySimilarityAlignment = ({
         recordKey,
         status: 'reference',
         rationale: 'reference',
-        anchor: reference,
-        orientationPolicy: 'preserve',
-        effectiveReverseComplement: null
+        anchor: reference
       };
     }
     const candidates = members.filter((member) => memberRecordKey(member) === recordKey);
@@ -174,19 +172,13 @@ export const materializeLegacySimilarityAlignment = ({
       recordKey,
       status: 'skipped',
       rationale: 'skipped_no_candidate',
-      anchor: null,
-      orientationPolicy: 'preserve',
-      effectiveReverseComplement: null
+      anchor: null
     };
-    const record = records.find((item) => item.recordKey === recordKey);
     return {
       recordKey,
       status: 'aligned',
       rationale: 'only_usable_candidate',
-      anchor: anchorFor(member),
-      orientationPolicy: 'preserve',
-      effectiveReverseComplement: Boolean(record?.presentation?.reverseComplement)
-        !== Boolean(record?.region?.reverseComplement)
+      anchor: anchorFor(member)
     };
   });
   return {

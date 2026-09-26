@@ -85,20 +85,25 @@ sessions retain their previous effective repeat shape.
 ## Linear Similarity Group alignment
 
 The Web feature popup and Similarity Groups drawer each provide one **Align…**
-action for an exact reference feature. Every valid action opens a review palette
-before changing the diagram. Python preselects usable anchors with visible
+action for an exact reference feature. Resolved plans apply automatically with
+record directions preserved; ambiguity or **Review alignment options…** opens
+the review palette. Python preselects usable anchors with visible
 reasons; ambiguous recommendations use a unique representative or stable
-candidate 1 as a convenience heuristic. Each target can replace its anchor,
-choose **Skip**, and independently enable **Match reference direction**. The
-palette shows the effective orientation before Apply. Local edits start no
-Worker job; Apply validates the full draft and generates one Result. Errors keep
-the draft for correction and retry; Cancel and stale work leave the last Result
-and History intact.
+candidate 1 as a convenience heuristic. Each target can replace its anchor
+or choose **Skip**. One **Match reference direction** checkbox reverses all
+selected targets with known opposite strands. The palette names the affected
+records and shows each selected anchor's direction before Apply. Local edits
+start no Worker job; Apply validates the full draft and generates one Result.
+The option starts off on every review and is disabled when no selected target
+faces the opposite direction. Unknown strands stay unchanged. Errors show the
+underlying failure once in the review and banner, keeping the draft for retry.
+Cancel and stale work leave the last Result and History intact.
 
-A successful Apply stores a fully resolved schema-2 plan with each record's
-requested and effective orientation. Ordinary Generate and stable reorder
-preserve it. Reset Align restores the immediate pre-align geometry; Undo/Redo
-restores the complete artifact. The typed Python request accepts a resolved
+A successful Apply stores a fully resolved schema-2 plan containing anchors and
+Skip decisions. Record Reverse settings own orientation. Ordinary Generate,
+stable reorder, and manual Reverse preserve the plan. Reset Align restores the
+immediate pre-align positions and keeps record directions; Undo/Redo restores
+the complete artifact. The typed Python request accepts a resolved
 plan, while the CLI accepts an exact reference only when target choices are
 unambiguous. See [Web alignment](./REFERENCE/web-app.md#similarity-group-alignment-in-linear-view),
 [CLI behavior](./REFERENCE/command-line.md#strict-similarity-group-alignment),

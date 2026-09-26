@@ -2188,8 +2188,8 @@ export const createAppSetup = () => {
   } = createRunAnalysis({
     state,
     isCurrentFeature: recordDisplayControls.isCurrentFeature,
-    serializeCanonicalFiles: (comparisonPlanSnapshot, linearRecordCatalog = null) => (
-      serializeActiveRenderFiles(state.mode.value, state, {
+    serializeCanonicalFiles: (comparisonPlanSnapshot, linearRecordCatalog, runState) => (
+      serializeActiveRenderFiles(runState.mode.value, runState, {
         comparisonPlan: comparisonPlanSnapshot,
         linearRecordCatalog
       })
@@ -2699,10 +2699,10 @@ export const createAppSetup = () => {
       draftResolution: comparisonPlanSnapshot
     });
     if (!comparisonExecution.ok) {
-      errorLog.value = new Error(comparisonExecution.message);
+      errorLog.value = normalizeUserFacingError(new Error(comparisonExecution.message));
       failedGeneratePreservedResult.value = results.value.length > 0;
       if (mode.value === 'linear') await focusLinearComparisonIssue();
-      return { status: 'error' };
+      return { status: 'error', error: errorLog.value };
     }
     cancelDefinitionUpdate();
     const result = await runGeneratedDiagramAnalysis(
@@ -3913,21 +3913,6 @@ export const createAppSetup = () => {
     return true;
   };
 
-  const setLinearRecordOrientation = (sequence, reverseComplement) => (
-    similarityAlignmentActions?.setManualOrientation?.(sequence, reverseComplement)
-  );
-
-  const linearRecordOrientationValue = (sequence) => {
-    const recordKey = String(sequence?.uid || '');
-    const decision = state.similarityAlignmentPlan.value?.records?.find(
-      (entry) => entry.recordKey === recordKey
-    );
-    return decision?.effectiveReverseComplement === null
-      || decision?.effectiveReverseComplement === undefined
-      ? Boolean(sequence?.region_reverse)
-      : Boolean(decision.effectiveReverseComplement);
-  };
-
   const resetLinearRecordDefinition = (seq) => {
     if (!seq) return;
     history.runUndoable('Reset record definition', () => {
@@ -4118,8 +4103,6 @@ export const createAppSetup = () => {
     setLinearInputType,
     setLinearRecordSelector,
     setLinearRecordCrop,
-    setLinearRecordOrientation,
-    linearRecordOrientationValue,
     linearSourceMoveBlockedReason,
     canMoveLinearSource,
     moveLinearSource,
@@ -4327,7 +4310,8 @@ export const createAppSetup = () => {
     similarityAlignmentDrawerDisabledReason: similarityAlignmentActions.drawerDisabledReason,
     selectSimilarityAlignmentCandidate: similarityAlignmentActions.selectCandidate,
     skipSimilarityAlignmentRecord: similarityAlignmentActions.skipRecord,
-    setSimilarityAlignmentOrientation: similarityAlignmentActions.setOrientation,
+    similarityAlignmentDirectionMatch: similarityAlignmentActions.directionMatch,
+    setSimilarityAlignmentMatchReferenceDirection: similarityAlignmentActions.setMatchReferenceDirection,
     applySimilarityAlignmentDraft: applySimilarityAlignmentDialog,
     cancelSimilarityAlignmentDraft: cancelSimilarityAlignmentDialog,
     cancelSimilarityAlignmentDialog,

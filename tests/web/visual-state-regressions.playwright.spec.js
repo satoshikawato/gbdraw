@@ -56,7 +56,7 @@ test('B-06 J36 rejected FASTA recovery and label regeneration preserve scale geo
   const valid = 'gbdraw/web/tutorial-data/lambda-gff3/NC_001416.fna';
   await fasta.setInputFiles(valid); await generate(page);
   await fasta.setInputFiles({ name: 'mismatch.fasta', mimeType: 'text/plain', buffer: Buffer.from('>wrong_record_identity\n' + 'ATGC'.repeat(100) + '\n') });
-  expect(await page.evaluate(() => window.__GBDRAW_APP__.runAnalysis())).toEqual({ status: 'error' });
+  expect((await page.evaluate(() => window.__GBDRAW_APP__.runAnalysis())).status).toBe('error');
   await agree(page, info, 'rejected-input');
   await fasta.setInputFiles(valid);
   await popup(page); await label(page, 'JOURNEY_J36');

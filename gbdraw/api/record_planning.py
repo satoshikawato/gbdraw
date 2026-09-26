@@ -212,39 +212,18 @@ class ResolvedRecordCollection:
         object.__setattr__(self, "transforms", tuple(transforms))
 
 
-def materialize_similarity_alignment_display(
+def project_similarity_alignment_centers(
     collection: ResolvedRecordCollection,
     plan: SimilarityAlignmentPlan | None,
-) -> tuple[ResolvedRecordCollection, tuple[float | None, ...]]:
-    """Apply effective orientations once, then project every selected anchor."""
+) -> tuple[float | None, ...]:
+    """Project selected anchor centers from already resolved record orientations."""
 
     if plan is None:
-        return collection, tuple(None for _ in collection.records)
+        return tuple(None for _ in collection.records)
     record_keys = tuple(item.record_key for item in collection.provenance)
     plan.validate_record_coverage(record_keys)
     decisions = {decision.record_key: decision for decision in plan.records}
-    effective_records: list[SeqRecord] = []
-    for record, provenance, transform in zip(
-        collection.records, collection.provenance, collection.transforms, strict=True
-    ):
-        decision = decisions[provenance.record_key]
-        base_orientation = transform.source_step == -1
-        effective_orientation = (
-            decision.effective_reverse_complement
-            if decision.effective_reverse_complement is not None
-            else base_orientation
-        )
-        effective_records.append(
-            reverse_records(
-                (record,),
-                effective_orientation != base_orientation,
-                log=logger,
-            )[0]
-        )
-    effective = ResolvedRecordCollection(
-        tuple(effective_records), collection.provenance
-    )
-    centers = tuple(
+    return tuple(
         _project_alignment_anchor_center(
             decision.anchor,
             provenance=provenance,
@@ -254,14 +233,13 @@ def materialize_similarity_alignment_display(
         if decision.status is not AlignmentDecisionStatus.SKIPPED
         else None
         for record, provenance, transform, decision in zip(
-            effective.records,
-            effective.provenance,
-            effective.transforms,
+            collection.records,
+            collection.provenance,
+            collection.transforms,
             (decisions[key] for key in record_keys),
             strict=True,
         )
     )
-    return effective, centers
 
 
 def _project_alignment_anchor_center(
@@ -483,9 +461,6 @@ def _similarity_candidate_from_orthogroup_member(
         center_mappable=display_center is not None,
         display_center=display_center,
         identity_is_unique=identity_is_unique,
-        effective_reverse_complement=(
-            collection.transforms[member.record_index].source_step == -1
-        ),
         representative=member.representative,
         role=str(member.role),
         source_start=member.start,

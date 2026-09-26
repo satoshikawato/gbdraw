@@ -61,7 +61,6 @@ from gbdraw.io.regions import parse_region_spec
 from gbdraw.layout.similarity_alignment import (
     AlignmentAnchorIdentity,
     AlignmentDecisionStatus,
-    AlignmentOrientationPolicy,
     AlignmentRecordDecision,
     AlignmentResolutionRationale,
     SimilarityAlignmentPlan,
@@ -361,7 +360,6 @@ def _similarity_alignment_plan() -> SimilarityAlignmentPlan:
                 status=AlignmentDecisionStatus.ALIGNED,
                 rationale=AlignmentResolutionRationale.ONLY_USABLE_CANDIDATE,
                 anchor=target,
-                effective_reverse_complement=False,
             ),
         ),
     )
@@ -403,8 +401,7 @@ def test_schema8_round_trips_typed_similarity_alignment_and_translations(
     assert alignment["schema"] == 2
     assert "mode" not in alignment
     assert alignment["groupId"] == "og-1"
-    assert alignment["records"][1]["orientationPolicy"] == "preserve"
-    assert alignment["records"][1]["effectiveReverseComplement"] is False
+    assert set(alignment["records"][1]) == {"recordKey", "status", "rationale", "anchor"}
     assert "alignOrthogroupFeature" not in json.dumps(encoded.payload)
 
     decoded = decode_canonical_request(
@@ -417,21 +414,14 @@ def test_schema8_round_trips_typed_similarity_alignment_and_translations(
     assert decoded.similarity_alignment == _similarity_alignment_plan()
 
 
-def test_schema8_round_trips_requested_match_and_effective_reversal(
+def test_schema8_round_trips_record_presentation_with_orientation_free_plan(
     tmp_path: Path,
 ) -> None:
     base = _aligned_linear_request(tmp_path)
-    assert base.similarity_alignment is not None
-    original = base.similarity_alignment
-    target = replace(
-        original.records[1],
-        orientation_policy=AlignmentOrientationPolicy.MATCH_REFERENCE,
-        effective_reverse_complement=True,
-    )
-    request = replace(
-        base,
-        similarity_alignment=replace(original, records=(original.records[0], target)),
-    )
+    request = replace(base, records=(
+        base.records[0],
+        replace(base.records[1], presentation=RecordPresentation(reverse_complement=True)),
+    ))
     encoded = encode_canonical_request(request)
     decoded = decode_canonical_request(
         encoded.payload,
@@ -439,18 +429,9 @@ def test_schema8_round_trips_requested_match_and_effective_reversal(
         output_directory=tmp_path / "output",
     )
     assert decoded.similarity_alignment == request.similarity_alignment
-    assert encoded.payload["layout"]["similarityAlignment"]["records"][1] == {
-        "recordKey": "record-b",
-        "status": "aligned",
-        "rationale": "only_usable_candidate",
-        "anchor": {
-            "recordKey": "record-b",
-            "biologicalFeatureId": "feature-b",
-            "sourceFeatureIndex": 5,
-            "stableFeatureSvgId": "stable-b",
-        },
-        "orientationPolicy": "match_reference",
-        "effectiveReverseComplement": True,
+    assert decoded.records[1].presentation.reverse_complement is True
+    assert set(encoded.payload["layout"]["similarityAlignment"]["records"][1]) == {
+        "recordKey", "status", "rationale", "anchor"
     }
 
 
@@ -492,22 +473,16 @@ def test_schema8_accepts_reordered_keyed_alignment_records(tmp_path: Path) -> No
             "invalid plan combination|inconsistent",
         ),
         (
-            lambda layout: layout["similarityAlignment"]["records"][1].pop(
-                "orientationPolicy"
+            lambda layout: layout["similarityAlignment"]["records"][1].update(
+                orientationPolicy="preserve"
             ),
-            "orientationPolicy",
+            "Unknown field|orientationPolicy",
         ),
         (
             lambda layout: layout["similarityAlignment"]["records"][1].update(
-                orientationPolicy="smart"
+                effectiveReverseComplement=True
             ),
-            "orientation policy",
-        ),
-        (
-            lambda layout: layout["similarityAlignment"]["records"][1].update(
-                effectiveReverseComplement=None
-            ),
-            "inconsistent",
+            "Unknown field|effectiveReverseComplement",
         ),
         (
             lambda layout: layout["similarityAlignment"].update(mode="position"),

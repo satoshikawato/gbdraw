@@ -19,15 +19,10 @@ from gbdraw.exceptions import ValidationError
 SIMILARITY_ALIGNMENT_PLAN_SCHEMA = 2
 
 
-class AlignmentOrientationPolicy(str, Enum):
-    PRESERVE = "preserve"
-    MATCH_REFERENCE = "match_reference"
-
-
-class AlignmentOrientationEffect(str, Enum):
-    PRESERVE = "preserve"
-    REVERSE_WHOLE_RECORD = "reverse_whole_record"
-    PRESERVE_UNKNOWN_STRAND = "preserve_unknown_strand"
+class AlignmentStrandRelation(str, Enum):
+    SAME = "same"
+    OPPOSITE = "opposite"
+    UNKNOWN = "unknown"
 
 
 class AlignmentRecommendationReason(str, Enum):
@@ -163,7 +158,6 @@ class SimilarityAlignmentCandidate:
     display_center: float | None = None
     identity_is_unique: bool = True
     hidden: bool = False
-    effective_reverse_complement: bool = False
     representative: bool = False
     role: str = ""
     source_start: int | None = None
@@ -186,7 +180,6 @@ class SimilarityAlignmentCandidate:
             "center_mappable",
             "identity_is_unique",
             "hidden",
-            "effective_reverse_complement",
             "representative",
         ):
             if not isinstance(getattr(self, name), bool):
@@ -261,18 +254,10 @@ class AlignmentRecordChoice:
     record_key: str
     kind: AlignmentChoiceKind
     anchor: AlignmentAnchorIdentity | None = None
-    orientation_policy: AlignmentOrientationPolicy = AlignmentOrientationPolicy.PRESERVE
 
     def __post_init__(self) -> None:
         object.__setattr__(
             self, "record_key", _required_text(self.record_key, "record_key")
-        )
-        object.__setattr__(
-            self,
-            "orientation_policy",
-            _enum_value(
-                self.orientation_policy, AlignmentOrientationPolicy, "orientation policy"
-            ),
         )
         object.__setattr__(
             self,
@@ -288,8 +273,6 @@ class AlignmentRecordChoice:
                 )
         elif self.anchor is not None:
             raise ValidationError("A Skip choice must not contain an anchor.")
-        elif self.orientation_policy is not AlignmentOrientationPolicy.PRESERVE:
-            raise ValidationError("A Skip choice must preserve orientation.")
 
 
 @dataclass(frozen=True)
@@ -300,8 +283,6 @@ class AlignmentRecordDecision:
     status: AlignmentDecisionStatus
     rationale: AlignmentResolutionRationale
     anchor: AlignmentAnchorIdentity | None = None
-    orientation_policy: AlignmentOrientationPolicy = AlignmentOrientationPolicy.PRESERVE
-    effective_reverse_complement: bool | None = None
 
     def __post_init__(self) -> None:
         object.__setattr__(
@@ -319,19 +300,6 @@ class AlignmentRecordDecision:
                 self.rationale, AlignmentResolutionRationale, "decision rationale"
             ),
         )
-        object.__setattr__(
-            self,
-            "orientation_policy",
-            _enum_value(
-                self.orientation_policy, AlignmentOrientationPolicy, "orientation policy"
-            ),
-        )
-        if self.effective_reverse_complement is not None and not isinstance(
-            self.effective_reverse_complement, bool
-        ):
-            raise ValidationError(
-                "effective_reverse_complement must be a boolean or None."
-            )
 
         aligned_rationales = {
             AlignmentResolutionRationale.USER_SELECTED,
@@ -348,27 +316,21 @@ class AlignmentRecordDecision:
                 isinstance(self.anchor, AlignmentAnchorIdentity)
                 and self.anchor.record_key == self.record_key
                 and self.rationale is AlignmentResolutionRationale.REFERENCE
-                and self.effective_reverse_complement is None
-                and self.orientation_policy is AlignmentOrientationPolicy.PRESERVE
             )
         elif self.status is AlignmentDecisionStatus.ALIGNED:
             valid = (
                 isinstance(self.anchor, AlignmentAnchorIdentity)
                 and self.anchor.record_key == self.record_key
                 and self.rationale in aligned_rationales
-                and isinstance(self.effective_reverse_complement, bool)
             )
         else:
             valid = (
                 self.anchor is None
                 and self.rationale in skipped_rationales
-                and self.effective_reverse_complement is None
-                and self.orientation_policy is AlignmentOrientationPolicy.PRESERVE
             )
         if not valid:
             raise ValidationError(
-                "Alignment decision status, rationale, anchor, and orientation "
-                "policy/effect are inconsistent."
+                "Alignment decision status, rationale, and anchor are inconsistent."
             )
 
     @property
@@ -460,8 +422,13 @@ class AlignmentReviewCandidate:
     candidate: SimilarityAlignmentCandidate
     usable: bool
     direct_evidence: tuple[str, ...]
-    match_reference_effective_reverse_complement: bool
-    match_reference_effect: AlignmentOrientationEffect
+    strand_relation: AlignmentStrandRelation
+
+    def __post_init__(self) -> None:
+        object.__setattr__(
+            self, "strand_relation",
+            _enum_value(self.strand_relation, AlignmentStrandRelation, "strand relation"),
+        )
 
 
 @dataclass(frozen=True)
@@ -632,36 +599,26 @@ class SimilarityAlignmentResolution:
         return plan
 
 
-def _orientation_result(
-    policy: AlignmentOrientationPolicy,
+def _strand_relation(
     reference: SimilarityAlignmentCandidate,
     target: SimilarityAlignmentCandidate,
-) -> tuple[bool, AlignmentOrientationEffect]:
-    base = target.effective_reverse_complement
-    if policy is AlignmentOrientationPolicy.PRESERVE:
-        return base, AlignmentOrientationEffect.PRESERVE
+) -> AlignmentStrandRelation:
     if reference.displayed_strand is None or target.displayed_strand is None:
-        return base, AlignmentOrientationEffect.PRESERVE_UNKNOWN_STRAND
+        return AlignmentStrandRelation.UNKNOWN
     if reference.displayed_strand != target.displayed_strand:
-        return not base, AlignmentOrientationEffect.REVERSE_WHOLE_RECORD
-    return base, AlignmentOrientationEffect.PRESERVE
+        return AlignmentStrandRelation.OPPOSITE
+    return AlignmentStrandRelation.SAME
 
 
 def _aligned_decision(
     candidate: SimilarityAlignmentCandidate,
     rationale: AlignmentResolutionRationale,
-    *,
-    policy: AlignmentOrientationPolicy,
-    reference: SimilarityAlignmentCandidate,
 ) -> AlignmentRecordDecision:
-    effective, _effect = _orientation_result(policy, reference, candidate)
     return AlignmentRecordDecision(
         record_key=candidate.anchor.record_key,
         status=AlignmentDecisionStatus.ALIGNED,
         rationale=rationale,
         anchor=candidate.anchor,
-        orientation_policy=policy,
-        effective_reverse_complement=effective,
     )
 
 
@@ -771,9 +728,6 @@ def _review_row(
 ) -> AlignmentReviewRow:
     rows = []
     for candidate in candidates:
-        matched, effect = _orientation_result(
-            AlignmentOrientationPolicy.MATCH_REFERENCE, reference, candidate
-        )
         rows.append(
             AlignmentReviewCandidate(
                 candidate=candidate,
@@ -784,8 +738,7 @@ def _review_row(
                     candidate=candidate.anchor,
                     edges=edges,
                 ),
-                match_reference_effective_reverse_complement=matched,
-                match_reference_effect=effect,
+                strand_relation=_strand_relation(reference, candidate),
             )
         )
     return AlignmentReviewRow(record_key=record_key, candidates=tuple(rows))
@@ -963,8 +916,6 @@ def resolve_similarity_alignment(
                 _aligned_decision(
                     selected,
                     AlignmentResolutionRationale.USER_SELECTED,
-                    policy=choice.orientation_policy,
-                    reference=reference_candidate,
                 )
             )
             continue
@@ -987,8 +938,6 @@ def resolve_similarity_alignment(
                 _aligned_decision(
                     usable[0],
                     AlignmentResolutionRationale.ONLY_USABLE_CANDIDATE,
-                    policy=AlignmentOrientationPolicy.PRESERVE,
-                    reference=reference_candidate,
                 )
             )
             continue
@@ -1004,8 +953,6 @@ def resolve_similarity_alignment(
                 _aligned_decision(
                     direct_rbh[0],
                     AlignmentResolutionRationale.UNIQUE_DIRECT_RBH,
-                    policy=AlignmentOrientationPolicy.PRESERVE,
-                    reference=reference_candidate,
                 )
             )
             continue
@@ -1039,8 +986,7 @@ __all__ = [
     "AlignmentEvidenceEdge",
     "AlignmentRecordChoice",
     "AlignmentRecordDecision",
-    "AlignmentOrientationEffect",
-    "AlignmentOrientationPolicy",
+    "AlignmentStrandRelation",
     "AlignmentRecommendationReason",
     "AlignmentResolutionRationale",
     "AlignmentReviewCandidate",

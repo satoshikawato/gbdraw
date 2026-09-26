@@ -1,5 +1,7 @@
 // @ts-check
 const { defineConfig, devices } = require('@playwright/test');
+const serverPort = Number(process.env.GBDRAW_WEB_TEST_PORT || 4173);
+const serverUrl = `http://127.0.0.1:${serverPort}`;
 
 module.exports = defineConfig({
   testDir: './tests/web',
@@ -10,12 +12,12 @@ module.exports = defineConfig({
   workers: process.env.CI ? 1 : undefined,
   reporter: process.env.CI ? 'github' : 'list',
   use: {
-    baseURL: 'http://127.0.0.1:4173',
+    baseURL: serverUrl,
     trace: 'on-first-retry'
   },
   webServer: {
-    command: 'python3 -m http.server 4173 --bind 127.0.0.1',
-    url: 'http://127.0.0.1:4173',
+    command: `python3 -m http.server ${serverPort} --bind 127.0.0.1`,
+    url: serverUrl,
     reuseExistingServer: !process.env.CI,
     stderr: 'ignore'
   },

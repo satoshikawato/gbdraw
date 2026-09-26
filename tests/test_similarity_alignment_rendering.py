@@ -54,7 +54,6 @@ from gbdraw.layout.similarity_alignment import (
     AlignmentDecisionStatus,
     AlignmentRecordDecision,
     AlignmentResolutionRationale,
-    AlignmentOrientationPolicy,
     SimilarityAlignmentPlan,
 )
 from gbdraw.io.regions import parse_region_spec
@@ -98,9 +97,6 @@ def _anchor(record: SeqRecord, record_key: str) -> AlignmentAnchorIdentity:
 def _plan(
     reference: AlignmentAnchorIdentity,
     target: AlignmentAnchorIdentity,
-    *,
-    orient_target: bool = False,
-    orientation_policy: AlignmentOrientationPolicy = AlignmentOrientationPolicy.PRESERVE,
 ) -> SimilarityAlignmentPlan:
     return SimilarityAlignmentPlan(
         group_id="og-1",
@@ -117,8 +113,6 @@ def _plan(
                 AlignmentDecisionStatus.ALIGNED,
                 AlignmentResolutionRationale.ONLY_USABLE_CANDIDATE,
                 target,
-                orientation_policy,
-                orient_target,
             ),
         ),
     )
@@ -206,7 +200,6 @@ def test_absolute_translation_formula_preserves_reference_skipped_and_every_y() 
                 AlignmentDecisionStatus.ALIGNED,
                 AlignmentResolutionRationale.ONLY_USABLE_CANDIDATE,
                 target,
-                effective_reverse_complement=False,
             ),
             AlignmentRecordDecision(
                 skipped_key,
@@ -252,22 +245,24 @@ def test_absolute_translation_formula_preserves_reference_skipped_and_every_y() 
     assert positive[1][0] == pytest.approx(30.0)
 
 
-def test_planning_derives_effective_orientation_once_then_projects_centers() -> None:
+def test_plan_projects_centers_from_record_owned_orientation() -> None:
     first = _record("first", 100, 20, 30)
     second = _record("second", 120, 60, 70, strand=-1)
     plan = _plan(
         _anchor(first, "first"),
         _anchor(second, "second"),
-        orient_target=True,
-        orientation_policy=AlignmentOrientationPolicy.MATCH_REFERENCE,
     )
     request = _request(first, second, plan)
+    request = replace(request, records=(
+        request.records[0],
+        replace(request.records[1], presentation=RecordPresentation(reverse_complement=True)),
+    ))
 
     planned = plan_linear_request(request)
 
     assert [item.presentation.reverse_complement for item in planned.provenance] == [
         False,
-        False,
+        True,
     ]
     assert [transform.source_step for transform in planned.transforms] == [1, -1]
     assert planned.alignment_anchor_centers == pytest.approx((25.0, 55.0))
@@ -277,7 +272,7 @@ def test_planning_derives_effective_orientation_once_then_projects_centers() -> 
     assert int(second.features[0].location.strand) == -1
 
 
-def test_session_request_replacement_does_not_reapply_effective_orientation() -> None:
+def test_session_request_replacement_keeps_record_orientation() -> None:
     first = _record("first", 100, 20, 30)
     second = _record("second", 120, 60, 70, strand=-1)
     request = _request(
@@ -286,8 +281,6 @@ def test_session_request_replacement_does_not_reapply_effective_orientation() ->
         _plan(
             _anchor(first, "first"),
             _anchor(second, "second"),
-            orient_target=True,
-            orientation_policy=AlignmentOrientationPolicy.MATCH_REFERENCE,
         ),
     )
     planned = plan_linear_request(request)
@@ -302,42 +295,17 @@ def test_session_request_replacement_does_not_reapply_effective_orientation() ->
     assert replaced.alignment_anchor_centers == planned.alignment_anchor_centers
 
 
-@pytest.mark.parametrize(
-    ("base_orientation", "override", "expected_step"),
-    (
-        (False, None, 1),
-        (True, None, -1),
-        (False, False, 1),
-        (False, True, -1),
-        (True, False, 1),
-        (True, True, -1),
-    ),
-)
-def test_effective_orientation_is_absolute_against_record_presentation(
-    base_orientation: bool,
-    override: bool | None,
-    expected_step: int,
-) -> None:
+@pytest.mark.parametrize("reverse", (False, True))
+def test_plan_never_changes_record_presentation(reverse: bool) -> None:
     first = _record("first", 100, 20, 30)
     second = _record("second", 120, 60, 70)
-    plan = _plan(
-        _anchor(first, "first"),
-        _anchor(second, "second"),
-        orient_target=base_orientation if override is None else override,
-        orientation_policy=(
-            AlignmentOrientationPolicy.PRESERVE
-            if override is None else AlignmentOrientationPolicy.MATCH_REFERENCE
-        ),
-    )
+    plan = _plan(_anchor(first, "first"), _anchor(second, "second"))
     request = LinearDiagramRequest(
         records=(
             RecordInput(InMemoryRecordSource(first), record_key="first"),
             RecordInput(
-                InMemoryRecordSource(second),
-                record_key="second",
-                presentation=RecordPresentation(
-                    reverse_complement=base_orientation
-                ),
+                InMemoryRecordSource(second), record_key="second",
+                presentation=RecordPresentation(reverse_complement=reverse),
             ),
         ),
         layout=LinearMultiRecordOptions(
@@ -348,11 +316,12 @@ def test_effective_orientation_is_absolute_against_record_presentation(
         ),
         similarity_alignment=plan,
     )
-
     planned = plan_linear_request(request)
-
-    assert planned.provenance[1].presentation.reverse_complement is base_orientation
-    assert planned.transforms[1].source_step == expected_step
+    assert planned.provenance[1].presentation.reverse_complement is reverse
+    assert planned.transforms[1].source_step == (-1 if reverse else 1)
+    assert planned.alignment_anchor_centers == pytest.approx(
+        (25.0, 55.0 if reverse else 65.0)
+    )
 
 
 def test_crop_and_circular_display_offset_are_applied_before_anchor_translation() -> None:
@@ -408,15 +377,13 @@ def test_crop_and_circular_display_offset_are_applied_before_anchor_translation(
     assert displayed.alignment_anchor_centers[1] == pytest.approx(15.0)
 
 
-def test_match_direction_after_reverse_crop_preserves_readable_geometry() -> None:
+def test_reverse_crop_preserves_readable_geometry() -> None:
     reference = _record("reference", 100, 20, 30, strand=1)
     target = _record("target", 120, 60, 70, strand=1)
     target.features[0].qualifiers["gene"] = ["readable-target"]
     plan = _plan(
         _anchor(reference, "first"),
         _anchor(target, "second"),
-        orient_target=False,
-        orientation_policy=AlignmentOrientationPolicy.MATCH_REFERENCE,
     )
     request = LinearDiagramRequest(
         records=(
@@ -445,14 +412,14 @@ def test_match_direction_after_reverse_crop_preserves_readable_geometry() -> Non
     )
     first = plan_linear_request(request)
     second = plan_linear_request(request)
-    assert first.transforms[1].source_step == 1
-    assert first.alignment_anchor_centers == pytest.approx((25, 25))
+    assert first.transforms[1].source_step == -1
+    assert first.alignment_anchor_centers == pytest.approx((25, 35))
     assert first.alignment_anchor_centers == second.alignment_anchor_centers
     assert str(first.records[1].seq) == str(second.records[1].seq)
     assert first.transforms[1] == second.transforms[1]
     feature = first.records[1].features[0]
-    assert (int(feature.location.start), int(feature.location.end)) == (20, 30)
-    assert feature.location.strand == 1
+    assert (int(feature.location.start), int(feature.location.end)) == (30, 40)
+    assert feature.location.strand == -1
 
     svg = build_request_diagram(request).drawing.tostring()
     root = ElementTree.fromstring(svg)
@@ -484,9 +451,11 @@ def test_match_direction_after_reverse_crop_preserves_readable_geometry() -> Non
         "same-row",
     ),
 )
+@pytest.mark.parametrize("reverse", (False, True))
 def test_final_placements_align_anchors_and_bounds_do_not_clip(
     overrides: dict[str, object],
     positions: tuple[str, ...] | None,
+    reverse: bool,
 ) -> None:
     first = _record("first", 100, 10, 20)
     second = _record("second", 200, 150, 170)
@@ -502,6 +471,10 @@ def test_final_placements_align_anchors_and_bounds_do_not_clip(
         positions=positions,
         overrides=overrides,
     )
+    request = replace(request, records=(
+        request.records[0],
+        replace(request.records[1], presentation=RecordPresentation(reverse_complement=reverse)),
+    ))
 
     prepared = build_request_diagram(request)
     geometry = prepared.drawing._gbdraw_track_slot_geometry["records"]
@@ -954,3 +927,85 @@ def test_cli_materializes_typed_plan_and_reuses_completed_analysis(
     assert request.options.protein_blastp_mode == "none"
     assert not hasattr(request.options, "align_orthogroup_feature")
     assert captured["analysis_builds"] == 1
+
+
+def test_real_render_keeps_unknown_and_skipped_record_directions_and_positions() -> None:
+    from gbdraw.layout.similarity_alignment import (
+        AlignmentRecordChoice,
+        SimilarityAlignmentCandidate,
+        resolve_similarity_alignment,
+    )
+
+    keys = ('reference', 'opposite', 'unknown', 'skipped', 'missing', 'unusable')
+    records = tuple(
+        _record(key, 200, 20 + index * 10, 40 + index * 10,
+                strand=None if key == 'unknown' else -1 if key == 'opposite' else 1)
+        for index, key in enumerate(keys)
+    )
+    anchors = tuple(_anchor(record, key) for record, key in zip(records, keys))
+    resolution = resolve_similarity_alignment(
+        record_keys=keys, group_id='og-edge', reference=anchors[0],
+        candidates=tuple(
+            SimilarityAlignmentCandidate(
+                group_id='og-edge', anchor=anchors[index],
+                displayed_strand=None if key == 'unknown' else -1 if index else 1,
+                center_mappable=key != 'unusable',
+                display_center=None if key == 'unusable' else 30 + index * 10,
+            )
+            for index, key in enumerate(keys) if key != 'missing'
+        ),
+        choices=(AlignmentRecordChoice('skipped', 'skip'),),
+    )
+    plan = resolution.require_plan()
+    assert resolution.review_rows[2].candidates[0].strand_relation.value == 'unknown'
+    assert [item.rationale.value for item in plan.records[3:]] == [
+        'skipped_by_user', 'skipped_no_candidate', 'skipped_unmappable'
+    ]
+    request = replace(
+        _request(records[0], records[1], _plan(
+            _anchor(records[0], 'first'), _anchor(records[1], 'second')
+        )),
+        records=tuple(
+            RecordInput(InMemoryRecordSource(record), record_key=key,
+                        presentation=RecordPresentation(reverse_complement=index >= 2))
+            for index, (record, key) in enumerate(zip(records, keys))
+        ),
+        layout=LinearMultiRecordOptions(record_translations=tuple(
+            LinearRecordTranslation(key, 7 + index * 4, -5 + index * 3)
+            for index, key in enumerate(keys)
+        )),
+        similarity_alignment=None,
+    )
+    before = build_request_diagram(request)
+    matched_request = replace(request, similarity_alignment=plan, records=(
+        request.records[0],
+        replace(request.records[1], presentation=RecordPresentation(reverse_complement=True)),
+        *request.records[2:],
+    ))
+    after = build_request_diagram(matched_request)
+    assert [item.source_step for item in plan_linear_request(request).transforms] == [1, 1, -1, -1, -1, -1]
+    assert [item.source_step for item in plan_linear_request(matched_request).transforms] == [1, -1, -1, -1, -1, -1]
+
+    def translations(prepared):
+        return {
+            group.attrib['data-record-key']: (
+                float(group.attrib['data-record-translation-x']),
+                float(group.attrib['data-record-translation-y']),
+            )
+            for group in ElementTree.fromstring(prepared.drawing.tostring()).iter()
+            if 'data-record-key' in group.attrib
+        }
+
+    original, matched = translations(before), translations(after)
+    assert {key: value[1] for key, value in matched.items()} == {
+        key: value[1] for key, value in original.items()
+    }
+    for key in ('reference', 'skipped', 'missing', 'unusable'):
+        assert matched[key] == original[key]
+    centers = plan_linear_request(matched_request).alignment_anchor_centers
+    geometry = after.drawing._gbdraw_track_slot_geometry['records']
+    world_centers = [
+        item['axisXpx'] + centers[index] * item['sequenceWidthPx'] / len(after.records[index])
+        for index, item in enumerate(geometry) if centers[index] is not None
+    ]
+    assert world_centers == pytest.approx([world_centers[0]] * 3, abs=0.5)

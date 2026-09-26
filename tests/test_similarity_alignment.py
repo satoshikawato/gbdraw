@@ -18,7 +18,7 @@ from gbdraw.layout.similarity_alignment import (
     AlignmentResolutionRationale,
     AmbiguousAlignmentRecord,
     SimilarityAlignmentCandidate,
-    AlignmentOrientationPolicy,
+    AlignmentStrandRelation,
     AlignmentRecommendationReason,
     SimilarityAlignmentPlan,
     resolve_similarity_alignment,
@@ -54,7 +54,6 @@ def _candidate(
     center: float | None = 10.0,
     unique: bool = True,
     hidden: bool = False,
-    reversed_: bool = False,
     representative: bool = False,
     role: str = "anchor",
 ) -> SimilarityAlignmentCandidate:
@@ -71,7 +70,6 @@ def _candidate(
         display_center=center,
         identity_is_unique=unique,
         hidden=hidden,
-        effective_reverse_complement=reversed_,
         representative=representative,
         role=role,
     )
@@ -124,7 +122,6 @@ def test_exact_non_representative_reference_and_zero_or_one_candidate() -> None:
         status="aligned",
         rationale="only_usable_candidate",
         anchor=only_target.anchor,
-        effective_reverse_complement=False,
     )
     assert _decision(resolution, "record-b").anchor == reference.anchor
     assert _decision(resolution, "record-c").rationale is (
@@ -331,65 +328,40 @@ def test_other_group_member_is_not_a_candidate() -> None:
     )
 
 
-@pytest.mark.parametrize(
-    ("policy", "reference_strand", "target_strand", "target_reversed", "expected"),
-    (
-        ("preserve", 1, -1, False, False),
-        ("preserve", -1, 1, True, True),
-        ("match_reference", 1, 1, False, False),
-        ("match_reference", -1, -1, True, True),
-        ("match_reference", 1, -1, False, True),
-        ("match_reference", -1, 1, True, False),
-        ("match_reference", None, 1, False, False),
-        ("match_reference", 1, None, True, True),
-    ),
-)
-def test_per_record_orientation_policy_and_strand_matrix(
-    policy: str,
+@pytest.mark.parametrize("reference_strand", (None, -1, 1))
+@pytest.mark.parametrize("target_strand", (None, -1, 1))
+def test_review_candidate_strand_relation(
     reference_strand: int | None,
     target_strand: int | None,
-    target_reversed: bool,
-    expected: bool,
 ) -> None:
     reference = _candidate("reference", "clicked", strand=reference_strand)
-    target = _candidate(
-        "target", "target", strand=target_strand, reversed_=target_reversed
-    )
-    resolution = resolve_similarity_alignment(
-        record_keys=("reference", "target"),
-        group_id=GROUP,
-        reference=reference.anchor,
-        candidates=(reference, target),
-        choices=(AlignmentRecordChoice("target", "select", target.anchor, policy),),
-    )
-    decision = _decision(resolution, "target")
-    assert decision.orientation_policy is AlignmentOrientationPolicy(policy)
-    assert decision.effective_reverse_complement is expected
-    assert _decision(resolution, "reference").effective_reverse_complement is None
-    assert resolution.review_rows[1].candidates[0].match_reference_effective_reverse_complement is (
-        not target_reversed if reference_strand is not None
-        and target_strand is not None and reference_strand != target_strand
-        else target_reversed
-    )
-
-
-def test_default_preserves_existing_source_relative_reverse_state() -> None:
-    reference = _candidate("reference", "clicked", strand=1)
-    target = _candidate("target", "target", strand=-1, reversed_=True)
+    target = _candidate("target", "target", strand=target_strand)
     resolution = resolve_similarity_alignment(
         record_keys=("reference", "target"),
         group_id=GROUP,
         reference=reference.anchor,
         candidates=(reference, target),
     )
-    decision = _decision(resolution, "target")
-    assert decision.orientation_policy is AlignmentOrientationPolicy.PRESERVE
-    assert decision.effective_reverse_complement is True
+    expected = (
+        AlignmentStrandRelation.UNKNOWN
+        if reference_strand is None or target_strand is None
+        else AlignmentStrandRelation.SAME
+        if reference_strand == target_strand
+        else AlignmentStrandRelation.OPPOSITE
+    )
+    assert resolution.review_rows[1].candidates[0].strand_relation is expected
+    assert _decision(resolution, "target").anchor == target.anchor
 
 
-def test_skip_rejects_match_reference_policy() -> None:
-    with pytest.raises(ValidationError, match="Skip choice must preserve"):
-        AlignmentRecordChoice("target", "skip", orientation_policy="match_reference")
+def test_choice_and_decision_reject_removed_orientation_fields() -> None:
+    anchor = _anchor("target", "feature")
+    with pytest.raises(TypeError, match="orientation_policy"):
+        AlignmentRecordChoice("target", "select", anchor, orientation_policy="preserve")
+    with pytest.raises(TypeError, match="effective_reverse_complement"):
+        AlignmentRecordDecision(
+            "target", "aligned", "user_selected", anchor,
+            effective_reverse_complement=False,
+        )
 
 
 def test_input_permutations_produce_identical_resolution() -> None:
@@ -505,7 +477,7 @@ def test_missing_or_unmappable_reference_is_rejected() -> None:
         )
 
 
-def test_duplicate_decisions_and_invalid_plan_enums_are_rejected() -> None:
+def test_duplicate_decisions_and_invalid_plan_are_rejected() -> None:
     anchor = _anchor("record", "feature")
     reference_decision = AlignmentRecordDecision(
         "record", "reference", "reference", anchor
@@ -515,11 +487,6 @@ def test_duplicate_decisions_and_invalid_plan_enums_are_rejected() -> None:
             group_id=GROUP,
             reference=anchor,
             records=(reference_decision, reference_decision),
-        )
-    with pytest.raises(ValidationError, match="orientation policy must be one of"):
-        AlignmentRecordDecision(
-            "record", "reference", "reference", anchor,
-            orientation_policy="smart",
         )
     with pytest.raises(ValidationError, match="exactly one matching"):
         SimilarityAlignmentPlan(
@@ -645,57 +612,14 @@ def test_recommendation_can_be_replaced_or_skipped_only_by_explicit_choice() -> 
         choices=(AlignmentRecordChoice("target", "skip"),),
     ).require_plan()
     assert skipped.records[1].status is AlignmentDecisionStatus.SKIPPED
-    assert skipped.records[1].effective_reverse_complement is None
 
 
-@pytest.mark.parametrize("policy", list(AlignmentOrientationPolicy))
-@pytest.mark.parametrize("reference_strand", (None, -1, 1))
-@pytest.mark.parametrize("target_strand", (None, -1, 1))
-@pytest.mark.parametrize("base_reverse", (False, True))
-def test_orientation_complete_policy_strand_matrix(
-    policy: AlignmentOrientationPolicy,
-    reference_strand: int | None,
-    target_strand: int | None,
-    base_reverse: bool,
-) -> None:
-    reference = _candidate("reference", "reference", strand=reference_strand)
-    target = _candidate(
-        "target", "target", strand=target_strand, reversed_=base_reverse
-    )
-    result = resolve_similarity_alignment(
-        record_keys=("reference", "target"),
-        group_id=GROUP,
-        reference=reference.anchor,
-        candidates=(reference, target),
-        choices=(AlignmentRecordChoice("target", "select", target.anchor, policy),),
-    )
-    should_reverse = (
-        policy is AlignmentOrientationPolicy.MATCH_REFERENCE
-        and reference_strand is not None
-        and target_strand is not None
-        and reference_strand != target_strand
-    )
-    assert result.require_plan().records[1].effective_reverse_complement is (
-        base_reverse ^ should_reverse
-    )
-    assert result.require_plan().records[1].orientation_policy is policy
-
-
-def test_plan_requires_effective_outcome_and_preserving_reference_or_skip() -> None:
+def test_plan_decision_consistency_and_schema() -> None:
     reference = _anchor("reference", "reference")
     target = _anchor("target", "target")
+    assert AlignmentRecordDecision("target", "aligned", "user_selected", target).anchor == target
     with pytest.raises(ValidationError, match="inconsistent"):
-        AlignmentRecordDecision("target", "aligned", "user_selected", target)
-    with pytest.raises(ValidationError, match="inconsistent"):
-        AlignmentRecordDecision(
-            "reference", "reference", "reference", reference,
-            orientation_policy="match_reference",
-        )
-    with pytest.raises(ValidationError, match="inconsistent"):
-        AlignmentRecordDecision(
-            "target", "skipped", "skipped_by_user",
-            effective_reverse_complement=True,
-        )
+        AlignmentRecordDecision("target", "skipped", "skipped_by_user", target)
     with pytest.raises(ValidationError, match="schema must be 2"):
         SimilarityAlignmentPlan(
             group_id=GROUP,

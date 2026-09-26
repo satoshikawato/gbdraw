@@ -7,7 +7,6 @@ import { isInternalProteinDisplayId } from './feature-utils.js';
 
 const { computed, ref } = window.Vue;
 
-const ORIENTATION_POLICIES = new Set(['preserve', 'match_reference']);
 const REVIEW_REASONS = new Set([
   'only_usable_candidate', 'unique_direct_rbh',
   'unique_representative', 'deterministic_candidate_1'
@@ -125,7 +124,7 @@ const candidateView = (candidate, request, displayFacts = new Map()) => {
     representative: candidate.representative,
     role: candidate.role || 'member',
     directEvidence: candidate.directEvidence.length ? candidate.directEvidence : ['None'],
-    orientation: candidate.orientation,
+    strandRelation: candidate.strandRelation,
     usable: candidate.usable
   };
 };
@@ -170,16 +169,12 @@ const reviewRows = (response, request, displayFacts, recordLabels) => response.r
       choice: selectedAnchor
         ? { kind: 'select', candidateKey: anchorKey(selectedAnchor) }
         : { kind: 'skip', candidateKey: null },
-      orientationPolicy: 'preserve',
-      orientationEffect: selectedAnchor
-        ? record.candidates.find(({ anchor }) => sameJson(anchor, selectedAnchor))?.orientation.preserve.effect
-        : 'preserve',
       unchanged: !selectedAnchor,
       repairRequired: false
     };
   });
 
-const successfulSummary = (plan, request) => {
+const successfulSummary = (plan, reversed) => {
   const aligned = plan.records.filter(({ status }) => status === 'aligned').length;
   const explicitlySkipped = plan.records.filter(
     ({ rationale }) => rationale === 'skipped_by_user'
@@ -188,13 +183,6 @@ const successfulSummary = (plan, request) => {
     rationale === 'skipped_no_candidate' || rationale === 'skipped_unmappable'
   )).length;
   const unchanged = plan.records.filter(({ status }) => status === 'reference').length;
-  const base = new Map(request.records.map((record) => [
-    record.recordKey, baseReverseComplement(record)
-  ]));
-  const reversed = plan.records.filter((decision) => (
-    decision.status === 'aligned'
-    && decision.effectiveReverseComplement !== base.get(decision.recordKey)
-  )).length;
   return deepFreeze({
     aligned,
     unchanged,
@@ -213,11 +201,11 @@ const baseReverseComplement = (record) => Boolean(
     : record?.presentation?.reverseComplement
 );
 
-const inspectActivePlan = (plan, request) => {
+const inspectActivePlan = (plan, linearSeqs) => {
   if (!plan || plan.schema !== 2 || !Array.isArray(plan.records)) return null;
   const records = new Map(
-    (Array.isArray(request?.records) ? request.records : [])
-      .map((record) => [String(record?.recordKey || ''), record])
+    (Array.isArray(linearSeqs) ? linearSeqs : [])
+      .map((record) => [String(record?.uid || ''), Boolean(record.region_reverse)])
   );
   return deepFreeze({
     groupId: plan.groupId,
@@ -227,17 +215,13 @@ const inspectActivePlan = (plan, request) => {
       label: plan.reference.biologicalFeatureId
     },
     records: plan.records.map((decision) => {
-      const baseReverse = baseReverseComplement(records.get(decision.recordKey));
-      const effectiveReverse = decision.effectiveReverseComplement === null
-        ? baseReverse
-        : decision.effectiveReverseComplement;
       return {
         recordKey: decision.recordKey,
         anchorLabel: decision.anchor?.biologicalFeatureId || 'Skip',
         status: decision.status,
         rationale: decision.rationale,
         rationaleLabel: rationaleLabels[decision.rationale] || decision.rationale,
-        reversedFromSource: Boolean(effectiveReverse)
+        reversedFromSource: records.get(decision.recordKey) || false
       };
     })
   });
@@ -282,7 +266,7 @@ const validateCandidate = (value, path, recordKey) => {
   const raw = exactObject(value, [
     'anchor', 'displayName', 'sourceStart', 'sourceEnd', 'displayCenter',
     'displayedStrand', 'hidden', 'representative', 'role', 'usable',
-    'directEvidence', 'orientation'
+    'directEvidence', 'strandRelation'
   ], path);
   const anchor = validateAnchor(raw.anchor, `${path}.anchor`);
   if (anchor.recordKey !== recordKey || typeof raw.displayName !== 'string'
@@ -296,26 +280,19 @@ const validateCandidate = (value, path, recordKey) => {
     || raw.directEvidence.some((evidence) => typeof evidence !== 'string')) {
     throw new Error(`${path} contains invalid candidate facts.`);
   }
-  const orientation = exactObject(raw.orientation, ['preserve', 'match_reference'], `${path}.orientation`);
-  for (const policy of ORIENTATION_POLICIES) {
-    const outcome = exactObject(orientation[policy], [
-      'effect', 'effectiveReverseComplement'
-    ], `${path}.orientation.${policy}`);
-    if (!['preserve', 'reverse_whole_record', 'preserve_unknown_strand'].includes(outcome.effect)
-      || typeof outcome.effectiveReverseComplement !== 'boolean') {
-      throw new Error(`${path}.orientation.${policy} is invalid.`);
-    }
+  if (!['same', 'opposite', 'unknown'].includes(raw.strandRelation)) {
+    throw new Error(`${path}.strandRelation is invalid.`);
   }
-  return { ...raw, anchor, orientation };
+  return { ...raw, anchor };
 };
 
 const validateDecision = (value, path) => {
   const raw = exactObject(value, [
     'kind', 'recordKey', 'status', 'rationale', 'reviewReason', 'anchor',
-    'orientationPolicy', 'effectiveReverseComplement', 'candidates'
+    'candidates'
   ], path);
   if (raw.kind !== 'decision' || !STATUSES.has(raw.status)
-    || !RATIONALES.has(raw.rationale) || !ORIENTATION_POLICIES.has(raw.orientationPolicy)
+    || !RATIONALES.has(raw.rationale)
     || (raw.reviewReason !== null && !REVIEW_REASONS.has(raw.reviewReason))) {
     throw new Error(`${path} contains an unknown decision value.`);
   }
@@ -325,23 +302,16 @@ const validateDecision = (value, path) => {
     validateCandidate(candidate, `${path}.candidates[${index}]`, recordKey)
   ));
   if (anchor && anchor.recordKey !== recordKey) throw new Error(`${path}.anchor belongs to another record.`);
-  if (raw.effectiveReverseComplement !== null
-    && typeof raw.effectiveReverseComplement !== 'boolean') {
-    throw new Error(`${path}.effectiveReverseComplement is invalid.`);
-  }
   const alignedRationales = new Set(['user_selected', 'only_usable_candidate', 'unique_direct_rbh']);
   const skippedRationales = new Set(['skipped_by_user', 'skipped_no_candidate', 'skipped_unmappable']);
   const valid = raw.status === 'reference'
     ? anchor !== null && raw.rationale === 'reference' && raw.reviewReason === null
-      && raw.orientationPolicy === 'preserve' && raw.effectiveReverseComplement === null
     : raw.status === 'aligned'
       ? anchor !== null && alignedRationales.has(raw.rationale)
-        && typeof raw.effectiveReverseComplement === 'boolean'
         && candidates.some((candidate) => candidate.usable && sameJson(candidate.anchor, anchor))
         && raw.reviewReason === (raw.rationale === 'user_selected' ? null : raw.rationale)
       : anchor === null && skippedRationales.has(raw.rationale)
-        && raw.reviewReason === null && raw.orientationPolicy === 'preserve'
-        && raw.effectiveReverseComplement === null;
+        && raw.reviewReason === null;
   if (!valid) throw new Error(`${path} contains an invalid decision combination.`);
   return { ...raw, anchor, candidates };
 };
@@ -383,15 +353,12 @@ const validatePlan = (value, response, path) => {
   const records = raw.records.map((record, index) => {
     const decision = response.records[index];
     const fields = exactObject(record, [
-      'recordKey', 'status', 'rationale', 'anchor', 'orientationPolicy',
-      'effectiveReverseComplement'
+      'recordKey', 'status', 'rationale', 'anchor'
     ], `${path}.records[${index}]`);
     if (!decision || decision.kind !== 'decision'
       || !sameJson(fields, {
         recordKey: decision.recordKey, status: decision.status,
-        rationale: decision.rationale, anchor: decision.anchor,
-        orientationPolicy: decision.orientationPolicy,
-        effectiveReverseComplement: decision.effectiveReverseComplement
+        rationale: decision.rationale, anchor: decision.anchor
       })) throw new Error(`${path} differs from helper decisions.`);
     return fields;
   });
@@ -651,43 +618,18 @@ const anchorsAgree = (left, right) => {
   ));
 };
 
-const orientationsFromRequest = (request, plan = null) => {
-  const decisions = new Map(
-    (Array.isArray(plan?.records) ? plan.records : [])
-      .map((decision) => [decision.recordKey, decision])
-  );
-  return (Array.isArray(request?.records) ? request.records : []).map((record) => {
-    const decision = decisions.get(record.recordKey);
-    return {
-      recordKey: record.recordKey,
-      reverseComplement: decision?.effectiveReverseComplement === null
-        || decision?.effectiveReverseComplement === undefined
-        ? baseReverseComplement(record)
-        : Boolean(decision.effectiveReverseComplement)
-    };
-  });
-};
+const selectedStrandRelation = (decision) => decision?.status === 'aligned'
+  ? decision.candidates.find(({ anchor }) => sameJson(anchor, decision.anchor))?.strandRelation
+  : null;
 
-const requestWithOrientations = (request, orientations) => {
-  const byRecord = new Map(
-    (Array.isArray(orientations) ? orientations : [])
-      .map((entry) => [entry.recordKey, Boolean(entry.reverseComplement)])
-  );
-  return deepFreeze({
-    ...cloneJson(request),
-    records: request.records.map((record) => {
-      const reverseComplement = byRecord.get(record.recordKey);
-      return record.region
-        ? {
-            ...record,
-            region: { ...record.region, reverseComplement },
-            presentation: { ...record.presentation, reverseComplement: false }
-          }
-        : {
-            ...record,
-            presentation: { ...record.presentation, reverseComplement }
-          };
-    })
+export const matchedOrientations = (response, request, enabled) => {
+  const decisions = new Map(response.records.map((decision) => [decision.recordKey, decision]));
+  return request.records.map((record) => {
+    const reverseComplement = baseReverseComplement(record);
+    const reverse = record.recordKey !== response.reference.recordKey
+      && selectedStrandRelation(decisions.get(record.recordKey)) === 'opposite';
+    return { recordKey: record.recordKey,
+      reverseComplement: enabled && reverse ? !reverseComplement : reverseComplement };
   });
 };
 
@@ -799,28 +741,16 @@ export const createSimilarityAlignmentActions = ({
     const recordKeys = (request?.records || []).map(({ recordKey }) => recordKey);
     const plan = materializePlan ? state.similarityAlignmentPlan?.value : null;
     return {
-      request: materializePlan
-        ? requestWithOrientations(request, orientationsFromRequest(request, plan))
-        : request,
+      request,
       translations: materializePlan
         ? materializedTranslations(recordKeys, plan)
-        : replacementTranslations(state, recordKeys),
-      orientations: orientationsFromRequest(request, plan)
+        : replacementTranslations(state, recordKeys)
     };
   };
 
   const installBaseState = (value) => {
     if (!value) return;
     state.linearRecordTranslations.value = cloneJson(value.translations);
-    const orientations = new Map(
-      value.orientations.map((entry) => [entry.recordKey, entry.reverseComplement])
-    );
-    (Array.isArray(state.linearSeqs) ? state.linearSeqs : []).forEach((sequence) => {
-      const recordKey = String(sequence?.uid || '');
-      if (orientations.has(recordKey)) {
-        sequence.region_reverse = orientations.get(recordKey);
-      }
-    });
   };
 
   const publishNotice = (message) => {
@@ -845,13 +775,19 @@ export const createSimilarityAlignmentActions = ({
   const installReviewDraft = (response, request) => {
     draft.value = deepFreeze({
       response,
+      matchReferenceDirection: false,
       reference: referenceView(response, request, displayFacts, recordLabels),
       rows: reviewRows(response, request, displayFacts, recordLabels)
     });
     status.value = 'reviewing';
   };
 
-  const applyPlan = async (plan, request, expectedActionId, retryResponse = null) => {
+  const applyPlan = async (response, request, expectedActionId, retryResponse = null) => {
+    const plan = response.plan;
+    const orientations = matchedOrientations(response, request, draft.value?.matchReferenceDirection === true);
+    const reversed = orientations.filter((entry, index) => (
+      entry.reverseComplement !== baseReverseComplement(request.records[index])
+    )).length;
     if (expectedActionId !== actionId) return { status: 'stale' };
     if (!artifactIsCurrent()) return rejectStaleDraft();
     const recordKeys = request.records.map(({ recordKey }) => recordKey);
@@ -862,9 +798,7 @@ export const createSimilarityAlignmentActions = ({
         linearRecordTranslations: cloneJson(
           activeBaseline?.translations || replacementTranslations(state, recordKeys)
         ),
-        linearRecordOrientations: cloneJson(
-          activeBaseline?.orientations || orientationsFromRequest(request)
-        )
+        linearRecordOrientations: orientations
       }
     });
     activeApply = promise;
@@ -878,7 +812,7 @@ export const createSimilarityAlignmentActions = ({
     }
     if (expectedActionId !== actionId) return { status: 'stale' };
     if (outcome?.status === 'ok') {
-      summary.value = successfulSummary(plan, request);
+      summary.value = successfulSummary(plan, reversed);
       repair.value = null;
       notice.value = '';
       activeBaseline = null;
@@ -889,7 +823,8 @@ export const createSimilarityAlignmentActions = ({
     }
     if (retryResponse) installReviewDraft(retryResponse, request);
     else status.value = 'reviewing';
-    publishError(outcome?.error || new Error('Alignment generation failed. Review the draft and retry Apply.'));
+    if (outcome?.error?.summary) error.value = { message: outcome.error.summary };
+    else publishError(outcome?.error || new Error('Alignment generation failed. Review the draft and retry Apply.'));
     return { status: outcome?.status || 'error' };
   };
 
@@ -912,7 +847,7 @@ export const createSimilarityAlignmentActions = ({
     error.value = null;
     if (mode === 'align' && response.status === 'resolved') {
       status.value = 'applying';
-      return applyPlan(response.plan, request, expectedActionId, response);
+      return applyPlan(response, request, expectedActionId, response);
     }
     installReviewDraft(response, request);
     return { status: 'reviewing' };
@@ -979,28 +914,21 @@ export const createSimilarityAlignmentActions = ({
       const candidate = row.candidates.find(({ anchor }) => sameJson(anchor, selectedAnchor));
       if (!candidate) return { status: 'rejected' };
       next = { ...row, choice: { kind: 'select', candidateKey: candidate.key },
-        orientationPolicy: row.orientationPolicy,
-        orientationEffect: candidate.orientation[row.orientationPolicy].effect,
         reason: 'user_selected', reasonLabel: 'Selected by user',
         unchanged: false, repairRequired: false };
     } else if (update.kind === 'skip') {
       if (!row.candidates.length) return { status: 'rejected' };
       next = { ...row, choice: { kind: 'skip', candidateKey: null },
-        orientationPolicy: 'preserve', orientationEffect: 'preserve',
         reason: 'skipped_by_user', reasonLabel: 'Skipped by user',
         unchanged: true, repairRequired: false };
-    } else if (update.kind === 'orientation') {
-      if (!ORIENTATION_POLICIES.has(update.policy) || row.choice?.kind !== 'select') {
-        return { status: 'rejected' };
-      }
-      const candidate = row.candidates.find(({ key }) => key === row.choice.candidateKey);
-      next = { ...row, orientationPolicy: update.policy,
-        orientationEffect: candidate.orientation[update.policy].effect };
     } else return { status: 'rejected' };
     draft.value = deepFreeze({
       ...draft.value,
       rows: draft.value.rows.map((entry) => entry === row ? next : entry)
     });
+    if (directionMatch.value.disabledReason && draft.value.matchReferenceDirection) {
+      setMatchReferenceDirection(false);
+    }
     error.value = null;
     return { status: 'selected' };
   };
@@ -1016,8 +944,7 @@ export const createSimilarityAlignmentActions = ({
       return {
         recordKey: row.recordKey,
         kind: row.choice.kind,
-        anchor: row.choice.kind === 'select' ? candidate.anchor : null,
-        orientationPolicy: row.choice.kind === 'select' ? row.orientationPolicy : 'preserve'
+        anchor: row.choice.kind === 'select' ? candidate.anchor : null
       };
     });
     const request = deepFreeze({ ...cloneJson(activeRequest), choices });
@@ -1030,7 +957,7 @@ export const createSimilarityAlignmentActions = ({
         throw new Error('The resolver did not resolve every record. Review the choices and retry.');
       }
       if (!artifactIsCurrent()) return rejectStaleDraft();
-      return applyPlan(response.plan, request, expectedActionId);
+      return applyPlan(response, request, expectedActionId);
     } catch (cause) {
       if (expectedActionId !== actionId) return { status: 'stale' };
       status.value = 'reviewing';
@@ -1096,7 +1023,7 @@ export const createSimilarityAlignmentActions = ({
 
   const activePlanInspector = computed(() => {
     try {
-      return inspectActivePlan(state.similarityAlignmentPlan?.value, getCommittedRequest());
+      return inspectActivePlan(state.similarityAlignmentPlan?.value, state.linearSeqs);
     } catch (_error) {
       return null;
     }
@@ -1115,8 +1042,7 @@ export const createSimilarityAlignmentActions = ({
       skipSimilarityAlignmentValidation: true,
       canonicalStateOverride: {
         similarityAlignmentPlan: null,
-        linearRecordTranslations: cloneJson(current.translations),
-        linearRecordOrientations: cloneJson(current.orientations)
+        linearRecordTranslations: cloneJson(current.translations)
       }
     });
     activeApply = promise;
@@ -1134,7 +1060,7 @@ export const createSimilarityAlignmentActions = ({
       clearDraft();
       repair.value = null;
       summary.value = null;
-      publishNotice('Alignment reset to the immediate pre-align baseline.');
+      publishNotice('Alignment reset: record positions restored; record directions unchanged.');
     }
     return outcome;
   };
@@ -1145,8 +1071,7 @@ export const createSimilarityAlignmentActions = ({
       .map((decision) => ({
         recordKey: decision.recordKey,
         kind: decision.status === 'aligned' ? 'select' : 'skip',
-        anchor: decision.status === 'aligned' ? decision.anchor : null,
-        orientationPolicy: decision.status === 'aligned' ? decision.orientationPolicy : 'preserve'
+        anchor: decision.status === 'aligned' ? decision.anchor : null
       }))
   );
 
@@ -1190,7 +1115,8 @@ export const createSimilarityAlignmentActions = ({
         : row
     ));
     draft.value = deepFreeze({
-      response, reference: referenceView(response, repairRequest, displayFacts, recordLabels),
+      response, matchReferenceDirection: false,
+      reference: referenceView(response, repairRequest, displayFacts, recordLabels),
       rows, repair: true
     });
     repair.value = deepFreeze({
@@ -1290,13 +1216,6 @@ export const createSimilarityAlignmentActions = ({
     }
   };
 
-  const materializeAndClear = (reason) => {
-    if (!state.similarityAlignmentPlan?.value) return false;
-    const value = baseline({ materializePlan: true });
-    installBaseState(value);
-    return clearCommittedPlan(reason);
-  };
-
   const beforeRecordDrag = () => {
     pendingRecordDragBaseline = state.similarityAlignmentPlan?.value
       ? baseline({ materializePlan: true })
@@ -1323,11 +1242,46 @@ export const createSimilarityAlignmentActions = ({
     return true;
   };
 
-  const setManualOrientation = (sequence, reverseComplement) => {
-    if (!sequence) return false;
-    materializeAndClear('record orientation changed.');
-    sequence.region_reverse = Boolean(reverseComplement);
-    return true;
+  const directionMatch = computed(() => {
+    if (!draft.value || !activeRequest) return null;
+    const decisions = draft.value.rows.map((row) => {
+      const candidate = row.candidates.find(({ key }) => key === row.choice?.candidateKey);
+      return { recordKey: row.recordKey, status: row.choice?.kind === 'select' ? 'aligned' : 'skipped',
+        anchor: candidate?.anchor, candidates: row.candidates };
+    });
+    const response = { ...draft.value.response, records: decisions };
+    const matched = matchedOrientations(response, activeRequest, true);
+    const reversalKeys = new Set(matched.filter((entry, index) => (
+      entry.reverseComplement !== baseReverseComplement(activeRequest.records[index])
+    )).map(({ recordKey }) => recordKey));
+    const reversalLabels = draft.value.rows.filter(({ recordKey }) => reversalKeys.has(recordKey))
+      .map(({ recordLabel }) => recordLabel);
+    const unknownLabels = [];
+    const directions = {};
+    decisions.forEach((decision, index) => {
+      const relation = selectedStrandRelation(decision);
+      if (relation === 'unknown') unknownLabels.push(draft.value.rows[index].recordLabel);
+      directions[decision.recordKey] = relation === 'unknown'
+        ? 'Direction: unknown strand — unchanged'
+        : relation ? `Direction: ${relation === 'same' ? 'same as' : 'opposite to'} reference`
+          + (draft.value.matchReferenceDirection && reversalKeys.has(decision.recordKey)
+            ? ' — reversed on Apply' : '') : '';
+    });
+    return {
+      directions, unknownLabels,
+      statusLine: draft.value.matchReferenceDirection
+        ? `Apply reverses ${reversalLabels.length} record(s): ${reversalLabels.join(', ')}.`
+        : 'Record directions stay unchanged.',
+      disabledReason: reversalKeys.size ? '' : 'All selected anchors already face the reference direction.'
+    };
+  });
+
+  const setMatchReferenceDirection = (enabled) => {
+    if (!draft.value || status.value !== 'reviewing'
+      || enabled && directionMatch.value.disabledReason) return { status: 'rejected' };
+    draft.value = deepFreeze({ ...draft.value, matchReferenceDirection: Boolean(enabled) });
+    error.value = null;
+    return { status: 'selected' };
   };
 
   const unresolvedCount = computed(() => (
@@ -1365,7 +1319,8 @@ export const createSimilarityAlignmentActions = ({
     retainForStableReorder,
     beforeRecordDrag,
     afterRecordDrag,
-    setManualOrientation,
+    directionMatch,
+    setMatchReferenceDirection,
     startFromPopup: (options) => start({ ...options, source: 'popup' }),
     startFromDrawer: (options) => start({
       ...options,
@@ -1381,7 +1336,6 @@ export const createSimilarityAlignmentActions = ({
     drawerDisabledReason,
     selectCandidate: (recordKey, anchor) => editRow(recordKey, { kind: 'select', anchor }),
     skipRecord: (recordKey) => editRow(recordKey, { kind: 'skip' }),
-    setOrientation: (recordKey, policy) => editRow(recordKey, { kind: 'orientation', policy }),
     applyDraft,
     cancel,
     previewCandidate: (anchor) => {
