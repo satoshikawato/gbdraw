@@ -106,7 +106,7 @@ const responseFor = (request, { ambiguous = false, missing = false } = {}) => {
   const status = records.some(({ kind }) => kind === 'ambiguous') ? 'ambiguous' : 'resolved';
   return {
     schema: 2, status, groupId: request.groupId, reference: request.reference,
-    referenceDisplayedStrand: 1, referenceDisplayCenter: 65, records,
+    referenceDisplayedStrand: 1, referenceDisplayCenter: 65, records, projection: null,
     plan: status === 'resolved' ? {
       schema: 2, groupId: request.groupId, reference: request.reference,
       records: records.map(({ recordKey, status: decisionStatus, rationale, anchor: chosen }) => ({
