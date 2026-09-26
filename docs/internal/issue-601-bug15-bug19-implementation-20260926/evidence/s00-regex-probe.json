@@ -1,0 +1,902 @@
+{
+  "scope": "native/helper regex owners only; no Worker, browser, Generate, or original-audit reproduction",
+  "corpus": {
+    "corpus": [
+      "NADH",
+      "nadh",
+      "β-lactamase",
+      "ı",
+      "i",
+      "İ",
+      "unrelated"
+    ],
+    "unrelated": [
+      "unrelated"
+    ],
+    "empty": []
+  },
+  "rows": [
+    {
+      "pattern": "(?i)NADH",
+      "catalog": "corpus",
+      "color": {
+        "accepted": true,
+        "targets": [
+          0,
+          1
+        ]
+      },
+      "label": {
+        "accepted": true,
+        "targets": [
+          0,
+          1
+        ]
+      },
+      "nativeColor": {
+        "accepted": true,
+        "targets": [
+          0,
+          1
+        ]
+      },
+      "nativeLabel": {
+        "accepted": true,
+        "targets": [
+          0,
+          1
+        ]
+      },
+      "whitelist": {
+        "accepted": true,
+        "targets": [
+          0,
+          1
+        ]
+      },
+      "visibility": {
+        "accepted": true,
+        "targets": [
+          0,
+          1
+        ]
+      }
+    },
+    {
+      "pattern": "(?i)NADH",
+      "catalog": "unrelated",
+      "color": {
+        "accepted": true,
+        "targets": []
+      },
+      "label": {
+        "accepted": true,
+        "targets": []
+      },
+      "nativeColor": {
+        "accepted": true,
+        "targets": []
+      },
+      "nativeLabel": {
+        "accepted": true,
+        "targets": []
+      },
+      "whitelist": {
+        "accepted": true,
+        "targets": []
+      },
+      "visibility": {
+        "accepted": true,
+        "targets": []
+      }
+    },
+    {
+      "pattern": "(?i)NADH",
+      "catalog": "empty",
+      "color": {
+        "accepted": true,
+        "targets": []
+      },
+      "label": {
+        "accepted": true,
+        "targets": []
+      },
+      "nativeColor": {
+        "accepted": true,
+        "targets": []
+      },
+      "nativeLabel": {
+        "accepted": true,
+        "targets": []
+      },
+      "whitelist": {
+        "accepted": true,
+        "targets": []
+      },
+      "visibility": {
+        "accepted": true,
+        "targets": []
+      }
+    },
+    {
+      "pattern": "(?P<enzyme>NADH)",
+      "catalog": "corpus",
+      "color": {
+        "accepted": true,
+        "targets": [
+          0,
+          1
+        ]
+      },
+      "label": {
+        "accepted": true,
+        "targets": [
+          0,
+          1
+        ]
+      },
+      "nativeColor": {
+        "accepted": true,
+        "targets": [
+          0,
+          1
+        ]
+      },
+      "nativeLabel": {
+        "accepted": true,
+        "targets": [
+          0,
+          1
+        ]
+      },
+      "whitelist": {
+        "accepted": true,
+        "targets": [
+          0,
+          1
+        ]
+      },
+      "visibility": {
+        "accepted": true,
+        "targets": [
+          0,
+          1
+        ]
+      }
+    },
+    {
+      "pattern": "(?P<enzyme>NADH)",
+      "catalog": "unrelated",
+      "color": {
+        "accepted": true,
+        "targets": []
+      },
+      "label": {
+        "accepted": true,
+        "targets": []
+      },
+      "nativeColor": {
+        "accepted": true,
+        "targets": []
+      },
+      "nativeLabel": {
+        "accepted": true,
+        "targets": []
+      },
+      "whitelist": {
+        "accepted": true,
+        "targets": []
+      },
+      "visibility": {
+        "accepted": true,
+        "targets": []
+      }
+    },
+    {
+      "pattern": "(?P<enzyme>NADH)",
+      "catalog": "empty",
+      "color": {
+        "accepted": true,
+        "targets": []
+      },
+      "label": {
+        "accepted": true,
+        "targets": []
+      },
+      "nativeColor": {
+        "accepted": true,
+        "targets": []
+      },
+      "nativeLabel": {
+        "accepted": true,
+        "targets": []
+      },
+      "whitelist": {
+        "accepted": true,
+        "targets": []
+      },
+      "visibility": {
+        "accepted": true,
+        "targets": []
+      }
+    },
+    {
+      "pattern": "[",
+      "catalog": "corpus",
+      "color": {
+        "accepted": false,
+        "type": "PatternError",
+        "causeType": "PatternError",
+        "pythonCharacterPosition": 0,
+        "producerLoggedSyntheticPattern": false
+      },
+      "label": {
+        "accepted": false,
+        "type": "ParseError",
+        "causeType": "PatternError",
+        "pythonCharacterPosition": 0,
+        "producerLoggedSyntheticPattern": true
+      },
+      "nativeColor": {
+        "accepted": false,
+        "type": "PatternError",
+        "causeType": "PatternError",
+        "pythonCharacterPosition": 0,
+        "producerLoggedSyntheticPattern": false
+      },
+      "nativeLabel": {
+        "accepted": false,
+        "type": "ParseError",
+        "causeType": "PatternError",
+        "pythonCharacterPosition": 0,
+        "producerLoggedSyntheticPattern": true
+      },
+      "whitelist": {
+        "accepted": false,
+        "type": "ParseError",
+        "causeType": "PatternError",
+        "pythonCharacterPosition": 0,
+        "producerLoggedSyntheticPattern": true
+      },
+      "visibility": {
+        "accepted": false,
+        "type": "ParseError",
+        "causeType": "PatternError",
+        "pythonCharacterPosition": 0,
+        "producerLoggedSyntheticPattern": true
+      }
+    },
+    {
+      "pattern": "[",
+      "catalog": "unrelated",
+      "color": {
+        "accepted": false,
+        "type": "PatternError",
+        "causeType": "PatternError",
+        "pythonCharacterPosition": 0,
+        "producerLoggedSyntheticPattern": false
+      },
+      "label": {
+        "accepted": false,
+        "type": "ParseError",
+        "causeType": "PatternError",
+        "pythonCharacterPosition": 0,
+        "producerLoggedSyntheticPattern": true
+      },
+      "nativeColor": {
+        "accepted": false,
+        "type": "PatternError",
+        "causeType": "PatternError",
+        "pythonCharacterPosition": 0,
+        "producerLoggedSyntheticPattern": false
+      },
+      "nativeLabel": {
+        "accepted": false,
+        "type": "ParseError",
+        "causeType": "PatternError",
+        "pythonCharacterPosition": 0,
+        "producerLoggedSyntheticPattern": true
+      },
+      "whitelist": {
+        "accepted": false,
+        "type": "ParseError",
+        "causeType": "PatternError",
+        "pythonCharacterPosition": 0,
+        "producerLoggedSyntheticPattern": true
+      },
+      "visibility": {
+        "accepted": false,
+        "type": "ParseError",
+        "causeType": "PatternError",
+        "pythonCharacterPosition": 0,
+        "producerLoggedSyntheticPattern": true
+      }
+    },
+    {
+      "pattern": "[",
+      "catalog": "empty",
+      "color": {
+        "accepted": false,
+        "type": "PatternError",
+        "causeType": "PatternError",
+        "pythonCharacterPosition": 0,
+        "producerLoggedSyntheticPattern": false
+      },
+      "label": {
+        "accepted": false,
+        "type": "ParseError",
+        "causeType": "PatternError",
+        "pythonCharacterPosition": 0,
+        "producerLoggedSyntheticPattern": true
+      },
+      "nativeColor": {
+        "accepted": false,
+        "type": "PatternError",
+        "causeType": "PatternError",
+        "pythonCharacterPosition": 0,
+        "producerLoggedSyntheticPattern": false
+      },
+      "nativeLabel": {
+        "accepted": false,
+        "type": "ParseError",
+        "causeType": "PatternError",
+        "pythonCharacterPosition": 0,
+        "producerLoggedSyntheticPattern": true
+      },
+      "whitelist": {
+        "accepted": false,
+        "type": "ParseError",
+        "causeType": "PatternError",
+        "pythonCharacterPosition": 0,
+        "producerLoggedSyntheticPattern": true
+      },
+      "visibility": {
+        "accepted": false,
+        "type": "ParseError",
+        "causeType": "PatternError",
+        "pythonCharacterPosition": 0,
+        "producerLoggedSyntheticPattern": true
+      }
+    },
+    {
+      "pattern": "(?<enzyme>NADH)",
+      "catalog": "corpus",
+      "color": {
+        "accepted": false,
+        "type": "PatternError",
+        "causeType": "PatternError",
+        "pythonCharacterPosition": 1,
+        "producerLoggedSyntheticPattern": false
+      },
+      "label": {
+        "accepted": false,
+        "type": "ParseError",
+        "causeType": "PatternError",
+        "pythonCharacterPosition": 1,
+        "producerLoggedSyntheticPattern": true
+      },
+      "nativeColor": {
+        "accepted": false,
+        "type": "PatternError",
+        "causeType": "PatternError",
+        "pythonCharacterPosition": 1,
+        "producerLoggedSyntheticPattern": false
+      },
+      "nativeLabel": {
+        "accepted": false,
+        "type": "ParseError",
+        "causeType": "PatternError",
+        "pythonCharacterPosition": 1,
+        "producerLoggedSyntheticPattern": true
+      },
+      "whitelist": {
+        "accepted": false,
+        "type": "ParseError",
+        "causeType": "PatternError",
+        "pythonCharacterPosition": 1,
+        "producerLoggedSyntheticPattern": true
+      },
+      "visibility": {
+        "accepted": false,
+        "type": "ParseError",
+        "causeType": "PatternError",
+        "pythonCharacterPosition": 1,
+        "producerLoggedSyntheticPattern": true
+      }
+    },
+    {
+      "pattern": "(?<enzyme>NADH)",
+      "catalog": "unrelated",
+      "color": {
+        "accepted": false,
+        "type": "PatternError",
+        "causeType": "PatternError",
+        "pythonCharacterPosition": 1,
+        "producerLoggedSyntheticPattern": false
+      },
+      "label": {
+        "accepted": false,
+        "type": "ParseError",
+        "causeType": "PatternError",
+        "pythonCharacterPosition": 1,
+        "producerLoggedSyntheticPattern": true
+      },
+      "nativeColor": {
+        "accepted": false,
+        "type": "PatternError",
+        "causeType": "PatternError",
+        "pythonCharacterPosition": 1,
+        "producerLoggedSyntheticPattern": false
+      },
+      "nativeLabel": {
+        "accepted": false,
+        "type": "ParseError",
+        "causeType": "PatternError",
+        "pythonCharacterPosition": 1,
+        "producerLoggedSyntheticPattern": true
+      },
+      "whitelist": {
+        "accepted": false,
+        "type": "ParseError",
+        "causeType": "PatternError",
+        "pythonCharacterPosition": 1,
+        "producerLoggedSyntheticPattern": true
+      },
+      "visibility": {
+        "accepted": false,
+        "type": "ParseError",
+        "causeType": "PatternError",
+        "pythonCharacterPosition": 1,
+        "producerLoggedSyntheticPattern": true
+      }
+    },
+    {
+      "pattern": "(?<enzyme>NADH)",
+      "catalog": "empty",
+      "color": {
+        "accepted": false,
+        "type": "PatternError",
+        "causeType": "PatternError",
+        "pythonCharacterPosition": 1,
+        "producerLoggedSyntheticPattern": false
+      },
+      "label": {
+        "accepted": false,
+        "type": "ParseError",
+        "causeType": "PatternError",
+        "pythonCharacterPosition": 1,
+        "producerLoggedSyntheticPattern": true
+      },
+      "nativeColor": {
+        "accepted": false,
+        "type": "PatternError",
+        "causeType": "PatternError",
+        "pythonCharacterPosition": 1,
+        "producerLoggedSyntheticPattern": false
+      },
+      "nativeLabel": {
+        "accepted": false,
+        "type": "ParseError",
+        "causeType": "PatternError",
+        "pythonCharacterPosition": 1,
+        "producerLoggedSyntheticPattern": true
+      },
+      "whitelist": {
+        "accepted": false,
+        "type": "ParseError",
+        "causeType": "PatternError",
+        "pythonCharacterPosition": 1,
+        "producerLoggedSyntheticPattern": true
+      },
+      "visibility": {
+        "accepted": false,
+        "type": "ParseError",
+        "causeType": "PatternError",
+        "pythonCharacterPosition": 1,
+        "producerLoggedSyntheticPattern": true
+      }
+    },
+    {
+      "pattern": "NADH\\Z",
+      "catalog": "corpus",
+      "color": {
+        "accepted": true,
+        "targets": [
+          0,
+          1
+        ]
+      },
+      "label": {
+        "accepted": true,
+        "targets": [
+          0,
+          1
+        ]
+      },
+      "nativeColor": {
+        "accepted": true,
+        "targets": [
+          0,
+          1
+        ]
+      },
+      "nativeLabel": {
+        "accepted": true,
+        "targets": [
+          0,
+          1
+        ]
+      },
+      "whitelist": {
+        "accepted": true,
+        "targets": [
+          0,
+          1
+        ]
+      },
+      "visibility": {
+        "accepted": true,
+        "targets": [
+          0,
+          1
+        ]
+      }
+    },
+    {
+      "pattern": "NADH\\Z",
+      "catalog": "unrelated",
+      "color": {
+        "accepted": true,
+        "targets": []
+      },
+      "label": {
+        "accepted": true,
+        "targets": []
+      },
+      "nativeColor": {
+        "accepted": true,
+        "targets": []
+      },
+      "nativeLabel": {
+        "accepted": true,
+        "targets": []
+      },
+      "whitelist": {
+        "accepted": true,
+        "targets": []
+      },
+      "visibility": {
+        "accepted": true,
+        "targets": []
+      }
+    },
+    {
+      "pattern": "NADH\\Z",
+      "catalog": "empty",
+      "color": {
+        "accepted": true,
+        "targets": []
+      },
+      "label": {
+        "accepted": true,
+        "targets": []
+      },
+      "nativeColor": {
+        "accepted": true,
+        "targets": []
+      },
+      "nativeLabel": {
+        "accepted": true,
+        "targets": []
+      },
+      "whitelist": {
+        "accepted": true,
+        "targets": []
+      },
+      "visibility": {
+        "accepted": true,
+        "targets": []
+      }
+    },
+    {
+      "pattern": "\\bβ",
+      "catalog": "corpus",
+      "color": {
+        "accepted": true,
+        "targets": [
+          2
+        ]
+      },
+      "label": {
+        "accepted": true,
+        "targets": [
+          2
+        ]
+      },
+      "nativeColor": {
+        "accepted": true,
+        "targets": [
+          2
+        ]
+      },
+      "nativeLabel": {
+        "accepted": true,
+        "targets": [
+          2
+        ]
+      },
+      "whitelist": {
+        "accepted": true,
+        "targets": [
+          2
+        ]
+      },
+      "visibility": {
+        "accepted": true,
+        "targets": [
+          2
+        ]
+      }
+    },
+    {
+      "pattern": "\\bβ",
+      "catalog": "unrelated",
+      "color": {
+        "accepted": true,
+        "targets": []
+      },
+      "label": {
+        "accepted": true,
+        "targets": []
+      },
+      "nativeColor": {
+        "accepted": true,
+        "targets": []
+      },
+      "nativeLabel": {
+        "accepted": true,
+        "targets": []
+      },
+      "whitelist": {
+        "accepted": true,
+        "targets": []
+      },
+      "visibility": {
+        "accepted": true,
+        "targets": []
+      }
+    },
+    {
+      "pattern": "\\bβ",
+      "catalog": "empty",
+      "color": {
+        "accepted": true,
+        "targets": []
+      },
+      "label": {
+        "accepted": true,
+        "targets": []
+      },
+      "nativeColor": {
+        "accepted": true,
+        "targets": []
+      },
+      "nativeLabel": {
+        "accepted": true,
+        "targets": []
+      },
+      "whitelist": {
+        "accepted": true,
+        "targets": []
+      },
+      "visibility": {
+        "accepted": true,
+        "targets": []
+      }
+    },
+    {
+      "pattern": "i",
+      "catalog": "corpus",
+      "color": {
+        "accepted": true,
+        "targets": [
+          3,
+          4,
+          5
+        ]
+      },
+      "label": {
+        "accepted": true,
+        "targets": [
+          3,
+          4,
+          5
+        ]
+      },
+      "nativeColor": {
+        "accepted": true,
+        "targets": [
+          3,
+          4,
+          5
+        ]
+      },
+      "nativeLabel": {
+        "accepted": true,
+        "targets": [
+          3,
+          4,
+          5
+        ]
+      },
+      "whitelist": {
+        "accepted": true,
+        "targets": [
+          3,
+          4,
+          5
+        ]
+      },
+      "visibility": {
+        "accepted": true,
+        "targets": [
+          3,
+          4,
+          5
+        ]
+      }
+    },
+    {
+      "pattern": "i",
+      "catalog": "unrelated",
+      "color": {
+        "accepted": true,
+        "targets": []
+      },
+      "label": {
+        "accepted": true,
+        "targets": []
+      },
+      "nativeColor": {
+        "accepted": true,
+        "targets": []
+      },
+      "nativeLabel": {
+        "accepted": true,
+        "targets": []
+      },
+      "whitelist": {
+        "accepted": true,
+        "targets": []
+      },
+      "visibility": {
+        "accepted": true,
+        "targets": []
+      }
+    },
+    {
+      "pattern": "i",
+      "catalog": "empty",
+      "color": {
+        "accepted": true,
+        "targets": []
+      },
+      "label": {
+        "accepted": true,
+        "targets": []
+      },
+      "nativeColor": {
+        "accepted": true,
+        "targets": []
+      },
+      "nativeLabel": {
+        "accepted": true,
+        "targets": []
+      },
+      "whitelist": {
+        "accepted": true,
+        "targets": []
+      },
+      "visibility": {
+        "accepted": true,
+        "targets": []
+      }
+    },
+    {
+      "pattern": "β",
+      "catalog": "corpus",
+      "color": {
+        "accepted": true,
+        "targets": [
+          2
+        ]
+      },
+      "label": {
+        "accepted": true,
+        "targets": [
+          2
+        ]
+      },
+      "nativeColor": {
+        "accepted": true,
+        "targets": [
+          2
+        ]
+      },
+      "nativeLabel": {
+        "accepted": true,
+        "targets": [
+          2
+        ]
+      },
+      "whitelist": {
+        "accepted": true,
+        "targets": [
+          2
+        ]
+      },
+      "visibility": {
+        "accepted": true,
+        "targets": [
+          2
+        ]
+      }
+    },
+    {
+      "pattern": "β",
+      "catalog": "unrelated",
+      "color": {
+        "accepted": true,
+        "targets": []
+      },
+      "label": {
+        "accepted": true,
+        "targets": []
+      },
+      "nativeColor": {
+        "accepted": true,
+        "targets": []
+      },
+      "nativeLabel": {
+        "accepted": true,
+        "targets": []
+      },
+      "whitelist": {
+        "accepted": true,
+        "targets": []
+      },
+      "visibility": {
+        "accepted": true,
+        "targets": []
+      }
+    },
+    {
+      "pattern": "β",
+      "catalog": "empty",
+      "color": {
+        "accepted": true,
+        "targets": []
+      },
+      "label": {
+        "accepted": true,
+        "targets": []
+      },
+      "nativeColor": {
+        "accepted": true,
+        "targets": []
+      },
+      "nativeLabel": {
+        "accepted": true,
+        "targets": []
+      },
+      "whitelist": {
+        "accepted": true,
+        "targets": []
+      },
+      "visibility": {
+        "accepted": true,
+        "targets": []
+      }
+    }
+  ]
+}

@@ -1,0 +1,44 @@
+{
+  "known": {
+    "summary": "ValueError: Comparison source feature index conflicts with its view feature ID.",
+    "details": []
+  },
+  "tracebackOnly": {
+    "summary": "stderr:",
+    "details": []
+  },
+  "structuredTransport": {
+    "keys": [
+      "name",
+      "message",
+      "details",
+      "notes",
+      "stack"
+    ],
+    "code": null,
+    "stage": null,
+    "context": null
+  },
+  "deserialized": {
+    "code": null,
+    "stage": null
+  },
+  "search": [
+    {
+      "query": "(?i)NADH",
+      "error": "Invalid regex"
+    },
+    {
+      "query": "(?P<enzyme>NADH)",
+      "error": "Invalid regex"
+    },
+    {
+      "query": "(?<enzyme>NADH)",
+      "error": ""
+    },
+    {
+      "query": "NADH",
+      "error": ""
+    }
+  ]
+}
