@@ -17,7 +17,7 @@ from gbdraw.analysis.protein_colinearity import (
     OrthogroupResult,
 )
 from gbdraw.exceptions import ValidationError
-from gbdraw.core.record_metadata import _read_coord_map
+from gbdraw.core.record_metadata import _iter_source_features, _read_coord_map, _source_feature_index
 from gbdraw.io.cli_tables import (
     read_comparisons_table,
     read_conservation_table,
@@ -51,6 +51,7 @@ from .options import (
     LinearMultiRecordOptions,
 )
 from gbdraw.features.source import SourceFeatureIdentity, build_source_feature_catalog
+from gbdraw.features.ids import compute_feature_hash_from_location_parts
 
 from .prepared import (
     ParsedRecordInputs,
@@ -210,6 +211,95 @@ class ResolvedRecordCollection:
         object.__setattr__(self, "provenance", tuple(provenance))
         object.__setattr__(self, "displays", tuple(displays))
         object.__setattr__(self, "transforms", tuple(transforms))
+
+
+def project_source_bound_comparisons(
+    options: LinearDiagramOptions, collection: ResolvedRecordCollection,
+) -> LinearDiagramOptions:
+    """Reproject existing source-bound evidence into the requested record views.
+
+    View hashes must match this source/crop's current or opposite orientation.
+    Source identities, scores and block membership remain unchanged. Coordinates
+    are record-local; the existing renderer alone applies a circular display cut.
+    """
+    frames = [comparison.matches for comparison in options.linear_comparisons or ()]
+    frames.extend(options.protein_comparisons or ())
+    required = {f"{role}_{name}" for role in ("query", "subject")
+                for name in ("feature_index", "feature_svg_id")}
+    if not any(not frame.empty and required <= set(frame.columns) for frame in frames):
+        return options
+    bindings = []
+    for record, provenance in zip(collection.records, collection.provenance, strict=True):
+        current, opposite = {}, {}
+        for ordinal, feature in enumerate(_iter_source_features(record.features)):
+            if feature.location is None:
+                continue
+            index = _source_feature_index(feature)
+            index = ordinal if index is None else index
+            for target, location in ((current, feature.location),
+                                     (opposite, feature.location._flip(len(record)))):
+                target[index] = compute_feature_hash_from_location_parts(
+                    feature.type,
+                    [(int(part.start), int(part.end), part.strand) for part in location.parts],
+                    record_id=record.id,
+                )
+        source = {feature.source_feature_index: feature.stable_feature_id
+                  for feature in provenance.source_feature_catalog or ()}
+        bindings.append((source, current, opposite, len(record)))
+
+    def project(frame: pd.DataFrame, query_index: int, subject_index: int) -> pd.DataFrame:
+        required = {f"{role}_{name}" for role in ("query", "subject")
+                    for name in ("feature_index", "feature_svg_id")}
+        if frame.empty or not required <= set(frame.columns):
+            return frame
+        updated = None
+        for row_index, row in frame.iterrows():
+            flips = []
+            for role, record_index, prefix in (("query", query_index, "q"), ("subject", subject_index, "s")):
+                if not 0 <= record_index < len(bindings):
+                    raise ValidationError("Comparison record endpoint is outside the resolved collection.")
+                source, current, opposite, length = bindings[record_index]
+                try:
+                    indices = [int(value) for value in str(row[f"{role}_feature_index"]).split(";")]
+                except ValueError:
+                    raise ValidationError("Comparison source feature indexes must be integers.") from None
+                source_ids = str(row[f"{role}_feature_svg_id"]).split(";")
+                view_ids = str(row.get(f"{role}_view_feature_svg_id", row[f"{role}_feature_svg_id"])).split(";")
+                if not len(indices) == len(source_ids) == len(view_ids):
+                    raise ValidationError("Comparison source feature binding has inconsistent coverage.")
+                if any(source.get(index) != source_id for index, source_id in zip(indices, source_ids, strict=True)):
+                    raise ValidationError("Comparison source feature index conflicts with its source feature ID.")
+                current_ids, opposite_ids = ([views.get(index) for index in indices] for views in (current, opposite))
+                flip = view_ids != current_ids
+                if flip and view_ids != opposite_ids:
+                    raise ValidationError("Comparison view feature IDs do not match the current source/crop binding.")
+                flips.append(flip)
+                if not flip:
+                    continue
+                if updated is None:
+                    updated = frame.copy(deep=True)
+                for coordinate_field in (f"{prefix}start", f"{prefix}end"):
+                    coordinate = row[coordinate_field]
+                    if not 1 <= coordinate <= length or int(coordinate) != coordinate:
+                        raise ValidationError("Comparison view coordinate must be a finite genomic base within its record.")
+                    updated.at[row_index, coordinate_field] = length + 1 - int(coordinate)
+                updated.at[row_index, f"{role}_view_feature_svg_id"] = ";".join(current_ids)
+            if updated is not None and flips[0] != flips[1] and "collinearity_orientation" in frame.columns:
+                orientation = row["collinearity_orientation"]
+                if orientation in ("plus", "minus"):
+                    updated.at[row_index, "collinearity_orientation"] = "minus" if orientation == "plus" else "plus"
+        return frame if updated is None else updated
+
+    explicit = tuple(replace(comparison, matches=project(comparison.matches,
+        comparison.query_record_index, comparison.subject_record_index))
+        for comparison in options.linear_comparisons or ())
+    protein = None if options.protein_comparisons is None else tuple(
+        project(frame, index, index + 1) for index, frame in enumerate(options.protein_comparisons))
+    changed = any(before.matches is not after.matches for before, after in
+                  zip(options.linear_comparisons or (), explicit, strict=True))
+    changed = changed or (protein is not None and any(before is not after for before, after in
+                         zip(options.protein_comparisons or (), protein, strict=True)))
+    return replace(options, linear_comparisons=explicit, protein_comparisons=protein) if changed else options
 
 
 def project_similarity_alignment_centers(

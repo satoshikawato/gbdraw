@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { mkdir, mkdtemp, readFile, writeFile } from 'node:fs/promises';
+import { cp, mkdir, mkdtemp, readFile, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
@@ -15,6 +15,7 @@ await writeFile(
   await readFile(join(webSourceDir, 'web-ux-profile.js'), 'utf8'),
   'utf8'
 );
+await cp(webSourceDir, tempDir, {recursive:true});
 await mkdir(join(tempDir, 'services'), { recursive: true });
 await mkdir(join(tempDir, 'app'), { recursive: true });
 for (const filename of [

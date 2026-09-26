@@ -296,6 +296,7 @@ def test_released_legacy_alignment_cli_writes_current_typed_sidecar(
     assert saved.version == CURRENT_SESSION_VERSION
     assert payload["renderRequest"]["schema"] == CANONICAL_REQUEST_SCHEMA
     assert payload["renderRequest"]["layout"]["similarityAlignment"]["groupId"] == "og_1"
+    assert payload["editorState"]["alignmentResetReceipt"] is None
     assert len(payload["renderRequest"]["layout"]["recordTranslations"]) == 5
     assert "alignOrthogroupFeature" not in serialized
     assert "align_orthogroup_feature" not in serialized
