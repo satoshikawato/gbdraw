@@ -1,0 +1,35 @@
+[
+  {
+    "case": "BUG-08 auxiliary column",
+    "error_type": "ValidationError",
+    "error": "Annotation table has unknown columns: notes."
+  },
+  {
+    "case": "BUG-09 all missing",
+    "error_type": "ValidationError",
+    "error": "Feature annotation selector(s) did not match record 'r1': gene=absent."
+  },
+  {
+    "case": "BUG-09 partial match",
+    "error_type": "ValidationError",
+    "error": "Feature annotation selector(s) did not match record 'r1': gene=absent."
+  },
+  {
+    "case": "BUG-09 control",
+    "value": {
+      "count": 1,
+      "warnings": []
+    }
+  },
+  {
+    "case": "BUG-10 two used colors",
+    "value": {
+      "Transporter": "#445566"
+    }
+  },
+  {
+    "case": "BUG-14 circular CLI slot",
+    "error_type": "CircularTrackSlotParseError",
+    "error": "inner_gap_px must be a numeric pixel value without a unit: 'gc:dinucleotide_content@inner_gap_px=10px'"
+  }
+]
