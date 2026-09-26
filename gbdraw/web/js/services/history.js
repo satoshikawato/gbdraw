@@ -171,6 +171,7 @@ export const createHistoryManager = ({
   let currentFileIds = new Set();
   let totalEntryBytes = 0;
   let activeTransaction = null;
+  let activeCheckpoint = null;
 
   const touch = () => {
     revision.value += 1;
@@ -443,7 +444,7 @@ export const createHistoryManager = ({
 
   const runUndoable = async (label, fn, options = {}) => {
     if (typeof fn !== 'function') return undefined;
-    if (restoring.value || capturing.value) return fn();
+    if (restoring.value || capturing.value || activeCheckpoint) return fn();
 
     const usesActiveTransaction = Boolean(activeTransaction && !activeTransaction.closed);
     const tx = usesActiveTransaction ? activeTransaction : await begin(label, options);
@@ -549,8 +550,9 @@ export const createHistoryManager = ({
 
   const runUndoableCheckpoint = (label, fn, options = {}) => {
     if (typeof fn !== 'function') return undefined;
-    if (restoring.value || capturing.value) return fn();
+    if (restoring.value || capturing.value || activeCheckpoint) return fn();
     const execute = async (tx) => {
+      activeCheckpoint = tx;
       try {
         const result = await fn();
         if (
@@ -567,6 +569,8 @@ export const createHistoryManager = ({
         if (tx) tx.closed = true;
         releaseUnreferencedFiles();
         throw error;
+      } finally {
+        activeCheckpoint = null;
       }
     };
     const transaction = beginCheckpoint(label, options);

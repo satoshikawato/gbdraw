@@ -1527,47 +1527,54 @@ export const createHistorySnapshotService = ({
 
   const applyArtifactCheckpoint = async (snapshot) => {
     if (!snapshot || typeof snapshot !== 'object') return;
-    closeTransientState(state);
+    const suppressRef = state.semanticFileWatchersSuppressed;
+    const previousSuppressed = getGeneratedArtifactRef(suppressRef, false);
+    setGeneratedArtifactRef(suppressRef, true);
+    try {
+      closeTransientState(state);
 
-    const ui = snapshot.ui || {};
-    if (ui.mode) setRef(state.mode, ui.mode === 'linear' ? 'linear' : 'circular');
-    if (ui.cInputType) setRef(state.cInputType, ui.cInputType);
-    if (ui.lInputType) setRef(state.lInputType, ui.lInputType);
-    // The mode watcher clears generated metadata. Let that reset finish before
-    // restoring snapshot-owned feature, label, and orthogroup state.
-    await nextTick();
+      const ui = snapshot.ui || {};
+      if (ui.mode) setRef(state.mode, ui.mode === 'linear' ? 'linear' : 'circular');
+      if (ui.cInputType) setRef(state.cInputType, ui.cInputType);
+      if (ui.lInputType) setRef(state.lInputType, ui.lInputType);
+      // The mode watcher clears generated metadata. Let that reset finish before
+      // restoring snapshot-owned feature, label, and orthogroup state.
+      await nextTick();
 
-    if (typeof applyConfigData === 'function' && snapshot.config) {
-      applyConfigData(snapshot.config);
-    } else if (snapshot.config?.linearComparisonPlan) {
-      replaceLinearComparisonPlan(
-        state.linearComparisonPlan,
-        snapshot.config.linearComparisonPlan
-      );
-    }
-    applyDraftIntentData(state, snapshot.drafts || {});
+      if (typeof applyConfigData === 'function' && snapshot.config) {
+        applyConfigData(snapshot.config);
+      } else if (snapshot.config?.linearComparisonPlan) {
+        replaceLinearComparisonPlan(
+          state.linearComparisonPlan,
+          snapshot.config.linearComparisonPlan
+        );
+      }
+      applyDraftIntentData(state, snapshot.drafts || {});
 
-    if (typeof applyUiStateData === 'function') {
-      applyUiStateData(ui, { restorePreviewNavigation: false });
-    } else {
-      applyFallbackUiStateData(state, ui);
-    }
-    await nextTick();
+      if (typeof applyUiStateData === 'function') {
+        applyUiStateData(ui, { restorePreviewNavigation: false });
+      } else {
+        applyFallbackUiStateData(state, ui);
+      }
+      await nextTick();
 
-    applyFilesData(state, snapshot.files || {}, fileStore, normalizeLinearSeqList);
+      applyFilesData(state, snapshot.files || {}, fileStore, normalizeLinearSeqList);
 
-    if (state.skipCaptureBaseConfig) state.skipCaptureBaseConfig.value = true;
-    if (state.skipPositionReapply) state.skipPositionReapply.value = true;
-    if (state.skipExtractOnSvgChange) state.skipExtractOnSvgChange.value = false;
+      if (state.skipCaptureBaseConfig) state.skipCaptureBaseConfig.value = true;
+      if (state.skipPositionReapply) state.skipPositionReapply.value = true;
+      if (state.skipExtractOnSvgChange) state.skipExtractOnSvgChange.value = false;
 
-    applyArtifactDomains(snapshot);
+      applyArtifactDomains(snapshot);
 
-    await nextTick();
-    await nextFrame();
-    if (typeof applyUiStateData === 'function') {
-      applyUiStateData(ui, { restorePreviewNavigation: false });
-    } else {
-      applyFallbackUiStateData(state, ui);
+      await nextTick();
+      await nextFrame();
+      if (typeof applyUiStateData === 'function') {
+        applyUiStateData(ui, { restorePreviewNavigation: false });
+      } else {
+        applyFallbackUiStateData(state, ui);
+      }
+    } finally {
+      setGeneratedArtifactRef(suppressRef, previousSuppressed);
     }
   };
 

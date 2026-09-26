@@ -2278,3 +2278,57 @@ const createLayoutPreferences = () => ({
 }
 
 console.log('history tests passed');
+
+{
+  let file = 'original.tsv';
+  let rules = ['original'];
+  let svg = 'original legend';
+  const history = createHistoryManager({
+    buildIntent: () => ({ file, rules }),
+    applyIntent: (intent) => { file = intent.file; rules = [...intent.rules]; },
+    buildCheckpoint: () => ({ file, rules: [...rules], svg }),
+    applyCheckpoint: (checkpoint) => {
+      file = checkpoint.file;
+      rules = [...checkpoint.rules];
+      svg = checkpoint.svg;
+    }
+  });
+  await history.initializeIntentBaseline();
+  await history.runUndoableCheckpoint('Import specific colors', async () => {
+    file = 'colors.tsv';
+    await history.runUndoableCheckpoint('Commit prepared rules', async () => {
+      rules = ['canonical caption'];
+      svg = 'canonical legend';
+      await history.runUndoable('Derived preview', () => { svg += ' and colors'; });
+    });
+  });
+  assert.equal(history.getUndoCount(), 1, 'an upload and its canonical rule/legend edit are one action');
+  assert.equal(history.getDiagnostics().artifactCheckpointBuilds, 2, 'nested edits share the outer capture');
+  await history.undo();
+  assert.deepEqual({ file, rules, svg }, { file: 'original.tsv', rules: ['original'], svg: 'original legend' });
+  await history.redo();
+  assert.deepEqual({ file, rules, svg }, { file: 'colors.tsv', rules: ['canonical caption'], svg: 'canonical legend and colors' });
+  await assert.rejects(history.runUndoableCheckpoint('Invalid import', async () => {
+    throw new Error('invalid known value');
+  }), /invalid known value/);
+  assert.equal(history.getUndoCount(), 1);
+  await history.runUndoable('Next edit', () => { rules = ['next']; });
+  assert.equal(history.getUndoCount(), 2, 'a failed checkpoint releases its nesting scope');
+  await history.undo();
+  assert.deepEqual(rules, ['canonical caption']);
+}
+
+for (const previousSuppressed of [false, true]) {
+  const state = { semanticFileWatchersSuppressed: ref(previousSuppressed) };
+  const snapshots = createHistorySnapshotService({
+    state,
+    fileStore: createHistoryFileStore(),
+    nextTick: async () => {
+      assert.equal(state.semanticFileWatchersSuppressed.value, true);
+      throw new Error('restore did not settle');
+    }
+  });
+  await assert.rejects(snapshots.applyArtifactCheckpoint({}), /restore did not settle/);
+  assert.equal(state.semanticFileWatchersSuppressed.value, previousSuppressed,
+    'checkpoint failure restores the prior semantic file-watcher suppression');
+}

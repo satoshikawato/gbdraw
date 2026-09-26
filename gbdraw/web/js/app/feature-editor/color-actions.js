@@ -1031,8 +1031,8 @@ export const createFeatureColorActions = ({
       await applyColorToFeatureGroup(allFeatures, displayLabel, color, { preferLabelRules: true });
     } else if (choice === 'single') {
       let singleCaption = legendName;
-      if (matchingRule && featureStyleScopeDialog.ruleMatchCount > 1) {
-        const ruleCaption = matchingRule.cap || matchingRule.val;
+      if (featureStyleScopeDialog.siblingCount > 0 || (matchingRule && featureStyleScopeDialog.ruleMatchCount > 1)) {
+        const ruleCaption = matchingRule ? (matchingRule.cap || matchingRule.val) : legendName;
         if (legendName === ruleCaption) {
           singleCaption = getIndividualFeatureLabel(feat);
         }

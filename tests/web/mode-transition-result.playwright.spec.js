@@ -8,6 +8,7 @@ const color = async (page, value, index = 0) => {
     element.dispatchEvent(new Event('change', { bubbles: true }));
   }, value);
   await page.getByText('This feature only', { exact: true }).click();
+  await expect(page.getByText('This feature only', { exact: true })).toBeHidden({ timeout: 180000 });
   await closeEditor(page);
   return target;
 };

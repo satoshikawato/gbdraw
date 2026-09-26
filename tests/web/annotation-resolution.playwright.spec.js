@@ -129,10 +129,9 @@ for (const width of [1440, 390]) {
     } finally { await context.close(); }
     // Web projection still supplies an automatic slot for the unchanged rows,
     // even when Python skips every row. Native automatic slots have a separate contract.
-    await page.evaluate(async () => {
-      const { state } = await import('./js/state.js');
-      state.adv.circular_track_slots_enabled = false;
-      state.adv.feature_width_circular = 16;
+    await page.evaluate(() => {
+      window.__GBDRAW_APP__.adv.circular_track_slots_enabled = false;
+      window.__GBDRAW_APP__.adv.feature_width_circular = 16;
     });
     await generateAndWaitForResult(page);
     const automatic = await page.evaluate(async () => {

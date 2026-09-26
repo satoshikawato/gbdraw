@@ -1839,7 +1839,7 @@ export const createRunAnalysis = ({
     generatedArtifactHandle = null,
     comparisonExecution = null
   } = {}) => {
-    const runState = state;
+    const runState = { ...state };
     const { linearSeqs } = runState;
     let colorCandidate = null;
     let candidateRules = manualSpecificRules;

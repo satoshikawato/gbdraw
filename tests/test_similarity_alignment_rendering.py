@@ -900,6 +900,7 @@ def test_cli_materializes_typed_plan_and_reuses_completed_analysis(
             losat_derived_cache_entries=(),
             protein_identity_manifest=None,
             request=planned.request,
+            annotation_warnings=(),
         )
 
     monkeypatch.setattr(linear_cli_module, "build_request_plan_diagram", fake_analysis_build)

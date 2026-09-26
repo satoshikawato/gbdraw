@@ -20,7 +20,7 @@ const setup = () => {
   let prepareLegend = async () => {};
   let previousIntents = [];
   const actions = createFeatureRuleActions({state, rulePreparation:preparation, history:{
-    runUndoable: async (label, commit) => {
+    runUndoableCheckpoint: async (label, commit) => {
       const before=JSON.stringify(state.manualSpecificRules);
       await commit();
       if (before!==JSON.stringify(state.manualSpecificRules)) transactions.push(label);

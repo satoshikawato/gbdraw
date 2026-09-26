@@ -119,7 +119,7 @@ export const ColorValueControl = {
 
 export const FileUploader = {
   template: '#file-uploader-template',
-  props: ['label', 'accept', 'modelValue', 'small', 'multiple', 'testId', 'afterChange', 'requestClear'],
+  props: ['label', 'accept', 'modelValue', 'small', 'multiple', 'testId', 'afterChange', 'requestClear', 'artifactHistory'],
   emits: ['update:modelValue', 'clearRequest'],
   setup(props, { emit }) {
     const input = ref(null);
@@ -146,12 +146,15 @@ export const FileUploader = {
         }
       };
       const history = window.__GBDRAW_HISTORY__;
-      if (history?.runUndoable) {
-        void history.runUndoable('Change uploaded file', async () => {
-          update();
-          await nextTick();
-          await props.afterChange?.(nextFiles[0]);
-        });
+      const apply = async () => {
+        update();
+        await nextTick();
+        await props.afterChange?.(nextFiles[0]);
+      };
+      if (props.artifactHistory) {
+        void history.runUndoableCheckpoint('Change uploaded file', apply);
+      } else if (history?.runUndoable) {
+        void history.runUndoable('Change uploaded file', apply);
       } else {
         update();
       }

@@ -3831,7 +3831,7 @@
 
                                 <div class="mt-2">
                                     <div class="text-[10px] text-center text-slate-400 mb-1">- OR UPLOAD FILE -</div>
-                                    <file-uploader label="Specific Table (-t)" v-model="files.t_color" :after-change="waitForAuxiliaryFileImport" accept=".tsv,.tab,.txt,text/tab-separated-values,text/plain,text/*" :small="true"></file-uploader>
+                                    <file-uploader label="Specific Table (-t)" v-model="files.t_color" :after-change="waitForAuxiliaryFileImport" :artifact-history="true" accept=".tsv,.tab,.txt,text/tab-separated-values,text/plain,text/*" :small="true"></file-uploader>
                                     <div class="text-[9px] text-slate-400 mt-1">
                                         <help-tip text="TSV file that overrides the color palette for specific features based on qualifiers."></help-tip>
                                         Override colors for specific features.

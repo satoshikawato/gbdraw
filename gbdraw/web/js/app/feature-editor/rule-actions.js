@@ -56,7 +56,7 @@ export const createFeatureRuleActions = ({ state, nextTick, legendActions, ruleP
       .map(rule => ({ caption: rule.cap, color: rule.color })), ...previousLegendIntents];
     const previousCaptions = new Set(previousIntents.map(intent => intent.caption));
     let applied = false;
-    await history.runUndoable(label, async () => {
+    await history.runUndoableCheckpoint(label, async () => {
       if (!current()) return;
       await legendActions.syncFileLegendEntries(candidate.intents.filter(intent => !(state.deletedLegendEntries?.value || [])
         .some(entry => (entry.originalCaption || entry.caption) === intent.caption)), {
