@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { createHash } from 'node:crypto';
 import { cp, mkdtemp, readFile, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -14,6 +15,10 @@ await writeFile(join(tempRoot, 'package.json'), '{"type":"module"}', 'utf8');
 const {
   buildCanonicalRenderRequest: buildCanonicalRenderRequestRaw,
   managedConfigOverridePathsForMode,
+  projectGenerationIntent,
+  projectAppliedGenerationIntent,
+  projectAppliedGenerationFields,
+  compareGenerationIntent,
   normalizeWebGridColumnOrdering,
   promoteCanonicalRenderRequestToCurrent,
   projectCommittedRecordTransform,
@@ -70,12 +75,17 @@ assert.deepEqual(
   ]
 );
 
-const buildCanonicalRenderRequest = (args) => buildCanonicalRenderRequestRaw({
+const characterizedRequests = [];
+const buildCanonicalRenderRequest = (args) => {
+  const result = buildCanonicalRenderRequestRaw({
   ...args,
   ...(args.state?.mode?.value === 'linear' && !args.comparisonPlanSnapshot
     ? { comparisonPlanSnapshot: comparisonSnapshotForState(args.state, args.filesData) }
     : {})
-});
+  });
+  characterizedRequests.push(result.renderRequest);
+  return result;
+};
 const {
   buildLinearTrackSlotPayload,
   buildLinearTrackSlotSpec,
@@ -4913,6 +4923,11 @@ const resolvedProteinMarker = resolvedSelectedProtein.renderRequest.comparisons[
 assert.equal(resolvedProteinMarker.mode, 'none');
 assert.deepEqual(resolvedProteinMarker.pairs, []);
 
+assert.equal(characterizedRequests.length, 83);
+assert.equal(createHash('sha256').update(JSON.stringify(characterizedRequests)).digest('hex'),
+  '999b5d4358b9db6892be52117d3fd9db96a3a708773c6a536678a7ea62893730',
+  'Extraction preserves the 83 characterized request meanings, including topology, tracks and typed comparisons');
+
 const projectSessionIndex = process.argv.indexOf('--project-session');
 if (projectSessionIndex >= 0) {
   const sessionPath = process.argv[projectSessionIndex + 1];
@@ -5109,3 +5124,209 @@ for (const [fixture, locked] of [
   const projection = projectCanonicalSessionRequest(session);
   assert.equal(projection.config.form.keep_definition_left_aligned, locked, fixture);
 }
+
+// Derived generation intent has no resource-content or browser dependency.
+const { createDefaultForm, createDefaultAdv } = await import(
+  pathToFileURL(join(tempRoot, 'js', 'services', 'session-active-config-contract.js')));
+const intentState = {
+  ...linearCombinationRegressionState(), form: createDefaultForm(), adv: createDefaultAdv('linear'),
+  recordDisplayDrafts: [], featurePlacementOverrides: {},
+  currentColors: ref({ CDS: '#abcdef' }), appliedPaletteColors: ref({ CDS: '#abcdef' }),
+  selectedPalette: ref('default'), appliedPaletteName: ref('default'),
+  canonicalLabelOverrideRows: ref([]), featureVisibilityRules: ref([]),
+  labelTextFeatureOverrides: {}, labelTextBulkOverrides: {}, labelTextFeatureOverrideSources: {},
+  labelVisibilityOverrides: {}, manualSpecificRules: [], manualWhitelist: [], manualPriorityRules: [],
+  unmanagedConfigOverrides: { 'objects.definition.linear.text_anchor': 'start' },
+  linearRecordLayoutEnabled: ref(false), linearRecordRows: []
+};
+const bytesForbidden = () => assert.fail('Status must not read File contents');
+const inputFile = { name: 'same.gb', size: 4, arrayBuffer: bytesForbidden, text: bytesForbidden };
+const intentFiles = { linearSeqs: [{ uid: 'a', gb: inputFile, definition: 'Alpha', region_record_id: '#1' },
+  { uid: 'b', gb: inputFile, definition: 'Beta', region_record_id: '#2' }] };
+const intentCanonical = buildCanonicalRenderRequest({ state: intentState, filesData: intentFiles });
+const appliedIntent = projectAppliedGenerationIntent(intentCanonical);
+const intentResult = (liveState = null) => compareGenerationIntent({
+  draft: projectGenerationIntent({ state: intentState, filesData: intentFiles }),
+  applied: appliedIntent, liveState
+});
+assert.equal(intentResult().status, 'clean', JSON.stringify(projectGenerationIntent({state:intentState,filesData:intentFiles})));
+for (const [owner, key, value] of [
+  [intentState.adv, 'scale_interval', 200], [intentState.form, 'show_scale', false],
+  [intentFiles.linearSeqs[0], 'region_start', 1],
+  [intentFiles.linearSeqs[0], 'definition', 'Renamed'],
+  [intentState.unmanagedConfigOverrides, 'objects.definition.linear.text_anchor', 'end']
+]) {
+  const before = owner[key]; owner[key] = value;
+  if (key === 'region_start') intentFiles.linearSeqs[0].region_end = 3;
+  assert.equal(intentResult().status, 'pending', key);
+  owner[key] = before;
+  if (key === 'region_start') delete intentFiles.linearSeqs[0].region_end;
+  assert.equal(intentResult().status, 'clean', `${key} restored`);
+}
+intentState.adv.linear_accession_visibility = 'show';
+intentState.adv.linear_length_visibility = 'show';
+assert.equal(intentResult().status, 'clean', 'Auto and Show have the same effective booleans');
+intentState.linearRecordLayoutEnabled.value = true;
+intentState.linearRecordRows = [{ uid: 'a', row: 1 }, { uid: 'b', row: 1 }];
+intentState.adv.linear_accession_visibility = 'auto';
+assert.equal(intentResult().status, 'pending');
+assert.equal(projectGenerationIntent({state:intentState,filesData:intentFiles}).meaning.diagramOptions
+  .configOverrides['objects.definition.linear.show_accession'], false);
+intentState.linearRecordLayoutEnabled.value = false;
+assert.equal(intentResult().status, 'clean', 'Dormant shared rows do not affect Auto');
+intentState.adv.circular_track_slots[0].enabled = false;
+intentState.adv.circular_track_slots[0].params.legend_label = 'dormant';
+intentState.form.species = 'dormant circular profile';
+intentState.tab = 'anything'; intentState.scroll = 999;
+assert.equal(intentResult().status, 'clean');
+intentFiles.linearSeqs[0].gb = { ...inputFile };
+assert.equal(intentResult().status, 'pending', 'Same-name/same-size different File binding');
+intentFiles.linearSeqs[0].gb = inputFile;
+intentFiles.linearSeqs[0].gb = { name: 'same.gb', size: 4 };
+assert.equal(intentResult().status, 'unknown', 'Unestablished identity cannot be clean');
+intentFiles.linearSeqs[0].gb = inputFile;
+intentState.form.keep_definition_left_aligned = 'invalid';
+assert.equal(intentResult().status, 'invalid');
+intentState.form.keep_definition_left_aligned = true;
+assert.equal(compareGenerationIntent({ draft: projectGenerationIntent({state:intentState, filesData:intentFiles}),
+  applied:null,hasResult:false }).status, 'ungenerated');
+assert.equal(compareGenerationIntent({ draft: projectGenerationIntent({state:intentState, filesData:intentFiles}),
+  applied:null }).status, 'unknown');
+intentState.adv.scale_interval = 200;
+intentState.currentColors.value = { CDS:'#112233' };
+intentState.appliedPaletteColors.value = { CDS:'#112233' };
+assert.equal(intentResult(intentState).status, 'pending', 'Live palette preserves unrelated scale Pending');
+intentState.adv.scale_interval = null;
+assert.equal(intentResult(intentState).status, 'clean', 'Live palette updates only its applied scope');
+intentState.currentColors.value = { CDS:'#334455' };
+assert.equal(intentResult(intentState).status, 'pending', 'Non-live Palette draft remains Pending');
+const oldBtoa = globalThis.btoa, oldAtob = globalThis.atob, oldWorker = globalThis.Worker;
+globalThis.btoa = bytesForbidden; globalThis.atob = bytesForbidden; globalThis.Worker = bytesForbidden;
+try {
+  for (let i=0;i<10;i++) assert.equal(intentResult(intentState).status, 'pending');
+} finally { globalThis.btoa=oldBtoa;globalThis.atob=oldAtob;globalThis.Worker=oldWorker; }
+
+const slotState = { ...intentState, adv: createDefaultAdv('linear'), currentColors: ref({ CDS:'#abcdef' }) };
+slotState.adv.linear_track_slots_enabled = true;
+slotState.adv.linear_track_slots.push({id:'gc',renderer:'dinucleotide_content',enabled:false,side:'below',height:'20px',spacing:null,z:0,params:{}});
+const slotApplied = projectAppliedGenerationIntent(buildCanonicalRenderRequestRaw({state:slotState,
+  filesData:intentFiles, comparisonPlanSnapshot:comparisonSnapshotForState(slotState,intentFiles)}));
+const slotResult = () => compareGenerationIntent({draft:projectGenerationIntent({state:slotState,filesData:intentFiles}), applied:slotApplied});
+assert.equal(slotResult().status,'clean');
+slotState.adv.linear_track_slots[1].height = '90px';
+slotState.form.show_gc = !slotState.form.show_gc;
+slotState.unmanagedConfigOverrides['objects.definition.circular.font_size'] = 75;
+assert.equal(slotResult().status,'clean','Dormant slots, legacy availability and other-mode unmanaged settings');
+slotState.adv.linear_track_slots[1].enabled = true;
+assert.equal(slotResult().status,'pending','Enabling the slot restores its effective meaning');
+slotState.adv.linear_track_slots[1].enabled = false;
+assert.equal(slotResult().status,'clean');
+
+const upload = { name:'same.tsv',size:4,arrayBuffer:bytesForbidden,text:bytesForbidden };
+const comparisonState = { ...slotState, linearComparisonPlan:{mode:'selected',defaultSource:'upload',edges:[{
+  id:'edge',queryUid:'a',subjectUid:'b',source:'upload',included:true,fileActive:true,file:upload
+}]} };
+const comparisonFiles = {...intentFiles,linearComparisons:[{id:'edge',file:upload}]};
+const comparisonApplied = projectAppliedGenerationIntent(buildCanonicalRenderRequestRaw({state:comparisonState,
+  filesData:comparisonFiles,comparisonPlanSnapshot:comparisonSnapshotForState(comparisonState,comparisonFiles)}));
+const comparisonResult = () => compareGenerationIntent({draft:projectGenerationIntent({state:comparisonState,filesData:comparisonFiles}),applied:comparisonApplied});
+assert.equal(comparisonResult().status,'clean');
+comparisonState.adv.comparison_height = 'bad';
+assert.equal(comparisonResult().status,'invalid');
+comparisonState.adv.comparison_height = null;
+comparisonFiles.linearComparisons[0].file = {...upload};
+assert.equal(comparisonResult().status,'pending');
+comparisonFiles.linearComparisons[0].file = upload;
+assert.equal(comparisonResult().status,'clean');
+comparisonState.linearComparisonPlan.mode = 'none';
+comparisonState.adv.comparison_height = 'bad';
+assert.equal(comparisonResult().status,'pending','Comparison removed, dormant invalid height ignored');
+
+const pairedState = { ...intentState,lInputType:ref('gff'),currentColors:ref({CDS:'#abcdef'}) };
+const pairedFiles = {linearSeqs:intentFiles.linearSeqs.map(seq=>({...seq,gff:seq.gb,fasta:upload}))};
+const pairedApplied = projectAppliedGenerationIntent(buildCanonicalRenderRequestRaw({state:pairedState,filesData:pairedFiles,
+  comparisonPlanSnapshot:comparisonSnapshotForState(pairedState,pairedFiles)}));
+const pairedResult=()=>compareGenerationIntent({draft:projectGenerationIntent({state:pairedState,filesData:pairedFiles}),applied:pairedApplied});
+assert.equal(pairedResult().status,'clean');
+pairedFiles.linearSeqs[0].fasta = {...upload};
+assert.equal(pairedResult().status,'pending','GFF paired FASTA binding is part of source identity');
+pairedFiles.linearSeqs[0].fasta=upload;
+assert.equal(pairedResult().status,'clean');
+
+
+const unknownFiles = {linearSeqs:intentFiles.linearSeqs.map(seq=>({...seq,gb:{name:'same.gb',size:4}}))};
+const unknownApplied = projectAppliedGenerationIntent(buildCanonicalRenderRequestRaw({state:intentState,
+  filesData:unknownFiles,comparisonPlanSnapshot:comparisonSnapshotForState(intentState,unknownFiles)}));
+assert.equal(compareGenerationIntent({draft:projectGenerationIntent({state:intentState,filesData:unknownFiles}),
+  applied:unknownApplied}).status,'unknown','Two unresolved identities cannot prove clean');
+
+intentState.currentColors.value = {CDS:'#abcdef'};
+intentState.appliedPaletteColors.value = {CDS:'#abcdef'};
+intentState.form.show_gc = appliedIntent.meaning.diagramOptions.configOverrides['canvas.show_gc'];
+intentState.adv.scale_interval = 200;
+intentState.adv.block_stroke_width = 2;
+const strokeApplied = projectAppliedGenerationFields(appliedIntent,intentState,new Set(['blockStrokeWidth']));
+const strokeResult=()=>compareGenerationIntent({draft:projectGenerationIntent({state:intentState,filesData:intentFiles}),applied:strokeApplied});
+assert.equal(strokeResult().status,'pending');
+assert(strokeResult().differences.every(path=>path.includes('scale.interval')),JSON.stringify(strokeResult()));
+intentState.adv.scale_interval = null;
+assert.equal(strokeResult().status,'clean');
+assert.equal(appliedIntent.meaning.diagramOptions.configOverrides['objects.features.block_stroke_width.short'],undefined);
+intentState.labelReflowProcessing = ref(true);
+assert.equal(compareGenerationIntent({draft:projectGenerationIntent({state:intentState,filesData:intentFiles}),
+  applied:strokeApplied,liveState:intentState}).status,'unknown');
+intentState.labelReflowProcessing.value=false;
+intentState.labelReflowLastError=ref('Live render failed');
+assert.equal(compareGenerationIntent({draft:projectGenerationIntent({state:intentState,filesData:intentFiles}),
+  applied:strokeApplied,liveState:intentState}).status,'unknown');
+
+const losatState={...intentState,adv:createDefaultAdv('linear'),losatProgram:ref('blastn'),losat:{blastn:{task:'megablast'}},
+  linearComparisonPlan:{mode:'selected',defaultSource:'losat',edges:[{id:'losat',queryUid:'a',subjectUid:'b',source:'losat',included:true}]}};
+const losatApplied=projectAppliedGenerationIntent(buildCanonicalRenderRequestRaw({state:losatState,filesData:intentFiles,
+  comparisonPlanSnapshot:comparisonSnapshotForState(losatState,intentFiles)}));
+const losatResult=()=>compareGenerationIntent({draft:projectGenerationIntent({state:losatState,filesData:intentFiles}),applied:losatApplied});
+assert.equal(losatResult().status,'clean');
+losatState.losat.blastn.task='blastn';assert.equal(losatResult().status,'pending');
+losatState.losat.blastn.task='megablast';assert.equal(losatResult().status,'clean');
+intentFiles.linearSeqs[0].losat_gencode=4;assert.equal(losatResult().status,'clean','Genetic code is dormant for nucleotide search');
+delete intentFiles.linearSeqs[0].losat_gencode;assert.equal(losatResult().status,'clean');
+losatState.losatProgram.value='tblastx';
+const translatedApplied=projectAppliedGenerationIntent(buildCanonicalRenderRequestRaw({state:losatState,filesData:intentFiles,
+  comparisonPlanSnapshot:comparisonSnapshotForState(losatState,intentFiles)}));
+const translatedResult=()=>compareGenerationIntent({draft:projectGenerationIntent({state:losatState,filesData:intentFiles}),applied:translatedApplied});
+assert.equal(translatedResult().status,'clean');
+losatState.losat.blastn.task='blastn';assert.equal(translatedResult().status,'clean','Nucleotide task is dormant for translated search');
+intentFiles.linearSeqs[0].losat_gencode=4;assert.equal(translatedResult().status,'pending');
+delete intentFiles.linearSeqs[0].losat_gencode;assert.equal(translatedResult().status,'clean');
+
+const conservationState={...intentState,mode:ref('circular'),form:createDefaultForm(),adv:createDefaultAdv('circular'),
+  circularRecordList:ref([{value:'#1',length:100}]),losat:{blastn:{task:'megablast'}},
+  circularConservation:{enabled:true,source:'losat',losat_program:'blastn',subject_gencode:1,reference:'subject',labels:'Comparison',series:[{label:'Comparison',color:'#D9EAF7'}]}};
+const conservationFiles={c_gb:inputFile,c_conservation_fastas:[upload]};
+const conservationApplied=projectAppliedGenerationIntent(buildCanonicalRenderRequestRaw({state:conservationState,filesData:conservationFiles,
+  resolvedCircularConservation:[{name:'comparison.tsv',text:'resolved output',label:'Comparison',color:'#D9EAF7',fasta:upload}]}));
+const conservationResult=()=>compareGenerationIntent({draft:projectGenerationIntent({state:conservationState,filesData:conservationFiles}),applied:conservationApplied});
+assert.equal(conservationResult().status,'clean',JSON.stringify(conservationResult()));
+
+conservationState.losat.blastn.task='blastn';assert.equal(conservationResult().status,'pending');
+conservationState.losat.blastn.task='megablast';assert.equal(conservationResult().status,'clean');
+conservationState.circularConservation.subject_gencode=4;
+assert.equal(conservationResult().status,'clean','Circular nucleotide conservation ignores genetic code');
+conservationFiles.c_conservation_fastas[0]={...upload};assert.equal(conservationResult().status,'pending');
+conservationFiles.c_conservation_fastas[0]=upload;assert.equal(conservationResult().status,'clean');
+
+conservationState.adv.circular_track_slots_enabled=true;
+const dormantConservationApplied=projectAppliedGenerationIntent(buildCanonicalRenderRequestRaw({state:conservationState,filesData:conservationFiles}));
+const dormantConservationResult=()=>compareGenerationIntent({draft:projectGenerationIntent({state:conservationState,filesData:conservationFiles}),applied:dormantConservationApplied});
+assert.equal(dormantConservationResult().status,'clean');
+conservationFiles.c_conservation_fastas[0]={...upload};
+conservationState.circularConservation.losat_program='tblastx';
+assert.equal(dormantConservationResult().status,'clean','Dormant conservation source and program are excluded by active slots');
+
+const unprovenAnalysis = {status:'valid',meaning:{...losatApplied.meaning,analysis:null}};
+losatState.losatProgram.value='blastn';losatState.losat.blastn.task='megablast';
+assert.equal(compareGenerationIntent({draft:projectGenerationIntent({state:losatState,filesData:intentFiles}),
+  applied:unprovenAnalysis}).status,'unknown','Restored tables cannot establish unsaved search inputs');
+losatState.adv.scale_interval=200;
+const uncertainPending=compareGenerationIntent({draft:projectGenerationIntent({state:losatState,filesData:intentFiles}),applied:unprovenAnalysis});
+assert.equal(uncertainPending.status,'pending');assert(uncertainPending.unknown.includes('$.analysis'));

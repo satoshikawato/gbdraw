@@ -4,6 +4,8 @@ const { join } = require('node:path');
 const { openApp } = require('./helpers/app-lifecycle.cjs');
 
 const source = readFileSync(join(__dirname, '../test_inputs/HmmtDNA.gbk'), 'utf8');
+const applicationStatus = page => page.evaluate(async () =>
+  (await import('./js/services/config.js')).getGenerationApplicationStatus());
 const status = page => page.locator('p[role="status"][aria-live="polite"][aria-atomic="true"]');
 const generate = page => page.getByRole('button', { name: 'Generate Diagram', exact: true });
 const prepare = async (page, baseURL) => {
@@ -101,6 +103,7 @@ test('Generate reports real cold/warm stages and preserves the successful Result
   const cold = await record(page, testInfo, 'cold');
   expectRenderStages(cold);
   expect(cold.workers.constructions).toBe(1);
+  expect((await applicationStatus(page)).status).toBe('clean');
 
   await resetObservations(page);
   await generate(page).click();
@@ -110,9 +113,11 @@ test('Generate reports real cold/warm stages and preserves the successful Result
   expect(warm.statuses.map(entry => entry.value)).not.toContain('Preparing diagram runtime (first use)...');
   expect(warm.workers.constructions).toBe(1);
 
-  await page.evaluate(() => {
+  await page.evaluate(async () => {
     const app = window.__GBDRAW_APP__;
     window.successfulResults = app.results;
+    const config = await import('./js/services/config.js');
+    window.appliedBeforeCancel = config.canonicalRenderArtifactOwner.capture().appliedGenerationIntent;
     window.__GBDRAW_TEST_HOOKS__.beforeDiagramGenerationResponse = () => new Promise(resolve => {
       window.releaseFeedbackResponse = resolve;
     });
@@ -135,6 +140,9 @@ test('Generate reports real cold/warm stages and preserves the successful Result
     preserved: window.__GBDRAW_APP__.failedGeneratePreservedResult
   }))).toEqual({ status: 'Canceled.', sameResult: true, preserved: true });
   await record(page, testInfo, 'canceled');
+  expect((await applicationStatus(page)).status).toBe('clean');
+  expect(await page.evaluate(async () => window.appliedBeforeCancel ===
+    (await import('./js/services/config.js')).canonicalRenderArtifactOwner.capture().appliedGenerationIntent)).toBe(true);
 
   await setInput('invalid GenBank');
   await generate(page).click();
@@ -143,6 +151,9 @@ test('Generate reports real cold/warm stages and preserves the successful Result
   await expect(generate(page)).toBeEnabled();
   expect(await page.evaluate(() => window.__GBDRAW_APP__.results === window.successfulResults)).toBe(true);
   await record(page, testInfo, 'error');
+  expect((await applicationStatus(page)).status).not.toBe('clean');
+  expect(await page.evaluate(async () => window.appliedBeforeCancel ===
+    (await import('./js/services/config.js')).canonicalRenderArtifactOwner.capture().appliedGenerationIntent)).toBe(true);
 
   await setInput(source);
   await page.setViewportSize({ width: 390, height: 844 });
@@ -150,6 +161,7 @@ test('Generate reports real cold/warm stages and preserves the successful Result
   await generate(page).click();
   await awaitSuccess(page);
   expectRenderStages(await record(page, testInfo, 'retry-mobile'));
+  expect((await applicationStatus(page)).status).toBe('clean');
   await screenshot(page, testInfo, 'ready-mobile');
   expect(external).toEqual([]);
 });
@@ -195,4 +207,31 @@ test('Linear comparison preparation, real search counts, cache reuse, and no-com
   expectRenderStages(none);
   expect(none.statuses.some(entry => /comparison|LOSAT/.test(entry.value))).toBe(false);
   expect(external).toEqual([]);
+});
+
+
+test('S03 Linear LOSAT intent follows successful Result and task reversal', async ({ page, baseURL }) => {
+  test.setTimeout(180000);
+  await prepare(page,baseURL);
+  await page.evaluate(async content => {
+    const app=window.__GBDRAW_APP__;
+    app.mode='linear';await window.Vue.nextTick();
+    while(app.linearSeqs.length<2) app.addLinearSeq();
+    for(let i=0;i<2;i++) app.setLinearSeqPrimaryFile(i,'gb',new File([content],`record-${i}.gbk`,{type:'text/plain'}));
+    await app.setLinearComparisonGlobalAction('losat');await window.Vue.nextTick();
+  },source);
+  await page.getByRole('combobox', { name: 'LOSAT execution', exact: true }).selectOption('serial');
+  await generate(page).click();
+  await expect.poll(()=>page.evaluate(()=>window.feedbackEvents.some(event=>event.name==='generate.completed')),
+    {timeout:180000}).toBe(true);
+  expect(await page.evaluate(()=>window.__GBDRAW_APP__.errorLog?.summary||'')).toBe('');
+  expect((await applicationStatus(page)).status).toBe('clean');
+  await page.evaluate(async()=>{
+    const {state}=await import('./js/state.js');state.losat.blastn.task='blastn';await window.Vue.nextTick();
+  });
+  expect((await applicationStatus(page)).status).toBe('pending');
+  await page.evaluate(async()=>{
+    const {state}=await import('./js/state.js');state.losat.blastn.task='megablast';await window.Vue.nextTick();
+  });
+  expect((await applicationStatus(page)).status).toBe('clean');
 });

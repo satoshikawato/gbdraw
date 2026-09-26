@@ -22,6 +22,7 @@ import {
   buildRunStateData,
   buildUiStateData,
   canonicalRenderArtifactOwner,
+  commitAppliedGenerationFields,
   exportSession,
   getCommittedCanonicalSession,
   getCommittedCanonicalRenderRequest,
@@ -1224,6 +1225,7 @@ export const createAppSetup = () => {
     previewRuntime
   });
   const svgActions = createSvgStyles({
+    commitAppliedGenerationFields,
     state,
     rulePreparation,
     watch,
