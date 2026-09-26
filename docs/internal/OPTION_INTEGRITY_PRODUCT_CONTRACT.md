@@ -5,7 +5,7 @@ Status: active Product authority
 ## Authority metadata
 
 - Contract ID: `OIPC`
-- Contract revision: `16`
+- Contract revision: `17`
 - Product Decision Owner: `satoshikawato`
 - Decision date: `2026-08-28`
 - Decision source: explicit Product Decision Owner selection of one (`1`) after
@@ -25,8 +25,9 @@ Status: active Product authority
 - Revision 2 change: `PD-OI-007`, as recorded below
 - Additional approved decision IDs: `PD-OI-018`, `PD-OI-019`, `PD-OI-020`,
   `PD-OI-021`, `PD-OI-022`, `PD-OI-023`, `PD-OI-024`, `PD-OI-025`,
-  `PD-OI-026`, `PD-OI-027`, `PD-OI-028`, `PD-OI-029`, `PD-OI-030`, and
-  `PD-OI-031`, `PD-OI-032`, `PD-OI-033`, `PD-OI-034`, and `PD-OI-035`
+  `PD-OI-026`, `PD-OI-027`, `PD-OI-028`, `PD-OI-029`, `PD-OI-030`,
+  `PD-OI-031`, `PD-OI-032`, `PD-OI-033`, `PD-OI-034`, `PD-OI-035`,
+  `PD-OI-036`, `PD-OI-037`, `PD-OI-038`, and `PD-OI-039`
 - Revision 3 addition: `PD-OI-018`, accepted by `satoshikawato` on
   `2026-09-13` after confirming the complete record/search outcome, no feature
   retirement, and the runtime/memory cost of complete comparisons. The initial
@@ -121,6 +122,18 @@ Status: active Product authority
   scope of these replacements. `PD-OI-026`, `PD-OI-030`, `PD-OI-035`, and
   other decisions retain their scope. Dependent runtime requires this
   authority merged into its base; this amendment contains no runtime.
+- Revision 17 changes: `satoshikawato` signed five complete
+  `PRODUCT_DECISION` responses for issue `#602` on `2026-09-26`:
+  01=B and 02–05=A. `PD-OI-024` scenario revision `2` replaces only the
+  D1 Web fresh/reset default and retains D2-P/D3-A. New `PD-OI-036` through
+  `PD-OI-039` serialize the other four receipts. `PD-OI-035` scenario
+  revision `3` retains its independent canvas-interaction guarantees and
+  supersedes only the scenario-2 mobile coverage exception and close-review
+  continuation, using the signed review-presentation receipt in `PD-OI-039`.
+  The five receipts below preserve all nine supplied fields exactly. Earlier
+  unaffected outcomes retain their scope. This amendment contains no runtime;
+  dependent runtime requires all five outcomes and the limited supersession
+  merged into its base.
 - Records remaining `EVIDENCE_REQUIRED`: none
 - Excluded records: none
 
@@ -909,15 +922,19 @@ corrected. Passing evidence does not make incorrect behavior normative.
 ### PD-OI-024: Linear Definition alignment and automatic Replicon visibility
 
 - Concern key: `linear.definition-display`
-- Scenario revision: `1`
+- Scenario revision: `2`
+- Supersedes: `PD-OI-024`, scenario revision `1`, only D1's Web fresh/reset
+  Lock=false default; D2-P and D3-A remain required in full.
 - Status: `ACCEPTED`
-- Selected outcomes: `D1-A`, `D2-P`, `D3-A`
+- Selected outcomes: `D1-B-WEB-LOCKED-FRESH`, `D2-P`, `D3-A`
 - Normative outcome:
-  1. **D1-A — 共通幅の中央:** Lock Definition Column=falseの既定配置では、
-     同じ開始位置の行のDefinitionを共通幅の中心にそろえる。行を移動すると
-     対応するDefinitionも追従する。単一／複数／混在行に適用する。
-     Lock=trueの共通左列を維持する。既にサポートする明示的な`text_anchor`
-     設定は、その既存の受入範囲で維持し、新しい経路へ拡張しない。
+  1. **D1-B-WEB-LOCKED-FRESH:** Web fresh/reset selects Lock Definition
+     Column=true. Lock=true retains the common left edge and configured gap;
+     explicit Lock=false retains common-width centering and row following.
+     Single, shared, and mixed rows, the existing accepted `text_anchor`
+     domain, explicit saved values, supported old omission meanings, the
+     saved Result on Load, and CLI/Python omitted defaults remain supported.
+     Linear Layout always explains ON/OFF and application on Generate.
   2. **D2-P — 保存値を保持:** 保存済みSubtitleは、自動／手入力を推測したり、
      Replicon名と文字列が一致したりすることを理由に削除しない。
      読み込みだけでは保存Resultを変えず、Generateで新しい表示契約を適用する。
@@ -929,26 +946,25 @@ corrected. Passing evidence does not make incorrect behavior normative.
      organelleの表記は既存の自動Subtitle表記を引き継ぐ。
      Web・CLI・Pythonの共通描画に適用し、Show Repliconの既定値falseを維持する。
      自動名のオン／オフは手入力Subtitleの表示を変更しない。
-- Decision source: The complete `PRODUCT_DECISION` response from
-  `satoshikawato` dated `2026-09-19` for issues `#543` and `#545`, reproduced
-  below.
-  The receipt below preserves the supplied fields without translating or
-  extending the rationale, preservation, retirement, risk, owner or date.
-  This is a reviewable serialization in the existing static authority document,
-  not a new decision store or a `BD-###` record. It cannot authorize dependent
-  runtime until merged into that runtime's base.
+- Decision source: The complete issue `#602` response for
+  `linear.definition-display`, scenario revision `2`, signed in full by
+  `satoshikawato` on `2026-09-26`, reproduced below without changing any
+  supplied field. The retained D2-P/D3-A clauses above are unchanged from
+  scenario revision `1`. This is serialization in the existing static
+  authority document; dependent runtime requires it merged into its base.
+- Acceptance contracts: `OIC-004`, `OIC-005`, `OIC-006`, `OIC-023`.
 
 ```json
 {
   "concern": "linear.definition-display",
-  "scenarioRevision": 1,
-  "choices": ["D1-A", "D2-P", "D3-A"],
-  "rationale": "名前の比較をしやすくし、自動の生物学的名称を一つの表示スイッチで制御する。",
-  "mustPreserve": "手入力Subtitle、保存済みSessionの値とプレビュー、Lock=trueの共通左列、行共通・レコード固有ラベルの区別。",
-  "mayRetire": "Replicon/Organelle名のSubtitleへの自動コピー、Lock=falseで各Definition自身の幅に基づく既定横配置。",
-  "acceptedResidualRisk": "保存済みの自動Subtitleはオフでも残りうる。再Generate後の配置は保存済みプレビューと変わりうる。",
+  "scenarioRevision": 2,
+  "choice": "A / D1-B-WEB-LOCKED-FRESH; retain D2-P and D3-A",
+  "rationale": "Webで新しく作るLinear比較図ではDefinitionを共通左列にそろえ、行のalignやoffset後も名前を比較しやすくする。",
+  "mustPreserve": "Lock=trueの共通左端とconfigured gap、明示Lock=falseの共通幅中央とrow追従、単一/共有/混在行、既存text_anchorの受入範囲、保存Sessionの明示値と対応済み旧省略意味、読込時の保存Result、CLI/Python省略default。PD-OI-024のD2-Pの保存/手入力Subtitleと継承・ラベル区別、およびD3-AのReplicon/Organelle選択順・独立制御・既定falseをすべて維持する。Linear LayoutでON/OFFの違いとGenerate適用を常時説明する。",
+  "mayRetire": "D1-Aのうち、Web fresh/resetがLock=falseを初期値として選ぶ部分だけ。OFFの明示操作とCLI/Python既定は退役しない。",
+  "acceptedResidualRisk": "新しいWeb図のDefinition外観が従来のfresh図と変わり、Definitionがrowに追従しなくなる。利用者はOFFを選べ、既存Sessionの値と保存Resultは勝手に変更しない。",
   "owner": "satoshikawato",
-  "decisionDate": "2026-09-19"
+  "decisionDate": "2026-09-26"
 }
 ```
 
@@ -1340,26 +1356,152 @@ corrected. Passing evidence does not make incorrect behavior normative.
 ### PD-OI-035: Similarity-alignment canvas interaction
 
 - Concern key: `web.similarity-alignment.canvas-interaction`
-- Scenario revision: `2`
-- Supersedes: `PD-OI-035`, scenario revision `1` (`A / FLOATING_GUIDE_CANVAS_PICK`).
+- Scenario revision: `3`
+- Supersedes: `PD-OI-035`, scenario revision `2`
+  (`A / RETAIN_MOBILE_PALETTE_COVERAGE`), only its permission for review
+  coverage of the 390 px Preview, retirement of simultaneous canvas picking
+  and pan/zoom, and continuation requiring review closure to inspect the
+  diagram. Those permissions are no longer active.
 - Status: `ACCEPTED`
-- Selected outcome: `A / RETAIN_MOBILE_PALETTE_COVERAGE`
-- Normative outcome: exactly the approved `PRODUCT_DECISION` receipt below.
-- Decision source: The complete `PRODUCT_DECISION` response supplied by
-  `satoshikawato` on `2026-09-25` for the issue `#586` follow-up. This
-  serialization adds no terms to that response.
+- Normative outcome: the independent scenario-2 preservation requirements
+  remain unchanged:
+
+  正確な feature identity に基づく選択、候補一覧からの keyboard radio 選択と Skip、390 px での操作と適切な focus、描画されない候補の一覧からの選択、図上位置だけによる自動選択の禁止、デスクトップでの canvas 選択と手動 pan／zoom、レビューを閉じた後のプレビュー、ガイド・番号・draft が Result・download・Session に混入しないこと。
+
+  The compact review presentation, visible canvas and simultaneous canvas
+  interaction are governed by `PD-OI-039`, scenario revision `1`, in full.
+  This record and `PD-OI-039` are jointly required; presentation does not
+  replace identity, keyboard/Skip, non-rendered-candidate, desktop canvas,
+  focus, or overlay-exclusion guarantees. No candidate may be selected from
+  canvas position alone. The previous mobile coverage rationale and risk
+  are retained in Git history, not as an active coverage exception.
+- Decision source: the signed issue `#602` response for
+  `web.similarity-alignment.review-presentation`, scenario revision `1`,
+  reproduced in `PD-OI-039`, supplies exactly the rationale, preservation,
+  limited retirement, accepted residual risk, owner, and date for this
+  limited supersession. No separate human choice or rationale is inferred
+  for the canvas-interaction concern. Other transform, plan, Reset, History,
+  and alignment outcomes, including `PD-OI-031`/`PD-OI-034`, retain their scope.
+  Dependent runtime requires this supersession merged into its base.
+- Acceptance contracts: `OIC-006`, `OIC-013`, `OIC-014`, `OIC-026`.
+
+### PD-OI-036: Linear record-label Auto visibility and disclosure
+
+- Concern key: `linear.record-label-auto-visibility`
+- Scenario revision: `2`
+- Status: `ACCEPTED`
+- Selected outcome: `B / AUTO-FRESH-RESET-WITH-DISCLOSURE`
+- Scenario revision `2` is the signed scenario; no prior record for this
+  concern exists in the base Contract. Fresh/reset remains independently
+  Auto for Accession and Length; default Show (01-A) is not selected.
+- Normative outcome: exactly the signed `PRODUCT_DECISION` receipt below.
+- Decision source: the complete issue `#602` response signed in full by
+  `satoshikawato` on `2026-09-26`. This serialization preserves all nine
+  supplied fields without translation or extension. It is not a new decision
+  store or a `BD-###` record and cannot authorize dependent runtime until
+  merged into its base.
+- Acceptance contracts: `OIC-004`, `OIC-005`, `OIC-006`, `OIC-022`.
 
 ```json
 {
-  "concern": "web.similarity-alignment.canvas-interaction",
+  "concern": "linear.record-label-auto-visibility",
   "scenarioRevision": 2,
-  "choice": "A / RETAIN_MOBILE_PALETTE_COVERAGE",
-  "rationale": "390 px の画面では、候補の根拠と Select・Skip・Apply・Cancel を読んで操作できることを優先する。レビュー中に図を同時に見る必要がある場合は、レビューを閉じてプレビューを確認する。",
-  "mustPreserve": "正確な feature identity に基づく選択、候補一覧からの keyboard radio 選択と Skip、390 px での操作と適切な focus、描画されない候補の一覧からの選択、図上位置だけによる自動選択の禁止、デスクトップでの canvas 選択と手動 pan／zoom、レビューを閉じた後のプレビュー、ガイド・番号・draft が Result・download・Session に混入しないこと。",
-  "mayRetire": "390 px でパレットを開いている間の、プレビューを遮らずに表示する Session 04 の受け入れ条件、および同時に図上候補選択・手動 pan／zoom を行えること。",
-  "acceptedResidualRisk": "390×740 px ではパレットが x=12–378、y=12–728 を占め、開いている間はプレビューの大部分を確認・操作できない。候補一覧による選択は可能だが、図を再確認するにはレビューを閉じる必要がある。",
+  "choice": "B / AUTO-FRESH-RESET-WITH-DISCLOSURE",
+  "rationale": "共有行の図では簡潔な既定表示を維持し、情報が非表示になる理由とShowへの変更先を配置操作の場所で明示する。",
+  "mustPreserve": "fresh/resetの独立Auto、Show/Hideの明示値、diagram-wide Auto解決、休眠行除外、既存Sessionと保存Result、Undo/Redo、GenerateとExportの区別。Auto非表示時はLayoutにも理由・対象field・図全体の範囲・次回Generateの効果・Record Labelsへの変更先を表示する。",
+  "mayRetire": "なし。",
+  "acceptedResidualRisk": "共有行でAccession/Lengthが非表示になる結果自体は残る。説明を見落とす可能性があるため、layout操作場所とLabelsの両方で実効値と変更先を示す。",
   "owner": "satoshikawato",
-  "decisionDate": "2026-09-25"
+  "decisionDate": "2026-09-26"
+}
+```
+
+### PD-OI-037: Derived edit-application feedback
+
+- Concern key: `web.edit-application-feedback`
+- Scenario revision: `1`
+- Status: `ACCEPTED`
+- Selected outcome: `A / DERIVED-APPLICATION-STATUS`
+- Normative outcome: exactly the signed `PRODUCT_DECISION` receipt below.
+- Decision source: the complete issue `#602` response signed in full by
+  `satoshikawato` on `2026-09-26`. This serialization preserves all nine
+  supplied fields without translation or extension. It is not a new decision
+  store or a `BD-###` record and cannot authorize dependent runtime until
+  merged into its base.
+- Acceptance contracts: `OIC-005`, `OIC-013`, `OIC-014`, `OIC-024`.
+
+```json
+{
+  "concern": "web.edit-application-feedback",
+  "scenarioRevision": 1,
+  "choice": "A / DERIVED-APPLICATION-STATUS",
+  "rationale": "利用者が編集後の図と次回Generateの変更を区別できるよう、操作の適用タイミングと生成設定の未適用状態を事実から表示する。",
+  "mustPreserve": "操作単位のLive edit、Applies on Generate、Apply requiredを区別し、左Palette Instant Previewと右Alignment reviewを例外なく正しく分類する。canonical即時commitと必要時自動rerender、reviewのlocal draft、target-only操作とpending設定の分離、対応済みoverride継承、atomic Generate、失敗/Cancel/stale時の旧ResultとHistory、Undo/Redo、SessionのResult/draft分離、Exportの現在Result出力を維持する。Pendingとlive applying/errorを独立に示し、invalid/unknownをAppliedとしない。Generateによる配置再計算とzoom reset、Save/Exportの意味を事前に説明する。",
+  "mayRetire": "製品の適用タイミング・保存・復旧・編集機能は退役しない。全DOM座標や手動位置を再生成後にも無条件に保持する保証は新設しない。",
+  "acceptedResidualRisk": "生成intent比較の漏れや比較基準の誤更新は誤表示を生みうる。生成・live commit・履歴・Sessionの一致テストを必須とし、根拠不足はunknownとして表示する。Status目的のWorker呼出、genome byte読取り/hash、SVG/checkpoint cloneは受け入れない。",
+  "owner": "satoshikawato",
+  "decisionDate": "2026-09-26"
+}
+```
+
+### PD-OI-038: Compact Editor presentation
+
+- Concern key: `web.editor.compact-presentation`
+- Scenario revision: `1`
+- Status: `ACCEPTED`
+- Selected outcome: `A / DOCKED-COMPACT-EDITOR`
+- Normative outcome: exactly the signed `PRODUCT_DECISION` receipt below.
+- Decision source: the complete issue `#602` response signed in full by
+  `satoshikawato` on `2026-09-26`. This serialization preserves all nine
+  supplied fields without translation or extension. It is not a new decision
+  store or a `BD-###` record and cannot authorize dependent runtime until
+  merged into its base.
+- Acceptance contracts: `OIC-006`, `OIC-013`, `OIC-014`, `OIC-025`.
+
+```json
+{
+  "concern": "web.editor.compact-presentation",
+  "scenarioRevision": 1,
+  "choice": "A / DOCKED-COMPACT-EDITOR",
+  "rationale": "狭いPreviewでも即時編集の変化を図で確認できるよう、図とEditorを上下の領域へ配置する。",
+  "mustPreserve": "同じSVGとEditor、全tabと同期可用性、canonical live commitと必要時rerender、既存History/Session/Export、camera操作、keyboard、Close/Escapeのvisibility-only意味、選択tab、Result置換/失敗復旧。390×844/740では利用可能幅全体かつ高さ200px以上のcanvasを確保し、Editor内容を独立scrollさせ、Close/headerとtoolbarを操作可能にする。短いviewport/soft keyboardでは全操作へscrollで到達できる。wideのside drawerを維持する。",
+  "mayRetire": "狭いPreviewでEditorが横から全面高さを覆う表示配置だけ。編集機能や保存意味は退役しない。",
+  "acceptedResidualRisk": "上下分割で図とEditor listの縦領域が短くなり、list scrollが増える。実操作のpointer/keyboard/browser検証を必須とし、複製Preview・SVG clone・第二editorによる回避は受け入れない。",
+  "owner": "satoshikawato",
+  "decisionDate": "2026-09-26"
+}
+```
+
+### PD-OI-039: Compact Similarity-alignment review presentation
+
+- Concern key: `web.similarity-alignment.review-presentation`
+- Scenario revision: `1`
+- Status: `ACCEPTED`
+- Selected outcome: `A / DOCKED-COMPACT-ALIGNMENT-REVIEW`
+- Supersession scope: replaces only the scenario-2 mobile coverage
+  exception and close-review continuation in `PD-OI-035`; its independent
+  guarantees remain jointly required in scenario revision `3`. Narrow free
+  drag and concurrent Editor opening during review may retire only as stated
+  in this receipt. Wide drag and non-modal canvas interaction remain required.
+- Normative outcome: exactly the signed `PRODUCT_DECISION` receipt below.
+- Decision source: the complete issue `#602` response signed in full by
+  `satoshikawato` on `2026-09-26`. This serialization preserves all nine
+  supplied fields without translation or extension. It is not a new decision
+  store or a `BD-###` record and cannot authorize dependent runtime until
+  merged into its base.
+- Acceptance contracts: `OIC-006`, `OIC-013`, `OIC-014`, `OIC-026`.
+
+```json
+{
+  "concern": "web.similarity-alignment.review-presentation",
+  "scenarioRevision": 1,
+  "choice": "A / DOCKED-COMPACT-ALIGNMENT-REVIEW",
+  "rationale": "狭いPreviewでもalignment候補をcanvasで確認できるよう、reviewを図の下段に固定し、候補比較へ操作を集中させる。",
+  "mustPreserve": "PD-OI-031/034と現行transform/plan/reset/historyのすべての結果。resolvedの通常自動Apply、ambiguousと明示reviewのlocal draft、独立Select/Skip、候補根拠とreference identity、1つのMatch reference directionと各targetの結果方向、canvas操作、local編集でWorkerを呼ばないこと、Applyの共有Python batch validationとatomic Result/History。失敗時draft/error/retry、Cancel/stale/superseded時の以前のResult/orientation/History、Session/regeneration/Export、focus復帰を維持する。390×844/740では利用可能幅全体かつ高さ200px以上のcanvasを確保し、候補listをscroll、Apply/Cancelを到達可能にする。狭いreview開始時はEditorをownerで閉じ、tabを保持し、review中は理由付きでopenをdisable、終了後は明示reopen可能。wideのdragと非モーダルcanvasを維持する。",
+  "mayRetire": "狭いPreviewでreviewを自由にdragする操作、およびreview中にEditorを同時openする継続だけ。候補や方向の選択、Apply前draft、failure/retryは退役しない。",
+  "acceptedResidualRisk": "狭いreviewではlist scrollが増え、自由に位置を動かせなくなる。開始時Editorは閉じるがtabは保持し、終了後再openできる。位置変更で候補draftやResultを変えないことをbrowserで確認する。",
+  "owner": "satoshikawato",
+  "decisionDate": "2026-09-26"
 }
 ```
 
@@ -1388,6 +1530,16 @@ corrected. Passing evidence does not make incorrect behavior normative.
 | `OIC-019` | Completed raw searches survive downstream cancellation for matching retries; member-only edits do not rerun LOSAT. Raw-setting/input changes, Clear Cache, and Session/History replacement prevent incompatible reuse; the committed Result remains intact. |
 | `OIC-020` | Linear File cards expose common Depth TSV assignment without expanding records. File-level apply and clear update only that File and logical series as one undoable operation; empty, common, and mixed states remain truthful. Per-record sparse overrides, logical indexes, canonical requests, Session replay, and regeneration remain unchanged. |
 | `OIC-021` | Feature-popup record rotation uses the explicit popup target and source coordinates, changes only one effectively circular record through a target-only atomic transaction, preserves pending edits and the prior artifact on every no-op path, round-trips the absolute transform, and reuses compatible LOSAT evidence without additional executor jobs. |
+| `OIC-022` | `PD-OI-036`: independent fresh/reset Auto, explicit Show/Hide, diagram-wide resolution excluding dormant rows, saved Session/Result and Undo/Redo remain supported; Layout and Labels disclose the effective Auto result, affected fields, reason, scope, next Generate effect, and route to Record Labels. |
+| `OIC-023` | `PD-OI-024`: only Web fresh/reset selects Lock ON; explicit OFF, saved values and supported omission meanings, saved Result on Load, CLI/Python defaults, accepted anchors, D2-P and D3-A remain supported. ON/OFF and Generate application are always explained in Linear Layout. |
+| `OIC-024` | `PD-OI-037`: operation-level Live edit, Applies on Generate, and Apply required are truthful, including Palette Instant Preview and Alignment review. Pending and live applying/error are independent; invalid/unknown is never Applied. Generate/live commit/History/Session observations agree, with no status-only Worker, genome-byte read/hash, or SVG/checkpoint clone. |
+| `OIC-025` | `PD-OI-038`: one SVG and Editor retain live commit/rerender, all tabs, availability, History/Session/Export, camera, keyboard, visibility-only Close/Escape, selected tab and Result recovery. At 390×844/740 the canvas uses the available full width and at least 200 px height; content scroll, reachable header/Close/toolbar, short-viewport/soft-keyboard access, and wide side drawer remain required. Pointer/keyboard/browser verification is required; duplicated Preview/SVG/editor is not accepted. |
+| `OIC-026` | `PD-OI-035` and `PD-OI-039`: identity, keyboard Select/Skip, non-rendered candidates, no position-only selection, desktop canvas, focus and transient overlay exclusion remain required with all PD-OI-031/034 outcomes. Compact review retains visible, operable canvas at full available width and at least 200 px height at 390×844/740, scrollable candidates and reachable Apply/Cancel, local no-Worker draft edits, atomic batch validation, failure/error/retry and artifact/orientation/History recovery. Narrow review closes Editor through its owner while retaining tab, disables reopening with a reason until review ends, then permits explicit reopen; wide drag remains. Browser verification must show presentation changes leave draft and Result unchanged. |
+
+These new acceptance entries are obligations for dependent runtime work, not
+claims of completed runtime or browser verification by this authority amendment.
+The signed receipts remain the complete outcome; existing acceptance contracts
+and independent preserved guarantees remain jointly required.
 
 ### OIC-020 required regression coverage
 
