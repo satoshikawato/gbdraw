@@ -106,6 +106,7 @@ from .prepared import (
     resolve_feature_inputs,
 )
 from .record_planning import (
+    project_source_bound_comparisons,
     ResolvedRecordCollection,
     ResolvedRecordDisplay,
     _detected_topology,
@@ -1578,6 +1579,7 @@ def plan_linear_request(
             records=collection.records,
             layout=resolved_layout,
         )
+        resolved_options = project_source_bound_comparisons(resolved_options, collection)
         materialized_request = (
             unresolved_request
             if _is_materialized_exact_one_request(unresolved_request)

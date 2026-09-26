@@ -133,9 +133,14 @@ export const normalizeUserFacingError = (
   }
 
   const type = safeErrorText(error.type || error.name || error.stage, { limit: 120 });
+  const primaryMessage = error.summary || error.message;
+  // A PythonError may contain only its traceback. Keep the final exception,
+  // while continuing to suppress diagnostic frames and stderr tracebacks.
+  const pythonException = typeof primaryMessage === 'string' && /^Traceback/m.test(primaryMessage)
+    ? primaryMessage.split(/\r?\n/).filter((line) => /^[\w.]+(?:Error|Exception):/.test(line)).at(-1)
+    : null;
   const message = safeErrorText(
-    error.summary ||
-      error.message ||
+    pythonException || primaryMessage ||
       lastNonemptyLine(error.stderr) ||
       lastNonemptyLine(error.stdout) ||
       error.reason ||

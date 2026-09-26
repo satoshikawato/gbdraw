@@ -1,3 +1,6 @@
+import { plainTextLinearRecordLabel } from './linear-comparisons.js';
+import { canonicalRecordReverseComplement } from './record-display-options.js';
+import { validateSimilarityAlignmentResetReceipt } from '../services/session-active-config-contract.js';
 import {
   featureIdentity,
   orthogroupIdStatus
@@ -166,7 +169,7 @@ const reviewRows = (response, request, displayFacts, recordLabels) => response.r
         ? reviewReasonLabels[reason] || rationaleLabels[reason] : 'Unchanged',
       recommendedKey,
       recommendationReasonLabel: recommendedKey ? reviewReasonLabels[reason] : null,
-      choice: selectedAnchor
+      choice: record.kind === 'ambiguous' ? null : selectedAnchor
         ? { kind: 'select', candidateKey: anchorKey(selectedAnchor) }
         : { kind: 'skip', candidateKey: null },
       unchanged: !selectedAnchor,
@@ -195,11 +198,7 @@ const successfulSummary = (plan, reversed) => {
   });
 };
 
-const baseReverseComplement = (record) => Boolean(
-  record?.region
-    ? record.region.reverseComplement
-    : record?.presentation?.reverseComplement
-);
+const baseReverseComplement = canonicalRecordReverseComplement;
 
 const inspectActivePlan = (plan, linearSeqs) => {
   if (!plan || plan.schema !== 2 || !Array.isArray(plan.records)) return null;
@@ -365,10 +364,147 @@ const validatePlan = (value, response, path) => {
   return { schema: 2, groupId: raw.groupId, reference: raw.reference, records };
 };
 
-const validateResolution = (value, request) => {
+const validateProjection = (value, request) => {
+  if (value === null) return null;
+  const raw = exactObject(value, ['binding', 'geometryOrientations', 'records'], 'alignment projection');
+  const keys = request.records.map(({ recordKey }) => recordKey);
+  if (!/^[a-f0-9]{64}$/.test(raw.binding) || !Array.isArray(raw.records)
+    || raw.records.length !== keys.length) throw new Error('Invalid alignment projection binding or coverage.');
+  exactObject(raw.geometryOrientations, keys, 'alignment projection.geometryOrientations');
+  const known = new Set(request.members.map(({ anchor }) => anchorKey(anchor)));
+  const finite = (number) => { if (!Number.isFinite(number)) throw new Error('Nonfinite alignment placement.'); };
+  raw.records.forEach((record, index) => {
+    exactObject(record, ['recordKey', 'beforeReverseComplement', 'base', 'beforeAxisY',
+      'beforeAnchors', 'variants'], 'alignment projection record');
+    if (record.recordKey !== keys[index] || typeof raw.geometryOrientations[record.recordKey] !== 'boolean'
+      || record.beforeReverseComplement !== baseReverseComplement(request.records[index])) {
+      throw new Error('Alignment projection changed record orientation binding.');
+    }
+    exactObject(record.base, ['x', 'y'], 'alignment projection base');
+    [record.base.x, record.base.y, record.beforeAxisY].forEach(finite);
+    const validateAnchors = (anchors, variant) => {
+      if (!Array.isArray(anchors)) throw new Error('Alignment projection anchors must be an array.');
+      const identities = new Set();
+      anchors.forEach((entry) => {
+        exactObject(entry, variant ? ['anchor', 'displayedStrand', 'displayCenter', 'centerX']
+          : ['anchor', 'centerX'], 'alignment projection anchor');
+        const anchor = validateAnchor(entry.anchor, 'alignment projection anchor identity');
+        const key = anchorKey(anchor);
+        if (anchor.recordKey !== record.recordKey || !known.has(key) || identities.has(key)) {
+          throw new Error('Alignment projection changed anchor coverage.');
+        }
+        identities.add(key);
+        if (variant) {
+          if (![null, -1, 1].includes(entry.displayedStrand)
+            || (entry.displayCenter === null) !== (entry.centerX === null)) {
+            throw new Error('Alignment projection contains invalid strand or center facts.');
+          }
+          if (entry.displayCenter !== null) finite(entry.displayCenter);
+        }
+        if (!variant || entry.centerX !== null) finite(entry.centerX);
+      });
+      return identities;
+    };
+    const beforeAnchors = validateAnchors(record.beforeAnchors, false);
+    if (!Array.isArray(record.variants) || record.variants.length !== 2) {
+      throw new Error('Alignment projection requires both absolute directions.');
+    }
+    record.variants.forEach((variant, direction) => {
+      exactObject(variant, ['reverseComplement', 'axisY', 'anchors'], 'alignment projection variant');
+      if (variant.reverseComplement !== Boolean(direction)) throw new Error('Invalid alignment direction variant.');
+      finite(variant.axisY);
+      const anchors = validateAnchors(variant.anchors, true);
+      const expected = request.members.filter(({ anchor }) => anchor.recordKey === record.recordKey);
+      if (anchors.size !== expected.length || expected.some(({ anchor }) => !anchors.has(anchorKey(anchor)))) {
+        throw new Error('Alignment projection omitted a source anchor.');
+      }
+      if (variant.reverseComplement === record.beforeReverseComplement
+        && variant.anchors.some(({ anchor, centerX }) => (centerX !== null) !== beforeAnchors.has(anchorKey(anchor)))) {
+        throw new Error('Alignment projection changed current anchor mappability.');
+      }
+    });
+  });
+  return raw;
+};
+
+// One transient resolver is shared by local previews and final helper admission.
+export const projectSimilarityAlignmentDirections = ({ resolution, intent, expectedBinding, choices = [] }) => {
+  const facts = resolution?.projection;
+  if (!facts) throw new Error('Source-bound alignment projection facts are required.');
+  if (typeof expectedBinding !== 'string') throw new Error('An explicit alignment binding is required.');
+  if (facts.binding !== expectedBinding) return deepFreeze({ status: 'stale', reason: 'binding_changed', binding: facts.binding });
+  const mode = intent?.mode;
+  if (!['keep', 'right', 'left', 'custom'].includes(mode)) throw new Error('Invalid alignment direction mode.');
+  exactObject(intent, mode === 'custom' ? ['mode', 'byRecordKey'] : ['mode'], 'alignment direction intent');
+  if (mode === 'custom') {
+    if (!isObject(intent.byRecordKey) || Object.entries(intent.byRecordKey).some(([key, value]) => (
+      !facts.records.some(({ recordKey }) => recordKey === key) || !['keep', 'right', 'left'].includes(value)
+    ))) throw new Error('Invalid Custom alignment choices.');
+  }
+  if (!Array.isArray(choices)) throw new Error('Alignment choices must be an array.');
+  const selectedChoices = new Map();
+  choices.forEach((choice) => {
+    exactObject(choice, ['recordKey', 'kind', 'anchor'], 'local alignment choice');
+    const record = resolution.records.find(({ recordKey }) => recordKey === choice.recordKey);
+    if (!record || choice.recordKey === resolution.reference.recordKey || selectedChoices.has(choice.recordKey)
+      || !['select', 'skip'].includes(choice.kind)) throw new Error('Invalid local alignment choice.');
+    if (choice.kind === 'skip' ? choice.anchor !== null : !record.candidates.some((candidate) => (
+      candidate.usable && sameJson(candidate.anchor, validateAnchor(choice.anchor, 'local alignment anchor'))
+    ))) throw new Error('Local alignment selection is not a usable Python candidate.');
+    selectedChoices.set(choice.recordKey, choice);
+  });
+  const records = facts.records.map((fact, index) => {
+    const row = resolution.records[index];
+    const choice = selectedChoices.get(fact.recordKey);
+    const decision = choice
+      ? { status: choice.kind === 'select' ? 'aligned' : 'skipped', anchor: choice.anchor, rationale: 'skipped_by_user' }
+      : row.kind === 'ambiguous' ? { status: 'ambiguous', anchor: null, rationale: 'selection_required' } : row;
+    const current = fact.variants[Number(fact.beforeReverseComplement)];
+    const selected = decision.anchor === null ? null : current.anchors.find(({ anchor }) => sameJson(anchor, decision.anchor));
+    let exclusion = ['skipped', 'ambiguous'].includes(decision.status) ? decision.rationale : null;
+    if (!exclusion && (!selected || selected.centerX === null)) exclusion = 'unusable_anchor';
+    if (!exclusion && selected.displayedStrand === null) exclusion = 'unknown_strand';
+    const requested = mode === 'custom' ? intent.byRecordKey[fact.recordKey] || 'keep' : mode;
+    const flip = !exclusion && requested !== 'keep'
+      && selected.displayedStrand !== (requested === 'right' ? 1 : -1);
+    const afterReverseComplement = flip ? !fact.beforeReverseComplement : fact.beforeReverseComplement;
+    const variant = fact.variants[Number(afterReverseComplement)];
+    const afterAnchor = selected ? variant.anchors.find(({ anchor }) => sameJson(anchor, selected.anchor)) : null;
+    if (!exclusion && afterAnchor?.centerX === null) throw new Error('Requested direction makes the selected anchor unusable.');
+    return { recordKey: fact.recordKey, anchor: decision.anchor, status: decision.status,
+      beforeReverseComplement: fact.beforeReverseComplement, afterReverseComplement,
+      beforeArrow: selected?.displayedStrand ?? null, afterArrow: afterAnchor?.displayedStrand ?? null,
+      exclusion, beforeCenterX: fact.beforeAnchors.find(({ anchor }) => sameJson(anchor, decision.anchor))?.centerX ?? null,
+      afterCenterX: afterAnchor?.centerX ?? null,
+      translation: { x: fact.base.x, y: fact.base.y + fact.beforeAxisY - variant.axisY } };
+  });
+  const reference = records.find(({ recordKey }) => recordKey === resolution.reference.recordKey);
+  const fact = facts.records.find(({ recordKey }) => recordKey === reference.recordKey);
+  if (!Number.isFinite(reference.beforeCenterX) || !Number.isFinite(reference.afterCenterX)) {
+    throw new Error('The exact reference center is unavailable.');
+  }
+  const beforeX = reference.beforeCenterX + fact.base.x;
+  reference.translation.x = beforeX - reference.afterCenterX;
+  const deltaX = reference.translation.x - fact.base.x;
+  if (!Number.isFinite(deltaX) || records.some(({ translation }) => !Number.isFinite(translation.y))) {
+    throw new Error('Alignment correction is nonfinite.');
+  }
+  const signature = JSON.stringify({
+    records: records.map(({ recordKey, anchor, status, afterReverseComplement }) => ({ recordKey, anchor, status, afterReverseComplement })),
+    referenceBeforeX: beforeX, referenceDeltaX: deltaX
+  });
+  return deepFreeze({ status: 'projected', binding: facts.binding, records,
+    selectionComplete: records.every(({ status }) => status !== 'ambiguous'),
+    reference: { anchor: resolution.reference, beforeX, afterX: reference.afterCenterX + reference.translation.x, deltaX },
+    geometryValidated: records.every(({ recordKey, afterReverseComplement }) => (
+      facts.geometryOrientations[recordKey] === afterReverseComplement
+    )), signature });
+};
+
+export const validateSimilarityAlignmentResolution = (value, request) => {
   const raw = exactObject(value, [
     'schema', 'status', 'groupId', 'reference', 'referenceDisplayedStrand',
-    'referenceDisplayCenter', 'records', 'plan'
+    'referenceDisplayCenter', 'records', 'plan', 'projection'
   ], 'alignment helper response');
   if (raw.schema !== 2 || !['resolved', 'ambiguous'].includes(raw.status)
     || raw.groupId !== request.groupId || !Array.isArray(raw.records)
@@ -412,8 +548,26 @@ const validateResolution = (value, request) => {
     schema: 2, status: raw.status, groupId: raw.groupId, reference,
     referenceDisplayedStrand: raw.referenceDisplayedStrand,
     referenceDisplayCenter: raw.referenceDisplayCenter,
-    records, plan: null
+    records, plan: null, projection: validateProjection(raw.projection, request)
   };
+  response.projection?.records.forEach((fact, index) => {
+    const current = fact.variants[Number(fact.beforeReverseComplement)];
+    const candidates = records[index].candidates;
+    candidates.forEach((candidate) => {
+      const projected = current.anchors.find(({ anchor }) => sameJson(anchor, candidate.anchor));
+      if (!projected || projected.displayedStrand !== candidate.displayedStrand
+        || projected.displayCenter !== candidate.displayCenter) {
+        throw new Error('Alignment projection disagrees with Python candidate facts.');
+      }
+    });
+    if (fact.recordKey === reference.recordKey) {
+      const selected = current.anchors.find(({ anchor }) => sameJson(anchor, reference));
+      if (!selected || selected.displayedStrand !== raw.referenceDisplayedStrand
+        || selected.displayCenter !== raw.referenceDisplayCenter) {
+        throw new Error('Alignment projection changed the exact reference facts.');
+      }
+    }
+  });
   if (raw.status === 'resolved') {
     if (raw.plan === null) throw new Error('Resolved alignment helper response has no plan.');
     response.plan = validatePlan(raw.plan, response, 'alignment helper response.plan');
@@ -618,28 +772,16 @@ const anchorsAgree = (left, right) => {
   ));
 };
 
-const selectedStrandRelation = (decision) => decision?.status === 'aligned'
-  ? decision.candidates.find(({ anchor }) => sameJson(anchor, decision.anchor))?.strandRelation
-  : null;
-
-export const matchedOrientations = (response, request, enabled) => {
-  const decisions = new Map(response.records.map((decision) => [decision.recordKey, decision]));
-  return request.records.map((record) => {
-    const reverseComplement = baseReverseComplement(record);
-    const reverse = record.recordKey !== response.reference.recordKey
-      && selectedStrandRelation(decisions.get(record.recordKey)) === 'opposite';
-    return { recordKey: record.recordKey,
-      reverseComplement: enabled && reverse ? !reverseComplement : reverseComplement };
-  });
-};
-
 export const createSimilarityAlignmentActions = ({
   state,
   getOrthogroupById,
   getEnrichedOrthogroupMembers,
   getCommittedRequest,
   getRecordCatalog = null,
-  runAnalysis,
+  getCommittedSession,
+  projectCommittedAlignment,
+  runCommittedCanonicalCandidate,
+  recordDisplayControls,
   cancelRunAnalysis = null,
   runHelperOperation,
   resolveOperation,
@@ -653,7 +795,9 @@ export const createSimilarityAlignmentActions = ({
     || typeof getOrthogroupById !== 'function'
     || typeof getEnrichedOrthogroupMembers !== 'function'
     || typeof getCommittedRequest !== 'function'
-    || typeof runAnalysis !== 'function'
+    || typeof getCommittedSession !== 'function'
+    || typeof projectCommittedAlignment !== 'function'
+    || typeof runCommittedCanonicalCandidate !== 'function'
     || typeof runHelperOperation !== 'function'
     || typeof resolveOperation !== 'string'
     || !resolveOperation
@@ -667,6 +811,9 @@ export const createSimilarityAlignmentActions = ({
   const notice = ref('');
   const repair = ref(null);
   const drawerReferenceKey = ref('');
+  const resetDialogOpen = ref(false);
+  const automaticApply = ref(false);
+  const resetScope = ref('positions');
   let actionId = 0;
   let activeRequest = null;
   let activeApply = null;
@@ -677,10 +824,10 @@ export const createSimilarityAlignmentActions = ({
   let materializedRecordDrag = false;
   let pendingRecordDragBaseline = null;
 
-  const publishError = (value) => {
+  const publishError = (value, notify = true) => {
     const normalized = value instanceof Error ? value : new Error(String(value || 'Alignment failed.'));
     error.value = normalized;
-    if (typeof onError === 'function') onError(normalized);
+    if (notify && typeof onError === 'function') onError(normalized);
     return normalized;
   };
 
@@ -700,7 +847,7 @@ export const createSimilarityAlignmentActions = ({
     selectedGroup: state.selectedOrthogroupId?.value,
     catalog: state.featureCatalog?.value,
     result: state.results?.value?.[state.selectedResultIndex?.value ?? 0],
-    svg: currentSvg()
+    translations: JSON.stringify(state.linearRecordTranslations?.value || [])
   });
   const artifactIsCurrent = () => {
     if (!artifactStamp || !activeRequest) return false;
@@ -710,7 +857,7 @@ export const createSimilarityAlignmentActions = ({
       && current.selectedGroup === artifactStamp.selectedGroup
       && current.catalog === artifactStamp.catalog
       && current.result === artifactStamp.result
-      && current.svg === artifactStamp.svg;
+      && current.translations === artifactStamp.translations;
   };
   const rejectStaleDraft = () => {
     clearDraft();
@@ -737,15 +884,19 @@ export const createSimilarityAlignmentActions = ({
   };
 
   const baseline = ({ materializePlan = false } = {}) => {
-    const request = currentRequest();
-    const recordKeys = (request?.records || []).map(({ recordKey }) => recordKey);
-    const plan = materializePlan ? state.similarityAlignmentPlan?.value : null;
-    return {
-      request,
-      translations: materializePlan
-        ? materializedTranslations(recordKeys, plan)
-        : replacementTranslations(state, recordKeys)
-    };
+    const canonical = getCommittedSession();
+    const request = cloneJson(canonical?.renderRequest);
+    if (!request) throw new Error('Generate a Linear diagram before aligning.');
+    const recordKeys = request.records.map(({ recordKey }) => recordKey);
+    const translations = materializePlan
+      ? materializedTranslations(recordKeys, request.layout?.similarityAlignment)
+      : cloneJson(request.layout?.recordTranslations || replacementTranslations(state, recordKeys));
+    const orientations = request.records.map(record => ({ recordKey: record.recordKey,
+      reverseComplement: baseReverseComplement(record) }));
+    const materialized = projectCommittedAlignment({ committed: canonical,
+      plan: materializePlan ? null : request.layout?.similarityAlignment,
+      translations, orientations });
+    return { canonical: materialized, request: materialized.renderRequest, translations };
   };
 
   const installBaseState = (value) => {
@@ -764,6 +915,8 @@ export const createSimilarityAlignmentActions = ({
     clearDraft();
     status.value = 'idle';
     activeBaseline = null;
+    state.similarityAlignmentResetReceipt.value = null;
+    resetDialogOpen.value = false;
     if (!hadPlan) return false;
     state.similarityAlignmentPlan.value = null;
     summary.value = null;
@@ -772,68 +925,78 @@ export const createSimilarityAlignmentActions = ({
     return true;
   };
 
+  const rowChoices = () => (draft.value?.rows || []).filter(row => row.choice).map(row => ({
+    recordKey: row.recordKey, kind: row.choice.kind,
+    anchor: row.choice.kind === 'select'
+      ? row.candidates.find(({ key }) => key === row.choice.candidateKey)?.anchor : null
+  }));
+  const projectDraft = (response = draft.value?.response, choices = rowChoices()) => (
+    projectSimilarityAlignmentDirections({ resolution: response,
+      expectedBinding: draft.value?.binding || response.projection.binding,
+      intent: draft.value?.intent || { mode: 'keep' }, choices })
+  );
   const installReviewDraft = (response, request) => {
-    draft.value = deepFreeze({
-      response,
-      matchReferenceDirection: false,
+    if (!response.projection) throw new Error('Source-bound alignment facts are required.');
+    draft.value = deepFreeze({ response, binding: response.projection.binding,
+      intent: { mode: 'keep' },
       reference: referenceView(response, request, displayFacts, recordLabels),
-      rows: reviewRows(response, request, displayFacts, recordLabels)
-    });
+      rows: reviewRows(response, request, displayFacts, recordLabels) });
     status.value = 'reviewing';
   };
 
-  const applyPlan = async (response, request, expectedActionId, retryResponse = null) => {
-    const plan = response.plan;
-    const orientations = matchedOrientations(response, request, draft.value?.matchReferenceDirection === true);
-    const reversed = orientations.filter((entry, index) => (
-      entry.reverseComplement !== baseReverseComplement(request.records[index])
-    )).length;
+  const runAlignmentCandidate = async ({ canonical, label, alignmentResetBefore = null,
+    alignmentResetReceipt = undefined }) => {
+    const beforeRecords = new Map(currentRequest().records.map(record => [record.recordKey, record]));
+    const changed = canonical.renderRequest.records.filter(record => (
+      baseReverseComplement(record) !== baseReverseComplement(beforeRecords.get(record.recordKey))
+    )).map(record => ({recordKey: record.recordKey, reverseComplement: baseReverseComplement(record)}));
+    return runCommittedCanonicalCandidate({ canonical, label, alignmentResetBefore, alignmentResetReceipt,
+      captureIntentCheckpoint: () => recordDisplayControls.captureAlignmentOrientationIntent(changed),
+      restoreIntentCheckpoint: checkpoint => recordDisplayControls.restoreAlignmentOrientationIntent(checkpoint),
+      commitIntent: () => recordDisplayControls.commitAlignmentOrientations(changed) });
+  };
+
+  const applyPlan = async (response, request, expectedActionId, projected) => {
     if (expectedActionId !== actionId) return { status: 'stale' };
     if (!artifactIsCurrent()) return rejectStaleDraft();
-    const recordKeys = request.records.map(({ recordKey }) => recordKey);
-    const promise = runAnalysis({
-      skipSimilarityAlignmentValidation: true,
-      canonicalStateOverride: {
-        similarityAlignmentPlan: cloneJson(plan),
-        linearRecordTranslations: cloneJson(
-          activeBaseline?.translations || replacementTranslations(state, recordKeys)
-        ),
-        linearRecordOrientations: orientations
-      }
-    });
+    if (!projected.selectionComplete || !projected.geometryValidated) {
+      throw new Error('Alignment selection or final geometry is not validated.');
+    }
+    const orientations = projected.records.map(({ recordKey, afterReverseComplement }) => ({
+      recordKey, reverseComplement: afterReverseComplement }));
+    const canonical = projectCommittedAlignment({ committed: activeBaseline.canonical,
+      plan: response.plan, orientations,
+      translations: projected.records.map(({ recordKey, translation }) => ({recordKey, ...translation})) });
+    const promise = runAlignmentCandidate({canonical, label: 'Align Similarity Group',
+      alignmentResetBefore: activeBaseline.canonical});
     activeApply = promise;
     let outcome;
-    try {
-      outcome = await promise;
-    } catch (cause) {
-      outcome = { status: 'error', error: cause };
-    } finally {
-      if (activeApply === promise) activeApply = null;
-    }
-    if (expectedActionId !== actionId) return { status: 'stale' };
+    try { outcome = await promise; }
+    catch (cause) { outcome = {status:'error', error:cause}; }
+    finally { if (activeApply === promise) activeApply = null; }
+    if (expectedActionId !== actionId) return {status:'stale'};
     if (outcome?.status === 'ok') {
-      summary.value = successfulSummary(plan, reversed);
-      repair.value = null;
-      notice.value = '';
-      activeBaseline = null;
-      clearDraft();
-      error.value = null;
-      status.value = 'idle';
-      return { status: 'ok' };
+      summary.value = successfulSummary(response.plan, projected.records.filter(record => (
+        record.beforeReverseComplement !== record.afterReverseComplement)).length);
+      repair.value = null; notice.value = ''; activeBaseline = null;
+      clearDraft(); error.value = null; status.value = 'idle';
+      return {status:'ok'};
     }
-    if (retryResponse) installReviewDraft(retryResponse, request);
-    else status.value = 'reviewing';
-    if (outcome?.error?.summary) error.value = { message: outcome.error.summary };
-    else publishError(outcome?.error || new Error('Alignment generation failed. Review the draft and retry Apply.'));
-    return { status: outcome?.status || 'error' };
+    status.value = 'reviewing';
+    const cause = outcome?.error || state.errorLog?.value;
+    publishError(new Error(cause?.summary || cause?.message || 'Alignment generation failed. Review the draft and retry Apply.'), !state.errorLog?.value?.summary);
+    return {status: outcome?.status || 'error'};
   };
 
   const resolveRequest = async (request, expectedActionId, mode) => {
     let response;
     try {
-      const helper = await runHelperOperation(resolveOperation, { request });
+      const helper = await runHelperOperation(resolveOperation, { request,
+        projection: { canonicalRequest: activeBaseline.request, orientations: Object.fromEntries(
+          request.records.map(record => [record.recordKey, baseReverseComplement(record)])) },
+        resources: activeBaseline.canonical.resources });
       if (expectedActionId !== actionId) return { status: 'stale' };
-      response = validateResolution(helper?.result, request);
+      response = validateSimilarityAlignmentResolution(helper?.result, request);
       if (!artifactIsCurrent()) return rejectStaleDraft();
     } catch (cause) {
       if (expectedActionId !== actionId) return { status: 'stale' };
@@ -845,11 +1008,13 @@ export const createSimilarityAlignmentActions = ({
     }
     activeRequest = request;
     error.value = null;
+    installReviewDraft(response, request);
     if (mode === 'align' && response.status === 'resolved') {
       status.value = 'applying';
-      return applyPlan(response, request, expectedActionId, response);
+      automaticApply.value = true;
+      try { return await applyPlan(response, request, expectedActionId, projectDraft(response, [])); }
+      finally { automaticApply.value = false; }
     }
-    installReviewDraft(response, request);
     return { status: 'reviewing' };
   };
 
@@ -886,8 +1051,8 @@ export const createSimilarityAlignmentActions = ({
       ]));
       recordLabels = new Map(request.records.map(({ recordKey }, index) => {
         const sequence = (state.linearSeqs || []).find((entry) => String(entry?.uid) === recordKey);
-        return [recordKey, displayText(sequence?.definition, sequence?.accession,
-          sequence?.gb?.name, sequence?.gff?.name) || `Record ${index + 1}`];
+        return [recordKey, plainTextLinearRecordLabel(displayText(sequence?.definition, sequence?.accession,
+          sequence?.gb?.name, sequence?.gff?.name) || `Record ${index + 1}`)];
       }));
       activeRequest = request;
       artifactStamp = captureArtifact(request.groupId);
@@ -926,9 +1091,6 @@ export const createSimilarityAlignmentActions = ({
       ...draft.value,
       rows: draft.value.rows.map((entry) => entry === row ? next : entry)
     });
-    if (directionMatch.value.disabledReason && draft.value.matchReferenceDirection) {
-      setMatchReferenceDirection(false);
-    }
     error.value = null;
     return { status: 'selected' };
   };
@@ -939,30 +1101,33 @@ export const createSimilarityAlignmentActions = ({
     }
     if (!artifactIsCurrent()) return rejectStaleDraft();
     const expectedActionId = actionId;
-    const choices = draft.value.rows.map((row) => {
-      const candidate = row.candidates.find(({ key }) => key === row.choice?.candidateKey);
-      return {
-        recordKey: row.recordKey,
-        kind: row.choice.kind,
-        anchor: row.choice.kind === 'select' ? candidate.anchor : null
-      };
-    });
+    const choices = rowChoices();
     const request = deepFreeze({ ...cloneJson(activeRequest), choices });
+    const preview = projectDraft();
+    const orientations = Object.fromEntries(preview.records.map(record => [record.recordKey, record.afterReverseComplement]));
     status.value = 'applying';
     try {
-      const helper = await runHelperOperation(resolveOperation, { request });
+      const helper = await runHelperOperation(resolveOperation, { request,
+        projection: { canonicalRequest: activeBaseline.request, orientations },
+        resources: activeBaseline.canonical.resources });
       if (expectedActionId !== actionId) return { status: 'stale' };
-      const response = validateResolution(helper?.result, request);
-      if (response.status !== 'resolved' || !response.plan) {
+      const response = validateSimilarityAlignmentResolution(helper?.result, request);
+      if (!artifactIsCurrent()) return rejectStaleDraft();
+      const final = projectDraft(response, choices);
+      if (final.status === 'stale') return rejectStaleDraft();
+      if (!final.selectionComplete || response.status !== 'resolved' || !response.plan) {
         throw new Error('The resolver did not resolve every record. Review the choices and retry.');
       }
-      if (!artifactIsCurrent()) return rejectStaleDraft();
-      return applyPlan(response, request, expectedActionId);
+      if (final.signature !== preview.signature || !final.geometryValidated) {
+        draft.value = deepFreeze({ ...draft.value, response });
+        status.value = 'reviewing';
+        publishError(new Error('Validated directions or reference placement changed. Review the updated preview and Apply again.'));
+        return {status:'reviewing'};
+      }
+      return applyPlan(response, request, expectedActionId, final);
     } catch (cause) {
       if (expectedActionId !== actionId) return { status: 'stale' };
-      status.value = 'reviewing';
-      publishError(cause);
-      return { status: 'error' };
+      status.value = 'reviewing'; publishError(cause); return { status: 'error' };
     }
   };
 
@@ -1029,40 +1194,85 @@ export const createSimilarityAlignmentActions = ({
     }
   });
 
-  const resetAlignment = async () => {
-    if (!state.similarityAlignmentPlan?.value) return { status: 'noop' };
-    const expectedActionId = ++actionId;
-    if (activeApply) {
-      if (typeof cancelRunAnalysis === 'function') cancelRunAnalysis();
-      await activeApply;
-    }
-    const current = baseline();
-    status.value = 'applying';
-    const promise = runAnalysis({
-      skipSimilarityAlignmentValidation: true,
-      canonicalStateOverride: {
-        similarityAlignmentPlan: null,
-        linearRecordTranslations: cloneJson(current.translations)
-      }
+  const resetPreview = computed(() => {
+    const receipt = state.similarityAlignmentResetReceipt.value;
+    const request = currentRequest();
+    const targets = (receipt?.directions || []).map(delta => {
+      const record = request?.records.find(({recordKey}) => recordKey === delta.recordKey);
+      const sequence = state.linearSeqs.find(({uid}) => uid === delta.recordKey);
+      return {recordKey: delta.recordKey, label: plainTextLinearRecordLabel(displayText(record?.presentation?.label, sequence?.definition, sequence?.file_definition, sequence?.accession) || delta.recordKey),
+        current: baseReverseComplement(record), restored: delta.before,
+        laterManualEdit: baseReverseComplement(record) !== delta.after};
     });
-    activeApply = promise;
-    let outcome;
+    return { targets, disabledReason: !receipt
+      ? 'This Session has no historical alignment direction evidence. Reset positions is available.'
+      : !targets.length ? 'The latest Align made no direction changes. Reset positions is available.' : '' };
+  });
+  const resetAlignment = async (scope = 'positions') => {
+    if (!state.similarityAlignmentPlan?.value) return {status:'noop'};
+    if (!['positions', 'positions-and-directions'].includes(scope)) return {status:'rejected'};
+    if (scope === 'positions-and-directions' && resetPreview.value.disabledReason) return {status:'rejected'};
+    if (busy.value) return {status:'busy'};
+    const expectedActionId = ++actionId;
+    status.value = 'applying';
+    let promise;
     try {
-      outcome = await promise;
-    } catch (cause) {
-      outcome = { status: 'error', error: cause };
-    } finally {
-      if (activeApply === promise) activeApply = null;
-    }
-    if (expectedActionId !== actionId) return { status: 'stale' };
-    status.value = 'idle';
-    if (outcome?.status === 'ok') {
-      clearDraft();
-      repair.value = null;
-      summary.value = null;
-      publishNotice('Alignment reset: record positions restored; record directions unchanged.');
-    }
-    return outcome;
+      const current = baseline();
+      const receipt = await validateSimilarityAlignmentResetReceipt(state.similarityAlignmentResetReceipt.value,
+        current.canonical);
+      const translations = cloneJson(current.translations);
+      if (receipt?.referenceDeltaX) {
+        const delta = receipt.referenceDeltaX;
+        const reference = translations.find(({recordKey}) => recordKey === delta.recordKey);
+        if (!reference) throw new Error('Alignment reset reference placement is unavailable.');
+        reference.x -= delta.deltaX;
+      }
+      const restore = new Map(scope === 'positions-and-directions'
+        ? receipt.directions.map(delta => [delta.recordKey, delta.before]) : []);
+      const orientations = current.request.records.map(record => ({recordKey: record.recordKey,
+        reverseComplement: restore.has(record.recordKey) ? restore.get(record.recordKey) : baseReverseComplement(record)}));
+      if (orientations.some((direction, index) => direction.reverseComplement
+        !== baseReverseComplement(current.request.records[index]))) {
+        const plan = current.request.layout.similarityAlignment;
+        const catalogFeatures = (state.featureCatalog?.value?.items || [])
+          .flatMap(item => item.biologicalFeatures || []);
+        const members = plan.records.filter(record => record.anchor).map(({anchor}) => {
+          const matches = catalogFeatures.filter(feature => feature.recordKey === anchor.recordKey
+            && feature.biologicalFeatureId === anchor.biologicalFeatureId
+            && (anchor.sourceFeatureIndex === null || feature.sourceFeatureIndex === anchor.sourceFeatureIndex));
+          if (matches.length !== 1) throw new Error('Alignment Reset source anchor is unavailable or ambiguous.');
+          return {...matches[0], ...anchor};
+        });
+        const request = buildHelperRequest({group:{id:plan.groupId,orthologEdges:[]}, members,
+          reference:plan.reference, request:current.request, catalog:state.featureCatalog?.value,
+          recordCatalog:getRecordCatalog?.(), linearSeqs:state.linearSeqs, choices:planChoices(plan)});
+        const vector = Object.fromEntries(orientations.map(direction => [direction.recordKey,direction.reverseComplement]));
+        const helper = await runHelperOperation(resolveOperation, {request,
+          projection:{canonicalRequest:current.request,orientations:vector},resources:current.canonical.resources});
+        if (expectedActionId !== actionId) return {status:'stale'};
+        const facts = validateSimilarityAlignmentResolution(helper?.result,request).projection;
+        if (!facts || orientations.some(direction => facts.geometryOrientations[direction.recordKey]
+          !== direction.reverseComplement)) throw new Error('Alignment Reset geometry is not validated.');
+        translations.forEach(translation => {
+          const fact = facts.records.find(record => record.recordKey === translation.recordKey);
+          translation.y += fact.beforeAxisY - fact.variants[Number(vector[translation.recordKey])].axisY;
+        });
+      }
+      const canonical = projectCommittedAlignment({committed: current.canonical, plan:null, translations, orientations});
+      promise = runAlignmentCandidate({canonical, label: scope === 'positions'
+        ? 'Reset alignment positions' : 'Reset alignment positions and direction changes', alignmentResetReceipt:null});
+      activeApply = promise;
+      const outcome = await promise;
+      if (expectedActionId !== actionId) return {status:'stale'};
+      if (outcome?.status === 'ok') {
+        clearDraft(); repair.value = null; summary.value = null; resetDialogOpen.value = false;
+        error.value = null;
+        publishNotice(scope === 'positions' ? 'Alignment reset: record positions restored; record directions unchanged.'
+          : 'Alignment reset: positions and the latest Align direction changes restored.');
+      } else publishError(new Error(outcome?.error?.message || state.errorLog?.value?.summary || 'Alignment Reset failed. Retry the same scope.'));
+      return outcome;
+    } catch (cause) { publishError(cause); return {status:'error', error:cause}; }
+    finally { if (activeApply === promise) activeApply = null; if (expectedActionId === actionId) status.value = 'idle'; }
   };
 
   const planChoices = (plan, staleRecordKeys = new Set()) => (
@@ -1098,16 +1308,17 @@ export const createSimilarityAlignmentActions = ({
       choices: planChoices(plan, staleRecordKeys)
     });
     let response;
+    activeBaseline = baseline({materializePlan:true});
     try {
-      const helper = await runHelperOperation(resolveOperation, { request: repairRequest });
+      const helper = await runHelperOperation(resolveOperation, { request: repairRequest,
+        projection:{canonicalRequest:activeBaseline.request, orientations:null}, resources:activeBaseline.canonical.resources });
       if (expectedActionId !== actionId) return { status: 'stale' };
-      response = validateResolution(helper?.result, repairRequest);
+      response = validateSimilarityAlignmentResolution(helper?.result, repairRequest);
     } catch (cause) {
       if (expectedActionId !== actionId) return { status: 'stale' };
       return markStaleReference(cause?.message || cause);
     }
     activeRequest = repairRequest;
-    activeBaseline = baseline();
     artifactStamp = captureArtifact(repairRequest.groupId);
     const rows = reviewRows(response, repairRequest, displayFacts, recordLabels).map((row) => (
       staleRecordKeys.has(row.recordKey)
@@ -1115,7 +1326,7 @@ export const createSimilarityAlignmentActions = ({
         : row
     ));
     draft.value = deepFreeze({
-      response, matchReferenceDirection: false,
+      response, binding: response.projection.binding, intent:{mode:'keep'},
       reference: referenceView(response, repairRequest, displayFacts, recordLabels),
       rows, repair: true
     });
@@ -1179,7 +1390,7 @@ export const createSimilarityAlignmentActions = ({
     try {
       const helper = await runHelperOperation(resolveOperation, { request });
       if (expectedActionId !== actionId) return { status: 'stale' };
-      validateResolution(helper?.result, request);
+      validateSimilarityAlignmentResolution(helper?.result, request);
     } catch (_cause) {
       if (expectedActionId !== actionId) return { status: 'stale' };
       const alignedKeys = new Set(
@@ -1242,47 +1453,19 @@ export const createSimilarityAlignmentActions = ({
     return true;
   };
 
-  const directionMatch = computed(() => {
-    if (!draft.value || !activeRequest) return null;
-    const decisions = draft.value.rows.map((row) => {
-      const candidate = row.candidates.find(({ key }) => key === row.choice?.candidateKey);
-      return { recordKey: row.recordKey, status: row.choice?.kind === 'select' ? 'aligned' : 'skipped',
-        anchor: candidate?.anchor, candidates: row.candidates };
-    });
-    const response = { ...draft.value.response, records: decisions };
-    const matched = matchedOrientations(response, activeRequest, true);
-    const reversalKeys = new Set(matched.filter((entry, index) => (
-      entry.reverseComplement !== baseReverseComplement(activeRequest.records[index])
-    )).map(({ recordKey }) => recordKey));
-    const reversalLabels = draft.value.rows.filter(({ recordKey }) => reversalKeys.has(recordKey))
-      .map(({ recordLabel }) => recordLabel);
-    const unknownLabels = [];
-    const directions = {};
-    decisions.forEach((decision, index) => {
-      const relation = selectedStrandRelation(decision);
-      if (relation === 'unknown') unknownLabels.push(draft.value.rows[index].recordLabel);
-      directions[decision.recordKey] = relation === 'unknown'
-        ? 'Direction: unknown strand — unchanged'
-        : relation ? `Direction: ${relation === 'same' ? 'same as' : 'opposite to'} reference`
-          + (draft.value.matchReferenceDirection && reversalKeys.has(decision.recordKey)
-            ? ' — reversed on Apply' : '') : '';
-    });
-    return {
-      directions, unknownLabels,
-      statusLine: draft.value.matchReferenceDirection
-        ? `Apply reverses ${reversalLabels.length} record(s): ${reversalLabels.join(', ')}.`
-        : 'Record directions stay unchanged.',
-      disabledReason: reversalKeys.size ? '' : 'All selected anchors already face the reference direction.'
-    };
-  });
-
-  const setMatchReferenceDirection = (enabled) => {
-    if (!draft.value || status.value !== 'reviewing'
-      || enabled && directionMatch.value.disabledReason) return { status: 'rejected' };
-    draft.value = deepFreeze({ ...draft.value, matchReferenceDirection: Boolean(enabled) });
+  const directionPreview = computed(() => draft.value ? projectDraft() : null);
+  const setDirectionIntent = (intent) => {
+    if (!draft.value || status.value !== 'reviewing') return {status:'rejected'};
+    projectSimilarityAlignmentDirections({resolution:draft.value.response,
+      expectedBinding:draft.value.binding, choices:rowChoices(), intent});
+    draft.value = deepFreeze({...draft.value, intent:cloneJson(intent)});
     error.value = null;
-    return { status: 'selected' };
+    return {status:'selected'};
   };
+  const setDirectionMode = (mode) => setDirectionIntent(mode === 'custom'
+    ? {mode, byRecordKey:{}} : {mode});
+  const setCustomDirection = (recordKey, direction) => setDirectionIntent({mode:'custom',
+    byRecordKey:{...draft.value?.intent?.byRecordKey, [recordKey]:direction}});
 
   const unresolvedCount = computed(() => (
     draft.value?.rows?.filter(({ choice }) => choice === null).length || 0
@@ -1308,7 +1491,7 @@ export const createSimilarityAlignmentActions = ({
     repair,
     drawerReferenceKey,
     activePlanInspector,
-    dialogOpen: computed(() => Boolean(draft.value && status.value !== 'idle')),
+    dialogOpen: computed(() => !automaticApply.value && Boolean(draft.value && status.value !== 'idle')),
     isDraftArtifactCurrent: artifactIsCurrent,
     unresolvedCount,
     applyDisabledReason,
@@ -1319,8 +1502,15 @@ export const createSimilarityAlignmentActions = ({
     retainForStableReorder,
     beforeRecordDrag,
     afterRecordDrag,
-    directionMatch,
-    setMatchReferenceDirection,
+    directionPreview,
+    setDirectionMode,
+    setCustomDirection,
+    resetPreview,
+    resetDialogOpen,
+    resetScope,
+    openReset: () => { resetScope.value = 'positions'; resetDialogOpen.value = true; },
+    cancelReset: () => { if (!busy.value) resetDialogOpen.value = false; },
+    applyReset: () => resetAlignment(resetScope.value),
     startFromPopup: (options) => start({ ...options, source: 'popup' }),
     startFromDrawer: (options) => start({
       ...options,

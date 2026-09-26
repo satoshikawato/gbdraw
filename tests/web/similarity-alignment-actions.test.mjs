@@ -5,10 +5,11 @@ const ref = (value) => ({ value });
 globalThis.window = {
   Vue: { ref, computed: (getter) => ({ get value() { return getter(); } }) }
 };
-const { createSimilarityAlignmentActions, matchedOrientations } = await import(
+const { createSimilarityAlignmentActions } = await import(
   '../../gbdraw/web/js/app/similarity-alignment.js'
 );
 
+const { buildSimilarityAlignmentResetReceipt } = await import('../../gbdraw/web/js/services/session-active-config-contract.js');
 const { createHistoryManager } = await import('../../gbdraw/web/js/services/history.js');
 
 const anchor = (recordKey, biologicalFeatureId, sourceFeatureIndex) => ({
@@ -27,8 +28,8 @@ const targetA = member('b', 'target-a', 1, '-', true);
 const targetB = member('b', 'target-b', 2, '+');
 const targetC = member('c', 'target-c', 3, null);
 const renderRequest = {
-  mode: 'linear', records: ['a', 'b', 'c'].map((recordKey) => ({
-    recordKey, region: null, presentation: { reverseComplement: false }
+  schema: 8, mode: 'linear', layout:{recordTranslations:[],similarityAlignment:null}, records: ['a', 'b', 'c'].map((recordKey) => ({
+    recordKey, source:{kind:'genbank',resourceId:'source'}, selector:{kind:'recordId',id:recordKey},cardinality:'exactly_one',display:{isCircular:null,startCoordinate:null}, region: null, presentation: { reverseComplement: false }
   }))
 };
 const state = () => ({
@@ -39,6 +40,7 @@ const state = () => ({
   }] }),
   selectedOrthogroupId: ref('og-1'),
   similarityAlignmentPlan: ref(null),
+  similarityAlignmentResetReceipt:ref(null),
   errorLog: ref(null),
   linearRecordTranslations: ref([]),
   linearSeqs: ['a', 'b', 'c'].map((uid) => ({ uid, region_reverse: false })),
@@ -50,17 +52,19 @@ const deferred = () => {
   return { promise, resolve };
 };
 const serializedCandidate = (item, request) => {
-  const displayedStrand = item.sourceStrand;
-  const referenceStrand = request.members.find(({ anchor: selected }) => (
+  const reverse = key => {const row=request.records.find(r=>r.recordKey===key);return Boolean(row.region ? row.region.reverseComplement : row.presentation?.reverseComplement);};
+  const displayedStrand = item.sourceStrand === null ? null : item.sourceStrand*(reverse(item.anchor.recordKey)?-1:1);
+  const referenceSourceStrand = request.members.find(({ anchor: selected }) => (
     selected.recordKey === request.reference.recordKey
     && selected.biologicalFeatureId === request.reference.biologicalFeatureId
   ))?.sourceStrand;
+  const referenceStrand=referenceSourceStrand===null?null:referenceSourceStrand*(reverse(request.reference.recordKey)?-1:1);
   const strandRelation = displayedStrand === null || referenceStrand === null
     ? 'unknown' : displayedStrand === referenceStrand ? 'same' : 'opposite';
   return {
     anchor: item.anchor, displayName: item.anchor.biologicalFeatureId,
     sourceStart: item.sourceStart, sourceEnd: item.sourceEnd,
-    displayCenter: (item.sourceStart + item.sourceEnd) / 2,
+    displayCenter: reverse(item.anchor.recordKey)?300-(item.sourceStart + item.sourceEnd)/2:(item.sourceStart + item.sourceEnd)/2,
     displayedStrand, hidden: false, representative: item.representative,
     role: item.role, usable: true, directEvidence: [], strandRelation
   };
@@ -106,7 +110,7 @@ const responseFor = (request, { ambiguous = false, missing = false } = {}) => {
   const status = records.some(({ kind }) => kind === 'ambiguous') ? 'ambiguous' : 'resolved';
   return {
     schema: 2, status, groupId: request.groupId, reference: request.reference,
-    referenceDisplayedStrand: 1, referenceDisplayCenter: 65, records,
+    referenceDisplayedStrand: 1, referenceDisplayCenter: 65, records, projection: null,
     plan: status === 'resolved' ? {
       schema: 2, groupId: request.groupId, reference: request.reference,
       records: records.map(({ recordKey, status: decisionStatus, rationale, anchor: chosen }) => ({
@@ -119,15 +123,25 @@ const create = ({
   members = [reference, targetA, targetC], helper = (_operation, { request }) => ({
     result: responseFor(request)
   }), generation = async () => ({ status: 'ok' }), onError = null,
-  previewCandidate = null, clearCandidatePreview = null,
-  getCommittedRequest = () => renderRequest
+  previewCandidate = null, clearCandidatePreview = null, mutateProjection = null,
+  getCommittedRequest = null
 } = {}) => {
   const controllerState = state();
+  controllerState.featureCatalog.value.items[0].biologicalFeatures=members;
   const currentGroup = { id: 'og-1', members, orthologEdges: [] };
   const helperCalls = [];
   const generationCalls = [];
   let svg = null;
+  const bytes=Buffer.from('fixture source');
+  let canonical={renderRequest:structuredClone(renderRequest),resources:{source:{name:'source.gbk',kind:'genbank',encoding:'base64',data:bytes.toString('base64'),size:bytes.length}}};
+  const projectCommittedAlignment=({committed,plan,translations,orientations})=>{
+    const next={...committed,renderRequest:structuredClone(committed.renderRequest)};
+    next.renderRequest.layout={recordTranslations:structuredClone(translations),similarityAlignment:structuredClone(plan??null)};
+    for(const direction of orientations)next.renderRequest.records.find(r=>r.recordKey===direction.recordKey).presentation.reverseComplement=direction.reverseComplement;
+    return next;
+  };
   const capture = () => ({ retainedBytes: 0, ownerSet: structuredClone({
+    canonical, receipt:controllerState.similarityAlignmentResetReceipt.value,
     plan: controllerState.similarityAlignmentPlan.value,
     translations: controllerState.linearRecordTranslations.value,
     sequences: controllerState.linearSeqs,
@@ -140,6 +154,8 @@ const create = ({
     captureGeneratedArtifactHandle: capture,
     compareGeneratedArtifactHandles: (a, b) => JSON.stringify(a) === JSON.stringify(b),
     restoreGeneratedArtifactHandle: ({ ownerSet }) => {
+      canonical=structuredClone(ownerSet.canonical);
+      controllerState.similarityAlignmentResetReceipt.value=structuredClone(ownerSet.receipt);
       controllerState.similarityAlignmentPlan.value = structuredClone(ownerSet.plan);
       controllerState.linearRecordTranslations.value = structuredClone(ownerSet.translations);
       controllerState.linearSeqs.splice(0, controllerState.linearSeqs.length,
@@ -151,19 +167,24 @@ const create = ({
     state: controllerState,
     getOrthogroupById: (id) => id === currentGroup.id ? currentGroup : null,
     getEnrichedOrthogroupMembers: () => currentGroup.members,
-    getCommittedRequest,
+    getCommittedRequest:()=>getCommittedRequest?.()||canonical.renderRequest,
+    getCommittedSession:()=>({...canonical,renderRequest:getCommittedRequest?.()||canonical.renderRequest}),
+    projectCommittedAlignment,
+    recordDisplayControls:{captureAlignmentOrientationIntent:()=>controllerState.linearSeqs.map(r=>r.region_reverse),
+      restoreAlignmentOrientationIntent:before=>before.forEach((v,i)=>{controllerState.linearSeqs[i].region_reverse=v;}),
+      commitAlignmentOrientations:directions=>directions.forEach(({recordKey,reverseComplement})=>{controllerState.linearSeqs.find(r=>r.uid===recordKey).region_reverse=reverseComplement;})},
     getCurrentSvg: () => svg,
-    runAnalysis: (options) => history.runUndoableArtifactReplacement('Generate diagram', async () => {
-      generationCalls.push(structuredClone(options));
+    runCommittedCanonicalCandidate: (options) => history.runUndoableArtifactReplacement(options.label, async () => {
+      generationCalls.push(options);
       const outcome = await generation(options);
       if (outcome.error?.summary) controllerState.errorLog.value = outcome.error;
       if (outcome.status === 'ok') {
-        controllerState.similarityAlignmentPlan.value = options.canonicalStateOverride.similarityAlignmentPlan;
-        controllerState.linearRecordTranslations.value = options.canonicalStateOverride.linearRecordTranslations;
-        for (const orientation of options.canonicalStateOverride.linearRecordOrientations || []) {
-          controllerState.linearSeqs.find(({ uid }) => uid === orientation.recordKey)
-            .region_reverse = orientation.reverseComplement;
-        }
+        const receipt=options.alignmentResetBefore?await buildSimilarityAlignmentResetReceipt({before:options.alignmentResetBefore,after:options.canonical}):options.alignmentResetReceipt;
+        canonical=options.canonical;
+        controllerState.similarityAlignmentResetReceipt.value=receipt;
+        controllerState.similarityAlignmentPlan.value = canonical.renderRequest.layout.similarityAlignment;
+        controllerState.linearRecordTranslations.value = canonical.renderRequest.layout.recordTranslations;
+        options.commitIntent();
         controllerState.results.value = [{ name: 'aligned.svg' }];
         svg = null;
       }
@@ -172,7 +193,29 @@ const create = ({
     cancelRunAnalysis: () => {},
     runHelperOperation: async (operation, payload) => {
       helperCalls.push({ operation, payload: structuredClone(payload) });
-      return helper(operation, payload, helperCalls.length);
+      const output=await helper(operation, payload, helperCalls.length);
+      if(output?.result && payload.projection && output.result.projection===null){
+        const r=output.result;const request=payload.request;
+        const current=payload.projection.canonicalRequest;
+        const refMember=request.members.find(m=>JSON.stringify(m.anchor)===JSON.stringify(request.reference));
+        const refCandidate=serializedCandidate(refMember,request);
+        r.referenceDisplayCenter=refCandidate.displayCenter;
+        r.referenceDisplayedStrand=refCandidate.displayedStrand;
+        r.projection={binding:'a'.repeat(64),geometryOrientations:payload.projection.orientations||Object.fromEntries(request.records.map(r=>[r.recordKey,Boolean(r.presentation?.reverseComplement)])),records:request.records.map(record=>{
+          const candidates=request.members.filter(m=>m.anchor.recordKey===record.recordKey);
+          const before=Boolean(record.region?record.region.reverseComplement:record.presentation?.reverseComplement);
+          const facts=reverse=>candidates.map(m=>{
+            const candidate=r.records.find(row=>row.recordKey===record.recordKey).candidates.find(c=>JSON.stringify(c.anchor)===JSON.stringify(m.anchor));
+            const center=candidate?.usable===false?null:reverse?300-(m.sourceStart+m.sourceEnd)/2:(m.sourceStart+m.sourceEnd)/2;
+            return {anchor:m.anchor,displayCenter:center,centerX:center,displayedStrand:m.sourceStrand===null?null:m.sourceStrand*(reverse?-1:1)};
+          });
+          return {recordKey:record.recordKey,beforeReverseComplement:before,base:current.layout?.recordTranslations.find(t=>t.recordKey===record.recordKey)||{x:0,y:0},beforeAxisY:100,
+            beforeAnchors:facts(before).filter(f=>f.centerX!==null).map(({anchor,centerX})=>({anchor,centerX})),variants:[false,true].map(reverseComplement=>({reverseComplement,axisY:100,anchors:facts(reverseComplement)}))};
+        })};
+        r.projection.records.forEach(f=>{delete f.base.recordKey;});
+      }
+      mutateProjection?.(output.result,helperCalls.length);
+      return output;
     },
     resolveOperation: 'resolveSimilarityAlignment',
     onError: (error) => { controllerState.errorLog.value = error; onError?.(error); },
@@ -210,7 +253,7 @@ test('normal Align applies only-usable and unusable targets with one helper and 
   await new Promise((resolve) => setImmediate(resolve));
   assert.equal(fixture.actions.status.value, 'applying');
   assert.equal(fixture.actions.dialogOpen.value, false);
-  assert.equal(fixture.actions.draft.value, null);
+  assert.ok(fixture.actions.draft.value);
   assert.equal(fixture.actions.summary.value, null);
   assert.equal(fixture.state.results.value, priorResult);
   assert.equal(fixture.helperCalls.length, 1);
@@ -272,9 +315,8 @@ test('normal Align opens complete review for genuine Python ambiguity', async ()
   assert.deepEqual(await startAlign(fixture), { status: 'reviewing' });
   assert.equal(fixture.generationCalls.length, 0);
   assert.equal(fixture.actions.draft.value.rows[0].reason, 'unique_representative');
-  assert.equal(fixture.actions.draft.value.rows[0].choice.candidateKey,
-    JSON.stringify(anchor('b', 'target-a', 1)));
-  assert.equal(fixture.actions.canApply.value, true);
+  assert.equal(fixture.actions.draft.value.rows[0].choice, null);
+  assert.equal(fixture.actions.canApply.value, false);
 });
 
 test('explicit review of a resolved response keeps the full local draft without generation', async () => {
@@ -368,13 +410,14 @@ test('explicit review opens an applicable Python-selected draft for either respo
       helper: (_operation, { request }) => ({ result: responseFor(request, { ambiguous }) }) });
     assert.deepEqual(await startReview(fixture), { status: 'reviewing' });
     assert.equal(fixture.actions.dialogOpen.value, true);
-    assert.equal(fixture.actions.canApply.value, true);
-    assert.equal(fixture.actions.unresolvedCount.value, 0);
+    assert.equal(fixture.actions.canApply.value, !ambiguous);
+    assert.equal(fixture.actions.unresolvedCount.value, Number(ambiguous));
+    if(ambiguous)fixture.actions.selectCandidate('b',anchor('b','target-a',1));
     assert.deepEqual(fixture.actions.draft.value.rows.map(({ recordKey }) => recordKey), ['b', 'c']);
     assert.equal(fixture.actions.draft.value.rows[0].choice.candidateKey,
       JSON.stringify(anchor('b', 'target-a', 1)));
     assert.equal(fixture.actions.draft.value.rows[0].reason,
-      ambiguous ? 'unique_representative' : 'only_usable_candidate');
+      ambiguous ? 'user_selected' : 'only_usable_candidate');
     assert.equal(fixture.actions.draft.value.reference.featureIdentifier, 'clicked');
     assert.equal(fixture.actions.draft.value.reference.coordinates, '51..70 bp');
     assert.equal(fixture.actions.draft.value.rows[0].recommendedKey,
@@ -424,6 +467,7 @@ test('Apply validates one explicit batch and commits through one generation call
   const fixture = create({ members: [reference, targetA, targetB, targetC],
     helper: (_operation, { request }) => ({ result: responseFor(request, { ambiguous: true }) }) });
   await startReview(fixture);
+  fixture.actions.selectCandidate('b',anchor('b','target-a',1));
   assert.deepEqual(await fixture.actions.applyDraft(), { status: 'ok' });
   assert.equal(fixture.helperCalls.length, 2);
   assert.equal(fixture.generationCalls.length, 1);
@@ -467,7 +511,7 @@ test('validation and generation failures preserve editable draft and prior artif
         : { status: 'ok' }
     });
     await startReview(fixture);
-    fixture.actions.setMatchReferenceDirection(true);
+    fixture.actions.setDirectionMode('right');
     const before = fixture.actions.draft.value;
     const orientations = fixture.state.linearSeqs.map(({ region_reverse }) => region_reverse);
     assert.equal((await fixture.actions.applyDraft()).status, 'error');
@@ -547,7 +591,7 @@ test('active schema-2 plan validates on regeneration and supports Reset and stab
   assert.equal(fixture.state.similarityAlignmentPlan.value, null);
 });
 
-test('Python recommendation and direct-RBH reason control initial selection', async () => {
+test('Python recommendation remains a hint while direct-RBH resolved selection is preserved', async () => {
   const ambiguous = create({ members: [reference, targetA, targetB, targetC],
     helper: (_operation, { request }) => {
       const response = responseFor(request, { ambiguous: true });
@@ -556,7 +600,8 @@ test('Python recommendation and direct-RBH reason control initial selection', as
       return { result: response };
     } });
   await startReview(ambiguous);
-  assert.equal(ambiguous.actions.draft.value.rows[0].choice.candidateKey,
+  assert.equal(ambiguous.actions.draft.value.rows[0].choice,null);
+  assert.equal(ambiguous.actions.draft.value.rows[0].recommendedKey,
     JSON.stringify(anchor('b', 'target-b', 2)));
   assert.equal(ambiguous.actions.draft.value.rows[0].reason, 'deterministic_candidate_1');
   const direct = create({ helper: (_operation, { request }) => {
@@ -707,106 +752,123 @@ test('candidate labels retain biological metadata and displayed record names', a
 });
 
 
-test('matchedOrientations flips only aligned known-opposite targets and returns every record', () => {
-  const request = { records: ['ref', 'opposite', 'same', 'unknown', 'skipped', 'missing'].map(
-    (recordKey, index) => ({ recordKey, region: index === 1 ? { reverseComplement: true } : null,
-      presentation: { reverseComplement: index >= 3 } })
-  ) };
-  const response = { reference: { recordKey: 'ref' }, records: request.records.map((record, index) => ({
-    recordKey: record.recordKey, status: index === 0 ? 'reference' : index >= 4 ? 'skipped' : 'aligned',
-    anchor: { recordKey: record.recordKey },
-    candidates: [{ anchor: { recordKey: record.recordKey },
-      strandRelation: index === 2 ? 'same' : index === 3 ? 'unknown' : 'opposite' }]
-  })) };
-  const before = structuredClone({ request, response });
-  assert.deepEqual(matchedOrientations(response, request, false).map((r) => r.reverseComplement),
-    [false, true, false, true, true, true]);
-  assert.deepEqual(matchedOrientations(response, request, true).map((r) => r.reverseComplement),
-    [false, false, false, true, true, true]);
-  assert.deepEqual({ request, response }, before);
+test('exclusive modes, reference Custom, Select and Skip are local with zero Worker', async () => {
+  const f=create({members:[reference,targetA,targetB,targetC]});await startReview(f);
+  f.actions.setDirectionMode('left');
+  assert.deepEqual(f.actions.directionPreview.value.records.map(r=>r.afterReverseComplement),[true,false,false]);
+  f.actions.setDirectionMode('custom');f.actions.setCustomDirection('a','left');f.actions.setCustomDirection('b','right');
+  assert.deepEqual(f.actions.directionPreview.value.records.map(r=>r.afterReverseComplement),[true,true,false]);
+  f.actions.skipRecord('b');assert.equal(f.actions.directionPreview.value.records[1].afterReverseComplement,false);
+  f.actions.setDirectionMode('keep');assert.deepEqual(f.actions.draft.value.intent,{mode:'keep'});
+  assert.equal(f.helperCalls.length,1);assert.equal(f.generationCalls.length,0);
 });
-
-test('Match availability and direction lines follow local Select and Skip with no Worker', async () => {
-  const fixture = create({ members: [reference, targetA, targetB, targetC] });
-  await startReview(fixture);
-  assert.equal(fixture.actions.draft.value.matchReferenceDirection, false);
-  assert.equal(fixture.actions.directionMatch.value.disabledReason, '');
-  assert.equal(fixture.actions.directionMatch.value.statusLine, 'Record directions stay unchanged.');
-  fixture.actions.setMatchReferenceDirection(true);
-  assert.equal(fixture.actions.directionMatch.value.statusLine, 'Apply reverses 1 record(s): Record 2.');
-  assert.equal(fixture.actions.directionMatch.value.directions.b,
-    'Direction: opposite to reference — reversed on Apply');
-  assert.deepEqual(fixture.actions.directionMatch.value.unknownLabels, ['Record 3']);
-  assert.equal(fixture.actions.directionMatch.value.directions.c, 'Direction: unknown strand — unchanged');
-  fixture.actions.selectCandidate('b', anchor('b', 'target-b', 2));
-  assert.equal(fixture.actions.directionMatch.value.directions.b, 'Direction: same as reference');
-  assert.equal(fixture.actions.directionMatch.value.disabledReason,
-    'All selected anchors already face the reference direction.');
-  assert.equal(fixture.actions.draft.value.matchReferenceDirection, false);
-  assert.deepEqual(fixture.actions.setMatchReferenceDirection(true), { status: 'rejected' });
-  fixture.actions.selectCandidate('b', anchor('b', 'target-a', 1));
-  fixture.actions.setMatchReferenceDirection(true);
-  fixture.actions.skipRecord('b');
-  assert.equal(fixture.actions.draft.value.matchReferenceDirection, false);
-  assert.equal(fixture.actions.directionMatch.value.directions.b, '');
-  assert.equal(fixture.helperCalls.length, 1);
-  assert.equal(fixture.generationCalls.length, 0);
-});
-
-test('matched Apply commits plan, orientations, and Result in one History entry; Reset keeps direction', async () => {
-  const fixture = create();
-  await startReview(fixture);
-  fixture.actions.setMatchReferenceDirection(true);
-  assert.deepEqual(await fixture.actions.applyDraft(), { status: 'ok' });
-  assert.deepEqual(fixture.generationCalls[0].canonicalStateOverride.linearRecordOrientations, [
-    { recordKey: 'a', reverseComplement: false }, { recordKey: 'b', reverseComplement: true },
-    { recordKey: 'c', reverseComplement: false }
-  ]);
-  assert.equal(fixture.actions.summary.value.reversed, 1);
-  assert.equal(fixture.history.getUndoCount(), 1);
-  assert.equal(fixture.state.linearSeqs[1].region_reverse, true);
-  assert.deepEqual(fixture.actions.activePlanInspector.value.records
-    .map(({ reversedFromSource }) => reversedFromSource), [false, true, false]);
-  await fixture.history.undo();
-  assert.equal(fixture.state.linearSeqs[1].region_reverse, false);
-  assert.equal(fixture.state.similarityAlignmentPlan.value, null);
-  await fixture.history.redo();
-  assert.equal(fixture.state.linearSeqs[1].region_reverse, true);
-  await fixture.actions.resetAlignment();
-  assert.equal(Object.hasOwn(fixture.generationCalls[1].canonicalStateOverride,
-    'linearRecordOrientations'), false);
-  assert.equal(fixture.state.linearSeqs[1].region_reverse, true);
-  assert.equal(fixture.actions.notice.value,
-    'Alignment reset: record positions restored; record directions unchanged.');
-});
-
-test('Apply uses validated strand facts rather than initial review facts', async () => {
-  const fixture = create({ helper: (_operation, { request }, count) => {
-    const response = responseFor(request);
-    if (count === 2) response.records[1].candidates[0].strandRelation = 'same';
-    return { result: response };
-  } });
-  await startReview(fixture);
-  fixture.actions.setMatchReferenceDirection(true);
-  await fixture.actions.applyDraft();
-  assert.equal(fixture.generationCalls[0].canonicalStateOverride.linearRecordOrientations[1]
-    .reverseComplement, false);
-  assert.equal(fixture.actions.summary.value.reversed, 0);
-});
-
-test('canceled and stale matched generations leave orientations and History unchanged', async () => {
-  for (const outcome of ['canceled', 'stale']) {
-    const pending = deferred();
-    const fixture = create({ generation: () => pending.promise });
-    await startReview(fixture);
-    fixture.actions.setMatchReferenceDirection(true);
-    const operation = fixture.actions.applyDraft();
-    await new Promise((resolve) => setImmediate(resolve));
-    assert.equal(fixture.state.linearSeqs[1].region_reverse, false);
-    if (outcome === 'canceled') fixture.actions.cancel();
-    pending.resolve({ status: outcome });
-    assert.equal((await operation).status, outcome === 'canceled' ? 'stale' : outcome);
-    assert.equal(fixture.state.linearSeqs[1].region_reverse, false);
-    assert.equal(fixture.history.getUndoCount(), 0);
+test('Apply and both Reset scopes own one History transaction and consume receipt',async()=>{
+  for(const scope of ['positions','positions-and-directions']){
+    const f=create();await startReview(f);f.actions.setDirectionMode('left');await f.actions.applyDraft();
+    assert.equal(f.history.getUndoCount(),1);assert.equal(f.state.linearSeqs[0].region_reverse,true);
+    const receipt=structuredClone(f.state.similarityAlignmentResetReceipt.value);assert.deepEqual(receipt.directions,[{recordKey:'a',before:false,after:true}]);
+    assert.ok(receipt.referenceDeltaX);const calls=f.helperCalls.length;
+    await f.actions.resetAlignment(scope);assert.equal(f.helperCalls.length,calls+Number(scope==='positions-and-directions'));
+    assert.equal(f.state.similarityAlignmentResetReceipt.value,null);assert.equal(f.state.similarityAlignmentPlan.value,null);
+    assert.equal(f.state.linearSeqs[0].region_reverse,scope==='positions');
+    await f.history.undo();assert.deepEqual(f.state.similarityAlignmentResetReceipt.value,receipt);
+    assert.equal(f.state.linearSeqs[0].region_reverse,true);await f.history.redo();assert.equal(f.state.similarityAlignmentResetReceipt.value,null);
   }
+});
+test('changed final reference correction refreshes preview and requires another Apply',async()=>{
+  const f=create({mutateProjection:(response,count)=>{
+    if(count>=2)response.projection.records[0].variants[1].anchors[0].centerX+=5;
+  }});await startReview(f);f.actions.setDirectionMode('left');
+  const first=f.actions.directionPreview.value.reference.deltaX;
+  assert.equal((await f.actions.applyDraft()).status,'reviewing');assert.equal(f.generationCalls.length,0);
+  assert.equal(f.helperCalls.length,2);assert.equal(f.actions.directionPreview.value.reference.deltaX,first-5);
+  assert.equal((await f.actions.applyDraft()).status,'ok');assert.equal(f.helperCalls.length,3);assert.equal(f.generationCalls.length,1);
+});
+test('a changed final source binding rejects corrections without committing anything',async()=>{
+  const f=create({mutateProjection:(response,count)=>{if(count===2)response.projection.binding='b'.repeat(64);}});
+  await startReview(f);f.actions.setDirectionMode('right');assert.equal((await f.actions.applyDraft()).status,'stale');
+  assert.equal(f.history.getUndoCount(),0);assert.equal(f.generationCalls.length,0);assert.equal(f.state.similarityAlignmentResetReceipt.value,null);
+});
+test('empty modern evidence and missing historical evidence disable combined Reset with different reasons',async()=>{
+  const f=create();await startAlign(f);assert.match(f.actions.resetPreview.value.disabledReason,/no direction changes/);
+  f.state.similarityAlignmentResetReceipt.value=null;assert.match(f.actions.resetPreview.value.disabledReason,/historical/);
+  assert.equal((await f.actions.resetAlignment('positions-and-directions')).status,'rejected');
+  assert.equal((await f.actions.resetAlignment()).status,'ok');
+});
+test('canceled and stale direction generations leave orientations, receipt and History unchanged', async () => {
+  for (const outcome of ['canceled', 'stale']) {
+    const pending = deferred();const fixture=create({generation:()=>pending.promise});await startReview(fixture);
+    fixture.actions.setDirectionMode('right');const operation=fixture.actions.applyDraft();await new Promise(resolve=>setImmediate(resolve));
+    assert.equal(fixture.state.linearSeqs[1].region_reverse,false);if(outcome==='canceled')fixture.actions.cancel();pending.resolve({status:outcome});
+    assert.equal((await operation).status,outcome==='canceled'?'stale':outcome);assert.equal(fixture.history.getUndoCount(),0);
+    assert.equal(fixture.state.similarityAlignmentResetReceipt.value,null);
+  }
+});
+
+test('Align A then B resets to B before, including reference and only affected later edits', async () => {
+  const f = create();
+  await startReview(f);f.actions.setDirectionMode('left');await f.actions.applyDraft();
+  const afterA = f.state.linearSeqs.map(row => row.region_reverse);
+  await startReview(f);f.actions.setDirectionMode('right');
+  const firstB=await f.actions.applyDraft();
+  if(firstB.status==='reviewing'){assert.equal(f.history.getUndoCount(),1);assert.equal((await f.actions.applyDraft()).status,'ok');}
+  else assert.equal(firstB.status,'ok');
+  const receiptB = structuredClone(f.state.similarityAlignmentResetReceipt.value);
+  assert.deepEqual(receiptB.directions, [
+    {recordKey:'a',before:true,after:false}, {recordKey:'b',before:false,after:true}
+  ]);
+  assert.equal(f.history.getUndoCount(),2);
+  // A later affected edit is replaced, while a skipped/unknown record's edit survives.
+  f.state.linearSeqs[0].region_reverse=true;
+  f.state.linearSeqs[2].region_reverse=true;
+  // Model the ordinary Generate owner committing those manual directions.
+  f.generationCalls.at(-1).canonical.renderRequest.records[0].presentation.reverseComplement=true;
+  f.generationCalls.at(-1).canonical.renderRequest.records[2].presentation.reverseComplement=true;
+  f.generationCalls.at(-1).canonical.renderRequest.records[0].presentation.label='<i>Exact displayed record</i>';
+  f.state.linearSeqs[0].definition='Source-only name';
+  assert.equal(f.actions.resetPreview.value.targets[0].label,'Exact displayed record');
+  assert.equal(f.actions.resetPreview.value.targets[0].laterManualEdit,true);
+  assert.equal((await f.actions.resetAlignment('positions-and-directions')).status,'ok');
+  assert.deepEqual(f.state.linearSeqs.map(row=>row.region_reverse),[...afterA.slice(0,2),true]);
+  assert.equal(f.state.similarityAlignmentResetReceipt.value,null);
+  assert.equal(f.history.getUndoCount(),3);
+  await f.history.undo();assert.deepEqual(f.state.similarityAlignmentResetReceipt.value,receiptB);
+  await f.history.undo();assert.deepEqual(f.state.linearSeqs.map(row=>row.region_reverse),afterA);
+});
+
+test('failed Reset retains the original receipt and Result for an explicit retry', async () => {
+  let fail=false;
+  const f=create({generation:async()=>fail?{status:'error',error:{summary:'Reset render rejected.'}}:{status:'ok'}});
+  await startReview(f);f.actions.setDirectionMode('left');await f.actions.applyDraft();
+  const before=structuredClone({receipt:f.state.similarityAlignmentResetReceipt.value,
+    plan:f.state.similarityAlignmentPlan.value,translations:f.state.linearRecordTranslations.value,
+    sequences:f.state.linearSeqs,results:f.state.results.value});
+  fail=true;assert.equal((await f.actions.resetAlignment('positions-and-directions')).status,'error');
+  assert.deepEqual({receipt:f.state.similarityAlignmentResetReceipt.value,
+    plan:f.state.similarityAlignmentPlan.value,translations:f.state.linearRecordTranslations.value,
+    sequences:f.state.linearSeqs,results:f.state.results.value},before);
+  assert.equal(f.history.getUndoCount(),1);
+  fail=false;assert.equal((await f.actions.resetAlignment('positions-and-directions')).status,'ok');
+  assert.equal(f.history.getUndoCount(),2);assert.equal(f.state.similarityAlignmentResetReceipt.value,null);
+});
+
+test('combined Reset uses current geometry for y without storing a translation snapshot', async () => {
+  const f=create({mutateProjection:(response,count)=>{
+    if(count===3)response.projection.records[0].variants[0].axisY+=20;
+  }});
+  await startReview(f);f.actions.setDirectionMode('left');await f.actions.applyDraft();
+  const prior=f.state.linearRecordTranslations.value.find(row=>row.recordKey==='a').y;
+  assert.equal((await f.actions.resetAlignment('positions-and-directions')).status,'ok');
+  assert.equal(f.state.linearRecordTranslations.value.find(row=>row.recordKey==='a').y,prior-20);
+  assert.equal(f.helperCalls.length,3);
+});
+
+test('stable reorder retains receipt, invalidation consumes it through the existing plan owner', async () => {
+  const f=create();await startReview(f);f.actions.setDirectionMode('left');await f.actions.applyDraft();
+  const receipt=structuredClone(f.state.similarityAlignmentResetReceipt.value);
+  f.actions.retainForStableReorder(['c','b','a']);
+  assert.deepEqual(f.state.similarityAlignmentResetReceipt.value,receipt);
+  f.actions.clearForMutation('Source changed.');
+  assert.equal(f.state.similarityAlignmentPlan.value,null);
+  assert.equal(f.state.similarityAlignmentResetReceipt.value,null);
 });

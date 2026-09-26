@@ -1,3 +1,4 @@
+import { writeCanonicalRecordReverseComplement } from '../app/record-display-options.js';
 import { canonicalFeaturePlacements } from './feature-placement.js';
 export { canonicalFeaturePlacements } from './feature-placement.js';
 import { buildDefaultColorOverrideTsv, normalizePaletteColors } from '../app/color-utils.js';
@@ -4880,6 +4881,28 @@ export const projectCommittedRecordTransform = ({ committed, target, transform }
       reverseComplement: transform.reverseComplement
     })
   };
+};
+
+/** Project only alignment-owned fields of the last committed canonical artifact. */
+export const projectCommittedSimilarityAlignment = ({ committed, plan, translations, orientations }) => {
+  if (committed?.renderRequest?.schema !== CANONICAL_REQUEST_SCHEMA
+    || committed.renderRequest.mode !== 'linear' || !committed.resources) {
+    throw new Error('Alignment requires a committed canonical Linear artifact.');
+  }
+  const canonical = { ...committed, renderRequest: cloneCanonicalJsonValue(committed.renderRequest) };
+  const request = canonical.renderRequest;
+  const keys = request.records.map(({ recordKey }) => recordKey);
+  const byKey = new Map((orientations || []).map((entry) => [entry.recordKey, entry.reverseComplement]));
+  if (byKey.size !== keys.length || orientations.length !== keys.length
+    || keys.some(key => typeof byKey.get(key) !== 'boolean')) {
+    throw new Error('Alignment orientation coverage changed.');
+  }
+  request.records.forEach(record => writeCanonicalRecordReverseComplement(record, byKey.get(record.recordKey)));
+  request.layout = { recordGapPx: 24, multiRecordPositions: null, ...request.layout,
+    similarityAlignment: cloneCanonicalJsonValue(plan ?? null),
+    recordTranslations: cloneCanonicalJsonValue(translations) };
+  projectCanonicalSessionRequest({ ...canonical, deferResourceContent: true });
+  return canonical;
 };
 
 const normalizePublicationRequestAliases = (request) => {

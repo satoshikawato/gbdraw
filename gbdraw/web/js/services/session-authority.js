@@ -1,7 +1,7 @@
 import { validateAnnotationWarnings } from './session-feature-metadata.js';
 import { assertSafeObjectKeys } from './safe-object-keys.js';
 import { validateWebFileBindings } from './session-resource-backing.js';
-import { validateCurrentWriterActiveConfig } from './session-active-config-contract.js';
+import { validateCurrentWriterActiveConfig, validateAlignmentResetReceiptShape } from './session-active-config-contract.js';
 import { migrateLegacyLinearLabelVisibility } from '../app/linear-label-visibility.js';
 import { migrateLegacyRecordDisplayDrafts } from '../app/record-display-options.js';
 
@@ -413,6 +413,12 @@ export const validateSessionAuthorityInventory = (sessionData, version) => {
         `Session version ${String(version)} requires editorState.featureCatalog.`
       );
     }
+    if (sessionData.renderRequest?.schema === 8
+      && sessionData.renderRequest.layout?.similarityAlignment
+      && !Object.hasOwn(editorState, 'alignmentResetReceipt')) {
+      throw new Error('Current alignment Session requires editorState.alignmentResetReceipt.');
+    }
+    validateAlignmentResetReceiptShape(editorState.alignmentResetReceipt, sessionData.renderRequest);
     const featureCatalog = editorState.featureCatalog;
     const expectedCatalogSchema = Number(version) === 44 ? 4 : 3;
     if (
