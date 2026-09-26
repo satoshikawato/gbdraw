@@ -593,6 +593,7 @@ def validate_session(session: Mapping[str, Any]) -> None:
         _validate_current_retired_active_config_paths(session)
         _validate_current_comparison_authority(session)
         _validate_current_feature_catalog_authority(session)
+        _validate_alignment_reset_receipt(session)
     if version >= 41:
         _validate_display_placement_drafts(session)
     if is_settings_only_session(session):
@@ -1024,6 +1025,79 @@ def _validate_current_comparison_authority(
             )
 
 
+def _validate_alignment_reset_receipt(session: Mapping[str, Any]) -> None:
+    """Admit optional artifact restoration history without interpreting render policy."""
+    editor = session.get("editorState")
+    request = session.get("renderRequest")
+    plan = request.get("layout", {}).get("similarityAlignment") if isinstance(request, Mapping) else None
+    if (isinstance(request, Mapping) and request.get("schema") == 8 and plan
+            and isinstance(editor, Mapping) and "alignmentResetReceipt" not in editor):
+        raise ValidationError("Current alignment Session requires editorState.alignmentResetReceipt.")
+    receipt = editor.get("alignmentResetReceipt") if isinstance(editor, Mapping) else None
+    if receipt is None:
+        return
+    def invalid() -> None:
+        raise ValidationError("Alignment reset receipt is malformed or stale.")
+
+    if (not isinstance(receipt, Mapping)
+            or set(receipt) != {"binding", "directions", "referenceDeltaX"}
+            or not isinstance(receipt.get("binding"), str)
+            or not re.fullmatch(r"[0-9a-f]{64}", receipt["binding"])
+            or not isinstance(receipt.get("directions"), list)
+            or not isinstance(plan, Mapping) or request.get("mode") != "linear"):
+        invalid()
+    eligible = {item["recordKey"] for item in plan["records"] if item["status"] != "skipped"}
+    keys: set[str] = set()
+    for delta in receipt["directions"]:
+        if (not isinstance(delta, Mapping) or set(delta) != {"recordKey", "before", "after"}
+                or delta["recordKey"] not in eligible or delta["recordKey"] in keys
+                or not isinstance(delta["before"], bool) or not isinstance(delta["after"], bool)
+                or delta["before"] == delta["after"]):
+            invalid()
+        keys.add(delta["recordKey"])
+    delta = receipt["referenceDeltaX"]
+    if delta is not None and (not isinstance(delta, Mapping)
+            or set(delta) != {"recordKey", "deltaX"}
+            or delta["recordKey"] != plan["reference"]["recordKey"]
+            or isinstance(delta["deltaX"], bool) or not isinstance(delta["deltaX"], (int, float))
+            or not math.isfinite(delta["deltaX"]) or delta["deltaX"] == 0):
+        invalid()
+    fingerprints: dict[str, str] = {}
+
+    def source_identity(source: Mapping[str, Any]) -> dict[str, str]:
+        identity = {}
+        for key, value in source.items():
+            if key == "kind":
+                identity[key] = value
+            else:
+                if value not in fingerprints:
+                    resource = session.get("resources", {}).get(value)
+                    if not isinstance(resource, Mapping) or resource.get("encoding") != "base64":
+                        invalid()
+                    try:
+                        content = base64.b64decode(resource["data"], validate=True)
+                    except (ValueError, TypeError, KeyError) as exc:
+                        raise ValidationError("Alignment reset receipt resource is invalid.") from exc
+                    if len(content) != resource.get("size"):
+                        invalid()
+                    fingerprints[value] = hashlib.sha256(content).hexdigest()
+                identity[key] = fingerprints[value]
+        return identity
+
+    records = [{
+        "recordKey": record["recordKey"], "source": source_identity(record["source"]),
+        "selector": record["selector"],
+        "region": ({"start": record["region"]["start"], "end": record["region"]["end"]}
+                   if record.get("region") else None), "display": record["display"],
+    } for record in request["records"]]
+    binding = {"plan": {**plan, "records": sorted(plan["records"], key=lambda item: item["recordKey"])},
+               "records": sorted(records, key=lambda item: item["recordKey"])}
+    digest = hashlib.sha256(json.dumps(binding, ensure_ascii=False, sort_keys=True,
+                                     separators=(",", ":")).encode()).hexdigest()
+    if receipt["binding"] != digest:
+        raise ValidationError("Alignment reset receipt source or plan binding changed.")
+
+
 def _validate_current_feature_catalog_authority(
     session: Mapping[str, Any],
 ) -> None:
@@ -1435,6 +1509,13 @@ def normalize_current_session_artifacts(
     Legacy protein artifacts are kept outside the current cache maps so a
     save-before-generate round trip is lossless.
     """
+
+    request = session.get("renderRequest")
+    editor = session.get("editorState")
+    if (isinstance(request, Mapping)
+            and request.get("layout", {}).get("similarityAlignment") is not None
+            and isinstance(editor, dict)):
+        editor.setdefault("alignmentResetReceipt", None)
 
     source_manifest = (
         protein_identity_manifest

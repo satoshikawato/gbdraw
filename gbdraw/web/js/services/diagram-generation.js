@@ -473,7 +473,8 @@ const runAuxiliaryWorkerRequest = ({
   payload,
   operation = null,
   activeRequests,
-  fallbackMessage
+  fallbackMessage,
+  prepareResources = null
 }) => {
   const requestId = nextRequestId;
   nextRequestId += 1;
@@ -503,6 +504,8 @@ const runAuxiliaryWorkerRequest = ({
       };
       request.cleanup = cleanup;
       activeRequests.add(request);
+      let preparedResources = null;
+      let workerPayload = payload;
 
       const fail = (error) => {
         cleanup();
@@ -514,6 +517,7 @@ const runAuxiliaryWorkerRequest = ({
         if (data.type !== type || data.requestId !== requestId) return;
         cleanup();
         if (data.ok) {
+          preparedResources?.commit();
           resolveRequest({ requestId, result: data.result });
           return;
         }
@@ -528,6 +532,12 @@ const runAuxiliaryWorkerRequest = ({
         fail(new Error('Diagram generation worker message could not be decoded'));
       }
 
+      if (prepareResources) {
+        preparedResources = await prepareResources();
+        if (!activeRequests.has(request)) return;
+        workerPayload = { ...payload, resourceManifest: preparedResources.resourceManifest,
+          stagedResources: preparedResources.stagedResources };
+      }
       currentWorker.addEventListener('message', handleMessage);
       currentWorker.addEventListener('error', handleError);
       currentWorker.addEventListener('messageerror', handleMessageError);
@@ -536,9 +546,9 @@ const runAuxiliaryWorkerRequest = ({
           type,
           requestId,
           ...(operation ? { operation } : {}),
-          payload
+          payload: workerPayload
         },
-        collectTransferList(payload)
+        collectTransferList(workerPayload)
       );
     } catch (error) {
       request?.cleanup?.();
@@ -559,10 +569,15 @@ export const runDiagramHelperOperation = (operation, payload = {}) => {
   if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
     return Promise.reject(new TypeError('Diagram helper payload must be an object.'));
   }
+  const projection = normalizedOperation === DIAGRAM_HELPER_OPERATIONS.RESOLVE_SIMILARITY_ALIGNMENT
+    && payload.projection !== undefined;
+  const { resources, ...helperPayload } = payload;
   return runAuxiliaryWorkerRequest({
-    type: 'helper',
-    operation: normalizedOperation,
-    payload,
+    type: 'helper', operation: normalizedOperation,
+    payload: projection ? helperPayload : payload,
+    prepareResources: projection ? () => resourceTransport.prepare({
+      request: payload.projection.canonicalRequest, resources
+    }) : null,
     activeRequests: activeHelperRequests,
     fallbackMessage: `Diagram helper operation '${normalizedOperation}' failed`
   });

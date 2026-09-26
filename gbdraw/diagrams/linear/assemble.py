@@ -2484,6 +2484,9 @@ def assemble_linear_diagram(
             ),
             px_per_bp=sequence_width / max(1, len(record.seq)),
         )
+    # Keep raw layout placements available to the existing alignment helper.
+    # They exclude canonical translations and composition/viewBox fitting.
+    alignment_placements = tuple(record_placements.values())
     final_translations = _final_record_translations(
         record_keys=record_keys,
         placements=record_placements,
@@ -3081,6 +3084,10 @@ def assemble_linear_diagram(
         targets = FeaturePlacementSlot("linear", resolved_feature_slot.side, profile.strandedness).supported_targets()
         for record_geometry in getattr(canvas, "_gbdraw_track_slot_geometry", {}).get("records", []):
             record_geometry["featurePlacementTargets"] = targets
+    setattr(canvas, "_gbdraw_alignment_placements", tuple(
+        replace(placement, x=placement.x + float(canvas_config.horizontal_offset))
+        for placement in alignment_placements
+    ))
     setattr(canvas, "_gbdraw_linear_source_content_bounds", source_primary_bounds)
     setattr(canvas, "_gbdraw_linear_composition_plan", composition_plan)
 
