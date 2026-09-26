@@ -249,6 +249,25 @@ def _project_alignment_anchor_center(
     transform: RecordDisplayTransform,
     displayed_length: int,
 ) -> float:
+    feature = _alignment_source_feature(anchor, provenance)
+    center = (
+        min(part[0] for part in feature.location_parts)
+        + max(part[1] for part in feature.location_parts)
+    ) / 2.0
+    projected = transform.source_position_to_display_offset(center)
+    if not 0.0 <= projected <= float(displayed_length):
+        raise ValidationError(
+            "Similarity alignment anchor is outside the current crop for record "
+            f"{provenance.record_key!r}."
+        )
+    return projected
+
+
+
+def _alignment_source_feature(
+    anchor: AlignmentAnchorIdentity | None,
+    provenance: ResolvedRecordProvenance,
+) -> SourceFeatureIdentity:
     if anchor is None:
         raise ValidationError(
             f"Similarity alignment record {provenance.record_key!r} has no anchor."
@@ -288,19 +307,49 @@ def _project_alignment_anchor_center(
             "Similarity alignment anchor must resolve to exactly one source feature "
             f"for record {provenance.record_key!r}."
         )
-    feature = matches[0]
-    center = (
-        min(part[0] for part in feature.location_parts)
-        + max(part[1] for part in feature.location_parts)
-    ) / 2.0
-    projected = transform.source_position_to_display_offset(center)
-    if not 0.0 <= projected <= float(displayed_length):
-        raise ValidationError(
-            "Similarity alignment anchor is outside the current crop for record "
-            f"{provenance.record_key!r}."
-        )
-    return projected
+    return matches[0]
 
+
+@dataclass(frozen=True)
+class AlignmentAnchorDisplayFact:
+    """Source-bound anchor geometry in one already resolved display transform."""
+
+    source_start: int
+    source_end: int
+    source_strand: int | None
+    displayed_strand: int | None
+    display_center: float | None
+
+
+def project_similarity_alignment_anchor_fact(
+    collection: ResolvedRecordCollection,
+    anchor: AlignmentAnchorIdentity,
+) -> AlignmentAnchorDisplayFact:
+    """Use the same source identity and center projection as the renderer."""
+
+    matches = [i for i, item in enumerate(collection.provenance)
+               if item.record_key == anchor.record_key]
+    if len(matches) != 1:
+        raise ValidationError("Alignment anchor record coverage is invalid.")
+    index = matches[0]
+    provenance = collection.provenance[index]
+    feature = _alignment_source_feature(anchor, provenance)
+    if anchor.biological_feature_id not in {feature.biological_feature_id, feature.stable_feature_id}:
+        raise ValidationError("Alignment anchor biological identity changed.")
+    strands = {part[2] for part in feature.location_parts}
+    strand = next(iter(strands)) if len(strands) == 1 and strands <= {-1, 1} else None
+    try:
+        center = _project_alignment_anchor_center(
+            anchor, provenance=provenance, transform=collection.transforms[index],
+            displayed_length=len(collection.records[index]),
+        )
+    except ValidationError:
+        center = None  # An exact source anchor outside the crop is unusable.
+    return AlignmentAnchorDisplayFact(
+        min(part[0] for part in feature.location_parts),
+        max(part[1] for part in feature.location_parts),
+        strand, None if strand is None else strand * collection.transforms[index].source_step, center,
+    )
 
 def resolve_cli_similarity_alignment_plan(
     collection: ResolvedRecordCollection,

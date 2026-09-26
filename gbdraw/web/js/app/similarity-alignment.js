@@ -365,10 +365,147 @@ const validatePlan = (value, response, path) => {
   return { schema: 2, groupId: raw.groupId, reference: raw.reference, records };
 };
 
-const validateResolution = (value, request) => {
+const validateProjection = (value, request) => {
+  if (value === null) return null;
+  const raw = exactObject(value, ['binding', 'geometryOrientations', 'records'], 'alignment projection');
+  const keys = request.records.map(({ recordKey }) => recordKey);
+  if (!/^[a-f0-9]{64}$/.test(raw.binding) || !Array.isArray(raw.records)
+    || raw.records.length !== keys.length) throw new Error('Invalid alignment projection binding or coverage.');
+  exactObject(raw.geometryOrientations, keys, 'alignment projection.geometryOrientations');
+  const known = new Set(request.members.map(({ anchor }) => anchorKey(anchor)));
+  const finite = (number) => { if (!Number.isFinite(number)) throw new Error('Nonfinite alignment placement.'); };
+  raw.records.forEach((record, index) => {
+    exactObject(record, ['recordKey', 'beforeReverseComplement', 'base', 'beforeAxisY',
+      'beforeAnchors', 'variants'], 'alignment projection record');
+    if (record.recordKey !== keys[index] || typeof raw.geometryOrientations[record.recordKey] !== 'boolean'
+      || record.beforeReverseComplement !== baseReverseComplement(request.records[index])) {
+      throw new Error('Alignment projection changed record orientation binding.');
+    }
+    exactObject(record.base, ['x', 'y'], 'alignment projection base');
+    [record.base.x, record.base.y, record.beforeAxisY].forEach(finite);
+    const validateAnchors = (anchors, variant) => {
+      if (!Array.isArray(anchors)) throw new Error('Alignment projection anchors must be an array.');
+      const identities = new Set();
+      anchors.forEach((entry) => {
+        exactObject(entry, variant ? ['anchor', 'displayedStrand', 'displayCenter', 'centerX']
+          : ['anchor', 'centerX'], 'alignment projection anchor');
+        const anchor = validateAnchor(entry.anchor, 'alignment projection anchor identity');
+        const key = anchorKey(anchor);
+        if (anchor.recordKey !== record.recordKey || !known.has(key) || identities.has(key)) {
+          throw new Error('Alignment projection changed anchor coverage.');
+        }
+        identities.add(key);
+        if (variant) {
+          if (![null, -1, 1].includes(entry.displayedStrand)
+            || (entry.displayCenter === null) !== (entry.centerX === null)) {
+            throw new Error('Alignment projection contains invalid strand or center facts.');
+          }
+          if (entry.displayCenter !== null) finite(entry.displayCenter);
+        }
+        if (!variant || entry.centerX !== null) finite(entry.centerX);
+      });
+      return identities;
+    };
+    const beforeAnchors = validateAnchors(record.beforeAnchors, false);
+    if (!Array.isArray(record.variants) || record.variants.length !== 2) {
+      throw new Error('Alignment projection requires both absolute directions.');
+    }
+    record.variants.forEach((variant, direction) => {
+      exactObject(variant, ['reverseComplement', 'axisY', 'anchors'], 'alignment projection variant');
+      if (variant.reverseComplement !== Boolean(direction)) throw new Error('Invalid alignment direction variant.');
+      finite(variant.axisY);
+      const anchors = validateAnchors(variant.anchors, true);
+      const expected = request.members.filter(({ anchor }) => anchor.recordKey === record.recordKey);
+      if (anchors.size !== expected.length || expected.some(({ anchor }) => !anchors.has(anchorKey(anchor)))) {
+        throw new Error('Alignment projection omitted a source anchor.');
+      }
+      if (variant.reverseComplement === record.beforeReverseComplement
+        && variant.anchors.some(({ anchor, centerX }) => (centerX !== null) !== beforeAnchors.has(anchorKey(anchor)))) {
+        throw new Error('Alignment projection changed current anchor mappability.');
+      }
+    });
+  });
+  return raw;
+};
+
+// One transient resolver is shared by local previews and final helper admission.
+export const projectSimilarityAlignmentDirections = ({ resolution, intent, expectedBinding, choices = [] }) => {
+  const facts = resolution?.projection;
+  if (!facts) throw new Error('Source-bound alignment projection facts are required.');
+  if (typeof expectedBinding !== 'string') throw new Error('An explicit alignment binding is required.');
+  if (facts.binding !== expectedBinding) return deepFreeze({ status: 'stale', reason: 'binding_changed', binding: facts.binding });
+  const mode = intent?.mode;
+  if (!['keep', 'right', 'left', 'custom'].includes(mode)) throw new Error('Invalid alignment direction mode.');
+  exactObject(intent, mode === 'custom' ? ['mode', 'byRecordKey'] : ['mode'], 'alignment direction intent');
+  if (mode === 'custom') {
+    if (!isObject(intent.byRecordKey) || Object.entries(intent.byRecordKey).some(([key, value]) => (
+      !facts.records.some(({ recordKey }) => recordKey === key) || !['keep', 'right', 'left'].includes(value)
+    ))) throw new Error('Invalid Custom alignment choices.');
+  }
+  if (!Array.isArray(choices)) throw new Error('Alignment choices must be an array.');
+  const selectedChoices = new Map();
+  choices.forEach((choice) => {
+    exactObject(choice, ['recordKey', 'kind', 'anchor'], 'local alignment choice');
+    const record = resolution.records.find(({ recordKey }) => recordKey === choice.recordKey);
+    if (!record || choice.recordKey === resolution.reference.recordKey || selectedChoices.has(choice.recordKey)
+      || !['select', 'skip'].includes(choice.kind)) throw new Error('Invalid local alignment choice.');
+    if (choice.kind === 'skip' ? choice.anchor !== null : !record.candidates.some((candidate) => (
+      candidate.usable && sameJson(candidate.anchor, validateAnchor(choice.anchor, 'local alignment anchor'))
+    ))) throw new Error('Local alignment selection is not a usable Python candidate.');
+    selectedChoices.set(choice.recordKey, choice);
+  });
+  const records = facts.records.map((fact, index) => {
+    const row = resolution.records[index];
+    const choice = selectedChoices.get(fact.recordKey);
+    const decision = choice
+      ? { status: choice.kind === 'select' ? 'aligned' : 'skipped', anchor: choice.anchor, rationale: 'skipped_by_user' }
+      : row.kind === 'ambiguous' ? { status: 'ambiguous', anchor: null, rationale: 'selection_required' } : row;
+    const current = fact.variants[Number(fact.beforeReverseComplement)];
+    const selected = decision.anchor === null ? null : current.anchors.find(({ anchor }) => sameJson(anchor, decision.anchor));
+    let exclusion = ['skipped', 'ambiguous'].includes(decision.status) ? decision.rationale : null;
+    if (!exclusion && (!selected || selected.centerX === null)) exclusion = 'unusable_anchor';
+    if (!exclusion && selected.displayedStrand === null) exclusion = 'unknown_strand';
+    const requested = mode === 'custom' ? intent.byRecordKey[fact.recordKey] || 'keep' : mode;
+    const flip = !exclusion && requested !== 'keep'
+      && selected.displayedStrand !== (requested === 'right' ? 1 : -1);
+    const afterReverseComplement = flip ? !fact.beforeReverseComplement : fact.beforeReverseComplement;
+    const variant = fact.variants[Number(afterReverseComplement)];
+    const afterAnchor = selected ? variant.anchors.find(({ anchor }) => sameJson(anchor, selected.anchor)) : null;
+    if (!exclusion && afterAnchor?.centerX === null) throw new Error('Requested direction makes the selected anchor unusable.');
+    return { recordKey: fact.recordKey, anchor: decision.anchor, status: decision.status,
+      beforeReverseComplement: fact.beforeReverseComplement, afterReverseComplement,
+      beforeArrow: selected?.displayedStrand ?? null, afterArrow: afterAnchor?.displayedStrand ?? null,
+      exclusion, beforeCenterX: fact.beforeAnchors.find(({ anchor }) => sameJson(anchor, decision.anchor))?.centerX ?? null,
+      afterCenterX: afterAnchor?.centerX ?? null,
+      translation: { x: fact.base.x, y: fact.base.y + fact.beforeAxisY - variant.axisY } };
+  });
+  const reference = records.find(({ recordKey }) => recordKey === resolution.reference.recordKey);
+  const fact = facts.records.find(({ recordKey }) => recordKey === reference.recordKey);
+  if (!Number.isFinite(reference.beforeCenterX) || !Number.isFinite(reference.afterCenterX)) {
+    throw new Error('The exact reference center is unavailable.');
+  }
+  const beforeX = reference.beforeCenterX + fact.base.x;
+  reference.translation.x = beforeX - reference.afterCenterX;
+  const deltaX = reference.translation.x - fact.base.x;
+  if (!Number.isFinite(deltaX) || records.some(({ translation }) => !Number.isFinite(translation.y))) {
+    throw new Error('Alignment correction is nonfinite.');
+  }
+  const signature = JSON.stringify({
+    records: records.map(({ recordKey, anchor, status, afterReverseComplement }) => ({ recordKey, anchor, status, afterReverseComplement })),
+    referenceBeforeX: beforeX, referenceDeltaX: deltaX
+  });
+  return deepFreeze({ status: 'projected', binding: facts.binding, records,
+    selectionComplete: records.every(({ status }) => status !== 'ambiguous'),
+    reference: { anchor: resolution.reference, beforeX, afterX: reference.afterCenterX + reference.translation.x, deltaX },
+    geometryValidated: records.every(({ recordKey, afterReverseComplement }) => (
+      facts.geometryOrientations[recordKey] === afterReverseComplement
+    )), signature });
+};
+
+export const validateSimilarityAlignmentResolution = (value, request) => {
   const raw = exactObject(value, [
     'schema', 'status', 'groupId', 'reference', 'referenceDisplayedStrand',
-    'referenceDisplayCenter', 'records', 'plan'
+    'referenceDisplayCenter', 'records', 'plan', 'projection'
   ], 'alignment helper response');
   if (raw.schema !== 2 || !['resolved', 'ambiguous'].includes(raw.status)
     || raw.groupId !== request.groupId || !Array.isArray(raw.records)
@@ -412,8 +549,26 @@ const validateResolution = (value, request) => {
     schema: 2, status: raw.status, groupId: raw.groupId, reference,
     referenceDisplayedStrand: raw.referenceDisplayedStrand,
     referenceDisplayCenter: raw.referenceDisplayCenter,
-    records, plan: null
+    records, plan: null, projection: validateProjection(raw.projection, request)
   };
+  response.projection?.records.forEach((fact, index) => {
+    const current = fact.variants[Number(fact.beforeReverseComplement)];
+    const candidates = records[index].candidates;
+    candidates.forEach((candidate) => {
+      const projected = current.anchors.find(({ anchor }) => sameJson(anchor, candidate.anchor));
+      if (!projected || projected.displayedStrand !== candidate.displayedStrand
+        || projected.displayCenter !== candidate.displayCenter) {
+        throw new Error('Alignment projection disagrees with Python candidate facts.');
+      }
+    });
+    if (fact.recordKey === reference.recordKey) {
+      const selected = current.anchors.find(({ anchor }) => sameJson(anchor, reference));
+      if (!selected || selected.displayedStrand !== raw.referenceDisplayedStrand
+        || selected.displayCenter !== raw.referenceDisplayCenter) {
+        throw new Error('Alignment projection changed the exact reference facts.');
+      }
+    }
+  });
   if (raw.status === 'resolved') {
     if (raw.plan === null) throw new Error('Resolved alignment helper response has no plan.');
     response.plan = validatePlan(raw.plan, response, 'alignment helper response.plan');
@@ -833,7 +988,7 @@ export const createSimilarityAlignmentActions = ({
     try {
       const helper = await runHelperOperation(resolveOperation, { request });
       if (expectedActionId !== actionId) return { status: 'stale' };
-      response = validateResolution(helper?.result, request);
+      response = validateSimilarityAlignmentResolution(helper?.result, request);
       if (!artifactIsCurrent()) return rejectStaleDraft();
     } catch (cause) {
       if (expectedActionId !== actionId) return { status: 'stale' };
@@ -952,7 +1107,7 @@ export const createSimilarityAlignmentActions = ({
     try {
       const helper = await runHelperOperation(resolveOperation, { request });
       if (expectedActionId !== actionId) return { status: 'stale' };
-      const response = validateResolution(helper?.result, request);
+      const response = validateSimilarityAlignmentResolution(helper?.result, request);
       if (response.status !== 'resolved' || !response.plan) {
         throw new Error('The resolver did not resolve every record. Review the choices and retry.');
       }
@@ -1101,7 +1256,7 @@ export const createSimilarityAlignmentActions = ({
     try {
       const helper = await runHelperOperation(resolveOperation, { request: repairRequest });
       if (expectedActionId !== actionId) return { status: 'stale' };
-      response = validateResolution(helper?.result, repairRequest);
+      response = validateSimilarityAlignmentResolution(helper?.result, repairRequest);
     } catch (cause) {
       if (expectedActionId !== actionId) return { status: 'stale' };
       return markStaleReference(cause?.message || cause);
@@ -1179,7 +1334,7 @@ export const createSimilarityAlignmentActions = ({
     try {
       const helper = await runHelperOperation(resolveOperation, { request });
       if (expectedActionId !== actionId) return { status: 'stale' };
-      validateResolution(helper?.result, request);
+      validateSimilarityAlignmentResolution(helper?.result, request);
     } catch (_cause) {
       if (expectedActionId !== actionId) return { status: 'stale' };
       const alignedKeys = new Set(
