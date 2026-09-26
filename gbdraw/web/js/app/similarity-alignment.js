@@ -1200,7 +1200,7 @@ export const createSimilarityAlignmentActions = ({
     const targets = (receipt?.directions || []).map(delta => {
       const record = request?.records.find(({recordKey}) => recordKey === delta.recordKey);
       const sequence = state.linearSeqs.find(({uid}) => uid === delta.recordKey);
-      return {recordKey: delta.recordKey, label: displayText(sequence?.definition, sequence?.accession) || delta.recordKey,
+      return {recordKey: delta.recordKey, label: plainTextLinearRecordLabel(displayText(sequence?.definition, sequence?.accession) || delta.recordKey),
         current: baseReverseComplement(record), restored: delta.before,
         laterManualEdit: baseReverseComplement(record) !== delta.after};
     });
