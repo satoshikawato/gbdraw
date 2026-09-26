@@ -754,9 +754,10 @@ test('Apply error retains draft, focuses retry guidance, and accepts correction'
   await expect(error).toBeFocused();
   await expect(dialog.getByRole('button', { name: 'Apply', exact: true })).toBeEnabled();
   await page.setViewportSize({ width: 390, height: 500 });
-  const errorBox = await error.boundingBox();
-  expect(errorBox.x).toBeGreaterThanOrEqual(0);
-  expect(errorBox.x + errorBox.width).toBeLessThanOrEqual(390);
+  await expect.poll(async () => {
+    const errorBox = await error.boundingBox();
+    return errorBox.x >= 0 && errorBox.x + errorBox.width <= 390;
+  }).toBe(true);
   await expect(dialog.getByRole('button', { name: 'Cancel', exact: true })).toBeVisible();
   await expect(dialog.getByRole('button', { name: 'Apply', exact: true })).toBeVisible();
   expect(await dialog.locator('.custom-scrollbar').evaluate(
@@ -1086,4 +1087,189 @@ test('released v40 alignment materializes by stable feature identity without a W
   expect(observed.workers.constructions).toBe(0);
   expect(observed.workers.instances).toHaveLength(0);
   await expectNoUnhandledRejections(page);
+});
+
+test('Gallery Match reference direction reverses records with ribbons and preserves plan lifecycle', async ({ page, browser }, testInfo) => {
+  test.setTimeout(600000);
+  await captureUnhandledRejections(page);
+  const pageErrors = [];
+  page.on('pageerror', (error) => { pageErrors.push(String(error?.message || error)); console.log('Gallery page error:', String(error)); });
+  page.on('console', (message) => { if (message.type() === 'error') console.log('Gallery console error:', message.text()); });
+  await page.setViewportSize({ width: 1600, height: 1000 });
+  await page.goto('/gbdraw/web/index.html', { waitUntil: 'domcontentloaded' });
+  await page.waitForFunction(() => window.__GBDRAW_APP__);
+  await importSession(page, readFileSync(
+    'gbdraw/web/gallery/sessions/BGC0000708-BGC0000713.gbdraw-session.json'
+  ), 'BGC0000708-BGC0000713.gbdraw-session.json');
+
+  const recordState = (targetPage = page) => targetPage.evaluate(async () => {
+    const { state } = await import('./js/state.js');
+    return {
+      plan: JSON.parse(JSON.stringify(state.similarityAlignmentPlan.value)),
+      translations: JSON.parse(JSON.stringify(state.linearRecordTranslations.value)),
+      orientations: state.linearSeqs.map(({ uid, region_reverse }) => ({
+        recordKey: uid, reverseComplement: Boolean(region_reverse)
+      })),
+      results: state.results.value.map(({ name, content }) => ({ name, content })),
+      positions: Array.from(document.querySelectorAll(
+        '.gbdraw-preview-surface svg [data-gbdraw-composition-role="primary"][data-gbdraw-record-id]'
+      )).filter((element) => !element.hasAttribute('data-gbdraw-definition-part'))
+        .map((element) => ({ recordId: element.getAttribute('data-gbdraw-record-id'),
+          transform: element.getAttribute('transform') })),
+      historyCount: window.__GBDRAW_HISTORY__.getUndoCount()
+    };
+  });
+  const review = async () => {
+    const featureId = await page.evaluate(() => {
+      const feature = window.__GBDRAW_APP__.extractedFeatures.find(
+        (item) => item.protein_id === 'CAG38712.1' || item.sourceProteinId === 'CAG38712.1'
+      );
+      if (!feature) throw new Error('Gallery reference CAG38712.1 is unavailable.');
+      return feature.svg_id;
+    });
+    await page.locator(`[data-gbdraw-feature-id="${featureId}"]`).first()
+      .dispatchEvent('click', { clientX: -100, clientY: -100 });
+    await page.locator('.feature-popup[role="dialog"]')
+      .getByRole('button', { name: 'Review alignment options…' }).click();
+    const dialog = page.getByRole('dialog', { name: 'Select alignment anchors' });
+    await expect(dialog).toBeVisible({ timeout: 180000 });
+    return dialog;
+  };
+  const geometry = () => page.evaluate(async () => {
+    const { getFeatureFillElements } = await import('./js/app/feature-dom.js');
+    const { state } = await import('./js/state.js');
+    const svg = document.querySelector('.gbdraw-preview-surface svg');
+    const plan = state.similarityAlignmentPlan.value;
+    const center = (anchor) => {
+      const feature = state.extractedFeatures.value.find((item) => (
+        item.recordKey === anchor.recordKey && item.biologicalFeatureId === anchor.biologicalFeatureId
+      ));
+      const bounds = getFeatureFillElements(svg, feature.svg_id).map((element) => element.getBoundingClientRect());
+      return (Math.min(...bounds.map((b) => b.left)) + Math.max(...bounds.map((b) => b.right))) / 2;
+    };
+    const reference = center(plan.reference);
+    const offsets = plan.records.filter(({ status }) => status === 'aligned').map(({ recordKey, anchor }) => ({
+      recordKey, offset: center(anchor) - reference
+    }));
+    const ribbons = Array.from(svg.querySelectorAll('[data-gbdraw-pairwise-match-id]'));
+    return { offsets, ribbons: ribbons.length,
+      targetRibbons: ribbons.filter((element) => element.getAttribute('data-query-record-index') === '1'
+        || element.getAttribute('data-subject-record-index') === '1').length };
+  });
+  const before = await recordState();
+  const dialog = await review();
+  const targetRow = dialog.locator('[data-alignment-record-key="record-2"]');
+  await expect(targetRow).toContainText('Streptomyces fradiae');
+  await expect(targetRow.locator('[data-similarity-alignment-direction]')).toHaveText('Direction: opposite to reference');
+  const match = dialog.getByRole('checkbox', { name: 'Match reference direction', exact: true });
+  await expect(match).not.toBeChecked();
+  await match.focus();
+  await page.keyboard.press('Space');
+  await expect(match).toBeChecked();
+  await expect(targetRow.locator('[data-similarity-alignment-direction]')).toHaveText('Direction: opposite to reference — reversed on Apply');
+  await expect(dialog.locator('#similarity-alignment-direction-status')).toContainText('Streptomyces fradiae');
+  await dialog.screenshot({ path: testInfo.outputPath('match-review-desktop.png') });
+  await page.setViewportSize({ width: 390, height: 740 });
+  await match.scrollIntoViewIfNeeded();
+  await expect(match).toBeVisible();
+  const bounds = await dialog.boundingBox();
+  expect(bounds.x).toBeGreaterThanOrEqual(0);
+  expect(bounds.x + bounds.width).toBeLessThanOrEqual(390);
+  const apply = dialog.getByRole('button', { name: 'Apply', exact: true });
+  await expect(apply).toBeVisible();
+  expect(await dialog.evaluate((element) => element.scrollWidth <= element.clientWidth)).toBe(true);
+  await page.screenshot({ path: testInfo.outputPath('match-review-390.png') });
+  await page.setViewportSize({ width: 1600, height: 1000 });
+  await apply.click();
+  await page.waitForFunction(() => !window.__GBDRAW_APP__.similarityAlignmentBusy, null, { timeout: 180000 });
+  const applyStatus = await page.evaluate(() => ({ status: window.__GBDRAW_APP__.similarityAlignmentStatus,
+    error: window.__GBDRAW_APP__.similarityAlignmentError?.message, globalError: window.__GBDRAW_APP__.errorLog }));
+  expect(applyStatus, JSON.stringify(applyStatus)).toMatchObject({ status: 'idle' });
+  await expect(dialog).toBeHidden({ timeout: 180000 });
+  const applied = await recordState();
+  expect(applied.orientations.find(({ recordKey }) => recordKey === 'record-2').reverseComplement).toBe(true);
+  expect(applied.historyCount).toBe(before.historyCount + 1);
+  const reversedCount = applied.orientations.filter((entry, index) => (
+    entry.reverseComplement !== before.orientations[index].reverseComplement
+  )).length;
+  expect(reversedCount).toBe(4);
+  await expect(page.locator('[data-similarity-alignment-summary]')).toContainText(`${reversedCount} reversed`);
+  const measured = await geometry();
+  expect(measured.ribbons).toBeGreaterThan(0);
+  expect(measured.targetRibbons).toBeGreaterThan(0);
+  expect(Math.max(...measured.offsets.map(({ offset }) => Math.abs(offset)))).toBeLessThanOrEqual(0.5);
+  await testInfo.attach('matched-anchor-offsets', { body: JSON.stringify(measured, null, 2), contentType: 'application/json' });
+  console.log('Matched Gallery anchor offsets:', JSON.stringify(measured));
+  await page.screenshot({ path: testInfo.outputPath('match-applied.png'), fullPage: true });
+
+  await review();
+  await expect(targetRow.locator('[data-similarity-alignment-direction]')).toHaveText('Direction: same as reference');
+  await expect(match).not.toBeChecked();
+  await expect(match).toBeDisabled();
+  await expect(dialog).toContainText('All selected anchors already face the reference direction.');
+  await page.keyboard.press('Escape');
+  await expect(dialog).toBeHidden();
+  await page.getByRole('button', { name: 'Undo', exact: true }).click();
+  await expect.poll(recordState).toEqual(before);
+  await page.getByRole('button', { name: 'Redo', exact: true }).click();
+  await expect.poll(recordState).toEqual(applied);
+
+  const reset = await page.evaluate(() => window.__GBDRAW_APP__.resetSimilarityAlignment());
+  expect(reset.status).toBe('ok');
+  const resetState = await recordState();
+  expect(resetState.plan).toBeNull();
+  expect(resetState.orientations).toEqual(applied.orientations);
+  expect(resetState.translations).toEqual(applied.translations);
+  expect(before.positions).toHaveLength(5);
+  expect(resetState.positions).toEqual(before.positions);
+  await expect(page.locator('[data-similarity-alignment-notice]')).toContainText(
+    'Alignment reset: record positions restored; record directions unchanged.'
+  );
+  await page.getByRole('button', { name: 'Undo', exact: true }).click();
+  await expect.poll(recordState).toEqual(applied);
+
+  await page.evaluate(() => window.__GBDRAW_APP__.closeFeaturePopup());
+  await page.getByRole('button', { name: 'Record options for sequence 2', exact: true }).click();
+  const reverse = page.getByRole('checkbox', { name: 'Reverse complement for sequence 2', exact: true });
+  await expect(reverse).toBeChecked();
+  await reverse.uncheck();
+  expect((await recordState()).plan).toEqual(applied.plan);
+  expect(await page.evaluate(() => window.__GBDRAW_APP__.similarityAlignmentNotice))
+    .not.toContain('Alignment cleared');
+  const generated = await page.evaluate(() => window.__GBDRAW_APP__.runAnalysis());
+  expect(generated.status).toBe('ok');
+  const manual = await recordState();
+  expect(manual.plan).toEqual(applied.plan);
+  expect(manual.orientations.find(({ recordKey }) => recordKey === 'record-2').reverseComplement).toBe(false);
+  const manualGeometry = await geometry();
+  expect(Math.max(...manualGeometry.offsets.map(({ offset }) => Math.abs(offset)))).toBeLessThanOrEqual(0.5);
+  expect(manualGeometry.targetRibbons).toBeGreaterThan(0);
+  console.log('Manual Reverse anchor offsets:', JSON.stringify(manualGeometry));
+  await testInfo.attach('manual-anchor-offsets', { body: JSON.stringify(manualGeometry, null, 2), contentType: 'application/json' });
+
+  // Save the reversed matched result and verify a fresh app loads it without reconstructing Python.
+  await review();
+  await match.check();
+  await apply.click();
+  await expect(dialog).toBeHidden({ timeout: 180000 });
+  const saved = await recordState();
+  await page.evaluate(() => { window.__GBDRAW_APP__.sessionTitle = 'record-owned-match'; });
+  const downloadPromise = page.waitForEvent('download', { timeout: 180000 });
+  await page.evaluate(() => window.__GBDRAW_APP__.saveSessionWithTitle());
+  const download = await downloadPromise;
+  const savedPath = testInfo.outputPath('record-owned-match.gbdraw-session.json.gz');
+  await download.saveAs(savedPath);
+  const freshContext = await browser.newContext();
+  const freshPage = await freshContext.newPage();
+  await captureUnhandledRejections(freshPage);
+  await freshPage.goto(new URL('/gbdraw/web/index.html', page.url()).href, { waitUntil: 'domcontentloaded' });
+  await freshPage.waitForFunction(() => window.__GBDRAW_APP__);
+  await importSession(freshPage, readFileSync(savedPath), 'record-owned-match.gbdraw-session.json.gz');
+  const loaded = await recordState(freshPage);
+  expect(loaded).toMatchObject({ plan: saved.plan, translations: saved.translations,
+    orientations: saved.orientations, results: saved.results });
+  await expectNoUnhandledRejections(page);
+  await expectNoUnhandledRejections(freshPage);
+  expect(pageErrors).toEqual([]);
+  await freshContext.close();
 });

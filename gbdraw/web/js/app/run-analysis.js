@@ -1834,6 +1834,21 @@ export const createRunAnalysis = ({
     comparisonExecution = null,
     canonicalStateOverride = null
   } = {}) => {
+    const orientationByRecord = new Map((canonicalStateOverride?.linearRecordOrientations || [])
+      .map(({ recordKey, reverseComplement }) => [recordKey, Boolean(reverseComplement)]));
+    const runState = { ...state, linearSeqs: state.linearSeqs.map((sequence) => ({
+      ...sequence,
+      region_reverse: orientationByRecord.has(sequence.uid)
+        ? orientationByRecord.get(sequence.uid) : Boolean(sequence.region_reverse)
+    })) };
+    const { linearSeqs } = runState;
+    runState.recordDisplayRows = { get value() {
+      return (state.recordDisplayRows?.value || []).map((row) => {
+        const sequence = row.scope === 'linear'
+          ? linearSeqs.find(({ uid }) => uid === row.sourceUid) : null;
+        return sequence ? { ...row, reverse: sequence.region_reverse } : row;
+      });
+    } };
     const isReflow = runMode === 'reflow';
     if (!isReflow) {
       recordSessionLifecycleEvent('generate-start');
@@ -4446,36 +4461,20 @@ export const createRunAnalysis = ({
       recordSessionLifecycleEvent('serialize-canonical-files-start');
       const serializedFiles = await serializeCanonicalFiles(
         activeComparisonPlanSnapshot,
-        linearRecordCatalog
+        linearRecordCatalog,
+        runState
       );
       recordSessionLifecycleEvent('serialize-canonical-files-end');
       throwIfGenerationCanceled();
-      let candidateFiles = forceEmptyComparison
+      const candidateFiles = forceEmptyComparison
         ? { ...serializedFiles, linearCanonicalComparisons: [] }
         : serializedFiles;
-      if (Array.isArray(canonicalStateOverride?.linearRecordOrientations)) {
-        const orientationByRecord = new Map(
-          canonicalStateOverride.linearRecordOrientations.map((entry) => [
-            String(entry?.recordKey || ''),
-            Boolean(entry?.reverseComplement)
-          ])
-        );
-        candidateFiles = {
-          ...candidateFiles,
-          linearSeqs: (candidateFiles.linearSeqs || []).map((sequence) => ({
-            ...sequence,
-            region_reverse: orientationByRecord.has(String(sequence?.uid || ''))
-              ? orientationByRecord.get(String(sequence?.uid || ''))
-              : Boolean(sequence?.region_reverse)
-          }))
-        };
-      }
       const canonicalCircularConservation = resolvedCircularConservation.map((entry) => ({
         ...entry,
         fasta: candidateFiles.c_conservation_fastas?.[entry.sourceIndex] || null
       }));
       const candidateRequestState = {
-        ...state,
+        ...runState,
         selectedOrthogroupAlignmentFeature: {
           value: workingSelectedOrthogroupAlignmentFeature
         },
@@ -4766,9 +4765,9 @@ export const createRunAnalysis = ({
             linearRecordTranslations: cloneJsonData(
               canonicalStateOverride.linearRecordTranslations
             ) || [],
-            linearRecordOrientations: cloneJsonData(
-              canonicalStateOverride.linearRecordOrientations
-            ) || currentOwnerSet.linearRecordOrientations
+            linearRecordOrientations: linearSeqs.map(({ uid, region_reverse }) => ({
+              recordKey: uid, reverseComplement: region_reverse
+            }))
           } : {}),
           trackSlotResolvedGeometry: generationMetadata.trackSlotGeometry || null,
           proteinIdentityManifest: workingProteinIdentityManifest,

@@ -2188,8 +2188,8 @@ export const createAppSetup = () => {
   } = createRunAnalysis({
     state,
     isCurrentFeature: recordDisplayControls.isCurrentFeature,
-    serializeCanonicalFiles: (comparisonPlanSnapshot, linearRecordCatalog = null) => (
-      serializeActiveRenderFiles(state.mode.value, state, {
+    serializeCanonicalFiles: (comparisonPlanSnapshot, linearRecordCatalog, runState) => (
+      serializeActiveRenderFiles(runState.mode.value, runState, {
         comparisonPlan: comparisonPlanSnapshot,
         linearRecordCatalog
       })
@@ -3913,12 +3913,6 @@ export const createAppSetup = () => {
     return true;
   };
 
-  const setLinearRecordOrientation = (sequence, reverseComplement) => (
-    similarityAlignmentActions?.setManualOrientation?.(sequence, reverseComplement)
-  );
-
-  const linearRecordOrientationValue = (sequence) => Boolean(sequence?.region_reverse);
-
   const resetLinearRecordDefinition = (seq) => {
     if (!seq) return;
     history.runUndoable('Reset record definition', () => {
@@ -4109,8 +4103,6 @@ export const createAppSetup = () => {
     setLinearInputType,
     setLinearRecordSelector,
     setLinearRecordCrop,
-    setLinearRecordOrientation,
-    linearRecordOrientationValue,
     linearSourceMoveBlockedReason,
     canMoveLinearSource,
     moveLinearSource,
@@ -4318,6 +4310,8 @@ export const createAppSetup = () => {
     similarityAlignmentDrawerDisabledReason: similarityAlignmentActions.drawerDisabledReason,
     selectSimilarityAlignmentCandidate: similarityAlignmentActions.selectCandidate,
     skipSimilarityAlignmentRecord: similarityAlignmentActions.skipRecord,
+    similarityAlignmentDirectionMatch: similarityAlignmentActions.directionMatch,
+    setSimilarityAlignmentMatchReferenceDirection: similarityAlignmentActions.setMatchReferenceDirection,
     applySimilarityAlignmentDraft: applySimilarityAlignmentDialog,
     cancelSimilarityAlignmentDraft: cancelSimilarityAlignmentDialog,
     cancelSimilarityAlignmentDialog,

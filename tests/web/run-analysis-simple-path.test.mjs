@@ -1293,7 +1293,7 @@ test('neutral conservation replay delegates lazy resources to the shared reader'
   const runner = wireGeneratedArtifactRuntimeOwner(createRunAnalysis({
     ...generatedArtifactHandleOptions,
     state,
-    serializeCanonicalFiles: () => serializeActiveRenderFiles(state.mode.value, state),
+    serializeCanonicalFiles: (_snapshot, _catalog, runState) => serializeActiveRenderFiles(runState.mode.value, runState),
     canonicalSessionVersion: SESSION_VERSION,
     adoptCanonicalRenderArtifacts: (canonical) => {
       if (failLateArtifactAdoption) {
@@ -1492,6 +1492,14 @@ test('neutral conservation replay delegates lazy resources to the shared reader'
       losatProgram: state.losatProgram.value,
       blastpMode: state.losat.blastp.mode
     });
+    const localOrientations = state.linearSeqs.map(({ uid, region_reverse }) => ({
+      recordKey: uid, reverseComplement: uid === 'middle' ? true : region_reverse
+    }));
+    // App display controls expose rows computed from live state. The run must
+    // substitute its orientation before canonical transform construction too.
+    state.recordDisplayRows = { value: [{ scope: 'linear', sourceUid: 'middle',
+      key: JSON.stringify(['linear', 'middle', '#1']), selector: '#1', recordId: 'MIDDLE', recordLength: 8,
+      reverse: false, cropped: false, detectedTopology: 'linear' }] };
     const linearResult = result('lazy-linear.svg', 'lazy-linear');
     workerHelperResponses.push({
       ok: true,
@@ -1501,7 +1509,11 @@ test('neutral conservation replay delegates lazy resources to the shared reader'
     });
     workerResponses.push(response(linearResult, validCatalog(linearResult.name)));
     assert.deepEqual(
-      await runner.runAnalysis(comparisonPlanSnapshot),
+      await runner.runAnalysis(comparisonPlanSnapshot, null, null, {
+        similarityAlignmentPlan: null,
+        linearRecordTranslations: [],
+        linearRecordOrientations: localOrientations
+      }),
       { status: 'ok' },
       JSON.stringify({ error: state.errorLog.value, lastWorker: workerMessages.at(-1) })
     );
@@ -1514,8 +1526,13 @@ test('neutral conservation replay delegates lazy resources to the shared reader'
     ));
     assert.deepEqual(conversionRequest?.payload.queryViewTransform, {
       length: 8,
-      reverse: false
+      reverse: true
     });
+    const projectedRun = workerMessages.findLast(({ type }) => type === 'run').payload.request;
+    assert.equal(projectedRun.records.find(({ recordKey }) => recordKey === 'middle')
+      .presentation.reverseComplement, conversionRequest.payload.queryViewTransform.reverse);
+    assert.equal(state.linearSeqs.find(({ uid }) => uid === 'middle').region_reverse, true);
+    delete state.recordDisplayRows;
     assert.equal(
       resourceMetrics.filter(({ name }) => name === 'resourceByteReadCount').length,
       3
@@ -1591,7 +1608,12 @@ test('neutral conservation replay delegates lazy resources to the shared reader'
       failedLinearResult,
       validCatalog(failedLinearResult.name)
     ));
-    assert.equal((await runner.runAnalysis(comparisonPlanSnapshot)).status, 'error');
+    const failedOrientations = localOrientations.map((entry) => ({ ...entry, reverseComplement: false }));
+    assert.equal((await runner.runAnalysis(comparisonPlanSnapshot, null, null, {
+      similarityAlignmentPlan: null, linearRecordTranslations: [],
+      linearRecordOrientations: failedOrientations
+    })).status, 'error');
+    assert.equal(state.linearSeqs.find(({ uid }) => uid === 'middle').region_reverse, true);
     failLateArtifactAdoption = false;
     state.losat.blastn.task = 'megablast';
     assert.match(
@@ -1716,7 +1738,7 @@ test('neutral conservation replay delegates lazy resources to the shared reader'
     }));
     const alignmentOrientations = ['multi', 'middle', 'third'].map((recordKey) => ({
       recordKey,
-      reverseComplement: recordKey === 'middle'
+      reverseComplement: recordKey !== 'third'
     }));
     const helperRequestsBeforeAlignment = workerMessages.filter(({ type }) => type === 'helper')
       .length;
@@ -1988,11 +2010,11 @@ test('Linear mode none ignores dormant comparison state while active depth and a
   const runner = wireGeneratedArtifactRuntimeOwner(createRunAnalysis({
     ...generatedArtifactHandleOptions,
     state,
-    serializeCanonicalFiles: (snapshot, recordCatalog) => {
+    serializeCanonicalFiles: (snapshot, recordCatalog, runState) => {
       serializeCalls += 1;
       serializedSnapshot = snapshot;
       serializedRecordCatalog = recordCatalog;
-      return serializeActiveRenderFiles(state.mode.value, state, snapshot);
+      return serializeActiveRenderFiles(runState.mode.value, runState, snapshot);
     },
     prepareLinearRecordCatalog: (...args) => prepareLinearRecordCatalogImpl(...args),
     canonicalSessionVersion: SESSION_VERSION,
@@ -2127,13 +2149,22 @@ test('Linear mode none ignores dormant comparison state while active depth and a
   });
   const committedResults = state.results.value;
   const workerRunsBeforeCancel = workerMessages.filter(({ type }) => type === 'run').length;
-  const canceledRun = runner.runAnalysis(comparisonPlanSnapshot);
+  const priorOrientations = state.linearSeqs.map(({ uid, region_reverse }) => ({
+    recordKey: uid, reverseComplement: Boolean(region_reverse)
+  }));
+  const pendingOverride = { similarityAlignmentPlan: null, linearRecordTranslations: [],
+    linearRecordOrientations: priorOrientations.map((entry) => ({ ...entry,
+      reverseComplement: !entry.reverseComplement })) };
+  const canceledRun = runner.runAnalysis(comparisonPlanSnapshot, null, null, pendingOverride);
   for (let turn = 0; turn < 4 && typeof releaseRecordCatalog !== 'function'; turn += 1) {
     await Promise.resolve();
   }
   await runner.cancelRunAnalysis();
   releaseRecordCatalog({ catalog: preparedRecordCatalog, error: '' });
   assert.deepEqual(await canceledRun, { status: 'canceled' });
+  assert.deepEqual(state.linearSeqs.map(({ uid, region_reverse }) => ({
+    recordKey: uid, reverseComplement: Boolean(region_reverse)
+  })), priorOrientations);
   assert.equal(state.results.value, committedResults);
   assert.deepEqual(state.results.value, committedResults);
   assert.equal(state.results.value[0], committedResults[0]);
@@ -2164,7 +2195,7 @@ test('Linear mode none ignores dormant comparison state while active depth and a
   prepareLinearRecordCatalogImpl = () => new Promise((resolve) => {
     releaseSupersededCatalog = resolve;
   });
-  const supersededRun = runner.runAnalysis(comparisonPlanSnapshot);
+  const supersededRun = runner.runAnalysis(comparisonPlanSnapshot, null, null, pendingOverride);
   while (!releaseSupersededCatalog) {
     await new Promise((resolve) => setImmediate(resolve));
   }
@@ -2178,6 +2209,9 @@ test('Linear mode none ignores dormant comparison state while active depth and a
   assert.deepEqual(state.results.value, [newestResult]);
   releaseSupersededCatalog({ catalog: preparedRecordCatalog, error: '' });
   assert.deepEqual(await supersededRun, { status: 'stale' });
+  assert.deepEqual(state.linearSeqs.map(({ uid, region_reverse }) => ({
+    recordKey: uid, reverseComplement: Boolean(region_reverse)
+  })), priorOrientations);
   assert.deepEqual(state.results.value, [newestResult]);
   assert.equal(state.failedGeneratePreservedResult.value, false);
   assert.equal(state.processing.value, false);

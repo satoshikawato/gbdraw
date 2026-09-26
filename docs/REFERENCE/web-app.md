@@ -325,10 +325,12 @@ in the palette. You can pan and zoom while reviewing. The guide, badges, and
 recommendation markers are preview-only and are absent from downloads and saved
 Sessions.
 
-Every usable row also has **Match reference direction**, initially off. The row
-shows whether Apply will preserve direction, reverse the whole target, or
-preserve it because a required displayed strand is unknown. Matching reverses
-only when both displayed anchor strands are known and opposite. The reference
+One **Match reference direction** checkbox below the exact reference is initially
+off. Its status names the records Apply will reverse; each target row shows its
+selected anchor's direction relative to the reference. The checkbox is disabled
+when no selected target faces the opposite direction. Unknown strands are listed
+as unchanged. Matching reverses only when both displayed anchor strands are
+known and opposite. The reference
 and every target's vertical position stay fixed; selected target anchor centers
 align horizontally after any reversal. Text stays readable. Skipped and missing
 records and unselected inparalogs keep their positions, orientations,
@@ -337,8 +339,8 @@ effective direction relative to the source.
 
 Anchor and orientation edits are local; they start no Worker job. **Apply** sends
 the complete choices for one Python validation and diagram generation, then
-commits the Result and History together. A validation or generation error keeps
-the draft so you can correct it and retry. **Cancel** or **Escape** commits
+commits the plan, record Reverse settings, and Result in one History entry.
+A validation or generation error keeps the draft so you can correct it and retry. **Cancel** or **Escape** commits
 nothing and returns focus to the initiating control when it is still present.
 If the source, crop, group, or committed Result changes during review, start
 again. The palette does not trap keyboard focus. The operation summary counts
@@ -346,14 +348,16 @@ aligned, unchanged, skipped, missing, and reversed records; the active-plan
 inspector lists exact anchors and selection reasons.
 
 The active plan survives ordinary **Generate Diagram** after style, label, or
-canvas changes and survives a stable record reorder. Source replacement,
-crop, selector, manual orientation, and manual record drag clear it with a
-visible reason. A stale reference blocks Generate until **Reselect** or
+canvas changes and survives a stable record reorder. A manual **Reverse
+complement** keeps the plan; the next Generate aligns the same anchors in the
+new direction. Source replacement, crop, selector, and manual record drag clear
+it with a visible reason. A stale reference blocks Generate until **Reselect** or
 **Clear**; a stale target requires **Select** or **Skip**. Pending or failed
 repair keeps the last successful Result visible. **Reset Align** restores the
-geometry immediately before the latest Apply and clears that plan. For Apply A,
-then Apply B, Reset B restores the geometry after A without restoring A's plan;
-**Undo** restores the complete preceding artifact, and **Redo** reapplies the
+record positions immediately before the latest Apply and clears that plan,
+leaving record directions unchanged. For Apply A, then Apply B, Reset B restores
+the positions after A without restoring A's plan; **Undo** restores the complete
+preceding artifact, including record orientations, and **Redo** reapplies the
 reset. Each successful Apply, Reset, or manual clear uses one History action.
 
 Alignment changes display only and does not rerun LOSATP or group inference.
