@@ -3752,6 +3752,7 @@
                                     <option v-for="value in specificRuleQualifierSuggestions" :key="`specific-rule-qual-${value}`" :value="value"></option>
                                 </datalist>
 
+                                <p role="status" aria-live="polite" aria-atomic="true" class="mb-2 text-[10px] text-slate-600 break-words">{{ specificRuleNotice }}</p>
                                 <div class="space-y-1 mb-3">
                                     <div v-for="(rule, i) in manualSpecificRules" :key="i" class="bg-white p-1.5 rounded border border-slate-200 text-[10px] space-y-1">
                                         <div class="grid grid-cols-12 gap-1 items-center">

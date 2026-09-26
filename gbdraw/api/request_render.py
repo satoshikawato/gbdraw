@@ -83,6 +83,7 @@ from .diagram import (
 )
 from .io import load_gbks, load_gff_fasta
 from .options import (
+    ColorOptions,
     CircularDiagramOptions,
     CircularMultiRecordOptions,
     LinearDiagramOptions,
@@ -1072,6 +1073,18 @@ def _prepare_diagram_inputs(request: DiagramRequest) -> PreparedDiagramInputs:
     )
 
 
+def _with_prepared_colors(request: DiagramRequest, inputs: PreparedDiagramInputs) -> DiagramRequest:
+    """Record the canonical table actually compiled for this request."""
+    if inputs.features.color_table is None:
+        return request
+    colors = replace(
+        request.options.colors or ColorOptions(),
+        color_table=inputs.features.color_table,
+        color_table_file=None,
+    )
+    return replace(request, options=replace(request.options, colors=colors))
+
+
 def _normalize_request_records(
     request: DiagramRequest,
     inputs: PreparedDiagramInputs,
@@ -1432,6 +1445,7 @@ def plan_circular_request(
             else replace(request, options=resolved_options)
         )
         inputs = _prepare_diagram_inputs(unresolved_request)
+        unresolved_request = _with_prepared_colors(unresolved_request, inputs)
     with _request_render_diagnostic_phase("recordLoad"):
         collection = _coerce_resolved_collection(
             unresolved_request,
@@ -1488,6 +1502,7 @@ def plan_circular_batch_request(
             else replace(request, options=resolved_options)
         )
         inputs = _prepare_diagram_inputs(unresolved_request)
+        unresolved_request = _with_prepared_colors(unresolved_request, inputs)
     with _request_render_diagnostic_phase("recordLoad"):
         collection = _coerce_resolved_collection(
             unresolved_request,
@@ -1544,6 +1559,7 @@ def plan_linear_request(
             ),
         )
         inputs = _prepare_diagram_inputs(unresolved_request)
+        unresolved_request = _with_prepared_colors(unresolved_request, inputs)
     with _request_render_diagnostic_phase("recordLoad"):
         collection = _coerce_resolved_collection(
             unresolved_request,

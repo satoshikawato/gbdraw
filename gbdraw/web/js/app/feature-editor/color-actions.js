@@ -10,7 +10,6 @@ import {
 export const createFeatureColorActions = ({
   state,
   rulePreparation,
-  nextTick,
   legendActions,
   svgActions,
   ruleActions,
@@ -40,15 +39,11 @@ export const createFeatureColorActions = ({
   } = state;
 
   const {
-    addLegendEntry: addLegendEntryRaw,
-    removeLegendEntry: removeLegendEntryRaw,
-    updateLegendEntryColorByCaption: updateLegendEntryColorByCaptionRaw,
     compactLegendEntries,
     extractLegendEntries,
     getAllFeatureLegendGroups,
     onLegendGeometryChanged
   } = legendActions;
-  const { applySpecificRulesToSvg } = svgActions;
   const {
     countFeaturesMatchingRule,
     findExistingColorForCaption,
@@ -69,7 +64,6 @@ export const createFeatureColorActions = ({
   const captionsMatch = (left, right) => normalizeCaptionKey(left) === normalizeCaptionKey(right);
   const colorsMatch = (left, right) => normalizeColor(left) === normalizeColor(right);
   const isHashSpecificRule = (rule) => String(rule?.qual || '').toLowerCase() === 'hash';
-  const SUFFIXED_CAPTION_PATTERN = /^(.*?)\s*\((\d+)\)$/;
   const hasOwn = (object, key) => Object.prototype.hasOwnProperty.call(object || {}, key);
   let colorActionDepth = 0;
   let colorActionChangedPreview = false;
@@ -80,23 +74,6 @@ export const createFeatureColorActions = ({
     return marked;
   };
 
-  const applyFeatureColorPreview = (feature, color) => {
-    const featureId = String(
-      feature?.rendered_svg_id
-      || feature?.renderedSvgId
-      || feature?.rendered_feature_svg_id
-      || feature?.renderedFeatureSvgId
-      || feature?.svg_id
-      || ''
-    ).trim();
-    if (!featureId || !previewRuntime?.applyFeatureFillChanges) return false;
-    const updated = previewRuntime.applyFeatureFillChanges(
-      [{ featureId, color }],
-      { reason: 'feature-color' }
-    ) === true;
-    colorActionChangedPreview = colorActionChangedPreview || updated;
-    return updated;
-  };
 
   const runColorAction = async (action) => {
     const isOuterAction = colorActionDepth === 0;
@@ -361,40 +338,6 @@ export const createFeatureColorActions = ({
     return null;
   };
 
-  const addLegendEntry = async (caption, color, options = {}) => {
-    const beforeColor = getLiveLegendColor(caption);
-    const addedCaption = await addLegendEntryRaw(caption, color, { ...options, commit: false });
-    if (!addedCaption) return addedCaption;
-    if (
-      !beforeColor
-      || !captionsMatch(addedCaption, caption)
-      || !colorsMatch(beforeColor, color)
-    ) {
-      markColorPreviewDirty('feature-color-legend');
-    }
-    return addedCaption;
-  };
-
-  const updateLegendEntryColorByCaption = (caption, color) => {
-    const existingEntry = findLegendEntryByCaption(caption);
-    const resolvedCaption = existingEntry?.caption || caption;
-    const overrideChanged = Boolean(
-      existingEntry && !colorsMatch(legendColorOverrides[resolvedCaption], color)
-    );
-    if (overrideChanged) {
-      legendColorOverrides[resolvedCaption] = color;
-    }
-    const updated = updateLegendEntryColorByCaptionRaw(resolvedCaption, color, { commit: false }) === true;
-    if (updated) markColorPreviewDirty('feature-color-legend');
-    return updated || overrideChanged;
-  };
-
-  const removeLegendEntry = (caption) => {
-    const removed = removeLegendEntryRaw(caption, { commit: false }) === true;
-    if (removed) markColorPreviewDirty('feature-color-legend');
-    return removed;
-  };
-
   const exactHashRulesForFeature = (feature) => manualSpecificRules.filter(
     (rule) => hashRuleTargetsFeatureExactly(rule, feature)
   );
@@ -457,13 +400,6 @@ export const createFeatureColorActions = ({
     }
   };
 
-  const removeCaptionStateKey = (store, caption) => {
-    if (!store || !caption) return;
-    const matchingKey = findCaptionKey(store, caption);
-    if (matchingKey) {
-      delete store[matchingKey];
-    }
-  };
 
   const moveAddedLegendCaption = (oldCaption, newCaption) => {
     if (!oldCaption || !newCaption || oldCaption === newCaption) return;
@@ -479,15 +415,6 @@ export const createFeatureColorActions = ({
     addedLegendCaptions.value.add(newCaption);
   };
 
-  const removeAddedLegendCaption = (caption) => {
-    if (!caption) return;
-    for (const existingCaption of addedLegendCaptions.value) {
-      if (captionsMatch(existingCaption, caption)) {
-        addedLegendCaptions.value.delete(existingCaption);
-        break;
-      }
-    }
-  };
 
   const syncOriginalLegendMetadataRename = (oldCaption, newCaption, color = null) => {
     if (!oldCaption || !newCaption || oldCaption === newCaption) return;
@@ -509,14 +436,6 @@ export const createFeatureColorActions = ({
     }
   };
 
-  const removeOriginalLegendMetadata = (caption) => {
-    if (!caption) return;
-    originalLegendOrder.value = originalLegendOrder.value.filter((entryCaption) => !captionsMatch(entryCaption, caption));
-    const matchingColorKey = findCaptionKey(originalLegendColors.value, caption);
-    if (matchingColorKey) {
-      delete originalLegendColors.value[matchingColorKey];
-    }
-  };
 
   const updateClickedFeatureLegendState = (feat, caption, color = null) => {
     if (!clickedFeature.value || !feat || clickedFeature.value.svg_id !== feat.svg_id) return;
@@ -625,84 +544,30 @@ export const createFeatureColorActions = ({
     return finalCaption;
   };
 
-  const upsertFeatureHashRule = (feat, color, caption) => {
-    const qualifier = getFeatureQualifier(feat);
-    if (!qualifier?.val) return;
-    const existingIdx = manualSpecificRules.findIndex(
-      (rule) => hashRuleTargetsFeatureExactly(rule, feat)
-    );
-
-    if (existingIdx >= 0) {
-      manualSpecificRules[existingIdx].feat = feat.type;
-      manualSpecificRules[existingIdx].qual = 'hash';
-      manualSpecificRules[existingIdx].val = qualifier.val;
-      manualSpecificRules[existingIdx].color = color;
-      manualSpecificRules[existingIdx].cap = caption;
-      delete manualSpecificRules[existingIdx].fromFile;
-      return;
-    }
-
-    const nextRule = {
-      feat: feat.type,
-      qual: 'hash',
-      val: qualifier.val,
-      color,
-      cap: caption
-    };
-    const firstConflictingHashIdx = manualSpecificRules.findIndex(
-      (rule) => rule?.feat === feat.type && isHashSpecificRule(rule) && ruleMatchesFeature(feat, rule)
-    );
-    if (firstConflictingHashIdx >= 0) {
-      manualSpecificRules.splice(firstConflictingHashIdx, 0, nextRule);
+  const featureRuleCandidate = (features, color, caption, { preferLabelRules = false } = {}) => {
+    const rules = manualSpecificRules.map(rule => ({ ...rule }));
+    const labelRule = preferLabelRules ? getSafeLabelSpecificRule(features, caption) : null;
+    if (labelRule) {
+      for (let i = rules.length - 1; i >= 0; i--) {
+        if (features.some(feature => hashRuleTargetsFeatureExactly(rules[i], feature))
+          || (rules[i].feat === labelRule.feat && rules[i].qual === labelRule.qual && rules[i].val === labelRule.val)) rules.splice(i, 1);
+      }
+      const first = rules.findIndex(rule => rule.feat === labelRule.feat && rule.qual === labelRule.qual);
+      rules.splice(first < 0 ? rules.length : first, 0, { ...labelRule, color, cap: caption });
     } else {
-      manualSpecificRules.push(nextRule);
-    }
-  };
-
-  const removeFeatureHashRules = (feature) => {
-    for (let index = manualSpecificRules.length - 1; index >= 0; index -= 1) {
-      if (hashRuleTargetsFeatureExactly(manualSpecificRules[index], feature)) {
-        manualSpecificRules.splice(index, 1);
+      for (const feature of features) {
+        const qualifier = getFeatureQualifier(feature);
+        if (!qualifier) continue;
+        const next = { feat: feature.type, ...qualifier, color, cap: caption };
+        const existing = rules.findIndex(rule => hashRuleTargetsFeatureExactly(rule, feature));
+        if (existing >= 0) rules.splice(existing, 1, next);
+        else {
+          const conflicting = rules.findIndex(rule => rule.feat === feature.type && isHashSpecificRule(rule) && ruleMatchesFeature(feature, rule));
+          rules.splice(conflicting < 0 ? rules.length : conflicting, 0, next);
+        }
       }
     }
-  };
-
-  const upsertLabelSpecificRule = (rule, color, caption) => {
-    if (!rule?.feat || !rule?.qual || !rule?.val) return false;
-    const qualifier = String(rule.qual).toLowerCase();
-    const existingIdx = manualSpecificRules.findIndex(
-      (candidate) =>
-        candidate.feat === rule.feat &&
-        String(candidate.qual || '').toLowerCase() === qualifier &&
-        candidate.val === rule.val
-    );
-    if (existingIdx >= 0) {
-      const [existing] = manualSpecificRules.splice(existingIdx, 1);
-      Object.assign(existing, { ...rule, color, cap: caption });
-      delete existing.fromFile;
-      const firstSameQualifierIdx = manualSpecificRules.findIndex(
-        (candidate) =>
-          candidate.feat === rule.feat && String(candidate.qual || '').toLowerCase() === qualifier
-      );
-      manualSpecificRules.splice(
-        firstSameQualifierIdx >= 0 ? firstSameQualifierIdx : manualSpecificRules.length,
-        0,
-        existing
-      );
-      return true;
-    }
-
-    const firstSameQualifierIdx = manualSpecificRules.findIndex(
-      (candidate) =>
-        candidate.feat === rule.feat && String(candidate.qual || '').toLowerCase() === qualifier
-    );
-    const nextRule = { ...rule, color, cap: caption };
-    if (firstSameQualifierIdx >= 0) {
-      manualSpecificRules.splice(firstSameQualifierIdx, 0, nextRule);
-    } else {
-      manualSpecificRules.push(nextRule);
-    }
-    return true;
+    return rules;
   };
 
   const featureIdentityKey = (feature) => String(
@@ -751,28 +616,6 @@ export const createFeatureColorActions = ({
       return existingQualifier !== candidateQualifier;
     });
     return hasPrecedenceConflict ? null : first;
-  };
-
-  const syncFeatureLegendOverrides = (features, caption, color) => {
-    for (const feature of features) {
-      upsertFeatureHashRule(feature, color, caption);
-      featureColorOverrides[featureOverrideKey(feature)] = { color, caption };
-      updateClickedFeatureLegendState(feature, caption, color);
-      applyFeatureColorPreview(feature, color);
-    }
-  };
-
-  const refreshLegendEntryFeatureIds = (captions = []) => {
-    const requestedCaptionKeys =
-      Array.isArray(captions) && captions.length > 0
-        ? new Set(captions.map((caption) => normalizeCaptionKey(caption)).filter(Boolean))
-        : null;
-
-    legendEntries.value.forEach((entry) => {
-      if (!entry) return;
-      if (requestedCaptionKeys && !requestedCaptionKeys.has(normalizeCaptionKey(entry.caption))) return;
-      entry.featureIds = getFeaturesForLegendCaption(entry.caption).map((feature) => feature.svg_id);
-    });
   };
 
   const renameLegendEntryInSvg = (oldCaption, newCaption, color = null) => {
@@ -830,95 +673,38 @@ export const createFeatureColorActions = ({
     return true;
   };
 
-  const removeLegendCaptionArtifacts = (caption) => {
-    removeCaptionStateKey(legendColorOverrides, caption);
-    removeCaptionStateKey(legendStrokeOverrides, caption);
-    removeAddedLegendCaption(caption);
-    removeOriginalLegendMetadata(caption);
-  };
-
-  const ensureLegendEntry = async (caption, color) => {
-    const normalizedCaption = normalizeCaption(caption);
-    if (!normalizedCaption) return '';
-
-    const existingEntry = findLegendEntryByCaption(normalizedCaption);
-    if (existingEntry) {
-      if (color && !colorsMatch(existingEntry.color, color)) {
-        updateLegendEntryColorByCaption(existingEntry.caption, color);
-      }
-      return existingEntry.caption;
-    }
-
-    const addedCaption = await addLegendEntry(normalizedCaption, color);
-    if (addedCaption && typeof addedCaption === 'string') {
-      addedLegendCaptions.value.add(addedCaption);
-      return addedCaption;
-    }
-
-    return normalizedCaption;
-  };
-
   const applyLegendRenameRequest = async (request) => {
     const oldCaption = normalizeCaption(request.oldCaption);
-    let finalCaption = normalizeCaption(request.finalCaption || request.newCaption);
-    if (!finalCaption) return false;
-
-    const features = Array.isArray(request.features) ? request.features.filter(Boolean) : [];
-    const finalColor =
-      resolveColorToHex(request.finalColor || request.currentColor) || request.finalColor || request.currentColor || '#cccccc';
-    const selectedFeatureIds = new Set(features.map((feature) => feature.svg_id));
-    const remainingOldFeatures = oldCaption
-      ? getFeaturesForLegendCaption(oldCaption).filter((feature) => !selectedFeatureIds.has(feature.svg_id))
-      : [];
-    const existingTargetEntry = findLegendEntryByCaption(finalCaption);
-    const hasDistinctTargetEntry = existingTargetEntry && !captionsMatch(existingTargetEntry.caption, oldCaption);
-    const canRenameInPlace =
-      Boolean(oldCaption) && !hasDistinctTargetEntry && remainingOldFeatures.length === 0 && finalCaption !== oldCaption;
-
-    if (features.length > 0) {
-      syncFeatureLegendOverrides(features, finalCaption, finalColor);
+    const caption = normalizeCaption(request.finalCaption || request.newCaption);
+    const color = resolveColorToHex(request.finalColor || request.currentColor) || '#cccccc';
+    if (!caption) return false;
+    const features = (request.features || []).filter(Boolean);
+    const sourceRules = manualSpecificRules.filter(rule => rule.cap === oldCaption);
+    if (sourceRules.length || features.length) {
+      const rules = request.sourceScope === 'group' && sourceRules.length
+        ? manualSpecificRules.map(rule => rule.cap === oldCaption ? { ...rule, cap: caption, color } : { ...rule })
+        : featureRuleCandidate(features, color, caption);
+      const selected = new Set(features.map(feature => feature.svg_id));
+      const retireOld = features.length > 0 && getFeaturesForLegendCaption(oldCaption)
+        .every(feature => selected.has(feature.svg_id));
+      const oldEntry = findLegendEntryByCaption(oldCaption);
+      return ruleActions.commitSpecificRules(rules, 'Rename legend item', {
+        previousLegendIntents: retireOld && oldEntry ? [{ caption: oldCaption, color: oldEntry.color }] : [],
+        afterCommit: () => {
+          if (retireOld && !sourceRules.length) {
+            const adoptedCaption = getEffectiveLegendCaption(features[0]);
+            moveCaptionStateKey(legendColorOverrides, oldCaption, adoptedCaption);
+            moveCaptionStateKey(legendStrokeOverrides, oldCaption, adoptedCaption);
+            moveAddedLegendCaption(oldCaption, adoptedCaption);
+            syncOriginalLegendMetadataRename(oldCaption, adoptedCaption, color);
+          }
+          for (const feature of features) updateClickedFeatureLegendState(feature, getEffectiveLegendCaption(feature), color);
+        }
+      });
     }
-
-    let actualCaption = finalCaption;
-    if (canRenameInPlace) {
-      renameLegendEntryInSvg(oldCaption, finalCaption, finalColor);
-    } else if (!hasDistinctTargetEntry) {
-      actualCaption = await ensureLegendEntry(finalCaption, finalColor);
-      if (actualCaption && actualCaption !== finalCaption && features.length > 0) {
-        finalCaption = actualCaption;
-        syncFeatureLegendOverrides(features, actualCaption, finalColor);
-      }
-    } else {
-      actualCaption = existingTargetEntry.caption;
-      if (features.length > 0) {
-        syncFeatureLegendOverrides(features, actualCaption, finalColor);
-      }
-    }
-
-    applySpecificRulesToSvg();
-    await nextTick();
-
-    if (oldCaption && !captionsMatch(actualCaption, oldCaption)) {
-      const currentOldUsers = getFeaturesForLegendCaption(oldCaption);
-      if (currentOldUsers.length === 0 && !canRenameInPlace) {
-        removeLegendEntry(oldCaption);
-        removeLegendCaptionArtifacts(oldCaption);
-      }
-    }
-
-    await nextTick();
+    // Unrelated manual legend rows retain their existing editor semantics.
+    renameLegendEntryInSvg(oldCaption, caption, color);
     extractLegendEntries();
-    refreshLegendEntryFeatureIds([oldCaption, actualCaption]);
-    await reclaimOrphanedBaseCaptions();
-    await nextTick();
-    extractLegendEntries();
-    refreshLegendEntryFeatureIds([oldCaption, actualCaption]);
-
-    if (request.source === 'popup' && request.feat) {
-      updateClickedFeatureLegendState(request.feat, actualCaption, finalColor);
-    }
-
-    legendEntries.value = [...legendEntries.value];
     return true;
   };
 
@@ -989,6 +775,13 @@ export const createFeatureColorActions = ({
       features = [];
     }
 
+    if (features.length || manualSpecificRules.some(rule => rule.cap === oldCaption)) {
+      await applyLegendRenameRequest({ ...request, currentColor, features,
+        finalCaption: newCaption, finalColor: currentColor });
+      clearLegendRenameDialog();
+      return;
+    }
+
     const targetEntry = findLegendEntryByCaption(newCaption);
     const isDistinctTargetEntry = targetEntry && !captionsMatch(targetEntry.caption, oldCaption);
 
@@ -1045,266 +838,24 @@ export const createFeatureColorActions = ({
     clearLegendRenameDialog();
   };
 
-  const reclaimOrphanedBaseCaptions = async () => {
-    if (extractedFeatures.value.length === 0) return false;
-
-    const catalog = new Map();
-    const rememberCaption = (caption) => {
-      const normalized = normalizeCaption(caption);
-      if (!normalized) return;
-      const key = normalizeCaptionKey(normalized);
-      if (!catalog.has(key)) {
-        catalog.set(key, normalized);
+  const applyColorToFeatureGroup = async (features, caption, color, options = {}) => {
+    if (!features?.length || !normalizeCaption(caption)) return false;
+    const rules = featureRuleCandidate(features, color, normalizeCaption(caption), options);
+    return ruleActions.commitSpecificRules(rules, 'Change feature color', {
+      afterCommit: () => {
+        for (const feature of features) updateClickedFeatureLegendState(feature, getEffectiveLegendCaption(feature), color);
       }
-    };
-
-    legendEntries.value.forEach((entry) => rememberCaption(entry?.caption));
-    manualSpecificRules.forEach((rule) => rememberCaption(rule?.cap));
-    Object.values(featureColorOverrides).forEach((override) => rememberCaption(override?.caption));
-
-    const usageByCaptionKey = new Map();
-    extractedFeatures.value.forEach((feat) => {
-      const effectiveCaption = normalizeCaption(getEffectiveLegendCaption(feat));
-      if (!effectiveCaption) return;
-      rememberCaption(effectiveCaption);
-      const key = normalizeCaptionKey(effectiveCaption);
-      usageByCaptionKey.set(key, (usageByCaptionKey.get(key) || 0) + 1);
     });
-
-    const suffixCandidatesByBase = new Map();
-    for (const [captionKey, captionRaw] of catalog.entries()) {
-      const match = captionRaw.match(SUFFIXED_CAPTION_PATTERN);
-      if (!match) continue;
-
-      const baseRaw = normalizeCaption(match[1]);
-      if (!baseRaw) continue;
-
-      const baseKey = normalizeCaptionKey(baseRaw);
-      rememberCaption(baseRaw);
-      const parsedIndex = Number.parseInt(match[2], 10);
-      const index = Number.isFinite(parsedIndex) ? parsedIndex : Number.MAX_SAFE_INTEGER;
-
-      if (!suffixCandidatesByBase.has(baseKey)) {
-        suffixCandidatesByBase.set(baseKey, []);
-      }
-      suffixCandidatesByBase.get(baseKey).push({
-        captionKey,
-        captionRaw,
-        baseRaw,
-        index
-      });
-    }
-
-    let changed = false;
-
-    for (const [baseKey, candidates] of suffixCandidatesByBase.entries()) {
-      const baseUsage = usageByCaptionKey.get(baseKey) || 0;
-      if (baseUsage > 0) continue;
-
-      const ordered = [...candidates].sort((a, b) => {
-        if (a.index !== b.index) return a.index - b.index;
-        return a.captionRaw.localeCompare(b.captionRaw);
-      });
-
-      const activeCandidate =
-        ordered.find((candidate) => (usageByCaptionKey.get(candidate.captionKey) || 0) > 0) || ordered[0];
-      if (!activeCandidate) continue;
-      if (activeCandidate.captionKey === baseKey) continue;
-
-      const baseCaption = catalog.get(baseKey) || activeCandidate.baseRaw;
-      const suffixCaption = activeCandidate.captionRaw;
-
-      let sourceColor = null;
-      const suffixLegendEntry = findLegendEntryByCaption(suffixCaption);
-      if (suffixLegendEntry?.color) {
-        sourceColor = suffixLegendEntry.color;
-      }
-
-      manualSpecificRules.forEach((rule) => {
-        if (!captionsMatch(rule.cap, suffixCaption)) return;
-        if (!sourceColor && rule.color) sourceColor = rule.color;
-        rule.cap = baseCaption;
-        changed = true;
-      });
-
-      Object.values(featureColorOverrides).forEach((override) => {
-        if (!override || !captionsMatch(override.caption, suffixCaption)) return;
-        if (!sourceColor && override.color) sourceColor = override.color;
-        override.caption = baseCaption;
-        changed = true;
-      });
-
-      const baseLegendEntry = findLegendEntryByCaption(baseCaption);
-      if (baseLegendEntry) {
-        if (sourceColor) {
-          updateLegendEntryColorByCaption(baseLegendEntry.caption, sourceColor);
-          changed = true;
-        }
-      } else {
-        const colorToUse = sourceColor || '#cccccc';
-        const addedCaption = await addLegendEntry(baseCaption, colorToUse);
-        if (addedCaption && typeof addedCaption === 'string') {
-          addedLegendCaptions.value.add(addedCaption);
-          const addedKey = normalizeCaptionKey(addedCaption);
-          if (addedKey !== baseKey) {
-            manualSpecificRules.forEach((rule) => {
-              if (captionsMatch(rule.cap, baseCaption)) {
-                rule.cap = addedCaption;
-              }
-            });
-            Object.values(featureColorOverrides).forEach((override) => {
-              if (override && captionsMatch(override.caption, baseCaption)) {
-                override.caption = addedCaption;
-              }
-            });
-          }
-          changed = true;
-        }
-      }
-
-      removeLegendEntry(suffixLegendEntry?.caption || suffixCaption);
-      changed = true;
-    }
-
-    if (changed) {
-      applySpecificRulesToSvg();
-      await nextTick();
-      extractLegendEntries();
-    }
-
-    return changed;
   };
 
-  const applyColorToFeatureGroup = async (
-    features,
-    targetCaption,
-    color,
-    { preferLabelRules = false } = {}
-  ) => {
-    if (!Array.isArray(features) || features.length === 0) return;
-
-    const normalizedTargetCaption = normalizeCaption(targetCaption);
-    if (!normalizedTargetCaption) return;
-
-    const existingLegendEntry = findLegendEntryByCaption(normalizedTargetCaption);
-    let finalCaption = existingLegendEntry?.caption || normalizedTargetCaption;
-
-    if (existingLegendEntry) {
-      updateLegendEntryColorByCaption(existingLegendEntry.caption, color);
-    } else {
-      const addedCaption = await addLegendEntry(normalizedTargetCaption, color);
-      if (addedCaption && typeof addedCaption === 'string') {
-        finalCaption = addedCaption;
-        addedLegendCaptions.value.add(addedCaption);
-      }
-    }
-
-    const labelRule = preferLabelRules
-      ? getSafeLabelSpecificRule(features, normalizedTargetCaption)
-      : null;
-    if (labelRule) {
-      for (const feature of features) {
-        removeFeatureHashRules(feature);
-      }
-      upsertLabelSpecificRule(labelRule, color, finalCaption);
-    } else {
-      for (const feature of features) {
-        upsertFeatureHashRule(feature, color, finalCaption);
-      }
-    }
-    for (const feature of features) {
-      featureColorOverrides[featureOverrideKey(feature)] = { color, caption: finalCaption };
-      updateClickedFeatureLegendState(feature, finalCaption, color);
-    }
-
-    applySpecificRulesToSvg();
-    await reclaimOrphanedBaseCaptions();
-    extractLegendEntries();
-  };
-
-  const applyColorToLegendSpecificRules = async (targetCaption, color, captionFeatures = []) => {
-    const normalizedTargetCaption = normalizeCaption(targetCaption);
-    if (!normalizedTargetCaption) return false;
-    const normalizedColor = String(color || '').trim();
-    if (!normalizedColor) return false;
-
-    const specificRules = manualSpecificRules.filter(
-      (rule) => !isHashSpecificRule(rule) && captionsMatch(rule.cap, normalizedTargetCaption)
-    );
-    if (specificRules.length === 0) return false;
-
-    const existingLegendEntry = findLegendEntryByCaption(normalizedTargetCaption);
-    const finalCaption = existingLegendEntry?.caption || normalizeCaption(specificRules[0].cap) || normalizedTargetCaption;
-    const coveredFeatures = extractedFeatures.value.filter((feature) =>
-      specificRules.some((rule) => ruleMatchesFeature(feature, rule))
-    );
-    const affectedFeatures = new Map();
-    [...captionFeatures, ...coveredFeatures].forEach((feature) => {
-      const key = String(feature?.svg_id || feature?.id || '').trim();
-      if (key) affectedFeatures.set(key, feature);
-    });
-    const captionHashRules = manualSpecificRules.filter(
-      (rule) => isHashSpecificRule(rule) && captionsMatch(rule.cap, finalCaption)
-    );
-    const removesCoveredHashRule = captionHashRules.some((rule) => (
-      coveredFeatures.some((feature) => hashRuleTargetsFeatureExactly(rule, feature))
-    ));
-    const rulesAlreadyMatch = specificRules.every(
-      (rule) => colorsMatch(rule.color, normalizedColor) && captionsMatch(rule.cap, finalCaption)
-    ) && captionHashRules.every(
-      (rule) => colorsMatch(rule.color, normalizedColor) && captionsMatch(rule.cap, finalCaption)
-    );
-    const overridesAlreadyMatch = Array.from(affectedFeatures.values()).every((feature) => {
-      if (!feature?.id) return true;
-      const override = getFeatureOverride(featureColorOverrides, feature);
-      return Boolean(
-        override
-        && colorsMatch(override.color, normalizedColor)
-        && captionsMatch(override.caption, finalCaption)
-      );
-    });
-    const liveColorsAlreadyMatch = Array.from(affectedFeatures.values()).every(
-      (feature) => liveFeatureColorMatches(feature, normalizedColor)
-    );
-    const legendAlreadyMatches = !existingLegendEntry || colorsMatch(existingLegendEntry.color, normalizedColor);
-    if (
-      !removesCoveredHashRule
-      && rulesAlreadyMatch
-      && overridesAlreadyMatch
-      && liveColorsAlreadyMatch
-      && legendAlreadyMatches
-    ) {
-      return false;
-    }
-
-    for (const rule of specificRules) {
-      rule.color = normalizedColor;
-      rule.cap = finalCaption;
-    }
-    updateLegendEntryColorByCaption(finalCaption, normalizedColor);
-
-    for (let i = manualSpecificRules.length - 1; i >= 0; i--) {
-      const rule = manualSpecificRules[i];
-      if (!isHashSpecificRule(rule) || !captionsMatch(rule.cap, finalCaption)) continue;
-      if (coveredFeatures.some((feature) => hashRuleTargetsFeatureExactly(rule, feature))) {
-        manualSpecificRules.splice(i, 1);
-      } else {
-        rule.color = normalizedColor;
-        rule.cap = finalCaption;
-      }
-    }
-
-    affectedFeatures.forEach((feature) => {
-      if (!feature?.id) return;
-      featureColorOverrides[featureOverrideKey(feature)] = { color: normalizedColor, caption: finalCaption };
-      updateClickedFeatureLegendState(feature, finalCaption, normalizedColor);
-    });
-
-    applySpecificRulesToSvg();
-    await nextTick();
-    extractLegendEntries();
-    refreshLegendEntryFeatureIds([finalCaption]);
-    return true;
+  const applyColorToLegendSpecificRules = async (caption, color) => {
+    const specificRules = manualSpecificRules.filter(rule => rule.cap === caption && !isHashSpecificRule(rule));
+    if (!specificRules.length) return false;
+    const covered = extractedFeatures.value.filter(feature => specificRules.some(rule => ruleMatchesFeature(feature, rule)));
+    const rules = manualSpecificRules.filter(rule => !(rule.cap === caption && isHashSpecificRule(rule)
+      && covered.some(feature => hashRuleTargetsFeatureExactly(rule, feature))))
+      .map(rule => rule.cap === caption ? { ...rule, color } : { ...rule });
+    return ruleActions.commitSpecificRules(rules, 'Change legend color');
   };
 
   const requestFeatureColorChange = async (feat, color, requestedLegendName = null, options = {}) => {
@@ -1455,14 +1006,8 @@ export const createFeatureColorActions = ({
     }
 
     if (choice === 'rule') {
-      if (matchingRule) {
-        matchingRule.color = color;
-        if (matchingRule.cap) {
-          updateLegendEntryColorByCaption(matchingRule.cap, color);
-          extractLegendEntries();
-        }
-      }
-      applySpecificRulesToSvg();
+      if (matchingRule) await ruleActions.commitSpecificRules(manualSpecificRules.map(rule => rule === matchingRule
+        ? { ...rule, color } : { ...rule }), 'Change specific color rule');
     } else if (choice === 'caption') {
       const targetLegendName = normalizeCaption(legendName) || normalizeCaption(getEffectiveLegendCaption(feat));
       if (!targetLegendName) {
@@ -1506,18 +1051,7 @@ export const createFeatureColorActions = ({
     } else if (choice === 'useExisting') {
       if (existingCaptionColor) {
         const targetLegendName = normalizeCaption(legendName) || normalizeCaption(getEffectiveLegendCaption(feat));
-        upsertFeatureHashRule(feat, existingCaptionColor, targetLegendName);
-        if (clickedFeature.value && clickedFeature.value.svg_id === feat.svg_id) {
-          clickedFeature.value.color = existingCaptionColor;
-          clickedFeature.value.legendName = targetLegendName;
-          clickedFeature.value.appliedLegendName = targetLegendName;
-        }
-        featureColorOverrides[featureOverrideKey(feat)] = {
-          color: existingCaptionColor,
-          caption: targetLegendName
-        };
-        applyFeatureColorPreview(feat, existingCaptionColor);
-        applySpecificRulesToSvg();
+        await setFeatureColor(feat, existingCaptionColor, targetLegendName);
       }
     }
 
@@ -1738,97 +1272,21 @@ export const createFeatureColorActions = ({
   };
 
   const doResetFillColor = async (choice) => {
-    if (!clickedFeature.value) return;
-    if (!svgContainer.value) return;
-
-    const svg = svgContainer.value.querySelector('svg');
-    if (!svg) return;
-
-    const feat = clickedFeature.value.feat;
-    if (!feat) return;
-
-    const defaultColor = resetColorDialog.defaultColor || appliedPaletteColors.value[feat.type];
-    const caption =
-      resetColorDialog.caption ||
-      feat.product ||
-      feat.gene ||
-      feat.locus_tag ||
-      feat.note ||
-      `${feat.type} at ${feat.start}..${feat.end}`;
-    const svgId = clickedFeature.value.svg_id;
-
-    if (choice === 'this' || choice === 'this_with_legend') {
-      const elements = getFeatureFillElements(svg, svgId);
-      elements.forEach((el) => {
-        el.setAttribute('fill', defaultColor);
-      });
-
-      clickedFeature.value.color = defaultColor;
-
-      removeFeatureHashRules(feat);
-
-      let resetCaption = feat.type === 'CDS' ? 'other proteins' : `other ${feat.type}s`;
-      if (choice === 'this_with_legend') {
-        console.log(`Attempting to add legend entry: caption="${caption}", color="${defaultColor}"`);
-        const addedCaption = await addLegendEntry(caption, defaultColor);
-        console.log(`addLegendEntry returned: ${addedCaption}`);
-        if (addedCaption) {
-          resetCaption = addedCaption;
-          extractLegendEntries();
-          console.log(`Added legend entry: ${addedCaption} with color: ${defaultColor}`);
-        } else {
-          console.error(`Failed to add legend entry for caption="${caption}"`);
-        }
-      }
-
-      const remainsCoveredBySpecificRule = manualSpecificRules.some(
-        (rule) => ruleMatchesFeature(feat, rule)
-      );
-      if (remainsCoveredBySpecificRule || choice === 'this_with_legend') {
-        upsertFeatureHashRule(feat, defaultColor, resetCaption);
-        featureColorOverrides[featureOverrideKey(feat)] = {
-          color: defaultColor,
-          caption: resetCaption
-        };
-      } else {
-        delete featureColorOverrides[featureOverrideKey(feat)];
-      }
-      applySpecificRulesToSvg();
-
-      console.log(`Reset fill color to default (${defaultColor}) for feature: ${svgId}`);
-    } else if (choice === 'all') {
-      const matchingFeatures = extractedFeatures.value.filter((f) => getFeatureCaption(f) === caption);
-
-      for (const matchFeat of matchingFeatures) {
-        const elements = getFeatureFillElements(svg, matchFeat.svg_id);
-        elements.forEach((el) => {
-          el.setAttribute('fill', defaultColor);
-        });
-      }
-
-      clickedFeature.value.color = defaultColor;
-
-      for (let i = manualSpecificRules.length - 1; i >= 0; i--) {
-        const rule = manualSpecificRules[i];
-        if (rule.cap === caption) {
-          manualSpecificRules.splice(i, 1);
-        }
-      }
-
-      const legendIdx = legendEntries.value.findIndex((e) => e.caption === caption);
-      if (legendIdx !== -1) {
-        await removeLegendEntry(caption);
-        extractLegendEntries();
-      }
-
-      console.log(
-        `Reset fill color to default (${defaultColor}) for all ${matchingFeatures.length} features with caption: ${caption}`
-      );
+    const feature = clickedFeature.value?.feat;
+    if (!feature || choice === 'cancel') return false;
+    const caption = getEffectiveLegendCaption(feature);
+    const color = resetColorDialog.defaultColor || appliedPaletteColors.value[feature.type];
+    if (choice === 'this_with_legend') return setFeatureColor(feature, color, caption);
+    let rules = manualSpecificRules.filter(rule => choice === 'all'
+      ? rule.cap !== caption : !hashRuleTargetsFeatureExactly(rule, feature));
+    if (choice === 'this' && rules.some(rule => ruleMatchesFeature(feature, rule))) {
+      const qualifier = getFeatureQualifier(feature);
+      if (qualifier) rules.push({ feat: feature.type, ...qualifier, color,
+        cap: feature.type === 'CDS' ? 'other proteins' : `other ${feature.type}s` });
     }
-
-    persistCurrentSvg(svg);
-
-    clickedFeature.value = null;
+    const applied = await ruleActions.commitSpecificRules(rules, 'Reset feature color');
+    if (applied) clickedFeature.value = null;
+    return applied;
   };
 
   const uniqueFeaturesBySvgId = (features) => {
@@ -2008,125 +1466,22 @@ export const createFeatureColorActions = ({
       : handleColorScopeChoice(choice)
   );
 
-  const setFeatureColor = async (feat, color, customCaption = null) => {
-    if (!feat) return false;
-    const qualInfo = getFeatureQualifier(feat);
-    if (!qualInfo) {
-      console.warn(
-        `Cannot identify feature: ${feat.type} at ${feat.start}..${feat.end} (no locus_tag, gene, or product)`
-      );
-      return false;
-    }
-    const normalizedColor = String(color || '').trim();
-    if (!normalizedColor) return false;
-    const featureKey = featureOverrideKey(feat);
-
-    const caption = normalizeCaption(
-      customCaption || feat.product || feat.gene || feat.locus_tag || `${feat.type} at ${feat.start}..${feat.end}`
-    );
-    if (!caption) return false;
-    if (featureColorAssignmentMatches(feat, normalizedColor, caption)) return false;
-
-    const oldOverride = featureColorOverrides[featureKey];
-    const oldCaption = normalizeCaption(oldOverride?.caption);
-    featureColorOverrides[featureKey] = { color: normalizedColor, caption };
-
-    applyFeatureColorPreview(feat, normalizedColor);
-
-    await nextTick();
-    let actualCaption = caption;
-    if (caption) {
-      if (oldCaption) {
-        if (captionsMatch(oldCaption, caption)) {
-          const hasNonHashRule = manualSpecificRules.some(
-            (rule) => captionsMatch(rule.cap, caption) && String(rule.qual || '').toLowerCase() !== 'hash'
-          );
-          const hasOtherUses = extractedFeatures.value.some((f) => {
-            if (f.svg_id === feat.svg_id) return false;
-            return captionsMatch(getEffectiveLegendCaption(f), caption);
-          });
-
-          if (hasNonHashRule || hasOtherUses) {
-            actualCaption = await addLegendEntry(caption, normalizedColor);
-            if (actualCaption && typeof actualCaption === 'string') {
-              addedLegendCaptions.value.add(actualCaption);
-            }
-          } else {
-            updateLegendEntryColorByCaption(oldCaption, normalizedColor);
-          }
-        } else {
-          removeLegendEntry(oldCaption);
-          actualCaption = await addLegendEntry(caption, normalizedColor);
-          if (actualCaption && typeof actualCaption === 'string') {
-            addedLegendCaptions.value.add(actualCaption);
-          }
-        }
-      } else {
-        actualCaption = await addLegendEntry(caption, normalizedColor);
-        if (actualCaption && typeof actualCaption === 'string') {
-          addedLegendCaptions.value.add(actualCaption);
-        }
-      }
-
-      if (actualCaption && typeof actualCaption === 'string' && actualCaption !== caption) {
-        featureColorOverrides[featureKey] = { color: normalizedColor, caption: actualCaption };
-      }
-    }
-
-    skipExtractOnSvgChange.value = true;
-
-    const finalCaption = actualCaption && typeof actualCaption === 'string' ? actualCaption : caption;
-    upsertFeatureHashRule(feat, normalizedColor, finalCaption);
-
-    featureColorOverrides[featureKey] = { color: normalizedColor, caption: finalCaption };
-    updateClickedFeatureLegendState(feat, finalCaption, normalizedColor);
-
-    await reclaimOrphanedBaseCaptions();
-
-    await nextTick();
-    await nextTick();
-    skipExtractOnSvgChange.value = false;
-    extractLegendEntries();
-    return true;
+  const setFeatureColor = async (feature, color, customCaption = null) => {
+    if (!feature || !getFeatureQualifier(feature)) return false;
+    const caption = normalizeCaption(customCaption || getIndividualFeatureLabel(feature));
+    if (!caption || featureColorAssignmentMatches(feature, color, caption)) return false;
+    return applyColorToFeatureGroup([feature], caption, resolveColorToHex(color) || color);
   };
 
-  const setFeatureColorValue = async (feat, value, customCaption = null) => {
-    if (!feat) return false;
-    const featureKey = featureOverrideKey(feat);
-    if (!featureKey) return false;
+  const setFeatureColorValue = async (feature, value, customCaption = null) => {
+    if (!feature) return false;
     if (value === null) {
-      if (!getFeatureOverride(featureColorOverrides, feat) && exactHashRulesForFeature(feat).length === 0) {
-        return false;
-      }
-      delete featureColorOverrides[featureKey];
-      removeFeatureHashRules(feat);
-      const inheritedColor = appliedPaletteColors.value[feat.type] || '#cccccc';
-      applyFeatureColorPreview(feat, inheritedColor);
-      applySpecificRulesToSvg();
-      if (clickedFeature.value?.feat === feat || clickedFeature.value?.svg_id === feat.svg_id) {
-        clickedFeature.value.color = inheritedColor;
-      }
-      return true;
+      return ruleActions.commitSpecificRules(manualSpecificRules.filter(rule => !hashRuleTargetsFeatureExactly(rule, feature)), 'Reset feature color');
     }
-    const normalizedValue = String(value || '').trim();
-    if (normalizedValue.toLowerCase() === 'none') {
-      const caption = normalizeCaption(
-        customCaption
-        || getEffectiveLegendCaption(feat)
-        || getFeatureCaption(feat)
-        || feat.type
-      );
-      if (featureColorAssignmentMatches(feat, 'none', caption, { requireLegend: false })) {
-        return false;
-      }
-      featureColorOverrides[featureKey] = { color: 'none', caption };
-      upsertFeatureHashRule(feat, 'none', caption);
-      applyFeatureColorPreview(feat, 'none');
-      applySpecificRulesToSvg();
-      updateClickedFeatureLegendState(feat, caption, 'none');
-      return true;
+    if (String(value).trim().toLowerCase() === 'none') {
+      return applyColorToFeatureGroup([feature], normalizeCaption(customCaption || getEffectiveLegendCaption(feature) || feature.type), 'none');
     }
-    return setFeatureColor(feat, normalizedValue, customCaption);
+    return setFeatureColor(feature, value, customCaption);
   };
 
   return {

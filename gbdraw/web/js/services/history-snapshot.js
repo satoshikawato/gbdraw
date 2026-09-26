@@ -729,6 +729,8 @@ export const createHistorySnapshotService = ({
       ),
       linearRecordOrientations: artifactOwnedValue(captureLinearRecordOrientations()),
       annotationWarnings: artifactOwnedValue(getGeneratedArtifactRef(state.annotationWarnings, null)),
+      specificRules: (state.manualSpecificRules || []).map(rule => ({ ...rule })),
+      fileLegendCaptions: new Set(state.fileLegendCaptions?.value || []),
       trackSlotResolvedGeometry: artifactOwnedValue(
         getGeneratedArtifactRef(state.trackSlotResolvedGeometry, null)
       ),
@@ -823,6 +825,10 @@ export const createHistorySnapshotService = ({
     );
     installLinearRecordOrientations(ownerSet.linearRecordOrientations);
     setGeneratedArtifactRef(state.annotationWarnings, ownerSet.annotationWarnings || []);
+    if (state.manualSpecificRules && ownerSet.specificRules) {
+      state.manualSpecificRules.splice(0, state.manualSpecificRules.length, ...ownerSet.specificRules.map(rule => ({ ...rule })));
+    }
+    if (state.fileLegendCaptions && ownerSet.fileLegendCaptions) state.fileLegendCaptions.value = new Set(ownerSet.fileLegendCaptions);
     setGeneratedArtifactRef(
       state.trackSlotResolvedGeometry,
       ownerSet.trackSlotResolvedGeometry ?? null

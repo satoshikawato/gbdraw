@@ -6,7 +6,7 @@ from types import SimpleNamespace
 
 from pandas import DataFrame
 
-from gbdraw.features.colors import preprocess_color_tables
+from gbdraw.features.colors import normalize_specific_color_captions, preprocess_color_tables
 from gbdraw.features.selector_values import iter_specific_color_rules
 from gbdraw.labels.filtering import _build_label_override_rules, _resolve_label_override
 
@@ -14,9 +14,39 @@ from gbdraw.labels.filtering import _build_label_override_rules, _resolve_label_
 def evaluate_rules_json(features_json: str, rules_json: str, kind: str = "color") -> str:
     features = json.loads(features_json)
     rules = json.loads(rules_json)
+    if kind == "color-captions":
+        table = DataFrame(
+            [
+                dict(
+                    feature_type=r["feat"],
+                    qualifier_key=r["qual"],
+                    value=r["val"],
+                    color=r["color"],
+                    caption=r.get("cap", ""),
+                )
+                for r in rules
+            ]
+        )
+        normalized = normalize_specific_color_captions(table)
+        captions = list(normalized["caption"]) if len(rules) else []
+        return json.dumps(
+            {
+                "rules": [
+                    dict(rule, cap=caption) for rule, caption in zip(rules, captions)
+                ]
+            }
+        )
     if kind == "color":
-        rows = [dict(feature_type=r["feat"], qualifier_key=r["qual"], value=r["val"],
-                     color=str(i), caption="") for i, r in enumerate(rules)]
+        rows = [
+            dict(
+                feature_type=r["feat"],
+                qualifier_key=r["qual"],
+                value=r["val"],
+                color=str(i),
+                caption="",
+            )
+            for i, r in enumerate(rules)
+        ]
         defaults = DataFrame(columns=["feature_type", "color"])
         compiled, _ = preprocess_color_tables(DataFrame(rows), defaults)
     elif kind == "label":

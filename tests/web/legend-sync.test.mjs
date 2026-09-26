@@ -111,21 +111,13 @@ assert.deepEqual(second, {
   unchanged: [{ caption: 'Shared', color: '#112233' }]
 });
 
-assert.deepEqual(
-  buildLegendIntents([
-    { feat: 'CDS', qual: 'gene', val: 'a', color: '#112233', cap: 'Historical' },
-    { feat: 'CDS', qual: 'gene', val: 'b', color: '#445566', cap: 'Historical' }
-  ], { conflictPolicy: 'last-wins' }),
-  {
-    intents: [{ caption: 'Historical', color: '#445566' }],
-    conflicts: [{
-      caption: 'Historical',
-      previousColor: '#112233',
-      nextColor: '#445566',
-      ruleIndex: 1
-    }]
-  }
-);
+assert.deepEqual(buildLegendIntents([
+  { feat: 'CDS', qual: 'gene', val: 'a', color: '#112233', cap: 'Historical [#112233]' },
+  { feat: 'CDS', qual: 'gene', val: 'b', color: '#445566', cap: 'Historical [#445566]' }
+]).intents, [
+  { caption: 'Historical [#112233]', color: '#112233' },
+  { caption: 'Historical [#445566]', color: '#445566' }
+]);
 
 class MockElement {
   constructor(tagName, attributes = {}, textContent = '') {
@@ -329,6 +321,9 @@ const mockLegendEntry = (caption, color, x) => {
   assert.equal(dirtyMarks, strokeWidthDirtyMarks);
 
   const betaSwatch = featureLegend.children[0].querySelector('path');
+  betaSwatch.setAttribute('fill', '#aabbcc');
+  assert.equal(actions.updateLegendEntryColorByCaption('Beta', '#abc', {commit:false}), false);
+  assert.equal(betaSwatch.getAttribute('fill'), '#aabbcc');
   betaSwatch.setAttribute('stroke', '#222222');
   betaSwatch.setAttribute('stroke-width', '2');
   assert.equal(strokeActions.resetLegendEntryStroke(0), true);

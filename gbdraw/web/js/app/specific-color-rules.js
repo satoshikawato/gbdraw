@@ -42,38 +42,16 @@ export const applySpecificRuleProvenance = (canonicalRules, storedRules) => {
   });
 };
 
-export const buildLegendIntents = (rules, { conflictPolicy = 'reject' } = {}) => {
-  const intents = [];
+// Captions reaching this projection have already been allocated by Python.
+export const buildLegendIntents = (rules) => {
   const byCaption = new Map();
-  const conflicts = [];
-
-  (Array.isArray(rules) ? rules : []).forEach((rule, index) => {
+  for (const rule of rules || []) {
     const normalized = normalizeSpecificRule(rule);
-    if (!normalized.cap) return;
-    const previous = byCaption.get(normalized.cap);
-    if (previous && previous.color !== normalized.color) {
-      const conflict = {
-        caption: normalized.cap,
-        previousColor: previous.color,
-        nextColor: normalized.color,
-        ruleIndex: index
-      };
-      conflicts.push(conflict);
-      if (conflictPolicy === 'reject') {
-        throw new Error(
-          `Specific-color caption "${normalized.cap}" uses multiple colors (${previous.color}, ${normalized.color}).`
-        );
-      }
-      previous.color = normalized.color;
-      return;
+    if (normalized.cap && !byCaption.has(normalized.cap)) {
+      byCaption.set(normalized.cap, { caption: normalized.cap, color: normalized.color });
     }
-    if (previous) return;
-    const intent = { caption: normalized.cap, color: normalized.color };
-    byCaption.set(intent.caption, intent);
-    intents.push(intent);
-  });
-
-  return { intents, conflicts };
+  }
+  return { intents: [...byCaption.values()] };
 };
 
 export const diffLegendIntents = (currentEntries, desiredIntents) => {
@@ -106,15 +84,12 @@ export const diffLegendIntents = (currentEntries, desiredIntents) => {
 
 export const prepareSpecificColorImport = (text, currentRules = []) => {
   const { rules } = parseSpecificRules(text);
-  const { intents } = buildLegendIntents(rules, { conflictPolicy: 'reject' });
   const retainedRules = (Array.isArray(currentRules) ? currentRules : [])
     .filter((rule) => !rule?.fromFile)
     .map((rule) => normalizeSpecificRule(rule));
   const nextRules = [...retainedRules, ...rules.map((rule) => normalizeSpecificRule(rule, { fromFile: true }))];
   return {
     nextRules,
-    intents,
-    fileLegendCaptions: intents.map((intent) => intent.caption),
     importedCount: rules.length
   };
 };

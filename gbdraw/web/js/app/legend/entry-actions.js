@@ -1,3 +1,4 @@
+import { resolveColorToHex, toNativeColorInputValue } from '../color-utils.js';
 import {
   getAllFeatureLegendGroups,
   getVisibleFeatureLegendGroup,
@@ -14,7 +15,10 @@ import {
   runDiagramHelperOperation
 } from '../../services/diagram-generation.js';
 
-const normalizedColor = (value) => String(value || '').trim().toLowerCase();
+const normalizedColor = (value) => {
+  const resolved = String(resolveColorToHex(String(value || '').trim()) || value || '').trim().toLowerCase();
+  return resolved.startsWith('#') ? toNativeColorInputValue(resolved) : resolved;
+};
 
 const legendEntryColor = (entryGroup) => {
   for (const path of entryGroup?.querySelectorAll?.('path') || []) {
@@ -148,7 +152,7 @@ export const createLegendEntryActions = ({
     console.log(`addLegendEntry called with caption="${caption}", color="${color}"`);
     if (!svgContainer.value) return false;
 
-    const svg = svgContainer.value.querySelector('svg');
+    const svg = options.svg || svgContainer.value.querySelector('svg');
     if (!svg) return false;
     const composition = parseCompositionMetadata(svg);
     const reflowMetrics = composition.legendReflow;
@@ -648,24 +652,25 @@ export const createLegendEntryActions = ({
     return true;
   };
 
-  const syncFileLegendEntries = async (intents, { previousFileIntents = [] } = {}) => {
+  const syncFileLegendEntries = async (intents, { previousFileIntents = [], isCurrent = () => true, commit = () => {} } = {}) => {
     if (!svgContainer.value) {
+      if (isCurrent()) commit();
       return { add: [], update: [], remove: [], unchanged: [] };
     }
-    const svg = svgContainer.value.querySelector('svg');
-    if (!svg) return { add: [], update: [], remove: [], unchanged: [] };
+    const mountedSvg = svgContainer.value.querySelector('svg');
+    const svg = mountedSvg?.cloneNode(true);
+    if (!svg) { if (isCurrent()) commit(); return true; }
     const targetGroups = getAllFeatureLegendGroups(svg);
-    if (targetGroups.length === 0) return { add: [], update: [], remove: [], unchanged: [] };
+    if (targetGroups.length === 0) { if (isCurrent()) commit(); return true; }
 
-    const svgSnapshot = svg.cloneNode(true);
     const resultIndex = selectedResultIndex.value;
-    const resultSnapshot = resultIndex >= 0 && results.value.length > resultIndex
-      ? { ...results.value[resultIndex] }
-      : null;
-    const editorSnapshot = legendEntries.value.map((entry) => ({ ...entry }));
-    const provenance = new Map(
-      previousFileIntents.map((entry) => [String(entry?.caption || '').trim(), normalizedColor(entry?.color)])
-    );
+    let measurementHost;
+    const provenance = new Map();
+    for (const entry of previousFileIntents) {
+      const caption = String(entry?.caption || '').trim();
+      if (!provenance.has(caption)) provenance.set(caption, new Set());
+      provenance.get(caption).add(normalizedColor(entry?.color));
+    }
 
     try {
       const desiredByCaption = new Map(intents.map((intent) => [intent.caption, normalizedColor(intent.color)]));
@@ -674,7 +679,7 @@ export const createLegendEntryActions = ({
           const caption = entry.getAttribute('data-legend-key') || '';
           if (
             !entry.hasAttribute('data-legend-owner') &&
-            provenance.get(caption) === legendEntryColor(entry)
+            provenance.get(caption)?.has(legendEntryColor(entry))
           ) {
             entry.setAttribute('data-legend-owner', SPECIFIC_COLOR_FILE_OWNER);
           }
@@ -726,6 +731,7 @@ export const createLegendEntryActions = ({
       }
       for (const entry of diff.add) {
         await addLegendEntry(entry.caption, entry.color, {
+          svg,
           owner: SPECIFIC_COLOR_FILE_OWNER,
           conflictPolicy: 'error',
           commit: false,
@@ -737,29 +743,33 @@ export const createLegendEntryActions = ({
       const legendGroup = svg.getElementById('legend');
       const hasDualLegends =
         !!legendGroup?.querySelector('#legend_horizontal') && !!legendGroup?.querySelector('#legend_vertical');
+      if (!isCurrent() || svgContainer.value.querySelector('svg') !== mountedSvg) return false;
+      // Measure a disposable, hidden SVG before admitting any current state.
+      measurementHost = document.createElement('div');
+      measurementHost.style.cssText = 'position:fixed;left:-100000px;top:0;visibility:hidden;pointer-events:none';
+      measurementHost.appendChild(svg);
+      document.body.appendChild(measurementHost);
       if (hasDualLegends) reflowDualLegendLayout(svg);
       else updatePairwiseLegendPositions(svg);
+      // No await after this point: rules, mounted geometry and Result commit together.
+      commit();
+      const mountedLegend = mountedSvg.getElementById('legend');
+      const candidateLegend = svg.getElementById('legend');
+      if (mountedLegend && candidateLegend) mountedLegend.replaceWith(candidateLegend);
       onLegendGeometryChanged();
       skipCaptureBaseConfig.value = true;
       if (resultIndex >= 0 && results.value.length > resultIndex) {
         const nextResults = [...results.value];
         nextResults[resultIndex] = {
           ...results.value[resultIndex],
-          content: serializeCleanSvg(svg)
+          content: serializeCleanSvg(mountedSvg)
         };
         results.value = nextResults;
       }
       extractLegendEntries();
       return diff;
-    } catch (error) {
-      svg.replaceWith(svgSnapshot);
-      if (resultSnapshot && resultIndex >= 0 && results.value.length > resultIndex) {
-        const nextResults = [...results.value];
-        nextResults[resultIndex] = resultSnapshot;
-        results.value = nextResults;
-      }
-      legendEntries.value = editorSnapshot;
-      throw error;
+    } finally {
+      measurementHost?.remove();
     }
   };
 

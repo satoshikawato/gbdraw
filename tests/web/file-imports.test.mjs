@@ -113,14 +113,10 @@ const prepared = prepareSpecificColorImport(
 );
 assert.equal(prepared.nextRules.length, 3);
 assert.equal(prepared.nextRules.filter((rule) => rule.fromFile).length, 2);
-assert.deepEqual(prepared.intents, [{ caption: 'Alpha', color: '#112233' }]);
-assert.throws(
-  () => prepareSpecificColorImport(
-    'CDS\tgene\talpha\t#112233\tAlpha\nCDS\tgene\tbeta\t#445566\tAlpha\n',
-    []
-  ),
-  /caption "Alpha" uses multiple colors/
-);
+// Import assembles the full draft; allocation belongs to Python preparation.
+assert.deepEqual(prepareSpecificColorImport(
+  'CDS\tgene\talpha\t#112233\tAlpha\nCDS\tgene\tbeta\t#445566\tAlpha\n', []
+).nextRules.map(rule => rule.cap), ['Alpha', 'Alpha']);
 
 assert.deepEqual(diffLegendIntents(
   [

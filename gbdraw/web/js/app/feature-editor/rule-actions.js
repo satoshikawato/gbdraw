@@ -38,7 +38,6 @@ export const createFeatureRuleActions = ({ state, nextTick, legendActions, ruleP
     fileLegendCaptions
   } = state;
 
-  const { addLegendEntry, removeLegendEntry, extractLegendEntries } = legendActions;
   const normalizeCaption = (value) => String(value || '').trim();
   const normalizeCaptionKey = (value) => normalizeCaption(value).toLowerCase();
   const normalizeFeatureIdKey = (value) => String(value || '').trim().toLowerCase();
@@ -46,24 +45,41 @@ export const createFeatureRuleActions = ({ state, nextTick, legendActions, ruleP
   const specificRuleFields = new Set(['feat', 'qual', 'val', 'color', 'cap']);
 
   let preparationRevision = 0;
-  const commitPrepared = (rules, label, commit) => {
+  const commitSpecificRules = async (rules, label = 'Change specific color rules', { isCurrent = () => true, afterCommit = () => {}, previousLegendIntents = [] } = {}) => {
     const revision = ++preparationRevision;
-    const before = rulePreparation.snapshot();
-    const apply = () => {
-      if (revision !== preparationRevision || !rulePreparation.isCurrent(before)) return;
-      return history.runUndoable(label, () => {
-        if (revision !== preparationRevision || !rulePreparation.isCurrent(before)) return;
-        return commit();
+    const candidate = await rulePreparation.prepareCandidate(rules);
+    if (!candidate) return false;
+    const current = () => revision === preparationRevision && isCurrent()
+      && rulePreparation.isCurrent(candidate.snapshot);
+    if (!current()) return false;
+    const previousIntents = [...manualSpecificRules.filter(rule => rule.cap)
+      .map(rule => ({ caption: rule.cap, color: rule.color })), ...previousLegendIntents];
+    const previousCaptions = new Set(previousIntents.map(intent => intent.caption));
+    let applied = false;
+    await history.runUndoable(label, async () => {
+      if (!current()) return;
+      await legendActions.syncFileLegendEntries(candidate.intents.filter(intent => !(state.deletedLegendEntries?.value || [])
+        .some(entry => (entry.originalCaption || entry.caption) === intent.caption)), {
+        previousFileIntents: previousIntents,
+        isCurrent: current,
+        commit: () => {
+          manualSpecificRules.splice(0, manualSpecificRules.length, ...candidate.rules);
+          fileLegendCaptions.value = new Set(candidate.rules.filter(rule => rule.fromFile && rule.cap).map(rule => rule.cap));
+          addedLegendCaptions.value = new Set([
+            ...[...addedLegendCaptions.value].filter(caption => !previousCaptions.has(caption)),
+            ...candidate.intents.map(intent => intent.caption)
+          ]);
+          applyRulePreview();
+          afterCommit(candidate);
+          applied = true;
+        }
       });
-    };
-    try {
-      const prepared = rulePreparation.prepare(rules);
-      return Promise.resolve(prepared === true ? apply() : prepared.then((current) => current && apply()))
-        .catch((error) => { if (revision === preparationRevision) alert(`Invalid rule: ${error.message}`); });
-    } catch (error) {
-      alert(`Invalid rule: ${error.message}`);
-    }
+    });
+    if (applied) rulePreparation.notifyChanges(candidate);
+    return applied;
   };
+  const commitPrepared = (rules, label, afterCommit = () => {}) => commitSpecificRules(rules, label, { afterCommit })
+    .catch(error => { alert(`Invalid rule: ${error.message}`); return false; });
   const applyRulePreview = () => {
     refreshFeatureOverrides(extractedFeatures.value);
     svgActions.applyPaletteToSvg();
@@ -78,25 +94,19 @@ export const createFeatureRuleActions = ({ state, nextTick, legendActions, ruleP
 
     const nextRule = { ...current, [field]: nextValue };
     delete nextRule.fromFile;
-    return commitPrepared([nextRule, ...manualSpecificRules], 'Edit specific color rule', () => {
-      manualSpecificRules.splice(index, 1, nextRule);
-      applyRulePreview();
-    })?.finally(() => {
+    const rules = manualSpecificRules.map((rule, i) => i === index ? nextRule : { ...rule });
+    return commitPrepared(rules, 'Edit specific color rule')?.finally(() => {
       if (input?.isConnected) input.value = manualSpecificRules[index]?.[field] ?? '';
     });
   };
 
   const moveSpecificRule = (index, offset) => {
+    const rules = manualSpecificRules.map(rule => ({ ...rule }));
     const target = index + offset;
-    if (target < 0 || target >= manualSpecificRules.length) return;
-    const [rule] = manualSpecificRules.splice(index, 1);
-    manualSpecificRules.splice(target, 0, rule);
-  };
-
-  const removeSpecificRule = (index) => {
-    const rule = manualSpecificRules[index];
-    if (rule?.cap) fileLegendCaptions.value.delete(rule.cap);
-    manualSpecificRules.splice(index, 1);
+    if (target < 0 || target >= rules.length) return;
+    const [rule] = rules.splice(index, 1);
+    rules.splice(target, 0, rule);
+    return commitPrepared(rules, 'Move specific color rule');
   };
 
   const downloadSpecificRulesTsv = () => {
@@ -206,28 +216,9 @@ export const createFeatureRuleActions = ({ state, nextTick, legendActions, ruleP
       color: String(newSpecRule.color || '#000000'),
       cap: String(newSpecRule.cap || '')
     };
-    return commitPrepared([...manualSpecificRules, rule], 'Add specific color rule', async () => {
-      manualSpecificRules.push(rule);
-      applyRulePreview();
+    return commitPrepared([...manualSpecificRules, rule], 'Add specific color rule', () => {
       if (newSpecRule.val === rule.val) newSpecRule.val = '';
-      if (rule.cap) {
-        const actualCaption = await addLegendEntry(rule.cap, rule.color);
-        if (actualCaption && typeof actualCaption === 'string') addedLegendCaptions.value.add(actualCaption);
-        extractLegendEntries();
-      }
     });
-  };
-
-  const clearAllSpecificRules = async () => {
-    const captionsToRemove = manualSpecificRules.filter((rule) => rule.cap).map((rule) => rule.cap);
-
-    for (const cap of captionsToRemove) {
-      await removeLegendEntry(cap);
-    }
-
-    manualSpecificRules.splice(0);
-    applyRulePreview();
-    extractLegendEntries();
   };
 
   const applySpecificRulePreset = async () => {
@@ -248,45 +239,21 @@ export const createFeatureRuleActions = ({ state, nextTick, legendActions, ruleP
         throw new Error(`Preset fetch failed: ${response.status}`);
       }
       const text = await response.text();
-      const { rules, rulesWithCaptions } = parseSpecificRules(text);
+      const { rules } = parseSpecificRules(text);
       if (selectedSpecificPreset.value !== presetId || !rulePreparation.isCurrent(presetContext)) return;
-      return await commitPrepared(rules, 'Apply specific color preset', async () => {
-      if (selectedSpecificPreset.value !== presetId) return;
-
-      const captionsToRemove = manualSpecificRules.filter((rule) => rule.cap).map((rule) => rule.cap);
-      for (const cap of captionsToRemove) {
-        await removeLegendEntry(cap);
-        addedLegendCaptions.value.delete(cap);
-        fileLegendCaptions.value.delete(cap);
-      }
-
-      manualSpecificRules.splice(0);
-      rules.forEach((rule) => manualSpecificRules.push(rule));
-
-      applyRulePreview();
-      if (presetId === 'bakta') {
-        currentColors.value = { ...currentColors.value, CDS: '#cccccc' };
-        adv.legend_box_size = 12;
-        adv.legend_font_size = 12;
-      }
-
-      if (rulesWithCaptions.length > 0) {
-        await nextTick();
-        for (const rule of rulesWithCaptions) {
-          const actualCaption = await addLegendEntry(rule.cap, rule.color);
-          if (actualCaption && typeof actualCaption === 'string') {
-            addedLegendCaptions.value.add(actualCaption);
-            fileLegendCaptions.value.add(actualCaption);
+      return await commitSpecificRules(rules, 'Apply specific color preset', {
+        isCurrent: () => selectedSpecificPreset.value === presetId,
+        afterCommit: () => {
+          if (presetId === 'bakta') {
+            currentColors.value = { ...currentColors.value, CDS: '#cccccc' };
+            adv.legend_box_size = 12;
+            adv.legend_font_size = 12;
           }
         }
-        extractLegendEntries();
-      } else {
-        extractLegendEntries();
-      }
       });
     } catch (e) {
       console.error('Failed to load specific rule preset:', e);
-      alert('Failed to load preset. Please check the preset file and format.');
+      alert(`Invalid rule: ${e.message}`);
     } finally {
       specificRulePresetLoading.value = false;
     }
@@ -461,7 +428,8 @@ export const createFeatureRuleActions = ({ state, nextTick, legendActions, ruleP
     addSpecificRule,
     applySpecificRulePreset,
     canEditFeatureColor,
-    clearAllSpecificRules: () => commitPrepared(manualSpecificRules, 'Clear specific color rules', clearAllSpecificRules),
+    clearAllSpecificRules: () => commitPrepared([], 'Clear specific color rules'),
+    commitSpecificRules,
     countFeaturesMatchingRule,
     downloadSpecificRulesTsv,
     findExistingColorForCaption,
@@ -477,10 +445,10 @@ export const createFeatureRuleActions = ({ state, nextTick, legendActions, ruleP
     getIndividualFeatureLabel,
     getFeatureQualifier,
     getLabelSpecificRule,
-    moveSpecificRuleDown: (index) => commitPrepared(manualSpecificRules, 'Move specific color rule', () => { moveSpecificRule(index, 1); applyRulePreview(); }),
-    moveSpecificRuleUp: (index) => commitPrepared(manualSpecificRules, 'Move specific color rule', () => { moveSpecificRule(index, -1); applyRulePreview(); }),
+    moveSpecificRuleDown: (index) => moveSpecificRule(index, 1),
+    moveSpecificRuleUp: (index) => moveSpecificRule(index, -1),
     refreshFeatureOverrides,
-    removeSpecificRule: (index) => commitPrepared(manualSpecificRules, 'Remove specific color rule', () => { removeSpecificRule(index); applyRulePreview(); }),
+    removeSpecificRule: (index) => commitPrepared(manualSpecificRules.filter((_, i) => i !== index), 'Remove specific color rule'),
     setSpecificRuleField
   };
 };

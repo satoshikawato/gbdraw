@@ -11,6 +11,55 @@ from .ids import compute_feature_hash as compute_feature_hash
 from .selector_values import feature_matches_specific_color_rule, find_specific_color_rule
 
 
+def normalize_specific_color_captions(
+    color_table: DataFrame | None,
+) -> DataFrame | None:
+    """Allocate captions without I/O, changing neither rule order nor selectors.
+
+    Reserve every literal first. Allocation order depends on caption/color, never
+    row order; a canonical caption is then an ordinary string on subsequent edits.
+    """
+    from gbdraw.core.color import normalize_hex_color
+    from gbdraw.io.colors import resolve_color_to_hex
+    from gbdraw.legend.table import _unique_legend_key
+
+    if color_table is None or color_table.empty or "caption" not in color_table:
+        return color_table
+    captions = [
+        str(value) if value is not None else ""
+        for value in color_table["caption"].fillna("")
+    ]
+    colors = [str(value).strip() for value in color_table["color"]]
+    normalized_colors = [
+        "none"
+        if color.lower() == "none"
+        else normalize_hex_color(resolve_color_to_hex(color))
+        for color in colors
+    ]
+    groups: dict[str, set[str]] = {}
+    for caption, color in zip(captions, normalized_colors):
+        if caption.strip():
+            groups.setdefault(caption, set()).add(color)
+    reserved = dict.fromkeys(captions)
+    allocated = {}
+    for caption in sorted(groups):
+        if len(groups[caption]) < 2:
+            continue
+        for color in sorted(groups[caption]):
+            key = _unique_legend_key(reserved, f"{caption} [{color}]")
+            reserved[key] = None
+            allocated[caption, color] = key
+    normalized = [
+        allocated.get((caption, color), caption)
+        for caption, color in zip(captions, normalized_colors)
+    ]
+    if normalized == captions:
+        return color_table
+    result = color_table.copy()
+    result["caption"] = normalized
+    return result
+
+
 def preprocess_color_tables(color_table: DataFrame, default_colors: DataFrame) -> tuple[dict, dict]:
     """
     Preprocesses color tables to create mappings for feature coloring.
@@ -141,4 +190,5 @@ __all__ = [
     "get_color_with_info",
     "precompute_used_color_rules",
     "preprocess_color_tables",
+    "normalize_specific_color_captions",
 ]

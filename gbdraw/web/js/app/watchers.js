@@ -5,7 +5,6 @@ import {
   parseWhitelistRules
 } from './file-imports.js';
 import {
-  buildLegendIntents,
   prepareSpecificColorImport
 } from './specific-color-rules.js';
 import {
@@ -59,7 +58,6 @@ export const setupWatchers = ({
     extractedFeatures,
     biologicalFeatures,
     featureSelectorSafetyScope,
-    addedLegendCaptions,
     layoutRepositionMode,
     editableLabels,
     results,
@@ -107,7 +105,6 @@ export const setupWatchers = ({
     currentColors,
     paletteInstantPreviewEnabled,
     pendingPaletteName,
-    fileLegendCaptions,
     semanticFileWatchersSuppressed,
     sessionResourceDiscoveryDeferred,
     sessionImportRollbackInProgress,
@@ -126,15 +123,13 @@ export const setupWatchers = ({
   } = state;
 
   const {
-    removeLegendEntry,
     addLegendEntry,
     extractLegendEntries,
-    refreshLegendDragAffordances,
-    syncFileLegendEntries
+    refreshLegendDragAffordances
   } = legendActions;
 
-  const { applyPaletteToSvg, applySpecificRulesToSvg } = svgActions;
-  const { refreshFeatureOverrides, syncLabelEditor } = featureActions;
+  const { applyPaletteToSvg } = svgActions;
+  const { syncLabelEditor } = featureActions;
   const {
     applyCanvasPadding,
     repositionForLegendChange,
@@ -195,32 +190,6 @@ export const setupWatchers = ({
     }
     scheduleDefinitionUpdate();
   };
-
-  watch(
-    () => [...manualSpecificRules],
-    async (newRules, oldRules) => {
-      if (semanticFileWatchersSuppressed.value) return;
-      if (extractedFeatures.value.length > 0) {
-        refreshFeatureOverrides(extractedFeatures.value);
-      }
-      applyPaletteToSvg();
-      applySpecificRulesToSvg();
-
-      const currentCaptions = new Set(newRules.filter((r) => r.cap).map((r) => r.cap));
-      const oldCaptions = new Set((oldRules || []).filter((r) => r.cap).map((r) => r.cap));
-
-      const removedFromRules = [...oldCaptions].filter((cap) => !currentCaptions.has(cap));
-      const removedFromTracked = [...addedLegendCaptions.value].filter((cap) => !currentCaptions.has(cap));
-
-      const allRemovedCaptions = new Set([...removedFromRules, ...removedFromTracked]);
-
-      for (const cap of allRemovedCaptions) {
-        removeLegendEntry(cap);
-        addedLegendCaptions.value.delete(cap);
-      }
-    },
-    { deep: true }
-  );
 
   watch(
     currentColors,
@@ -500,23 +469,7 @@ export const setupWatchers = ({
   watchFileImport('t_color', async (text, isCurrent) => {
     try {
       const prepared = prepareSpecificColorImport(text, manualSpecificRules);
-      if (!await rulePreparation.prepare(prepared.nextRules) || !isCurrent()) return;
-      const previousCaptions = Array.from(fileLegendCaptions.value);
-      const previousFileIntents = buildLegendIntents(
-        manualSpecificRules.filter((rule) => rule.fromFile),
-        { conflictPolicy: 'last-wins' }
-      ).intents;
-      if (svgContent.value) {
-        await nextTick();
-        await syncFileLegendEntries(prepared.intents, { previousFileIntents });
-      }
-      if (!isCurrent()) return;
-
-      manualSpecificRules.splice(0, manualSpecificRules.length, ...prepared.nextRules);
-      previousCaptions.forEach((caption) => addedLegendCaptions.value.delete(caption));
-      fileLegendCaptions.value = new Set(prepared.fileLegendCaptions);
-      prepared.fileLegendCaptions.forEach((caption) => addedLegendCaptions.value.add(caption));
-      extractLegendEntries();
+      if (!await featureActions.commitSpecificRules(prepared.nextRules, 'Import specific color rules', { isCurrent })) return;
       console.log(`Loaded ${prepared.importedCount} rules from file.`);
     } catch (e) {
       console.error('Failed to load rules file:', e);

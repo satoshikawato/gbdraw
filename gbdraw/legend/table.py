@@ -176,10 +176,14 @@ def prepare_legend_table(
             has_matching_rules = False
             for entry in feature_specific_colors[selected_feature]:
                 specific_caption = entry[0]
+                if not str(specific_caption or "").strip():
+                    continue
                 specific_fill_color = entry[1]
                 # Only add to legend if this rule was actually used (or if used_color_rules not provided)
                 if used_color_rules is None or (specific_caption, specific_fill_color) in used_color_rules:
                     has_matching_rules = True
+                    if specific_caption in legend_table:
+                        continue
                     legend_table[specific_caption] = {
                         "type": "solid",
                         "fill": specific_fill_color,
