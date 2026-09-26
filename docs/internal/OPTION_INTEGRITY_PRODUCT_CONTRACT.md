@@ -5,7 +5,7 @@ Status: active Product authority
 ## Authority metadata
 
 - Contract ID: `OIPC`
-- Contract revision: `21`
+- Contract revision: `22`
 - Product Decision Owner: `satoshikawato`
 - Decision date: `2026-08-28`
 - Decision source: explicit Product Decision Owner selection of one (`1`) after
@@ -28,7 +28,8 @@ Status: active Product authority
   `PD-OI-026`, `PD-OI-027`, `PD-OI-028`, `PD-OI-029`, `PD-OI-030`,
   `PD-OI-031`, `PD-OI-032`, `PD-OI-033`, `PD-OI-034`, `PD-OI-035`,
   `PD-OI-036`, `PD-OI-037`, `PD-OI-038`, `PD-OI-039`, `PD-OI-040`,
-  `PD-OI-041`, `PD-OI-042`, `PD-OI-043`, `PD-OI-044`, and `PD-OI-045`
+  `PD-OI-041`, `PD-OI-042`, `PD-OI-043`, `PD-OI-044`, `PD-OI-045`,
+  `PD-OI-046`, and `PD-OI-047`
 - Revision 3 addition: `PD-OI-018`, accepted by `satoshikawato` on
   `2026-09-13` after confirming the complete record/search outcome, no feature
   retirement, and the runtime/memory cost of complete comparisons. The initial
@@ -172,6 +173,15 @@ Status: active Product authority
   instruction and receives no authority record. Earlier outcomes retain
   their scope. This amendment contains no runtime; dependent implementation
   requires this authority merged into its base.
+- Revision 22 additions: `PD-OI-046` and `PD-OI-047`, selected by
+  `satoshikawato` on `2026-09-26` through the two complete Choice A
+  `PRODUCT_DECISION` receipts for issue `#601` BUG-15 and BUG-19.
+  The two independent records below preserve all nine supplied fields and
+  their original concern keys exactly. Earlier decisions and acceptance
+  conditions retain their scope. This authority-only amendment contains no
+  runtime; dependent implementation requires these records merged into its
+  base. It neither registers nor supersedes the separate export-plan
+  diagnostic-disclosure candidate.
 - Records remaining `EVIDENCE_REQUIRED`: none
 - Excluded records: none
 
@@ -1746,6 +1756,98 @@ corrected. Passing evidence does not make incorrect behavior normative.
   "mustPreserve": "主スレッドの応答と閲覧・scroll・pan/zoom・検索、visible pending/busy reasons、同時 Save の join と一度の download、title/size/repeat-download 取消、committed Result と editable draft の分離、supported Sessions と settings-only、atomic Load、failed/canceled/stale/teardown recovery、旧 request/resources/Result/History、source bytesと全 cache/evidence/provenance、JSON/gzip と CLI/Python replay、privacyとsize/sanitization constraints、現行 performance gates。",
   "mayRetire": "Save/Load pending 中の source/editor/History/Reset/Generate 等の semantic mutation と、mutation entry point によって偶然編集可能または silent no-op になる振る舞い。Generate/automatic reflow 中の Save/Load 開始も busy reason 付きで停止し、完了後の再試行を提供する。通常編集・閲覧・成功後の操作は廃止しない。",
   "acceptedResidualRisk": "長い Save/Load の間、document 編集は一時停止する。閲覧、status、bounded completion、error/retry を維持する。無期限 lock、main-thread freeze、データの省略、checkpoint混合、追加memoryの未計測、既存gateの弱化は受容しない。",
+  "owner": "satoshikawato",
+  "decisionDate": "2026-09-26"
+}
+```
+
+### PD-OI-046: Guidance with bounded diagnostics
+
+- Concern key: `web.errors.diagnostic-disclosure`
+- Scenario revision: `1`
+- Status: `ACCEPTED`
+- Selected outcome: `A / GUIDANCE_WITH_BOUNDED_DIAGNOSTICS`
+- Normative outcome: exactly the complete approved `PRODUCT_DECISION` receipt
+  and its nine-field JSON representation below.
+- Decision source: the complete Choice A receipt approved by `satoshikawato`
+  on `2026-09-26`, retained in
+  [`DECISION_01_ERROR_DISCLOSURE.md`](./issue-601-bug15-bug19-implementation-20260926/decisions/DECISION_01_ERROR_DISCLOSURE.md)
+  at S00 commit `202fe9de554aaa70dc731deb80bf032f26d80061`.
+  All nine supplied fields are reproduced without translation or additional
+  terms. This static record does not change the source receipt's concern key
+  or retire another receipt. Dependent runtime requires this authority merged
+  into its base; this amendment supplies no runtime acceptance evidence.
+- Receipt SHA-256 (UTF-8, excluding the final newline):
+  `8617888cb1838521f78640db4653e2dcf88dd427cd466bbbc33d59efacaceae8`.
+
+```text
+PRODUCT_DECISION
+Concern: web.errors.diagnostic-disclosure
+Scenario revision: 1
+Choice: A / GUIDANCE_WITH_BOUNDED_DIAGNOSTICS
+Rationale: 利用者が短い修正案内から作業を続けられ、必要な場合は入力内容を公開せずに安全な失敗種別と段階を調査へ渡せるようにする。
+Must preserve: すべての移行対象で既知 validation の修正情報を保持する。Generate/Align の以前の Result、canonical request、draft、orientation、History、retry、Save/Export、cancel/stale/superseded を保つ。Details は keyboard で開け、Copy diagnostics は表示中の bounded code/operation/stage/許可 context/副因だけを手動コピーする。unknown は stage と stable code を示し、元 pattern、sequence、file/record 名、path、SVG、自由な exception/traceback/stdout/stderr を画面・Copy・console に自動公開しない。初回と旧 Result 保持を区別する。
+May retire: user-facing raw exception/traceback と自由な stdout/stderr、個別の例外型 prefix の直接表示。安全な修正情報、Details 入口、既存 recovery は退役しない。
+Accepted residual risk: bounded 診断だけでは稀な未知例外を特定できず、利用者の明示的な Session 保存・別途再現情報が必要になる場合がある。Clipboard 不可時も表示情報の手動選択コピーと通常 recovery を維持する。
+Owner: satoshikawato
+Decision date: 2026-09-26
+```
+
+```json
+{
+  "concern": "web.errors.diagnostic-disclosure",
+  "scenarioRevision": 1,
+  "choice": "A / GUIDANCE_WITH_BOUNDED_DIAGNOSTICS",
+  "rationale": "利用者が短い修正案内から作業を続けられ、必要な場合は入力内容を公開せずに安全な失敗種別と段階を調査へ渡せるようにする。",
+  "mustPreserve": "すべての移行対象で既知 validation の修正情報を保持する。Generate/Align の以前の Result、canonical request、draft、orientation、History、retry、Save/Export、cancel/stale/superseded を保つ。Details は keyboard で開け、Copy diagnostics は表示中の bounded code/operation/stage/許可 context/副因だけを手動コピーする。unknown は stage と stable code を示し、元 pattern、sequence、file/record 名、path、SVG、自由な exception/traceback/stdout/stderr を画面・Copy・console に自動公開しない。初回と旧 Result 保持を区別する。",
+  "mayRetire": "user-facing raw exception/traceback と自由な stdout/stderr、個別の例外型 prefix の直接表示。安全な修正情報、Details 入口、既存 recovery は退役しない。",
+  "acceptedResidualRisk": "bounded 診断だけでは稀な未知例外を特定できず、利用者の明示的な Session 保存・別途再現情報が必要になる場合がある。Clipboard 不可時も表示情報の手動選択コピーと通常 recovery を維持する。",
+  "owner": "satoshikawato",
+  "decisionDate": "2026-09-26"
+}
+```
+
+### PD-OI-047: Rejected Color rule pattern edit recovery
+
+- Concern key: `web.rules.rejected-pattern-edit-recovery`
+- Scenario revision: `1`
+- Status: `ACCEPTED`
+- Selected outcome: `A / KEEP_REJECTED_PATTERN_DRAFT`
+- Normative outcome: exactly the complete approved `PRODUCT_DECISION` receipt
+  and its nine-field JSON representation below.
+- Decision source: the complete Choice A receipt approved by `satoshikawato`
+  on `2026-09-26`, retained in
+  [`DECISION_02_REGEX_EDIT_RECOVERY.md`](./issue-601-bug15-bug19-implementation-20260926/decisions/DECISION_02_REGEX_EDIT_RECOVERY.md)
+  at S00 commit `202fe9de554aaa70dc731deb80bf032f26d80061`.
+  All nine supplied fields are reproduced without translation or additional
+  terms. This static record does not change the source receipt's concern key
+  or retire another receipt. Dependent runtime requires this authority merged
+  into its base; this amendment supplies no runtime acceptance evidence.
+- Receipt SHA-256 (UTF-8, excluding the final newline):
+  `9cc66bc30f97cc995b9b0002b094ba74cfa00a8e77b163c33074689f0e73b496`.
+
+```text
+PRODUCT_DECISION
+Concern: web.rules.rejected-pattern-edit-recovery
+Scenario revision: 1
+Choice: A / KEEP_REJECTED_PATTERN_DRAFT
+Rationale: 有効なルールと図を保護しながら、入力ミスや一時的な検証失敗から同じ文字列を修正・再試行できるようにする。
+Must preserve: Color/Label の Python regex semantics、既存一 Worker・一 preparation・atomic live commit、優先順位、prepared reuse、valid target と Generate の同値、canonical rule/Result/History、stale/cancel 隔離を維持する。対象は既存 Color rule の pattern field。拒否された text を field に保持して原因と Not applied、Save/Generate は last accepted rule、Export は現在 Result を使うことを示す。keyboard の編集/Retry/Revert、正しい syntax/runtime 分類、同 document の drawer close/reopen・一時 mode 切替での draft 保持、row/revision の現在性を保つ。対象 rule の Undo/Redo 置換、row 削除、document/session 成功置換、reset で draft を解放する。成功 edit だけ History へ記録し、未確定 text は Session/diagnostics/console に自動保存・公開しない。TSV、新規 rule、preset、Search の意味は変えない。
+May retire: 対象 field の failure 後に未確定 pattern text を無条件で accepted 値へ戻す表示。不正 rule の拒否、last accepted rule の保護、正常な live edit は退役しない。
+Accepted residual risk: 表示 text と accepted rule が一時的に異なり、Save/Generate は accepted rule、Export は現在 Result を使う。Not applied と対象説明、Revert を提供する。Session/document や対象 rule の History 置換後に未確定 draft は保持しない。
+Owner: satoshikawato
+Decision date: 2026-09-26
+```
+
+```json
+{
+  "concern": "web.rules.rejected-pattern-edit-recovery",
+  "scenarioRevision": 1,
+  "choice": "A / KEEP_REJECTED_PATTERN_DRAFT",
+  "rationale": "有効なルールと図を保護しながら、入力ミスや一時的な検証失敗から同じ文字列を修正・再試行できるようにする。",
+  "mustPreserve": "Color/Label の Python regex semantics、既存一 Worker・一 preparation・atomic live commit、優先順位、prepared reuse、valid target と Generate の同値、canonical rule/Result/History、stale/cancel 隔離を維持する。対象は既存 Color rule の pattern field。拒否された text を field に保持して原因と Not applied、Save/Generate は last accepted rule、Export は現在 Result を使うことを示す。keyboard の編集/Retry/Revert、正しい syntax/runtime 分類、同 document の drawer close/reopen・一時 mode 切替での draft 保持、row/revision の現在性を保つ。対象 rule の Undo/Redo 置換、row 削除、document/session 成功置換、reset で draft を解放する。成功 edit だけ History へ記録し、未確定 text は Session/diagnostics/console に自動保存・公開しない。TSV、新規 rule、preset、Search の意味は変えない。",
+  "mayRetire": "対象 field の failure 後に未確定 pattern text を無条件で accepted 値へ戻す表示。不正 rule の拒否、last accepted rule の保護、正常な live edit は退役しない。",
+  "acceptedResidualRisk": "表示 text と accepted rule が一時的に異なり、Save/Generate は accepted rule、Export は現在 Result を使う。Not applied と対象説明、Revert を提供する。Session/document や対象 rule の History 置換後に未確定 draft は保持しない。",
   "owner": "satoshikawato",
   "decisionDate": "2026-09-26"
 }
