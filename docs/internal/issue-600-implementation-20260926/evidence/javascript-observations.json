@@ -1,0 +1,62 @@
+[
+  {
+    "case": "BUG-08 auxiliary column",
+    "error": "Annotation table has unknown columns: notes."
+  },
+  {
+    "case": "BUG-10 same caption two colors",
+    "error": "Specific-color caption \"Transporter\" uses multiple colors (#112233, #445566)."
+  },
+  {
+    "case": "BUG-14 raw validation 10",
+    "value": []
+  },
+  {
+    "case": "BUG-14 payload 10",
+    "value": 10
+  },
+  {
+    "case": "BUG-14 raw validation 10px",
+    "value": [
+      "Circular track slot 'gc' inner_gap_px must be a numeric pixel value without a unit."
+    ]
+  },
+  {
+    "case": "BUG-14 payload 10px",
+    "value": 10
+  },
+  {
+    "case": "BUG-14 raw validation 10PX",
+    "value": [
+      "Circular track slot 'gc' inner_gap_px must be a numeric pixel value without a unit."
+    ]
+  },
+  {
+    "case": "BUG-14 payload 10PX",
+    "value": null
+  },
+  {
+    "case": "BUG-14 raw validation oops",
+    "value": [
+      "Circular track slot 'gc' inner_gap_px must be a nonnegative numeric pixel value."
+    ]
+  },
+  {
+    "case": "BUG-14 payload oops",
+    "value": null
+  },
+  {
+    "case": "BUG-14 raw validation px",
+    "value": [
+      "Circular track slot 'gc' inner_gap_px must be a numeric pixel value without a unit."
+    ]
+  },
+  {
+    "case": "BUG-14 payload px",
+    "value": 0
+  },
+  {
+    "case": "BUG-14 linear control 10px",
+    "value": []
+  }
+]
