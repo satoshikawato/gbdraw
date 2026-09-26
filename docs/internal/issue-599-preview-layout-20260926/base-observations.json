@@ -1,0 +1,743 @@
+{
+  "playwrightVersion": "1.61.0",
+  "wheelSha256": "fad72f78c38c61ecd67fd542d4b8f3492622098c9420755d842a09ed265d06ec",
+  "wheelSourceMismatches": [],
+  "baseSha": "d457b7189b137185a8dec800819a312c30b969fa",
+  "scope": "Unchanged runtime; real Generate, actual pointer drag, DOM geometry",
+  "generations": [
+    {
+      "mode": "circular",
+      "fixture": "HmmtDNA_basic_circular",
+      "first": {
+        "status": "ok"
+      },
+      "initial": {
+        "deltas": {
+          "primary": [
+            [
+              0,
+              0
+            ],
+            [
+              0,
+              0
+            ],
+            [
+              0,
+              0
+            ],
+            [
+              0,
+              0
+            ],
+            [
+              0,
+              0
+            ],
+            [
+              0,
+              0
+            ],
+            [
+              0,
+              0
+            ],
+            [
+              0,
+              0
+            ]
+          ],
+          "legend": [
+            0,
+            0
+          ],
+          "title": [
+            0,
+            0
+          ]
+        },
+        "cursors": [
+          {
+            "role": "legend",
+            "cursor": "grab"
+          },
+          {
+            "role": "title",
+            "cursor": "grab"
+          }
+        ],
+        "primaryIds": [
+          "Axis",
+          "label_leaders",
+          "record_group_046c3ec67b1727a8",
+          "tick",
+          "gc_content",
+          "skew",
+          "label_text",
+          "NC_012920.1_definition"
+        ],
+        "layoutEdit": false
+      },
+      "dragged": {
+        "deltas": {
+          "primary": [
+            [
+              0,
+              0
+            ],
+            [
+              0,
+              0
+            ],
+            [
+              0,
+              0
+            ],
+            [
+              0,
+              0
+            ],
+            [
+              0,
+              0
+            ],
+            [
+              0,
+              0
+            ],
+            [
+              0,
+              0
+            ],
+            [
+              0,
+              0
+            ]
+          ],
+          "legend": [
+            40,
+            20
+          ],
+          "title": [
+            40,
+            20
+          ]
+        },
+        "cursors": [
+          {
+            "role": "legend",
+            "cursor": "grab"
+          },
+          {
+            "role": "title",
+            "cursor": "grab"
+          }
+        ],
+        "primaryIds": [
+          "Axis",
+          "label_leaders",
+          "record_group_046c3ec67b1727a8",
+          "tick",
+          "gc_content",
+          "skew",
+          "label_text",
+          "NC_012920.1_definition"
+        ],
+        "layoutEdit": true
+      },
+      "pointerHits": [
+        {
+          "selector": "#legend text",
+          "tag": "text",
+          "id": "",
+          "intended": true
+        },
+        {
+          "selector": "#plot_title text",
+          "tag": "tspan",
+          "id": "",
+          "intended": true
+        }
+      ],
+      "generate": {
+        "status": "ok"
+      },
+      "regenerated": {
+        "deltas": {
+          "primary": [
+            [
+              0,
+              0
+            ],
+            [
+              0,
+              0
+            ],
+            [
+              0,
+              0
+            ],
+            [
+              0,
+              0
+            ],
+            [
+              0,
+              0
+            ],
+            [
+              0,
+              0
+            ],
+            [
+              0,
+              0
+            ],
+            [
+              0,
+              0
+            ]
+          ],
+          "legend": [
+            0,
+            0
+          ],
+          "title": [
+            0,
+            0
+          ]
+        },
+        "cursors": [
+          {
+            "role": "legend",
+            "cursor": "grab"
+          },
+          {
+            "role": "title",
+            "cursor": "grab"
+          }
+        ],
+        "primaryIds": [
+          "Axis",
+          "label_leaders",
+          "record_group_046c3ec67b1727a8",
+          "tick",
+          "gc_content",
+          "skew",
+          "label_text",
+          "NC_012920.1_definition"
+        ],
+        "layoutEdit": true
+      }
+    },
+    {
+      "mode": "linear",
+      "fixture": "lambda_basic_linear",
+      "first": {
+        "status": "ok"
+      },
+      "initial": {
+        "deltas": {
+          "primary": [
+            [
+              0,
+              0
+            ],
+            [
+              0,
+              0
+            ],
+            [
+              0,
+              0
+            ]
+          ],
+          "legend": [
+            0,
+            0
+          ],
+          "title": [
+            0,
+            0
+          ]
+        },
+        "cursors": [
+          {
+            "role": "legend",
+            "cursor": "grab"
+          },
+          {
+            "role": "title",
+            "cursor": "grab"
+          }
+        ],
+        "primaryIds": [
+          "length_bar",
+          "record_group_f2bf3907e3133510",
+          "NC_001416.1_definition"
+        ],
+        "layoutEdit": true
+      },
+      "dragged": {
+        "deltas": {
+          "primary": [
+            [
+              39.999999999999986,
+              20
+            ],
+            [
+              0,
+              0
+            ],
+            [
+              0,
+              0
+            ]
+          ],
+          "legend": [
+            40,
+            20
+          ],
+          "title": [
+            40,
+            20
+          ]
+        },
+        "cursors": [
+          {
+            "role": "legend",
+            "cursor": "grab"
+          },
+          {
+            "role": "title",
+            "cursor": "grab"
+          }
+        ],
+        "primaryIds": [
+          "length_bar",
+          "record_group_f2bf3907e3133510",
+          "NC_001416.1_definition"
+        ],
+        "layoutEdit": true
+      },
+      "pointerHits": [
+        {
+          "selector": "#legend text",
+          "tag": "text",
+          "id": "",
+          "intended": true
+        },
+        {
+          "selector": "#plot_title text",
+          "tag": "tspan",
+          "id": "",
+          "intended": true
+        },
+        {
+          "selector": "#length_bar text",
+          "tag": "text",
+          "id": "",
+          "intended": true
+        }
+      ],
+      "generate": {
+        "status": "ok"
+      },
+      "regenerated": {
+        "deltas": {
+          "primary": [
+            [
+              0,
+              0
+            ],
+            [
+              0,
+              0
+            ],
+            [
+              0,
+              0
+            ]
+          ],
+          "legend": [
+            0,
+            0
+          ],
+          "title": [
+            0,
+            0
+          ]
+        },
+        "cursors": [
+          {
+            "role": "legend",
+            "cursor": "grab"
+          },
+          {
+            "role": "title",
+            "cursor": "grab"
+          }
+        ],
+        "primaryIds": [
+          "length_bar",
+          "record_group_f2bf3907e3133510",
+          "NC_001416.1_definition"
+        ],
+        "layoutEdit": true
+      }
+    }
+  ],
+  "chrome": [
+    {
+      "viewport": [
+        1440,
+        1000
+      ],
+      "drawerOpen": false,
+      "search": {
+        "x": 774,
+        "y": 132,
+        "width": 632,
+        "height": 79,
+        "right": 1406,
+        "bottom": 211
+      },
+      "toolbar": {
+        "x": 624,
+        "y": 880,
+        "width": 532,
+        "height": 58,
+        "right": 1156,
+        "bottom": 938
+      },
+      "preview": {
+        "x": 358,
+        "y": 116,
+        "width": 1064,
+        "height": 838,
+        "right": 1422,
+        "bottom": 954
+      },
+      "searchToolbarOverlap": 0,
+      "searchOutsidePreview": false,
+      "searchInlineTransform": "translate(0px, 0px)",
+      "searchComputedTransform": "matrix(1, 0, 0, 1, 0, 0)"
+    },
+    {
+      "viewport": [
+        1440,
+        1000
+      ],
+      "drawerOpen": true,
+      "search": {
+        "x": 414,
+        "y": 132,
+        "width": 632,
+        "height": 79,
+        "right": 1046,
+        "bottom": 211
+      },
+      "toolbar": {
+        "x": 358,
+        "y": 884,
+        "width": 704,
+        "height": 54,
+        "right": 1062,
+        "bottom": 938
+      },
+      "preview": {
+        "x": 358,
+        "y": 116,
+        "width": 1064,
+        "height": 838,
+        "right": 1422,
+        "bottom": 954
+      },
+      "searchToolbarOverlap": 0,
+      "searchOutsidePreview": false,
+      "searchInlineTransform": "translate(-360px, 0px)",
+      "searchComputedTransform": "matrix(1, 0, 0, 1, -360, 0)"
+    },
+    {
+      "viewport": [
+        1024,
+        768
+      ],
+      "drawerOpen": false,
+      "search": {
+        "x": 374,
+        "y": 174,
+        "width": 616,
+        "height": 79,
+        "right": 990,
+        "bottom": 253
+      },
+      "toolbar": {
+        "x": 442,
+        "y": 648,
+        "width": 480,
+        "height": 58,
+        "right": 922,
+        "bottom": 706
+      },
+      "preview": {
+        "x": 358,
+        "y": 158,
+        "width": 648,
+        "height": 564,
+        "right": 1006,
+        "bottom": 722
+      },
+      "searchToolbarOverlap": 0,
+      "searchOutsidePreview": false,
+      "searchInlineTransform": "translate(0px, 0px)",
+      "searchComputedTransform": "matrix(1, 0, 0, 1, 0, 0)"
+    },
+    {
+      "viewport": [
+        1024,
+        768
+      ],
+      "drawerOpen": true,
+      "search": {
+        "x": 14,
+        "y": 174,
+        "width": 616,
+        "height": 79,
+        "right": 630,
+        "bottom": 253
+      },
+      "toolbar": {
+        "x": 358,
+        "y": 560,
+        "width": 288,
+        "height": 146,
+        "right": 646,
+        "bottom": 706
+      },
+      "preview": {
+        "x": 358,
+        "y": 158,
+        "width": 648,
+        "height": 564,
+        "right": 1006,
+        "bottom": 722
+      },
+      "searchToolbarOverlap": 0,
+      "searchOutsidePreview": true,
+      "searchInlineTransform": "translate(-360px, 0px)",
+      "searchComputedTransform": "matrix(1, 0, 0, 1, -360, 0)"
+    },
+    {
+      "viewport": [
+        900,
+        768
+      ],
+      "drawerOpen": false,
+      "search": {
+        "x": 366,
+        "y": 166,
+        "width": 508,
+        "height": 79,
+        "right": 874,
+        "bottom": 245
+      },
+      "toolbar": {
+        "x": 366,
+        "y": 614,
+        "width": 508,
+        "height": 100,
+        "right": 874,
+        "bottom": 714
+      },
+      "preview": {
+        "x": 358,
+        "y": 158,
+        "width": 524,
+        "height": 564,
+        "right": 882,
+        "bottom": 722
+      },
+      "searchToolbarOverlap": 0,
+      "searchOutsidePreview": false,
+      "searchInlineTransform": "translate(0px, 0px)",
+      "searchComputedTransform": "matrix(1, 0, 0, 1, 0, 0)"
+    },
+    {
+      "viewport": [
+        900,
+        768
+      ],
+      "drawerOpen": true,
+      "search": {
+        "x": 522,
+        "y": 166,
+        "width": 508,
+        "height": 79,
+        "right": 1030,
+        "bottom": 245
+      },
+      "toolbar": {
+        "x": 522,
+        "y": 614,
+        "width": 508,
+        "height": 100,
+        "right": 1030,
+        "bottom": 714
+      },
+      "preview": {
+        "x": 358,
+        "y": 158,
+        "width": 524,
+        "height": 564,
+        "right": 882,
+        "bottom": 722
+      },
+      "searchToolbarOverlap": 0,
+      "searchOutsidePreview": true,
+      "searchInlineTransform": "translate(-360px, 0px)",
+      "searchComputedTransform": "matrix(1, 0, 0, 1, 156, 0)"
+    },
+    {
+      "viewport": [
+        768,
+        768
+      ],
+      "drawerOpen": false,
+      "search": {
+        "x": 18,
+        "y": 1831.8125,
+        "width": 732,
+        "height": 193.5,
+        "right": 750,
+        "bottom": 2025.3125
+      },
+      "toolbar": {
+        "x": 18,
+        "y": 2085.8125,
+        "width": 732,
+        "height": 54,
+        "right": 750,
+        "bottom": 2139.8125
+      },
+      "preview": {
+        "x": 10,
+        "y": 1823.8125,
+        "width": 748,
+        "height": 324,
+        "right": 758,
+        "bottom": 2147.8125
+      },
+      "searchToolbarOverlap": 0,
+      "searchOutsidePreview": false,
+      "searchInlineTransform": "translate(0px, 0px)",
+      "searchComputedTransform": "matrix(1, 0, 0, 1, 0, 0)"
+    },
+    {
+      "viewport": [
+        768,
+        768
+      ],
+      "drawerOpen": true,
+      "search": {
+        "x": -342,
+        "y": 1831.8125,
+        "width": 732,
+        "height": 193.5,
+        "right": 390,
+        "bottom": 2025.3125
+      },
+      "toolbar": {
+        "x": 18,
+        "y": 2085.8125,
+        "width": 732,
+        "height": 54,
+        "right": 750,
+        "bottom": 2139.8125
+      },
+      "preview": {
+        "x": 10,
+        "y": 1823.8125,
+        "width": 748,
+        "height": 324,
+        "right": 758,
+        "bottom": 2147.8125
+      },
+      "searchToolbarOverlap": 0,
+      "searchOutsidePreview": true,
+      "searchInlineTransform": "translate(-360px, 0px)",
+      "searchComputedTransform": "matrix(1, 0, 0, 1, -360, 0)"
+    },
+    {
+      "viewport": [
+        390,
+        844
+      ],
+      "drawerOpen": false,
+      "search": {
+        "x": 18,
+        "y": 1986.203125,
+        "width": 354,
+        "height": 193.5,
+        "right": 372,
+        "bottom": 2179.703125
+      },
+      "toolbar": {
+        "x": 18,
+        "y": 2187.703125,
+        "width": 354,
+        "height": 100,
+        "right": 372,
+        "bottom": 2287.703125
+      },
+      "preview": {
+        "x": 10,
+        "y": 1978.203125,
+        "width": 370,
+        "height": 317.5,
+        "right": 380,
+        "bottom": 2295.703125
+      },
+      "searchToolbarOverlap": 0,
+      "searchOutsidePreview": false,
+      "searchInlineTransform": "translate(0px, 0px)",
+      "searchComputedTransform": "matrix(1, 0, 0, 1, 0, 0)"
+    },
+    {
+      "viewport": [
+        390,
+        844
+      ],
+      "drawerOpen": true,
+      "search": {
+        "x": 46,
+        "y": 1986.203125,
+        "width": 354,
+        "height": 193.5,
+        "right": 400,
+        "bottom": 2179.703125
+      },
+      "toolbar": {
+        "x": 46,
+        "y": 2187.703125,
+        "width": 354,
+        "height": 100,
+        "right": 400,
+        "bottom": 2287.703125
+      },
+      "preview": {
+        "x": 10,
+        "y": 1978.203125,
+        "width": 370,
+        "height": 317.5,
+        "right": 380,
+        "bottom": 2295.703125
+      },
+      "searchToolbarOverlap": 0,
+      "searchOutsidePreview": true,
+      "searchInlineTransform": "translate(-360px, 0px)",
+      "searchComputedTransform": "matrix(1, 0, 0, 1, 28, 0)"
+    }
+  ],
+  "chromiumVersion": "149.0.7827.55"
+}
