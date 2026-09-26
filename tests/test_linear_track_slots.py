@@ -725,6 +725,7 @@ def test_linear_cli_forwards_track_slots_to_api(
             drawing=Drawing(filename=str(tmp_path / "dummy.svg")),
             interactive_context=None,
             records=tuple(item.source.record for item in resolved.records),
+            annotation_warnings=(),
             losat_cache_entries=(),
             losat_derived_cache_entries=(),
             protein_identity_manifest=None,

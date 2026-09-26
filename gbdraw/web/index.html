@@ -219,6 +219,16 @@
             position: relative;
             z-index: 1;
         }
+        .track-slot-pixel-field .track-slot-geometry-input::placeholder {
+            color: transparent;
+        }
+        .track-slot-pixel-field:focus-within .track-slot-auto-placeholder {
+            display: none;
+        }
+        .track-slot-pixel-field .track-slot-geometry-input:focus::placeholder {
+            color: #94a3b8;
+            opacity: 1;
+        }
         .track-slot-auto-placeholder {
             position: absolute;
             inset: 0;
@@ -2924,23 +2934,23 @@
                                                     </div>
                                                     <div class="track-slot-geometry-grid">
                                                         <div class="track-slot-field">
-                                                            <label class="track-slot-field-label">h <help-tip :text="entry.slot.renderer === 'features' ? 'Minimum reserved height for the measured feature band, in pixels. The actual reservation is max(measured, configured); this does not change feature glyph thickness, which is controlled by Feature Height (--feature_height). Auto values vary by record.' : 'Linear track height in pixels. Leave blank for the automatic height.'"></help-tip></label>
-                                                            <div class="track-slot-value-field">
+                                                            <label class="track-slot-field-label">h <help-tip :text="entry.slot.renderer === 'features' ? 'Minimum reserved height for the measured feature band, in pixels (px optional; positive). The actual reservation is max(measured, configured); this does not change feature glyph thickness, which is controlled by Feature Height (--feature_height). Auto values vary by record.' : 'Linear track height in pixels (px optional; positive). Leave blank for the automatic height.'"></help-tip></label>
+                                                            <div class="track-slot-value-field track-slot-pixel-field">
                                                                 <span v-if="!linearTrackSlotGeometryHasManual(entry.slot, 'height')" class="track-slot-auto-placeholder">{{ linearTrackSlotGeometryAutoText(entry.slot, entry.index, 'height') }}</span>
                                                                 <input
                                                                     :value="linearTrackSlotHeightValue(entry.slot)"
                                                                     @input="setLinearTrackSlotHeight(entry.slot, $event.target.value)"
                                                                     class="form-input track-slot-geometry-input px-1 py-0.5 text-[10px]"
-                                                                    title="Height"
+                                                                    title="Height" placeholder="px optional"
                                                                 >
                                                                 <span v-if="linearTrackSlotGeometryUnitSuffix(entry.slot, 'height')" class="track-slot-unit-suffix">{{ linearTrackSlotGeometryUnitSuffix(entry.slot, 'height') }}</span>
                                                             </div>
                                                         </div>
                                                         <div class="track-slot-field">
-                                                            <label class="track-slot-field-label">spacing <help-tip :text="entry.slot.renderer === 'features' ? 'Clearance between the reserved feature band and its adjacent outer track, in pixels. Leave blank for the automatic record-specific value.' : 'Linear vertical spacing after the track, in pixels. Leave blank for the automatic spacing.'"></help-tip></label>
-                                                            <div class="track-slot-value-field">
+                                                            <label class="track-slot-field-label">spacing <help-tip :text="entry.slot.renderer === 'features' ? 'Clearance between the reserved feature band and its adjacent outer track, in pixels (px optional; nonnegative). Leave blank for the automatic record-specific value.' : 'Linear vertical spacing after the track, in pixels (px optional; nonnegative). Leave blank for the automatic spacing.'"></help-tip></label>
+                                                            <div class="track-slot-value-field track-slot-pixel-field">
                                                                 <span v-if="!linearTrackSlotGeometryHasManual(entry.slot, 'spacing')" class="track-slot-auto-placeholder">{{ linearTrackSlotGeometryAutoText(entry.slot, entry.index, 'spacing') }}</span>
-                                                                <input v-model.trim="entry.slot.spacing" class="form-input track-slot-geometry-input px-1 py-0.5 text-[10px]" title="Spacing">
+                                                                <input v-model.trim="entry.slot.spacing" class="form-input track-slot-geometry-input px-1 py-0.5 text-[10px]" title="Spacing" placeholder="px optional">
                                                                 <span v-if="linearTrackSlotGeometryUnitSuffix(entry.slot, 'spacing')" class="track-slot-unit-suffix">{{ linearTrackSlotGeometryUnitSuffix(entry.slot, 'spacing') }}</span>
                                                             </div>
                                                         </div>
@@ -3306,18 +3316,18 @@
                                                             </div>
                                                         </div>
                                                         <div class="track-slot-field">
-                                                            <label class="track-slot-field-label">inner gap <help-tip text="Physical radial gap on the side closer to the center, in pixels. Leave blank for auto."></help-tip></label>
-                                                            <div class="track-slot-value-field">
+                                                            <label class="track-slot-field-label">inner gap <help-tip text="Physical radial gap on the side closer to the center, in pixels (px optional; nonnegative). Leave blank for auto."></help-tip></label>
+                                                            <div class="track-slot-value-field track-slot-pixel-field">
                                                                 <span v-if="!circularTrackSlotGeometryHasManual(entry.slot, 'inner_gap_px')" class="track-slot-auto-placeholder">{{ circularTrackSlotGeometryAutoText(entry.slot, entry.index, 'inner_gap_px') }}</span>
-                                                                <input v-model.trim="entry.slot.inner_gap_px" class="form-input track-slot-geometry-input px-1 py-0.5 text-[10px]" title="Inner gap">
+                                                                <input v-model.trim="entry.slot.inner_gap_px" class="form-input track-slot-geometry-input px-1 py-0.5 text-[10px]" title="Inner gap" placeholder="px optional">
                                                                 <span v-if="circularTrackSlotGeometryUnitSuffix(entry.slot, 'inner_gap_px')" class="track-slot-unit-suffix">{{ circularTrackSlotGeometryUnitSuffix(entry.slot, 'inner_gap_px') }}</span>
                                                             </div>
                                                         </div>
                                                         <div class="track-slot-field">
-                                                            <label class="track-slot-field-label">outer gap <help-tip text="Physical radial gap on the side farther from the center, in pixels. Leave blank for auto."></help-tip></label>
-                                                            <div class="track-slot-value-field">
+                                                            <label class="track-slot-field-label">outer gap <help-tip text="Physical radial gap on the side farther from the center, in pixels (px optional; nonnegative). Leave blank for auto."></help-tip></label>
+                                                            <div class="track-slot-value-field track-slot-pixel-field">
                                                                 <span v-if="!circularTrackSlotGeometryHasManual(entry.slot, 'outer_gap_px')" class="track-slot-auto-placeholder">{{ circularTrackSlotGeometryAutoText(entry.slot, entry.index, 'outer_gap_px') }}</span>
-                                                                <input v-model.trim="entry.slot.outer_gap_px" class="form-input track-slot-geometry-input px-1 py-0.5 text-[10px]" title="Outer gap">
+                                                                <input v-model.trim="entry.slot.outer_gap_px" class="form-input track-slot-geometry-input px-1 py-0.5 text-[10px]" title="Outer gap" placeholder="px optional">
                                                                 <span v-if="circularTrackSlotGeometryUnitSuffix(entry.slot, 'outer_gap_px')" class="track-slot-unit-suffix">{{ circularTrackSlotGeometryUnitSuffix(entry.slot, 'outer_gap_px') }}</span>
                                                             </div>
                                                         </div>

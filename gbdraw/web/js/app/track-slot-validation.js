@@ -37,24 +37,30 @@ const parseSlotZIndex = (value, fieldName) => {
   return numeric;
 };
 
-const parseOptionalLinearPx = (value, fieldName, { allowZero }) => {
-  if (value === null || value === undefined || value === '') return null;
-  if (typeof value === 'boolean' || (typeof value !== 'number' && typeof value !== 'string')) {
-    throw new Error(`${fieldName} must be a number of pixels.`);
+// Pure physical-pixel text grammar; factor/% scalars keep their separate owner.
+const PIXEL_TEXT = /^([+-]?(?:[0-9]+(?:\.[0-9]*)?|\.[0-9]+)(?:[eE][+-]?[0-9]+)?)(?:\s*px)?$/i;
+
+export const parseOptionalPixel = (value, fieldName, { allowZero }) => {
+  if (value === null || value === undefined) return null;
+  const invalid = () => new Error(
+    `${fieldName} must be ${allowZero ? 'nonnegative' : 'positive'} finite number of pixels (px optional).`
+  );
+  let numeric;
+  if (typeof value === 'number') {
+    numeric = value;
+  } else if (typeof value === 'string') {
+    const text = value.trim();
+    if (!text) return null;
+    const match = PIXEL_TEXT.exec(text);
+    if (!match) throw invalid();
+    numeric = Number(match[1]);
+  } else {
+    throw invalid();
   }
-  const text = String(value).trim();
-  if (!text || /%$/i.test(text)) {
-    throw new Error(`${fieldName} only accepts px or unitless px values.`);
+  if (!Number.isFinite(numeric) || numeric < 0 || (!allowZero && numeric === 0)) {
+    throw invalid();
   }
-  const numericText = /px$/i.test(text) ? text.slice(0, -2).trim() : text;
-  const numeric = Number(numericText);
-  if (!Number.isFinite(numeric)) {
-    throw new Error(`${fieldName} must be a number of pixels.`);
-  }
-  if (numeric < 0 || (!allowZero && numeric === 0)) {
-    throw new Error(`${fieldName} must be ${allowZero ? 'nonnegative' : 'positive'}.`);
-  }
-  return numeric;
+  return numeric === 0 ? 0 : numeric;
 };
 
 const parseOptionalCircularScalar = (value, fieldName) => {
@@ -81,26 +87,10 @@ const parseOptionalCircularScalar = (value, fieldName) => {
   return numeric;
 };
 
-const parseOptionalCircularGap = (value, fieldName) => {
-  if (value === null || value === undefined || value === '') return null;
-  if (typeof value === 'boolean' || (typeof value !== 'number' && typeof value !== 'string')) {
-    throw new Error(`${fieldName} must be a nonnegative numeric pixel value.`);
-  }
-  const text = String(value).trim();
-  if (!text || /(?:px|%)$/i.test(text)) {
-    throw new Error(`${fieldName} must be a numeric pixel value without a unit.`);
-  }
-  const numeric = Number(text);
-  if (!Number.isFinite(numeric) || numeric < 0) {
-    throw new Error(`${fieldName} must be a nonnegative numeric pixel value.`);
-  }
-  return numeric;
-};
-
 const validateSlotGeometry = (slot, id, layoutKind) => {
   if (layoutKind === 'linear') {
-    parseOptionalLinearPx(slot.height, `Linear track slot '${id}' height`, { allowZero: false });
-    parseOptionalLinearPx(slot.spacing, `Linear track slot '${id}' spacing`, { allowZero: true });
+    parseOptionalPixel(slot.height, `Linear track slot '${id}' height`, { allowZero: false });
+    parseOptionalPixel(slot.spacing, `Linear track slot '${id}' spacing`, { allowZero: true });
     return;
   }
   if (layoutKind !== 'circular') {
@@ -117,13 +107,15 @@ const validateSlotGeometry = (slot, id, layoutKind) => {
   }
   parseOptionalCircularScalar(slot.radius, `Circular track slot '${id}' radius`);
   parseOptionalCircularScalar(slot.width, `Circular track slot '${id}' width`);
-  parseOptionalCircularGap(
+  parseOptionalPixel(
     slot.inner_gap_px,
-    `Circular track slot '${id}' inner_gap_px`
+    `Circular track slot '${id}' inner_gap_px`,
+    { allowZero: true }
   );
-  parseOptionalCircularGap(
+  parseOptionalPixel(
     slot.outer_gap_px,
-    `Circular track slot '${id}' outer_gap_px`
+    `Circular track slot '${id}' outer_gap_px`,
+    { allowZero: true }
   );
 };
 

@@ -3390,14 +3390,20 @@ const projectCurrentCanonicalCircularSlot = (slot) => {
       Object.prototype.hasOwnProperty.call(slot, field)
     ))
   ) throw new Error('Current canonical circular track slot uses an obsolete shape.');
+  for (const field of ['innerGapPx', 'outerGapPx']) {
+    const value = slot[field];
+    if (value !== null && value !== undefined && (typeof value !== 'number' || !Number.isFinite(value) || value < 0)) {
+      throw new Error(`Canonical Circular track ${field} must be a nonnegative finite number or null.`);
+    }
+  }
   const projected = projectCanonicalCircularSlot(slot);
   return {
     id: String(projected.id || ''),
     renderer: String(projected.renderer || ''),
     enabled: projected.enabled !== false,
     width: projected.width ?? null, radius: projected.radius ?? null,
-    inner_gap_px: projected.inner_gap_px ?? null,
-    outer_gap_px: projected.outer_gap_px ?? null,
+    inner_gap_px: slot.innerGapPx == null ? null : String(slot.innerGapPx),
+    outer_gap_px: slot.outerGapPx == null ? null : String(slot.outerGapPx),
     side: projected.side ?? null, z: Number(projected.z) || 0,
     params: cloneCanonicalJsonValue(projected.params || {})
   };

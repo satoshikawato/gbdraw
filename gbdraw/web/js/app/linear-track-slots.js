@@ -12,7 +12,7 @@ import {
   normalizeOptionalText
 } from './track-slot-display.js';
 import { requireCurrentLinearTrackLayout } from './current-option-values.js';
-import { validateCustomTrackPlan } from './track-slot-validation.js';
+import { parseOptionalPixel, validateCustomTrackPlan } from './track-slot-validation.js';
 import { visibleFeatureUnderlaysForState } from '../utils/feature-rendering.js';
 
 const SUPPORTED_RENDERERS = [
@@ -128,12 +128,13 @@ const normalizeTrackIndex = (value) => {
   return numeric;
 };
 
-const normalizePxText = (value) => {
-  const text = normalizeOptionalText(value);
-  if (text === null) return '';
-  const withoutUnit = text.endsWith('px') ? text.slice(0, -2) : text;
-  const numeric = Number(withoutUnit);
-  return Number.isFinite(numeric) && numeric >= 0 ? `${numeric}px` : '';
+const normalizePxText = (value, field) => {
+  try {
+    const numeric = parseOptionalPixel(value, `Linear track slot ${field}`, { allowZero: field === 'spacing' });
+    return numeric === null ? '' : `${numeric}px`;
+  } catch {
+    return value; // Keep an invalid draft intact for row feedback and submission failure.
+  }
 };
 
 const defaultSlot = (renderer, overrides = {}) => {
@@ -147,8 +148,8 @@ const defaultSlot = (renderer, overrides = {}) => {
       overrides.side,
       normalizedRenderer === 'features' ? 'overlay' : (normalizedRenderer === 'annotations' ? 'above' : 'below')
     ),
-    height: normalizePxText(overrides.height),
-    spacing: normalizePxText(overrides.spacing),
+    height: normalizePxText(overrides.height, 'height'),
+    spacing: normalizePxText(overrides.spacing, 'spacing'),
     z: Number.isInteger(Number(overrides.z)) ? Number(overrides.z) : 0,
     params
   };
@@ -293,8 +294,8 @@ export const normalizeLinearTrackSlots = (slots, nt = 'GC', trackLayout = 'middl
           ? { depth_binding_error: String(slot.depth_binding_error) }
           : {}),
         side: renderer !== 'features' && renderer !== 'annotations' && side === 'overlay' ? 'below' : side,
-        height: normalizePxText(slot.height),
-        spacing: normalizePxText(slot.spacing),
+        height: normalizePxText(slot.height, 'height'),
+        spacing: normalizePxText(slot.spacing, 'spacing'),
         z: Number.isInteger(Number(slot.z)) ? Number(slot.z) : 0,
         params
       };
@@ -403,8 +404,10 @@ export const buildLinearTrackSlotSpec = (slot, { includeEnabled = false, include
   if (normalized.side && (includeSide || normalized.side === 'overlay')) {
     parts.push(`side=${normalized.side}`);
   }
-  if (normalizeOptionalText(normalized.height)) parts.push(`h=${normalized.height}`);
-  if (normalizeOptionalText(normalized.spacing)) parts.push(`spacing=${normalized.spacing}`);
+  const height = parseOptionalPixel(normalized.height, `Linear track '${normalized.id}' height`, { allowZero: false });
+  const spacing = parseOptionalPixel(normalized.spacing, `Linear track '${normalized.id}' spacing`, { allowZero: true });
+  if (height !== null) parts.push(`h=${height}px`);
+  if (spacing !== null) parts.push(`spacing=${spacing}px`);
   if (Number(normalized.z) !== 0) parts.push(`z=${Number(normalized.z)}`);
   const params = cloneParams(normalized.params);
   if (normalized.renderer === 'depth') {
@@ -440,34 +443,8 @@ export const buildLinearTrackSlotSpec = (slot, { includeEnabled = false, include
 };
 
 const linearScalarPayload = (value, fieldName, { allowZero }) => {
-  if (value === null || value === undefined || value === '') return null;
-  if (value && typeof value === 'object' && !Array.isArray(value)) {
-    const numeric = Number(value.value);
-    const unit = String(value.unit || '').trim().toLowerCase();
-    if (
-      unit !== 'px' ||
-      !Number.isFinite(numeric) ||
-      numeric < 0 ||
-      (!allowZero && numeric === 0)
-    ) {
-      throw new Error(`${fieldName} must be ${allowZero ? 'nonnegative' : 'positive'} px.`);
-    }
-    return { value: numeric, unit: 'px' };
-  }
-  const text = String(value).trim();
-  if (/%$/i.test(text)) {
-    throw new Error(`${fieldName} only accepts px or unitless px values.`);
-  }
-  const numericText = /px$/i.test(text) ? text.slice(0, -2).trim() : text;
-  const numeric = Number(numericText);
-  if (
-    !Number.isFinite(numeric) ||
-    numeric < 0 ||
-    (!allowZero && numeric === 0)
-  ) {
-    throw new Error(`${fieldName} must be ${allowZero ? 'nonnegative' : 'positive'} px.`);
-  }
-  return { value: numeric, unit: 'px' };
+  const numeric = parseOptionalPixel(value, fieldName, { allowZero });
+  return numeric === null ? null : { value: numeric, unit: 'px' };
 };
 
 const canonicalLinearAnnotationParams = (params) => {
@@ -566,17 +543,8 @@ const parseLinearTrackSlotPx = (value, field) => {
   if (rawUnit !== 'px') {
     throw new Error(`Linear track slot ${field} only accepts px values.`);
   }
-  const text = String(rawValue ?? '').trim();
-  const withoutUnit = text.toLowerCase().endsWith('px') ? text.slice(0, -2) : text;
-  if (!withoutUnit.trim()) {
-    throw new Error(`Invalid linear track slot ${field}: ${value}.`);
-  }
-  const numeric = Number(withoutUnit);
-  const allowZero = field === 'spacing';
-  if (!Number.isFinite(numeric) || numeric < 0 || (!allowZero && numeric === 0)) {
-    throw new Error(`Invalid linear track slot ${field}: ${value}.`);
-  }
-  return `${numeric}px`;
+  const numeric = parseOptionalPixel(rawValue, `Linear track slot ${field}`, { allowZero: field === 'spacing' });
+  return numeric === null ? '' : `${numeric}px`;
 };
 
 const parseStructuredLinearTrackSlotPx = (value, field) => {
@@ -1455,11 +1423,11 @@ export const createLinearTrackSlotEditor = ({ state }) => {
   };
 
   const parsePositivePxNumber = (value) => {
-    const text = normalizeOptionalText(value);
-    if (text === null) return null;
-    const withoutUnit = text.endsWith('px') ? text.slice(0, -2) : text;
-    const numeric = Number(withoutUnit);
-    return Number.isFinite(numeric) && numeric > 0 ? numeric : null;
+    try {
+      return parseOptionalPixel(value, 'Linear track height', { allowZero: false });
+    } catch {
+      return null;
+    }
   };
 
   const ensureDepthTrackConfigForSlotIndex = (trackIndex) => {
@@ -1516,8 +1484,8 @@ export const createLinearTrackSlotEditor = ({ state }) => {
       return String(slot?.height || '');
     }
     const trackIndex = linearDepthTrackIndexForSlot(slot) ?? 0;
-    const heightText = heightTextFromDepthTrackConfig(trackIndex);
-    return heightText || String(slot?.height || '');
+    if (isManualSlotValue(slot?.height)) return String(slot.height);
+    return heightTextFromDepthTrackConfig(trackIndex);
   };
 
   const linearSlotManualValue = (slot, field) => {
@@ -1599,7 +1567,11 @@ export const createLinearTrackSlotEditor = ({ state }) => {
     if (normalizeRenderer(slot.renderer) !== 'depth') return;
     const trackIndex = linearDepthTrackIndexForSlot(slot) ?? 0;
     const config = ensureDepthTrackConfigForSlotIndex(trackIndex);
-    config.height = parsePositivePxNumber(text);
+    try {
+      config.height = parseOptionalPixel(text, 'Linear track height', { allowZero: false });
+    } catch {
+      // The slot retains the invalid text; keep the last valid shared config.
+    }
   };
 
   const linearTrackSlotHasSkewColorOverride = (slot, key) => (

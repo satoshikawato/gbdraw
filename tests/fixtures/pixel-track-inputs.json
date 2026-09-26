@@ -1,0 +1,284 @@
+[
+  {
+    "value": null,
+    "gap": null,
+    "height": null
+  },
+  {
+    "value": "",
+    "gap": null,
+    "height": null
+  },
+  {
+    "value": "  \t\n",
+    "gap": null,
+    "height": null
+  },
+  {
+    "value": 10,
+    "gap": 10,
+    "height": 10
+  },
+  {
+    "value": "10",
+    "gap": 10,
+    "height": 10
+  },
+  {
+    "value": "10px",
+    "gap": 10,
+    "height": 10
+  },
+  {
+    "value": "10PX",
+    "gap": 10,
+    "height": 10
+  },
+  {
+    "value": "10 pX",
+    "gap": 10,
+    "height": 10
+  },
+  {
+    "value": " 1e1px ",
+    "gap": 10,
+    "height": 10
+  },
+  {
+    "value": " .5px ",
+    "gap": 0.5,
+    "height": 0.5
+  },
+  {
+    "value": ".5",
+    "gap": 0.5,
+    "height": 0.5
+  },
+  {
+    "value": "+.5E+1 PX",
+    "gap": 5,
+    "height": 5
+  },
+  {
+    "value": "10.",
+    "gap": 10,
+    "height": 10
+  },
+  {
+    "value": "1.0e-2 px",
+    "gap": 0.01,
+    "height": 0.01
+  },
+  {
+    "value": "\t10\tpx\n",
+    "gap": 10,
+    "height": 10
+  },
+  {
+    "value": " 10 px ",
+    "gap": 10,
+    "height": 10
+  },
+  {
+    "value": "﻿10px﻿",
+    "gap": 10,
+    "height": 10
+  },
+  {
+    "value": "1e308px",
+    "gap": 1e+308,
+    "height": 1e+308
+  },
+  {
+    "value": 0,
+    "gap": 0,
+    "height": "invalid"
+  },
+  {
+    "value": "0px",
+    "gap": 0,
+    "height": "invalid"
+  },
+  {
+    "value": "-0px",
+    "gap": 0,
+    "height": "invalid"
+  },
+  {
+    "value": "1e-999px",
+    "gap": 0,
+    "height": "invalid"
+  },
+  {
+    "value": "px",
+    "gap": "invalid",
+    "height": "invalid"
+  },
+  {
+    "value": "PX",
+    "gap": "invalid",
+    "height": "invalid"
+  },
+  {
+    "value": "0x10",
+    "gap": "invalid",
+    "height": "invalid"
+  },
+  {
+    "value": "0b10",
+    "gap": "invalid",
+    "height": "invalid"
+  },
+  {
+    "value": "0o10",
+    "gap": "invalid",
+    "height": "invalid"
+  },
+  {
+    "value": "NaN",
+    "gap": "invalid",
+    "height": "invalid"
+  },
+  {
+    "value": "Infinity",
+    "gap": "invalid",
+    "height": "invalid"
+  },
+  {
+    "value": "-Infinity",
+    "gap": "invalid",
+    "height": "invalid"
+  },
+  {
+    "value": "1e309px",
+    "gap": "invalid",
+    "height": "invalid"
+  },
+  {
+    "value": "1e309",
+    "gap": "invalid",
+    "height": "invalid"
+  },
+  {
+    "value": "-1",
+    "gap": "invalid",
+    "height": "invalid"
+  },
+  {
+    "value": "-.5px",
+    "gap": "invalid",
+    "height": "invalid"
+  },
+  {
+    "value": "-1e1px",
+    "gap": "invalid",
+    "height": "invalid"
+  },
+  {
+    "value": "10%",
+    "gap": "invalid",
+    "height": "invalid"
+  },
+  {
+    "value": "10em",
+    "gap": "invalid",
+    "height": "invalid"
+  },
+  {
+    "value": "10 px px",
+    "gap": "invalid",
+    "height": "invalid"
+  },
+  {
+    "value": "10p x",
+    "gap": "invalid",
+    "height": "invalid"
+  },
+  {
+    "value": "1e",
+    "gap": "invalid",
+    "height": "invalid"
+  },
+  {
+    "value": "1 e1px",
+    "gap": "invalid",
+    "height": "invalid"
+  },
+  {
+    "value": "1_0",
+    "gap": "invalid",
+    "height": "invalid"
+  },
+  {
+    "value": "١٠px",
+    "gap": "invalid",
+    "height": "invalid"
+  },
+  {
+    "value": "+",
+    "gap": "invalid",
+    "height": "invalid"
+  },
+  {
+    "value": ".",
+    "gap": "invalid",
+    "height": "invalid"
+  },
+  {
+    "value": true,
+    "gap": "invalid",
+    "height": "invalid"
+  },
+  {
+    "value": false,
+    "gap": "invalid",
+    "height": "invalid"
+  },
+  {
+    "value": [],
+    "gap": "invalid",
+    "height": "invalid"
+  },
+  {
+    "value": [
+      10
+    ],
+    "gap": "invalid",
+    "height": "invalid"
+  },
+  {
+    "value": [
+      "10"
+    ],
+    "gap": "invalid",
+    "height": "invalid"
+  },
+  {
+    "value": {},
+    "gap": "invalid",
+    "height": "invalid"
+  },
+  {
+    "value": {
+      "value": 10,
+      "unit": "px"
+    },
+    "gap": "invalid",
+    "height": "invalid"
+  },
+  {
+    "numberToken": "NaN",
+    "gap": "invalid",
+    "height": "invalid"
+  },
+  {
+    "numberToken": "Infinity",
+    "gap": "invalid",
+    "height": "invalid"
+  },
+  {
+    "numberToken": "-Infinity",
+    "gap": "invalid",
+    "height": "invalid"
+  }
+]

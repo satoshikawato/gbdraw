@@ -182,7 +182,7 @@ assert.deepEqual(structuredLinearSlot, {
 });
 assert.throws(() => parseLinearTrackSlotSpec('missing-renderer'), /requires '<slot_id>:<renderer>'/);
 assert.throws(() => parseLinearTrackSlotSpec('mystery:not_a_renderer'), /Unsupported linear track renderer/);
-assert.throws(() => parseLinearTrackSlotSpec('features:features@spacing='), /Invalid linear track slot spacing/);
+assert.equal(parseLinearTrackSlotSpec('features:features@spacing=').spacing, '');
 assert.throws(
   () => parseLinearTrackSlotSpec({
     kind: 'linearTrackSlot', id: 'bad', renderer: 'features', enabled: true,
@@ -1835,8 +1835,8 @@ currentStructuredCircularSlot.renderRequest.diagramOptions.tracks.circularTrackS
   {
     id: 'current',
     renderer: 'dinucleotide_skew',
-    innerGapPx: { value: 2, unit: 'px' },
-    outerGapPx: { value: 3, unit: 'px' },
+    innerGapPx: 2,
+    outerGapPx: 3,
     params: {}
   }
 ];
@@ -5096,4 +5096,20 @@ if (roundTripSessionIndex >= 0) {
   assert.throws(() => projectCanonicalSessionRequest({ ...frozen, webFiles: bad }), /at least two/);
   const noDraft = projectCanonicalSessionRequest({ ...frozen, webFiles: { bindings: { schema: 2, c_gb: null } } });
   assert.equal(noDraft.files.c_gb, null);
+}
+
+// Current typed gaps must survive numeric -> draft projection without text acceptance.
+const pixelGapSession = structuredClone(canonical);
+pixelGapSession.renderRequest.diagramOptions.tracks.circularTrackSlots = [{
+  kind: 'circularTrackSlot', id: 'gc_pixel', renderer: 'dinucleotide_content', enabled: false,
+  side: 'inside', radius: null, width: null, innerGapPx: 10, outerGapPx: 0, z: 0, params: {}
+}];
+const pixelGapDraft = projectCanonicalSessionRequest(pixelGapSession).config.adv.circular_track_slots[0];
+assert.equal(pixelGapDraft.inner_gap_px, '10');
+assert.equal(pixelGapDraft.outer_gap_px, '0');
+assert.equal(pixelGapDraft.enabled, false);
+for (const invalid of ['10', '10px', true, [], {}, Infinity, NaN]) {
+  const invalidSession = structuredClone(pixelGapSession);
+  invalidSession.renderRequest.diagramOptions.tracks.circularTrackSlots[0].innerGapPx = invalid;
+  assert.throws(() => projectCanonicalSessionRequest(invalidSession), /innerGapPx must be a nonnegative finite number/);
 }

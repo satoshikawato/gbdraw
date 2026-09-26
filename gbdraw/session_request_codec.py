@@ -3035,6 +3035,7 @@ def _decode_track_slots(
                 )
             kwargs["params"] = params
         decoded_slot = cls(**kwargs)
+        _validate_dataclass_contract(decoded_slot, path=slot_path, error="decode")
         if (
             isinstance(decoded_slot, CircularTrackSlot)
             and legacy_spacing is not None

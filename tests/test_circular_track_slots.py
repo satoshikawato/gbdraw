@@ -477,8 +477,9 @@ def test_parse_circular_track_slot_rejects_removed_spacing_field() -> None:
     with pytest.raises(CircularTrackSlotParseError, match="spacing.*no longer supported"):
         parse_circular_track_slot("gc_content:dinucleotide_content@spacing=4px")
 
-    with pytest.raises(CircularTrackSlotParseError, match="without a unit"):
-        parse_circular_track_slot("gc_content:dinucleotide_content@inner_gap_px=4px")
+    assert parse_circular_track_slot(
+        "gc_content:dinucleotide_content@inner_gap_px=4px"
+    ).inner_gap_px == pytest.approx(4.0)
 
 
 @pytest.mark.parametrize(
