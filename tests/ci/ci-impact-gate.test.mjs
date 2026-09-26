@@ -403,3 +403,18 @@ test('release aggregate rejects any skipped or failed exhaustive matrix', () => 
     }
   }
 });
+
+test('documentation-only PR gate requires selected checks without claiming inherited staging', () => {
+  for (const impact of ['documentation', 'policy-documentation']) {
+    const documentary = plan({ impact, basis: 'DOCUMENTATION_ONLY_PR', inheritedEvidence: null });
+    const needs = needsFor(documentary);
+    const outcome = validate(documentary, needs);
+    assert.equal(outcome.ok, true);
+    assert.equal(outcome.inheritedEvidence, false);
+    for (const result of ['failure', 'cancelled', 'skipped']) {
+      const job = documentary.requiredJobs[0];
+      assert.throws(() => validate(documentary, { ...needs, [job]: { result } }),
+        { code: 'REQUIRED_JOB_NOT_SUCCESSFUL' });
+    }
+  }
+});

@@ -34,6 +34,8 @@ const preservedComparisonSession = () => {
 
 const decisionRequiredComparisonSession = () => {
   const session = JSON.parse(readFileSync(bgcSessionPath, 'utf8'));
+  // Keep this missing-resource check independent of saved alignment validation.
+  session.renderRequest.layout.similarityAlignment = null;
   session.renderRequest.comparisons = [{
     kind: 'nucleotideBlast',
     resourceId: 'missing-comparison-resource',
