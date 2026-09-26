@@ -87,7 +87,7 @@ test('PR planning uses a three-dot diff and direct base evidence', async () => {
     token: 'test-token',
     runGitImpl: (_root, args) => {
       gitArgs = args;
-      return gitResult('M', 'docs/FAQ.md');
+      return gitResult('M', '.gitignore');
     },
     verifyWorkflowEvidenceImpl: async (args) => {
       evidenceArguments = args;
@@ -104,10 +104,10 @@ test('PR planning uses a three-dot diff and direct base evidence', async () => {
   ]);
   assert.equal(evidenceArguments.expectedHeadSha, SHA.base);
   assert.equal(evidenceArguments.workflowPath, '.github/workflows/test.yml');
-  assert.equal(outcome.plan.impact, 'documentation');
+  assert.equal(outcome.plan.impact, 'metadata');
   assert.equal(outcome.plan.decision, 'selective');
   assert.equal(outcome.plan.basis, 'LIGHT_CHANGE_WITH_DIRECT_BASE_EVIDENCE');
-  assert.deepEqual(outcome.plan.requiredJobs, ['recipes-standard']);
+  assert.deepEqual(outcome.plan.requiredJobs, []);
 });
 
 test('Product Contract documentation PR selects only Web policy validation', async () => {
@@ -115,10 +115,12 @@ test('Product Contract documentation PR selects only Web policy validation', asy
     configuration: configuration(),
     token: 'test-token',
     runGitImpl: () => gitResult('M', 'docs/internal/OPTION_INTEGRITY_PRODUCT_CONTRACT.md'),
-    verifyWorkflowEvidenceImpl: async () => successfulEvidence()
+    verifyWorkflowEvidenceImpl: async () => assert.fail('Documentation PR must not query staging')
   });
   assert.equal(outcome.plan.impact, 'policy-documentation');
   assert.equal(outcome.plan.decision, 'selective');
+  assert.equal(outcome.plan.basis, 'DOCUMENTATION_ONLY_PR');
+  assert.equal(outcome.plan.inheritedEvidence, null);
   assert.deepEqual(outcome.plan.requiredJobs, ['web-change-budget']);
 });
 
@@ -292,42 +294,35 @@ test('dev direct-parent staging failures force the current run to full', async (
   }
 });
 
-test('documentation-only PRs run the full tier when exact base staging has no matching run', async () => {
-  for (const path of [
-    'docs/TUTORIALS/1_Intro.md',
-    'docs/internal/OPTION_INTEGRITY_PRODUCT_CONTRACT.md'
-  ]) {
-    const outcome = await buildImpactPlan({
-      configuration: configuration(),
-      token: 'test-token',
-      runGitImpl: () => gitResult('M', path),
-      verifyWorkflowEvidenceImpl: async () => {
-        throw new PromotionReadinessError('NO_MATCHING_RUN', 'Base staging run is missing.');
-      }
-    });
-    assert.equal(outcome.plan.decision, 'full', path);
-    assert.equal(outcome.plan.basis, 'INHERITED_EVIDENCE_UNAVAILABLE', path);
-    assert.equal(outcome.plan.inheritedEvidence, null, path);
-    assert.equal(outcome.evidenceFailure.code, 'NO_MATCHING_RUN', path);
-    assert.deepEqual(outcome.plan.requiredJobs, [
-      'web-change-budget', 'core-pr', 'recipes-standard', 'gallery',
-      'lint', 'web-contracts-pr', 'web-pr-smoke'
-    ], path);
-  }
-});
-
-test('documentation-only PRs fail closed for failed, unfinished, or unavailable evidence', async () => {
+test('documentation-only PRs stay selective without querying any base staging state', async () => {
   for (const code of [
-    'RUN_NOT_SUCCESSFUL', 'AGGREGATE_JOB_NOT_SUCCESSFUL', 'API_REQUEST_FAILED'
+    'NO_MATCHING_RUN', 'RUN_NOT_SUCCESSFUL', 'AGGREGATE_JOB_NOT_SUCCESSFUL', 'API_REQUEST_FAILED'
   ]) {
-    await assert.rejects(buildImpactPlan({
-      configuration: configuration(),
-      token: 'test-token',
-      runGitImpl: () => gitResult('M', 'docs/internal/OPTION_INTEGRITY_PRODUCT_CONTRACT.md'),
-      verifyWorkflowEvidenceImpl: async () => {
-        throw new PromotionReadinessError(code, `Base staging evidence unavailable: ${code}`);
-      }
-    }), { code: 'DOCUMENTATION_BASE_EVIDENCE_UNAVAILABLE' }, code);
+    for (const [tokens, jobs] of [
+      [['M', 'docs/TUTORIALS/1_Intro.md'], ['recipes-standard']],
+      [['M', 'docs/internal/OPTION_INTEGRITY_PRODUCT_CONTRACT.md'], ['web-change-budget']],
+      [['M', '.gitignore', 'M', 'docs/FAQ.md', 'M', 'docs/internal/SELECTIVE_CI.md'],
+        ['web-change-budget', 'recipes-standard']],
+      [['R100', 'docs/old.md', 'docs/new.md'], ['recipes-standard']],
+      [['D', 'docs/FAQ.md'], ['recipes-standard']]
+    ]) {
+      let calls = 0;
+      const outcome = await buildImpactPlan({
+        configuration: configuration(),
+        token: '',
+        runGitImpl: () => gitResult(...tokens),
+        verifyWorkflowEvidenceImpl: async () => {
+          calls += 1;
+          throw new PromotionReadinessError(code, `Base staging unavailable: ${code}`);
+        }
+      });
+      assert.equal(calls, 0);
+      assert.equal(outcome.plan.decision, 'selective');
+      assert.equal(outcome.plan.basis, 'DOCUMENTATION_ONLY_PR');
+      assert.equal(outcome.plan.inheritedEvidence, null);
+      assert.equal(outcome.evidenceFailure, undefined);
+      assert.deepEqual(outcome.plan.requiredJobs, jobs);
+    }
   }
 });
 
