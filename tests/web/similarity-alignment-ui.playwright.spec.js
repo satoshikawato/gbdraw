@@ -1157,6 +1157,22 @@ test('Gallery Match reference direction reverses records with ribbons and preser
         || element.getAttribute('data-subject-record-index') === '1').length };
   });
   const before = await recordState();
+  // Default Align renders comparisons and preserves every record direction.
+  const defaultReference = before.plan.records.find(({ recordKey }) => recordKey === 'record-2').anchor;
+  const referenceId = await page.evaluate((anchor) => window.__GBDRAW_APP__.extractedFeatures
+    .find((item) => item.recordKey === anchor.recordKey
+      && item.biologicalFeatureId === anchor.biologicalFeatureId).svg_id, defaultReference);
+  await page.locator(`[data-gbdraw-feature-id="${referenceId}"]`).first()
+    .dispatchEvent('click', { clientX: -100, clientY: -100 });
+  await page.locator('.feature-popup[role="dialog"]')
+    .getByRole('button', { name: 'Align…', exact: true }).click();
+  await expect.poll(() => page.evaluate(() => window.__GBDRAW_APP__.similarityAlignmentBusy),
+    { timeout: 180000 }).toBe(false);
+  await expect(page.locator('[data-similarity-alignment-summary]')).toContainText('0 reversed');
+  expect((await recordState()).orientations).toEqual(before.orientations);
+  await expect(page.getByRole('dialog', { name: 'Select alignment anchors' })).toHaveCount(0);
+  await page.getByRole('button', { name: 'Undo', exact: true }).click();
+  await expect.poll(recordState).toEqual(before);
   const dialog = await review();
   const targetRow = dialog.locator('[data-alignment-record-key="record-2"]');
   await expect(targetRow).toContainText('Streptomyces fradiae');
@@ -1180,6 +1196,25 @@ test('Gallery Match reference direction reverses records with ribbons and preser
   expect(await dialog.evaluate((element) => element.scrollWidth <= element.clientWidth)).toBe(true);
   await page.screenshot({ path: testInfo.outputPath('match-review-390.png') });
   await page.setViewportSize({ width: 1600, height: 1000 });
+  // A failed matched Apply retains the checked draft without committing reversals.
+  await page.evaluate(() => {
+    const sanitize = window.DOMPurify.sanitize;
+    window.DOMPurify.sanitize = (...args) => {
+      if (String(args[0]).includes('<svg')) {
+        window.DOMPurify.sanitize = sanitize;
+        throw new Error('Forced matched candidate post-processing failure.');
+      }
+      return sanitize(...args);
+    };
+  });
+  await apply.click();
+  await expect(dialog.locator('[data-similarity-alignment-error]'))
+    .toHaveText('Forced matched candidate post-processing failure.', { timeout: 180000 });
+  await expect(page.getByRole('alert', { name: 'Generation Error' })
+    .locator('.text-sm.font-semibold'))
+    .toHaveText('Forced matched candidate post-processing failure.');
+  await expect(match).toBeChecked();
+  expect(await recordState()).toEqual(before);
   await apply.click();
   await page.waitForFunction(() => !window.__GBDRAW_APP__.similarityAlignmentBusy, null, { timeout: 180000 });
   const applyStatus = await page.evaluate(() => ({ status: window.__GBDRAW_APP__.similarityAlignmentStatus,
@@ -1194,6 +1229,24 @@ test('Gallery Match reference direction reverses records with ribbons and preser
   )).length;
   expect(reversedCount).toBe(4);
   await expect(page.locator('[data-similarity-alignment-summary]')).toContainText(`${reversedCount} reversed`);
+  expect(applied.orientations[0]).toEqual(before.orientations[0]);
+  expect(applied.translations.map(({ y }) => y)).toEqual(before.translations.map(({ y }) => y));
+  const revLabels = () => page.evaluate(async () => {
+    const app = window.__GBDRAW_APP__;
+    const previous = { open: app.showRightDrawer, tab: app.rightDrawerTab };
+    app.showRightDrawer = true;
+    app.rightDrawerTab = 'orthogroups';
+    await window.Vue.nextTick();
+    const labels = [...document.querySelectorAll(
+      '[data-similarity-alignment-plan-inspector] [aria-label$=" reversed relative to source"]'
+    )].map((element) => element.getAttribute('aria-label'));
+    app.showRightDrawer = previous.open;
+    app.rightDrawerTab = previous.tab;
+    await window.Vue.nextTick();
+    return labels;
+  });
+  expect(await revLabels()).toEqual(applied.orientations.filter(({ reverseComplement }) => reverseComplement)
+    .map(({ recordKey }) => `${recordKey} reversed relative to source`));
   const measured = await geometry();
   expect(measured.ribbons).toBeGreaterThan(0);
   expect(measured.targetRibbons).toBeGreaterThan(0);
@@ -1241,6 +1294,7 @@ test('Gallery Match reference direction reverses records with ribbons and preser
   const manual = await recordState();
   expect(manual.plan).toEqual(applied.plan);
   expect(manual.orientations.find(({ recordKey }) => recordKey === 'record-2').reverseComplement).toBe(false);
+  expect(await revLabels()).not.toContain('record-2 reversed relative to source');
   const manualGeometry = await geometry();
   expect(Math.max(...manualGeometry.offsets.map(({ offset }) => Math.abs(offset)))).toBeLessThanOrEqual(0.5);
   expect(manualGeometry.targetRibbons).toBeGreaterThan(0);
@@ -1268,6 +1322,52 @@ test('Gallery Match reference direction reverses records with ribbons and preser
   const loaded = await recordState(freshPage);
   expect(loaded).toMatchObject({ plan: saved.plan, translations: saved.translations,
     orientations: saved.orientations, results: saved.results });
+  // Re-render the restored Session and compare the complete SVG tree.
+  const regenerated = await freshPage.evaluate(() => window.__GBDRAW_APP__.runAnalysis());
+  expect(regenerated.status).toBe('ok');
+  const replayed = await recordState(freshPage);
+  expect(replayed).toMatchObject({ plan: saved.plan, translations: saved.translations,
+    orientations: saved.orientations });
+  const svgEquivalent = await freshPage.evaluate(({ before, after }) => {
+    const parser = new DOMParser();
+    const normalized = (element) => ({
+      tag: element.tagName,
+      attributes: [...element.attributes]
+        .filter(({ name }) => name !== 'baseProfile' && !name.startsWith('xmlns'))
+        .map(({ name, value }) => [name, value]).sort(([a], [b]) => a.localeCompare(b)),
+      text: [...element.childNodes].filter(({ nodeType }) => nodeType === Node.TEXT_NODE)
+        .map(({ textContent }) => textContent.trim()).filter(Boolean),
+      children: [...element.children].map(normalized)
+    });
+    return JSON.stringify(normalized(parser.parseFromString(before, 'image/svg+xml').documentElement))
+      === JSON.stringify(normalized(parser.parseFromString(after, 'image/svg+xml').documentElement));
+  }, { before: saved.results[0].content, after: replayed.results[0].content });
+  expect(svgEquivalent).toBe(true);
+  // An open review must never leak guides, badges, or controls into the SVG download.
+  await review();
+  const exportPromise = page.waitForEvent('download');
+  await page.evaluate(() => window.__GBDRAW_APP__.downloadSVG());
+  const exported = await exportPromise;
+  const exportPath = testInfo.outputPath('record-owned-match-export.svg');
+  await exported.saveAs(exportPath);
+  expect(readFileSync(exportPath, 'utf8'))
+    .not.toMatch(/gbdraw-alignment-|Select alignment anchors|Match reference direction/);
+  const downloadFormat = async (format, suffix) => {
+    const pending = page.waitForEvent('download');
+    await page.evaluate((method) => window.__GBDRAW_APP__[method](), `download${format}`);
+    const file = await pending;
+    const path = testInfo.outputPath(`record-owned-match-${suffix}.${format.toLowerCase()}`);
+    await file.saveAs(path);
+    const bytes = readFileSync(path);
+    return format === 'PNG' ? bytes : bytes.toString('latin1')
+      .replace(/\/CreationDate \([^)]*\)/g, '')
+      .replace(/\/ID \[\s*<[0-9a-f]+>\s*<[0-9a-f]+>\s*\]/gi, '');
+  };
+  const reviewPng = await downloadFormat('PNG', 'review');
+  const reviewPdf = await downloadFormat('PDF', 'review');
+  await page.keyboard.press('Escape');
+  expect(await downloadFormat('PNG', 'closed')).toEqual(reviewPng);
+  expect(await downloadFormat('PDF', 'closed')).toEqual(reviewPdf);
   await expectNoUnhandledRejections(page);
   await expectNoUnhandledRejections(freshPage);
   expect(pageErrors).toEqual([]);

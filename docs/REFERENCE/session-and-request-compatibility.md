@@ -186,10 +186,12 @@ Select/Skip rationale, record orientation, base translations, and the
 immediate pre-align Reset baseline. Ordinary Generate renders the saved
 plan through the canonical typed path without guessing a new anchor. A stable
 reorder resolves by `recordKey` and biological feature identity. Source
-replacement, crop, selector, manual orientation, and record drag clear the plan
-with a visible reason. A stale reference requires Reselect/Clear and a stale
-target requires Select/Skip; pending or failed repair keeps the last successful
-Result. Undo/Redo restores the complete artifact. Preview-only guides,
+replacement, crop, selector, and record drag clear the plan with a visible reason.
+Manual Reverse keeps the plan and aligns the same anchors on the next Generate.
+Reset Align restores the immediate pre-align positions and clears the plan while
+keeping record directions unchanged. A stale reference requires Reselect/Clear
+and a stale target requires Select/Skip; pending or failed repair keeps the last
+successful Result. Undo/Redo restores the complete artifact. Preview-only guides,
 candidate markers, and recommendation badges are never saved.
 
 In Web **Run Info**, **Source recipe** uses the original input filenames and

@@ -94,8 +94,10 @@ or choose **Skip**. One **Match reference direction** checkbox reverses all
 selected targets with known opposite strands. The palette names the affected
 records and shows each selected anchor's direction before Apply. Local edits
 start no Worker job; Apply validates the full draft and generates one Result.
-Errors keep the draft for correction and retry; Cancel and stale work leave the last Result
-and History intact.
+The option starts off on every review and is disabled when no selected target
+faces the opposite direction. Unknown strands stay unchanged. Errors show the
+underlying failure once in the review and banner, keeping the draft for retry.
+Cancel and stale work leave the last Result and History intact.
 
 A successful Apply stores a fully resolved schema-2 plan containing anchors and
 Skip decisions. Record Reverse settings own orientation. Ordinary Generate,

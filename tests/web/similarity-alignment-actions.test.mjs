@@ -765,6 +765,8 @@ test('matched Apply commits plan, orientations, and Result in one History entry;
   assert.equal(fixture.actions.summary.value.reversed, 1);
   assert.equal(fixture.history.getUndoCount(), 1);
   assert.equal(fixture.state.linearSeqs[1].region_reverse, true);
+  assert.deepEqual(fixture.actions.activePlanInspector.value.records
+    .map(({ reversedFromSource }) => reversedFromSource), [false, true, false]);
   await fixture.history.undo();
   assert.equal(fixture.state.linearSeqs[1].region_reverse, false);
   assert.equal(fixture.state.similarityAlignmentPlan.value, null);

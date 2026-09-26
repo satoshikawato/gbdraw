@@ -1,11 +1,11 @@
 # Similarity Group alignment with record-owned orientation — master plan
 
-Status: planning committed; implementation not started.
+Status: implementation and integrated acceptance complete (2026-09-26); see section 10.
 Implementation branch: `fix/similarity-alignment-orientation-owner-20260926`
 Branch base at creation: `origin/dev@22cbcca96f2ef5e20bb45fe397ba4232fb158574`, fetched 2026-09-26.
-Product authority: receipts approved on 2026-09-26 and serialized as commit `61eec6c5` on
-`authority/similarity-alignment-orientation-owner-20260926` (contract revision 16); merge into
-`origin/dev` is pending. See [00_DECISION_PACK.md](00_DECISION_PACK.md) and Session 00.
+Product authority: receipts approved on 2026-09-26 and serialized as commit
+`61eec6c5de15d1b47d89c02ee3ccf829a116bef0` (contract revision 16), merged into
+`origin/dev` by `4d1cf93514d0f75fa7a0ee32c1c4b2f176e03682`. See [00_DECISION_PACK.md](00_DECISION_PACK.md) and Session 00.
 
 ## 1. Background and problem
 
@@ -448,4 +448,213 @@ The planning commit contains only this directory.
 
 ## 10. Acceptance record
 
-Session 04 appends the integrated acceptance record here.
+### Session 04 — integrated acceptance (2026-09-26)
+
+Runtime base: `origin/dev@4d1cf93514d0f75fa7a0ee32c1c4b2f176e03682`.
+Authority: `61eec6c5de15d1b47d89c02ee3ccf829a116bef0`, merged by that
+base commit; Product contract revision 16 includes `PD-OI-027/028/029/031/034`.
+The fix branch contains merge `1690d2cdc55f55e42fe5496a8e67d6da5c69e2f4`
+and these implementation commits:
+
+| Session | Commit | Change |
+| --- | --- | --- |
+| 01 | `5bcdd4f561b08285f499c2b8350a8a58a96ada01` | Underlying generation errors |
+| 02 | `92880e9962128c7fcbe9dd4458ca6a331a7193fd` | Anchor-only plan and strand facts |
+| 03 | `7c542cc71ced5a448995ff1161b48aff5a0a0ae0` | Record-owned Match workflow |
+| 04 | The commit containing this acceptance record | Documentation, rev indicator, and integrated verification |
+
+`git fetch origin` was repeated before handoff. `origin/dev` remains the base
+above and is an ancestor of HEAD; no additional merge is needed. The existing
+fix branch and its same-named upstream were preserved. A concurrent session
+switched and reset the shared checkout during early checks, so final work and
+all accepted evidence use the isolated worktree `/tmp/gbdraw-session04`.
+The shared checkout's unrelated branch and work were left in place.
+
+#### Commands and final results
+
+Commands below ran in that worktree. `PYTHONPATH=/tmp/gbdraw-session04` selects
+this code for clean-directory subprocesses because the installed editable
+package points at the shared checkout. `GBDRAW_WEB_TEST_PORT` selects a free
+local port; `playwright.config.js` retains 4173 as its default. Node and Python
+Playwright were both available. Local commands used sandbox escalation after
+an environment mount failure; no test timeout or acceptance threshold changed.
+
+| Command | Result |
+| --- | --- |
+| `PYTHONPATH=/tmp/gbdraw-session04 python -m pytest tests/test_similarity_alignment.py tests/test_similarity_alignment_rendering.py tests/test_similarity_alignment_web_adapter.py tests/test_session_request_codec.py tests/test_session_compat.py tests/test_api_session.py tests/test_documentation_reference_contracts.py tests/test_gallery_session_semantics.py -q` | 305 passed; 10 warnings |
+| `node --test tests/web/similarity-alignment-actions.test.mjs tests/web/session-request.test.mjs tests/web/run-analysis-simple-path.test.mjs tests/web/gallery-session-publication.test.mjs` | 41 passed |
+| `GBDRAW_WEB_TEST_PORT=4178 PYTHONPATH=/tmp/gbdraw-session04 npx playwright test tests/web/similarity-alignment-ui.playwright.spec.js tests/web/linear-multi-record.playwright.spec.js --project=chromium --workers=1 --output=/tmp/session04-complete-browser-results` | 44 passed; 6.5 minutes |
+| `GBDRAW_WEB_TEST_PORT=4180 PYTHONPATH=/tmp/gbdraw-session04 npx playwright test tests/web/similarity-alignment-ui.playwright.spec.js --project=chromium --workers=1 --grep 'Gallery Match reference direction' --output=/tmp/session04-rev-browser-results` | 1 passed; checked failure/retry and source-relative rev checks included |
+| `ruff check gbdraw/` | Passed |
+| `node tests/web/architecture-contracts.test.mjs` | 137 passed |
+| `node tools/check-web-change-budget.mjs --base origin/dev` | Gate PASS; Review REQUIRED; no blocking violations |
+| `python tools/update_cli_reference_help.py --check` | Passed |
+| `GBDRAW_WEB_TEST_PORT=4179 PYTHONPATH=/tmp/gbdraw-session04 python -m pytest tests/ -v -m 'not slow'` | 6251 passed; 17 skipped; 11 deselected; 23 warnings; 689.22 s |
+| `PYTHONPATH=/tmp/gbdraw-session04 python -m pytest tests/test_output_comparison.py::TestOutputComparison -v` | 16 passed |
+| `python -m build` | Wheel and sdist built |
+| `python tools/prepare_browser_wheel.py` | Gitignored browser wheel prepared; no deploy cache-bust refresh |
+| `python tools/refresh_gallery_sessions.py` | Unfiltered refresh completed; no additional generated-byte changes |
+| `python tools/gallery_artifact_manifest.py` | Passed |
+| `python tools/capture_gallery_tutorial_screenshots.py --example BGC0000708-BGC0000713 --check` | 19 media entries, 19 operations, 19 operation media entries; strict check passed |
+| `node tools/check-pr-language.mjs --title 'Fix direction matching in Linear Similarity Group alignment' --body-file /tmp/session04-pr-body.md` | Passed; no PR opened |
+| `git diff --check` | Passed |
+
+Final logs are `/tmp/session04-complete-{focused-python,browser,pytest}.log`,
+`/tmp/session04-final-{focused-node,architecture,budget,build}.log`,
+`/tmp/session04-rev-browser.log`, `/tmp/session04-reference-comparison.log`, and
+`/tmp/session04-isolated-{ruff,cli-reference,wheel,gallery-refresh,
+gallery-manifest,tutorial-check}.log`.
+
+Early failures were diagnosed and corrected: two browser assertions expected
+an obsolete error outcome without its normalized error payload; an initial
+default-Align fixture selected an ambiguous group; clean-directory Python
+subprocesses imported the shared checkout; and browser shards collided with
+an occupied server port. The corrected subprocess checks passed 14 tests.
+An exploratory invalid-layout mutation on the active-plan Gallery fixture
+caused reactive canonical-request errors before generation; the
+checked-Match failure check instead injects an SVG admission error after real
+rendering, using the existing post-processing boundary. The earlier failed full
+Python log is `/tmp/session04-full-pytest.log`. Failed attempts are not counted
+as acceptance evidence.
+
+#### Every jointly required Product effect
+
+Developer preflight: `IMPLEMENT_EXISTING_AUTHORITY`. The merged revision-16
+outcome resolves all material behavior choices. No new Product decision,
+compatibility promise, architecture exception, or offline-bundle audit applies.
+The independent contributions below were checked together; matching decision
+IDs alone was not used as proof.
+
+| Section 3 requirement | Evidence |
+| --- | --- |
+| 1 — Record orientation and anchor-only plans | Typed requests apply record orientation before anchor projection. Python tests cover source transforms, feature identity, labels, annotations, and comparison paths. BGC plans have exactly `recordKey/status/rationale/anchor` decisions. Browser `rev` badges match current source-relative record directions after Apply and manual Reverse. |
+| 2 — Automatic default Align | Real BGC resolved `og_1` Align opens no review, preserves all five directions, reports `0 reversed`, and Undo restores the full prior state. |
+| 3 — One local checkbox and current candidate lines | Browser checks cover unchecked-on-open, same/opposite/unknown lines, disabled reason, selected-candidate updates, keyboard Space, and no per-target direction controls. Node checks verify local edits start no helper/generation. |
+| 4 — Validation, eligible targets, one commit | Apply uses validated strand facts; four BGC targets reverse, the reference stays unchanged, and one History entry contains the complete successful artifact. Node checks count helper/generation calls and exclude unselected, skipped, and unknown targets. |
+| 5 — Unchanged records and exact placement | Real six-record render checks reference, Skip, missing, and unusable positions/orientations; unknown orientation; and every y translation. BGC measured centers meet the 0.5 px bound; reopening Match shows same direction and disables the option. |
+| 6 — Manual Reverse retains plan | Real BGC record-2 Reverse keeps the same plan and biological anchors, emits no clearing notice, and regenerates aligned ribbons. Other clearing triggers remain covered by existing focused tests. |
+| 7 — Reset positions only | Real BGC Reset clears the plan, restores all five original rendered record transforms, retains matched directions, and shows the exact required notice. |
+| 8 — Undo and unsuccessful work | BGC Undo/Redo compares plan, directions, translations, SVG Result, rendered positions, and History count. Cancel/stale/superseded checks preserve admission state. Checked Match post-processing failure leaves that entire snapshot unchanged. |
+| 9 — Underlying error once and retained draft | Browser real invalid-layout failure shows the underlying summary once in each surface and supports correction. The BGC post-processing failure additionally retains the checked Match draft and succeeds on retry. |
+| 10 — Session and exports | A reversed BGC Session loads in a fresh app and regenerates an identical normalized full SVG tree. SVG has no guide/badge/control markup. Review-open and review-closed PNG bytes match; PDF bytes match after excluding creation time and document ID only. |
+| 11 — CLI unchanged | Native BLAST+ CLI renders the owner BGC recipe at base and head with the same `--align_orthogroup_feature` selector and five Reverse settings; SVG bytes match exactly. CLI help check and all 16 tracked reference comparisons pass. |
+
+The real Gallery regression uses `CAG38712.1` (livA), comparisons enabled,
+**Review alignment options…**, and the single checked Match option. It reverses
+four records, including *Streptomyces fradiae* ATCC 10745 (`record-2`). There are
+77 comparison ribbons in total and 40 touching record-2. Target anchor offsets
+from the reference, in CSS px, are:
+
+| Record | After Match | After manual Reverse of record-2 |
+| --- | ---: | ---: |
+| record-2 | 0 | 0 |
+| record-3 | -0.0001220703125 | -0.0001220703125 |
+| record-4 | -0.0001220703125 | -0.0001220703125 |
+| record-5 | 0.0001220703125 | 0 |
+
+Maximum absolute offset: **0.0001220703125 px**, below **0.5 px**.
+The repeated review shows `same as reference`; it opens unchecked and disabled.
+
+Native CLI parity used `BGC_COMMAND` from
+`tools/prepare_interactive_gallery_assets.py`, with static `svg` output,
+`--align_orthogroup_feature CAG38695.1`,
+`--ncbi_blastp_bin /home/kawato/micromamba/bin/blastp --losatp_threads 1`,
+and five `--reverse_complement` values `0,0,0,0,1`. The owner recipe includes
+the labels, metadata, colors, title, scale, and comparison options. Base Python
+and package data were extracted with
+`git archive origin/dev 'gbdraw/*.py' gbdraw/data` into a disposable directory;
+both variants ran `python -m gbdraw.cli linear` from clean input directories.
+The complete argv and base SHA are in `/tmp/session04-cli-parity/evidence.json`;
+`/tmp/session04-cli-parity.py` regenerates the check. Each SVG is **236013 bytes**,
+SHA-256 **4c94ea57f0f41dd20df75bc9edd41dbbd33b0370a6765b5e0363bdda1b49ca52**.
+Native LOSAT was absent; the CLI's existing explicit BLAST+ option was used.
+Browser acceptance separately exercises actual browser LOSATP comparisons.
+
+#### Visual, documentation, and generated dispositions
+
+Rendered and visually inspected the current Gallery source and matched SVG at
+2400 px width, on white. Both retain five realistic BGC rows, source metadata,
+first-row gene labels, scale, title, color and identity legends, and comparison
+ribbons. The `rev` mark belongs to the Active plan inspector; it reports source
+orientation and is absent from figure exports. A fresh-browser load of the saved
+matched Session showed four `rev` marks, matching record-2 through record-5;
+the inspector crop was visually inspected for legibility. The replay command is
+`python /tmp/session04-inspector-check.py`; its capture is
+`/tmp/session04-gallery-render/active-plan-rev.png`.
+
+Desktop (1600 x 1000) and mobile (390 x 740) review captures were inspected.
+The single checkbox follows the reference card, status labels wrap, direction
+lines are readable, and the scrollable body leaves Apply/Cancel reachable.
+The 390 px dialog has no horizontal overflow. Accepted capture/export evidence
+is under `/tmp/session04-complete-browser-results` and
+`/tmp/session04-rev-browser-results`. Inspection renders are under
+`/tmp/session04-gallery-render`.
+
+Current public references now describe the single option, its exact status and
+direction lines, retained manual Reverse, position-only Reset, full Undo, and
+underlying errors. The consistency sweep also corrected stale plan-policy text
+in `typed-requests.md` and stale manual-orientation clearing text in
+`session-and-request-compatibility.md`. Release notes describe only current
+behavior. The BGC tutorial names the single option and eligible selected targets.
+Historical plan directories were left unchanged.
+
+Gallery sessions, examples, SVGs, thumbnails, and manifest regenerate without
+additional byte changes from Session 02. The BGC saved plan has no removed
+orientation fields and renders through the current embedded canonical request.
+No tutorial image depicts the changed review; the operation register records
+**Keep** for the unchanged popup and default-Align preview. Strict media checks
+pass. No tracked reference SVG was rewritten. The owner-maintained social
+preview was untouched. No dependencies, privacy behavior, bundle composition,
+or Worker lifecycle changed, so no offline audit is required.
+
+#### Concise architecture evidence
+
+Production changes across Sessions 01–04 relative to the runtime base add
+197 lines and remove 407 (net **-210**) in 13 files, with no new production
+module or dependency. Session 04 fixes the inspector's `rev` display to read
+`linearSeqs[].region_reverse` directly: canonical rendered requests normalize
+materialized source orientation, so they cannot report the source-relative
+record setting. This removes the incorrect request-reading display path without
+adding an owner or changing generation, persistence, or CLI behavior. The
+regression checks matched directions and the subsequent manual Reverse.
+
+| Responsibility | Before | Accepted owner/path |
+| --- | --- | --- |
+| Orientation (OE decreases) | Record `region_reverse` plus plan direction fields | Record `region_reverse` only; current presentation/region projection has no plan direction owner |
+| Typed orientation application (PE decreases) | `resolve_record_inputs()` plus late plan reversal | `resolve_record_inputs()` once; `project_similarity_alignment_centers()` only projects centers |
+| Per-generation orientation (PE decreases) | Live comparison input plus late serialization patch | One run-local `runState.linearSeqs`, read by LOSATP display projection, file/request construction, and serialization |
+| Anchor resolution/validation | Python domain module | One `gbdraw/layout/similarity_alignment.py` resolver/validator; Web helper is an adapter |
+| Web workflow | Existing controller | One `createSimilarityAlignmentActions` controller; pure `matchedOrientations()` consumes Python facts |
+| Persistence | Existing request/Session writers | Existing `services/session-request.js` projection and `services/config.js` Session coordination, with Python codec adapters; no new writer |
+| Result/History admission | Existing generated-artifact transaction | Existing SVG candidate admission and generated-artifact History path; no alignment-specific History |
+| Compatibility (CB unchanged) | Released legacy selector reader | Same reader retained; branch-only retired fields rejected; no new reader or version |
+
+Production searches confirm removal of plan `orientationPolicy`,
+`effectiveReverseComplement`, `match_reference`, late
+`materialize_similarity_alignment_display()`, the partial serialization patch,
+per-target controls, and `setManualOrientation()`. Before/after owners and
+execution paths decrease or remain unchanged; no exception condition calls
+for full OE/PE/CB sets. The change-budget Review REQUIRED result records ordinary
+human review signals, not a failed gate. Production, tests, current docs, and
+generated artifacts were reviewed separately; final changed parts were revisited.
+
+Remaining limitations: existing Gallery labels contain literal `<i>` markup in
+review record names, as already recorded in Session 03. It does not affect
+selection, direction facts, rendering, or acceptance. Temporary captures and logs
+are local evidence, not additional public tutorial assets. No unresolved Product
+outcome or implementation criterion remains after the final gates.
+
+Proposed English PR title: **Fix direction matching in Linear Similarity Group alignment**.
+
+Proposed PR summary: Apply reverses eligible targets through their record Reverse
+complement settings, allowing anchors and comparison ribbons to render together.
+The review has one Match option; manual Reverse keeps the plan, Reset restores
+positions while retaining direction, Undo restores the whole artifact, and failed
+Apply retains its draft while showing the underlying error once. Real Gallery,
+Session/export, CLI parity, regression, architecture, and packaging checks validate
+the resulting behavior. No PR creation or merge is authorized in this session.
+
+Proposed Session 04 commit title: **Verify record-owned Similarity Group alignment and update documentation**.
+Summary: Correct public direction/reset descriptions and the source-relative `rev`
+indicator, complete real-render acceptance and export/Session checks, and record
+final gates and ownership evidence.

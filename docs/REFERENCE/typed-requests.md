@@ -92,8 +92,8 @@ rounding. Typed analysis resource schema 3 is required to read newly saved data.
 A Linear request may carry `similarity_alignment=SimilarityAlignmentPlan(...)`
 and a complete `LinearMultiRecordOptions.record_translations` sequence keyed by
 stable `recordKey`. The schema-2 plan records the exact reference, one
-decision per record, rationale, requested `preserve` or `match_reference`
-policy, and effective source-relative reverse-complement outcome. It must be
+anchor or Skip decision per record, and rationale. Record presentation or region
+state owns orientation; the plan does not store direction settings. It must be
 fully resolved; a group-ID string, partial record coverage, or schema-1 plan
 is invalid in a current request. See the [executable typed Python
 example](python-api.md#typed-linear-similarity-group-alignment) and the

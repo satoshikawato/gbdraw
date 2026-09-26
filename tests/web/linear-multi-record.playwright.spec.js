@@ -2402,7 +2402,9 @@ ${origin}
     };
   });
   expect(postprocessingFailure).toEqual({
-    result: { status: 'error' },
+    result: { status: 'error', error: {
+      summary: 'Forced candidate post-processing failure.', details: []
+    } },
     errorSummary: 'Forced candidate post-processing failure.',
     snapshotPreserved: true,
     changedFields: []
@@ -2471,7 +2473,9 @@ ${origin}
   });
   expect(staleResponse).toEqual({
     firstResult: { status: 'stale' },
-    secondResult: { status: 'error' },
+    secondResult: { status: 'error', error: {
+      summary: 'A diagram generation request is already running.', details: []
+    } },
     errorLog: {
       summary: 'A diagram generation request is already running.',
       details: []

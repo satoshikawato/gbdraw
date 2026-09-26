@@ -201,11 +201,11 @@ const baseReverseComplement = (record) => Boolean(
     : record?.presentation?.reverseComplement
 );
 
-const inspectActivePlan = (plan, request) => {
+const inspectActivePlan = (plan, linearSeqs) => {
   if (!plan || plan.schema !== 2 || !Array.isArray(plan.records)) return null;
   const records = new Map(
-    (Array.isArray(request?.records) ? request.records : [])
-      .map((record) => [String(record?.recordKey || ''), record])
+    (Array.isArray(linearSeqs) ? linearSeqs : [])
+      .map((record) => [String(record?.uid || ''), Boolean(record.region_reverse)])
   );
   return deepFreeze({
     groupId: plan.groupId,
@@ -221,7 +221,7 @@ const inspectActivePlan = (plan, request) => {
         status: decision.status,
         rationale: decision.rationale,
         rationaleLabel: rationaleLabels[decision.rationale] || decision.rationale,
-        reversedFromSource: baseReverseComplement(records.get(decision.recordKey))
+        reversedFromSource: records.get(decision.recordKey) || false
       };
     })
   });
@@ -1023,7 +1023,7 @@ export const createSimilarityAlignmentActions = ({
 
   const activePlanInspector = computed(() => {
     try {
-      return inspectActivePlan(state.similarityAlignmentPlan?.value, getCommittedRequest());
+      return inspectActivePlan(state.similarityAlignmentPlan?.value, state.linearSeqs);
     } catch (_error) {
       return null;
     }

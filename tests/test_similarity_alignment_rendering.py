@@ -927,3 +927,85 @@ def test_cli_materializes_typed_plan_and_reuses_completed_analysis(
     assert request.options.protein_blastp_mode == "none"
     assert not hasattr(request.options, "align_orthogroup_feature")
     assert captured["analysis_builds"] == 1
+
+
+def test_real_render_keeps_unknown_and_skipped_record_directions_and_positions() -> None:
+    from gbdraw.layout.similarity_alignment import (
+        AlignmentRecordChoice,
+        SimilarityAlignmentCandidate,
+        resolve_similarity_alignment,
+    )
+
+    keys = ('reference', 'opposite', 'unknown', 'skipped', 'missing', 'unusable')
+    records = tuple(
+        _record(key, 200, 20 + index * 10, 40 + index * 10,
+                strand=None if key == 'unknown' else -1 if key == 'opposite' else 1)
+        for index, key in enumerate(keys)
+    )
+    anchors = tuple(_anchor(record, key) for record, key in zip(records, keys))
+    resolution = resolve_similarity_alignment(
+        record_keys=keys, group_id='og-edge', reference=anchors[0],
+        candidates=tuple(
+            SimilarityAlignmentCandidate(
+                group_id='og-edge', anchor=anchors[index],
+                displayed_strand=None if key == 'unknown' else -1 if index else 1,
+                center_mappable=key != 'unusable',
+                display_center=None if key == 'unusable' else 30 + index * 10,
+            )
+            for index, key in enumerate(keys) if key != 'missing'
+        ),
+        choices=(AlignmentRecordChoice('skipped', 'skip'),),
+    )
+    plan = resolution.require_plan()
+    assert resolution.review_rows[2].candidates[0].strand_relation.value == 'unknown'
+    assert [item.rationale.value for item in plan.records[3:]] == [
+        'skipped_by_user', 'skipped_no_candidate', 'skipped_unmappable'
+    ]
+    request = replace(
+        _request(records[0], records[1], _plan(
+            _anchor(records[0], 'first'), _anchor(records[1], 'second')
+        )),
+        records=tuple(
+            RecordInput(InMemoryRecordSource(record), record_key=key,
+                        presentation=RecordPresentation(reverse_complement=index >= 2))
+            for index, (record, key) in enumerate(zip(records, keys))
+        ),
+        layout=LinearMultiRecordOptions(record_translations=tuple(
+            LinearRecordTranslation(key, 7 + index * 4, -5 + index * 3)
+            for index, key in enumerate(keys)
+        )),
+        similarity_alignment=None,
+    )
+    before = build_request_diagram(request)
+    matched_request = replace(request, similarity_alignment=plan, records=(
+        request.records[0],
+        replace(request.records[1], presentation=RecordPresentation(reverse_complement=True)),
+        *request.records[2:],
+    ))
+    after = build_request_diagram(matched_request)
+    assert [item.source_step for item in plan_linear_request(request).transforms] == [1, 1, -1, -1, -1, -1]
+    assert [item.source_step for item in plan_linear_request(matched_request).transforms] == [1, -1, -1, -1, -1, -1]
+
+    def translations(prepared):
+        return {
+            group.attrib['data-record-key']: (
+                float(group.attrib['data-record-translation-x']),
+                float(group.attrib['data-record-translation-y']),
+            )
+            for group in ElementTree.fromstring(prepared.drawing.tostring()).iter()
+            if 'data-record-key' in group.attrib
+        }
+
+    original, matched = translations(before), translations(after)
+    assert {key: value[1] for key, value in matched.items()} == {
+        key: value[1] for key, value in original.items()
+    }
+    for key in ('reference', 'skipped', 'missing', 'unusable'):
+        assert matched[key] == original[key]
+    centers = plan_linear_request(matched_request).alignment_anchor_centers
+    geometry = after.drawing._gbdraw_track_slot_geometry['records']
+    world_centers = [
+        item['axisXpx'] + centers[index] * item['sequenceWidthPx'] / len(after.records[index])
+        for index, item in enumerate(geometry) if centers[index] is not None
+    ]
+    assert world_centers == pytest.approx([world_centers[0]] * 3, abs=0.5)
