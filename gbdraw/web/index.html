@@ -1240,6 +1240,51 @@
         details[open] > summary { @apply mb-2 text-blue-600; }
         details > summary::before { content: ''; @apply w-4 h-4 bg-contain bg-no-repeat transition-transform duration-200; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%2364748b' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='9 18 15 12 9 6'%3E%3C/polyline%3E%3C/svg%3E"); }
         details[open] > summary::before { transform: rotate(90deg); }
+
+        .alignment-review-dock { height: clamp(15rem, 30dvh, 22rem); }
+        .result-pane:has(.alignment-review-compact) { height: auto !important; overflow: visible !important; }
+        .alignment-review-compact { flex: none; min-height: calc(200px + clamp(15rem, 30dvh, 22rem) + 5rem); }
+        .alignment-review-compact .preview-viewport {
+            display: grid;
+            grid-template-rows: auto 200px auto;
+            gap: .375rem;
+            padding: .375rem 0;
+            flex: none;
+        }
+        .alignment-review-compact [data-preview-canvas] {
+            position: relative;
+            grid-area: 2 / 1;
+            inset: auto;
+            height: 200px;
+            min-height: 200px;
+            overflow: hidden;
+        }
+        .alignment-review-compact .preview-feature-search {
+            position: relative;
+            grid-area: 1 / 1;
+            inset: auto !important;
+            width: auto;
+            padding: .25rem;
+        }
+        .alignment-review-compact .preview-feature-search .gfs-query { flex: 1 1 8rem !important; }
+        .alignment-review-compact .preview-feature-search .gfs-select { flex: 0 1 5rem !important; }
+        .alignment-review-compact .preview-feature-search .gfs-qualifier { flex: 1 1 3rem !important; }
+        .alignment-review-compact .preview-feature-search .gfs-count { flex: 0 1 auto !important; }
+        .alignment-review-compact .preview-controls {
+            position: relative;
+            grid-area: 3 / 1;
+            inset: auto !important;
+            transform: none !important;
+        }
+        .alignment-review-compact .preview-controls > button { padding: .375rem; }
+        .alignment-review-compact .preview-controls > button > span { display: none; }
+        .alignment-review-compact .preview-controls button[aria-label*="zoom"] { height: 2rem; width: 2rem; }
+        .alignment-review-compact .preview-controls button[aria-label="Reset zoom"] { width: 3rem; }
+        @media (max-width: 768px) {
+            #app:has(.alignment-review-compact) .generate-bar { position: static !important; width: auto !important; }
+        }
+        .alignment-review-panel > header, .alignment-review-panel > footer { padding: .5rem .75rem; }
+        .alignment-review-compact .drawer-toggle:disabled { opacity: .55; cursor: not-allowed; }
     </style>
 </head>
 <body class="antialiased pb-0 overflow-hidden">
@@ -4607,7 +4652,7 @@
                 </details>
             </div>
 
-            <div v-if="results.length > 0" role="region" aria-label="Result Preview" class="card border-2 border-green-100 ring-4 ring-green-50/50 flex flex-col flex-grow overflow-hidden relative">
+            <div v-if="results.length > 0" role="region" aria-label="Result Preview" :class="{ 'alignment-review-compact': similarityAlignmentCompact && similarityAlignmentDialogOpen }" class="card border-2 border-green-100 ring-4 ring-green-50/50 flex flex-col flex-grow overflow-hidden relative">
                 <div class="card-header bg-green-50/50 -m-4 mb-0 p-3 pl-5 pr-6 border-green-100 flex justify-between items-center shrink-0 flex-wrap gap-2">
                     <div class="flex items-center gap-3 flex-wrap min-w-0">
                         <h2 class="text-green-600 flex items-center gap-2 text-base font-bold min-w-0">
@@ -4996,6 +5041,7 @@
 
                     <div class="absolute inset-0 overflow-auto flex p-2 custom-scrollbar"
                          ref="canvasContainerRef"
+                         data-preview-canvas
                          style="cursor: grab;"
                          @wheel.prevent="handleWheel"
                          @mousedown="startPan"
@@ -5014,6 +5060,7 @@
                     <Teleport to="body">
                     <!-- Feature Editor Popup -->
                     <div v-if="clickedFeature"
+                         v-show="!similarityAlignmentCompact || !similarityAlignmentDialogOpen"
                          ref="featurePopupRef"
                          @mousedown="startFeaturePopupDrag"
                          role="dialog"
@@ -6357,12 +6404,17 @@
                     </div>
                 </div>
 
+                <div data-similarity-alignment-dock
+                     v-show="similarityAlignmentCompact && similarityAlignmentDialogOpen"
+                     class="alignment-review-dock shrink-0 min-w-0"></div>
                 <!-- Right-side editor drawer -->
                 <button v-if="svgContent && resultPanelTab === 'preview'"
                         @click="toggleRightDrawer"
                         class="drawer-toggle absolute right-0 top-1/2 bg-slate-800 hover:bg-slate-900 text-white px-2 py-4 rounded-l-lg shadow-lg z-20 transition-all"
                         :aria-expanded="showRightDrawer"
-                        :title="showRightDrawer ? 'Close editor' : 'Open editor'">
+                        :disabled="Boolean(similarityAlignmentEditorDisabledReason)"
+                        :aria-label="similarityAlignmentEditorDisabledReason || (showRightDrawer ? 'Close editor' : 'Open editor')"
+                        :title="similarityAlignmentEditorDisabledReason || (showRightDrawer ? 'Close editor' : 'Open editor')">
                     <i class="ph ph-sidebar-simple text-lg"></i>
                 </button>
 
@@ -6582,10 +6634,10 @@
                                         <button type="button"
                                                 data-history-managed
                                                 data-similarity-alignment-reset
-                                                @click="resetSimilarityAlignment"
+                                                @click="openSimilarityAlignmentReset"
                                                 :disabled="['resolving', 'applying'].includes(similarityAlignmentStatus)"
                                                 class="btn btn-secondary px-2 py-1 text-[10px]">
-                                            Reset Align
+                                            Reset alignment…
                                         </button>
                                     </div>
                                     <div>
@@ -6625,7 +6677,7 @@
                                     </button>
                                     <button type="button"
                                             data-history-managed
-                                            @click="resetSimilarityAlignment"
+                                            @click="openSimilarityAlignmentReset"
                                             class="btn btn-secondary px-2 py-1 text-[10px]">
                                         Clear alignment
                                     </button>
@@ -6925,7 +6977,7 @@
         </span>
         <!-- GBDRAW_HOSTED_BUILD_LABEL -->
     </footer>
-    <Teleport to="body">
+    <Teleport v-if="results.length > 0" :to="similarityAlignmentCompact ? '[data-similarity-alignment-dock]' : 'body'">
         <section v-if="similarityAlignmentDialogOpen"
                  ref="similarityAlignmentPaletteRef"
                  role="dialog"
@@ -6935,7 +6987,8 @@
                  data-similarity-alignment-overlay
                  data-similarity-alignment-dialog
                  :style="similarityAlignmentPaletteStyle"
-                 class="fixed right-3 top-3 z-[55] flex max-h-[calc(100dvh-1.5rem)] w-[calc(100vw-1.5rem)] max-w-[26rem] flex-col overflow-hidden rounded-xl border border-slate-200 bg-white shadow-2xl">
+                 :class="similarityAlignmentCompact ? 'alignment-review-panel h-full w-full' : 'fixed right-3 top-3 max-h-[calc(100dvh-1.5rem)] w-[calc(100vw-1.5rem)] max-w-[26rem] shadow-2xl'"
+                 class="z-[55] flex min-h-0 flex-col overflow-hidden rounded-xl border border-slate-200 bg-white">
                 <header class="shrink-0 cursor-move select-none border-b border-slate-200 px-4 py-3 touch-none"
                         @pointerdown="startSimilarityAlignmentPaletteDrag">
                     <div class="flex items-start justify-between gap-4">
@@ -6944,9 +6997,6 @@
                                 class="text-base font-bold text-slate-800 focus-visible:outline focus-visible:outline-2 focus-visible:outline-blue-600">
                                 Select alignment anchors
                             </h2>
-                            <p id="similarity-alignment-dialog-description" class="mt-1 text-xs leading-relaxed text-slate-600">
-                                Review every target record. Python selected the initial anchors; you can Select another or Skip. Orientation is preserved unless you choose to match the reference direction.
-                            </p>
                             <p class="mt-2 text-xs font-semibold text-blue-700" data-similarity-alignment-count>
                                 {{ similarityAlignmentDraft?.rows.length || 0 }} target records · {{ similarityAlignmentUnresolvedCount }} need a choice
                             </p>
@@ -6961,6 +7011,9 @@
                 </header>
 
                 <div class="min-h-0 min-w-0 flex-1 overflow-x-hidden overflow-y-auto p-3 custom-scrollbar sm:p-5">
+                    <p id="similarity-alignment-dialog-description" class="mb-3 text-xs leading-relaxed text-slate-600">
+                        Choose Select or Skip for ambiguous records. Direction applies to the exact reference and selected usable anchors; skipped and unknown-strand records stay unchanged.
+                    </p>
                     <div class="space-y-4">
                         <section class="min-w-0 rounded-lg border border-blue-200 bg-blue-50 p-3 text-xs text-slate-700"
                                  data-similarity-alignment-reference
@@ -6971,24 +7024,39 @@
                             <p class="mt-1 break-all">Feature ID: {{ similarityAlignmentDraft?.reference.featureIdentifier }}</p>
                             <p class="mt-1">Coordinates: {{ similarityAlignmentDraft?.reference.coordinates }} · Strand: {{ similarityAlignmentDraft?.reference.displayedStrand }}</p>
                         </section>
-                        <section class="min-w-0 text-xs text-slate-700">
-                            <label class="flex items-center gap-2 font-semibold">
-                                <input type="checkbox"
-                                       :checked="similarityAlignmentDraft?.matchReferenceDirection"
-                                       :disabled="similarityAlignmentBusy || Boolean(similarityAlignmentDirectionMatch?.disabledReason)"
-                                       @change="setSimilarityAlignmentMatchReferenceDirection($event.target.checked)"
-                                       aria-describedby="similarity-alignment-direction-status"
-                                       class="border-slate-300 text-blue-600 focus:ring-blue-500">
-                                Match reference direction
-                            </label>
-                            <div id="similarity-alignment-direction-status" aria-live="polite" class="mt-2 space-y-1 break-words">
-                                <p>{{ similarityAlignmentDirectionMatch?.statusLine }}</p>
-                                <p v-if="similarityAlignmentDirectionMatch?.unknownLabels.length">
-                                    Unchanged because a strand is unknown: {{ similarityAlignmentDirectionMatch.unknownLabels.join(', ') }}.
-                                </p>
-                                <p v-if="similarityAlignmentDirectionMatch?.disabledReason">{{ similarityAlignmentDirectionMatch.disabledReason }}</p>
+                        <fieldset class="min-w-0 text-xs text-slate-700" data-similarity-alignment-direction-mode>
+                            <legend class="font-semibold">Alignment direction</legend>
+                            <div class="mt-2 flex flex-wrap gap-3">
+                                <label v-for="option in [{value:'keep',label:'Keep current directions'},{value:'right',label:'All selected arrows right'},{value:'left',label:'All selected arrows left'},{value:'custom',label:'Custom'}]" :key="option.value" class="flex items-center gap-1">
+                                    <input type="radio" name="alignment-direction-mode"
+                                           :value="option.value" :checked="similarityAlignmentDraft?.intent.mode === option.value"
+                                           :disabled="similarityAlignmentBusy" @change="setSimilarityAlignmentDirectionMode(option.value)">
+                                    {{ option.label }}
+                                </label>
                             </div>
-                        </section>
+                            <p class="mt-2">Before → proposed direction (selected anchor arrows):</p>
+                            <div v-for="record in (similarityAlignmentDirectionPreview?.records || [])" :key="record.recordKey" class="mt-2 flex flex-wrap items-center gap-2" data-similarity-alignment-direction>
+                                <span class="break-all">{{ record.status === 'reference' ? similarityAlignmentDraft.reference.recordLabel : similarityAlignmentDraft.rows.find(row => row.recordKey === record.recordKey)?.recordLabel }} · {{ record.recordKey }}{{ record.status === 'reference' ? ' · exact reference' : '' }}:
+                                    {{ record.beforeArrow === 1 ? '→' : record.beforeArrow === -1 ? '←' : 'unknown' }} →
+                                    {{ record.afterArrow === 1 ? '→' : record.afterArrow === -1 ? '←' : 'unknown' }}
+                                    <span v-if="record.exclusion"> · unchanged: {{ record.exclusion }}</span>
+                                </span>
+                                <label v-if="similarityAlignmentDraft?.intent.mode === 'custom'">
+                                    <span class="sr-only">Direction for {{ record.recordKey }}</span>
+                                    <select :value="similarityAlignmentDraft.intent.byRecordKey[record.recordKey] || 'keep'"
+                                            :aria-label="'Direction for ' + record.recordKey"
+                                            :disabled="similarityAlignmentBusy || Boolean(record.exclusion)"
+                                            @change="setSimilarityAlignmentCustomDirection(record.recordKey, $event.target.value)"
+                                            class="rounded border border-slate-300 p-1">
+                                        <option value="keep">Keep</option><option value="right">Right →</option><option value="left">Left ←</option>
+                                    </select>
+                                </label>
+                            </div>
+                            <p class="mt-2" data-similarity-alignment-reference-correction>
+                                Exact reference center stays at {{ similarityAlignmentDirectionPreview?.reference.beforeX }}.
+                                Reference left-edge correction: {{ similarityAlignmentDirectionPreview?.reference.deltaX }}.
+                            </p>
+                        </fieldset>
                         <fieldset v-for="record in (similarityAlignmentDraft?.rows || [])"
                                   :key="'alignment-review-' + record.recordKey"
                                   class="min-w-0 rounded-lg border border-slate-200 p-3"
@@ -6999,10 +7067,6 @@
                             <p class="mb-2 break-all text-[11px] text-slate-500">Record ID: {{ record.recordKey }}</p>
                             <p class="mb-2 text-xs font-medium text-slate-700">
                                 {{ record.choice?.kind === 'select' ? 'Selected anchor' : record.choice?.kind === 'skip' ? 'Unchanged: ' + record.reasonLabel : 'Select or Skip is required.' }}
-                            </p>
-                            <p v-if="similarityAlignmentDirectionMatch?.directions[record.recordKey]"
-                               class="mb-2 text-xs text-slate-700" data-similarity-alignment-direction>
-                                {{ similarityAlignmentDirectionMatch.directions[record.recordKey] }}
                             </p>
                             <p v-if="record.recommendedKey" class="mb-3 text-[11px] leading-relaxed text-slate-600"
                                data-similarity-alignment-reason>
@@ -7083,7 +7147,7 @@
                        data-similarity-alignment-error>
                         {{ similarityAlignmentError.message }}
                     </p>
-                    <div class="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+                    <div class="flex justify-end gap-2">
                         <button type="button"
                                 @click="cancelSimilarityAlignmentDialog"
                                 class="btn btn-secondary min-w-28 py-2 text-xs font-bold focus-visible:outline focus-visible:outline-2 focus-visible:outline-blue-600">Cancel</button>
@@ -7098,7 +7162,34 @@
                     </div>
                 </footer>
         </section>
-
+    </Teleport>
+    <Teleport to="body">
+        <section v-if="similarityAlignmentResetDialogOpen" role="dialog"
+                 aria-labelledby="similarity-alignment-reset-title" data-history-scope="transient"
+                 data-similarity-alignment-reset-dialog
+                 @keydown.esc.prevent.stop="cancelSimilarityAlignmentReset"
+                 class="fixed right-3 top-3 z-[55] flex max-h-[calc(100dvh-1.5rem)] w-[calc(100vw-1.5rem)] max-w-md flex-col overflow-hidden rounded-xl border border-slate-200 bg-white p-4 shadow-2xl">
+            <h2 id="similarity-alignment-reset-title" class="font-bold">Reset alignment</h2>
+            <fieldset class="mt-3 space-y-3 text-xs">
+                <legend>Reset scope</legend>
+                <label class="flex gap-2"><input type="radio" v-model="similarityAlignmentResetScope" value="positions" :disabled="similarityAlignmentBusy">Reset positions</label>
+                <label class="flex gap-2"><input type="radio" v-model="similarityAlignmentResetScope" value="positions-and-directions" :disabled="similarityAlignmentBusy || Boolean(similarityAlignmentResetPreview.disabledReason)" aria-describedby="alignment-reset-direction-reason">Reset positions and alignment direction changes</label>
+            </fieldset>
+            <p id="alignment-reset-direction-reason" class="mt-2 text-xs text-amber-800">{{ similarityAlignmentResetPreview.disabledReason }}</p>
+            <div class="mt-3 min-h-0 overflow-auto text-xs">
+                <p>{{ similarityAlignmentResetPreview.targets.length }} records changed by the latest Align.</p>
+                <p v-for="target in similarityAlignmentResetPreview.targets" :key="target.recordKey" class="mt-2 break-all">
+                    {{ target.label }} ({{ target.recordKey }}): {{ target.current ? 'reverse' : 'forward' }} → {{ target.restored ? 'reverse' : 'forward' }}.
+                    <span v-if="target.laterManualEdit">This record was manually changed after Align; combined Reset replaces that direction edit.</span>
+                    <span v-else>Combined Reset restores this record's direction before the latest Align.</span>
+                </p>
+            </div>
+            <p v-if="similarityAlignmentError" role="alert" class="mt-2 text-xs text-red-700">{{ similarityAlignmentError.message }}</p>
+            <div class="mt-4 flex justify-end gap-2">
+                <button type="button" @click="cancelSimilarityAlignmentReset" class="btn btn-secondary">Cancel</button>
+                <button type="button" @click="applySimilarityAlignmentReset" :disabled="similarityAlignmentBusy" class="btn btn-primary">Reset</button>
+            </div>
+        </section>
         <div
             v-if="linearSourceRemovalDialog.open"
             class="fixed inset-0 z-[70] flex items-center justify-center bg-slate-950/45 p-4"

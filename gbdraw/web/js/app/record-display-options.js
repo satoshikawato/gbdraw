@@ -123,6 +123,18 @@ export const requestedRecordDisplay = (row, draft = {}, context = {}) => {
     startCoordinate: surface.startEnabled ? start : null };
 };
 
+export const canonicalRecordReverseComplement = (record) => Boolean(
+  record?.region ? record.region.reverseComplement : record?.presentation?.reverseComplement
+);
+
+export const writeCanonicalRecordReverseComplement = (record, reverseComplement) => {
+  if (typeof reverseComplement !== 'boolean') throw new Error('Record orientation must be boolean.');
+  if (record.region) {
+    record.region.reverseComplement = reverseComplement;
+    record.presentation.reverseComplement = false;
+  } else record.presentation.reverseComplement = reverseComplement;
+};
+
 export const effectiveRecordReverseComplement = (row, draft = {}, context = {}) => {
   const inherited = Boolean(context.reverse ?? row.reverse);
   if (Boolean(context.cropped ?? row.cropped)) return inherited;
@@ -212,6 +224,26 @@ export const createRecordDisplayControls = ({ state, computed, watch, linearReco
       startCoordinate: resolvedStart,
       reverseComplementOverride: reverseComplement,
       anchorIntent: resolvedIntent
+    });
+  };
+  const alignmentRows = (orientations) => {
+    refreshCommittedRows();
+    return orientations.map(orientation => {
+      const matches = committedRows.filter(row => row.scope === 'linear' && row.recordKey === orientation.recordKey);
+      if (matches.length !== 1) throw new Error('Alignment record transform target is stale.');
+      return { row:matches[0], orientation };
+    });
+  };
+  const captureAlignmentOrientationIntent = (orientations) => alignmentRows(orientations)
+    .map(({row}) => captureTargetDraft(row));
+  const restoreAlignmentOrientationIntent = (checkpoints) => checkpoints.forEach(restoreTargetDraft);
+  const commitAlignmentOrientations = (orientations) => {
+    alignmentRows(orientations).forEach(({row, orientation}) => {
+      const sequence = state.linearSeqs.find(entry => entry.uid === row.sourceUid);
+      if (!sequence) throw new Error('Alignment record input is unavailable.');
+      sequence.region_reverse = orientation.reverseComplement;
+      const draft = draftFor(row);
+      if (Object.hasOwn(draft, 'reverseComplementOverride')) draft.reverseComplementOverride = null;
     });
   };
   const matchesSavedSource = (file, resourceId) => {
@@ -414,6 +446,9 @@ export const createRecordDisplayControls = ({ state, computed, watch, linearReco
       () => writeResolvedTransform(row, transform)
     ),
     commitResolvedTransform: writeResolvedTransform,
+    captureAlignmentOrientationIntent,
+    restoreAlignmentOrientationIntent,
+    commitAlignmentOrientations,
     captureTargetDraft,
     restoreTargetDraft,
     targetForFeature };

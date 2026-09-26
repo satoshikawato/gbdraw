@@ -432,7 +432,10 @@ export const createAppSetup = () => {
     adv,
     linked: linearTypographyLinked
   });
-  const rightDrawerActions = createRightDrawerController({ state, watch });
+  let alignmentReviewBlocksEditor = () => false;
+  const rightDrawerActions = createRightDrawerController({ state, watch,
+    getOpenDisabledReason: () => alignmentReviewBlocksEditor()
+      ? 'Finish or cancel alignment review before opening Editor.' : '' });
 
   const comparisonHeightValidationError = computed(() => {
     if (
@@ -2174,6 +2177,7 @@ export const createAppSetup = () => {
     runAnalysis: runGeneratedDiagramAnalysis,
     runCommittedCanonicalCandidate,
     projectCommittedRecordTransform,
+    projectCommittedSimilarityAlignment,
     cancelRunAnalysis,
     runLabelReflow,
     refreshCircularRecordOrder,
@@ -2678,10 +2682,7 @@ export const createAppSetup = () => {
         await linearRecordSelector.refresh();
       }
     }
-    if (
-      !options?.skipSimilarityAlignmentValidation
-      && similarityAlignmentActions?.validateBeforeGenerate
-    ) {
+    if (similarityAlignmentActions?.validateBeforeGenerate) {
       const validation = await similarityAlignmentActions.validateBeforeGenerate();
       if (validation?.status !== 'ok') {
         failedGeneratePreservedResult.value = results.value.length > 0;
@@ -2708,8 +2709,7 @@ export const createAppSetup = () => {
     const result = await runGeneratedDiagramAnalysis(
       comparisonPlanSnapshot,
       null,
-      comparisonExecution,
-      options?.canonicalStateOverride || null
+      comparisonExecution
     );
     if (result?.status === 'error' && mode.value === 'linear') {
       await focusLinearComparisonIssue();
@@ -2772,7 +2772,10 @@ export const createAppSetup = () => {
     getEnrichedOrthogroupMembers: orthogroupActions.getEnrichedOrthogroupMembers,
     getRecordCatalog: getAnnotationRecordCatalog,
     getCommittedRequest: getCommittedCanonicalRenderRequest,
-    runAnalysis,
+    getCommittedSession: getCommittedCanonicalSession,
+    projectCommittedAlignment: projectCommittedSimilarityAlignment,
+    runCommittedCanonicalCandidate,
+    recordDisplayControls,
     cancelRunAnalysis,
     runHelperOperation: runDiagramHelperOperation,
     resolveOperation: DIAGRAM_HELPER_OPERATIONS.RESOLVE_SIMILARITY_ALIGNMENT,
@@ -2809,10 +2812,33 @@ export const createAppSetup = () => {
   let similarityAlignmentReturnFocus = null;
   const similarityAlignmentPaletteRef = ref(null);
   const similarityAlignmentPalettePosition = reactive({ x: null, y: null });
+  const similarityAlignmentPreviewWidth = ref(window.innerWidth);
+  const similarityAlignmentCompact = computed(() => similarityAlignmentPreviewWidth.value <= 640);
+  const similarityAlignmentEditorDisabledReason = computed(() => (
+    similarityAlignmentCompact.value && similarityAlignmentActions.dialogOpen.value
+      ? 'Finish or cancel alignment review before opening Editor.' : ''
+  ));
+  alignmentReviewBlocksEditor = () => Boolean(similarityAlignmentEditorDisabledReason.value);
+  let similarityAlignmentPreviewObserver = null;
+  const revealCompactAlignmentCanvas = () => {
+    if (!similarityAlignmentActions.dialogOpen.value
+      || !similarityAlignmentCompact.value || window.innerWidth > 768) return;
+    const canvas = document.querySelector('.preview-viewport');
+    const header = document.querySelector('.app-header');
+    if (canvas && header) window.scrollBy(0,
+      canvas.getBoundingClientRect().top - header.getBoundingClientRect().bottom);
+  };
+  watch([similarityAlignmentActions.dialogOpen, similarityAlignmentCompact], async ([open, compact]) => {
+    if (open && compact) {
+      rightDrawerActions.closeRightDrawer();
+      await nextTick();
+      requestAnimationFrame(revealCompactAlignmentCanvas);
+    }
+  }, { flush: 'sync' });
   let similarityAlignmentPaletteDrag = null;
   const clampSimilarityAlignmentPalette = () => {
     const palette = similarityAlignmentPaletteRef.value;
-    if (!palette) return;
+    if (!palette || similarityAlignmentCompact.value) return;
     const margin = 12;
     const maxX = Math.max(margin, window.innerWidth - palette.offsetWidth - margin);
     const maxY = Math.max(margin, window.innerHeight - palette.offsetHeight - margin);
@@ -2823,7 +2849,7 @@ export const createAppSetup = () => {
       Math.max(similarityAlignmentPalettePosition.y ?? margin, margin), maxY
     );
   };
-  const similarityAlignmentPaletteStyle = computed(() => ({
+  const similarityAlignmentPaletteStyle = computed(() => similarityAlignmentCompact.value ? {} : ({
     left: similarityAlignmentPalettePosition.x === null ? undefined : `${similarityAlignmentPalettePosition.x}px`,
     right: similarityAlignmentPalettePosition.x === null ? undefined : 'auto',
     top: similarityAlignmentPalettePosition.y === null ? undefined : `${similarityAlignmentPalettePosition.y}px`
@@ -2842,7 +2868,8 @@ export const createAppSetup = () => {
     document.removeEventListener('pointercancel', stopSimilarityAlignmentPaletteDrag);
   };
   const startSimilarityAlignmentPaletteDrag = (event) => {
-    if (event.button !== 0 || event.target.closest('button, a, input, select, textarea')) return;
+    if (similarityAlignmentCompact.value || event.button !== 0
+      || event.target.closest('button, a, input, select, textarea')) return;
     const rect = similarityAlignmentPaletteRef.value?.getBoundingClientRect();
     if (!rect) return;
     similarityAlignmentPaletteDrag = { x: event.clientX - rect.left, y: event.clientY - rect.top };
@@ -2859,15 +2886,18 @@ export const createAppSetup = () => {
     await nextTick();
     const target = similarityAlignmentReturnFocus;
     similarityAlignmentReturnFocus = null;
-    if (target?.isConnected && typeof target.focus === 'function') {
+    const hiddenEditorInvoker = target?.closest?.('.right-drawer') && !showRightDrawer.value;
+    if (!hiddenEditorInvoker && target?.isConnected && target.getClientRects().length && typeof target.focus === 'function') {
       target.focus();
       return;
     }
+    document.querySelector('.drawer-toggle')?.focus();
   };
   const focusSimilarityAlignmentDialog = async () => {
     await nextTick();
     clampSimilarityAlignmentPalette();
-    document.getElementById('similarity-alignment-dialog-title')?.focus();
+    document.getElementById('similarity-alignment-dialog-title')?.focus({ preventScroll: similarityAlignmentCompact.value });
+    revealCompactAlignmentCanvas();
   };
   const handleSimilarityAlignmentEscape = (event) => {
     if (event.key !== 'Escape' || !similarityAlignmentActions.dialogOpen.value) return;
@@ -2885,10 +2915,16 @@ export const createAppSetup = () => {
     void restoreSimilarityAlignmentFocus();
   });
   onMounted(() => {
+    similarityAlignmentPreviewObserver = new ResizeObserver(([entry]) => {
+      similarityAlignmentPreviewWidth.value = entry.contentRect.width;
+    });
+    const pane = document.querySelector('.result-pane');
+    if (pane) similarityAlignmentPreviewObserver.observe(pane);
     document.addEventListener('keydown', handleSimilarityAlignmentEscape, true);
     window.addEventListener('resize', clampSimilarityAlignmentPalette);
   });
   onUnmounted(() => {
+    similarityAlignmentPreviewObserver?.disconnect();
     stopSimilarityAlignmentPaletteDrag();
     document.removeEventListener('keydown', handleSimilarityAlignmentEscape, true);
     window.removeEventListener('resize', clampSimilarityAlignmentPalette);
@@ -4310,13 +4346,22 @@ export const createAppSetup = () => {
     similarityAlignmentDrawerDisabledReason: similarityAlignmentActions.drawerDisabledReason,
     selectSimilarityAlignmentCandidate: similarityAlignmentActions.selectCandidate,
     skipSimilarityAlignmentRecord: similarityAlignmentActions.skipRecord,
-    similarityAlignmentDirectionMatch: similarityAlignmentActions.directionMatch,
-    setSimilarityAlignmentMatchReferenceDirection: similarityAlignmentActions.setMatchReferenceDirection,
+    similarityAlignmentDirectionPreview: similarityAlignmentActions.directionPreview,
+    setSimilarityAlignmentDirectionMode: similarityAlignmentActions.setDirectionMode,
+    setSimilarityAlignmentCustomDirection: similarityAlignmentActions.setCustomDirection,
+    similarityAlignmentResetPreview: similarityAlignmentActions.resetPreview,
+    similarityAlignmentResetDialogOpen: similarityAlignmentActions.resetDialogOpen,
+    similarityAlignmentResetScope: similarityAlignmentActions.resetScope,
+    openSimilarityAlignmentReset: similarityAlignmentActions.openReset,
+    cancelSimilarityAlignmentReset: similarityAlignmentActions.cancelReset,
+    applySimilarityAlignmentReset: similarityAlignmentActions.applyReset,
     applySimilarityAlignmentDraft: applySimilarityAlignmentDialog,
     cancelSimilarityAlignmentDraft: cancelSimilarityAlignmentDialog,
     cancelSimilarityAlignmentDialog,
     similarityAlignmentPaletteRef,
     similarityAlignmentPaletteStyle,
+    similarityAlignmentCompact,
+    similarityAlignmentEditorDisabledReason,
     similarityAlignmentCanvasHover,
     startSimilarityAlignmentPaletteDrag,
     previewSimilarityAlignmentCandidate: similarityAlignmentActions.previewCandidate,

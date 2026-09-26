@@ -55,3 +55,8 @@ assert.deepEqual(nestedJson, {
 const bounded = safeErrorText('x'.repeat(5000), { limit: 80 });
 assert.ok(bounded.length <= 80);
 assert.match(bounded, /details truncated/);
+
+const pythonOnly = normalizeUserFacingError({name: 'PythonError', message:
+  'Traceback (most recent call last):\n  File "private.py", line 7\n    fail()\nValueError: Invalid source binding.\n'});
+assert.equal(pythonOnly.summary, 'PythonError: ValueError: Invalid source binding.');
+assert.doesNotMatch(JSON.stringify(pythonOnly), /Traceback|private\.py|fail\(\)/);

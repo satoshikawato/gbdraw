@@ -1007,7 +1007,7 @@ const frozenV39Session = () => JSON.parse(gunzipSync(readFileSync(new URL(
   import.meta.url
 ))));
 
-test('released schema-7 alignment materializes exact typed anchors on import', async () => {
+test('current schema-8 alignment retains exact typed anchors and explicit historical receipt absence on import', async () => {
   const source = JSON.parse(readFileSync(new URL(
     '../test_inputs/BGC0000708-BGC0000713.gbdraw-session.json',
     import.meta.url

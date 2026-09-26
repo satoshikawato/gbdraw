@@ -1,3 +1,4 @@
+import { buildSimilarityAlignmentResetReceipt, validateSimilarityAlignmentResetReceipt } from '../services/session-active-config-contract.js';
 import { prepareLosatRuntime, runLosatPairsParallel } from '../services/losat.js';
 import { prepareLosatSourceBatches, splitLosatSourceResult } from './linear-sources.js';
 import {
@@ -11,6 +12,7 @@ import {
 import {
   buildCanonicalRenderRequest,
   projectCommittedRecordTransform,
+  projectCommittedSimilarityAlignment,
   readCanonicalResourceRecordCount
 } from '../services/session-request.js';
 import {
@@ -1831,24 +1833,10 @@ export const createRunAnalysis = ({
     requestId = 0,
     comparisonPlanSnapshot = null,
     generatedArtifactHandle = null,
-    comparisonExecution = null,
-    canonicalStateOverride = null
+    comparisonExecution = null
   } = {}) => {
-    const orientationByRecord = new Map((canonicalStateOverride?.linearRecordOrientations || [])
-      .map(({ recordKey, reverseComplement }) => [recordKey, Boolean(reverseComplement)]));
-    const runState = { ...state, linearSeqs: state.linearSeqs.map((sequence) => ({
-      ...sequence,
-      region_reverse: orientationByRecord.has(sequence.uid)
-        ? orientationByRecord.get(sequence.uid) : Boolean(sequence.region_reverse)
-    })) };
+    const runState = state;
     const { linearSeqs } = runState;
-    runState.recordDisplayRows = { get value() {
-      return (state.recordDisplayRows?.value || []).map((row) => {
-        const sequence = row.scope === 'linear'
-          ? linearSeqs.find(({ uid }) => uid === row.sourceUid) : null;
-        return sequence ? { ...row, reverse: sequence.region_reverse } : row;
-      });
-    } };
     const isReflow = runMode === 'reflow';
     if (!isReflow) {
       recordSessionLifecycleEvent('generate-start');
@@ -4477,15 +4465,7 @@ export const createRunAnalysis = ({
         ...runState,
         selectedOrthogroupAlignmentFeature: {
           value: workingSelectedOrthogroupAlignmentFeature
-        },
-        ...(canonicalStateOverride ? {
-          similarityAlignmentPlan: {
-            value: cloneJsonData(canonicalStateOverride.similarityAlignmentPlan)
-          },
-          linearRecordTranslations: {
-            value: cloneJsonData(canonicalStateOverride.linearRecordTranslations) || []
-          }
-        } : {})
+        }
       };
       recordSessionLifecycleEvent('canonical-request-construction-start');
       const canonical = buildCanonicalRenderRequest({
@@ -4737,6 +4717,9 @@ export const createRunAnalysis = ({
       }
 
       if (!isReflow) {
+        await validateSimilarityAlignmentResetReceipt(
+          state.similarityAlignmentResetReceipt?.value, canonical
+        );
         recordSessionLifecycleEvent('preview-result-commit-start');
         const candidateGroups = Array.isArray(candidateCommit.featureState.orthogroups)
           ? candidateCommit.featureState.orthogroups
@@ -4758,17 +4741,6 @@ export const createRunAnalysis = ({
           collinearGroups: Array.isArray(candidateCommit.featureState.collinearGroups)
             ? candidateCommit.featureState.collinearGroups
             : [],
-          ...(canonicalStateOverride ? {
-            similarityAlignmentPlan: cloneJsonData(
-              canonicalStateOverride.similarityAlignmentPlan
-            ),
-            linearRecordTranslations: cloneJsonData(
-              canonicalStateOverride.linearRecordTranslations
-            ) || [],
-            linearRecordOrientations: linearSeqs.map(({ uid, region_reverse }) => ({
-              recordKey: uid, reverseComplement: region_reverse
-            }))
-          } : {}),
           trackSlotResolvedGeometry: generationMetadata.trackSlotGeometry || null,
           proteinIdentityManifest: workingProteinIdentityManifest,
           legacyProteinRawCandidates: workingLegacyProteinRawCandidates,
@@ -4997,8 +4969,7 @@ export const createRunAnalysis = ({
   const runAnalysis = async (
     comparisonPlanSnapshot = null,
     generatedArtifactHandle = null,
-    comparisonExecution = null,
-    canonicalStateOverride = null
+    comparisonExecution = null
   ) => {
     let outcome = null;
     processing.value = true;
@@ -5019,8 +4990,7 @@ export const createRunAnalysis = ({
         runMode: 'manual',
         comparisonPlanSnapshot,
         generatedArtifactHandle: beforeHandle || generatedArtifactHandle,
-        comparisonExecution,
-        canonicalStateOverride
+        comparisonExecution
       });
       outcome = typeof runGeneratedArtifactReplacement === 'function'
         ? await runGeneratedArtifactReplacement(
@@ -5079,7 +5049,9 @@ export const createRunAnalysis = ({
   const runCommittedCanonicalCandidateInternal = async ({
     canonical,
     generatedArtifactHandle = null,
-    commitIntent = null
+    commitIntent = null,
+    alignmentResetBefore = null,
+    alignmentResetReceipt = undefined
   }) => {
     const generationToken = ++latestGenerationToken;
     const generationAbortController = typeof AbortController === 'function'
@@ -5175,9 +5147,17 @@ export const createRunAnalysis = ({
       const candidateGroups = Array.isArray(candidateCommit.featureState.orthogroups)
         ? candidateCommit.featureState.orthogroups
         : [];
+      const receipt = alignmentResetBefore
+        ? await buildSimilarityAlignmentResetReceipt({before:alignmentResetBefore, after:canonical})
+        : alignmentResetReceipt === undefined ? state.similarityAlignmentResetReceipt?.value
+          : alignmentResetReceipt;
+      await validateSimilarityAlignmentResetReceipt(receipt, canonical);
       const currentOwnerSet = captureGeneratedArtifactOwnerSet();
       const candidateOwnerSet = {
         ...currentOwnerSet,
+        similarityAlignmentPlan: canonical.renderRequest.layout?.similarityAlignment ?? null,
+        linearRecordTranslations: canonical.renderRequest.layout?.recordTranslations || [],
+        similarityAlignmentResetReceipt: receipt ?? null,
         results: candidateCommit.results,
         featureCatalog: candidateCatalog,
         extractedFeatures: candidateCommit.featureState.extractedFeatures,
@@ -5269,6 +5249,8 @@ export const createRunAnalysis = ({
         adoptCanonicalRenderArtifacts(canonical, { adoptOwnedRequest: true });
       }
       if (typeof commitIntent === 'function') await commitIntent();
+      errorLog.value = null;
+      failedGeneratePreservedResult.value = false;
       logPostGbdrawTimings(timingEntries);
       return { status: 'ok', generatedArtifactCandidate: activatedCandidate };
     } catch (error) {
@@ -5295,7 +5277,9 @@ export const createRunAnalysis = ({
     label = 'Rotate record to feature',
     captureIntentCheckpoint = null,
     restoreIntentCheckpoint = null,
-    commitIntent = null
+    commitIntent = null,
+    alignmentResetBefore = null,
+    alignmentResetReceipt = undefined
   }) => {
     let outcome = null;
     processing.value = true;
@@ -5307,7 +5291,7 @@ export const createRunAnalysis = ({
       const execute = (beforeHandle) => runCommittedCanonicalCandidateInternal({
         canonical,
         generatedArtifactHandle: beforeHandle,
-        commitIntent
+        commitIntent, alignmentResetBefore, alignmentResetReceipt
       });
       outcome = typeof runGeneratedArtifactReplacement === 'function'
         ? await runGeneratedArtifactReplacement(label, execute, {
@@ -5417,6 +5401,7 @@ export const createRunAnalysis = ({
     runAnalysis,
     runCommittedCanonicalCandidate,
     projectCommittedRecordTransform,
+    projectCommittedSimilarityAlignment,
     cancelRunAnalysis,
     captureGeneratedArtifactRuntimeState,
     restoreGeneratedArtifactRuntimeState,
