@@ -1,0 +1,50 @@
+✔ tests/web/error-normalization.test.mjs (135.694364ms)
+{"featureCount":25000,"preparedMs":1985.3352350000005,"synchronousReuseMs":26.31788200000119}
+✔ one prepared Python result supplies synchronous membership without JS regex translation (1831.399401ms)
+✔ invalid syntax with an empty or unrelated catalog cannot reach the commit (3885.027974ms)
+✔ late evaluation cannot commit to a replaced artifact, rules or catalog (2141.366382ms)
+✔ late evaluation cannot commit to a replaced artifact, rules or catalog (1762.206413ms)
+✔ late evaluation cannot commit to a replaced artifact, rules or catalog (1745.553638ms)
+✔ prepared precedence follows Python even when qualifier and wildcard rules interleave (1789.734981ms)
+✔ 25,000-feature matching is prepared once and reused synchronously (2017.807081ms)
+✔ normal Align applies only-usable and unusable targets with one helper and one Result (7.154884ms)
+✔ normal Align keeps a missing target unchanged in the resolved plan (0.876968ms)
+✔ normal Align uses Python unique-direct-RBH plan without a review or second helper (0.76918ms)
+✔ normal Align opens complete review for genuine Python ambiguity (9.285339ms)
+✔ explicit review of a resolved response keeps the full local draft without generation (0.748248ms)
+✔ automatic generation failure opens the resolved draft for one Apply retry (1.681077ms)
+✔ canceled or stale resolved completion cannot install a plan or Result (1.739396ms)
+✔ busy is synchronous, duplicate starts are ignored, and exact popup reference survives (0.824566ms)
+✔ drawer preserves its selected exact member and opens the same review (0.795374ms)
+✔ explicit review opens an applicable Python-selected draft for either response status (1.184303ms)
+✔ missing target is explicitly unchanged and complete Apply includes every target (0.866497ms)
+✔ candidate selection and Skip are local edits with zero Worker jobs (0.764038ms)
+✔ Apply validates one explicit batch and commits through one generation call (1.269539ms)
+✔ duplicate Apply while validation is pending starts one batch (0.678252ms)
+✔ validation and generation failures preserve editable draft and prior artifact (1.352436ms)
+✔ Cancel preserves committed diagram, plan, and Result (0.327573ms)
+✔ stale initial resolution and canceled Apply cannot publish late completions (0.527631ms)
+✔ changed committed Result rejects an old draft before validation (0.277805ms)
+✔ active schema-2 plan validates on regeneration and supports Reset and stable reorder (2.047002ms)
+✔ Python recommendation and direct-RBH reason control initial selection (0.772121ms)
+✔ stale active target enters the same repair draft and needs an explicit new choice (1.014923ms)
+✔ drawer requires a unique exact reference before starting the Worker (0.227332ms)
+✔ malformed Python projection and initial Worker errors leave the prior Result intact (0.593352ms)
+✔ candidate preview delegates to the existing owner and Cancel clears it (0.407574ms)
+✔ manual Reverse keeps the plan while invalidating edits clear it with a notice (1.557342ms)
+✔ missing saved reference blocks regeneration while preserving plan and Result (0.427865ms)
+✔ a committed schema-2 plan regenerates after its transient groups leave the catalog (0.858343ms)
+✔ candidate labels retain biological metadata and displayed record names (0.341738ms)
+✔ matchedOrientations flips only aligned known-opposite targets and returns every record (0.215714ms)
+✔ Match availability and direction lines follow local Select and Skip with no Worker (0.465167ms)
+✔ matched Apply commits plan, orientations, and Result in one History entry; Reset keeps direction (0.90929ms)
+✔ Apply uses validated strand facts rather than initial review facts (0.449955ms)
+✔ canceled and stale matched generations leave orientations and History unchanged (4.059834ms)
+ℹ tests 41
+ℹ suites 0
+ℹ pass 41
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 15263.633596

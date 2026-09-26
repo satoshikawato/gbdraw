@@ -470,6 +470,14 @@ const stageRenderResources = async (
   return resourcePaths;
 };
 
+// Rendering and source-bound helpers enter the same canonical staging boundary.
+const prepareCanonicalResources = (
+  pyodide, workspace, { resourceManifest, stagedResources },
+  { testLifecycleEnabled = false, requestId = 0 } = {}
+) => stageRenderResources(
+  pyodide, workspace, resourceManifest, stagedResources, testLifecycleEnabled, requestId
+);
+
 const requireHelperFile = (paths, role, operation) => {
   const path = paths.get(role);
   if (!path) throw new TypeError(`Diagram helper '${operation}' requires the '${role}' file.`);
@@ -493,13 +501,22 @@ const jsonArgument = (value, fallback) => JSON.stringify(value ?? fallback);
 
 const HELPER_OPERATION_SPECS = Object.freeze({
   [DIAGRAM_HELPER_OPERATIONS.RESOLVE_SIMILARITY_ALIGNMENT]: {
-    keys: ['request'],
+    keys: ['request', 'projection', 'resourceManifest', 'stagedResources'],
     fileRoles: [],
-    run: (pyodide, payload) => callJsonHelper(
-      pyodide,
-      'resolve_similarity_alignment_json',
-      [jsonArgument(payload.request, null)]
-    )
+    run: async (pyodide, payload, _paths, _operation, workspace) => {
+      let resourcePaths = {};
+      if (payload.projection !== undefined) {
+        resourcePaths = await prepareCanonicalResources(
+          pyodide, `${workspace}/projection`, payload
+        );
+      } else if (payload.resourceManifest !== undefined || payload.stagedResources !== undefined) {
+        throw new TypeError('Alignment resources require a projection context.');
+      }
+      return callJsonHelper(pyodide, 'resolve_similarity_alignment_json', [
+        jsonArgument(payload.request, null), jsonArgument(payload.projection, null),
+        jsonArgument(resourcePaths, {}), workspace
+      ]);
+    }
   },
   [DIAGRAM_HELPER_OPERATIONS.EVALUATE_RULES]: {
     keys: ['features', 'rules', 'kind'],
@@ -825,7 +842,7 @@ const runHelperOperation = async ({ operation, payload, requestId } = {}) => {
         normalizedPayload.files,
         spec.fileRoles
       );
-      return spec.run(runtime.pyodide, normalizedPayload, paths, normalizedOperation);
+      return spec.run(runtime.pyodide, normalizedPayload, paths, normalizedOperation, workspace);
     }
   );
 };
@@ -868,13 +885,9 @@ const runGeneration = async ({
       'worker-resource-linking-start'
     );
     self.postMessage({ type: 'progress', requestId, stage: 'preparing-resources' });
-    const resourcePaths = await stageRenderResources(
-      pyodide,
-      workspace,
-      resourceManifest,
-      stagedResources,
-      testLifecycleEnabled,
-      requestId
+    const resourcePaths = await prepareCanonicalResources(
+      pyodide, workspace, { resourceManifest, stagedResources },
+      { testLifecycleEnabled, requestId }
     );
     emitTestLifecycle(
       testLifecycleEnabled,

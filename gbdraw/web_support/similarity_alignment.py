@@ -3,10 +3,19 @@
 from __future__ import annotations
 
 import json
+import hashlib
+from dataclasses import replace
+from pathlib import Path
 from collections.abc import Mapping, Sequence
 from typing import Any
 
 from gbdraw.exceptions import ValidationError
+from gbdraw.api.record_planning import (
+    ResolvedRecordCollection, project_similarity_alignment_anchor_fact,
+)
+from gbdraw.api.request_render import plan_linear_request
+from gbdraw.api.requests import LinearDiagramRequest
+from gbdraw.session_request_codec import decode_canonical_request
 from gbdraw.layout.similarity_alignment import (
     AlignmentAnchorIdentity,
     AlignmentEvidenceEdge,
@@ -317,7 +326,123 @@ def _serialize_plan(plan: SimilarityAlignmentPlan) -> dict[str, object]:
     }
 
 
-def resolve_similarity_alignment_payload(payload: object) -> dict[str, object]:
+
+def _projection_context(value: object, resource_paths: Mapping[str, str], output_directory: str):
+    raw = _object(value, {"canonicalRequest", "orientations"}, "projection")
+    request = decode_canonical_request(
+        raw["canonicalRequest"], resource_paths=resource_paths, output_directory=output_directory,
+    )
+    if not isinstance(request, LinearDiagramRequest):
+        raise ValidationError("Alignment projection requires a Linear request.")
+    keys = [record.record_key for record in request.records]
+    if len(set(keys)) != len(keys) or None in keys:
+        raise ValidationError("Alignment projection requires keyed records.")
+    # The caller materializes current placements through the composition bridge.
+    # The plan is deliberately removed for raw, untranslated placement facts.
+    request = replace(request, similarity_alignment=None)
+    before = plan_linear_request(request)
+    before_collection = ResolvedRecordCollection(before.records, before.provenance)
+    orientations = raw["orientations"]
+    if orientations is None:
+        orientations = {key: item.source_step == 1
+                        for key, item in zip(keys, before.transforms, strict=True)}
+    else:
+        orientations = _object(orientations, set(keys), "projection.orientations")
+        orientations = {key: _boolean(value, f"projection.orientations.{key}")
+                        for key, value in orientations.items()}
+    records = []
+    for record in request.records:
+        reverse = orientations[record.record_key]
+        if record.region is not None:
+            records.append(replace(record, region=replace(record.region, reverse_complement=reverse),
+                                   presentation=replace(record.presentation, reverse_complement=False)))
+        else:
+            records.append(replace(record, presentation=replace(record.presentation, reverse_complement=reverse)))
+    after = plan_linear_request(replace(request, records=tuple(records)))
+    # Counterfactual source transforms are always available for local direction edits.
+    flipped_records = []
+    for record, transform in zip(request.records, before.transforms, strict=True):
+        reverse = transform.source_step == 1
+        if record.region is not None:
+            flipped_records.append(replace(record, region=replace(record.region, reverse_complement=reverse),
+                                           presentation=replace(record.presentation, reverse_complement=False)))
+        else:
+            flipped_records.append(replace(record, presentation=replace(record.presentation, reverse_complement=reverse)))
+    flipped = plan_linear_request(replace(request, records=tuple(flipped_records)))
+    return raw, before, before_collection, after, flipped
+
+
+def _serialize_projection(context, candidates, raw_request):
+    raw, before, collection, after, flipped = context
+    before_placements = getattr(before.build().drawing, "_gbdraw_alignment_placements")
+    after_placements = getattr(after.build().drawing, "_gbdraw_alignment_placements")
+    flipped_collection = ResolvedRecordCollection(flipped.records, flipped.provenance)
+    fingerprints = {}
+    for provenance in collection.provenance:
+        for path in provenance.source_paths:
+            fingerprints[path] = hashlib.sha256(Path(path).read_bytes()).hexdigest()
+    binding_records = []
+    records = []
+    base = {item.record_key: item for item in (before.layout.record_translations if before.layout else ())}
+    for index, provenance in enumerate(collection.provenance):
+        key = provenance.record_key
+        before_reverse = before.transforms[index].source_step == -1
+        after_reverse = after.transforms[index].source_step == -1
+        translation = base.get(key)
+        record_raw = raw["canonicalRequest"]["records"][index]
+        binding_records.append({
+            "record": {"recordKey": key, "source": record_raw["source"],
+                       "selector": record_raw["selector"], "region": record_raw["region"],
+                       "display": {"isCircular": provenance.display.is_circular,
+                                   "startCoordinate": provenance.display.start_coordinate},
+                       "cardinality": provenance.cardinality.value},
+            "reverseComplement": before_reverse,
+            "translation": {"x": 0.0 if translation is None else float(translation.x),
+                            "y": 0.0 if translation is None else float(translation.y)},
+            "sourceRecordIndex": provenance.source_record_index,
+            "sourceRecordId": provenance.source_record_id,
+            "sourceFingerprints": [fingerprints[path] for path in provenance.source_paths],
+        })
+        variants = []
+        for reverse in (False, True):
+            variant_collection = collection if reverse == before_reverse else flipped_collection
+            placement = after_placements[index] if reverse == after_reverse else before_placements[index]
+            anchors = []
+            for candidate in candidates:
+                if candidate.anchor.record_key != key:
+                    continue
+                fact = project_similarity_alignment_anchor_fact(variant_collection, candidate.anchor)
+                anchors.append({
+                    "anchor": _serialize_anchor(candidate.anchor),
+                    "displayedStrand": fact.displayed_strand,
+                    "displayCenter": fact.display_center,
+                    "centerX": None if fact.display_center is None else placement.x_for_position(fact.display_center),
+                })
+            variants.append({"reverseComplement": reverse, "axisY": placement.axis_y, "anchors": anchors})
+        records.append({
+            "recordKey": key, "beforeReverseComplement": before_reverse,
+            "base": {"x": 0.0 if translation is None else float(translation.x),
+                     "y": 0.0 if translation is None else float(translation.y)},
+            "beforeAxisY": before_placements[index].axis_y,
+            "beforeAnchors": [
+                {"anchor": _serialize_anchor(candidate.anchor),
+                 "centerX": before_placements[index].x_for_position(candidate.display_center)}
+                for candidate in candidates if candidate.anchor.record_key == key and candidate.center_mappable
+            ],
+            "variants": variants,
+        })
+    binding = {"records": binding_records, "groupId": raw_request["groupId"],
+               "reference": raw_request["reference"],
+               "anchors": [_serialize_anchor(candidate.anchor) for candidate in candidates]}
+    return {"binding": hashlib.sha256(json.dumps(binding, sort_keys=True, separators=(",", ":")).encode()).hexdigest(),
+            "geometryOrientations": {item.record_key: transform.source_step == -1
+                                     for item, transform in zip(after.provenance, after.transforms, strict=True)},
+            "records": records}
+
+def resolve_similarity_alignment_payload(
+    payload: object, *, projection: object = None,
+    resource_paths: Mapping[str, str] | None = None, output_directory: str = "/tmp",
+) -> dict[str, object]:
     """Validate Web facts, call the shared resolver, and serialize its result."""
 
     raw = _object(
@@ -354,6 +479,22 @@ def resolve_similarity_alignment_payload(payload: object) -> dict[str, object]:
         )
         for index, value in enumerate(_list(raw["members"], "request.members"))
     ]
+    context = None
+    if projection is not None:
+        context = _projection_context(projection, resource_paths or {}, output_directory)
+        collection = context[2]
+        if tuple(item.record_key for item in collection.provenance) != tuple(record_keys):
+            raise ValidationError("Alignment projection record binding changed.")
+        verified = []
+        for candidate, member in zip(candidates, raw["members"], strict=True):
+            fact = project_similarity_alignment_anchor_fact(collection, candidate.anchor)
+            if (member["sourceStart"], member["sourceEnd"], member["sourceStrand"]) != (
+                fact.source_start, fact.source_end, fact.source_strand,
+            ):
+                raise ValidationError("Alignment projection source anchor facts changed.")
+            verified.append(replace(candidate, displayed_strand=fact.displayed_strand,
+                                    display_center=fact.display_center, center_mappable=fact.display_center is not None))
+        candidates = verified
     candidate_keys = {candidate.anchor.canonical_key for candidate in candidates}
     edges = []
     for index, value in enumerate(_list(raw["directEdges"], "request.directEdges")):
@@ -413,10 +554,17 @@ def resolve_similarity_alignment_payload(payload: object) -> dict[str, object]:
             )
         ],
         "plan": _serialize_plan(plan) if plan is not None else None,
+        "projection": _serialize_projection(context, candidates, raw) if context is not None else None,
     }
 
 
-def resolve_similarity_alignment_json(payload_json: object) -> str:
+def resolve_similarity_alignment_json(
+    payload_json: object, projection_json: object = "null", resource_paths_json: object = "{}",
+    output_directory: str = "/tmp",
+) -> str:
     """JSON boundary used by the existing lazy diagram Worker."""
 
-    return json.dumps(resolve_similarity_alignment_payload(json.loads(str(payload_json))))
+    return json.dumps(resolve_similarity_alignment_payload(
+        json.loads(str(payload_json)), projection=json.loads(str(projection_json)),
+        resource_paths=json.loads(str(resource_paths_json)), output_directory=output_directory,
+    ))

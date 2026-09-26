@@ -201,6 +201,7 @@ import {
   requireCurrentWebStateFieldNames
 } from '../app/current-option-values.js';
 import {
+  validateSimilarityAlignmentResetReceipt,
   CIRCULAR_TRACK_SLOT_SCHEMA_VERSION,
   CURRENT_WRITER_ACTIVE_CONFIG_DOMAINS,
   createDefaultLosatpHitLimits,
@@ -1036,6 +1037,7 @@ export const buildEditorStateData = ({ preserveAdoptedCatalog = false } = {}) =>
     color: state.originalSvgStroke.value?.color ?? null,
     width: state.originalSvgStroke.value?.width ?? null
   },
+  alignmentResetReceipt: cloneJsonValue(state.similarityAlignmentResetReceipt?.value, null),
   featureCatalog: serializableFeatureCatalog(preserveAdoptedCatalog)
 });
 
@@ -1067,6 +1069,7 @@ const normalizeEditorStateData = (editorState = {}, { featureCatalog = undefined
         ? normalizeStrokeWidth(originalSvgStroke.width)
         : defaults.originalSvgStroke.width
     },
+    alignmentResetReceipt: cloneJsonValue(source.alignmentResetReceipt, null),
     featureCatalog: featureCatalog !== undefined
       ? featureCatalog
       : isPlainObject(source.featureCatalog)
@@ -1143,6 +1146,9 @@ export const applyEditorStateData = (
       ? cloneJsonData(editorState)
       : normalizeEditorStateData(editorState);
 
+  if (state.similarityAlignmentResetReceipt) {
+    state.similarityAlignmentResetReceipt.value = normalized.alignmentResetReceipt ?? null;
+  }
   state.legendEntries.value = normalized.legend.entries;
   state.deletedLegendEntries.value = normalized.legend.deletedEntries;
   state.originalLegendOrder.value = normalized.legend.originalOrder;
@@ -4142,6 +4148,7 @@ export const exportSession = async (
       : promoted;
   }
   const canonical = await assembleSessionResources(state, committed);
+  await validateSimilarityAlignmentResetReceipt(editorState.alignmentResetReceipt, canonical);
   const legacyRawCandidates = serializableLegacyProteinCandidateEnvelope(
     state.legacyProteinRawCandidates.value
   );
@@ -4286,6 +4293,10 @@ export const importSession = async (e, options = {}) => {
 
     recordSessionLifecycleEvent('current-session-preflight-start');
     const preflight = preflightSessionImport(data);
+    await validateSimilarityAlignmentResetReceipt(
+      data.editorState?.alignmentResetReceipt,
+      { renderRequest: data.renderRequest, resources: data.resources }
+    );
     recordSessionLifecycleEvent('current-session-preflight-end');
     data = preflight.data;
     const {

@@ -1290,6 +1290,7 @@ test('neutral conservation replay delegates lazy resources to the shared reader'
 
   let failLateArtifactAdoption = false;
   let committedRenderRequest = null;
+  let committedCanonicalSession = null;
   const runner = wireGeneratedArtifactRuntimeOwner(createRunAnalysis({
     ...generatedArtifactHandleOptions,
     state,
@@ -1300,6 +1301,7 @@ test('neutral conservation replay delegates lazy resources to the shared reader'
         throw new Error('injected LOSAT late artifact adoption failure');
       }
       committedRenderRequest = canonical.renderRequest;
+      committedCanonicalSession = canonical;
     },
     getCommittedCanonicalRenderRequest: () => committedRenderRequest,
     prepareLinearRecordCatalog: async () => ({
@@ -1492,14 +1494,10 @@ test('neutral conservation replay delegates lazy resources to the shared reader'
       losatProgram: state.losatProgram.value,
       blastpMode: state.losat.blastp.mode
     });
-    const localOrientations = state.linearSeqs.map(({ uid, region_reverse }) => ({
-      recordKey: uid, reverseComplement: uid === 'middle' ? true : region_reverse
-    }));
-    // App display controls expose rows computed from live state. The run must
-    // substitute its orientation before canonical transform construction too.
+    state.linearSeqs.find(({uid})=>uid==='middle').region_reverse=true;
     state.recordDisplayRows = { value: [{ scope: 'linear', sourceUid: 'middle',
       key: JSON.stringify(['linear', 'middle', '#1']), selector: '#1', recordId: 'MIDDLE', recordLength: 8,
-      reverse: false, cropped: false, detectedTopology: 'linear' }] };
+      reverse: true, cropped: false, detectedTopology: 'linear' }] };
     const linearResult = result('lazy-linear.svg', 'lazy-linear');
     workerHelperResponses.push({
       ok: true,
@@ -1509,11 +1507,7 @@ test('neutral conservation replay delegates lazy resources to the shared reader'
     });
     workerResponses.push(response(linearResult, validCatalog(linearResult.name)));
     assert.deepEqual(
-      await runner.runAnalysis(comparisonPlanSnapshot, null, null, {
-        similarityAlignmentPlan: null,
-        linearRecordTranslations: [],
-        linearRecordOrientations: localOrientations
-      }),
+      await runner.runAnalysis(comparisonPlanSnapshot),
       { status: 'ok' },
       JSON.stringify({ error: state.errorLog.value, lastWorker: workerMessages.at(-1) })
     );
@@ -1608,11 +1602,7 @@ test('neutral conservation replay delegates lazy resources to the shared reader'
       failedLinearResult,
       validCatalog(failedLinearResult.name)
     ));
-    const failedOrientations = localOrientations.map((entry) => ({ ...entry, reverseComplement: false }));
-    assert.equal((await runner.runAnalysis(comparisonPlanSnapshot, null, null, {
-      similarityAlignmentPlan: null, linearRecordTranslations: [],
-      linearRecordOrientations: failedOrientations
-    })).status, 'error');
+    assert.equal((await runner.runAnalysis(comparisonPlanSnapshot)).status, 'error');
     assert.equal(state.linearSeqs.find(({ uid }) => uid === 'middle').region_reverse, true);
     failLateArtifactAdoption = false;
     state.losat.blastn.task = 'megablast';
@@ -1745,10 +1735,10 @@ test('neutral conservation replay delegates lazy resources to the shared reader'
     const alignedResult = result('lazy-linear-aligned.svg', 'lazy-linear-aligned');
     workerResponses.push(response(alignedResult, validCatalog(alignedResult.name)));
     assert.deepEqual(
-      await runner.runAnalysis(warmComparisonPlan, null, null, {
-        similarityAlignmentPlan: alignmentPlan,
-        linearRecordTranslations: alignmentTranslations,
-        linearRecordOrientations: alignmentOrientations
+      await runner.runCommittedCanonicalCandidate({
+        canonical:runner.projectCommittedSimilarityAlignment({committed:committedCanonicalSession,plan:alignmentPlan,translations:alignmentTranslations,orientations:alignmentOrientations}),
+        label:'Align Similarity Group',
+        commitIntent:()=>alignmentOrientations.forEach(({recordKey,reverseComplement})=>{state.linearSeqs.find(s=>s.uid===recordKey).region_reverse=reverseComplement;})
       }),
       { status: 'ok' },
       JSON.stringify(state.errorLog.value)
@@ -1794,14 +1784,8 @@ test('neutral conservation replay delegates lazy resources to the shared reader'
       validCatalog(rejectedAlignedResult.name)
     ));
     assert.deepEqual(
-      await runner.runAnalysis(warmComparisonPlan, null, null, {
-        similarityAlignmentPlan: {
-          ...alignmentPlan,
-          groupId: 'og-rejected-candidate'
-        },
-        linearRecordTranslations: alignmentTranslations
-      }),
-      { status: 'error', error: state.errorLog.value }
+      await runner.runCommittedCanonicalCandidate({canonical:runner.projectCommittedSimilarityAlignment({committed:committedCanonicalSession,plan:{...alignmentPlan,groupId:'og-rejected-candidate'},translations:alignmentTranslations,orientations:alignmentOrientations})}),
+      { status: 'error' }
     );
     failLateArtifactAdoption = false;
     assert.match(
@@ -2152,10 +2136,7 @@ test('Linear mode none ignores dormant comparison state while active depth and a
   const priorOrientations = state.linearSeqs.map(({ uid, region_reverse }) => ({
     recordKey: uid, reverseComplement: Boolean(region_reverse)
   }));
-  const pendingOverride = { similarityAlignmentPlan: null, linearRecordTranslations: [],
-    linearRecordOrientations: priorOrientations.map((entry) => ({ ...entry,
-      reverseComplement: !entry.reverseComplement })) };
-  const canceledRun = runner.runAnalysis(comparisonPlanSnapshot, null, null, pendingOverride);
+  const canceledRun = runner.runAnalysis(comparisonPlanSnapshot);
   for (let turn = 0; turn < 4 && typeof releaseRecordCatalog !== 'function'; turn += 1) {
     await Promise.resolve();
   }
@@ -2195,7 +2176,7 @@ test('Linear mode none ignores dormant comparison state while active depth and a
   prepareLinearRecordCatalogImpl = () => new Promise((resolve) => {
     releaseSupersededCatalog = resolve;
   });
-  const supersededRun = runner.runAnalysis(comparisonPlanSnapshot, null, null, pendingOverride);
+  const supersededRun = runner.runAnalysis(comparisonPlanSnapshot);
   while (!releaseSupersededCatalog) {
     await new Promise((resolve) => setImmediate(resolve));
   }
