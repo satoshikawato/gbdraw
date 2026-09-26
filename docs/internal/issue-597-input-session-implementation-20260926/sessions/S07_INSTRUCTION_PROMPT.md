@@ -1,4 +1,4 @@
-# INSTRUCTION PROMPT — S07: Current artifacts and reproducible public documentation
+# INSTRUCTION PROMPT — S07: Reproducible discovery and Session documentation
 
 あなたは gbdraw の Issue #597 修正担当者です。このpromptとrepository内の資料だけで作業してください。
 実装対象は `fix/issue-597-input-session-20260926`。他sessionのcheckout/branchを変更してはいけません。
@@ -14,15 +14,15 @@ Product outcomesは承認済みで、再選択を求めません。authority-bef
 
 ## 目的
 
-current writerへのartifact更新と既存public workflow説明を完成し、branch-only intermediateの残存を除く。
+BUG-02 の探索・controls と BUG-20 の Save/Load の既存public workflow説明を完成する。保存形式変更や複数ファイル説明は含めない。
 
 ## 開始条件
 
-S06 result、current bindings/Session grammar、generated artifact inventory。main/tag historyを再確認。
+S06 result、既存discovery/Session workflow、更新が必要な公開資料のinventory。
 
 ## 所有範囲
 
-既存Gallery generator/refreshが所有するSession/artifact projections、既存public technical/input/session pages、必要なtutorial screenshots/text、compatibility docs、S07 result。social_previewやdist/egg-infoを手編集しない。
+既存Gallery generator/refreshが所有するSession/artifact projections、既存public technical/input/session pages、必要なtutorial screenshots/text、S07 result。social_previewやdist/egg-infoを手編集しない。
 
 他sessionが変更したcodeをrevertせず、最新の同名 branchに合わせてscope内を実装してください。
 SOLID/KISS/DRY/YAGNIをstate/owners/paths/compatibility/deliveryにも適用し、
@@ -30,10 +30,10 @@ SOLID/KISS/DRY/YAGNIをstate/owners/paths/compatibility/deliveryにも適用し�
 
 ## 実行手順
 
-1. reader/writer namespaceとreleased fixture inventoryを確認。未公開Session44/bindings2はcurrentに再生成し、その組の不要reader/migrator/test/docsを除去。
-2. Gallery canonical EXAMPLES inventoryとrefresh ownerを使用。S02でcurrent formatへ再生成済みのartifact evidenceはcode/input/environment/conditionsが同じならreuseし、不足したartifactsだけowner generatorで更新する。手編集しない。source bytes、metadata/labels/legend/tracks/comparison contextを保持。
+1. 既存public pageとcaptureのownerを確認し、実装で変わった探索status/一件用controls/Save・Load操作の説明と画像だけを更新する。
+2. Gallery canonical EXAMPLES inventoryとrefresh ownerを使用。code/input/environment/conditionsが同じartifact evidenceはreuseし、変更された公開workflowに必要なartifactsだけowner generatorで更新する。手編集しない。source bytes、metadata/labels/legend/tracks/comparison contextを保持。
 3. 手順docsを変更する場合love-me-love-my-docs、Gallery/tutorial cropsならweb-gallery-screenshot-maintenanceを読んで適用。internal proseだけにcapture workflowを適用しない。
-4. existing public page ownersへmulti-file、truthful discovery/single crop、exclusive session semantics、limits/errorsを記述。capabilityごとの新ページを増やさない。
+4. existing public page ownersへtruthful discovery/single crop、exclusive session semantics、limits/errorsを記述。capabilityごとの新ページを増やさない。
 5. documented commands/session/GUI actionsをclean checkoutから実行。readable scale/keyboard/390pxで最終public artifactsを視認しregeneration evidenceを残す。
 6. generated wheelは必要時にprepareするだけ。deployable bundle準備の場合だけcache-bust更新。offline依存/lifecycleのruntime変更の検証は該当skillを使う。
 
@@ -46,12 +46,12 @@ generator/admission/Session replay/current writer、public literal commands/step
 
 ## 保存・コミット・プッシュ
 
-current artifacts、実行可能docs、再生成/視認evidence、compatibility cleanup、S07 resultをcommit/push。public smoke diagramで代用しない。
+必要なartifacts、実行可能docs、再生成/視認evidence、S07 resultをcommit/push。public smoke diagramで代用しない。
 
 `results/S07_RESULT.md`にcommands/results、source/input/environment SHA、owners/paths、
 authority/base references、acceptance ID、remaining boundaryと次sessionの具体的入口を保存してください。
 このsessionの実装・tests・docs・結果だけを一commitにし、終了時に必ず同名remoteへpushしてください。
-English commit title: `Regenerate current source bindings and document input workflows`。
+English commit title: `Document record discovery and responsive Session workflows`。
 
 ```bash
 git branch --show-current

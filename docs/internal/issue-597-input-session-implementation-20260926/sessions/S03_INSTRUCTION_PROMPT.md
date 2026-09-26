@@ -18,11 +18,11 @@ native automatic discoveryを保護し、deferred/loading/errorとsingle crop ap
 
 ## 開始条件
 
-S02 resultとdiscovery Product authorityがmerged。source collectionがfresh/restoreで一貫している。
+S00/S01 resultsとdiscovery Product authorityがmerged。既存scalar入力とsaved Sessionのsource identityを維持する。
 
 ## 所有範囲
 
-circular-sources/record-discovery/record-displayとpresentation owner、index.html/setup/watchers、focused browser/state tests、S03 result。new parser/schema/rendererは追加しない。
+既存run-analysis/record-discovery/record-displayとpresentation owner、index.html/setup/watchers、focused browser/state tests、S03 result。new parser/schema/rendererは追加しない。
 
 他sessionが変更したcodeをrevertせず、最新の同名 branchに合わせてscope内を実装してください。
 SOLID/KISS/DRY/YAGNIをstate/owners/paths/compatibility/deliveryにも適用し、
@@ -30,7 +30,7 @@ SOLID/KISS/DRY/YAGNIをstate/owners/paths/compatibility/deliveryにも適用し�
 
 ## 実行手順
 
-1. idle/deferred/loading/ready/errorをsource operationと一致させる。valid native uploadは自動探索、rare formatは既存helper。completionはUID/version/mode/typeを再確認。
+1. idle/deferred/loading/ready/errorをsource operationと一致させる。valid native uploadは自動探索、rare formatは既存helper。completionは既存source identity/version/mode/typeを再確認。
 2. saved previewはsourceを再探索せずPython Worker0。Records not inspected/Inspect source records、実際のloading、Retry/Replace/Removeを示す。
 3. artifactとdraftのsource同一性を確認せずcatalog metadataを流用しない。新source交換は自動探索に戻す。
 4. Single-record crop, orientation and titlesと外側の適用不可理由/一件選択導線。applicableになるupload/selector transitionで自動展開し、manual close後は無関係更新で開かない。

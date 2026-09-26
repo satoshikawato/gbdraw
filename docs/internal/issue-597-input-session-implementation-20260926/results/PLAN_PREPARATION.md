@@ -1,5 +1,7 @@
 # 計画準備の検証記録
 
+この記録は計画作成時の履歴である。BUG-01除外後の有効scopeと検証は [S00_RESULT.md](./S00_RESULT.md) を参照。
+
 日付: 2026-09-26。対象は Issue #597 の実装計画と引継ぎ資料であり、runtime の修正は未実施。
 
 - Branch: `fix/issue-597-input-session-20260926`。

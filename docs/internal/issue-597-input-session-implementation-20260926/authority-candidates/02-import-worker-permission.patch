@@ -1,0 +1,12 @@
+diff --git a/tools/web-change-policy.json b/tools/web-change-policy.json
+index 2867f849..2ffebd76 100644
+--- a/tools/web-change-policy.json
++++ b/tools/web-change-policy.json
+@@ -106,6 +106,7 @@
+       "app/run-analysis.js",
+       "services/diagram-generation.js",
+       "services/losat.js",
++      "services/session-import-client.js",
+       "workers/diagram-generation-worker.js",
+       "workers/losat-threaded-worker.js"
+     ],

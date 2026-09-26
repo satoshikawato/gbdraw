@@ -1,0 +1,109 @@
+diff --git a/docs/internal/OPTION_INTEGRITY_PRODUCT_CONTRACT.md b/docs/internal/OPTION_INTEGRITY_PRODUCT_CONTRACT.md
+index 4b9443ce..dd64e5e7 100644
+--- a/docs/internal/OPTION_INTEGRITY_PRODUCT_CONTRACT.md
++++ b/docs/internal/OPTION_INTEGRITY_PRODUCT_CONTRACT.md
+@@ -5,7 +5,7 @@ Status: active Product authority
+ ## Authority metadata
+
+ - Contract ID: `OIPC`
+-- Contract revision: `19`
++- Contract revision: `20`
+ - Product Decision Owner: `satoshikawato`
+ - Decision date: `2026-08-28`
+ - Decision source: explicit Product Decision Owner selection of one (`1`) after
+@@ -28,7 +28,7 @@ Status: active Product authority
+   `PD-OI-026`, `PD-OI-027`, `PD-OI-028`, `PD-OI-029`, `PD-OI-030`,
+   `PD-OI-031`, `PD-OI-032`, `PD-OI-033`, `PD-OI-034`, `PD-OI-035`,
+   `PD-OI-036`, `PD-OI-037`, `PD-OI-038`, `PD-OI-039`, `PD-OI-040`,
+-  `PD-OI-041`, `PD-OI-042`, and `PD-OI-043`
++  `PD-OI-041`, `PD-OI-042`, `PD-OI-043`, `PD-OI-044`, and `PD-OI-045`
+ - Revision 3 addition: `PD-OI-018`, accepted by `satoshikawato` on
+   `2026-09-13` after confirming the complete record/search outcome, no feature
+   retirement, and the runtime/memory cost of complete comparisons. The initial
+@@ -154,6 +154,15 @@ Status: active Product authority
+   have this authority merged into its base. Issue `#598` BUG-17 is excluded
+   from implementation at the owner's instruction, with no circular-rotation
+   authority change.
++- Revision 20 additions: `PD-OI-044` and `PD-OI-045`, approved by
++  `satoshikawato` on `2026-09-26` as the two complete Choice A outcomes for
++  issue `#597` BUG-02 and BUG-20. The approval receipt is
++  「推奨案で承認します」 for each outcome. The complete supplied receipts
++  are serialized below without inferred rationale, preservation, retirement,
++  or risk terms. BUG-01 is outside this delivery scope at the owner's
++  instruction and receives no authority record. Earlier outcomes retain
++  their scope. This amendment contains no runtime; dependent implementation
++  requires this authority merged into its base.
+ - Records remaining `EVIDENCE_REQUIRED`: none
+ - Excluded records: none
+
+@@ -1661,6 +1670,70 @@ corrected. Passing evidence does not make incorrect behavior normative.
+ }
+ ```
+
++### PD-OI-044: Applicable Circular controls and truthful record discovery
++
++- Concern key: `diagram-generation.circular-transform-discoverability`
++- Scenario revision: `1`
++- Status: `ACCEPTED`
++- Selected outcome: `A / REVEAL_APPLICABLE_SINGLE_RECORD_CONTROLS`
++- Normative outcome: exactly the complete approved `PRODUCT_DECISION` receipt below.
++- Approval receipt: 「推奨案で承認します」, selecting this complete outcome,
++  approved by `satoshikawato` on `2026-09-26`.
++- Reviewed outcome SHA-256: `57debd7625f007c99849b8de5f992508b369b7a2277c01ed1ff51e7c95354d93`.
++- Decision source: the complete receipt in
++  `docs/internal/issue-597-input-session-implementation-20260926/decisions/02_RECORD_DISCOVERY.md`
++  at commit `51a786086dc2777e5fa375e5f94d8b7ac7deeedc` of
++  `fix/issue-597-input-session-20260926`. Its nine supplied fields are
++  reproduced below without translation or additional terms. The receipt
++  document is evidence of the human choice; this record is its static authority.
++  Dependent runtime requires this authority merged into its base.
++
++```json
++{
++  "concern": "diagram-generation.circular-transform-discoverability",
++  "scenarioRevision": 1,
++  "choice": "A / REVEAL_APPLICABLE_SINGLE_RECORD_CONTROLS",
++  "rationale": "source の探索状況と一件用 crop の適用条件を区別して示し、編集可能になった一件用 controls は selection の直後に見えるようにする。通常 upload の自動探索と保存済みプレビューの軽い閲覧を両立する。",
++  "mustPreserve": "valid native upload の自動 record discovery と Generate 前の rotation controls、既存 parser/helper 境界、exact source-bound identity、explicit single/grid/batch、fresh shared-canvas default、saved explicit choices、一件 crop と topology/start/reverse の適用条件、手動 close/expand、元の focus、keyboard/390 px、preview-only Load の Python Worker 0、active draft と saved artifact の分離、失敗時の旧 Result、Retry/Replace/Remove/Inspect/Generate の継続。",
++  "mayRetire": "適用可能になった一件用 section が常に collapsed で始まる挙動、valid fresh upload に manual Load が必須であるかのような prompt、実行中でない deferred discovery を loading と表す UI。全 record subset editing や複数 source support の選択は含まない。",
++  "acceptedResidualRisk": "applicable になった時に一件用 section が展開されて pane 高さが変わる。操作元の focus と scroll anchor を維持し、無関係な更新で再展開しない。科学的意味の変更、先頭 record の自動選択、grouping の自動切替、preview-only Load による Python 初期化は受容しない。",
++  "owner": "satoshikawato",
++  "decisionDate": "2026-09-26"
++}
++```
++
++### PD-OI-045: Exclusive semantic Session operations with responsive browsing
++
++- Concern key: `web.session-operation-consistency`
++- Scenario revision: `1`
++- Status: `ACCEPTED`
++- Selected outcome: `A / EXCLUSIVE_SEMANTIC_SESSION_OPERATION`
++- Normative outcome: exactly the complete approved `PRODUCT_DECISION` receipt below.
++- Approval receipt: 「推奨案で承認します」, selecting this complete outcome,
++  approved by `satoshikawato` on `2026-09-26`.
++- Reviewed outcome SHA-256: `7cef6306aefc5ff935d949efef7f76964eae2d24df8281c6ca371df5c2e87633`.
++- Decision source: the complete receipt in
++  `docs/internal/issue-597-input-session-implementation-20260926/decisions/03_SESSION_OPERATIONS.md`
++  at commit `51a786086dc2777e5fa375e5f94d8b7ac7deeedc` of
++  `fix/issue-597-input-session-20260926`. Its nine supplied fields are
++  reproduced below without translation or additional terms. The receipt
++  document is evidence of the human choice; this record is its static authority.
++  Dependent runtime requires this authority merged into its base.
++
++```json
++{
++  "concern": "web.session-operation-consistency",
++  "scenarioRevision": 1,
++  "choice": "A / EXCLUSIVE_SEMANTIC_SESSION_OPERATION",
++  "rationale": "Save/Load は一つの整合した document に対する操作として完了させ、異なる時点の Result、draft、source、cache を混合しない。処理中は閲覧を維持し、semantic edits を終了後に再開する明確な workflow を優先する。",
++  "mustPreserve": "主スレッドの応答と閲覧・scroll・pan/zoom・検索、visible pending/busy reasons、同時 Save の join と一度の download、title/size/repeat-download 取消、committed Result と editable draft の分離、supported Sessions と settings-only、atomic Load、failed/canceled/stale/teardown recovery、旧 request/resources/Result/History、source bytesと全 cache/evidence/provenance、JSON/gzip と CLI/Python replay、privacyとsize/sanitization constraints、現行 performance gates。",
++  "mayRetire": "Save/Load pending 中の source/editor/History/Reset/Generate 等の semantic mutation と、mutation entry point によって偶然編集可能または silent no-op になる振る舞い。Generate/automatic reflow 中の Save/Load 開始も busy reason 付きで停止し、完了後の再試行を提供する。通常編集・閲覧・成功後の操作は廃止しない。",
++  "acceptedResidualRisk": "長い Save/Load の間、document 編集は一時停止する。閲覧、status、bounded completion、error/retry を維持する。無期限 lock、main-thread freeze、データの省略、checkpoint混合、追加memoryの未計測、既存gateの弱化は受容しない。",
++  "owner": "satoshikawato",
++  "decisionDate": "2026-09-26"
++}
++```
++
+ ## Acceptance contract catalog
+
+ | Contract | Required meaning |

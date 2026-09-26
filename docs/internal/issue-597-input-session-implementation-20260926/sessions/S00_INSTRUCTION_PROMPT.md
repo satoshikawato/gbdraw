@@ -14,15 +14,15 @@ Product outcomesは承認済みで、再選択を求めません。authority-bef
 
 ## 目的
 
-3件のapproved receiptsを既存authorityに統合する候補を完成させる。Product再承認を要求せず、runtimeには着手しない。
+2件のapproved receiptsを既存authorityに統合する候補を完成させる。Product再承認を要求せず、runtimeには着手しない。
 
 ## 開始条件
 
-計画branchがremoteに存在する。3件のdecisions Markdownのreceipt/machine fieldsが一致する。
+計画branchがremoteに存在する。2件のdecisions Markdownのreceipt/machine fieldsが一致する。
 
 ## 所有範囲
 
-`authority-candidates/` と `results/S00_RESULT.md`。既存policy/map/contract/first-parent historyはread-only。active guard/checker/runtimeをこのbranchで編集しない。
+`authority-candidates/` と `results/S00_RESULT.md`。2026-09-26の追加指示により、この計画ディレクトリ内の BUG-01 計画・依存の削除も担当する。残る2件の承認本文は変更しない。既存policy/map/contract/first-parent historyはread-only。active guard/checker/runtimeをこのbranchで編集しない。
 
 他sessionが変更したcodeをrevertせず、最新の同名 branchに合わせてscope内を実装してください。
 SOLID/KISS/DRY/YAGNIをstate/owners/paths/compatibility/deliveryにも適用し、
@@ -32,14 +32,14 @@ SOLID/KISS/DRY/YAGNIをstate/owners/paths/compatibility/deliveryにも適用し�
 
 1. Product Impact map/durable store/static Product Contract/privileged detectorを読み、各concernの正しいauthority targetを確定する。unmapped concernを無理にBDへ登録しない。
 2. selected choice、rationale/mustPreserve/mayRetire/risk/owner/dateをそのままauthority-only patchへserialize。静的contractのrevision/IDは最新baseから割り当て、既存scopeを変更しない。
-3. concrete source-lifecycle/import-client/Worker pathsのprivileged subjectsとimportersを調査する。初期候補clientは`services/session-import-client.js`、workerは`workers/session-import-worker.js`。constructorの一ownerと実際に必要な最小permissionsを別patchにする。S01でtransportが確定してからfinal pathsをreviewする。
+3. concrete import-client/Worker pathsのprivileged subjectsとimportersを調査する。初期候補clientは`services/session-import-client.js`、workerは`workers/session-import-worker.js`。constructorの一ownerと実際に必要な最小permissionsを別patchにする。S01でtransportが確定してからfinal pathsをreviewする。
 4. mapped behavior contractが変わる場合のevidence-only→authority-ref→runtime順序を整理。checker改修が必要ならchecker-only laneを分ける。
 5. separate authority-only PRのexact target、patch application/validation commands、merge後に記録するSHAをresultsへ書く。候補patchの統合はmaintainerが最新devの別PRで行う。implementation branchをauthority-only PRのbaseにしない。
 6. 候補をtemporary clean dev worktreeに適用し、schema/field-preservationとdiff pathsを検証してdiscard。active file変更をimplementation branchへ持ち込まない。独立worktree以外を操作しない。
 
 ## 検証と完了条件
 
-3 receiptsとcandidateのfield equality、patch checkとallowable paths、既存authorityへのconflictなし、Worker privileged scope根拠。authority統合は未完了ならpendingと記録する。
+2 receiptsとcandidateのfield equality、patch checkとallowable paths、既存authorityへのconflictなし、Worker privileged scope根拠。authority統合は未完了ならpendingと記録する。
 
 共通作業規約のverification commandsからscopeに必要なものを実行し、必要な追加targetを結果に記録してください。
 失敗を修正し、未測定をpassと報告しないでください。unchanged evidenceは条件一致時だけ再利用してください。
