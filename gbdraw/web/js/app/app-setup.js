@@ -26,6 +26,7 @@ import {
   exportSession,
   getCommittedCanonicalSession,
   getCommittedCanonicalRenderRequest,
+  getGenerationApplicationStatus,
   importSession as importSessionFromFile,
   SESSION_VERSION,
   serializeActiveRenderFiles,
@@ -85,6 +86,7 @@ import {
   compositionUserDeltas
 } from './legend-layout/composition-actions.js';
 import { createResultsManager } from './results.js';
+import { describeGenerationApplication } from './generation-status.js';
 import { setupWatchers } from './watchers.js';
 import { setupHistoryInputs } from './history-inputs.js';
 import { setupHistoryShortcuts } from './history-shortcuts.js';
@@ -1153,6 +1155,13 @@ export const createAppSetup = () => {
   const recordDisplayControls = createRecordDisplayControls({ state, computed, watch, linearRecordSelector, history, getCommittedRequest: getCommittedCanonicalRenderRequest, getCommittedSession: getCommittedCanonicalSession });
   state.recordDisplayRows = recordDisplayControls.allRows;
   window.__GBDRAW_HISTORY__ = history;
+  const generationApplicationFeedback = computed(() => {
+    // Observe existing artifact/edit owners when the applied basis changes.
+    void history.revision.value;
+    void svgContent.value;
+    void results.value;
+    return describeGenerationApplication(getGenerationApplicationStatus());
+  });
   const canUndoHistory = computed(() => {
     void history.revision.value;
     return history.canUndo();
@@ -3955,6 +3964,7 @@ export const createAppSetup = () => {
 
   return {
     recordDisplayControls,
+    generationApplicationFeedback,
     featureRecordRotationDraft: featureRecordRotation.draft,
     recordActionsExpanded,
     toggleRecordActions,
