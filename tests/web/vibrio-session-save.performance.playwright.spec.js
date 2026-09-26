@@ -327,9 +327,11 @@ test.describe.configure({ mode: 'serial' });
 test('Vibrio Session saves once within memory, responsiveness, and compatibility budgets', async ({
   page,
   context,
-  browser
+  browser,
+  baseURL
 }, testInfo) => {
   test.setTimeout(1_800_000);
+  const appOrigin = new URL(baseURL).origin;
   const terminal = { pageErrors: [], crashes: 0 };
   const requests = [];
   const dialogs = [];
@@ -465,7 +467,7 @@ test('Vibrio Session saves once within memory, responsiveness, and compatibility
 
   const externalRequests = requests.filter((url) => {
     const parsed = new URL(url);
-    return !['http://127.0.0.1:4173', 'blob:', 'data:'].includes(parsed.origin)
+    return ![appOrigin, 'blob:', 'data:'].includes(parsed.origin)
       && !['blob:', 'data:'].includes(parsed.protocol);
   });
   expect(externalRequests).toEqual([]);
@@ -478,7 +480,8 @@ test('Vibrio Session saves once within memory, responsiveness, and compatibility
   expect(sourceSummary).toMatchObject({
     format: 'gbdraw-session',
     version: 44,
-    requestSchema: 7,
+    requestSchema: 8,
+    schema8LayoutDefaults: true,
     catalogSchema: 4,
     resourceCount: 4,
     resultCount: 1,
@@ -551,7 +554,7 @@ test('Vibrio Session saves once within memory, responsiveness, and compatibility
   expect(freshErrors).toEqual([]);
   expect(freshRequests.filter((url) => {
     const parsed = new URL(url);
-    return !['http://127.0.0.1:4173', 'blob:', 'data:'].includes(parsed.origin)
+    return ![appOrigin, 'blob:', 'data:'].includes(parsed.origin)
       && !['blob:', 'data:'].includes(parsed.protocol);
   })).toEqual([]);
   await freshContext.close();
