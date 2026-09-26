@@ -215,6 +215,13 @@ test('Linear Accession and Length resolve independent Auto modes from rendered r
   await focusAfterHistoryCapture(page, restoredSecondRow);
   await restoredSecondRow.fill('1');
   await restoredSecondRow.press('Tab');
+  const restoredDisclosure = page.locator('[data-linear-label-auto-layout]');
+  await expect(restoredDisclosure).toContainText('Accession: Auto will hide');
+  await expect(restoredDisclosure).toContainText('next successful Generate');
+  const savedResultText = await page.evaluate(() => new DOMParser()
+    .parseFromString(window.__GBDRAW_APP__.results[0].content, 'image/svg+xml').documentElement.textContent);
+  expect(savedResultText).toContain('NC_012920.1');
+  expect(savedResultText).toContain('16,569 bp');
   expect(await runDiagram(page)).toEqual({
     result: { status: 'ok' },
     errorSummary: '',
@@ -240,6 +247,138 @@ test('Linear Accession and Length resolve independent Auto modes from rendered r
   expect(restored.overrides['objects.definition.linear.show_length']).toBe(true);
   expect(restored.text).not.toContain('NC_012920.1');
   expect(restored.text).toContain('16,569 bp');
+});
+
+test('Auto disclosure names draft fields and navigates without changing Result or History', async ({ page }, testInfo) => {
+  test.setTimeout(300000);
+  await openApp(page);
+  await page.getByRole('button', { name: 'Linear', exact: true }).click();
+  const titles = page.getByLabel('Titles and Record Labels', { exact: true });
+  const layout = page.locator('[data-linear-label-auto-layout]');
+  const labels = page.locator('[data-linear-label-auto-labels]');
+  const accession = page.getByLabel('Accession visibility', { exact: true });
+  const length = page.getByLabel('Length / Coordinates visibility', { exact: true });
+  await expect(layout).toContainText('Accession and Length / Coordinates: Auto will show');
+  await titles.click();
+  await expect(accession).toHaveValue('auto');
+  await expect(length).toHaveValue('auto');
+
+  await page.getByRole('group', { name: 'Linear File actions' })
+    .getByRole('button', { name: 'Add sequence', exact: true }).click();
+  await page.getByRole('group', { name: 'Linear File actions' })
+    .getByRole('button', { name: 'Add sequence', exact: true }).click();
+  for (const index of [1, 2, 3]) {
+    await page.getByTestId(`linear-genbank-${index}`).setInputFiles(genbankPath);
+  }
+  await page.getByLabel('Advanced comparison and layout', { exact: true }).click();
+  const enabled = page.getByLabel('Arrange linear records in rows', { exact: true });
+  await enabled.check();
+  const secondRow = page.getByLabel('Linear record row for sequence 2', { exact: true });
+  await focusAfterHistoryCapture(page, secondRow);
+  await secondRow.fill('1');
+  await secondRow.press('Tab');
+  const hiddenReason = 'throughout the diagram on the next successful Generate because at least one rendered row contains multiple records';
+  await expect(layout).toContainText(hiddenReason);
+  await expect(labels).toHaveText(await layout.locator('[role="status"]').innerText());
+
+  const snapshot = () => page.evaluate(() => ({
+    selected: [window.__GBDRAW_APP__.adv.linear_accession_visibility,
+      window.__GBDRAW_APP__.adv.linear_length_visibility],
+    svg: window.__GBDRAW_APP__.svgContent,
+    results: window.__GBDRAW_APP__.results.map((result) => result.content),
+    undo: window.__GBDRAW_HISTORY__.getUndoCount(),
+    redo: window.__GBDRAW_HISTORY__.getRedoCount()
+  }));
+  for (const accessionMode of ['auto', 'show', 'hide']) {
+    for (const lengthMode of ['auto', 'show', 'hide']) {
+      await focusAfterHistoryCapture(page, accession);
+      await accession.selectOption(accessionMode);
+      await focusAfterHistoryCapture(page, length);
+      await length.selectOption(lengthMode);
+      const autoFields = [accessionMode === 'auto' ? 'Accession' : null,
+        lengthMode === 'auto' ? 'Length / Coordinates' : null].filter(Boolean);
+      const text = await layout.locator('[role="status"]').innerText();
+      if (autoFields.length) {
+        expect(text).toContain(`${autoFields.join(' and ')}: Auto will hide`);
+        expect(text).toContain(hiddenReason);
+        await expect(labels).toHaveText(text);
+      } else {
+        expect(text).toBe('');
+        await expect(labels).toHaveCount(0);
+      }
+      expect(await runDiagram(page)).toEqual({ result: { status: 'ok' }, errorSummary: '', errorDetails: [] });
+      const svgText = await page.evaluate(() => new DOMParser()
+        .parseFromString(window.__GBDRAW_APP__.results[0].content, 'image/svg+xml').documentElement.textContent);
+      expect(svgText.includes('NC_012920.1')).toBe(accessionMode === 'show');
+      expect(svgText.includes('16,569 bp')).toBe(lengthMode === 'show');
+    }
+  }
+  await focusAfterHistoryCapture(page, accession);
+  await accession.selectOption('auto');
+  await focusAfterHistoryCapture(page, length);
+  await length.selectOption('auto');
+  await page.setViewportSize({ width: 390, height: 844 });
+  await titles.click();
+  for (const [field, control, key] of [
+    ['Accession', accession, 'Enter'], ['Length / Coordinates', length, 'Space']
+  ]) {
+    const button = page.getByRole('button', { name: `Record Labels: ${field}`, exact: true });
+    await focusAfterHistoryCapture(page, button);
+    const before = await snapshot();
+    await button.press(key);
+    await expect(titles.locator('..')).toHaveAttribute('open', '');
+    await expect(control).toBeFocused();
+    await expect(control).toBeInViewport();
+    expect(await snapshot()).toEqual(before);
+    await titles.click();
+  }
+  await page.getByRole('button', { name: 'Record Labels: Accession', exact: true }).click();
+  await expect(accession).toBeFocused();
+  await layout.scrollIntoViewIfNeeded();
+  await page.screenshot({ path: testInfo.outputPath('shared-auto-layout.png') });
+  await labels.scrollIntoViewIfNeeded();
+  await page.screenshot({ path: testInfo.outputPath('shared-auto-labels.png') });
+
+  // An unchanged effect does not rewrite the polite status on unrelated edits.
+  await page.evaluate(() => {
+    window.__autoDisclosureMutations = 0;
+    new MutationObserver((changes) => { window.__autoDisclosureMutations += changes.length; })
+      .observe(document.querySelector('[data-linear-label-auto-layout] [role="status"]'),
+        { subtree: true, childList: true, characterData: true });
+    window.__GBDRAW_APP__.adv.def_font_size = 19;
+    window.__GBDRAW_APP__.linearRecordRows[2].row = 4;
+  });
+  await page.evaluate(() => new Promise(requestAnimationFrame));
+  expect(await page.evaluate(() => window.__autoDisclosureMutations)).toBe(0);
+
+  await enabled.uncheck();
+  await expect(layout).toContainText('Auto will show');
+  await expect(layout).toContainText('no rendered row contains multiple records');
+  expect(await runDiagram(page)).toEqual({ result: { status: 'ok' }, errorSummary: '', errorDetails: [] });
+  const beforeNavigation = await snapshot();
+  await page.getByRole('button', { name: 'Record Labels: Length / Coordinates', exact: true }).click();
+  await expect(length).toBeFocused();
+  expect(await snapshot()).toEqual(beforeNavigation);
+  const dormantText = await page.evaluate(() => new DOMParser()
+    .parseFromString(window.__GBDRAW_APP__.results[0].content, 'image/svg+xml').documentElement.textContent);
+  expect(dormantText).toContain('NC_012920.1');
+  expect(dormantText).toContain('16,569 bp');
+  await enabled.check();
+  await expect(layout).toContainText('Auto will hide');
+  await focusAfterHistoryCapture(page, secondRow);
+  await secondRow.fill('2');
+  await secondRow.press('Tab');
+  await expect(layout).toContainText('Auto will show');
+  await focusAfterHistoryCapture(page, accession);
+  await accession.selectOption('hide');
+  await focusAfterHistoryCapture(page, length);
+  await length.selectOption('show');
+  const resultBeforeReset = (await snapshot()).results;
+  page.once('dialog', (dialog) => dialog.accept());
+  await page.getByRole('button', { name: 'Reset Settings', exact: true }).click();
+  await expect(accession).toHaveValue('auto');
+  await expect(length).toHaveValue('auto');
+  expect((await snapshot()).results).toEqual(resultBeforeReset);
 });
 
 test('independent Linear typography follows linked, imported, and History journeys', async ({ page }, testInfo) => {

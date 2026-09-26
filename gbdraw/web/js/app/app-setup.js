@@ -127,6 +127,7 @@ import {
 } from './linear-record-layout.js';
 import {
   describeLinearLabelVisibility,
+  requireLinearLabelVisibilityMode,
   resolveLinearLabelVisibility
 } from './linear-label-visibility.js';
 import {
@@ -1518,6 +1519,29 @@ export const createAppSetup = () => {
   const linearLabelVisibilitySummary = (mode) => describeLinearLabelVisibility(mode, {
     hasSharedRow: linearLabelHasSharedRow.value
   });
+  const linearLabelAutoFields = computed(() => definitionLineStyleRows.filter((row) => (
+    row.visibilityType === 'mode'
+    && requireLinearLabelVisibilityMode(adv[row.visibilityKey]) === 'auto'
+  )));
+  const linearLabelAutoDisclosure = computed(() => {
+    if (!linearLabelAutoFields.value.length) return '';
+    const fields = linearLabelAutoFields.value.map((row) => row.label).join(' and ');
+    const shown = resolveLinearLabelVisibility('auto', {
+      hasSharedRow: linearLabelHasSharedRow.value
+    });
+    return shown
+      ? `${fields}: Auto will show these fields throughout the diagram on the next successful Generate because no rendered row contains multiple records.`
+      : `${fields}: Auto will hide these fields throughout the diagram on the next successful Generate because at least one rendered row contains multiple records. Choose Show in Record Labels to keep a field visible.`;
+  });
+  const focusLinearLabelVisibility = async (key) => {
+    if (mode.value !== 'linear') return;
+    const select = document.getElementById(`linear-label-visibility-${key}`);
+    if (!select) return;
+    select.closest('details').open = true;
+    await nextTick();
+    select.scrollIntoView({ block: 'center' });
+    select.focus({ preventScroll: true });
+  };
   const legendPositionLabel = (position) => ({
     right: 'Right',
     left: 'Left',
@@ -4571,6 +4595,9 @@ export const createAppSetup = () => {
     resetCanvasPadding,
     definitionLineStyleRows,
     linearLabelVisibilitySummary,
+    linearLabelAutoFields,
+    linearLabelAutoDisclosure,
+    focusLinearLabelVisibility,
     legendPositionLabel,
     getDefinitionLineStyleSize,
     setDefinitionLineStyleSize,

@@ -2779,6 +2779,12 @@
                         <summary aria-label="Layout"><i class="ph ph-layout"></i> Layout <help-tip text="Control track placement and layout-related options."></help-tip></summary>
                         <div class="mt-2 space-y-3 pt-2 border-t border-slate-200">
                             <template v-if="mode === 'linear'">
+                                <div class="text-[11px] text-slate-600 space-y-1" data-linear-label-auto-layout>
+                                    <p role="status" aria-live="polite" aria-atomic="true">{{ linearLabelAutoDisclosure }}</p>
+                                    <div v-if="linearLabelAutoFields.length" class="flex flex-wrap gap-2">
+                                        <button v-for="row in linearLabelAutoFields" :key="row.key" type="button" class="text-blue-600 underline" :aria-controls="'linear-label-visibility-' + row.key" @click="focusLinearLabelVisibility(row.key)">Record Labels: {{ row.label }}</button>
+                                    </div>
+                                </div>
                                 <div>
                                     <label for="linear-track-layout" class="input-label text-[10px] mb-1">Track Layout <help-tip text="Simple mode only. Above places features above the axis, Features on axis centers them on it, and Below places them below it. Use Reset to copy this choice into the custom stack."></help-tip></label>
                                     <select id="linear-track-layout" v-model="form.linear_track_layout" class="form-input text-xs py-1" :disabled="adv.linear_track_slots_enabled" :title="adv.linear_track_slots_enabled ? 'Simple mode only. Use Reset to rebuild the custom stack from this setting.' : ''">
@@ -3580,6 +3586,7 @@
                                 </div>
 
                                 <div v-if="mode === 'linear'" class="space-y-1.5">
+                                    <p v-if="linearLabelAutoDisclosure" class="text-[11px] text-slate-600" data-linear-label-auto-labels>{{ linearLabelAutoDisclosure }}</p>
                                     <div v-for="row in definitionLineStyleRows" :key="row.key" class="rounded border border-slate-200 bg-white px-2 py-1.5">
                                         <div class="flex items-center justify-between gap-2">
                                             <span class="text-[10px] font-semibold text-slate-700">{{ row.label }}</span>
@@ -3587,7 +3594,7 @@
                                                 <input type="checkbox" v-model="adv[row.visibilityKey]" class="form-checkbox" :aria-label="row.label + ' visibility'">
                                                 <span>Show</span>
                                             </label>
-                                            <select v-else-if="row.visibilityType === 'mode'" v-model="adv[row.visibilityKey]" class="form-input form-input-compact w-28 text-[10px]" :aria-label="row.label + ' visibility'">
+                                            <select v-else-if="row.visibilityType === 'mode'" :id="'linear-label-visibility-' + row.key" v-model="adv[row.visibilityKey]" class="form-input form-input-compact w-28 text-[10px]" :aria-label="row.label + ' visibility'">
                                                 <option value="auto">{{ linearLabelVisibilitySummary('auto') }}</option>
                                                 <option value="show">Show</option>
                                                 <option value="hide">Hide</option>
