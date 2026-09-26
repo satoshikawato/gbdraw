@@ -324,3 +324,25 @@ test('ordinary Web changes stay selective when accompanied by their regression t
     assert.throws(() => jobsForPaths([{ status: 'M', paths: [path] }]), /full coverage/, path);
   }
 });
+
+test('documentation-only PR basis requires exact documentary scope and no inherited evidence', () => {
+  const documentary = selectivePlan({ basis: 'DOCUMENTATION_ONLY_PR', inheritedEvidence: null });
+  assert.equal(validateImpactPlan(documentary), true);
+  assert.deepEqual(documentary.requiredJobs, ['recipes-standard']);
+  for (const impact of ['metadata', 'web-runtime', 'ci-only', 'packaging', 'full']) {
+    assert.throws(() => validateImpactPlan({ ...documentary, impact, capabilities: [impact] }),
+      { code: 'BASIS_DECISION_MISMATCH' });
+  }
+  for (const profile of ['dev', 'gallery', 'release']) {
+    assert.throws(() => validateImpactPlan({ ...documentary, profile }),
+      { code: 'BASIS_DECISION_MISMATCH' });
+  }
+  assert.throws(() => validateImpactPlan({ ...documentary, decision: 'full' }),
+    { code: 'BASIS_DECISION_MISMATCH' });
+  assert.throws(() => validateImpactPlan({ ...documentary, inheritedEvidence: evidence() }),
+    { code: 'UNEXPECTED_EVIDENCE' });
+  assert.throws(() => validateImpactPlan({ ...documentary, requiredJobs: [] }),
+    { code: 'REQUIRED_JOBS_MISMATCH' });
+  assert.throws(() => selectivePlan({ impact: 'web-runtime', inheritedEvidence: null }),
+    { code: 'INVALID_EVIDENCE_SCHEMA' });
+});

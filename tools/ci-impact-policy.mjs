@@ -11,7 +11,7 @@ export const IMPACT_CLASSES = freeze([
 export const IMPACT_DECISIONS = freeze(['selective', 'full']);
 export const IMPACT_PLAN_BASES = freeze([
   'FULL_CHANGE', 'UNKNOWN_OR_INVALID_CHANGE', 'MANUAL_FULL_RUN',
-  'ARCHITECTURE_CHANGE', 'LIGHT_CHANGE_WITH_DIRECT_BASE_EVIDENCE',
+  'ARCHITECTURE_CHANGE', 'DOCUMENTATION_ONLY_PR', 'LIGHT_CHANGE_WITH_DIRECT_BASE_EVIDENCE',
   'LIGHT_CHANGE_WITH_DIRECT_PARENT_EVIDENCE', 'INHERITED_EVIDENCE_UNAVAILABLE'
 ]);
 
@@ -51,6 +51,9 @@ const PR_CAPABILITY_JOBS = freeze({
 export const requiresFullCoverage = (profile, capabilities) => profile === 'release'
   || capabilities.some((capability) => ['full', 'ci-only', 'packaging', 'tests-only'].includes(capability))
   || (profile !== 'pr' && capabilities.some((capability) => !['metadata', 'documentation', 'policy-documentation'].includes(capability)));
+export const isDocumentationOnly = (capabilities) => Array.isArray(capabilities)
+  && capabilities.some((capability) => ['documentation', 'policy-documentation'].includes(capability))
+  && capabilities.every((capability) => ['metadata', 'documentation', 'policy-documentation'].includes(capability));
 const orderedCapabilities = (capabilities) => IMPACT_CLASSES.filter((capability) => capabilities.includes(capability));
 const primaryImpact = (capabilities) => capabilities.at(-1);
 const FULL_OBJECT_ID = /^(?:[0-9a-f]{40}|[0-9a-f]{64})$/i;
@@ -303,7 +306,12 @@ const validateBasis = (plan) => {
   const selectiveBasis = plan.profile === 'pr'
     ? 'LIGHT_CHANGE_WITH_DIRECT_BASE_EVIDENCE'
     : 'LIGHT_CHANGE_WITH_DIRECT_PARENT_EVIDENCE';
-  if (plan.decision === 'selective' && plan.basis !== selectiveBasis) {
+  const documentationOnlyPr = plan.basis === 'DOCUMENTATION_ONLY_PR';
+  if (documentationOnlyPr && (plan.profile !== 'pr' || plan.decision !== 'selective'
+      || !isDocumentationOnly(plan.capabilities))) {
+    fail('BASIS_DECISION_MISMATCH', 'Documentation-only PR basis requires only documentation and metadata.');
+  }
+  if (plan.decision === 'selective' && !documentationOnlyPr && plan.basis !== selectiveBasis) {
     fail('BASIS_DECISION_MISMATCH', 'Selective decision does not match its evidence basis.');
   }
   if (plan.decision === 'full' && [
@@ -358,10 +366,10 @@ export const validateImpactPlan = (plan, expected = {}) => {
       observed: plan.requiredJobs
     });
   }
-  if (plan.decision === 'selective') {
+  if (plan.decision === 'selective' && plan.basis !== 'DOCUMENTATION_ONLY_PR') {
     validateInheritedEvidence(plan.inheritedEvidence, plan.changeBaseSha);
   } else if (plan.inheritedEvidence !== null) {
-    fail('UNEXPECTED_EVIDENCE', 'Full plans cannot contain inherited evidence.');
+    fail('UNEXPECTED_EVIDENCE', 'Plans without an evidence basis cannot contain inherited evidence.');
   }
   if (expected.profile !== undefined && plan.profile !== expected.profile) {
     fail('PROFILE_MISMATCH', 'Impact plan profile does not match the gate.', {
