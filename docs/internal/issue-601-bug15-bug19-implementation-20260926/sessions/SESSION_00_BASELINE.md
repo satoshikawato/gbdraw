@@ -50,10 +50,27 @@ sourceが変わらない既存41 Node/9 Python/2 Chromiumの結果はbaselineで
 English commit title: Record error and regex implementation prerequisites
 Summary: Inventory failure paths, regex owners, authority, and overlapping work.
 
-## セッション終了時のコミット・プッシュ
+## セッション終了時のコミット・作業ブランチとdevへのプッシュ
 
-総合計画書の共通終了手順に従い、SESSION_00_RESULT.mdと対象変更を
-**検証後にコミットし、当該同名remote branchへプッシュしてください**。
-通常のtargetはfix/issue-601-bug15-bug19です。
-branch/upstream、staged scope、remote実状態を確認し、force-pushやmain/dev直接pushは行いません。
-remote/local SHA一致、result file、完了/未完了の開始条件を次sessionへ引き継ぎます。
+総合計画書の共通終了手順と「S00の追加終了条件」に従い、SESSION_00_RESULT.mdと対象変更を
+**検証後にコミットし、fix/issue-601-bug15-bug19へプッシュしたうえで、
+最新devへ統合してorigin/devまでプッシュしてください**。
+S00の計画資料・調査結果のdev統合とpushは利用者の明示的な許可済みです。
+S01以降のauthority/runtimeを同時に統合する許可には拡張しません。
+
+専用cloneの作業ブランチで最新origin/devを通常mergeし、devとの差分が本計画directoryの資料だけであること、
+branch/upstream、staged scope、remote実状態を確認してください。
+統合後の参照・整合性・whitespaceと適用されるrequired gateが合格したHEADを、次の順にpushします。
+
+~~~bash
+git push origin HEAD:refs/heads/fix/issue-601-bug15-bug19
+git push origin HEAD:refs/heads/dev
+git ls-remote --heads origin fix/issue-601-bug15-bug19 dev
+git rev-parse HEAD
+~~~
+
+両remote headとlocal HEADの一致を確認してください。
+dev pushが競合した場合はremote状態を確認し、最新devの通常merge・必要な再検証・作業ブランチpushを
+行ってから再試行します。force-push、mainへのpush、対象外変更の統合は行いません。
+commit SHA、result file、検証結果、dev統合完了、完了/未完了のS01開始条件を次sessionへ引き継ぎます。
+devへのpushが未完了なら、S00を完了扱いにしないでください。

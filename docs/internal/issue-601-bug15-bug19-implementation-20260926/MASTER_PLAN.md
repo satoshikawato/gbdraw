@@ -251,9 +251,33 @@ S01はauthority commitと実装branch上の非規範handoff記録を分ける。
    成功済みpushを再試行しない。失敗したmutationの再試行前にもremote実状態を確認する。
 8. commit SHA、remote branch、result file、次開始条件をhandoffする。push未完了を完了扱いしない。
 
+### S00の追加終了条件: origin/devまでプッシュする
+
+S00は作業ブランチへのcommit/pushに加え、検証済みの計画資料・調査結果を最新devへ統合し、
+**origin/devまでプッシュして終了する**。このS00の資料統合とdev pushは利用者が明示的に許可済み。
+この許可はS01以降のauthority/runtime統合、main、release/deployには拡張しない。
+
+1. 専用cloneのfix/issue-601-bug15-bug19でgit fetch originを実行し、最新origin/devのSHAを記録する。
+2. git diff --name-status origin/dev...HEADとgit diff origin/dev...HEADで、
+   devへ追加する変更が本計画directoryの計画資料・S00調査結果だけであることを確認する。
+   他セッションのruntimeやauthorityを含む場合は、その変更を巻き込んでdevへpushしない。
+3. git merge --no-edit origin/devで最新devを作業ブランチへ統合する。
+   競合は担当資料の範囲で解消し、対象外の変更や製品判断を変更しない。
+4. git diff --name-status origin/dev HEADとgit diff origin/dev HEADで最終追加差分を確認し、
+   資料の参照・整合性・whitespaceと、統合後に適用されるrequired gateを検証する。
+   必要なチェックが未完了または不合格ならdevへpushしない。
+5. 検証済みHEADをgit push origin HEAD:refs/heads/fix/issue-601-bug15-bug19で公開した後、
+   git push origin HEAD:refs/heads/devを実行する。dev自体で資料commitは作成しない。
+6. dev pushがnon-fast-forwardで拒否された場合は、remote実状態を確認して最新devを通常mergeし、
+   差分reviewと必要な検証、作業ブランチpushをやり直してからdev pushを再試行する。
+   force-pushは使用しない。
+7. git ls-remote --heads origin fix/issue-601-bug15-bug19 devで両remote headを確認し、
+   git rev-parse HEADと一致することを確認する。commit SHA、検証結果、result file、
+   dev統合完了とS01開始条件をhandoffする。dev push未完了をS00完了と扱わない。
+
 S01のauthority branchも同じbranch/upstream/remote SHA確認とcommit/pushを行う。
-PR作成、dev merge、main promotion、release/deployは別の明示的許可が必要で、
-main/devへの直接pushで代用しない。PR文面にはwrite-clear-pull-request skillを適用する。
+S00以外のdev統合、PR作成、main promotion、release/deployは別の明示的許可が必要。
+PR文面にはwrite-clear-pull-request skillを適用する。
 remote CI/status監視は五分以上の間隔を守る。
 
 ## 必須統合受入
