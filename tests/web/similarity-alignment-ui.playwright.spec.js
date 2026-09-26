@@ -331,7 +331,7 @@ test('Similarity alignment UI completes exact-reference, ambiguity, focus, summa
   const dialog = page.getByRole('dialog', { name: 'Select alignment anchors' });
   await expect(dialog).toBeVisible({ timeout: 180000 });
   await expect(dialog.getByRole('heading', { name: 'Select alignment anchors' })).toBeFocused();
-  await expect(dialog).toHaveAttribute('aria-describedby', 'similarity-alignment-dialog-description');
+  await expect(dialog).toHaveAttribute('aria-describedby', 'similarity-alignment-dialog-description similarity-alignment-application-help');
   const referenceCard = dialog.locator('[data-similarity-alignment-reference]');
   await expect(referenceCard).toContainText('b0');
   await expect(referenceCard).toContainText('record_b');
@@ -367,7 +367,7 @@ test('Similarity alignment UI completes exact-reference, ambiguity, focus, summa
   paletteBox = await dialog.boundingBox();
   if(await page.evaluate(()=>window.__GBDRAW_APP__.similarityAlignmentCompact)) {
     await expect(page.locator('[data-similarity-alignment-dock]')).toContainText('Select alignment anchors');
-    expect((await page.locator('.preview-viewport').boundingBox()).height).toBeGreaterThanOrEqual(200);
+    expect((await page.locator('.preview-canvas').boundingBox()).height).toBeGreaterThanOrEqual(200);
   } else {
     expect(paletteBox.x + paletteBox.width).toBeLessThanOrEqual(889);
     expect(paletteBox.y + paletteBox.height).toBeLessThanOrEqual(639);
@@ -839,7 +839,8 @@ test('Apply error retains draft, focuses retry guidance, and accepts correction'
   expect(await dialog.locator('.custom-scrollbar').evaluate(
     (element) => element.scrollWidth <= element.clientWidth
   )).toBe(true);
-  await expect(application).toHaveText('Invalid settings');
+  // Candidate sanitization failed; the independent settings draft was not changed.
+  await expect(application).toHaveText(initialApplication);
   const afterFailure = await artifactSnapshot(page);
   expect(afterFailure.results).toEqual(before.results);
   expect(afterFailure.history.slice(0, 2)).toEqual(before.history.slice(0, 2));
@@ -1323,11 +1324,7 @@ test('Gallery explicit directions own receipts, Reset scopes, fresh Load and rib
     console.log('S02 compact canvas hit',JSON.stringify(hit));
     expect(hit.inside).toBe(true);
     for (const control of [apply, dialog.getByRole('button', { name: 'Cancel', exact: true })]) {
-      expect(await control.evaluate(element => {
-        const box = element.getBoundingClientRect();
-        const hit = document.elementFromPoint(box.x + box.width / 2, box.y + box.height / 2);
-        return hit === element || element.contains(hit);
-      })).toBe(true);
+      await exposeReviewControl(page, control);
     }
     console.log('Visible compact canvas height:', height, visible);
     await page.screenshot({ path: testInfo.outputPath(`direction-review-390-${height}.png`) });
@@ -1837,3 +1834,196 @@ test('changed final facts require a separate Apply and validation errors preserv
   expect(await page.evaluate(() => window.__s03FinalBatches)).toBe(3);
   expect((await artifactSnapshot(page)).history[0]).toBe(before.history[0] + 1);
 });
+// S06 acceptance uses the existing controller, real Gallery sources and native input.
+const exposeReviewControl = async (page, control) => {
+  await control.evaluate(element => {
+    element.scrollIntoView({block:'center',inline:'nearest'});
+    const box=element.getBoundingClientRect();
+    const header=document.querySelector('.app-header').getBoundingClientRect();
+    const bar=document.querySelector('.generate-bar').getBoundingClientRect();
+    const bottom=bar.left<box.right&&bar.right>box.left?bar.top:innerHeight;
+    if(box.top<header.bottom)window.scrollBy(0,box.top-header.bottom-8);
+    else if(box.bottom>bottom)window.scrollBy(0,box.bottom-bottom+8);
+  });
+  const pointerState=()=>control.evaluate(element=>{
+    const box=element.getBoundingClientRect();
+    const hit=document.elementFromPoint(box.x+box.width/2,box.y+box.height/2);
+    const rect=el=>el?el.getBoundingClientRect().toJSON():null;
+    const list=element.closest('.custom-scrollbar');
+    return {reachable:hit===element||element.contains(hit),control:element.outerHTML,box:rect(element),hit:hit?.outerHTML.slice(0,800),header:rect(document.querySelector('.app-header')),bar:rect(document.querySelector('.generate-bar')),list:rect(list),scrollTop:list?.scrollTop,scrollHeight:list?.scrollHeight,scrollY,viewport:[innerWidth,innerHeight]};
+  });
+  try {
+    await expect.poll(async()=>(await pointerState()).reachable,{message:'the actual operation center must receive pointer input'}).toBe(true);
+  } catch(error) {
+    console.log('S06_POINTER_FAILURE',JSON.stringify(await pointerState()));
+    throw error;
+  }
+};
+const compactReviewGeometry = (page) => page.evaluate(()=>{
+  const canvas=document.querySelector('.preview-canvas');
+  const palette=document.querySelector('[data-similarity-alignment-dialog]');
+  const rect=el=>{const b=el.getBoundingClientRect();return {x:b.x,y:b.y,width:b.width,height:b.height,left:b.left,right:b.right,top:b.top,bottom:b.bottom}};
+  const c=rect(canvas),p=rect(palette),header=rect(document.querySelector('.app-header')),bar=rect(document.querySelector('.generate-bar'));
+  const v={left:Math.max(0,c.left),right:Math.min(innerWidth,c.right),top:Math.max(0,c.top,header.bottom),bottom:Math.min(innerHeight,c.bottom,bar.left<c.right&&bar.right>c.left?bar.top:innerHeight)};
+  const overlap=Math.max(0,Math.min(p.right,v.right)-Math.max(p.left,v.left))*Math.max(0,Math.min(p.bottom,v.bottom)-Math.max(p.top,v.top));
+  const list=palette.querySelector('.custom-scrollbar');
+  return {viewport:[innerWidth,innerHeight],canvas:c,review:p,visibleWidth:Math.max(0,v.right-v.left),visibleHeight:Math.max(0,v.bottom-v.top),overlap,
+    pageWidth:document.documentElement.scrollWidth,listScrollable:list.scrollHeight>list.clientHeight,
+    editorOpen:window.__GBDRAW_APP__.showRightDrawer,editorTab:window.__GBDRAW_APP__.rightDrawerTab};
+});
+
+for(const entry of ['resolved explicit','multiple target ambiguity','automatic render retry']) {
+  test(`compact review preserves canvas, local intent and recovery: ${entry}`,async({page},info)=>{
+    test.setTimeout(600000);
+    page.setDefaultTimeout(30000);
+    await captureUnhandledRejections(page);
+    const pageErrors=[];page.on('pageerror',error=>pageErrors.push(String(error)));
+    await page.addInitScript(()=>{
+      window.__S06_POSTS__=[];window.__GBDRAW_TEST_HOOKS__={};
+      const original=Worker.prototype.postMessage;
+      Worker.prototype.postMessage=function(message,...rest){window.__S06_POSTS__.push({type:message.type,operation:message.operation});return original.call(this,message,...rest)};
+    });
+    await page.setViewportSize({width:1600,height:1000});
+    await page.goto('/gbdraw/web/index.html',{waitUntil:'domcontentloaded'});
+    await page.waitForFunction(()=>window.__GBDRAW_APP__);
+    const seed=JSON.parse(readFileSync('gbdraw/web/gallery/sessions/BGC0000708-BGC0000713.gbdraw-session.json','utf8'));
+    if(entry==='multiple target ambiguity') {
+      const catalog=seed.editorState.featureCatalog.items[0];
+      const group=catalog.orthogroups.find(group=>group.id==='og_1');
+      for(const recordKey of ['record-2','record-3']) {
+        const existing=new Set(group.members.filter(member=>member.recordKey===recordKey).map(member=>member.biologicalFeatureId));
+        const feature=catalog.biologicalFeatures.find(feature=>feature.recordKey===recordKey&&feature.type==='CDS'&&!existing.has(feature.biologicalFeatureId));
+        expect(feature).toBeTruthy();
+        group.members.push({recordKey,biologicalFeatureId:feature.biologicalFeatureId,representative:false,role:'member',confidence:'low',assignmentReason:'disposable ambiguity fixture'});
+      }
+      group.orthologEdges=[];group.member_count=group.members.length;
+    }
+    await importSession(page,Buffer.from(JSON.stringify(seed)),'s06-gallery.gbdraw-session.json');
+    await page.evaluate(async()=>{const app=window.__GBDRAW_APP__;app.openRightDrawerTab('orthogroups');app.selectedOrthogroupId='og_1';app.losat.executionMode='serial';await window.Vue.nextTick()});
+    const drawer=page.locator('.right-drawer');
+    const reference=drawer.getByLabel('Exact reference record and feature');
+    if(!await reference.isVisible())await drawer.locator('button').filter({has:page.locator('.font-mono',{hasText:/^og_1$/})}).first().click();
+    const key=await page.evaluate(()=>window.__GBDRAW_APP__.similarityAlignmentDrawerReferenceOptions('og_1').find(option=>option.anchor.recordKey==='record-1').key);
+    await reference.selectOption(key);
+    let before=await artifactSnapshot(page);
+    if(entry==='automatic render retry')await page.evaluate(()=>{window.__GBDRAW_TEST_HOOKS__.beforeDiagramGenerationResponse=()=>{throw new Error('S06 forced automatic render failure.')}});
+    await page.setViewportSize({width:390,height:844});
+    const start=drawer.getByRole('button',{name:entry==='resolved explicit'?'Review alignment options…':'Align…',exact:true});
+    await exposeReviewControl(page,start);await start.click();
+    const dialog=page.getByRole('dialog',{name:'Select alignment anchors'});
+    await expect(dialog).toBeVisible({timeout:180000});
+    await expect.poll(()=>page.evaluate(()=>window.__GBDRAW_APP__.similarityAlignmentBusy),{timeout:180000}).toBe(false);
+    if(entry==='multiple target ambiguity')expect(await page.evaluate(()=>window.__GBDRAW_APP__.similarityAlignmentDraft.rows.filter(row=>row.candidates.length>1).length)).toBeGreaterThanOrEqual(2);
+    if(entry==='automatic render retry') {
+      await expect(dialog.locator('[data-similarity-alignment-error]')).toHaveText('S06 forced automatic render failure.');
+      // Aborting the existing artifact transaction increments an internal
+      // invalidation revision; the previous artifact and both History stacks
+      // remain unchanged. Resize and local review must retain this settled state.
+      const settled=await artifactSnapshot(page);
+      expect({...settled,history:[...settled.history.slice(0,2),before.history[2]]}).toEqual(before);
+      before=settled;
+      for(const viewport of [{width:390,height:740},{width:320,height:740},{width:195,height:422}]) {
+        await page.setViewportSize(viewport);
+        await exposeReviewControl(page,dialog.locator('[data-alignment-record-key]').first().getByRole('radio',{name:/Select .*bp, strand/}).first());
+        await exposeReviewControl(page,dialog.getByRole('button',{name:'Cancel',exact:true}));
+        await exposeReviewControl(page,dialog.locator('[data-similarity-alignment-error]'));
+        await expect(dialog.locator('[data-similarity-alignment-error]')).toHaveText('S06 forced automatic render failure.');
+        expect(await artifactSnapshot(page)).toEqual(before);
+      }
+      await page.setViewportSize({width:390,height:844});
+    }
+    expect(await artifactSnapshot(page)).toEqual(before);
+    await expect(dialog).not.toHaveAttribute('aria-modal','true');
+    await expect(page.locator('.drawer-toggle')).toBeDisabled();
+    await expect(page.locator('.drawer-toggle')).toHaveAttribute('title',/Finish or cancel alignment review/);
+    expect(await page.evaluate(()=>({open:window.__GBDRAW_APP__.showRightDrawer,tab:window.__GBDRAW_APP__.rightDrawerTab}))).toEqual({open:false,tab:'orthogroups'});
+    await dialog.getByRole('radio',{name:'Custom',exact:true}).check();
+    const target=dialog.locator('[data-alignment-record-key]').first();
+    const select=target.getByRole('radio',{name:/Select .*bp, strand/}).first();
+    await exposeReviewControl(page,select);await select.focus();await page.keyboard.press('Space');
+    const skip=target.getByRole('radio',{name:/Skip /});await exposeReviewControl(page,skip);await skip.focus();await page.keyboard.press('Space');await expect(skip).toBeChecked();
+    await exposeReviewControl(page,select);await select.focus();await page.keyboard.press('Space');await expect(select).toBeChecked();
+    const custom=dialog.getByLabel('Direction for record-1',{exact:true});await custom.selectOption('right');
+    const local=await page.evaluate(()=>JSON.stringify(window.__GBDRAW_APP__.similarityAlignmentDraft));
+    const posts=await page.evaluate(()=>window.__S06_POSTS__.length);
+    const geometry=[];
+    for(const viewport of [{width:390,height:844},{width:390,height:740},{width:390,height:500},{width:320,height:740},{width:844,height:390},{width:195,height:422},{width:390,height:422},{width:1600,height:1000}]) {
+      await page.setViewportSize(viewport);
+      const expectedCompact=await page.locator('[aria-label="Result Preview"]').evaluate(el=>getComputedStyle(el).getPropertyValue('--alignment-review-compact').trim()==='1');
+      await expect.poll(()=>page.evaluate(()=>window.__GBDRAW_APP__.similarityAlignmentCompact)).toBe(expectedCompact);
+      if(!expectedCompact) {
+        // Wide retains its existing floating palette and native drag. Move it
+        // off the toolbar before exercising the non-modal background controls.
+        const header=await dialog.locator('header').boundingBox();
+        const previous=await dialog.boundingBox();
+        await page.mouse.move(header.x+24,header.y+18);await page.mouse.down();
+        await page.mouse.move(36,header.y+18,{steps:5});await page.mouse.up();
+        expect((await dialog.boundingBox()).x).toBeLessThan(previous.x);
+      }
+      if(viewport.width===390&&viewport.height===422)await page.getByRole('searchbox',{name:'Search features',exact:true}).focus();
+      await exposeReviewControl(page,select);await exposeReviewControl(page,skip);await exposeReviewControl(page,custom);
+      for(const control of [dialog.getByRole('button',{name:'Apply',exact:true}),dialog.getByRole('button',{name:'Cancel',exact:true})])await exposeReviewControl(page,control);
+      await page.locator('.preview-canvas').evaluate(el=>el.scrollIntoView({block:'start'}));
+      const measured=await compactReviewGeometry(page);geometry.push({...measured,cssCompact:expectedCompact});
+      await info.attach(`review-${viewport.width}x${viewport.height}`,{body:JSON.stringify(measured,null,2),contentType:'application/json'});
+      expect(await dialog.evaluate(el=>el.scrollWidth<=el.clientWidth)).toBe(true);
+      if(viewport.width===390&&[740,844].includes(viewport.height)) {
+        expect(measured.visibleHeight).toBeGreaterThanOrEqual(200);expect(measured.visibleWidth).toBeGreaterThanOrEqual(369);
+        expect(measured.overlap).toBe(0);expect(measured.listScrollable).toBe(true);
+      }
+      if(expectedCompact){expect(measured.editorOpen).toBe(false);await expect(page.locator('.drawer-toggle')).toBeDisabled();}
+      // Native pointer input, not a DOM dispatch or a fit-camera assignment.
+      const canvas=await page.locator('.preview-canvas').boundingBox();
+      const pan=await page.evaluate(()=>({...window.__GBDRAW_APP__.canvasPan}));
+      const point={x:canvas.x+(expectedCompact?5:100),y:Math.max(canvas.y+5,await page.locator('.app-header').evaluate(el=>el.getBoundingClientRect().bottom+5))};
+      await page.mouse.move(point.x,point.y);await page.mouse.down();await page.mouse.move(point.x+24,point.y+10,{steps:4});await page.mouse.up();
+      await expect.poll(()=>page.evaluate(()=>({...window.__GBDRAW_APP__.canvasPan}))).toEqual({x:pan.x+24,y:pan.y+10});
+      const zoom=page.getByRole('button',{name:'Zoom in',exact:true});await exposeReviewControl(page,zoom);const zoomBefore=await page.evaluate(()=>window.__GBDRAW_APP__.zoom);await zoom.click();
+      await expect.poll(()=>page.evaluate(()=>window.__GBDRAW_APP__.zoom)).toBeGreaterThan(zoomBefore);
+      for(const control of await page.locator('.preview-controls button').all())await exposeReviewControl(page,control);
+      expect(await artifactSnapshot(page)).toEqual(before);
+      expect(await page.evaluate(()=>JSON.stringify(window.__GBDRAW_APP__.similarityAlignmentDraft))).toBe(local);
+      expect(await page.evaluate(()=>window.__S06_POSTS__.length)).toBe(posts);
+      // Record readable full-Gallery QA using only the existing camera.
+      await page.locator('.preview-canvas').evaluate(el=>el.scrollIntoView({block:'start'}));
+      await page.evaluate(async()=>{const app=window.__GBDRAW_APP__,c=document.querySelector('.preview-canvas').getBoundingClientRect(),s=document.querySelector('.gbdraw-preview-surface svg').getBoundingClientRect();app.zoom=Math.min((c.width-16)/(s.width/app.zoom),(c.height-16)/(s.height/app.zoom));await window.Vue.nextTick()});
+      await page.waitForTimeout(230);
+      await page.evaluate(async()=>{const app=window.__GBDRAW_APP__,c=document.querySelector('.preview-canvas').getBoundingClientRect(),s=document.querySelector('.gbdraw-preview-surface svg').getBoundingClientRect();app.canvasPan.x+=(c.left+c.right-s.left-s.right)/2;app.canvasPan.y+=(c.top+c.bottom-s.top-s.bottom)/2;await window.Vue.nextTick()});
+      await page.waitForTimeout(230); // Existing camera transform transition.
+      await page.screenshot({path:info.outputPath(`${entry.replaceAll(' ','-')}-${viewport.width}x${viewport.height}.png`)});
+    }
+    await info.attach('compact-review-geometry',{body:JSON.stringify(geometry,null,2),contentType:'application/json'});
+    const apply=dialog.getByRole('button',{name:'Apply',exact:true});await apply.focus();await page.keyboard.press('Tab');
+    expect(await dialog.evaluate(el=>el.contains(document.activeElement))).toBe(false);
+    await page.setViewportSize({width:390,height:740});
+    await expect.poll(()=>page.evaluate(()=>window.__GBDRAW_APP__.similarityAlignmentCompact)).toBe(true);
+    if(entry==='automatic render retry') {
+      await page.evaluate(()=>{delete window.__GBDRAW_TEST_HOOKS__.beforeDiagramGenerationResponse});
+      for(const key of await page.evaluate(()=>window.__GBDRAW_APP__.similarityAlignmentDraft.rows.filter(row=>!row.choice).map(row=>row.recordKey))) {
+        const choice=dialog.locator(`[data-alignment-record-key="${key}"]`).getByRole('radio',{name:/Select .*bp, strand/}).first();
+        await exposeReviewControl(page,choice);await choice.check();
+      }
+      for(let attempt=0;attempt<2;attempt++) {
+        const batches=await page.evaluate(()=>window.__S06_POSTS__.filter(post=>post.type==='helper').length);
+        await exposeReviewControl(page,apply);await apply.click();await expect.poll(()=>page.evaluate(()=>window.__GBDRAW_APP__.similarityAlignmentBusy),{timeout:180000}).toBe(false);
+        expect(await page.evaluate(()=>window.__S06_POSTS__.filter(post=>post.type==='helper').length)).toBe(batches+1);
+        if(!await dialog.isVisible())break;
+        await expect(dialog.locator('[data-similarity-alignment-error]')).toContainText('Validated directions or reference placement changed');
+      }
+      await expect(dialog).toBeHidden();expect((await artifactSnapshot(page)).history[0]).toBe(before.history[0]+1);
+      expect(await page.evaluate(async()=>{const {state}=await import('./js/state.js');return {error:state.errorLog.value,preserved:state.failedGeneratePreservedResult.value}})).toEqual({error:null,preserved:false});
+    } else {
+      await exposeReviewControl(page,dialog.getByRole('button',{name:'Cancel',exact:true}));
+      await dialog.getByRole('button',{name:'Cancel',exact:true}).focus();await page.keyboard.press('Enter');await expect(dialog).toBeHidden();
+      expect(await artifactSnapshot(page)).toEqual(before);
+    }
+    // The narrow-start invoker stays hidden in the closed Editor. Focus returns
+    // to the existing drawer toggle, and Editor must be explicitly reopened.
+    await expect(page.locator('.drawer-toggle')).toBeFocused();
+    await page.setViewportSize({width:390,height:740});await expect(page.locator('.drawer-toggle')).toBeEnabled();
+    expect(await page.evaluate(()=>window.__GBDRAW_APP__.showRightDrawer)).toBe(false);
+    await exposeReviewControl(page,page.locator('.drawer-toggle'));await page.locator('.drawer-toggle').click();
+    await expect(drawer).toHaveAttribute('aria-hidden','false');expect(await page.evaluate(()=>window.__GBDRAW_APP__.rightDrawerTab)).toBe('orthogroups');
+    expect(pageErrors).toEqual([]);await expectNoUnhandledRejections(page);
+  });
+}

@@ -1114,8 +1114,16 @@
                 min-width: 0;
                 isolation: isolate;
             }
-            .preview-editor-layout:has(.right-drawer[aria-hidden="false"]) {
-                grid-template-rows: auto minmax(200px, calc(var(--compact-preview-space) * 0.5)) auto clamp(11rem, calc(var(--compact-preview-space) * 0.4), 18rem);
+            .preview-editor-layout:has(.right-drawer[aria-hidden="false"]),
+            .preview-editor-layout:has(.alignment-review-panel) {
+                grid-template-rows: auto minmax(200px, calc(var(--compact-preview-space) * 0.5)) auto var(--compact-dock-height, clamp(11rem, calc(var(--compact-preview-space) * 0.4), 18rem));
+            }
+            .preview-editor-layout:has(.alignment-review-panel) {
+                --compact-dock-height: clamp(15rem, 29dvh, 18rem);
+            }
+            .alignment-review-dock {
+                grid-area: 4 / 1;
+                min-height: 0;
             }
             .preview-viewport {
                 display: contents;
@@ -1294,25 +1302,17 @@
             min-height: 0 !important;
             overflow-y: auto !important;
         }
-        .alignment-review-dock { height: clamp(15rem, 29dvh, 18rem); }
-        .alignment-review-compact { flex: none; min-height: 0; }
-        .alignment-review-compact .preview-viewport {
-            flex: none;
-            grid-template-rows: auto minmax(200px, calc((100dvh - 21rem) * .5)) auto;
-            min-height: 0;
-            padding: 0;
-        }
-        .alignment-review-compact .preview-feature-search { grid-area: 1 / 1; max-height: 12rem !important; }
-        .alignment-review-compact .preview-canvas { position: relative; grid-area: 2 / 1; inset: auto; scroll-margin-top: 9rem; }
-        .alignment-review-compact .preview-controls { grid-area: 3 / 1; gap: .25rem; }
-        .alignment-review-compact .preview-controls > button { padding: .5rem; }
-        .alignment-review-compact .preview-controls > button span { display: none; }
-        .alignment-review-compact .preview-controls [aria-label="Reset zoom"] { width: 3rem; }
+        .alignment-review-compact .preview-canvas { scroll-margin-top: 9rem; }
         .alignment-review-panel > header, .alignment-review-panel > footer { padding: .5rem .75rem; }
         .alignment-review-panel > header { cursor: default; touch-action: auto; }
         .alignment-review-panel > footer > .flex { flex-direction: row; }
         .alignment-review-panel > footer .btn { flex: 1; min-width: 0; }
         .alignment-review-compact .drawer-toggle:disabled { opacity: .55; cursor: not-allowed; }
+        /* A wrapped sticky header can consume the entire short viewport.
+           During compact review, page scroll must expose its native controls. */
+        @media (max-height: 32rem) {
+            body:has(.alignment-review-compact) .app-header { position: relative; }
+        }
     </style>
 </head>
 <body class="antialiased pb-0 overflow-hidden">
@@ -5047,7 +5047,7 @@
                             <span>Canvas padding</span>
                         </button>
                         <!-- Zoom controls -->
-                        <div class="flex gap-1 bg-white shadow rounded-lg p-1.5 border border-slate-200">
+                        <div data-history-ignore class="flex gap-1 bg-white shadow rounded-lg p-1.5 border border-slate-200">
                             <button @click="zoom+=0.1" class="w-10 h-10 flex items-center justify-center hover:bg-slate-100 text-slate-600 rounded text-lg" aria-label="Zoom in"><i class="ph ph-plus"></i></button>
                             <button @click="zoom = 1.0" class="w-16 h-10 flex items-center justify-center hover:bg-slate-100 text-slate-600 text-sm font-mono rounded" aria-label="Reset zoom">{{Math.round(zoom*100)}}%</button>
                             <button @click="zoom = Math.max(0.1, zoom-0.1)" class="w-10 h-10 flex items-center justify-center hover:bg-slate-100 text-slate-600 rounded text-lg" aria-label="Zoom out"><i class="ph ph-minus"></i></button>
@@ -7058,7 +7058,6 @@
                                 class="text-base font-bold text-slate-800 focus-visible:outline focus-visible:outline-2 focus-visible:outline-blue-600">
                                 Select alignment anchors
                             </h2>
-                            <p id="similarity-alignment-application-help" data-alignment-application-help class="mt-1 text-xs font-semibold text-blue-700">Apply required: selections stay in this review draft until Apply succeeds. Cancel keeps the current Result.</p>
                         </div>
                         <button type="button"
                                 @click="cancelSimilarityAlignmentDialog"
@@ -7071,6 +7070,13 @@
 
                 <div class="min-h-0 min-w-0 flex-1 overflow-x-hidden overflow-y-auto p-3 custom-scrollbar sm:p-5">
                     <div class="space-y-4">
+                            <p id="similarity-alignment-application-help" data-alignment-application-help class="mt-1 text-xs font-semibold text-blue-700">Apply required: selections stay in this review draft until Apply succeeds. Cancel keeps the current Result.</p>
+                            <p v-if="similarityAlignmentError" role="alert" tabindex="-1"
+                               class="mb-2 break-all text-xs text-red-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-red-700"
+                               data-similarity-alignment-error>
+                                {{ similarityAlignmentError.message }}
+                            </p>
+
                             <p id="similarity-alignment-dialog-description" class="mt-1 text-xs leading-relaxed text-slate-600">
                                 Choose Select or Skip for ambiguous records. Direction choices include the exact reference and selected anchors with a known direction. Skipped, missing, unusable and unknown-direction anchors stay unchanged.
                             </p>
@@ -7209,11 +7215,6 @@
                        class="mb-2 text-xs"
                        :class="canApplySimilarityAlignment ? 'text-emerald-700' : 'text-amber-700'">
                         {{ canApplySimilarityAlignment ? 'Apply validates the complete draft with Python, then regenerates the diagram.' : similarityAlignmentApplyDisabledReason }}
-                    </p>
-                    <p v-if="similarityAlignmentError" role="alert" tabindex="-1"
-                       class="mb-2 break-all text-xs text-red-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-red-700"
-                       data-similarity-alignment-error>
-                        {{ similarityAlignmentError.message }}
                     </p>
                     <div class="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
                         <button type="button"
