@@ -7012,7 +7012,7 @@
 
                 <div class="min-h-0 min-w-0 flex-1 overflow-x-hidden overflow-y-auto p-3 custom-scrollbar sm:p-5">
                     <p id="similarity-alignment-dialog-description" class="mb-3 text-xs leading-relaxed text-slate-600">
-                        Choose Select or Skip for ambiguous records. Direction applies to the exact reference and selected usable anchors; skipped and unknown-strand records stay unchanged.
+                        Choose Select or Skip for ambiguous records. Direction choices include the exact reference and selected anchors with a known direction. Skipped, missing, unusable and unknown-direction anchors stay unchanged.
                     </p>
                     <div class="space-y-4">
                         <section class="min-w-0 rounded-lg border border-blue-200 bg-blue-50 p-3 text-xs text-slate-700"
@@ -7022,29 +7022,35 @@
                             <p class="mt-1 break-all font-semibold">{{ similarityAlignmentDraft?.reference.label }}</p>
                             <p class="mt-1 break-all">Record: {{ similarityAlignmentDraft?.reference.recordLabel }} ({{ similarityAlignmentDraft?.reference.recordKey }})</p>
                             <p class="mt-1 break-all">Feature ID: {{ similarityAlignmentDraft?.reference.featureIdentifier }}</p>
-                            <p class="mt-1">Coordinates: {{ similarityAlignmentDraft?.reference.coordinates }} · Strand: {{ similarityAlignmentDraft?.reference.displayedStrand }}</p>
+                            <p class="mt-1">Coordinates: {{ similarityAlignmentDraft?.reference.coordinates }} · Strand: {{ similarityAlignmentDraft?.reference.displayedStrand }} (current display)</p>
                         </section>
-                        <fieldset class="min-w-0 text-xs text-slate-700" data-similarity-alignment-direction-mode>
+                        <fieldset class="min-w-0 text-xs text-slate-700" data-similarity-alignment-direction-mode aria-describedby="alignment-direction-scope alignment-direction-transform">
                             <legend class="font-semibold">Alignment direction</legend>
                             <div class="mt-2 flex flex-wrap gap-3">
                                 <label v-for="option in [{value:'keep',label:'Keep current directions'},{value:'right',label:'All selected arrows right'},{value:'left',label:'All selected arrows left'},{value:'custom',label:'Custom'}]" :key="option.value" class="flex items-center gap-1">
                                     <input type="radio" name="alignment-direction-mode"
                                            :value="option.value" :checked="similarityAlignmentDraft?.intent.mode === option.value"
                                            :disabled="similarityAlignmentBusy" @change="setSimilarityAlignmentDirectionMode(option.value)">
-                                    {{ option.label }}
+                                    {{ option.label }}<span v-if="option.value === 'right' || option.value === 'left'" aria-hidden="true">{{ option.value === 'right' ? '→' : '←' }}</span>
                                 </label>
                             </div>
-                            <p class="mt-2">Before → proposed direction (selected anchor arrows):</p>
+                            <p id="alignment-direction-scope" role="status" aria-live="polite" aria-atomic="true" class="mt-2">
+                                {{ similarityAlignmentDraft?.intent.mode === 'keep' ? 'Keep current directions' : similarityAlignmentDraft?.intent.mode === 'custom' ? 'Custom directions' : similarityAlignmentDraft?.intent.mode === 'right' ? 'All right-facing' : 'All left-facing' }}:
+                                {{ similarityAlignmentDirectionPreview?.eligibleCount || 0 }} selected anchors with known direction, including the exact reference when known.
+                            </p>
+                            <p id="alignment-direction-transform" class="mt-2">A direction change reverses the whole record, including features, labels and comparison ribbons. Biological source strands (+/−) stay unchanged.</p>
+                            <p class="mt-2">Current to after Align (selected anchor arrows):</p>
                             <div v-for="record in (similarityAlignmentDirectionPreview?.records || [])" :key="record.recordKey" class="mt-2 flex flex-wrap items-center gap-2" data-similarity-alignment-direction>
-                                <span class="break-all">{{ record.status === 'reference' ? similarityAlignmentDraft.reference.recordLabel : similarityAlignmentDraft.rows.find(row => row.recordKey === record.recordKey)?.recordLabel }} · {{ record.recordKey }}{{ record.status === 'reference' ? ' · exact reference' : '' }}:
-                                    {{ record.beforeArrow === 1 ? '→' : record.beforeArrow === -1 ? '←' : 'unknown' }} →
-                                    {{ record.afterArrow === 1 ? '→' : record.afterArrow === -1 ? '←' : 'unknown' }}
-                                    <span v-if="record.exclusion"> · unchanged: {{ record.exclusion }}</span>
+                                <span class="min-w-0 break-words" :id="'alignment-direction-' + record.recordKey">{{ record.label }} · {{ record.recordKey }}{{ record.status === 'reference' ? ' · exact reference' : '' }}:
+                                    <span aria-hidden="true">{{ record.beforeArrow === 1 ? '→' : record.beforeArrow === -1 ? '←' : 'unknown' }} → {{ record.afterArrow === 1 ? '→' : record.afterArrow === -1 ? '←' : 'unknown' }}</span>
+                                    <span class="sr-only">Current {{ record.beforeDirection }}; after Align {{ record.afterDirection }}.</span>
+                                    <span v-if="record.exclusion"> · unchanged: {{ record.exclusionLabel }}</span>
                                 </span>
                                 <label v-if="similarityAlignmentDraft?.intent.mode === 'custom'">
                                     <span class="sr-only">Direction for {{ record.recordKey }}</span>
                                     <select :value="similarityAlignmentDraft.intent.byRecordKey[record.recordKey] || 'keep'"
                                             :aria-label="'Direction for ' + record.recordKey"
+                                            :aria-describedby="'alignment-direction-' + record.recordKey"
                                             :disabled="similarityAlignmentBusy || Boolean(record.exclusion)"
                                             @change="setSimilarityAlignmentCustomDirection(record.recordKey, $event.target.value)"
                                             class="rounded border border-slate-300 p-1">
@@ -7053,8 +7059,8 @@
                                 </label>
                             </div>
                             <p class="mt-2" data-similarity-alignment-reference-correction>
-                                Exact reference center stays at {{ similarityAlignmentDirectionPreview?.reference.beforeX }}.
-                                Reference left-edge correction: {{ similarityAlignmentDirectionPreview?.reference.deltaX }}.
+                                The exact reference feature center stays at logical canvas x {{ similarityAlignmentDirectionPreview?.reference.beforeX?.toFixed(2) }}.
+                                Its record left edge moves by {{ similarityAlignmentDirectionPreview?.reference.deltaX?.toFixed(2) }} to keep that center fixed. Automatic diagram fitting and zoom may move it on screen.
                             </p>
                         </fieldset>
                         <fieldset v-for="record in (similarityAlignmentDraft?.rows || [])"
@@ -7165,30 +7171,40 @@
     </Teleport>
     <Teleport to="body">
         <section v-if="similarityAlignmentResetDialogOpen" role="dialog"
-                 aria-labelledby="similarity-alignment-reset-title" data-history-scope="transient"
+                 aria-labelledby="similarity-alignment-reset-title" aria-describedby="alignment-reset-description" data-history-scope="transient"
                  data-similarity-alignment-reset-dialog
                  @keydown.esc.prevent.stop="cancelSimilarityAlignmentReset"
-                 class="fixed right-3 top-3 z-[55] flex max-h-[calc(100dvh-1.5rem)] w-[calc(100vw-1.5rem)] max-w-md flex-col overflow-hidden rounded-xl border border-slate-200 bg-white p-4 shadow-2xl">
-            <h2 id="similarity-alignment-reset-title" class="font-bold">Reset alignment</h2>
-            <fieldset class="mt-3 space-y-3 text-xs">
-                <legend>Reset scope</legend>
-                <label class="flex gap-2"><input type="radio" v-model="similarityAlignmentResetScope" value="positions" :disabled="similarityAlignmentBusy">Reset positions</label>
-                <label class="flex gap-2"><input type="radio" v-model="similarityAlignmentResetScope" value="positions-and-directions" :disabled="similarityAlignmentBusy || Boolean(similarityAlignmentResetPreview.disabledReason)" aria-describedby="alignment-reset-direction-reason">Reset positions and alignment direction changes</label>
-            </fieldset>
-            <p id="alignment-reset-direction-reason" class="mt-2 text-xs text-amber-800">{{ similarityAlignmentResetPreview.disabledReason }}</p>
-            <div class="mt-3 min-h-0 overflow-auto text-xs">
-                <p>{{ similarityAlignmentResetPreview.targets.length }} records changed by the latest Align.</p>
-                <p v-for="target in similarityAlignmentResetPreview.targets" :key="target.recordKey" class="mt-2 break-all">
-                    {{ target.label }} ({{ target.recordKey }}): {{ target.current ? 'reverse' : 'forward' }} → {{ target.restored ? 'reverse' : 'forward' }}.
-                    <span v-if="target.laterManualEdit">This record was manually changed after Align; combined Reset replaces that direction edit.</span>
-                    <span v-else>Combined Reset restores this record's direction before the latest Align.</span>
+                 class="fixed right-3 top-3 z-[55] flex max-h-[calc(100dvh-1.5rem)] w-[calc(100vw-1.5rem)] max-w-md flex-col overflow-hidden rounded-xl border border-slate-200 bg-white shadow-2xl">
+            <header class="shrink-0 border-b border-slate-200 p-4">
+                <h2 id="similarity-alignment-reset-title" tabindex="-1" class="font-bold focus-visible:outline focus-visible:outline-2 focus-visible:outline-blue-600">Reset alignment</h2>
+            </header>
+            <div class="min-h-0 flex-1 overflow-y-auto p-4 text-xs custom-scrollbar">
+                <p id="alignment-reset-description">Restore positions immediately before the latest successful Align. Both scopes consume that alignment and its restoration evidence. To choose the other scope afterward, Undo Reset first.</p>
+                <fieldset class="mt-3 space-y-3" aria-describedby="alignment-reset-direction-reason alignment-reset-scope">
+                    <legend class="font-semibold">Reset scope</legend>
+                    <label class="flex items-start gap-2"><input type="radio" name="alignment-reset-scope" v-model="similarityAlignmentResetScope" value="positions" :disabled="similarityAlignmentBusy">Reset positions</label>
+                    <label class="flex items-start gap-2"><input type="radio" name="alignment-reset-scope" v-model="similarityAlignmentResetScope" value="positions-and-directions" :disabled="similarityAlignmentBusy || Boolean(similarityAlignmentResetPreview.disabledReason)">Reset positions and alignment direction changes</label>
+                </fieldset>
+                <p id="alignment-reset-direction-reason" class="mt-2 text-amber-800">{{ similarityAlignmentResetPreview.disabledReason }}</p>
+                <p id="alignment-reset-scope" role="status" aria-live="polite" aria-atomic="true" class="mt-3">
+                    {{ similarityAlignmentResetScope === 'positions' ? 'Positions only: all current directions stay unchanged.' : 'Positions and directions: restore only the records listed below; later manual direction edits on these records are replaced.' }}
                 </p>
+                <p class="mt-3">{{ similarityAlignmentResetPreview.targets.length }} records changed direction in the latest Align. Only combined Reset restores their directions.</p>
+                <ul aria-label="Alignment direction restoration targets" class="mt-2 space-y-3">
+                    <li v-for="target in similarityAlignmentResetPreview.targets" :key="target.recordKey" class="break-words">
+                        <strong>{{ target.label }}</strong> ({{ target.recordKey }}): current {{ target.current ? 'reverse' : 'forward' }}; restored {{ target.restored ? 'reverse' : 'forward' }} relative to source.
+                        <span v-if="target.laterManualEdit">This record was manually changed after Align; combined Reset replaces that direction edit.</span>
+                        <span v-else>Combined Reset restores this record's direction before the latest Align.</span>
+                    </li>
+                </ul>
             </div>
-            <p v-if="similarityAlignmentError" role="alert" class="mt-2 text-xs text-red-700">{{ similarityAlignmentError.message }}</p>
-            <div class="mt-4 flex justify-end gap-2">
-                <button type="button" @click="cancelSimilarityAlignmentReset" class="btn btn-secondary">Cancel</button>
-                <button type="button" @click="applySimilarityAlignmentReset" :disabled="similarityAlignmentBusy" class="btn btn-primary">Reset</button>
-            </div>
+            <footer class="shrink-0 border-t border-slate-200 bg-slate-50 p-4">
+                <p v-if="similarityAlignmentError" role="alert" tabindex="-1" data-similarity-alignment-reset-error class="mb-2 break-all text-xs text-red-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-red-700">{{ similarityAlignmentError.message }}</p>
+                <div class="flex justify-end gap-2">
+                    <button type="button" @click="cancelSimilarityAlignmentReset" :disabled="similarityAlignmentBusy" class="btn btn-secondary">Cancel</button>
+                    <button type="button" @click="applySimilarityAlignmentReset" :disabled="similarityAlignmentBusy" aria-describedby="alignment-reset-scope" class="btn btn-primary">{{ similarityAlignmentBusy ? 'Resetting…' : 'Reset' }}</button>
+                </div>
+            </footer>
         </section>
         <div
             v-if="linearSourceRemovalDialog.open"
