@@ -5,7 +5,7 @@ Status: active Product authority
 ## Authority metadata
 
 - Contract ID: `OIPC`
-- Contract revision: `19`
+- Contract revision: `21`
 - Product Decision Owner: `satoshikawato`
 - Decision date: `2026-08-28`
 - Decision source: explicit Product Decision Owner selection of one (`1`) after
@@ -28,7 +28,7 @@ Status: active Product authority
   `PD-OI-026`, `PD-OI-027`, `PD-OI-028`, `PD-OI-029`, `PD-OI-030`,
   `PD-OI-031`, `PD-OI-032`, `PD-OI-033`, `PD-OI-034`, `PD-OI-035`,
   `PD-OI-036`, `PD-OI-037`, `PD-OI-038`, `PD-OI-039`, `PD-OI-040`,
-  `PD-OI-041`, `PD-OI-042`, and `PD-OI-043`
+  `PD-OI-041`, `PD-OI-042`, `PD-OI-043`, `PD-OI-044`, and `PD-OI-045`
 - Revision 3 addition: `PD-OI-018`, accepted by `satoshikawato` on
   `2026-09-13` after confirming the complete record/search outcome, no feature
   retirement, and the runtime/memory cost of complete comparisons. The initial
@@ -154,6 +154,24 @@ Status: active Product authority
   have this authority merged into its base. Issue `#598` BUG-17 is excluded
   from implementation at the owner's instruction, with no circular-rotation
   authority change.
+- Revision 20 change: `PD-OI-039` is replaced for scenario revision `2`.
+  `satoshikawato` explicitly approved the complete nine-field
+  `A / EXCLUSIVE_DIRECTIONS_WITHOUT_MATCH` receipt on `2026-09-26`
+  (UTF-8 receipt SHA-256
+  `06a9d2fe9b1d1406f6f8e04c23a9ca031133b9fae24b0683403ec2c6cae55270`).
+  Only the old Match affordance is additionally retired to reconcile issue
+  `#598` with issue `#602`. All independent `PD-OI-035`/`PD-OI-039`
+  requirements and all four accepted issue `#598` decisions retain their
+  scope. This authority-only amendment contains no runtime.
+- Revision 21 additions: `PD-OI-044` and `PD-OI-045`, approved by
+  `satoshikawato` on `2026-09-26` as the two complete Choice A outcomes for
+  issue `#597` BUG-02 and BUG-20. The approval receipt is
+  「推奨案で承認します」 for each outcome. The complete supplied receipts
+  are serialized below without inferred rationale, preservation, retirement,
+  or risk terms. BUG-01 is outside this delivery scope at the owner's
+  instruction and receives no authority record. Earlier outcomes retain
+  their scope. This amendment contains no runtime; dependent implementation
+  requires this authority merged into its base.
 - Records remaining `EVIDENCE_REQUIRED`: none
 - Excluded records: none
 
@@ -1385,7 +1403,7 @@ corrected. Passing evidence does not make incorrect behavior normative.
   正確な feature identity に基づく選択、候補一覧からの keyboard radio 選択と Skip、390 px での操作と適切な focus、描画されない候補の一覧からの選択、図上位置だけによる自動選択の禁止、デスクトップでの canvas 選択と手動 pan／zoom、レビューを閉じた後のプレビュー、ガイド・番号・draft が Result・download・Session に混入しないこと。
 
   The compact review presentation, visible canvas and simultaneous canvas
-  interaction are governed by `PD-OI-039`, scenario revision `1`, in full.
+  interaction are governed by `PD-OI-039`, scenario revision `2`, in full.
   This record and `PD-OI-039` are jointly required; presentation does not
   replace identity, keyboard/Skip, non-rendered-candidate, desktop canvas,
   focus, or overlay-exclusion guarantees. No candidate may be selected from
@@ -1393,7 +1411,8 @@ corrected. Passing evidence does not make incorrect behavior normative.
   are retained in Git history, not as an active coverage exception.
 - Decision source: the signed issue `#602` response for
   `web.similarity-alignment.review-presentation`, scenario revision `1`,
-  reproduced in `PD-OI-039`, supplies exactly the rationale, preservation,
+  retained in Git history and preserved by `PD-OI-039` scenario revision `2`,
+  supplies exactly the rationale, preservation,
   limited retirement, accepted residual risk, owner, and date for this
   limited supersession. No separate human choice or rationale is inferred
   for the canvas-interaction concern. Other transform, plan, Reset, History,
@@ -1488,34 +1507,41 @@ corrected. Passing evidence does not make incorrect behavior normative.
 }
 ```
 
-### PD-OI-039: Compact Similarity-alignment review presentation
+### PD-OI-039: Compact review with exclusive alignment directions
 
 - Concern key: `web.similarity-alignment.review-presentation`
-- Scenario revision: `1`
+- Scenario revision: `2`
 - Status: `ACCEPTED`
-- Selected outcome: `A / DOCKED-COMPACT-ALIGNMENT-REVIEW`
-- Supersession scope: replaces only the scenario-2 mobile coverage
-  exception and close-review continuation in `PD-OI-035`; its independent
-  guarantees remain jointly required in scenario revision `3`. Narrow free
-  drag and concurrent Editor opening during review may retire only as stated
-  in this receipt. Wide drag and non-modal canvas interaction remain required.
-- Normative outcome: exactly the signed `PRODUCT_DECISION` receipt below.
-- Decision source: the complete issue `#602` response signed in full by
-  `satoshikawato` on `2026-09-26`. This serialization preserves all nine
-  supplied fields without translation or extension. It is not a new decision
-  store or a `BD-###` record and cannot authorize dependent runtime until
-  merged into its base.
+- Selected outcome: `A / EXCLUSIVE_DIRECTIONS_WITHOUT_MATCH`
+- Supersedes: `PD-OI-039`, scenario revision `1`
+  (`A / DOCKED-COMPACT-ALIGNMENT-REVIEW`), replacing its Match retention
+  with the explicitly approved exclusive direction controls. All independent
+  identity, keyboard/Skip, non-rendered-candidate, canvas, focus, Editor,
+  validation/retry, artifact, Session and History requirements remain.
+  The scenario-2 mobile coverage exception and close-review continuation in
+  `PD-OI-035` remain superseded; its scenario-3 independent guarantees remain
+  jointly required. Narrow free drag and concurrent Editor opening during
+  review may retire only as stated in this receipt. Wide drag and non-modal
+  canvas interaction remain required.
+- Normative outcome: exactly the complete approved `PRODUCT_DECISION` receipt
+  below. The four issue `#598` decisions are unchanged.
+- Decision source: `satoshikawato` selected A and explicitly approved all nine
+  fields of the displayed receipt on `2026-09-26`, then authorized this
+  authority-only update through dev. Receipt UTF-8 SHA-256:
+  `06a9d2fe9b1d1406f6f8e04c23a9ca031133b9fae24b0683403ec2c6cae55270`.
+  This serialization adds no retirement or risk terms to that approval.
+  Dependent runtime requires the supersession merged into its base.
 - Acceptance contracts: `OIC-006`, `OIC-013`, `OIC-014`, `OIC-026`.
 
 ```json
 {
   "concern": "web.similarity-alignment.review-presentation",
-  "scenarioRevision": 1,
-  "choice": "A / DOCKED-COMPACT-ALIGNMENT-REVIEW",
-  "rationale": "狭いPreviewでもalignment候補をcanvasで確認できるよう、reviewを図の下段に固定し、候補比較へ操作を集中させる。",
-  "mustPreserve": "PD-OI-031/034と現行transform/plan/reset/historyのすべての結果。resolvedの通常自動Apply、ambiguousと明示reviewのlocal draft、独立Select/Skip、候補根拠とreference identity、1つのMatch reference directionと各targetの結果方向、canvas操作、local編集でWorkerを呼ばないこと、Applyの共有Python batch validationとatomic Result/History。失敗時draft/error/retry、Cancel/stale/superseded時の以前のResult/orientation/History、Session/regeneration/Export、focus復帰を維持する。390×844/740では利用可能幅全体かつ高さ200px以上のcanvasを確保し、候補listをscroll、Apply/Cancelを到達可能にする。狭いreview開始時はEditorをownerで閉じ、tabを保持し、review中は理由付きでopenをdisable、終了後は明示reopen可能。wideのdragと非モーダルcanvasを維持する。",
-  "mayRetire": "狭いPreviewでreviewを自由にdragする操作、およびreview中にEditorを同時openする継続だけ。候補や方向の選択、Apply前draft、failure/retryは退役しない。",
-  "acceptedResidualRisk": "狭いreviewではlist scrollが増え、自由に位置を動かせなくなる。開始時Editorは閉じるがtabは保持し、終了後再openできる。位置変更で候補draftやResultを変えないことをbrowserで確認する。",
+  "scenarioRevision": 2,
+  "choice": "A / EXCLUSIVE_DIRECTIONS_WITHOUT_MATCH",
+  "rationale": "狭いPreviewでもalignment候補をcanvasで確認できるよう、reviewを図の下段に固定し、候補比較へ操作を集中させる。表示方向はIssue #598のKeep/right/left/Customへ統一し、reference相対のMatch操作による結果との混同を避ける。",
+  "mustPreserve": "PD-OI-031/034と現行transform/plan/reset/historyのすべての結果。resolvedの通常自動Apply、ambiguousと明示reviewのlocal draft、独立Select/Skip、候補根拠とreference identity、Issue #598で承認済みの排他的Keep/right/left/Custom、referenceを含むselected known-strand anchorsの方向選択と各recordのbefore/after矢印、unknown/skipped/missing/unusableの理由付き不変、canvas操作、local編集でWorkerを呼ばないこと、Applyの共有Python batch validationとatomic Result/History。失敗時draft/error/retry、Cancel/stale/superseded時の以前のResult/orientation/History、Session/regeneration/Export、focus復帰を維持する。390×844/740では利用可能幅全体かつ高さ200px以上のcanvasを確保し、候補listをscroll、Apply/Cancelを到達可能にする。狭いreview開始時はEditorをownerで閉じ、tabを保持し、review中は理由付きでopenをdisable、終了後は明示reopen可能。wideのdragと非モーダルcanvasを維持する。",
+  "mayRetire": "旧Match reference direction checkbox・flag・操作affordance。狭いPreviewでreviewを自由にdragする操作、およびreview中にEditorを同時openする継続。これ以外のPD-OI-035/039の独立要求とIssue #598の承認済み4決定は退役しない。",
+  "acceptedResidualRisk": "狭いreviewではlist scrollが増え、自由に位置を動かせなくなる。開始時Editorは閉じるがtabは保持し、終了後再openできる。位置変更で候補draftやResultを変えないことをbrowserで確認する。旧Match利用者はright/leftまたはCustomで表示方向を明示的に選ぶ必要がある。",
   "owner": "satoshikawato",
   "decisionDate": "2026-09-26"
 }
@@ -1656,6 +1682,70 @@ corrected. Passing evidence does not make incorrect behavior normative.
   "mustPreserve": "既存 valid 数値、Linear px acceptance、auto、physical pixel 意味、現行 typed request/Session、Circular radius/width factor/%、retired key 拒否。 typed JSON の gaps は数値、Linear は既存 ScalarSpec。Circular ratio/% semantics を保つ。不正値を null/0 化しない。不要な arbitrary CSS unit conversion を作らない。",
   "mayRetire": "pure pixel 対象の without-a-unit restriction と、invalid→null/zero の黙示的変換。一般 dimension input の制限は退役しない。",
   "acceptedResidualRisk": "trim空欄はauto。decimal/exponent以外のJS Number形式を使っていた入力は拒否され得るが、Pythonと一致しない隠れた入力経路を支持しない。scope は listed slot fields に限る。",
+  "owner": "satoshikawato",
+  "decisionDate": "2026-09-26"
+}
+```
+
+### PD-OI-044: Applicable Circular controls and truthful record discovery
+
+- Concern key: `diagram-generation.circular-transform-discoverability`
+- Scenario revision: `1`
+- Status: `ACCEPTED`
+- Selected outcome: `A / REVEAL_APPLICABLE_SINGLE_RECORD_CONTROLS`
+- Normative outcome: exactly the complete approved `PRODUCT_DECISION` receipt below.
+- Approval receipt: 「推奨案で承認します」, selecting this complete outcome,
+  approved by `satoshikawato` on `2026-09-26`.
+- Reviewed outcome SHA-256: `57debd7625f007c99849b8de5f992508b369b7a2277c01ed1ff51e7c95354d93`.
+- Decision source: the complete receipt in
+  `docs/internal/issue-597-input-session-implementation-20260926/decisions/02_RECORD_DISCOVERY.md`
+  at commit `51a786086dc2777e5fa375e5f94d8b7ac7deeedc` of
+  `fix/issue-597-input-session-20260926`. Its nine supplied fields are
+  reproduced below without translation or additional terms. The receipt
+  document is evidence of the human choice; this record is its static authority.
+  Dependent runtime requires this authority merged into its base.
+
+```json
+{
+  "concern": "diagram-generation.circular-transform-discoverability",
+  "scenarioRevision": 1,
+  "choice": "A / REVEAL_APPLICABLE_SINGLE_RECORD_CONTROLS",
+  "rationale": "source の探索状況と一件用 crop の適用条件を区別して示し、編集可能になった一件用 controls は selection の直後に見えるようにする。通常 upload の自動探索と保存済みプレビューの軽い閲覧を両立する。",
+  "mustPreserve": "valid native upload の自動 record discovery と Generate 前の rotation controls、既存 parser/helper 境界、exact source-bound identity、explicit single/grid/batch、fresh shared-canvas default、saved explicit choices、一件 crop と topology/start/reverse の適用条件、手動 close/expand、元の focus、keyboard/390 px、preview-only Load の Python Worker 0、active draft と saved artifact の分離、失敗時の旧 Result、Retry/Replace/Remove/Inspect/Generate の継続。",
+  "mayRetire": "適用可能になった一件用 section が常に collapsed で始まる挙動、valid fresh upload に manual Load が必須であるかのような prompt、実行中でない deferred discovery を loading と表す UI。全 record subset editing や複数 source support の選択は含まない。",
+  "acceptedResidualRisk": "applicable になった時に一件用 section が展開されて pane 高さが変わる。操作元の focus と scroll anchor を維持し、無関係な更新で再展開しない。科学的意味の変更、先頭 record の自動選択、grouping の自動切替、preview-only Load による Python 初期化は受容しない。",
+  "owner": "satoshikawato",
+  "decisionDate": "2026-09-26"
+}
+```
+
+### PD-OI-045: Exclusive semantic Session operations with responsive browsing
+
+- Concern key: `web.session-operation-consistency`
+- Scenario revision: `1`
+- Status: `ACCEPTED`
+- Selected outcome: `A / EXCLUSIVE_SEMANTIC_SESSION_OPERATION`
+- Normative outcome: exactly the complete approved `PRODUCT_DECISION` receipt below.
+- Approval receipt: 「推奨案で承認します」, selecting this complete outcome,
+  approved by `satoshikawato` on `2026-09-26`.
+- Reviewed outcome SHA-256: `7cef6306aefc5ff935d949efef7f76964eae2d24df8281c6ca371df5c2e87633`.
+- Decision source: the complete receipt in
+  `docs/internal/issue-597-input-session-implementation-20260926/decisions/03_SESSION_OPERATIONS.md`
+  at commit `51a786086dc2777e5fa375e5f94d8b7ac7deeedc` of
+  `fix/issue-597-input-session-20260926`. Its nine supplied fields are
+  reproduced below without translation or additional terms. The receipt
+  document is evidence of the human choice; this record is its static authority.
+  Dependent runtime requires this authority merged into its base.
+
+```json
+{
+  "concern": "web.session-operation-consistency",
+  "scenarioRevision": 1,
+  "choice": "A / EXCLUSIVE_SEMANTIC_SESSION_OPERATION",
+  "rationale": "Save/Load は一つの整合した document に対する操作として完了させ、異なる時点の Result、draft、source、cache を混合しない。処理中は閲覧を維持し、semantic edits を終了後に再開する明確な workflow を優先する。",
+  "mustPreserve": "主スレッドの応答と閲覧・scroll・pan/zoom・検索、visible pending/busy reasons、同時 Save の join と一度の download、title/size/repeat-download 取消、committed Result と editable draft の分離、supported Sessions と settings-only、atomic Load、failed/canceled/stale/teardown recovery、旧 request/resources/Result/History、source bytesと全 cache/evidence/provenance、JSON/gzip と CLI/Python replay、privacyとsize/sanitization constraints、現行 performance gates。",
+  "mayRetire": "Save/Load pending 中の source/editor/History/Reset/Generate 等の semantic mutation と、mutation entry point によって偶然編集可能または silent no-op になる振る舞い。Generate/automatic reflow 中の Save/Load 開始も busy reason 付きで停止し、完了後の再試行を提供する。通常編集・閲覧・成功後の操作は廃止しない。",
+  "acceptedResidualRisk": "長い Save/Load の間、document 編集は一時停止する。閲覧、status、bounded completion、error/retry を維持する。無期限 lock、main-thread freeze、データの省略、checkpoint混合、追加memoryの未計測、既存gateの弱化は受容しない。",
   "owner": "satoshikawato",
   "decisionDate": "2026-09-26"
 }
