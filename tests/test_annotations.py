@@ -266,3 +266,156 @@ def test_annotation_style_has_priority_over_track_override() -> None:
         style_override=RegionAnnotationStyle(stroke="#778899"),
     )
     assert effective_annotation_style(bundle.annotations[0], params).stroke == "#112233"
+
+
+@pytest.mark.parametrize("mode", ["circular", "linear"])
+@pytest.mark.parametrize("envelope", ["outer_bounds", "segments"])
+@pytest.mark.parametrize("circular_path", ["forward", "reverse", "shortest"])
+def test_selector_miss_skips_complete_row_with_one_private_warning(
+    mode, envelope, circular_path
+):
+    record = _record()
+    record.annotations["topology"] = "circular"
+    record.features = [
+        SeqFeature(
+            FeatureLocation(10, 20), type="CDS", qualifiers={"gene": ["present"]}
+        )
+    ]
+    matched = RegionAnnotation(
+        "matched",
+        FeatureSpan(
+            None, ("gene=present",), envelope=envelope, circular_path=circular_path
+        ),
+    )
+    partial = RegionAnnotation(
+        "partial",
+        FeatureSpan(
+            None,
+            (
+                "gene=present",
+                "gene=PRIVATE-MISSING",
+                "gene=PRIVATE-MISSING",
+                "gene=OTHER-MISSING",
+            ),
+            envelope=envelope,
+            circular_path=circular_path,
+        ),
+    )
+    absent = RegionAnnotation("absent", FeatureSpan(None, ("gene=PRIVATE-MISSING",)))
+    control = resolve_annotations(
+        (AnnotationSet("s", (matched,)),), [record], mode=mode
+    )
+    result = resolve_annotations(
+        (AnnotationSet("s", (matched, partial, absent)),), [record], mode=mode
+    )
+    assert result.annotations == control.annotations
+    assert [w.annotation_id for w in result.warnings] == ["partial", "absent"]
+    assert [w.missing_count for w in result.warnings] == [2, 1]
+    assert all(
+        w.code == "feature_selector_unmatched"
+        and w.set_id == "s"
+        and w.record_id == "r1"
+        and w.record_index == 0
+        for w in result.warnings
+    )
+    assert "PRIVATE-MISSING" not in repr(result.warnings)
+    assert "OTHER-MISSING" not in repr(result.warnings)
+
+
+@pytest.mark.parametrize(
+    "binding,record_ids,error",
+    [
+        (None, ["a", "b"], "ambiguous"),
+        ("missing", ["a"], "did not match"),
+        ("same", ["same", "same"], "multiple records"),
+        ("#3", ["a", "b"], "out of range"),
+    ],
+)
+def test_record_errors_remain_fatal_before_missing_feature(binding, record_ids, error):
+    annotation = RegionAnnotation(
+        "a",
+        FeatureSpan(
+            parse_record_selector(binding) if binding else None, ("gene=missing",)
+        ),
+    )
+    with pytest.raises(ValidationError, match=error):
+        resolve_annotations(
+            (AnnotationSet("s", (annotation,)),),
+            [_record(record_id=id) for id in record_ids],
+            mode="linear",
+        )
+
+
+@pytest.mark.parametrize("selector", ["", "gene=", "=missing"])
+def test_malformed_feature_selector_is_fatal(selector):
+    with pytest.raises(ValidationError):
+        FeatureSpan(None, (selector,))
+
+
+def test_matched_feature_without_geometry_is_empty_span():
+    record = _record()
+    record.features = [
+        SeqFeature(
+            FeatureLocation(10, 10), type="CDS", qualifiers={"gene": ["present"]}
+        )
+    ]
+    row = RegionAnnotation("a", FeatureSpan(None, ("gene=present",)))
+    result = resolve_annotations((AnnotationSet("s", (row,)),), [record], mode="linear")
+    assert not result.annotations
+    assert [w.code for w in result.warnings] == ["empty_span"]
+    assert result.warnings[0].missing_count == 0
+
+
+@pytest.mark.parametrize(
+    "policy,code",
+    [
+        ("clip", "out_of_bounds_clipped"),
+        ("skip", "out_of_bounds_skipped"),
+        ("error", None),
+    ],
+)
+def test_coordinate_policy_remains_independent_of_selector_misses(policy, code):
+    rows = (
+        RegionAnnotation(
+            "coordinate", CoordinateSpan(None, 90, 120, out_of_bounds=policy)
+        ),
+        RegionAnnotation("missing", FeatureSpan(None, ("gene=missing",))),
+    )
+    if policy == "error":
+        with pytest.raises(ValidationError, match="extends outside"):
+            resolve_annotations((AnnotationSet("s", rows),), [_record()], mode="linear")
+    else:
+        result = resolve_annotations(
+            (AnnotationSet("s", rows),), [_record()], mode="linear"
+        )
+        assert [w.code for w in result.warnings] == [code, "feature_selector_unmatched"]
+        assert [w.record_id for w in result.warnings] == ["r1", "r1"]
+        assert [item.segments for item in result.annotations] == (
+            [((89, 100),)] if policy == "clip" else []
+        )
+
+
+@pytest.mark.parametrize("mode", ["circular", "linear"])
+@pytest.mark.parametrize("envelope", ["outer_bounds", "segments"])
+@pytest.mark.parametrize("path", ["forward", "reverse", "shortest"])
+def test_fully_matched_envelope_and_circular_path_are_preserved(mode, envelope, path):
+    record = _record()
+    record.annotations["topology"] = "circular"
+    record.features = [
+        SeqFeature(FeatureLocation(start, end), type="CDS", qualifiers={"gene": [gene]})
+        for start, end, gene in [(10, 20, "first"), (80, 90, "last")]
+    ]
+    row = RegionAnnotation(
+        "a",
+        FeatureSpan(
+            None, ("gene=first", "gene=last"), envelope=envelope, circular_path=path
+        ),
+    )
+    result = resolve_annotations((AnnotationSet("s", (row,)),), [record], mode=mode)
+    expected = (
+        ((10, 20), (80, 90))
+        if envelope == "segments"
+        else (((80, 100), (0, 20)) if path != "forward" else ((10, 90),))
+    )
+    assert result.annotations[0].segments == expected
+    assert result.warnings == ()

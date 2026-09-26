@@ -1647,6 +1647,7 @@ def assemble_linear_diagram_from_records(
     _return_build_result: bool = False,
     _record_transforms: Sequence[RecordDisplayTransform] | None = None,
     _alignment_anchor_centers: Sequence[float | None] | None = None,
+    _resolved_annotations: ResolvedAnnotationBundle | None = None,
 ) -> Drawing | LinearDiagramBuildResult:
     """Builds and assembles a linear diagram for the given records.
 
@@ -2108,7 +2109,7 @@ def assemble_linear_diagram_from_records(
         record_depth_tracks=record_depth_tracks,
         linear_track_slots=parsed_linear_track_slots,
         linear_track_axis_index=resolved_linear_track_axis_index,
-        annotations=annotation_options,
+        annotations=_resolved_annotations if _resolved_annotations is not None else annotation_options,
         plot_title=normalized_plot_title or None,
         plot_title_position=normalized_plot_title_position,
         plot_title_font_size=resolved_plot_title_font_size,
@@ -2580,7 +2581,7 @@ def assemble_circular_diagram_from_record(
         conservation_min_identity=float(identity),
         circular_track_slots=parsed_circular_track_slots,
         circular_track_axis_index=circular_track_axis_index,
-        annotations=_resolved_annotations or annotation_options,
+        annotations=_resolved_annotations if _resolved_annotations is not None else annotation_options,
         annotation_record_index=_annotation_record_index,
         dinucleotide_content_dataframes=dinucleotide_content_dataframes,
         dinucleotide_skew_dataframes=dinucleotide_skew_dataframes,
@@ -2657,6 +2658,7 @@ def assemble_circular_diagram_from_records(
     _resolved_feature_inputs: ResolvedFeatureInputs | None = None,
     _resolved_placement_inputs: tuple[ResolvedPlacementInputs, ...] = (),
     _record_transforms: Sequence[RecordDisplayTransform] | None = None,
+    _resolved_annotations: ResolvedAnnotationBundle | None = None,
 ) -> Drawing:
     """Build and assemble a circular diagram grid from multiple records."""
     if not isinstance(cfg, GbdrawConfig):
@@ -2673,7 +2675,10 @@ def assemble_circular_diagram_from_records(
     bitscore = thresholds.bitscore
     identity = thresholds.identity
     alignment_length = thresholds.alignment_length
-    resolved_annotations = resolve_annotations(annotation_options, records, mode="circular", record_transforms=_record_transforms)
+    resolved_annotations = (
+        _resolved_annotations if _resolved_annotations is not None else
+        resolve_annotations(annotation_options, records, mode="circular", record_transforms=_record_transforms)
+    )
     _validate_positive_optional("depth_window", depth_window)
     _validate_positive_optional("depth_step", depth_step)
     _validate_positive_float_optional("conservation_ring_width", conservation_ring_width)
@@ -3327,6 +3332,7 @@ def build_circular_diagram(
     _resolved_feature_inputs: ResolvedFeatureInputs | None = None,
     _resolved_placement_inputs: tuple[ResolvedPlacementInputs, ...] = (),
     _record_transform: RecordDisplayTransform | None = None,
+    _resolved_annotations: ResolvedAnnotationBundle | None = None,
 ) -> Drawing:
     """Build a circular diagram using mode-specific typed options."""
 
@@ -3392,6 +3398,7 @@ def build_circular_diagram(
         circular_track_slots=tracks.circular_track_slots if tracks else None,
         circular_track_axis_index=tracks.circular_track_axis_index if tracks else None,
         annotation_options=options.annotations,
+        _resolved_annotations=_resolved_annotations,
         _precomputed_depth_track_specs=_precomputed_depth_track_specs,
         _precomputed_depth_track_count=_precomputed_depth_track_count,
         _resolved_feature_inputs=_resolved_feature_inputs,
@@ -3413,6 +3420,7 @@ def _build_linear_diagram(
     _return_build_result: bool = False,
     _record_transforms: Sequence[RecordDisplayTransform] | None = None,
     _alignment_anchor_centers: Sequence[float | None] | None = None,
+    _resolved_annotations: ResolvedAnnotationBundle | None = None,
 ) -> Drawing | LinearDiagramBuildResult:
     """Build a linear diagram using mode-specific typed options."""
 
@@ -3486,6 +3494,7 @@ def _build_linear_diagram(
         linear_track_slots=tracks.linear_track_slots if tracks else None,
         linear_track_axis_index=tracks.linear_track_axis_index if tracks else None,
         annotation_options=options.annotations,
+        _resolved_annotations=_resolved_annotations,
         plot_title=options.plot_title,
         plot_title_position=(
             output.plot_title_position
@@ -3517,6 +3526,7 @@ def build_linear_diagram(
     _resolved_placement_inputs: tuple[ResolvedPlacementInputs, ...] = (),
     _record_transforms: Sequence[RecordDisplayTransform] | None = None,
     _alignment_anchor_centers: Sequence[float | None] | None = None,
+    _resolved_annotations: ResolvedAnnotationBundle | None = None,
 ) -> Drawing:
     """Build a linear diagram using mode-specific typed options."""
 
@@ -3528,6 +3538,7 @@ def build_linear_diagram(
         losatp_cache=losatp_cache,
         protein_extraction=protein_extraction,
         _resolved_feature_inputs=_resolved_feature_inputs,
+        _resolved_annotations=_resolved_annotations,
         _resolved_placement_inputs=_resolved_placement_inputs,
         _record_transforms=_record_transforms,
         _alignment_anchor_centers=_alignment_anchor_centers,
@@ -3547,6 +3558,7 @@ def build_linear_diagram_result(
     _resolved_placement_inputs: tuple[ResolvedPlacementInputs, ...] = (),
     _record_transforms: Sequence[RecordDisplayTransform] | None = None,
     _alignment_anchor_centers: Sequence[float | None] | None = None,
+    _resolved_annotations: ResolvedAnnotationBundle | None = None,
 ) -> LinearDiagramBuildResult:
     """Build a Linear drawing with its computed analysis metadata."""
 
@@ -3558,6 +3570,7 @@ def build_linear_diagram_result(
         losatp_cache=losatp_cache,
         protein_extraction=protein_extraction,
         _resolved_feature_inputs=_resolved_feature_inputs,
+        _resolved_annotations=_resolved_annotations,
         _resolved_placement_inputs=_resolved_placement_inputs,
         _record_transforms=_record_transforms,
         _alignment_anchor_centers=_alignment_anchor_centers,
@@ -3576,6 +3589,7 @@ def build_circular_multi_diagram(
     _resolved_feature_inputs: ResolvedFeatureInputs | None = None,
     _resolved_placement_inputs: tuple[ResolvedPlacementInputs, ...] = (),
     _record_transforms: Sequence[RecordDisplayTransform] | None = None,
+    _resolved_annotations: ResolvedAnnotationBundle | None = None,
 ) -> Drawing:
     """Build a circular grid using mode-specific typed options."""
 
@@ -3647,6 +3661,7 @@ def build_circular_multi_diagram(
         circular_track_slots=tracks.circular_track_slots if tracks else None,
         circular_track_axis_index=tracks.circular_track_axis_index if tracks else None,
         annotation_options=options.annotations,
+        _resolved_annotations=_resolved_annotations,
         evalue=options.evalue,
         bitscore=options.bitscore,
         identity=options.identity,

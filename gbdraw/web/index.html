@@ -4665,6 +4665,14 @@
                     </div>
                 </div>
 
+                <div v-if="annotationWarnings.length && !processing"
+                     role="status" aria-live="polite" aria-atomic="true" data-testid="annotation-resolution-notice"
+                     class="border-b border-amber-200 bg-amber-50 px-5 py-3 text-sm text-amber-900 shrink-0 break-words">
+                    <p class="font-semibold">Skipped {{ annotationWarnings.filter(w => w.code !== 'out_of_bounds_clipped').length }} annotation row(s).</p>
+                    <p v-for="(warning, index) in annotationWarnings" :key="index">
+                        {{ warning.setId }}/{{ warning.annotationId }} · record #{{ warning.recordIndex + 1 }} ({{ warning.recordId }}): {{ warning.message }}
+                    </p>
+                </div>
                 <div v-if="failedGeneratePreservedResult"
                      role="status"
                      class="-mx-4 border-b border-amber-200 bg-amber-50 px-5 py-3 text-sm text-amber-900 shrink-0">

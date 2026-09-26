@@ -1,3 +1,25 @@
+export const validateAnnotationWarnings = (warnings, results) => {
+  if (warnings === undefined) return [];
+  const fields = ['code', 'setId', 'annotationId', 'recordId', 'recordIndex',
+    'missingCount', 'message', 'resultIndex', 'resultName'];
+  const codes = new Set(['feature_selector_unmatched', 'empty_span',
+    'out_of_bounds_skipped', 'out_of_bounds_clipped']);
+  if (!Array.isArray(warnings) || warnings.some((warning) => (
+    (warning === null || typeof warning !== 'object' || Array.isArray(warning))
+    || Object.keys(warning).length !== fields.length
+    || fields.some((field) => !Object.prototype.hasOwnProperty.call(warning, field))
+    || !codes.has(warning.code)
+    || ['setId', 'annotationId', 'recordId', 'message', 'resultName']
+      .some((field) => typeof warning[field] !== 'string')
+    || !warning.setId || !warning.annotationId
+    || ['recordIndex', 'missingCount', 'resultIndex']
+      .some((field) => !Number.isSafeInteger(warning[field]) || warning[field] < 0)
+    || (warning.code === 'feature_selector_unmatched') !== (warning.missingCount > 0)
+    || results?.[warning.resultIndex]?.name !== warning.resultName
+  ))) throw new Error('Annotation warnings do not match the successful Result metadata schema.');
+  return warnings;
+};
+
 const FEATURE_ID_SELECTOR = [
   '[data-gbdraw-feature-id]',
   'path[id^="f"]',

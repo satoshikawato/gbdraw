@@ -215,6 +215,21 @@ def _render_canonical_web_request(
         )
     with _web_render_diagnostic_phase(diagnostics, "featureCatalog"):
         metadata["featureCatalog"] = build_feature_catalog(feature_catalog_items)
+    metadata["annotationWarnings"] = [
+        {
+            "code": warning.code,
+            "setId": warning.set_id,
+            "annotationId": warning.annotation_id,
+            "recordId": warning.record_id,
+            "recordIndex": warning.record_index,
+            "missingCount": warning.missing_count,
+            "message": warning.message,
+            "resultIndex": result_index,
+            "resultName": results[result_index]["name"],
+        }
+        for result_index, item in enumerate(items)
+        for warning in item.annotation_warnings
+    ]
     return {
         "results": results,
         "metadata": metadata,

@@ -98,7 +98,7 @@ def prepare_annotation_track_slots(
             f"Annotation track references unknown set_id(s): {', '.join(sorted(unknown))}"
         )
     for set_id in set_ids:
-        if set_id not in requested:
+        if set_id not in requested and any(item.set_id == set_id for item in bundle.annotations):
             logger.warning(
                 "Annotation set %s is not referenced by a %s track slot.", set_id, mode
             )

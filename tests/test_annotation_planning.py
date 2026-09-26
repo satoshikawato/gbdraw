@@ -35,3 +35,27 @@ def test_unknown_annotation_set_uses_shared_validation_error() -> None:
             default_slots=list,
             slot_factory=_Slot,
         )
+
+
+@pytest.mark.parametrize("mode", ["circular", "linear"])
+def test_empty_resolved_set_has_no_native_automatic_slot_but_preserves_explicit(mode):
+    from gbdraw.tracks import CircularTrackSlot, LinearTrackSlot
+
+    factory = CircularTrackSlot if mode == "circular" else LinearTrackSlot
+    bundle = ResolvedAnnotationBundle(annotations=(), set_ids=("empty",))
+    slots, returned, _ = prepare_annotation_track_slots(
+        bundle, [], None, mode=mode, default_slots=list, slot_factory=factory
+    )
+    assert slots == [] and returned is bundle
+    explicit = [
+        factory(
+            id="empty",
+            renderer="annotations",
+            side="outside" if mode == "circular" else "above",
+            params={"set_id": "empty"},
+        )
+    ]
+    slots, returned, _ = prepare_annotation_track_slots(
+        bundle, [], explicit, mode=mode, default_slots=list, slot_factory=factory
+    )
+    assert slots is explicit and returned is bundle

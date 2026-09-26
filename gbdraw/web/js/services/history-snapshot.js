@@ -728,6 +728,7 @@ export const createHistorySnapshotService = ({
         getGeneratedArtifactRef(state.linearRecordTranslations, null)
       ),
       linearRecordOrientations: artifactOwnedValue(captureLinearRecordOrientations()),
+      annotationWarnings: artifactOwnedValue(getGeneratedArtifactRef(state.annotationWarnings, null)),
       trackSlotResolvedGeometry: artifactOwnedValue(
         getGeneratedArtifactRef(state.trackSlotResolvedGeometry, null)
       ),
@@ -821,6 +822,7 @@ export const createHistorySnapshotService = ({
       ownerSet.linearRecordTranslations || []
     );
     installLinearRecordOrientations(ownerSet.linearRecordOrientations);
+    setGeneratedArtifactRef(state.annotationWarnings, ownerSet.annotationWarnings || []);
     setGeneratedArtifactRef(
       state.trackSlotResolvedGeometry,
       ownerSet.trackSlotResolvedGeometry ?? null
@@ -911,6 +913,7 @@ export const createHistorySnapshotService = ({
       'similarityAlignmentPlan',
       'linearRecordTranslations',
       'trackSlotResolvedGeometry',
+      'annotationWarnings',
       'proteinIdentityManifest',
       'legacyProteinRawCandidates',
       'legacyProteinDerivedEvidence',

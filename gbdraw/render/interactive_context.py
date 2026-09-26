@@ -13,7 +13,7 @@ from gbdraw.features.visibility import compile_feature_visibility_rules
 from gbdraw.exceptions import ExportError, ValidationError
 from gbdraw.api.prepared import record_prepared_input_metric
 from gbdraw.render.interactive_svg import InteractiveSvgContext
-from gbdraw.annotations import AnnotationOptions, resolve_annotations
+from gbdraw.annotations import AnnotationOptions, ResolvedAnnotationBundle, resolve_annotations
 from gbdraw.layout.record_coordinates import RecordDisplayTransform
 from gbdraw.web_support.feature_metadata import extract_features_from_records_payload
 from gbdraw.svg.ids import instance_svg_id
@@ -53,7 +53,7 @@ def build_interactive_svg_context(
     specific_color_rules: Mapping[str, Any] | None = None,
     orthogroups: object | None = None,
     linear_rendered_feature_ids: bool = False,
-    annotations: AnnotationOptions | None = None,
+    annotations: AnnotationOptions | ResolvedAnnotationBundle | None = None,
     mode: str | None = None,
     comparison_sequence_records: Sequence[Sequence[SeqRecord]] | None = None,
     collinearity_search_scope: str | None = None,
@@ -120,7 +120,7 @@ def build_interactive_svg_context(
 
     annotation_payload: list[dict[str, object]] = []
     if annotations is not None:
-        resolved = resolve_annotations(
+        resolved = annotations if isinstance(annotations, ResolvedAnnotationBundle) else resolve_annotations(
             annotations,
             record_list,
             mode=mode or ("linear" if linear_rendered_feature_ids else "circular"),

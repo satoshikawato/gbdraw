@@ -29,7 +29,7 @@ from gbdraw.analysis.protein_colinearity import (
     OrthogroupResult,
     OrthogroupGraphResult,
 )
-from gbdraw.annotations import AnnotationOptions
+from gbdraw.annotations import AnnotationOptions, ResolutionWarning
 from gbdraw.api.io import load_gbks as _load_gbks, load_gff_fasta as _load_gff_fasta
 from gbdraw.api.options import (
     CircularDiagramOptions as _CircularDiagramOptions,
@@ -543,6 +543,7 @@ class Diagram:
         *,
         mode: Literal["circular", "linear"],
         records: Sequence[SeqRecord],
+        annotation_warnings: tuple[ResolutionWarning, ...] = (),
         interactive_context: (
             InteractiveSvgContext
             | Callable[[], InteractiveSvgContext]
@@ -553,6 +554,12 @@ class Diagram:
         self.mode = mode
         self.records = tuple(records)
         self._interactive_context = interactive_context
+        self._annotation_warnings = tuple(annotation_warnings)
+
+    @property
+    def annotation_warnings(self) -> tuple[ResolutionWarning, ...]:
+        """Structured notices belonging to this successfully prepared diagram."""
+        return self._annotation_warnings
 
     def _resolve_interactive_context(self) -> InteractiveSvgContext | None:
         if callable(self._interactive_context):
@@ -988,6 +995,7 @@ def draw_circular(
     )
     return Diagram(
         prepared.drawing,
+        annotation_warnings=prepared.annotation_warnings,
         mode="circular",
         records=normalized,
         interactive_context=lambda: _interactive_context(
@@ -1035,6 +1043,7 @@ def draw_linear(
     )
     return Diagram(
         prepared.drawing,
+        annotation_warnings=prepared.annotation_warnings,
         mode="linear",
         records=normalized,
         interactive_context=lambda: _interactive_context(

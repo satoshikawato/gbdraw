@@ -1883,3 +1883,232 @@ def test_render_request_preflights_every_single_request_format_before_build(
 
     assert svg_path.read_text(encoding="utf-8") == "keep"
     assert blocked_png.is_dir()
+
+
+@pytest.mark.parametrize("mode", ["single", "grid", "batch", "linear"])
+@pytest.mark.parametrize("all_missed", [False, True])
+def test_annotation_resolution_is_once_and_batch_indices_remain_global(
+    mode, all_missed, monkeypatch, tmp_path
+):
+    from dataclasses import FrozenInstanceError
+    from gbdraw.annotations import (
+        AnnotationOptions,
+        AnnotationSet,
+        FeatureSpan,
+        RegionAnnotation,
+    )
+    import gbdraw.annotations.resolve as resolver
+
+    records = [_seqrecord("same", "ACGT" * 100), _seqrecord("same", "ACGT" * 100)]
+    for record in records:
+        record.annotations["topology"] = "circular"
+        record.features = [
+            SeqFeature(
+                FeatureLocation(10, 20), type="CDS", qualifiers={"gene": ["present"]}
+            )
+        ]
+    if mode == "single":
+        records = records[:1]
+    binding = parse_record_selector("#1" if mode == "single" else "#2")
+    rows = (
+        RegionAnnotation(
+            "missing",
+            FeatureSpan(
+                binding,
+                ("gene=present", "gene=PRIVATE-MISSING", "gene=PRIVATE-MISSING"),
+            ),
+            label="SKIPPED",
+            legend_label="SKIPPED LEGEND",
+        ),
+    )
+    if not all_missed:
+        rows += (
+            RegionAnnotation(
+                "matched", FeatureSpan(binding, ("gene=present",)), label="MATCHED"
+            ),
+        )
+    annotations = AnnotationOptions(sets=(AnnotationSet("s", rows),))
+    options = (LinearDiagramOptions if mode == "linear" else CircularDiagramOptions)(
+        annotations=annotations
+    )
+    inputs = tuple(RecordInput(InMemoryRecordSource(record)) for record in records)
+    output = RenderOutputRequest(
+        output_prefix=mode, output_directory=tmp_path, formats=("svg",)
+    )
+    if mode == "batch":
+        request = CircularBatchRequest(
+            records=inputs,
+            options=options,
+            outputs=tuple(replace_output(output, f"batch-{i}") for i in range(2)),
+        )
+    elif mode == "linear":
+        request = LinearDiagramRequest(records=inputs, options=options, output=output)
+    else:
+        request = CircularDiagramRequest(
+            records=inputs,
+            options=options,
+            output=output,
+            layout=CircularMultiRecordOptions() if mode == "grid" else None,
+            grouping=mode,
+        )
+    count = 0
+    original = resolver.resolve_annotation_set
+
+    def counted(*args, **kwargs):
+        nonlocal count
+        count += 1
+        return original(*args, **kwargs)
+
+    monkeypatch.setattr(resolver, "resolve_annotation_set", counted)
+    plan = plan_request(request)
+    prepared = build_request_plan_diagram(plan)
+    rendered = request_render_module.render_prepared_request(
+        prepared, include_feature_catalog=True
+    )
+    items = rendered.items if mode == "batch" else (rendered,)
+    prepared_items = prepared.items if mode == "batch" else (prepared,)
+    assert count == 1
+    warnings = tuple(w for item in items for w in item.annotation_warnings)
+    assert len(warnings) == 1
+    warning = warnings[0]
+    assert (warning.record_index, warning.record_id, warning.missing_count) == (
+        0 if mode == "single" else 1,
+        "same",
+        1,
+    )
+    with pytest.raises(FrozenInstanceError):
+        warning.missing_count = 10
+    if mode == "batch":
+        assert items[0].annotation_warnings == ()
+        assert items[1].annotation_warnings == warnings
+        assert all(
+            mark.record_index == 0
+            for mark in prepared_items[1].resolved_annotations.annotations
+        )
+    for item, built in zip(items, prepared_items, strict=True):
+        svg = item.output_paths[0].read_text()
+        assert "SKIPPED" not in svg
+        assert "PRIVATE-MISSING" not in svg
+        if all_missed:
+            assert not built.resolved_annotations.annotations
+        assert item.annotation_warnings is built.resolved_annotations.warnings
+    assert request.options.annotations.sets[0].annotations == rows
+
+
+def replace_output(output, prefix):
+    from dataclasses import replace
+
+    return replace(output, output_prefix=prefix)
+
+
+@pytest.mark.parametrize("mode", ["circular", "linear"])
+@pytest.mark.parametrize("transform", ["crop", "reverse", "rotation"])
+def test_selector_skip_preserves_source_local_and_transformed_geometry(mode, transform):
+    from gbdraw.annotations import (
+        AnnotationOptions,
+        AnnotationSet,
+        CoordinateSpan,
+        FeatureSpan,
+        RegionAnnotation,
+    )
+    from gbdraw.api.requests import RecordDisplayOptions
+
+    record = _seqrecord("r", "ACGT" * 100)
+    record.annotations["topology"] = "circular"
+    record.features = [
+        SeqFeature(
+            FeatureLocation(110, 120), type="CDS", qualifiers={"gene": ["present"]}
+        )
+    ]
+    region = (
+        parse_region_spec("101-300:rc" if transform == "reverse" else "101-300")
+        if transform != "rotation"
+        else None
+    )
+    source = RecordInput(
+        InMemoryRecordSource(record),
+        region=region,
+        display=RecordDisplayOptions(start_coordinate=350)
+        if transform == "rotation"
+        else RecordDisplayOptions(),
+    )
+    expected = (
+        ((110, 120),)
+        if transform == "rotation"
+        else (((180, 190),) if transform == "reverse" else ((10, 20),))
+    )
+    local_start, local_end = expected[0]
+    rows = (
+        RegionAnnotation("feature", FeatureSpan(None, ("gene=present",))),
+        RegionAnnotation("source", CoordinateSpan(None, 111, 120)),
+        RegionAnnotation(
+            "local",
+            CoordinateSpan(None, local_start + 1, local_end, coordinate_space="local"),
+        ),
+        RegionAnnotation(
+            "missing", FeatureSpan(None, ("gene=present", "gene=missing"))
+        ),
+    )
+    options = (CircularDiagramOptions if mode == "circular" else LinearDiagramOptions)(
+        annotations=AnnotationOptions(sets=(AnnotationSet("s", rows),))
+    )
+    request = (CircularDiagramRequest if mode == "circular" else LinearDiagramRequest)(
+        records=(source,), options=options
+    )
+    plan = plan_request(request)
+    assert [mark.segments for mark in plan.resolved_annotations.annotations] == [
+        expected
+    ] * 3
+    assert len(plan.resolved_annotations.warnings) == 1
+    from gbdraw.annotations.planning import prepare_annotation_track_slots
+    from gbdraw.tracks import CircularTrackSlot, LinearTrackSlot
+
+    _, projected, _ = prepare_annotation_track_slots(
+        plan.resolved_annotations,
+        plan.records,
+        None,
+        mode=mode,
+        default_slots=list,
+        slot_factory=CircularTrackSlot if mode == "circular" else LinearTrackSlot,
+        record_transforms=plan.transforms,
+    )
+    assert len({mark.geometry_segments for mark in projected.annotations}) == 1
+    assert projected.warnings is plan.resolved_annotations.warnings
+
+
+@pytest.mark.parametrize("mode", ["circular", "linear"])
+def test_cli_reports_each_successful_annotation_warning_once(mode, tmp_path, caplog):
+    from Bio import SeqIO
+    from gbdraw.circular import circular_main
+    from gbdraw.linear import linear_main
+
+    record = _seqrecord("cli-warning", "ACGT" * 100)
+    record.annotations["topology"] = "circular"
+    source = tmp_path / "genome.gbk"
+    SeqIO.write(record, source, "genbank")
+    table = tmp_path / "annotations.tsv"
+    table.write_text(
+        "set_id\tid\tmark\tfeature_selector\nregions\tskipped\tline\tgene=PRIVATE-MISSING;gene=PRIVATE-MISSING\n"
+    )
+    (circular_main if mode == "circular" else linear_main)(
+        [
+            "--gbk",
+            str(source),
+            "-o",
+            str(tmp_path / mode),
+            "-f",
+            "svg",
+            "--annotation_table",
+            str(table),
+        ]
+    )
+    warnings = [
+        record.message
+        for record in caplog.records
+        if "feature_selector_unmatched" in record.message
+    ]
+    assert len(warnings) == 1
+    assert "regions/skipped" in warnings[0] and "record #1 (cli-warning)" in warnings[0]
+    assert "1 feature selector(s) unmatched" in warnings[0]
+    assert "PRIVATE-MISSING" not in caplog.text
+    assert (tmp_path / f"{mode}.svg").is_file()

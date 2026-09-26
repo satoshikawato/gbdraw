@@ -1,3 +1,4 @@
+import { validateAnnotationWarnings } from '../services/session-feature-metadata.js';
 import { prepareLosatRuntime, runLosatPairsParallel } from '../services/losat.js';
 import { prepareLosatSourceBatches, splitLosatSourceResult } from './linear-sources.js';
 import {
@@ -999,6 +1000,7 @@ export const executeCanonicalRenderCandidate = async ({
     && !Array.isArray(generationResponse.metadata)
     ? generationResponse.metadata
     : {};
+  const annotationWarnings = validateAnnotationWarnings(metadata.annotationWarnings, results);
   recordSessionLifecycleEvent('candidate-result-validation-start');
   const catalogState = catalogAdmission(metadata.featureCatalog, results, {
     adopt: true,
@@ -1025,6 +1027,7 @@ export const executeCanonicalRenderCandidate = async ({
     status: 'ok',
     generationResponse,
     generationMetadata: metadata,
+    annotationWarnings,
     results,
     catalogAdmission: catalogState,
     catalog: catalogState.catalog,
@@ -4770,6 +4773,7 @@ export const createRunAnalysis = ({
             }))
           } : {}),
           trackSlotResolvedGeometry: generationMetadata.trackSlotGeometry || null,
+          annotationWarnings: canonicalExecution.annotationWarnings,
           proteinIdentityManifest: workingProteinIdentityManifest,
           legacyProteinRawCandidates: workingLegacyProteinRawCandidates,
           legacyProteinDerivedEvidence: workingLegacyProteinDerivedEvidence,
@@ -5192,6 +5196,7 @@ export const createRunAnalysis = ({
           : [],
         trackSlotResolvedGeometry:
           execution.generationMetadata.trackSlotGeometry || null,
+        annotationWarnings: execution.annotationWarnings,
         matchSequenceOwner: matchSequenceRegistry?.buildTrustedOwner?.(
           candidateCommit.featureState.sequenceSources
         ) || currentOwnerSet.matchSequenceOwner,

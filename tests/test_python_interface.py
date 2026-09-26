@@ -617,3 +617,50 @@ def test_beginner_circular_workflow_runs(examples_dir: Path, tmp_path: Path) -> 
 
     assert diagram.to_svg().startswith("<svg")
     assert diagram.save(tmp_path / "diagram.svg").is_file()
+
+
+@pytest.mark.parametrize("mode", ["circular", "linear"])
+def test_native_diagram_exposes_immutable_warnings_and_reuses_bundle(mode, monkeypatch):
+    from gbdraw.annotations import (
+        AnnotationOptions,
+        AnnotationSet,
+        FeatureSpan,
+        RegionAnnotation,
+    )
+    import gbdraw.annotations.resolve as resolver
+
+    record = _record()
+    record.annotations["topology"] = "circular"
+    options = (gbdraw.CircularOptions if mode == "circular" else gbdraw.LinearOptions)(
+        annotations=AnnotationOptions(
+            sets=(
+                AnnotationSet(
+                    "s",
+                    (
+                        RegionAnnotation(
+                            "a", FeatureSpan(None, ("gene=PRIVATE-MISSING",))
+                        ),
+                    ),
+                ),
+            )
+        )
+    )
+    count = 0
+    original = resolver.resolve_annotation_set
+
+    def counted(*args, **kwargs):
+        nonlocal count
+        count += 1
+        return original(*args, **kwargs)
+
+    monkeypatch.setattr(resolver, "resolve_annotation_set", counted)
+    diagram = (gbdraw.draw_circular if mode == "circular" else gbdraw.draw_linear)(
+        record, options=options
+    )
+    assert len(diagram.annotation_warnings) == 1
+    assert diagram.annotation_warnings[0].missing_count == 1
+    with pytest.raises(AttributeError):
+        diagram.annotation_warnings = ()
+    assert "PRIVATE-MISSING" not in diagram.to_svg()
+    assert "PRIVATE-MISSING" not in diagram.to_svg(interactive=True)
+    assert count == 1

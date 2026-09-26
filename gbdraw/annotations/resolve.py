@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Sequence
+from dataclasses import dataclass
 
 from Bio.SeqFeature import SeqFeature  # type: ignore[reportMissingImports]
 from Bio.SeqRecord import SeqRecord  # type: ignore[reportMissingImports]
@@ -171,36 +172,38 @@ def _feature_matches(feature: object, selector: FeatureSelector, record_id: str)
     )
 
 
-def _feature_segments(target: FeatureSpan, record: SeqRecord, *, is_circular: bool) -> tuple[tuple[int, int], ...]:
+@dataclass(frozen=True)
+class _FeatureSegments:
+    segments: tuple[tuple[int, int], ...]
+    missing_count: int = 0
+
+
+def _feature_segments(target: FeatureSpan, record: SeqRecord, *, is_circular: bool) -> _FeatureSegments:
     matched: list[object] = []
-    unmatched: list[str] = []
-    for selector in target.selectors:
+    unmatched: list[FeatureSelector] = []
+    for selector in dict.fromkeys(target.selectors):
         selector_matches = [
             feature
             for feature in getattr(record, "features", ())
             if isinstance(feature, SeqFeature) and _feature_matches(feature, selector, record.id)
         ]
         if not selector_matches:
-            unmatched.append(
-                f"{selector.key}={selector.value}" if selector.key else selector.value
-            )
+            unmatched.append(selector)
         matched.extend(selector_matches)
     if unmatched:
-        raise ValidationError(
-            f"Feature annotation selector(s) did not match record {record.id!r}: {', '.join(unmatched)}."
-        )
+        return _FeatureSegments((), len(unmatched))
     segments = merge_annotation_segments(
         [segment for feature in matched for segment in _seqfeature_segments(feature)]
     )
     if not segments:
-        return ()
+        return _FeatureSegments(())
     if target.envelope == "segments":
-        return segments
+        return _FeatureSegments(segments)
 
     length = len(record.seq)
     normal = ((segments[0][0], segments[-1][1]),)
     if not is_circular or len(segments) == 1:
-        return normal
+        return _FeatureSegments(normal)
     normal_span = normal[0][1] - normal[0][0]
     wrap_span = (length - segments[-1][0]) + segments[0][1]
     use_wrap = target.circular_path == "reverse" or (
@@ -208,7 +211,7 @@ def _feature_segments(target: FeatureSpan, record: SeqRecord, *, is_circular: bo
     )
     if target.circular_path == "forward":
         use_wrap = False
-    return ((segments[-1][0], length), (0, segments[0][1])) if use_wrap else normal
+    return _FeatureSegments(((segments[-1][0], length), (0, segments[0][1])) if use_wrap else normal)
 
 
 def annotation_midpoint(
@@ -264,6 +267,8 @@ def resolve_annotation_set(
                         code="out_of_bounds_skipped",
                         set_id=annotation_set.id,
                         annotation_id=annotation.id,
+                        record_id=record.id,
+                        record_index=record_index,
                         message=f"Skipped annotation outside record {record.id!r}.",
                     )
                 )
@@ -274,17 +279,35 @@ def resolve_annotation_set(
                         code="out_of_bounds_clipped",
                         set_id=annotation_set.id,
                         annotation_id=annotation.id,
+                        record_id=record.id,
+                        record_index=record_index,
                         message=f"Clipped annotation to record {record.id!r}.",
                     )
                 )
         else:
-            segments = _feature_segments(annotation.target, record, is_circular=is_circular)
+            feature_segments = _feature_segments(annotation.target, record, is_circular=is_circular)
+            if feature_segments.missing_count:
+                warnings.append(
+                    ResolutionWarning(
+                        code="feature_selector_unmatched",
+                        set_id=annotation_set.id,
+                        annotation_id=annotation.id,
+                        record_id=record.id,
+                        record_index=record_index,
+                        missing_count=feature_segments.missing_count,
+                        message=f"Skipped annotation: {feature_segments.missing_count} feature selector(s) unmatched.",
+                    )
+                )
+                continue
+            segments = feature_segments.segments
         if not segments:
             warnings.append(
                 ResolutionWarning(
                     code="empty_span",
                     set_id=annotation_set.id,
                     annotation_id=annotation.id,
+                    record_id=record.id,
+                    record_index=record_index,
                     message=f"Annotation resolved to an empty span on record {record.id!r}.",
                 )
             )
