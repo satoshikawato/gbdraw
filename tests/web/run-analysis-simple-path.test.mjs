@@ -1699,18 +1699,15 @@ test('neutral conservation replay delegates lazy resources to the shared reader'
       records: [
         {
           recordKey: 'multi', status: 'reference', rationale: 'reference',
-          anchor: alignmentReference, orientationPolicy: 'preserve',
-          effectiveReverseComplement: null
+          anchor: alignmentReference
         },
         {
           recordKey: 'middle', status: 'aligned', rationale: 'only_usable_candidate',
-          anchor: alignmentTarget, orientationPolicy: 'preserve',
-          effectiveReverseComplement: true
+          anchor: alignmentTarget
         },
         {
           recordKey: 'third', status: 'skipped', rationale: 'skipped_no_candidate',
-          anchor: null, orientationPolicy: 'preserve',
-          effectiveReverseComplement: null
+          anchor: null
         }
       ]
     };

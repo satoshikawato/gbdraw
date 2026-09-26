@@ -2483,22 +2483,18 @@ state.similarityAlignmentPlan.value = {
   records: [
     {
       recordKey: 'first', status: 'reference', rationale: 'reference',
-      anchor: resolvedPlanReference, orientationPolicy: 'preserve',
-      effectiveReverseComplement: null
+      anchor: resolvedPlanReference
     },
     {
       recordKey: 'second', status: 'skipped', rationale: 'skipped_no_candidate',
-      anchor: null, orientationPolicy: 'preserve',
-      effectiveReverseComplement: null
+      anchor: null
     },
     {
       recordKey: 'third', status: 'aligned', rationale: 'only_usable_candidate',
       anchor: {
         recordKey: 'third', biologicalFeatureId: 'feature-third',
         sourceFeatureIndex: 2, stableFeatureSvgId: 'stable-third'
-      },
-      orientationPolicy: 'match_reference',
-      effectiveReverseComplement: true
+      }
     }
   ]
 };
@@ -2635,7 +2631,8 @@ for (const mutate of [
   (request) => { request.layout.recordTranslations[0].x = Infinity; },
   (request) => { request.layout.unknownTransform = true; },
   (request) => { request.layout.similarityAlignment.records[2].anchor = null; },
-  (request) => { delete request.layout.similarityAlignment.records[2].orientationPolicy; },
+  (request) => { request.layout.similarityAlignment.records[2].orientationPolicy = 'preserve'; },
+  (request) => { request.layout.similarityAlignment.records[2].effectiveReverseComplement = true; },
   (request) => { request.layout.similarityAlignment.schema = 1; }
 ]) {
   const invalid = structuredClone(resolvedProteinCanonical.renderRequest);

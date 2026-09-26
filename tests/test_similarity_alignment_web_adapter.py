@@ -92,16 +92,12 @@ def test_web_adapter_projects_crop_facts_and_returns_canonical_plan() -> None:
                 "status": "reference",
                 "rationale": "reference",
                 "anchor": _anchor("record-a", "reference", 0),
-                "orientationPolicy": "preserve",
-                "effectiveReverseComplement": None,
             },
             {
                 "recordKey": "record-b",
                 "status": "aligned",
                 "rationale": "only_usable_candidate",
                 "anchor": _anchor("record-b", "target", 1),
-                "orientationPolicy": "preserve",
-                "effectiveReverseComplement": True,
             },
         ],
     }
@@ -121,8 +117,7 @@ def test_web_adapter_returns_ambiguity_then_uses_explicit_skip() -> None:
     assert ambiguous["records"][1]["kind"] == "ambiguous"  # type: ignore[index]
 
     request["choices"] = [
-        {"recordKey": "record-b", "kind": "skip", "anchor": None,
-         "orientationPolicy": "preserve"}
+        {"recordKey": "record-b", "kind": "skip", "anchor": None}
     ]
     resolved = resolve_similarity_alignment_payload(request)
     assert resolved["status"] == "resolved"
@@ -145,14 +140,13 @@ def test_web_adapter_rejects_unknown_fields_and_unmappable_reference() -> None:
         resolve_similarity_alignment_payload(cropped)
 
 
-def test_web_projection_discloses_candidate_evidence_and_orientation_facts() -> None:
+def test_web_projection_discloses_candidate_evidence_and_strand_relation() -> None:
     request = _request()
     request["members"][1]["displayName"] = "target gene"  # type: ignore[index]
     result = resolve_similarity_alignment_payload(request)
     row = result["records"][1]
     assert row["reviewReason"] == "only_usable_candidate"
     assert row["anchor"] == _anchor("record-b", "target", 1)
-    assert row["orientationPolicy"] == "preserve"
     candidate = row["candidates"][0]
     assert candidate["displayName"] == "target gene"
     assert (candidate["sourceStart"], candidate["sourceEnd"]) == (140, 170)
@@ -160,15 +154,12 @@ def test_web_projection_discloses_candidate_evidence_and_orientation_facts() -> 
     assert candidate["displayedStrand"] == 1
     assert candidate["representative"] is False
     assert candidate["directEvidence"] == ["rbh"]
-    assert candidate["orientation"] == {
-        "preserve": {"effect": "preserve", "effectiveReverseComplement": True},
-        "match_reference": {"effect": "preserve", "effectiveReverseComplement": True},
-    }
+    assert candidate["strandRelation"] == "same"
     assert result["referenceDisplayedStrand"] == 1
     assert result["referenceDisplayCenter"] == 25.0
 
 
-def test_web_recommendation_is_transient_and_explicit_match_is_validated() -> None:
+def test_web_recommendation_is_transient_and_explicit_select_is_validated() -> None:
     request = _request()
     request["directEdges"] = []
     request["members"][1]["sourceStrand"] = 1  # type: ignore[index]
@@ -181,33 +172,28 @@ def test_web_recommendation_is_transient_and_explicit_match_is_validated() -> No
     row = unresolved["records"][1]
     assert row["recommendationReason"] == "unique_representative"
     assert row["recommendedAnchor"] == _anchor("record-b", "other", 2)
-    assert row["candidates"][0]["orientation"]["match_reference"] == {
-        "effect": "reverse_whole_record",
-        "effectiveReverseComplement": False,
-    }
+    assert row["candidates"][0]["strandRelation"] == "opposite"
     assert unresolved["plan"] is None
 
     request["choices"] = [{
         "recordKey": "record-b", "kind": "select",
         "anchor": _anchor("record-b", "target", 1),
-        "orientationPolicy": "match_reference",
     }]
     selected = resolve_similarity_alignment_payload(request)
     assert selected["plan"]["schema"] == 2
     assert selected["plan"]["records"][1]["anchor"] == _anchor("record-b", "target", 1)
-    assert selected["plan"]["records"][1]["orientationPolicy"] == "match_reference"
-    assert selected["plan"]["records"][1]["effectiveReverseComplement"] is False
+    assert set(selected["plan"]["records"][1]) == {
+        "recordKey", "status", "rationale", "anchor"
+    }
 
 
-def test_web_rejects_incomplete_choice_and_invalid_crop() -> None:
+def test_web_rejects_removed_choice_field_and_invalid_crop() -> None:
     request = _request()
     request["choices"] = [{
         "recordKey": "record-b", "kind": "skip", "anchor": None,
     }]
-    with pytest.raises(ValidationError, match="invalid fields"):
-        resolve_similarity_alignment_payload(request)
     request["choices"][0]["orientationPolicy"] = "match_reference"  # type: ignore[index]
-    with pytest.raises(ValidationError, match="Skip choice must preserve"):
+    with pytest.raises(ValidationError, match="invalid fields"):
         resolve_similarity_alignment_payload(request)
 
     cropped = _request()
@@ -228,10 +214,7 @@ def test_web_crop_after_presentation_reverse_uses_source_coordinates() -> None:
     # then to 145 in the 101..300 crop.
     assert candidate["displayCenter"] == 145.0
     assert candidate["displayedStrand"] == -1
-    assert candidate["orientation"]["match_reference"] == {
-        "effect": "reverse_whole_record",
-        "effectiveReverseComplement": False,
-    }
+    assert candidate["strandRelation"] == "opposite"
 
     target_record["region"]["reverseComplement"] = True
     with pytest.raises(ValidationError, match="both region and presentation"):

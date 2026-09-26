@@ -148,7 +148,7 @@ def test_typed_similarity_alignment_example_runs_from_clean_directory(
         check=False,
     )
     assert result.returncode == 0, result.stderr
-    assert result.stdout.strip() == "only_usable_candidate match_reference True"
+    assert result.stdout.strip() == "only_usable_candidate opposite True"
 
 
 def test_first_web_tutorial_controls_have_stable_accessible_names() -> None:

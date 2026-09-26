@@ -70,9 +70,8 @@ for (const name of sessionNames) {
     assert.deepEqual(new Set(plan.records.map(({ recordKey }) => recordKey)),
       new Set(result.session.renderRequest.records.map(({ recordKey }) => recordKey)), name);
     for (const decision of plan.records) {
-      assert.ok(['preserve', 'match_reference'].includes(decision.orientationPolicy), name);
-      assert.equal(decision.status === 'aligned',
-        typeof decision.effectiveReverseComplement === 'boolean', name);
+      assert.deepEqual(Object.keys(decision).sort(),
+        ['anchor', 'rationale', 'recordKey', 'status'], name);
     }
   }
   assert.equal(
@@ -103,11 +102,11 @@ const admittedLambda = admitGallerySession(lambda);
 assert.equal(admittedLambda.version, 44);
 assert.equal(admittedLambda.editorState.featureCatalog.schema, 4);
 assert.deepEqual(admittedLambda.results, lambda.results);
-assert.equal(lambda.version, 42);
-assert.equal(lambda.editorState.featureCatalog.schema, 3);
+assert.equal(lambda.version, 44);
+assert.equal(lambda.editorState.featureCatalog.schema, 4);
 const releasedCurrent = await loadSession('HmmtDNA_basic_circular.gbdraw-session.json');
 assert.equal(releasedCurrent.version, 44);
-assert.equal(releasedCurrent.renderRequest.schema, 7);
+assert.equal(releasedCurrent.renderRequest.schema, 8);
 assert.equal(releasedCurrent.editorState.featureCatalog.schema, 4);
 const admittedReleasedCurrent = admitGallerySession(releasedCurrent);
 assert.equal(admittedReleasedCurrent.renderRequest.schema, 8);
@@ -125,7 +124,7 @@ const [lambdaPrepared, alteredPrepared] = await Promise.all([
 assert.deepEqual(
   lambdaPrepared.session.renderRequest.records.map(({ cardinality }) => cardinality),
   ['exactly_one'],
-  'publication must preserve schema-5 materialized record cardinality'
+  'publication must preserve materialized record cardinality'
 );
 assert.equal(
   lambdaPrepared.equivalence.actual.digest,

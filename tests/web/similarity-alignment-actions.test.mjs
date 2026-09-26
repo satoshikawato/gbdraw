@@ -53,22 +53,14 @@ const serializedCandidate = (item, request) => {
     selected.recordKey === request.reference.recordKey
     && selected.biologicalFeatureId === request.reference.biologicalFeatureId
   ))?.sourceStrand;
-  const opposite = displayedStrand !== null && referenceStrand !== null
-    && displayedStrand !== referenceStrand;
+  const strandRelation = displayedStrand === null || referenceStrand === null
+    ? 'unknown' : displayedStrand === referenceStrand ? 'same' : 'opposite';
   return {
     anchor: item.anchor, displayName: item.anchor.biologicalFeatureId,
     sourceStart: item.sourceStart, sourceEnd: item.sourceEnd,
     displayCenter: (item.sourceStart + item.sourceEnd) / 2,
     displayedStrand, hidden: false, representative: item.representative,
-    role: item.role, usable: true, directEvidence: [],
-    orientation: {
-      preserve: { effect: 'preserve', effectiveReverseComplement: false },
-      match_reference: {
-        effect: displayedStrand === null ? 'preserve_unknown_strand'
-          : opposite ? 'reverse_whole_record' : 'preserve',
-        effectiveReverseComplement: opposite
-      }
-    }
+    role: item.role, usable: true, directEvidence: [], strandRelation
   };
 };
 const responseFor = (request, { ambiguous = false, missing = false } = {}) => {
@@ -76,7 +68,7 @@ const responseFor = (request, { ambiguous = false, missing = false } = {}) => {
     if (recordKey === request.reference.recordKey) return {
       kind: 'decision', recordKey, status: 'reference', rationale: 'reference',
       reviewReason: null, anchor: request.reference,
-      orientationPolicy: 'preserve', effectiveReverseComplement: null, candidates: []
+      candidates: []
     };
     const candidates = request.members.filter((item) => item.anchor.recordKey === recordKey)
       .map((item) => serializedCandidate(item, request));
@@ -90,16 +82,13 @@ const responseFor = (request, { ambiguous = false, missing = false } = {}) => {
         status: choice.kind === 'select' ? 'aligned' : 'skipped',
         rationale: choice.kind === 'select' ? 'user_selected' : 'skipped_by_user',
         reviewReason: null, anchor: selected?.anchor || null,
-        orientationPolicy: choice.orientationPolicy,
-        effectiveReverseComplement: selected
-          ? selected.orientation[choice.orientationPolicy].effectiveReverseComplement : null,
         candidates
       };
     }
     if (!candidates.length || missing && recordKey === 'c') return {
       kind: 'decision', recordKey, status: 'skipped',
       rationale: 'skipped_no_candidate', reviewReason: null, anchor: null,
-      orientationPolicy: 'preserve', effectiveReverseComplement: null, candidates: []
+      candidates: []
     };
     if (ambiguous && recordKey === 'b') return {
       kind: 'ambiguous', recordKey, candidates, directRbhCandidates: [],
@@ -109,8 +98,7 @@ const responseFor = (request, { ambiguous = false, missing = false } = {}) => {
     return {
       kind: 'decision', recordKey, status: 'aligned',
       rationale: 'only_usable_candidate', reviewReason: 'only_usable_candidate',
-      anchor: candidates[0].anchor, orientationPolicy: 'preserve',
-      effectiveReverseComplement: false, candidates
+      anchor: candidates[0].anchor, candidates
     };
   });
   const status = records.some(({ kind }) => kind === 'ambiguous') ? 'ambiguous' : 'resolved';
@@ -119,10 +107,8 @@ const responseFor = (request, { ambiguous = false, missing = false } = {}) => {
     referenceDisplayedStrand: 1, referenceDisplayCenter: 65, records,
     plan: status === 'resolved' ? {
       schema: 2, groupId: request.groupId, reference: request.reference,
-      records: records.map(({ recordKey, status: decisionStatus, rationale, anchor: chosen,
-        orientationPolicy, effectiveReverseComplement }) => ({
-        recordKey, status: decisionStatus, rationale, anchor: chosen,
-        orientationPolicy, effectiveReverseComplement
+      records: records.map(({ recordKey, status: decisionStatus, rationale, anchor: chosen }) => ({
+        recordKey, status: decisionStatus, rationale, anchor: chosen
       }))
     } : null
   };
@@ -184,12 +170,10 @@ test('normal Align applies only-usable and unusable targets with one helper and 
       unusable.rationale = 'skipped_unmappable';
       unusable.reviewReason = null;
       unusable.anchor = null;
-      unusable.effectiveReverseComplement = null;
       unusable.candidates[0].usable = false;
       unusable.candidates[0].displayCenter = null;
       Object.assign(response.plan.records[2], {
-        status: 'skipped', rationale: 'skipped_unmappable', anchor: null,
-        effectiveReverseComplement: null
+        status: 'skipped', rationale: 'skipped_unmappable', anchor: null
       });
       return { result: response };
     },
@@ -364,7 +348,6 @@ test('explicit review opens an applicable Python-selected draft for either respo
       JSON.stringify(anchor('b', 'target-a', 1)));
     assert.equal(fixture.actions.draft.value.rows[0].reason,
       ambiguous ? 'unique_representative' : 'only_usable_candidate');
-    assert.equal(fixture.actions.draft.value.rows[0].orientationPolicy, 'preserve');
     assert.equal(fixture.actions.draft.value.reference.featureIdentifier, 'clicked');
     assert.equal(fixture.actions.draft.value.reference.coordinates, '51..70 bp');
     assert.equal(fixture.actions.draft.value.rows[0].recommendedKey,
@@ -391,7 +374,7 @@ test('missing target is explicitly unchanged and complete Apply includes every t
   assert.deepEqual(fixture.state.results.value, [{ name: 'aligned.svg' }]);
 });
 
-test('candidate, canvas, Skip, and orientation use local edits with zero Worker jobs', async () => {
+test('candidate selection and Skip are local edits with zero Worker jobs', async () => {
   const fixture = create({ members: [reference, targetA, targetB, targetC],
     helper: (_operation, { request }) => ({ result: responseFor(request, { ambiguous: true }) }) });
   await startReview(fixture);
@@ -400,16 +383,12 @@ test('candidate, canvas, Skip, and orientation use local edits with zero Worker 
     { status: 'selected' });
   assert.equal(fixture.actions.draft.value.rows[0].choice.candidateKey,
     JSON.stringify(anchor('b', 'target-b', 2)));
-  assert.deepEqual(fixture.actions.setOrientation('b', 'match_reference'),
-    { status: 'selected' });
-  assert.equal(fixture.actions.draft.value.rows[0].orientationEffect, 'preserve');
+  assert.equal(fixture.actions.draft.value.rows[0].candidates[1].strandRelation, 'same');
   fixture.actions.skipRecord('b');
-  assert.equal(fixture.actions.draft.value.rows[0].orientationPolicy, 'preserve');
+  assert.equal(fixture.actions.draft.value.rows[0].choice.kind, 'skip');
   fixture.actions.selectCandidate('b', anchor('b', 'target-a', 1));
-  fixture.actions.setOrientation('b', 'match_reference');
-  assert.equal(fixture.actions.draft.value.rows[0].orientationEffect, 'reverse_whole_record');
-  fixture.actions.setOrientation('c', 'match_reference');
-  assert.equal(fixture.actions.draft.value.rows[1].orientationEffect, 'preserve_unknown_strand');
+  assert.equal(fixture.actions.draft.value.rows[0].candidates[0].strandRelation, 'opposite');
+  assert.equal(fixture.actions.draft.value.rows[1].candidates[0].strandRelation, 'unknown');
   assert.equal(fixture.helperCalls.length, count);
   assert.equal(fixture.generationCalls.length, 0);
 });
@@ -418,17 +397,14 @@ test('Apply validates one explicit batch and commits through one generation call
   const fixture = create({ members: [reference, targetA, targetB, targetC],
     helper: (_operation, { request }) => ({ result: responseFor(request, { ambiguous: true }) }) });
   await startReview(fixture);
-  fixture.actions.setOrientation('b', 'match_reference');
   assert.deepEqual(await fixture.actions.applyDraft(), { status: 'ok' });
   assert.equal(fixture.helperCalls.length, 2);
   assert.equal(fixture.generationCalls.length, 1);
   assert.deepEqual(fixture.helperCalls[1].payload.request.choices, [
-    { recordKey: 'b', kind: 'select', anchor: anchor('b', 'target-a', 1),
-      orientationPolicy: 'match_reference' },
-    { recordKey: 'c', kind: 'select', anchor: anchor('c', 'target-c', 3),
-      orientationPolicy: 'preserve' }
+    { recordKey: 'b', kind: 'select', anchor: anchor('b', 'target-a', 1) },
+    { recordKey: 'c', kind: 'select', anchor: anchor('c', 'target-c', 3) }
   ]);
-  assert.equal(fixture.state.similarityAlignmentPlan.value.records[1].effectiveReverseComplement, true);
+  assert.equal(fixture.actions.summary.value.reversed, 0);
   assert.equal(fixture.actions.status.value, 'idle');
 });
 
@@ -597,6 +573,21 @@ test('drawer requires a unique exact reference before starting the Worker', asyn
 test('malformed Python projection and initial Worker errors leave the prior Result intact', async () => {
   for (const helper of [
     (_operation, { request }) => ({ result: { ...responseFor(request), schema: 1 } }),
+    (_operation, { request }) => {
+      const response = responseFor(request);
+      response.records[1].candidates[0].orientation = {};
+      return { result: response };
+    },
+    (_operation, { request }) => {
+      const response = responseFor(request);
+      response.records[1].orientationPolicy = 'preserve';
+      return { result: response };
+    },
+    (_operation, { request }) => {
+      const response = responseFor(request);
+      response.plan.records[1].effectiveReverseComplement = false;
+      return { result: response };
+    },
     () => { throw new Error('Python resolver unavailable. Retry Align.'); }
   ]) {
     const fixture = create({ helper });

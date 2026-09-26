@@ -14,12 +14,11 @@ The current Session 44 writer uses canonical request schema 8 to move
 Linear Similarity Group alignment out of generated-protein pipeline settings. The Linear request layout now owns
 finite `x` and `y` base translations keyed by `recordKey`, plus an optional
 resolved `SimilarityAlignmentPlan`. The plan records the exact reference feature,
-one validated decision per displayed record, its rationale, requested
-`preserve` or `match_reference` policy, and effective source-relative
-orientation. The nested plan is schema 2. Its unreleased schema-1 predecessor
-has no current reader; the Session remains version 44 and the canonical request
-remains schema 8. `RecordPresentation.reverse_complement` remains the base
-orientation owner.
+one validated decision per displayed record, and its rationale. Record
+presentation or region state owns orientation, and anchor centers are projected
+from the resolved record display. The nested plan is schema 2. Its unreleased
+schema-1 predecessor has no current reader; the Session remains version 44 and
+the canonical request remains schema 8.
 
 Current writers never emit `align_orthogroup_feature`,
 `alignOrthogroupFeature`, or the former Session-only

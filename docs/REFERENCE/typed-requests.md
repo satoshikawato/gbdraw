@@ -31,6 +31,12 @@ Every `RecordInput` declares a `RecordCardinality`:
 
 Selectors and selector-qualified regions identify one record and therefore require `EXACTLY_ONE`. The planner loads each unique source once, then applies selection, reverse complement, and record-local region transforms. Collection-level ordering and layout are applied after expansion.
 
+For Linear Similarity Group alignment, `similarity_alignment` stores the exact
+reference and each record's anchor or Skip decision. It has no orientation
+field. Each `RecordInput` owns its orientation through
+`RecordPresentation.reverse_complement` or its region setting. The planner
+projects anchor centers after resolving those record transforms.
+
 ## Planning and rendering lifecycle
 
 | Function | Result and side effects |

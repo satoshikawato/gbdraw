@@ -231,7 +231,6 @@ def _member_candidate(
             raw["identityIsUnique"], f"{path}.identityIsUnique"
         ),
         hidden=_boolean(raw["hidden"], f"{path}.hidden"),
-        effective_reverse_complement=effective_reverse,
         representative=_boolean(raw["representative"], f"{path}.representative"),
         role=role.strip(),
         source_start=start,
@@ -263,18 +262,7 @@ def _serialize_review_candidate(row: AlignmentReviewCandidate) -> dict[str, obje
         "role": candidate.role,
         "usable": row.usable,
         "directEvidence": list(row.direct_evidence),
-        "orientation": {
-            "preserve": {
-                "effect": "preserve",
-                "effectiveReverseComplement": candidate.effective_reverse_complement,
-            },
-            "match_reference": {
-                "effect": row.match_reference_effect.value,
-                "effectiveReverseComplement": (
-                    row.match_reference_effective_reverse_complement
-                ),
-            },
-        },
+        "strandRelation": row.strand_relation.value,
     }
 
 
@@ -291,8 +279,6 @@ def _serialize_decision(
             decision.review_reason.value if decision.review_reason else None
         ),
         "anchor": _serialize_anchor(decision.anchor) if decision.anchor else None,
-        "orientationPolicy": decision.orientation_policy.value,
-        "effectiveReverseComplement": decision.effective_reverse_complement,
         "candidates": [_serialize_review_candidate(item) for item in row.candidates],
     }
 
@@ -325,8 +311,6 @@ def _serialize_plan(plan: SimilarityAlignmentPlan) -> dict[str, object]:
                 "rationale": decision.rationale.value,
                 "anchor": _serialize_anchor(decision.anchor)
                 if decision.anchor else None,
-                "orientationPolicy": decision.orientation_policy.value,
-                "effectiveReverseComplement": decision.effective_reverse_complement,
             }
             for decision in plan.records
         ],
@@ -393,7 +377,7 @@ def resolve_similarity_alignment_payload(payload: object) -> dict[str, object]:
     choices = []
     for index, value in enumerate(_list(raw["choices"], "request.choices")):
         path = f"request.choices[{index}]"
-        choice = _object(value, {"recordKey", "kind", "anchor", "orientationPolicy"}, path)
+        choice = _object(value, {"recordKey", "kind", "anchor"}, path)
         choices.append(
             AlignmentRecordChoice(
                 record_key=_text(choice["recordKey"], f"{path}.recordKey"),
@@ -401,9 +385,6 @@ def resolve_similarity_alignment_payload(payload: object) -> dict[str, object]:
                 anchor=(
                     _anchor(choice["anchor"], f"{path}.anchor")
                     if choice["anchor"] is not None else None
-                ),
-                orientation_policy=_text(
-                    choice["orientationPolicy"], f"{path}.orientationPolicy"
                 ),
             )
         )

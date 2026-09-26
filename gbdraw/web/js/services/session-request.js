@@ -205,8 +205,7 @@ const canonicalSimilarityAlignment = (value, recordKeys, path) => {
   const records = plan.records.map((raw, index) => {
     const decisionPath = `${path}.records[${index}]`;
     const decision = requireExactCanonicalKeys(raw, [
-      'recordKey', 'status', 'rationale', 'anchor', 'orientationPolicy',
-      'effectiveReverseComplement'
+      'recordKey', 'status', 'rationale', 'anchor'
     ], decisionPath);
     const recordKey = requireCanonicalText(decision.recordKey, `${decisionPath}.recordKey`);
     const anchor = decision.anchor === null
@@ -215,12 +214,6 @@ const canonicalSimilarityAlignment = (value, recordKeys, path) => {
     if (anchor && anchor.recordKey !== recordKey) {
       throw new Error(`${decisionPath}.anchor belongs to another record.`);
     }
-    if (!['preserve', 'match_reference'].includes(decision.orientationPolicy)) {
-      throw new Error(`${decisionPath}.orientationPolicy is unsupported.`);
-    }
-    if (decision.effectiveReverseComplement !== null && typeof decision.effectiveReverseComplement !== 'boolean') {
-      throw new Error(`${decisionPath}.effectiveReverseComplement must be boolean or null.`);
-    }
     const alignedRationales = new Set([
       'user_selected', 'only_usable_candidate', 'unique_direct_rbh'
     ]);
@@ -228,25 +221,18 @@ const canonicalSimilarityAlignment = (value, recordKeys, path) => {
       'skipped_by_user', 'skipped_no_candidate', 'skipped_unmappable'
     ]);
     const valid = decision.status === 'reference'
-      ? anchor !== null && decision.rationale === 'reference' &&
-        decision.orientationPolicy === 'preserve' &&
-        decision.effectiveReverseComplement === null
+      ? anchor !== null && decision.rationale === 'reference'
       : decision.status === 'aligned'
-        ? anchor !== null && alignedRationales.has(decision.rationale) &&
-          typeof decision.effectiveReverseComplement === 'boolean'
+        ? anchor !== null && alignedRationales.has(decision.rationale)
         : decision.status === 'skipped'
-          ? anchor === null && skippedRationales.has(decision.rationale) &&
-            decision.orientationPolicy === 'preserve' &&
-            decision.effectiveReverseComplement === null
+          ? anchor === null && skippedRationales.has(decision.rationale)
           : false;
     if (!valid) throw new Error(`${decisionPath} contains an invalid plan combination.`);
     return {
       recordKey,
       status: decision.status,
       rationale: decision.rationale,
-      anchor,
-      orientationPolicy: decision.orientationPolicy,
-      effectiveReverseComplement: decision.effectiveReverseComplement
+      anchor
     };
   });
   const decisionKeys = records.map((decision) => decision.recordKey);

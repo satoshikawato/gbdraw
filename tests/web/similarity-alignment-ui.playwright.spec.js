@@ -518,7 +518,7 @@ test('Similarity alignment UI completes exact-reference, ambiguity, focus, summa
   )).toBeLessThan(24);
   await expect(dialog.locator('[data-similarity-alignment-reference]')).toBeVisible();
   await expect(dialog.locator('[data-similarity-alignment-reason]')).toBeVisible();
-  await expect(dialog.getByRole('checkbox', { name: /Match reference direction for/ })).toBeVisible();
+  await expect(dialog.getByRole('checkbox', { name: /Match reference direction for/ })).toHaveCount(0);
   await paletteBody.evaluate((element) => { element.scrollTop = element.scrollHeight; });
   expect(await paletteBody.evaluate((element) => element.scrollTop)).toBeGreaterThan(0);
   await page.setViewportSize({ width: 390, height: 740 });
@@ -553,7 +553,6 @@ test('Similarity alignment UI completes exact-reference, ambiguity, focus, summa
   await align.click();
   await expect(dialog).toBeVisible({ timeout: 180000 });
   await dialog.getByRole('radio', { name: /Select .*bp, strand/ }).first().check();
-  await dialog.getByRole('checkbox', { name: /Match reference direction for/ }).check();
   await expect(apply).toBeEnabled();
   await apply.click();
 
@@ -592,8 +591,8 @@ test('Similarity alignment UI completes exact-reference, ambiguity, focus, summa
       results: state.results.value.map(({ name, content }) => ({ name, content }))
     };
   });
-  expect(savedState.plan.records.find(({ status }) => status === 'aligned'))
-    .toMatchObject({ orientationPolicy: 'match_reference' });
+  expect(Object.keys(savedState.plan.records.find(({ status }) => status === 'aligned')).sort())
+    .toEqual(['anchor', 'rationale', 'recordKey', 'status']);
   await page.evaluate(() => { window.__GBDRAW_APP__.sessionTitle = 's06-active-alignment'; });
   const downloadPromise = page.waitForEvent('download', { timeout: 180000 });
   await page.evaluate(() => window.__GBDRAW_APP__.saveSessionWithTitle());
@@ -725,32 +724,14 @@ const openAlignmentFromDrawer = async (page) => {
   return dialog;
 };
 
-test('review reports Python-projected reversal and unknown-strand preservation', async ({ page }, testInfo) => {
+test('review has no per-target direction control', async ({ page }, testInfo) => {
   test.setTimeout(180000);
   await loadAmbiguousSession(page, testInfo);
-  for (const [strand, expected] of [
-    [-1, 'reverse whole record'],
-    [null, 'preserve because a strand is unknown']
-  ]) {
-    await page.evaluate(async (nextStrand) => {
-      const { state } = await import('./js/state.js');
-      const group = state.orthogroups.value.find(({ id }) => id === 'og_1');
-      group.members.filter(({ recordKey }) => recordKey === 'record_a')
-        .forEach((member) => { member.strand = nextStrand; });
-    }, strand);
-    const dialog = await openAlignmentFromDrawer(page);
-    const checkbox = dialog.getByRole('checkbox', {
-      name: /Match reference direction for record-1.gbk/
-    });
-    await expect(checkbox).not.toBeChecked();
-    await checkbox.focus();
-    await page.keyboard.press('Space');
-    await expect(checkbox).toBeChecked();
-    await expect(dialog.locator('[data-similarity-alignment-orientation]')).toContainText(expected);
-    await expect(dialog.getByRole('button', { name: 'Apply', exact: true })).toBeEnabled();
-    await dialog.getByRole('button', { name: 'Cancel', exact: true }).click();
-    await expect(dialog).toBeHidden();
-  }
+  const dialog = await openAlignmentFromDrawer(page);
+  await expect(dialog.getByRole('checkbox', { name: /Match reference direction for/ })).toHaveCount(0);
+  await expect(dialog.locator('[data-similarity-alignment-orientation]')).toHaveCount(0);
+  await expect(dialog.getByRole('radio', { name: /Select .*bp, strand/ }).first()).toBeVisible();
+  await dialog.getByRole('button', { name: 'Cancel', exact: true }).click();
 });
 
 test('Apply error retains draft, focuses retry guidance, and accepts correction', async ({ page }, testInfo) => {
@@ -878,9 +859,8 @@ test('one usable member applies directly through one Worker resolve and one Hist
   await expect(resolvedReview.locator('[data-similarity-alignment-reference]')).toContainText('b0');
   await expect(resolvedReview.locator('[data-alignment-record-key]')).toHaveCount(1);
   await expect(resolvedReview.getByRole('button', { name: 'Apply', exact: true })).toBeEnabled();
-  const matchDirection = resolvedReview.getByRole('checkbox', { name: /Match reference direction for/ });
-  await matchDirection.check();
-  await expect(matchDirection).toBeChecked();
+  await expect(resolvedReview.getByRole('checkbox', { name: /Match reference direction for/ }))
+    .toHaveCount(0);
   await resolvedReview.getByRole('radio', { name: /Skip / }).check();
   await expect(resolvedReview).toContainText('Unchanged');
   await resolvedReview.getByRole('radio', { name: /Select .*bp, strand/ }).first().check();

@@ -165,8 +165,8 @@ For Linear requests, `renderRequest` schema 8 stores `recordTranslations` and
 is schema 2; this does not change the Session version or request schema. Every
 translation has one stable `recordKey` and finite `x` and `y` values. An active
 plan covers those displayed keys and stores the exact reference, each target's
-Select or Skip outcome, requested `preserve` or `match_reference` policy, and
-effective source-relative reverse-complement result. Current readers reject
+Select or Skip outcome and rationale. Record presentation or region state
+owns the orientation used to project each anchor center. Current readers reject
 partial, malformed, mismatched, or unsupported plans. Schema 1 of the nested
 plan was never released and has no reader. There is no Circular form or generic
 transform matrix.
@@ -182,8 +182,8 @@ Result. Current requests reject group-only input. Loading a saved preview does
 not initialize the diagram Worker or start LOSATP.
 
 A current Session round trip retains exact feature and record identities,
-Select/Skip rationale, requested and effective orientation, base translations,
-and the immediate pre-align Reset baseline. Ordinary Generate renders the saved
+Select/Skip rationale, record orientation, base translations, and the
+immediate pre-align Reset baseline. Ordinary Generate renders the saved
 plan through the canonical typed path without guessing a new anchor. A stable
 reorder resolves by `recordKey` and biological feature identity. Source
 replacement, crop, selector, manual orientation, and record drag clear the plan

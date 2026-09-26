@@ -3917,16 +3917,7 @@ export const createAppSetup = () => {
     similarityAlignmentActions?.setManualOrientation?.(sequence, reverseComplement)
   );
 
-  const linearRecordOrientationValue = (sequence) => {
-    const recordKey = String(sequence?.uid || '');
-    const decision = state.similarityAlignmentPlan.value?.records?.find(
-      (entry) => entry.recordKey === recordKey
-    );
-    return decision?.effectiveReverseComplement === null
-      || decision?.effectiveReverseComplement === undefined
-      ? Boolean(sequence?.region_reverse)
-      : Boolean(decision.effectiveReverseComplement);
-  };
+  const linearRecordOrientationValue = (sequence) => Boolean(sequence?.region_reverse);
 
   const resetLinearRecordDefinition = (seq) => {
     if (!seq) return;
@@ -4327,7 +4318,6 @@ export const createAppSetup = () => {
     similarityAlignmentDrawerDisabledReason: similarityAlignmentActions.drawerDisabledReason,
     selectSimilarityAlignmentCandidate: similarityAlignmentActions.selectCandidate,
     skipSimilarityAlignmentRecord: similarityAlignmentActions.skipRecord,
-    setSimilarityAlignmentOrientation: similarityAlignmentActions.setOrientation,
     applySimilarityAlignmentDraft: applySimilarityAlignmentDialog,
     cancelSimilarityAlignmentDraft: cancelSimilarityAlignmentDialog,
     cancelSimilarityAlignmentDialog,

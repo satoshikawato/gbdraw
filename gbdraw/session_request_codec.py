@@ -1097,8 +1097,6 @@ def _encode_similarity_alignment_plan(
                     if decision.anchor is not None
                     else None
                 ),
-                "orientationPolicy": decision.orientation_policy.value,
-                "effectiveReverseComplement": decision.effective_reverse_complement,
             }
             for decision in plan.records
         ],
@@ -1152,8 +1150,6 @@ def _decode_similarity_alignment_plan(
                 "status",
                 "rationale",
                 "anchor",
-                "orientationPolicy",
-                "effectiveReverseComplement",
             },
         )
         decisions.append(
@@ -1169,10 +1165,6 @@ def _decode_similarity_alignment_plan(
                     if decision["anchor"] is not None
                     else None
                 ),
-                orientation_policy=decision["orientationPolicy"],
-                effective_reverse_complement=decision[
-                    "effectiveReverseComplement"
-                ],
             )
         )
     return SimilarityAlignmentPlan(

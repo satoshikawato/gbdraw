@@ -7,7 +7,6 @@ import { isInternalProteinDisplayId } from './feature-utils.js';
 
 const { computed, ref } = window.Vue;
 
-const ORIENTATION_POLICIES = new Set(['preserve', 'match_reference']);
 const REVIEW_REASONS = new Set([
   'only_usable_candidate', 'unique_direct_rbh',
   'unique_representative', 'deterministic_candidate_1'
@@ -125,7 +124,7 @@ const candidateView = (candidate, request, displayFacts = new Map()) => {
     representative: candidate.representative,
     role: candidate.role || 'member',
     directEvidence: candidate.directEvidence.length ? candidate.directEvidence : ['None'],
-    orientation: candidate.orientation,
+    strandRelation: candidate.strandRelation,
     usable: candidate.usable
   };
 };
@@ -170,16 +169,12 @@ const reviewRows = (response, request, displayFacts, recordLabels) => response.r
       choice: selectedAnchor
         ? { kind: 'select', candidateKey: anchorKey(selectedAnchor) }
         : { kind: 'skip', candidateKey: null },
-      orientationPolicy: 'preserve',
-      orientationEffect: selectedAnchor
-        ? record.candidates.find(({ anchor }) => sameJson(anchor, selectedAnchor))?.orientation.preserve.effect
-        : 'preserve',
       unchanged: !selectedAnchor,
       repairRequired: false
     };
   });
 
-const successfulSummary = (plan, request) => {
+const successfulSummary = (plan) => {
   const aligned = plan.records.filter(({ status }) => status === 'aligned').length;
   const explicitlySkipped = plan.records.filter(
     ({ rationale }) => rationale === 'skipped_by_user'
@@ -188,13 +183,7 @@ const successfulSummary = (plan, request) => {
     rationale === 'skipped_no_candidate' || rationale === 'skipped_unmappable'
   )).length;
   const unchanged = plan.records.filter(({ status }) => status === 'reference').length;
-  const base = new Map(request.records.map((record) => [
-    record.recordKey, baseReverseComplement(record)
-  ]));
-  const reversed = plan.records.filter((decision) => (
-    decision.status === 'aligned'
-    && decision.effectiveReverseComplement !== base.get(decision.recordKey)
-  )).length;
+  const reversed = 0;
   return deepFreeze({
     aligned,
     unchanged,
@@ -227,17 +216,13 @@ const inspectActivePlan = (plan, request) => {
       label: plan.reference.biologicalFeatureId
     },
     records: plan.records.map((decision) => {
-      const baseReverse = baseReverseComplement(records.get(decision.recordKey));
-      const effectiveReverse = decision.effectiveReverseComplement === null
-        ? baseReverse
-        : decision.effectiveReverseComplement;
       return {
         recordKey: decision.recordKey,
         anchorLabel: decision.anchor?.biologicalFeatureId || 'Skip',
         status: decision.status,
         rationale: decision.rationale,
         rationaleLabel: rationaleLabels[decision.rationale] || decision.rationale,
-        reversedFromSource: Boolean(effectiveReverse)
+        reversedFromSource: baseReverseComplement(records.get(decision.recordKey))
       };
     })
   });
@@ -282,7 +267,7 @@ const validateCandidate = (value, path, recordKey) => {
   const raw = exactObject(value, [
     'anchor', 'displayName', 'sourceStart', 'sourceEnd', 'displayCenter',
     'displayedStrand', 'hidden', 'representative', 'role', 'usable',
-    'directEvidence', 'orientation'
+    'directEvidence', 'strandRelation'
   ], path);
   const anchor = validateAnchor(raw.anchor, `${path}.anchor`);
   if (anchor.recordKey !== recordKey || typeof raw.displayName !== 'string'
@@ -296,26 +281,19 @@ const validateCandidate = (value, path, recordKey) => {
     || raw.directEvidence.some((evidence) => typeof evidence !== 'string')) {
     throw new Error(`${path} contains invalid candidate facts.`);
   }
-  const orientation = exactObject(raw.orientation, ['preserve', 'match_reference'], `${path}.orientation`);
-  for (const policy of ORIENTATION_POLICIES) {
-    const outcome = exactObject(orientation[policy], [
-      'effect', 'effectiveReverseComplement'
-    ], `${path}.orientation.${policy}`);
-    if (!['preserve', 'reverse_whole_record', 'preserve_unknown_strand'].includes(outcome.effect)
-      || typeof outcome.effectiveReverseComplement !== 'boolean') {
-      throw new Error(`${path}.orientation.${policy} is invalid.`);
-    }
+  if (!['same', 'opposite', 'unknown'].includes(raw.strandRelation)) {
+    throw new Error(`${path}.strandRelation is invalid.`);
   }
-  return { ...raw, anchor, orientation };
+  return { ...raw, anchor };
 };
 
 const validateDecision = (value, path) => {
   const raw = exactObject(value, [
     'kind', 'recordKey', 'status', 'rationale', 'reviewReason', 'anchor',
-    'orientationPolicy', 'effectiveReverseComplement', 'candidates'
+    'candidates'
   ], path);
   if (raw.kind !== 'decision' || !STATUSES.has(raw.status)
-    || !RATIONALES.has(raw.rationale) || !ORIENTATION_POLICIES.has(raw.orientationPolicy)
+    || !RATIONALES.has(raw.rationale)
     || (raw.reviewReason !== null && !REVIEW_REASONS.has(raw.reviewReason))) {
     throw new Error(`${path} contains an unknown decision value.`);
   }
@@ -325,23 +303,16 @@ const validateDecision = (value, path) => {
     validateCandidate(candidate, `${path}.candidates[${index}]`, recordKey)
   ));
   if (anchor && anchor.recordKey !== recordKey) throw new Error(`${path}.anchor belongs to another record.`);
-  if (raw.effectiveReverseComplement !== null
-    && typeof raw.effectiveReverseComplement !== 'boolean') {
-    throw new Error(`${path}.effectiveReverseComplement is invalid.`);
-  }
   const alignedRationales = new Set(['user_selected', 'only_usable_candidate', 'unique_direct_rbh']);
   const skippedRationales = new Set(['skipped_by_user', 'skipped_no_candidate', 'skipped_unmappable']);
   const valid = raw.status === 'reference'
     ? anchor !== null && raw.rationale === 'reference' && raw.reviewReason === null
-      && raw.orientationPolicy === 'preserve' && raw.effectiveReverseComplement === null
     : raw.status === 'aligned'
       ? anchor !== null && alignedRationales.has(raw.rationale)
-        && typeof raw.effectiveReverseComplement === 'boolean'
         && candidates.some((candidate) => candidate.usable && sameJson(candidate.anchor, anchor))
         && raw.reviewReason === (raw.rationale === 'user_selected' ? null : raw.rationale)
       : anchor === null && skippedRationales.has(raw.rationale)
-        && raw.reviewReason === null && raw.orientationPolicy === 'preserve'
-        && raw.effectiveReverseComplement === null;
+        && raw.reviewReason === null;
   if (!valid) throw new Error(`${path} contains an invalid decision combination.`);
   return { ...raw, anchor, candidates };
 };
@@ -383,15 +354,12 @@ const validatePlan = (value, response, path) => {
   const records = raw.records.map((record, index) => {
     const decision = response.records[index];
     const fields = exactObject(record, [
-      'recordKey', 'status', 'rationale', 'anchor', 'orientationPolicy',
-      'effectiveReverseComplement'
+      'recordKey', 'status', 'rationale', 'anchor'
     ], `${path}.records[${index}]`);
     if (!decision || decision.kind !== 'decision'
       || !sameJson(fields, {
         recordKey: decision.recordKey, status: decision.status,
-        rationale: decision.rationale, anchor: decision.anchor,
-        orientationPolicy: decision.orientationPolicy,
-        effectiveReverseComplement: decision.effectiveReverseComplement
+        rationale: decision.rationale, anchor: decision.anchor
       })) throw new Error(`${path} differs from helper decisions.`);
     return fields;
   });
@@ -651,22 +619,12 @@ const anchorsAgree = (left, right) => {
   ));
 };
 
-const orientationsFromRequest = (request, plan = null) => {
-  const decisions = new Map(
-    (Array.isArray(plan?.records) ? plan.records : [])
-      .map((decision) => [decision.recordKey, decision])
-  );
-  return (Array.isArray(request?.records) ? request.records : []).map((record) => {
-    const decision = decisions.get(record.recordKey);
-    return {
-      recordKey: record.recordKey,
-      reverseComplement: decision?.effectiveReverseComplement === null
-        || decision?.effectiveReverseComplement === undefined
-        ? baseReverseComplement(record)
-        : Boolean(decision.effectiveReverseComplement)
-    };
-  });
-};
+const orientationsFromRequest = (request) => (
+  (Array.isArray(request?.records) ? request.records : []).map((record) => ({
+    recordKey: record.recordKey,
+    reverseComplement: baseReverseComplement(record)
+  }))
+);
 
 const requestWithOrientations = (request, orientations) => {
   const byRecord = new Map(
@@ -800,12 +758,12 @@ export const createSimilarityAlignmentActions = ({
     const plan = materializePlan ? state.similarityAlignmentPlan?.value : null;
     return {
       request: materializePlan
-        ? requestWithOrientations(request, orientationsFromRequest(request, plan))
+        ? requestWithOrientations(request, orientationsFromRequest(request))
         : request,
       translations: materializePlan
         ? materializedTranslations(recordKeys, plan)
         : replacementTranslations(state, recordKeys),
-      orientations: orientationsFromRequest(request, plan)
+      orientations: orientationsFromRequest(request)
     };
   };
 
@@ -878,7 +836,7 @@ export const createSimilarityAlignmentActions = ({
     }
     if (expectedActionId !== actionId) return { status: 'stale' };
     if (outcome?.status === 'ok') {
-      summary.value = successfulSummary(plan, request);
+      summary.value = successfulSummary(plan);
       repair.value = null;
       notice.value = '';
       activeBaseline = null;
@@ -980,23 +938,13 @@ export const createSimilarityAlignmentActions = ({
       const candidate = row.candidates.find(({ anchor }) => sameJson(anchor, selectedAnchor));
       if (!candidate) return { status: 'rejected' };
       next = { ...row, choice: { kind: 'select', candidateKey: candidate.key },
-        orientationPolicy: row.orientationPolicy,
-        orientationEffect: candidate.orientation[row.orientationPolicy].effect,
         reason: 'user_selected', reasonLabel: 'Selected by user',
         unchanged: false, repairRequired: false };
     } else if (update.kind === 'skip') {
       if (!row.candidates.length) return { status: 'rejected' };
       next = { ...row, choice: { kind: 'skip', candidateKey: null },
-        orientationPolicy: 'preserve', orientationEffect: 'preserve',
         reason: 'skipped_by_user', reasonLabel: 'Skipped by user',
         unchanged: true, repairRequired: false };
-    } else if (update.kind === 'orientation') {
-      if (!ORIENTATION_POLICIES.has(update.policy) || row.choice?.kind !== 'select') {
-        return { status: 'rejected' };
-      }
-      const candidate = row.candidates.find(({ key }) => key === row.choice.candidateKey);
-      next = { ...row, orientationPolicy: update.policy,
-        orientationEffect: candidate.orientation[update.policy].effect };
     } else return { status: 'rejected' };
     draft.value = deepFreeze({
       ...draft.value,
@@ -1017,8 +965,7 @@ export const createSimilarityAlignmentActions = ({
       return {
         recordKey: row.recordKey,
         kind: row.choice.kind,
-        anchor: row.choice.kind === 'select' ? candidate.anchor : null,
-        orientationPolicy: row.choice.kind === 'select' ? row.orientationPolicy : 'preserve'
+        anchor: row.choice.kind === 'select' ? candidate.anchor : null
       };
     });
     const request = deepFreeze({ ...cloneJson(activeRequest), choices });
@@ -1146,8 +1093,7 @@ export const createSimilarityAlignmentActions = ({
       .map((decision) => ({
         recordKey: decision.recordKey,
         kind: decision.status === 'aligned' ? 'select' : 'skip',
-        anchor: decision.status === 'aligned' ? decision.anchor : null,
-        orientationPolicy: decision.status === 'aligned' ? decision.orientationPolicy : 'preserve'
+        anchor: decision.status === 'aligned' ? decision.anchor : null
       }))
   );
 
@@ -1382,7 +1328,6 @@ export const createSimilarityAlignmentActions = ({
     drawerDisabledReason,
     selectCandidate: (recordKey, anchor) => editRow(recordKey, { kind: 'select', anchor }),
     skipRecord: (recordKey) => editRow(recordKey, { kind: 'skip' }),
-    setOrientation: (recordKey, policy) => editRow(recordKey, { kind: 'orientation', policy }),
     applyDraft,
     cancel,
     previewCandidate: (anchor) => {

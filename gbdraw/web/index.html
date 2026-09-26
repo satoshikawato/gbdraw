@@ -7048,17 +7048,6 @@
                                 <span><strong>Skip</strong> — leave this record's position and orientation unchanged.</span>
                             </label>
                             <p v-else class="text-xs text-slate-600">No usable candidate. This record stays unchanged.</p>
-                            <label v-if="record.choice?.kind === 'select'" class="mt-3 flex items-center gap-2 text-xs text-slate-700 focus-within:ring-2 focus-within:ring-blue-500">
-                                <input type="checkbox"
-                                       :checked="record.orientationPolicy === 'match_reference'"
-                                       :disabled="similarityAlignmentBusy"
-                                       :aria-label="'Match reference direction for ' + record.recordLabel"
-                                       @change="setSimilarityAlignmentOrientation(record.recordKey, $event.target.checked ? 'match_reference' : 'preserve')">
-                                Match reference direction
-                            </label>
-                            <p class="mt-2 text-[11px] text-slate-600" data-similarity-alignment-orientation>
-                                Effective orientation: {{ record.orientationEffect === 'reverse_whole_record' ? 'reverse whole record' : record.orientationEffect === 'preserve_unknown_strand' ? 'preserve because a strand is unknown' : 'preserve' }}
-                            </p>
                         </fieldset>
                     </div>
                 </div>
