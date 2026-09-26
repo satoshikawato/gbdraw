@@ -2936,7 +2936,16 @@ export const createAppSetup = () => {
     event.stopImmediatePropagation();
     void cancelSimilarityAlignmentDialog();
   };
-  watch(similarityAlignmentActions.dialogOpen, (open) => {
+  const openSimilarityAlignmentReset = (event) => {
+    rememberSimilarityAlignmentInvoker(event);
+    similarityAlignmentActions.openReset();
+  };
+  watch([similarityAlignmentActions.dialogOpen, similarityAlignmentActions.resetDialogOpen], async ([open, resetOpen]) => {
+    if (resetOpen) {
+      await nextTick();
+      document.getElementById('similarity-alignment-reset-title')?.focus();
+      return;
+    }
     if (open) return;
     stopSimilarityAlignmentPaletteDrag();
     similarityAlignmentPalettePosition.x = null;
@@ -2975,11 +2984,11 @@ export const createAppSetup = () => {
   const cancelSimilarityAlignmentDialog = async () => {
     similarityAlignmentActions.cancel();
   };
-  const applySimilarityAlignmentDialog = async () => {
-    const outcome = await similarityAlignmentActions.applyDraft();
-    if (outcome.status === 'error') {
+  const applySimilarityAlignmentDialog = async (reset = false) => {
+    const outcome = await (reset ? similarityAlignmentActions.applyReset() : similarityAlignmentActions.applyDraft());
+    if (outcome.status === 'error' || outcome.status === 'reviewing') {
       await nextTick();
-      document.querySelector('[data-similarity-alignment-error]')?.focus();
+      document.querySelector('[data-similarity-alignment-error], [data-similarity-alignment-reset-error]')?.focus();
     }
     return outcome;
   };
@@ -4381,10 +4390,10 @@ export const createAppSetup = () => {
     similarityAlignmentResetPreview: similarityAlignmentActions.resetPreview,
     similarityAlignmentResetDialogOpen: similarityAlignmentActions.resetDialogOpen,
     similarityAlignmentResetScope: similarityAlignmentActions.resetScope,
-    openSimilarityAlignmentReset: similarityAlignmentActions.openReset,
+    openSimilarityAlignmentReset,
     cancelSimilarityAlignmentReset: similarityAlignmentActions.cancelReset,
-    applySimilarityAlignmentReset: similarityAlignmentActions.applyReset,
-    applySimilarityAlignmentDraft: applySimilarityAlignmentDialog,
+    applySimilarityAlignmentReset: () => applySimilarityAlignmentDialog(true),
+    applySimilarityAlignmentDraft: () => applySimilarityAlignmentDialog(),
     cancelSimilarityAlignmentDraft: cancelSimilarityAlignmentDialog,
     cancelSimilarityAlignmentDialog,
     similarityAlignmentPaletteRef,

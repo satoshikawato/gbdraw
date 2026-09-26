@@ -78,6 +78,17 @@ const rationaleLabels = Object.freeze({
   skipped_unmappable: 'Candidate center outside the displayed crop'
 });
 
+const directionExclusionLabels = Object.freeze({
+  selection_required: 'Select an anchor or Skip this record first.',
+  skipped_by_user: 'Skipped by user.',
+  skipped_no_candidate: 'No usable candidate in this record.',
+  skipped_unmappable: 'Candidate center is outside the displayed crop.',
+  unusable_anchor: 'The selected anchor cannot be displayed.',
+  unknown_strand: 'The selected anchor has no known direction; it is never guessed.'
+});
+
+const arrowLabel = (arrow) => arrow === 1 ? 'right-facing' : arrow === -1 ? 'left-facing' : 'unknown';
+
 const reviewReasonLabels = Object.freeze({
   only_usable_candidate: 'The only usable candidate in this record.',
   unique_direct_rbh: 'The only candidate with a direct reciprocal best hit.',
@@ -580,7 +591,8 @@ export const validateSimilarityAlignmentResolution = (value, request) => {
 const strandValue = (value, path) => {
   if (value === 1 || value === '+' || String(value).trim() === '1') return 1;
   if (value === -1 || value === '-' || String(value).trim() === '-1') return -1;
-  if (value === null || value === undefined || String(value).trim() === '') return null;
+  if (value === null || value === undefined
+    || ['', 'undefined', 'unstranded', 'mixed'].includes(String(value).trim())) return null;
   throw new Error(`${path} has an invalid source strand.`);
 };
 
@@ -925,7 +937,8 @@ export const createSimilarityAlignmentActions = ({
     return true;
   };
 
-  const rowChoices = () => (draft.value?.rows || []).filter(row => row.choice).map(row => ({
+  const rowChoices = () => (draft.value?.rows || []).filter(row => row.choice
+    && (row.choice.kind === 'select' || row.candidates.length > 0)).map(row => ({
     recordKey: row.recordKey, kind: row.choice.kind,
     anchor: row.choice.kind === 'select'
       ? row.candidates.find(({ key }) => key === row.choice.candidateKey)?.anchor : null
@@ -1453,7 +1466,18 @@ export const createSimilarityAlignmentActions = ({
     return true;
   };
 
-  const directionPreview = computed(() => draft.value ? projectDraft() : null);
+  const directionPreview = computed(() => {
+    if (!draft.value) return null;
+    const projected = projectDraft();
+    return { ...projected,
+      eligibleCount: projected.records.filter(record => !record.exclusion).length,
+      records: projected.records.map(record => ({ ...record,
+        label: record.status === 'reference' ? draft.value.reference.recordLabel
+          : draft.value.rows.find(row => row.recordKey === record.recordKey)?.recordLabel || record.recordKey,
+        beforeDirection: arrowLabel(record.beforeArrow), afterDirection: arrowLabel(record.afterArrow),
+        exclusionLabel: directionExclusionLabels[record.exclusion] || record.exclusion
+      })) };
+  });
   const setDirectionIntent = (intent) => {
     if (!draft.value || status.value !== 'reviewing') return {status:'rejected'};
     projectSimilarityAlignmentDirections({resolution:draft.value.response,
@@ -1508,7 +1532,10 @@ export const createSimilarityAlignmentActions = ({
     resetPreview,
     resetDialogOpen,
     resetScope,
-    openReset: () => { resetScope.value = 'positions'; resetDialogOpen.value = true; },
+    openReset: () => {
+      if (!state.similarityAlignmentPlan?.value || busy.value) return;
+      error.value = null; resetScope.value = 'positions'; resetDialogOpen.value = true;
+    },
     cancelReset: () => { if (!busy.value) resetDialogOpen.value = false; },
     applyReset: () => resetAlignment(resetScope.value),
     startFromPopup: (options) => start({ ...options, source: 'popup' }),
