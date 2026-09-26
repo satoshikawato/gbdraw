@@ -1,0 +1,9 @@
+# Authority integration candidates
+
+S00が既存static Product Contractまたは適用可能なdurable storeへの3 selected outcomesのpatchを準備する。
+privileged operator/importer preauthorizationが必要なら、それとは分けて最小のpatchを用意する。
+ここに保存するpatch/Markdownはinert preparationであり、有効authorityでも第二のdecision registryでもない。
+maintainerは最新devから独立したauthority-only PRを作り、各patchのtarget/path scopeを守ってmergeする。
+runtime/checker/workflow/evidence-producing contractsを同じauthority-only PRへ混ぜない。
+implementation branchはそのdev mergeを取得してから依存runtimeを始める。
+すべてのProduct選択は承認済みで、ここで改変・新規選択しない。
