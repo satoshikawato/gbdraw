@@ -5,6 +5,18 @@ Last updated: 2026-09-27
 This register records task-specific decisions for Gallery operation media.
 Capture metadata remains the executable source of truth in each tutorial JSON.
 
+## Circular Width/Radius numeric and unit controls (#619 S03)
+
+| Tutorial | Operation media | Decision | Required capture state | Status |
+| --- | --- | --- | --- | --- |
+| `tobacco-chloroplast` | `manual-07-01-custom-track-slots.webp` | Replace | Exact tobacco Session; features Auto; plastome_regions 20 px / 0.65 ×R; GC content 0.08 ×R / 0.56 ×R; explicit numeric/unit controls | Recaptured at DSF 3 / quality 94; eight value/unit controls passed; equal-width visual comparison accepted |
+
+Keep the three-row stack, annotation binding and all finished-preview media.
+Update the existing table and caption to name numeric values and units. A taller viewport keeps the added unit/help controls fully visible without widening
+the crop. The operation declares its own Session, app state and eight visible
+controls. The existing GUI Tutorial's corresponding track-controls crop uses
+its original `T-GUI-05` owner recipe; unrelated images remain unchanged.
+
 ## Alignment direction and Reset (#598 S04)
 
 The existing BGC tutorial keeps its public reader route and media. The alignment

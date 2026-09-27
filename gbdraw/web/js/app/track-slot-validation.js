@@ -63,28 +63,33 @@ export const parseOptionalPixel = (value, fieldName, { allowZero }) => {
   return numeric === 0 ? 0 : numeric;
 };
 
-const parseOptionalCircularScalar = (value, fieldName) => {
+export const parseOptionalCircularScalar = (value, fieldName = 'Circular measure') => {
   if (value === null || value === undefined || value === '') return null;
+  const invalid = () => new Error(`${fieldName} must be a positive finite px or factor scalar.`);
   if (value && typeof value === 'object' && !Array.isArray(value)) {
+    if (typeof value.value !== 'number' && typeof value.value !== 'string') throw invalid();
     const numeric = Number(value.value);
     const unit = normalizedString(value.unit);
     if (!Number.isFinite(numeric) || numeric <= 0 || !['px', 'factor'].includes(unit)) {
-      throw new Error(`${fieldName} must be a positive finite px or factor scalar.`);
+      throw invalid();
     }
-    return numeric;
+    return { value: numeric, unit };
   }
   if (typeof value === 'boolean' || (typeof value !== 'number' && typeof value !== 'string')) {
-    throw new Error(`${fieldName} must be a positive finite px or factor scalar.`);
+    throw invalid();
   }
   const text = String(value).trim();
+  const isPx = /px$/i.test(text);
+  const isPercent = /%$/.test(text);
   let numericText = text;
-  if (/px$/i.test(text)) numericText = text.slice(0, -2).trim();
-  else if (/%$/.test(text)) numericText = text.slice(0, -1).trim();
+  if (isPx) numericText = text.slice(0, -2).trim();
+  else if (isPercent) numericText = text.slice(0, -1).trim();
   const numeric = Number(numericText);
-  if (!text || !Number.isFinite(numeric) || numeric <= 0) {
-    throw new Error(`${fieldName} must be a positive finite px or factor scalar.`);
+  const resolved = isPercent ? numeric / 100 : numeric;
+  if (!text || !Number.isFinite(resolved) || resolved <= 0) {
+    throw invalid();
   }
-  return numeric;
+  return { value: resolved, unit: isPx ? 'px' : 'factor' };
 };
 
 const validateSlotGeometry = (slot, id, layoutKind) => {

@@ -166,6 +166,23 @@
             grid-template-columns: repeat(2, minmax(0, 1fr));
             gap: 0.25rem;
         }
+        .circular-measure-controls {
+            display: grid;
+            grid-template-columns: minmax(0, 1fr) 3.5rem;
+            gap: 0.25rem;
+        }
+        .circular-measure-controls .form-input {
+            min-width: 0;
+            width: 100%;
+            height: 1.5rem;
+            padding: 0.2rem 0.25rem;
+        }
+        .circular-measure-note {
+            margin-top: 0.125rem;
+            font-size: 9px;
+            line-height: 1.3;
+            overflow-wrap: anywhere;
+        }
         .track-slot-field {
             min-width: 0;
         }
@@ -3279,6 +3296,11 @@
                                         </div>
                                     </div>
                                     <div v-if="circularTrackSlotsPanelOpen" id="circular-custom-track-slots-panel" class="space-y-1.5">
+                                        <p id="circular-measure-help" class="text-[10px] leading-snug text-slate-600">
+                                            Width and Radius: px or ×R, where R is the base circular radius.
+                                            Paste 20px or 65% (0.65 ×R). Changing units keeps the number;
+                                            changes apply on the next Generate. Blank means Auto; its unit selection is for the next input only.
+                                        </p>
                                         <div v-if="!adv.circular_track_slots_enabled" class="rounded border border-amber-200 bg-amber-50 px-2 py-1 text-[10px] text-amber-700">
                                             Custom stack is saved but inactive; generation uses the simple track controls.
                                         </div>
@@ -3386,22 +3408,16 @@
                                                         </div>
                                                     </div>
                                                     <div class="track-slot-geometry-grid">
-                                                        <div class="track-slot-field">
-                                                            <label class="track-slot-field-label">w <help-tip text="Track width. Use px for physical pixels, or a unitless value for a multiple of the base circular radius. Leave blank for auto."></help-tip></label>
-                                                            <div class="track-slot-value-field">
-                                                                <span v-if="!circularTrackSlotGeometryHasManual(entry.slot, 'width')" class="track-slot-auto-placeholder">{{ circularTrackSlotGeometryAutoText(entry.slot, entry.index, 'width') }}</span>
-                                                                <input v-model.trim="entry.slot.width" class="form-input track-slot-geometry-input px-1 py-0.5 text-[10px]" title="Width">
-                                                                <span v-if="circularTrackSlotGeometryUnitSuffix(entry.slot, 'width')" class="track-slot-unit-suffix">{{ circularTrackSlotGeometryUnitSuffix(entry.slot, 'width') }}</span>
-                                                            </div>
-                                                        </div>
-                                                        <div class="track-slot-field">
-                                                            <label class="track-slot-field-label">r <help-tip text="Track center radius as a multiple of the base circular radius. For example, 1.0 is on the axis and 0.75 is inside it. Leave blank for auto."></help-tip></label>
-                                                            <div class="track-slot-value-field">
-                                                                <span v-if="!circularTrackSlotGeometryHasManual(entry.slot, 'radius')" class="track-slot-auto-placeholder">{{ circularTrackSlotGeometryAutoText(entry.slot, entry.index, 'radius') }}</span>
-                                                                <input v-model.trim="entry.slot.radius" class="form-input track-slot-geometry-input px-1 py-0.5 text-[10px]" title="Radius">
-                                                                <span v-if="circularTrackSlotGeometryUnitSuffix(entry.slot, 'radius')" class="track-slot-unit-suffix">{{ circularTrackSlotGeometryUnitSuffix(entry.slot, 'radius') }}</span>
-                                                            </div>
-                                                        </div>
+                                                        <circular-measure-input
+                                                            v-for="field in ['width', 'radius']"
+                                                            :key="field"
+                                                            :model-value="entry.slot[field]"
+                                                            :slot-id="entry.slot.id"
+                                                            :field="field"
+                                                            :control-id="`${circularTrackSlotEditorKey(entry.slot)}-${field}`"
+                                                            :auto-text="circularTrackSlotGeometryAutoText(entry.slot, entry.index, field)"
+                                                            @update:model-value="updateCircularTrackSlotMeasure(entry.slot, field, $event)"
+                                                        ></circular-measure-input>
                                                         <div class="track-slot-field">
                                                             <label class="track-slot-field-label">inner gap <help-tip text="Physical radial gap on the side closer to the center, in pixels (px optional; nonnegative). Leave blank for auto."></help-tip></label>
                                                             <div class="track-slot-value-field track-slot-pixel-field">
@@ -7377,6 +7393,24 @@
         </noscript>
     </div>
 </div>
+
+<script type="text/x-template" id="circular-measure-input-template">
+    <div class="track-slot-field circular-measure-field">
+        <label :for="controlId" class="track-slot-field-label">{{ label }}</label>
+        <div class="circular-measure-controls">
+            <input :id="controlId" type="text" inputmode="decimal" v-model.trim="valueText"
+                   :aria-label="`${accessibleName} value`" :aria-describedby="describedBy"
+                   :aria-invalid="view.error ? 'true' : 'false'" placeholder="Auto" class="form-input">
+            <select v-model="selectedUnit" :aria-label="`${accessibleName} unit`"
+                    :aria-describedby="describedBy" class="form-input">
+                <option value="px">px</option>
+                <option value="factor">×R</option>
+            </select>
+        </div>
+        <p v-if="view.isAuto && autoText" :id="`${controlId}-auto`" class="circular-measure-note text-slate-500">{{ autoText }}</p>
+        <p v-if="view.error" :id="`${controlId}-error`" class="circular-measure-note text-red-700" role="alert">{{ view.error }}</p>
+    </div>
+</script>
 
 <script type="text/x-template" id="record-display-control-template">
   <div class="rounded border border-slate-200 p-2 text-xs space-y-1" :data-record-rotation="row.key">
