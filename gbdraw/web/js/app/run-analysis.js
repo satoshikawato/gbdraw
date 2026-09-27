@@ -5249,6 +5249,8 @@ export const createRunAnalysis = ({
         adoptCanonicalRenderArtifacts(canonical, { adoptOwnedRequest: true });
       }
       if (typeof commitIntent === 'function') await commitIntent();
+      errorLog.value = null;
+      failedGeneratePreservedResult.value = false;
       logPostGbdrawTimings(timingEntries);
       return { status: 'ok', generatedArtifactCandidate: activatedCandidate };
     } catch (error) {

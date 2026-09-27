@@ -1090,8 +1090,8 @@ def _validate_alignment_reset_receipt(session: Mapping[str, Any]) -> None:
         "region": ({"start": record["region"]["start"], "end": record["region"]["end"]}
                    if record.get("region") else None), "display": record["display"],
     } for record in request["records"]]
-    binding = {"plan": {**plan, "records": sorted(plan["records"], key=lambda item: item["recordKey"])},
-               "records": sorted(records, key=lambda item: item["recordKey"])}
+    binding = {"plan": {**plan, "records": sorted(plan["records"], key=lambda item: item["recordKey"].encode("utf-16be"))},
+               "records": sorted(records, key=lambda item: item["recordKey"].encode("utf-16be"))}
     digest = hashlib.sha256(json.dumps(binding, ensure_ascii=False, sort_keys=True,
                                      separators=(",", ":")).encode()).hexdigest()
     if receipt["binding"] != digest:
