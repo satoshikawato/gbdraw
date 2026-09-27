@@ -1,19 +1,20 @@
 # Web Gallery operation screenshot register
 
-Last updated: 2026-09-26
+Last updated: 2026-09-27
 
 This register records task-specific decisions for Gallery operation media.
 Capture metadata remains the executable source of truth in each tutorial JSON.
 
-## Record-owned alignment direction (Session 04)
+## Alignment direction and Reset (#598 S04)
 
-The BGC tutorial retains its existing reader route and media. Its alignment
-instruction now names the single Match reference direction option and eligible
-targets. No operation image shows the changed review: `manual-08-01-align-og1.webp`
-shows the unchanged feature-popup entry points, and the final preview follows
-ordinary Align with directions preserved. Disposition: **Keep** both images;
-no recapture is required. The desktop and 390 px review screenshots are acceptance
-evidence in the master plan, not additional public tutorial media.
+The existing BGC tutorial keeps its public reader route and media. The alignment
+instruction now names exclusive Keep/right/left/Custom and both Reset scopes.
+`manual-08-01-align-og1.webp` shows the feature-popup entry points, with no
+retired Match control. The final preview uses automatic Keep alignment. Both
+images remain truthful: **Keep**, with no recapture or new public smoke figure.
+The five-source GUI recipe regenerates the finished BGC example and verifies
+optional minority-reference reversal, both Reset scopes and Undo; see
+`docs/capture/README.md`. Internal acceptance captures remain internal.
 
 ## Optional Similarity Group alignment review (#586)
 
