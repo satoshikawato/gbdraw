@@ -16,6 +16,16 @@ Circular Width/Radiusをnumeric text input＋unit selectorで編集できるよ�
 
 S00authorityとS01完了を確認する。componentが必要な表現をS01で実証できていなければ、先にその境界を解決する。native `type=number`でinvalidtextを消すことを修正と呼ばない。
 
+S01の完了記録と実interfaceは[SESSION_RESULTS/S01.md](../SESSION_RESULTS/S01.md)。
+`measure-editor.js`の`readCircularMeasure`、`writeCircularMeasureValue`
+（numeric update＋完全なlegacy suffix adapter）、`changeCircularMeasureUnit`を使う。
+viewは`{valueText,selectedUnit,isAuto,error}`。Autoのunitはnullで、componentの
+次回入力preferenceは別のtransient intent。Autoのselector操作ではslotへnullを
+代入しない。manual same-unitは元scalarを返す。read/Loadだけでraw draftを書き換えない。
+canonical pairが必要な既存callerはvalidation ownerの`parseOptionalCircularScalar`へ委譲する。
+S01の37 codec tests、writer/admission matrix、実browser/native round tripsは
+DOM component/IME/History transaction/Auto remount/Generate geometryの成功証拠ではない。
+
 ## 作業
 
 1. 2field共通の専用componentを作る。native `type=text inputmode=decimal`、Vue trim/composition、accessible numeric/unit names、slot identityを維持する。

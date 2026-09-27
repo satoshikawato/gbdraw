@@ -18,6 +18,11 @@ S00 の独立した検証成果は [SESSION_RESULTS/S00.md](SESSION_RESULTS/S00.
 この補助 session は S01 に着手していない。inactive 跨mode Load の config 差と
 nonfinite History の既知の限界は同結果へ明記し、全受入の完了とは扱わない。
 
+[S01結果](SESSION_RESULTS/S01.md)でscalar owner統一とDOM-free codecを完了した。
+最新dev `a1450fdfd0cfb776645da74c142b89f6fc080276`のauthority revision 24でも
+PD-OI-048〜050は継続。S02の開始条件は成立し、実装は未着手。
+実controls/History wiring/geometry/SVGの最終受入は後続へ残す。
+
 ## 2. 問題と現行契約
 
 基準の tobacco chloroplast Gallery Session は Session 44 / request schema 8。`config.adv.circular_track_slots` に width/radius の `{value, unit}` object が保存されている。
