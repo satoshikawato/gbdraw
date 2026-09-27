@@ -45,6 +45,8 @@ export const createLegendDragActions = ({ state, extractLegendEntries, history =
   };
 
   const applyLegendDragPosition = (clientX, clientY) => {
+    const sessionBusy = state.sessionOperationAvailability?.();
+    if (sessionBusy) return sessionBusy;
     if (!legendDragging.value) return;
     const legendGroup = legendDragContext?.binding.legend.targets[0] || null;
     if (!legendGroup) return;
@@ -64,6 +66,8 @@ export const createLegendDragActions = ({ state, extractLegendEntries, history =
   };
 
   const startLegendDrag = (e) => {
+    const sessionBusy = state.sessionOperationAvailability?.();
+    if (sessionBusy) return sessionBusy;
     if (!isLayoutRepositionModeEnabled()) return;
     if (e.shiftKey) return;
     if (!svgContainer.value) return;
@@ -151,6 +155,8 @@ export const createLegendDragActions = ({ state, extractLegendEntries, history =
   };
 
   const resetLegendPositionOnly = () => {
+    const sessionBusy = state.sessionOperationAvailability?.();
+    if (sessionBusy) return sessionBusy;
     if (!svgContainer.value) return;
     const svg = svgContainer.value.querySelector('svg');
     if (!svg) return;

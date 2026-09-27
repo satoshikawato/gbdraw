@@ -364,6 +364,8 @@ export const createFeatureVisibilityActions = ({ state, featureSvgActions, previ
   };
 
   const setFeatureVisibility = (feat, modeRaw, options = {}) => {
+    const sessionBusy = state.sessionOperationAvailability?.();
+    if (sessionBusy) return sessionBusy;
     const svgId = String(feat?.svg_id || '').trim();
     if (!svgId) return false;
 
@@ -382,12 +384,16 @@ export const createFeatureVisibilityActions = ({ state, featureSvgActions, previ
   };
 
   const setSelectedFeaturesVisibility = async (features, modeRaw) => {
+    const sessionBusy = state.sessionOperationAvailability?.();
+    if (sessionBusy) return sessionBusy;
     const command = buildSelectedFeaturesVisibilityCommand(features, modeRaw);
     if (!command) return false;
     return command.apply();
   };
 
   const updateClickedFeatureVisibility = (modeRaw) => {
+    const sessionBusy = state.sessionOperationAvailability?.();
+    if (sessionBusy) return sessionBusy;
     if (!clickedFeature.value?.feat) return false;
     const feat = clickedFeature.value.feat;
     const scopes = buildVisibilityScopes(feat);
@@ -405,6 +411,8 @@ export const createFeatureVisibilityActions = ({ state, featureSvgActions, previ
   };
 
   const handleFeatureVisibilityScopeChoice = (scopeId) => {
+    const sessionBusy = state.sessionOperationAvailability?.();
+    if (sessionBusy) return sessionBusy;
     if (scopeId === 'cancel' || !featureVisibilityScopeDialog.show) {
       clearFeatureVisibilityScopeDialog({ restorePrevious: true });
       return false;
@@ -430,6 +438,8 @@ export const createFeatureVisibilityActions = ({ state, featureSvgActions, previ
   };
 
   const setFeatureVisibilityRuleField = (index, field, value) => {
+    const sessionBusy = state.sessionOperationAvailability?.();
+    if (sessionBusy) return sessionBusy;
     if (!ruleFields.has(field)) return;
     const current = featureVisibilityManualRules[index];
     if (!current) return;
@@ -445,10 +455,14 @@ export const createFeatureVisibilityActions = ({ state, featureSvgActions, previ
   };
 
   const addFeatureVisibilityRule = () => {
+    const sessionBusy = state.sessionOperationAvailability?.();
+    if (sessionBusy) return sessionBusy;
     featureVisibilityManualRules.push(createDefaultFeatureVisibilityRule());
   };
 
   const removeFeatureVisibilityRule = (index) => {
+    const sessionBusy = state.sessionOperationAvailability?.();
+    if (sessionBusy) return sessionBusy;
     if (index < 0 || index >= featureVisibilityManualRules.length) return;
     featureVisibilityManualRules.splice(index, 1);
   };

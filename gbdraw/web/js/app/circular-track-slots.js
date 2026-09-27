@@ -1549,6 +1549,8 @@ export const createCircularTrackSlotEditor = ({ state }) => {
   };
 
   const setCircularAnnotationMarkSelected = (slot, mark, checked) => {
+    const sessionBusy = state.sessionOperationAvailability?.();
+    if (sessionBusy) return sessionBusy;
     if (!slot || slot.renderer !== 'annotations' || !ANNOTATION_MARK_OPTIONS.includes(mark)) return;
     slot.params = cloneParams(slot.params);
     const current = Array.isArray(slot.params.marks) && slot.params.marks.length > 0
@@ -1567,6 +1569,8 @@ export const createCircularTrackSlotEditor = ({ state }) => {
   };
 
   const setCircularAnnotationNumber = (slot, field, value, defaultValue) => {
+    const sessionBusy = state.sessionOperationAvailability?.();
+    if (sessionBusy) return sessionBusy;
     if (!slot || slot.renderer !== 'annotations') return;
     slot.params = cloneParams(slot.params);
     if (value === null || value === undefined || value === '') {
@@ -1581,6 +1585,8 @@ export const createCircularTrackSlotEditor = ({ state }) => {
   const circularAnnotationCoverAnchor = (slot) => slot?.params?.cover_anchor === true;
 
   const setCircularAnnotationCoverAnchor = (slot, checked) => {
+    const sessionBusy = state.sessionOperationAvailability?.();
+    if (sessionBusy) return sessionBusy;
     if (!slot || slot.renderer !== 'annotations') return;
     slot.params = cloneParams(slot.params);
     if (checked) slot.params.cover_anchor = true;
@@ -1858,6 +1864,8 @@ export const createCircularTrackSlotEditor = ({ state }) => {
   };
 
   const resetCircularTrackSlotsToPreset = (preset) => {
+    const sessionBusy = state.sessionOperationAvailability?.();
+    if (sessionBusy) return sessionBusy;
     const normalizedPreset = normalizeCircularTrackPreset(preset);
     const templateSlots = applyCircularGeometryShortcuts(createDefaultCircularTrackSlots({
       nt: state.adv.nt,
@@ -1885,6 +1893,8 @@ export const createCircularTrackSlotEditor = ({ state }) => {
   const applyCircularTrackPreset = (preset) => resetCircularTrackSlotsToPreset(preset);
 
   const setCircularTrackSlotsEnabled = (enabled) => {
+    const sessionBusy = state.sessionOperationAvailability?.();
+    if (sessionBusy) return sessionBusy;
     state.adv.circular_track_slots_enabled = Boolean(enabled);
     if (
       state.adv.circular_track_slots_enabled &&
@@ -1895,6 +1905,8 @@ export const createCircularTrackSlotEditor = ({ state }) => {
   };
 
   const addCircularTrackSlot = (renderer, placement = null) => {
+    const sessionBusy = state.sessionOperationAvailability?.();
+    if (sessionBusy) return sessionBusy;
     if (!canAddCircularTrackRenderer(renderer)) return;
     normalizeSlotsInPlace();
     const slot = createCircularTrackSlotForRenderer(renderer, state.adv.circular_track_slots, state.adv.nt, placement);
@@ -1918,6 +1930,8 @@ export const createCircularTrackSlotEditor = ({ state }) => {
   };
 
   const duplicateCircularTrackSlot = (index) => {
+    const sessionBusy = state.sessionOperationAvailability?.();
+    if (sessionBusy) return sessionBusy;
     normalizeSlotsInPlace();
     const idx = Number(index);
     if (!Number.isInteger(idx) || idx < 0 || idx >= state.adv.circular_track_slots.length) return;
@@ -1940,6 +1954,8 @@ export const createCircularTrackSlotEditor = ({ state }) => {
   };
 
   const removeCircularTrackSlot = (index) => {
+    const sessionBusy = state.sessionOperationAvailability?.();
+    if (sessionBusy) return sessionBusy;
     const idx = Number(index);
     if (!Number.isInteger(idx) || idx < 0 || idx >= state.adv.circular_track_slots.length) return;
     const axis = axisIndexForCurrentSlots(state.adv.circular_track_slots);
@@ -1971,6 +1987,8 @@ export const createCircularTrackSlotEditor = ({ state }) => {
   };
 
   const moveCircularTrackSlot = (fromIndex, toIndex) => {
+    const sessionBusy = state.sessionOperationAvailability?.();
+    if (sessionBusy) return sessionBusy;
     if (wouldCircularTrackSlotMoveCrossAxis(fromIndex, toIndex)) return;
     normalizeSlotsInPlace();
     const from = Number(fromIndex);
@@ -2024,6 +2042,8 @@ export const createCircularTrackSlotEditor = ({ state }) => {
   };
 
   const moveCircularTrackSlotToPlacement = (index, placement) => {
+    const sessionBusy = state.sessionOperationAvailability?.();
+    if (sessionBusy) return sessionBusy;
     const idx = Number(index);
     if (!Number.isInteger(idx) || idx < 0 || idx >= state.adv.circular_track_slots.length) return;
     normalizeSlotsInPlace();
@@ -2103,6 +2123,8 @@ export const createCircularTrackSlotEditor = ({ state }) => {
   };
 
   const updateCircularTrackSlotRenderer = (slot, renderer) => {
+    const sessionBusy = state.sessionOperationAvailability?.();
+    if (sessionBusy) return sessionBusy;
     renderer = renderer || slot?.renderer;
     if (!slot || !SUPPORTED_RENDERERS.includes(renderer)) return;
     slot.renderer = renderer;
@@ -2197,6 +2219,8 @@ export const createCircularTrackSlotEditor = ({ state }) => {
   };
 
   const setCircularSuppressControl = (key, checked, event = null) => {
+    const sessionBusy = state.sessionOperationAvailability?.();
+    if (sessionBusy) return sessionBusy;
     const renderer = SUPPRESS_RENDERER_BY_KEY[key];
     if (!renderer) return;
     const formKey = SUPPRESS_FORM_KEY_BY_RENDERER[renderer];
@@ -2232,6 +2256,8 @@ export const createCircularTrackSlotEditor = ({ state }) => {
   };
 
   const setCircularTrackSlotEnabled = (slot, enabled) => {
+    const sessionBusy = state.sessionOperationAvailability?.();
+    if (sessionBusy) return sessionBusy;
     if (!slot || circularTrackSlotHiddenBySuppressForm(slot, state.form)) return;
     slot.enabled = Boolean(enabled);
     if (slot.params && typeof slot.params === 'object' && !Array.isArray(slot.params)) {
@@ -2259,6 +2285,8 @@ export const createCircularTrackSlotEditor = ({ state }) => {
   };
 
   const updateCircularTrackSlotPlacement = (slot, placement) => {
+    const sessionBusy = state.sessionOperationAvailability?.();
+    if (sessionBusy) return sessionBusy;
     if (!slot || !SUPPORTED_RENDERERS.includes(slot.renderer)) return;
     if (normalizeOptionalText(placement) === null) {
       slot.side = null;
@@ -2282,6 +2310,8 @@ export const createCircularTrackSlotEditor = ({ state }) => {
   };
 
   const updateCircularTrackFeatureLane = (slot, laneDirection) => {
+    const sessionBusy = state.sessionOperationAvailability?.();
+    if (sessionBusy) return sessionBusy;
     if (!slot || slot.renderer !== 'features') return;
     slot.params = cloneParams(slot.params);
     const explicitLaneDirection = normalizeOptionalText(laneDirection);
@@ -2347,6 +2377,8 @@ export const createCircularTrackSlotEditor = ({ state }) => {
   };
 
   const setCircularTrackSlotSkewColor = (slot, key, value) => {
+    const sessionBusy = state.sessionOperationAvailability?.();
+    if (sessionBusy) return sessionBusy;
     if (!slot || slot.renderer !== 'dinucleotide_skew' || !['positive_color', 'negative_color'].includes(key)) return;
     slot.params = cloneParams(slot.params);
     const color = normalizeColorParam(value);
@@ -2355,6 +2387,8 @@ export const createCircularTrackSlotEditor = ({ state }) => {
   };
 
   const clearCircularTrackSlotSkewColor = (slot, key) => {
+    const sessionBusy = state.sessionOperationAvailability?.();
+    if (sessionBusy) return sessionBusy;
     if (!slot || slot.renderer !== 'dinucleotide_skew' || !['positive_color', 'negative_color'].includes(key)) return;
     slot.params = cloneParams(slot.params);
     delete slot.params[key];

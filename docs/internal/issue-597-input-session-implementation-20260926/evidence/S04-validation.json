@@ -1,0 +1,183 @@
+{
+  "session": "S04",
+  "acceptance": [
+    "S-02",
+    "A-01",
+    "W-01"
+  ],
+  "scope": [
+    "BUG-02",
+    "BUG-20",
+    "Session operation consistency"
+  ],
+  "branch": "fix/issue-597-input-session-20260926",
+  "measurementHead": "eed70f05d04f638a5a4ab6c6567982d45e774596",
+  "startingHead": "e3684d496df7a3b2a7492443cad50168f6959b36",
+  "integrationMerge": "eed70f05d04f638a5a4ab6c6567982d45e774596",
+  "trustedBase": "c922fc38aac78da9be83342c09ac0164ecef6ff6",
+  "authorityMerge": "af5d942af60353dda199aa487da9152a3576b3fe",
+  "runtimeManifestSha256": "20f51b6c90b46575c7ef20bad43f57e0eca75f644c5f32cb1bd88a05d29cea73",
+  "runtimeFiles": 372,
+  "productionSha256": {
+    "gbdraw/web/index.html": "419f235af99446d786e47502ac0a7c796a27fe946d4894096cca8a5295856484",
+    "gbdraw/web/js/app/annotations.js": "dfcf544a4e67c6272608c82ed7f7f1db19093e4c5e86961823efe806149b84f0",
+    "gbdraw/web/js/app/app-setup.js": "00d6acac00a400b16b15778fe1ead9b0ad863244a5650bb076cc6192a96c040a",
+    "gbdraw/web/js/app/circular-track-slots.js": "7a98aa6f3116617b9963e228b4b8280743ba1c2b78cd10b82e379fc76a2b1704",
+    "gbdraw/web/js/app/feature-editor.js": "430d1dbd274a388c9ee99adf8eb380b360d83c1e0f2aa532fcfb43463ffda704",
+    "gbdraw/web/js/app/feature-editor/color-actions.js": "3b624c788abfd6e6f32c798c821cbd56cdfe2bf48b387af7c2f2d2a35d7e5b20",
+    "gbdraw/web/js/app/feature-editor/label-actions.js": "bd66a0fa9a721ed97962dc1a8be29d9f8743060e5fe8132aa90bbfe2b6b4456d",
+    "gbdraw/web/js/app/feature-editor/placement-actions.js": "1dd705889953a10c4fb3dcddce18ee2c614909d24a2e1ad43ddb713660f1052b",
+    "gbdraw/web/js/app/feature-editor/rule-actions.js": "b17f88a8c0da9364313fe04a514019c6a583da8e10feb8525b0d6e16c80b9f97",
+    "gbdraw/web/js/app/feature-editor/visibility-actions.js": "17ca84629c15c0b7fac0ff60e86db4347268c34713a865a3a524317dfc96086e",
+    "gbdraw/web/js/app/legend-layout.js": "711d0c78a83331007e5c5caa0a06e24231d6bf21785024b6e370234716f4dc2d",
+    "gbdraw/web/js/app/legend-layout/canvas-actions.js": "15e847eb708d5f4c06632d8106a770fedb481a20a53583c0ef7cf2cfa1810213",
+    "gbdraw/web/js/app/legend-layout/diagram-drag.js": "84283ea2a80c8ac56265a34e44bd242932a9cd356a86c8b70967b43c6589d3f3",
+    "gbdraw/web/js/app/legend-layout/reposition-actions.js": "853b5dc1ce91af1898b905370c497db6463b080eefc59b2325ee8d2fbf8674d0",
+    "gbdraw/web/js/app/legend/drag-actions.js": "db3510194fdab3a7c663f776a0767496ffe297656528480a5e43e592f3612186",
+    "gbdraw/web/js/app/legend/entry-actions.js": "ec5933af129a908bd02feef228b9b1c0756fa71a2ca7858f2905e1736dd09574",
+    "gbdraw/web/js/app/legend/sort-actions.js": "f956fd920fc784b1d72a53c22fbdcca66c293020b15d59dc3e7f1ce080c7fb80",
+    "gbdraw/web/js/app/legend/stroke-actions.js": "75a7a5eb9bbe7d089793969359937d9b90f0a00048bd5e6769d3b546b3a911c6",
+    "gbdraw/web/js/app/linear-record-selector.js": "602ee4a891d4734f780bc7ac0aa601b192062bc7c743c6fb4d79b6d31e03e70a",
+    "gbdraw/web/js/app/linear-track-slots.js": "a0a640986e54e9edc64a6183d732901fabf22986ea590f27b41a49ae4d995737",
+    "gbdraw/web/js/app/linear-typography.js": "c641658e48ef59fbb0fd919b80aa3fe66647b9fdd06e44db1fbadd716b0dad3e",
+    "gbdraw/web/js/app/orthogroups.js": "f879540a6b6a86cb3d59c68ac4c6bfc2a7bc9f185606ab18beb365911af93bfa",
+    "gbdraw/web/js/app/preview-runtime.js": "efc89e73345b86adf06d51fbd0ac68f10a29d7eb66fb9331c416595209a1e50f",
+    "gbdraw/web/js/app/record-display-options.js": "a0c57f3083a8df6eafff2aa804d54328e54b1b5ade30f30689b5efd585a12a5d",
+    "gbdraw/web/js/app/results.js": "559b3b8057551583178e461e9792e242ce793abb0ff94613367da86133dc1ae3",
+    "gbdraw/web/js/app/rule-matching.js": "e8cf21686c83b908aef9f641bd857695e047a62c47ba54eb81696ad54ad0bd70",
+    "gbdraw/web/js/app/run-analysis.js": "baa498e7fb2b35758acd391d1394d447d93b2a683ae1c9ed5d60e4a42c8d8447",
+    "gbdraw/web/js/app/svg-styles.js": "5e895286dd741bd11b39ed69ff03abeaf563457455d8836a5e5b490605396916",
+    "gbdraw/web/js/app/watchers.js": "31a6d2458590ec165cc2594daf699d48dd1bafa1df90a88e3dc041f1f40d0fa4",
+    "gbdraw/web/js/components.js": "0dddcc60e72ee0467ffa2a69e7be52bd6acc5f2e8c95cfd385326af9cf248191",
+    "gbdraw/web/js/services/config.js": "51b513067ef127723a66c0861c91416ef7f4fd61a309e7c7fd0f322ce5fd8c0b",
+    "gbdraw/web/js/services/history.js": "7acf8de8185a210471e5c11fbb8dde5561056fe2007dd9582643841e633501f3",
+    "gbdraw/web/js/state.js": "5cb2cb673344c8b8ca2d49f3fa8659b22eaf9f8be4fbb8b2c0655cf294bb75a7"
+  },
+  "testSha256": {
+    "tests/test_web_mode_profiles.py": "844a9b92e1c5a1f286619252206013a7b8ba434c4f041424462bb7eb7fc6829c",
+    "tests/test_web_ux_profile.py": "beb0e93b84f12c509756c0e17f24224145d3b45cff51379401820b08d7be9244",
+    "tests/web/history-inputs.playwright.spec.js": "7eb5e9d8e1cee6976aaff4a451f921030984afc6626825bcdd31406e0f532f06",
+    "tests/web/session-operation-consistency.playwright.spec.js": "e6126bcfa5f3593038404b261d8854f9277ba9e2f2b640fb0c6b67787db7659c",
+    "tests/web/session-operation-consistency.test.mjs": "2406a339f5f31b7531b14a40e8196893602a5c11d074d28166e7d2804727fdab"
+  },
+  "inputAndBoundarySha256": {
+    "gbdraw/web/gallery/sessions/HmmtDNA_basic_circular.gbdraw-session.json": "d53cf930db19cbe2f8c201909d06c69ba02140ffd06498021e7582ddebed83db",
+    "gbdraw/web/gallery/sessions/lambda_basic_linear.gbdraw-session.json": "c416dcd7edfff23837fb02e3fd65ff9f90cdec7f1512e28d200f0ae995fa5c45",
+    "gbdraw/web/gallery/sessions/vibrio-harveyi-group-collinear.gbdraw-session.json.gz": "a3cfba6c8d883a0050529c89b1fd0849348254cdfa46dbf938a69cebef5379aa",
+    "tests/fixtures/sessions/settings-only.v42.json.gz": "bd11fa0406d40d09c72ff20500a49a3c74be781dbfa9253a4c3c696f28b2d34c",
+    "tests/fixtures/sessions/cli-web-mito.gb": "f2e922c26561d37a8d3b410ba972526c709cad5635f598bbdcfc234f02642c92",
+    "tests/test_inputs/MjeNMV.gbk": "7b46d2cc4baa301a76ac1917bd5f2d41553c1271930e20e2904024986219ddd0",
+    "tests/web/helpers/app-lifecycle.cjs": "bb36d5a7a28f22f8ddfafb88b5e502462652c6f4719b991e563b08173458d618",
+    "tests/web/helpers/visual-state.cjs": "ecee93c255cb68cdf9783fe8fc127f4a0ea416000556e59588b45588139c55f6",
+    "playwright.config.js": "15bd5138d7fe48f6f7ef4ebce61c12d2cc67f291aae943ee764f3985a0242000",
+    "playwright.functional.config.js": "6dde379836ed909fea1d0a7983b2d7978f0d0d2f199b0ab4a2a30346f8b49b77",
+    "playwright.perf.config.js": "7c0581f969bf3753e46b298294628bf515c3139a2093ac4078455f462ed66431",
+    "package.json": "c093d1ea634d4615984e341868a558033f38138c1f597834229601c7e9081080",
+    "tools/web-change-policy.json": "fee8541705ea8bce25939c8aef2f727f64b2cfb1ff2bea12114471452df9b47f",
+    "tools/check-web-change-budget.mjs": "c7888ffb9c6d136284b567712f6e11a474e6b08f54d4daaee7d78e1a402d7f1c",
+    "docs/internal/OPTION_INTEGRITY_PRODUCT_CONTRACT.md": "5451db7da8e4de970f05afd5d19b003b7de77d52eb84c05d71ff85a533d4b1fb"
+  },
+  "environment": {
+    "python": "3.13.3",
+    "pythonExecutable": "/home/kawato/micromamba/bin/python",
+    "node": "v26.8.2",
+    "nodePlaywright": "1.61.0",
+    "pythonPlaywright": "1.61.0",
+    "platform": "Linux-5.15.167.4-microsoft-standard-WSL2-x86_64-with-glibc2.39",
+    "browser": "Chromium 149.0.7827.55",
+    "webPorts": [
+      43014,
+      43015,
+      43016,
+      43017,
+      43018,
+      43019,
+      43020,
+      43021,
+      43022,
+      43023,
+      43024,
+      43025
+    ],
+    "sharedDefaultPortUntouched": 4173
+  },
+  "artifactRoot": "/tmp/issue597-S04-evidence-3Pw7Yo",
+  "results": {
+    "finalNode": {
+      "passed": 723,
+      "exit": 0,
+      "elapsedMilliseconds": 78923.012614,
+      "log": "node-final-current.log"
+    },
+    "finalBrowser": {
+      "passed": 39,
+      "exit": 0,
+      "elapsedMinutes": 2.6,
+      "log": "browser-final-current.log"
+    },
+    "pythonFull": {
+      "passed": 6262,
+      "failed": 6,
+      "skipped": 17,
+      "deselected": 11,
+      "elapsedSeconds": 1500.33,
+      "result": "FAIL; corrected focused reruns, not claimed as a full-suite PASS"
+    },
+    "pythonFailureReruns": {
+      "comparison": {
+        "passed": 2,
+        "elapsedSeconds": 213.91
+      },
+      "fixtureAndSourceContracts": {
+        "passed": 10,
+        "elapsedSeconds": 0.94
+      }
+    },
+    "ruff": "PASS",
+    "authorityPinnedCurrentAndHistorical": "PASS",
+    "originalRevision21Probe": "FAIL: latest trusted base revision is 22; probe unchanged",
+    "localPolicyBefore": "Gate PASS / Review REQUIRED",
+    "localPolicyAfter": "required --head HEAD; result/log at handoff",
+    "fullIssue597Performance": "S01 FAIL not resolved; S05/S06 remaining; individual Vibrio acceptance measured separately",
+    "existingVibrioAcceptance": {
+      "passed": 1,
+      "exit": 0,
+      "log": "browser-vibrio-final.log",
+      "metrics": {
+        "singleObservation": true,
+        "saveWallMs": 5540,
+        "usedJsHeapBeforeBytes": 781568032,
+        "heapHighWaterBytes": 959027190,
+        "heapDeltaBytes": 177459158,
+        "maximumHeartbeatGapMs": 962.6000000238419,
+        "compressedBytes": 23738963,
+        "structuralMetrics": {
+          "sessionSaveProteinRawTextValidationReuseCount": 12
+        }
+      },
+      "scope": "existing test budgets and exact data/CLI/Python round-trip; not full Issue597 S-03 performance"
+    }
+  },
+  "remaining": [
+    "S05 import Worker permission must be merged into dev before runtime",
+    "S05 whole-object import transport/lifecycle",
+    "S06 full-pipeline large performance/heap/heartbeat/copy measurements",
+    "S07 public docs/screenshots",
+    "trusted CI and human Review are not certified by local checks"
+  ],
+  "artifactSha256": {
+    "wheel.log": "da12da61b1e751fc9771c62b74257d6c8fafba41cd5a94cc5d96004ad69154a6",
+    "authority-historical-probe.log": "9be4da770e43da35a7b882c704fad3079b78929b11a89072cda4a753848a42b5",
+    "authority-final.json": "537a003319c7e49de1c8ff948fedb66cce0db648f78e84837b9215dfb1262951",
+    "node-final-current.log": "4a4819f475e2c6832a34e3fe760fe4df2b22119c7a6b48b9edf90f5004f61db1",
+    "browser-final-current.log": "6269c214edae3b8428ea7cb04220c33058ee4c05c8c65bb21d196673210fe782",
+    "browser-vibrio-final.log": "e69f6d63a20d6b5dbad08c792f742fb014f448ce7f7fd9e241aee62652f16727",
+    "pytest.log": "ad074fb02d38465b6d3764a2ef8e24d575bde9bfdef0f1acd563c657debdef98",
+    "pytest-comparison-recheck.log": "3b2dc3610a8f5c9cb059aa2861f184a7451ace5bfe7a0f6a287fff5ae25eb36f",
+    "pytest-focused-final.log": "9263ab988c415c53c13c17a37dfe111d4af1b0c43d887e8ecf50fde2b861566f",
+    "node-final-changed.log": "30f95d237a05f704557f60b927c3c5307d3d9d68da78240356a1ac9e98ece868",
+    "node-style-final.log": "4f752f3b4127bb2424efb0355ed6d4f1f6acf6911e2907a240f2c062d436882e",
+    "ruff-final.log": "82b3e6a6c090a57601d22943bd23fca9218d1031dbe5a7b754092f9a156b4f18",
+    "policy-final-before.log": "599b4fb34edaed8925d33822f5c1ef5cffad2152e29e4141e5ab0e9776ab7245"
+  }
+}

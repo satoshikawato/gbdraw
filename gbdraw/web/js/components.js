@@ -1,3 +1,4 @@
+import { state } from './state.js';
 import {
   colorValueForMode,
   colorValueMode,
@@ -74,11 +75,14 @@ export const ColorValueControl = {
   },
   emits: ['update:modelValue'],
   setup(props, { emit }) {
+    const controlAvailable = computed(() => !state.sessionOperationAvailability());
     const mode = computed(() => colorValueMode(props.modelValue));
     const pickerValue = computed(() => (
       toNativeColorInputValue(props.modelValue, props.fallback)
     ));
     const updateMode = (event) => {
+      const busy = state.sessionOperationAvailability();
+      if (busy) return busy;
       const nextMode = String(event?.target?.value || 'auto');
       emit(
         'update:modelValue',
@@ -86,17 +90,20 @@ export const ColorValueControl = {
       );
     };
     const updateColor = (event) => {
+      const busy = state.sessionOperationAvailability();
+      if (busy) return busy;
       emit(
         'update:modelValue',
         toNativeColorInputValue(event?.target?.value, props.fallback)
       );
     };
-    return { mode, pickerValue, updateMode, updateColor };
+    return { mode, pickerValue, updateMode, updateColor, controlAvailable };
   },
   template: `
     <div class="grid grid-cols-[minmax(0,1fr)_2.25rem] gap-1 items-center">
       <select
         :value="mode"
+        :disabled="!controlAvailable"
         @change="updateMode"
         class="form-input form-input-compact min-w-0"
         :aria-label="\`\${ariaLabel} mode\`"
@@ -109,7 +116,7 @@ export const ColorValueControl = {
         type="color"
         :value="pickerValue"
         @input="updateColor"
-        :disabled="mode !== 'color'"
+        :disabled="!controlAvailable || mode !== 'color'"
         class="h-8 w-full p-0 border rounded disabled:opacity-40"
         :aria-label="ariaLabel"
       >
@@ -123,6 +130,7 @@ export const FileUploader = {
   emits: ['update:modelValue', 'clearRequest'],
   setup(props, { emit }) {
     const input = ref(null);
+    const uploadAvailable = computed(() => !state.sessionOperationAvailability());
     const selectedFiles = computed(() => {
       if (Array.isArray(props.modelValue)) return props.modelValue.filter(Boolean);
       return props.modelValue ? [props.modelValue] : [];
@@ -137,6 +145,8 @@ export const FileUploader = {
       return `${items.length} files: ${firstNames}${suffix}`;
     });
     const handleFile = (e) => {
+      const busy = state.sessionOperationAvailability();
+      if (busy) { e.target.value = ''; return busy; }
       const nextFiles = Array.from(e.target.files || []);
       const update = () => {
         if (props.multiple) {
@@ -158,6 +168,8 @@ export const FileUploader = {
       e.target.value = '';
     };
     const clearFile = (event) => {
+      const busy = state.sessionOperationAvailability();
+      if (busy) return busy;
       if (props.requestClear) {
         emit('clearRequest', event?.currentTarget || null);
         return;
@@ -172,7 +184,7 @@ export const FileUploader = {
         emit('update:modelValue', props.multiple ? [] : null);
       }
     };
-    return { input, handleFile, clearFile, hasSelection, selectedLabel };
+    return { input, handleFile, clearFile, hasSelection, selectedLabel, uploadAvailable };
   }
 };
 
@@ -182,6 +194,8 @@ export const RecordDisplayControl = {
   setup(props) {
     const error = ref('');
     const setStart = async (event) => {
+      const busy = state.sessionOperationAvailability();
+      if (busy) return busy;
       try {
         if (!event.target.checkValidity()) throw new Error(event.target.validationMessage);
         await props.controller.setStart(props.row, event.target.value);
@@ -191,7 +205,7 @@ export const RecordDisplayControl = {
         event.target.value = props.controller.draftFor(props.row).startCoordinate ?? '';
       }
     };
-    return { error, setStart, draft: computed(() => props.controller.draftFor(props.row)),
+    return { error, setStart, controlAvailable: computed(() => !state.sessionOperationAvailability()), draft: computed(() => props.controller.draftFor(props.row)),
       surface: computed(() => props.controller.surfaceFor(props.row)) };
   }
 };

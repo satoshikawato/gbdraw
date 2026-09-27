@@ -663,6 +663,8 @@ export const createOrthogroupEditor = ({ state }) => {
   };
 
   const setOrthogroupNameOverride = (orthogroupId, value) => {
+    const sessionBusy = state.sessionOperationAvailability?.();
+    if (sessionBusy) return sessionBusy;
     const id = normalizeText(orthogroupId);
     if (!id) return;
     const group = getOrthogroupById(id);
@@ -677,6 +679,8 @@ export const createOrthogroupEditor = ({ state }) => {
   };
 
   const setOrthogroupDescriptionOverride = (orthogroupId, value) => {
+    const sessionBusy = state.sessionOperationAvailability?.();
+    if (sessionBusy) return sessionBusy;
     const id = normalizeText(orthogroupId);
     if (!id) return;
     const group = getOrthogroupById(id);
@@ -691,6 +695,8 @@ export const createOrthogroupEditor = ({ state }) => {
   };
 
   const resetOrthogroupRename = (orthogroupId = selectedOrthogroupId.value) => {
+    const sessionBusy = state.sessionOperationAvailability?.();
+    if (sessionBusy) return sessionBusy;
     const id = normalizeText(orthogroupId);
     if (!id) return;
     delete orthogroupNameOverrides[id];

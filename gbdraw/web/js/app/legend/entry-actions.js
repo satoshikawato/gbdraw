@@ -141,6 +141,8 @@ export const createLegendEntryActions = ({
   const onLegendGeometryChanged = () => legendGeometryChangedHandler?.();
 
   const addLegendEntry = async (caption, color, options = {}) => {
+    const sessionBusy = state.sessionOperationAvailability?.();
+    if (sessionBusy) return sessionBusy;
     const owner = String(options.owner || '').trim();
     const conflictPolicy = options.conflictPolicy || 'suffix';
     const shouldCommit = options.commit !== false;
@@ -438,6 +440,8 @@ export const createLegendEntryActions = ({
   };
 
   const updateLegendEntryColorByCaption = (caption, color, { commit = true } = {}) => {
+    const sessionBusy = state.sessionOperationAvailability?.();
+    if (sessionBusy) return sessionBusy;
     if (!svgContainer.value) return false;
 
     const svg = svgContainer.value.querySelector('svg');
@@ -488,6 +492,8 @@ export const createLegendEntryActions = ({
   };
 
   const removeLegendEntry = (caption, { commit = true } = {}) => {
+    const sessionBusy = state.sessionOperationAvailability?.();
+    if (sessionBusy) return sessionBusy;
     if (!svgContainer.value) return false;
 
     const svg = svgContainer.value.querySelector('svg');
@@ -870,6 +876,8 @@ export const createLegendEntryActions = ({
   };
 
   const updateLegendEntryColor = (idx, newColor) => {
+    const sessionBusy = state.sessionOperationAvailability?.();
+    if (sessionBusy) return sessionBusy;
     if (!svgContainer.value) return false;
     const svg = svgContainer.value.querySelector('svg');
     if (!svg) return false;
@@ -911,6 +919,8 @@ export const createLegendEntryActions = ({
   };
 
   const updateLegendEntryCaption = (idx, newCaption) => {
+    const sessionBusy = state.sessionOperationAvailability?.();
+    if (sessionBusy) return sessionBusy;
     if (!svgContainer.value) return false;
     const svg = svgContainer.value.querySelector('svg');
     if (!svg) return false;
@@ -967,17 +977,25 @@ export const createLegendEntryActions = ({
   };
 
   const addNewLegendEntry = async () => {
+    const sessionBusy = state.sessionOperationAvailability?.();
+    if (sessionBusy) return sessionBusy;
     if (!newLegendCaption.value.trim()) return;
 
     const added = await addLegendEntry(newLegendCaption.value.trim(), newLegendColor.value, { owner: 'direct-editor' });
     if (added) {
       newLegendCaption.value = '';
       newLegendColor.value = '#808080';
-      setTimeout(() => extractLegendEntries(), 100);
+      const result = results.value[selectedResultIndex.value];
+      setTimeout(() => {
+        if (!state.sessionOperationAvailability?.()
+          && results.value[selectedResultIndex.value] === result) extractLegendEntries();
+      }, 100);
     }
   };
 
   const deleteLegendEntry = (idx) => {
+    const sessionBusy = state.sessionOperationAvailability?.();
+    if (sessionBusy) return sessionBusy;
     const entry = legendEntries.value[idx];
     if (!entry) return;
 
@@ -988,6 +1006,8 @@ export const createLegendEntryActions = ({
   };
 
   const restoreDeletedLegendEntries = () => {
+    const sessionBusy = state.sessionOperationAvailability?.();
+    if (sessionBusy) return sessionBusy;
     if (deletedLegendEntries.value.length === 0) return;
 
     for (const entry of deletedLegendEntries.value) {

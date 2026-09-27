@@ -1581,9 +1581,11 @@ export const createRunAnalysis = ({
       customName,
       entry.filename || defaultName || `losat_pair_${fallbackOrdinal + 1}.tsv`
     );
-    losatCacheInfo.value = losatCacheInfo.value.map((candidate) => (
-      candidate === entry ? { ...candidate, filename } : candidate
-    ));
+    if (!state.sessionOperationAvailability?.()) {
+      losatCacheInfo.value = losatCacheInfo.value.map((candidate) => (
+        candidate === entry ? { ...candidate, filename } : candidate
+      ));
+    }
     const hydrated = await hydrateLosatDownloadText(entry.key, cached);
     downloadTextFile(
       filename || 'losat.tsv',
@@ -1593,6 +1595,8 @@ export const createRunAnalysis = ({
   };
 
   const setLosatPairFilename = (edgeKey, customName) => {
+    const sessionBusy = state.sessionOperationAvailability?.();
+    if (sessionBusy) return sessionBusy;
     const entry = getLosatCacheInfoEntry(edgeKey);
     if (!entry) return;
     const defaultName = getLosatPairDefaultName(entry.edgeKey || edgeKey);
@@ -1758,6 +1762,12 @@ export const createRunAnalysis = ({
         (inputType === 'gff' ? files.c_gff : files.c_gb) !== primaryFile ||
         (inputType === 'gff' ? files.c_fasta : null) !== pairedFile
       ) return;
+      const busy = state.sessionOperationAvailability?.();
+      if (busy) {
+        circularRecordDiscovery.status = 'deferred';
+        circularRecordDiscovery.primaryFile = null;
+        return busy;
+      }
       const nextRecords = records.map((entry) => {
         const recordKey = preservedRecordKeys.get(String(entry.selector || '').trim())
           || preservedRecordKeys.get(String(entry.recordId || '').trim())
@@ -1787,6 +1797,12 @@ export const createRunAnalysis = ({
         (inputType === 'gff' ? files.c_gff : files.c_gb) !== primaryFile ||
         (inputType === 'gff' ? files.c_fasta : null) !== pairedFile
       ) return;
+      const busy = state.sessionOperationAvailability?.();
+      if (busy) {
+        circularRecordDiscovery.status = 'deferred';
+        circularRecordDiscovery.primaryFile = null;
+        return busy;
+      }
       console.warn('Failed to inspect circular source records.', error);
       circularRecordList.value = [];
       circularRecordDiscovery.status = 'error';
@@ -1796,6 +1812,8 @@ export const createRunAnalysis = ({
   };
 
   const refreshCircularRecordOrder = (options = {}) => {
+    const sessionBusy = state.sessionOperationAvailability?.();
+    if (sessionBusy) return sessionBusy;
     const inputType = cInputType.value;
     const fingerprint = [
       Boolean(options.suppress || recordDiscoverySuppressed()),
@@ -2056,7 +2074,6 @@ export const createRunAnalysis = ({
     let pendingLosatCacheCommit = null;
 
     if (isReflow) {
-      labelReflowProcessing.value = true;
       labelReflowLastError.value = null;
       skipCaptureBaseConfig.value = true;
       skipPositionReapply.value = true;
@@ -4946,9 +4963,7 @@ export const createRunAnalysis = ({
       errorLog.value = formatJsError(e);
       return { status: 'error', error: errorLog.value };
     } finally {
-      if (isReflow) {
-        labelReflowProcessing.value = false;
-      } else {
+      if (!isReflow) {
         if (activeLosatAbortController === generationAbortController) {
           activeLosatAbortController = null;
         }
@@ -4962,8 +4977,11 @@ export const createRunAnalysis = ({
   const runAnalysis = async (
     comparisonPlanSnapshot = null,
     generatedArtifactHandle = null,
-    comparisonExecution = null
+    comparisonExecution = null,
+    { prepareGenerate = null, afterGenerate = null } = {}
   ) => {
+    const sessionBusy = state.sessionOperationAvailability?.();
+    if (sessionBusy) return sessionBusy;
     let outcome = null;
     processing.value = true;
     processingStatus.value = 'Preparing input files...';
@@ -4978,6 +4996,12 @@ export const createRunAnalysis = ({
         outcome = { status: 'canceled' };
         failedGeneratePreservedResult.value = results.value.length > 0;
         return outcome;
+      }
+      if (prepareGenerate) {
+        const prepared = await prepareGenerate();
+        if (prepared.status !== 'ready') return prepared;
+        comparisonPlanSnapshot = prepared.comparisonPlanSnapshot;
+        comparisonExecution = prepared.comparisonExecution;
       }
       const execute = (beforeHandle) => runAnalysisInternal({
         runMode: 'manual',
@@ -5028,6 +5052,7 @@ export const createRunAnalysis = ({
       } else if (outcome?.status === 'ok') {
         failedGeneratePreservedResult.value = false;
       }
+      await afterGenerate?.(outcome);
       return outcome;
     } finally {
       if (outcome?.status !== 'canceled') processingStatus.value = '';
@@ -5274,6 +5299,8 @@ export const createRunAnalysis = ({
     alignmentResetBefore = null,
     alignmentResetReceipt = undefined
   }) => {
+    const sessionBusy = state.sessionOperationAvailability?.();
+    if (sessionBusy) return sessionBusy;
     let outcome = null;
     processing.value = true;
     processingStatus.value = 'Preparing target record...';
@@ -5316,6 +5343,8 @@ export const createRunAnalysis = ({
   };
 
   const cancelRunAnalysis = () => {
+    const sessionBusy = state.sessionOperationAvailability?.();
+    if (sessionBusy) return sessionBusy;
     const canceledGenerationToken = latestGenerationToken;
     latestGenerationToken += 1;
     generationCancelRequested.value = true;
@@ -5333,20 +5362,24 @@ export const createRunAnalysis = ({
   };
 
   const runLabelReflow = async (reason = 'label-edit') => {
+    const sessionBusy = state.sessionOperationAvailability?.();
+    if (sessionBusy) return sessionBusy;
     pendingReflowRequestId += 1;
     pendingReflowReason = String(reason || 'label-edit');
     if (activeReflowRequestId !== 0) return;
 
-    while (activeReflowRequestId < pendingReflowRequestId) {
-      activeReflowRequestId = pendingReflowRequestId;
-      await runAnalysisInternal({
-        runMode: 'reflow',
-        requestId: activeReflowRequestId,
-        reason: pendingReflowReason
-      });
+    labelReflowProcessing.value = true;
+    try {
+      while (activeReflowRequestId < pendingReflowRequestId) {
+        activeReflowRequestId = pendingReflowRequestId;
+        await runAnalysisInternal({
+          runMode: 'reflow', requestId: activeReflowRequestId, reason: pendingReflowReason
+        });
+      }
+    } finally {
+      activeReflowRequestId = 0;
+      labelReflowProcessing.value = false;
     }
-
-    activeReflowRequestId = 0;
   };
 
   const downloadLosatCache = async () => {
@@ -5381,6 +5414,8 @@ export const createRunAnalysis = ({
   };
 
   const clearLosatCache = () => {
+    const sessionBusy = state.sessionOperationAvailability?.();
+    if (sessionBusy) return sessionBusy;
     completedLosatSearch = null;
     losatCache.value = new Map();
     losatDerivedCache.value = new Map();

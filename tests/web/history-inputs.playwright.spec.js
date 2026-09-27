@@ -4,6 +4,7 @@ const { resolve } = require('node:path');
 const { gunzipSync } = require('node:zlib');
 const { openApp } = require('./helpers/app-lifecycle.cjs');
 
+const appOrigin = `http://127.0.0.1:${Number(process.env.GBDRAW_WEB_TEST_PORT || 4173)}`;
 const seed = resolve('gbdraw/web/gallery/sessions/HmmtDNA_basic_circular.gbdraw-session.json');
 const sessionInput = 'input[type="file"][accept^=".json,"]';
 
@@ -51,7 +52,7 @@ for (const inputMethod of ['keyboard', 'pointer']) {
     test.setTimeout(300_000);
     const externalRequests = [];
     const allowLocal = (route) => {
-      if (new URL(route.request().url()).origin === 'http://127.0.0.1:4173') {
+      if (new URL(route.request().url()).origin === appOrigin) {
         return route.continue();
       }
       externalRequests.push(route.request().url());
@@ -119,7 +120,7 @@ for (const inputMethod of ['keyboard', 'pointer']) {
     expect(saved.config.form.labels_mode).toBe('out');
     expect(await generate(page)).toBe(originalSvg);
 
-    const freshContext = await browser.newContext({ baseURL: 'http://127.0.0.1:4173' });
+    const freshContext = await browser.newContext({ baseURL: appOrigin });
     try {
       await freshContext.route('**/*', allowLocal);
       const freshPage = await freshContext.newPage();

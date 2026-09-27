@@ -186,7 +186,11 @@ export const createRecordDisplayControls = ({ state, computed, watch, linearReco
       } catch { return []; } // Existing selector control owns its visible validation error.
     }));
   const draftFor = (row) => state.recordDisplayDrafts.find((draft) => recordDisplayKey(draft) === row.key) || {};
-  const surfaceFor = (row) => recordDisplaySurface(row, draftFor(row), row);
+  const surfaceFor = (row) => {
+    const surface = recordDisplaySurface(row, draftFor(row), row);
+    const busy = state.sessionOperationAvailability?.();
+    return busy ? { ...surface, startEnabled: false, disabledReason: busy.reason } : surface;
+  };
   const edit = (row, patch, label) => history.runUndoable(label, () => {
     let draft = state.recordDisplayDrafts.find((entry) => recordDisplayKey(entry) === row.key);
     if (!draft) {
@@ -199,6 +203,8 @@ export const createRecordDisplayControls = ({ state, computed, watch, linearReco
     Object.assign(draft, patch);
   });
   const writeResolvedTransform = (row, { startCoordinate, reverseComplement, anchorIntent }) => {
+    const busy = state.sessionOperationAvailability?.();
+    if (busy) return busy;
     if (typeof reverseComplement !== 'boolean') {
       throw new Error('Resolved record orientation must be boolean.');
     }
@@ -442,6 +448,8 @@ export const createRecordDisplayControls = ({ state, computed, watch, linearReco
   };
   return { rows, allRows, draftFor, surfaceFor, shortcutState, hasPendingChanges,
     applyShortcut: (row, shortcut) => {
+      const busy = state.sessionOperationAvailability?.();
+      if (busy) return busy;
       const result = shortcutState(row, shortcut);
       if (!result.enabled) throw new Error(result.reason);
       return edit(row, { startCoordinate: result.start }, 'Use selected feature for record display start');
@@ -458,11 +466,11 @@ export const createRecordDisplayControls = ({ state, computed, watch, linearReco
     },
     rowsFor: (uid) => rows.value.filter((row) => row.sourceUid === uid),
     setTopology: (row, value) => edit(row, { topologyOverride: value }, 'Change record topology'),
-    setStart: (row, value) => edit(row, {
+    setStart: (row, value) => state.sessionOperationAvailability?.() || edit(row, {
       startCoordinate: parseRecordDisplayStart(value), anchorIntent: null
     }, 'Change record display start'),
     resetStart: (row) => edit(row, { startCoordinate: null, anchorIntent: null }, 'Reset record display start'),
-    setReverseComplement: (row, value) => edit(row, {
+    setReverseComplement: (row, value) => state.sessionOperationAvailability?.() || edit(row, {
       reverseComplementOverride: requireReverseComplementOverride(value), anchorIntent: null
     }, 'Change record orientation'),
     setResolvedTransform: (row, transform) => history.runUndoable(

@@ -47,6 +47,8 @@ export const createFeatureRuleActions = ({ state, nextTick, legendActions, ruleP
 
   let preparationRevision = 0;
   const commitPrepared = (rules, label, commit) => {
+    const busy = state.sessionOperationAvailability?.();
+    if (busy) return Promise.resolve(busy);
     const revision = ++preparationRevision;
     const before = rulePreparation.snapshot();
     const apply = () => {
@@ -71,6 +73,8 @@ export const createFeatureRuleActions = ({ state, nextTick, legendActions, ruleP
   };
 
   const setSpecificRuleField = (index, field, value, input = null) => {
+    const sessionBusy = state.sessionOperationAvailability?.();
+    if (sessionBusy) return sessionBusy;
     if (!specificRuleFields.has(field)) return;
     const current = manualSpecificRules[index];
     if (!current) return;
@@ -87,6 +91,8 @@ export const createFeatureRuleActions = ({ state, nextTick, legendActions, ruleP
   };
 
   const moveSpecificRule = (index, offset) => {
+    const sessionBusy = state.sessionOperationAvailability?.();
+    if (sessionBusy) return sessionBusy;
     const target = index + offset;
     if (target < 0 || target >= manualSpecificRules.length) return;
     const [rule] = manualSpecificRules.splice(index, 1);
@@ -94,6 +100,8 @@ export const createFeatureRuleActions = ({ state, nextTick, legendActions, ruleP
   };
 
   const removeSpecificRule = (index) => {
+    const sessionBusy = state.sessionOperationAvailability?.();
+    if (sessionBusy) return sessionBusy;
     const rule = manualSpecificRules[index];
     if (rule?.cap) fileLegendCaptions.value.delete(rule.cap);
     manualSpecificRules.splice(index, 1);
@@ -163,6 +171,8 @@ export const createFeatureRuleActions = ({ state, nextTick, legendActions, ruleP
   };
 
   const addCustomColor = () => {
+    const sessionBusy = state.sessionOperationAvailability?.();
+    if (sessionBusy) return sessionBusy;
     if (!newColorFeat.value) return;
     currentColors.value = {
       ...currentColors.value,
@@ -170,7 +180,30 @@ export const createFeatureRuleActions = ({ state, nextTick, legendActions, ruleP
     };
   };
 
+  const setLabelFilterMode = (value) => {
+    const busy = state.sessionOperationAvailability?.();
+    if (busy) return busy;
+    state.filterMode.value = value;
+  };
+  const addWhitelistRule = () => {
+    const busy = state.sessionOperationAvailability?.();
+    if (busy) return busy;
+    state.manualWhitelist.push({ feat: 'CDS', qual: 'product', key: '' });
+  };
+  const removeWhitelistRule = (index) => {
+    const busy = state.sessionOperationAvailability?.();
+    if (busy) return busy;
+    state.manualWhitelist.splice(index, 1);
+  };
+  const removePriorityRule = (index) => {
+    const busy = state.sessionOperationAvailability?.();
+    if (busy) return busy;
+    manualPriorityRules.splice(index, 1);
+  };
+
   const addPriorityRule = () => {
+    const sessionBusy = state.sessionOperationAvailability?.();
+    if (sessionBusy) return sessionBusy;
     if (!newPriorityRule.order) return;
     const idx = manualPriorityRules.findIndex((r) => r.feat === newPriorityRule.feat);
     if (idx >= 0) {
@@ -181,6 +214,8 @@ export const createFeatureRuleActions = ({ state, nextTick, legendActions, ruleP
   };
 
   const addSpecificRule = async () => {
+    const sessionBusy = state.sessionOperationAvailability?.();
+    if (sessionBusy) return sessionBusy;
     if (!newSpecRule.val) return;
 
     if (newSpecRule.val.length > 50) {
@@ -231,6 +266,8 @@ export const createFeatureRuleActions = ({ state, nextTick, legendActions, ruleP
   };
 
   const applySpecificRulePreset = async () => {
+    const sessionBusy = state.sessionOperationAvailability?.();
+    if (sessionBusy) return sessionBusy;
     if (specificRulePresetLoading.value) return;
     const presetId = selectedSpecificPreset.value;
     if (!presetId) return;
@@ -293,6 +330,8 @@ export const createFeatureRuleActions = ({ state, nextTick, legendActions, ruleP
   };
 
   const addFeature = () => {
+    const sessionBusy = state.sessionOperationAvailability?.();
+    if (sessionBusy) return sessionBusy;
     if (newFeatureToAdd.value && !adv.features.includes(newFeatureToAdd.value)) {
       adv.features.push(newFeatureToAdd.value);
       if (!adv.feature_shapes || typeof adv.feature_shapes !== 'object') {
@@ -305,6 +344,8 @@ export const createFeatureRuleActions = ({ state, nextTick, legendActions, ruleP
   };
 
   const removeFeature = (featureType) => {
+    const sessionBusy = state.sessionOperationAvailability?.();
+    if (sessionBusy) return sessionBusy;
     const idx = adv.features.indexOf(featureType);
     if (idx >= 0) {
       adv.features.splice(idx, 1);
@@ -321,6 +362,8 @@ export const createFeatureRuleActions = ({ state, nextTick, legendActions, ruleP
   };
 
   const setFeatureShape = (featureType, shape) => {
+    const sessionBusy = state.sessionOperationAvailability?.();
+    if (sessionBusy) return sessionBusy;
     if (!adv.feature_shapes || typeof adv.feature_shapes !== 'object') {
       adv.feature_shapes = {};
     }
@@ -458,6 +501,10 @@ export const createFeatureRuleActions = ({ state, nextTick, legendActions, ruleP
     getFeatureShape,
     setFeatureShape,
     addPriorityRule,
+    setLabelFilterMode,
+    addWhitelistRule,
+    removeWhitelistRule,
+    removePriorityRule,
     addSpecificRule,
     applySpecificRulePreset,
     canEditFeatureColor,

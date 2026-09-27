@@ -5,7 +5,7 @@ import {
   createFeatureRecordRotationAction,
   createFeatureRecordRotationWorkflow
 } from './record-display/feature-record-rotation.js';
-import { state, createLinearSeq, normalizeLinearSeqList } from '../state.js';
+import { state, sessionOperationAvailability, createLinearSeq, normalizeLinearSeqList } from '../state.js';
 import {
   adoptCanonicalRenderArtifacts,
   applyConfigData,
@@ -23,6 +23,7 @@ import {
   buildUiStateData,
   canonicalRenderArtifactOwner,
   exportSession,
+  disposeSessionOperations,
   getCommittedCanonicalSession,
   getCommittedCanonicalRenderRequest,
   importSession as importSessionFromFile,
@@ -238,6 +239,8 @@ export const createAppSetup = () => {
   const {
     processing,
     processingStatus,
+    sessionSavePending,
+    sessionImportPending,
     generationCancelRequested,
     errorLog,
     sessionTitle,
@@ -430,7 +433,8 @@ export const createAppSetup = () => {
   let refreshSimilarityAlignmentCanvas = () => {};
   const linearTypography = createLinearTypographyController({
     adv,
-    linked: linearTypographyLinked
+    linked: linearTypographyLinked,
+    mutationAvailability: sessionOperationAvailability
   });
   let alignmentReviewBlocksEditor = () => false;
   const rightDrawerActions = createRightDrawerController({ state, watch,
@@ -555,6 +559,8 @@ export const createAppSetup = () => {
     return !rowsUnchanged || comparisonsChanged;
   };
   const setLinearRecordRow = (uid, row) => {
+    const sessionBusy = sessionOperationAvailability();
+    if (sessionBusy) return sessionBusy;
     syncLinearRecordLayout({ preserveLosatCacheInfo: true });
     const previous = linearRecordRows.find((entry) => entry.uid === uid)?.row;
     updateLinearRecordRow(linearRecordRows, uid, row);
@@ -563,6 +569,8 @@ export const createAppSetup = () => {
     }
   };
   const setLinearRecordLayoutEnabled = (enabled) => {
+    const sessionBusy = sessionOperationAvailability();
+    if (sessionBusy) return sessionBusy;
     const nextEnabled = Boolean(enabled);
     if (linearRecordLayoutEnabled.value === nextEnabled) return;
     linearRecordLayoutEnabled.value = nextEnabled;
@@ -571,6 +579,8 @@ export const createAppSetup = () => {
     if (nextEnabled) return materializeAutomaticLinearRecords();
   };
   const moveLinearRecordWithinRow = (uid, direction) => {
+    const sessionBusy = sessionOperationAvailability();
+    if (sessionBusy) return sessionBusy;
     const next = moveLinearRecordInRow(linearSeqs, linearRecordRows, uid, direction);
     linearRecordRows.splice(0, linearRecordRows.length, ...next);
     syncLinearComparisonRecords({ invalidate: false });
@@ -685,6 +695,8 @@ export const createAppSetup = () => {
   };
 
   const setLinearComparisonGlobalAction = async (action) => {
+    const sessionBusy = sessionOperationAvailability();
+    if (sessionBusy) return sessionBusy;
     const normalized = String(action || '').trim().toLowerCase();
     const result = await mutateLinearComparisonPlan((next) => {
       if (normalized === 'none') {
@@ -703,6 +715,8 @@ export const createAppSetup = () => {
   };
 
   const setLinearComparisonLosatMode = (modeKey) => {
+    const sessionBusy = sessionOperationAvailability();
+    if (sessionBusy) return sessionBusy;
     const selection = projectLinearComparisonLosatModeSelection({ modeKey });
     if (!selection.selectable || !selection.patch) return false;
     const nextProgram = selection.patch.losatProgram;
@@ -714,6 +728,8 @@ export const createAppSetup = () => {
   };
 
   const setLinearComparisonLosatpMode = (modeKey) => {
+    const sessionBusy = sessionOperationAvailability();
+    if (sessionBusy) return sessionBusy;
     const selection = projectLinearComparisonLosatpModeSelection({
       plan: linearComparisonPlan,
       modeKey
@@ -790,6 +806,8 @@ export const createAppSetup = () => {
   };
 
   const addLinearComparison = async () => {
+    const sessionBusy = sessionOperationAvailability();
+    if (sessionBusy) return sessionBusy;
     if (linearSeqs.length < 2) return;
     syncLinearRecordLayout();
     const [firstPair] = adjacentRowPairs(
@@ -803,6 +821,8 @@ export const createAppSetup = () => {
     await focusLinearComparisonPair(linearComparisonEdgeKey(queryUid, subjectUid));
   };
   const omitLinearComparison = (id) => {
+    const sessionBusy = sessionOperationAvailability();
+    if (sessionBusy) return sessionBusy;
     const next = selectedPlanForEdit();
     const index = findEdgeIndex(next.edges, id);
     if (index < 0) return;
@@ -812,6 +832,8 @@ export const createAppSetup = () => {
     replaceLinearComparisonPlan(next);
   };
   const clearSelectedLinearComparisons = () => {
+    const sessionBusy = sessionOperationAvailability();
+    if (sessionBusy) return sessionBusy;
     const next = selectedPlanForEdit();
     next.edges = next.edges
       .filter((edge) => edge.file || String(edge.losatFilename || '').trim())
@@ -819,6 +841,8 @@ export const createAppSetup = () => {
     replaceLinearComparisonPlan(next);
   };
   const setLinearComparisonEndpoint = (id, endpoint, uid) => {
+    const sessionBusy = sessionOperationAvailability();
+    if (sessionBusy) return sessionBusy;
     if (!['queryUid', 'subjectUid'].includes(endpoint)) return;
     const next = selectedPlanForEdit();
     const edge = next.edges.find((entry) => entry.id === id);
@@ -828,6 +852,8 @@ export const createAppSetup = () => {
     replaceLinearComparisonPlan(next);
   };
   const setLinearComparisonSource = (id, source) => {
+    const sessionBusy = sessionOperationAvailability();
+    if (sessionBusy) return sessionBusy;
     const normalized = source === LINEAR_COMPARISON_SOURCES.LOSAT
       ? LINEAR_COMPARISON_SOURCES.LOSAT
       : LINEAR_COMPARISON_SOURCES.UPLOAD;
@@ -839,6 +865,8 @@ export const createAppSetup = () => {
     replaceLinearComparisonPlan(next);
   };
   const setLinearComparisonFile = (id, file) => {
+    const sessionBusy = sessionOperationAvailability();
+    if (sessionBusy) return sessionBusy;
     const next = selectedPlanForEdit();
     const edge = next.edges.find((entry) => entry.id === id);
     if (!edge) return;
@@ -849,6 +877,8 @@ export const createAppSetup = () => {
     replaceLinearComparisonPlan(next);
   };
   const reuseLinearComparisonFile = (id) => {
+    const sessionBusy = sessionOperationAvailability();
+    if (sessionBusy) return sessionBusy;
     const next = selectedPlanForEdit();
     const edge = next.edges.find((entry) => entry.id === id);
     if (!edge?.file) return;
@@ -858,6 +888,8 @@ export const createAppSetup = () => {
     replaceLinearComparisonPlan(next);
   };
   const deactivateLinearComparisonFile = (id) => {
+    const sessionBusy = sessionOperationAvailability();
+    if (sessionBusy) return sessionBusy;
     const next = selectedPlanForEdit();
     const edge = next.edges.find((entry) => entry.id === id);
     if (!edge?.file) return;
@@ -866,6 +898,8 @@ export const createAppSetup = () => {
     replaceLinearComparisonPlan(next);
   };
   const setLinearComparisonLosatFilename = (id, value) => {
+    const sessionBusy = sessionOperationAvailability();
+    if (sessionBusy) return sessionBusy;
     const next = selectedPlanForEdit();
     const edge = next.edges.find((entry) => entry.id === id);
     if (!edge) return;
@@ -874,6 +908,8 @@ export const createAppSetup = () => {
     replaceLinearComparisonPlan(next, { invalidate: false });
   };
   const reuseLinearComparisonLosatFilename = (id) => {
+    const sessionBusy = sessionOperationAvailability();
+    if (sessionBusy) return sessionBusy;
     const next = selectedPlanForEdit();
     const edge = next.edges.find((entry) => entry.id === id);
     if (!edge || !String(edge.losatFilename || '').trim()) return;
@@ -883,6 +919,8 @@ export const createAppSetup = () => {
     replaceLinearComparisonPlan(next);
   };
   const deactivateLinearComparisonLosatFilename = (id) => {
+    const sessionBusy = sessionOperationAvailability();
+    if (sessionBusy) return sessionBusy;
     const next = selectedPlanForEdit();
     const edge = next.edges.find((entry) => entry.id === id);
     if (!edge) return;
@@ -890,6 +928,8 @@ export const createAppSetup = () => {
     replaceLinearComparisonPlan(next, { invalidate: false });
   };
   const updateResolvedLosatFilenameDraft = (edgeKey, updater) => {
+    const sessionBusy = sessionOperationAvailability();
+    if (sessionBusy) return sessionBusy;
     const resolved = linearComparisonResolution.value.edges.find((edge) => edge.edgeKey === edgeKey);
     if (!resolved) return;
     const next = normalizeLinearComparisonPlan(linearComparisonPlan);
@@ -936,6 +976,8 @@ export const createAppSetup = () => {
     replaceLinearComparisonPlan(next);
   };
   const setLinearComparisonGapAction = (edgeKey, action) => {
+    const sessionBusy = sessionOperationAvailability();
+    if (sessionBusy) return sessionBusy;
     const pair = linearComparisonPairForEdgeKey(edgeKey);
     if (!pair) return;
     const next = selectedPlanForEdit();
@@ -961,6 +1003,8 @@ export const createAppSetup = () => {
     replaceLinearComparisonPlan(next);
   };
   const setLinearComparisonCardFile = (edgeKey, file) => {
+    const sessionBusy = sessionOperationAvailability();
+    if (sessionBusy) return sessionBusy;
     let pair = linearComparisonPairForEdgeKey(edgeKey);
     let draft = pair?.draft || null;
     if (!draft) {
@@ -1053,7 +1097,7 @@ export const createAppSetup = () => {
     )
   });
   const getCircularRecordDiscoveryState = () => circularDiscoveryForInput(state);
-  const getAnnotationRecordCatalog = (loadComparisonOverride = null) => {
+  const getAnnotationRecordCatalog = (loadComparisonOverride = null, linearSourcesOverride = null) => {
     const inputType = mode.value === 'linear' ? lInputType.value : cInputType.value;
     const circularPrimaryFile = cInputType.value === 'gff' ? files.c_gff : files.c_gb;
     const circularPairedFile = cInputType.value === 'gff' ? files.c_fasta : null;
@@ -1078,7 +1122,7 @@ export const createAppSetup = () => {
         error: circularDiscovery.error,
         records: circularDiscovery.records
       },
-      linearSources: linearSeqs.map((seq) => {
+      linearSources: linearSourcesOverride || linearSeqs.map((seq) => {
         const primaryFile = lInputType.value === 'gff' ? seq.gff : seq.gb;
         const pairedFile = lInputType.value === 'gff' ? seq.fasta : null;
         return {
@@ -1142,7 +1186,8 @@ export const createAppSetup = () => {
     signatureFor: historySnapshots.snapshotSignature,
     fileStore: historyFileStore,
     collectCurrentFileIds: historySnapshots.collectCurrentFileIds,
-    makeRef: ref
+    makeRef: ref,
+    mutationAvailability: sessionOperationAvailability
   });
   const recordDisplayControls = createRecordDisplayControls({ state, computed, watch, linearRecordSelector, history, getCommittedRequest: getCommittedCanonicalRenderRequest, getCommittedSession: getCommittedCanonicalSession });
   state.recordDisplayRows = recordDisplayControls.allRows;
@@ -1323,6 +1368,9 @@ export const createAppSetup = () => {
     featureActions.dispose();
     disposePanZoom();
     setUnmanagedConfigOverrideValidator(null);
+    disposeSessionOperations();
+    resultsManager.cancelDefinitionUpdate();
+    state.sessionPreparationBusyReason = null;
     disposeDiagramGenerationWorker();
   });
 
@@ -1347,7 +1395,7 @@ export const createAppSetup = () => {
     },
     () => {
       const catalog = getAnnotationRecordCatalog();
-      if (catalog.status === 'ready') {
+      if (catalog.status === 'ready' && !sessionOperationAvailability()) {
         reconcileAnnotationRecordBindings(annotationSets, catalog);
       }
     },
@@ -1444,10 +1492,12 @@ export const createAppSetup = () => {
     normalizeDepthTrackConfigEntry(entry, index, depthTrackConfigDefaults())
   );
   const optionalNumberInputValue = (value) => value ?? '';
-  const setOptionalNumberInputValue = (target, key, value) => {
+  const setOptionalNumberInputValue = (target, key, value, numeric = false) => {
+    const sessionBusy = sessionOperationAvailability();
+    if (sessionBusy) return sessionBusy;
     if (!target || typeof target !== 'object') return;
     const text = String(value ?? '').trim();
-    target[key] = text === '' ? null : text;
+    target[key] = text === '' ? null : numeric ? Number(text) : text;
   };
   const activeDepthTrackCount = () => {
     if (mode.value === 'linear') {
@@ -1548,15 +1598,21 @@ export const createAppSetup = () => {
     ensureDefinitionLineStyle(kind).font_size
   );
   const setDefinitionLineStyleSize = (kind, value) => {
+    const sessionBusy = sessionOperationAvailability();
+    if (sessionBusy) return sessionBusy;
     setOptionalNumberInputValue(ensureDefinitionLineStyle(kind), 'font_size', value);
   };
   const getDefinitionLineStyleWeight = (kind) => ensureDefinitionLineStyle(kind).font_weight ?? '';
   const setDefinitionLineStyleWeight = (kind, value) => {
+    const sessionBusy = sessionOperationAvailability();
+    if (sessionBusy) return sessionBusy;
     const normalized = String(value || '').trim().toLowerCase();
     ensureDefinitionLineStyle(kind).font_weight = normalized === 'bold' ? 'bold' : null;
   };
   const getDefinitionLineStyleFill = (kind) => ensureDefinitionLineStyle(kind).fill ?? '';
   const setDefinitionLineStyleColor = (kind, value) => {
+    const sessionBusy = sessionOperationAvailability();
+    if (sessionBusy) return sessionBusy;
     const normalized = String(value || '').trim();
     ensureDefinitionLineStyle(kind).fill = normalized || null;
   };
@@ -1595,6 +1651,8 @@ export const createAppSetup = () => {
     return String(config?.color || depthTrackFallbackColor(idx));
   };
   const setDepthTrackColor = (index, value) => {
+    const sessionBusy = sessionOperationAvailability();
+    if (sessionBusy) return sessionBusy;
     const idx = Math.max(0, Number(index) || 0);
     const color = String(value ?? '').trim();
     const config = depthTrackConfigForIndex(idx);
@@ -1615,6 +1673,8 @@ export const createAppSetup = () => {
     void index;
   };
   const setDepthTrackLabel = (index, value) => {
+    const sessionBusy = sessionOperationAvailability();
+    if (sessionBusy) return sessionBusy;
     const idx = Math.max(0, Number(index) || 0);
     const config = depthTrackConfigForIndex(idx);
     config.label = String(value ?? '');
@@ -1624,6 +1684,8 @@ export const createAppSetup = () => {
     getDepthTrackLabel(normalizeDepthSlotTrackIndex(slot))
   );
   const setDepthTrackLegendLabelForSlot = (slot, value) => {
+    const sessionBusy = sessionOperationAvailability();
+    if (sessionBusy) return sessionBusy;
     if (!slot) return;
     const idx = normalizeDepthSlotTrackIndex(slot);
     slot.params = slot.params && typeof slot.params === 'object' ? { ...slot.params } : {};
@@ -1681,6 +1743,8 @@ export const createAppSetup = () => {
   };
   const getCircularDepthFile = (index) => circularDepthRepresentatives()[Number(index)] || null;
   const setCircularDepthFile = (index, file) => {
+    const sessionBusy = sessionOperationAvailability();
+    if (sessionBusy) return sessionBusy;
     const idx = Math.max(0, Number(index) || 0);
     ensureDepthTrackConfigCount(idx + 1);
     depthTrackUiCounts.circular = Math.max(depthTrackUiCounts.circular, idx + 1);
@@ -1697,6 +1761,8 @@ export const createAppSetup = () => {
   };
   const getLinearDepthFile = (seq, index) => depthFileSlotsFromValue(seq?.depth)[Number(index)] || null;
   const setLinearDepthFiles = (sequences, index, file) => {
+    const sessionBusy = sessionOperationAvailability();
+    if (sessionBusy) return sessionBusy;
     const targets = Array.from(sequences || []).filter(Boolean);
     if (!targets.length) return;
     const idx = Math.max(0, Number(index) || 0);
@@ -1729,11 +1795,15 @@ export const createAppSetup = () => {
     () => setLinearSourceDepthFile(source, index, null)
   );
   const addCircularDepthTrack = () => {
+    const sessionBusy = sessionOperationAvailability();
+    if (sessionBusy) return sessionBusy;
     depthTrackUiCounts.circular = sourceDepthTrackCount(files.c_depth, depthTrackUiCounts.circular) + 1;
     ensureDepthTrackConfigCount(depthTrackUiCounts.circular);
     if (canShowDepthTrack.value) form.show_depth = true;
   };
   const addLinearDepthTrack = () => {
+    const sessionBusy = sessionOperationAvailability();
+    if (sessionBusy) return sessionBusy;
     const nextCount = linearDepthTrackUiCount() + 1;
     padLinearDepthRows(nextCount);
     ensureDepthTrackConfigCount(nextCount);
@@ -1743,6 +1813,8 @@ export const createAppSetup = () => {
     }
   };
   const removeCircularDepthTrack = (index) => {
+    const sessionBusy = sessionOperationAvailability();
+    if (sessionBusy) return sessionBusy;
     const idx = Number(index);
     if (!Number.isInteger(idx) || idx < 0) return;
     const count = sourceDepthTrackCount(files.c_depth, depthTrackUiCounts.circular);
@@ -1771,6 +1843,8 @@ export const createAppSetup = () => {
     }
   };
   const removeLinearDepthTrack = (index) => {
+    const sessionBusy = sessionOperationAvailability();
+    if (sessionBusy) return sessionBusy;
     const idx = Number(index);
     if (!Number.isInteger(idx) || idx < 0) return;
     const logicalWidth = linearDepthLogicalWidth();
@@ -1838,11 +1912,8 @@ export const createAppSetup = () => {
   );
   watch(mode, (nextMode, previousMode) => {
     if (nextMode === previousMode) return;
-    if (state.semanticFileWatchersSuppressed.value) {
-      state.modeProfileStateManager.invalidate(nextMode);
-    } else {
-      state.modeProfileStateManager.transition(adv, previousMode, nextMode);
-    }
+    if (state.semanticFileWatchersSuppressed.value) return;
+    state.modeProfileStateManager.transition(adv, previousMode, nextMode);
     matchSequenceRegistry?.reset?.();
     clickedPairwiseMatch.value = null;
   });
@@ -1868,6 +1939,8 @@ export const createAppSetup = () => {
     files.c_conservation_blasts_source = null;
   };
   const setCircularConservationSourceFiles = (nextFiles) => {
+    const sessionBusy = sessionOperationAvailability();
+    if (sessionBusy) return sessionBusy;
     const normalized = normalizeFileList(nextFiles);
     if (isCircularConservationUploadSource()) {
       files.c_conservation_blasts = normalized;
@@ -1880,6 +1953,8 @@ export const createAppSetup = () => {
     syncCircularConservationSeries();
   };
   const setCircularConservationUploadFiles = (nextFiles) => {
+    const sessionBusy = sessionOperationAvailability();
+    if (sessionBusy) return sessionBusy;
     files.c_conservation_blasts = normalizeFileList(nextFiles);
     files.c_conservation_blasts_source = null;
     files.c_conservation_sequence_sources = [];
@@ -1937,6 +2012,8 @@ export const createAppSetup = () => {
     );
   };
   const moveCircularConservationSeries = (index, direction) => {
+    const sessionBusy = sessionOperationAvailability();
+    if (sessionBusy) return sessionBusy;
     if (moveConservationSeriesEntry(circularConservation.series, index, direction)) {
       if (adv.circular_track_slots_enabled === true) {
         circularTrackSlotEditor.syncCircularConservationSlots();
@@ -1947,6 +2024,8 @@ export const createAppSetup = () => {
     circularConservationFastaInput.value?.click();
   };
   const addCircularConservationComparisonFile = (event) => {
+    const sessionBusy = sessionOperationAvailability();
+    if (sessionBusy) return sessionBusy;
     const target = event?.target || null;
     const selectedFile = Array.from(target?.files || []).filter(Boolean)[0] || null;
     if (!selectedFile) return;
@@ -1957,6 +2036,8 @@ export const createAppSetup = () => {
     if (target) target.value = '';
   };
   const setCircularConservationCompanionFile = (sourceIndex, event) => {
+    const sessionBusy = sessionOperationAvailability();
+    if (sessionBusy) return sessionBusy;
     const index = Number(sourceIndex);
     if (!Number.isInteger(index) || index < 0) return;
     const selectedFile = Array.from(event?.target?.files || []).filter(Boolean)[0] || null;
@@ -1969,6 +2050,8 @@ export const createAppSetup = () => {
     if (event?.target) event.target.value = '';
   };
   const removeCircularConservationSource = (index) => {
+    const sessionBusy = sessionOperationAvailability();
+    if (sessionBusy) return sessionBusy;
     const idx = Number(index);
     if (!Number.isInteger(idx) || idx < 0 || idx >= circularConservation.series.length) return;
     if (isDerivedCircularConservationReplay()) {
@@ -2307,10 +2390,11 @@ export const createAppSetup = () => {
   const resultsManager = createResultsManager({
     state,
     legendLayout,
-    rerenderLinearDefinitions: runLabelReflow
+    rerenderLinearDefinitions: runLabelReflow,
+    makeRef: ref
   });
 
-  const { waitForAuxiliaryFileImport } = setupWatchers({
+  const { waitForAuxiliaryFileImport, auxiliaryFileImportPending } = setupWatchers({
     state,
     rulePreparation,
     watch,
@@ -2330,77 +2414,69 @@ export const createAppSetup = () => {
     preparePaletteDefinitions: paletteLoader.loadPaletteAsset
   });
 
-  const sessionImportPending = ref(false);
-  const sessionSavePending = ref(false);
-  let sessionSaveInFlight = null;
+  state.sessionPreparationBusyReason = () => {
+    if (history.mutationPending() || ruleMatchingPending.value || auxiliaryFileImportPending()) {
+      return 'Applying an edit. Retry after the edit finishes.';
+    }
+    if (resultsManager.definitionUpdatePending()) {
+      return 'Updating diagram. Retry after the update finishes.';
+    }
+    return '';
+  };
+  const semanticMutationAvailable = computed(() => !sessionOperationAvailability());
+  const sessionSaveAvailable = computed(() => !sessionOperationAvailability('save'));
+  const sessionLoadAvailable = computed(() => !sessionOperationAvailability('load'));
+  const sessionBusyReason = computed(() => sessionOperationAvailability('save')?.reason || '');
   const circularRecordPresentationPanel = ref(null);
   let nextSessionPreviewToken = 1;
-  const importSession = async (event) => {
-    const input = event?.target;
-    const file = input?.files?.[0];
-    if (!file) return { status: 'skipped' };
-    if (sessionImportPending.value) {
-      input.value = '';
-      return { status: 'busy' };
-    }
-
-    const importEvent = {
-      target: {
-        files: [file],
-        value: input.value
-      }
-    };
-    sessionImportPending.value = true;
-    recordSessionLifecycleEvent('session-import-pending-published');
-    try {
+  const importSession = (event) => importSessionFromFile(event, {
+    beforeImport: async () => {
       await nextTick();
       await afterPaint();
       recordSessionLifecycleEvent('session-import-paint-opportunity-completed');
-      const result = await importSessionFromFile(importEvent, {
-        beforePreviewMount: ({ results: importedResults, resultIndex }) => {
-          const selectedResult = importedResults[resultIndex] || null;
-          if (!selectedResult) return null;
-          const token = `session-load:${nextSessionPreviewToken++}`;
-          return previewRuntime.registerReadinessExpectation({
-            result: selectedResult,
-            resultIndex,
-            artifactIdentity: token,
-            generationToken: token,
-            catalogState: state.featureCatalog?.value || null,
-            phase: 'session-load',
-            bindingOptions: { isIncrementalEdit: true },
-            isCurrent: () => (
-              results.value[resultIndex] === selectedResult
-              && Number(selectedResultIndex.value) === resultIndex
-            )
-          });
-        },
-        rollbackState: createSessionImportRollbackState({
-          depthTrackUiCounts,
-          depthTracks: adv.depth_tracks,
-          featureListScrollTop,
-          featureListScrollRef,
-          selectedPairwiseBlockOrthogroupId
-        })
+    },
+    beforePreviewMount: ({ results: importedResults, resultIndex }) => {
+      const selectedResult = importedResults[resultIndex] || null;
+      if (!selectedResult) return null;
+      const token = `session-load:${nextSessionPreviewToken++}`;
+      return previewRuntime.registerReadinessExpectation({
+        result: selectedResult,
+        resultIndex,
+        artifactIdentity: token,
+        generationToken: token,
+        catalogState: state.featureCatalog?.value || null,
+        phase: 'session-load',
+        bindingOptions: { isIncrementalEdit: true },
+        isCurrent: () => (
+          results.value[resultIndex] === selectedResult
+          && Number(selectedResultIndex.value) === resultIndex
+        )
       });
+    },
+    rollbackState: createSessionImportRollbackState({
+      depthTrackUiCounts,
+      depthTracks: adv.depth_tracks,
+      featureListScrollTop,
+      featureListScrollRef,
+      selectedPairwiseBlockOrthogroupId
+    }),
+    afterImport: async (result) => {
       if (result?.status === 'ok' || result?.status === 'legacy') {
+        await nextTick();
+        recordSessionLifecycleEvent('history-baseline-start');
+        if (!await history.initializeIntentBaseline('Loaded session', { isCurrent: result.isCurrent })) {
+          throw new Error('Session loading canceled.');
+        }
         historySnapshots.clearGeneratedArtifactIdentity({
           retainedBytes: result?.status === 'ok'
             ? Number(result.decompressedCharacters || 0) * 2
             : 0
         });
-        await nextTick();
-        recordSessionLifecycleEvent('history-baseline-start');
-        await history.initializeIntentBaseline('Loaded session');
         recordSessionLifecycleEvent('history-baseline-end');
         if (circularRecordPresentationPanel.value) circularRecordPresentationPanel.value.open = false;
       }
-      return result;
-    } finally {
-      sessionImportPending.value = false;
-      input.value = '';
     }
-  };
+  });
 
   const {
     addNewLegendEntry,
@@ -2425,6 +2501,10 @@ export const createAppSetup = () => {
   const {
     addCustomColor,
     addPriorityRule,
+    setLabelFilterMode,
+    addWhitelistRule,
+    removeWhitelistRule,
+    removePriorityRule,
     addFeature,
     removeFeature,
     getFeatureShape,
@@ -2637,7 +2717,7 @@ export const createAppSetup = () => {
     'exact replay command'
   );
 
-  async function prepareLinearRecordCatalog(loadComparison = false) {
+  async function prepareLinearRecordCatalog(loadComparison = false, { privateCandidate = false } = {}) {
     if (mode.value !== 'linear') return { catalog: null, error: '' };
     const hasAutomaticSequence = linearSeqs.some((sequence) => {
       if (String(sequence?.region_record_id || '').trim()) return false;
@@ -2649,6 +2729,25 @@ export const createAppSetup = () => {
     ));
     if (!hasAutomaticSequence && !hasRegionAnnotations) {
       return { catalog: null, error: '' };
+    }
+    if (privateCandidate) {
+      const sources = await Promise.all(linearSeqs.map(async (seq) => {
+        const inputType = lInputType.value;
+        const primaryFile = inputType === 'gff' ? seq.gff : seq.gb;
+        const pairedFile = inputType === 'gff' ? seq.fasta : null;
+        const sourceKey = annotationSourceKey({ scope: 'linear', uid: seq.uid, inputType, primaryFile, pairedFile });
+        try {
+          const records = inputType === 'gff'
+            ? await discoverGffFastaRecords({ gffFile: primaryFile, fastaFile: pairedFile, readText: readFileText })
+            : await discoverSequenceRecords({ file: primaryFile, format: 'genbank', readText: readFileText });
+          return { sourceKey, selector: seq.region_record_id, hasInput: Boolean(primaryFile), status: 'ready', records };
+        } catch (error) {
+          return { sourceKey, selector: seq.region_record_id, hasInput: Boolean(primaryFile), status: 'error', error: error.message, records: [] };
+        }
+      }));
+      const catalog = getAnnotationRecordCatalog(loadComparison, sources);
+      return catalog.status === 'ready' ? { catalog, error: '' }
+        : { catalog: null, error: catalog.issues[0] || 'Could not read records from the Linear input file(s).' };
     }
     let catalog = getAnnotationRecordCatalog(loadComparison);
     if (catalog.status !== 'ready') {
@@ -2667,52 +2766,51 @@ export const createAppSetup = () => {
         };
   }
 
-  const runAnalysis = async (options = null) => {
-    if (mode.value === 'linear') {
-      if (importedComparisonIntent.disposition === IMPORTED_COMPARISON_DISPOSITIONS.EDITABLE) {
-        await materializeAutomaticLinearRecords();
-      } else {
-        await linearRecordSelector.refresh();
-      }
-    }
-    if (similarityAlignmentActions?.validateBeforeGenerate) {
-      const validation = await similarityAlignmentActions.validateBeforeGenerate();
-      if (validation?.status !== 'ok') {
-        failedGeneratePreservedResult.value = results.value.length > 0;
-        if (similarityAlignmentActions.dialogOpen.value) {
-          await focusSimilarityAlignmentDialog();
+  const runAnalysis = (options = null) => runGeneratedDiagramAnalysis(null, null, null, {
+    prepareGenerate: async () => {
+      if (mode.value === 'linear') {
+        if (importedComparisonIntent.disposition === IMPORTED_COMPARISON_DISPOSITIONS.EDITABLE) {
+          await materializeAutomaticLinearRecords();
+        } else {
+          await linearRecordSelector.refresh();
         }
-        return validation;
+      }
+      if (similarityAlignmentActions?.validateBeforeGenerate) {
+        const validation = await similarityAlignmentActions.validateBeforeGenerate();
+        if (validation?.status !== 'ok') {
+          failedGeneratePreservedResult.value = results.value.length > 0;
+          if (similarityAlignmentActions.dialogOpen.value) {
+            await focusSimilarityAlignmentDialog();
+          }
+          return validation;
+        }
+      }
+      const comparisonPlanSnapshot = mode.value === 'linear'
+        ? linearComparisonResolution.value
+        : null;
+      const comparisonExecution = importedComparisonExecution({
+        intent: importedComparisonIntent,
+        draftResolution: comparisonPlanSnapshot
+      });
+      if (!comparisonExecution.ok) {
+        errorLog.value = normalizeUserFacingError(new Error(comparisonExecution.message));
+        failedGeneratePreservedResult.value = results.value.length > 0;
+        if (mode.value === 'linear') await focusLinearComparisonIssue();
+        return { status: 'error', error: errorLog.value };
+      }
+      cancelDefinitionUpdate();
+      return { status: 'ready', comparisonPlanSnapshot, comparisonExecution };
+    },
+    afterGenerate: async (result) => {
+      if (result?.status === 'error' && mode.value === 'linear') {
+        await focusLinearComparisonIssue();
+      }
+      if (result?.status === 'ok') {
+        await rulePreparation.prepare();
+        featureSelection.clearFeatureSelection({ clearStatus: true });
       }
     }
-    const comparisonPlanSnapshot = mode.value === 'linear'
-      ? linearComparisonResolution.value
-      : null;
-    const comparisonExecution = importedComparisonExecution({
-      intent: importedComparisonIntent,
-      draftResolution: comparisonPlanSnapshot
-    });
-    if (!comparisonExecution.ok) {
-      errorLog.value = normalizeUserFacingError(new Error(comparisonExecution.message));
-      failedGeneratePreservedResult.value = results.value.length > 0;
-      if (mode.value === 'linear') await focusLinearComparisonIssue();
-      return { status: 'error', error: errorLog.value };
-    }
-    cancelDefinitionUpdate();
-    const result = await runGeneratedDiagramAnalysis(
-      comparisonPlanSnapshot,
-      null,
-      comparisonExecution
-    );
-    if (result?.status === 'error' && mode.value === 'linear') {
-      await focusLinearComparisonIssue();
-    }
-    if (result?.status === 'ok') {
-      await rulePreparation.prepare();
-      featureSelection.clearFeatureSelection({ clearStatus: true });
-    }
-    return result;
-  };
+  });
 
   const chooseImportedComparisonAction = (action) => history.runUndoable(
     `${String(action || '').toLowerCase()} imported comparison`,
@@ -2754,9 +2852,7 @@ export const createAppSetup = () => {
     && linearComparisonResolution.value.hasComparisonIntent
   ));
 
-  const cancelGeneration = () => {
-    cancelRunAnalysis();
-  };
+  const cancelGeneration = () => cancelRunAnalysis();
 
   const orthogroupActions = createOrthogroupEditor({ state });
   similarityAlignmentActions = createSimilarityAlignmentActions({
@@ -2943,6 +3039,8 @@ export const createAppSetup = () => {
     similarityAlignmentActions.cancel();
   };
   const applySimilarityAlignmentDialog = async (reset = false) => {
+    const sessionBusy = state.sessionOperationAvailability?.();
+    if (sessionBusy) return sessionBusy;
     const outcome = await (reset ? similarityAlignmentActions.applyReset() : similarityAlignmentActions.applyDraft());
     if (outcome.status === 'error' || outcome.status === 'reviewing') {
       await nextTick();
@@ -3036,6 +3134,8 @@ export const createAppSetup = () => {
   const { resetAllPositions, resetCanvasPadding } = legendLayout;
 
   const resetSettings = () => {
+    const sessionBusy = sessionOperationAvailability();
+    if (sessionBusy) return sessionBusy;
     const proceed = window.confirm(
       'Reset all settings to the webapp defaults?\n\nUploaded files and current results will be kept.'
     );
@@ -3055,6 +3155,8 @@ export const createAppSetup = () => {
   };
 
   const resetLayout = () => {
+    const sessionBusy = sessionOperationAvailability();
+    if (sessionBusy) return sessionBusy;
     resetAllPositions();
     resetCanvasPadding();
     resetLayoutState(state);
@@ -3492,70 +3594,52 @@ export const createAppSetup = () => {
   });
 
   const editSessionTitle = () => {
+    const busy = sessionOperationAvailability();
+    if (busy) return busy;
     const current = normalizeSessionTitle(sessionTitle.value);
     const input = prompt('Session title', current);
     if (input === null) return;
     sessionTitle.value = normalizeSessionTitle(input);
   };
 
-  const saveSessionWithTitle = () => {
-    if (sessionSaveInFlight) {
-      recordSessionLifecycleEvent('session-save-joined');
-      return sessionSaveInFlight;
-    }
-
-    const operation = Promise.resolve().then(async () => {
-      try {
-        let title = normalizeSessionTitle(sessionTitle.value);
-        if (!title) {
-          const input = prompt('Session title', '');
-          if (input === null) {
-            recordSessionLifecycleEvent('session-save-title-canceled');
-            return;
-          }
-          title = normalizeSessionTitle(input);
-          sessionTitle.value = title;
+  const saveSessionWithTitle = () => exportSession(null, {
+    resolveTitle: () => {
+      let title = normalizeSessionTitle(sessionTitle.value);
+      if (!title) {
+        const input = prompt('Session title', '');
+        if (input === null) {
+          recordSessionLifecycleEvent('session-save-title-canceled');
+          return null;
         }
-        sessionSavePending.value = true;
-        recordSessionLifecycleEvent('session-save-pending-published');
-        await nextTick();
-        await afterPaint();
-        recordSessionLifecycleEvent('session-save-paint-opportunity-completed');
-
-        recordSessionLifecycleEvent('session-save-catalog-preparation-start');
-        const committedSession = getCommittedCanonicalSession();
-        let catalog = null;
-        let error = '';
-        // A committed request already owns its record selections and resources.
-        // Catalog discovery is only needed while projecting an uncommitted draft.
-        if (!committedSession) {
-          const comparisonPlanSnapshot = mode.value === 'linear'
-            ? linearComparisonResolution.value
-            : null;
-          ({ catalog, error } = await prepareLinearRecordCatalog(
-            comparisonPlanSnapshot?.hasComparisonIntent
-          ));
-          await afterPaint();
-        }
-        recordSessionLifecycleEvent('session-save-catalog-preparation-end', {
-          reusedCommittedSession: Boolean(committedSession)
-        });
-        if (error) throw new Error(error);
-        return await exportSession(title, { linearRecordCatalog: catalog });
-      } catch (error) {
-        errorLog.value = normalizeUserFacingError(error);
-        recordSessionLifecycleEvent('session-save-error');
-        return { status: 'error' };
+        title = normalizeSessionTitle(input);
+        sessionTitle.value = title;
       }
-    });
-
-    sessionSaveInFlight = operation.finally(() => {
-      sessionSavePending.value = false;
-      sessionSaveInFlight = null;
-      recordSessionLifecycleEvent('session-save-pending-cleared');
-    });
-    return sessionSaveInFlight;
-  };
+      return title;
+    },
+    beforeExport: async () => {
+      await nextTick();
+      await afterPaint();
+      recordSessionLifecycleEvent('session-save-paint-opportunity-completed');
+      recordSessionLifecycleEvent('session-save-catalog-preparation-start');
+      const committedSession = getCommittedCanonicalSession();
+      let catalog = null;
+      let error = '';
+      if (!committedSession) {
+        const comparisonPlanSnapshot = mode.value === 'linear'
+          ? linearComparisonResolution.value : null;
+        ({ catalog, error } = await prepareLinearRecordCatalog(
+          comparisonPlanSnapshot?.hasComparisonIntent, { privateCandidate: true }
+        ));
+        await afterPaint();
+      }
+      recordSessionLifecycleEvent('session-save-catalog-preparation-end', {
+        reusedCommittedSession: Boolean(committedSession)
+      });
+      if (error) throw new Error(error);
+      return { linearRecordCatalog: catalog };
+    },
+    onError: (error) => { errorLog.value = normalizeUserFacingError(error); }
+  });
 
   const openFeatureEditorFromList = (feat, event) => {
     return openFeatureEditorForFeature(feat, event);
@@ -3571,13 +3655,14 @@ export const createAppSetup = () => {
   };
 
   const circularRecordDiscoveryState = computed(getCircularRecordDiscoveryState);
-  const circularRecordInspectionEnabled = computed(() => mode.value === 'circular'
+  const circularRecordInspectionEnabled = computed(() => semanticMutationAvailable.value
+    && mode.value === 'circular'
     && circularRecordDiscoveryState.value.hasInput
     && circularRecordDiscoveryState.value.status !== 'loading'
     && !state.semanticFileWatchersSuppressed.value);
-  const inspectCircularSourceRecords = () => circularRecordInspectionEnabled.value
+  const inspectCircularSourceRecords = () => sessionOperationAvailability() || (circularRecordInspectionEnabled.value
     ? refreshCircularRecordOrder()
-    : Promise.resolve({ status: 'unavailable', reason: 'Source inspection is unavailable.' });
+    : Promise.resolve({ status: 'unavailable', reason: 'Source inspection is unavailable.' }));
   const circularRecordPresentationEntries = () => buildDisambiguatedRecordEntries(
     circularRecordDiscoveryState.value.records.map(
       (record) => ({
@@ -3638,9 +3723,12 @@ export const createAppSetup = () => {
       || (selection.status === 'unspecified' && entries.length === 1);
   });
 
-  const circularRecordSelectionEnabled = computed(() => mode.value === 'circular'
+  const circularRecordSelectionEnabled = computed(() => semanticMutationAvailable.value
+    && mode.value === 'circular'
     && !form.multi_record_canvas && circularRecordDiscoveryState.value.status === 'ready');
   const setCircularRecordPresentationSelector = (value) => {
+    const busy = sessionOperationAvailability();
+    if (busy) return busy;
     if (!circularRecordSelectionEnabled.value) return { status: 'unavailable' };
     const normalized = String(value || '').trim();
     form.circular_record_selector = normalized;
@@ -3725,6 +3813,8 @@ export const createAppSetup = () => {
   };
 
   const setCircularRecordRow = (index, rowValue) => {
+    const sessionBusy = sessionOperationAvailability();
+    if (sessionBusy) return sessionBusy;
     const idx = Number(index);
     if (!Number.isInteger(idx) || idx < 0 || idx >= adv.multi_record_positions.length) return;
     const target = adv.multi_record_positions[idx];
@@ -3753,6 +3843,8 @@ export const createAppSetup = () => {
   };
 
   const moveCircularRecordOrderUp = (index) => {
+    const sessionBusy = sessionOperationAvailability();
+    if (sessionBusy) return sessionBusy;
     const idx = Number(index);
     if (!canMoveCircularRecordOrderUp(idx)) return;
     const next = [...adv.multi_record_positions];
@@ -3763,6 +3855,8 @@ export const createAppSetup = () => {
   };
 
   const moveCircularRecordOrderDown = (index) => {
+    const sessionBusy = sessionOperationAvailability();
+    if (sessionBusy) return sessionBusy;
     const idx = Number(index);
     if (!canMoveCircularRecordOrderDown(idx)) return;
     const next = [...adv.multi_record_positions];
@@ -3773,6 +3867,8 @@ export const createAppSetup = () => {
   };
 
   const resetCircularRecordOrder = () => {
+    const sessionBusy = sessionOperationAvailability();
+    if (sessionBusy) return sessionBusy;
     const defaults = buildDefaultCircularRecordPositions();
     adv.multi_record_positions.splice(0, adv.multi_record_positions.length, ...defaults);
   };
@@ -3785,6 +3881,8 @@ export const createAppSetup = () => {
       alignmentMutation = 'source set changed.'
     } = {}
   ) => {
+    const sessionBusy = sessionOperationAvailability();
+    if (sessionBusy) return sessionBusy;
     const depthWidth = linearDepthLogicalWidth();
     const next = normalizeLinearSeqList(items);
     if (depthWidth > 0) {
@@ -3818,7 +3916,7 @@ export const createAppSetup = () => {
   };
 
   const addLinearSeq = () => {
-    applyLinearSeqMutation([...linearSeqs, createLinearSeq()]);
+    return applyLinearSeqMutation([...linearSeqs, createLinearSeq()]);
   };
 
   const restoreLinearSourceRemovalFocus = async () => {
@@ -3871,6 +3969,8 @@ export const createAppSetup = () => {
   };
   const cancelLinearSourceRemoval = () => closeLinearSourceRemovalDialog();
   const applyLinearSourceRemoval = async (intent) => {
+    const sessionBusy = sessionOperationAvailability();
+    if (sessionBusy) return sessionBusy;
     if (linearSourceRemovalDialog.origin === 'global' && intent !== 'delete') return false;
     const plan = planLinearSourceRemoval({
       sequences: linearSeqs,
@@ -3892,10 +3992,14 @@ export const createAppSetup = () => {
     return operation;
   };
   const requestLinearSourceRemoval = (source, returnFocus = null) => {
+    const sessionBusy = sessionOperationAvailability();
+    if (sessionBusy) return sessionBusy;
     if (!source || !linearSourceHasPrimaryInput(source)) return false;
     return openLinearSourceRemovalDialog(source, 'card', returnFocus);
   };
   const removeLastLinearSeq = (event = null) => {
+    const sessionBusy = sessionOperationAvailability();
+    if (sessionBusy) return sessionBusy;
     const source = linearSourceGroups.value.at(-1);
     if (!source || linearSourceGroups.value.length <= 1) return false;
     if (isPristineLinearSource(source)) {
@@ -3907,6 +4011,8 @@ export const createAppSetup = () => {
   };
 
   const setLinearSeqPrimaryFile = (index, field, value) => {
+    const sessionBusy = sessionOperationAvailability();
+    if (sessionBusy) return sessionBusy;
     const idx = Number(index);
     if (!Number.isInteger(idx) || idx < 0 || idx >= linearSeqs.length) return;
     if (!['gb', 'gff', 'fasta'].includes(field)) return;
@@ -3951,6 +4057,8 @@ export const createAppSetup = () => {
   );
 
   const moveLinearSource = (sourceIndex, direction) => {
+    const sessionBusy = sessionOperationAvailability();
+    if (sessionBusy) return sessionBusy;
     const plan = linearSourceMovePlan(sourceIndex, direction);
     if (!plan.allowed) return;
     const next = moveLinearSourceGroup(linearSeqs, sourceIndex, direction);
@@ -3964,6 +4072,8 @@ export const createAppSetup = () => {
   };
 
   const setLinearRecordSelector = (sequence, value) => {
+    const sessionBusy = sessionOperationAvailability();
+    if (sessionBusy) return sessionBusy;
     if (!sequence) return false;
     const next = String(value || '');
     if (String(sequence.region_record_id || '') === next) return false;
@@ -3972,7 +4082,22 @@ export const createAppSetup = () => {
     return true;
   };
 
+  const setMode = (value) => {
+    const busy = sessionOperationAvailability();
+    if (busy) return busy;
+    mode.value = value;
+    return { status: 'ok' };
+  };
+  const setCircularInputType = (value) => {
+    const busy = sessionOperationAvailability();
+    if (busy) return busy;
+    cInputType.value = value;
+    return { status: 'ok' };
+  };
+
   const setLinearInputType = (value) => {
+    const sessionBusy = sessionOperationAvailability();
+    if (sessionBusy) return sessionBusy;
     const next = value === 'gff' ? 'gff' : 'gb';
     if (lInputType.value === next) return false;
     similarityAlignmentActions?.clearForMutation?.('source type changed.');
@@ -3981,6 +4106,8 @@ export const createAppSetup = () => {
   };
 
   const setLinearRecordCrop = (sequence, field, value) => {
+    const sessionBusy = sessionOperationAvailability();
+    if (sessionBusy) return sessionBusy;
     if (!sequence || !['region_start', 'region_end'].includes(field)) return false;
     const next = value === '' || value === null || value === undefined
       ? null
@@ -3992,6 +4119,8 @@ export const createAppSetup = () => {
   };
 
   const resetLinearRecordDefinition = (seq) => {
+    const sessionBusy = sessionOperationAvailability();
+    if (sessionBusy) return sessionBusy;
     if (!seq) return;
     history.runUndoable('Reset record definition', () => {
       seq.definition = '';
@@ -3999,6 +4128,8 @@ export const createAppSetup = () => {
   };
 
   const resetLinearRecordSubtitle = (seq) => {
+    const sessionBusy = sessionOperationAvailability();
+    if (sessionBusy) return sessionBusy;
     if (!seq) return;
     history.runUndoable('Reset record subtitle', () => {
       seq.record_subtitle = '';
@@ -4022,6 +4153,10 @@ export const createAppSetup = () => {
     processingStatus,
     sessionImportPending,
     sessionSavePending,
+    semanticMutationAvailable,
+    sessionSaveAvailable,
+    sessionLoadAvailable,
+    sessionBusyReason,
     generationCancelRequested,
     errorLog,
     errorDisplay,
@@ -4056,6 +4191,8 @@ export const createAppSetup = () => {
     sidebarWidth,
     startResizing,
     mode,
+    setMode,
+    setCircularInputType,
     cInputType,
     lInputType,
     losatProgram,
@@ -4455,6 +4592,10 @@ export const createAppSetup = () => {
     filterMode,
     manualBlacklist,
     manualWhitelist,
+    setLabelFilterMode,
+    addWhitelistRule,
+    removeWhitelistRule,
+    removePriorityRule,
     featureKeys,
     defaultColorKeys,
     newColorFeat,

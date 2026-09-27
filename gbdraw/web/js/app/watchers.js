@@ -187,6 +187,7 @@ export const setupWatchers = ({
   };
 
   const scheduleCircularDefinitionUpdate = () => {
+    if (semanticFileWatchersSuppressed.value || state.sessionOperationAvailability?.()) return;
     if (mode.value !== 'circular') return;
     if (generatedMode.value !== mode.value) return;
     if (shouldDeferCircularPreviewUpdates.value) {
@@ -242,6 +243,7 @@ export const setupWatchers = ({
   watch(
     canvasPadding,
     () => {
+      if (semanticFileWatchersSuppressed.value || state.sessionOperationAvailability?.()) return;
       applyCanvasPadding();
     },
     { deep: true }
@@ -260,6 +262,7 @@ export const setupWatchers = ({
   watch(
     () => form.legend,
     (newPos, oldPos) => {
+      if (semanticFileWatchersSuppressed.value || state.sessionOperationAvailability?.()) return;
       if (generatedMode.value !== mode.value) return;
       if (mode.value === 'circular' && shouldDeferCircularPreviewUpdates.value) return;
       if (
@@ -269,6 +272,7 @@ export const setupWatchers = ({
         newPos !== generatedLegendPosition.value
       ) {
         nextTick(() => {
+          if (semanticFileWatchersSuppressed.value || state.sessionOperationAvailability?.()) return;
           if (mode.value === 'circular' && shouldDeferCircularPreviewUpdates.value) return;
           repositionForLegendChange(newPos, generatedLegendPosition.value);
         });
@@ -455,7 +459,7 @@ export const setupWatchers = ({
     }
   );
 
-  const pendingFileImports = new WeakMap();
+  const pendingFileImports = window.Vue.reactive(new Map());
   let fileImportApplications = Promise.resolve();
   const restoredFileSelections = new Map();
   const watchFileImport = (key, apply) => watch(() => files[key], (file, previousFile) => {
@@ -465,6 +469,7 @@ export const setupWatchers = ({
     if (semanticFileWatchersSuppressed.value || !file) return;
     const ruleContext = key === 't_color' ? rulePreparation.snapshot() : null;
     const isCurrent = () => files[key] === file && !semanticFileWatchersSuppressed.value
+      && !state.sessionOperationAvailability?.()
       && (!ruleContext || rulePreparation.isCurrent(ruleContext));
     const pending = readFileText(file).then((text) => {
       // Reads may finish out of order; serialize only their live application.
@@ -481,6 +486,9 @@ export const setupWatchers = ({
       if (isCurrent()) alert(`Failed to read ${file.name || 'uploaded table'}: ${error.message}`);
     });
     pendingFileImports.set(file, pending);
+    void pending.finally(() => {
+      if (pendingFileImports.get(file) === pending) pendingFileImports.delete(file);
+    });
   });
   const waitForAuxiliaryFileImport = (file) => pendingFileImports.get(file);
 
@@ -594,6 +602,8 @@ export const setupWatchers = ({
   watch(
     () => [
       semanticFileWatchersSuppressed.value,
+      state.sessionSavePending?.value,
+      state.sessionImportPending?.value,
       mode.value,
       cInputType.value,
       files.c_gb,
@@ -613,6 +623,8 @@ export const setupWatchers = ({
   watch(
     () => [
       semanticFileWatchersSuppressed.value,
+      state.sessionSavePending?.value,
+      state.sessionImportPending?.value,
       mode.value,
       lInputType.value,
       ...linearSeqs.flatMap((seq) => [
@@ -642,5 +654,5 @@ export const setupWatchers = ({
       console.warn('Could not load browser palette definitions.', error);
     }
   });
-  return { waitForAuxiliaryFileImport };
+  return { waitForAuxiliaryFileImport, auxiliaryFileImportPending: () => pendingFileImports.size > 0 };
 };

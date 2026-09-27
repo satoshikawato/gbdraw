@@ -471,6 +471,8 @@ export const createFeatureLabelActions = ({ state, previewRuntime = null, rulePr
     });
 
   const handleGlobalLabelModeChoice = (choiceRaw) => {
+    const sessionBusy = state.sessionOperationAvailability?.();
+    if (sessionBusy) return sessionBusy;
     if (!globalLabelModeDialog.show) return;
     const resolver = globalLabelModeDialog.resolve;
     const normalizedChoice = choiceRaw === 'whitelist_only' ? 'whitelist_only' : 'show_all';
@@ -757,6 +759,8 @@ export const createFeatureLabelActions = ({ state, previewRuntime = null, rulePr
   };
 
   const requestLabelTextChangeByKey = (labelKey, nextTextRaw) => {
+    const sessionBusy = state.sessionOperationAvailability?.();
+    if (sessionBusy) return sessionBusy;
     if (!labelKey) return;
     const entry = editableLabels.value.find((candidate) => candidate.key === labelKey);
     if (!entry) return;
@@ -786,6 +790,8 @@ export const createFeatureLabelActions = ({ state, previewRuntime = null, rulePr
   };
 
   const requestLabelTextChangeByFeatureId = (featureId, nextTextRaw) => {
+    const sessionBusy = state.sessionOperationAvailability?.();
+    if (sessionBusy) return sessionBusy;
     const entry = getEditableLabelByFeatureId(featureId);
     if (!entry) return false;
     requestLabelTextChangeByKey(entry.key, nextTextRaw);
@@ -869,6 +875,8 @@ export const createFeatureLabelActions = ({ state, previewRuntime = null, rulePr
   };
 
   const updateClickedFeatureLabelText = async () => {
+    const sessionBusy = state.sessionOperationAvailability?.();
+    if (sessionBusy) return sessionBusy;
     if (!clickedFeature.value) return;
     const featureId = String(clickedFeature.value.svg_id || clickedFeature.value.id || '').trim();
     if (!featureId) return;
@@ -911,6 +919,8 @@ export const createFeatureLabelActions = ({ state, previewRuntime = null, rulePr
   };
 
   const handleLabelTextScopeChoice = (choice) => {
+    const sessionBusy = state.sessionOperationAvailability?.();
+    if (sessionBusy) return sessionBusy;
     if (choice === 'cancel' || !labelTextScopeDialog.show) {
       closeLabelTextScopeDialog();
       return;
@@ -972,6 +982,8 @@ export const createFeatureLabelActions = ({ state, previewRuntime = null, rulePr
   };
 
   const resetAllLabelTextOverrides = () => {
+    const sessionBusy = state.sessionOperationAvailability?.();
+    if (sessionBusy) return sessionBusy;
     const svg = svgContainer.value?.querySelector('svg');
     if (svg) resetLabelsToSourceText(svg);
     clearOverrides();
@@ -997,6 +1009,8 @@ export const createFeatureLabelActions = ({ state, previewRuntime = null, rulePr
     labelTextFeatureOverrides, labelTextBulkOverrides, labelVisibilityOverrides
   ]);
   const loadLabelOverrideTable = async (event) => {
+    const sessionBusy = state.sessionOperationAvailability?.();
+    if (sessionBusy) return sessionBusy;
     const input = event?.target;
     const file = input?.files?.[0];
     if (!file) return;
@@ -1008,6 +1022,7 @@ export const createFeatureLabelActions = ({ state, previewRuntime = null, rulePr
     try {
       const text = await readFileText(file);
       if (input.files?.[0] !== file || (svgContainer.value?.querySelector('svg') || null) !== sourceSvg) return;
+      if (state.sessionOperationAvailability?.()) return state.sessionOperationAvailability();
       const rows = parseLabelOverrideTsv(text);
 
       const svg = sourceSvg;
@@ -1026,6 +1041,7 @@ export const createFeatureLabelActions = ({ state, previewRuntime = null, rulePr
           byId.get(normalizeKeyToken(entry.featureId)) || { type: '', svg_id: entry.featureId }, entry.sourceText
         ))
       });
+      if (state.sessionOperationAvailability?.()) return state.sessionOperationAvailability();
       if (revision !== labelImportRevision || labelIntent !== labelIntentSignature()
         || input.files?.[0] !== file || !rulePreparation.isCurrent(before)
         || (svgContainer.value?.querySelector('svg') || null) !== sourceSvg) return;

@@ -955,6 +955,8 @@ export const createLinearTrackSlotEditor = ({ state }) => {
   };
 
   const setLinearAnnotationMarkSelected = (slot, mark, checked) => {
+    const sessionBusy = state.sessionOperationAvailability?.();
+    if (sessionBusy) return sessionBusy;
     if (!slot || normalizeRenderer(slot.renderer) !== 'annotations' || !ANNOTATION_MARK_OPTIONS.includes(mark)) return;
     slot.params = cloneParams(slot.params);
     const current = Array.isArray(slot.params.marks) && slot.params.marks.length > 0
@@ -973,6 +975,8 @@ export const createLinearTrackSlotEditor = ({ state }) => {
   };
 
   const setLinearAnnotationNumber = (slot, field, value, defaultValue) => {
+    const sessionBusy = state.sessionOperationAvailability?.();
+    if (sessionBusy) return sessionBusy;
     if (!slot || normalizeRenderer(slot.renderer) !== 'annotations') return;
     slot.params = cloneParams(slot.params);
     if (value === null || value === undefined || value === '') {
@@ -987,6 +991,8 @@ export const createLinearTrackSlotEditor = ({ state }) => {
   const linearAnnotationCoverAnchor = (slot) => slot?.params?.cover_anchor === true;
 
   const setLinearAnnotationCoverAnchor = (slot, checked) => {
+    const sessionBusy = state.sessionOperationAvailability?.();
+    if (sessionBusy) return sessionBusy;
     if (!slot || normalizeRenderer(slot.renderer) !== 'annotations') return;
     slot.params = cloneParams(slot.params);
     if (checked) slot.params.cover_anchor = true;
@@ -1030,6 +1036,8 @@ export const createLinearTrackSlotEditor = ({ state }) => {
   };
 
   const resetLinearTrackSlotsFromSimpleControls = () => {
+    const sessionBusy = state.sessionOperationAvailability?.();
+    if (sessionBusy) return sessionBusy;
     const slots = createDefaultLinearTrackSlots({
       showDepth: Boolean(form.show_depth),
       depthTrackCount: linearDepthTrackCountForState(state),
@@ -1049,10 +1057,14 @@ export const createLinearTrackSlotEditor = ({ state }) => {
   };
 
   const setLinearTrackSlotsEnabled = (enabled) => {
+    const sessionBusy = state.sessionOperationAvailability?.();
+    if (sessionBusy) return sessionBusy;
     adv.linear_track_slots_enabled = Boolean(enabled);
   };
 
   const addLinearTrackSlot = (renderer = 'spacer') => {
+    const sessionBusy = state.sessionOperationAvailability?.();
+    if (sessionBusy) return sessionBusy;
     const normalizedRenderer = normalizeRenderer(renderer, 'spacer');
     if (!canAddLinearTrackRenderer(normalizedRenderer)) return;
     normalizeCurrentSlots();
@@ -1094,6 +1106,8 @@ export const createLinearTrackSlotEditor = ({ state }) => {
   };
 
   const duplicateLinearTrackSlot = (index) => {
+    const sessionBusy = state.sessionOperationAvailability?.();
+    if (sessionBusy) return sessionBusy;
     normalizeCurrentSlots();
     const idx = Number(index);
     const source = adv.linear_track_slots[idx];
@@ -1111,6 +1125,8 @@ export const createLinearTrackSlotEditor = ({ state }) => {
   };
 
   const removeLinearTrackSlot = (index) => {
+    const sessionBusy = state.sessionOperationAvailability?.();
+    if (sessionBusy) return sessionBusy;
     normalizeCurrentSlots();
     const idx = Number(index);
     if (!Number.isInteger(idx) || idx < 0 || idx >= adv.linear_track_slots.length) return;
@@ -1154,6 +1170,8 @@ export const createLinearTrackSlotEditor = ({ state }) => {
   };
 
   const moveLinearTrackSlot = (fromIndex, toIndex) => {
+    const sessionBusy = state.sessionOperationAvailability?.();
+    if (sessionBusy) return sessionBusy;
     if (wouldLinearTrackSlotMoveCrossAxis(fromIndex, toIndex)) return;
     normalizeCurrentSlots();
     const from = Number(fromIndex);
@@ -1199,6 +1217,8 @@ export const createLinearTrackSlotEditor = ({ state }) => {
   };
 
   const moveLinearTrackSlotToPlacement = (index, placement) => {
+    const sessionBusy = state.sessionOperationAvailability?.();
+    if (sessionBusy) return sessionBusy;
     const idx = Number(index);
     if (!Number.isInteger(idx) || idx < 0 || idx >= adv.linear_track_slots.length) return;
     normalizeCurrentSlots();
@@ -1283,6 +1303,8 @@ export const createLinearTrackSlotEditor = ({ state }) => {
   };
 
   const updateLinearTrackSlotRenderer = (slot) => {
+    const sessionBusy = state.sessionOperationAvailability?.();
+    if (sessionBusy) return sessionBusy;
     if (!slot) return;
     slot.renderer = normalizeRenderer(slot.renderer);
     slot.params = cloneParams(slot.params);
@@ -1304,6 +1326,8 @@ export const createLinearTrackSlotEditor = ({ state }) => {
   };
 
   const updateLinearTrackSlotPlacement = (slot, placement) => {
+    const sessionBusy = state.sessionOperationAvailability?.();
+    if (sessionBusy) return sessionBusy;
     if (!slot) return;
     const index = adv.linear_track_slots.findIndex((candidate) => candidate === slot);
     if (index >= 0) {
@@ -1593,6 +1617,8 @@ export const createLinearTrackSlotEditor = ({ state }) => {
   );
 
   const setLinearTrackSlotHeight = (slot, value) => {
+    const sessionBusy = state.sessionOperationAvailability?.();
+    if (sessionBusy) return sessionBusy;
     if (!slot) return;
     const text = String(value ?? '').trim();
     slot.height = text;
@@ -1618,6 +1644,8 @@ export const createLinearTrackSlotEditor = ({ state }) => {
   };
 
   const setLinearTrackSlotSkewColor = (slot, key, value) => {
+    const sessionBusy = state.sessionOperationAvailability?.();
+    if (sessionBusy) return sessionBusy;
     if (!slot || normalizeRenderer(slot.renderer) !== 'dinucleotide_skew' || !['positive_color', 'negative_color'].includes(key)) return;
     slot.params = cloneParams(slot.params);
     const color = normalizeColorParam(value);
@@ -1626,6 +1654,8 @@ export const createLinearTrackSlotEditor = ({ state }) => {
   };
 
   const clearLinearTrackSlotSkewColor = (slot, key) => {
+    const sessionBusy = state.sessionOperationAvailability?.();
+    if (sessionBusy) return sessionBusy;
     if (!slot || normalizeRenderer(slot.renderer) !== 'dinucleotide_skew' || !['positive_color', 'negative_color'].includes(key)) return;
     slot.params = cloneParams(slot.params);
     delete slot.params[key];

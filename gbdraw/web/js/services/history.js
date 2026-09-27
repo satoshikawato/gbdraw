@@ -126,7 +126,8 @@ export const createHistoryManager = ({
   collectCurrentFileIds = null,
   maxActions = DEFAULT_MAX_ACTIONS,
   maxBytes = DEFAULT_MAX_BYTES,
-  makeRef = makeBox
+  makeRef = makeBox,
+  mutationAvailability = () => null
 } = {}) => {
   if (typeof buildIntent !== 'function') {
     throw new Error('createHistoryManager requires buildIntent.');
@@ -356,10 +357,12 @@ export const createHistoryManager = ({
   };
 
   const begin = async (label = 'Edit', options = {}) => {
+    if (mutationAvailability()) return null;
     if (restoring.value || capturing.value) return null;
     if (activeTransaction && !activeTransaction.closed) return activeTransaction;
 
     const before = await captureIntent();
+    if (mutationAvailability()) return null;
     emitHistoryDiagnostic({ type: 'begin', scope: 'intent', label });
     const tx = {
       label,
@@ -370,19 +373,21 @@ export const createHistoryManager = ({
       source: options.source || ''
     };
     activeTransaction = tx;
+    touch();
     return tx;
   };
 
   const cancel = (transaction) => {
     if (!transaction) return;
     transaction.closed = true;
-    if (activeTransaction === transaction) activeTransaction = null;
+    if (activeTransaction === transaction) { activeTransaction = null; touch(); }
   };
 
-  const initializeIntentBaseline = async (_label = 'Intent baseline') => {
+  const initializeIntentBaseline = async (_label = 'Intent baseline', { isCurrent = () => true } = {}) => {
     if (restoring.value) return false;
     if (activeTransaction && !activeTransaction.closed) cancel(activeTransaction);
     const intentRecord = await captureIntent();
+    if (!isCurrent()) return false;
     clearStack(undoStack);
     clearRedo();
     currentCheckpoint = null;
@@ -414,8 +419,10 @@ export const createHistoryManager = ({
   const commit = async (transaction, options = {}) => {
     if (!transaction || transaction.closed) return false;
     const afterRecord = await captureIntent();
+    const busy = mutationAvailability();
+    if (busy) { cancel(transaction); return busy; }
     transaction.closed = true;
-    if (activeTransaction === transaction) activeTransaction = null;
+    if (activeTransaction === transaction) { activeTransaction = null; touch(); }
     setCurrentIntent(afterRecord);
 
     const entry = buildPatchEntry(transaction, afterRecord, options);
@@ -442,14 +449,18 @@ export const createHistoryManager = ({
   };
 
   const runUndoable = async (label, fn, options = {}) => {
+    const sessionBusy = mutationAvailability();
+    if (sessionBusy) return sessionBusy;
     if (typeof fn !== 'function') return undefined;
     if (restoring.value || capturing.value) return fn();
 
     const usesActiveTransaction = Boolean(activeTransaction && !activeTransaction.closed);
     const tx = usesActiveTransaction ? activeTransaction : await begin(label, options);
-    if (usesActiveTransaction && tx) tx.deferAdapterCommit = true;
+    if (tx) tx.deferAdapterCommit = true;
 
     try {
+      const busy = mutationAvailability();
+      if (busy) { cancel(tx); return busy; }
       const result = await fn();
       await commit(tx, options);
       return result;
@@ -548,9 +559,13 @@ export const createHistoryManager = ({
   };
 
   const runUndoableCheckpoint = (label, fn, options = {}) => {
+    const sessionBusy = mutationAvailability();
+    if (sessionBusy) return sessionBusy;
     if (typeof fn !== 'function') return undefined;
     if (restoring.value || capturing.value) return fn();
     const execute = async (tx) => {
+      const busy = mutationAvailability();
+      if (busy) { cancel(tx); return busy; }
       try {
         const result = await fn();
         if (
@@ -801,9 +816,13 @@ export const createHistoryManager = ({
   };
 
   const runUndoableArtifactReplacement = async (label, fn, options = {}) => {
+    const sessionBusy = mutationAvailability();
+    if (sessionBusy) return sessionBusy;
     if (typeof fn !== 'function') return undefined;
     if (restoring.value || capturing.value) return fn(null);
     const transaction = await beginArtifactReplacement(label, options);
+    const busy = mutationAvailability();
+    if (busy) { cancel(transaction); return busy; }
     try {
       const result = await fn(transaction?.before || null);
       if (
@@ -880,11 +899,16 @@ export const createHistoryManager = ({
   };
 
   const runUndoableCommand = async (label, buildCommand) => {
+    const sessionBusy = mutationAvailability();
+    if (sessionBusy) return sessionBusy;
     if (typeof buildCommand !== 'function') return false;
     if (!restoring.value && !capturing.value && activeTransaction && !activeTransaction.closed) {
       await commit(activeTransaction);
     }
-    const command = normalizeCommand(label, await buildCommand());
+    const preparedCommand = await buildCommand();
+    const busy = mutationAvailability();
+    if (busy) return busy;
+    const command = normalizeCommand(label, preparedCommand);
     if (!command) return false;
 
     if (restoring.value || capturing.value) {
@@ -961,6 +985,8 @@ export const createHistoryManager = ({
   };
 
   const undo = async () => {
+    const sessionBusy = mutationAvailability();
+    if (sessionBusy) return sessionBusy;
     if (restoring.value || undoStack.length === 0) return false;
     const entry = undoStack[undoStack.length - 1];
     if (entry.type === 'command') {
@@ -985,6 +1011,8 @@ export const createHistoryManager = ({
   };
 
   const redo = async () => {
+    const sessionBusy = mutationAvailability();
+    if (sessionBusy) return sessionBusy;
     if (restoring.value || redoStack.length === 0) return false;
     const entry = redoStack[redoStack.length - 1];
     if (entry.type === 'command') {
@@ -1008,12 +1036,16 @@ export const createHistoryManager = ({
     return true;
   };
 
-  const canUndo = () => undoStack.length > 0 && !restoring.value;
-  const canRedo = () => redoStack.length > 0 && !restoring.value;
+  const canUndo = () => undoStack.length > 0 && !restoring.value && !mutationAvailability();
+  const canRedo = () => redoStack.length > 0 && !restoring.value && !mutationAvailability();
   const undoLabel = () => (canUndo() ? undoStack[undoStack.length - 1].label : '');
   const redoLabel = () => (canRedo() ? redoStack[redoStack.length - 1].label : '');
 
   return {
+    mutationPending: () => {
+      void revision.value;
+      return Boolean(restoring.value || capturing.value || activeTransaction && !activeTransaction.closed && activeTransaction.deferAdapterCommit);
+    },
     begin,
     beginArtifactReplacement,
     beginCheckpoint,

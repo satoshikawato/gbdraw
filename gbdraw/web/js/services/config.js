@@ -1,4 +1,4 @@
-import { state, normalizeLinearSeqList, collapseEmptyLinearSeqList } from '../state.js';
+import { state, sessionOperationAvailability, normalizeLinearSeqList, collapseEmptyLinearSeqList } from '../state.js';
 import { resolveColorToHex } from '../app/color-utils.js';
 import {
   captureRightDrawerState,
@@ -3075,10 +3075,10 @@ export const canonicalRenderArtifactOwner = Object.freeze({
   }
 });
 
-const applyFiles = (filesData, { adoptCanonicalPayloads = false, resolveRecordInputs = true } = {}) => {
-  state.matchSequenceRegistry?.reset?.();
-  state.circularRecordList.value = [];
-  Object.assign(state.circularRecordDiscovery, {
+const applyFiles = (filesData, { adoptCanonicalPayloads = false, resolveRecordInputs = true, targetState = state } = {}) => {
+  targetState.matchSequenceRegistry?.reset?.();
+  targetState.circularRecordList.value = [];
+  Object.assign(targetState.circularRecordDiscovery, {
     status: 'idle',
     error: '',
     inputType: '',
@@ -3086,63 +3086,63 @@ const applyFiles = (filesData, { adoptCanonicalPayloads = false, resolveRecordIn
     pairedFile: null,
     canonicalRecordIdentities: []
   });
-  state.files.c_gb = null;
-  state.files.c_gff = null;
-  state.files.c_fasta = null;
-  state.files.c_depth = null;
-  state.files.c_conservation_blasts = [];
-  state.files.c_conservation_blasts_source = null;
-  state.files.c_conservation_fastas = [];
-  state.files.c_conservation_sequence_sources = [];
-  state.files.linearCanonicalComparisons = [];
-  state.files.d_color = null;
-  state.files.t_color = null;
-  state.files.blacklist = null;
-  state.files.whitelist = null;
-  state.files.qualifier_priority = null;
-  state.linearReorderNotice.value = '';
+  targetState.files.c_gb = null;
+  targetState.files.c_gff = null;
+  targetState.files.c_fasta = null;
+  targetState.files.c_depth = null;
+  targetState.files.c_conservation_blasts = [];
+  targetState.files.c_conservation_blasts_source = null;
+  targetState.files.c_conservation_fastas = [];
+  targetState.files.c_conservation_sequence_sources = [];
+  targetState.files.linearCanonicalComparisons = [];
+  targetState.files.d_color = null;
+  targetState.files.t_color = null;
+  targetState.files.blacklist = null;
+  targetState.files.whitelist = null;
+  targetState.files.qualifier_priority = null;
+  targetState.linearReorderNotice.value = '';
 
   if (!filesData) {
-    state.linearSeqs.splice(0, state.linearSeqs.length, ...normalizeLinearSeqList([]));
-    state.linearRecordRows.splice(0);
+    targetState.linearSeqs.splice(0, targetState.linearSeqs.length, ...normalizeLinearSeqList([]));
+    targetState.linearRecordRows.splice(0);
     replaceLinearComparisonPlan(
-      state.linearComparisonPlan,
-      reconcileLinearComparisonPlan(state.linearComparisonPlan, state.linearSeqs)
+      targetState.linearComparisonPlan,
+      reconcileLinearComparisonPlan(targetState.linearComparisonPlan, targetState.linearSeqs)
     );
     return { collapsedLinearSeqs: false };
   }
 
-  state.files.c_gb = deserializeFile(filesData.c_gb);
-  state.files.c_gff = deserializeFile(filesData.c_gff);
-  state.files.c_fasta = deserializeFile(filesData.c_fasta);
-  state.files.c_depth = deserializeFile(filesData.c_depth);
-  state.files.c_conservation_blasts = Array.isArray(filesData.c_conservation_blasts)
+  targetState.files.c_gb = deserializeFile(filesData.c_gb);
+  targetState.files.c_gff = deserializeFile(filesData.c_gff);
+  targetState.files.c_fasta = deserializeFile(filesData.c_fasta);
+  targetState.files.c_depth = deserializeFile(filesData.c_depth);
+  targetState.files.c_conservation_blasts = Array.isArray(filesData.c_conservation_blasts)
     ? filesData.c_conservation_blasts.map((entry) => deserializeFile(entry)).filter(Boolean)
     : [];
-  state.files.c_conservation_blasts_source = filesData.c_conservation_blasts_source === 'losat-cache'
+  targetState.files.c_conservation_blasts_source = filesData.c_conservation_blasts_source === 'losat-cache'
     ? 'losat-cache'
     : null;
-  state.files.c_conservation_fastas = Array.isArray(filesData.c_conservation_fastas)
+  targetState.files.c_conservation_fastas = Array.isArray(filesData.c_conservation_fastas)
     ? filesData.c_conservation_fastas.map((entry) => deserializeFile(entry))
     : [];
-  state.files.c_conservation_sequence_sources = Array.isArray(filesData.c_conservation_sequence_sources)
+  targetState.files.c_conservation_sequence_sources = Array.isArray(filesData.c_conservation_sequence_sources)
     ? filesData.c_conservation_sequence_sources.map((entry) => deserializeFile(entry))
     : [];
-  state.files.linearCanonicalComparisons = deserializeCanonicalComparisons(
+  targetState.files.linearCanonicalComparisons = deserializeCanonicalComparisons(
     filesData.linearCanonicalComparisons,
     { adoptCanonicalPayloads }
   );
-  state.files.d_color = deserializeFile(filesData.d_color);
-  state.files.t_color = deserializeFile(filesData.t_color);
-  state.files.blacklist = deserializeFile(filesData.blacklist);
-  state.files.whitelist = deserializeFile(filesData.whitelist);
-  state.files.qualifier_priority = deserializeFile(filesData.qualifier_priority);
+  targetState.files.d_color = deserializeFile(filesData.d_color);
+  targetState.files.t_color = deserializeFile(filesData.t_color);
+  targetState.files.blacklist = deserializeFile(filesData.blacklist);
+  targetState.files.whitelist = deserializeFile(filesData.whitelist);
+  targetState.files.qualifier_priority = deserializeFile(filesData.qualifier_priority);
 
   const canonicalCircularRecords = Array.isArray(filesData.circularRecords)
     ? filesData.circularRecords
     : [];
   if (canonicalCircularRecords.length > 0) {
-    state.circularRecordDiscovery.canonicalRecordIdentities = canonicalCircularRecords
+    targetState.circularRecordDiscovery.canonicalRecordIdentities = canonicalCircularRecords
       .map((record, index) => {
         const selector = record?.region?.selector || record?.selector;
         const selectorValue = selector?.kind === 'recordId'
@@ -3156,17 +3156,17 @@ const applyFiles = (filesData, { adoptCanonicalPayloads = false, resolveRecordIn
           recordKey: String(record?.recordKey || '')
         };
       });
-    Object.assign(state.circularRecordDiscovery, {
-      status: (state.cInputType.value === 'gff'
-        ? state.files.c_gff && state.files.c_fasta
-        : state.files.c_gb) ? 'deferred' : 'idle',
+    Object.assign(targetState.circularRecordDiscovery, {
+      status: (targetState.cInputType.value === 'gff'
+        ? targetState.files.c_gff && targetState.files.c_fasta
+        : targetState.files.c_gb) ? 'deferred' : 'idle',
       error: '',
-      inputType: state.cInputType.value,
-      primaryFile: state.cInputType.value === 'gff'
-        ? state.files.c_gff
-        : state.files.c_gb,
-      pairedFile: state.cInputType.value === 'gff'
-        ? state.files.c_fasta
+      inputType: targetState.cInputType.value,
+      primaryFile: targetState.cInputType.value === 'gff'
+        ? targetState.files.c_gff
+        : targetState.files.c_gb,
+      pairedFile: targetState.cInputType.value === 'gff'
+        ? targetState.files.c_fasta
         : null
     });
   }
@@ -3191,13 +3191,13 @@ const applyFiles = (filesData, { adoptCanonicalPayloads = false, resolveRecordIn
     const normalized = normalizeLinearSeqList(loadedLinearSeqs);
     const collapsed = resolveRecordInputs ? collapseEmptyLinearSeqList(loadedLinearSeqs) : loadedLinearSeqs;
     const collapsedLinearSeqs = collapsed.length !== normalized.length;
-    state.linearSeqs.splice(0, state.linearSeqs.length, ...collapsed);
+    targetState.linearSeqs.splice(0, targetState.linearSeqs.length, ...collapsed);
     if (resolveRecordInputs) {
-      const rowByUid = new Map(state.linearRecordRows.map((entry) => [String(entry?.uid || ''), entry]));
-      state.linearRecordRows.splice(
+      const rowByUid = new Map(targetState.linearRecordRows.map((entry) => [String(entry?.uid || ''), entry]));
+      targetState.linearRecordRows.splice(
         0,
-        state.linearRecordRows.length,
-        ...state.linearSeqs.map((seq, index) => ({
+        targetState.linearRecordRows.length,
+        ...targetState.linearSeqs.map((seq, index) => ({
           uid: seq.uid,
           row: Number.isInteger(Number(rowByUid.get(seq.uid)?.row)) && Number(rowByUid.get(seq.uid)?.row) > 0
             ? Number(rowByUid.get(seq.uid).row)
@@ -3213,21 +3213,21 @@ const applyFiles = (filesData, { adoptCanonicalPayloads = false, resolveRecordIn
         ])
         .filter(([id]) => id)
     );
-    const planWithFiles = normalizeLinearComparisonPlan(state.linearComparisonPlan);
+    const planWithFiles = normalizeLinearComparisonPlan(targetState.linearComparisonPlan);
     planWithFiles.edges.forEach((edge) => {
       edge.file = comparisonFiles.get(edge.id) || null;
     });
     replaceLinearComparisonPlan(
-      state.linearComparisonPlan,
-      reconcileLinearComparisonPlan(planWithFiles, state.linearSeqs)
+      targetState.linearComparisonPlan,
+      reconcileLinearComparisonPlan(planWithFiles, targetState.linearSeqs)
     );
     return { collapsedLinearSeqs };
   }
 
-  state.linearSeqs.splice(0, state.linearSeqs.length, ...normalizeLinearSeqList([]));
+  targetState.linearSeqs.splice(0, targetState.linearSeqs.length, ...normalizeLinearSeqList([]));
   replaceLinearComparisonPlan(
-    state.linearComparisonPlan,
-    reconcileLinearComparisonPlan(state.linearComparisonPlan, state.linearSeqs)
+    targetState.linearComparisonPlan,
+    reconcileLinearComparisonPlan(targetState.linearComparisonPlan, targetState.linearSeqs)
   );
   return { collapsedLinearSeqs: false };
 };
@@ -3515,14 +3515,14 @@ const captureSessionImportSnapshot = () => ({
   config: cloneJsonData(buildConfigData()),
   ui: cloneJsonData(buildUiStateData()),
   files: cloneLiveFileState(),
-  results: serializeResults(),
+  results: state.results.value,
   features: buildFeatureStateData(),
-  editorState: buildEditorStateData(),
+  editorState: buildEditorStateData({ preserveAdoptedCatalog: true }),
   orthogroupState: buildOrthogroupStateData(),
   collinearGroups: state.collinearGroups.value,
   runState: buildRunStateData(),
-  losatCache: new Map(state.losatCache.value),
-  losatDerivedCache: new Map(state.losatDerivedCache.value),
+  losatCache: state.losatCache.value,
+  losatDerivedCache: state.losatDerivedCache.value,
   proteinIdentityManifest: rawReactiveValue(state.proteinIdentityManifest.value)
     === adoptedProteinIdentityManifest
     ? rawReactiveValue(state.proteinIdentityManifest.value)
@@ -3547,12 +3547,11 @@ const restoreSessionImportSnapshot = async (snapshot) => {
     state.semanticFileWatchersSuppressed.value = true;
     resetSessionBaseline();
     state.mode.value = snapshot.ui.mode === 'linear' ? 'linear' : 'circular';
-    await nextTick();
     applyConfigData(snapshot.config);
     applyUiStateData(snapshot.ui);
     restoreLiveFileState(snapshot.files);
-    state.losatCache.value = new Map(snapshot.losatCache);
-    state.losatDerivedCache.value = new Map(snapshot.losatDerivedCache);
+    state.losatCache.value = snapshot.losatCache;
+    state.losatDerivedCache.value = snapshot.losatDerivedCache;
     adoptedProteinIdentityManifest = snapshot.adoptedProteinIdentityManifest;
     state.proteinIdentityManifest.value = snapshot.proteinIdentityManifest === adoptedProteinIdentityManifest
       ? snapshot.proteinIdentityManifest
@@ -3580,7 +3579,9 @@ const restoreSessionImportSnapshot = async (snapshot) => {
     state.errorLog.value = snapshot.errorLog;
     state.resultPanelTab.value = snapshot.resultPanelTab;
     await nextTick();
+    recordSessionLifecycleEvent('session-rollback-source-restored');
     restoreSessionImportTransientState(snapshot.transients);
+    recordSessionLifecycleEvent('session-rollback-transients-reconciled');
     await nextTick();
   } finally {
     state.sessionImportRollbackInProgress.value = false;
@@ -3775,14 +3776,13 @@ export const applyUiStateData = (ui = {}, { restorePreviewNavigation = true } = 
 export const applyResultsData = (resultsData = [], ui = {}) => {
   state.failedGeneratePreservedResult.value = false;
   if (Array.isArray(resultsData)) {
-    const logicalResults = normalizeLogicalResults(resultsData.map((res, idx) => (
-      isCommittedSvgResult(res)
-        ? { ...res, name: res?.name || `Result ${idx + 1}` }
-        : {
-            name: res?.name || `Result ${idx + 1}`,
-            content: res?.content || ''
-          }
-    )));
+    const logicalResults = resultsData.every(isCommittedSvgResult)
+      ? resultsData
+      : normalizeLogicalResults(resultsData.map((res, idx) => (
+          isCommittedSvgResult(res)
+            ? res
+            : { name: res?.name || `Result ${idx + 1}`, content: res?.content || '' }
+        )));
     const committedCount = logicalResults.filter(isCommittedSvgResult).length;
     if (committedCount !== 0 && committedCount !== logicalResults.length) {
       throw new Error('Committed and imported SVG Results cannot be mixed.');
@@ -3897,19 +3897,6 @@ const synchronizeRestoredFeatureSummaryStatus = ({ generationId = 'session-load'
   return true;
 };
 
-const buildSessionFeatureRecoverySnapshot = () => ({
-  mode: state.mode.value,
-  cInputType: state.cInputType.value,
-  lInputType: state.lInputType.value,
-  files: state.files,
-  linearSeqs: state.linearSeqs,
-  results: state.results.value,
-  selectedResultIndex: state.selectedResultIndex.value,
-  featureState: buildFeatureStateData(),
-  editorState: buildEditorStateData(),
-  orthogroupIndex: state.featureOrthogroupIndex.value
-});
-
 const applySessionFeatureRecoveryPlan = (plan, { generationId = 'session-feature-recovery' } = {}) => {
   state.featureExtractionPending.value = false;
 
@@ -3943,48 +3930,9 @@ const applySessionFeatureRecoveryPlan = (plan, { generationId = 'session-feature
   synchronizeRestoredFeatureSummaryStatus({ generationId });
 };
 
-const recoverSessionFeatureMetadataIfNeeded = async ({ generationId = 'session-feature-recovery' } = {}) => {
-  const validation = classifyFeatureMetadataState({
-    results: state.results.value,
-    selectedResultIndex: state.selectedResultIndex.value,
-    extractedFeatures: state.extractedFeatures.value
-  });
-
-  if (validation.state === 'missing' || validation.state === 'alignable' || validation.state === 'stale') {
-    state.featureExtractionPending.value = true;
-    state.featureExtractionError.value = null;
-    setFeatureEditorStatusData({
-      status: 'pending-summary',
-      generationId,
-      error: null,
-      summaryCount: state.extractedFeatures.value.length
-    });
-  }
-
-  const featureVisibilityTsv = serializeFeatureVisibilityRules(state.featureVisibilityRules?.value || []);
-  let plan;
-  try {
-    plan = await buildSessionFeatureRecoveryPlan({
-      snapshot: buildSessionFeatureRecoverySnapshot(),
-      featureVisibilityTsv
-    });
-  } catch (error) {
-    console.warn('Session feature metadata recovery failed.', error);
-    plan = {
-      status: 'failed',
-      reason: 'recovery-plan-failed',
-      validation,
-      warning: 'Feature metadata recovery failed. The SVG preview and pairwise popups remain available.',
-      errors: [error]
-    };
-  }
-  applySessionFeatureRecoveryPlan(plan, { generationId });
-  return plan;
-};
-
-export const exportSession = async (
+const exportSessionDocument = async (
   titleOverride = null,
-  { linearRecordCatalog = null } = {}
+  { linearRecordCatalog = null, storedConfig, savedUi, isCurrent } = {}
 ) => {
   const resolvedTitle =
     typeof titleOverride === 'string'
@@ -4034,7 +3982,6 @@ export const exportSession = async (
   const exportableCliInvocation = isCliInvocationSessionExportable(lastRunInvocation)
     ? cloneJsonData(lastRunInvocation)
     : undefined;
-  const storedConfig = buildConfigData();
   Object.assign(
     storedConfig.adv,
     normalizedArrowGeometryState(storedConfig.adv)
@@ -4131,30 +4078,7 @@ export const exportSession = async (
     createdAt: new Date().toISOString(),
     title: resolvedTitle || undefined,
     config: storedConfig,
-    ui: {
-      mode: state.mode.value,
-      zoom: state.zoom.value,
-      canvasPan: { x: state.canvasPan.x, y: state.canvasPan.y },
-      canvasPadding: { ...state.canvasPadding },
-      selectedResultIndex: state.selectedResultIndex.value,
-      generatedLegendPosition: state.generatedLegendPosition.value,
-      generatedMultiRecordCanvas: Boolean(state.generatedMultiRecordCanvas.value),
-      generatedCircularPlotTitlePosition: normalizeCircularPlotTitlePosition(
-        state.generatedCircularPlotTitlePosition.value
-      ),
-      layoutPreferences: cloneJsonData(state.layoutPreferences),
-      featurePanelTab: state.featurePanelTab.value,
-      cInputType: state.cInputType.value,
-      lInputType: state.lInputType.value,
-      downloadDpi: state.downloadDpi.value,
-      autoLabelReflow: Boolean(state.autoLabelReflowEnabled.value),
-      linearTypographyLinked: Boolean(state.linearTypographyLinked.value),
-      paletteInstantPreviewEnabled: Boolean(state.paletteInstantPreviewEnabled.value),
-      appliedPaletteName: state.appliedPaletteName.value,
-      appliedPaletteColors: cloneColors(state.appliedPaletteColors.value),
-      pendingPaletteName: state.pendingPaletteName.value,
-      pendingPaletteColors: cloneColors(state.pendingPaletteColors.value)
-    },
+    ui: savedUi,
     renderRequest: canonical.renderRequest,
     resources: canonical.resources,
     webFiles: canonical.webFiles,
@@ -4213,6 +4137,7 @@ export const exportSession = async (
   recordSessionLifecycleEvent('session-save-compression-end', {
     compressedSize: compressed.size
   });
+  if (!isCurrent()) return { status: 'canceled' };
   if (!confirmLargeSessionBlob(compressed)) {
     recordSessionLifecycleEvent('session-save-download-canceled', {
       reason: 'large-download',
@@ -4220,6 +4145,7 @@ export const exportSession = async (
     });
     return { status: 'canceled', compressedSize: compressed.size };
   }
+  if (!isCurrent()) return { status: 'canceled' };
   downloadBlob(compressed, sessionFilename);
   recordSessionLifecycleEvent('session-save-download-handoff-completed', {
     compressedSize: compressed.size
@@ -4228,7 +4154,7 @@ export const exportSession = async (
   return { status: 'saved', blob: compressed, filename: sessionFilename };
 };
 
-export const importSession = async (e, options = {}) => {
+const importSessionDocument = async (e, options = {}) => {
   const file = e.target.files[0];
   if (!file) return { status: 'skipped' };
   recordSessionLifecycleEvent('sessionSelection');
@@ -4244,6 +4170,7 @@ export const importSession = async (e, options = {}) => {
   try {
     recordSessionLifecycleEvent('gzip-to-text-start');
     const text = await readSessionText(file);
+    if (!options.isCurrent()) return { status: 'canceled' };
     recordSessionLifecycleEvent('gzip-to-text-end', { characters: text.length });
     recordSessionLifecycleEvent('json-parse-start');
     let data = JSON.parse(text);
@@ -4281,6 +4208,189 @@ export const importSession = async (e, options = {}) => {
     const canonicalSession = Boolean(projectionResult);
     const settingsOnly = isSettingsOnlySessionDocument(data);
     const currentSchemaSession = sourceSessionVersion >= CURRENT_AUTHORITY_SESSION_MIN_VERSION;
+    const ui = canonicalSession
+      ? {
+          ...projectionResult.editorMetadata.ui,
+          ...projectionResult.artifactState.ui,
+          mode: projectionResult.renderState.mode
+        }
+      : (data.ui || {});
+    const candidateMode = ui.mode === 'linear' ? 'linear' : 'circular';
+    const candidateInputType = (candidateMode === 'linear'
+      ? ui.lInputType : ui.cInputType) || canonicalProjection?.inputType || 'gb';
+    const candidateFiles = {
+      files: {}, linearSeqs: [], circularRecordList: { value: [] },
+      circularRecordDiscovery: {}, linearReorderNotice: { value: '' },
+      cInputType: { value: candidateMode === 'circular' ? candidateInputType : (ui.cInputType || 'gb') },
+      linearRecordRows: cloneJsonData(restoredConfig?.linearRecordLayout?.rows || []),
+      linearComparisonPlan: normalizeLinearComparisonPlan(restoredConfig?.linearComparisonPlan)
+    };
+    const { collapsedLinearSeqs } = applyFiles(
+      canonicalSession ? projectionResult.restoredFiles : data.files,
+      { adoptCanonicalPayloads: currentSchemaSession, resolveRecordInputs: !settingsOnly, targetState: candidateFiles }
+    );
+    const importedResults = canonicalSession
+      ? projectionResult.artifactState.results
+      : data.results;
+    const logicalImportedResults = normalizeLogicalResults(
+      (Array.isArray(importedResults) ? importedResults : []).map((result, index) => ({
+        name: result?.name || `Result ${index + 1}`,
+        content: result?.content || ''
+      }))
+    );
+    const storedEditorState = canonicalSession
+      ? projectionResult.artifactState.editorState
+      : data.editorState;
+    let currentCatalogFeatureState = null;
+    let validatedSessionCatalog = currentSchemaSession
+      ? projectionResult?.validatedFeatureCatalog || null
+      : null;
+    let restoredEditorState = storedEditorState;
+    if (currentSchemaSession && validatedSessionCatalog) {
+      currentCatalogFeatureState = featureStateFromCatalog(
+        validatedSessionCatalog,
+        { mode: candidateMode }
+      );
+    }
+
+    const artifactFeatureState = canonicalSession
+      ? currentSchemaSession
+        ? { ...projectionResult.artifactState.features }
+        : cloneJsonData(projectionResult.artifactState.features)
+      : {};
+    if (currentSchemaSession) {
+      [
+        'extractedFeatures',
+        'biologicalFeatures',
+        'featureSelectorSafetyScope',
+        'featureRecordIds'
+      ].forEach((field) => delete artifactFeatureState[field]);
+    }
+    const features = canonicalSession
+      ? {
+          ...projectionResult.renderState.semanticFeatureState,
+          ...(currentCatalogFeatureState || {}),
+          ...artifactFeatureState
+        }
+      : (data.features || {});
+    const catalogSequenceSources = currentSchemaSession
+      ? (currentCatalogFeatureState?.sequenceSources || [])
+      : [];
+    const comparisonSourceAvailability = candidateMode === 'circular'
+      ? resolveCircularComparisonSequenceAvailability({
+          files: candidateFiles.files,
+          circularConservation: restoredConfig?.circularConservation || {}
+        })
+      : undefined;
+    const catalogSequenceSourceCoverage = (
+      currentSchemaSession
+      && validatedSessionCatalog
+    )
+      ? analyzeCatalogSequenceSourceCoverage({
+          mode: candidateMode,
+          catalogFeatureState: validatedSessionCatalog,
+          renderRequest: data.renderRequest,
+          comparisonSourceAvailability
+        })
+      : null;
+    const missingCatalogSequenceSources = sourceSessionVersion < CURRENT_AUTHORITY_SESSION_MIN_VERSION
+      || !catalogSequenceSourceCoverage?.complete;
+    let restoredFileSequenceSources = [];
+    let currentRecoveryError = null;
+    if (missingCatalogSequenceSources && !settingsOnly) {
+      recordStructuralMetric('sourceRecoveryCount');
+      try {
+        restoredFileSequenceSources = await buildRestoredMatchSequenceSources({
+          mode: candidateMode,
+          cInputType: candidateFiles.cInputType.value,
+          lInputType: candidateInputType,
+          files: candidateFiles.files,
+          linearSeqs: candidateFiles.linearSeqs,
+          circularConservation: restoredConfig?.circularConservation || {}
+        });
+      } catch (sequenceError) {
+        currentRecoveryError = sequenceError;
+        console.warn('Session match sequence preparation failed.', sequenceError);
+      }
+    }
+
+    const restoredFeatureState = currentCatalogFeatureState || features || {};
+    const transformRestoredSessionSvg = (svg, { applyStrokes = true } = {}) => {
+      const legendGroupsChanged = normalizeLegacyLegendEntryGroups(svg);
+      let compositionChanged = false;
+      if (
+        svg.getAttribute(COMPOSITION_SCHEMA_ATTRIBUTE) === null
+        && svg.getAttribute(COMPOSITION_METADATA_ATTRIBUTE) === null
+      ) {
+        normalizeLegacyComposition(svg, {
+          legendSide: restoredConfig?.form?.legend || 'none',
+          titleSide: restoredConfig?.adv?.plot_title_position || 'none',
+          userDeltas: {
+            primary: ui.diagramOffset ? [ui.diagramOffset.x, ui.diagramOffset.y] : null,
+            legend: ui.legendCurrentOffset
+              ? [ui.legendCurrentOffset.x, ui.legendCurrentOffset.y]
+              : null,
+            lengthBar: ui.lengthBarUserOffset
+              ? [ui.lengthBarUserOffset.x, ui.lengthBarUserOffset.y]
+              : null,
+            title: ui.plotTitleUserOffset
+              ? [ui.plotTitleUserOffset.x, ui.plotTitleUserOffset.y]
+              : null
+          }
+        });
+        compositionChanged = true;
+      }
+      const strokeCount = applyStrokes
+        ? applyStrokeOverridesToSvg({
+            svg,
+            features: restoredFeatureState.extractedFeatures || [],
+            legendStrokeOverrides: restoredEditorState?.legend?.strokeOverrides || {},
+            featureStrokeOverrides: restoredEditorState?.featureStrokes?.overrides || {}
+          })
+        : 0;
+      return legendGroupsChanged || compositionChanged || strokeCount > 0;
+    };
+
+    recordSessionLifecycleEvent('svg-admission-start');
+    const committedImportedResults = currentSchemaSession && validatedSessionCatalog
+      ? (() => {
+          const catalogAdmission = admitFeatureCatalog(
+            validatedSessionCatalog,
+            logicalImportedResults,
+            { adopt: true, mode: candidateMode }
+          );
+          return admitCurrentSessionResults(
+            createCurrentSessionResultSource(logicalImportedResults, catalogAdmission),
+            { mutationPlan: createEmptySvgMutationPlan(logicalImportedResults.length) }
+          );
+        })()
+      : admitLegacyImportedResults(
+          createLegacyImportResultSource(logicalImportedResults),
+          { transformSvg: transformRestoredSessionSvg }
+        );
+    recordSessionLifecycleEvent('svg-admission-end');
+
+    let legacyFeatureRecoveryPlan = null;
+    if (sourceSessionVersion < CURRENT_AUTHORITY_SESSION_MIN_VERSION) {
+      try {
+        legacyFeatureRecoveryPlan = await buildSessionFeatureRecoveryPlan({
+          snapshot: {
+            mode: candidateMode, cInputType: candidateFiles.cInputType.value,
+            lInputType: candidateInputType, files: candidateFiles.files,
+            linearSeqs: candidateFiles.linearSeqs, results: committedImportedResults,
+            selectedResultIndex: ui.selectedResultIndex || 0,
+            featureState: features, editorState: restoredEditorState
+          },
+          featureVisibilityTsv: serializeFeatureVisibilityRules(
+            features.featureVisibilityManualRules || features.featureVisibilityRules || []
+          )
+        });
+      } catch (error) {
+        legacyFeatureRecoveryPlan = { status: 'failed', warning: error.message };
+      }
+    }
+    recordSessionLifecycleEvent('session-candidate-prepared');
+    if (!options.isCurrent()) return { status: 'canceled' };
     rollbackSnapshot = captureSessionImportSnapshot();
     if (typeof rollbackStateExtension?.capture === 'function') {
       rollbackExtensionSnapshot = rollbackStateExtension.capture();
@@ -4293,13 +4403,6 @@ export const importSession = async (e, options = {}) => {
       committedCanonicalSession = adoptedCanonicalSession;
       activeSessionResourceTable = currentResourceTable;
     }
-    const ui = canonicalSession
-      ? {
-          ...projectionResult.editorMetadata.ui,
-          ...projectionResult.artifactState.ui,
-          mode: projectionResult.renderState.mode
-        }
-      : (data.ui || {});
     state.sessionTitle.value = canonicalSession
       ? projectionResult.documentMetadata.title
       : (typeof data.title === 'string' ? data.title : '');
@@ -4314,9 +4417,7 @@ export const importSession = async (e, options = {}) => {
     if (ui.cInputType) state.cInputType.value = ui.cInputType;
     if (ui.lInputType) state.lInputType.value = ui.lInputType;
     if (ui.downloadDpi) state.downloadDpi.value = ui.downloadDpi;
-    // The mode watcher clears feature/editor state. Let that reset finish before
-    // restoring session-owned metadata such as extractedFeatures.
-    await nextTick();
+    // Suppressed mode watchers observe only the complete admitted document.
     state.autoLabelReflowEnabled.value = Boolean(ui.autoLabelReflow);
     state.paletteInstantPreviewEnabled.value = Boolean(ui.paletteInstantPreviewEnabled);
     state.labelOverrideBuildWarning.value = '';
@@ -4370,10 +4471,14 @@ export const importSession = async (e, options = {}) => {
     restorePaletteStateFromSession(ui);
     restoreLayoutPreferences(ui, { preserveActive: Boolean(canonicalSession) });
 
-    const { collapsedLinearSeqs } = applyFiles(
-      canonicalSession ? projectionResult.restoredFiles : data.files,
-      { adoptCanonicalPayloads: currentSchemaSession, resolveRecordInputs: !settingsOnly }
-    );
+    restoreLiveFileState({
+      files: candidateFiles.files,
+      linearSeqs: candidateFiles.linearSeqs,
+      circularRecordList: candidateFiles.circularRecordList.value,
+      circularRecordDiscovery: candidateFiles.circularRecordDiscovery,
+      linearRecordRows: candidateFiles.linearRecordRows,
+      linearComparisonPlan: candidateFiles.linearComparisonPlan
+    });
     restoreImportedComparisonIntent(
       state.importedComparisonIntent,
       comparisonClassification,
@@ -4416,92 +4521,10 @@ export const importSession = async (e, options = {}) => {
     state.skipCaptureBaseConfig.value = false;
     state.skipPositionReapply.value = false;
 
-    const importedResults = canonicalSession
-      ? projectionResult.artifactState.results
-      : data.results;
-    const logicalImportedResults = normalizeLogicalResults(
-      (Array.isArray(importedResults) ? importedResults : []).map((result, index) => ({
-        name: result?.name || `Result ${index + 1}`,
-        content: result?.content || ''
-      }))
-    );
-    const storedEditorState = canonicalSession
-      ? projectionResult.artifactState.editorState
-      : data.editorState;
-    let currentCatalogFeatureState = null;
-    let validatedSessionCatalog = currentSchemaSession
-      ? projectionResult?.validatedFeatureCatalog || null
-      : null;
-    let restoredEditorState = storedEditorState;
-    if (currentSchemaSession && validatedSessionCatalog) {
-      currentCatalogFeatureState = featureStateFromCatalog(
-        validatedSessionCatalog,
-        { mode: state.mode.value }
-      );
-    }
-
-    const artifactFeatureState = canonicalSession
-      ? currentSchemaSession
-        ? { ...projectionResult.artifactState.features }
-        : cloneJsonData(projectionResult.artifactState.features)
-      : {};
-    if (currentSchemaSession) {
-      [
-        'extractedFeatures',
-        'biologicalFeatures',
-        'featureSelectorSafetyScope',
-        'featureRecordIds'
-      ].forEach((field) => delete artifactFeatureState[field]);
-    }
-    const features = canonicalSession
-      ? {
-          ...projectionResult.renderState.semanticFeatureState,
-          ...(currentCatalogFeatureState || {}),
-          ...artifactFeatureState
-        }
-      : (data.features || {});
     applyFeatureStateData(features);
     if (currentSchemaSession && currentCatalogFeatureState) {
       state.collinearGroups.value = currentCatalogFeatureState.collinearGroups;
       synchronizeRestoredFeatureSummaryStatus({ generationId: 'session-load' });
-    }
-    const catalogSequenceSources = currentSchemaSession
-      ? (currentCatalogFeatureState?.sequenceSources || [])
-      : [];
-    const comparisonSourceAvailability = state.mode.value === 'circular'
-      ? resolveCircularComparisonSequenceAvailability({
-          files: state.files,
-          circularConservation: state.circularConservation
-        })
-      : undefined;
-    const catalogSequenceSourceCoverage = (
-      currentSchemaSession
-      && validatedSessionCatalog
-    )
-      ? analyzeCatalogSequenceSourceCoverage({
-          mode: state.mode.value,
-          catalogFeatureState: validatedSessionCatalog,
-          renderRequest: data.renderRequest,
-          comparisonSourceAvailability
-        })
-      : null;
-    const missingCatalogSequenceSources = sourceSessionVersion < CURRENT_AUTHORITY_SESSION_MIN_VERSION
-      || !catalogSequenceSourceCoverage?.complete;
-    let restoredFileSequenceSources = [];
-    if (missingCatalogSequenceSources && !currentSchemaSession) {
-      recordStructuralMetric('sourceRecoveryCount');
-      try {
-        restoredFileSequenceSources = await buildRestoredMatchSequenceSources({
-          mode: state.mode.value,
-          cInputType: state.cInputType.value,
-          lInputType: state.lInputType.value,
-          files: state.files,
-          linearSeqs: state.linearSeqs,
-          circularConservation: state.circularConservation
-        });
-      } catch (sequenceError) {
-        console.warn('Session loaded, but match sequence recovery failed.', sequenceError);
-      }
     }
     state.matchSequenceRegistry?.reset?.([
       ...catalogSequenceSources,
@@ -4537,71 +4560,19 @@ export const importSession = async (e, options = {}) => {
       normalized: currentSchemaSession,
       adoptCatalog: currentSchemaSession
     });
-
-    const restoredFeatureState = currentCatalogFeatureState || features || {};
-    const transformRestoredSessionSvg = (svg, { applyStrokes = true } = {}) => {
-      const legendGroupsChanged = normalizeLegacyLegendEntryGroups(svg);
-      let compositionChanged = false;
-      if (
-        svg.getAttribute(COMPOSITION_SCHEMA_ATTRIBUTE) === null
-        && svg.getAttribute(COMPOSITION_METADATA_ATTRIBUTE) === null
-      ) {
-        normalizeLegacyComposition(svg, {
-          legendSide: state.form.legend || 'none',
-          titleSide: state.adv.plot_title_position || 'none',
-          userDeltas: {
-            primary: ui.diagramOffset ? [ui.diagramOffset.x, ui.diagramOffset.y] : null,
-            legend: ui.legendCurrentOffset
-              ? [ui.legendCurrentOffset.x, ui.legendCurrentOffset.y]
-              : null,
-            lengthBar: ui.lengthBarUserOffset
-              ? [ui.lengthBarUserOffset.x, ui.lengthBarUserOffset.y]
-              : null,
-            title: ui.plotTitleUserOffset
-              ? [ui.plotTitleUserOffset.x, ui.plotTitleUserOffset.y]
-              : null
-          }
-        });
-        compositionChanged = true;
-      }
-      const strokeCount = applyStrokes
-        ? applyStrokeOverridesToSvg({
-            svg,
-            features: restoredFeatureState.extractedFeatures || [],
-            legendStrokeOverrides: restoredEditorState?.legend?.strokeOverrides || {},
-            featureStrokeOverrides: restoredEditorState?.featureStrokes?.overrides || {}
-          })
-        : 0;
-      return legendGroupsChanged || compositionChanged || strokeCount > 0;
-    };
-
-    recordSessionLifecycleEvent('svg-admission-start');
-    const committedImportedResults = currentSchemaSession && validatedSessionCatalog
-      ? (() => {
-          const catalogAdmission = admitFeatureCatalog(
-            validatedSessionCatalog,
-            logicalImportedResults,
-            { adopt: true, mode: state.mode.value }
-          );
-          return admitCurrentSessionResults(
-            createCurrentSessionResultSource(logicalImportedResults, catalogAdmission),
-            { mutationPlan: createEmptySvgMutationPlan(logicalImportedResults.length) }
-          );
-        })()
-      : admitLegacyImportedResults(
-          createLegacyImportResultSource(logicalImportedResults),
-          { transformSvg: transformRestoredSessionSvg }
-        );
-    recordSessionLifecycleEvent('svg-admission-end');
+    if (legacyFeatureRecoveryPlan) {
+      applySessionFeatureRecoveryPlan(legacyFeatureRecoveryPlan, { generationId: 'session-load' });
+    }
 
     const desiredResultIndex = (
       Number.isInteger(ui.selectedResultIndex) && ui.selectedResultIndex >= 0
     )
       ? Math.min(ui.selectedResultIndex, Math.max(0, committedImportedResults.length - 1))
       : 0;
-    await nextTick();
+    if (!options.isCurrent()) throw new Error('Session loading was canceled.');
     state.skipCaptureBaseConfig.value = true;
     state.skipPositionReapply.value = true;
+    recordSessionLifecycleEvent('session-candidate-adopted');
     recordSessionLifecycleEvent('preview-mount-start');
     applyResultsData(committedImportedResults, ui);
     state.trackSlotResolvedGeometry.value = cloneJsonData(
@@ -4623,28 +4594,6 @@ export const importSession = async (e, options = {}) => {
     if (previewReadiness?.promise) await previewReadiness.promise;
     else if (previewReadiness?.then) await previewReadiness;
 
-    let currentRecoveryError = null;
-    if (currentSchemaSession && missingCatalogSequenceSources) {
-      recordStructuralMetric('sourceRecoveryCount');
-      try {
-        restoredFileSequenceSources = await buildRestoredMatchSequenceSources({
-          mode: state.mode.value,
-          cInputType: state.cInputType.value,
-          lInputType: state.lInputType.value,
-          files: state.files,
-          linearSeqs: state.linearSeqs,
-          circularConservation: state.circularConservation
-        });
-        state.matchSequenceRegistry?.reset?.([
-          ...catalogSequenceSources,
-          ...restoredFileSequenceSources
-        ]);
-      } catch (sequenceError) {
-        currentRecoveryError = sequenceError;
-        console.warn('Session preview loaded, but match sequence recovery failed.', sequenceError);
-      }
-    }
-
     if (typeof options?.afterLoad === 'function') {
       await options.afterLoad({ data, ui });
     }
@@ -4663,14 +4612,6 @@ export const importSession = async (e, options = {}) => {
       state.zoom.value = ui.zoom;
     }
 
-    if (sourceSessionVersion < CURRENT_AUTHORITY_SESSION_MIN_VERSION) {
-      try {
-        await recoverSessionFeatureMetadataIfNeeded({ generationId: 'session-load' });
-      } catch (recoveryError) {
-        console.warn('Session loaded, but feature metadata recovery failed.', recoveryError);
-      }
-    }
-
     state.semanticFileWatchersSuppressed.value =
       semanticFileWatchersSuppressedBeforeImport;
     await nextTick();
@@ -4683,6 +4624,9 @@ export const importSession = async (e, options = {}) => {
       status: 'success',
       degradedRecovery: Boolean(currentRecoveryError)
     });
+    if (!options.isCurrent()) throw new Error('Session loading was canceled.');
+    await options.afterImport?.({ status: 'ok', decompressedCharacters: text.length, isCurrent: options.isCurrent });
+    if (!options.isCurrent()) throw new Error('Session loading was canceled.');
     alert('Session loaded successfully!');
     return {
       status: 'ok',
@@ -4715,5 +4659,114 @@ export const importSession = async (e, options = {}) => {
     state.semanticFileWatchersSuppressed.value =
       semanticFileWatchersSuppressedBeforeImport;
     e.target.value = '';
+  }
+};
+
+
+let sessionSaveInFlight = null;
+let activeSessionImport = null;
+
+export const disposeSessionOperations = () => {
+  if (sessionSaveInFlight) sessionSaveInFlight.canceled = true;
+  if (activeSessionImport) activeSessionImport.canceled = true;
+  sessionSaveInFlight = null;
+  activeSessionImport = null;
+  state.sessionSavePending.value = false;
+  state.sessionImportPending.value = false;
+};
+
+export const exportSession = (titleOverride = null, options = {}) => {
+  if (sessionSaveInFlight) {
+    recordSessionLifecycleEvent('session-save-joined');
+    return sessionSaveInFlight.promise;
+  }
+  const busy = sessionOperationAvailability('save');
+  if (busy) return Promise.resolve(busy);
+  const operation = { canceled: false, promise: null };
+  const isCurrent = () => sessionSaveInFlight === operation && !operation.canceled;
+  operation.promise = Promise.resolve().then(async () => {
+    const busy = sessionOperationAvailability('save');
+    if (busy) return busy;
+    if (!isCurrent()) return { status: 'canceled' };
+    const title = options.resolveTitle ? options.resolveTitle() : titleOverride;
+    if (title === null && options.resolveTitle) return;
+    state.sessionSavePending.value = true;
+    recordSessionLifecycleEvent('session-save-pending-published');
+    // Only mutable draft configuration/navigation is copied. Adopted biological
+    // payloads, resources, catalogs, caches and Results retain their existing owner.
+    const storedConfig = cloneJsonData(buildConfigData());
+    const savedUi = {
+      mode: state.mode.value,
+      zoom: state.zoom.value,
+      canvasPan: { x: state.canvasPan.x, y: state.canvasPan.y },
+      canvasPadding: { ...state.canvasPadding },
+      selectedResultIndex: state.selectedResultIndex.value,
+      generatedLegendPosition: state.generatedLegendPosition.value,
+      generatedMultiRecordCanvas: Boolean(state.generatedMultiRecordCanvas.value),
+      generatedCircularPlotTitlePosition: normalizeCircularPlotTitlePosition(
+        state.generatedCircularPlotTitlePosition.value
+      ),
+      layoutPreferences: cloneJsonData(state.layoutPreferences),
+      featurePanelTab: state.featurePanelTab.value,
+      cInputType: state.cInputType.value,
+      lInputType: state.lInputType.value,
+      downloadDpi: state.downloadDpi.value,
+      autoLabelReflow: Boolean(state.autoLabelReflowEnabled.value),
+      linearTypographyLinked: Boolean(state.linearTypographyLinked.value),
+      paletteInstantPreviewEnabled: Boolean(state.paletteInstantPreviewEnabled.value),
+      appliedPaletteName: state.appliedPaletteName.value,
+      appliedPaletteColors: cloneColors(state.appliedPaletteColors.value),
+      pendingPaletteName: state.pendingPaletteName.value,
+      pendingPaletteColors: cloneColors(state.pendingPaletteColors.value)
+    };
+    const prepared = await options.beforeExport?.();
+    if (!isCurrent()) return { status: 'canceled' };
+    return exportSessionDocument(title, {
+      ...options, ...prepared, storedConfig, savedUi, isCurrent
+    });
+  }).catch((error) => {
+    recordSessionLifecycleEvent('session-save-error');
+    if (typeof options.onError !== 'function') throw error;
+    options.onError(error);
+    return { status: 'error' };
+  }).finally(() => {
+    if (sessionSaveInFlight === operation) {
+      state.sessionSavePending.value = false;
+      sessionSaveInFlight = null;
+    }
+    recordSessionLifecycleEvent('session-save-pending-cleared');
+  });
+  sessionSaveInFlight = operation;
+  return operation.promise;
+};
+
+export const importSession = async (event, options = {}) => {
+  const input = event?.target;
+  const file = input?.files?.[0];
+  if (!file) return { status: 'skipped' };
+  const busy = sessionOperationAvailability('load');
+  if (busy) {
+    input.value = '';
+    return busy;
+  }
+  const operation = { canceled: false };
+  activeSessionImport = operation;
+  const isCurrent = () => activeSessionImport === operation && !operation.canceled;
+  state.sessionImportPending.value = true;
+  recordSessionLifecycleEvent('session-import-pending-published');
+  try {
+    await options.beforeImport?.();
+    if (!isCurrent()) return { status: 'canceled' };
+    const result = await importSessionDocument({ target: { files: [file], value: input.value } }, {
+      ...options, isCurrent
+    });
+    return result;
+  } finally {
+    if (activeSessionImport === operation) {
+      activeSessionImport = null;
+      state.sessionImportPending.value = false;
+    }
+    input.value = '';
+    recordSessionLifecycleEvent('session-import-pending-cleared');
   }
 };
