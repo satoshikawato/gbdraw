@@ -596,7 +596,7 @@ Bind a set to a custom slot with `set_id=<set_id>`. Without custom slots, `highl
 
 `lane` is the zero-based collision-avoidance row within an annotation track. Leave it blank for deterministic automatic packing. Use `0` for the first row, `1` for the second, and so on only when a fixed row is required. Highlights always cover the full feature band, so `lane` does not apply to them.
 
-The table options accept UTF-8, tab-separated files with a header row, with or without a UTF-8 byte order mark (BOM). Use real tab characters between cells. Blank lines are ignored, duplicate or unknown column names are rejected, and relative paths resolve against the table file.
+The table options accept UTF-8, tab-separated files with a header row, with or without a UTF-8 byte order mark (BOM). Use real tab characters between cells. Blank lines are ignored, duplicate column names are rejected, and relative paths resolve against the table file. Unknown columns remain errors for records and track tables. For Annotation TSV only, the approved issue #600 contract accepts unknown headers, imports only known columns, and warns once per table with the ignored column names and their absence from Session and TSV re-export; warnings exclude cell contents. Missing required columns, duplicate headers after normalization, malformed rows, and invalid known values still reject the whole import. This Annotation exception awaits static authority integration and runtime implementation; see [the approved issue #600 outcome](internal/issue-600-implementation-20260926/APPROVED_PRODUCT_DECISIONS.md#annotationstable-auxiliary-columns).
 
 ### `--records_table`
 
@@ -752,10 +752,12 @@ Allowed columns:
 | `side` | optional | `outside`, `axis`, or `inside`. If omitted, rows default to `inside`, except the first `features` row may become `axis` when no explicit axis row exists. |
 | `r` | optional | Slot radius scalar. Values may be ratios such as `0.8`, percentages such as `80%`, or pixels such as `200px`. |
 | `w` | optional | Slot width scalar, using the same scalar syntax as `r`. |
-| `inner_gap_px` | optional | Numeric inner gap in pixels, without a unit. |
-| `outer_gap_px` | optional | Numeric outer gap in pixels, without a unit. |
+| `inner_gap_px` | optional | Finite nonnegative inner gap in pixels. The approved text grammar accepts decimal/exponent values with optional case-insensitive `px`; blank means auto (runtime implementation pending). |
+| `outer_gap_px` | optional | Finite nonnegative outer gap in pixels. The approved text grammar accepts decimal/exponent values with optional case-insensitive `px`; blank means auto (runtime implementation pending). |
 | `z` | optional | Integer SVG layering order. |
 | `params` | optional | Comma-separated renderer-specific parameters in `key=value` form, for example `nt=AT,legend_label=AT skew`. Structural settings belong in their dedicated columns and cannot be repeated here. |
+
+The approved pure pixel text grammar is limited to Circular `inner_gap_px`/`outer_gap_px` and Linear `height`/`spacing`; height must be positive, while gaps and spacing may be zero. It does not change Circular `r`/`w` ratio or percent semantics, numeric-only typed JSON gaps, or the existing Linear `ScalarSpec` representation. See [the approved issue #600 outcome](internal/issue-600-implementation-20260926/APPROVED_PRODUCT_DECISIONS.md#trackspixel-text-input-domain); static authority integration and runtime implementation are pending.
 
 Only one row may use `side=axis`, and it must use `renderer=features`. That row defines the circular axis boundary and is converted internally to a split feature slot. Rows with `side=outside` are placed before the axis boundary, and rows with `side=inside` are placed after it. Relative row order is preserved within each side group.
 

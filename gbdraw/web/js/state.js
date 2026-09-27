@@ -288,6 +288,7 @@ const collinearGroups = ref([]);
 const featureOrthogroupIndex = ref(new Map());
 const selectedOrthogroupAlignmentFeature = ref('');
 const similarityAlignmentPlan = ref(null);
+const similarityAlignmentResetReceipt = ref(null);
 const linearRecordTranslations = ref([]);
 const legacySimilarityAlignment = ref(null);
 const orthogroupNameOverrides = reactive({});
@@ -850,6 +851,7 @@ export const state = {
   featureOrthogroupIndex,
   selectedOrthogroupAlignmentFeature,
   similarityAlignmentPlan,
+  similarityAlignmentResetReceipt,
   linearRecordTranslations,
   legacySimilarityAlignment,
   orthogroupNameOverrides,

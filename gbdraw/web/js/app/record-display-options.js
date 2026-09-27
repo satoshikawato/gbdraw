@@ -123,6 +123,18 @@ export const requestedRecordDisplay = (row, draft = {}, context = {}) => {
     startCoordinate: surface.startEnabled ? start : null };
 };
 
+export const canonicalRecordReverseComplement = (record) => Boolean(
+  record?.region ? record.region.reverseComplement : record?.presentation?.reverseComplement
+);
+
+export const writeCanonicalRecordReverseComplement = (record, reverseComplement) => {
+  if (typeof reverseComplement !== 'boolean') throw new Error('Record orientation must be boolean.');
+  if (record.region) {
+    record.region.reverseComplement = reverseComplement;
+    record.presentation.reverseComplement = false;
+  } else record.presentation.reverseComplement = reverseComplement;
+};
+
 export const effectiveRecordReverseComplement = (row, draft = {}, context = {}) => {
   const inherited = Boolean(context.reverse ?? row.reverse);
   if (Boolean(context.cropped ?? row.cropped)) return inherited;
@@ -212,6 +224,50 @@ export const createRecordDisplayControls = ({ state, computed, watch, linearReco
       startCoordinate: resolvedStart,
       reverseComplementOverride: reverseComplement,
       anchorIntent: resolvedIntent
+    });
+  };
+  const alignmentRows = (orientations) => {
+    refreshCommittedRows();
+    const request = getCommittedRequest();
+    return orientations.map(orientation => {
+      const records = request?.mode === 'linear'
+        ? request.records.filter(record => record.recordKey === orientation.recordKey) : [];
+      const inputs = sources.value.filter(source => source.scope === 'linear'
+        && source.sourceUid === orientation.recordKey);
+      if (records.length !== 1 || inputs.length !== 1) {
+        throw new Error('Alignment record transform target is stale.');
+      }
+      const record = records[0];
+      const input = inputs[0];
+      if (!boundSources.some(source => source.scope === input.scope && source.sourceUid === input.sourceUid
+          && source.source === input.source && source.paired === input.paired)
+        || !input.source || !matchesSavedSource(input.source, record.source.resourceId || record.source.gffResourceId)
+        || (record.source.kind === 'gffFasta'
+          && (!input.paired || !matchesSavedSource(input.paired, record.source.fastaResourceId)))) {
+        throw new Error('Alignment record source binding changed.');
+      }
+      const selector = record.region?.selector || record.selector;
+      const drafts = state.recordDisplayDrafts.filter(draft => draft.scope === 'linear'
+        && draft.sourceUid === input.sourceUid && (selector?.kind === 'recordIndex'
+          ? draft.selector === `#${selector.index + 1}`
+          : selector?.kind === 'recordId' ? draft.recordId === selector.value : draft.selector === '#1'));
+      return { recordKey: orientation.recordKey, orientation, drafts,
+        sequence: state.linearSeqs.find(sequence => sequence.uid === input.sourceUid) };
+    });
+  };
+  const captureAlignmentOrientationIntent = (orientations) => alignmentRows(orientations)
+    .map(({recordKey, sequence, drafts}) => ({ recordKey,
+      reverseComplement: Boolean(sequence.region_reverse), drafts: drafts.map(captureTargetDraft) }));
+  const restoreAlignmentOrientationIntent = (checkpoints) => {
+    alignmentRows(checkpoints).forEach(({sequence}, index) => {
+      sequence.region_reverse = checkpoints[index].reverseComplement;
+      checkpoints[index].drafts.forEach(restoreTargetDraft);
+    });
+  };
+  const commitAlignmentOrientations = (orientations) => {
+    alignmentRows(orientations).forEach(({sequence, orientation, drafts}) => {
+      sequence.region_reverse = orientation.reverseComplement;
+      drafts.forEach(draft => { draft.reverseComplementOverride = null; });
     });
   };
   const matchesSavedSource = (file, resourceId) => {
@@ -414,6 +470,9 @@ export const createRecordDisplayControls = ({ state, computed, watch, linearReco
       () => writeResolvedTransform(row, transform)
     ),
     commitResolvedTransform: writeResolvedTransform,
+    captureAlignmentOrientationIntent,
+    restoreAlignmentOrientationIntent,
+    commitAlignmentOrientations,
     captureTargetDraft,
     restoreTargetDraft,
     targetForFeature };

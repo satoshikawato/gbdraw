@@ -1,3 +1,4 @@
+import { validateSimilarityAlignmentResetReceipt } from './session-active-config-contract.js';
 import {
   normalizeFeatureVisibilityRule,
   normalizeVisibilityMode,
@@ -721,6 +722,9 @@ export const createHistorySnapshotService = ({
         getGeneratedArtifactRef(state.featureOrthogroupIndex, null)
       ),
       collinearGroups: artifactOwnedValue(getGeneratedArtifactRef(state.collinearGroups, null)),
+      similarityAlignmentResetReceipt: artifactOwnedValue(
+        getGeneratedArtifactRef(state.similarityAlignmentResetReceipt, null)
+      ),
       similarityAlignmentPlan: artifactOwnedValue(
         getGeneratedArtifactRef(state.similarityAlignmentPlan, null)
       ),
@@ -812,6 +816,10 @@ export const createHistorySnapshotService = ({
       ownerSet.featureOrthogroupIndex || new Map()
     );
     setGeneratedArtifactRef(state.collinearGroups, ownerSet.collinearGroups || []);
+    setGeneratedArtifactRef(
+      state.similarityAlignmentResetReceipt,
+      ownerSet.similarityAlignmentResetReceipt ?? null
+    );
     setGeneratedArtifactRef(
       state.similarityAlignmentPlan,
       ownerSet.similarityAlignmentPlan ?? null
@@ -908,6 +916,7 @@ export const createHistorySnapshotService = ({
       'orthogroups',
       'featureOrthogroupIndex',
       'collinearGroups',
+      'similarityAlignmentResetReceipt',
       'similarityAlignmentPlan',
       'linearRecordTranslations',
       'trackSlotResolvedGeometry',
@@ -1046,6 +1055,7 @@ export const createHistorySnapshotService = ({
       editorState,
       orthogroupState,
       alignmentState: Object.freeze({
+        receipt: cloneJsonData(getGeneratedArtifactRef(state.similarityAlignmentResetReceipt, null)),
         plan: cloneJsonData(getGeneratedArtifactRef(state.similarityAlignmentPlan, null)),
         recordTranslations: cloneJsonData(
           getGeneratedArtifactRef(state.linearRecordTranslations, [])
@@ -1096,6 +1106,10 @@ export const createHistorySnapshotService = ({
     { clearFailedGeneratePresentation = false } = {}
   ) => {
     if (!handle || handle.kind !== 'GeneratedArtifactHandle') return false;
+    await validateSimilarityAlignmentResetReceipt(
+      handle.ownerSet?.similarityAlignmentResetReceipt,
+      handle.runtimeState?.canonical?.committedCanonicalSession
+    );
     if (clearFailedGeneratePresentation && state.failedGeneratePreservedResult) {
       state.failedGeneratePreservedResult.value = false;
     }
@@ -1150,6 +1164,7 @@ export const createHistorySnapshotService = ({
           featureStrokes: mutableIntent.editorState?.featureStrokes || {},
           originalSvgStroke: mutableIntent.editorState?.originalSvgStroke || {}
         }),
+        alignmentResetReceipt: handle.ownerSet?.similarityAlignmentResetReceipt ?? null,
         featureCatalog: handle.ownerSet?.featureCatalog || null
       };
       if (typeof applyEditorStateData === 'function') {
@@ -1366,6 +1381,7 @@ export const createHistorySnapshotService = ({
       config,
       files: buildIntentFilesData(state, fileStore),
       alignmentState: {
+        receipt: getGeneratedArtifactRef(state.similarityAlignmentResetReceipt, null),
         plan: getGeneratedArtifactRef(state.similarityAlignmentPlan, null),
         recordTranslations: getGeneratedArtifactRef(state.linearRecordTranslations, [])
       },
@@ -1389,6 +1405,15 @@ export const createHistorySnapshotService = ({
             'editorState', 'orthogroupState'
           ]
     );
+    if (domains.has('alignmentState')) {
+      const canonical = generatedArtifactRuntimeOwner?.capture?.()?.canonical?.committedCanonicalSession;
+      await validateSimilarityAlignmentResetReceipt(intent.alignmentState?.receipt, canonical && {
+        ...canonical,
+        renderRequest: { ...canonical.renderRequest, layout: {
+          ...canonical.renderRequest.layout, similarityAlignment: intent.alignmentState?.plan
+        } }
+      });
+    }
     const retainedComparisonFiles = domains.has('config') && !domains.has('files')
       ? new Map(
           (Array.isArray(state.linearComparisonPlan?.edges)
@@ -1450,6 +1475,8 @@ export const createHistorySnapshotService = ({
         applyFilesData(state, intent.files || {}, fileStore, normalizeLinearSeqList);
       }
       if (domains.has('alignmentState')) {
+        setGeneratedArtifactRef(state.similarityAlignmentResetReceipt,
+          cloneJsonData(intent.alignmentState?.receipt) || null);
         setGeneratedArtifactRef(
           state.similarityAlignmentPlan,
           cloneJsonData(intent.alignmentState?.plan) || null
