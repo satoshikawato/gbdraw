@@ -294,6 +294,16 @@ const mockLegendEntry = (caption, color, x) => {
     'the sanitized mounted legend remains visual authority and mismatched metadata is ignored'
   );
 
+  const capturedOwners = actions.captureLegendEntryOwners();
+  featureLegend.children[0].setAttribute('data-legend-owner', 'specific-color-file');
+  featureLegend.children[0].querySelector('path').setAttribute('fill', '#112233');
+  assert.equal(actions.reconcileLegendEntries({ restoreColorState: true, entryOwners: capturedOwners }), true);
+  assert.equal(featureLegend.children[0].getAttribute('data-legend-owner'), null);
+  assert.equal(featureLegend.children[0].querySelector('path').getAttribute('fill'), '#abcdef',
+    'History restores the captured swatch, even when the original palette differs');
+  assert.equal(state.legendEntries.value[0].color, '#abcdef');
+  assert.equal(Object.hasOwn(state.legendEntries.value[0], 'owner'), false);
+
   const noOpDirtyMarks = dirtyMarks;
   assert.equal(actions.updateLegendEntryColor(0, '#abcdef'), false);
   assert.equal(actions.updateLegendEntryCaption(0, 'Beta'), false);

@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { createFeatureRuleActions } from '../../gbdraw/web/js/app/feature-editor/rule-actions.js';
 import { createRulePreparation } from '../../gbdraw/web/js/app/rule-matching.js';
+import { diffLegendIntents } from '../../gbdraw/web/js/app/specific-color-rules.js';
 import { evaluatePythonRules } from './helpers/python-rule-evaluator.mjs';
 
 const setup = () => {
@@ -15,28 +16,36 @@ const setup = () => {
     legendEntries: { value:[] }, files: {t_color:null},
     newSpecRule: {feat:'CDS',qual:'gene',val:'a',color:'#112233',cap:'Shared'}
   };
-  const notices = [], transactions = [];
+  const notices = [], transactions = [], transactionScopes = [];
   const preparation = createRulePreparation({state, evaluate:evaluatePythonRules, notify:message=>notices.push(message)});
   let prepareLegend = async () => {};
   let previousIntents = [];
-  const actions = createFeatureRuleActions({state, rulePreparation:preparation, history:{
-    runUndoableCheckpoint: async (label, commit) => {
-      const before=JSON.stringify(state.manualSpecificRules);
-      await commit();
-      if (before!==JSON.stringify(state.manualSpecificRules)) transactions.push(label);
+  const transact = scope => async (label, commit) => {
+    const before=JSON.stringify(state.manualSpecificRules);
+    await commit();
+    if (before!==JSON.stringify(state.manualSpecificRules)) {
+      transactions.push(label);
+      transactionScopes.push(scope);
     }
+  };
+  const actions = createFeatureRuleActions({state, rulePreparation:preparation, history:{
+    runUndoableCheckpoint: transact('checkpoint'),
+    runUndoable: transact('intent')
   }, legendActions: {
-    syncFileLegendEntries: async (intents, {isCurrent,commit,previousFileIntents}) => {
+    syncFileLegendEntries: async (intents, {isCurrent,commit,previousFileIntents,transact = (_diff, apply) => apply()}) => {
       previousIntents=previousFileIntents;
       await prepareLegend(intents);
       if (!isCurrent()) return false;
-      commit();
-      state.legendEntries.value=intents;
-      state.results.value=[{name:'figure',content:'after'}];
-      return true;
+      return transact(diffLegendIntents(state.legendEntries.value, intents), () => {
+        if (!isCurrent()) return false;
+        commit();
+        state.legendEntries.value=intents;
+        state.results.value=[{name:'figure',content:'after'}];
+        return true;
+      });
     }
   }, svgActions:{applyPaletteToSvg(){},applySpecificRulesToSvg(){}}, nextTick:async()=>{}});
-  return {state,actions,preparation,notices,transactions, setLegendPreparation: fn => {prepareLegend=fn;}, previousIntents:()=>previousIntents};
+  return {state,actions,preparation,notices,transactions,transactionScopes, setLegendPreparation: fn => {prepareLegend=fn;}, previousIntents:()=>previousIntents};
 };
 const rules = [
   {feat:'CDS',qual:'gene',val:'a',color:'#112233',cap:'Shared',fromFile:true},
@@ -99,4 +108,20 @@ test('historical caption ownership retains every source color before normalizati
   await s.actions.setSpecificRuleField(0,'val','a');
   assert.deepEqual(s.previousIntents(),[{caption:'Shared',color:'#112233'},{caption:'Shared',color:'#445566'}]);
   assert.deepEqual(s.state.manualSpecificRules.map(rule=>rule.cap),['Shared [#112233]','Shared [#445566]']);
+});
+
+test('complete caption recolor uses bounded intent while caption replacement retains checkpoint History', async () => {
+  const s = setup();
+  s.state.legendEntries.value = [{ caption: 'Shared', color: '#012345' }];
+  const recolor = [{ feat: 'CDS', qual: 'gene', val: 'a', color: '#abcdef', cap: 'Shared' }];
+  assert.equal(await s.actions.commitSpecificRules(recolor, 'Recolor', {
+    previousLegendIntents: [{ caption: 'Shared', color: '#012345' }]
+  }), true);
+  assert.deepEqual(s.transactionScopes, ['intent']);
+  assert.deepEqual(s.state.legendEntries.value, [{ caption: 'Shared', color: '#abcdef' }]);
+  assert.deepEqual(s.state.manualSpecificRules.map(rule => rule.cap), ['Shared']);
+  assert.equal(s.transactions.length, 1);
+  assert.equal(await s.actions.commitSpecificRules(recolor.map(rule => ({ ...rule, cap: 'Renamed' }))), true);
+  assert.deepEqual(s.transactionScopes, ['intent', 'checkpoint']);
+  assert.deepEqual(s.state.legendEntries.value, [{ caption: 'Renamed', color: '#abcdef' }]);
 });

@@ -474,7 +474,8 @@ const runAuxiliaryWorkerRequest = ({
   operation = null,
   activeRequests,
   fallbackMessage,
-  prepareResources = null
+  prepareResources = null,
+  onProgress = null
 }) => {
   const requestId = nextRequestId;
   nextRequestId += 1;
@@ -489,6 +490,9 @@ const runAuxiliaryWorkerRequest = ({
   (async () => {
     let request = null;
     try {
+      if (!workerInitialized && typeof onProgress === 'function') {
+        onProgress({ requestId, stage: 'preparing-runtime' });
+      }
       const currentWorker = await ensureWorkerInitialized();
       request = {
         requestId,
@@ -559,7 +563,7 @@ const runAuxiliaryWorkerRequest = ({
   return promise;
 };
 
-export const runDiagramHelperOperation = (operation, payload = {}) => {
+export const runDiagramHelperOperation = (operation, payload = {}, { onProgress = null } = {}) => {
   const normalizedOperation = String(operation || '').trim();
   if (!diagramHelperOperationNames.has(normalizedOperation)) {
     return Promise.reject(
@@ -579,7 +583,8 @@ export const runDiagramHelperOperation = (operation, payload = {}) => {
       request: payload.projection.canonicalRequest, resources
     }) : null,
     activeRequests: activeHelperRequests,
-    fallbackMessage: `Diagram helper operation '${normalizedOperation}' failed`
+    fallbackMessage: `Diagram helper operation '${normalizedOperation}' failed`,
+    onProgress
   });
 };
 

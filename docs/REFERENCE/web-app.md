@@ -81,14 +81,88 @@ for every record while preserving existing assignments.
 4. Select **Generate Diagram**.
 5. Inspect **Result Preview**, then export a file or select **Save Session**.
 
-Settings are committed to a result only after generation succeeds. The form
-may contain newer draft values than the visible result, so a session records
-the committed request together with supported editable state.
+The **Generation application status** beside the Result and Generate bar
+compares the generation settings with the current Result. **Pending** means
+that an effective setting has changed; returning to its applied value removes
+that difference. Opening a tab, scrolling, or changing an unused setting does
+not make it Pending. **Unknown** means the comparison lacks sufficient evidence,
+**Invalid settings** means the draft is invalid, and **Not generated** means
+there is no Result. None of these states means Applied.
+
+| Operation label | When the Result changes |
+|---|---|
+| **Applies on Generate** | A successful **Generate Diagram** applies crop, row layout, Definition Lock, scale label sizes, and track slots. |
+| **Live edit** | Feature color, label text, and visibility update the current Result directly; geometry changes may rerender automatically. Palette selection is live when **Instant Preview** is on. |
+| **Apply required** | Alignment choices stay in the review draft until **Apply** succeeds. |
+
+A live edit can succeed while another setting stays Pending. **Live edit applying**
+and **Live edit failed** describe that operation independently of generation
+settings. A rerender failure retains any direct edit already applied and keeps
+the previous diagram geometry; correct the edit and retry. An unapplied alignment
+review is a local selection, not an applied Result or a generation-setting change.
+
+**Generate Diagram** recalculates placement and resets zoom. Supported color,
+label, visibility, and record-layout edits are carried forward; arbitrary manual
+positions are not guaranteed to survive regeneration. **Undo** restores the
+previous Result. Failed, canceled, or superseded generation keeps the last
+successful Result.
+
+**Save Session** saves the current Result and supported settings draft together.
+**Load Session** displays that saved Result without applying a newer draft.
+**SVG**, **PNG**, and **PDF** export the current Result. Save and Export do not
+Generate or apply Pending settings. A review's guide, candidate numbers, and
+unapplied choices are excluded from saved and exported artifacts.
 
 For Linear diagrams, the DOM and keyboard order is **Input Genomes**,
 **Comparison**, **Basic**, **Generate Diagram**, then **Advanced comparison and
 layout**. The fixed Generate bar remains visible while its DOM anchor stays in
 that order.
+
+### Follow a Result and its Pending draft
+
+For a small Linear comparison, download the complete GenBank records
+[Lambda (NC_001416.1)](https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi?db=nuccore&id=NC_001416.1&rettype=gbwithparts&retmode=text)
+and [DE3 (NC_042057.1)](https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi?db=nuccore&id=NC_042057.1&rettype=gbwithparts&retmode=text).
+Save them as `NC_001416.1.gb` and `NC_042057.1.gb`. Check the VERSION lines and
+complete lengths, 48,502 and 42,925 bp, before uploading them to two Linear File
+cards. A sequence version does not freeze its annotation table; the capture's
+exact source retrieval and hashes are recorded in the
+[reproduction receipt](../capture/linear-live-edit-source-verification.json).
+
+1. Open **Advanced comparison and layout**, enable **Arrange in rows**, and put
+   both records in row 1. The Auto explanation describes hiding Accession and
+   Length throughout the next generated diagram. Follow **Record Labels:
+   Accession** to its unchanged Auto selection. Choose Show for both fields,
+   then put DE3 in row 2 to return to a stacked comparison.
+2. In **Linear Layout**, turn **Lock Definition Column** OFF and back ON.
+   Choose **Run LOSAT**, retain LOSATN, and enable all labels under **Labels**.
+   To reproduce the figure, set **Label Font Size** and Record Labels' **Default
+   font size** to `24`, and upload `cds_gene_qualifier_priority.tsv` as the
+   **Priority File (TSV)**. Generate; the generation status becomes Applied.
+3. Open **Editor**, turn **Auto Reflow** off for this direct-label example,
+   find the Lambda portal protein, and use **Edit** and **Apply Label** to change
+   its label to `portal`. Close the popup and Editor.
+   This live edit is already part of the current Result.
+4. Under **Axis & Scale**, set **Scale Font Size** to `19`. The status becomes
+   Pending; the current Result still contains its earlier scale and the live label.
+5. Save as `lambda_de3_pending`, then Load that downloaded Session. Pending
+   remains. Export SVG to obtain the saved Result with the live label, without
+   applying the new scale font size.
+6. Generate to apply the draft. Undo restores the saved Result with its Pending
+   draft; Redo restores the regenerated Result and Applied status.
+
+Create `cds_gene_qualifier_priority.tsv` with this one tab-separated line:
+
+```tsv
+CDS	gene
+```
+
+![Pending generation settings above a Lambda–DE3 comparison containing the live portal label, record metadata, feature labels, legend, and comparison ribbons.](../assets/web-app/linear-current-result.png)
+
+The figure retains a gene-label priority rule and uses larger label fonts for
+readability. Use preview zoom and pan to inspect individual features. The
+[documentation capture instructions](../capture/README.md#linear-result-and-draft-checkpoints)
+regenerate the image and verify all checkpoints through the UI.
 
 ## Circular multi-record canvas
 
@@ -145,10 +219,16 @@ beside that row, while a value that varies within the row, such as a per-record
 replicon name, is drawn above its own record; a row whose records disagree on
 the organism gets no row-level text.
 
-With **Lock Definition Column** off, definitions beside rows use a common column
-center and follow each row's horizontal offset. Turning it on aligns them at a
-shared left edge. The definition gap separates the reserved column from the row;
-shorter text can leave more space. Record-local text stays above its own sequence.
+New Web diagrams and **Reset Settings** start with **Lock Definition Column**
+on. Definitions then share a left edge, with the configured definition gap
+before the nearest sequence. Turn it off explicitly to use a common column
+center that follows each row's horizontal offset. Shorter text can leave more
+space; record-local text stays above its own sequence. Apply either selection
+with **Generate Diagram**.
+
+Loading a session preserves its saved ON or OFF selection and its saved Result.
+Supported older sessions that omitted the setting keep their former OFF meaning.
+The CLI and Python API still default to OFF when the option is omitted.
 
 **Show Replicon** controls one automatic name per record, taking the first available
 source qualifier in the order chromosome, plasmid, organelle. It is off by default.
@@ -158,12 +238,20 @@ Apply these settings with **Generate**. Saved subtitles and previews retain thei
 values on load; see [Session compatibility](session-and-request-compatibility.md#linear-file-level-defaults).
 
 Under **Titles & Record Labels**, **Accession** and **Length / Coordinates**
-each have an independent **Auto**, **Show**, or **Hide** selection. Auto is shown
+each start at **Auto** on fresh pages and **Reset Settings**, with independent
+**Show** and **Hide** alternatives. Auto is shown
 as **Auto · Shown** while every rendered row contains one record. If any rendered
 row contains two or more records, that Auto field becomes **Auto · Hidden** for
 the entire diagram. Turning **Arrange in rows** off ignores dormant shared-row
 assignments. Changing the layout recalculates Auto but never rewrites an explicit
 Show or Hide selection. **Replicon** remains a separate checkbox.
+
+The Auto explanation in **Linear Layout** and **Record Labels** names the affected
+fields and describes the next successful Generate, which may differ from the
+current Result. Select **Record Labels: Accession** or **Record Labels: Length /
+Coordinates** beside that explanation to open the label controls and focus the
+matching selection. This navigation changes no value and creates no Undo entry.
+Choose **Show** yourself if shared rows should retain that field, then Generate.
 
 Plot-title text, position, and size share the **Plot Title** subsection. Record
 label defaults and the per-line **Style** disclosures share **Record Labels**.
@@ -186,6 +274,7 @@ biological coordinates.
 | Comparison | No rings until configured | No comparison until a command creates a plan |
 | Pairwise match style | Ribbon | Curve |
 | Accession / Length visibility | Not applicable | Auto · Shown |
+| Lock Definition Column | Not applicable | On |
 
 Loading a session restores its saved values instead of applying these
 defaults. Turning off **Use custom stack** preserves its draft slots. **Reset
@@ -364,12 +453,15 @@ those revised facts. A validation or rendering error shows the underlying
 failure and retains editable choices for retry. Failed, canceled, stale or
 superseded work leaves the previous Result and History intact.
 
-**Cancel** or **Escape** commits nothing and returns focus to the initiating
+**Cancel**, **Escape**, or Close commits nothing and returns focus to the initiating
 control when available. Start again if source, crop, group or committed Result
 changes during review. The review does not trap keyboard focus. On narrow
 screens it docks below the canvas with a scrolling list and reachable footer;
 Editor closes while retaining its tab, cannot reopen during review, and can be
-explicitly reopened afterward. On wide screens the review can be dragged.
+explicitly reopened afterward. The disabled Editor toggle explains why reopening
+is unavailable during review. Short screens may require page and list scrolling
+to reach the footer; narrow reviews cannot be freely dragged. On wide screens
+the review can be dragged.
 
 A successful Apply commits directions, positions and the plan together as one
 History action. Alignment uses the last committed diagram: pending form edits
@@ -448,11 +540,16 @@ feature. Identical duplicate records can share the same hash, so a regenerated
 diagram cannot preserve a one-instance-only rule for indistinguishable
 duplicates.
 
+On a narrow preview, the same **Editor** sits below the canvas and toolbar.
+Its content scrolls independently, while its header, Close action, and tabs stay
+reachable. **Close** and **Escape** change visibility only and retain the selected
+tab. On short screens, scroll the page and Editor content to reach all controls;
+on wide previews the Editor remains beside the canvas.
+
 **Layout edit** moves supported legends and other layout objects without
 changing record geometry. **Undo** and **Redo** traverse supported form and
 editor changes. **Reset Settings** is broader than undo and requires
-confirmation. Regenerate after rule-backed edits when the exported figure must
-match the current form state.
+confirmation. Generate when the exported figure should include Pending settings.
 
 The export actions and session handoff rules are documented in [Output formats
 and export](output-formats-and-export.md) and [Session and request

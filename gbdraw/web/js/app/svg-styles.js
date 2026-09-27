@@ -46,7 +46,7 @@ const paletteColorKeysEqual = (left, right, keys) => keys.every(
   (key) => normalizeComparableColor(left?.[key]) === normalizeComparableColor(right?.[key])
 );
 
-export const createSvgStyles = ({ state, watch, nextTick, legendActions, rulePreparation }) => {
+export const createSvgStyles = ({ state, watch, nextTick, legendActions, rulePreparation, commitAppliedGenerationFields }) => {
   const {
     svgContent,
     extractedFeatures,
@@ -410,6 +410,7 @@ export const createSvgStyles = ({ state, watch, nextTick, legendActions, rulePre
     if (!svg) return;
 
     let updatedCount = 0;
+    const appliedFields = new Set();
 
     if (adv.block_stroke_color || adv.block_stroke_width !== null) {
       const featurePaths = Array.from(svg.querySelectorAll(FEATURE_SELECTOR))
@@ -418,10 +419,12 @@ export const createSvgStyles = ({ state, watch, nextTick, legendActions, rulePre
         if (adv.block_stroke_color) {
           path.setAttribute('stroke', adv.block_stroke_color);
           updatedCount++;
+          appliedFields.add('blockStrokeColor');
         }
         if (adv.block_stroke_width !== null) {
           path.setAttribute('stroke-width', adv.block_stroke_width);
           updatedCount++;
+          appliedFields.add('blockStrokeWidth');
         }
       });
     }
@@ -433,10 +436,12 @@ export const createSvgStyles = ({ state, watch, nextTick, legendActions, rulePre
         if (adv.axis_stroke_color) {
           el.setAttribute('stroke', adv.axis_stroke_color);
           updatedCount++;
+          appliedFields.add(mode.value === 'linear' ? 'linearAxisStrokeColor' : 'circularAxisStrokeColor');
         }
         if (adv.axis_stroke_width !== null) {
           el.setAttribute('stroke-width', adv.axis_stroke_width);
           updatedCount++;
+          appliedFields.add(mode.value === 'linear' ? 'linearAxisStrokeWidth' : 'circularAxisStrokeWidth');
         }
       });
     });
@@ -448,10 +453,12 @@ export const createSvgStyles = ({ state, watch, nextTick, legendActions, rulePre
         if (adv.axis_stroke_color) {
           el.setAttribute('stroke', adv.axis_stroke_color);
           updatedCount++;
+          appliedFields.add(mode.value === 'linear' ? 'linearAxisStrokeColor' : 'circularAxisStrokeColor');
         }
         if (adv.axis_stroke_width !== null) {
           el.setAttribute('stroke-width', adv.axis_stroke_width);
           updatedCount++;
+          appliedFields.add(mode.value === 'linear' ? 'linearAxisStrokeWidth' : 'circularAxisStrokeWidth');
         }
       });
     });
@@ -464,10 +471,12 @@ export const createSvgStyles = ({ state, watch, nextTick, legendActions, rulePre
         if (adv.line_stroke_color) {
           path.setAttribute('stroke', adv.line_stroke_color);
           updatedCount++;
+          appliedFields.add('lineStrokeColor');
         }
         if (adv.line_stroke_width !== null) {
           path.setAttribute('stroke-width', adv.line_stroke_width);
           updatedCount++;
+          appliedFields.add('lineStrokeWidth');
         }
       });
     }
@@ -479,10 +488,12 @@ export const createSvgStyles = ({ state, watch, nextTick, legendActions, rulePre
         if (adv.scale_stroke_color) {
           el.setAttribute('stroke', adv.scale_stroke_color);
           updatedCount++;
+          appliedFields.add('scaleStrokeColor');
         }
         if (adv.scale_stroke_width !== null) {
           el.setAttribute('stroke-width', adv.scale_stroke_width);
           updatedCount++;
+          appliedFields.add('scaleStrokeWidth');
         }
       });
     }
@@ -525,10 +536,12 @@ export const createSvgStyles = ({ state, watch, nextTick, legendActions, rulePre
             if (adv.block_stroke_color) {
               path.setAttribute('stroke', adv.block_stroke_color);
               updatedCount++;
+              appliedFields.add('blockStrokeColor');
             }
             if (adv.block_stroke_width !== null) {
               path.setAttribute('stroke-width', adv.block_stroke_width);
               updatedCount++;
+              appliedFields.add('blockStrokeWidth');
             }
           }
         });
@@ -537,6 +550,7 @@ export const createSvgStyles = ({ state, watch, nextTick, legendActions, rulePre
 
     if (updatedCount > 0) {
       persistSvgEdit(svg);
+      commitAppliedGenerationFields(state, appliedFields);
       console.log(`Applied styles: updated ${updatedCount} elements`);
     }
   };
