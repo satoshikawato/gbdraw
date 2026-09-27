@@ -177,3 +177,24 @@ and search helpers retain their established canvas/search CSS selectors. These
 are capture findings; the runtime's authority, selectors, hit checks and timeouts
 are unchanged. Run this focused command in documentation CI to detect future
 changes to the workflow.
+
+## Alignment directions and Reset
+
+`T-GUI-04` regenerates the finished five-BGC example from original inputs, then
+uses the real review to reverse only its minority reference. It exercises the
+combined and positions-only Reset controls, Undo between scopes, and restores
+the Keep artifact before the SVG download. The Keep figure and group popup
+are captured before the optional Reset checks, so a notification from those
+checks does not obscure the finished comparison. Run:
+
+```sh
+python docs/capture/run_all.py --scenario T-GUI-04 --tier extended
+```
+
+`bgc-source-verification.json` records direct byte comparisons with all five
+version-5 MIBiG GenBank downloads, including UTC retrieval timestamps, URLs,
+sizes and source/mirror SHA-256. The BGC harness checks these pins before using
+its offline copies. Public readers obtain inputs from MIBiG, as the Tutorial
+specifies. No login, stored authentication or seed data is needed. `config.py`
+owns the existing viewport/theme/locale; `web_server.py` selects a free loopback
+port. The existing screenshot density remains unchanged.

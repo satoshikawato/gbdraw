@@ -379,95 +379,136 @@ filters, direction, and interpretation.
 
 Generate a Linear diagram with **LOSATP → Similarity groups**, then choose
 **Align…** from a feature popup. The exact clicked feature is the reference,
-even when it is not the group representative. The Similarity Groups editor
-offers the same action after you select an exact reference record and feature.
-Group selection alone cannot choose a reference. **Resolving…** means Python is
-determining the target anchors. A resolved normal **Align…** applies automatically
-in **Keep current directions** mode without opening a review. Missing or
-unusable targets stay unchanged. If rendering fails, the Keep draft opens with
-the underlying error for correction and retry.
+even when it is not the group representative. The Similarity Groups drawer
+offers the same action after you select an exact reference record and feature;
+group selection alone cannot choose a reference. Both entry points show
+**Resolving…** while Python determines the anchors. When every target resolves,
+**Align…** applies immediately in **Keep current directions** and shows the
+Result summary. Missing or unusable targets remain unchanged. A generation
+failure opens the retained Keep draft for correction and retry.
 
-Choose **Review alignment options…** to inspect anchors and directions before
-commitment, including a fully resolved plan. Ambiguity also opens **Select
-alignment anchors** automatically. The review lists other displayed records in
-diagram order. Python selects the only usable candidate or unique direct
-reciprocal-best-hit (RBH) candidate. For remaining ambiguity, it recommends the
-unique representative or candidate 1 in stable identity order. The row states
-its reason. Recommendations are convenience heuristics, not evidence that an
-anchor is biologically superior. Choose a candidate with **Select**, or **Skip**
-that record. A hidden member can be usable when its center maps into the crop;
-a member outside the crop is unusable. RBH query/subject direction is symmetric.
+Choose **Review alignment options…** beside **Align…** to inspect anchors,
+choose **Skip**, or change display directions before commitment. Ambiguity
+opens the same **Select alignment anchors** review automatically. It lists the
+other displayed records in diagram order. Python selects the only usable
+candidate or unique direct reciprocal-best-hit (RBH) candidate. For remaining
+ambiguity, it recommends the unique representative or candidate 1 in stable
+identity order. Recommendation reasons are visible; they are convenience
+heuristics, not evidence that an anchor is biologically superior. A hidden
+member is usable when its center maps into the displayed crop; a member outside
+that crop is unusable. RBH query/subject direction is symmetric.
 
-Candidates show names or feature IDs, source coordinates, strand,
-representative status, and direct evidence. A guide marks the reference center;
-numbered badges locate visible candidates. Hovering a candidate or its feature
-highlights the other. Clicking a feature or badge makes the same local choice
-as its row control. Candidates without visible badges remain selectable in the
-list. Pan and zoom remain available during review.
+Each candidate shows its name or feature ID, source coordinates, current
+display strand, representative status, direct evidence, and internal identity.
+A thin line marks the reference center and numbered badges locate visible
+candidates. Hover a row or its feature to highlight the other; clicking a
+feature or badge selects the same anchor as its row control. Candidates without
+a visible badge remain selectable. Pan and zoom remain available. Guides and
+badges appear only in the preview, never in downloads or saved Sessions.
 
-Choose exactly one direction mode:
+### Choose display directions
 
-| Direction mode | Scope |
-|---|---|
-| **Keep current directions** | Preserve all current record directions. |
-| **All selected arrows right** | Make selected known-strand anchors, including the reference, right-facing. |
-| **All selected arrows left** | Make those anchors left-facing. |
-| **Custom** | Choose Keep, right, or left independently for each selected record. |
+**Alignment direction** offers one exclusive choice:
 
-The arrows describe displayed anchors, not rewritten biological strands.
-Unknown-strand, skipped, missing, and unusable records stay unchanged with a
-reason. The before/after arrows show which whole records will reverse. The
-reference participates in an explicit direction choice, while its selected
-feature center keeps its pre-Align horizontal position. All vertical positions
-stay fixed; selected target centers align with that center. Text stays readable,
-and unselected features and ribbons follow their record's transform.
+| Choice | Effect on the selected anchors |
+| --- | --- |
+| **Keep current directions** (default) | Preserve every record's current display direction. |
+| **All selected arrows right →** | Reverse each eligible record only when its selected anchor currently points left. |
+| **All selected arrows left ←** | Reverse each eligible record only when its selected anchor currently points right. |
+| **Custom** | Choose **Keep**, **Right →**, or **Left ←** separately for each eligible record, including the reference. |
 
-Candidate, Skip, direction-mode, and Custom edits are local and start no Worker
-job. **Apply** performs final Python batch validation and renders one atomic
-Result with directions, placement, plan, and one History entry. If final facts
-materially change the displayed directions or reference-center placement, the
-review updates and requires another **Apply**. A validation or render failure
-keeps the editable draft and underlying error for retry. **Cancel**, **Escape**,
-and Close commit nothing; focus returns to the initiating control when it is
-still present. Changed source, crop, group, or Result can invalidate a review;
-restart it using the current reference. The review does not trap keyboard focus.
+The scope is the exact reference and selected target anchors with a known
+direction. It is not every input record or every gene. The review lists the
+scope, current → after-Align arrows, excluded records and their reasons.
+Unknown direction is never guessed; **Skip**, missing members, and unusable
+anchors keep their directions. Changing Select/Skip immediately updates the
+scope. An excluded Custom row is disabled and its choice is not applied.
 
-On wide previews the review floats and can be dragged. On narrow previews it
-sits below the same canvas, with a scrolling candidate list and reachable
-**Apply** and **Cancel**. Opening a narrow review closes the Editor while retaining
-its selected tab. The Editor toggle explains why reopening is unavailable until
-the review ends; reopen it explicitly afterward. Short screens may require page
-and list scrolling to reach the footer. Narrow reviews cannot be freely dragged.
+For a left-facing reference with right-facing targets, **All selected arrows
+right →** reverses only the reference record. **All selected arrows left ←**
+reverses only those targets. To change one record independently, choose
+**Custom** and leave the other rows at **Keep**. These choices replace the former
+**Match reference direction** checkbox.
 
-The active plan survives style regeneration and stable record reorder. Manual
-**Reverse complement** keeps the anchors; the next Generate aligns them in the
-new direction. Source replacement, crop, selector changes, and manual record
-movement clear the plan with a reason. Repair a stale reference with **Reselect**
-or **Clear**, and a stale target with **Select** or **Skip**. Pending or failed
-repair retains the last successful Result.
+A reversal acts on the whole record: features, labels, annotations, quantitative
+tracks and comparison endpoints follow its display transform, while text stays
+readable. Source bytes, feature identity and biological +/− strands are unchanged.
+Unselected inparalogs retain their membership and links while following their
+record's transform. **rev** in the Active plan inspector reports direction
+relative to the source.
 
-**Reset Align** offers two scopes:
+Align keeps the exact reference feature center at its immediate pre-Align
+logical canvas x and aligns target centers there. Every record's logical y is
+preserved. Reversing the reference can move its record's left edge; the review
+shows that correction. Automatic diagram composition, viewBox fitting and zoom
+can move the reference on screen. This is not a promise of fixed screen pixels.
 
-| Reset scope | Result |
-|---|---|
-| **Reset positions** (default) | Restore positions immediately before the latest successful Align, retain current directions, and clear its plan. |
-| **Reset positions and alignment direction changes** | Restore the same positions and the before-Align directions only for records actually reversed by that Align, including the reference if changed. |
+### Apply, retry, and continue editing
 
-The combined preview lists target names, count, and current/restored directions.
-It replaces later manual direction edits on those targets; other records and
-unrelated Pending settings are preserved. Both scopes consume the latest plan
-and restoration evidence. To change scope after Reset, Undo that Reset first.
-Older sessions without direction evidence retain positions Reset and explain
-why combined Reset is unavailable. A modern plan with no direction changes is
-a separate no-change case. Save/fresh Load and style regeneration preserve valid
-restoration evidence. **Undo** and **Redo** restore complete artifacts, including
-directions, plan, and restoration evidence. Failed, canceled, stale, or
-superseded operations retain the previous artifact and create no committed
-History entry.
+Candidate, Skip, mode and Custom changes are local and start no Worker job.
+**Apply** performs one final Python batch validation per attempt. If the final
+directions or reference correction differ from the preview, the review updates
+and asks for another **Apply**; the existing Result is kept until you accept
+those revised facts. A validation or rendering error shows the underlying
+failure and retains editable choices for retry. Failed, canceled, stale or
+superseded work leaves the previous Result and History intact.
 
-Alignment and Reset change display only; they do not rerun LOSATP or group
-inference. Collinear alignment controls, anchor TSV, scored inference,
-support-count ranking, and multi-hop automatic selection are unsupported.
+**Cancel** or **Escape** commits nothing and returns focus to the initiating
+control when available. Start again if source, crop, group or committed Result
+changes during review. The review does not trap keyboard focus. On narrow
+screens it docks below the canvas with a scrolling list and reachable footer;
+Editor closes while retaining its tab, cannot reopen during review, and can be
+explicitly reopened afterward. On wide screens the review can be dragged.
+
+A successful Apply commits directions, positions and the plan together as one
+History action. Alignment uses the last committed diagram: pending form edits
+and unrelated settings remain pending. Ordinary **Generate Diagram** after
+style, label or canvas changes and stable record reorder retain the plan and
+valid Reset evidence. Manual **Reverse complement** keeps the plan; the next
+Generate aligns the same anchors in the new direction. Source replacement,
+crop, selector changes and manual record drag clear it with a visible reason.
+A stale reference requires **Reselect** or **Clear**; a stale target requires
+**Select** or **Skip**. Pending or failed repair keeps the last successful Result.
+
+### Reset positions or directions
+
+Open **Editor → Similarity groups**, choose **Reset alignment…** in
+**Active plan**, inspect the preview and select one scope:
+
+| Scope | Positions | Directions |
+| --- | --- | --- |
+| **Reset positions** (default) | Restore the positions immediately before the latest successful Align. | Keep all current directions. |
+| **Reset positions and alignment direction changes** | Restore the same immediate pre-Align positions. | Restore the absolute pre-Align direction only for records that this Align actually reversed. |
+
+Combined Reset lists affected names, count and current → restored directions.
+It includes the reference only if that Align reversed it. On those listed
+records, later manual direction edits are also replaced, as the preview warns;
+manual Reverse on a record that Align did not change is preserved. Reset does
+not toggle a direction or restore the original file's direction by assumption.
+
+Both scopes consume the active plan and its restoration evidence. After
+positions-only Reset, use **Undo** before choosing combined Reset; the evidence
+cannot be used twice. An empty direction-change list means this Align changed
+no directions, so combined Reset is disabled. A supported older Session without
+trusted restoration evidence has a different explanation: direction restoration
+is unavailable, but positions-only Reset remains usable. No history is inferred.
+**Save Session** followed by a fresh **Load Session** preserves valid evidence;
+malformed or mismatched evidence rejects the load and keeps the existing artifact.
+
+For Align A followed by Align B, Reset B restores B's immediate before positions
+and clears B's plan; it does not reactivate A's plan. **Undo** restores the full
+previous artifact, including plan, restoration evidence, directions, positions,
+SVG and resources; **Redo** reapplies the action. Each successful Apply, Reset
+or manual clear creates one History action. Both Reset scopes preserve pending
+form edits and unrelated settings. Reset starts no additional LOSAT job, and
+direction changes reproject existing comparison endpoints without changing
+source search evidence.
+
+Try the optional direction and Reset steps in the
+[five-BGC Tutorial](../TUTORIALS/GUI/compare-proteins-losatp.md#optional-review-directions-and-reset).
+See [Session compatibility](session-and-request-compatibility.md#similarity-alignment-request-ownership)
+for persistence details. Collinear alignment controls, anchor TSV, scored
+inference, support-count ranking and multi-hop automatic selection are unsupported.
 
 ## Preview, search, and editor
 

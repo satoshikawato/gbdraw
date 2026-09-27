@@ -709,7 +709,7 @@
     },
     {
       "title": "Generate and align to og_1",
-      "body": "Click Generate Diagram to create the initial comparison. In the preview, click the livE CDS assigned to og_1 and choose Align…; resolved targets align immediately using cached LOSATP results. Choose Review alignment options… first to inspect or change anchors, choose Skip, or enable the single Match reference direction option. It reverses selected targets with known opposite strands on Apply. Ambiguity opens that review automatically.",
+      "body": "Click Generate Diagram to create the initial comparison. In the preview, click the livE CDS assigned to og_1 and choose Align…; resolved targets align immediately using cached LOSATP results. Choose Review alignment options… first to inspect or change anchors, choose Skip, or select one of Keep current directions, All selected arrows right →, All selected arrows left ←, or Custom. Direction choices include the exact reference and selected anchors with known direction; source strands stay unchanged. Reset alignment… offers positions only or positions plus the latest Align’s actual direction changes. Both scopes consume the evidence; use Undo before choosing the other scope. See the Web alignment reference for scope, excluded records, later manual edits and retry. Ambiguity opens that review automatically.",
       "operations": [
         {
           "title": "Align the og_1 feature",

@@ -135,13 +135,17 @@ Pairwise comparison between only the first and last records.
 ## Step 5: Align every record to `og_1`
 
 Select the `livE` CDS in `og_1` on the first record. Its feature popup includes
-an **Align** action because the current result is in Similarity-groups mode.
+an **Align…** action because the current result is in Similarity-groups mode.
 
 ![og_1 feature popup with the Align action](../../images/t-gui-04/04-align-og1.png)
 
-Select **Align**. gbdraw regenerates the same 23-group comparison without
+Select **Align…**. gbdraw regenerates the same 23-group comparison without
 rerunning LOSATP and shifts each record so its `og_1` member shares one
-x-coordinate. This is the alignment used by the Interactive SVG Gallery.
+x-coordinate. If ambiguity opens **Select alignment anchors**, select the
+recommended first candidate in each unresolved row, leave **Keep current
+directions** selected and choose **Apply**. Inspect and accept a refreshed
+preview with another Apply if requested. This is the alignment used by the
+Interactive SVG Gallery.
 
 ![Five whole BGC records aligned to similarity group og_1](../../images/t-gui-04/05-comparison-result.png)
 
@@ -157,6 +161,37 @@ Select a comparison ribbon. The popup reports the group ID, display name,
 member count, record coverage, RBH seeds, paths, and every member protein.
 
 ![LOSATP similarity-group popup with member details](../../images/t-gui-04/06-match-popup.png)
+
+### Optional: review directions and Reset
+
+Use the same five records and presentation from Steps 1–5. Click the first
+record's left-facing `livA` CDS (`CAG38712.1`, group `og_18`) and choose
+**Review alignment options…**. Choose a
+**Select** anchor for each row still needing a choice. Start with **Keep current
+directions**, then select **All selected arrows right →**. The reference
+currently points left while the selected targets point right, so the preview
+changes only the reference record. Select **Apply**; if final validation updates
+the preview, inspect it and select **Apply** again. Features and labels reverse
+with the record; biological source strands stay unchanged.
+
+Open **Editor**, select **Similarity groups**, then choose **Reset alignment…**
+in **Active plan**. **Reset positions** is selected by default and
+would keep the new reference direction. Select **Reset positions and alignment
+direction changes**, inspect the listed reference and select **Reset** to
+restore its pre-Align direction and positions. The plan is cleared. **Undo**
+restores the aligned artifact and its evidence; reopen Reset to try the other
+scope. After either successful Reset, Undo is required before another scope.
+Combined Reset also replaces subsequent manual direction edits on the listed
+records. See the [Web alignment reference](../../REFERENCE/web-app.md#similarity-group-alignment-in-linear-view)
+for Custom, exclusions, missing old evidence and retry details.
+
+The executable GUI recipe verifies these choices, both Reset scopes and Undo
+from the original five inputs. It captures the Keep figure and group popup
+before those optional steps, then restores Keep before downloading the SVG.
+Regenerate it with
+`python docs/capture/run_all.py --scenario T-GUI-04 --tier extended`;
+environment and source-verification details are in the
+[capture README](../../capture/README.md).
 
 ## Next steps
 

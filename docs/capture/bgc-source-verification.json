@@ -1,0 +1,64 @@
+{
+  "records": [
+    {
+      "url": "https://mibig.secondarymetabolites.org/repository/BGC0000708.5/BGC0000708.gbk",
+      "accessionVersion": "BGC0000708.5",
+      "format": "GenBank",
+      "retrievedUtc": "2026-09-27T00:26:06.865322+00:00",
+      "sourceBytes": 105185,
+      "sourceSha256": "9a5f971c5ed8c406b20574fb50aac567609deb787eb1e8d4635050aa264a04b0",
+      "mirrorPath": "gbdraw/web/tutorial-data/aminoglycoside-bgc-five/BGC0000708.gbk",
+      "mirrorBytes": 105185,
+      "mirrorSha256": "9a5f971c5ed8c406b20574fb50aac567609deb787eb1e8d4635050aa264a04b0",
+      "equal": true
+    },
+    {
+      "url": "https://mibig.secondarymetabolites.org/repository/BGC0000709.5/BGC0000709.gbk",
+      "accessionVersion": "BGC0000709.5",
+      "format": "GenBank",
+      "retrievedUtc": "2026-09-27T00:26:06.780402+00:00",
+      "sourceBytes": 121511,
+      "sourceSha256": "4b66b7e4b78d429d12176e1e36d0e48178c562a9d128d4308b38753af9995255",
+      "mirrorPath": "gbdraw/web/tutorial-data/aminoglycoside-bgc-five/BGC0000709.gbk",
+      "mirrorBytes": 121511,
+      "mirrorSha256": "4b66b7e4b78d429d12176e1e36d0e48178c562a9d128d4308b38753af9995255",
+      "equal": true
+    },
+    {
+      "url": "https://mibig.secondarymetabolites.org/repository/BGC0000711.5/BGC0000711.gbk",
+      "accessionVersion": "BGC0000711.5",
+      "format": "GenBank",
+      "retrievedUtc": "2026-09-27T00:26:06.724940+00:00",
+      "sourceBytes": 72291,
+      "sourceSha256": "32393648f6a91166444331b83687f1b9b7b24c60553a7ddcb677dfe207736789",
+      "mirrorPath": "gbdraw/web/tutorial-data/aminoglycoside-bgc-five/BGC0000711.gbk",
+      "mirrorBytes": 72291,
+      "mirrorSha256": "32393648f6a91166444331b83687f1b9b7b24c60553a7ddcb677dfe207736789",
+      "equal": true
+    },
+    {
+      "url": "https://mibig.secondarymetabolites.org/repository/BGC0000712.5/BGC0000712.gbk",
+      "accessionVersion": "BGC0000712.5",
+      "format": "GenBank",
+      "retrievedUtc": "2026-09-27T00:26:06.888434+00:00",
+      "sourceBytes": 134734,
+      "sourceSha256": "705104a0daa5c44981b0a1e5352d3e56f012dd2e3ae94c98c85cd0ee9198bf94",
+      "mirrorPath": "gbdraw/web/tutorial-data/aminoglycoside-bgc-five/BGC0000712.gbk",
+      "mirrorBytes": 134734,
+      "mirrorSha256": "705104a0daa5c44981b0a1e5352d3e56f012dd2e3ae94c98c85cd0ee9198bf94",
+      "equal": true
+    },
+    {
+      "url": "https://mibig.secondarymetabolites.org/repository/BGC0000713.5/BGC0000713.gbk",
+      "accessionVersion": "BGC0000713.5",
+      "format": "GenBank",
+      "retrievedUtc": "2026-09-27T00:26:06.614379+00:00",
+      "sourceBytes": 79197,
+      "sourceSha256": "bf182663de453f4a3fc30ed0aa8f040a164eeab1c98e604983844994996e58fb",
+      "mirrorPath": "gbdraw/web/tutorial-data/aminoglycoside-bgc-five/BGC0000713.gbk",
+      "mirrorBytes": 79197,
+      "mirrorSha256": "bf182663de453f4a3fc30ed0aa8f040a164eeab1c98e604983844994996e58fb",
+      "equal": true
+    }
+  ]
+}
