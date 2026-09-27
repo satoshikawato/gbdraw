@@ -122,3 +122,58 @@ python docs/capture/run_all.py --scenario H-GUI-15 --tier core --check
 GUI tiers are cumulative. The first GUI run can take a few minutes while the packaged Python diagram worker starts. Worker and generation waits are bounded at three minutes each. CLI and Python recipes may still be run through their standalone runners for surface-specific development; `run_all.py` is the authoritative whole-documentation entry point.
 
 After regeneration, inspect every published Tutorial image directory at normal document width. Pixel comparison detects stale committed images. The semantic checks separately verify accessions, complete sequence lengths and topology, feature and comparison counts, track ordering and axes, popup metadata, exported evidence, legend placement, and static-SVG safety.
+
+## Linear Result and draft checkpoints
+
+The Web reference is the existing public owner for generation status, Auto,
+Definition Lock, live editing, review directions and Reset. Its small worked
+comparison is verified independently of Gallery sessions. The specialized
+browser screenshot inventory in `tools/reproduce_examples_manifest.py` points
+to its regeneration command; it does not add a Tutorial scenario or change
+that registry's reviewed screenshot budgets:
+
+```bash
+python tools/prepare_browser_wheel.py
+python docs/capture/verify_linear_live_edit.py --capture
+```
+
+The first command prepares the ignored browser wheel. The second is the
+one-command reproduction of the reference image and its complete UI journey.
+Omit `--capture` to verify without replacing the committed image; use `--output`
+to choose an evidence directory (default `/tmp/gbdraw-linear-live-edit-evidence`).
+It uses the existing pinned browser environment, fresh contexts, network-blocking
+capture owner and random loopback server; no login, storage seed, or running
+external service is needed. It reloads only the Session saved earlier in this
+same raw-input journey.
+
+`linear-live-edit-source-verification.json` binds both complete GenBank records
+to the exact NCBI `gbwithparts` requests, UTC retrieval time, byte size and SHA-256.
+DE3 uses its existing byte-identical tutorial mirror. Lambda uses the unchanged
+original fetched for this capture, stored losslessly as gzip under `fixtures/`;
+the receipt records both compressed and original bytes/hashes. The older tutorial
+copy's taxonomy differs and is not used. Offline runs validate both pinned mirrors
+and record identity before uploading the exact decompressed original bytes. The
+versioned accessions do not promise a frozen annotation table: a new upstream revision must be reviewed and recorded
+before replacing this evidence. Readers obtain originals through the links in
+the reference page. The existing support TSV has the exact contents `CDS<TAB>gene`
+plus a newline, published on that page.
+
+The harness writes each checkpoint's current Result, mounted/exported SVG,
+settings draft, committed request, feature identity and History observation.
+It compares the mandatory sanitizer's output after fresh Load, retains both
+source hashes in the saved resources, verifies pending Export without Generate,
+and checks complete Generate → Undo → Redo restoration. Naming a new Session
+adds the existing document-title History change; all other intent fields are
+compared unchanged. Camera framing and capture-only search hiding change no
+artifact or History. The public crop contains Pending, the current comparison,
+metadata, gene labels, legend and ribbons; QA JSON/SVG/Session/log files remain
+outside the repository.
+
+Selector findings in this flow: the Auto status marker and generated SVG need
+CSS locators because they have no separately named capture surface; the Feature
+list search and popup label input have placeholders without associated labels.
+Other operations use roles, labels, titles or existing test IDs. Imported camera
+and search helpers retain their established canvas/search CSS selectors. These
+are capture findings; the runtime's authority, selectors, hit checks and timeouts
+are unchanged. Run this focused command in documentation CI to detect future
+changes to the workflow.

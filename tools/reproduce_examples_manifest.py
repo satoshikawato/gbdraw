@@ -18,6 +18,11 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 PALETTES_FILE = PROJECT_ROOT / "gbdraw" / "data" / "color_palettes.toml"
 
 MANUALLY_MANAGED_FIGURES: dict[str, str] = {
+    "docs/assets/web-app/linear-current-result.png": (
+        "Specialized browser reference screenshot; regenerate and verify with "
+        "python docs/capture/verify_linear_live_edit.py --capture using the "
+        "source-verification receipt, then visually review the complete figure."
+    ),
     "examples/gbdraw_social_preview.png": (
         "Owner-maintained README artwork; automated reproduction and replacement are prohibited."
     ),
