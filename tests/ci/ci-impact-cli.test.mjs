@@ -743,6 +743,7 @@ test('web PR route inherits only exact base evidence and falls back to full on A
     assert.equal(outcome.plan.requiredJobs.includes('core-pr'), !available);
     assert.ok(outcome.plan.requiredJobs.includes('web-contracts-pr'));
     assert.ok(outcome.plan.requiredJobs.includes('web-pr-smoke'));
+    assert.ok(outcome.plan.requiredJobs.includes('gallery'));
   }
 });
 
@@ -776,4 +777,29 @@ test('release workflow binds exhaustive matrices and package/browser contracts t
   assert.match(job('browser'), /Run package build integration[\s\S]*-m "slow and not browser"/);
   assert.match(job('browser'), /Run offline GUI browser contracts[\s\S]*-m "slow and browser"/);
   assert.match(job('pr-gate'), /sparse-checkout: tools[\s\S]*node \.ci-trusted-base\/tools\/ci-impact.mjs gate/);
+});
+
+test('Gallery alone owns PR parity without expanding dev or release execution', () => {
+  const workflow = readFileSync(resolve(REPOSITORY_ROOT, '.github/workflows/test.yml'), 'utf8');
+  const job = (id) => workflow.match(new RegExp(`\\n  ${id}:\\n[\\s\\S]*?(?=\\n  [a-z0-9-]+:\\n|$)`))?.[0] || '';
+  const gallery = job('gallery');
+  const smoke = job('web-pr-smoke');
+  assert.equal((workflow.match(/run: npm run test:web:gallery-publication/g) || []).length, 1);
+  assert.match(gallery, /timeout-minutes: 15/);
+  assert.match(gallery, /GBDRAW_GALLERY_PR_PARITY: \$\{\{ github\.event_name == 'pull_request' && github\.base_ref == 'dev' && contains\(fromJSON\(needs\.ci-impact\.outputs\.plan\)\.requiredJobs, 'web-pr-smoke'\) \}\}/);
+  assert.match(gallery, /python -m pytest tests\/[\s\S]*-m "gallery and not slow"/);
+  for (const name of ['Set up Node.js for Gallery parity', 'Install Gallery parity dependencies', 'Prepare Gallery browser wheel', 'Verify Gallery first-Generate parity']) {
+    assert.match(gallery, new RegExp(`name: ${name}\\n        if: env\\.GBDRAW_GALLERY_PR_PARITY == 'true'`));
+  }
+  assert.match(gallery, /node-version: "20"/);
+  assert.match(gallery, /npm ci/);
+  assert.match(gallery, /npx playwright install --with-deps chromium/);
+  assert.equal((gallery.match(/run: python tools\/prepare_browser_wheel\.py/g) || []).length, 1);
+  assert.match(gallery, /if: failure\(\) && env\.GBDRAW_GALLERY_PR_PARITY == 'true'/);
+  assert.match(gallery, /path: test-results\//);
+  assert.match(smoke, /timeout-minutes: 10/);
+  assert.match(smoke, /run: npm run test:web:pr-smoke/);
+  assert.doesNotMatch(smoke, /test:web:gallery-publication/);
+  assert.equal((smoke.match(/run: python tools\/prepare_browser_wheel\.py/g) || []).length, 1);
+  assert.match(smoke, /Upload Playwright PR smoke traces/);
 });
