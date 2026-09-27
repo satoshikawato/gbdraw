@@ -1,5 +1,10 @@
 # INSTRUCTION PROMPT — S01 承認済み製品動作の正式契約化
 
+## 2026-09-27の担当更新
+
+現在の担当はPDF authorityのみ。診断公開はdevのPD-OI-046を参照し、第二active recordを追加しない。以下の二record記録・独立error進行の旧指示は診断concernには適用しない。PDFのS00証拠条件は維持する。
+[owner handoff](./OWNER_HANDOFF_20260927.md)を先に読み、その担当指示を適用する。
+
 あなたはgbdraw Issue #601のProduct authority担当です。日本語・中国語のPDF文字対応と、原因のあるsummary＋任意の安全なDetailsの二つのoutcomeが、`satoshikawato`に承認されています。承認内容を独立recordとして正式なstatic Product Contractへ記録し、runtimeより先にbaseへ統合できる差分を準備してください。
 
 ## branch取得と必読資料

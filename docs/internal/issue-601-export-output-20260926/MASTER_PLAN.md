@@ -6,9 +6,15 @@ Repository: `https://github.com/satoshikawato/gbdraw.git`。
 実装ブランチ: **`fix/issue-601-export-output-20260926`**。
 実装ブランチの基点: fetch済みの最新`origin/dev`、`b11fe6091f179f6e251fe415ecfde269343ec764`。修正前の動作調査はCURRENT_BEHAVIOR_EVIDENCE.mdに記載したsource SHAを基準とする。
 
+## 現在の担当
+
+BUG-15/19は[owner handoff](./OWNER_HANDOFF_20260927.md)により
+`fix/issue-601-bug15-bug19`へ移管済み。このbranchはBUG-07 PDFを担当する。
+以下のerror/regex設計・承認は引継ぎ資料であり、このbranchの実行担当を意味しない。
+
 ## 目的と完成後の動作
 
-[Issue #601](https://github.com/satoshikawato/gbdraw/issues/601)のBUG-07、BUG-15、BUG-19を扱う。
+[Issue #601](https://github.com/satoshikawato/gbdraw/issues/601)のBUG-07をこのbranchで扱う。BUG-15/19は移管先が実装・受入を担当する。
 日本語と中国語（簡体字・繁体字）を含む図のPDF出力に対応する。既存fontで表せるアルファベット・数字・記号とstyleを維持し、不足部分だけ対応fontへ自動切替する。PDF内に文字を保持し、検索・選択できる出力を提供する。
 失敗した操作には既知の原因と次の操作を示し、許可済みの診断情報を任意Detailsで確認できるようにする。Color/LabelのPython regex評価とFeature SearchのJavaScript regex評価は維持し、それぞれの構文を入力欄で案内する。
 
@@ -23,7 +29,7 @@ Repository: `https://github.com/satoshikawato/gbdraw.git`。
 
 両Decision Packsは`satoshikawato`が`2026-09-26`に承認した。[機械表現](./APPROVED_DECISIONS.md)は本文の忠実なserializationで、独立したCI storeではない。製品outcomeを再選択せず、各Packのpreservation、retirement、riskをそのまま実現する。
 
-[Product Impact Ratchet](../PRODUCT_IMPACT_RATCHET.md)のLane Bを適用する。実装前にS00のPDF実現性証拠を取得し、S01で既存static Product Contractに二つの独立recordを記録する。PDF証拠が保留された場合は、error recordの正式契約化とS03を独立して進め、PDFの不足checkpointだけを止める。S01の各authority-only差分は`docs/internal/OPTION_INTEGRITY_PRODUCT_CONTRACT.md`一ファイルに限定し、他の文書やruntimeを混ぜない。authorityのbase統合後に依存runtimeを実装する。新しいdetector、JSON registry、approval botをこの問題のために作らない。
+[Product Impact Ratchet](../PRODUCT_IMPACT_RATCHET.md)のLane Bを適用する。実装前にS00のPDF実現性証拠を取得し、S01ではPDF recordだけを既存static Product Contractへ記録する。診断公開とColor field回復はdevのPD-OI-046/047を使用し、別の診断recordやこのbranchのS03実装を追加しない。PDF証拠が保留された場合はPDFの不足checkpointだけを止め、BUG-15/19は移管先で独立して進める。S01の各authority-only差分は`docs/internal/OPTION_INTEGRITY_PRODUCT_CONTRACT.md`一ファイルに限定し、他の文書やruntimeを混ぜない。authorityのbase統合後に依存runtimeを実装する。新しいdetector、JSON registry、approval botをこの問題のために作らない。
 
 ## 現在の事実と修正方針
 
@@ -88,10 +94,10 @@ Color/Labelは`createRulePreparation`→`EVALUATE_RULES`→`web_support/rule_mat
 | Session | 作業 | 主な所有範囲 | 開始条件 |
 | --- | --- | --- | --- |
 | [S00](./SESSION_00_FONT_EVIDENCE.md) | font選定とPDF実現性証拠 | このdirectoryの`evidence/`と`SESSION_00_RESULT.md`。production変更なし | 計画branch取得 |
-| [S01](./SESSION_01_AUTHORITY.md) | 承認outcomeの正式契約化 | 専用authority branch上のOIPC一ファイル | PDFはS00証拠合格。errorは独立した承認本文 |
+| [S01](./SESSION_01_AUTHORITY.md) | PDF承認outcomeの正式契約化 | 専用authority branch上のOIPC一ファイル、PDF recordのみ | PDFはS00証拠合格。診断公開はdevのPD-OI-046を参照 |
 | [S02](./SESSION_02_PDF.md) | 日中font fallback、配布、PDF受入 | `pdf-fonts.js`、export、font preparation/loader、関係tests | S01契約がorigin/devに統合済み |
-| [S03](./SESSION_03_ERRORS_AND_REGEX.md) | error cause/Details、syntax案内 | Python producer/glue、Worker/client、normalizer、callers、index/search、関係tests | 通常はS02 push済み。独立進行時もS01 error契約統合済み |
-| [S04](./SESSION_04_ACCEPTANCE.md) | 全経路の受入・必要修正・handoff | integration testsと`SESSION_04_RESULT.md`、原因ownerの必要修正 | S02/S03 push済み、両契約統合済み |
+| [S03](./SESSION_03_ERRORS_AND_REGEX.md) | 移管済み・このbranchでは実行しない | BUG-15/19計画のS02–S05が所有 | [owner handoff](./OWNER_HANDOFF_20260927.md)を参照 |
+| [S04](./SESSION_04_ACCEPTANCE.md) | PDF受入・共通errorとの接続確認・handoff | PDF testsと`SESSION_04_RESULT.md`。共通error/regex修正は移管先 | S02 push済み、PDF契約統合済み。移管先error受入を参照 |
 
 `app-setup.js`、`python-helpers.js`、`index.html`等の共有fileは表の順序で所有を引き渡す。同一fileを複数sessionが同時に編集しない。別Issueの実装を取り込むための再設計やコード削除をせず、変更された現行ownerへ本修正を合わせる。
 

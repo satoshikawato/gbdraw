@@ -1,5 +1,10 @@
 # INSTRUCTION PROMPT — S03 原因保持・安全なDetails・regex構文案内
 
+## 2026-09-27の担当更新
+
+**移管済み。このbranchで本sessionの実装を開始しない。** BUG-15/19は`fix/issue-601-bug15-bug19`のS02–S05が唯一の担当。以下は旧設計の引継ぎ資料として保持し、実行指示ではない。
+[owner handoff](./OWNER_HANDOFF_20260927.md)を先に読み、その担当指示を適用する。
+
 あなたはgbdraw Issue #601のerror処理とregex案内の実装担当です。失敗した操作に既知の原因と利用可能な次の操作を示し、任意Detailsへ許可済みの診断情報を表示してください。Color/LabelのPython regexとFeature SearchのJavaScript regexの評価経路を維持し、入力欄でそれぞれのsyntaxを案内します。
 
 ## branch取得と必読資料

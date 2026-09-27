@@ -1,5 +1,10 @@
 # INSTRUCTION PROMPT — S04 全体受入・最終修正・handoff
 
+## 2026-09-27の担当更新
+
+現在の担当はPDF受入と共通errorとの接続確認。BUG-15/19の実装・修正・本受入は移管先が所有する。以下6/7等のerror/regex検証は移管先の受入結果を参照し、修正が必要なら同じownerへ引き渡す。PDF契約の統合とS02 pushが開始条件で、このbranchのS03は実行しない。
+[owner handoff](./OWNER_HANDOFF_20260927.md)を先に読み、その担当指示を適用する。
+
 あなたはgbdraw Issue #601の統合受入担当です。日本語・中国語の部分font切替によるtext PDF、既知causeと安全な任意Details、Python/JavaScript regex案内が承認された製品動作として全経路で成立することを確認し、必要な修正を完了してください。
 
 ## branch取得と必読資料
