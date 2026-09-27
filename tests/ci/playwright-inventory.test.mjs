@@ -58,3 +58,18 @@ test('comparison browser contracts run in the required PR contract job and full 
   assert.doesNotMatch(job, /continue-on-error/);
   assert.match(workflow.split('  pr-gate:\n')[1], /- web-contracts-pr/);
 });
+
+test('functional CI shards partition the complete acceptance inventory without duplication', () => {
+  const workflow = readFileSync('.github/workflows/test.yml', 'utf8');
+  const job = workflow.split('  playwright-functional:\n')[1]
+    .split('  playwright-performance:\n')[0];
+  const shards = JSON.parse(job.match(/shard: (\[[\d, ]+\])/)[1]);
+  const total = Number(job.match(/--shard=\$\{\{ matrix\.shard \}\}\/(\d+)/)[1]);
+  assert.deepEqual(shards, Array.from({ length: total }, (_, index) => index + 1));
+  const full = collect('test', '--config=playwright.functional.config.js');
+  const partition = shards.flatMap((shard) => collect(
+    'test', '--config=playwright.functional.config.js', `--shard=${shard}/${total}`
+  ));
+  assert.equal(new Set(partition).size, partition.length, 'a case appears in multiple shards');
+  assert.deepEqual(partition.sort(), full.sort(), 'the CI matrix loses acceptance cases');
+});

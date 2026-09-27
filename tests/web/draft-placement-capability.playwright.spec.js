@@ -3,7 +3,7 @@ const fs = require('node:fs/promises');
 const { openApp, reveal } = require('./helpers/app-lifecycle.cjs');
 
 for (const mode of ['circular', 'linear']) {
-  test(`${mode} draft placement capability survives history and dirty session restore`, async ({ browser }, testInfo) => {
+  test(`${mode} draft placement capability survives history and dirty session restore`, async ({ browser, baseURL }, testInfo) => {
     test.setTimeout(240000);
     const external = [];
     let context;
@@ -13,7 +13,7 @@ for (const mode of ['circular', 'linear']) {
       context = await browser.newContext({ viewport: { width: 1600, height: 1000 } });
       await context.route('**/*', (route) => {
         const url = new URL(route.request().url());
-        if (url.origin === 'http://127.0.0.1:4173') return route.continue();
+        if (url.origin === new URL(baseURL).origin) return route.continue();
         external.push(url.origin);
         return route.abort();
       });
