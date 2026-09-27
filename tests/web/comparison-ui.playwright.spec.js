@@ -535,8 +535,12 @@ test('imported comparison resolutions are explicit and create one History entry 
   ));
   await page.getByRole('button', { name: 'Generate Diagram' }).click();
   await expect(page.getByRole('alert', { name: 'Generation Error' })).toContainText(
-    'missing a required resource'
+    'Supply the required value.'
   );
+  expect(await page.evaluate(() => window.__GBDRAW_APP__.errorLog)).toMatchObject({
+    code: 'COMPARISON_INPUT', operation: 'generate', stage: 'request-validation',
+    context: { field: 'comparison', reason: 'REQUIRED' }
+  });
   await expect(page.getByRole('region', { name: 'Result Preview' }))
     .toContainText('Last Successful Result');
   await expect(page.getByRole('button', { name: 'SVG', exact: true })).toBeEnabled();

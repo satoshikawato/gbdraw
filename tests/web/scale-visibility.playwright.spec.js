@@ -216,8 +216,12 @@ test('Arrow controls render in both modes and survive a session round trip', asy
   const invalidRun = await runDiagram(page);
   expect(invalidRun.result.status).toBe('error');
   expect(invalidRun.errorSummary).toContain(
-    'Arrow head length ratio must be Auto or a positive finite number.'
+    'Field: Arrow head length ratio. Use Auto or a finite value greater than zero.'
   );
+  expect(await page.evaluate(() => window.__GBDRAW_APP__.errorLog)).toMatchObject({
+    code: 'INPUT_INVALID', operation: 'generate', stage: 'request-validation',
+    context: { field: 'arrow_head_length_ratio', reason: 'POSITIVE_OR_AUTO' }
+  });
   await headRatio.fill('1.25');
   await shaftRatio.fill('0.25');
   await expect(rendering).toHaveValue('arrow');

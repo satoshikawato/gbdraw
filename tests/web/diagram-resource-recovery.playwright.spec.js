@@ -1,7 +1,7 @@
 const { test, expect } = require('@playwright/test');
 const fs = require('node:fs/promises');
 const { createHash } = require('node:crypto');
-const { openApp } = require('./helpers/app-lifecycle.cjs');
+const { openApp, evaluateWithRetainedPromise } = require('./helpers/app-lifecycle.cjs');
 const { snapshot, download } = require('./helpers/mode-transition.cjs');
 
 const gffPath = 'gbdraw/web/tutorial-data/lambda-gff3/NC_001416.gff3';
@@ -28,7 +28,9 @@ const installEvidence = async page => {
         evidence.events.push(event);
         if (event.name === 'result-admission-start' && evidence.rejectAdmission) {
           evidence.rejectAdmission = false;
-          throw new Error('Injected Result admission rejection');
+          throw Object.assign(new Error('Injected Result admission rejection'), {
+            code: 'UNKNOWN', stage: 'result-admission'
+          });
         }
         if (event.name === 'worker-resource-linking-end' && evidence.cancelAfterStaging) {
           evidence.cancelAfterStaging = false;
@@ -81,7 +83,7 @@ test('W1/W2/W4/W8/W9: retained M23 recovery succeeds once and resource ownership
   page.on('pageerror', error => errors.push(String(error)));
   await installEvidence(page);
   const generate = async expected => {
-    const result = await page.evaluate(() => window.__GBDRAW_APP__.runAnalysis());
+    const result = await evaluateWithRetainedPromise(page, () => window.__GBDRAW_APP__.runAnalysis());
     outcomes.push({ result, error: await page.evaluate(() => window.__GBDRAW_APP__.errorLog) });
     expect(result.status).toBe(expected);
   };
@@ -112,13 +114,16 @@ test('W1/W2/W4/W8/W9: retained M23 recovery succeeds once and resource ownership
     const a = await agree('original-A');
     await fasta.setInputFiles({ name: 'mismatch.fasta', mimeType: 'text/plain', buffer: mismatch });
     await generate('error');
-    expect(outcomes.at(-1).error.summary).toContain('No matching FASTA record');
+    expect(outcomes.at(-1).error).toMatchObject({
+      code: 'FASTA_REQUIRED', operation: 'generate', context: { reason: 'GFF_FASTA_MATCH' }
+    });
+    expect(outcomes.at(-1).error.summary).toContain('matching FASTA');
     expect(await agree('rejected-B')).toEqual(a);
     const rejectedEvidence = await inspect();
     expect(rejectedEvidence.workers).toHaveLength(1);
     expect(rejectedEvidence.workers[0].terminated).toBe(false);
     expect(rejectedEvidence.workers[0].messages.find(m => m.requestId === rejectedEvidence.runs[1].requestId && m.type === 'run'))
-      .toMatchObject({ ok: true, error: { type: 'ParseError' } });
+      .toMatchObject({ ok: true, error: { code: 'FASTA_REQUIRED', operation: 'generate' } });
     await fasta.setInputFiles(fastaPath);
     await generate('ok'); // Mandatory first recovery: no retry in the test.
     expect(await agree('first-recovery-A')).toEqual(a);
@@ -140,7 +145,10 @@ test('W1/W2/W4/W8/W9: retained M23 recovery succeeds once and resource ownership
     });
     await page.evaluate(() => { window.__RESOURCE_RECOVERY__.rejectAdmission = true; });
     await generate('error');
-    expect(outcomes.at(-1).error.summary).toContain('Injected Result admission rejection');
+    expect(outcomes.at(-1).error).toMatchObject({
+      code: 'UNKNOWN', operation: 'generate', stage: 'result-admission'
+    });
+    expect(outcomes.at(-1).error.summary).not.toContain('Injected Result admission rejection');
     expect(await agree('unadmitted-candidate')).toEqual(a);
     expect((await inspect()).workers).toHaveLength(1);
     await page.getByLabel('GFF3', { exact: true }).setInputFiles(gffPath);

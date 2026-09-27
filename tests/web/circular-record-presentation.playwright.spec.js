@@ -123,8 +123,12 @@ test('Circular single-record presentation selects, transforms, titles, and round
     requireCommittedResult: true
   });
   expect(failed.errorSummary).toContain(
-    'Circular region End (60000) exceeds the selected record length (50466).'
+    'Keep the region within the record length.'
   );
+  expect(await page.evaluate(() => window.__GBDRAW_APP__.errorLog)).toMatchObject({
+    code: 'REGION_INVALID', operation: 'generate', stage: 'request-validation',
+    context: { field: 'region', reason: 'RECORD_BOUNDS' }
+  });
   expect((await inspectCircularResult(page)).content).toBe(cropReverse.content);
 
   await page.reload({ waitUntil: 'domcontentloaded' });

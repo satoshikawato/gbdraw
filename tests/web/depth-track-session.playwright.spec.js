@@ -1449,14 +1449,14 @@ test('preserved Result presentation ignores no-Result Generate failures and non-
   await page.evaluate(async () => {
     const { state } = await import('./js/state.js');
     state.errorLog.value = {
-      summary: 'Non-Generate operation failed.',
-      details: []
+      code: 'UNKNOWN', operation: 'evaluateRules', stage: 'helper'
     };
     await window.Vue.nextTick();
   });
 
-  await expect(page.getByRole('alert', { name: 'Generation Error' }))
-    .toContainText('Non-Generate operation failed.');
+  await expect(page.getByRole('alert', { name: 'Rule error' }))
+    .toContainText('without recognized diagnostic information');
+  await expect(page.getByRole('alert', { name: 'Generation Error' })).toHaveCount(0);
   await expect(page.getByRole('heading', { name: 'Result Preview', exact: true })).toBeVisible();
   await expect(page.getByRole('heading', { name: 'Last Successful Result', exact: true }))
     .toHaveCount(0);
@@ -1510,6 +1510,12 @@ test('Session preflight rejects invalid canonical data without resetting live st
     dialogs.push(dialog.message());
     await dialog.accept();
   });
+  await page.evaluate(() => {
+    window.__SESSION_REJECTIONS__ = 0;
+    window.__GBDRAW_TEST_HOOKS__ = { onSessionLifecycleEvent(event) {
+      if (event.name === 'interactiveReady' && event.status === 'error') window.__SESSION_REJECTIONS__++;
+    } };
+  });
   const input = page.locator('input[accept^=".json,"]').first();
 
   const invalidCanonicalSession = {
@@ -1529,8 +1535,17 @@ test('Session preflight rejects invalid canonical data without resetting live st
     mimeType: 'application/json',
     buffer: Buffer.from(JSON.stringify(invalidCanonicalSession))
   });
-  await expect.poll(() => dialogs.length).toBe(1);
-  expect(dialogs[0]).toContain('Canonical renderRequest records are required.');
+  const expectSchemaRejection = async (count, reason) => {
+    await expect.poll(() => page.evaluate(() => window.__SESSION_REJECTIONS__)).toBe(count);
+    await expect.poll(() => page.evaluate(() => window.__GBDRAW_APP__.sessionImportPending)).toBe(false);
+    await expect(page.getByRole('alert', { name: 'Operation error' }))
+      .toContainText('Load a supported Session file or recreate it with the current writer.');
+    expect(await page.evaluate(() => window.__GBDRAW_APP__.errorLog)).toMatchObject({
+      code: 'INPUT_INVALID', stage: 'request-validation', context: { field: 'schema', reason }
+    });
+    expect(dialogs).toEqual([]);
+  };
+  await expectSchemaRejection(1, 'RECORDS_REQUIRED');
   expect(await snapshot()).toEqual(before);
 
   const invalidSlotSchemaSession = {
@@ -1548,8 +1563,7 @@ test('Session preflight rejects invalid canonical data without resetting live st
     mimeType: 'application/json',
     buffer: Buffer.from(JSON.stringify(invalidSlotSchemaSession))
   });
-  await expect.poll(() => dialogs.length).toBe(2);
-  expect(dialogs[1]).toContain('Custom Track Slots use an obsolete schema.');
+  await expectSchemaRejection(2, 'TRACK_SCHEMA');
   expect(await snapshot()).toEqual(before);
 
   const recordText = `LOCUS       PREFLIGHT                   4 bp    DNA     linear   UNK 01-JAN-1980
@@ -1621,8 +1635,7 @@ ORIGIN
     mimeType: 'application/json',
     buffer: Buffer.from(JSON.stringify(unknownAuthoritySession))
   });
-  await expect.poll(() => dialogs.length).toBe(3);
-  expect(dialogs[2]).toContain('unclassified top-level field');
+  await expectSchemaRejection(3, 'SESSION_FIELDS');
   expect(await snapshot()).toEqual(before);
 
   const invalidLegacyConfig = {
@@ -1636,8 +1649,7 @@ ORIGIN
     mimeType: 'application/json',
     buffer: Buffer.from(JSON.stringify(invalidLegacyConfig))
   });
-  await expect.poll(() => dialogs.length).toBe(4);
-  expect(dialogs[3]).toContain('Custom Track Slots use an obsolete schema.');
+  await expectSchemaRejection(4, 'TRACK_SCHEMA');
   expect(await snapshot()).toEqual(before);
 
   const repairedCanonicalSession = {
@@ -1667,8 +1679,8 @@ ORIGIN
     mimeType: 'application/json',
     buffer: Buffer.from(JSON.stringify(repairedCanonicalSession))
   });
-  await expect.poll(() => dialogs.length).toBe(5);
-  expect(dialogs[4]).toBe('Session loaded successfully!');
+  await expect.poll(() => dialogs.length).toBe(1);
+  expect(dialogs[0]).toBe('Session loaded successfully!');
   expect(await page.evaluate(() => ({
     mode: window.__GBDRAW_APP__.mode,
     comparisonHeight: window.__GBDRAW_APP__.adv.comparison_height,
@@ -2487,8 +2499,13 @@ ORIGIN
     mimeType: 'application/json',
     buffer: Buffer.from(JSON.stringify(session))
   });
-  await expect.poll(() => dialogs.length).toBe(1);
-  expect(dialogs[0]).toContain('Injected session commit failure');
+  await expect.poll(() => page.evaluate(() => window.__GBDRAW_APP__.sessionImportPending)).toBe(false);
+  await expect(page.getByRole('alert', { name: 'Operation error' })).toBeVisible();
+  expect(await page.evaluate(() => window.__GBDRAW_APP__.errorLog)).toMatchObject({
+    code: 'UNKNOWN', operation: 'unknown', stage: 'request-validation'
+  });
+  await expect(page.getByRole('alert', { name: 'Operation error' })).not.toContainText('Injected session commit failure');
+  expect(dialogs).toEqual([]);
   expect(await page.evaluate(() => ({
     mode: window.__GBDRAW_APP__.mode,
     title: window.__GBDRAW_APP__.sessionTitle,
