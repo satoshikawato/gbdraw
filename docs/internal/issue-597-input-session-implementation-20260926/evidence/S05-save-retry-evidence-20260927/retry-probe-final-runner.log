@@ -1,0 +1,8 @@
+
+Running 1 test using 1 worker
+
+(node:1349293) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  1 [chromium] › tests/web/contracts/s05-owned-retry-probe.playwright.spec.js:2210:1 › evidence: held real reflow exercises the final Save helper busy and retry branch (11.5s)
+
+  1 passed (12.3s)
