@@ -280,6 +280,8 @@ test('Worker construction and the diagram-generation client have explicit owners
     new Map([
       ['services/diagram-generation.js', 1],
       ['services/losat.js', 2],
+      ...(productionSources.has('services/session-import-client.js')
+        ? [['services/session-import-client.js', 1]] : []),
       ['workers/losat-threaded-worker.js', 2]
     ])
   );
@@ -565,6 +567,8 @@ test('shared privileged detectors preserve the characterized current-source fact
       { path: 'app/run-analysis.js', count: 1 },
       { path: 'services/diagram-generation.js', count: 1 },
       { path: 'services/losat.js', count: 2 },
+      ...(productionSources.has('services/session-import-client.js')
+        ? [{ path: 'services/session-import-client.js', count: 1 }] : []),
       { path: 'workers/diagram-generation-worker.js', count: 1 },
       { path: 'workers/losat-threaded-worker.js', count: 2 }
     ],
