@@ -146,7 +146,7 @@ import {
   projectLinearComparisonLosatpModeSelection,
   projectLinearComparisonUi
 } from './comparison-ui.js';
-import { discoverGffFastaRecords, discoverSequenceRecords } from './record-discovery.js';
+import { circularDiscoveryForInput, discoverGffFastaRecords, discoverSequenceRecords } from './record-discovery.js';
 import {
   conservationSourceDescriptors,
   defaultConservationSeriesLabel,
@@ -1052,17 +1052,12 @@ export const createAppSetup = () => {
           })
     )
   });
+  const getCircularRecordDiscoveryState = () => circularDiscoveryForInput(state);
   const getAnnotationRecordCatalog = (loadComparisonOverride = null) => {
     const inputType = mode.value === 'linear' ? lInputType.value : cInputType.value;
     const circularPrimaryFile = cInputType.value === 'gff' ? files.c_gff : files.c_gb;
     const circularPairedFile = cInputType.value === 'gff' ? files.c_fasta : null;
-    const circularHasInput = Boolean(
-      circularPrimaryFile && (cInputType.value !== 'gff' || circularPairedFile)
-    );
-    const circularIsCurrent =
-      circularRecordDiscovery.inputType === cInputType.value &&
-      circularRecordDiscovery.primaryFile === circularPrimaryFile &&
-      circularRecordDiscovery.pairedFile === circularPairedFile;
+    const circularDiscovery = getCircularRecordDiscoveryState();
     const loadComparison = loadComparisonOverride == null
       ? mode.value === 'linear' && hasLinearComparisonIntent.value
       : Boolean(loadComparisonOverride);
@@ -1078,12 +1073,10 @@ export const createAppSetup = () => {
           primaryFile: circularPrimaryFile,
           pairedFile: circularPairedFile
         }),
-        hasInput: circularHasInput,
-        status: circularIsCurrent
-          ? circularRecordDiscovery.status
-          : (circularHasInput ? 'loading' : 'idle'),
-        error: circularIsCurrent ? circularRecordDiscovery.error : '',
-        records: circularIsCurrent ? circularRecordList.value : []
+        hasInput: circularDiscovery.hasInput,
+        status: circularDiscovery.status,
+        error: circularDiscovery.error,
+        records: circularDiscovery.records
       },
       linearSources: linearSeqs.map((seq) => {
         const primaryFile = lInputType.value === 'gff' ? seq.gff : seq.gb;
@@ -2400,7 +2393,7 @@ export const createAppSetup = () => {
         recordSessionLifecycleEvent('history-baseline-start');
         await history.initializeIntentBaseline('Loaded session');
         recordSessionLifecycleEvent('history-baseline-end');
-        if (circularRecordPresentationPanel.value?.open) await refreshCircularRecordOrder();
+        if (circularRecordPresentationPanel.value) circularRecordPresentationPanel.value.open = false;
       }
       return result;
     } finally {
@@ -3577,8 +3570,16 @@ export const createAppSetup = () => {
     return `${normalized} (${String(matched.record_id || '').trim() || 'Unknown'})`;
   };
 
+  const circularRecordDiscoveryState = computed(getCircularRecordDiscoveryState);
+  const circularRecordInspectionEnabled = computed(() => mode.value === 'circular'
+    && circularRecordDiscoveryState.value.hasInput
+    && circularRecordDiscoveryState.value.status !== 'loading'
+    && !state.semanticFileWatchersSuppressed.value);
+  const inspectCircularSourceRecords = () => circularRecordInspectionEnabled.value
+    ? refreshCircularRecordOrder()
+    : Promise.resolve({ status: 'unavailable', reason: 'Source inspection is unavailable.' });
   const circularRecordPresentationEntries = () => buildDisambiguatedRecordEntries(
-    (Array.isArray(circularRecordList.value) ? circularRecordList.value : []).map(
+    circularRecordDiscoveryState.value.records.map(
       (record) => ({
         ...record,
         recordId: record?.record_id ?? record?.recordId,
@@ -3591,7 +3592,7 @@ export const createAppSetup = () => {
     const entries = circularRecordPresentationEntries();
     const current = String(form.circular_record_selector || '').trim();
     const selection = resolveDisambiguatedRecordSelection(entries, current);
-    const automaticLabel = entries.length > 1
+    const automaticLabel = entries.length > 1 || adv.circular_grouping_intent === 'batch'
       ? 'All records (separate diagrams)'
       : 'Automatic (only record)';
     return [
@@ -3613,7 +3614,7 @@ export const createAppSetup = () => {
 
   const circularRecordPresentationError = computed(() => {
     const current = String(form.circular_record_selector || '').trim();
-    if (!current) return '';
+    if (!current || circularRecordDiscoveryState.value.status !== 'ready') return '';
     const selection = resolveDisambiguatedRecordSelection(
       circularRecordPresentationEntries(),
       current
@@ -3628,20 +3629,59 @@ export const createAppSetup = () => {
   });
 
   const circularSingleRecordPresentationEnabled = computed(() => {
-    if (form.multi_record_canvas) return false;
+    if (mode.value !== 'circular' || form.multi_record_canvas
+      || adv.circular_grouping_intent === 'batch'
+      || circularRecordDiscoveryState.value.status !== 'ready') return false;
     const entries = circularRecordPresentationEntries();
-    if (entries.length === 1) return true;
-    const current = String(form.circular_record_selector || '').trim();
-    if (!current && entries.length !== 1) return false;
-    if (entries.length === 0) return Boolean(current);
-    return resolveDisambiguatedRecordSelection(entries, current).status === 'resolved';
+    const selection = resolveDisambiguatedRecordSelection(entries, form.circular_record_selector);
+    return selection.status === 'resolved'
+      || (selection.status === 'unspecified' && entries.length === 1);
   });
 
+  const circularRecordSelectionEnabled = computed(() => mode.value === 'circular'
+    && !form.multi_record_canvas && circularRecordDiscoveryState.value.status === 'ready');
   const setCircularRecordPresentationSelector = (value) => {
+    if (!circularRecordSelectionEnabled.value) return { status: 'unavailable' };
     const normalized = String(value || '').trim();
     form.circular_record_selector = normalized;
     adv.circular_grouping_intent = normalized ? 'single' : 'auto';
+    return { status: 'ok' };
   };
+  const showCircularCanvasSetting = async () => {
+    const control = document.querySelector('[data-circular-canvas-setting]');
+    if (!control || mode.value !== 'circular' || !form.multi_record_canvas) {
+      return { status: 'unavailable' };
+    }
+    for (let section = control.closest('details'); section; section = section.parentElement?.closest('details')) {
+      section.open = true;
+    }
+    await nextTick();
+    control.focus();
+    control.scrollIntoView({ block: 'nearest' });
+    return { status: 'ok' };
+  };
+  watch(() => [mode.value, circularSingleRecordPresentationEnabled.value,
+    circularRecordDiscoveryState.value.primaryFile, circularRecordDiscoveryState.value.pairedFile,
+    form.circular_record_selector], async (current, previous = []) => {
+    if (!current[1] || current.every((value, index) => Object.is(value, previous[index]))) return;
+    const origin = document.activeElement;
+    const pane = document.querySelector('.settings-scroll');
+    const scrollOwner = pane && getComputedStyle(pane).overflowY !== 'visible'
+      ? pane : document.scrollingElement;
+    const anchored = pane?.contains(origin) && origin.getClientRects().length;
+    const top = anchored ? origin.getBoundingClientRect().top : null;
+    const scrollTop = scrollOwner?.scrollTop;
+    await nextTick();
+    if (!circularSingleRecordPresentationEnabled.value
+      || circularRecordDiscoveryState.value.primaryFile !== current[2]
+      || circularRecordDiscoveryState.value.pairedFile !== current[3]) return;
+    if (circularRecordPresentationPanel.value) circularRecordPresentationPanel.value.open = true;
+    await afterPaint();
+    if (scrollOwner && document.activeElement === origin) {
+      scrollOwner.scrollTop = anchored && origin.isConnected
+        ? scrollOwner.scrollTop + origin.getBoundingClientRect().top - top : scrollTop;
+    }
+  }, { flush: 'sync' });
 
   const buildDefaultCircularRecordPositions = () => {
     const selectors = Array.isArray(circularRecordList.value)
@@ -4379,6 +4419,11 @@ export const createAppSetup = () => {
     circularRecordPresentationOptions,
     circularRecordPresentationError,
     circularSingleRecordPresentationEnabled,
+    circularRecordDiscoveryState,
+    circularRecordInspectionEnabled,
+    inspectCircularSourceRecords,
+    circularRecordSelectionEnabled,
+    showCircularCanvasSetting,
     setCircularRecordPresentationSelector,
     paletteDefinitions,
     paletteNames,

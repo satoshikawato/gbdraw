@@ -606,7 +606,7 @@ export const setupWatchers = ({
         rollbackInProgress: sessionImportRollbackInProgress,
         semanticWatchersSuppressed: semanticFileWatchersSuppressed,
         sessionResourceDiscoveryDeferred,
-        refresh: ({ suppress }) => refreshCircularRecordOrder({ suppress })
+        refresh: ({ suppress }) => refreshCircularRecordOrder({ suppress, automatic: true })
       });
     }
   );

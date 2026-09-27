@@ -102,6 +102,7 @@ import {
   requireCurrentProteinBlastpMode
 } from './current-option-values.js';
 import {
+  circularDiscoveryForInput,
   discoverGffFastaRecords,
   discoverSequenceRecords
 } from './record-discovery.js';
@@ -1616,16 +1617,7 @@ export const createRunAnalysis = ({
     labelTextScopeDialog.matchingCount = 0;
   };
 
-  const circularDiscoveryTargetsCurrentInput = () => {
-    const inputType = cInputType.value;
-    const primaryFile = inputType === 'gff' ? files.c_gff : files.c_gb;
-    const pairedFile = inputType === 'gff' ? files.c_fasta : null;
-    return (
-      circularRecordDiscovery.inputType === inputType &&
-      circularRecordDiscovery.primaryFile === primaryFile &&
-      circularRecordDiscovery.pairedFile === pairedFile
-    );
-  };
+  const circularDiscoveryTargetsCurrentInput = () => circularDiscoveryForInput(state).current;
 
   const circularDiscoveryMatchesCurrentInput = () => (
     circularRecordDiscovery.status === 'ready' &&
@@ -1690,7 +1682,10 @@ export const createRunAnalysis = ({
     return '';
   };
 
-  const runCircularRecordRefresh = async ({ suppress = false } = {}) => {
+  const runCircularRecordRefresh = async ({ suppress = false, automatic = false } = {}) => {
+    if (automatic && circularDiscoveryTargetsCurrentInput()
+      && (circularRecordDiscovery.status === 'deferred'
+        || (mode.value === 'circular' && ['ready', 'error'].includes(circularRecordDiscovery.status)))) return;
     const refreshGeneration = ++circularRecordRefreshGeneration;
     if (suppress || recordDiscoverySuppressed()) return;
     if (!Array.isArray(adv.multi_record_positions)) {
@@ -1729,10 +1724,8 @@ export const createRunAnalysis = ({
         ? circularRecordDiscovery.canonicalRecordIdentities
         : []
     });
-    if (
-      !hasActiveInput
-    ) {
-      circularRecordList.value = [];
+    circularRecordList.value = [];
+    if (!hasActiveInput) {
       adv.multi_record_positions.splice(0, adv.multi_record_positions.length);
       return;
     }
@@ -1794,10 +1787,10 @@ export const createRunAnalysis = ({
         (inputType === 'gff' ? files.c_gff : files.c_gb) !== primaryFile ||
         (inputType === 'gff' ? files.c_fasta : null) !== pairedFile
       ) return;
-      console.warn('Failed to refresh circular record order:', error);
+      console.warn('Failed to inspect circular source records.', error);
       circularRecordList.value = [];
       circularRecordDiscovery.status = 'error';
-      circularRecordDiscovery.error = 'Could not read records from the circular input file(s).';
+      circularRecordDiscovery.error = `Could not read records from the circular input file(s): ${primaryFile.name || 'unnamed source'}. Replace or remove the input, or retry inspection.`;
       adv.multi_record_positions.splice(0, adv.multi_record_positions.length);
     }
   };

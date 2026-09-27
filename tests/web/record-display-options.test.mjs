@@ -6,7 +6,7 @@ import {
   requestedRecordTransform, selectedFeatureDisplayStart, validateAnchorIntent,
   validateRecordDisplayDrafts
 } from '../../gbdraw/web/js/app/record-display-options.js';
-import { parseSequenceRecordText } from '../../gbdraw/web/js/app/record-discovery.js';
+import { circularDiscoveryForInput, parseSequenceRecordText } from '../../gbdraw/web/js/app/record-discovery.js';
 
 import { createFeaturePlacementActions } from '../../gbdraw/web/js/app/feature-editor/placement-actions.js';
 import { createDefaultForm, createDefaultAdv } from '../../gbdraw/web/js/services/session-active-config-contract.js';
@@ -294,4 +294,26 @@ test('fresh loaded alignment binds canonical sources before discovery and restor
   assert.equal(model.state.linearSeqs[0].region_reverse, true);
   model.state.linearSeqs[0].gb = new Blob(['replacement']);
   assert.throws(() => model.controls.captureAlignmentOrientationIntent([target]), /source binding changed/);
+});
+
+test('Circular discovery metadata belongs only to the current source and complete input pair', () => {
+  const source = {};
+  const state = { cInputType: { value: 'gb' }, files: { c_gb: source },
+    circularRecordList: { value: [{ selector: '#1', record_id: 'committed' }] },
+    circularRecordDiscovery: { status: 'ready', inputType: 'gb', primaryFile: source, pairedFile: null, error: '' } };
+  assert.equal(circularDiscoveryForInput(state).status, 'ready');
+  assert.equal(circularDiscoveryForInput(state).records.length, 1);
+  state.files.c_gb = {};
+  assert.equal(circularDiscoveryForInput(state).status, 'deferred');
+  assert.deepEqual(circularDiscoveryForInput(state).records, []);
+  state.files.c_gb = source;
+  state.circularRecordDiscovery.status = 'deferred';
+  assert.equal(circularDiscoveryForInput(state).status, 'deferred');
+  assert.deepEqual(circularDiscoveryForInput(state).records, []);
+  state.cInputType.value = 'gff';
+  state.files.c_gff = {};
+  assert.equal(circularDiscoveryForInput(state).status, 'idle');
+  state.files.c_fasta = {};
+  assert.equal(circularDiscoveryForInput(state).status, 'deferred');
+  assert.deepEqual(circularDiscoveryForInput(state).records, []);
 });

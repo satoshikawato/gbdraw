@@ -1358,35 +1358,45 @@
                             <file-uploader label="GFF3 File" v-model="files.c_gff" accept=".gff,.gff3,.txt,text/plain,text/*"></file-uploader>
                             <file-uploader label="FASTA File" v-model="files.c_fasta" accept=".fa,.fas,.fasta,.fna,.ffn,.faa,.txt,text/plain,text/*"></file-uploader>
                         </div>
+                        <section aria-label="Source records" class="space-y-2">
+                            <p data-circular-discovery-status role="status" aria-live="polite" class="text-xs text-slate-600">
+                                <span v-if="circularRecordDiscoveryState.status === 'deferred'">Records not inspected</span>
+                                <span v-else-if="circularRecordDiscoveryState.status === 'loading'">Inspecting source records…</span>
+                                <span v-else-if="circularRecordDiscoveryState.status === 'ready'">{{ circularRecordDiscoveryState.records.length }} source record(s) inspected</span>
+                                <span v-else-if="circularRecordDiscoveryState.status === 'error'" class="text-red-600">{{ circularRecordDiscoveryState.error }}</span>
+                                <span v-else>{{ cInputType === 'gff' ? 'Upload both GFF3 and FASTA files to inspect records.' : 'Upload a source file to inspect records.' }}</span>
+                            </p>
+                            <button v-if="circularRecordDiscoveryState.hasInput" data-circular-inspect type="button" data-history-ignore @click="inspectCircularSourceRecords" :aria-disabled="!circularRecordInspectionEnabled" :aria-busy="circularRecordDiscoveryState.status === 'loading'" :class="circularRecordInspectionEnabled ? 'text-blue-600' : 'text-slate-400'" class="text-xs">{{ circularRecordDiscoveryState.status === 'error' ? 'Retry source inspection' : circularRecordDiscoveryState.status === 'ready' ? 'Inspect source records again' : 'Inspect source records' }}</button>
+                            <div>
+                                <label class="input-label text-[10px]">Record <help-tip text="Select one stable record identity for a single Circular diagram. Leave this on All records to keep separate-diagram batch output."></help-tip></label>
+                                <select
+                                    :value="form.circular_record_selector"
+                                    @change="setCircularRecordPresentationSelector($event.target.value)"
+                                    :disabled="!circularRecordSelectionEnabled"
+                                    aria-label="Circular record"
+                                    class="form-select w-full px-1 py-1 text-xs disabled:bg-slate-100 disabled:text-slate-500"
+                                >
+                                    <option
+                                        v-for="option in circularRecordPresentationOptions"
+                                        :key="`${option.value}:${option.synthetic ? 'synthetic' : 'record'}`"
+                                        :value="option.value"
+                                    >{{ option.label }}</option>
+                                </select>
+                                <p v-if="form.multi_record_canvas" class="mt-1 text-[9px] text-slate-500">Multi-Record Canvas uses a grid. Turn it off to select one record.</p>
+                                <p v-else-if="circularRecordPresentationError" class="mt-1 text-[9px] text-red-600">{{ circularRecordPresentationError }}</p>
+                                <button v-if="form.multi_record_canvas" type="button" data-history-ignore @click="showCircularCanvasSetting" class="mt-1 text-xs text-blue-600">Show Multi-Record Canvas setting</button>
+                                <p v-if="!form.multi_record_canvas && circularRecordDiscoveryState.status === 'ready' && !circularSingleRecordPresentationEnabled" class="mt-1 text-[9px] text-slate-500">Select one record to edit crop, orientation, and title lines.</p>
+                            </div>
+                        </section>
                         <section aria-label="Record rotation" class="space-y-2">
-                            <button v-if="(cInputType === 'gff' ? files.c_gff && files.c_fasta : files.c_gb) && !recordDisplayControls.rowsFor('circular').length" type="button" @click="refreshCircularRecordOrder" class="text-xs text-blue-600">Load record rotation controls</button>
                             <record-display-control v-for="row in recordDisplayControls.rowsFor('circular')" :key="row.key" :row="row" :controller="recordDisplayControls"></record-display-control>
                         </section>
-                        <details ref="circularRecordPresentationPanel" data-circular-record-presentation @toggle="$event.target.open && refreshCircularRecordOrder()" class="rounded border border-slate-200 bg-white/70 p-2">
-                            <summary aria-label="Circular record presentation">
+                        <details ref="circularRecordPresentationPanel" data-circular-record-presentation class="rounded border border-slate-200 bg-white/70 p-2">
+                            <summary aria-label="Circular record presentation" data-history-ignore>
                                 <i class="ph ph-selection"></i>
-                                Single-record presentation
+                                Single-record crop, orientation and titles
                             </summary>
                             <div class="pt-2 space-y-2">
-                                <div>
-                                    <label class="input-label text-[10px]">Record <help-tip text="Select one stable record identity for a single Circular diagram. Leave this on All records to keep separate-diagram batch output."></help-tip></label>
-                                    <select
-                                        :value="form.circular_record_selector"
-                                        @change="setCircularRecordPresentationSelector($event.target.value)"
-                                        :disabled="form.multi_record_canvas"
-                                        aria-label="Circular record"
-                                        class="form-select w-full px-1 py-1 text-xs disabled:bg-slate-100 disabled:text-slate-500"
-                                    >
-                                        <option
-                                            v-for="option in circularRecordPresentationOptions"
-                                            :key="`${option.value}:${option.synthetic ? 'synthetic' : 'record'}`"
-                                            :value="option.value"
-                                        >{{ option.label }}</option>
-                                    </select>
-                                    <p v-if="form.multi_record_canvas" class="mt-1 text-[9px] text-slate-500">Turn off Multi-Record Canvas to edit one record.</p>
-                                    <p v-else-if="circularRecordPresentationError" class="mt-1 text-[9px] text-red-600">{{ circularRecordPresentationError }}</p>
-                                    <p v-else-if="!circularSingleRecordPresentationEnabled" class="mt-1 text-[9px] text-slate-500">Select one record to edit crop, orientation, and title lines.</p>
-                                </div>
                                 <div class="grid grid-cols-1 gap-2" :class="circularSingleRecordPresentationEnabled ? '' : 'opacity-60'">
                                     <div>
                                         <label class="input-label text-[10px]">Record label <help-tip text="Overrides the inferred organism line for this Circular record. Leave empty to keep inference."></help-tip></label>
@@ -3152,7 +3162,7 @@
                                     </label>
 
                                     <label class="option-label flex items-center gap-2 text-xs text-slate-700 cursor-pointer select-none" title="Place multiple records on one shared circular canvas.">
-                                        <input type="checkbox" v-model="form.multi_record_canvas" class="form-checkbox">
+                                        <input type="checkbox" v-model="form.multi_record_canvas" data-circular-canvas-setting class="form-checkbox">
                                         <span>Multi-Record Canvas</span>
                                     </label>
                                     <label class="option-label flex items-center gap-2 text-xs text-slate-700 cursor-pointer select-none" title="Suppress the GC content track.">

@@ -3157,7 +3157,9 @@ const applyFiles = (filesData, { adoptCanonicalPayloads = false, resolveRecordIn
         };
       });
     Object.assign(state.circularRecordDiscovery, {
-      status: 'loading',
+      status: (state.cInputType.value === 'gff'
+        ? state.files.c_gff && state.files.c_fasta
+        : state.files.c_gb) ? 'deferred' : 'idle',
       error: '',
       inputType: state.cInputType.value,
       primaryFile: state.cInputType.value === 'gff'

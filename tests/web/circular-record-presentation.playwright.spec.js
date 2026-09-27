@@ -1,5 +1,5 @@
 const { test, expect } = require('@playwright/test');
-const { readFileSync } = require('node:fs');
+const { readFileSync, writeFileSync } = require('node:fs');
 const { join, resolve } = require('node:path');
 const {
   generateAndWaitForResult,
@@ -106,6 +106,7 @@ test('Circular single-record presentation selects, transforms, titles, and round
     reverseComplement: true
   });
   expect(cropReverse.canonicalRecord.presentation.reverseComplement).toBe(false);
+  writeFileSync(testInfo.outputPath('circular-record-presentation.svg'), cropReverse.content);
   const renderedSvg = page.locator('main svg').last();
   await expect(renderedSvg).toBeVisible();
   await renderedSvg.screenshot({
@@ -146,11 +147,134 @@ test('Circular single-record presentation selects, transforms, titles, and round
   expect(regenerated.canonicalRecord.presentation.reverseComplement).toBe(false);
   expect(new Set(regenerated.recordIds)).toEqual(new Set(['BGC0000709']));
 
-  await presentationDetails.locator('summary').click();
+  await expect(presentationDetails).toHaveAttribute('open', '');
   await page.getByLabel('Circular record label').fill('');
   await page.getByLabel('Circular record subtitle').fill('');
   await generateAndWaitForResult(page);
   const inferred = await inspectCircularResult(page);
   expect(inferred.text).toContain('Streptomyces fradiae');
   expect(inferred.text).not.toContain('Selected second record');
+});
+
+const singleSource = readFileSync(join(repoRoot, 'tests/fixtures/sessions/cli-web-mito.gb'), 'utf8');
+const panel = (page) => page.locator('[data-circular-record-presentation]');
+const ready = (page) => expect.poll(() => page.evaluate(async () => (
+  (await import('./js/state.js')).state.circularRecordDiscovery.status
+))).toBe('ready');
+const nativeUpload = (page, content, name = 'presentation.gb') => page.getByLabel('GenBank/DDBJ File', { exact: true })
+  .setInputFiles({ name, mimeType: 'text/plain', buffer: Buffer.from(content) });
+
+for (const width of [1280, 390]) {
+  test(`applicable disclosure keeps manual close, focus, scroll and keyboard at ${width}px`, async ({ page }, testInfo) => {
+    await page.setViewportSize({ width, height: 900 });
+    await openApp(page);
+    await page.evaluate(() => { window.__GBDRAW_APP__.form.multi_record_canvas = false; });
+    const upload = page.getByRole('button', { name: 'Choose GenBank/DDBJ File', exact: true });
+    await upload.focus();
+    const uploadAnchor = await upload.boundingBox();
+    await nativeUpload(page, singleSource);
+    await ready(page);
+    await expect(upload).toBeFocused();
+    await expect.poll(async () => Math.abs((await upload.boundingBox()).y - uploadAnchor.y)).toBeLessThanOrEqual(2);
+    await expect(panel(page)).toHaveAttribute('open', '');
+    await expect(page.getByLabel('Circular region start')).toBeEnabled();
+    const baseline = await page.evaluate(() => window.__GBDRAW_HISTORY__.getUndoCount());
+    const summary = panel(page).locator('summary');
+    await summary.focus();
+    await page.keyboard.press('Enter');
+    await expect(panel(page)).not.toHaveAttribute('open', '');
+    await expect(summary).toBeFocused();
+    await page.evaluate(() => { window.__GBDRAW_APP__.form.plot_title = 'Unrelated update'; });
+    await expect(panel(page)).not.toHaveAttribute('open', '');
+    expect(await page.evaluate(() => window.__GBDRAW_HISTORY__.getUndoCount())).toBe(baseline);
+    await page.keyboard.press('Space');
+    await expect(panel(page)).toHaveAttribute('open', '');
+    await page.keyboard.press('Enter');
+    await nativeUpload(page, `${firstGenbank}\n${secondGenbank}`, 'two.gb');
+    await ready(page);
+    await expect(panel(page)).not.toHaveAttribute('open', '');
+    const selector = page.getByLabel('Circular record', { exact: true });
+    await selector.focus();
+    const before = await selector.boundingBox();
+    await selector.selectOption('BGC0000709');
+    await expect(panel(page)).toHaveAttribute('open', '');
+    await expect(selector).toBeFocused();
+    await expect.poll(async () => Math.abs((await selector.boundingBox()).y - before.y))
+      .toBeLessThanOrEqual(2);
+    expect(await page.evaluate(() => window.__GBDRAW_APP__.form.circular_record_selector)).toBe('BGC0000709');
+    expect(await page.evaluate(() => window.__GBDRAW_APP__.form.multi_record_canvas)).toBe(false);
+    await summary.focus();
+    await page.keyboard.press('Enter');
+    await page.evaluate(() => { window.__GBDRAW_APP__.adv.def_font_size += 1; });
+    await expect(panel(page)).not.toHaveAttribute('open', '');
+    await selector.selectOption('BGC0000708');
+    await expect(panel(page)).toHaveAttribute('open', '');
+    if (width === 390) {
+      expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(width);
+    }
+    await page.locator('.settings-pane').screenshot({ path: testInfo.outputPath(`disclosure-${width}.png`) });
+  });
+}
+
+test('grid and explicit batch explain applicability outside disclosure and require an explicit one-record choice', async ({ page }) => {
+  await openApp(page);
+  await page.evaluate(() => { window.__GBDRAW_APP__.form.multi_record_canvas = false; });
+  await nativeUpload(page, `${firstGenbank}\n${secondGenbank}`);
+  await ready(page);
+  await expect(panel(page)).not.toHaveAttribute('open', '');
+  await expect(page.getByText('Select one record to edit crop, orientation, and title lines.', { exact: true })).toBeVisible();
+  await page.evaluate(() => { window.__GBDRAW_APP__.form.multi_record_canvas = true; });
+  await expect(page.getByLabel('Circular record', { exact: true })).toBeDisabled();
+  const action = await page.evaluate(() => window.__GBDRAW_APP__.setCircularRecordPresentationSelector('BGC0000708'));
+  expect(action.status).toBe('unavailable');
+  expect(await page.evaluate(() => window.__GBDRAW_APP__.form.circular_record_selector)).toBe('');
+  await expect(page.getByText('Multi-Record Canvas uses a grid. Turn it off to select one record.', { exact: true })).toBeVisible();
+  await page.getByRole('button', { name: 'Show Multi-Record Canvas setting' }).click();
+  const grid = page.locator('[data-circular-canvas-setting]');
+  await expect(grid).toBeFocused();
+  await expect(grid).toBeChecked();
+  await page.keyboard.press('Space');
+  await page.getByLabel('Circular record', { exact: true }).selectOption('BGC0000709');
+  await expect(panel(page)).toHaveAttribute('open', '');
+  await expect(page.getByLabel('Circular region start')).toBeEnabled();
+  // A saved one-record batch remains a batch until the user selects that record.
+  await page.evaluate(() => {
+    window.__GBDRAW_APP__.form.circular_record_selector = '';
+    window.__GBDRAW_APP__.adv.circular_grouping_intent = 'batch';
+  });
+  await nativeUpload(page, singleSource);
+  await ready(page);
+  await expect(page.getByLabel('Circular region start')).toBeDisabled();
+  await expect(page.getByText('Select one record to edit crop, orientation, and title lines.', { exact: true })).toBeVisible();
+  expect(await page.evaluate(() => window.__GBDRAW_APP__.adv.circular_grouping_intent)).toBe('batch');
+  await page.getByLabel('Circular record', { exact: true }).selectOption('NC_012920.1');
+  await expect(page.getByLabel('Circular region start')).toBeEnabled();
+});
+
+test('History restore re-inspects sources and reconciles missing or ambiguous selectors without changing crop intent', async ({ page }) => {
+  await openApp(page);
+  await page.evaluate(() => { window.__GBDRAW_APP__.form.multi_record_canvas = false; });
+  await nativeUpload(page, singleSource);
+  await ready(page);
+  await expect.poll(() => page.evaluate(() => window.__GBDRAW_HISTORY__.getUndoCount())).toBe(1);
+  await page.getByRole('button', { name: 'Undo', exact: true }).click();
+  await expect.poll(() => page.evaluate(async () => (await import('./js/state.js')).state.circularRecordDiscovery.status)).toBe('idle');
+  await page.getByRole('button', { name: 'Redo', exact: true }).click();
+  await ready(page);
+  expect(await page.evaluate(() => window.__GBDRAW_APP__.circularRecordList.length)).toBe(1);
+  await page.getByLabel('Circular region start').fill('25');
+  await page.getByLabel('Circular region end').fill('100');
+  await page.getByLabel('Circular region end').blur();
+  await page.evaluate(() => { window.__GBDRAW_APP__.form.circular_record_selector = 'missing'; });
+  await expect(page.getByLabel('Circular region start')).toBeDisabled();
+  await expect(page.getByText("Record selector 'missing' was not found in the current input.", { exact: true })).toBeVisible();
+  await nativeUpload(page, `${singleSource}\n${singleSource}`);
+  await ready(page);
+  await page.evaluate(() => { window.__GBDRAW_APP__.form.circular_record_selector = 'NC_012920.1'; });
+  await expect(page.getByLabel('Circular region start')).toBeDisabled();
+  await expect(page.getByText("Record selector 'NC_012920.1' is ambiguous in the current input.", { exact: true })).toBeVisible();
+  await page.getByLabel('Circular record', { exact: true }).selectOption('#2');
+  await expect(page.getByLabel('Circular region start')).toBeEnabled();
+  await expect(page.getByLabel('Circular region start')).toHaveValue('25');
+  await expect(page.getByLabel('Circular region end')).toHaveValue('100');
 });
