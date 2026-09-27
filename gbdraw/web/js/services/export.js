@@ -65,7 +65,7 @@ const getDownloadName = (snapshot, extension) => {
   return normalized;
 };
 
-const getCurrentSvgClone = (snapshot, { interactive = false } = {}) => {
+const getCurrentSvgClone = (snapshot) => {
   const clone = snapshot.svg || getSvgFromString(snapshot.svgContent);
   if (clone) {
     if (!clone.getAttribute('xmlns')) {
@@ -78,7 +78,7 @@ const getCurrentSvgClone = (snapshot, { interactive = false } = {}) => {
   if (!clone) {
     throw new Error('No SVG result is available for export.');
   }
-  stripTransientPreviewState(clone, { stripCursor: !interactive });
+  stripTransientPreviewState(clone);
   stripPreviewFeatureSearchClasses(clone);
   return clone;
 };
@@ -89,7 +89,7 @@ const getCurrentSvgString = (snapshot) => (
 
 const getInteractiveSvgString = async (snapshot) => {
   const { enrichSvgWithStandaloneInteractivity } = await loadStandaloneInteractivity();
-  const clone = getCurrentSvgClone(snapshot, { interactive: true });
+  const clone = getCurrentSvgClone(snapshot);
   const enriched = enrichSvgWithStandaloneInteractivity(clone, snapshot.interactivity);
   if (!enriched) {
     throw new Error('Interactive SVG export requires the committed feature catalog.');

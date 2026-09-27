@@ -9,7 +9,7 @@ import {
   isMultiRecordCanvasSvg,
   isRecordGroup
 } from '../record-groups.js';
-import { serializeCleanSvg } from '../../services/svg-serialization.js';
+import { serializeCleanSvg, setClassToken } from '../../services/svg-serialization.js';
 
 export const createDiagramDragActions = ({
   state,
@@ -249,8 +249,11 @@ export const createDiagramDragActions = ({
       }
     });
 
-    setElementCursor(lengthBarElement.value, enabled ? 'grab' : '');
-    setElementCursor(plotTitleElement.value, enabled ? 'grab' : '');
+    [lengthBarElement.value, plotTitleElement.value].forEach((element) => {
+      setClassToken(element, 'gbdraw-preview-layout-target', true);
+      setElementCursor(element, activeDragElements.includes(element) && diagramDragging.value
+        ? 'grabbing' : enabled ? 'grab' : 'help');
+    });
   };
 
   const startLengthBarDrag = (e, group) => {
@@ -272,6 +275,7 @@ export const createDiagramDragActions = ({
     activeDragOriginalTransforms = new Map([[group, parseTransform(group.getAttribute('transform'))]]);
     group.style.opacity = '0.8';
     group.style.willChange = 'transform';
+    setElementCursor(group, 'grabbing');
 
     document.addEventListener('mousemove', onDiagramDrag);
     document.addEventListener('mouseup', endDiagramDrag);
@@ -296,6 +300,7 @@ export const createDiagramDragActions = ({
     activeDragOriginalTransforms = new Map([[group, parseTransform(group.getAttribute('transform'))]]);
     group.style.opacity = '0.8';
     group.style.willChange = 'transform';
+    setElementCursor(group, 'grabbing');
 
     document.addEventListener('mousemove', onDiagramDrag);
     document.addEventListener('mouseup', endDiagramDrag);
@@ -368,6 +373,7 @@ export const createDiagramDragActions = ({
       activeDragOriginalTransforms.set(el, parseTransform(el.getAttribute('transform')));
       el.style.opacity = '0.8';
       el.style.willChange = 'transform';
+      setElementCursor(el, 'grabbing');
     });
 
     document.addEventListener('mousemove', onDiagramDrag);
@@ -454,6 +460,7 @@ export const createDiagramDragActions = ({
     activeLengthBarOffsetStart = { x: lengthBarUserOffset.x, y: lengthBarUserOffset.y };
     activePlotTitleOffsetStart = { x: plotTitleUserOffset.x, y: plotTitleUserOffset.y };
     pendingDiagramPointer = null;
+    refreshDiagramDragAffordances();
     if (completedDragMode === 'record') {
       similarityAlignmentLifecycle?.afterRecordDrag?.({
         moved: Math.abs(deltaX) > 1e-9 || Math.abs(deltaY) > 1e-9

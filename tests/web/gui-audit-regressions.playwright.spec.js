@@ -86,6 +86,8 @@ test('selected D-loop without gene or locus_tag generates a feature annotation',
 test('label search includes live edits and reports the initial rendered feature count', async ({ page }) => {
   test.setTimeout(180000);
   await session(page);
+  await page.getByRole('button', { name: 'Toggle layout edit mode' }).click();
+  await expect(page.getByRole('button', { name: 'Toggle layout edit mode' })).toHaveAttribute('aria-pressed', 'true');
   const status = page.getByRole('status', { name: 'Feature search status' });
   await expect(status).toHaveText('0 / 37 features');
   const search = page.getByRole('searchbox', { name: 'Search features', exact: true });
@@ -208,8 +210,13 @@ test('a failed PDF font request can be retried without reloading the diagram', a
   test.setTimeout(180000);
   await session(page);
   await page.route('**/gbdraw-*-py3-none-any.whl*', (route) => route.abort());
-  expect(await page.evaluate(() => window.__GBDRAW_APP__.downloadPDF())).toEqual({ status: 'error' });
-  await expect.poll(() => page.evaluate(() => window.__GBDRAW_APP__.errorLog?.type)).toBe('Export error');
+  expect(await page.evaluate(() => window.__GBDRAW_APP__.downloadPDF())).toMatchObject({
+    status: 'error', error: { code: 'WORKER_INIT', operation: 'export-pdf', stage: 'initialization' }
+  });
+  await expect(page.getByRole('alert', { name: 'PDF export error' })).toBeVisible();
+  expect(await page.evaluate(() => window.__GBDRAW_APP__.errorLog)).toMatchObject({
+    operation: 'export-pdf', stage: 'initialization'
+  });
   await page.unroute('**/gbdraw-*-py3-none-any.whl*');
   const pending = page.waitForEvent('download');
   await page.evaluate(() => window.__GBDRAW_APP__.downloadPDF());
@@ -264,7 +271,8 @@ test('invalid annotation coordinates preserve the draft and the last successful 
   await panel.getByPlaceholder('Start (1-based)', { exact: true }).fill('1.5');
   await panel.getByPlaceholder('Start (1-based)', { exact: true }).press('Tab');
   expect((await page.evaluate(() => window.__GBDRAW_APP__.runAnalysis())).status).toBe('error');
-  expect(await page.evaluate(() => window.__GBDRAW_APP__.errorLog)).toMatchObject({ summary: expect.stringContaining('positive integers') });
+  expect(await page.evaluate(() => window.__GBDRAW_APP__.errorLog)).toMatchObject({ code: 'ANNOTATION_TARGET', context: { reason: 'POSITIVE_INTEGER' },
+    summary: expect.stringContaining('integer greater than zero') });
   expect(await page.evaluate(() => window.__GBDRAW_APP__.results[0].content)).toBe(oldResult);
   await panel.getByPlaceholder('Start (1-based)', { exact: true }).fill('1');
   await generateAndWaitForResult(page);

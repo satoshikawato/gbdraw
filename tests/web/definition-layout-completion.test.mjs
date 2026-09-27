@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { readFile } from 'node:fs/promises';
+import { setClassToken } from '../../gbdraw/web/js/services/svg-serialization.js';
 import * as transforms from '../../gbdraw/web/js/app/legend-layout/transform-utils.js';
 
 // Load the existing owners with a controlled scheduler and Worker response.
@@ -26,7 +27,7 @@ test('incremental rebind adopts the replacement scale geometry, retaining same-r
   const root = { getAttribute: () => '1', getElementById: id => id === 'length_bar' ? activeBar : null,
     addEventListener() {}, removeEventListener() {} };
   const create = await loadOwner('legend-layout/diagram-drag.js', 'createDiagramDragActions', {
-    ...transforms, COMPOSITION_SCHEMA_ATTRIBUTE: 'schema', bindCompositionMetadata: () => binding,
+    ...transforms, setClassToken, COMPOSITION_SCHEMA_ATTRIBUTE: 'schema', bindCompositionMetadata: () => binding,
     compositionUserDeltas: () => ({ primary: [] })
   });
   const state = Object.fromEntries(['results','selectedResultIndex','diagramElements','diagramElementIds',

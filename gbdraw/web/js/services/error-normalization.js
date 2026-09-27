@@ -7,7 +7,7 @@ const STAGES = new Set(['unknown', 'initialization', 'resource-staging', 'reques
   'helper', 'rule-validation', 'render', 'result-admission', 'cleanup', 'export-capture', 'export-conversion', 'font-validation']);
 const FIELDS = new Set(`legend title scale decorations pattern record_selector region start end sourceStart sourceEnd recordLength
 recordIndex queryIndex subjectIndex depth min_depth max_depth window step tick font_size plot_title_font_size height large_tick_interval small_tick_interval tick_font_size
-inner_gap_px outer_gap_px radius width color action feature_type qualifier value record_id label_text
+inner_gap_px outer_gap_px radius width spacing arrow_head_length_ratio arrow_shaft_width_ratio keep_definition_left_aligned color action feature_type qualifier value record_id label_text
 config configOverrides records anchors schema recordKey groupId direction sourceStrand role blast files
 input comparison protein_blastp_max_hits orthogroup_member_max_hits bitscore evalue identity
 alignment_length collinear_min_anchors collinear_max_gene_gap collinear_block_merge_gap
@@ -40,6 +40,18 @@ const REASONS = Object.freeze({
   COLLINEAR_COLOR_MODE: 'Choose average_identity, orientation, or orientation_identity.',
   ORTHOGROUP_MEMBERSHIP_MODE: 'Choose anchor_core_v1.',
 
+  UNKNOWN_CONFIG_PATH: 'Remove unknown configuration overrides or use a supported setting.',
+  RESOURCE_SIZE: 'Session resource byte sizes must be non-negative safe integers.',
+  TRACK_SCHEMA: 'Recreate Custom Track Slots with the current schema.',
+  SESSION_FIELDS: 'Remove unsupported top-level Session fields.',
+  RECORDS_REQUIRED: 'Session render requests require at least one record.',
+  POSITIVE_UNIT_INTERVAL: 'Use a finite number greater than zero and at most one.',
+  PIXEL_POSITIVE: 'Use a finite number of pixels greater than zero (px optional).',
+  PIXEL_NONNEGATIVE: 'Use a finite number of pixels of zero or greater (px optional).',
+  POSITIVE_SCALAR: 'Use a positive finite px or factor scalar.',
+  CIRCULAR_GAPS: 'Use inner_gap_px and outer_gap_px for physical gaps.',
+  SEPARATE_LINEAR_ROWS: 'Turn Normalize Record Lengths off or assign each record to a separate Linear row.',
+  GFF_FASTA_MATCH: 'Ensure every GFF3 record has a matching FASTA entry.',
   UNTERMINATED_SET: 'Close the character set with ].',
   UNTERMINATED_GROUP: 'Close the group with ).', UNBALANCED_GROUP: 'Check the matching parentheses.',
   NOTHING_TO_REPEAT: 'Place a value before the repetition operator.', MULTIPLE_REPEAT: 'Remove the repeated repetition operator.',
@@ -75,6 +87,7 @@ const REASONS = Object.freeze({
 });
 const DEFINITIONS = Object.freeze({
   DECORATION_CONTINUITY: ['Could not preserve decoration placement. Reset the affected position or use Reset Layout on the previous Result, or restore matching settings, then Generate again.', ['edit-input', 'retry', 'save-session']],
+  GENERATION_BUSY: ['A diagram generation request is already running. Wait for it to finish before retrying.', ['retry', 'save-session']],
   UNKNOWN: ['The operation failed without recognized diagnostic information. Retry; if it continues, save a Session for investigation.', ['retry', 'save-session']],
   VALIDATION_UNCLASSIFIED: ['Input validation failed. Review the inputs before retrying.', ['review-input', 'retry']],
   INPUT_INVALID: ['An input value is invalid.', ['edit-input', 'retry']],
@@ -107,7 +120,9 @@ const DEFINITIONS = Object.freeze({
   CLEANUP_FAILED: ['Temporary resource cleanup failed. Save a Session and reload before retrying.', ['save-session', 'reload', 'retry']]
 });
 
-const FIELD_LABELS = Object.freeze({ protein_blastp_max_hits: 'Protein BLASTP Pairwise max hits' });
+const FIELD_LABELS = Object.freeze({ protein_blastp_max_hits: 'Protein BLASTP Pairwise max hits',
+  arrow_head_length_ratio: 'Arrow head length ratio', arrow_shaft_width_ratio: 'Arrow shaft width ratio',
+  keep_definition_left_aligned: 'Lock Definition Column' });
 const CODES = new Set(Object.keys(DEFINITIONS));
 // Exact native JS validation messages with no document interpolation.
 const NATIVE_VALIDATIONS = new Map([
@@ -217,8 +232,36 @@ for (const message of [
   'Settings-only Session cannot contain committed render artifacts.'
 ]) NATIVE_VALIDATIONS.set(message, { code: 'INPUT_INVALID', stage: 'request-validation',
   context: { field: 'schema', reason: 'FIELDS' } });
+NATIVE_VALIDATIONS.set('A diagram generation request is already running.',
+  { code: 'GENERATION_BUSY', stage: 'render' });
+NATIVE_VALIDATIONS.set('Arrow head length ratio must be Auto or a positive finite number.',
+  { code: 'INPUT_INVALID', stage: 'request-validation', context: { field: 'arrow_head_length_ratio', reason: 'POSITIVE_OR_AUTO' } });
+NATIVE_VALIDATIONS.set('Arrow shaft width ratio must be a finite number greater than 0 and at most 1.',
+  { code: 'INPUT_INVALID', stage: 'request-validation', context: { field: 'arrow_shaft_width_ratio', reason: 'POSITIVE_UNIT_INTERVAL' } });
+NATIVE_VALIDATIONS.set('Normalize Record Lengths cannot be used when multiple records share the same Linear row. Turn Normalize off or assign each record to a separate row.',
+  { code: 'INPUT_INVALID', stage: 'request-validation', context: { field: 'config', reason: 'SEPARATE_LINEAR_ROWS' } });
+NATIVE_VALIDATIONS.set('Current session active configuration config.form.keep_definition_left_aligned must be a boolean.',
+  { code: 'INPUT_INVALID', stage: 'request-validation', context: { field: 'keep_definition_left_aligned', reason: 'BOOLEAN' } });
+for (const [message, reason] of [
+  ['Circular region requires both Start and End coordinates.', 'BOTH_ENDPOINTS'],
+  ['Circular region Start and End must be positive integers.', 'POSITIVE_INTEGER'],
+  ['Circular region Start must not exceed End. Use Reverse complement to change display orientation.', 'ORDER']
+]) NATIVE_VALIDATIONS.set(message, { code: 'REGION_INVALID', stage: 'request-validation',
+  context: { field: 'region', reason } });
+NATIVE_VALIDATIONS.set('Canonical renderRequest records are required.',
+  { code: 'INPUT_INVALID', stage: 'request-validation', context: { field: 'schema', reason: 'RECORDS_REQUIRED' } });
+for (const message of ['The preserved comparison is missing a required resource.',
+  'The saved comparison is missing a required resource.',
+  'The saved Circular comparison is missing a required resource.']) NATIVE_VALIDATIONS.set(message,
+  { code: 'COMPARISON_INPUT', stage: 'request-validation', context: { field: 'comparison', reason: 'REQUIRED' } });
 const nativeValidation = (message) => {
   if (typeof message !== 'string') return null;
+  if (/^Circular region End \([0-9]+\) exceeds the selected record length \([0-9]+\)\.$/.test(message)) return { code: 'REGION_INVALID', stage: 'request-validation', context: { field: 'region', reason: 'RECORD_BOUNDS' } };
+  for (const [template, reason] of [
+    [/^Session resource [\s\S]* has an invalid declared byte size\.$/, 'RESOURCE_SIZE'],
+    [/^Custom Track Slots use an obsolete schema\. Recreate the slots with schema version [0-9]+\.$/, 'TRACK_SCHEMA'],
+    [/^Session contains unclassified top-level field\(s\): [\s\S]*$/, 'SESSION_FIELDS']
+  ]) if (template.test(message)) return { code: 'INPUT_INVALID', stage: 'request-validation', context: { field: 'schema', reason } };
   if (/^Session version [0-9]+ is newer than this gbdraw supports \([0-9]+\)\.$/.test(message)) return { code: 'INPUT_INVALID', stage: 'request-validation', context: { field: 'schema', reason: 'FIELDS' } };
   if (/^Invalid managed flag for (?:circular|linear)\.[a-z_]+\.$/.test(message)) return { code: 'INPUT_INVALID', stage: 'request-validation', context: { field: 'config', reason: 'FIELDS' } };
   if (/^Missing canonical resource:/.test(message) || /^Session resource [\s\S]* has an unsupported encoded payload\.$/.test(message)) return { code: 'INPUT_INVALID', stage: 'request-validation', context: { field: 'schema', reason: 'FIELDS' } };
@@ -231,6 +274,12 @@ const nativeValidation = (message) => {
   if (/^Invalid region (?:spec|coordinates) for LOSAT FASTA extraction: [\s\S]*$/.test(message)) {
     return { code: 'REGION_INVALID', stage: 'request-validation', context: { reason: 'REGION_FORMAT' } };
   }
+  const pixel = /^(?:Circular|Linear) track slot '[\s\S]*' (height|spacing|inner_gap_px|outer_gap_px) must be (nonnegative|positive) finite number of pixels \(px optional\)\.$/.exec(message);
+  if (pixel) return { code: 'TRACK_INVALID', stage: 'request-validation', context: {
+    field: pixel[1], reason: pixel[2] === 'positive' ? 'PIXEL_POSITIVE' : 'PIXEL_NONNEGATIVE' } };
+  const scalar = /^Circular track slot '[\s\S]*' (radius|width) must be a positive finite px or factor scalar\.$/.exec(message);
+  if (scalar) return { code: 'TRACK_INVALID', stage: 'request-validation', context: { field: scalar[1], reason: 'POSITIVE_SCALAR' } };
+  if (/^Circular track slot '[\s\S]*' uses obsolete field '(?:spacing|strict|compress|reserve)'\. Use inner_gap_px and outer_gap_px for physical gaps\.$/.test(message)) return { code: 'TRACK_INVALID', stage: 'request-validation', context: { reason: 'CIRCULAR_GAPS' } };
   const order = /^Start position \([0-9]+\) must be less than end position \([0-9]+\)\.$/.test(message);
   if (order) return { code: 'REGION_INVALID', stage: 'request-validation', context: { reason: 'STRICT_ORDER' } };
   const selector = /^Record selector #[0-9]+ is out of range \(loaded ([0-9]+) record\(s\)\)\.$/.exec(message);
@@ -284,7 +333,7 @@ const TRACK_ISSUES = Object.freeze({
   slot_not_object: ['OBJECT'], enabled_not_boolean: ['BOOLEAN'], linear_slots_empty: ['REQUIRED'],
   axis_out_of_range: ['TRACK_AXIS', 'axis'], id_required: ['REQUIRED'], id_duplicate: ['UNIQUE_IDS'],
   renderer_unsupported: ['TRACK_RENDERER', 'renderer'], side_unsupported: ['TRACK_SIDE', 'side'],
-  params_not_object: ['OBJECT'], geometry_invalid: ['NONNEGATIVE'], z_invalid: ['INTEGER', 'z'],
+  params_not_object: ['OBJECT'], z_invalid: ['INTEGER', 'z'],
   generic_param: ['TRACK_PARAMS'], renderer_param_mismatch: ['TRACK_PARAMS'], feature_lane: ['TRACK_LANE'],
   feature_lane_side_conflict: ['TRACK_LANE', 'side'], overlay_renderer_unsupported: ['TRACK_SIDE', 'side'],
   conservation_overlay: ['TRACK_SIDE', 'side'], ticks_obsolete_param: ['TICK_PARAMETER'],
@@ -302,6 +351,12 @@ const TRACK_ISSUES = Object.freeze({
 });
 const typedTrackValidation = (error) => {
   const issue = Array.isArray(error.issues) ? error.issues[0] : null;
+  if (issue?.code === 'geometry_invalid') {
+    const geometry = nativeValidation(issue.message);
+    return geometry?.code === 'TRACK_INVALID'
+      ? { ...geometry, context: { ...geometry.context, slotIndex: issue.rowIndex } }
+      : { code: 'VALIDATION_UNCLASSIFIED', stage: 'request-validation', context: {} };
+  }
   const correction = issue && typeof issue.code === 'string' && issue.code.length <= 80 && Object.hasOwn(TRACK_ISSUES, issue.code) ? TRACK_ISSUES[issue.code] : null;
   return { code: correction ? 'TRACK_INVALID' : 'VALIDATION_UNCLASSIFIED', stage: 'request-validation',
     context: correction ? { reason: correction[0], field: correction[1], slotIndex: issue.rowIndex } : {} };

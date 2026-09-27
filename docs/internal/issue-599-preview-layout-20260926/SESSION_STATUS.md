@@ -3,7 +3,7 @@
 対象ブランチ: `fix/issue-599-preview-layout-20260926`。
 計画基準: `origin/dev@d457b7189b137185a8dec800819a312c30b969fa`。
 
-2026-09-28更新。製品結果の3案 A を OIPC revision 25 の PD-OI-052–054 に記録・検証し、[PR #634](https://github.com/satoshikawato/gbdraw/pull/634) の必須 checks 成功後に dev `007388567222638b707fbb16fe82dbeba61551c9` へ merge 済み。**S00 / S01 完了、次は S02**。S01 の装飾差分継承と担当受入検証を完了した。公開 SHA は同名 branch の Git 履歴・終了報告で確認する。全統合・remote checks・integrated dev staging は S04 の残件である。
+2026-09-28更新。製品結果の3案 A を OIPC revision 25 の PD-OI-052–054 に記録・検証し、[PR #634](https://github.com/satoshikawato/gbdraw/pull/634) の必須 checks 成功後に dev `007388567222638b707fbb16fe82dbeba61551c9` へ merge 済み。**S00 / S01 / S02 完了、次は S03**。S01 の装飾差分継承と S02 の明示 Layout edit 操作説明・保存/export 担当検証を完了した。公開 SHA は同名 branch の Git 履歴・終了報告で確認する。全統合・remote checks・integrated dev staging は S04 の残件である。
 担当者は開始前に前セッションの commit/push と単一 writer を確認し、終了時にこの表と担当結果文書を更新する。
 
 | セッション | 状態 | 結果文書 | 次の開始条件 |
@@ -11,7 +11,7 @@
 | 計画作成 | 文書作成済み。公開 SHA は Git 履歴・終了報告で確認 | MASTER_PLAN / 個別 prompts / 承認 Pack | 計画 commit が同名 remote branch に存在 |
 | S00 / authority | 完了。OIPC単独PR #634はrequired checks成功・dev merge済み。同期後のdocs-only Gate PASS | [results/S00.md](results/S00.md) | retained checkout で最新devの完全な3 outcomeと関連authorityを確認してS01へ |
 | S01 / 配置継承 | 実装・担当検証完了。同名branchへcommit/push | [results/S01.md](results/S01.md) | 公開SHAのlocal/remote一致・clean treeとS01証拠を確認してS02へ |
-| S02 / 操作説明 | 未着手 | 終了時に `results/S02.md` を作成 | S02 commit/push、A01–A02 の証拠 |
+| S02 / 操作説明 | 実装・担当検証完了。同名branchへcommit/push | [results/S02.md](results/S02.md) | S02公開SHAのlocal/remote一致・clean treeと証拠を確認してS03へ |
 | S03 / chrome | 未着手 | 終了時に `results/S03.md` を作成 | S03 commit/push、P01–P03 の証拠 |
 | S04 / 統合 | 未着手 | 終了時に `results/S04.md` を作成 | 全受入と適用 gate、文書・diff review。未達の merge後 staging は別記 |
 
@@ -35,3 +35,7 @@ S00 の authority base は `origin/dev@ecb96a065d808addff0fb088f9eb6b6ba3c92a6d`
 ## S01 handoff
 
 入力HEADは `ba533ee105fc51c60dcc5bb88c825e65e644e1d3`、authority baseは `origin/dev@007388567222638b707fbb16fe82dbeba61551c9`。devは既にancestorのため追加merge不要。matched decoration deltaを既存candidate transactionに継承し、非ゼロ対応不能は旧Result/request/Historyを保持して停止する。実Gallery Circular/Linearのpointer drag → Generate 2回、batch、History/Session/export、zero fast path、failure isolationを検証した。trusted-base Gate PASS / Review REQUIRED。比較wrapperの300秒timeoutと直接spec検証を区別してS04へ渡す。詳細は[S01](results/S01.md)。S02/S03は未実装、PR作成・dev merge・deployは未実施。
+
+## S02 handoff
+
+入力 HEAD / S01 公開 SHA は `72eca074fa5ead71a8bb849e577e7cffaf21bc29`、開始 authority base は `origin/dev@007388567222638b707fbb16fe82dbeba61551c9`。終了 fetch の新 dev `f8577629189db36dfff0fa6aa0d7ee00d6b4f964` は通常mergeで取り込み、診断定義を両側保持して統合検査した。PD-OI-052–054 の完全 outcome / receipt / 全9フィールドを確認した。OFF の eligible target に help/hover説明、ON grab/drag中 grabbing、keyboard/touchへ常設説明と明示toggleを接続した。実 Circular/Linear、編集/modifier、record/alignment、History/Session/Generate再bind、実SVG/interactive SVG/PNG/PDFとshared clean sourceを検証。trusted-base Gate PASS / Review REQUIRED。詳細・修正前失敗・source blob SHA・残件は [S02](results/S02.md)。S03/S04は未実装。S03は共通開始手順とS02公開状態を確認して開始し、公開文書/Gallery更新はS04へ引き継ぐ。

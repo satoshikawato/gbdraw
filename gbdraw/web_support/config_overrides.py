@@ -15,6 +15,7 @@ from gbdraw.config.modify import (
 )
 from gbdraw.config.models import GbdrawConfig
 from gbdraw.exceptions import ValidationError
+from gbdraw.web_support.error_adapter import serialize_web_error
 
 
 def _raw_config_leaf(config: Mapping[str, Any], path: str) -> object:
@@ -154,10 +155,10 @@ def validate_web_config_overrides_json(
             require_unmanaged_only=bool(require_unmanaged_only),
         )
     except ValidationError as exc:
-        return json.dumps({"error": str(exc)}, ensure_ascii=False)
-    except (KeyError, TypeError, ValueError):
+        return json.dumps({"error": serialize_web_error(exc, operation="validateConfigOverrides", stage="helper")}, ensure_ascii=False)
+    except (KeyError, TypeError, ValueError) as exc:
         return json.dumps(
-            {"error": "Web config override payload is invalid."},
+            {"error": serialize_web_error(exc, operation="validateConfigOverrides", stage="helper")},
             ensure_ascii=False,
         )
     return json.dumps({"overrides": projected}, ensure_ascii=False)

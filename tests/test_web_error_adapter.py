@@ -185,3 +185,24 @@ def test_native_alignment_region_correction(region, reason):
     result = serialize_web_error(caught.value, operation='resolveSimilarityAlignment', stage='helper')
     assert result['code'] == 'INPUT_INVALID'
     assert result['context'] == {'field': 'region', 'reason': reason}
+
+
+def test_missing_gff_fasta_match_keeps_correction_without_record_name():
+    error = ParseError(
+        "No matching FASTA record found for GFF record PRIVATE_RECORD. "
+        "Please ensure that all GFF records have corresponding FASTA entries."
+    )
+    model = serialize_web_error(error, operation='generate', stage='render')
+    assert model['code'] == 'FASTA_REQUIRED'
+    assert model['context'] == {'reason': 'GFF_FASTA_MATCH'}
+    assert 'PRIVATE_' not in json.dumps(model)
+
+
+def test_unknown_config_path_keeps_correction_without_private_path():
+    from gbdraw.config.modify import validate_config_overrides
+    with pytest.raises(ValidationError) as caught:
+        validate_config_overrides({'PRIVATE_PATH': 1})
+    model = serialize_web_error(caught.value, operation='validateConfigOverrides', stage='helper')
+    assert model['code'] == 'INPUT_INVALID'
+    assert model['context'] == {'field': 'configOverrides', 'reason': 'UNKNOWN_CONFIG_PATH'}
+    assert 'PRIVATE_' not in json.dumps(model)

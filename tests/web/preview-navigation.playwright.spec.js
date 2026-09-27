@@ -125,25 +125,42 @@ test('preview pan leaves feature and match gestures available', async ({ page })
   await settle(page);
   expect(await getDiagramWorkerActivity(page)).toMatchObject({ constructions: 0 });
 
-  for (const selector of ['[data-gbdraw-feature-id]', '[data-gbdraw-pairwise-match-id]']) {
-    const point = await page.evaluate((selector) => {
-      for (const element of window.__GBDRAW_APP__.svgContainer.querySelectorAll(selector)) {
-        const bounds = element.getBoundingClientRect();
-        const x = bounds.x + bounds.width / 2;
-        const y = bounds.y + bounds.height / 2;
-        if (document.elementFromPoint(x, y)?.closest(selector)) return { x, y };
+  for (const enabled of [false, true]) {
+    await page.evaluate((enabled) => { window.__GBDRAW_APP__.layoutRepositionMode = enabled; }, enabled);
+    for (const selector of ['[data-gbdraw-feature-id]', '[data-gbdraw-pairwise-match-id]']) {
+      const point = await page.evaluate((selector) => {
+        for (const element of window.__GBDRAW_APP__.svgContainer.querySelectorAll(selector)) {
+          const bounds = element.getBoundingClientRect();
+          const x = bounds.x + bounds.width / 2;
+          const y = bounds.y + bounds.height / 2;
+          if (document.elementFromPoint(x, y)?.closest(selector)) return { x, y };
+        }
+        throw new Error(`No visible gesture target: ${selector}`);
+      }, selector);
+      const before = await geometry(page);
+      await move(page, point, 10, 10);
+      expectTranslation(before, await geometry(page), 0, 0);
+      await page.mouse.click(point.x, point.y);
+      await page.waitForFunction(() => !window.__GBDRAW_APP__.ruleMatchingPending);
+      const selectionKey = selector.includes('pairwise') ? 'clickedPairwiseMatch' : 'clickedFeature';
+      await expect.poll(() => page.evaluate((key) => Boolean(window.__GBDRAW_APP__[key]), selectionKey)).toBe(true);
+      await page.keyboard.press('Escape');
+      if (selector === '[data-gbdraw-feature-id]') {
+        const id = await page.evaluate(({ x, y }) => document.elementFromPoint(x, y)
+          .closest('[data-gbdraw-feature-id]').getAttribute('data-gbdraw-rendered-feature-id')
+          || document.elementFromPoint(x, y).closest('[data-gbdraw-feature-id]').id, point);
+        for (const modifier of ['Control', 'Shift']) {
+          await page.keyboard.down(modifier);
+          await page.mouse.click(point.x, point.y);
+          await page.keyboard.up(modifier);
+          expect(await page.evaluate((id) => window.__GBDRAW_APP__.selectedFeatureIds.has(id), id)).toBe(true);
+          expectTranslation(before, await geometry(page), 0, 0);
+        }
+        await page.evaluate(() => window.__GBDRAW_APP__.clearFeatureSelection());
       }
-      throw new Error(`No visible gesture target: ${selector}`);
-    }, selector);
-    const before = await geometry(page);
-    await move(page, point, 10, 10);
-    expectTranslation(before, await geometry(page), 0, 0);
-    await page.mouse.click(point.x, point.y);
-    await page.waitForFunction(() => !window.__GBDRAW_APP__.ruleMatchingPending);
-    const selectionKey = selector.includes('pairwise') ? 'clickedPairwiseMatch' : 'clickedFeature';
-    await expect.poll(() => page.evaluate((key) => Boolean(window.__GBDRAW_APP__[key]), selectionKey)).toBe(true);
-    await page.keyboard.press('Escape');
+    }
   }
+  await page.evaluate(() => { window.__GBDRAW_APP__.layoutRepositionMode = false; });
 
   await page.locator('.drawer-toggle').click();
   await expect(page.locator('.right-drawer')).toBeVisible();

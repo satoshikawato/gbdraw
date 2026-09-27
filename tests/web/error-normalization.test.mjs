@@ -190,3 +190,61 @@ assert.deepEqual(alignCause.context,normalized.context);
 assert.deepEqual(alignCause.secondary,normalized.secondary);
 assert.deepEqual(normalizeUserFacingError(alignCause),alignCause);
 assert.equal((alignCause.summary.match(/Python regular expression is invalid/g)||[]).length,1);
+
+// Native boundary diagnostics retain corrections while discarding private IDs.
+for (const [message, code, context] of [
+  ['Circular region End (60000) exceeds the selected record length (50466).', 'REGION_INVALID', { field: 'region', reason: 'RECORD_BOUNDS' }],
+  ['Circular region requires both Start and End coordinates.', 'REGION_INVALID', { field: 'region', reason: 'BOTH_ENDPOINTS' }],
+  ['Circular region Start and End must be positive integers.', 'REGION_INVALID', { field: 'region', reason: 'POSITIVE_INTEGER' }],
+  ['Circular region Start must not exceed End. Use Reverse complement to change display orientation.', 'REGION_INVALID', { field: 'region', reason: 'ORDER' }],
+  ['The preserved comparison is missing a required resource.', 'COMPARISON_INPUT', { field: 'comparison', reason: 'REQUIRED' }],
+  ['Canonical renderRequest records are required.', 'INPUT_INVALID', { field: 'schema', reason: 'RECORDS_REQUIRED' }],
+  ['Session resource PRIVATE_RESOURCE has an invalid declared byte size.', 'INPUT_INVALID', { field: 'schema', reason: 'RESOURCE_SIZE' }],
+  ['Custom Track Slots use an obsolete schema. Recreate the slots with schema version 2.', 'INPUT_INVALID', { field: 'schema', reason: 'TRACK_SCHEMA' }],
+  ['Session contains unclassified top-level field(s): PRIVATE_FIELD', 'INPUT_INVALID', { field: 'schema', reason: 'SESSION_FIELDS' }]
+]) {
+  const model = roundtrip(new Error(message));
+  assert.equal(model.code, code);
+  assert.deepEqual(model.context, context);
+  assert.equal(model.stage, 'request-validation');
+  assert.doesNotMatch(JSON.stringify(model), /PRIVATE_/);
+}
+assert.equal(roundtrip(new Error('Circular region End (PRIVATE_VALUE) exceeds the selected record length (50466).')).code, 'UNKNOWN');
+
+// Use actual track validators so producer wording and the public projection
+// cannot drift; every physical field keeps its own bound and unit guidance.
+for (const [mode, field, reason] of [
+  ['linear', 'height', 'PIXEL_POSITIVE'], ['linear', 'spacing', 'PIXEL_NONNEGATIVE'],
+  ['circular', 'inner_gap_px', 'PIXEL_NONNEGATIVE'], ['circular', 'outer_gap_px', 'PIXEL_NONNEGATIVE'],
+  ['circular', 'radius', 'POSITIVE_SCALAR'], ['circular', 'width', 'POSITIVE_SCALAR']
+]) {
+  const plan = validateCustomTrackPlan({ mode, axisIndex: 0, annotationSetIds: [], slots: [{
+    id: 'PRIVATE_SLOT', renderer: 'features', enabled: true, side: 'overlay', params: {}, [field]: '-1px'
+  }] });
+  assert.throws(() => assertValidCustomTrackPlan(plan), error => {
+    const model = roundtrip(error);
+    assert.equal(model.code, 'TRACK_INVALID');
+    assert.deepEqual(model.context, { field, reason, slotIndex: 0 });
+    assert.doesNotMatch(JSON.stringify(model), /PRIVATE_/);
+    assert.match(model.summary, /px/);
+    return true;
+  });
+}
+
+const arrows = await import('../../gbdraw/web/js/utils/feature-rendering.js');
+for (const [validator, field, reason] of [
+  ['normalizeArrowHeadLengthRatio', 'arrow_head_length_ratio', 'POSITIVE_OR_AUTO'],
+  ['normalizeArrowShaftWidthRatio', 'arrow_shaft_width_ratio', 'POSITIVE_UNIT_INTERVAL']
+]) assert.throws(() => arrows[validator](0), error => {
+  const model = roundtrip(error);
+  assert.equal(model.code, 'INPUT_INVALID');
+  assert.deepEqual(model.context, { field, reason });
+  assert.match(model.summary, /Arrow/);
+  return true;
+});
+
+const busy = roundtrip(new Error('A diagram generation request is already running.'));
+assert.equal(busy.code, 'GENERATION_BUSY');
+assert.equal(busy.stage, 'render');
+assert.match(busy.summary, /Wait for it to finish/);
+assert.deepEqual(busy.actions, ['retry', 'save-session']);

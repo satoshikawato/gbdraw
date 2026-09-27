@@ -837,7 +837,7 @@ const expectDirectEditFlushed = (before, after) => {
   expectBiologicalOwnersUnchanged(after);
 };
 
-const capturePageEvidence = (page) => page.evaluate(async () => {
+const capturePageEvidence = (page, savedSvg = null) => page.evaluate(async (savedSvg) => {
   const { state } = await import('/gbdraw/web/js/state.js');
   const { resolveColorToHex } = await import('/gbdraw/web/js/app/color-utils.js');
   const { serializeCleanSvg } = await import('/gbdraw/web/js/services/svg-serialization.js');
@@ -856,9 +856,9 @@ const capturePageEvidence = (page) => page.evaluate(async () => {
     return { length: text.length, hash: hash >>> 0 };
   };
   const mountedSvg = state.svgContainer.value?.querySelector?.('svg');
-  const svgContent = mountedSvg
+  const svgContent = savedSvg ?? (mountedSvg
     ? serializeCleanSvg(mountedSvg)
-    : String(app.results?.[app.selectedResultIndex]?.content || '');
+    : String(app.results?.[app.selectedResultIndex]?.content || ''));
   const svgDocument = new DOMParser().parseFromString(svgContent, 'image/svg+xml');
   const root = svgDocument.documentElement;
   if (!root || root.localName === 'parsererror') {
@@ -1072,7 +1072,7 @@ const capturePageEvidence = (page) => page.evaluate(async () => {
       )
     }
   };
-});
+}, savedSvg);
 
 const runGenerate = async (page) => {
   const result = await page.evaluate(async () => {
@@ -1947,6 +1947,13 @@ test('divergent draft and direct editor overrides survive repeated Save, Load, a
   });
 
   const divergentSave = await saveCurrentSession(page, 'intent-divergent-draft');
+  // Save serializes the current preview, which can advance after the earlier
+  // asynchronous capture. Fresh Load must preserve the actual saved artifact.
+  const savedPreview = await capturePageEvidence(
+    page, divergentSave.session.results[0].content
+  );
+  expect(savedPreview.active).toEqual(savedDraftIntent.active);
+  expect(savedPreview.history).toEqual(savedDraftIntent.history);
   expect(divergentSave.session.config.palette).toBe('orange');
   expect(divergentSave.session.config.colors).toMatchObject({
     CDS: '#0b4f6c',
@@ -1966,13 +1973,13 @@ test('divergent draft and direct editor overrides survive repeated Save, Load, a
   await loadCurrentSession(freshPage, divergentSave.path, divergentSave.session);
   const loadedDraft = await capturePageEvidence(freshPage);
   await testInfo.attach('divergent-preview-checkpoints.json', {
-    body: JSON.stringify({ savedDraftIntent, loadedDraft, savedSvg: divergentSave.session.results[0].content }),
+    body: JSON.stringify({ savedDraftIntent, savedPreview, loadedDraft, savedSvg: divergentSave.session.results[0].content }),
     contentType: 'application/json'
   });
   expect(loadedDraft.active).toEqual(savedDraftIntent.active);
   expectSvgEquivalent(
     loadedDraft.svg,
-    savedDraftIntent.svg,
+    savedPreview.svg,
     'divergent session must retain the saved committed preview'
   );
   expect(svgEquivalence(loadedDraft.svg, expectedB.svg).visual).toBe(false);

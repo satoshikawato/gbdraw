@@ -725,6 +725,21 @@
             color: white;
             outline: 2px solid white;
         }
+        .preview-layout-off .gbdraw-preview-layout-target:hover {
+            outline: 1px dashed #94a3b8;
+            outline-offset: 4px;
+        }
+        .preview-layout-hint {
+            display: none;
+            pointer-events: none;
+        }
+        .preview-layout-off:has(.gbdraw-preview-layout-target:hover) .preview-layout-hint {
+            display: block;
+        }
+        .drag-hint {
+            pointer-events: none;
+        }
+
         .gbdraw-preview-surface :is(
             path[data-gbdraw-feature-id],
             polygon[data-gbdraw-feature-id],
@@ -4791,6 +4806,7 @@
                         </div>
                     </div>
                     <div v-if="resultPanelTab === 'preview'" class="preview-toolbar flex gap-2 items-center flex-wrap mr-2" aria-describedby="session-export-help">
+                        <p id="preview-layout-help" class="basis-full text-xs text-slate-600">Turn on Layout edit to move a legend, title, or Linear scale. When off, drag to pan. Use the Layout edit button with click, tap, Space, or Enter.</p>
                         <div class="flex items-center gap-2 bg-white px-3 py-1.5 rounded border border-green-200">
                             <span class="text-sm font-bold text-green-700">DPI</span>
                             <select v-model="downloadDpi" aria-label="PNG DPI" class="text-sm bg-transparent border-none focus:ring-0 p-0 text-slate-600 font-mono outline-none cursor-pointer">
@@ -4863,7 +4879,8 @@
                 </div>
 
                 <div class="preview-editor-layout">
-                <div v-show="resultPanelTab === 'preview'" class="preview-viewport relative flex-grow overflow-hidden bg-slate-50/30">
+                <div v-show="resultPanelTab === 'preview'" class="preview-viewport relative flex-grow overflow-hidden bg-slate-50/30"
+                     :class="{ 'preview-layout-off': !layoutRepositionMode }">
 
                     <div v-if="svgContent"
                          :class="['preview-feature-search', { 'is-invalid': previewFeatureSearchError }]"
@@ -5086,7 +5103,8 @@
                                 :class="{ 'bg-amber-50 text-amber-700 border-amber-300': layoutRepositionMode }"
                                 :title="layoutRepositionMode ? 'Disable layout edit mode' : 'Enable layout edit mode'"
                                 :aria-pressed="layoutRepositionMode"
-                                aria-label="Toggle layout edit mode">
+                                aria-label="Toggle layout edit mode"
+                                aria-describedby="preview-layout-help">
                             <i class="ph ph-arrows-out-cardinal"></i>
                             <span>Layout edit</span>
                         </button>
@@ -5107,10 +5125,15 @@
                         </div>
                     </div>
 
+                    <!-- Preview-only target hint; the toolbar also explains keyboard/touch activation. -->
+                    <div v-if="svgContent && !layoutRepositionMode" class="preview-layout-hint drag-hint absolute top-4 left-4 bg-white/90 shadow rounded-lg px-4 py-2 z-20 border border-slate-200" aria-hidden="true">
+                        <p class="text-sm text-slate-600">Turn on Layout edit to move this item</p>
+                    </div>
+
                     <!-- Drag hint -->
                     <div v-if="svgContent && layoutRepositionMode" class="drag-hint absolute top-4 left-4 bg-white/90 shadow rounded-lg px-4 py-2 z-20 border border-slate-200">
                         <p class="text-sm text-slate-500 flex items-center gap-2">
-                            <i class="ph ph-hand-grabbing text-base"></i> Drag record or legend to reposition
+                            <i class="ph ph-hand-grabbing text-base"></i> Drag a record, legend, title, or Linear scale to reposition
                         </p>
                     </div>
 

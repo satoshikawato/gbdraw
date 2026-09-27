@@ -230,6 +230,20 @@ assert.equal(canvas.style.cursor, 'grab');
 assert.equal(wrapper.style.transition, 'transform 0.2s');
 completeCase('pan updates the wrapper transform and restores the existing transition');
 
+const legendTarget = {
+  tagName: 'text',
+  closest: (selector) => selector === 'g[id]' ? { id: 'feature_legend' }
+    : selector === '.gbdraw-preview-layout-target' ? { id: 'legend' } : null
+};
+panZoom.startPan({ button: 0, shiftKey: false, clientX: 100, clientY: 120, target: legendTarget });
+assert.equal(uiState.isPanning.value, true, 'a bound legend must pan while Layout edit is OFF');
+panZoom.endPan({ clientX: 100, clientY: 120 });
+panZoom.startPan({ button: 0, shiftKey: false, clientX: 100, clientY: 120,
+  target: { tagName: 'path', closest: (selector) => selector === 'g[id]' ? { id: 'f1' } : null } });
+assert.equal(uiState.isPanning.value, false, 'unbound feature groups retain gesture priority');
+completeCase('eligible legend bypasses the feature-prefix pan exclusion without changing feature priority');
+
+
 const changesBeforePanThenWheel = interactionChanges.length;
 panZoom.startPan({
   button: 0,
