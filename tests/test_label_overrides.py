@@ -665,6 +665,7 @@ def test_linear_cli_label_table_injects_override_df(
             losat_derived_cache_entries=(),
             protein_identity_manifest=None,
             request=resolved,
+            annotation_warnings=(),
         )
 
     monkeypatch.setattr(linear_cli_module, "render_request", fake_render_request)

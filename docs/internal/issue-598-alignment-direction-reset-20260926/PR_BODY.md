@@ -8,7 +8,7 @@ Refs #598 (BUG-03 and BUG-04). BUG-17 remains outside this change; this PR does 
 
 ## Purpose
 
-Base: `dev@c922fc38aac78da9be83342c09ac0164ecef6ff6`. The branch already contains that base; no additional merge is needed. The runtime is byte-identical to it. Normative PR admission is `Web base policy (trusted base)` and `PR / gate`; neither remote check has been run for this unpublished PR.
+Base: `dev@f5f86634459e0dcd46c1a452e9219fbba635d429`. PR #617 advanced dev while this PR was checking CI, so the branch normally merges that admitted base and preserves every earlier writer. The runtime is byte-identical to the new base. Normative PR admission is `Web base policy (trusted base)` and `PR / gate`. Both succeeded on the initial head; checks for the synchronized head are reported separately.
 
 ## User-visible impact
 
@@ -23,18 +23,20 @@ The documentation explains selected-anchor scope, reference participation, uncha
 
 ## Verification
 
-New local review: all five accepted receipts match all nine fields on the base; four required ancestors are retained; runtime and browser-test diff hashes match S04; five source pins and six PNGs pass byte/format checks and visual review. Documentation contracts: **41 passed**. Ruff and whitespace: **PASS**. Web policy: **Gate PASS / Review CLEAR**; the mandatory post-commit result is reported with the candidate SHA in the delivery response. PR wording is checked with `tools/check-pr-language.mjs` before publication.
+Initial review: five accepted receipts match all nine fields; four required ancestors, five source pins and S04's browser-test diff digest are retained. Documentation contracts: **41 passed**; Ruff, original six-image visual review, language and final-commit Web policy passed on the original head.
 
-Reused **S04 results**, not new executions: Python non-slow **6268 passed, 17 skipped, 11 deselected**; Node **712 passed** plus final architecture/Product guards **192 passed**; separate browser **41 passed**; read-only SVG comparison **16 passed**; documentation contracts **41 passed**; real `T-GUI-04` replay with six visually reviewed PNGs and verified SVG/TSV exports. Source, tests, fixtures, capture owner, baseline and recorded environment fields are unchanged. See [review evidence](docs/internal/issue-598-alignment-direction-reset-20260926/evidence/REVIEW_20260927.md) and [S04 evidence](docs/internal/issue-598-alignment-direction-reset-20260926/evidence/S04.md).
+After the admitted dev runtime advance, newly executed checks cover the shared History/Session/render boundary: **118 focused Node tests passed**; native alignment **83**, documentation **41** and read-only SVG **16** tests passed (**140 total**); **16 browser tests passed** for alignment, fresh Load, both Reset scopes, zero Reset LOSAT jobs, rollback/pending form, History, palette and region. Ruff passes. Reference-center delta remains below 0.000018 logical px, with 77 ribbons and maximum anchor offset 0.0001221 px. The real `T-GUI-04` recipe validates SVG (249702 bytes), TSV (232 rows) and both Reset scopes. Current image/check details are recorded in the integration evidence.
 
-Not newly executed: broad Python/Node/browser suites, GUI recipe replay, slow/performance tests, supported-version matrix, remote CI, physical zoom or assistive-technology speech. No wheel is generated and no browser server is reused in this review.
+Historical **S04 results**, not new runs or blanket evidence for the changed runtime: Python non-slow **6268 passed, 17 skipped, 11 deselected**; Node **712 passed** plus final guards **192 passed**; separate browser **41 passed**; documentation **41 passed**; read-only SVG **16 passed** and original GUI replay. The admitted #600 writer also records its own **6642-test** native verification; this is prior base evidence, not this PR's new execution. See [dev synchronization evidence](docs/internal/issue-598-alignment-direction-reset-20260926/evidence/PR_DEV_SYNC_20260927.md), [original review](docs/internal/issue-598-alignment-direction-reset-20260926/evidence/REVIEW_20260927.md) and [S04 evidence](docs/internal/issue-598-alignment-direction-reset-20260926/evidence/S04.md).
+
+Not newly executed after synchronization: whole Python/Node/browser suites, slow/performance tests, supported-version matrix, physical zoom or assistive-technology speech. Browser verification uses a clone-local rebuilt wheel and an isolated server port; no earlier session's server is reused. Post-sync remote CI is reported for the new head, independently from the initial green run.
 
 ## Risk and review notes
 
 - Gate: PASS, no blocker. Review: CLEAR from the checker, independent of normal maintainer approval.
 - **This is not architecture-bearing** relative to the actual base. No owner, canonical path, compatibility reader, schema version, dependency or privileged permission changes; `OE`/`PE`/`CB` scope is unchanged. No `architecture-change` label or exception packet is needed.
 - Review the instructions, capture/source evidence and retained browser assertions, especially logical center measurement, pending form, both fresh-Load Reset scopes, zero Reset LOSAT jobs, rollback and ribbon geometry. S04's historical Review REQUIRED is not represented as human approval.
-- Prior recorded environment fields match; a complete historic dependency freeze and regenerated wheel-byte comparison are unavailable. Reuse is limited to the identified S04 environment and acceptance, not a new staging or release certification. Future integrated `dev` needs exact-SHA staging.
+- Recorded environment fields match. A complete historic dependency freeze is unavailable; old broad results remain historical, and fresh scoped tests cover the changed shared boundary. Future integrated `dev` needs exact-SHA staging.
 
 ## Rollback
 
