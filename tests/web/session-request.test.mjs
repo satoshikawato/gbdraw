@@ -5330,3 +5330,95 @@ assert.equal(compareGenerationIntent({draft:projectGenerationIntent({state:losat
 losatState.adv.scale_interval=200;
 const uncertainPending=compareGenerationIntent({draft:projectGenerationIntent({state:losatState,filesData:intentFiles}),applied:unprovenAnalysis});
 assert.equal(uncertainPending.status,'pending');assert(uncertainPending.unknown.includes('$.analysis'));
+
+
+// Fresh-load reconstruction uses persisted artifact evidence, never the saved
+// draft as an applied snapshot. Exercise both modes, omission, invalid evidence,
+// unapplied width and an independent pending setting without reading any bytes.
+for (const mode of ['linear', 'circular']) {
+  const seed = JSON.parse(await readFile(join(repoRoot, 'gbdraw/web/gallery/sessions',
+    mode === 'linear' ? 'lambda_basic_linear.gbdraw-session.json'
+      : 'HmmtDNA_basic_circular.gbdraw-session.json'), 'utf8'));
+  const before = JSON.stringify(seed);
+  const saved = { ...seed, config: { ...seed.config, adv: { ...seed.config.adv,
+    block_stroke_width: 2, scale_interval: 12345 } },
+    editorState: { ...seed.editorState, originalSvgStroke: { width: 2 } } };
+  const restored = projectAppliedGenerationIntent(saved);
+  assert.equal(restored.status, 'valid', JSON.stringify(restored));
+  const widthPath = 'objects.features.block_stroke_width';
+  assert.equal(restored.meaning.diagramOptions.configOverrides[`${widthPath}.short`], 2);
+  assert.equal(restored.meaning.diagramOptions.configOverrides[`${widthPath}.long`], 2);
+  assert.notEqual(restored.meaning.diagramOptions.configOverrides['objects.scale.interval'], 12345);
+  const draft = { status: 'valid', meaning: { ...restored.meaning,
+    diagramOptions: { ...restored.meaning.diagramOptions,
+      configOverrides: { ...restored.meaning.diagramOptions.configOverrides } } } };
+  assert.equal(compareGenerationIntent({ draft, applied: restored }).status, 'clean');
+  draft.meaning.diagramOptions.configOverrides['objects.scale.interval'] = 12345;
+  let comparison = compareGenerationIntent({ draft, applied: restored });
+  assert.equal(comparison.status, 'pending');
+  assert.deepEqual(comparison.differences, ['$.diagramOptions.configOverrides.objects.scale.interval']);
+  draft.meaning.diagramOptions.configOverrides[`${widthPath}.short`] = 3;
+  draft.meaning.diagramOptions.configOverrides[`${widthPath}.long`] = 3;
+  comparison = compareGenerationIntent({ draft, applied: restored });
+  assert(comparison.differences.some(path => path.includes('block_stroke_width')),
+    'A draft width different from captured artifact width is still Pending');
+  assert.equal(JSON.stringify(seed), before, 'Projection must not mutate the saved artifact');
+  for (const width of [null, undefined, -1, NaN, '2']) {
+    const uncertain = projectAppliedGenerationIntent({ ...saved,
+      editorState: { originalSvgStroke: { width } } });
+    assert.equal(uncertain.status, 'unknown', `${mode}: missing/invalid width evidence ${width}`);
+    comparison = compareGenerationIntent({ draft, applied: uncertain });
+    assert.equal(comparison.status, 'pending');
+    assert(comparison.unknown.some(path => path.includes('block_stroke_width')));
+    assert.deepEqual(comparison.differences, ['$.diagramOptions.configOverrides.objects.scale.interval']);
+    const liveState = { ...intentState, mode: ref(mode), adv: createDefaultAdv(mode) };
+    liveState.adv.block_stroke_width = 3;
+    const committed = projectAppliedGenerationFields(uncertain, liveState, new Set(['blockStrokeWidth']));
+    assert.equal(committed.status, 'valid', 'A proven subsequent live edit resolves only its unknown fields');
+    assert.deepEqual(committed.unknownPaths, []);
+  }
+  const automatic = projectAppliedGenerationIntent({ ...saved,
+    config: { adv: { block_stroke_width: null } } });
+  assert.equal(automatic.meaning.diagramOptions.configOverrides[`${widthPath}.short`],
+    projectAppliedGenerationIntent(seed).meaning.diagramOptions.configOverrides[`${widthPath}.short`],
+    'Measured artifact widths do not redefine automatic request intent');
+  const zero = projectAppliedGenerationIntent({ ...saved, config: { adv: { block_stroke_width: 0 } },
+    editorState: { originalSvgStroke: { width: 0 } } });
+  assert.equal(zero.meaning.diagramOptions.configOverrides[`${widthPath}.short`], 0);
+}
+
+const selectionState = { ...conservationState, form: createDefaultForm(), adv: createDefaultAdv('circular'),
+  circularConservation: { enabled: false }, circularRecordList: ref([
+    { selector: '#1', record_id: 'NC_012920.1', recordLength: 100 },
+    { selector: '#2', record_id: 'Other', recordLength: 100 }
+  ]) };
+selectionState.form.multi_record_canvas = false;
+selectionState.form.circular_record_selector = '#1';
+const selectionFiles = { c_gb: inputFile };
+const selectedApplied = projectAppliedGenerationIntent(buildCanonicalRenderRequestRaw({
+  state: selectionState, filesData: selectionFiles }));
+const selectedStatus = () => compareGenerationIntent({
+  draft: projectGenerationIntent({ state: selectionState, filesData: selectionFiles }), applied: selectedApplied });
+assert.equal(selectedStatus().status, 'clean');
+selectionState.form.circular_record_selector = '#2';
+assert.equal(selectedStatus().status, 'pending', 'An explicit resolved selector change is a definite difference');
+selectionState.form.circular_record_selector = '#99';
+assert.equal(selectedStatus().status, 'invalid', 'A selector outside the known domain is invalid, not Unknown');
+selectionState.form.circular_record_selector = '';
+selectionState.circularRecordList.value = [];
+assert.equal(selectedStatus().status, 'unknown');
+assert.deepEqual(selectedStatus().differences, []);
+assert(selectedStatus().unknown.includes('$.records.0.selector'));
+selectionState.adv.scale_interval = 200;
+assert.equal(selectedStatus().status, 'pending');
+assert(selectedStatus().unknown.includes('$.records.0.selector'));
+assert(selectedStatus().differences.every(path => path.includes('scale.interval')));
+selectionFiles.c_gb = { ...inputFile };
+assert(selectedStatus().differences.some(path => path.includes('source.resourceId')),
+  'Unresolved selection cannot hide a known source replacement');
+selectionState.form.circular_record_selector = '#99';
+assert.equal(selectedStatus().status, 'invalid', 'Explicit unresolved selectors are not hidden as automatic selection');
+selectionState.form.circular_record_selector = '';
+selectionState.form.multi_record_canvas = true;
+assert(projectGenerationIntent({ state: selectionState, filesData: selectionFiles }).unknownPaths.includes('$.records'),
+  'Undiscovered multi-record cardinality is not a proven topology change');

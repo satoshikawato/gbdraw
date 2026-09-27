@@ -2760,7 +2760,12 @@ export const projectGenerationIntent = ({ state, filesData = {
       comparisonPlanSnapshot: snapshot, resources: createResourceBuilder({ encode: false }) });
     const unknownRecords = state.mode.value === 'circular'
       && !filesData.circularRecords?.length && !state.circularRecordList?.value?.length;
-    return { status: unknownRecords ? 'unknown' : 'valid',
+    const unknownPaths = unknownRecords
+      ? canonical.renderRequest.grouping !== 'single' ? ['$.records']
+        : canonical.renderRequest.records.flatMap((_, index) => [
+            `$.records.${index}.selector`, `$.records.${index}.recordKey`
+          ]) : [];
+    return { status: unknownRecords ? 'unknown' : 'valid', unknownPaths,
       meaning: generationMeaning(canonical, generationAnalysisMeaning(state, filesData, snapshot)) };
   } catch (error) {
     return { status: 'invalid', error: String(error.message || error) };
@@ -2768,8 +2773,10 @@ export const projectGenerationIntent = ({ state, filesData = {
 };
 
 // Called by the artifact owner at admission/restore, never from a draft. The
-// saved request owns rendering; saved config cannot advance the applied intent.
-export const projectAppliedGenerationIntent = (canonical) => {
+// saved request owns rendering; saved config alone cannot advance applied intent.
+export const projectAppliedGenerationIntent = (canonical, {
+  editorState = canonical?.editorState, storedConfig = canonical?.config
+} = {}) => {
   const existing = generationIntents.get(canonical);
   if (existing) return existing;
   if (!canonical?.renderRequest) return { status: 'unknown' };
@@ -2797,7 +2804,23 @@ export const projectAppliedGenerationIntent = (canonical) => {
         configOverrides: { ...baseline.renderRequest.diagramOptions.configOverrides,
           ...canonical.renderRequest.diagramOptions.configOverrides } }
     } });
-    return { status: 'valid', meaning };
+    const unknownPaths = [];
+    // A saved explicit global width is comparable to the editor's captured
+    // artifact width. The draft alone cannot prove that a live edit was applied.
+    // Automatic width remains request-owned; a measured width is not its intent.
+    const requestedWidth = optionalNumber(storedConfig?.adv?.block_stroke_width);
+    if (requestedWidth !== null) {
+      const path = SHARED_LENGTH_CONFIG_OVERRIDE_PATHS.blockStrokeWidth;
+      const width = editorState?.originalSvgStroke?.width;
+      for (const key of [`${path}.short`, `${path}.long`]) {
+        if (typeof width === 'number' && Number.isFinite(width) && width >= 0) {
+          meaning.diagramOptions.configOverrides[key] = width;
+        } else if (meaning.diagramOptions.configOverrides[key] !== requestedWidth) {
+          unknownPaths.push(`$.diagramOptions.configOverrides.${key}`);
+        }
+      }
+    }
+    return { status: unknownPaths.length ? 'unknown' : 'valid', meaning, unknownPaths };
   } catch (error) {
     return { status: 'unknown', error: String(error.message || error) };
   }
@@ -2810,15 +2833,22 @@ export const projectAppliedGenerationFields = (applied, state, fields) => {
   if (!applied?.meaning || applied.meaning.mode !== state.mode.value) return applied;
   const normalized = buildConfigOverrides(state);
   const overrides = { ...applied.meaning.diagramOptions.configOverrides };
+  const provenPaths = new Set();
   for (const field of fields) {
     const path = CONFIG_OVERRIDE_PATHS[field] || SHARED_LENGTH_CONFIG_OVERRIDE_PATHS[field];
     if (!path) throw new Error(`Unknown applied generation field: ${field}.`);
     for (const key of [path, `${path}.short`, `${path}.long`]) {
-      if (Object.hasOwn(normalized, key)) overrides[key] = normalized[key];
+      if (Object.hasOwn(normalized, key)) {
+        overrides[key] = normalized[key];
+        provenPaths.add(`$.diagramOptions.configOverrides.${key}`);
+      }
     }
   }
-  return { ...applied, meaning: { ...applied.meaning,
-    diagramOptions: { ...applied.meaning.diagramOptions, configOverrides: overrides } } };
+  const unknownPaths = (applied.unknownPaths || []).filter(path => !provenPaths.has(path));
+  return { ...applied, unknownPaths,
+    status: applied.unknownPaths?.length && !unknownPaths.length ? 'valid' : applied.status,
+    meaning: { ...applied.meaning,
+      diagramOptions: { ...applied.meaning.diagramOptions, configOverrides: overrides } } };
 };
 
 const liveGenerationTables = (state) => {
@@ -2831,7 +2861,8 @@ const liveGenerationTables = (state) => {
   return generationMeaning({ renderRequest: { diagramOptions: options }, resources: resources.resources }).diagramOptions;
 };
 
-const compareGenerationValue = (left, right, path, differences, unknown) => {
+const compareGenerationValue = (left, right, path, differences, unknown, unknownPaths) => {
+  if (unknownPaths.has(path)) return;
   if (left === right) {
     if (left === null && isCanonicalResourceReferenceField(path.split('.').at(-1))) unknown.push(path);
     return;
@@ -2853,7 +2884,7 @@ const compareGenerationValue = (left, right, path, differences, unknown) => {
   }
   if (Array.isArray(left) !== Array.isArray(right)) { differences.push(path); return; }
   const keys = new Set([...Object.keys(left), ...Object.keys(right)]);
-  for (const key of keys) compareGenerationValue(left[key], right[key], `${path}.${key}`, differences, unknown);
+  for (const key of keys) compareGenerationValue(left[key], right[key], `${path}.${key}`, differences, unknown, unknownPaths);
 };
 
 export const compareGenerationIntent = ({ draft, applied, liveState = null, hasResult = true }) => {
@@ -2870,7 +2901,8 @@ export const compareGenerationIntent = ({ draft, applied, liveState = null, hasR
     }
     baseline = { ...baseline, diagramOptions: options };
   }
-  const differences = [], unknown = [];
+  const unknownPaths = new Set([...(draft.unknownPaths || []), ...(applied.unknownPaths || [])]);
+  const differences = [], unknown = [...unknownPaths];
   let draftMeaning = draft.meaning;
   if (!baseline.analysis && draftMeaning.analysis) {
     // A restored rendered table proves the Result, not the unsaved search
@@ -2884,8 +2916,9 @@ export const compareGenerationIntent = ({ draft, applied, liveState = null, hasR
     draftMeaning = omitUnprovenAnalysis(draftMeaning);
     unknown.push('$.analysis');
   }
-  compareGenerationValue(baseline, draftMeaning, '$', differences, unknown);
-  if (draft.status === 'unknown' || applied.status === 'unknown') unknown.push('$');
+  compareGenerationValue(baseline, draftMeaning, '$', differences, unknown, unknownPaths);
+  if ((draft.status === 'unknown' && !draft.unknownPaths?.length)
+    || (applied.status === 'unknown' && !applied.unknownPaths?.length)) unknown.push('$');
   if (liveState?.labelReflowProcessing?.value || liveState?.labelReflowLastError?.value) unknown.push('$live-render');
   return { status: differences.length ? 'pending' : unknown.length ? 'unknown' : 'clean', differences, unknown };
 };

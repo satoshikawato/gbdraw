@@ -370,3 +370,115 @@ for (const mode of ['circular','linear']) {
     } finally {await page.context().close();}
   });
 }
+
+
+for (const mode of ['linear', 'circular']) {
+  test(`${mode} saved live block width restores its applied basis and separate Pending`, async ({ browser }, info) => {
+    test.setTimeout(240000);
+    const page = await load(browser, seeds[mode]);
+    let fresh;
+    try {
+      await generate(page);
+      expect((await status(page)).status).toBe('clean');
+      await page.locator('input[aria-label="Block Stroke Width"]').evaluate(
+        element => { element.closest('details').open = true; });
+      const field = page.getByLabel('Block Stroke Width', { exact: true });
+      await field.fill('2');
+      await field.press('Tab');
+      const blocks = '.gbdraw-preview-surface path[data-gbdraw-feature-id][data-gbdraw-feature-part="block"]';
+      await expect(page.locator(blocks).first()).toHaveAttribute('stroke-width', '2');
+      expect((await status(page)).status).toBe('clean');
+      const before = await snapshot(page);
+      const savedPath = info.outputPath(`${mode}-live-width.json.gz`);
+      const saved = JSON.parse(gunzipSync(await download(page, 'Save Session', savedPath)));
+      expect(saved.editorState.originalSvgStroke.width).toBe(2);
+      expect(saved.renderRequest).toEqual(before.request);
+      fresh = await load(browser, savedPath);
+      await expect(fresh.locator(blocks).first()).toHaveAttribute('stroke-width', '2');
+      const restored = await status(fresh);
+      expect(restored.differences).toEqual([]);
+      expect(restored.status).toBe(mode === 'linear' ? 'clean' : 'unknown');
+      expect((await snapshot(fresh)).request).toEqual(before.request);
+      // Admission sanitizes persisted SVG; compare the actual sanitized Result,
+      // rather than mistaking mandatory normalization for a render operation.
+      expect(await fresh.evaluate(async content =>
+        (await import('./js/services/svg-sanitization.js'))
+          .sanitizeSvgContent(content), before.result)).toBe((await snapshot(fresh)).result);
+      const activity = await fresh.evaluate(() => window.__GBDRAW_DIAGRAM_WORKER_ACTIVITY__);
+      expect(activity?.constructions || 0).toBe(0);
+      await status(fresh, { field: 'scale_interval', value: 12345 });
+      const pending = await status(fresh);
+      expect(pending.status).toBe('pending');
+      expect(pending.differences.every(path => path.includes('scale.interval'))).toBe(true);
+      if (mode === 'circular') expect(pending.unknown).toContain('$.records.0.selector');
+      const pendingPath = info.outputPath(`${mode}-pending-width.json.gz`);
+      await download(fresh, 'Save Session', pendingPath);
+      await fresh.context().close();
+      fresh = await load(browser, pendingPath);
+      const roundTrip = await status(fresh);
+      expect(roundTrip.status).toBe('pending');
+      expect(roundTrip.differences.every(path => path.includes('scale.interval'))).toBe(true);
+      expect((await snapshot(fresh)).request).toEqual(before.request);
+      const rollback = await fresh.evaluate(async () => {
+        const config = await import('./js/services/config.js');
+        const { state } = await import('./js/state.js');
+        const prior = config.canonicalRenderArtifactOwner.capture();
+        const draft = config.buildConfigData();
+        const counts = [window.__GBDRAW_HISTORY__.getUndoCount(), window.__GBDRAW_HISTORY__.getRedoCount()];
+        const file = new File([await (await fetch('/gbdraw/web/gallery/sessions/HmmtDNA_basic_circular.gbdraw-session.json')).arrayBuffer()], 'replacement.json');
+        const result = await config.importSession({ target: { files: [file], value: 'selected' } }, {
+          beforePreviewMount() { throw new Error('Status round-trip rollback probe'); }
+        });
+        const current = config.canonicalRenderArtifactOwner.capture();
+        return {
+          status: result.status, error: result.error?.message,
+          sameRequest: current.committedCanonicalSession === prior.committedCanonicalSession,
+          sameResources: current.activeSessionResourceTable === prior.activeSessionResourceTable,
+          sameApplied: current.appliedGenerationIntent === prior.appliedGenerationIntent,
+          sameDraft: JSON.stringify(config.buildConfigData()) === JSON.stringify(draft),
+          sameHistory: JSON.stringify(counts) === JSON.stringify([
+            window.__GBDRAW_HISTORY__.getUndoCount(), window.__GBDRAW_HISTORY__.getRedoCount()
+          ]), width: state.adv.block_stroke_width
+        };
+      });
+      expect(rollback).toEqual({ status: 'error', error: 'Status round-trip rollback probe',
+        sameRequest: true, sameResources: true, sameApplied: true, sameDraft: true,
+        sameHistory: true, width: 2 });
+      expect(await status(fresh)).toMatchObject({ status: 'pending', differences: roundTrip.differences,
+        unknown: roundTrip.unknown });
+      await expect(fresh.locator(blocks).first()).toHaveAttribute('stroke-width', '2');
+      await info.attach(`${mode}-round-trip-status`, {
+        body: JSON.stringify({ restored, pending, roundTrip }), contentType: 'application/json'
+      });
+      expect(page.externalRequests).toEqual([]);
+      expect(fresh.externalRequests).toEqual([]);
+    } finally {
+      await page.context().close();
+      if (fresh) await fresh.context().close();
+    }
+  });
+}
+
+test('Unedited Circular Save and fresh Load leaves unresolved selection Unknown', async ({ browser }, info) => {
+  test.setTimeout(180000);
+  const page = await load(browser);
+  let fresh;
+  try {
+    await generate(page);
+    expect((await status(page)).status).toBe('clean');
+    const before = await snapshot(page);
+    const path = info.outputPath('unedited-circular.json.gz');
+    await download(page, 'Save Session', path);
+    fresh = await load(browser, path);
+    expect((await snapshot(fresh)).request).toEqual(before.request);
+    const restored = await status(fresh);
+    expect(restored.status).toBe('unknown');
+    expect(restored.differences).toEqual([]);
+    expect(restored.unknown).toContain('$.records.0.selector');
+    expect(await fresh.evaluate(() => window.__GBDRAW_DIAGRAM_WORKER_ACTIVITY__?.constructions || 0)).toBe(0);
+    await info.attach('unedited-circular-status', { body: JSON.stringify(restored), contentType: 'application/json' });
+  } finally {
+    await page.context().close();
+    if (fresh) await fresh.context().close();
+  }
+});

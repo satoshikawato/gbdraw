@@ -4328,7 +4328,10 @@ export const importSession = async (e, options = {}) => {
     if (currentSchemaSession) {
       committedCanonicalSession = adoptedCanonicalSession;
       activeSessionResourceTable = currentResourceTable;
-      appliedGenerationIntent = projectAppliedGenerationIntent(adoptedCanonicalSession);
+      appliedGenerationIntent = projectAppliedGenerationIntent(adoptedCanonicalSession, {
+        editorState: projectionResult?.artifactState.editorState,
+        storedConfig: restoredConfig
+      });
     }
     const ui = canonicalSession
       ? {
