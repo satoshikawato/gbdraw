@@ -130,7 +130,18 @@ The exact relocated cases and before/after counts are in the
 The smoke config retains one worker and zero retries. Three local two-worker
 repetitions passed, but these are not repeated GitHub runner evidence. One worker
 already meets the projected target, so CI does not adopt unverified parallelism.
-Full functional CI retains four shards and its existing retry policy.
+Full functional CI retains four shards and two retries, and runs two workers
+per shard. The job limit is 45 minutes; case timeouts are unchanged. Hosted
+shard 1 still exceeded 30 minutes with two workers on `9dd6359c`: its composite
+placement took 7.2 minutes, a composite Session round trip took 4.4 minutes,
+and a Definition completion wait and retries consumed the remaining budget.
+The Definition test now triggers an actual edit; the job budget also allows
+for the measured composite workload, setup and existing retries. The line
+reporter names the running case, and the JSON report records durations,
+retries and final results alongside traces on every completed job. A job killed
+at its limit may not reach upload; its last running case remains in the log.
+The inventory check proves that the matrix partitions the full suite without
+omissions or duplicate execution.
 
 ## Trust and aggregate checks
 
