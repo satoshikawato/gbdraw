@@ -1,0 +1,134 @@
+{
+  "baseSha": "f5f86634459e0dcd46c1a452e9219fbba635d429",
+  "browserVersion": "149.0.7827.55",
+  "wheelSha256": "793cb568f6108d965e33980a759ade9fc47905ae2a864424b87099271c401ab7",
+  "fixtureSha256": "d70eb5bba1796df80733792af1f81cfd210bbfe042eaf6c71a3abc710affcc17",
+  "observations": [
+    {
+      "viewportWidth": 1440,
+      "fields": [
+        {
+          "title": "Width",
+          "text": "",
+          "suffix": "",
+          "auto": "18.5 px (auto)",
+          "visible": true
+        },
+        {
+          "title": "Radius",
+          "text": "",
+          "suffix": "",
+          "auto": "1 R (auto)",
+          "visible": true
+        },
+        {
+          "title": "Width",
+          "text": "[object Object]",
+          "suffix": "",
+          "auto": "",
+          "visible": true
+        },
+        {
+          "title": "Radius",
+          "text": "[object Object]",
+          "suffix": "R",
+          "auto": "",
+          "visible": true
+        },
+        {
+          "title": "Width",
+          "text": "[object Object]",
+          "suffix": "",
+          "auto": "",
+          "visible": true
+        },
+        {
+          "title": "Radius",
+          "text": "[object Object]",
+          "suffix": "R",
+          "auto": "",
+          "visible": true
+        }
+      ],
+      "slotsPreservedOnFocusBlur": true,
+      "resultPreservedOnFocusBlur": true,
+      "undoBefore": 0,
+      "undoAfter": 0,
+      "workerUrls": [
+        "http://127.0.0.1:36085/gbdraw/web/js/workers/diagram-generation-worker.js"
+      ],
+      "pageErrors": [],
+      "consoleErrors": []
+    },
+    {
+      "viewportWidth": 390,
+      "fields": [
+        {
+          "title": "Width",
+          "text": "",
+          "suffix": "",
+          "auto": "18.5 px (auto)",
+          "visible": true
+        },
+        {
+          "title": "Radius",
+          "text": "",
+          "suffix": "",
+          "auto": "1 R (auto)",
+          "visible": true
+        },
+        {
+          "title": "Width",
+          "text": "[object Object]",
+          "suffix": "",
+          "auto": "",
+          "visible": true
+        },
+        {
+          "title": "Radius",
+          "text": "[object Object]",
+          "suffix": "R",
+          "auto": "",
+          "visible": true
+        },
+        {
+          "title": "Width",
+          "text": "[object Object]",
+          "suffix": "",
+          "auto": "",
+          "visible": true
+        },
+        {
+          "title": "Radius",
+          "text": "[object Object]",
+          "suffix": "R",
+          "auto": "",
+          "visible": true
+        }
+      ],
+      "slotsPreservedOnFocusBlur": true,
+      "resultPreservedOnFocusBlur": true,
+      "undoBefore": 0,
+      "undoAfter": 0,
+      "workerUrls": [
+        "http://127.0.0.1:36085/gbdraw/web/js/workers/diagram-generation-worker.js"
+      ],
+      "pageErrors": [],
+      "consoleErrors": []
+    }
+  ],
+  "limits": [
+    "No Generate/Save/Load round trip or full-app Undo/Redo after a fix was performed.",
+    "Only the frozen baseline was observed; numeric/unit controls were not implemented."
+  ],
+  "runtimeSourceMatchesBase": true,
+  "runtimeSourceSha256": {
+    "gbdraw/web/index.html": "75a0e42d60c26fc334055e2550a19b3740f35c03cc0ad020d6406c81f2003615",
+    "gbdraw/web/js/app/circular-track-slots.js": "a93094d3db695a366adf637b06aa0902e36ea051509e596b9e643b2503dcb902",
+    "gbdraw/web/js/app/track-slot-display.js": "7f89d7d90b78ec8c1c1a3546056dac56993aed45ab638f84c6a5400deaeb7d41",
+    "gbdraw/web/js/app/app-setup.js": "3bac30ab720028615b54933740f837a81249a5d04ea10a5aadfec54abb466d94",
+    "gbdraw/web/js/services/session-request.js": "f8cd15586dd263058d53ee92e8541d20db08b570d45327252e6fcd6706591fe4",
+    "gbdraw/web/js/services/config.js": "5a9bfd767c200cf27f08dd358a9deda7fd74957f12475ae9784e789ef0caf2f0"
+  },
+  "playwrightVersion": "1.61.0"
+}
