@@ -2133,6 +2133,34 @@ test('@pr-smoke native Python engine error reaches Align review and retains choi
   await page.setViewportSize({width:390,height:900});
   await inspectSafeDetails(page,alert,{code:'REGEX_SYNTAX',operation:'align',stage:'rule-validation'});
   expect(logs.join('\n')).not.toContain('PRIVATE_');
+  // Exercise the real run-analysis catch after the native engine-error path.
+  // The next render succeeds; its actual admission owner throws once.
+  await alert.locator('details summary').press('Enter');
+  await page.evaluate(() => {
+    const sanitize = window.DOMPurify.sanitize;
+    window.DOMPurify.sanitize = (...args) => {
+      if (String(args[0]).includes('<svg')) {
+        window.DOMPurify.sanitize = sanitize;
+        throw Object.assign(new Error('PRIVATE_ADMISSION_SENTINEL'), {
+          code: 'COMPARISON_IDENTITY', stage: 'result-admission',
+          context: { reason: 'SOURCE_VIEW_CONFLICT' },
+          secondary: [{ code: 'CLEANUP_FAILED', stage: 'cleanup', message: 'PRIVATE_CLEANUP_SENTINEL' }]
+        });
+      }
+      return sanitize(...args);
+    };
+  });
+  await exposeReviewControl(page,dialog.getByRole('button',{name:'Apply',exact:true}));
+  await applyAndSettle(page,dialog);
+  const caught = await page.evaluate(() => window.__GBDRAW_APP__.similarityAlignmentError);
+  expect(caught).toMatchObject({ code: 'COMPARISON_IDENTITY', operation: 'align', stage: 'result-admission',
+    context: { reason: 'SOURCE_VIEW_CONFLICT' }, secondary: [{ code: 'CLEANUP_FAILED', stage: 'cleanup' }] });
+  const afterCatch = await artifactSnapshot(page);
+  expect({ ...afterCatch, history: [...afterCatch.history.slice(0, 2), before.history[2]] }).toEqual(before);
+  expect(await page.evaluate(() => JSON.stringify(window.__GBDRAW_APP__.similarityAlignmentDraft))).toBe(choices);
+  await expect(alert).toBeFocused();
+  await inspectSafeDetails(page, alert, caught);
+  expect(logs.join('\n')).not.toContain('PRIVATE_');
   await exposeReviewControl(page,dialog.getByRole('button',{name:'Apply',exact:true}));
   await applyAndSettle(page,dialog);
   await expect(dialog).toBeHidden({timeout:180000});

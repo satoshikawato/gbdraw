@@ -42,6 +42,23 @@ assert(normalizeUserFacingError(source, { summaryLimit: 8 }).summary.length <= 8
 assert(normalizeUserFacingError(source, { detailLimit: 8 }).details[0].text.length <= 8);
 assert(normalizeUserFacingError(source, { summaryLimit: 5000, detailLimit: 9000 }).summary.length <= 1000);
 
+// Diagnostic numeric boundaries must survive transport exactly, while larger,
+// fractional, nonfinite and nonnumeric values are omitted rather than clamped.
+for (const key of ['position', 'row', 'inputOrdinal', 'recordIndex', 'seriesIndex', 'slotIndex', 'recordCount', 'columnCount', 'codepoint']) {
+  const maximum = key === 'codepoint' ? 0x10ffff : 10000000;
+  const bounded = value => roundtrip({ ...source, context: { [key]: value, positionUnit: 'python-character' } });
+  for (const value of [0, maximum]) assert.equal(bounded(value).context[key], value, key);
+  for (const value of [-1, maximum + 1, 0.5, Infinity, NaN, String(maximum)]) {
+    assert.equal(bounded(value).context[key], undefined, key);
+  }
+}
+const manyCleanup = roundtrip({ ...source, secondary: Array.from({ length: 20 }, () => ({
+  code: 'CLEANUP_FAILED', stage: 'cleanup', message: sentinel
+})) });
+assert.equal(manyCleanup.code, 'REGEX_SYNTAX');
+assert.deepEqual(manyCleanup.secondary, Array.from({ length: 2 }, () => ({ code: 'CLEANUP_FAILED', stage: 'cleanup' })));
+assert.doesNotMatch(JSON.stringify(manyCleanup), /PRIVATE_SENTINEL/);
+
 // Real Python producers and exact embedded adapters, through Worker serializer/client.
 const invoke = (payload) => JSON.parse(execFileSync(process.env.PYTHON || 'python',
   ['tests/web/helpers/structured-error-oracle.py'], { input: JSON.stringify(payload), encoding: 'utf8' }));
