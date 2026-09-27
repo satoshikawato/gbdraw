@@ -256,3 +256,80 @@ test('Linear comparison keeps both legend orientations and their swatches canoni
     await fs.writeFile(testInfo.outputPath('dual-legend.json'),JSON.stringify({...fresh,svg:undefined},null,2));
   }finally{await page.context().close();}
 });
+
+
+for (const width of [1440, 390]) {
+  test(`loaded default caption recolors its complete group atomically (${width}px)`, async ({ browser }, info) => {
+    test.setTimeout(180000);
+    const page = await load(browser, 'gbdraw/web/gallery/sessions/HmmtDNA_basic_circular.gbdraw-session.json', { width, height: 1000 });
+    let fresh;
+    try {
+      const evidence = () => page.evaluate(async () => {
+        const a = window.__GBDRAW_APP__;
+        const { getGenerationApplicationStatus } = await import('./js/services/config.js');
+        const root = a.svgContainer.querySelector('svg');
+        const result = new DOMParser().parseFromString(a.results[a.selectedResultIndex].content, 'image/svg+xml');
+        const ids = new Set(a.extractedFeatures.filter(f => f.type === 'tRNA').map(f => f.svg_id));
+        const colors = svg => [...new Set([...svg.querySelectorAll('path[data-gbdraw-feature-part="block"]')].filter(e => ids.has(e.getAttribute('data-gbdraw-feature-id'))).map(e => e.getAttribute('fill')))];
+        return { mounted: colors(root), result: colors(result),
+          undo: window.__GBDRAW_HISTORY__.getUndoCount(), status: getGenerationApplicationStatus() };
+      });
+      const target = await page.evaluate(() => {
+        const a = window.__GBDRAW_APP__, feature = a.extractedFeatures.find(f => f.type === 'tRNA');
+        a.openFeatureEditorFromList(feature, { clientX: 220, clientY: 220 });
+        a.adv.scale_interval = 12345;
+        return feature.svg_id;
+      });
+      expect(target).toBeTruthy();
+      const before = await evidence();
+      expect(before.mounted).toHaveLength(1);
+      expect(before.result).toEqual(before.mounted);
+      const fill = page.getByRole('dialog', { name: /Feature details:/ }).getByLabel('Feature fill color').first();
+      await fill.fill('#c026d3');
+      const scope = page.getByRole('heading', { name: 'Color Change Scope' }).locator('..');
+      await scope.getByRole('button').filter({ hasText: 'Apply to all "tRNA"' }).last().click();
+      await expect.poll(async () => (await evidence()).mounted, { timeout: 10000 }).toEqual(['#c026d3']);
+      const after = await evidence();
+      expect(after.result).toEqual(['#c026d3']);
+      expect(after.undo).toBe(before.undo + 1);
+      expect(after.status.status).toBe('pending');
+      expect(after.status.differences).toEqual(before.status.differences);
+      expect(after.status.differences.some(path => path.includes('scale.interval'))).toBe(true);
+      const live = await inspect(page);
+      expect(live.result.find(entry => entry.caption === 'tRNA')?.color).toBe('#c026d3');
+      await history(page, 'Undo');
+      expect((await evidence()).mounted).toEqual(before.mounted);
+      expect((await evidence()).result).toEqual(before.result);
+      expect((await inspect(page)).result.find(entry => entry.caption === 'tRNA')?.color).toBe(before.mounted[0]);
+      await history(page, 'Redo');
+      expect((await evidence()).mounted).toEqual(after.mounted);
+      expect((await inspect(page)).rules).toEqual(live.rules);
+      expect((await inspect(page)).result.find(entry => entry.caption === 'tRNA')?.color).toBe('#c026d3');
+      const saved = info.outputPath('default-caption.json.gz');
+      await download(page, 'Save Session', saved);
+      fresh = await load(browser, saved, { width, height: 1000 });
+      expect((await inspect(fresh)).rules).toEqual(live.rules);
+      expect((await inspect(fresh)).result.find(entry => entry.caption === 'tRNA')?.color).toBe('#c026d3');
+      expect((await getDiagramWorkerActivity(fresh)).runs).toBe(0);
+      await generate(fresh);
+      expect((await inspect(fresh)).result.find(entry => entry.caption === 'tRNA')?.color).toBe('#c026d3');
+      await history(page, 'Undo');
+      await page.evaluate(async () => {
+        const a = window.__GBDRAW_APP__;
+        const { getFeatureGenerationHash } = await import('./js/app/feature-utils.js');
+        Object.assign(a.newSpecRule, { feat: 'CDS', qual: 'hash',
+          val: getFeatureGenerationHash(a.extractedFeatures.find(feature => feature.type === 'CDS')),
+          color: '#112233', cap: 'Independent group' });
+        await a.addSpecificRule();
+      });
+      const independent = await inspect(page);
+      expect(independent.result.find(entry => entry.caption === 'tRNA')?.color).toBe(before.mounted[0]);
+      expect(independent.result.find(entry => entry.caption === 'Independent group')?.color).toBe('#112233');
+      expect(page.externalRequests).toEqual([]);
+      expect(fresh.externalRequests).toEqual([]);
+    } finally {
+      await page.context().close();
+      if (fresh) await fresh.context().close();
+    }
+  });
+}

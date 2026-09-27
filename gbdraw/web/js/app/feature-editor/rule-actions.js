@@ -56,24 +56,23 @@ export const createFeatureRuleActions = ({ state, nextTick, legendActions, ruleP
       .map(rule => ({ caption: rule.cap, color: rule.color })), ...previousLegendIntents];
     const previousCaptions = new Set(previousIntents.map(intent => intent.caption));
     let applied = false;
-    await history.runUndoableCheckpoint(label, async () => {
-      if (!current()) return;
-      await legendActions.syncFileLegendEntries(candidate.intents.filter(intent => !(state.deletedLegendEntries?.value || [])
-        .some(entry => (entry.originalCaption || entry.caption) === intent.caption)), {
-        previousFileIntents: previousIntents,
-        isCurrent: current,
-        commit: () => {
-          manualSpecificRules.splice(0, manualSpecificRules.length, ...candidate.rules);
-          fileLegendCaptions.value = new Set(candidate.rules.filter(rule => rule.fromFile && rule.cap).map(rule => rule.cap));
-          addedLegendCaptions.value = new Set([
-            ...[...addedLegendCaptions.value].filter(caption => !previousCaptions.has(caption)),
-            ...candidate.intents.map(intent => intent.caption)
-          ]);
-          applyRulePreview();
-          afterCommit(candidate);
-          applied = true;
-        }
-      });
+    await legendActions.syncFileLegendEntries(candidate.intents.filter(intent => !(state.deletedLegendEntries?.value || [])
+      .some(entry => (entry.originalCaption || entry.caption) === intent.caption)), {
+      previousFileIntents: previousIntents,
+      isCurrent: current,
+      transact: (diff, apply) => (diff.add.length || diff.remove.length
+        ? history.runUndoableCheckpoint : history.runUndoable)(label, apply),
+      commit: () => {
+        manualSpecificRules.splice(0, manualSpecificRules.length, ...candidate.rules);
+        fileLegendCaptions.value = new Set(candidate.rules.filter(rule => rule.fromFile && rule.cap).map(rule => rule.cap));
+        addedLegendCaptions.value = new Set([
+          ...[...addedLegendCaptions.value].filter(caption => !previousCaptions.has(caption)),
+          ...candidate.intents.map(intent => intent.caption)
+        ]);
+        applyRulePreview();
+        afterCommit(candidate);
+        applied = true;
+      }
     });
     if (applied) rulePreparation.notifyChanges(candidate);
     return applied;

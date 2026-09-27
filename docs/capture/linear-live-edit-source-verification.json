@@ -1,0 +1,30 @@
+[
+  {
+    "accession": "NC_001416.1",
+    "format": "gbwithparts",
+    "url": "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi?db=nuccore&id=NC_001416.1&rettype=gbwithparts&retmode=text",
+    "retrievedUtc": "2026-09-27T00:16:23.058196+00:00",
+    "sourceBytes": 176721,
+    "sourceSha256": "3c624302adeeb3c00649f549903ab781b9e75bab16069ae655833d536407367f",
+    "mirrorPath": "docs/capture/fixtures/NC_001416.1.gb.gz",
+    "mirrorBytes": 48638,
+    "mirrorSha256": "fbb33cbea32b81a685a53c96e744f7e4f5d0a9018357834ee313c2f304b705c3",
+    "equal": true,
+    "previousMirrorStatus": "legacy-unverified: taxonomy differs; not used by this capture",
+    "mirrorCompression": "gzip",
+    "uncompressedBytes": 176721,
+    "uncompressedSha256": "3c624302adeeb3c00649f549903ab781b9e75bab16069ae655833d536407367f"
+  },
+  {
+    "accession": "NC_042057.1",
+    "format": "gbwithparts",
+    "url": "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi?db=nuccore&id=NC_042057.1&rettype=gbwithparts&retmode=text",
+    "retrievedUtc": "2026-09-27T00:16:25.054668+00:00",
+    "sourceBytes": 111686,
+    "sourceSha256": "288eb87480f8fe6eab6246fe1fc4af78c85a6cb7e591c47fd7d7f0170c932e09",
+    "mirrorPath": "gbdraw/web/tutorial-data/de3/NC_042057.1.gb",
+    "mirrorBytes": 111686,
+    "mirrorSha256": "288eb87480f8fe6eab6246fe1fc4af78c85a6cb7e591c47fd7d7f0170c932e09",
+    "equal": true
+  }
+]
