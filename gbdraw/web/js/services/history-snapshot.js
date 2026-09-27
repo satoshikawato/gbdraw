@@ -29,7 +29,7 @@ const replacePlainObject = (target, source) => {
 };
 
 const replaceRefArray = (target, source) => {
-  if (!target || typeof target !== 'object' || !Object.prototype.hasOwnProperty.call(target, 'value')) return;
+  if (!target || typeof target !== 'object' || !('value' in target)) return;
   target.value = Array.isArray(source) ? cloneJsonData(source) : [];
 };
 
@@ -50,6 +50,7 @@ const buildFeatureIntentData = (features = {}) => ({
 const buildEditorIntentData = (editorState = {}) => ({
   legend: {
     entries: cloneJsonData(editorState?.legend?.entries) || [],
+    ...(editorState?.legend?.entryOwners ? { entryOwners: cloneJsonData(editorState.legend.entryOwners) } : {}),
     deletedEntries: cloneJsonData(editorState?.legend?.deletedEntries) || [],
     colorOverrides: clonePlainObject(editorState?.legend?.colorOverrides),
     strokeOverrides: clonePlainObject(editorState?.legend?.strokeOverrides),
@@ -195,13 +196,13 @@ const replaceFeatureVisibilityState = (state, features = {}) => {
 };
 
 const setRef = (target, value) => {
-  if (target && typeof target === 'object' && Object.prototype.hasOwnProperty.call(target, 'value')) {
+  if (target && typeof target === 'object' && 'value' in target) {
     target.value = value;
   }
 };
 
 const getRef = (target, fallback = null) => (
-  target && typeof target === 'object' && Object.prototype.hasOwnProperty.call(target, 'value')
+  target && typeof target === 'object' && 'value' in target
     ? target.value
     : fallback
 );
@@ -646,6 +647,7 @@ export const createHistorySnapshotService = ({
   buildUiStateData = null,
   applyUiStateData = null,
   buildCompositionIntent = null,
+  buildLegendEntryOwners = null,
   buildFeatureStateData = null,
   applyFeatureStateData = null,
   buildEditorStateData = null,
@@ -1366,6 +1368,7 @@ export const createHistorySnapshotService = ({
     const editorState = {
       legend: {
         entries: getRef(state.legendEntries, []),
+        ...(typeof buildLegendEntryOwners === 'function' ? { entryOwners: buildLegendEntryOwners() } : {}),
         deletedEntries: getRef(state.deletedLegendEntries, []),
         colorOverrides: state.legendColorOverrides,
         strokeOverrides: state.legendStrokeOverrides,

@@ -22,10 +22,12 @@ import {
   buildRunStateData,
   buildUiStateData,
   canonicalRenderArtifactOwner,
+  commitAppliedGenerationFields,
   exportSession,
   disposeSessionOperations,
   getCommittedCanonicalSession,
   getCommittedCanonicalRenderRequest,
+  getGenerationApplicationStatus,
   importSession as importSessionFromFile,
   SESSION_VERSION,
   serializeActiveRenderFiles,
@@ -85,6 +87,7 @@ import {
   compositionUserDeltas
 } from './legend-layout/composition-actions.js';
 import { createResultsManager } from './results.js';
+import { describeGenerationApplication } from './generation-status.js';
 import { setupWatchers } from './watchers.js';
 import { setupHistoryInputs } from './history-inputs.js';
 import { setupHistoryShortcuts } from './history-shortcuts.js';
@@ -128,6 +131,7 @@ import {
 } from './linear-record-layout.js';
 import {
   describeLinearLabelVisibility,
+  requireLinearLabelVisibilityMode,
   resolveLinearLabelVisibility
 } from './linear-label-visibility.js';
 import {
@@ -1156,6 +1160,7 @@ export const createAppSetup = () => {
     applyConfigData,
     buildUiStateData,
     applyUiStateData,
+    buildLegendEntryOwners: () => legendActions.captureLegendEntryOwners(),
     buildCompositionIntent: () => {
       const svg = svgContainer.value?.querySelector?.('svg') || null;
       if (!svg) return null;
@@ -1193,6 +1198,13 @@ export const createAppSetup = () => {
   const recordDisplayControls = createRecordDisplayControls({ state, computed, watch, linearRecordSelector, history, getCommittedRequest: getCommittedCanonicalRenderRequest, getCommittedSession: getCommittedCanonicalSession });
   state.recordDisplayRows = recordDisplayControls.allRows;
   window.__GBDRAW_HISTORY__ = history;
+  const generationApplicationFeedback = computed(() => {
+    // Observe existing artifact/edit owners when the applied basis changes.
+    void history.revision.value;
+    void svgContent.value;
+    void results.value;
+    return describeGenerationApplication(getGenerationApplicationStatus());
+  });
   const canUndoHistory = computed(() => {
     void history.revision.value;
     return history.canUndo();
@@ -1258,7 +1270,7 @@ export const createAppSetup = () => {
     state,
     pending: ruleMatchingPending,
     notify: notice => { specificRuleNotice.value = notice; },
-    evaluate: async (payload) => (await runDiagramHelperOperation(DIAGRAM_HELPER_OPERATIONS.EVALUATE_RULES, payload)).result
+    evaluate: async (payload, options) => (await runDiagramHelperOperation(DIAGRAM_HELPER_OPERATIONS.EVALUATE_RULES, payload, options)).result
   });
   const legendActions = createLegendManager({
     state,
@@ -1268,6 +1280,7 @@ export const createAppSetup = () => {
     previewRuntime
   });
   const svgActions = createSvgStyles({
+    commitAppliedGenerationFields,
     state,
     rulePreparation,
     watch,
@@ -1572,6 +1585,29 @@ export const createAppSetup = () => {
   const linearLabelVisibilitySummary = (mode) => describeLinearLabelVisibility(mode, {
     hasSharedRow: linearLabelHasSharedRow.value
   });
+  const linearLabelAutoFields = computed(() => definitionLineStyleRows.filter((row) => (
+    row.visibilityType === 'mode'
+    && requireLinearLabelVisibilityMode(adv[row.visibilityKey]) === 'auto'
+  )));
+  const linearLabelAutoDisclosure = computed(() => {
+    if (!linearLabelAutoFields.value.length) return '';
+    const fields = linearLabelAutoFields.value.map((row) => row.label).join(' and ');
+    const shown = resolveLinearLabelVisibility('auto', {
+      hasSharedRow: linearLabelHasSharedRow.value
+    });
+    return shown
+      ? `${fields}: Auto will show these fields throughout the diagram on the next successful Generate because no rendered row contains multiple records.`
+      : `${fields}: Auto will hide these fields throughout the diagram on the next successful Generate because at least one rendered row contains multiple records. Choose Show in Record Labels to keep a field visible.`;
+  });
+  const focusLinearLabelVisibility = async (key) => {
+    if (mode.value !== 'linear') return;
+    const select = document.getElementById(`linear-label-visibility-${key}`);
+    if (!select) return;
+    select.closest('details').open = true;
+    await nextTick();
+    select.scrollIntoView({ block: 'center' });
+    select.focus({ preventScroll: true });
+  };
   const legendPositionLabel = (position) => ({
     right: 'Right',
     left: 'Left',
@@ -2594,7 +2630,7 @@ export const createAppSetup = () => {
       reconcileLabelOverrides();
     }
     if (changedDomains.has('editorState')) {
-      reconcileLegendEntries({ restoreColorState: true });
+      reconcileLegendEntries({ restoreColorState: true, entryOwners: _intent.editorState.legend.entryOwners });
       reconcileStrokeOverrides({ changes });
       reconcileLabelOverrides();
     }
@@ -4149,6 +4185,7 @@ export const createAppSetup = () => {
 
   return {
     recordDisplayControls,
+    generationApplicationFeedback,
     featureRecordRotationDraft: featureRecordRotation.draft,
     recordActionsExpanded,
     toggleRecordActions,
@@ -4818,6 +4855,9 @@ export const createAppSetup = () => {
     resetCanvasPadding,
     definitionLineStyleRows,
     linearLabelVisibilitySummary,
+    linearLabelAutoFields,
+    linearLabelAutoDisclosure,
+    focusLinearLabelVisibility,
     legendPositionLabel,
     getDefinitionLineStyleSize,
     setDefinitionLineStyleSize,

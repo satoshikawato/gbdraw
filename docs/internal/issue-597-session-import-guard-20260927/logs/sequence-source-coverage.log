@@ -1,0 +1,11 @@
+✔ real Vibrio catalog covers every sequence consumer with a valid sparse catalog (19.647278ms)
+✔ real Vibrio session still projects its embedded records and presentation settings (3.500209ms)
+✔ real current Vibrio Gallery session retains its collinearity unit gap (0.113889ms)
+ℹ tests 3
+ℹ suites 0
+ℹ pass 3
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 494.292873

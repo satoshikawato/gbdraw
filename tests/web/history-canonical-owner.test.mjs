@@ -21,6 +21,8 @@ const canonical = JSON.parse(await readFile(
 adoptCanonicalRenderArtifacts(canonical, { adoptOwnedRequest: true });
 const a = canonicalRenderArtifactOwner.capture();
 assert(Object.isFrozen(a));
+assert.equal(a.appliedGenerationIntent.status, 'valid');
+assert.equal(a.appliedGenerationIntent.meaning.diagramOptions.configOverrides['labels.circular.scope'], 'outer');
 assert.strictEqual(a.committedCanonicalSession.renderRequest, getCommittedCanonicalRenderRequest());
 state.form.labels_mode = 'out';
 state.results.value = [{ name: 'a.svg', content: '<svg id="a"/>' }];
@@ -50,11 +52,14 @@ await history.undo();
 assert.strictEqual(getCommittedCanonicalRenderRequest(), a.committedCanonicalSession.renderRequest);
 assert.strictEqual(canonicalRenderArtifactOwner.capture().activeSessionResourceTable, a.activeSessionResourceTable);
 assert.equal(state.results.value[0].name, 'a.svg');
+assert.strictEqual(canonicalRenderArtifactOwner.capture().appliedGenerationIntent, a.appliedGenerationIntent);
 assert.equal(state.form.labels_mode, 'none');
 await history.redo();
 assert.strictEqual(getCommittedCanonicalRenderRequest(), b.committedCanonicalSession.renderRequest);
 assert.strictEqual(canonicalRenderArtifactOwner.capture().activeSessionResourceTable, b.activeSessionResourceTable);
 assert.equal(state.results.value[0].name, 'b.svg');
+assert.strictEqual(canonicalRenderArtifactOwner.capture().appliedGenerationIntent, b.appliedGenerationIntent);
+assert.equal(b.appliedGenerationIntent.meaning.diagramOptions.configOverrides['labels.circular.scope'], 'none');
 await history.undo();
 await history.undo();
 assert.equal(state.form.labels_mode, 'out');
@@ -65,8 +70,20 @@ await assert.rejects(history.runUndoableArtifactReplacement('Failed Generate', (
 }), /finalization failed/);
 assert.strictEqual(getCommittedCanonicalRenderRequest(), a.committedCanonicalSession.renderRequest);
 assert.strictEqual(canonicalRenderArtifactOwner.capture().activeSessionResourceTable, a.activeSessionResourceTable);
+assert.strictEqual(canonicalRenderArtifactOwner.capture().appliedGenerationIntent, a.appliedGenerationIntent);
+for (const status of ['canceled','stale']) {
+  const before = canonicalRenderArtifactOwner.capture();
+  const undoCount = history.getUndoCount();
+  await history.runUndoableArtifactReplacement('Unaccepted Generate', () => ({status}), {
+    shouldCommit: result => result.status === 'ok'
+  });
+  assert.strictEqual(canonicalRenderArtifactOwner.capture().appliedGenerationIntent, before.appliedGenerationIntent);
+  assert.strictEqual(getCommittedCanonicalRenderRequest(), before.committedCanonicalSession.renderRequest);
+  assert.equal(history.getUndoCount(), undoCount);
+}
 canonicalRenderArtifactOwner.restore(empty);
 assert.equal(getCommittedCanonicalRenderRequest(), null);
+assert.equal(canonicalRenderArtifactOwner.capture().appliedGenerationIntent, null);
 assert.equal(canonicalRenderArtifactOwner.capture().activeSessionResourceTable, null);
 state.results.value = [];
 await history.initializeIntentBaseline();

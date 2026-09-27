@@ -5,7 +5,7 @@ Status: active Product authority
 ## Authority metadata
 
 - Contract ID: `OIPC`
-- Contract revision: `23`
+- Contract revision: `24`
 - Product Decision Owner: `satoshikawato`
 - Decision date: `2026-08-28`
 - Decision source: explicit Product Decision Owner selection of one (`1`) after
@@ -29,7 +29,7 @@ Status: active Product authority
   `PD-OI-031`, `PD-OI-032`, `PD-OI-033`, `PD-OI-034`, `PD-OI-035`,
   `PD-OI-036`, `PD-OI-037`, `PD-OI-038`, `PD-OI-039`, `PD-OI-040`,
   `PD-OI-041`, `PD-OI-042`, `PD-OI-043`, `PD-OI-044`, `PD-OI-045`,
-  `PD-OI-046`, `PD-OI-047`, `PD-OI-048`, `PD-OI-049`, and `PD-OI-050`
+  `PD-OI-046`, `PD-OI-047`, `PD-OI-048`, `PD-OI-049`, `PD-OI-050`, and `PD-OI-051`
 - Revision 3 addition: `PD-OI-018`, accepted by `satoshikawato` on
   `2026-09-13` after confirming the complete record/search outcome, no feature
   retirement, and the runtime/memory cost of complete comparisons. The initial
@@ -191,6 +191,13 @@ Status: active Product authority
   This authority-only amendment contains no runtime or runtime acceptance
   evidence; dependent implementation requires these records merged into its
   base.
+- Revision 24 addition: `PD-OI-051`, the complete Choice A receipt for
+  `diagram-generation.inflight-comparison-draft`, approved and signed by
+  `satoshikawato` on `2026-09-27`. The record and source receipt preserve all
+  nine approved fields. Earlier decisions and acceptance conditions retain
+  their scope. This authority-only amendment contains no runtime or runtime
+  acceptance evidence; dependent implementation requires the record merged
+  into its base.
 - Records remaining `EVIDENCE_REQUIRED`: none
 - Excluded records: none
 
@@ -1995,6 +2002,52 @@ Decision date: 2026-09-27
   "mustPreserve": "空欄/Autoのnull意味、unitを先に選ぶ操作、manual値のunitとHistory/Session、既存preview/request、invaliddraftと失敗復旧。",
   "mayRetire": "なし。Autoのunit preferenceのHistory/Session保証は新設しない。",
   "acceptedResidualRisk": "空欄時だけのunit選択はpanel再マウントやLoadで忘れられる。manual scalarのunitは必ず残り、Auto geometryは変わらない。",
+  "owner": "satoshikawato",
+  "decisionDate": "2026-09-27"
+}
+```
+
+### PD-OI-051: In-flight comparison draft changes
+
+- Concern key: `diagram-generation.inflight-comparison-draft`
+- Scenario revision: `1`
+- Status: `ACCEPTED`
+- Selected outcome: `A / RUN_SNAPSHOT_COMMIT_DRAFT_RETAINED`
+- Normative outcome: exactly the complete approved `PRODUCT_DECISION` receipt
+  and its nine-field JSON representation below.
+- Decision source: the complete nine-field receipt and JSON below, reviewed,
+  approved, and signed by `satoshikawato` on `2026-09-27` with
+  「承認、署名します。devに統合してください。」 The owner selected Choice A
+  and requested preparation of the remaining wording before that approval.
+  All nine approved fields are reproduced without translation or additional
+  terms. This record does not supersede another decision. Dependent runtime
+  requires this authority merged into its base; this amendment supplies no
+  runtime acceptance evidence.
+- Receipt SHA-256 (UTF-8, excluding final newline):
+  `b23439b7d9a744f1683735cc97ae2e86091febdf4eb3e11cfe967952f1c78776`.
+
+```text
+PRODUCT_DECISION
+Concern: diagram-generation.inflight-comparison-draft
+Scenario revision: 1
+Choice: A / RUN_SNAPSHOT_COMMIT_DRAFT_RETAINED
+Rationale: 開始時に固定したrequestの生成を完了させ、利用者が後から変更した比較draftは次のGenerateに残すことで、進行中の作業と次の操作を両立する。
+Must preserve: 開始時のmixed upload/LOSAT比較snapshotとstable source-bound query/subject endpoints・ordinalsを使い、biological inputs・rules・current artifactが不変でCancel/new Generateがなければ生成を完了する。後から選んだnone draftと保持された3 edge draftsを上書きせず、次のGenerateではnoneを適用する。source bytes/exact identity、mixed upload/LOSATの区別、content-addressed raw cacheと互換cache再利用、Last successful Result/request、draft、Cancel・true stale・new-run隔離、atomic artifact/History/rollback、SessionのResult/draft分離、current Result export、既存keyboard/focusを維持する。rule/catalog/Result/editor/source変更による旧candidate拒否を維持する。#598の4決定、Decision Packs 01–05、PD-OI-035 revision 3、EXCLUSIVE_DIRECTIONS_WITHOUT_MATCH、logical pre-Align reference center、canvas/keyboard/focus/Editor/exact identity/Select/Skipの独立要求を変更しない。
+May retire: none
+Accepted residual risk: none
+Owner: satoshikawato
+Decision date: 2026-09-27
+```
+
+```json
+{
+  "concern": "diagram-generation.inflight-comparison-draft",
+  "scenarioRevision": 1,
+  "choice": "A / RUN_SNAPSHOT_COMMIT_DRAFT_RETAINED",
+  "rationale": "開始時に固定したrequestの生成を完了させ、利用者が後から変更した比較draftは次のGenerateに残すことで、進行中の作業と次の操作を両立する。",
+  "mustPreserve": "開始時のmixed upload/LOSAT比較snapshotとstable source-bound query/subject endpoints・ordinalsを使い、biological inputs・rules・current artifactが不変でCancel/new Generateがなければ生成を完了する。後から選んだnone draftと保持された3 edge draftsを上書きせず、次のGenerateではnoneを適用する。source bytes/exact identity、mixed upload/LOSATの区別、content-addressed raw cacheと互換cache再利用、Last successful Result/request、draft、Cancel・true stale・new-run隔離、atomic artifact/History/rollback、SessionのResult/draft分離、current Result export、既存keyboard/focusを維持する。rule/catalog/Result/editor/source変更による旧candidate拒否を維持する。#598の4決定、Decision Packs 01–05、PD-OI-035 revision 3、EXCLUSIVE_DIRECTIONS_WITHOUT_MATCH、logical pre-Align reference center、canvas/keyboard/focus/Editor/exact identity/Select/Skipの独立要求を変更しない。",
+  "mayRetire": "none",
+  "acceptedResidualRisk": "none",
   "owner": "satoshikawato",
   "decisionDate": "2026-09-27"
 }

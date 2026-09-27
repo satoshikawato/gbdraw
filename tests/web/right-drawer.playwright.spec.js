@@ -1,6 +1,15 @@
 const { test, expect } = require('@playwright/test');
 const { writeFileSync } = require('node:fs');
-const { semantics, switchMode } = require('./helpers/mode-transition.cjs');
+const { semantics, switchMode, snapshot: readSnapshot } = require('./helpers/mode-transition.cjs');
+const { semantics: svgSemantics } = require('./helpers/visual-state.cjs');
+
+const snapshot = async (page) => {
+  // Opening an imported Editor hydrates transient DOM label bindings and its
+  // derived context key. Compare every drawing primitive/text with the existing
+  // oracle, while keeping exact Result, payload, request and override checks.
+  const { context, mounted, ...artifact } = await readSnapshot(page);
+  return { ...artifact, mounted: await svgSemantics(page, mounted) };
+};
 
 const loadGallerySession = async (page, filename) => page.evaluate(async (name) => {
   const response = await fetch(`/gbdraw/web/gallery/sessions/${name}`);
@@ -96,6 +105,10 @@ const readOverlayGeometry = (page) => page.evaluate(() => {
     controls: rect(controls),
     zoomControls: rect(zoomControls),
     drawer: rect(drawer),
+    canvas: rect(document.querySelector('.preview-canvas')),
+    header: rect(document.querySelector('.app-header')),
+    generate: getComputedStyle(document.querySelector('.generate-bar')).position === 'fixed'
+      ? rect(document.querySelector('.generate-bar')) : null,
     controlButtons: Array.from(controls.querySelectorAll('button')).map((button) => ({
       name: button.getAttribute('aria-label') || button.getAttribute('title') || '',
       box: rect(button),
@@ -204,6 +217,12 @@ test.beforeEach(async ({ page }) => {
     return route.abort();
   });
   page.on('dialog', (dialog) => dialog.accept());
+  await page.addInitScript(() => {
+    window.__MODE_EVENTS__ = [];
+    window.__GBDRAW_TEST_HOOKS__ = {
+      onSessionLifecycleEvent: (event) => window.__MODE_EVENTS__.push(event)
+    };
+  });
   await page.goto('/gbdraw/web/index.html', { waitUntil: 'domcontentloaded' });
   await page.waitForFunction(() => window.__GBDRAW_APP__);
 });
@@ -252,6 +271,7 @@ for (const viewport of ISSUE_461_VIEWPORTS) {
 const MOBILE_VIEWPORTS = [
   { id: 'MOB1', width: 390, height: 844 },
   { id: 'MOB2', width: 375, height: 667 },
+  { id: 'M01-740', width: 390, height: 740 },
   { id: 'MOB3', width: 430, height: 932 },
   { id: 'MOB4', width: 844, height: 390 }
 ];
@@ -260,50 +280,49 @@ const centerPreview = async (page) => {
   await waitForSettledDrawer(page);
   await page.getByRole('region', { name: 'Result Preview' }).evaluate(async (preview) => {
     await document.fonts.ready;
-    await Promise.all(preview.getAnimations().map((animation) => animation.finished.catch(() => {})));
-    preview.scrollIntoView({ block: 'center' });
-    // Center the journey's Preview in the space between the sticky header and
-    // fixed mobile Generate bar, as a user scrolling to the Result would.
+    const canvas = preview.querySelector('.preview-canvas');
+    const compact = getComputedStyle(preview.querySelector('.preview-editor-layout')).display === 'grid';
+    const target = compact ? canvas : preview;
+    target.scrollIntoView({ block: 'center' });
     const header = document.querySelector('.app-header').getBoundingClientRect();
     const generate = document.querySelector('.generate-bar');
     const bottom = getComputedStyle(generate).position === 'fixed'
       ? generate.getBoundingClientRect().top : innerHeight;
-    const box = preview.getBoundingClientRect();
-    window.scrollBy(0, (box.top + box.bottom - header.bottom - bottom) / 2);
+    const box = target.getBoundingClientRect();
+    // Scroll the actual canvas/toolbar/dock into the available screen. The
+    // search and export controls precede it and stay reachable by page scroll.
+    window.scrollBy(0, compact ? box.top - header.bottom
+      : (box.top + box.bottom - header.bottom - bottom) / 2);
   });
 };
 
 const assertMobileGeometry = (geometry, drawerOpen) => {
-  const { preview, toggle, drawer, viewport } = geometry;
+  const { preview, canvas, toggle, drawer, viewport, header, generate } = geometry;
   expect(viewport.pageWidth).toBeLessThanOrEqual(viewport.width);
   expect(toggle.left).toBeGreaterThanOrEqual(Math.max(0, preview.left));
   expect(toggle.right).toBeLessThanOrEqual(Math.min(viewport.width, preview.right));
-  expect(toggle.top).toBeGreaterThanOrEqual(Math.max(0, preview.top));
-  expect(toggle.bottom).toBeLessThanOrEqual(Math.min(viewport.height, preview.bottom));
-  expect(geometry.toggleReceivesPointerAtCenter, 'Editor toggle center is blocked').toBe(true);
-  expect(boxOverlap(toggle, geometry.controls).intersects).toBe(false);
+  // Search and its toggle precede the canvas and may be above the screen after
+  // scrolling to the dock; their hit tests run when scrolled into view.
   for (const button of geometry.controlButtons) {
     expect(boxOverlap(toggle, button.box).intersects, button.name).toBe(false);
+    expect(boxOverlap(canvas, button.box).intersects, button.name).toBe(false);
+    expect(boxOverlap(button.box, drawer).intersects && drawerOpen, button.name).toBe(false);
+    expect(button.box.left).toBeGreaterThanOrEqual(canvas.left);
+    expect(button.box.right).toBeLessThanOrEqual(canvas.right);
+    expect(button.receivesPointerAtCenter, `${button.name} blocked`).toBe(true);
   }
-  if (!drawerOpen) {
-    assertOverlayGeometry(geometry, 'mobile closed', false);
-    return;
-  }
-  expect(drawer.left).toBeGreaterThanOrEqual(Math.max(0, preview.left));
-  expect(drawer.right).toBeLessThanOrEqual(Math.min(viewport.width, preview.right));
-  expect(drawer.top).toBeGreaterThanOrEqual(0);
-  expect(drawer.bottom).toBeLessThanOrEqual(viewport.height);
-  expect(boxOverlap(toggle, drawer).intersects).toBe(false);
-  for (const button of geometry.controlButtons) {
-    // At these narrow widths the drawer obscures the underlying toolbar. A
-    // partially exposed button with a blocked center would still be a defect.
-    if (boxOverlap(button.box, drawer).intersects) {
-      expect(button.box.left, `${button.name} exposed beside drawer`).toBeGreaterThanOrEqual(drawer.left);
-      expect(button.box.top).toBeGreaterThanOrEqual(drawer.top);
-      expect(button.box.bottom).toBeLessThanOrEqual(drawer.bottom);
-      expect(button.receivesPointerAtCenter).toBe(false);
-    } else {
-      expect(button.receivesPointerAtCenter, `${button.name} exposed but blocked`).toBe(true);
+  expect(canvas.left).toBe(preview.left + 2);
+  expect(canvas.right).toBe(preview.right - 2);
+  if (drawerOpen) {
+    expect(drawer.left).toBe(canvas.left);
+    expect(drawer.right).toBe(canvas.right);
+    expect(drawer.top).toBeGreaterThanOrEqual(canvas.bottom);
+    expect(boxOverlap(toggle, drawer).intersects).toBe(false);
+    if (viewport.width === 390 && [844, 740].includes(viewport.height)) {
+      const visibleHeight = Math.min(canvas.bottom, generate?.top ?? viewport.height)
+        - Math.max(canvas.top, header.bottom);
+      expect(visibleHeight, 'M01: actual visible canvas below header and above Generate').toBeGreaterThanOrEqual(200);
+      expect(drawer.bottom, 'M01: complete dock above Generate').toBeLessThanOrEqual(generate.top);
     }
   }
 };
@@ -331,6 +350,9 @@ for (const viewport of MOBILE_VIEWPORTS) {
       }));
       const content = () => page.locator('.gbdraw-preview-surface svg').evaluate((svg) => svg.outerHTML);
       const beforeIdentity = await identity();
+      const historyCounts = () => page.evaluate(() => [
+        window.__GBDRAW_HISTORY__.getUndoCount(), window.__GBDRAW_HISTORY__.getRedoCount()
+      ]);
       const beforeSemantics = await semantics(page, await content());
       const text = () => page.locator('.gbdraw-preview-surface svg text').allTextContents();
       const beforeText = await text();
@@ -355,12 +377,19 @@ for (const viewport of MOBILE_VIEWPORTS) {
       await expect(page.getByRole('button', { name: 'Reset zoom', exact: true })).toHaveText('100%');
       expect(await identity()).toEqual(beforeIdentity);
       expect(await semantics(page, await content())).toEqual(beforeSemantics);
+      // Reset Layout above is an explicit artifact action. Start the pure
+      // open/close baseline after it, so its serialization is not attributed
+      // to the drawer's presentation transitions.
+      const beforeArtifact = await snapshot(page);
+      const beforeHistory = await historyCounts();
       await centerPreview(page);
       await toggle.click();
       await expect(toggle).toHaveAttribute('aria-expanded', 'true');
       await expect(drawer).toHaveAttribute('aria-hidden', 'false');
       await expect(toggle).toHaveAttribute('title', 'Close editor');
       await capture('open');
+      await exercisePreviewControls(page);
+      await centerPreview(page);
       // Exercise the real scrollable Features list, not just its overflow style.
       const scroll = await drawer.locator('.overflow-y-auto').evaluateAll((elements) => {
         const list = elements.find((element) => element.scrollHeight > element.clientHeight);
@@ -388,6 +417,8 @@ for (const viewport of MOBILE_VIEWPORTS) {
       expect(await identity()).toEqual(beforeIdentity);
       expect(await semantics(page, await content())).toEqual(beforeSemantics);
       expect(await text()).toEqual(beforeText);
+      expect(await snapshot(page)).toEqual(beforeArtifact);
+      expect(await historyCounts()).toEqual(beforeHistory);
       expect(await toggle.ariaSnapshot()).toEqual(initialAccessibility);
       writeFileSync(testInfo.outputPath('diagnostics.json'), JSON.stringify(page.overlayDiagnostics, null, 2));
       assertNoOverlayErrors(page);
@@ -627,19 +658,27 @@ test('preview similarity-group copy actions report isolated accessible outcomes'
   )).toHaveText(/Copy aa/);
 });
 
-test('individual Feature, Label, and Legend edits update the mounted SVG', { tag: '@pr-smoke' }, async ({
+for (const liveCase of [
+  { id: 'desktop', session: 'HmmtDNA_basic_circular.gbdraw-session.json' },
+  { id: 'compact Circular', session: 'HmmtDNA_basic_circular.gbdraw-session.json', viewport: { width: 390, height: 740 } },
+  { id: 'compact Linear', session: 'lambda_basic_linear.gbdraw-session.json', viewport: { width: 390, height: 844 } }
+]) {
+test(`individual Feature, Label, and Legend edits update the mounted SVG: ${liveCase.id}`, { tag: liveCase.viewport ? [] : '@pr-smoke' }, async ({
   page
 }) => {
   test.setTimeout(180000);
-  const imported = await loadGallerySession(
-    page,
-    'HmmtDNA_basic_circular.gbdraw-session.json'
-  );
+  if (liveCase.viewport) await page.setViewportSize(liveCase.viewport);
+  const imported = await loadGallerySession(page, liveCase.session);
   expect(imported.status).toBe('ok');
   await page.locator('.drawer-toggle').click();
   await expect(page.locator('.right-drawer').getByText(/^Features \(\d+\)$/)).toBeVisible();
   expect(await page.evaluate(() => window.__GBDRAW_APP__.runAnalysis())).toEqual({ status: 'ok' });
 
+  await page.evaluate(() => window.__GBDRAW_APP__.openRightDrawerTab('features'));
+  if (liveCase.viewport) {
+    await centerPreview(page);
+    assertMobileGeometry(await readOverlayGeometry(page), true);
+  }
   const result = await page.evaluate(async () => {
     const app = window.__GBDRAW_APP__;
     const svg = document.querySelector('.origin-top svg');
@@ -757,7 +796,56 @@ test('individual Feature, Label, and Legend edits update the mounted SVG', { tag
   );
   expect(result.visibilityResultContent).toContain('display="none"');
   expect(result.legendResultContent).toContain('#ab3412');
+  if (liveCase.viewport) {
+    // Isolate retry recovery from the preceding Legend override scenario.
+    // Reuse a fresh Gallery request as in the existing S04 failure contract.
+    expect((await loadGallerySession(page, liveCase.session)).status).toBe('ok');
+    expect(await page.evaluate(() => window.__GBDRAW_APP__.runAnalysis())).toEqual({ status: 'ok' });
+    await page.evaluate(() => window.__GBDRAW_APP__.openRightDrawerTab('features'));
+    await expect.poll(() => page.evaluate(() => window.__GBDRAW_APP__.labelReflowProcessing)).toBe(false);
+    const target = await page.evaluate(async () => {
+      const app = window.__GBDRAW_APP__;
+      const { state } = await import('./js/state.js');
+      const feature = app.extractedFeatures.find((candidate) => app.getEditableLabelByFeatureId(candidate.svg_id));
+      state.autoLabelReflowEnabled.value = true;
+      window.__GBDRAW_TEST_HOOKS__.beforeDiagramGenerationResponse = () => {
+        throw new Error('S05 forced live rerender failure');
+      };
+      app.openFeatureEditorFromList(feature, null);
+      return feature.svg_id;
+    });
+    const input = page.locator('.feature-popup input[placeholder="Edit label text"]');
+    await input.fill('S05 direct label retained');
+    await page.getByRole('button', { name: 'Apply Label', exact: true }).click();
+    await expect.poll(() => page.evaluate(() => window.__GBDRAW_APP__.labelReflowLastError), { timeout: 180000 })
+      .toContain('S05 forced live rerender failure');
+    await expect(page.locator('[data-live-application-feedback]')).toContainText('Live edit failed');
+    expect(await page.evaluate((id) => window.__GBDRAW_APP__.labelTextFeatureOverrides[id], target)).toBe('S05 direct label retained');
+    const retained = await snapshot(page);
+    expect(retained.result).toContain('S05 direct label retained');
+    await page.keyboard.press('Escape');
+    await expect(page.locator('.right-drawer')).toHaveAttribute('aria-hidden', 'true');
+    expect(await snapshot(page)).toEqual(retained);
+    await page.locator('.drawer-toggle').click();
+    await page.evaluate((id) => {
+      delete window.__GBDRAW_TEST_HOOKS__.beforeDiagramGenerationResponse;
+      const app = window.__GBDRAW_APP__;
+      app.openFeatureEditorFromList(app.extractedFeatures.find((feature) => feature.svg_id === id), null);
+    }, target);
+    await input.fill('S05 retry label succeeds');
+    await page.getByRole('button', { name: 'Apply Label', exact: true }).click();
+    await expect.poll(() => page.evaluate(() => ({
+      busy: window.__GBDRAW_APP__.labelReflowProcessing,
+      error: window.__GBDRAW_APP__.labelReflowLastError
+    })), { timeout: 180000 }).toEqual({ busy: false, error: null });
+    await expect(page.locator('[data-live-application-feedback]')).toHaveCount(0);
+    expect(await page.evaluate((id) => window.__GBDRAW_APP__.labelTextFeatureOverrides[id], target)).toBe('S05 retry label succeeds');
+    expect((await snapshot(page)).result).toContain('S05 retry label succeeds');
+    await expect(page.locator('.right-drawer')).toHaveAttribute('aria-hidden', 'false');
+  }
 });
+
+}
 
 test('adjacent Collinear mixed groups remain selectable after current-session save/load', async ({ page }, testInfo) => {
   test.setTimeout(180000);
@@ -883,4 +971,262 @@ test('adjacent Collinear mixed groups remain selectable after current-session sa
   }, [...saved]);
   expect(rollback).toEqual({ status: 'error', message: 'Issue 460 rollback probe', samePresentation: true });
   expect(await verifyGroups()).toEqual(before);
+});
+
+
+// Scroll recovery checks keep the same center hit oracle as M01. A short
+// screen need not show every operation at once, but must expose each in turn.
+const exposeControl = async (page, control) => {
+  await control.evaluate((element) => {
+    element.scrollIntoView({ block: 'center', inline: 'nearest' });
+    const header = document.querySelector('.app-header').getBoundingClientRect();
+    const generate = document.querySelector('.generate-bar');
+    const bottom = getComputedStyle(generate).position === 'fixed'
+      ? generate.getBoundingClientRect().top : innerHeight;
+    const box = element.getBoundingClientRect();
+    window.scrollBy(0, (box.top + box.bottom - header.bottom - bottom) / 2);
+  });
+  expect(await control.evaluate((element) => {
+    const box = element.getBoundingClientRect();
+    return element.contains(document.elementFromPoint(
+      box.left + box.width / 2, box.top + box.height / 2
+    ));
+  }), 'reachable control must receive its actual center pointer hit').toBe(true);
+};
+
+for (const viewport of [
+  { width: 390, height: 500 },
+  { width: 320, height: 740 },
+  { width: 844, height: 390 },
+  // 200% browser zoom has half the CSS width/height of a 390 x 844 screen.
+  // This tests that layout size; it does not operate a physical browser's UI.
+  { width: 195, height: 422 }
+]) {
+  test(`compact Editor scroll recovery at ${viewport.width}x${viewport.height}`, async ({ page }, info) => {
+    await page.setViewportSize(viewport);
+    expect((await loadGallerySession(page, 'majanivirus_orthogroup.gbdraw-session.json.gz')).status).toBe('ok');
+    const initialPageWidth = await page.evaluate(() => document.documentElement.scrollWidth);
+    const toggle = page.locator('.drawer-toggle');
+    await exposeControl(page, toggle);
+    await toggle.focus();
+    await page.keyboard.press('Enter');
+    const drawer = page.locator('.right-drawer');
+    await expect(drawer).toHaveAttribute('aria-hidden', 'false');
+    for (const name of ['Legend', 'Features', 'Similarity groups']) {
+      const tab = drawer.getByRole('button', { name: new RegExp(`${name}$`) });
+      await exposeControl(page, tab);
+      await tab.focus();
+      await page.keyboard.press('Space');
+      await expect.poll(() => page.evaluate(() => window.__GBDRAW_APP__.rightDrawerTab))
+        .toBe({ Legend: 'legend', Features: 'features', 'Similarity groups': 'orthogroups' }[name]);
+    }
+    const close = drawer.getByRole('button', { name: 'Close editor', exact: true });
+    await exposeControl(page, close);
+    await close.focus();
+    await page.keyboard.press('Tab');
+    await expect(drawer.getByRole('button', { name: /Legend$/ })).toBeFocused();
+    await page.keyboard.press('Tab');
+    await expect(drawer.getByRole('button', { name: /Features$/ })).toBeFocused();
+    await page.keyboard.press('Tab');
+    await expect(drawer.getByRole('button', { name: /Similarity groups$/ })).toBeFocused();
+    for (const name of ['Reset layout', 'Toggle layout edit mode', 'Toggle canvas padding controls', 'Zoom in', 'Reset zoom', 'Zoom out']) {
+      const control = page.getByRole('button', { name, exact: true });
+      await exposeControl(page, control);
+      await control.focus();
+      await expect(control).toBeFocused();
+    }
+    await exposeControl(page, page.getByRole('button', { name: 'Zoom in', exact: true }));
+    await page.getByRole('button', { name: 'Zoom in', exact: true }).click();
+    await expect(page.getByRole('button', { name: 'Reset zoom', exact: true })).toHaveText('110%');
+    await exposeControl(page, drawer.getByRole('button', { name: /Features$/ }));
+    await drawer.getByRole('button', { name: /Features$/ }).click();
+    const input = drawer.getByPlaceholder('Search by feature or annotation...');
+    await exposeControl(page, input);
+    await input.focus();
+    // Keep native input focus while reducing the viewport, as with a software
+    // keyboard. The physical OS keyboard is outside this automated evidence.
+    await page.setViewportSize({ width: viewport.width, height: Math.min(500, viewport.height) });
+    await expect(input).toBeFocused();
+    await exposeControl(page, input);
+    await input.fill('protein');
+    await exposeControl(page, close);
+    await page.keyboard.press('Escape');
+    await expect(drawer).toHaveAttribute('aria-hidden', 'true');
+    expect(await page.evaluate(() => window.__GBDRAW_APP__.rightDrawerTab)).toBe('features');
+    await exposeControl(page, toggle);
+    await toggle.click();
+    await exposeControl(page, close);
+    await close.click();
+    await expect(drawer).toHaveAttribute('aria-hidden', 'true');
+    await exposeControl(page, page.getByRole('button', { name: 'Generate Diagram', exact: true }));
+    const geometry = await readOverlayGeometry(page);
+    // Below 320 CSS px, pre-existing settings fields can overflow the page.
+    // The Editor must add none; all its controls pass exact center hit checks.
+    expect(geometry.viewport.pageWidth).toBeLessThanOrEqual(Math.max(viewport.width, initialPageWidth));
+    writeFileSync(info.outputPath('recovery-geometry.json'), JSON.stringify(geometry, null, 2));
+    assertNoOverlayErrors(page);
+  });
+}
+
+for (const [mode, session] of [
+  ['circular', 'HmmtDNA_basic_circular.gbdraw-session.json'],
+  ['linear', 'lambda_basic_linear.gbdraw-session.json']
+]) {
+  test(`compact ${mode} pan zoom and responsive transitions preserve artifact and History`, async ({ page }, info) => {
+    await page.setViewportSize({ width: 390, height: 740 });
+    expect((await loadGallerySession(page, session)).status).toBe('ok');
+    const before = await snapshot(page);
+    const beforeHistory = await page.evaluate(() => [window.__GBDRAW_HISTORY__.getUndoCount(), window.__GBDRAW_HISTORY__.getRedoCount()]);
+    await page.evaluate(() => {
+      window.s05Root = document.querySelector('.gbdraw-preview-surface svg');
+      window.s05WorkerCalls = 0;
+      const post = Worker.prototype.postMessage;
+      Worker.prototype.postMessage = function (...args) {
+        window.s05WorkerCalls += 1;
+        return Reflect.apply(post, this, args);
+      };
+    });
+    await page.locator('.drawer-toggle').click();
+    await centerPreview(page);
+    const canvas = page.locator('.preview-canvas');
+    const box = await canvas.boundingBox();
+    const pan = await page.evaluate(() => ({ ...window.__GBDRAW_APP__.canvasPan }));
+    await page.mouse.move(box.x + 4, box.y + 4);
+    await page.mouse.down();
+    await page.mouse.move(box.x + 34, box.y + 16, { steps: 5 });
+    await page.mouse.up();
+    await expect.poll(() => page.evaluate(() => ({ ...window.__GBDRAW_APP__.canvasPan }))).toEqual({ x: pan.x + 30, y: pan.y + 12 });
+    await page.mouse.move(box.x + 4, box.y + 4);
+    await page.mouse.wheel(0, -100);
+    await expect(page.getByRole('button', { name: 'Reset zoom', exact: true })).toHaveText('110%');
+    for (const viewport of [{ width: 1600, height: 1000 }, { width: 390, height: 844 }, { width: 390, height: 740 }]) {
+      await page.setViewportSize(viewport);
+      await waitForSettledDrawer(page);
+      expect(await page.evaluate(() => window.__GBDRAW_APP__.showRightDrawer)).toBe(true);
+      expect(await snapshot(page)).toEqual(before);
+    }
+    await page.evaluate(() => window.__GBDRAW_APP__.closeRightDrawer());
+    await page.evaluate(() => window.__GBDRAW_APP__.openRightDrawerTab('legend'));
+    await page.keyboard.press('Escape');
+    expect(await page.evaluate(() => window.__GBDRAW_APP__.rightDrawerTab)).toBe('legend');
+    expect(await snapshot(page)).toEqual(before);
+    expect(await page.evaluate(() => [window.__GBDRAW_HISTORY__.getUndoCount(), window.__GBDRAW_HISTORY__.getRedoCount()])).toEqual(beforeHistory);
+    expect(await page.evaluate(() => ({ same: document.querySelector('.gbdraw-preview-surface svg') === window.s05Root, workers: window.s05WorkerCalls })))
+      .toEqual({ same: true, workers: 0 });
+    await page.evaluate(() => window.__GBDRAW_APP__.openRightDrawerTab('features'));
+    await centerPreview(page);
+    assertMobileGeometry(await readOverlayGeometry(page), true);
+    writeFileSync(info.outputPath('final-geometry.json'), JSON.stringify(await readOverlayGeometry(page), null, 2));
+    // Reproducible evidence camera only: the real pointer pan/wheel above proves
+    // operation. Frame the same Gallery SVG for readable final UI inspection.
+    for (const viewport of [{ width: 1600, height: 1000 }, { width: 390, height: 844 }, { width: 390, height: 740 }]) {
+      await page.setViewportSize(viewport);
+      await centerPreview(page);
+      await page.evaluate(async () => {
+        const app = window.__GBDRAW_APP__;
+        const canvas = document.querySelector('.preview-canvas').getBoundingClientRect();
+        const svg = document.querySelector('.gbdraw-preview-surface svg');
+        const box = svg.getBoundingClientRect();
+        const drawer = document.querySelector('.right-drawer');
+        const right = getComputedStyle(drawer).position === 'absolute'
+          ? drawer.getBoundingClientRect().left : canvas.right;
+        app.zoom = Math.min((right - canvas.left - 16) / (box.width / app.zoom),
+          (canvas.height - 16) / (box.height / app.zoom));
+        await window.Vue.nextTick();
+      });
+      await readSettledPreviewSurface(page);
+      await page.evaluate(async () => {
+        const app = window.__GBDRAW_APP__;
+        const canvas = document.querySelector('.preview-canvas').getBoundingClientRect();
+        const svg = document.querySelector('.gbdraw-preview-surface svg').getBoundingClientRect();
+        const drawer = document.querySelector('.right-drawer');
+        const right = getComputedStyle(drawer).position === 'absolute'
+          ? drawer.getBoundingClientRect().left : canvas.right;
+        app.canvasPan.x += (canvas.left + right - svg.left - svg.right) / 2;
+        app.canvasPan.y += (canvas.top + canvas.bottom - svg.top - svg.bottom) / 2;
+        const pane = drawer.querySelector(':scope > .flex-1:not([style*="display: none"])');
+        const list = pane.querySelector('.overflow-y-auto');
+        pane.scrollTop = list.offsetTop - pane.offsetTop;
+        await window.Vue.nextTick();
+      });
+      await readSettledPreviewSurface(page);
+      const geometry = await readOverlayGeometry(page);
+      writeFileSync(info.outputPath(`${viewport.width}x${viewport.height}-geometry.json`), JSON.stringify(geometry, null, 2));
+      await page.screenshot({ path: info.outputPath(`${mode}-${viewport.width}x${viewport.height}-editor.png`) });
+      expect(await snapshot(page)).toEqual(before);
+      expect(await page.evaluate(() => window.s05WorkerCalls)).toBe(0);
+    }
+    assertNoOverlayErrors(page);
+  });
+}
+
+
+test('compact Editor reconciles availability and restores its tab after failed Session replacement', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 740 });
+  expect((await loadGallerySession(page, 'majanivirus_orthogroup.gbdraw-session.json.gz')).status).toBe('ok');
+  await page.evaluate(() => window.__GBDRAW_APP__.openRightDrawerTab('orthogroups'));
+  const before = await snapshot(page);
+  const failure = await page.evaluate(async () => {
+    const name = 'HmmtDNA_basic_circular.gbdraw-session.json';
+    const file = new File([await (await fetch(`/gbdraw/web/gallery/sessions/${name}`)).arrayBuffer()], name);
+    const { importSession } = await import('./js/services/config.js');
+    const result = await importSession({ target: { files: [file], value: 'selected' } }, {
+      beforePreviewMount: () => { throw new Error('S05 Session rollback probe'); }
+    });
+    return { status: result.status, message: result.error?.message };
+  });
+  expect(failure).toEqual({ status: 'error', message: 'S05 Session rollback probe' });
+  expect(await page.evaluate(() => ({
+    open: window.__GBDRAW_APP__.showRightDrawer, tab: window.__GBDRAW_APP__.rightDrawerTab
+  }))).toEqual({ open: true, tab: 'orthogroups' });
+  const restored = await snapshot(page);
+  // Session rollback serializes the restored SVG and normalizes xmlns/attribute
+  // order; verify complete drawing semantics plus exact canonical artifacts.
+  expect(await svgSemantics(page, restored.result)).toEqual(await svgSemantics(page, before.result));
+  for (const key of ['result', 'payload']) {
+    const normalized = await page.evaluate(async ({ actual, expected }) => {
+      const { sanitizeSvgContent } = await import('./js/services/svg-sanitization.js');
+      const { serializeCleanSvg } = await import('./js/services/svg-serialization.js');
+      return [actual, expected].map(content => {
+        const svg = new DOMParser().parseFromString(sanitizeSvgContent(content, window.DOMPurify), 'image/svg+xml').documentElement;
+        // XMLSerializer may inject these namespaces at the beginning on restore.
+        // Reinsert only the namespace declarations in one deterministic order.
+        svg.removeAttribute('xmlns'); svg.removeAttribute('xmlns:xlink');
+        return serializeCleanSvg(svg);
+      });
+    }, { actual: restored[key], expected: before[key] });
+    expect(normalized[0], `sanitized rollback ${key}`).toBe(normalized[1]);
+  }
+  for (const key of ['request', 'labels', 'visibility', 'colors']) {
+    expect(restored[key], `rollback ${key}`).toEqual(before[key]);
+  }
+  const reconcile = await page.evaluate(async () => {
+    const { state } = await import('./js/state.js');
+    const { captureRightDrawerState, restoreRightDrawerState, resetRightDrawerState } = await import('./js/app/right-drawer.js');
+    const saved = captureRightDrawerState(state);
+    state.orthogroups.value = [];
+    state.similarityAlignmentPlan.value = null;
+    // No nextTick: the availability watcher and restore use the same sync owner.
+    const lost = captureRightDrawerState(state);
+    restoreRightDrawerState(state, saved);
+    const fallback = captureRightDrawerState(state);
+    resetRightDrawerState(state);
+    return { lost, fallback, reset: captureRightDrawerState(state) };
+  });
+  expect(reconcile).toEqual({
+    lost: { showRightDrawer: true, rightDrawerTab: 'features' },
+    fallback: { showRightDrawer: true, rightDrawerTab: 'features' },
+    reset: { showRightDrawer: false, rightDrawerTab: 'features' }
+  });
+  expect((await loadGallerySession(page, 'lambda_basic_linear.gbdraw-session.json')).status).toBe('ok');
+  expect(await page.evaluate(() => ({
+    open: window.__GBDRAW_APP__.showRightDrawer, tab: window.__GBDRAW_APP__.rightDrawerTab
+  }))).toEqual({ open: false, tab: 'features' });
+  await page.locator('.drawer-toggle').click();
+  await centerPreview(page);
+  assertMobileGeometry(await readOverlayGeometry(page), true);
+  expect(page.overlayDiagnostics).toEqual({
+    pageErrors: [], externalRequests: [],
+    consoleErrors: [expect.stringMatching(/^Error: S05 Session rollback probe\n/)]
+  });
 });
