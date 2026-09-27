@@ -838,10 +838,8 @@ test('audit-5 owner: direct simple createRunAnalysis path is worker-only and cat
   ));
   assert.equal((await runner.runAnalysis()).status, 'error');
   failCandidateAdmission = false;
-  assert.match(
-    state.errorLog.value?.summary || '',
-    /forced current Result admission failure/
-  );
+  assert.equal(state.errorLog.value?.code, 'UNKNOWN');
+  assert.doesNotMatch(JSON.stringify(state.errorLog.value), /forced current Result admission failure/);
   assert.deepEqual(committedFeatureState(), admissionFailureState);
   for (const metric of [
     'generatedArtifactCandidateBuildCount',
@@ -882,10 +880,8 @@ test('audit-5 owner: direct simple createRunAnalysis path is worker-only and cat
   ));
   assert.equal((await runner.runAnalysis()).status, 'error');
   failArtifactAdoption = false;
-  assert.match(
-    state.errorLog.value?.summary || '',
-    /forced late canonical artifact adoption failure/
-  );
+  assert.equal(state.errorLog.value?.code, 'UNKNOWN');
+  assert.doesNotMatch(JSON.stringify(state.errorLog.value), /forced late canonical artifact adoption failure/);
   assert.deepEqual(committedFeatureState(), lateFailureState);
   assert.equal(state.extractedFeatures.value, committedExtractedFeatureIdentity);
   assert.equal(state.biologicalFeatures.value, committedBiologicalFeatureIdentity);
@@ -991,7 +987,7 @@ test('audit-5 owner: direct simple createRunAnalysis path is worker-only and cat
   );
   assert.match(
     state.errorLog.value?.summary || '',
-    /Could not read records from the circular input file/
+    /input could not be read/i
   );
   assert.doesNotMatch(
     JSON.stringify(state.errorLog.value),
@@ -1388,7 +1384,7 @@ test('neutral conservation replay delegates lazy resources to the shared reader'
     assert.equal((await runner.runAnalysis()).status, 'error');
     assert.match(
       state.errorLog.value?.summary || '',
-      /A File-like object with arrayBuffer\(\) or text\(\) is required/
+      /Input resource preparation failed/
     );
 
     resourceMetrics.splice(0);
@@ -1618,10 +1614,8 @@ test('neutral conservation replay delegates lazy resources to the shared reader'
     assert.equal(state.linearSeqs.find(({ uid }) => uid === 'middle').region_reverse, true);
     failLateArtifactAdoption = false;
     state.losat.blastn.task = 'megablast';
-    assert.match(
-      state.errorLog.value?.summary || '',
-      /injected LOSAT late artifact adoption failure/
-    );
+    assert.equal(state.errorLog.value?.code, 'UNKNOWN');
+    assert.doesNotMatch(JSON.stringify(state.errorLog.value), /injected LOSAT late artifact adoption failure/);
     assert.equal(state.losatCache.value, committedLosatCache);
     assert.deepEqual(
       Array.from(state.losatCache.value.entries()),
@@ -1800,10 +1794,8 @@ test('neutral conservation replay delegates lazy resources to the shared reader'
       { status: 'error' }
     );
     failLateArtifactAdoption = false;
-    assert.match(
-      state.errorLog.value?.summary || '',
-      /injected LOSAT late artifact adoption failure/
-    );
+    assert.equal(state.errorLog.value?.code, 'UNKNOWN');
+    assert.doesNotMatch(JSON.stringify(state.errorLog.value), /injected LOSAT late artifact adoption failure/);
     assert.equal(state.results.value, committedAlignedResult);
     assert.equal(state.similarityAlignmentPlan.value, committedAlignmentPlan);
     assert.equal(losatCalls, 2, 'failed alignment admission must not schedule LOSATP');
@@ -2131,7 +2123,8 @@ test('Linear mode none ignores dormant comparison state while active depth and a
 
   annotationValidationError = 'injected annotation target failure';
   assert.equal((await runner.runAnalysis(comparisonPlanSnapshot)).status, 'error');
-  assert.match(state.errorLog.value?.summary || '', /injected annotation target failure/);
+  assert.equal(state.errorLog.value?.code, 'UNKNOWN');
+  assert.doesNotMatch(JSON.stringify(state.errorLog.value), /injected annotation target failure/);
   assert.equal(serializeCalls, 1, 'invalid annotations must fail before serialization');
   assert.equal(
     workerMessages.filter(({ type }) => type === 'run').length,
@@ -2173,7 +2166,8 @@ test('Linear mode none ignores dormant comparison state while active depth and a
     throw new Error('injected record catalog failure');
   };
   assert.equal((await runner.runAnalysis(comparisonPlanSnapshot)).status, 'error');
-  assert.match(state.errorLog.value?.summary || '', /injected record catalog failure/);
+  assert.equal(state.errorLog.value?.code, 'UNKNOWN');
+  assert.doesNotMatch(JSON.stringify(state.errorLog.value), /injected record catalog failure/);
   assert.equal(state.processing.value, false);
 
   prepareLinearRecordCatalogImpl = async () => ({

@@ -104,8 +104,9 @@ def test_canonical_request_wrapper_rejects_invalid_request_without_monkeypatchin
 
     payload = wrapper("{}", "{}", str(tmp_path / "render"))  # type: ignore[operator]
 
-    assert payload["error"]["type"]
-    assert payload["error"]["message"]
+    assert payload["error"]["code"] == "RESOURCE_INVALID"
+    assert payload["error"]["stage"] == "resource-staging"
+    assert set(payload["error"]) == {"code", "operation", "stage", "context"}
     assert assemble.load_comparisons is original_loader
     assert marker.exists()
 
@@ -193,7 +194,9 @@ def test_regenerate_definition_svgs_reports_invalid_font_size_strings(
     payload = json.loads(regenerate(str(path), font_size="not-a-number"))  # type: ignore[operator]
 
     assert "error" in payload
-    assert "not-a-number" in payload["error"] or "could not convert" in payload["error"]
+    assert payload["error"]["code"] == "INPUT_INVALID"
+    assert payload["error"]["context"] == {"field": "font_size", "reason": "FINITE"}
+    assert "not-a-number" not in json.dumps(payload)
 
 
 def test_regenerate_definition_svgs_matches_duplicate_definition_id_contract(

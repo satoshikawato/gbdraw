@@ -1330,33 +1330,7 @@ export const createRunAnalysis = ({
     downloadBlob(createZipBlob(materializedFiles), latestCliHelperArchiveName);
   };
 
-  const extractCircularTrackSlotError = (err) => {
-    const texts = [
-      err?.message,
-      err?.stderr,
-      err?.stdout,
-      err?.traceback
-    ];
-    for (const text of texts) {
-      const lines = String(text || '').split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
-      for (const line of lines) {
-        const cleaned = line.replace(/^(ValueError|RuntimeError|ValidationError):\s*/, '');
-        if (/^Circular track slot '.+' cannot fit inside\b/.test(cleaned)) {
-          return cleaned;
-        }
-      }
-    }
-    return '';
-  };
-
-  const formatPythonError = (err) => {
-    const circularTrackSlotError = extractCircularTrackSlotError(err);
-    return normalizeUserFacingError(
-      circularTrackSlotError
-        ? { type: err?.type || 'ValidationError', message: circularTrackSlotError, notes: err?.notes }
-        : err
-    );
-  };
+  const formatPythonError = (err) => normalizeUserFacingError(err);
 
   const formatJsError = (err) => normalizeUserFacingError(err);
 

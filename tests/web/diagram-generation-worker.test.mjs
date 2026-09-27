@@ -82,71 +82,38 @@ assert.equal(
     + new TextEncoder().encode('out.svg').byteLength
 );
 
-const pythonPayload = {
-  error: {
-    type: 'ValidationError',
-    message: 'primary Python render failure',
-    traceback: 'Traceback: primary Python render failure'
-  }
-};
+const sentinel = 'PRIVATE_SENTINEL';
+const pythonPayload = { error: { code: 'COMPARISON_IDENTITY', operation: 'generate',
+  stage: 'render', context: { reason: 'SOURCE_VIEW_CONFLICT' } } };
 const pythonResult = resolveGenerationCleanupOutcome({
-  result: pythonPayload,
-  destroyError: new Error('proxy destroy failed'),
-  workspaceError: new Error('workspace invariant failed')
+  result: pythonPayload, destroyError: new Error(sentinel), workspaceError: new Error(sentinel)
 });
-assert.equal(pythonResult.error.type, 'ValidationError');
-assert.equal(pythonResult.error.message, 'primary Python render failure');
-assert.deepEqual(pythonResult.error.notes, [
-  'Temporary render handle cleanup also failed: Error: proxy destroy failed',
-  'Temporary render workspace cleanup also failed: Error: workspace invariant failed'
+assert.equal(pythonResult, pythonPayload);
+assert.deepEqual(pythonResult.error.secondary, [
+  { code: 'CLEANUP_FAILED', stage: 'cleanup' }, { code: 'CLEANUP_FAILED', stage: 'cleanup' }
 ]);
-assert.match(pythonResult.error.traceback, /proxy destroy failed/);
-assert.match(pythonResult.error.traceback, /workspace invariant failed/);
+assert.equal(serializeError(pythonResult.error).code, 'COMPARISON_IDENTITY');
+assert.doesNotMatch(JSON.stringify(serializeError(pythonResult.error)), /PRIVATE_SENTINEL/);
 
-const primaryJsError = new TypeError('primary JavaScript render failure');
-assert.throws(
-  () => resolveGenerationCleanupOutcome({
-    primaryError: primaryJsError,
-    destroyError: new Error('proxy destroy failed'),
-    workspaceError: new Error('workspace invariant failed')
-  }),
-  (error) => {
-    const serialized = serializeError(error);
-    assert.equal(serialized.name, 'TypeError');
-    assert.equal(serialized.message, 'TypeError: primary JavaScript render failure');
-    assert.match(serialized.stack, /proxy destroy failed/);
-    assert.match(serialized.stack, /workspace invariant failed/);
-    return true;
-  }
-);
-
-const destroyError = new Error('proxy destroy failed');
-assert.throws(
-  () => resolveGenerationCleanupOutcome({
-    result: { results: [] },
-    destroyError,
-    workspaceError: new Error('workspace invariant failed')
-  }),
-  (error) => {
-    assert.equal(error, destroyError);
-    assert.match(error.stack, /workspace invariant failed/);
-    return true;
-  }
-);
-
-const workspaceError = new Error('workspace invariant failed');
-assert.throws(
-  () => resolveGenerationCleanupOutcome({
-    result: { results: [] },
-    workspaceError
-  }),
-  (error) => error === workspaceError
-);
-
-const structuredError = serializeError({
-  type: 'ValidationError',
-  message: { summary: 'Annotation target is missing', details: ['row 2'] },
-  traceback: 'Traceback (most recent call last): secret input'
+const primaryJsError = Object.assign(new Error(sentinel), { code: 'RESOURCE_INVALID', stage: 'resource-staging' });
+assert.throws(() => resolveGenerationCleanupOutcome({ primaryError: primaryJsError,
+  destroyError: new Error(sentinel), workspaceError: new Error(sentinel) }), (error) => {
+  assert.equal(error, primaryJsError);
+  const serialized = serializeError(error);
+  assert.equal(serialized.code, 'RESOURCE_INVALID');
+  assert.equal(serialized.secondary.length, 2);
+  assert.doesNotMatch(JSON.stringify(serialized), /PRIVATE_SENTINEL/);
+  return true;
 });
-assert.doesNotMatch(structuredError.message, /\[object Object\]|Traceback/);
-assert.match(structuredError.message, /Annotation target is missing/);
+const destroyError = new Error(sentinel);
+assert.throws(() => resolveGenerationCleanupOutcome({ result: { results: [] }, destroyError,
+  workspaceError: new Error(sentinel) }), (error) => {
+  assert.equal(error, destroyError);
+  assert.equal(serializeError(error).code, 'CLEANUP_FAILED');
+  assert.equal(serializeError(error).stage, 'cleanup');
+  assert.equal(serializeError(error).secondary.length, 1);
+  return true;
+});
+const workspaceError = new Error(sentinel);
+assert.throws(() => resolveGenerationCleanupOutcome({ result: { results: [] }, workspaceError }),
+  (error) => error === workspaceError && serializeError(error).code === 'CLEANUP_FAILED');
