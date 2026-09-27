@@ -5,12 +5,13 @@ import {
   HelpTip,
   FileUploader
 } from './components.js';
+import { CircularMeasureInput } from './app/circular-track-slots/measure-input.js';
 import { createAppSetup } from './app/app-setup.js';
 
 const { createApp } = window.Vue;
 
 const app = createApp({
-  components: { RecordDisplayControl, AutoValueField, ColorValueControl, FileUploader, HelpTip },
+  components: { CircularMeasureInput, RecordDisplayControl, AutoValueField, ColorValueControl, FileUploader, HelpTip },
   setup: createAppSetup
 });
 

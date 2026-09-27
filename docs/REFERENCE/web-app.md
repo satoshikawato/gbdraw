@@ -118,6 +118,39 @@ For Linear diagrams, the DOM and keyboard order is **Input Genomes**,
 layout**. The fixed Generate bar remains visible while its DOM anchor stays in
 that order.
 
+### Circular track Width and Radius
+
+In **Layout → Custom Track Slots**, **Width** and **Radius** each have a
+numeric text field and a **px** / **×R** selector. R is the base circle radius;
+`0.65 ×R` means 65% of that radius. Existing `65%` values display as `0.65`
+with **×R** selected. Complete `20px` or `65%` input is also accepted and
+separated into its numeric value and unit. Reading a saved value does not
+rewrite it. Decimal and exponent input retain their precision without display
+rounding.
+
+A plain number uses the selected unit: `1.5` with **px** means 1.5 pixels,
+while `1.5` with **×R** means 1.5 times R. Changing the selector keeps the
+number and changes its meaning; it does not convert the physical size.
+Manual numeric and unit edits support **Undo** and **Redo**. Effective changes
+become **Pending** and reach the diagram on the next successful
+**Generate Diagram**. Export continues to use the current Result.
+
+Clear the numeric field for **Auto**. Its resolved geometry appears separately
+with units. While the field is empty, the selector chooses the next input's
+unit only; it does not change Auto geometry, create a History step, or enter
+the Session. That preference starts at **×R** and resets when the panel is
+remounted or settings are loaded or reset. History restores a manual value
+and its unit, or Auto's empty value; it does not promise to restore Auto's
+next-input preference.
+
+Incomplete or invalid input stays visible with its selected unit and a field
+error. Zero, negative values, nonfinite values and unsupported units are
+invalid, not Auto. A failed Generate keeps the previous committed request
+and Result; correct the field and Generate again. A valid Session saves the
+editing draft separately from the committed Result, including disabled and
+inactive track values. Loading it shows the saved preview; Generate applies
+the restored draft. Invalid drafts cannot be saved as valid Sessions.
+
 ### Follow a Result and its Pending draft
 
 For a small Linear comparison, download the complete GenBank records

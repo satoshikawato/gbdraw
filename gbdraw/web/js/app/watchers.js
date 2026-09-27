@@ -184,7 +184,7 @@ export const setupWatchers = ({
   const scheduleCircularDefinitionUpdate = () => {
     if (mode.value !== 'circular') return;
     if (generatedMode.value !== mode.value) return;
-    if (shouldDeferCircularPreviewUpdates.value) {
+    if (semanticFileWatchersSuppressed.value || shouldDeferCircularPreviewUpdates.value) {
       cancelDefinitionUpdate();
       return;
     }

@@ -154,3 +154,59 @@ const indexHtml = await readFile(indexPath, 'utf8');
 });
 
 console.log('history input tests passed');
+
+test('adjacent numeric/unit focus transitions retain distinct operations instead of a closing transaction', async () => {
+  let intent = { width: { value: '1.', unit: 'factor' } };
+  const history = createHistoryManager({
+    buildIntent: () => structuredClone(intent),
+    applyIntent: restored => { intent = restored; },
+    buildCheckpoint: () => assert.fail('Control edits use intent History'),
+    applyCheckpoint: () => assert.fail('Control edits restore intent History')
+  });
+  await history.initializeIntentBaseline();
+  const listeners = new Map();
+  const root = {
+    addEventListener: (name, handler) => listeners.set(name, handler),
+    removeEventListener: name => listeners.delete(name)
+  };
+  const control = tagName => {
+    const element = { tagName, type: 'text', closest: selector => selector.startsWith('input,') ? element : null };
+    return element;
+  };
+  const select = control('SELECT');
+  const text = control('INPUT');
+  const dispatch = (name, target) => listeners.get(name)?.({ target });
+  const settle = () => new Promise(resolve => setImmediate(resolve));
+  const cleanup = setupHistoryInputs({ root, history, nextTick: () => Promise.resolve() });
+  try {
+    dispatch('focusin', select);
+    await settle();
+    intent.width.unit = 'px';
+    dispatch('change', select);
+    dispatch('focusout', select);
+    dispatch('focusin', text);
+    await settle();
+    intent.width.value = '1e';
+    dispatch('change', text);
+    dispatch('focusout', text);
+    dispatch('focusin', select);
+    await settle();
+    intent.width.unit = 'factor';
+    dispatch('change', select);
+    dispatch('focusout', select);
+    await settle();
+    assert.equal(history.getUndoCount(), 3);
+    await history.undo();
+    assert.deepEqual(intent.width, { value: '1e', unit: 'px' });
+    await history.undo();
+    assert.deepEqual(intent.width, { value: '1.', unit: 'px' });
+    await history.undo();
+    assert.deepEqual(intent.width, { value: '1.', unit: 'factor' });
+    await history.redo();
+    await history.redo();
+    await history.redo();
+    assert.deepEqual(intent.width, { value: '1e', unit: 'factor' });
+  } finally {
+    cleanup();
+  }
+});

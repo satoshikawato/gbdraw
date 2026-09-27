@@ -1,0 +1,2306 @@
+{
+  "sourceSha": "eef7c9469912af22a07eb0eaece5d6e9a8a06497",
+  "snapshotRuntimeMatchesCheckout": true,
+  "fixture": "gbdraw/web/gallery/sessions/tobacco-chloroplast.gbdraw-session.json",
+  "fixtureSha256": "d70eb5bba1796df80733792af1f81cfd210bbfe042eaf6c71a3abc710affcc17",
+  "runtimeTreeSha256": "4c1f77c0109f6318fac612449d6b1e60c0879612144e314e3977a07d27da1410",
+  "wheelSha256": "81278bffd43eb41211fc65188abbd3b6b6cddf99a29efc490215e15a0bf98ea5",
+  "pythonVersion": "3.13.3",
+  "playwrightVersion": "1.61.0",
+  "browserVersion": "149.0.7827.55",
+  "observations": [
+    {
+      "name": "typed_px",
+      "input": {
+        "value": 20,
+        "unit": "px"
+      },
+      "draftAfterEdit": {
+        "width": {
+          "value": 20,
+          "unit": "px"
+        },
+        "radius": {
+          "value": 20,
+          "unit": "px"
+        }
+      },
+      "history": {
+        "captured": {
+          "width": {
+            "value": 20,
+            "unit": "px"
+          },
+          "radius": {
+            "value": 20,
+            "unit": "px"
+          }
+        },
+        "undoReturned": true,
+        "redoReturned": true,
+        "undoRestored": true,
+        "redoRestored": true,
+        "redone": {
+          "width": {
+            "value": 20,
+            "unit": "px"
+          },
+          "radius": {
+            "value": 20,
+            "unit": "px"
+          }
+        }
+      },
+      "requestAndResultPreserved": true,
+      "workersDuringEdit": 0,
+      "save": {
+        "accepted": true,
+        "via": "Save Session button and download",
+        "width": {
+          "value": 20,
+          "unit": "px"
+        },
+        "radius": {
+          "value": 20,
+          "unit": "px"
+        },
+        "committedRequestPreserved": true,
+        "downloadSha256": "ef0ca1ac64895c89b683c5edf620be9de52219312ab7e77424f1f6baa9d21f2c"
+      },
+      "nativeSaved": {
+        "accepted": true,
+        "width": {
+          "value": 20,
+          "unit": "px"
+        },
+        "radius": {
+          "value": 20,
+          "unit": "px"
+        }
+      },
+      "loadSaved": {
+        "accepted": true,
+        "dialogs": [
+          "Session loaded successfully!"
+        ],
+        "width": {
+          "value": 20,
+          "unit": "px"
+        },
+        "radius": {
+          "value": 20,
+          "unit": "px"
+        },
+        "requestPreserved": true,
+        "resultPreserved": true
+      },
+      "nativeSynthetic": {
+        "accepted": true,
+        "width": {
+          "value": 20,
+          "unit": "px"
+        },
+        "radius": {
+          "value": 20,
+          "unit": "px"
+        }
+      },
+      "loadSynthetic": {
+        "accepted": true,
+        "dialogs": [
+          "Session loaded successfully!"
+        ],
+        "width": {
+          "value": 20,
+          "unit": "px"
+        },
+        "radius": {
+          "value": 20,
+          "unit": "px"
+        },
+        "requestPreserved": true,
+        "resultPreserved": true
+      }
+    },
+    {
+      "name": "typed_factor",
+      "input": {
+        "value": 0.08,
+        "unit": "factor"
+      },
+      "draftAfterEdit": {
+        "width": {
+          "value": 0.08,
+          "unit": "factor"
+        },
+        "radius": {
+          "value": 0.08,
+          "unit": "factor"
+        }
+      },
+      "history": {
+        "captured": {
+          "width": {
+            "value": 0.08,
+            "unit": "factor"
+          },
+          "radius": {
+            "value": 0.08,
+            "unit": "factor"
+          }
+        },
+        "undoReturned": true,
+        "redoReturned": true,
+        "undoRestored": true,
+        "redoRestored": true,
+        "redone": {
+          "width": {
+            "value": 0.08,
+            "unit": "factor"
+          },
+          "radius": {
+            "value": 0.08,
+            "unit": "factor"
+          }
+        }
+      },
+      "requestAndResultPreserved": true,
+      "workersDuringEdit": 0,
+      "save": {
+        "accepted": true,
+        "via": "Save Session button and download",
+        "width": {
+          "value": 0.08,
+          "unit": "factor"
+        },
+        "radius": {
+          "value": 0.08,
+          "unit": "factor"
+        },
+        "committedRequestPreserved": true,
+        "downloadSha256": "ac9dc49359f62cd8de55c04d5ba29a8bc3909b3bacd7aa7b845359d093b8eb2e"
+      },
+      "nativeSaved": {
+        "accepted": true,
+        "width": {
+          "value": 0.08,
+          "unit": "factor"
+        },
+        "radius": {
+          "value": 0.08,
+          "unit": "factor"
+        }
+      },
+      "loadSaved": {
+        "accepted": true,
+        "dialogs": [
+          "Session loaded successfully!"
+        ],
+        "width": {
+          "value": 0.08,
+          "unit": "factor"
+        },
+        "radius": {
+          "value": 0.08,
+          "unit": "factor"
+        },
+        "requestPreserved": true,
+        "resultPreserved": true
+      },
+      "nativeSynthetic": {
+        "accepted": true,
+        "width": {
+          "value": 0.08,
+          "unit": "factor"
+        },
+        "radius": {
+          "value": 0.08,
+          "unit": "factor"
+        }
+      },
+      "loadSynthetic": {
+        "accepted": true,
+        "dialogs": [
+          "Session loaded successfully!"
+        ],
+        "width": {
+          "value": 0.08,
+          "unit": "factor"
+        },
+        "radius": {
+          "value": 0.08,
+          "unit": "factor"
+        },
+        "requestPreserved": true,
+        "resultPreserved": true
+      }
+    },
+    {
+      "name": "typed_decimal_px",
+      "input": {
+        "value": "1.",
+        "unit": "px"
+      },
+      "draftAfterEdit": {
+        "width": {
+          "value": "1.",
+          "unit": "px"
+        },
+        "radius": {
+          "value": "1.",
+          "unit": "px"
+        }
+      },
+      "history": {
+        "captured": {
+          "width": {
+            "value": "1.",
+            "unit": "px"
+          },
+          "radius": {
+            "value": "1.",
+            "unit": "px"
+          }
+        },
+        "undoReturned": true,
+        "redoReturned": true,
+        "undoRestored": true,
+        "redoRestored": true,
+        "redone": {
+          "width": {
+            "value": "1.",
+            "unit": "px"
+          },
+          "radius": {
+            "value": "1.",
+            "unit": "px"
+          }
+        }
+      },
+      "requestAndResultPreserved": true,
+      "workersDuringEdit": 0,
+      "save": {
+        "accepted": true,
+        "via": "Save Session button and download",
+        "width": {
+          "value": "1.",
+          "unit": "px"
+        },
+        "radius": {
+          "value": "1.",
+          "unit": "px"
+        },
+        "committedRequestPreserved": true,
+        "downloadSha256": "da903dbecda37e97d161a30f91394f51fcae1ec22b49997c23192bf463f47e82"
+      },
+      "nativeSaved": {
+        "accepted": true,
+        "width": {
+          "value": "1.",
+          "unit": "px"
+        },
+        "radius": {
+          "value": "1.",
+          "unit": "px"
+        }
+      },
+      "loadSaved": {
+        "accepted": true,
+        "dialogs": [
+          "Session loaded successfully!"
+        ],
+        "width": {
+          "value": "1.",
+          "unit": "px"
+        },
+        "radius": {
+          "value": "1.",
+          "unit": "px"
+        },
+        "requestPreserved": true,
+        "resultPreserved": true
+      },
+      "nativeSynthetic": {
+        "accepted": true,
+        "width": {
+          "value": "1.",
+          "unit": "px"
+        },
+        "radius": {
+          "value": "1.",
+          "unit": "px"
+        }
+      },
+      "loadSynthetic": {
+        "accepted": true,
+        "dialogs": [
+          "Session loaded successfully!"
+        ],
+        "width": {
+          "value": "1.",
+          "unit": "px"
+        },
+        "radius": {
+          "value": "1.",
+          "unit": "px"
+        },
+        "requestPreserved": true,
+        "resultPreserved": true
+      }
+    },
+    {
+      "name": "typed_decimal_factor",
+      "input": {
+        "value": "1.",
+        "unit": "factor"
+      },
+      "draftAfterEdit": {
+        "width": {
+          "value": "1.",
+          "unit": "factor"
+        },
+        "radius": {
+          "value": "1.",
+          "unit": "factor"
+        }
+      },
+      "history": {
+        "captured": {
+          "width": {
+            "value": "1.",
+            "unit": "factor"
+          },
+          "radius": {
+            "value": "1.",
+            "unit": "factor"
+          }
+        },
+        "undoReturned": true,
+        "redoReturned": true,
+        "undoRestored": true,
+        "redoRestored": true,
+        "redone": {
+          "width": {
+            "value": "1.",
+            "unit": "factor"
+          },
+          "radius": {
+            "value": "1.",
+            "unit": "factor"
+          }
+        }
+      },
+      "requestAndResultPreserved": true,
+      "workersDuringEdit": 0,
+      "save": {
+        "accepted": true,
+        "via": "Save Session button and download",
+        "width": {
+          "value": "1.",
+          "unit": "factor"
+        },
+        "radius": {
+          "value": "1.",
+          "unit": "factor"
+        },
+        "committedRequestPreserved": true,
+        "downloadSha256": "6fa52c0bb30897855d04ae0f388aaf2c23221b6b967b0e3efdb4485cbf67710c"
+      },
+      "nativeSaved": {
+        "accepted": true,
+        "width": {
+          "value": "1.",
+          "unit": "factor"
+        },
+        "radius": {
+          "value": "1.",
+          "unit": "factor"
+        }
+      },
+      "loadSaved": {
+        "accepted": true,
+        "dialogs": [
+          "Session loaded successfully!"
+        ],
+        "width": {
+          "value": "1.",
+          "unit": "factor"
+        },
+        "radius": {
+          "value": "1.",
+          "unit": "factor"
+        },
+        "requestPreserved": true,
+        "resultPreserved": true
+      },
+      "nativeSynthetic": {
+        "accepted": true,
+        "width": {
+          "value": "1.",
+          "unit": "factor"
+        },
+        "radius": {
+          "value": "1.",
+          "unit": "factor"
+        }
+      },
+      "loadSynthetic": {
+        "accepted": true,
+        "dialogs": [
+          "Session loaded successfully!"
+        ],
+        "width": {
+          "value": "1.",
+          "unit": "factor"
+        },
+        "radius": {
+          "value": "1.",
+          "unit": "factor"
+        },
+        "requestPreserved": true,
+        "resultPreserved": true
+      }
+    },
+    {
+      "name": "typed_exponent_px",
+      "input": {
+        "value": "1e-3",
+        "unit": "px"
+      },
+      "draftAfterEdit": {
+        "width": {
+          "value": "1e-3",
+          "unit": "px"
+        },
+        "radius": {
+          "value": "1e-3",
+          "unit": "px"
+        }
+      },
+      "history": {
+        "captured": {
+          "width": {
+            "value": "1e-3",
+            "unit": "px"
+          },
+          "radius": {
+            "value": "1e-3",
+            "unit": "px"
+          }
+        },
+        "undoReturned": true,
+        "redoReturned": true,
+        "undoRestored": true,
+        "redoRestored": true,
+        "redone": {
+          "width": {
+            "value": "1e-3",
+            "unit": "px"
+          },
+          "radius": {
+            "value": "1e-3",
+            "unit": "px"
+          }
+        }
+      },
+      "requestAndResultPreserved": true,
+      "workersDuringEdit": 0,
+      "save": {
+        "accepted": true,
+        "via": "Save Session button and download",
+        "width": {
+          "value": "1e-3",
+          "unit": "px"
+        },
+        "radius": {
+          "value": "1e-3",
+          "unit": "px"
+        },
+        "committedRequestPreserved": true,
+        "downloadSha256": "dd8e793557a00357ef2a2f3c5dc5f9f7a10793c276f4741da8ff8c2d383a55d8"
+      },
+      "nativeSaved": {
+        "accepted": true,
+        "width": {
+          "value": "1e-3",
+          "unit": "px"
+        },
+        "radius": {
+          "value": "1e-3",
+          "unit": "px"
+        }
+      },
+      "loadSaved": {
+        "accepted": true,
+        "dialogs": [
+          "Session loaded successfully!"
+        ],
+        "width": {
+          "value": "1e-3",
+          "unit": "px"
+        },
+        "radius": {
+          "value": "1e-3",
+          "unit": "px"
+        },
+        "requestPreserved": true,
+        "resultPreserved": true
+      },
+      "nativeSynthetic": {
+        "accepted": true,
+        "width": {
+          "value": "1e-3",
+          "unit": "px"
+        },
+        "radius": {
+          "value": "1e-3",
+          "unit": "px"
+        }
+      },
+      "loadSynthetic": {
+        "accepted": true,
+        "dialogs": [
+          "Session loaded successfully!"
+        ],
+        "width": {
+          "value": "1e-3",
+          "unit": "px"
+        },
+        "radius": {
+          "value": "1e-3",
+          "unit": "px"
+        },
+        "requestPreserved": true,
+        "resultPreserved": true
+      }
+    },
+    {
+      "name": "typed_exponent_factor",
+      "input": {
+        "value": "1e-3",
+        "unit": "factor"
+      },
+      "draftAfterEdit": {
+        "width": {
+          "value": "1e-3",
+          "unit": "factor"
+        },
+        "radius": {
+          "value": "1e-3",
+          "unit": "factor"
+        }
+      },
+      "history": {
+        "captured": {
+          "width": {
+            "value": "1e-3",
+            "unit": "factor"
+          },
+          "radius": {
+            "value": "1e-3",
+            "unit": "factor"
+          }
+        },
+        "undoReturned": true,
+        "redoReturned": true,
+        "undoRestored": true,
+        "redoRestored": true,
+        "redone": {
+          "width": {
+            "value": "1e-3",
+            "unit": "factor"
+          },
+          "radius": {
+            "value": "1e-3",
+            "unit": "factor"
+          }
+        }
+      },
+      "requestAndResultPreserved": true,
+      "workersDuringEdit": 0,
+      "save": {
+        "accepted": true,
+        "via": "Save Session button and download",
+        "width": {
+          "value": "1e-3",
+          "unit": "factor"
+        },
+        "radius": {
+          "value": "1e-3",
+          "unit": "factor"
+        },
+        "committedRequestPreserved": true,
+        "downloadSha256": "5b5376b057cecace051b9d9e27ea9499598f0e99a7d54b1752d6ab7ad4f56c03"
+      },
+      "nativeSaved": {
+        "accepted": true,
+        "width": {
+          "value": "1e-3",
+          "unit": "factor"
+        },
+        "radius": {
+          "value": "1e-3",
+          "unit": "factor"
+        }
+      },
+      "loadSaved": {
+        "accepted": true,
+        "dialogs": [
+          "Session loaded successfully!"
+        ],
+        "width": {
+          "value": "1e-3",
+          "unit": "factor"
+        },
+        "radius": {
+          "value": "1e-3",
+          "unit": "factor"
+        },
+        "requestPreserved": true,
+        "resultPreserved": true
+      },
+      "nativeSynthetic": {
+        "accepted": true,
+        "width": {
+          "value": "1e-3",
+          "unit": "factor"
+        },
+        "radius": {
+          "value": "1e-3",
+          "unit": "factor"
+        }
+      },
+      "loadSynthetic": {
+        "accepted": true,
+        "dialogs": [
+          "Session loaded successfully!"
+        ],
+        "width": {
+          "value": "1e-3",
+          "unit": "factor"
+        },
+        "radius": {
+          "value": "1e-3",
+          "unit": "factor"
+        },
+        "requestPreserved": true,
+        "resultPreserved": true
+      }
+    },
+    {
+      "name": "precision",
+      "input": {
+        "value": "0.12345678901234567",
+        "unit": "factor"
+      },
+      "draftAfterEdit": {
+        "width": {
+          "value": "0.12345678901234567",
+          "unit": "factor"
+        },
+        "radius": {
+          "value": "0.12345678901234567",
+          "unit": "factor"
+        }
+      },
+      "history": {
+        "captured": {
+          "width": {
+            "value": "0.12345678901234567",
+            "unit": "factor"
+          },
+          "radius": {
+            "value": "0.12345678901234567",
+            "unit": "factor"
+          }
+        },
+        "undoReturned": true,
+        "redoReturned": true,
+        "undoRestored": true,
+        "redoRestored": true,
+        "redone": {
+          "width": {
+            "value": "0.12345678901234567",
+            "unit": "factor"
+          },
+          "radius": {
+            "value": "0.12345678901234567",
+            "unit": "factor"
+          }
+        }
+      },
+      "requestAndResultPreserved": true,
+      "workersDuringEdit": 0,
+      "save": {
+        "accepted": true,
+        "via": "Save Session button and download",
+        "width": {
+          "value": "0.12345678901234567",
+          "unit": "factor"
+        },
+        "radius": {
+          "value": "0.12345678901234567",
+          "unit": "factor"
+        },
+        "committedRequestPreserved": true,
+        "downloadSha256": "7ebca1c8a1af663c7ceaab7eacbb61807a1bbce58258630cee979ffba5cbd971"
+      },
+      "nativeSaved": {
+        "accepted": true,
+        "width": {
+          "value": "0.12345678901234567",
+          "unit": "factor"
+        },
+        "radius": {
+          "value": "0.12345678901234567",
+          "unit": "factor"
+        }
+      },
+      "loadSaved": {
+        "accepted": true,
+        "dialogs": [
+          "Session loaded successfully!"
+        ],
+        "width": {
+          "value": "0.12345678901234567",
+          "unit": "factor"
+        },
+        "radius": {
+          "value": "0.12345678901234567",
+          "unit": "factor"
+        },
+        "requestPreserved": true,
+        "resultPreserved": true
+      },
+      "nativeSynthetic": {
+        "accepted": true,
+        "width": {
+          "value": "0.12345678901234567",
+          "unit": "factor"
+        },
+        "radius": {
+          "value": "0.12345678901234567",
+          "unit": "factor"
+        }
+      },
+      "loadSynthetic": {
+        "accepted": true,
+        "dialogs": [
+          "Session loaded successfully!"
+        ],
+        "width": {
+          "value": "0.12345678901234567",
+          "unit": "factor"
+        },
+        "radius": {
+          "value": "0.12345678901234567",
+          "unit": "factor"
+        },
+        "requestPreserved": true,
+        "resultPreserved": true
+      }
+    },
+    {
+      "name": "bare_number",
+      "input": 1.5,
+      "draftAfterEdit": {
+        "width": 1.5,
+        "radius": 1.5
+      },
+      "history": {
+        "captured": {
+          "width": 1.5,
+          "radius": 1.5
+        },
+        "undoReturned": true,
+        "redoReturned": true,
+        "undoRestored": true,
+        "redoRestored": true,
+        "redone": {
+          "width": 1.5,
+          "radius": 1.5
+        }
+      },
+      "requestAndResultPreserved": true,
+      "workersDuringEdit": 0,
+      "save": {
+        "accepted": true,
+        "via": "Save Session button and download",
+        "width": 1.5,
+        "radius": 1.5,
+        "committedRequestPreserved": true,
+        "downloadSha256": "8396da98cc6e1d342ff9238d175a03a9e9d04413b05791b5cebd8e8421120ca2"
+      },
+      "nativeSaved": {
+        "accepted": true,
+        "width": 1.5,
+        "radius": 1.5
+      },
+      "loadSaved": {
+        "accepted": true,
+        "dialogs": [
+          "Session loaded successfully!"
+        ],
+        "width": 1.5,
+        "radius": 1.5,
+        "requestPreserved": true,
+        "resultPreserved": true
+      },
+      "nativeSynthetic": {
+        "accepted": true,
+        "width": 1.5,
+        "radius": 1.5
+      },
+      "loadSynthetic": {
+        "accepted": true,
+        "dialogs": [
+          "Session loaded successfully!"
+        ],
+        "width": 1.5,
+        "radius": 1.5,
+        "requestPreserved": true,
+        "resultPreserved": true
+      }
+    },
+    {
+      "name": "bare_text",
+      "input": "1.5",
+      "draftAfterEdit": {
+        "width": "1.5",
+        "radius": "1.5"
+      },
+      "history": {
+        "captured": {
+          "width": "1.5",
+          "radius": "1.5"
+        },
+        "undoReturned": true,
+        "redoReturned": true,
+        "undoRestored": true,
+        "redoRestored": true,
+        "redone": {
+          "width": "1.5",
+          "radius": "1.5"
+        }
+      },
+      "requestAndResultPreserved": true,
+      "workersDuringEdit": 0,
+      "save": {
+        "accepted": true,
+        "via": "Save Session button and download",
+        "width": "1.5",
+        "radius": "1.5",
+        "committedRequestPreserved": true,
+        "downloadSha256": "248c393dea73225cc90c5e0991cea55ac19afe8bff0d2d5f1b2fe9ae579ae335"
+      },
+      "nativeSaved": {
+        "accepted": true,
+        "width": "1.5",
+        "radius": "1.5"
+      },
+      "loadSaved": {
+        "accepted": true,
+        "dialogs": [
+          "Session loaded successfully!"
+        ],
+        "width": "1.5",
+        "radius": "1.5",
+        "requestPreserved": true,
+        "resultPreserved": true
+      },
+      "nativeSynthetic": {
+        "accepted": true,
+        "width": "1.5",
+        "radius": "1.5"
+      },
+      "loadSynthetic": {
+        "accepted": true,
+        "dialogs": [
+          "Session loaded successfully!"
+        ],
+        "width": "1.5",
+        "radius": "1.5",
+        "requestPreserved": true,
+        "resultPreserved": true
+      }
+    },
+    {
+      "name": "px_suffix",
+      "input": "20px",
+      "draftAfterEdit": {
+        "width": "20px",
+        "radius": "20px"
+      },
+      "history": {
+        "captured": {
+          "width": "20px",
+          "radius": "20px"
+        },
+        "undoReturned": true,
+        "redoReturned": true,
+        "undoRestored": true,
+        "redoRestored": true,
+        "redone": {
+          "width": "20px",
+          "radius": "20px"
+        }
+      },
+      "requestAndResultPreserved": true,
+      "workersDuringEdit": 0,
+      "save": {
+        "accepted": true,
+        "via": "Save Session button and download",
+        "width": "20px",
+        "radius": "20px",
+        "committedRequestPreserved": true,
+        "downloadSha256": "4529bd9ed3a7ea1ce95c2f8ba1635b552bab836483234790b7cfbb8bd07fe0a4"
+      },
+      "nativeSaved": {
+        "accepted": true,
+        "width": "20px",
+        "radius": "20px"
+      },
+      "loadSaved": {
+        "accepted": true,
+        "dialogs": [
+          "Session loaded successfully!"
+        ],
+        "width": "20px",
+        "radius": "20px",
+        "requestPreserved": true,
+        "resultPreserved": true
+      },
+      "nativeSynthetic": {
+        "accepted": true,
+        "width": "20px",
+        "radius": "20px"
+      },
+      "loadSynthetic": {
+        "accepted": true,
+        "dialogs": [
+          "Session loaded successfully!"
+        ],
+        "width": "20px",
+        "radius": "20px",
+        "requestPreserved": true,
+        "resultPreserved": true
+      }
+    },
+    {
+      "name": "percent",
+      "input": "65%",
+      "draftAfterEdit": {
+        "width": "65%",
+        "radius": "65%"
+      },
+      "history": {
+        "captured": {
+          "width": "65%",
+          "radius": "65%"
+        },
+        "undoReturned": true,
+        "redoReturned": true,
+        "undoRestored": true,
+        "redoRestored": true,
+        "redone": {
+          "width": "65%",
+          "radius": "65%"
+        }
+      },
+      "requestAndResultPreserved": true,
+      "workersDuringEdit": 0,
+      "save": {
+        "accepted": true,
+        "via": "Save Session button and download",
+        "width": "65%",
+        "radius": "65%",
+        "committedRequestPreserved": true,
+        "downloadSha256": "0090bc36c34d1d94229c0a3d732b93aed456c7dc14a6d571b6014e283dd4821b"
+      },
+      "nativeSaved": {
+        "accepted": true,
+        "width": "65%",
+        "radius": "65%"
+      },
+      "loadSaved": {
+        "accepted": true,
+        "dialogs": [
+          "Session loaded successfully!"
+        ],
+        "width": "65%",
+        "radius": "65%",
+        "requestPreserved": true,
+        "resultPreserved": true
+      },
+      "nativeSynthetic": {
+        "accepted": true,
+        "width": "65%",
+        "radius": "65%"
+      },
+      "loadSynthetic": {
+        "accepted": true,
+        "dialogs": [
+          "Session loaded successfully!"
+        ],
+        "width": "65%",
+        "radius": "65%",
+        "requestPreserved": true,
+        "resultPreserved": true
+      }
+    },
+    {
+      "name": "null",
+      "input": null,
+      "draftAfterEdit": {
+        "width": null,
+        "radius": null
+      },
+      "history": {
+        "captured": {
+          "width": null,
+          "radius": null
+        },
+        "undoReturned": true,
+        "redoReturned": true,
+        "undoRestored": true,
+        "redoRestored": true,
+        "redone": {
+          "width": null,
+          "radius": null
+        }
+      },
+      "requestAndResultPreserved": true,
+      "workersDuringEdit": 0,
+      "save": {
+        "accepted": true,
+        "via": "Save Session button and download",
+        "width": null,
+        "radius": null,
+        "committedRequestPreserved": true,
+        "downloadSha256": "cb5f1ae1b7bbbc1206ab863ac5b9d813199a8daaf0c13a676c5e38ad3ef8561b"
+      },
+      "nativeSaved": {
+        "accepted": true,
+        "width": null,
+        "radius": null
+      },
+      "loadSaved": {
+        "accepted": true,
+        "dialogs": [
+          "Session loaded successfully!"
+        ],
+        "width": null,
+        "radius": null,
+        "requestPreserved": true,
+        "resultPreserved": true
+      },
+      "nativeSynthetic": {
+        "accepted": true,
+        "width": null,
+        "radius": null
+      },
+      "loadSynthetic": {
+        "accepted": true,
+        "dialogs": [
+          "Session loaded successfully!"
+        ],
+        "width": null,
+        "radius": null,
+        "requestPreserved": true,
+        "resultPreserved": true
+      }
+    },
+    {
+      "name": "blank",
+      "input": "",
+      "draftAfterEdit": {
+        "width": "",
+        "radius": ""
+      },
+      "history": {
+        "captured": {
+          "width": "",
+          "radius": ""
+        },
+        "undoReturned": true,
+        "redoReturned": true,
+        "undoRestored": true,
+        "redoRestored": true,
+        "redone": {
+          "width": "",
+          "radius": ""
+        }
+      },
+      "requestAndResultPreserved": true,
+      "workersDuringEdit": 0,
+      "save": {
+        "accepted": true,
+        "via": "Save Session button and download",
+        "width": "",
+        "radius": "",
+        "committedRequestPreserved": true,
+        "downloadSha256": "8b9ddef7c783ad735fc5133518b5460e4e9cfa4ce39ffe07a0e256ab8b9e5244"
+      },
+      "nativeSaved": {
+        "accepted": true,
+        "width": "",
+        "radius": ""
+      },
+      "loadSaved": {
+        "accepted": true,
+        "dialogs": [
+          "Session loaded successfully!"
+        ],
+        "width": "",
+        "radius": "",
+        "requestPreserved": true,
+        "resultPreserved": true
+      },
+      "nativeSynthetic": {
+        "accepted": true,
+        "width": "",
+        "radius": ""
+      },
+      "loadSynthetic": {
+        "accepted": true,
+        "dialogs": [
+          "Session loaded successfully!"
+        ],
+        "width": "",
+        "radius": "",
+        "requestPreserved": true,
+        "resultPreserved": true
+      }
+    },
+    {
+      "name": "invalid_text",
+      "input": "bad",
+      "draftAfterEdit": {
+        "width": "bad",
+        "radius": "bad"
+      },
+      "history": {
+        "captured": {
+          "width": "bad",
+          "radius": "bad"
+        },
+        "undoReturned": true,
+        "redoReturned": true,
+        "undoRestored": true,
+        "redoRestored": true,
+        "redone": {
+          "width": "bad",
+          "radius": "bad"
+        }
+      },
+      "requestAndResultPreserved": true,
+      "workersDuringEdit": 0,
+      "save": {
+        "accepted": false,
+        "error": "Save Session could not validate the active configuration."
+      },
+      "nativeSynthetic": {
+        "accepted": true,
+        "width": "bad",
+        "radius": "bad"
+      },
+      "loadSynthetic": {
+        "accepted": false,
+        "dialogs": [
+          "Failed to load session: Circular track slot 'gc_content' radius must be a positive finite px or factor scalar."
+        ],
+        "width": "",
+        "radius": "",
+        "requestPreserved": true,
+        "resultPreserved": true
+      }
+    },
+    {
+      "name": "incomplete_text",
+      "input": "1e",
+      "draftAfterEdit": {
+        "width": "1e",
+        "radius": "1e"
+      },
+      "history": {
+        "captured": {
+          "width": "1e",
+          "radius": "1e"
+        },
+        "undoReturned": true,
+        "redoReturned": true,
+        "undoRestored": true,
+        "redoRestored": true,
+        "redone": {
+          "width": "1e",
+          "radius": "1e"
+        }
+      },
+      "requestAndResultPreserved": true,
+      "workersDuringEdit": 0,
+      "save": {
+        "accepted": false,
+        "error": "Save Session could not validate the active configuration."
+      },
+      "nativeSynthetic": {
+        "accepted": true,
+        "width": "1e",
+        "radius": "1e"
+      },
+      "loadSynthetic": {
+        "accepted": false,
+        "dialogs": [
+          "Failed to load session: Circular track slot 'gc_content' radius must be a positive finite px or factor scalar."
+        ],
+        "width": "",
+        "radius": "",
+        "requestPreserved": true,
+        "resultPreserved": true
+      }
+    },
+    {
+      "name": "typed_invalid",
+      "input": {
+        "value": "bad",
+        "unit": "px"
+      },
+      "draftAfterEdit": {
+        "width": {
+          "value": "bad",
+          "unit": "px"
+        },
+        "radius": {
+          "value": "bad",
+          "unit": "px"
+        }
+      },
+      "history": {
+        "captured": {
+          "width": {
+            "value": "bad",
+            "unit": "px"
+          },
+          "radius": {
+            "value": "bad",
+            "unit": "px"
+          }
+        },
+        "undoReturned": true,
+        "redoReturned": true,
+        "undoRestored": true,
+        "redoRestored": true,
+        "redone": {
+          "width": {
+            "value": "bad",
+            "unit": "px"
+          },
+          "radius": {
+            "value": "bad",
+            "unit": "px"
+          }
+        }
+      },
+      "requestAndResultPreserved": true,
+      "workersDuringEdit": 0,
+      "save": {
+        "accepted": false,
+        "error": "Save Session could not validate the active configuration."
+      },
+      "nativeSynthetic": {
+        "accepted": true,
+        "width": {
+          "value": "bad",
+          "unit": "px"
+        },
+        "radius": {
+          "value": "bad",
+          "unit": "px"
+        }
+      },
+      "loadSynthetic": {
+        "accepted": false,
+        "dialogs": [
+          "Failed to load session: Circular track slot 'gc_content' radius must be a positive finite px or factor scalar."
+        ],
+        "width": "",
+        "radius": "",
+        "requestPreserved": true,
+        "resultPreserved": true
+      }
+    },
+    {
+      "name": "typed_incomplete",
+      "input": {
+        "value": "1e",
+        "unit": "factor"
+      },
+      "draftAfterEdit": {
+        "width": {
+          "value": "1e",
+          "unit": "factor"
+        },
+        "radius": {
+          "value": "1e",
+          "unit": "factor"
+        }
+      },
+      "history": {
+        "captured": {
+          "width": {
+            "value": "1e",
+            "unit": "factor"
+          },
+          "radius": {
+            "value": "1e",
+            "unit": "factor"
+          }
+        },
+        "undoReturned": true,
+        "redoReturned": true,
+        "undoRestored": true,
+        "redoRestored": true,
+        "redone": {
+          "width": {
+            "value": "1e",
+            "unit": "factor"
+          },
+          "radius": {
+            "value": "1e",
+            "unit": "factor"
+          }
+        }
+      },
+      "requestAndResultPreserved": true,
+      "workersDuringEdit": 0,
+      "save": {
+        "accepted": false,
+        "error": "Save Session could not validate the active configuration."
+      },
+      "nativeSynthetic": {
+        "accepted": true,
+        "width": {
+          "value": "1e",
+          "unit": "factor"
+        },
+        "radius": {
+          "value": "1e",
+          "unit": "factor"
+        }
+      },
+      "loadSynthetic": {
+        "accepted": false,
+        "dialogs": [
+          "Failed to load session: Circular track slot 'gc_content' radius must be a positive finite px or factor scalar."
+        ],
+        "width": "",
+        "radius": "",
+        "requestPreserved": true,
+        "resultPreserved": true
+      }
+    },
+    {
+      "name": "typed_empty",
+      "input": {
+        "value": "",
+        "unit": "px"
+      },
+      "draftAfterEdit": {
+        "width": {
+          "value": "",
+          "unit": "px"
+        },
+        "radius": {
+          "value": "",
+          "unit": "px"
+        }
+      },
+      "history": {
+        "captured": {
+          "width": {
+            "value": "",
+            "unit": "px"
+          },
+          "radius": {
+            "value": "",
+            "unit": "px"
+          }
+        },
+        "undoReturned": true,
+        "redoReturned": true,
+        "undoRestored": true,
+        "redoRestored": true,
+        "redone": {
+          "width": {
+            "value": "",
+            "unit": "px"
+          },
+          "radius": {
+            "value": "",
+            "unit": "px"
+          }
+        }
+      },
+      "requestAndResultPreserved": true,
+      "workersDuringEdit": 0,
+      "save": {
+        "accepted": false,
+        "error": "Save Session could not validate the active configuration."
+      },
+      "nativeSynthetic": {
+        "accepted": true,
+        "width": {
+          "value": "",
+          "unit": "px"
+        },
+        "radius": {
+          "value": "",
+          "unit": "px"
+        }
+      },
+      "loadSynthetic": {
+        "accepted": false,
+        "dialogs": [
+          "Failed to load session: Circular track slot 'gc_content' radius must be a positive finite px or factor scalar."
+        ],
+        "width": "",
+        "radius": "",
+        "requestPreserved": true,
+        "resultPreserved": true
+      }
+    },
+    {
+      "name": "typed_suffix",
+      "input": {
+        "value": "20px",
+        "unit": "px"
+      },
+      "draftAfterEdit": {
+        "width": {
+          "value": "20px",
+          "unit": "px"
+        },
+        "radius": {
+          "value": "20px",
+          "unit": "px"
+        }
+      },
+      "history": {
+        "captured": {
+          "width": {
+            "value": "20px",
+            "unit": "px"
+          },
+          "radius": {
+            "value": "20px",
+            "unit": "px"
+          }
+        },
+        "undoReturned": true,
+        "redoReturned": true,
+        "undoRestored": true,
+        "redoRestored": true,
+        "redone": {
+          "width": {
+            "value": "20px",
+            "unit": "px"
+          },
+          "radius": {
+            "value": "20px",
+            "unit": "px"
+          }
+        }
+      },
+      "requestAndResultPreserved": true,
+      "workersDuringEdit": 0,
+      "save": {
+        "accepted": false,
+        "error": "Save Session could not validate the active configuration."
+      },
+      "nativeSynthetic": {
+        "accepted": true,
+        "width": {
+          "value": "20px",
+          "unit": "px"
+        },
+        "radius": {
+          "value": "20px",
+          "unit": "px"
+        }
+      },
+      "loadSynthetic": {
+        "accepted": false,
+        "dialogs": [
+          "Failed to load session: Circular track slot 'gc_content' radius must be a positive finite px or factor scalar."
+        ],
+        "width": "",
+        "radius": "",
+        "requestPreserved": true,
+        "resultPreserved": true
+      }
+    },
+    {
+      "name": "typed_percent_unit",
+      "input": {
+        "value": 65,
+        "unit": "%"
+      },
+      "draftAfterEdit": {
+        "width": {
+          "value": 65,
+          "unit": "%"
+        },
+        "radius": {
+          "value": 65,
+          "unit": "%"
+        }
+      },
+      "history": {
+        "captured": {
+          "width": {
+            "value": 65,
+            "unit": "%"
+          },
+          "radius": {
+            "value": 65,
+            "unit": "%"
+          }
+        },
+        "undoReturned": true,
+        "redoReturned": true,
+        "undoRestored": true,
+        "redoRestored": true,
+        "redone": {
+          "width": {
+            "value": 65,
+            "unit": "%"
+          },
+          "radius": {
+            "value": 65,
+            "unit": "%"
+          }
+        }
+      },
+      "requestAndResultPreserved": true,
+      "workersDuringEdit": 0,
+      "save": {
+        "accepted": false,
+        "error": "Save Session could not validate the active configuration."
+      },
+      "nativeSynthetic": {
+        "accepted": true,
+        "width": {
+          "value": 65,
+          "unit": "%"
+        },
+        "radius": {
+          "value": 65,
+          "unit": "%"
+        }
+      },
+      "loadSynthetic": {
+        "accepted": false,
+        "dialogs": [
+          "Failed to load session: Circular track slot 'gc_content' radius must be a positive finite px or factor scalar."
+        ],
+        "width": "",
+        "radius": "",
+        "requestPreserved": true,
+        "resultPreserved": true
+      }
+    },
+    {
+      "name": "zero",
+      "input": 0,
+      "draftAfterEdit": {
+        "width": 0,
+        "radius": 0
+      },
+      "history": {
+        "captured": {
+          "width": 0,
+          "radius": 0
+        },
+        "undoReturned": true,
+        "redoReturned": true,
+        "undoRestored": true,
+        "redoRestored": true,
+        "redone": {
+          "width": 0,
+          "radius": 0
+        }
+      },
+      "requestAndResultPreserved": true,
+      "workersDuringEdit": 0,
+      "save": {
+        "accepted": false,
+        "error": "Save Session could not validate the active configuration."
+      },
+      "nativeSynthetic": {
+        "accepted": true,
+        "width": 0,
+        "radius": 0
+      },
+      "loadSynthetic": {
+        "accepted": false,
+        "dialogs": [
+          "Failed to load session: Circular track slot 'gc_content' radius must be a positive finite px or factor scalar."
+        ],
+        "width": "",
+        "radius": "",
+        "requestPreserved": true,
+        "resultPreserved": true
+      }
+    },
+    {
+      "name": "negative",
+      "input": -1,
+      "draftAfterEdit": {
+        "width": -1,
+        "radius": -1
+      },
+      "history": {
+        "captured": {
+          "width": -1,
+          "radius": -1
+        },
+        "undoReturned": true,
+        "redoReturned": true,
+        "undoRestored": true,
+        "redoRestored": true,
+        "redone": {
+          "width": -1,
+          "radius": -1
+        }
+      },
+      "requestAndResultPreserved": true,
+      "workersDuringEdit": 0,
+      "save": {
+        "accepted": false,
+        "error": "Save Session could not validate the active configuration."
+      },
+      "nativeSynthetic": {
+        "accepted": true,
+        "width": -1,
+        "radius": -1
+      },
+      "loadSynthetic": {
+        "accepted": false,
+        "dialogs": [
+          "Failed to load session: Circular track slot 'gc_content' radius must be a positive finite px or factor scalar."
+        ],
+        "width": "",
+        "radius": "",
+        "requestPreserved": true,
+        "resultPreserved": true
+      }
+    },
+    {
+      "name": "typed_zero",
+      "input": {
+        "value": 0,
+        "unit": "px"
+      },
+      "draftAfterEdit": {
+        "width": {
+          "value": 0,
+          "unit": "px"
+        },
+        "radius": {
+          "value": 0,
+          "unit": "px"
+        }
+      },
+      "history": {
+        "captured": {
+          "width": {
+            "value": 0,
+            "unit": "px"
+          },
+          "radius": {
+            "value": 0,
+            "unit": "px"
+          }
+        },
+        "undoReturned": true,
+        "redoReturned": true,
+        "undoRestored": true,
+        "redoRestored": true,
+        "redone": {
+          "width": {
+            "value": 0,
+            "unit": "px"
+          },
+          "radius": {
+            "value": 0,
+            "unit": "px"
+          }
+        }
+      },
+      "requestAndResultPreserved": true,
+      "workersDuringEdit": 0,
+      "save": {
+        "accepted": false,
+        "error": "Save Session could not validate the active configuration."
+      },
+      "nativeSynthetic": {
+        "accepted": true,
+        "width": {
+          "value": 0,
+          "unit": "px"
+        },
+        "radius": {
+          "value": 0,
+          "unit": "px"
+        }
+      },
+      "loadSynthetic": {
+        "accepted": false,
+        "dialogs": [
+          "Failed to load session: Circular track slot 'gc_content' radius must be a positive finite px or factor scalar."
+        ],
+        "width": "",
+        "radius": "",
+        "requestPreserved": true,
+        "resultPreserved": true
+      }
+    },
+    {
+      "name": "typed_negative",
+      "input": {
+        "value": -1,
+        "unit": "factor"
+      },
+      "draftAfterEdit": {
+        "width": {
+          "value": -1,
+          "unit": "factor"
+        },
+        "radius": {
+          "value": -1,
+          "unit": "factor"
+        }
+      },
+      "history": {
+        "captured": {
+          "width": {
+            "value": -1,
+            "unit": "factor"
+          },
+          "radius": {
+            "value": -1,
+            "unit": "factor"
+          }
+        },
+        "undoReturned": true,
+        "redoReturned": true,
+        "undoRestored": true,
+        "redoRestored": true,
+        "redone": {
+          "width": {
+            "value": -1,
+            "unit": "factor"
+          },
+          "radius": {
+            "value": -1,
+            "unit": "factor"
+          }
+        }
+      },
+      "requestAndResultPreserved": true,
+      "workersDuringEdit": 0,
+      "save": {
+        "accepted": false,
+        "error": "Save Session could not validate the active configuration."
+      },
+      "nativeSynthetic": {
+        "accepted": true,
+        "width": {
+          "value": -1,
+          "unit": "factor"
+        },
+        "radius": {
+          "value": -1,
+          "unit": "factor"
+        }
+      },
+      "loadSynthetic": {
+        "accepted": false,
+        "dialogs": [
+          "Failed to load session: Circular track slot 'gc_content' radius must be a positive finite px or factor scalar."
+        ],
+        "width": "",
+        "radius": "",
+        "requestPreserved": true,
+        "resultPreserved": true
+      }
+    },
+    {
+      "name": "infinity",
+      "input": {
+        "$number": "Infinity"
+      },
+      "draftAfterEdit": {
+        "width": {
+          "$number": "Infinity"
+        },
+        "radius": {
+          "$number": "Infinity"
+        }
+      },
+      "history": {
+        "captured": {
+          "width": null,
+          "radius": null
+        },
+        "undoReturned": true,
+        "redoReturned": true,
+        "undoRestored": true,
+        "redoRestored": false,
+        "redone": {
+          "width": null,
+          "radius": null
+        }
+      },
+      "requestAndResultPreserved": true,
+      "workersDuringEdit": 0,
+      "save": {
+        "accepted": true,
+        "status": "saved"
+      },
+      "nativeSynthetic": {
+        "accepted": true,
+        "width": {
+          "$number": "Infinity"
+        },
+        "radius": {
+          "$number": "Infinity"
+        }
+      },
+      "loadSynthetic": {
+        "accepted": false,
+        "dialogs": [
+          "Failed to load session: Unexpected token 'I', ...\"\"radius\": Infinity, \"... is not valid JSON"
+        ],
+        "width": "",
+        "radius": "",
+        "requestPreserved": true,
+        "resultPreserved": true
+      }
+    },
+    {
+      "name": "nan",
+      "input": {
+        "$number": "NaN"
+      },
+      "draftAfterEdit": {
+        "width": {
+          "$number": "NaN"
+        },
+        "radius": {
+          "$number": "NaN"
+        }
+      },
+      "history": {
+        "captured": {
+          "width": null,
+          "radius": null
+        },
+        "undoReturned": true,
+        "redoReturned": true,
+        "undoRestored": true,
+        "redoRestored": false,
+        "redone": {
+          "width": null,
+          "radius": null
+        }
+      },
+      "requestAndResultPreserved": true,
+      "workersDuringEdit": 0,
+      "save": {
+        "accepted": true,
+        "status": "saved"
+      },
+      "nativeSynthetic": {
+        "accepted": true,
+        "width": {
+          "$number": "NaN"
+        },
+        "radius": {
+          "$number": "NaN"
+        }
+      },
+      "loadSynthetic": {
+        "accepted": false,
+        "dialogs": [
+          "Failed to load session: Unexpected token 'N', ...\"\"radius\": NaN, \"widt\"... is not valid JSON"
+        ],
+        "width": "",
+        "radius": "",
+        "requestPreserved": true,
+        "resultPreserved": true
+      }
+    },
+    {
+      "name": "typed_infinity",
+      "input": {
+        "value": {
+          "$number": "Infinity"
+        },
+        "unit": "px"
+      },
+      "draftAfterEdit": {
+        "width": {
+          "value": {
+            "$number": "Infinity"
+          },
+          "unit": "px"
+        },
+        "radius": {
+          "value": {
+            "$number": "Infinity"
+          },
+          "unit": "px"
+        }
+      },
+      "history": {
+        "captured": {
+          "width": {
+            "value": null,
+            "unit": "px"
+          },
+          "radius": {
+            "value": null,
+            "unit": "px"
+          }
+        },
+        "undoReturned": true,
+        "redoReturned": true,
+        "undoRestored": true,
+        "redoRestored": false,
+        "redone": {
+          "width": {
+            "value": null,
+            "unit": "px"
+          },
+          "radius": {
+            "value": null,
+            "unit": "px"
+          }
+        }
+      },
+      "requestAndResultPreserved": true,
+      "workersDuringEdit": 0,
+      "save": {
+        "accepted": false,
+        "error": "Save Session could not validate the active configuration."
+      },
+      "nativeSynthetic": {
+        "accepted": true,
+        "width": {
+          "value": {
+            "$number": "Infinity"
+          },
+          "unit": "px"
+        },
+        "radius": {
+          "value": {
+            "$number": "Infinity"
+          },
+          "unit": "px"
+        }
+      },
+      "loadSynthetic": {
+        "accepted": false,
+        "dialogs": [
+          "Failed to load session: Unexpected token 'I', ...\"{\"value\": Infinity, \"... is not valid JSON"
+        ],
+        "width": "",
+        "radius": "",
+        "requestPreserved": true,
+        "resultPreserved": true
+      }
+    },
+    {
+      "name": "unsupported_unit",
+      "input": {
+        "value": 1,
+        "unit": "em"
+      },
+      "draftAfterEdit": {
+        "width": {
+          "value": 1,
+          "unit": "em"
+        },
+        "radius": {
+          "value": 1,
+          "unit": "em"
+        }
+      },
+      "history": {
+        "captured": {
+          "width": {
+            "value": 1,
+            "unit": "em"
+          },
+          "radius": {
+            "value": 1,
+            "unit": "em"
+          }
+        },
+        "undoReturned": true,
+        "redoReturned": true,
+        "undoRestored": true,
+        "redoRestored": true,
+        "redone": {
+          "width": {
+            "value": 1,
+            "unit": "em"
+          },
+          "radius": {
+            "value": 1,
+            "unit": "em"
+          }
+        }
+      },
+      "requestAndResultPreserved": true,
+      "workersDuringEdit": 0,
+      "save": {
+        "accepted": false,
+        "error": "Save Session could not validate the active configuration."
+      },
+      "nativeSynthetic": {
+        "accepted": true,
+        "width": {
+          "value": 1,
+          "unit": "em"
+        },
+        "radius": {
+          "value": 1,
+          "unit": "em"
+        }
+      },
+      "loadSynthetic": {
+        "accepted": false,
+        "dialogs": [
+          "Failed to load session: Circular track slot 'gc_content' radius must be a positive finite px or factor scalar."
+        ],
+        "width": "",
+        "radius": "",
+        "requestPreserved": true,
+        "resultPreserved": true
+      }
+    },
+    {
+      "name": "nonfinite_text",
+      "input": "Infinity",
+      "draftAfterEdit": {
+        "width": "Infinity",
+        "radius": "Infinity"
+      },
+      "history": {
+        "captured": {
+          "width": "Infinity",
+          "radius": "Infinity"
+        },
+        "undoReturned": true,
+        "redoReturned": true,
+        "undoRestored": true,
+        "redoRestored": true,
+        "redone": {
+          "width": "Infinity",
+          "radius": "Infinity"
+        }
+      },
+      "requestAndResultPreserved": true,
+      "workersDuringEdit": 0,
+      "save": {
+        "accepted": false,
+        "error": "Save Session could not validate the active configuration."
+      },
+      "nativeSynthetic": {
+        "accepted": true,
+        "width": "Infinity",
+        "radius": "Infinity"
+      },
+      "loadSynthetic": {
+        "accepted": false,
+        "dialogs": [
+          "Failed to load session: Circular track slot 'gc_content' radius must be a positive finite px or factor scalar."
+        ],
+        "width": "",
+        "radius": "",
+        "requestPreserved": true,
+        "resultPreserved": true
+      }
+    },
+    {
+      "name": "whitespace",
+      "input": "   ",
+      "draftAfterEdit": {
+        "width": "   ",
+        "radius": "   "
+      },
+      "history": {
+        "captured": {
+          "width": "   ",
+          "radius": "   "
+        },
+        "undoReturned": true,
+        "redoReturned": true,
+        "undoRestored": true,
+        "redoRestored": true,
+        "redone": {
+          "width": "   ",
+          "radius": "   "
+        }
+      },
+      "requestAndResultPreserved": true,
+      "workersDuringEdit": 0,
+      "save": {
+        "accepted": false,
+        "error": "Save Session could not validate the active configuration."
+      },
+      "nativeSynthetic": {
+        "accepted": true,
+        "width": "   ",
+        "radius": "   "
+      },
+      "loadSynthetic": {
+        "accepted": false,
+        "dialogs": [
+          "Failed to load session: Circular track slot 'gc_content' radius must be a positive finite px or factor scalar."
+        ],
+        "width": "",
+        "radius": "",
+        "requestPreserved": true,
+        "resultPreserved": true
+      }
+    },
+    {
+      "name": "bare_boolean",
+      "input": true,
+      "draftAfterEdit": {
+        "width": true,
+        "radius": true
+      },
+      "history": {
+        "captured": {
+          "width": true,
+          "radius": true
+        },
+        "undoReturned": true,
+        "redoReturned": true,
+        "undoRestored": true,
+        "redoRestored": true,
+        "redone": {
+          "width": true,
+          "radius": true
+        }
+      },
+      "requestAndResultPreserved": true,
+      "workersDuringEdit": 0,
+      "save": {
+        "accepted": false,
+        "error": "Save Session could not validate the active configuration."
+      },
+      "nativeSynthetic": {
+        "accepted": true,
+        "width": true,
+        "radius": true
+      },
+      "loadSynthetic": {
+        "accepted": false,
+        "dialogs": [
+          "Failed to load session: Circular track slot 'gc_content' radius must be a positive finite px or factor scalar."
+        ],
+        "width": "",
+        "radius": "",
+        "requestPreserved": true,
+        "resultPreserved": true
+      }
+    },
+    {
+      "name": "typed_boolean",
+      "input": {
+        "value": true,
+        "unit": "px"
+      },
+      "draftAfterEdit": {
+        "width": {
+          "value": true,
+          "unit": "px"
+        },
+        "radius": {
+          "value": true,
+          "unit": "px"
+        }
+      },
+      "history": {
+        "captured": {
+          "width": {
+            "value": true,
+            "unit": "px"
+          },
+          "radius": {
+            "value": true,
+            "unit": "px"
+          }
+        },
+        "undoReturned": true,
+        "redoReturned": true,
+        "undoRestored": true,
+        "redoRestored": true,
+        "redone": {
+          "width": {
+            "value": true,
+            "unit": "px"
+          },
+          "radius": {
+            "value": true,
+            "unit": "px"
+          }
+        }
+      },
+      "requestAndResultPreserved": true,
+      "workersDuringEdit": 0,
+      "save": {
+        "accepted": true,
+        "status": "saved"
+      },
+      "nativeSynthetic": {
+        "accepted": true,
+        "width": {
+          "value": true,
+          "unit": "px"
+        },
+        "radius": {
+          "value": true,
+          "unit": "px"
+        }
+      },
+      "loadSynthetic": {
+        "accepted": true,
+        "dialogs": [
+          "Session loaded successfully!"
+        ],
+        "width": {
+          "value": true,
+          "unit": "px"
+        },
+        "radius": {
+          "value": true,
+          "unit": "px"
+        },
+        "requestPreserved": true,
+        "resultPreserved": true
+      }
+    }
+  ],
+  "pageErrors": [],
+  "externalRequests": [],
+  "limits": [
+    "No new controls, selector/IME transaction, Generate geometry, SVG download/replay or Auto unit lifetime was implemented or tested.",
+    "Fixture scalar changes call the existing History manager in a real app; they do not prove future DOM input transaction wiring.",
+    "Native acceptance alone is not Web draft admission. NaN/Infinity JSON bytes are deliberately nonstandard negative reader inputs."
+  ]
+}
