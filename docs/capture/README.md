@@ -122,3 +122,24 @@ python docs/capture/run_all.py --scenario H-GUI-15 --tier core --check
 GUI tiers are cumulative. The first GUI run can take a few minutes while the packaged Python diagram worker starts. Worker and generation waits are bounded at three minutes each. CLI and Python recipes may still be run through their standalone runners for surface-specific development; `run_all.py` is the authoritative whole-documentation entry point.
 
 After regeneration, inspect every published Tutorial image directory at normal document width. Pixel comparison detects stale committed images. The semantic checks separately verify accessions, complete sequence lengths and topology, feature and comparison counts, track ordering and axes, popup metadata, exported evidence, legend placement, and static-SVG safety.
+
+## Alignment directions and Reset
+
+`T-GUI-04` regenerates the finished five-BGC example from original inputs, then
+uses the real review to reverse only its minority reference. It exercises the
+combined and positions-only Reset controls, Undo between scopes, and restores
+the Keep artifact before the SVG download. The Keep figure and group popup
+are captured before the optional Reset checks, so a notification from those
+checks does not obscure the finished comparison. Run:
+
+```sh
+python docs/capture/run_all.py --scenario T-GUI-04 --tier extended
+```
+
+`bgc-source-verification.json` records direct byte comparisons with all five
+version-5 MIBiG GenBank downloads, including UTC retrieval timestamps, URLs,
+sizes and source/mirror SHA-256. The BGC harness checks these pins before using
+its offline copies. Public readers obtain inputs from MIBiG, as the Tutorial
+specifies. No login, stored authentication or seed data is needed. `config.py`
+owns the existing viewport/theme/locale; `web_server.py` selects a free loopback
+port. The existing screenshot density remains unchanged.
