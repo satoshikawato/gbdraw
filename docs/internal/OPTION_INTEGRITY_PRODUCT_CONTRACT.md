@@ -5,7 +5,7 @@ Status: active Product authority
 ## Authority metadata
 
 - Contract ID: `OIPC`
-- Contract revision: `22`
+- Contract revision: `23`
 - Product Decision Owner: `satoshikawato`
 - Decision date: `2026-08-28`
 - Decision source: explicit Product Decision Owner selection of one (`1`) after
@@ -29,7 +29,7 @@ Status: active Product authority
   `PD-OI-031`, `PD-OI-032`, `PD-OI-033`, `PD-OI-034`, `PD-OI-035`,
   `PD-OI-036`, `PD-OI-037`, `PD-OI-038`, `PD-OI-039`, `PD-OI-040`,
   `PD-OI-041`, `PD-OI-042`, `PD-OI-043`, `PD-OI-044`, `PD-OI-045`,
-  `PD-OI-046`, and `PD-OI-047`
+  `PD-OI-046`, `PD-OI-047`, `PD-OI-048`, `PD-OI-049`, and `PD-OI-050`
 - Revision 3 addition: `PD-OI-018`, accepted by `satoshikawato` on
   `2026-09-13` after confirming the complete record/search outcome, no feature
   retirement, and the runtime/memory cost of complete comparisons. The initial
@@ -182,6 +182,15 @@ Status: active Product authority
   runtime; dependent implementation requires these records merged into its
   base. It neither registers nor supersedes the separate export-plan
   diagnostic-disclosure candidate.
+- Revision 23 additions: `PD-OI-048` through `PD-OI-050`, approved by
+  `satoshikawato` on `2026-09-27` as the three complete Choice A receipts for
+  issue `#619`. The owner explicitly answered 「署名します。」 to confirmation
+  of all three Choice A texts, Owner `satoshikawato`, and Decision date
+  `2026-09-27`. The independent records below preserve all nine supplied
+  fields. Earlier decisions and acceptance conditions retain their scope.
+  This authority-only amendment contains no runtime or runtime acceptance
+  evidence; dependent implementation requires these records merged into its
+  base.
 - Records remaining `EVIDENCE_REQUIRED`: none
 - Excluded records: none
 
@@ -1850,6 +1859,144 @@ Decision date: 2026-09-26
   "acceptedResidualRisk": "表示 text と accepted rule が一時的に異なり、Save/Generate は accepted rule、Export は現在 Result を使う。Not applied と対象説明、Revert を提供する。Session/document や対象 rule の History 置換後に未確定 draft は保持しない。",
   "owner": "satoshikawato",
   "decisionDate": "2026-09-26"
+}
+```
+
+### PD-OI-048: Circular Width/Radius input representation
+
+- Concern key: `tracks.circular-measure-input-representation`
+- Scenario revision: `1`
+- Status: `ACCEPTED`
+- Selected outcome: `A / NUMERIC_PX_FACTOR_WITH_LEGACY_INPUT`
+- Normative outcome: exactly the complete approved `PRODUCT_DECISION` receipt
+  and its nine-field JSON representation below.
+- Decision source: the complete Choice A text reviewed in
+  [01_INPUT_REPRESENTATION.md](https://github.com/satoshikawato/gbdraw/blob/727b876214b58d4233790ce1feb4913eaf48bf4d/docs/internal/issue-619-implementation-plan-20260927/DECISION_PACKS/01_INPUT_REPRESENTATION.md)
+  at S00 commit `727b876214b58d4233790ce1feb4913eaf48bf4d`. On `2026-09-27`,
+  `satoshikawato` explicitly confirmed signing all three Choice A texts with
+  that Owner and Decision date. All nine supplied fields are reproduced
+  without translation or additional terms. This record does not supersede
+  another decision. Dependent runtime requires this authority merged into
+  its base; this amendment supplies no runtime acceptance evidence.
+- Receipt SHA-256 (UTF-8, excluding the final newline):
+  `b405f184de5362132bb62451eb0e8ab3d28969809e8a3c9b12cf854d2c1ae55d`.
+
+```text
+PRODUCT_DECISION
+Concern: tracks.circular-measure-input-representation
+Scenario revision: 1
+Choice: A / NUMERIC_PX_FACTOR_WITH_LEGACY_INPUT
+Rationale: 数値の意味を明示しつつ、通常操作の選択肢をpxと倍率の二つに絞る。percentによる既存入力と保存値の意味は維持する。
+Must preserve: 既存px/factor/%の値とunit、precision、typed request/Session、Auto、invaliddraft、draft/Result分離、適用時点、History、privacy、失敗復旧。
+May retire: 数値欄内に単位を恒常表示する旧UIと、percentをliteral spellingのまま通常表示することのみ。percent入力や既存Sessionの受理は退役しない。
+Accepted residual risk: percent入力を倍率表示へまとめるため、65%が0.65と読めることをhelpで説明する必要がある。suffix入力の途中と確定を区別する。
+Owner: satoshikawato
+Decision date: 2026-09-27
+```
+
+```json
+{
+  "concern": "tracks.circular-measure-input-representation",
+  "scenarioRevision": 1,
+  "choice": "A / NUMERIC_PX_FACTOR_WITH_LEGACY_INPUT",
+  "rationale": "数値の意味を明示しつつ、通常操作の選択肢をpxと倍率の二つに絞る。percentによる既存入力と保存値の意味は維持する。",
+  "mustPreserve": "既存px/factor/%の値とunit、precision、typed request/Session、Auto、invaliddraft、draft/Result分離、適用時点、History、privacy、失敗復旧。",
+  "mayRetire": "数値欄内に単位を恒常表示する旧UIと、percentをliteral spellingのまま通常表示することのみ。percent入力や既存Sessionの受理は退役しない。",
+  "acceptedResidualRisk": "percent入力を倍率表示へまとめるため、65%が0.65と読めることをhelpで説明する必要がある。suffix入力の途中と確定を区別する。",
+  "owner": "satoshikawato",
+  "decisionDate": "2026-09-27"
+}
+```
+
+### PD-OI-049: Circular Width/Radius unit changes
+
+- Concern key: `tracks.circular-measure-unit-change`
+- Scenario revision: `1`
+- Status: `ACCEPTED`
+- Selected outcome: `A / KEEP_NUMBER_CHANGE_UNIT`
+- Normative outcome: exactly the complete approved `PRODUCT_DECISION` receipt
+  and its nine-field JSON representation below.
+- Decision source: the complete Choice A text reviewed in
+  [02_UNIT_CHANGE.md](https://github.com/satoshikawato/gbdraw/blob/727b876214b58d4233790ce1feb4913eaf48bf4d/docs/internal/issue-619-implementation-plan-20260927/DECISION_PACKS/02_UNIT_CHANGE.md)
+  at S00 commit `727b876214b58d4233790ce1feb4913eaf48bf4d`. On `2026-09-27`,
+  `satoshikawato` explicitly confirmed signing all three Choice A texts with
+  that Owner and Decision date. All nine supplied fields are reproduced
+  without translation or additional terms. This record does not supersede
+  another decision. Dependent runtime requires this authority merged into
+  its base; this amendment supplies no runtime acceptance evidence.
+- Receipt SHA-256 (UTF-8, excluding the final newline):
+  `f5832c5e43cb0d175c320197e47b7f04466608220e47e5b46806aef4f0ec59c8`.
+
+```text
+PRODUCT_DECISION
+Concern: tracks.circular-measure-unit-change
+Scenario revision: 1
+Choice: A / KEEP_NUMBER_CHANGE_UNIT
+Rationale: 単位選択を、入力した数値の意味を明示的に変更する編集として統一する。現在の円半径や古いResultに依存せず、生成前や複数recordでも同じ操作を使える。
+Must preserve: numericdraftとunitの明示、Auto、Generateまで旧Resultを保つこと、History/Session、失敗復旧、既存scalarの科学的意味、local-only。
+May retire: なし。
+Accepted residual risk: 倍率からpxへ切り替えると図上の大きさが変わる。helpとPendingに、数値維持・次回Generate反映を明記する。
+Owner: satoshikawato
+Decision date: 2026-09-27
+```
+
+```json
+{
+  "concern": "tracks.circular-measure-unit-change",
+  "scenarioRevision": 1,
+  "choice": "A / KEEP_NUMBER_CHANGE_UNIT",
+  "rationale": "単位選択を、入力した数値の意味を明示的に変更する編集として統一する。現在の円半径や古いResultに依存せず、生成前や複数recordでも同じ操作を使える。",
+  "mustPreserve": "numericdraftとunitの明示、Auto、Generateまで旧Resultを保つこと、History/Session、失敗復旧、既存scalarの科学的意味、local-only。",
+  "mayRetire": "なし。",
+  "acceptedResidualRisk": "倍率からpxへ切り替えると図上の大きさが変わる。helpとPendingに、数値維持・次回Generate反映を明記する。",
+  "owner": "satoshikawato",
+  "decisionDate": "2026-09-27"
+}
+```
+
+### PD-OI-050: Circular Auto unit preference lifecycle
+
+- Concern key: `tracks.circular-measure-auto-unit-lifecycle`
+- Scenario revision: `1`
+- Status: `ACCEPTED`
+- Selected outcome: `A / TRANSIENT_AUTO_UNIT`
+- Normative outcome: exactly the complete approved `PRODUCT_DECISION` receipt
+  and its nine-field JSON representation below.
+- Decision source: the complete Choice A text reviewed in
+  [03_AUTO_UNIT_LIFECYCLE.md](https://github.com/satoshikawato/gbdraw/blob/727b876214b58d4233790ce1feb4913eaf48bf4d/docs/internal/issue-619-implementation-plan-20260927/DECISION_PACKS/03_AUTO_UNIT_LIFECYCLE.md)
+  at S00 commit `727b876214b58d4233790ce1feb4913eaf48bf4d`. On `2026-09-27`,
+  `satoshikawato` explicitly confirmed signing all three Choice A texts with
+  that Owner and Decision date. All nine supplied fields are reproduced
+  without translation or additional terms. This record does not supersede
+  another decision. Dependent runtime requires this authority merged into
+  its base; this amendment supplies no runtime acceptance evidence.
+- Receipt SHA-256 (UTF-8, excluding the final newline):
+  `352ce20ffa4f81c9a7bc147d0275b8edad8b2a281311abf0dba01415217b40d6`.
+
+```text
+PRODUCT_DECISION
+Concern: tracks.circular-measure-auto-unit-lifecycle
+Scenario revision: 1
+Choice: A / TRANSIENT_AUTO_UNIT
+Rationale: Autoにgeometry上のunitはないため、その選択を次回入力用の小さなtransient preferenceとして扱う。manual値の意味と保存は保ち、追加の永続schemaやunit mirrorを避ける。
+Must preserve: 空欄/Autoのnull意味、unitを先に選ぶ操作、manual値のunitとHistory/Session、既存preview/request、invaliddraftと失敗復旧。
+May retire: なし。Autoのunit preferenceのHistory/Session保証は新設しない。
+Accepted residual risk: 空欄時だけのunit選択はpanel再マウントやLoadで忘れられる。manual scalarのunitは必ず残り、Auto geometryは変わらない。
+Owner: satoshikawato
+Decision date: 2026-09-27
+```
+
+```json
+{
+  "concern": "tracks.circular-measure-auto-unit-lifecycle",
+  "scenarioRevision": 1,
+  "choice": "A / TRANSIENT_AUTO_UNIT",
+  "rationale": "Autoにgeometry上のunitはないため、その選択を次回入力用の小さなtransient preferenceとして扱う。manual値の意味と保存は保ち、追加の永続schemaやunit mirrorを避ける。",
+  "mustPreserve": "空欄/Autoのnull意味、unitを先に選ぶ操作、manual値のunitとHistory/Session、既存preview/request、invaliddraftと失敗復旧。",
+  "mayRetire": "なし。Autoのunit preferenceのHistory/Session保証は新設しない。",
+  "acceptedResidualRisk": "空欄時だけのunit選択はpanel再マウントやLoadで忘れられる。manual scalarのunitは必ず残り、Auto geometryは変わらない。",
+  "owner": "satoshikawato",
+  "decisionDate": "2026-09-27"
 }
 ```
 
