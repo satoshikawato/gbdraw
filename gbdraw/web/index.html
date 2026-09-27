@@ -522,9 +522,9 @@
         .preview-feature-search {
             position: absolute;
             top: 1rem;
-            right: 1rem;
+            right: 3rem;
             z-index: 30;
-            width: min(39.5rem, calc(100% - 2rem));
+            width: min(39.5rem, calc(100% - 4rem));
             padding: 7px;
             border: 1px solid #cbd5e1;
             border-radius: 8px;
@@ -4914,6 +4914,7 @@
                                     aria-label="Next match">&gt;</button>
                             <button type="button"
                                     @click.stop="openPreviewFeatureSearchActiveMatch"
+                                    data-history-ignore
                                     :disabled="!previewFeatureSearchCanOpenActive"
                                     class="gfs-button gfs-button--open"
                                     title="Open active feature"
@@ -6505,7 +6506,7 @@
                 <button v-if="svgContent && resultPanelTab === 'preview'"
                         @click="toggleRightDrawer"
                         data-history-ignore
-                        class="drawer-toggle absolute right-0 top-1/2 bg-slate-800 hover:bg-slate-900 text-white px-2 py-4 rounded-l-lg shadow-lg z-20 transition-all"
+                        class="drawer-toggle absolute right-0 top-1/2 bg-slate-800 hover:bg-slate-900 text-white px-2 py-4 rounded-l-lg shadow-lg z-40 transition-all"
                         :aria-expanded="showRightDrawer"
                         :disabled="Boolean(similarityAlignmentEditorDisabledReason)"
                         :aria-label="similarityAlignmentEditorDisabledReason || (showRightDrawer ? 'Close editor' : 'Open editor')"
@@ -6654,7 +6655,7 @@
                                     <span class="flex-grow truncate text-slate-700" :title="feat.product || feat.gene || feat.locus_tag || feat.note || '(unnamed)'">
                                         {{ feat.product || feat.gene || feat.locus_tag || feat.note || '(unnamed)' }}
                                     </span>
-                                    <button @click.stop="openFeatureEditorFromList(feat, $event)" class="text-[10px] px-2 py-1 rounded border border-slate-200 text-slate-600 hover:bg-slate-100 shrink-0" title="Open feature editor">Edit</button>
+                                    <button data-history-ignore @click.stop="openFeatureEditorFromList(feat, $event)" class="text-[10px] px-2 py-1 rounded border border-slate-200 text-slate-600 hover:bg-slate-100 shrink-0" title="Open feature editor">Edit</button>
                                     <input type="color"
                                            :value="getFeatureColor(feat)"
                                            @click.stop
