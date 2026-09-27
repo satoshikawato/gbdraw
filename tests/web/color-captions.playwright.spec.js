@@ -300,9 +300,11 @@ for (const width of [1440, 390]) {
       await history(page, 'Undo');
       expect((await evidence()).mounted).toEqual(before.mounted);
       expect((await evidence()).result).toEqual(before.result);
+      expect((await inspect(page)).result.find(entry => entry.caption === 'tRNA')?.color).toBe(before.mounted[0]);
       await history(page, 'Redo');
       expect((await evidence()).mounted).toEqual(after.mounted);
       expect((await inspect(page)).rules).toEqual(live.rules);
+      expect((await inspect(page)).result.find(entry => entry.caption === 'tRNA')?.color).toBe('#c026d3');
       const saved = info.outputPath('default-caption.json.gz');
       await download(page, 'Save Session', saved);
       fresh = await load(browser, saved, { width, height: 1000 });
@@ -311,6 +313,18 @@ for (const width of [1440, 390]) {
       expect((await getDiagramWorkerActivity(fresh)).runs).toBe(0);
       await generate(fresh);
       expect((await inspect(fresh)).result.find(entry => entry.caption === 'tRNA')?.color).toBe('#c026d3');
+      await history(page, 'Undo');
+      await page.evaluate(async () => {
+        const a = window.__GBDRAW_APP__;
+        const { getFeatureGenerationHash } = await import('./js/app/feature-utils.js');
+        Object.assign(a.newSpecRule, { feat: 'CDS', qual: 'hash',
+          val: getFeatureGenerationHash(a.extractedFeatures.find(feature => feature.type === 'CDS')),
+          color: '#112233', cap: 'Independent group' });
+        await a.addSpecificRule();
+      });
+      const independent = await inspect(page);
+      expect(independent.result.find(entry => entry.caption === 'tRNA')?.color).toBe(before.mounted[0]);
+      expect(independent.result.find(entry => entry.caption === 'Independent group')?.color).toBe('#112233');
       expect(page.externalRequests).toEqual([]);
       expect(fresh.externalRequests).toEqual([]);
     } finally {

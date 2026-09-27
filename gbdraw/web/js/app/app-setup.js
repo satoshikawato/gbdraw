@@ -1123,6 +1123,7 @@ export const createAppSetup = () => {
     applyConfigData,
     buildUiStateData,
     applyUiStateData,
+    buildLegendEntryOwners: () => legendActions.captureLegendEntryOwners(),
     buildCompositionIntent: () => {
       const svg = svgContainer.value?.querySelector?.('svg') || null;
       if (!svg) return null;
@@ -2556,7 +2557,7 @@ export const createAppSetup = () => {
       reconcileLabelOverrides();
     }
     if (changedDomains.has('editorState')) {
-      reconcileLegendEntries({ restoreColorState: true });
+      reconcileLegendEntries({ restoreColorState: true, entryOwners: _intent.editorState.legend.entryOwners });
       reconcileStrokeOverrides({ changes });
       reconcileLabelOverrides();
     }
