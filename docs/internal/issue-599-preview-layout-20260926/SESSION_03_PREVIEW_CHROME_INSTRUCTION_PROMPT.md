@@ -4,19 +4,9 @@
 
 ## 取得・開始条件
 
-S02 の commit/push 完了と、自分が同じ remote branch の唯一の writer であることを確認する。他セッションの共有作業ツリーを変更せず、必ず指定実装ブランチを専用 clone へ取得する。
+S02 の commit/push 完了と、自分が同じ remote branch の唯一の writer であることを確認する。他セッションの共有作業ツリーを変更せず、retained checkout `/mnt/c/users/genom/github/gbdraw-issue599-s00` を流用する。毎回 clone しない。
 
-```bash
-task_dir=$(mktemp -d /tmp/gbdraw-issue599-s03.XXXXXX)
-git clone --branch fix/issue-599-preview-layout-20260926 \
-  https://github.com/satoshikawato/gbdraw.git "$task_dir/repo"
-cd "$task_dir/repo"
-git fetch origin
-git pull --ff-only origin fix/issue-599-preview-layout-20260926
-test "$(git branch --show-current)" = "fix/issue-599-preview-layout-20260926"
-test "$(git rev-parse --abbrev-ref '@{upstream}')" = "origin/fix/issue-599-preview-layout-20260926"
-git status --short
-```
+[総合計画の共通 Git 開始手順](MASTER_PLAN.md#必須-git-手順--全セッション共通)を実行する。clean tree、branch/upstream、前セッションの公開 SHA を確認し、fetch / ff-only pull する。
 
 repository AGENTS/CLAUDE、Web CLAUDE、[総合計画](MASTER_PLAN.md)、[Pack 03](DECISION_03_PREVIEW_CHROME.md)、[承認一覧](00_APPROVED_PRODUCT_DECISIONS.md)、[進捗](SESSION_STATUS.md)、S00–S02 の結果を読む。最新 origin/dev の authority を確認し、入力 SHA・authority base/record を記録する。検索自由 drag の退役は承認済みだが、candidate authority で runtime を自己承認しない。
 

@@ -106,7 +106,7 @@ container 幅に応じた wrap、`min-width: 0`、scroll を同じ CSS owner に
 | KISS | automatic + delta と CSS の専用行で解く。設定 toggle、observer 系列、互換 fallback を増やさない |
 | DRY | 差分演算、sanitize/commit、search/editor DOM、geometry、製品契約の正本を複製しない |
 | YAGNI | 新 Session/request schema、全要素 position store、drag engine、Worker、全 checkpoint clone、先回りする抽象化を追加しない |
-| ワークフロー | 同一 remote branch へ順番に引き継ぐ1 writer。セッション境界はレビュー可能な責任単位。各人の専用 clone で作業し、前セッションの公開済み状態を取得する |
+| ワークフロー | 同一 remote branch へ順番に引き継ぐ1 writer。セッション境界はレビュー可能な責任単位。同じ retained checkout を流用し、前セッションの公開済み状態を取得する |
 
 architecture-bearing 差分は owner と canonical path の before/after、旧経路の撤去を簡潔に記録する。通常の非増加経路に静的推測の OE/PE/CB 数値を付けない。Ratchet の例外条件（OE/PE 増加、新 persisted compatibility 等）に該当した場合だけ完全な sets・算術・maintainer 判断を用意する。チェック失敗を policy/checker/baseline の緩和で回避しない。
 
@@ -126,13 +126,12 @@ S01–S03 は個別に実装証拠を保存し、S04 は有効な既存証拠を
 
 **必ず公開済みの `fix/issue-599-preview-layout-20260926` を取得して使う。** 毎回 origin/dev から別ブランチを切り直さない。共有作業ツリーの branch switch/reset/stash、他セッションの untracked ファイルの追加、既存 worktree の横取りは禁止。前セッションの終了と公開 SHA を確認してから開始する。同じ remote branch の同時 writer は許可しない。
 
-新しい専用 clone を作る手順:
+依頼者の追記により、S01–S04 は S00 の retained checkout `/mnt/c/users/genom/github/gbdraw-issue599-s00` を流用する。毎回の clone は行わない。2026-09-28 の再開時に旧 `/tmp` checkout が失われていたため、公開済み branch をこの永続パスへ一度復元した。共通の開始手順はこの節を正本とする。
 
 ```bash
-task_dir=$(mktemp -d /tmp/gbdraw-issue599-session.XXXXXX)
-git clone --branch fix/issue-599-preview-layout-20260926 \
-  https://github.com/satoshikawato/gbdraw.git "$task_dir/repo"
-cd "$task_dir/repo"
+cd /mnt/c/users/genom/github/gbdraw-issue599-s00
+test -z "$(git status --porcelain)"
+git switch fix/issue-599-preview-layout-20260926
 git fetch origin
 git pull --ff-only origin fix/issue-599-preview-layout-20260926
 test "$(git branch --show-current)" = "fix/issue-599-preview-layout-20260926"
@@ -140,7 +139,7 @@ test "$(git rev-parse --abbrev-ref '@{upstream}')" = "origin/fix/issue-599-previ
 git status --short
 ```
 
-`task_dir` は取得した作業ディレクトリ。実行前に実パスを確認する。既存の専用 clone を再利用する場合も、clean tree、branch、upstream、前セッション SHA を確認して fetch/pull する。main/dev を upstream にしない。
+前セッション SHA と単一 writer を確認する。main/dev を upstream にしない。S00 の恒久 authority は PR #634 で dev に merge 済み（`007388567222638b707fbb16fe82dbeba61551c9`）。各 runtime セッションの開始時にも最新 dev の完全な outcome を確認する。
 
 S00 の authority が dev に merge された後、S01 は必要な記録を `git show origin/dev:docs/internal/OPTION_INTEGRITY_PRODUCT_CONTRACT.md` 等で確認し、clean な実装ブランチへ取り込む。`git merge --ff-only origin/dev` が ancestry の都合で不可能なら、両側の差分を確認して `git merge --no-edit origin/dev` で通常 merge する。公開済みブランチの rebase、reset、force push を行わない。conflict は両方の有効な変更を維持して解消する。source の同一境界に他 issue が入った場合は実装責任を増やさず統合する。
 
@@ -180,7 +179,7 @@ remote SHA が local HEAD と一致することを確認する。push のエラ�
 | P03 | 同じsearch/canvas/editor DOM。固定360px退避、search drag global listener、競合CSS・template bindingを撤去 |
 | R01 | zero/nonzero/batchのparse/serialize/bind/Worker回数を比較。追加genome read/hash、全checkpoint clone、二重bindなし。既存responsiveness guardrail合格 |
 
-C01/C03/C05/C07 の新しい保証には、修正前に失敗する意味のある回帰検査を設ける。base 用の disposable clone と既存観測を使い、実装ブランチを reset しない。browser は screenshot だけでなく elementFromPoint、実 pointer/keyboard、矩形・clipping を確認する。矩形交差0でも page外・clipping・drawer下に隠れていれば不合格。
+C01/C03/C05/C07 の新しい保証には、修正前に失敗する意味のある回帰検査を設ける。base Git data / archive による disposable fixture と既存観測を使い（新しい clone は不要）、実装ブランチを reset しない。browser は screenshot だけでなく elementFromPoint、実 pointer/keyboard、矩形・clipping を確認する。矩形交差0でも page外・clipping・drawer下に隠れていれば不合格。
 
 拡張先は既存 `tests/web/composition-layout.test.mjs`、`candidate-render.test.mjs`、`run-analysis-simple-path.test.mjs`、`preview-feature-search.test.mjs`、`legend-layout-actions.test.mjs`、composition browser specs、`preview-navigation.playwright.spec.js`、`responsiveness-guardrail.test.mjs`。必要な契約を示す検査を選び、実装行の写しや弱い mock だけにしない。
 

@@ -4,19 +4,9 @@
 
 ## 取得・開始条件
 
-同じ remote branch の writer が自分だけであること、S00 の公開完了を確認する。共有作業ツリーを切り替えない。必ず次の実装ブランチを専用 clone で取得する。
+同じ remote branch の writer が自分だけであること、S00 の公開完了を確認する。共有作業ツリーを切り替えない。S00 の retained checkout `/mnt/c/users/genom/github/gbdraw-issue599-s00` を流用し、毎回 clone しない。PR #634 の authority は dev merge済みだが、開始時に最新devを確認する。
 
-```bash
-task_dir=$(mktemp -d /tmp/gbdraw-issue599-s01.XXXXXX)
-git clone --branch fix/issue-599-preview-layout-20260926 \
-  https://github.com/satoshikawato/gbdraw.git "$task_dir/repo"
-cd "$task_dir/repo"
-git fetch origin
-git pull --ff-only origin fix/issue-599-preview-layout-20260926
-test "$(git branch --show-current)" = "fix/issue-599-preview-layout-20260926"
-test "$(git rev-parse --abbrev-ref '@{upstream}')" = "origin/fix/issue-599-preview-layout-20260926"
-git status --short
-```
+[総合計画の共通 Git 開始手順](MASTER_PLAN.md#必須-git-手順--全セッション共通)を実行する。clean tree、branch/upstream、前セッションの公開 SHA を確認し、fetch / ff-only pull する。
 
 repository AGENTS/CLAUDE、Web CLAUDE、[総合計画](MASTER_PLAN.md)、[承認一覧](00_APPROVED_PRODUCT_DECISIONS.md)、[Pack 01](DECISION_01_COMPOSITION_CONTINUITY.md)、[進捗](SESSION_STATUS.md)、S00 の結果を読む。最新の Product/Architecture/Web policy を適用する。
 
@@ -42,7 +32,7 @@ SRP は composition/transaction/request/保存の既存 owner を維持する。
 
 ## 検証
 
-総合計画 C01–C08、R01 の担当範囲を結果へ対応付ける。特に2回 Generate の非倍増、色/font/legend side、primary順、batch選択外・prefix・Save/Load、未知source/crop/mode、target消失、render/transform/bind失敗、Cancel/stale、zero fast path を意味のある regression test にする。C01/C03/C05/C07 の新保証は unchanged base で失敗することを disposable clone または有効な base 証拠で示す。
+総合計画 C01–C08、R01 の担当範囲を結果へ対応付ける。特に2回 Generate の非倍増、色/font/legend side、primary順、batch選択外・prefix・Save/Load、未知source/crop/mode、target消失、render/transform/bind失敗、Cancel/stale、zero fast path を意味のある regression test にする。C01/C03/C05/C07 の新保証は unchanged base で失敗することを Git data / archive による disposable fixture または有効な base 証拠（新しい clone は不要）で示す。
 
 対象に応じて既存検査を実行・拡張する:
 
