@@ -122,8 +122,17 @@ test('settings-only Session preserves non-default Circular and Linear profiles t
     const before = await snapshot(page);
     expect(before.config.form.labels_mode).toBe('both');
     expect(before.config.form.track_type).toBe('middle');
+    // Stale run metadata must not turn source-free settings into a committed artifact.
+    await page.evaluate(async () => {
+      const { state } = await import('./js/state.js');
+      state.annotationWarnings.value = [{ code: 'feature_selector_unmatched', setId: 'prior',
+        annotationId: 'prior-row', recordId: 'prior-record', recordIndex: 0,
+        missingCount: 1, message: 'Prior unmatched selector', resultIndex: 0, resultName: 'prior.svg' }];
+      state.trackSlotResolvedGeometry.value = { schema: 1, records: [] };
+    });
     const saved = await save(page, testInfo, 'first');
     expect(saved.document.version).toBe(44);
+    expect(saved.document).not.toHaveProperty('runMetadata');
     expect(saved.document.config.adv).not.toHaveProperty('linear_show_accession');
     expect(saved.document.config.adv).not.toHaveProperty('linear_show_length');
     assertSourceFree(await snapshot(page));
@@ -193,6 +202,14 @@ test('settings-only Load replaces existing work and rejected candidates preserve
   page.on('dialog', dialog => dialog.accept(dialog.type() === 'prompt' ? 'Full control' : undefined));
   await openApp(page);
   await loadFile(page, path.join(process.cwd(), 'gbdraw/web/gallery/sessions/HmmtDNA_basic_circular.gbdraw-session.json'));
+  const runMetadata = await page.evaluate(async () => {
+    const { state } = await import('./js/state.js');
+    state.annotationWarnings.value = [{ code: 'feature_selector_unmatched', setId: 'annotation-set',
+      annotationId: 'missing-selector', recordId: 'record', recordIndex: 0, missingCount: 1,
+      message: 'Unmatched annotation selector', resultIndex: 0, resultName: state.results.value[0].name }];
+    state.trackSlotResolvedGeometry.value = { schema: 1, records: [] };
+    return { annotationWarnings: state.annotationWarnings.value, trackSlotGeometry: state.trackSlotResolvedGeometry.value };
+  });
   const committed = (await snapshot(page)).committed.renderRequest;
   await page.getByRole('button', { name: 'Linear', exact: true }).click();
   await settle(page);
@@ -202,7 +219,12 @@ test('settings-only Load replaces existing work and rejected candidates preserve
   await assertCoherent(await capture(page, testInfo, 'inactive-source'), 'mode switch preserves the full Session');
   const inactiveSave = await save(page, testInfo, 'inactive-source');
   expect(inactiveSave.document.renderRequest).toEqual({ ...committed, schema: 8 });
+  expect(inactiveSave.document.runMetadata).toEqual(runMetadata);
   await loadFile(page, inactiveSave.file);
+  expect(await page.evaluate(async () => {
+    const { state } = await import('./js/state.js');
+    return { annotationWarnings: state.annotationWarnings.value, trackSlotGeometry: state.trackSlotResolvedGeometry.value };
+  })).toEqual(runMetadata);
   expect((await snapshot(page)).circularSources[0]).toBe(true);
   expect((await snapshot(page)).committed.renderRequest).toEqual({ ...committed, schema: 8 });
   const full = await save(page, testInfo, 'full-control');

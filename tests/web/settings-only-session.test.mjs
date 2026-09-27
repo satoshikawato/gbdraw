@@ -65,7 +65,9 @@ const invalid = [
   ['unknown config', d => { d.config.adv.unsupportedSetting = true; }, /unknown.*field/],
   ['binding schema', d => { d.webFiles.bindings.schema = 99; }, /binding schema/],
   ['saved Result', d => { d.results = [{ name: 'old.svg', content: '<svg/>' }]; }, /feature catalog/],
-  ['committed provenance', d => { d.cliInvocation = {}; }, /committed render artifacts/]
+  ['committed provenance', d => { d.cliInvocation = {}; }, /committed render artifacts/],
+  ['empty annotation warning artifact', d => { d.runMetadata = { annotationWarnings: [] }; }, /committed render artifacts/],
+  ['track geometry artifact', d => { d.runMetadata = { trackSlotGeometry: {} }; }, /committed render artifacts/]
 ];
 for (const [name, mutate, error] of invalid) {
   test(`settings-only admission rejects ${name}`, () => {
