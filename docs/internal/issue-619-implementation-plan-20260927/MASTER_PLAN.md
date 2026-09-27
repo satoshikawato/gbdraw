@@ -135,11 +135,11 @@ source of truth は既存 slot scalar。Auto preference は scalar に unit が�
 
 各終了時に `SESSION_RESULTS/Sxx.md` を作る。記録は対象 commit/environment/input、commands と exits、実測結果、限界、再利用可能な evidence、次の session の前提を含む。署名、gate pass、browser verification を実測せず完了扱いにしない。
 
-## 7. worktree・commit・push 規則
+## 7. checkout・commit・push 規則
 
-実装時は **remote の当該 branch を取得し、専用作業ツリー（独立clone）で使う**。他 session が使う checkout を switch/clean/reset しない。branch は origin/dev から既に作成済みなので、新しい session で main/dev から作り直さない。
+実装時は **remote の当該 branch を取得し、その既存checkoutをS00〜S03で直列に引き継ぐ**。セッションごとのclone、worktree、lock directory作成は必須にしない。別作業との隔離が必要な場合だけ、既存repositoryのGit履歴を共有するworktreeを一つ使う。他 session が使用中のcheckoutを switch/clean/reset しない。branch は origin/dev から既に作成済みなので、新しい session で main/dev から作り直さない。
 
-詳細な開始・終了コマンドは [共通手順](SESSION_PROMPTS/README.md) に置く。各 prompt から必ず参照する。branch lock、独立 localhost port、独立 browser profile/output dir を使い、プロセスを停止する際は自分が起動した PID だけを対象にする。
+詳細な開始・終了コマンドは [共通手順](SESSION_PROMPTS/README.md) に置く。各 prompt から必ず参照する。対象checkoutを他sessionが使用中でないことを確認する。server・browser・出力先は必要な検証に限って用意し、既存環境を使う場合もsourceと所有者を確認する。プロセスを停止する際は自分が起動した PID だけを対象にする。
 
 各セッションの終了時は、成果物と結果を **当該 branch に commit して同名 remote branch へ push**する。未解決の Product/evidence boundary があっても、完了した独立文書・検証結果を commit/push して境界を引き継ぐ。runtime を途中まで公開して完成と呼ばない。署名がなく runtime が変更できないことは、未コミットのまま終わる理由にしない。
 
@@ -183,7 +183,7 @@ GBDRAW_WEB_TEST_PORT=42619 npx --no-install playwright test \
   tests/web/circular-track-measure-input.playwright.spec.js
 ```
 
-port は例。専用 worktree で空いている port を選び、そこから起動した server のソースを確認する。Node Playwright と Python Playwright の両方を確認する。Node がなければ Python で等価 check を行い、未実行の spec を pass としない。sandbox Chromium failure は適切な escalation で同じ check を再試行する。テスト全体は少なくとも30分の実行余地を与え、test-owned timeout を緩めない。
+port は例。対象 checkout で空いている port を選び、そこから起動した server のソースを確認する。Node Playwright と Python Playwright の両方を確認する。Node がなければ Python で等価 check を行い、未実行の spec を pass としない。sandbox Chromium failure は適切な escalation で同じ check を再試行する。テスト全体は少なくとも30分の実行余地を与え、test-owned timeout を緩めない。
 
 geometry が変わる予定はない。tracked reference を書き換えない。actual SVG comparisons は canonical geometry と実 artifact を確認し、artifact byte identity は同じ生成環境で適切な場合にのみ要求する。
 

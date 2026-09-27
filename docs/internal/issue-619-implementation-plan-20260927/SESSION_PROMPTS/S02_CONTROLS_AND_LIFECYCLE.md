@@ -2,7 +2,7 @@
 
 ## 開始条件と隔離
 
-[共通開始・終了手順](README.md)を実行する。remoteの`fix/issue-619-circular-track-measure-inputs`を取得した専用作業ツリーを使用し、他sessionのcheckout・server・browser・artifactへ干渉しない。同branchのwriterは直列。dirty/unrelated changesをstage/revertしない。
+[共通開始・終了手順](README.md)を実行する。remoteの`fix/issue-619-circular-track-measure-inputs`を取得し、対象branchの既存checkoutを前sessionから引き継ぐ。同branchのwriterは直列。cloneは不要で、worktreeは別作業との隔離が必要な場合だけ使う。他sessionのcheckout・server・browser・artifactへ干渉しない。dirty/unrelated changesをstage/revertしない。
 
 [総合計画](../MASTER_PLAN.md)、AGENTS/CLAUDE/Web CLAUDE、architecture/Product/Web change policiesを読む。scalarの科学的意味、唯一のtyped request/Worker、draft/Result分離、Auto/invaliddraft、History/Session/privacyを守る。実装選択はSOLID/KISS/DRY/YAGNIに照らし、少数owner/pathとsuperseded pathの削除を優先する。
 
@@ -39,6 +39,6 @@ History/Session関連codeを変更した場合は該当Node checksと必要brows
 
 所有範囲のproduction/test/docs diffを別々にレビューする。`SESSION_RESULTS/S02.md`にcommands/exits、基準SHA・environment/input・authority、C619結果、未実行check、残るboundary、次sessionの前提を記録する。実測していないgate/browser checkをpassと呼ばない。
 
-**共通終了手順に従い、成果と結果文書を対象branchへcommitし、同名remote branchへpushする。** commit/pushを省略して終了しない。push直前にremote state、branch/upstreamを確認し、force push/main/devへの直接pushをしない。別writerが先へ進んでいればその内容を確認する。authority boundaryが未成立でも独立文書・evidenceはcommit/pushし、依存runtimeは変更しない。自分のlock/processを解放する。
+**共通終了手順に従い、成果と結果文書を対象branchへcommitし、同名remote branchへpushする。** commit/pushを省略して終了しない。push直前にremote state、branch/upstreamを確認し、force push/main/devへの直接pushをしない。別writerが先へ進んでいればその内容を確認する。authority boundaryが未成立でも独立文書・evidenceはcommit/pushし、依存runtimeは変更しない。自分が起動したprocessだけを停止し、対象checkoutを次sessionへ引き継ぐ。
 
 handoffにはremote branchと実際のcommit SHA、English commit title/summary、通ったchecks、未成立の境界、次に使うpromptを含める。

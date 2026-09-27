@@ -4,36 +4,30 @@
 
 すべてのセッションは [総合計画](../MASTER_PLAN.md) と自分のpromptを読み、S00→S01→S02→S03の順に実行する。同じbranchの並行writerは作らない。別branchへruntimeを分岐して後でまとめる手順は採らない。
 
-## 1. 他セッションからの隔離
+## 1. 対象checkoutの引継ぎ
 
-実装branch: `fix/issue-619-circular-track-measure-inputs`。remoteから **このbranchを取得して使う**。main/devから別branchを作り直さず、他セッションのcheckoutをswitch/reset/cleanしない。
+実装branch: `fix/issue-619-circular-track-measure-inputs`。remoteから **このbranchを取得して使う**。S00〜S03は直列で、対象branchの既存checkoutを引き継ぐ。セッションごとのclone、worktree、lock directory作成は必須にしない。
 
-独立cloneを専用作業ツリーとして使用する。これは、同じlocal branchが他worktreeにcheckoutされているときの競合も避ける。既存worktreeへ`--force`で同じbranchを追加しない。
-
-同一hostで共有するwrite-lock directoryは `/tmp/gbdraw-issue-619-write-lock`。開始時に`mkdir`で取得し、`owner.txt`へsession名と実行者を記録する。既存lockがあれば別sessionのwriterとみなし、ownerを確認して待つ／調整する。他ownerのlockを勝手に消さない。これはremoteの排他ではないため、push時のremote state確認も必要。
-
-以下の`S00`は自分のsession番号へ置き換える。clone先は空の新規temporary directoryとする。
+まず現在のbranch、変更、worktreeを確認する。
 
 ```bash
-mkdir /tmp/gbdraw-issue-619-write-lock
-printf '%s\n' 'S00: record your session identity here' \
-  > /tmp/gbdraw-issue-619-write-lock/owner.txt
-GBDRAW_SESSION_ROOT=$(mktemp -d /tmp/gbdraw-issue-619-S00-XXXXXX)
-git clone --single-branch \
-  --branch fix/issue-619-circular-track-measure-inputs \
-  https://github.com/satoshikawato/gbdraw.git "$GBDRAW_SESSION_ROOT"
-cd "$GBDRAW_SESSION_ROOT"
+git status --short --branch
+git worktree list
 git fetch origin
-git pull --ff-only origin fix/issue-619-circular-track-measure-inputs
 git branch --show-current
 git rev-parse --abbrev-ref --symbolic-full-name '@{upstream}'
-git merge-base --is-ancestor 88028fd242d263f0fe86aaf9da57b8dc9eb082f6 HEAD
-git status --short
 ```
 
-期待するbranchは対象名、upstreamは`origin/fix/issue-619-circular-track-measure-inputs`。dirty stateがあればdiffを確認し、所有範囲外をstage/revertしない。失敗したcloneのlockは自分のownerであることを確認して解放する。
+期待するbranchは対象名、upstreamは`origin/fix/issue-619-circular-track-measure-inputs`。そのcheckoutを他sessionが使用中でないことと、対象範囲の未完了編集がないことを確認してから更新する。無関係なdirty/untracked filesは保持し、pullと競合する場合にreset/cleanで消さない。
 
-独立cloneではNode/Python dependenciesやgenerated wheelを共有checkoutから書き換えない。必要な環境は専用作業ツリー内で準備する。localhost port、browser profile、artifact output directoryもsession専用にする。PID/ownerを確認せず既存serverを停止しない。
+```bash
+git pull --ff-only origin fix/issue-619-circular-track-measure-inputs
+git merge-base --is-ancestor 88028fd242d263f0fe86aaf9da57b8dc9eb082f6 HEAD
+```
+
+別作業との同時進行により作業ディレクトリの隔離が必要な場合だけ、既存repositoryのGit履歴を共有するworktreeを使う。対象branchのcheckoutが既にあれば、その作業終了後に引き継ぐ。同じbranchを`--force`で二重checkoutしない。checkoutがなければ対象branch用worktreeを一つ作成し、後続sessionも使う。main/devからbranchを作り直したり、別sessionのcheckoutをswitch/reset/cleanしたりしない。
+
+依存環境は利用可能な既存環境を使い、wheelは対象sourceに対応するものを必要時だけprepareする。browser検証では、serverが対象checkoutを配信していることとport/profile/outputの所有者を確認する。他sessionのserver/browser/outputを操作しない。新たなserverや出力先は必要な検証に限って用意する。
 
 ## 2. 読むものと前提
 
@@ -49,7 +43,7 @@ git fetch origin refs/heads/dev:refs/remotes/origin/dev
 git show origin/dev:docs/internal/OPTION_INTEGRITY_PRODUCT_CONTRACT.md
 ```
 
-`--single-branch` cloneはdevのremote-tracking refを自動取得しないため、上の明示refspecを使う。実装前にtrusted-base authorityを含む最新devが必要になった場合は、成果を保持して`git merge origin/dev`で取り込む。public branchをrebaseしてforce pushしない。conflictはin-scopeのowner/authorityを確認して解決し、Product choiceを推論で変えない。署名・evidence・必要なauthority-only統合が欠ける場合は依存runtimeを変更せず、独立成果と未成立の境界をcommit/pushする。
+origin/devを確実に更新するため、上の明示refspecを使う。実装前にtrusted-base authorityを含む最新devが必要になった場合は、成果を保持して`git merge origin/dev`で取り込む。public branchをrebaseしてforce pushしない。conflictはin-scopeのowner/authorityを確認して解決し、Product choiceを推論で変えない。署名・evidence・必要なauthority-only統合が欠ける場合は依存runtimeを変更せず、独立成果と未成立の境界をcommit/pushする。
 
 ## 3. 実装と検証
 
@@ -99,7 +93,7 @@ git ls-remote origin refs/heads/fix/issue-619-circular-track-measure-inputs
 
 remoteが自分のHEADのancestorでなければ、pushせず新しい内容・ownerを確認して取り込む。retry前に実際のremote SHAを確認し、成功済みのpushをAPIエラーだけで繰り返さない。force pushはしない。commit後のlocal HEADとremote SHA一致を確認し、最終handoffでbranch、SHA、tests、残るboundaryを報告する。
 
-終了時は、自分が所有するlockの`owner.txt`を削除してdirectoryを`rmdir`し、自分のserver/browser processだけを停止する。worktreeやcloneを自動削除して検証証拠を失わない。
+終了時は、自分が起動したserver/browser processだけを停止する。対象checkoutは次sessionへ引き継ぎ、検証証拠を保持する。
 
 ## Prompt index
 
