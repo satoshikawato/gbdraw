@@ -326,25 +326,70 @@
         "columns": ["Slot id", "Renderer", "Position", "Radius", "Width", "Key settings"],
         "rows": [
           ["features", "Features", "On axis", "Auto", "Auto", "Lane direction: split"],
-          ["plastome_regions", "Annotations", "Inside", "0.65", "20 px", "Set: plastome_regions; Labels: on; Overflow: Compress; gaps: 1 px"],
-          ["gc_content", "Dinucleotide content", "Inside", "0.56", "0.08 R", "Dinucleotide: GC"]
+          ["plastome_regions", "Annotations", "Inside", "0.65 ×R", "20 px", "Set: plastome_regions; Labels: on; Overflow: Compress; gaps: 1 px"],
+          ["gc_content", "Dinucleotide content", "Inside", "0.56 ×R", "0.08 ×R", "Dinucleotide: GC"]
         ]
       },
       "operations": [
         {
+          "dataDependent": true,
           "media": {
             "src": "./media/tobacco-chloroplast/manual-07-01-custom-track-slots.webp",
-            "alt": "Custom Track Slots stack with features on the axis, plastome_regions annotations inside, and GC content innermost.",
-            "caption": "Order the stack as features, plastome_regions, and gc_content, with the annotation row bound to plastome_regions."
+            "alt": "Circular track stack with separate numeric Width/Radius fields and px/×R units for plastome_regions and GC content.",
+            "caption": "Set the numeric Width/Radius values and px/×R units from the table, with plastome_regions between features and gc_content."
           },
           "capture": {
             "source": "webapp",
+            "session": "./sessions/tobacco-chloroplast.gbdraw-session.json",
+            "assertAppState": {
+              "mode": "circular",
+              "adv.circular_track_slots_enabled": true,
+              "adv.circular_track_slots.1.id": "plastome_regions",
+              "adv.circular_track_slots.2.id": "gc_content"
+            },
+            "visibleControls": [
+              {
+                "selector": "[aria-label=\"Circular track slot plastome_regions Width value\"]",
+                "value": "20"
+              },
+              {
+                "selector": "[aria-label=\"Circular track slot plastome_regions Width unit\"]",
+                "value": "px"
+              },
+              {
+                "selector": "[aria-label=\"Circular track slot plastome_regions Radius value\"]",
+                "value": "0.65"
+              },
+              {
+                "selector": "[aria-label=\"Circular track slot plastome_regions Radius unit\"]",
+                "value": "factor"
+              },
+              {
+                "selector": "[aria-label=\"Circular track slot gc_content Width value\"]",
+                "value": "0.08"
+              },
+              {
+                "selector": "[aria-label=\"Circular track slot gc_content Width unit\"]",
+                "value": "factor"
+              },
+              {
+                "selector": "[aria-label=\"Circular track slot gc_content Radius value\"]",
+                "value": "0.56"
+              },
+              {
+                "selector": "[aria-label=\"Circular track slot gc_content Radius unit\"]",
+                "value": "factor"
+              }
+            ],
             "selector": "#circular-custom-track-slots-panel",
             "highlightSelector": "[data-capture='circular-track-slot-plastome_regions']",
             "openDetails": ["Layout"],
+            "actions": [
+              {"type": "click", "selector": "button[aria-controls='circular-custom-track-slots-panel'][aria-expanded='false']"}
+            ],
             "viewport": {
               "width": 1400,
-              "height": 1200
+              "height": 1600
             },
             "cropPadding": 12,
             "waitForSelector": "[data-capture='circular-track-slot-plastome_regions']"

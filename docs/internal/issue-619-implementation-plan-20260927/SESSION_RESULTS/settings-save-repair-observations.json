@@ -1,0 +1,1013 @@
+{
+  "sourceBaseSha": "c75abf72d227443cbc01e0d892e4bc37851b2558",
+  "sourcePatchSha256": "d01320a2ea107cb1f4f8c240c63a1899d52a91a26eee8c5b6f4b6ce8bfa172d6",
+  "sourceSha256": {
+    "gbdraw/web/js/services/config.js": "1e850ee587a49c23ce653f2b3329d535d54ca6b02a07ed41a7a105a387b49729",
+    "gbdraw/web/js/services/session-authority.js": "62dd342b1982a89584983f3661014a7ea936a526de6da4e7f4980d91283ee718",
+    "gbdraw/web/js/services/session-active-config-contract.js": "7d12b467e91d89f2244cb9fc485569c8fd2282878708753adc56df8355a17ac6",
+    "gbdraw/web/js/app/circular-track-slots.js": "a93094d3db695a366adf637b06aa0902e36ea051509e596b9e643b2503dcb902"
+  },
+  "snapshotMatchesCheckout": true,
+  "wheelPythonFilesMatched": 214,
+  "wheelSha256": "e1cd1c3feafec3cd19f376decd81cbcd020aeb3e3483d01905b17616b766a18e",
+  "fixture": "gbdraw/web/gallery/sessions/tobacco-chloroplast.gbdraw-session.json",
+  "fixtureSha256": "d70eb5bba1796df80733792af1f81cfd210bbfe042eaf6c71a3abc710affcc17",
+  "scalarFixtureSha256": "633cef73a7b5fd87eef558ebb5dbc139d25879e9dd5e2fac2e4a9b04ca1bda2d",
+  "environment": {
+    "python": "3.13.3",
+    "playwright": "1.61.0",
+    "chromium": "149.0.7827.55",
+    "nativePackage": "/mnt/c/Users/genom/GitHub/gbdraw/gbdraw/__init__.py",
+    "url": "http://127.0.0.1:36309/gbdraw/web/index.html",
+    "sourceRoot": "/tmp/gbdraw-619-settings-save-20260927/source"
+  },
+  "observations": [
+    {
+      "name": "fresh-control",
+      "settingsOnly": true,
+      "save": {
+        "accepted": true,
+        "via": "Save Session button",
+        "download": "/tmp/gbdraw-619-settings-save-20260927/downloads-complete/fresh-control.gbdraw-session.json.gz",
+        "sha256": "d8d88dcf733344b2ce61a63aa02f0913897c40f53d2369b397fa68d0d4452958"
+      },
+      "freshLoad": {
+        "accepted": true,
+        "dialogs": [
+          "Session loaded successfully!"
+        ],
+        "configEqual": true,
+        "savedModeProfile": "circular",
+        "restoredModeProfile": "circular"
+      },
+      "nativeReader": {
+        "accepted": true,
+        "configRequestMetadataEqual": true
+      },
+      "readAndSaveStateUnchanged": true,
+      "resultHashes": [],
+      "history": {
+        "undo": 0,
+        "redo": 0
+      },
+      "metadata": {},
+      "freshLoadWorkerCount": 0
+    },
+    {
+      "name": "typed_px",
+      "settingsOnly": true,
+      "save": {
+        "accepted": true,
+        "via": "Save Session button",
+        "download": "/tmp/gbdraw-619-settings-save-20260927/downloads-complete/typed_px.gbdraw-session.json.gz",
+        "sha256": "18c359943e3c267d41321293114339c37249b1b53c260b2f431715a86585ad22"
+      },
+      "freshLoad": {
+        "accepted": true,
+        "dialogs": [
+          "Session loaded successfully!"
+        ],
+        "configEqual": true,
+        "savedModeProfile": "circular",
+        "restoredModeProfile": "circular"
+      },
+      "nativeReader": {
+        "accepted": true,
+        "configRequestMetadataEqual": true
+      },
+      "readAndSaveStateUnchanged": true,
+      "resultHashes": [],
+      "history": {
+        "undo": 1,
+        "redo": 0
+      },
+      "metadata": {},
+      "freshLoadWorkerCount": 0,
+      "rawScalars": {
+        "width": {
+          "value": 20,
+          "unit": "px"
+        },
+        "radius": {
+          "value": 20,
+          "unit": "px"
+        }
+      },
+      "canonicalScalars": {
+        "width": {
+          "value": 20.0,
+          "unit": "px"
+        },
+        "radius": {
+          "value": 20.0,
+          "unit": "px"
+        }
+      }
+    },
+    {
+      "name": "typed_factor",
+      "settingsOnly": true,
+      "save": {
+        "accepted": true,
+        "via": "Save Session button",
+        "download": "/tmp/gbdraw-619-settings-save-20260927/downloads-complete/typed_factor.gbdraw-session.json.gz",
+        "sha256": "77e787ab154bd4357a094b28c201a1fe5e7a9acd6b067edcb3874513f8ef3afd"
+      },
+      "freshLoad": {
+        "accepted": true,
+        "dialogs": [
+          "Session loaded successfully!"
+        ],
+        "configEqual": true,
+        "savedModeProfile": "circular",
+        "restoredModeProfile": "circular"
+      },
+      "nativeReader": {
+        "accepted": true,
+        "configRequestMetadataEqual": true
+      },
+      "readAndSaveStateUnchanged": true,
+      "resultHashes": [],
+      "history": {
+        "undo": 1,
+        "redo": 0
+      },
+      "metadata": {},
+      "freshLoadWorkerCount": 0,
+      "rawScalars": {
+        "width": {
+          "value": 0.08,
+          "unit": "factor"
+        },
+        "radius": {
+          "value": 0.08,
+          "unit": "factor"
+        }
+      },
+      "canonicalScalars": {
+        "width": {
+          "value": 0.08,
+          "unit": "factor"
+        },
+        "radius": {
+          "value": 0.08,
+          "unit": "factor"
+        }
+      }
+    },
+    {
+      "name": "typed_decimal_px",
+      "settingsOnly": true,
+      "save": {
+        "accepted": true,
+        "via": "Save Session button",
+        "download": "/tmp/gbdraw-619-settings-save-20260927/downloads-complete/typed_decimal_px.gbdraw-session.json.gz",
+        "sha256": "e1dc6c544c26ae814c395247eb65518e423da5befdf631580882945cdfee3ae7"
+      },
+      "freshLoad": {
+        "accepted": true,
+        "dialogs": [
+          "Session loaded successfully!"
+        ],
+        "configEqual": true,
+        "savedModeProfile": "circular",
+        "restoredModeProfile": "circular"
+      },
+      "nativeReader": {
+        "accepted": true,
+        "configRequestMetadataEqual": true
+      },
+      "readAndSaveStateUnchanged": true,
+      "resultHashes": [],
+      "history": {
+        "undo": 1,
+        "redo": 0
+      },
+      "metadata": {},
+      "freshLoadWorkerCount": 0,
+      "rawScalars": {
+        "width": {
+          "value": "1.",
+          "unit": "px"
+        },
+        "radius": {
+          "value": "1.",
+          "unit": "px"
+        }
+      },
+      "canonicalScalars": {
+        "width": {
+          "value": 1.0,
+          "unit": "px"
+        },
+        "radius": {
+          "value": 1.0,
+          "unit": "px"
+        }
+      }
+    },
+    {
+      "name": "typed_decimal_factor",
+      "settingsOnly": true,
+      "save": {
+        "accepted": true,
+        "via": "Save Session button",
+        "download": "/tmp/gbdraw-619-settings-save-20260927/downloads-complete/typed_decimal_factor.gbdraw-session.json.gz",
+        "sha256": "c3a861ff3bc38d807df3851e8c97b310655c35a63b52baaddbd55c058ac8d607"
+      },
+      "freshLoad": {
+        "accepted": true,
+        "dialogs": [
+          "Session loaded successfully!"
+        ],
+        "configEqual": true,
+        "savedModeProfile": "circular",
+        "restoredModeProfile": "circular"
+      },
+      "nativeReader": {
+        "accepted": true,
+        "configRequestMetadataEqual": true
+      },
+      "readAndSaveStateUnchanged": true,
+      "resultHashes": [],
+      "history": {
+        "undo": 1,
+        "redo": 0
+      },
+      "metadata": {},
+      "freshLoadWorkerCount": 0,
+      "rawScalars": {
+        "width": {
+          "value": "1.",
+          "unit": "factor"
+        },
+        "radius": {
+          "value": "1.",
+          "unit": "factor"
+        }
+      },
+      "canonicalScalars": {
+        "width": {
+          "value": 1.0,
+          "unit": "factor"
+        },
+        "radius": {
+          "value": 1.0,
+          "unit": "factor"
+        }
+      }
+    },
+    {
+      "name": "typed_exponent_px",
+      "settingsOnly": true,
+      "save": {
+        "accepted": true,
+        "via": "Save Session button",
+        "download": "/tmp/gbdraw-619-settings-save-20260927/downloads-complete/typed_exponent_px.gbdraw-session.json.gz",
+        "sha256": "788eef8cfc2c5f397374f8f4d2472e46b0e690177f8fbc88bb2b5cb37e8c2d02"
+      },
+      "freshLoad": {
+        "accepted": true,
+        "dialogs": [
+          "Session loaded successfully!"
+        ],
+        "configEqual": true,
+        "savedModeProfile": "circular",
+        "restoredModeProfile": "circular"
+      },
+      "nativeReader": {
+        "accepted": true,
+        "configRequestMetadataEqual": true
+      },
+      "readAndSaveStateUnchanged": true,
+      "resultHashes": [],
+      "history": {
+        "undo": 1,
+        "redo": 0
+      },
+      "metadata": {},
+      "freshLoadWorkerCount": 0,
+      "rawScalars": {
+        "width": {
+          "value": "1e-3",
+          "unit": "px"
+        },
+        "radius": {
+          "value": "1e-3",
+          "unit": "px"
+        }
+      },
+      "canonicalScalars": {
+        "width": {
+          "value": 0.001,
+          "unit": "px"
+        },
+        "radius": {
+          "value": 0.001,
+          "unit": "px"
+        }
+      }
+    },
+    {
+      "name": "typed_exponent_factor",
+      "settingsOnly": true,
+      "save": {
+        "accepted": true,
+        "via": "Save Session button",
+        "download": "/tmp/gbdraw-619-settings-save-20260927/downloads-complete/typed_exponent_factor.gbdraw-session.json.gz",
+        "sha256": "74c4ce9fc080cfcc86df0cb69f395691793c792c047d4ac7a582ae255dcef3a8"
+      },
+      "freshLoad": {
+        "accepted": true,
+        "dialogs": [
+          "Session loaded successfully!"
+        ],
+        "configEqual": true,
+        "savedModeProfile": "circular",
+        "restoredModeProfile": "circular"
+      },
+      "nativeReader": {
+        "accepted": true,
+        "configRequestMetadataEqual": true
+      },
+      "readAndSaveStateUnchanged": true,
+      "resultHashes": [],
+      "history": {
+        "undo": 1,
+        "redo": 0
+      },
+      "metadata": {},
+      "freshLoadWorkerCount": 0,
+      "rawScalars": {
+        "width": {
+          "value": "1e-3",
+          "unit": "factor"
+        },
+        "radius": {
+          "value": "1e-3",
+          "unit": "factor"
+        }
+      },
+      "canonicalScalars": {
+        "width": {
+          "value": 0.001,
+          "unit": "factor"
+        },
+        "radius": {
+          "value": 0.001,
+          "unit": "factor"
+        }
+      }
+    },
+    {
+      "name": "precision",
+      "settingsOnly": true,
+      "save": {
+        "accepted": true,
+        "via": "Save Session button",
+        "download": "/tmp/gbdraw-619-settings-save-20260927/downloads-complete/precision.gbdraw-session.json.gz",
+        "sha256": "9b938f555eeac276431262a1ccd65b03d795f5afb7495092cd14928f6fa09e39"
+      },
+      "freshLoad": {
+        "accepted": true,
+        "dialogs": [
+          "Session loaded successfully!"
+        ],
+        "configEqual": true,
+        "savedModeProfile": "circular",
+        "restoredModeProfile": "circular"
+      },
+      "nativeReader": {
+        "accepted": true,
+        "configRequestMetadataEqual": true
+      },
+      "readAndSaveStateUnchanged": true,
+      "resultHashes": [],
+      "history": {
+        "undo": 1,
+        "redo": 0
+      },
+      "metadata": {},
+      "freshLoadWorkerCount": 0,
+      "rawScalars": {
+        "width": {
+          "value": "0.12345678901234567",
+          "unit": "factor"
+        },
+        "radius": {
+          "value": "0.12345678901234567",
+          "unit": "factor"
+        }
+      },
+      "canonicalScalars": {
+        "width": {
+          "value": 0.12345678901234566,
+          "unit": "factor"
+        },
+        "radius": {
+          "value": 0.12345678901234566,
+          "unit": "factor"
+        }
+      }
+    },
+    {
+      "name": "bare_number",
+      "settingsOnly": true,
+      "save": {
+        "accepted": true,
+        "via": "Save Session button",
+        "download": "/tmp/gbdraw-619-settings-save-20260927/downloads-complete/bare_number.gbdraw-session.json.gz",
+        "sha256": "28db9f01a21916c5e23e957a4b3aee7a727251ede576742dfd5f1a30d63eec30"
+      },
+      "freshLoad": {
+        "accepted": true,
+        "dialogs": [
+          "Session loaded successfully!"
+        ],
+        "configEqual": true,
+        "savedModeProfile": "circular",
+        "restoredModeProfile": "circular"
+      },
+      "nativeReader": {
+        "accepted": true,
+        "configRequestMetadataEqual": true
+      },
+      "readAndSaveStateUnchanged": true,
+      "resultHashes": [],
+      "history": {
+        "undo": 1,
+        "redo": 0
+      },
+      "metadata": {},
+      "freshLoadWorkerCount": 0,
+      "rawScalars": {
+        "width": 1.5,
+        "radius": 1.5
+      },
+      "canonicalScalars": {
+        "width": {
+          "value": 1.5,
+          "unit": "factor"
+        },
+        "radius": {
+          "value": 1.5,
+          "unit": "factor"
+        }
+      }
+    },
+    {
+      "name": "bare_text",
+      "settingsOnly": true,
+      "save": {
+        "accepted": true,
+        "via": "Save Session button",
+        "download": "/tmp/gbdraw-619-settings-save-20260927/downloads-complete/bare_text.gbdraw-session.json.gz",
+        "sha256": "cc41fd087568f95fe7d73923ab22e8630cf9b59853b0bcc0946ddc31de0f22a2"
+      },
+      "freshLoad": {
+        "accepted": true,
+        "dialogs": [
+          "Session loaded successfully!"
+        ],
+        "configEqual": true,
+        "savedModeProfile": "circular",
+        "restoredModeProfile": "circular"
+      },
+      "nativeReader": {
+        "accepted": true,
+        "configRequestMetadataEqual": true
+      },
+      "readAndSaveStateUnchanged": true,
+      "resultHashes": [],
+      "history": {
+        "undo": 1,
+        "redo": 0
+      },
+      "metadata": {},
+      "freshLoadWorkerCount": 0,
+      "rawScalars": {
+        "width": "1.5",
+        "radius": "1.5"
+      },
+      "canonicalScalars": {
+        "width": {
+          "value": 1.5,
+          "unit": "factor"
+        },
+        "radius": {
+          "value": 1.5,
+          "unit": "factor"
+        }
+      }
+    },
+    {
+      "name": "px_suffix",
+      "settingsOnly": true,
+      "save": {
+        "accepted": true,
+        "via": "Save Session button",
+        "download": "/tmp/gbdraw-619-settings-save-20260927/downloads-complete/px_suffix.gbdraw-session.json.gz",
+        "sha256": "1fed64ec7f70defdcd2a8993b96072c5a99802e79af985313d1865e165c1a142"
+      },
+      "freshLoad": {
+        "accepted": true,
+        "dialogs": [
+          "Session loaded successfully!"
+        ],
+        "configEqual": true,
+        "savedModeProfile": "circular",
+        "restoredModeProfile": "circular"
+      },
+      "nativeReader": {
+        "accepted": true,
+        "configRequestMetadataEqual": true
+      },
+      "readAndSaveStateUnchanged": true,
+      "resultHashes": [],
+      "history": {
+        "undo": 1,
+        "redo": 0
+      },
+      "metadata": {},
+      "freshLoadWorkerCount": 0,
+      "rawScalars": {
+        "width": "20px",
+        "radius": "20px"
+      },
+      "canonicalScalars": {
+        "width": {
+          "value": 20,
+          "unit": "px"
+        },
+        "radius": {
+          "value": 20,
+          "unit": "px"
+        }
+      }
+    },
+    {
+      "name": "percent",
+      "settingsOnly": true,
+      "save": {
+        "accepted": true,
+        "via": "Save Session button",
+        "download": "/tmp/gbdraw-619-settings-save-20260927/downloads-complete/percent.gbdraw-session.json.gz",
+        "sha256": "9f18dad95e9be41a2a9ee4a14031241581c2517934f6bfde74efe58b3fc7e4bf"
+      },
+      "freshLoad": {
+        "accepted": true,
+        "dialogs": [
+          "Session loaded successfully!"
+        ],
+        "configEqual": true,
+        "savedModeProfile": "circular",
+        "restoredModeProfile": "circular"
+      },
+      "nativeReader": {
+        "accepted": true,
+        "configRequestMetadataEqual": true
+      },
+      "readAndSaveStateUnchanged": true,
+      "resultHashes": [],
+      "history": {
+        "undo": 1,
+        "redo": 0
+      },
+      "metadata": {},
+      "freshLoadWorkerCount": 0,
+      "rawScalars": {
+        "width": "65%",
+        "radius": "65%"
+      },
+      "canonicalScalars": {
+        "width": {
+          "value": 0.65,
+          "unit": "factor"
+        },
+        "radius": {
+          "value": 0.65,
+          "unit": "factor"
+        }
+      }
+    },
+    {
+      "name": "null",
+      "settingsOnly": true,
+      "save": {
+        "accepted": true,
+        "via": "Save Session button",
+        "download": "/tmp/gbdraw-619-settings-save-20260927/downloads-complete/null.gbdraw-session.json.gz",
+        "sha256": "77cc23140d8d3d3c39c459c1052ec8e0a96ec4dfd248e489c4425b2428e14f84"
+      },
+      "freshLoad": {
+        "accepted": true,
+        "dialogs": [
+          "Session loaded successfully!"
+        ],
+        "configEqual": true,
+        "savedModeProfile": "circular",
+        "restoredModeProfile": "circular"
+      },
+      "nativeReader": {
+        "accepted": true,
+        "configRequestMetadataEqual": true
+      },
+      "readAndSaveStateUnchanged": true,
+      "resultHashes": [],
+      "history": {
+        "undo": 1,
+        "redo": 0
+      },
+      "metadata": {},
+      "freshLoadWorkerCount": 0,
+      "rawScalars": {
+        "width": null,
+        "radius": null
+      },
+      "canonicalScalars": {
+        "width": null,
+        "radius": null
+      }
+    },
+    {
+      "name": "blank",
+      "settingsOnly": true,
+      "save": {
+        "accepted": true,
+        "via": "Save Session button",
+        "download": "/tmp/gbdraw-619-settings-save-20260927/downloads-complete/blank.gbdraw-session.json.gz",
+        "sha256": "c2134546e1964797f2cc7d1ec458f04abbb2c6718ff1f1f340f6492ba97b654a"
+      },
+      "freshLoad": {
+        "accepted": true,
+        "dialogs": [
+          "Session loaded successfully!"
+        ],
+        "configEqual": true,
+        "savedModeProfile": "circular",
+        "restoredModeProfile": "circular"
+      },
+      "nativeReader": {
+        "accepted": true,
+        "configRequestMetadataEqual": true
+      },
+      "readAndSaveStateUnchanged": true,
+      "resultHashes": [],
+      "history": {
+        "undo": 1,
+        "redo": 0
+      },
+      "metadata": {},
+      "freshLoadWorkerCount": 0,
+      "rawScalars": {
+        "width": "",
+        "radius": ""
+      },
+      "canonicalScalars": {
+        "width": null,
+        "radius": null
+      }
+    },
+    {
+      "name": "rendered-metadata",
+      "settingsOnly": false,
+      "save": {
+        "accepted": true,
+        "via": "Save Session button",
+        "download": "/tmp/gbdraw-619-settings-save-20260927/downloads-complete/rendered-metadata.gbdraw-session.json.gz",
+        "sha256": "971726016341c5c45fe30f10614c5e941ad93de7b310d7908b7a0744b0b50083"
+      },
+      "freshLoad": {
+        "accepted": true,
+        "dialogs": [
+          "Session loaded successfully!"
+        ],
+        "configEqual": true,
+        "savedModeProfile": "circular",
+        "restoredModeProfile": "circular"
+      },
+      "nativeReader": {
+        "accepted": true,
+        "configRequestMetadataEqual": true
+      },
+      "readAndSaveStateUnchanged": true,
+      "resultHashes": [
+        "c31adfdd0aae4036884a3296a3a6a94203935a40cdad9ceade27467686dd39a8"
+      ],
+      "history": {
+        "undo": 0,
+        "redo": 0
+      },
+      "metadata": {
+        "trackSlotGeometry": {
+          "schema": 1,
+          "mode": "circular",
+          "source": "resolved",
+          "records": [
+            {
+              "recordIndex": 0,
+              "recordId": "NC_001879.2",
+              "recordLabel": "NC_001879.2",
+              "axisRadiusPx": 406.7216232535808,
+              "slots": [
+                {
+                  "slotIndex": 0,
+                  "slotId": "features",
+                  "renderer": "features",
+                  "side": "overlay",
+                  "widthPx": 18.525,
+                  "widthFactor": null,
+                  "radiusFactor": 1,
+                  "innerGapPx": 4.067216232535808,
+                  "outerGapPx": 4.067216232535808,
+                  "compressed": false,
+                  "source": "resolved"
+                },
+                {
+                  "slotIndex": 1,
+                  "slotId": "plastome_regions",
+                  "renderer": "annotations",
+                  "side": "inside",
+                  "widthPx": 20,
+                  "widthFactor": null,
+                  "radiusFactor": 0.6232764266923401,
+                  "innerGapPx": 1,
+                  "outerGapPx": 1,
+                  "compressed": false,
+                  "source": "resolved"
+                },
+                {
+                  "slotIndex": 2,
+                  "slotId": "gc_content",
+                  "renderer": "dinucleotide_content",
+                  "side": "inside",
+                  "widthPx": 32.53772986028646,
+                  "widthFactor": 0.08,
+                  "radiusFactor": 0.5369766137657085,
+                  "innerGapPx": 3.9,
+                  "outerGapPx": 3.9,
+                  "compressed": false,
+                  "source": "resolved"
+                }
+              ],
+              "featurePlacementTargets": [
+                {
+                  "kind": "main"
+                },
+                {
+                  "kind": "lane",
+                  "side": "outward",
+                  "level": 1
+                },
+                {
+                  "kind": "lane",
+                  "side": "inward",
+                  "level": 1
+                }
+              ],
+              "resultIndex": 0,
+              "resultName": "tobacco-chloroplast"
+            }
+          ]
+        },
+        "annotationWarnings": [
+          {
+            "code": "feature_selector_unmatched",
+            "setId": "probe",
+            "annotationId": "unmatched",
+            "recordId": "NC_001879.2",
+            "recordIndex": 0,
+            "missingCount": 1,
+            "message": "Skipped annotation: 1 feature selector(s) unmatched.",
+            "resultIndex": 0,
+            "resultName": "tobacco-chloroplast"
+          }
+        ]
+      },
+      "freshLoadWorkerCount": 1
+    },
+    {
+      "name": "inactive-biological",
+      "settingsOnly": false,
+      "save": {
+        "accepted": true,
+        "via": "Save Session button",
+        "download": "/tmp/gbdraw-619-settings-save-20260927/downloads-complete/inactive-biological.gbdraw-session.json.gz",
+        "sha256": "2d4a4e4d2ef7ccd01350a16ab50418f5c9f034b0aa43d111e893282fcf1ef5da"
+      },
+      "freshLoad": {
+        "accepted": true,
+        "dialogs": [
+          "Session loaded successfully!"
+        ],
+        "configEqual": false,
+        "savedModeProfile": "linear",
+        "restoredModeProfile": "circular"
+      },
+      "nativeReader": {
+        "accepted": true,
+        "configRequestMetadataEqual": true
+      },
+      "readAndSaveStateUnchanged": true,
+      "resultHashes": [
+        "c31adfdd0aae4036884a3296a3a6a94203935a40cdad9ceade27467686dd39a8"
+      ],
+      "history": {
+        "undo": 1,
+        "redo": 0
+      },
+      "metadata": {
+        "trackSlotGeometry": {
+          "schema": 1,
+          "mode": "circular",
+          "source": "resolved",
+          "records": [
+            {
+              "recordIndex": 0,
+              "recordId": "NC_001879.2",
+              "recordLabel": "NC_001879.2",
+              "axisRadiusPx": 406.7216232535808,
+              "slots": [
+                {
+                  "slotIndex": 0,
+                  "slotId": "features",
+                  "renderer": "features",
+                  "side": "overlay",
+                  "widthPx": 18.525,
+                  "widthFactor": null,
+                  "radiusFactor": 1,
+                  "innerGapPx": 4.067216232535808,
+                  "outerGapPx": 4.067216232535808,
+                  "compressed": false,
+                  "source": "resolved"
+                },
+                {
+                  "slotIndex": 1,
+                  "slotId": "plastome_regions",
+                  "renderer": "annotations",
+                  "side": "inside",
+                  "widthPx": 20,
+                  "widthFactor": null,
+                  "radiusFactor": 0.6232764266923401,
+                  "innerGapPx": 1,
+                  "outerGapPx": 1,
+                  "compressed": false,
+                  "source": "resolved"
+                },
+                {
+                  "slotIndex": 2,
+                  "slotId": "gc_content",
+                  "renderer": "dinucleotide_content",
+                  "side": "inside",
+                  "widthPx": 32.53772986028646,
+                  "widthFactor": 0.08,
+                  "radiusFactor": 0.5369766137657085,
+                  "innerGapPx": 3.9,
+                  "outerGapPx": 3.9,
+                  "compressed": false,
+                  "source": "resolved"
+                }
+              ],
+              "featurePlacementTargets": [
+                {
+                  "kind": "main"
+                },
+                {
+                  "kind": "lane",
+                  "side": "outward",
+                  "level": 1
+                },
+                {
+                  "kind": "lane",
+                  "side": "inward",
+                  "level": 1
+                }
+              ],
+              "resultIndex": 0,
+              "resultName": "tobacco-chloroplast"
+            }
+          ]
+        },
+        "annotationWarnings": [
+          {
+            "code": "feature_selector_unmatched",
+            "setId": "probe",
+            "annotationId": "unmatched",
+            "recordId": "NC_001879.2",
+            "recordIndex": 0,
+            "missingCount": 1,
+            "message": "Skipped annotation: 1 feature selector(s) unmatched.",
+            "resultIndex": 0,
+            "resultName": "tobacco-chloroplast"
+          }
+        ]
+      },
+      "freshLoadWorkerCount": 1
+    },
+    {
+      "name": "invalid_text",
+      "save": {
+        "accepted": false,
+        "error": "Save Session could not validate the active configuration."
+      },
+      "load": {
+        "accepted": false,
+        "dialogs": [
+          "Failed to load session: Circular track slot 'gc_content' radius must be a positive finite px or factor scalar."
+        ]
+      },
+      "rawDraft": "bad",
+      "saveStateUnchanged": true,
+      "failedLoadStateUnchanged": true
+    },
+    {
+      "name": "incomplete_text",
+      "save": {
+        "accepted": false,
+        "error": "Save Session could not validate the active configuration."
+      },
+      "load": {
+        "accepted": false,
+        "dialogs": [
+          "Failed to load session: Circular track slot 'gc_content' radius must be a positive finite px or factor scalar."
+        ]
+      },
+      "rawDraft": "1e",
+      "saveStateUnchanged": true,
+      "failedLoadStateUnchanged": true
+    },
+    {
+      "name": "typed_invalid",
+      "save": {
+        "accepted": false,
+        "error": "Save Session could not validate the active configuration."
+      },
+      "load": {
+        "accepted": false,
+        "dialogs": [
+          "Failed to load session: Circular track slot 'gc_content' radius must be a positive finite px or factor scalar."
+        ]
+      },
+      "rawDraft": {
+        "value": "bad",
+        "unit": "px"
+      },
+      "saveStateUnchanged": true,
+      "failedLoadStateUnchanged": true
+    },
+    {
+      "name": "typed_incomplete",
+      "save": {
+        "accepted": false,
+        "error": "Save Session could not validate the active configuration."
+      },
+      "load": {
+        "accepted": false,
+        "dialogs": [
+          "Failed to load session: Circular track slot 'gc_content' radius must be a positive finite px or factor scalar."
+        ]
+      },
+      "rawDraft": {
+        "value": "1e",
+        "unit": "factor"
+      },
+      "saveStateUnchanged": true,
+      "failedLoadStateUnchanged": true
+    },
+    {
+      "name": "typed_empty",
+      "save": {
+        "accepted": false,
+        "error": "Save Session could not validate the active configuration."
+      },
+      "load": {
+        "accepted": false,
+        "dialogs": [
+          "Failed to load session: Circular track slot 'gc_content' radius must be a positive finite px or factor scalar."
+        ]
+      },
+      "rawDraft": {
+        "value": "",
+        "unit": "px"
+      },
+      "saveStateUnchanged": true,
+      "failedLoadStateUnchanged": true
+    },
+    {
+      "name": "settings-invalid",
+      "save": {
+        "accepted": false,
+        "error": "Circular track slot 'features' width must be a positive finite px or factor scalar."
+      },
+      "saveStateUnchanged": true
+    }
+  ],
+  "pageErrors": [],
+  "externalRequests": [],
+  "limits": [
+    "No S01 codec, new controls, IME/unit/Auto lifetime, geometry change or native render replay.",
+    "Rendered warning is a synthetic valid metadata fixture; resolved geometry and SVG are existing public Gallery artifacts.",
+    "Scalar fixtures are assigned to existing reactive drafts; this does not test future DOM controls.",
+    "Native reader acceptance is separate from Web admission; invalid native config domain is unchanged."
+  ]
+}

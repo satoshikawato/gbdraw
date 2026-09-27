@@ -83,3 +83,33 @@ test('controlled definition callbacks complete for the active root and ignore su
   assert.equal(mutations, 1, 'superseded callback must not reflow the current root');
   assert.equal(state.results.value[0].content, 'replacement');
 });
+
+test('Session restoration cancels definition callbacks while normal Circular edits still schedule them', async () => {
+  const callbacks = [];
+  let scheduled = 0;
+  let canceled = 0;
+  const setup = await loadOwner('watchers.js', 'setupWatchers', {});
+  const state = {
+    mode: ref('circular'), generatedMode: ref('circular'),
+    semanticFileWatchersSuppressed: ref(true), shouldDeferCircularPreviewUpdates: ref(false)
+  };
+  setup({ state, watch: (source, callback) => callbacks.push({ source, callback }),
+    onMounted() {}, legendActions: {}, svgActions: {}, featureActions: {}, legendLayout: {},
+    resultsManager: { scheduleDefinitionUpdate: () => scheduled++, cancelDefinitionUpdate: () => canceled++ }
+  });
+  const callback = callbacks.find(({ source }) => String(source).includes('form.species')).callback;
+  callback();
+  assert.equal(scheduled, 0);
+  assert.equal(canceled, 1);
+  state.semanticFileWatchersSuppressed.value = false;
+  callback();
+  assert.equal(scheduled, 1);
+  state.shouldDeferCircularPreviewUpdates.value = true;
+  callback();
+  assert.equal(scheduled, 1);
+  assert.equal(canceled, 2);
+  state.mode.value = 'linear';
+  callback();
+  assert.equal(scheduled, 1);
+  assert.equal(canceled, 2);
+});
