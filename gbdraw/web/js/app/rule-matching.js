@@ -70,7 +70,7 @@ export const createRulePreparation = ({ state, evaluate, pending = { value: fals
       ? before[key].length === after[key].length && before[key].every((file, index) => file === after[key][index])
       : before[key] === after[key]);
   };
-  const prepare = (rules = state.manualSpecificRules) => {
+  const prepare = (rules = state.manualSpecificRules, options = {}) => {
     const targets = features();
     const draft = [...new Map(rules.map((rule) => [ruleKey(rule), { feat: rule.feat, qual: rule.qual, val: rule.val }])).values()];
     if (!draft.length) return true;
@@ -78,7 +78,7 @@ export const createRulePreparation = ({ state, evaluate, pending = { value: fals
     if (draft.every((rule) => validated.has(ruleKey(rule))) && ruleMatchesReady(targets, draft)) return true;
     const before = snapshot();
     pending.value = ++pendingCount > 0;
-    return evaluate({ features: targets.map((feature) => ruleFeaturePayload(feature)), rules: draft, kind: 'color' })
+    return evaluate({ features: targets.map((feature) => ruleFeaturePayload(feature)), rules: draft, kind: 'color' }, options)
       .then((result) => {
         if (!isCurrent(before)) return false;
         validated = new Set(draft.map(ruleKey));
@@ -96,13 +96,13 @@ export const createRulePreparation = ({ state, evaluate, pending = { value: fals
     if (prepared === true) return commit();
     return Promise.resolve(prepared).then((current) => current ? commit() : undefined);
   };
-  const prepareCandidate = async (rules = state.manualSpecificRules) => {
+  const prepareCandidate = async (rules = state.manualSpecificRules, options = {}) => {
     const before = snapshot();
     const source = rules.map(rule => normalizeSpecificRule(rule));
-    const response = await evaluate({ features: [], rules: source, kind: 'color-captions' });
+    const response = await evaluate({ features: [], rules: source, kind: 'color-captions' }, options);
     if (!isCurrent(before)) return null;
     const normalized = response.rules;
-    if (!await prepare(normalized) || !isCurrent(before)) return null;
+    if (!await prepare(normalized, options) || !isCurrent(before)) return null;
     const rendered = (state.extractedFeatures.value || []).filter(feature =>
       state.featureVisibilityOverrides?.[feature.svg_id] !== 'off');
     const used = new Set(rendered.map(feature => firstMatchingRule(feature, normalized)).filter(Boolean));

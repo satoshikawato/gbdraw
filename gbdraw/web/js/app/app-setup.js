@@ -1231,7 +1231,7 @@ export const createAppSetup = () => {
     state,
     pending: ruleMatchingPending,
     notify: notice => { specificRuleNotice.value = notice; },
-    evaluate: async (payload) => (await runDiagramHelperOperation(DIAGRAM_HELPER_OPERATIONS.EVALUATE_RULES, payload)).result
+    evaluate: async (payload, options) => (await runDiagramHelperOperation(DIAGRAM_HELPER_OPERATIONS.EVALUATE_RULES, payload, options)).result
   });
   const legendActions = createLegendManager({
     state,
