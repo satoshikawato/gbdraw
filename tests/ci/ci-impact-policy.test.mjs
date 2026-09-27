@@ -251,9 +251,9 @@ const jobsForPaths = (changes) => {
 test('representative PR routes require the changed subsystem and cross-layer smoke', () => {
   for (const [path, expected] of [
     ['README.md', ['recipes-standard']],
-    ['gbdraw/render/drawers/linear/features.py', ['web-change-budget', 'core-pr', 'lint', 'web-contracts-pr', 'web-pr-smoke']],
-    ['gbdraw/web/js/app/label-editor.js', ['web-change-budget', 'web-contracts-pr', 'web-pr-smoke']],
-    ['gbdraw/web/js/services/session-request.js', ['web-change-budget', 'core-pr', 'recipes-standard', 'lint', 'web-contracts-pr', 'web-pr-smoke']],
+    ['gbdraw/render/drawers/linear/features.py', ['web-change-budget', 'core-pr', 'gallery', 'lint', 'web-contracts-pr', 'web-pr-smoke']],
+    ['gbdraw/web/js/app/label-editor.js', ['web-change-budget', 'gallery', 'web-contracts-pr', 'web-pr-smoke']],
+    ['gbdraw/web/js/services/session-request.js', ['web-change-budget', 'core-pr', 'recipes-standard', 'gallery', 'lint', 'web-contracts-pr', 'web-pr-smoke']],
     ['gbdraw/web/gallery/examples.json', ['web-change-budget', 'gallery', 'web-contracts-pr', 'web-pr-smoke']]
   ]) assert.deepEqual(jobsForPaths([{ status: 'M', paths: [path] }]), expected, path);
 });
@@ -302,11 +302,11 @@ test('release retains every dev functional job plus supported-version and slow a
 
 test('capability tampering cannot drop an independent contribution', () => {
   const combined = selectivePlan({ impact: 'web-runtime', capabilities: ['documentation', 'web-runtime'] });
-  assert.deepEqual(combined.requiredJobs, ['web-change-budget', 'recipes-standard', 'web-contracts-pr', 'web-pr-smoke']);
+  assert.deepEqual(combined.requiredJobs, ['web-change-budget', 'recipes-standard', 'gallery', 'web-contracts-pr', 'web-pr-smoke']);
   for (const capabilities of [[], ['web-runtime', 'documentation'], ['documentation', 'documentation'], ['future']]) {
     assert.throws(() => validateImpactPlan({ ...combined, capabilities }), /Capabilities/);
   }
-  assert.throws(() => validateImpactPlan({ ...combined, requiredJobs: ['web-change-budget', 'web-contracts-pr', 'web-pr-smoke'] }), /required jobs/);
+  assert.throws(() => validateImpactPlan({ ...combined, requiredJobs: ['web-change-budget', 'gallery', 'web-contracts-pr', 'web-pr-smoke'] }), /required jobs/);
 });
 
 
@@ -315,7 +315,7 @@ test('ordinary Web changes stay selective when accompanied by their regression t
     { status: 'M', paths: ['gbdraw/web/js/app/label-editor.js'] },
     { status: 'A', paths: ['tests/web/label-editor.test.mjs'] },
     { status: 'M', paths: ['tests/web/right-drawer.playwright.spec.js'] }
-  ]), ['web-change-budget', 'web-contracts-pr', 'web-pr-smoke']);
+  ]), ['web-change-budget', 'gallery', 'web-contracts-pr', 'web-pr-smoke']);
   for (const path of ['tests/web/session-request.test.mjs', 'tests/web/contracts/current-session-lazy-materialization.playwright.spec.js']) {
     assert.equal(classifyPath(path).impact, 'session-persistence', path);
     assert.ok(jobsForPaths([{ status: 'M', paths: [path] }]).includes('core-pr'));
@@ -345,4 +345,16 @@ test('documentation-only PR basis requires exact documentary scope and no inheri
     { code: 'REQUIRED_JOBS_MISMATCH' });
   assert.throws(() => selectivePlan({ impact: 'web-runtime', inheritedEvidence: null }),
     { code: 'INVALID_EVIDENCE_SCHEMA' });
+});
+
+test('every selective PR smoke route also requires the Gallery parity owner', () => {
+  for (const impact of ['python-core', 'renderer', 'web-runtime', 'session-persistence', 'gallery', 'losat-integration']) {
+    const requiredJobs = requiredJobsFor({ profile: 'pr', impact, decision: 'selective' });
+    assert.ok(requiredJobs.includes('web-pr-smoke'), impact);
+    assert.ok(requiredJobs.includes('gallery'), impact);
+    const candidate = selectivePlan({ impact });
+    assert.throws(() => validateImpactPlan({
+      ...candidate, requiredJobs: requiredJobs.filter((job) => job !== 'gallery')
+    }), /required jobs/, impact);
+  }
 });

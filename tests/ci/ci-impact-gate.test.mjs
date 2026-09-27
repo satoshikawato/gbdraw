@@ -418,3 +418,22 @@ test('documentation-only PR gate requires selected checks without claiming inher
     }
   }
 });
+
+test('PR gate requires Gallery parity for full and every selective smoke route', () => {
+  const routes = [
+    plan({ impact: 'full', decision: 'full', basis: 'FULL_CHANGE', inheritedEvidence: null }),
+    ...['python-core', 'renderer', 'web-runtime', 'session-persistence', 'gallery', 'losat-integration'].map((impact) => plan({ impact }))
+  ];
+  for (const impactPlan of routes) {
+    assert.ok(impactPlan.requiredJobs.includes('gallery'), impactPlan.impact);
+    assert.equal(validate(impactPlan, needsFor(impactPlan)).ok, true);
+    for (const result of ['skipped', 'failure', 'cancelled']) {
+      const needs = needsFor(impactPlan);
+      needs.gallery.result = result;
+      assert.throws(() => validate(impactPlan, needs), /required CI job did not succeed/, `${impactPlan.impact}: ${result}`);
+    }
+    const missing = needsFor(impactPlan);
+    delete missing.gallery;
+    assert.throws(() => validate(impactPlan, missing), /result is missing or invalid/);
+  }
+});
