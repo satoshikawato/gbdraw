@@ -1,0 +1,7 @@
+{
+  "python": "3.13.3",
+  "platform": "Linux-5.15.167.4-microsoft-standard-WSL2-x86_64-with-glibc2.39",
+  "node": "v26.8.2",
+  "nodePlaywright": "1.61.0",
+  "pythonPlaywright": "1.61.0"
+}

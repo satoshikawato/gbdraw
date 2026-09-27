@@ -1,0 +1,31 @@
+{
+  "command": [
+    "npx",
+    "playwright",
+    "test",
+    "--config=playwright.config.js",
+    "--project=chromium",
+    "--workers=1",
+    "--retries=0",
+    "--reporter=list",
+    "--output=/tmp/issue597-S05-trusted-guard-integration-20260927-evidence/browser-results",
+    "tests/web/session-import-worker.playwright.spec.js",
+    "tests/web/session-operation-consistency.playwright.spec.js",
+    "--grep=real import Worker|unsafe keys, malformed|teardown cancels|occupies all semantic owners"
+  ],
+  "environment": {
+    "GBDRAW_WEB_TEST_PORT": "58561"
+  }
+}
+
+Running 5 tests using 1 worker
+
+(node:949453) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  1 [chromium] › tests/web/session-import-worker.playwright.spec.js:47:1 › real import Worker JSON/gzip and repeated loads terminate before preflight with no transport resources retained (1.2s)
+  ✓  2 [chromium] › tests/web/session-import-worker.playwright.spec.js:69:1 › unsafe keys, malformed JSON/gzip, fatal UTF-8 and Worker crash preserve the old document and History (1.1s)
+  ✓  3 [chromium] › tests/web/session-import-worker.playwright.spec.js:92:1 › teardown cancels the actual pending Worker before adoption and permits a new load (948ms)
+  ✓  4 [chromium] › tests/web/session-operation-consistency.playwright.spec.js:80:3 › save occupies all semantic owners and keeps browsing available (1.1s)
+  ✓  5 [chromium] › tests/web/session-operation-consistency.playwright.spec.js:80:3 › load occupies all semantic owners and keeps browsing available (1.1s)
+
+  5 passed (6.2s)

@@ -1,0 +1,433 @@
+# Web change policy
+
+- Context: ORDINARY
+- Base: `origin/dev`
+- Head: `working tree`
+- Gate: **FAIL**
+- Review: **REQUIRED**
+- Privileged allowlist revision: `origin/dev`
+- Architecture rule base: `origin/dev`
+- Architecture rule candidate: `working tree`
+- Policy guide: `docs/internal/WEB_CHANGE_POLICY.md`
+- Selected profile: ordinary
+- Size-review threshold for production files: 8
+- Size-review threshold for gross churn: 800
+- Size-review threshold for net additions: 100
+- `architecture-change` label: absent
+
+## Blocking violations
+
+- candidate Product Impact authority: Product Contract authority changes must be isolated from other changed paths: docs/REFERENCE/web-app.md, docs/assets/web-app/linear-current-result.png, docs/capture/README.md, docs/capture/fixtures/NC_001416.1.gb.gz, docs/capture/linear-live-edit-source-verification.json, docs/capture/verify_linear_live_edit.py, docs/internal/issue-597-input-session-implementation-20260926/MASTER_PLAN.md, docs/internal/issue-597-input-session-implementation-20260926/README.md, docs/internal/issue-597-input-session-implementation-20260926/SESSION_WORKFLOW.md, docs/internal/issue-597-input-session-implementation-20260926/authority-candidates/01-product-contract.patch, docs/internal/issue-597-input-session-implementation-20260926/authority-candidates/02-import-worker-permission.patch, docs/internal/issue-597-input-session-implementation-20260926/authority-candidates/README.md, docs/internal/issue-597-input-session-implementation-20260926/authority-candidates/verify_candidate.py, docs/internal/issue-597-input-session-implementation-20260926/decisions/02_RECORD_DISCOVERY.md, docs/internal/issue-597-input-session-implementation-20260926/decisions/03_SESSION_OPERATIONS.md, docs/internal/issue-597-input-session-implementation-20260926/evidence/README.md, docs/internal/issue-597-input-session-implementation-20260926/evidence/S01-artifacts.json, docs/internal/issue-597-input-session-implementation-20260926/evidence/S01-authority.json, docs/internal/issue-597-input-session-implementation-20260926/evidence/S01-discovery.json, docs/internal/issue-597-input-session-implementation-20260926/evidence/S01-final-pipeline.json, docs/internal/issue-597-input-session-implementation-20260926/evidence/S01-final-transport.json, docs/internal/issue-597-input-session-implementation-20260926/evidence/S01-namespaces-and-source.json, docs/internal/issue-597-input-session-implementation-20260926/evidence/S01-real-fixture.json, docs/internal/issue-597-input-session-implementation-20260926/evidence/S01-semantics.json, docs/internal/issue-597-input-session-implementation-20260926/evidence/S01-verifications.json, docs/internal/issue-597-input-session-implementation-20260926/evidence/S01_REPRODUCTION.md, docs/internal/issue-597-input-session-implementation-20260926/evidence/S03-validation.json, docs/internal/issue-597-input-session-implementation-20260926/evidence/S04-mutation-inventory.json, docs/internal/issue-597-input-session-implementation-20260926/evidence/S04-validation.json, docs/internal/issue-597-input-session-implementation-20260926/evidence/S04_AUTHORITY.py, docs/internal/issue-597-input-session-implementation-20260926/evidence/S04_MUTATION_INVENTORY.md, docs/internal/issue-597-input-session-implementation-20260926/evidence/S05-guard-characterization-candidate.patch, docs/internal/issue-597-input-session-implementation-20260926/evidence/S05-readiness.json, docs/internal/issue-597-input-session-implementation-20260926/evidence/S05-resume-artifacts.json, docs/internal/issue-597-input-session-implementation-20260926/evidence/S05-resume-fingerprints.json, docs/internal/issue-597-input-session-implementation-20260926/evidence/S05-resume-journey.json, docs/internal/issue-597-input-session-implementation-20260926/evidence/S05-resume-limits.json, docs/internal/issue-597-input-session-implementation-20260926/evidence/S05-resume-pipeline.json, docs/internal/issue-597-input-session-implementation-20260926/evidence/S05-resume-readiness.json, docs/internal/issue-597-input-session-implementation-20260926/evidence/S05-resume-semantic.json, docs/internal/issue-597-input-session-implementation-20260926/evidence/S05-resume-transport.json, docs/internal/issue-597-input-session-implementation-20260926/evidence/S05-resume-validation.json, docs/internal/issue-597-input-session-implementation-20260926/evidence/S05-validation.json, docs/internal/issue-597-input-session-implementation-20260926/evidence/S05_GUARD_DELIVERY.md, docs/internal/issue-597-input-session-implementation-20260926/evidence/S05_MEASURE.py, docs/internal/issue-597-input-session-implementation-20260926/evidence/S05_READINESS.py, docs/internal/issue-597-input-session-implementation-20260926/evidence/S05_RESUME_REPRODUCTION.md, docs/internal/issue-597-input-session-implementation-20260926/evidence/current-browser.json, docs/internal/issue-597-input-session-implementation-20260926/evidence/probe_current_behavior.py, docs/internal/issue-597-input-session-implementation-20260926/results/AUTHORITY_INTEGRATION_RESULT.md, docs/internal/issue-597-input-session-implementation-20260926/results/PLAN_PREPARATION.md, docs/internal/issue-597-input-session-implementation-20260926/results/README.md, docs/internal/issue-597-input-session-implementation-20260926/results/S00_RESULT.md, docs/internal/issue-597-input-session-implementation-20260926/results/S01_RESULT.md, docs/internal/issue-597-input-session-implementation-20260926/results/S03_RESULT.md, docs/internal/issue-597-input-session-implementation-20260926/results/S04_RESULT.md, docs/internal/issue-597-input-session-implementation-20260926/results/S05_RESULT.md, docs/internal/issue-597-input-session-implementation-20260926/sessions/README.md, docs/internal/issue-597-input-session-implementation-20260926/sessions/S00_INSTRUCTION_PROMPT.md, docs/internal/issue-597-input-session-implementation-20260926/sessions/S01_INSTRUCTION_PROMPT.md, docs/internal/issue-597-input-session-implementation-20260926/sessions/S03_INSTRUCTION_PROMPT.md, docs/internal/issue-597-input-session-implementation-20260926/sessions/S04_INSTRUCTION_PROMPT.md, docs/internal/issue-597-input-session-implementation-20260926/sessions/S05_INSTRUCTION_PROMPT.md, docs/internal/issue-597-input-session-implementation-20260926/sessions/S06_INSTRUCTION_PROMPT.md, docs/internal/issue-597-input-session-implementation-20260926/sessions/S07_INSTRUCTION_PROMPT.md, docs/internal/issue-597-input-session-implementation-20260926/sessions/S08_INSTRUCTION_PROMPT.md, docs/internal/issue-597-session-import-guard-20260927/RESULT.md, docs/internal/issue-597-session-import-guard-20260927/fingerprints.json, docs/internal/issue-597-session-import-guard-20260927/logs/S05-extra-constructor-rejected.log, docs/internal/issue-597-session-import-guard-20260927/logs/S05-extra-owner-rejected.log, docs/internal/issue-597-session-import-guard-20260927/logs/S05-missing-constructor-rejected.log, docs/internal/issue-597-session-import-guard-20260927/logs/S05-overlay-focused.log, docs/internal/issue-597-session-import-guard-20260927/logs/architecture-full.log, docs/internal/issue-597-session-import-guard-20260927/logs/ci-contracts-corrected.log, docs/internal/issue-597-session-import-guard-20260927/logs/ci-contracts.log, docs/internal/issue-597-session-import-guard-20260927/logs/dev-extra-owner-rejected.log, docs/internal/issue-597-session-import-guard-20260927/logs/guard-dev-focused.log, docs/internal/issue-597-session-import-guard-20260927/logs/guard-fixtures.log, docs/internal/issue-597-session-import-guard-20260927/logs/policy-after.log, docs/internal/issue-597-session-import-guard-20260927/logs/policy-before.log, docs/internal/issue-597-session-import-guard-20260927/logs/projection-hepatoplasmataceae.log, docs/internal/issue-597-session-import-guard-20260927/logs/projection-tobacco.log, docs/internal/issue-597-session-import-guard-20260927/logs/sequence-source-coverage.log, docs/internal/issue-597-session-import-guard-20260927/logs/trusted-dev-focused.log, docs/internal/issue-597-session-import-guard-20260927/logs/web-node-pr.log, docs/internal/issue-597-session-import-guard-20260927/validation.json, docs/internal/issue-602-proposal-20260926/00_MASTER_PLAN.md, docs/internal/issue-602-proposal-20260926/01_METADATA_VISIBILITY_DECISION_PACK.md, docs/internal/issue-602-proposal-20260926/02_DEFINITION_DEFAULT_DECISION_PACK.md, docs/internal/issue-602-proposal-20260926/03_EDIT_FEEDBACK_DECISION_PACK.md, docs/internal/issue-602-proposal-20260926/04_COMPACT_EDITOR_DECISION_PACK.md, docs/internal/issue-602-proposal-20260926/05_COMPACT_ALIGNMENT_REVIEW_DECISION_PACK.md, docs/internal/issue-602-proposal-20260926/06_SIGNED_PRODUCT_DECISIONS.md, docs/internal/issue-602-proposal-20260926/INSTRUCTION_PROMPTS/README.md, docs/internal/issue-602-proposal-20260926/INSTRUCTION_PROMPTS/SESSION_00_AUTHORITY.md, docs/internal/issue-602-proposal-20260926/INSTRUCTION_PROMPTS/SESSION_01_AUTO_DISCLOSURE.md, docs/internal/issue-602-proposal-20260926/INSTRUCTION_PROMPTS/SESSION_02_DEFINITION_DEFAULT.md, docs/internal/issue-602-proposal-20260926/INSTRUCTION_PROMPTS/SESSION_03_CANONICAL_STATUS_PROJECTION.md, docs/internal/issue-602-proposal-20260926/INSTRUCTION_PROMPTS/SESSION_04_APPLICATION_FEEDBACK.md, docs/internal/issue-602-proposal-20260926/INSTRUCTION_PROMPTS/SESSION_05_COMPACT_EDITOR.md, docs/internal/issue-602-proposal-20260926/INSTRUCTION_PROMPTS/SESSION_06_COMPACT_ALIGNMENT_REVIEW.md, docs/internal/issue-602-proposal-20260926/INSTRUCTION_PROMPTS/SESSION_07_ACCEPTANCE_AND_DOCS.md, docs/internal/issue-602-proposal-20260926/evidence/mobile-editor-open.json, docs/internal/issue-602-proposal-20260926/evidence/mobile-editor-open.png, docs/internal/issue-602-proposal-20260926/results/DEV_SYNC_STATUS_20260927.md, docs/internal/issue-602-proposal-20260926/results/FINAL_REVIEW_STATUS_FIXES_20260927.md, docs/internal/issue-602-proposal-20260926/results/HISTORY_DEV_SYNC_20260927.md, docs/internal/issue-602-proposal-20260926/results/S00.md, docs/internal/issue-602-proposal-20260926/results/S01.md, docs/internal/issue-602-proposal-20260926/results/S02.md, docs/internal/issue-602-proposal-20260926/results/S03.md, docs/internal/issue-602-proposal-20260926/results/S04.md, docs/internal/issue-602-proposal-20260926/results/S05.md, docs/internal/issue-602-proposal-20260926/results/S06.md, docs/internal/issue-602-proposal-20260926/results/S07.md, docs/internal/issue-602-proposal-20260926/results/TECHNICAL_REVIEW_20260927.md, gbdraw/web/index.html, gbdraw/web/js/app/annotations.js, gbdraw/web/js/app/annotations/record-catalog.js, gbdraw/web/js/app/app-setup.js, gbdraw/web/js/app/circular-track-slots.js, gbdraw/web/js/app/feature-editor.js, gbdraw/web/js/app/feature-editor/color-actions.js, gbdraw/web/js/app/feature-editor/label-actions.js, gbdraw/web/js/app/feature-editor/placement-actions.js, gbdraw/web/js/app/feature-editor/rule-actions.js, gbdraw/web/js/app/feature-editor/visibility-actions.js, gbdraw/web/js/app/generation-status.js, gbdraw/web/js/app/legend-layout.js, gbdraw/web/js/app/legend-layout/canvas-actions.js, gbdraw/web/js/app/legend-layout/diagram-drag.js, gbdraw/web/js/app/legend-layout/reposition-actions.js, gbdraw/web/js/app/legend/drag-actions.js, gbdraw/web/js/app/legend/entry-actions.js, gbdraw/web/js/app/legend/sort-actions.js, gbdraw/web/js/app/legend/stroke-actions.js, gbdraw/web/js/app/linear-record-selector.js, gbdraw/web/js/app/linear-track-slots.js, gbdraw/web/js/app/linear-typography.js, gbdraw/web/js/app/orthogroups.js, gbdraw/web/js/app/preview-runtime.js, gbdraw/web/js/app/record-discovery.js, gbdraw/web/js/app/record-display-options.js, gbdraw/web/js/app/results.js, gbdraw/web/js/app/rule-matching.js, gbdraw/web/js/app/run-analysis.js, gbdraw/web/js/app/svg-styles.js, gbdraw/web/js/app/watchers.js, gbdraw/web/js/components.js, gbdraw/web/js/services/config.js, gbdraw/web/js/services/diagram-generation.js, gbdraw/web/js/services/history-snapshot.js, gbdraw/web/js/services/history.js, gbdraw/web/js/services/session-active-config-contract.js, gbdraw/web/js/services/session-import-client.js, gbdraw/web/js/services/session-request.js, gbdraw/web/js/state.js, gbdraw/web/js/workers/session-import-worker.js, tests/test_web_mode_profiles.py, tests/test_web_ux_profile.py, tests/web/architecture-contracts.test.mjs, tests/web/circular-record-presentation.playwright.spec.js, tests/web/color-captions.playwright.spec.js, tests/web/fixtures/issue597-session-measurement.js, tests/web/fixtures/issue597-session-transport.worker.js, tests/web/generation-feedback.playwright.spec.js, tests/web/generation-feedback.test.mjs, tests/web/generation-status.test.mjs, tests/web/helpers/session-import-gate.cjs, tests/web/helpers/session-import-node.mjs, tests/web/history-canonical-owner.test.mjs, tests/web/history-generated-authority.playwright.spec.js, tests/web/history-inputs.playwright.spec.js, tests/web/history.test.mjs, tests/web/legend-sync.test.mjs, tests/web/linear-label-visibility.test.mjs, tests/web/linear-multi-record.playwright.spec.js, tests/web/linear-typography.playwright.spec.js, tests/web/record-display-discovery.playwright.spec.js, tests/web/record-display-options.test.mjs, tests/web/right-drawer.playwright.spec.js, tests/web/rule-matching.test.mjs, tests/web/session-active-config-contract.test.mjs, tests/web/session-cli-compatibility.test.mjs, tests/web/session-definition-rehydration.test.mjs, tests/web/session-draft-authority.test.mjs, tests/web/session-import-client.test.mjs, tests/web/session-import-codec.test.mjs, tests/web/session-import-worker.playwright.spec.js, tests/web/session-loading-feedback.playwright.spec.js, tests/web/session-losat-cache-validation.test.mjs, tests/web/session-operation-consistency.playwright.spec.js, tests/web/session-operation-consistency.test.mjs, tests/web/session-request.test.mjs, tests/web/similarity-alignment-ui.playwright.spec.js, tests/web/specific-color-actions.test.mjs, tools/characterize_issue597_s01.py, tools/inspect_issue597_s01_contracts.py, tools/inspect_issue597_s01_namespaces.py, tools/measure_issue597_s01.py, tools/prepare_issue597_s01_fixture.py, tools/reproduce_examples_manifest.py, tools/verify_issue597_s01_outputs.py
+- production runtime files and Web guard/CI files changed together
+
+## Review reasons
+
+- Architecture-bearing signals: deterministic inventories changed (production modules, public exports, reactive declarations, watcher calls, canonical-entry import edges, session schema fields)
+- Governance and authority: Product Impact authority changed for future revisions (docs/internal/OPTION_INTEGRITY_PRODUCT_CONTRACT.md)
+- Governance and authority: registered governance or authority files changed (docs/internal/OPTION_INTEGRITY_PRODUCT_CONTRACT.md)
+- Material behavior/output risk: registered session or compatibility paths changed (gbdraw/web/js/services/config.js, gbdraw/web/js/services/session-request.js)
+- Size and scope: production files changed exceed ordinary size-review threshold (42 > 8)
+- Size and scope: production gross churn exceeds ordinary size-review threshold (3821 > 800)
+- Size and scope: production net additions exceed ordinary size-review threshold (245 > 100)
+
+## Product impact
+
+- Runtime context: TRUSTED_LOCAL_DIFF
+- Runtime authority: trusted base map, decisions, architecture rules, detectors, and checker only.
+- Base authority validation: VALID
+- Candidate authority validation: VALID (inert data only)
+- Candidate authority separation: INVALID
+- Runtime result count: 0
+
+### Candidate authority proposal
+
+- Changed Product Impact authority paths: `docs/internal/OPTION_INTEGRITY_PRODUCT_CONTRACT.md`
+- Candidate map: VALID
+- Candidate decision registry: VALID
+- Runtime effect: validation-only future preauthorization; candidate data does not alter this head runtime admission.
+
+## Key architecture differential summary
+
+| Inventory | Before | Added | Removed | After | Delta | Classification |
+| --- | ---: | ---: | ---: | ---: | ---: | --- |
+| Registered Authority Location Count | 2 | 0 | 0 | 2 | 0 | registered rule |
+| Registered canonical-contract results | 2 | 0 | 0 | 2 | 0 | registered rule |
+| Privileged operator permission entries | 49 | 0 | 0 | 49 | 0 | hard authority |
+| Privileged importer permission entries | 55 | 0 | 0 | 55 | 0 | hard authority |
+| Production files | 204 | 2 | 1 | 205 | +1 | size-review |
+| Production modules | 157 | 2 | 1 | 158 | +1 | report-only |
+| Exports | 926 | 4 | 7 | 923 | -3 | report-only |
+| create* declarations | 98 | 0 | 0 | 98 | 0 | report-only |
+| Reactive declarations | 375 | 11 | 5 | 381 | +6 | report-only |
+| Watcher calls | 57 | 1 | 0 | 58 | +1 | report-only |
+| Compatibility-like names | 165 | 0 | 0 | 165 | 0 | report-only |
+| Resource-like names | 400 | 0 | 0 | 400 | 0 | report-only |
+| Session object keys | 1010 | 9 | 42 | 977 | -33 | report-only |
+| Privileged import-target fan-out | 54 | 1 | 0 | 55 | +1 | report-only |
+| First-party static import cycles | 0 | 0 | 0 | 0 | 0 | hard |
+
+Production line change:
+
+- Additions: 2033
+- Deletions: 1788
+- Gross churn: 3821
+- Net additions: 245
+
+## Differential inventory changes
+
+### Production files
+
+Added (2):
+
+- gbdraw/web/js/services/session-import-client.js
+- gbdraw/web/js/workers/session-import-worker.js
+
+Removed (1):
+
+- gbdraw/web/js/app/generation-status.js
+
+### Production modules
+
+Added (2):
+
+- gbdraw/web/js/services/session-import-client.js
+- gbdraw/web/js/workers/session-import-worker.js
+
+Removed (1):
+
+- gbdraw/web/js/app/generation-status.js
+
+### Exports
+
+Added (4):
+
+- gbdraw/web/js/app/record-discovery.js: circularDiscoveryForInput
+- gbdraw/web/js/services/config.js: disposeSessionOperations
+- gbdraw/web/js/services/session-import-client.js: importSessionFile
+- gbdraw/web/js/state.js: sessionOperationAvailability
+
+Removed (7):
+
+- gbdraw/web/js/app/generation-status.js: describeGenerationApplication
+- gbdraw/web/js/services/config.js: commitAppliedGenerationFields
+- gbdraw/web/js/services/config.js: getGenerationApplicationStatus
+- gbdraw/web/js/services/session-request.js: compareGenerationIntent
+- gbdraw/web/js/services/session-request.js: projectAppliedGenerationFields
+- gbdraw/web/js/services/session-request.js: projectAppliedGenerationIntent
+- gbdraw/web/js/services/session-request.js: projectGenerationIntent
+
+### Reactive declarations
+
+Added (11):
+
+- gbdraw/web/js/app/app-setup.js: circularRecordDiscoveryState (computed)
+- gbdraw/web/js/app/app-setup.js: circularRecordInspectionEnabled (computed)
+- gbdraw/web/js/app/app-setup.js: circularRecordSelectionEnabled (computed)
+- gbdraw/web/js/app/app-setup.js: semanticMutationAvailable (computed)
+- gbdraw/web/js/app/app-setup.js: sessionBusyReason (computed)
+- gbdraw/web/js/app/app-setup.js: sessionLoadAvailable (computed)
+- gbdraw/web/js/app/app-setup.js: sessionSaveAvailable (computed)
+- gbdraw/web/js/components.js: controlAvailable (computed)
+- gbdraw/web/js/components.js: uploadAvailable (computed)
+- gbdraw/web/js/state.js: sessionImportPending (ref)
+- gbdraw/web/js/state.js: sessionSavePending (ref)
+
+Removed (5):
+
+- gbdraw/web/js/app/app-setup.js: generationApplicationFeedback (computed)
+- gbdraw/web/js/app/app-setup.js: linearLabelAutoDisclosure (computed)
+- gbdraw/web/js/app/app-setup.js: linearLabelAutoFields (computed)
+- gbdraw/web/js/app/app-setup.js: sessionImportPending (ref)
+- gbdraw/web/js/app/app-setup.js: sessionSavePending (ref)
+
+### Watcher calls
+
+Added (1):
+
+- gbdraw/web/js/app/app-setup.js: watcher call 21
+
+Removed (0):
+
+- None
+
+### Session object keys
+
+Added (9):
+
+- gbdraw/web/js/services/config.js: canceled
+- gbdraw/web/js/services/config.js: controller
+- gbdraw/web/js/services/config.js: featureVisibilityTsv
+- gbdraw/web/js/services/config.js: isCurrent
+- gbdraw/web/js/services/config.js: promise
+- gbdraw/web/js/services/config.js: signal
+- gbdraw/web/js/services/config.js: target
+- gbdraw/web/js/services/config.js: targetState
+- gbdraw/web/js/services/config.js: value
+
+Removed (42):
+
+- gbdraw/web/js/services/config.js: applied
+- gbdraw/web/js/services/config.js: cancelRequested
+- gbdraw/web/js/services/config.js: characters
+- gbdraw/web/js/services/config.js: draft
+- gbdraw/web/js/services/config.js: errors
+- gbdraw/web/js/services/config.js: generating
+- gbdraw/web/js/services/config.js: hasResult
+- gbdraw/web/js/services/config.js: keep_definition_left_aligned
+- gbdraw/web/js/services/config.js: liveApplying
+- gbdraw/web/js/services/config.js: liveError
+- gbdraw/web/js/services/config.js: liveState
+- gbdraw/web/js/services/config.js: operations
+- gbdraw/web/js/services/config.js: orthogroupIndex
+- gbdraw/web/js/services/config.js: state
+- gbdraw/web/js/services/session-request.js: analysis
+- gbdraw/web/js/services/session-request.js: blastpMode
+- gbdraw/web/js/services/session-request.js: comparisonPlanSnapshot
+- gbdraw/web/js/services/session-request.js: conservationBlastFiles
+- gbdraw/web/js/services/session-request.js: conservationColors
+- gbdraw/web/js/services/session-request.js: conservationFastaFiles
+- gbdraw/web/js/services/session-request.js: conservationLabels
+- gbdraw/web/js/services/session-request.js: conservationRingGap
+- gbdraw/web/js/services/session-request.js: conservationRingWidth
+- gbdraw/web/js/services/session-request.js: conservationSources
+- gbdraw/web/js/services/session-request.js: diagramOptions
+- gbdraw/web/js/services/session-request.js: encode
+- gbdraw/web/js/services/session-request.js: error
+- gbdraw/web/js/services/session-request.js: geneticCode
+- gbdraw/web/js/services/session-request.js: geneticCodes
+- gbdraw/web/js/services/session-request.js: linearComparisons
+- gbdraw/web/js/services/session-request.js: meaning
+- gbdraw/web/js/services/session-request.js: plan
+- gbdraw/web/js/services/session-request.js: query
+- gbdraw/web/js/services/session-request.js: retainedInputs
+- gbdraw/web/js/services/session-request.js: sequences
+- gbdraw/web/js/services/session-request.js: session
+- gbdraw/web/js/services/session-request.js: sessionResourceTable
+- gbdraw/web/js/services/session-request.js: state
+- gbdraw/web/js/services/session-request.js: subject
+- gbdraw/web/js/services/session-request.js: task
+- gbdraw/web/js/services/session-request.js: text
+- gbdraw/web/js/services/session-request.js: unknown
+
+### Privileged import-target fan-out
+
+Added (1):
+
+- workers/session-import-worker.js -> services/session-file.js
+
+Removed (0):
+
+- None
+
+## First-party static import graph
+
+- Before: 157 modules, 513 edges, 0 cycles
+- After: 158 modules, 514 edges, 0 cycles
+- Delta: 0 cycles
+- Cycle definition: SCC size > 1, or a one-node SCC with a self-edge.
+- Head cycles (sorted nodes and internal edges):
+- None
+- Base graph resolution errors:
+- None
+- Head graph resolution errors:
+- None
+
+## Report-only privileged import-target fan-out
+
+| Production module | Before | After | Delta |
+| --- | ---: | ---: | ---: |
+| app/app-setup.js | 9 | 9 | 0 |
+| app/candidate-render.js | 1 | 1 | 0 |
+| app/feature-editor/label-actions.js | 1 | 1 | 0 |
+| app/feature-editor/svg-actions.js | 1 | 1 | 0 |
+| app/feature-metadata-extraction.js | 1 | 1 | 0 |
+| app/feature-search/preview-svg.js | 1 | 1 | 0 |
+| app/feature-selection.js | 1 | 1 | 0 |
+| app/legend-layout/canvas-actions.js | 1 | 1 | 0 |
+| app/legend-layout/diagram-drag.js | 1 | 1 | 0 |
+| app/legend-layout/reposition-actions.js | 1 | 1 | 0 |
+| app/legend/drag-actions.js | 1 | 1 | 0 |
+| app/legend/entry-actions.js | 2 | 2 | 0 |
+| app/legend/sort-actions.js | 1 | 1 | 0 |
+| app/legend/stroke-actions.js | 1 | 1 | 0 |
+| app/preview-runtime.js | 1 | 1 | 0 |
+| app/record-discovery.js | 1 | 1 | 0 |
+| app/results.js | 2 | 2 | 0 |
+| app/run-analysis.js | 2 | 2 | 0 |
+| app/session-feature-metadata.js | 1 | 1 | 0 |
+| app/svg-styles.js | 1 | 1 | 0 |
+| app/watchers.js | 1 | 1 | 0 |
+| services/config.js | 8 | 8 | 0 |
+| services/diagram-generation.js | 2 | 2 | 0 |
+| services/diagram-resource-staging.js | 1 | 1 | 0 |
+| services/export.js | 1 | 1 | 0 |
+| services/gallery-session-migration.js | 1 | 1 | 0 |
+| services/history-snapshot.js | 1 | 1 | 0 |
+| services/session-request.js | 1 | 1 | 0 |
+| services/session-resources.js | 1 | 1 | 0 |
+| services/standalone-interactivity.js | 1 | 1 | 0 |
+| services/svg-result-ingestion.js | 2 | 2 | 0 |
+| state.js | 1 | 1 | 0 |
+| workers/diagram-generation-worker.js | 2 | 2 | 0 |
+| workers/session-import-worker.js | 0 | 1 | +1 |
+
+## Production files touched
+
+- M gbdraw/web/index.html
+- M gbdraw/web/js/app/annotations.js
+- M gbdraw/web/js/app/annotations/record-catalog.js
+- M gbdraw/web/js/app/app-setup.js
+- M gbdraw/web/js/app/circular-track-slots.js
+- M gbdraw/web/js/app/feature-editor.js
+- M gbdraw/web/js/app/feature-editor/color-actions.js
+- M gbdraw/web/js/app/feature-editor/label-actions.js
+- M gbdraw/web/js/app/feature-editor/placement-actions.js
+- M gbdraw/web/js/app/feature-editor/rule-actions.js
+- M gbdraw/web/js/app/feature-editor/visibility-actions.js
+- D gbdraw/web/js/app/generation-status.js
+- M gbdraw/web/js/app/legend-layout.js
+- M gbdraw/web/js/app/legend-layout/canvas-actions.js
+- M gbdraw/web/js/app/legend-layout/diagram-drag.js
+- M gbdraw/web/js/app/legend-layout/reposition-actions.js
+- M gbdraw/web/js/app/legend/drag-actions.js
+- M gbdraw/web/js/app/legend/entry-actions.js
+- M gbdraw/web/js/app/legend/sort-actions.js
+- M gbdraw/web/js/app/legend/stroke-actions.js
+- M gbdraw/web/js/app/linear-record-selector.js
+- M gbdraw/web/js/app/linear-track-slots.js
+- M gbdraw/web/js/app/linear-typography.js
+- M gbdraw/web/js/app/orthogroups.js
+- M gbdraw/web/js/app/preview-runtime.js
+- M gbdraw/web/js/app/record-discovery.js
+- M gbdraw/web/js/app/record-display-options.js
+- M gbdraw/web/js/app/results.js
+- M gbdraw/web/js/app/rule-matching.js
+- M gbdraw/web/js/app/run-analysis.js
+- M gbdraw/web/js/app/svg-styles.js
+- M gbdraw/web/js/app/watchers.js
+- M gbdraw/web/js/components.js
+- M gbdraw/web/js/services/config.js
+- M gbdraw/web/js/services/diagram-generation.js
+- M gbdraw/web/js/services/history-snapshot.js
+- M gbdraw/web/js/services/history.js
+- M gbdraw/web/js/services/session-active-config-contract.js
+- A gbdraw/web/js/services/session-import-client.js
+- M gbdraw/web/js/services/session-request.js
+- M gbdraw/web/js/state.js
+- A gbdraw/web/js/workers/session-import-worker.js
+
+## Production additions/deletions
+
+- Additions: 2033
+- Deletions: 1788
+- Gross churn: 3821
+- Net additions: 245
+- Binary production files: 0
+
+## Report-only new production modules
+
+- gbdraw/web/js/services/session-import-client.js
+- gbdraw/web/js/workers/session-import-worker.js
+
+## Report-only new exports and create* owners
+
+- gbdraw/web/js/app/record-discovery.js: circularDiscoveryForInput
+- gbdraw/web/js/services/config.js: disposeSessionOperations
+- gbdraw/web/js/services/session-import-client.js: importSessionFile
+- gbdraw/web/js/state.js: sessionOperationAvailability
+
+## Report-only new reactive state/watchers
+
+- gbdraw/web/js/app/app-setup.js: circularRecordDiscoveryState (computed)
+- gbdraw/web/js/app/app-setup.js: circularRecordInspectionEnabled (computed)
+- gbdraw/web/js/app/app-setup.js: circularRecordSelectionEnabled (computed)
+- gbdraw/web/js/app/app-setup.js: semanticMutationAvailable (computed)
+- gbdraw/web/js/app/app-setup.js: sessionBusyReason (computed)
+- gbdraw/web/js/app/app-setup.js: sessionLoadAvailable (computed)
+- gbdraw/web/js/app/app-setup.js: sessionSaveAvailable (computed)
+- gbdraw/web/js/components.js: controlAvailable (computed)
+- gbdraw/web/js/components.js: uploadAvailable (computed)
+- gbdraw/web/js/state.js: sessionImportPending (ref)
+- gbdraw/web/js/state.js: sessionSavePending (ref)
+- gbdraw/web/js/app/app-setup.js: +1 watcher call(s)
+
+## Unapproved privileged capability owners/importers
+
+- None
+
+## Removed privileged allowlist entries
+
+- None
+
+## Added privileged allowlist entries
+
+- None
+
+## Active privileged owners/importers excluded by proposed policy
+
+- None
+
+## Missing base privileged allowlist keys
+
+- None
+
+## Added privileged allowlist keys
+
+- None
+
+## Candidate architecture authority delta
+
+- Classification: UNCHANGED
+- None
+
+## Candidate architecture admission observations
+
+- None
+
+## Candidate architecture rule errors
+
+- None
+
+## Active architecture rule results
+
+- canonical-path.current-result-admission | subject=app/candidate-render.js -> services/svg-result-ingestion.js | observation=CONFORMING | mode=HARD | baselineRelation=NOT_APPLICABLE | authorityResolution=NOT_APPLICABLE | decision=PASS | observedCanonicalEntryEdges=1/1
+- canonical-path.render-request | subject=app/run-analysis.js -> services/session-request.js | observation=CONFORMING | mode=HARD | baselineRelation=NOT_APPLICABLE | authorityResolution=NOT_APPLICABLE | decision=PASS | observedCanonicalEntryEdges=1/1
+- semantic-owner.current-result-admission | subject=services/svg-result-ingestion.js | observation=CONFORMING | mode=HARD | baselineRelation=NOT_APPLICABLE | authorityResolution=NOT_APPLICABLE | decision=PASS | registeredDefinitionLocations=1; observedDefinitions=1/1
+- semantic-owner.render-request | subject=services/session-request.js | observation=CONFORMING | mode=HARD | baselineRelation=NOT_APPLICABLE | authorityResolution=NOT_APPLICABLE | decision=PASS | registeredDefinitionLocations=1; observedDefinitions=1/1
+
+## Active architecture rule errors
+
+- None
+
+## Report-only cache/token/handle/journal/protocol/manager names
+
+- None
+
+## Report-only session object keys and compatibility names
+
+- gbdraw/web/js/services/config.js: canceled
+- gbdraw/web/js/services/config.js: controller
+- gbdraw/web/js/services/config.js: featureVisibilityTsv
+- gbdraw/web/js/services/config.js: isCurrent
+- gbdraw/web/js/services/config.js: promise
+- gbdraw/web/js/services/config.js: signal
+- gbdraw/web/js/services/config.js: target
+- gbdraw/web/js/services/config.js: targetState
+- gbdraw/web/js/services/config.js: value
+
+## Added binary runtime files
+
+- None
+
+## Changed vendored runtime files
+
+- None
+
+## Dependency changes
+
+- None
+
+## Guard files touched
+
+- docs/internal/OPTION_INTEGRITY_PRODUCT_CONTRACT.md
+- tests/web/architecture-contracts.test.mjs
