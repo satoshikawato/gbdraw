@@ -732,6 +732,9 @@ export const createHistorySnapshotService = ({
         getGeneratedArtifactRef(state.linearRecordTranslations, null)
       ),
       linearRecordOrientations: artifactOwnedValue(captureLinearRecordOrientations()),
+      annotationWarnings: artifactOwnedValue(getGeneratedArtifactRef(state.annotationWarnings, null)),
+      specificRules: (state.manualSpecificRules || []).map(rule => ({ ...rule })),
+      fileLegendCaptions: new Set(state.fileLegendCaptions?.value || []),
       trackSlotResolvedGeometry: artifactOwnedValue(
         getGeneratedArtifactRef(state.trackSlotResolvedGeometry, null)
       ),
@@ -829,6 +832,11 @@ export const createHistorySnapshotService = ({
       ownerSet.linearRecordTranslations || []
     );
     installLinearRecordOrientations(ownerSet.linearRecordOrientations);
+    setGeneratedArtifactRef(state.annotationWarnings, ownerSet.annotationWarnings || []);
+    if (state.manualSpecificRules && ownerSet.specificRules) {
+      state.manualSpecificRules.splice(0, state.manualSpecificRules.length, ...ownerSet.specificRules.map(rule => ({ ...rule })));
+    }
+    if (state.fileLegendCaptions && ownerSet.fileLegendCaptions) state.fileLegendCaptions.value = new Set(ownerSet.fileLegendCaptions);
     setGeneratedArtifactRef(
       state.trackSlotResolvedGeometry,
       ownerSet.trackSlotResolvedGeometry ?? null
@@ -920,6 +928,7 @@ export const createHistorySnapshotService = ({
       'similarityAlignmentPlan',
       'linearRecordTranslations',
       'trackSlotResolvedGeometry',
+      'annotationWarnings',
       'proteinIdentityManifest',
       'legacyProteinRawCandidates',
       'legacyProteinDerivedEvidence',
@@ -1518,47 +1527,54 @@ export const createHistorySnapshotService = ({
 
   const applyArtifactCheckpoint = async (snapshot) => {
     if (!snapshot || typeof snapshot !== 'object') return;
-    closeTransientState(state);
+    const suppressRef = state.semanticFileWatchersSuppressed;
+    const previousSuppressed = getGeneratedArtifactRef(suppressRef, false);
+    setGeneratedArtifactRef(suppressRef, true);
+    try {
+      closeTransientState(state);
 
-    const ui = snapshot.ui || {};
-    if (ui.mode) setRef(state.mode, ui.mode === 'linear' ? 'linear' : 'circular');
-    if (ui.cInputType) setRef(state.cInputType, ui.cInputType);
-    if (ui.lInputType) setRef(state.lInputType, ui.lInputType);
-    // The mode watcher clears generated metadata. Let that reset finish before
-    // restoring snapshot-owned feature, label, and orthogroup state.
-    await nextTick();
+      const ui = snapshot.ui || {};
+      if (ui.mode) setRef(state.mode, ui.mode === 'linear' ? 'linear' : 'circular');
+      if (ui.cInputType) setRef(state.cInputType, ui.cInputType);
+      if (ui.lInputType) setRef(state.lInputType, ui.lInputType);
+      // The mode watcher clears generated metadata. Let that reset finish before
+      // restoring snapshot-owned feature, label, and orthogroup state.
+      await nextTick();
 
-    if (typeof applyConfigData === 'function' && snapshot.config) {
-      applyConfigData(snapshot.config);
-    } else if (snapshot.config?.linearComparisonPlan) {
-      replaceLinearComparisonPlan(
-        state.linearComparisonPlan,
-        snapshot.config.linearComparisonPlan
-      );
-    }
-    applyDraftIntentData(state, snapshot.drafts || {});
+      if (typeof applyConfigData === 'function' && snapshot.config) {
+        applyConfigData(snapshot.config);
+      } else if (snapshot.config?.linearComparisonPlan) {
+        replaceLinearComparisonPlan(
+          state.linearComparisonPlan,
+          snapshot.config.linearComparisonPlan
+        );
+      }
+      applyDraftIntentData(state, snapshot.drafts || {});
 
-    if (typeof applyUiStateData === 'function') {
-      applyUiStateData(ui, { restorePreviewNavigation: false });
-    } else {
-      applyFallbackUiStateData(state, ui);
-    }
-    await nextTick();
+      if (typeof applyUiStateData === 'function') {
+        applyUiStateData(ui, { restorePreviewNavigation: false });
+      } else {
+        applyFallbackUiStateData(state, ui);
+      }
+      await nextTick();
 
-    applyFilesData(state, snapshot.files || {}, fileStore, normalizeLinearSeqList);
+      applyFilesData(state, snapshot.files || {}, fileStore, normalizeLinearSeqList);
 
-    if (state.skipCaptureBaseConfig) state.skipCaptureBaseConfig.value = true;
-    if (state.skipPositionReapply) state.skipPositionReapply.value = true;
-    if (state.skipExtractOnSvgChange) state.skipExtractOnSvgChange.value = false;
+      if (state.skipCaptureBaseConfig) state.skipCaptureBaseConfig.value = true;
+      if (state.skipPositionReapply) state.skipPositionReapply.value = true;
+      if (state.skipExtractOnSvgChange) state.skipExtractOnSvgChange.value = false;
 
-    applyArtifactDomains(snapshot);
+      applyArtifactDomains(snapshot);
 
-    await nextTick();
-    await nextFrame();
-    if (typeof applyUiStateData === 'function') {
-      applyUiStateData(ui, { restorePreviewNavigation: false });
-    } else {
-      applyFallbackUiStateData(state, ui);
+      await nextTick();
+      await nextFrame();
+      if (typeof applyUiStateData === 'function') {
+        applyUiStateData(ui, { restorePreviewNavigation: false });
+      } else {
+        applyFallbackUiStateData(state, ui);
+      }
+    } finally {
+      setGeneratedArtifactRef(suppressRef, previousSuppressed);
     }
   };
 

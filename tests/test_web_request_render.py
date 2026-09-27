@@ -498,3 +498,105 @@ def test_web_circular_batch_has_one_catalog_item_per_logical_result(tmp_path) ->
         (0, "batch-catalog-1.svg", ["batch-record-key-1"]),
         (1, "batch-catalog-2.svg", ["batch-record-key-2"]),
     ]
+
+
+@pytest.mark.parametrize("mode", ["single", "batch", "linear"])
+def test_web_warning_metadata_reuses_one_resolution_and_one_load_per_source(
+    mode, monkeypatch, tmp_path
+):
+    from gbdraw.annotations import (
+        AnnotationOptions,
+        AnnotationSet,
+        FeatureSpan,
+        RegionAnnotation,
+    )
+    from gbdraw.api import CircularDiagramOptions
+    from gbdraw.io.record_select import parse_record_selector
+    import gbdraw.annotations.resolve as resolver
+    import gbdraw.api.request_render as request_renderer
+
+    records = [
+        SeqRecord(
+            Seq("ACGT" * 100),
+            id="same",
+            annotations={"molecule_type": "DNA", "topology": "circular"},
+        )
+        for _ in range(1 if mode == "single" else 2)
+    ]
+    inputs = tuple(
+        RecordInput(source=InMemoryRecordSource(record)) for record in records
+    )
+    rows = (
+        RegionAnnotation(
+            "missing",
+            FeatureSpan(
+                parse_record_selector("#1" if mode == "single" else "#2"),
+                ("gene=PRIVATE-MISSING", "gene=PRIVATE-MISSING"),
+            ),
+        ),
+    )
+    options = (LinearDiagramOptions if mode == "linear" else CircularDiagramOptions)(
+        annotations=AnnotationOptions(sets=(AnnotationSet("s", rows),))
+    )
+    output = RenderOutputRequest(output_prefix="web-warning", formats=("svg",))
+    if mode == "batch":
+        from dataclasses import replace
+
+        request = CircularBatchRequest(
+            records=inputs,
+            options=options,
+            outputs=tuple(
+                replace(output, output_prefix=f"web-warning-{i}") for i in range(2)
+            ),
+        )
+    else:
+        request = (
+            LinearDiagramRequest if mode == "linear" else CircularDiagramRequest
+        )(records=inputs, options=options, output=output)
+    document = build_session_document(request).to_dict()
+    loads = 0
+    resolutions = 0
+    original_load = request_renderer.load_gbks
+    original_resolve = resolver.resolve_annotation_set
+
+    def load(*args, **kwargs):
+        nonlocal loads
+        loads += 1
+        return original_load(*args, **kwargs)
+
+    def resolve(*args, **kwargs):
+        nonlocal resolutions
+        resolutions += 1
+        return original_resolve(*args, **kwargs)
+
+    monkeypatch.setattr(request_renderer, "load_gbks", load)
+    monkeypatch.setattr(resolver, "resolve_annotation_set", resolve)
+    result = render_embedded_canonical_web_request(
+        document["renderRequest"],
+        resources=document["resources"],
+        workspace=tmp_path / "render",
+    )
+    assert loads == len(records) and resolutions == 1
+    warnings = result["metadata"]["annotationWarnings"]
+    assert len(warnings) == 1
+    warning = warnings[0]
+    assert set(warning) == {
+        "code",
+        "setId",
+        "annotationId",
+        "recordId",
+        "recordIndex",
+        "missingCount",
+        "message",
+        "resultIndex",
+        "resultName",
+    }
+    assert warning["recordIndex"] == (0 if mode == "single" else 1)
+    assert warning["resultIndex"] == (1 if mode == "batch" else 0)
+    assert warning["resultName"] == result["results"][warning["resultIndex"]]["name"]
+    assert warning["missingCount"] == 1
+    assert warning["code"] == "feature_selector_unmatched"
+    assert "PRIVATE-MISSING" not in repr(warnings)
+    assert all(
+        "data-gbdraw-annotation-id" not in item["content"] for item in result["results"]
+    )
