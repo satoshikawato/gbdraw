@@ -1,0 +1,12 @@
+✔ Worker construction and the diagram-generation client have explicit owners (9.130708ms)
+✔ production rendering crosses the canonical request and Worker boundary (1.830068ms)
+✔ History intent and SVG admission have one production ownership path (144.060714ms)
+✔ shared privileged detectors preserve the characterized current-source facts (194.946224ms)
+ℹ tests 4
+ℹ suites 0
+ℹ pass 4
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 692.970911
