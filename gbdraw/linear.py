@@ -1569,6 +1569,10 @@ def run_linear_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
             artifacts=alignment_artifacts,
             include_feature_catalog=include_feature_catalog,
         )
+    for warning in render_result.annotation_warnings:
+        logger.warning("%s: %s/%s record #%s (%s): %s", warning.code,
+            warning.set_id, warning.annotation_id, warning.record_index + 1,
+            warning.record_id, warning.message)
     canvas = render_result.drawing
     interactive_context = render_result.interactive_context
     rendered_svg = make_rendered_svg(out_file_prefix, request_path.name)

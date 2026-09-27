@@ -1,3 +1,4 @@
+import { validateAnnotationWarnings } from '../services/session-feature-metadata.js';
 import { buildSimilarityAlignmentResetReceipt, validateSimilarityAlignmentResetReceipt } from '../services/session-active-config-contract.js';
 import { prepareLosatRuntime, runLosatPairsParallel } from '../services/losat.js';
 import { prepareLosatSourceBatches, splitLosatSourceResult } from './linear-sources.js';
@@ -1002,6 +1003,7 @@ export const executeCanonicalRenderCandidate = async ({
     && !Array.isArray(generationResponse.metadata)
     ? generationResponse.metadata
     : {};
+  const annotationWarnings = validateAnnotationWarnings(metadata.annotationWarnings, results);
   recordSessionLifecycleEvent('candidate-result-validation-start');
   const catalogState = catalogAdmission(metadata.featureCatalog, results, {
     adopt: true,
@@ -1028,6 +1030,7 @@ export const executeCanonicalRenderCandidate = async ({
     status: 'ok',
     generationResponse,
     generationMetadata: metadata,
+    annotationWarnings,
     results,
     catalogAdmission: catalogState,
     catalog: catalogState.catalog,
@@ -1038,6 +1041,7 @@ export const executeCanonicalRenderCandidate = async ({
 
 export const createRunAnalysis = ({
   state,
+  rulePreparation = null,
   isCurrentFeature,
   serializeCanonicalFiles,
   canonicalSessionVersion,
@@ -1846,8 +1850,10 @@ export const createRunAnalysis = ({
     generatedArtifactHandle = null,
     comparisonExecution = null
   } = {}) => {
-    const runState = state;
+    const runState = { ...state };
     const { linearSeqs } = runState;
+    let colorCandidate = null;
+    let candidateRules = manualSpecificRules;
     const isReflow = runMode === 'reflow';
     if (!isReflow) {
       recordSessionLifecycleEvent('generate-start');
@@ -2091,6 +2097,13 @@ export const createRunAnalysis = ({
     labelOverrideBuildWarning.value = '';
 
     try {
+      if (rulePreparation) {
+        colorCandidate = await rulePreparation.prepareCandidate(manualSpecificRules);
+        throwIfGenerationCanceled();
+        if (!colorCandidate || generationToken !== latestGenerationToken) return { status: 'stale' };
+        candidateRules = colorCandidate.rules;
+        runState.manualSpecificRules = candidateRules;
+      }
       if (mode.value === 'linear') {
         if (!activeComparisonPlanSnapshot || !Array.isArray(activeComparisonPlanSnapshot.edges)) {
           throw new Error('A resolved Linear comparison plan is required.');
@@ -2235,7 +2248,7 @@ export const createRunAnalysis = ({
         stageTextFile('/combined_d.tsv', `${dContent}\n`);
       }
 
-      const tContent = serializeSpecificRules(manualSpecificRules);
+      const tContent = serializeSpecificRules(candidateRules);
       if (tContent.trim() !== '') {
         stageTextFile('/combined_t.tsv', tContent);
       }
@@ -4592,7 +4605,8 @@ export const createRunAnalysis = ({
         canonical,
         mode: mode.value,
         kind: isReflow ? 'reflow' : 'generate',
-        shouldAdmit: () => generationToken === latestGenerationToken
+        shouldAdmit: () => (!colorCandidate || rulePreparation.isCurrent(colorCandidate.snapshot))
+          && generationToken === latestGenerationToken
           && (isReflow || !generationCancelRequested.value),
         onProgress: ({ stage }) => {
           const message = {
@@ -4605,7 +4619,7 @@ export const createRunAnalysis = ({
         },
         prepareCommit: isReflow ? prepareReflowCommit : prepareCandidateCommit,
         prepareCommitInput: isReflow ? {
-          featureColorOverrides,
+          featureColorOverrides: colorCandidate?.featureColorOverrides || featureColorOverrides,
           featureStrokeOverrides,
           featureVisibilityOverrides,
           labelTextFeatureOverrides,
@@ -4616,10 +4630,10 @@ export const createRunAnalysis = ({
           addedLegendCaptions: addedLegendCaptions.value,
           legendColorOverrides,
           legendStrokeOverrides,
-          manualSpecificRules
+          manualSpecificRules: candidateRules
         } : {
           sourceReplaced,
-          featureColorOverrides,
+          featureColorOverrides: colorCandidate?.featureColorOverrides || featureColorOverrides,
           featureStrokeOverrides,
           featureVisibilityOverrides,
           labelTextFeatureOverrides,
@@ -4630,7 +4644,7 @@ export const createRunAnalysis = ({
           addedLegendCaptions: addedLegendCaptions.value,
           legendColorOverrides,
           legendStrokeOverrides,
-          manualSpecificRules
+          manualSpecificRules: candidateRules
         },
         timingEntries: postGbdrawTimingEntries
       });
@@ -4752,6 +4766,9 @@ export const createRunAnalysis = ({
             ? candidateCommit.featureState.collinearGroups
             : [],
           trackSlotResolvedGeometry: generationMetadata.trackSlotGeometry || null,
+          annotationWarnings: canonicalExecution.annotationWarnings,
+          specificRules: candidateRules,
+          fileLegendCaptions: new Set(candidateRules.filter(rule => rule.fromFile && rule.cap).map(rule => rule.cap)),
           proteinIdentityManifest: workingProteinIdentityManifest,
           legacyProteinRawCandidates: workingLegacyProteinRawCandidates,
           legacyProteinDerivedEvidence: workingLegacyProteinDerivedEvidence,
@@ -4933,6 +4950,7 @@ export const createRunAnalysis = ({
           );
         }
       }
+      if (colorCandidate) rulePreparation.notifyChanges(colorCandidate);
       return {
         status: 'ok',
         generatedArtifactCandidate: activatedGeneratedArtifactCandidate
@@ -5190,6 +5208,7 @@ export const createRunAnalysis = ({
           : [],
         trackSlotResolvedGeometry:
           execution.generationMetadata.trackSlotGeometry || null,
+        annotationWarnings: execution.annotationWarnings,
         matchSequenceOwner: matchSequenceRegistry?.buildTrustedOwner?.(
           candidateCommit.featureState.sequenceSources
         ) || currentOwnerSet.matchSequenceOwner,

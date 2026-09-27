@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import csv
+import logging
 from dataclasses import fields
 from pathlib import Path
 from typing import Literal
@@ -21,6 +23,9 @@ from .models import (
     RegionAnnotationStyle,
     parse_feature_selector,
 )
+
+
+logger = logging.getLogger(__name__)
 
 
 ANNOTATION_TABLE_REQUIRED_COLUMNS = frozenset({"set_id", "id", "mark"})
@@ -217,6 +222,16 @@ def _target(
     )
 
 
+def _validate_header(columns) -> list[str]:
+    header = [str(column).strip().lstrip("\ufeff").strip() for column in columns]
+    missing = ANNOTATION_TABLE_REQUIRED_COLUMNS - set(header)
+    if missing:
+        raise ValidationError(f"Annotation table is missing required columns: {', '.join(sorted(missing))}.")
+    if len(set(header)) != len(header):
+        raise ValidationError("Annotation table has duplicate columns after normalization.")
+    return header
+
+
 def annotation_sets_from_dataframe(
     dataframe: DataFrame,
     *,
@@ -226,16 +241,11 @@ def annotation_sets_from_dataframe(
 
     if not isinstance(dataframe, DataFrame):
         raise ValidationError("Annotation table must be a pandas DataFrame.")
-    columns = {str(column).strip() for column in dataframe.columns}
-    missing = ANNOTATION_TABLE_REQUIRED_COLUMNS - columns
-    if missing:
-        raise ValidationError(f"Annotation table is missing required columns: {', '.join(sorted(missing))}.")
-    unknown = columns - ANNOTATION_TABLE_COLUMNS
-    if unknown:
-        raise ValidationError(f"Annotation table has unknown columns: {', '.join(sorted(unknown))}.")
-
+    header = _validate_header(dataframe.columns)
+    unknown = [column for column in header if column not in ANNOTATION_TABLE_COLUMNS]
     normalized = dataframe.copy()
-    normalized.columns = [str(column).strip() for column in dataframe.columns]
+    normalized.columns = header
+    normalized = normalized.loc[:, [column for column in header if column in ANNOTATION_TABLE_COLUMNS]]
     grouped: dict[str, list[RegionAnnotation]] = {}
     for row_index, row in normalized.iterrows():
         row_number = int(row_index) + 2 if isinstance(row_index, int) else len(sum(grouped.values(), [])) + 2
@@ -269,7 +279,13 @@ def annotation_sets_from_dataframe(
             raise ValidationError(f"Annotation table row {row_number}: {exc}") from exc
         grouped.setdefault(set_id, []).append(annotation)
 
-    return tuple(AnnotationSet(id=set_id, annotations=tuple(items)) for set_id, items in grouped.items())
+    sets = tuple(AnnotationSet(id=set_id, annotations=tuple(items)) for set_id, items in grouped.items())
+    if unknown:
+        logger.warning(
+            "Ignored annotation table columns: %s. These columns are not saved in Sessions or TSV re-export.",
+            ", ".join(unknown),
+        )
+    return sets
 
 
 def read_annotation_table(
@@ -280,10 +296,21 @@ def read_annotation_table(
     """Read a UTF-8 TSV annotation table into typed annotation sets."""
 
     try:
-        dataframe = pd.read_csv(path, sep="\t", dtype=str, keep_default_na=False)
-    except Exception as exc:
+        with Path(path).open(encoding="utf-8-sig", newline="") as handle:
+            rows = (row for row in csv.reader(handle, delimiter="\t", strict=True) if any(cell.strip() for cell in row))
+            header = _validate_header(next(rows, []))
+            values = []
+            for row_number, row in enumerate(rows, start=2):
+                if len(row) != len(header):
+                    raise ValidationError(
+                        f"Annotation table row {row_number}: expected {len(header)} columns, got {len(row)}."
+                    )
+                values.append(row)
+    except ValidationError:
+        raise
+    except (OSError, UnicodeError, csv.Error) as exc:
         raise ValidationError(f"Unable to read annotation table {str(path)!r}: {exc}") from exc
-    return annotation_sets_from_dataframe(dataframe, mode=mode)
+    return annotation_sets_from_dataframe(pd.DataFrame(values, columns=header), mode=mode)
 
 
 __all__ = [

@@ -250,6 +250,7 @@ export const createAppSetup = () => {
     failedGeneratePreservedResult,
     resultPanelTab,
     lastRunInfo,
+    annotationWarnings,
     pairwiseMatchFactors,
     matchSequenceRegistry,
     svgContent,
@@ -1251,14 +1252,17 @@ export const createAppSetup = () => {
   } = createPanZoom(state);
   const { startResizing } = createSidebarResize(state);
 
+  const specificRuleNotice = ref('');
   const ruleMatchingPending = ref(false);
   const rulePreparation = createRulePreparation({
     state,
     pending: ruleMatchingPending,
+    notify: notice => { specificRuleNotice.value = notice; },
     evaluate: async (payload) => (await runDiagramHelperOperation(DIAGRAM_HELPER_OPERATIONS.EVALUATE_RULES, payload)).result
   });
   const legendActions = createLegendManager({
     state,
+    commitSpecificRules: (...args) => featureActions.commitSpecificRules(...args),
     rulePreparation,
     history,
     previewRuntime
@@ -1387,7 +1391,11 @@ export const createAppSetup = () => {
   const circularConservationFastaInput = ref(null);
   const circularTrackSlotEditor = createCircularTrackSlotEditor({ state });
   const linearTrackSlotEditor = createLinearTrackSlotEditor({ state });
-  const annotationEditor = createAnnotationEditor({ state, getRecordCatalog: getAnnotationRecordCatalog });
+  const annotationImportNotice = ref('');
+  const annotationEditor = createAnnotationEditor({
+    state, getRecordCatalog: getAnnotationRecordCatalog,
+    onImportNotice: (notice) => { annotationImportNotice.value = notice; }
+  });
   watch(
     () => {
       const catalog = getAnnotationRecordCatalog();
@@ -2267,6 +2275,7 @@ export const createAppSetup = () => {
     restoreGeneratedArtifactRuntimeState
   } = createRunAnalysis({
     state,
+    rulePreparation,
     isCurrentFeature: recordDisplayControls.isCurrentFeature,
     serializeCanonicalFiles: (comparisonPlanSnapshot, linearRecordCatalog, runState) => (
       serializeActiveRenderFiles(runState.mode.value, runState, {
@@ -2467,6 +2476,8 @@ export const createAppSetup = () => {
         if (!await history.initializeIntentBaseline('Loaded session', { isCurrent: result.isCurrent })) {
           throw new Error('Session loading canceled.');
         }
+        annotationImportNotice.value = '';
+        specificRuleNotice.value = '';
         historySnapshots.clearGeneratedArtifactIdentity({
           retainedBytes: result?.status === 'ok'
             ? Number(result.decompressedCharacters || 0) * 2
@@ -4175,6 +4186,7 @@ export const createAppSetup = () => {
     selectResult,
     resultPanelTab,
     lastRunInfo,
+    annotationWarnings,
     runInfoCopyStatus,
     exactReplayCopyStatus,
     svgContent,
@@ -4208,6 +4220,8 @@ export const createAppSetup = () => {
     addSelectedFeatureAnnotations: annotationEditor.addSelectedFeatures,
     removeAnnotation: annotationEditor.removeAnnotation,
     setAnnotationTargetKind: annotationEditor.setAnnotationTargetKind,
+    annotationImportNotice,
+    specificRuleNotice,
     importAnnotationTableFile: undoableAction('Import annotations', annotationEditor.importAnnotationTableFile),
     renameAnnotation: annotationEditor.renameAnnotation,
     setAnnotationStyle: annotationEditor.setAnnotationStyle,

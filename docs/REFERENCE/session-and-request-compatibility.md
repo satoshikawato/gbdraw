@@ -183,16 +183,35 @@ not initialize the diagram Worker or start LOSATP.
 
 A current Session round trip retains exact feature and record identities,
 Select/Skip rationale, record orientation, base translations, and the
-immediate pre-align Reset baseline. Ordinary Generate renders the saved
-plan through the canonical typed path without guessing a new anchor. A stable
+immediate pre-align Reset baseline and trustworthy restoration evidence.
+Ordinary Generate renders the saved plan through the canonical typed path without guessing a new anchor. A stable
 reorder resolves by `recordKey` and biological feature identity. Source
 replacement, crop, selector, and record drag clear the plan with a visible reason.
 Manual Reverse keeps the plan and aligns the same anchors on the next Generate.
-Reset Align restores the immediate pre-align positions and clears the plan while
-keeping record directions unchanged. A stale reference requires Reselect/Clear
-and a stale target requires Select/Skip; pending or failed repair keeps the last
+**Reset alignment…** offers positions only (preserving current directions) or
+positions plus the latest Align's actual direction changes. Combined Reset
+restores absolute pre-Align directions only for those records, including a
+changed reference, and replaces later manual direction edits on those targets.
+Either scope consumes plan and evidence; Undo restores them before another scope
+can be chosen. See [Web Reset](web-app.md#reset-positions-or-directions).
+A stale reference requires Reselect/Clear and a stale target requires Select/Skip; pending or failed repair keeps the last
 successful Result. Undo/Redo restores the complete artifact. Preview-only guides,
 candidate markers, and recommendation badges are never saved.
+
+Restoration evidence is stored in `editorState.alignmentResetReceipt`, separately
+from the direction-independent plan. It binds source bytes, record/selector/crop
+identity and exact anchors, and stores only actual absolute direction deltas
+plus any reference x correction. It never stores a review mode or Custom policy.
+Save and fresh Load retain this binding; style regeneration, stable reorder and
+ordinary Reverse do not rewrite the pre-Align directions. Source/selector/crop
+invalidation and record drag clear evidence with the plan.
+
+Supported older Sessions without historical direction evidence retain their
+position baseline, with combined Reset disabled for missing evidence. A current
+receipt with an empty direction list instead reports that the latest Align
+changed no directions. Malformed or stale current evidence is rejected before
+replacing the current artifact; it is not silently dropped. Session version 44,
+request schema 8 and plan schema 2 remain unchanged by this restoration data.
 
 In Web **Run Info**, **Source recipe** uses the original input filenames and
 public CLI settings. Keep those original files and download any listed generated

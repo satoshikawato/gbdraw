@@ -287,8 +287,9 @@ print(plan.records[1].rationale.value, relation.value,
 
 Current Session round trips preserve the exact plan and rationale, record
 orientation, and base translations. An active plan survives ordinary
-regeneration; **Reset Align** uses the immediate pre-align base. Supported old
-Sessions enter an isolated reader-only compatibility path and save only the
+regeneration; Web **Reset alignment…** uses the immediate pre-align base and
+offers optional restoration of the directions actually changed by that Align.
+Supported old Sessions enter an isolated reader-only compatibility path and save only the
 current typed representation. See [Session and request compatibility](session-and-request-compatibility.md#similarity-alignment-request-ownership).
 
 ## Combined rotation and placement example

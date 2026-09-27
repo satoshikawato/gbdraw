@@ -392,3 +392,20 @@ for (const change of [
 for (const version of [27, 33, 39, 40, 43]) {
   assert.throws(() => validateSessionAuthorityInventory(compositeSession(), version), /requires session version 41/);
 }
+
+const { validateAnnotationWarnings } = await import(pathToFileURL(join(repoRoot, 'gbdraw/web/js/services/session-feature-metadata.js')));
+const warning = { code: 'feature_selector_unmatched', setId: 's', annotationId: 'a',
+  recordId: 'same', recordIndex: 1, missingCount: 2, message: 'Skipped annotation: 2 feature selector(s) unmatched.',
+  resultIndex: 0, resultName: 'out.svg' };
+const warningResults = [{ name: 'out.svg', content: '<svg />' }];
+const warningList = [warning];
+assert.equal(validateAnnotationWarnings(warningList, warningResults), warningList);
+assert.deepEqual(validateAnnotationWarnings(undefined, warningResults), []);
+for (const invalid of [
+  null, {}, [null], [{ ...warning, unknown: true }], [{ ...warning, missingCount: 0 }],
+  [{ ...warning, missingCount: 1.5 }], [{ ...warning, recordIndex: -1 }],
+  [{ ...warning, recordIndex: true }], [{ ...warning, code: 'unknown' }],
+  [{ ...warning, resultName: 'stale.svg' }], [{ ...warning, resultIndex: 1 }],
+  [{ ...warning, annotationId: '' }], [{ ...warning, message: {} }]
+]) assert.throws(() => validateAnnotationWarnings(invalid, warningResults), /Result metadata schema/);
+assert.doesNotThrow(() => validateAnnotationWarnings([{ ...warning, code: 'empty_span', missingCount: 0 }], warningResults));

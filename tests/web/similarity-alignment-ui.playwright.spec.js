@@ -1309,6 +1309,9 @@ test('Gallery explicit directions own receipts, Reset scopes, fresh Load and rib
     },canvas);
     console.log('S02 compact canvas hit',JSON.stringify(hit));
     expect(hit.inside).toBe(true);
+    expect(await page.evaluate(box => [25, 100, 175].map(offset => Boolean(
+      document.elementFromPoint(box.x + box.width / 2, box.y + offset)?.closest('.preview-canvas')
+    )), canvas)).toEqual([true, true, true]);
     for (const control of [apply, dialog.getByRole('button', { name: 'Cancel', exact: true })]) {
       expect(await control.evaluate(element => {
         const box = element.getBoundingClientRect();
@@ -1345,7 +1348,8 @@ test('Gallery explicit directions own receipts, Reset scopes, fresh Load and rib
   await page.waitForFunction(() => !window.__GBDRAW_APP__.similarityAlignmentBusy, null, { timeout: 180000 });
   const applyStatus = await page.evaluate(() => ({ status: window.__GBDRAW_APP__.similarityAlignmentStatus,
     error: window.__GBDRAW_APP__.similarityAlignmentError?.message, globalError: window.__GBDRAW_APP__.errorLog }));
-  expect(applyStatus, JSON.stringify(applyStatus)).toMatchObject({ status: 'idle' });
+  expect(applyStatus, JSON.stringify(applyStatus)).toMatchObject({ status: 'idle', globalError: null });
+  await expect(page.getByRole('alert', { name: 'Generation Error' })).toHaveCount(0);
   await expect(dialog).toBeHidden({ timeout: 180000 });
   const applied = await recordState();
   console.log('S02 Gallery: applied');
@@ -1541,6 +1545,73 @@ test('Gallery explicit directions own receipts, Reset scopes, fresh Load and rib
   await page.keyboard.press('Escape');
   expect(await downloadFormat('PNG', 'closed')).toEqual(reviewPng);
   expect(await downloadFormat('PDF', 'closed')).toEqual(reviewPdf);
+  // Reference-only Custom Align C preserves pending form and anchor-center x.
+  const beforeC=await recordState(freshPage);
+  const referenceCenter=()=>freshPage.evaluate(async anchor=>{
+    const {getFeatureFillElements}=await import('./js/app/feature-dom.js');
+    const app=window.__GBDRAW_APP__;
+    const feature=app.extractedFeatures.find(item=>item.recordKey===anchor.recordKey && item.biologicalFeatureId===anchor.biologicalFeatureId);
+    const svg=document.querySelector('.gbdraw-preview-surface svg');
+    const bounds=getFeatureFillElements(svg,feature.svg_id).map(element=>element.getBoundingClientRect());
+    const screenX=(Math.min(...bounds.map(box=>box.left))+Math.max(...bounds.map(box=>box.right)))/2;
+    const screenY=(Math.min(...bounds.map(box=>box.top))+Math.max(...bounds.map(box=>box.bottom)))/2;
+    // S01 placement facts exclude automatic composition/viewBox fitting.
+    // Remove that admitted global placement as well as viewport pan/zoom.
+    const {parseCompositionMetadata}=await import('./js/app/legend-layout/composition-actions.js');
+    const automaticX=parseCompositionMetadata(svg).primary.automaticTranslation[0];
+    return new DOMPoint(screenX,screenY).matrixTransform(svg.getScreenCTM().inverse()).x-automaticX;
+  },saved.plan.reference);
+  const centerBeforeC=await referenceCenter();
+  const referenceFeature=await freshPage.evaluate(anchor=>window.__GBDRAW_APP__.extractedFeatures
+    .find(item=>item.recordKey===anchor.recordKey && item.biologicalFeatureId===anchor.biologicalFeatureId).svg_id,saved.plan.reference);
+  await freshPage.locator(`[data-gbdraw-feature-id="${referenceFeature}"]`).first().dispatchEvent('click',{clientX:-100,clientY:-100});
+  await freshPage.locator('.feature-popup[role="dialog"]').getByRole('button',{name:'Review alignment options…'}).click();
+  const customReview=freshPage.getByRole('dialog',{name:'Select alignment anchors'});
+  await expect(customReview).toBeVisible({timeout:180000});
+  const unresolvedC=await freshPage.evaluate(()=>window.__GBDRAW_APP__.similarityAlignmentDraft.rows.filter(row=>!row.choice).map(row=>row.recordKey));
+  for(const key of unresolvedC)await customReview.locator(`[data-alignment-record-key="${key}"]`).getByRole('radio',{name:/Select .*bp, strand/}).first().check();
+  await freshPage.evaluate(()=>{
+    window.__GBDRAW_APP__.form.prefix='pending-unapplied-prefix';
+    window.__S02FinalBatches=0;
+    const postMessage=Worker.prototype.postMessage;
+    Worker.prototype.postMessage=function(message,transfer){
+      if(message.type==='helper' && message.operation==='resolveSimilarityAlignment')window.__S02FinalBatches++;
+      return postMessage.call(this,message,transfer);
+    };
+  });
+  console.log('S02 Gallery: Custom reference review ready');
+  await customReview.getByRole('radio',{name:'Custom',exact:true}).check();
+  await customReview.getByLabel(`Direction for ${saved.plan.reference.recordKey}`,{exact:true}).selectOption('right');
+  expect(await freshPage.evaluate(()=>window.__S02FinalBatches)).toBe(0);
+  const referencePreview=await freshPage.evaluate(()=>window.__GBDRAW_APP__.similarityAlignmentDirectionPreview.reference);
+  expect(Math.abs(referencePreview.beforeX-centerBeforeC)).toBeLessThanOrEqual(0.5);
+  await customReview.getByRole('button',{name:'Apply',exact:true}).click();
+  await freshPage.waitForFunction(()=>!window.__GBDRAW_APP__.similarityAlignmentBusy,null,{timeout:180000});
+  expect(await freshPage.evaluate(()=>window.__S02FinalBatches)).toBe(1);
+  if(await freshPage.evaluate(()=>window.__GBDRAW_APP__.similarityAlignmentError?.message.includes('Validated directions or reference placement changed'))) {
+    expect((await recordState(freshPage)).historyCount).toBe(beforeC.historyCount);
+    await customReview.getByRole('button',{name:'Apply',exact:true}).click();
+    await freshPage.waitForFunction(()=>!window.__GBDRAW_APP__.similarityAlignmentBusy,null,{timeout:180000});
+    expect(await freshPage.evaluate(()=>window.__S02FinalBatches)).toBe(2);
+  }
+  await expect(customReview).toBeHidden({timeout:180000});
+  const afterC=await recordState(freshPage);
+  expect(afterC.historyCount).toBe(beforeC.historyCount+1);
+  expect(afterC.receipt.directions).toEqual([{recordKey:saved.plan.reference.recordKey,before:false,after:true}]);
+  expect(afterC.receipt.referenceDeltaX.recordKey).toBe(saved.plan.reference.recordKey);
+  const centerAfterC=await referenceCenter();
+  console.log('S02 reference logical canvas centers',JSON.stringify({before:centerBeforeC,after:centerAfterC,receipt:afterC.receipt.referenceDeltaX}));
+  expect(Math.abs(centerAfterC-centerBeforeC)).toBeLessThanOrEqual(0.5);
+  expect(await freshPage.evaluate(()=>window.__GBDRAW_APP__.form.prefix)).toBe('pending-unapplied-prefix');
+  expect((await freshPage.evaluate(async()=>{const {getCommittedCanonicalSession}=await import('./js/services/config.js');return getCommittedCanonicalSession().renderRequest.output.prefix;})))
+    .not.toBe('pending-unapplied-prefix');
+  expect((await freshPage.evaluate(()=>window.__GBDRAW_APP__.resetSimilarityAlignment('positions-and-directions'))).status).toBe('ok');
+  expect((await recordState(freshPage)).orientations).toEqual(beforeC.orientations);
+  expect(await freshPage.evaluate(()=>window.__GBDRAW_APP__.form.prefix)).toBe('pending-unapplied-prefix');
+  await freshPage.evaluate(()=>window.__GBDRAW_HISTORY__.undo());
+  expect((await recordState(freshPage)).receipt).toEqual(afterC.receipt);
+  await freshPage.evaluate(()=>window.__GBDRAW_HISTORY__.redo());
+  expect((await recordState(freshPage)).receipt).toBeNull();
   await expectNoUnhandledRejections(page);
   await expectNoUnhandledRejections(freshPage);
   expect(pageErrors).toEqual([]);
