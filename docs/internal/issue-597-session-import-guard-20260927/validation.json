@@ -1,0 +1,495 @@
+{
+  "checkout": "/tmp/gbdraw-issue597-session-import-guard-20260927",
+  "branch": "fix/issue-597-session-import-guard-20260927",
+  "startHead": "27939faebd4728c5aa52c9524d14ad0c3244190b",
+  "actualRemote": "27939faebd4728c5aa52c9524d14ad0c3244190b\trefs/heads/dev\nc3ae518b914024d1299c1f3f6487640c8a2fbaaf\trefs/heads/fix/issue-597-input-session-20260926\n",
+  "invocations": [
+    {
+      "name": "policy-before",
+      "command": [
+        "node",
+        "tools/check-web-change-budget.mjs",
+        "--base",
+        "origin/dev"
+      ],
+      "cwd": "/tmp/gbdraw-issue597-session-import-guard-20260927",
+      "exit": 0,
+      "log": "docs/internal/issue-597-session-import-guard-20260927/logs/policy-before.log",
+      "sha256": "b945ddc19c0c16c252e09a1e8f062f17d160c95649ef3f58e1ce772b0ac1b785",
+      "rawLog": "/tmp/issue597-session-import-guard-20260927-evidence/policy-before.log"
+    },
+    {
+      "name": "trusted-dev-focused",
+      "command": [
+        "node",
+        "--test",
+        "--test-name-pattern=Worker construction and the diagram-generation client have explicit owners|shared privileged detectors preserve the characterized current-source facts|production rendering crosses the canonical request and Worker boundary|History intent and SVG admission have one production ownership path",
+        "tests/web/architecture-contracts.test.mjs"
+      ],
+      "cwd": "/tmp/gbdraw-issue597-session-import-guard-20260927",
+      "exit": 0,
+      "log": "docs/internal/issue-597-session-import-guard-20260927/logs/trusted-dev-focused.log",
+      "sha256": "4aeb4aa59fc7ba358caccf44553003c3e30f4495463da23ad47e1781e1f7003e",
+      "rawLog": "/tmp/issue597-session-import-guard-20260927-evidence/trusted-dev-focused.log",
+      "summary": {
+        "tests": 4,
+        "pass": 4,
+        "fail": 0
+      }
+    },
+    {
+      "name": "architecture-full",
+      "command": [
+        "node",
+        "--test",
+        "tests/web/architecture-contracts.test.mjs"
+      ],
+      "cwd": "/tmp/gbdraw-issue597-session-import-guard-20260927",
+      "exit": 0,
+      "log": "docs/internal/issue-597-session-import-guard-20260927/logs/architecture-full.log",
+      "sha256": "7747ed4600f0bce5c37e4f40264e0818778c93f2abd668a368b98e7895738042",
+      "rawLog": "/tmp/issue597-session-import-guard-20260927-evidence/architecture-full.log",
+      "summary": {
+        "tests": 139,
+        "pass": 139,
+        "fail": 0
+      }
+    },
+    {
+      "name": "guard-fixtures",
+      "command": [
+        "node",
+        "--test",
+        "tests/web/architecture-ratchet-fixtures.test.mjs",
+        "tests/web/product-impact-ratchet-fixtures.test.mjs",
+        "tests/web/promotion-readiness.test.mjs",
+        "tests/web/web-promotion-context.test.mjs"
+      ],
+      "cwd": "/tmp/gbdraw-issue597-session-import-guard-20260927",
+      "exit": 0,
+      "log": "docs/internal/issue-597-session-import-guard-20260927/logs/guard-fixtures.log",
+      "sha256": "b2dadbab97ce153ec29b782fd6f3b205f7cb95d4578a7c553488e9d1aa599957",
+      "rawLog": "/tmp/issue597-session-import-guard-20260927-evidence/guard-fixtures.log",
+      "summary": {
+        "tests": 78,
+        "pass": 78,
+        "fail": 0
+      }
+    },
+    {
+      "name": "ci-contracts",
+      "command": [
+        "node",
+        "--test",
+        "tests/ci/ci-impact-cli.test.mjs",
+        "tests/ci/ci-impact-gate.test.mjs",
+        "tests/ci/ci-impact-policy.test.mjs",
+        "tests/ci/playwright-inventory.test.mjs",
+        "tests/ci/release-workflow.test.mjs"
+      ],
+      "cwd": "/tmp/gbdraw-issue597-session-import-guard-20260927",
+      "exit": 1,
+      "log": "docs/internal/issue-597-session-import-guard-20260927/logs/ci-contracts.log",
+      "sha256": "0eeb9b4f0ca0b50db630e0e98c8fe6de718462305aa6b15218efce969aa7d6bd",
+      "rawLog": "/tmp/issue597-session-import-guard-20260927-evidence/ci-contracts.log",
+      "summary": {
+        "tests": 64,
+        "pass": 63,
+        "fail": 1
+      }
+    },
+    {
+      "name": "ci-contracts-corrected",
+      "command": [
+        "node",
+        "--test",
+        "tests/ci/ci-impact-cli.test.mjs",
+        "tests/ci/ci-impact-gate.test.mjs",
+        "tests/ci/ci-impact-policy.test.mjs",
+        "tests/ci/playwright-inventory.test.mjs",
+        "tests/ci/release-workflow.test.mjs"
+      ],
+      "cwd": "/tmp/gbdraw-issue597-session-import-guard-20260927",
+      "exit": 0,
+      "log": "docs/internal/issue-597-session-import-guard-20260927/logs/ci-contracts-corrected.log",
+      "sha256": "81e3b8cf1c2c915f5ff4a738428201785e0fb68707289ccb8cf46b0c5711a73a",
+      "rawLog": "/tmp/issue597-session-import-guard-20260927-evidence/ci-contracts-corrected.log",
+      "summary": {
+        "tests": 65,
+        "pass": 65,
+        "fail": 0
+      }
+    },
+    {
+      "name": "web-node-pr",
+      "command": [
+        "node",
+        "--test",
+        "tests/web/alignment-direction-projection.test.mjs",
+        "tests/web/alignment-reset-receipt.test.mjs",
+        "tests/web/annotations.test.mjs",
+        "tests/web/app-lifecycle-contract.test.mjs",
+        "tests/web/architecture-ratchet-fixtures.test.mjs",
+        "tests/web/candidate-render.test.mjs",
+        "tests/web/circular-label-slot-exclusions.test.mjs",
+        "tests/web/circular-track-slots.test.mjs",
+        "tests/web/cloudflare-worker.test.mjs",
+        "tests/web/color-utils.test.mjs",
+        "tests/web/comparison-ui.test.mjs",
+        "tests/web/composition-layout.test.mjs",
+        "tests/web/composition-runtime-parity.test.mjs",
+        "tests/web/current-option-values.test.mjs",
+        "tests/web/definition-layout-completion.test.mjs",
+        "tests/web/definition-line-style-state.test.mjs",
+        "tests/web/depth-track-state.test.mjs",
+        "tests/web/diagram-generation-worker.test.mjs",
+        "tests/web/diagram-resource-recovery.test.mjs",
+        "tests/web/diagram-resource-staging.test.mjs",
+        "tests/web/error-normalization.test.mjs",
+        "tests/web/feature-anchor.test.mjs",
+        "tests/web/feature-catalog.test.mjs",
+        "tests/web/feature-color-actions.test.mjs",
+        "tests/web/feature-display-boundaries.test.mjs",
+        "tests/web/feature-fill-targets.test.mjs",
+        "tests/web/feature-label-visual-unit.test.mjs",
+        "tests/web/feature-override-identity.test.mjs",
+        "tests/web/feature-popup-record-rotation.test.mjs",
+        "tests/web/feature-record-rotation.test.mjs",
+        "tests/web/feature-selection.test.mjs",
+        "tests/web/feature-selector.test.mjs",
+        "tests/web/feature-shapes.test.mjs",
+        "tests/web/feature-visibility-actions.test.mjs",
+        "tests/web/feature-visibility-reconciliation.test.mjs",
+        "tests/web/feature-visibility.test.mjs",
+        "tests/web/file-content-cache.test.mjs",
+        "tests/web/file-imports.test.mjs",
+        "tests/web/gallery-session-migration.test.mjs",
+        "tests/web/gallery-session-publication.test.mjs",
+        "tests/web/generation-feedback.test.mjs",
+        "tests/web/generation-status.test.mjs",
+        "tests/web/history-canonical-owner.test.mjs",
+        "tests/web/history-config-restore.test.mjs",
+        "tests/web/history-inputs.test.mjs",
+        "tests/web/history.test.mjs",
+        "tests/web/imported-comparison-intent.test.mjs",
+        "tests/web/joint-display-placement.test.mjs",
+        "tests/web/layout-preferences.test.mjs",
+        "tests/web/legend-layout-actions.test.mjs",
+        "tests/web/legend-sync.test.mjs",
+        "tests/web/linear-comparisons.test.mjs",
+        "tests/web/linear-label-visibility.test.mjs",
+        "tests/web/linear-record-layout.test.mjs",
+        "tests/web/linear-source-defaults.test.mjs",
+        "tests/web/linear-sources.test.mjs",
+        "tests/web/linear-typography.test.mjs",
+        "tests/web/losat-cache.test.mjs",
+        "tests/web/losat-session-schema-contract.test.mjs",
+        "tests/web/losat-settings.test.mjs",
+        "tests/web/match-sequences.test.mjs",
+        "tests/web/mode-profiles.test.mjs",
+        "tests/web/optional-positive-number.test.mjs",
+        "tests/web/orthogroups-stable-identity.test.mjs",
+        "tests/web/pairwise-payload-performance.test.mjs",
+        "tests/web/palette-history-preservation.test.mjs",
+        "tests/web/pr-language.test.mjs",
+        "tests/web/preview-feature-search.test.mjs",
+        "tests/web/preview-runtime.test.mjs",
+        "tests/web/preview-transform-interaction.test.mjs",
+        "tests/web/product-impact-ratchet-fixtures.test.mjs",
+        "tests/web/promotion-readiness.test.mjs",
+        "tests/web/pyodide-startup.test.mjs",
+        "tests/web/record-display-options.test.mjs",
+        "tests/web/record-groups.test.mjs",
+        "tests/web/record-metadata-inference.test.mjs",
+        "tests/web/record-selector.test.mjs",
+        "tests/web/responsiveness-guardrail.test.mjs",
+        "tests/web/result-normalization.test.mjs",
+        "tests/web/right-drawer.test.mjs",
+        "tests/web/rule-matching.test.mjs",
+        "tests/web/run-analysis-derived-cache.test.mjs",
+        "tests/web/run-analysis-simple-path.test.mjs",
+        "tests/web/run-info.test.mjs",
+        "tests/web/runtime-capabilities.test.mjs",
+        "tests/web/session-active-config-contract.test.mjs",
+        "tests/web/session-active-files.test.mjs",
+        "tests/web/session-authority.test.mjs",
+        "tests/web/session-cli-compatibility.test.mjs",
+        "tests/web/session-definition-rehydration.test.mjs",
+        "tests/web/session-draft-authority.test.mjs",
+        "tests/web/session-export-validation.test.mjs",
+        "tests/web/session-feature-metadata.test.mjs",
+        "tests/web/session-file.test.mjs",
+        "tests/web/session-losat-cache-validation.test.mjs",
+        "tests/web/session-regeneration-contract.test.mjs",
+        "tests/web/session-request.test.mjs",
+        "tests/web/session-resource-backing.test.mjs",
+        "tests/web/session-resources.test.mjs",
+        "tests/web/settings-only-session.test.mjs",
+        "tests/web/similarity-alignment-actions.test.mjs",
+        "tests/web/specific-color-actions.test.mjs",
+        "tests/web/svg-result-ingestion.test.mjs",
+        "tests/web/svg-sanitization.test.mjs",
+        "tests/web/svg-style-completion.test.mjs",
+        "tests/web/svg-styles-track-groups.test.mjs",
+        "tests/web/svg-visual-semantics.test.mjs",
+        "tests/web/track-slot-colors.test.mjs",
+        "tests/web/track-slot-display.test.mjs",
+        "tests/web/track-slot-validation.test.mjs",
+        "tests/web/web-promotion-context.test.mjs",
+        "tests/web/zip.test.mjs"
+      ],
+      "cwd": "/tmp/gbdraw-issue597-session-import-guard-20260927",
+      "exit": 0,
+      "log": "docs/internal/issue-597-session-import-guard-20260927/logs/web-node-pr.log",
+      "sha256": "69d3da83ee855d1642ed9e4593488df787823333a197e3cfe33559bc13dea8bc",
+      "rawLog": "/tmp/issue597-session-import-guard-20260927-evidence/web-node-pr.log",
+      "summary": {
+        "tests": 851,
+        "pass": 851,
+        "fail": 0
+      }
+    },
+    {
+      "name": "sequence-source-coverage",
+      "command": [
+        "node",
+        "--test",
+        "--test-concurrency=1",
+        "tests/web/contracts/vibrio-sequence-source-coverage.test.mjs"
+      ],
+      "cwd": "/tmp/gbdraw-issue597-session-import-guard-20260927",
+      "exit": 0,
+      "log": "docs/internal/issue-597-session-import-guard-20260927/logs/sequence-source-coverage.log",
+      "sha256": "03fa7779cb29f998f3168269379c47369f22482141fafc88ee6991dbc4f35033",
+      "rawLog": "/tmp/issue597-session-import-guard-20260927-evidence/sequence-source-coverage.log",
+      "summary": {
+        "tests": 3,
+        "pass": 3,
+        "fail": 0
+      }
+    },
+    {
+      "name": "projection-hepatoplasmataceae",
+      "command": [
+        "node",
+        "tests/web/session-request.test.mjs",
+        "--project-session",
+        "gbdraw/web/gallery/sessions/hepatoplasmataceae_orthogroup.gbdraw-session.json.gz"
+      ],
+      "cwd": "/tmp/gbdraw-issue597-session-import-guard-20260927",
+      "exit": 0,
+      "log": "docs/internal/issue-597-session-import-guard-20260927/logs/projection-hepatoplasmataceae.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "rawLog": "/tmp/issue597-session-import-guard-20260927-evidence/projection-hepatoplasmataceae.log"
+    },
+    {
+      "name": "projection-tobacco",
+      "command": [
+        "node",
+        "tests/web/session-request.test.mjs",
+        "--project-session",
+        "gbdraw/web/gallery/sessions/tobacco-chloroplast.gbdraw-session.json"
+      ],
+      "cwd": "/tmp/gbdraw-issue597-session-import-guard-20260927",
+      "exit": 0,
+      "log": "docs/internal/issue-597-session-import-guard-20260927/logs/projection-tobacco.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "rawLog": "/tmp/issue597-session-import-guard-20260927-evidence/projection-tobacco.log"
+    },
+    {
+      "name": "policy-after",
+      "command": [
+        "node",
+        "tools/check-web-change-budget.mjs",
+        "--base",
+        "origin/dev"
+      ],
+      "cwd": "/tmp/gbdraw-issue597-session-import-guard-20260927",
+      "exit": 0,
+      "gate": "PASS",
+      "reportedReview": "CLEAR",
+      "normativeHumanReview": "REQUIRED: governance/protected characterization change",
+      "rawLog": "/tmp/issue597-session-import-guard-20260927-evidence/policy-after.log",
+      "log": "docs/internal/issue-597-session-import-guard-20260927/logs/policy-after.log",
+      "sha256": "7c2fef2d870bb3ce614f74b9ee1236355873f2619b5bdf3f37f0e0960cf207dc"
+    }
+  ],
+  "overlay": {
+    "invocations": [
+      {
+        "name": "guard-dev-focused",
+        "cwd": "/tmp/gbdraw-issue597-session-import-guard-20260927",
+        "command": [
+          "node",
+          "--test",
+          "--test-name-pattern=Worker construction and the diagram-generation client have explicit owners|shared privileged detectors preserve the characterized current-source facts|production rendering crosses the canonical request and Worker boundary|History intent and SVG admission have one production ownership path",
+          "tests/web/architecture-contracts.test.mjs"
+        ],
+        "exit": 0,
+        "expectedExit": 0,
+        "summary": {
+          "tests": 4,
+          "pass": 4,
+          "fail": 0
+        },
+        "mutation": null,
+        "log": "docs/internal/issue-597-session-import-guard-20260927/logs/guard-dev-focused.log",
+        "sha256": "e84ca46960e4f37c1b3fd5221de4b15e46320bf2b9ac37963bffb4aa32ae60b7",
+        "rawLog": "/tmp/issue597-session-import-guard-20260927-evidence/guard-dev-focused.log"
+      },
+      {
+        "name": "S05-overlay-focused",
+        "cwd": "/tmp/issue597-session-import-guard-20260927-overlay",
+        "command": [
+          "node",
+          "--test",
+          "--test-name-pattern=Worker construction and the diagram-generation client have explicit owners|shared privileged detectors preserve the characterized current-source facts|production rendering crosses the canonical request and Worker boundary|History intent and SVG admission have one production ownership path",
+          "tests/web/architecture-contracts.test.mjs"
+        ],
+        "exit": 0,
+        "expectedExit": 0,
+        "summary": {
+          "tests": 4,
+          "pass": 4,
+          "fail": 0
+        },
+        "mutation": null,
+        "log": "docs/internal/issue-597-session-import-guard-20260927/logs/S05-overlay-focused.log",
+        "sha256": "71106fd08d615f16fc689fb2bbbc11614c11088254a77609c7b822c960a0c6e5",
+        "rawLog": "/tmp/issue597-session-import-guard-20260927-evidence/S05-overlay-focused.log"
+      },
+      {
+        "name": "S05-extra-constructor-rejected",
+        "cwd": "/tmp/issue597-session-import-guard-20260927-overlay",
+        "command": [
+          "node",
+          "--test",
+          "--test-name-pattern=Worker construction and the diagram-generation client have explicit owners|shared privileged detectors preserve the characterized current-source facts",
+          "tests/web/architecture-contracts.test.mjs"
+        ],
+        "exit": 1,
+        "expectedExit": 1,
+        "summary": {
+          "tests": 2,
+          "pass": 0,
+          "fail": 2
+        },
+        "mutation": "Append one new Worker constructor to the exact import client (count 1 -> 2).",
+        "log": "docs/internal/issue-597-session-import-guard-20260927/logs/S05-extra-constructor-rejected.log",
+        "sha256": "626dfd3f12516117ef6137f1b417dfafb8795c28720f83d6c31023dd152575d0",
+        "rawLog": "/tmp/issue597-session-import-guard-20260927-evidence/S05-extra-constructor-rejected.log",
+        "rawSha256": "e160f0e14306200f837176af206ca2af6d16921ac083c663c7b8894645ab70a6",
+        "storedLogTransformation": "Strip trailing spaces/tabs/CR in repository text copy only; original output at rawLog unchanged."
+      },
+      {
+        "name": "S05-extra-owner-rejected",
+        "cwd": "/tmp/issue597-session-import-guard-20260927-overlay",
+        "command": [
+          "node",
+          "--test",
+          "--test-name-pattern=Worker construction and the diagram-generation client have explicit owners|shared privileged detectors preserve the characterized current-source facts",
+          "tests/web/architecture-contracts.test.mjs"
+        ],
+        "exit": 1,
+        "expectedExit": 1,
+        "summary": {
+          "tests": 2,
+          "pass": 0,
+          "fail": 2
+        },
+        "mutation": "Add services/session-import-client-extra.js with one constructor; preserve the exact client.",
+        "log": "docs/internal/issue-597-session-import-guard-20260927/logs/S05-extra-owner-rejected.log",
+        "sha256": "20f9dd4a7867e0217c6d07fc6b6a285f34d1a35ec97f29e895d945e7ebe0e324",
+        "rawLog": "/tmp/issue597-session-import-guard-20260927-evidence/S05-extra-owner-rejected.log",
+        "rawSha256": "08d8ed9872ab43029c892db88a93482d9bf563749f8c25ec04409e07a19e3bd1",
+        "storedLogTransformation": "Strip trailing spaces/tabs/CR in repository text copy only; original output at rawLog unchanged."
+      },
+      {
+        "name": "S05-missing-constructor-rejected",
+        "cwd": "/tmp/issue597-session-import-guard-20260927-overlay",
+        "command": [
+          "node",
+          "--test",
+          "--test-name-pattern=Worker construction and the diagram-generation client have explicit owners|shared privileged detectors preserve the characterized current-source facts",
+          "tests/web/architecture-contracts.test.mjs"
+        ],
+        "exit": 1,
+        "expectedExit": 1,
+        "summary": {
+          "tests": 2,
+          "pass": 0,
+          "fail": 2
+        },
+        "mutation": "Keep exact module present but replace its sole new Worker call with createWorker (count 1 -> 0).",
+        "log": "docs/internal/issue-597-session-import-guard-20260927/logs/S05-missing-constructor-rejected.log",
+        "sha256": "77ac9f4bfcf28d2d140f372b85ab7c2ad3da88db4cdbbc4db79f04e870f723fa",
+        "rawLog": "/tmp/issue597-session-import-guard-20260927-evidence/S05-missing-constructor-rejected.log",
+        "rawSha256": "482c1900a5d571688fb52f504bfa6719de6e51d5640f5845b2940328db72b44c",
+        "storedLogTransformation": "Strip trailing spaces/tabs/CR in repository text copy only; original output at rawLog unchanged."
+      },
+      {
+        "name": "dev-extra-owner-rejected",
+        "cwd": "/tmp/issue597-session-import-guard-20260927-overlay",
+        "command": [
+          "node",
+          "--test",
+          "--test-name-pattern=Worker construction and the diagram-generation client have explicit owners|shared privileged detectors preserve the characterized current-source facts",
+          "tests/web/architecture-contracts.test.mjs"
+        ],
+        "exit": 1,
+        "expectedExit": 1,
+        "summary": {
+          "tests": 2,
+          "pass": 0,
+          "fail": 2
+        },
+        "mutation": "Restore trusted dev JS, remove the two overlay-owned S05 additions, and add services/session-import-client-extra.js with one constructor while the exact client is absent.",
+        "log": "docs/internal/issue-597-session-import-guard-20260927/logs/dev-extra-owner-rejected.log",
+        "sha256": "fa8f9c88926c4100ddbf810aacd279c64d87ebd39ba110c1d5e28614e2b48d84",
+        "rawLog": "/tmp/issue597-session-import-guard-20260927-evidence/dev-extra-owner-rejected.log",
+        "rawSha256": "7dc6186f5b2d3015fd2f634062f433f3bc03bb1bb037d04aeff072a60763d9b2",
+        "storedLogTransformation": "Strip trailing spaces/tabs/CR in repository text copy only; original output at rawLog unchanged."
+      }
+    ],
+    "construction": "Fresh independent clone at base; replace Web JS and index with git archive of S05 SHA; copy only patched architecture test; tools/tests/workflows stay at trusted base. All mutations occur only in disposable overlay.",
+    "priorEvidenceReuse": "Prior S05 performance/browser FAIL and null observations retained as historical results only. Prior guard PASS not reused: latest dev source advanced, so all required guard selections were rerun.",
+    "S05Source": "c3ae518b914024d1299c1f3f6487640c8a2fbaaf",
+    "base": "27939faebd4728c5aa52c9524d14ad0c3244190b"
+  },
+  "environment": {
+    "node": "v26.8.2",
+    "python": "Python 3.13.3",
+    "platform": "Linux 5.15.167.4-microsoft-standard-WSL2 x86_64 GNU/Linux",
+    "playwright": "1.61.1"
+  },
+  "trustedBase": "27939faebd4728c5aa52c9524d14ad0c3244190b",
+  "requiredCI": {
+    "profile": "ci-only / full PR job set from trusted base tools/ci-impact-policy.mjs",
+    "statuses": [
+      "Web base policy (trusted base)",
+      "PR / gate"
+    ],
+    "candidateJobs": [
+      "web-change-budget",
+      "core-pr",
+      "recipes-standard",
+      "gallery",
+      "lint",
+      "web-contracts-pr",
+      "web-pr-smoke"
+    ],
+    "qualification": "Local results are candidate checks, not trusted CI or a review waiver. Final exact-head CI/commit/push/PR state is recorded separately after the one commit."
+  },
+  "dependencyDiagnosis": {
+    "initialCIContracts": "63 PASS / 1 FAIL, MODULE_NOT_FOUND for @playwright/test in the new checkout; original log retained.",
+    "resolution": "npm ci --ignore-scripts using unchanged package-lock.json; 5 packages installed; corrected CI contracts 65 PASS. Python Playwright available. No runtime/package/lockfile change."
+  },
+  "diffReview": {
+    "production": "No changed production files. No owner, canonical path, compatibility path or user-visible continuation changed. OE/PE/CB unchanged; no exception.",
+    "tests": "Exactly four inserted lines in two Worker inventories, full candidate equals saved inert patch applied to current base. Both named mapped bodies identical; exact count assertions retained.",
+    "docsEvidence": "Only new guard-delivery folder, hashes and invocation logs. Existing S05 pinned measurements/results remain unchanged.",
+    "generated": "No tracked generated/public assets changed."
+  },
+  "policyRecordingDiagnosis": "The evidence-recording wrapper incorrectly expected checker Review REQUIRED and raised AssertionError. The checker itself exited 0 and reported Gate PASS / Review CLEAR. Its unchanged implementation does not add an executable review reason for this test-only guard edit. The normative governance human-review requirement remains separate; neither checker nor acceptance was changed. Original policy output retained.",
+  "evidenceDiffDiagnosis": "git diff --cached --check found trailing spaces emitted by Node assertion diagnostics. Normalize only the repository text copies, retain original raw logs externally and store both hashes. No command/source/acceptance rerun needed for this evidence-only formatting change."
+}
