@@ -844,6 +844,7 @@ export const createFeatureColorActions = ({
     if (!features?.length || !normalizeCaption(caption)) return false;
     const rules = featureRuleCandidate(features, color, normalizeCaption(caption), options);
     return ruleActions.commitSpecificRules(rules, 'Change feature color', {
+      previousLegendIntents: options.previousLegendIntents || [],
       afterCommit: () => {
         for (const feature of features) updateClickedFeatureLegendState(feature, getEffectiveLegendCaption(feature), color);
       }
@@ -1019,7 +1020,12 @@ export const createFeatureColorActions = ({
       const siblings = findFeaturesWithSameLegendItem(feat, targetLegendName);
       const allFeatures = [feat, ...siblings];
       if (!(await applyColorToLegendSpecificRules(targetLegendName, color, allFeatures))) {
-        await applyColorToFeatureGroup(allFeatures, targetLegendName, color);
+        // Recoloring the complete caption group replaces its proven default
+        // swatch through the same atomic legend owner as canonical rule edits.
+        const entry = findLegendEntryByCaption(targetLegendName);
+        await applyColorToFeatureGroup(allFeatures, targetLegendName, color, {
+          previousLegendIntents: entry ? [{ caption: entry.caption, color: entry.color }] : []
+        });
       }
     } else if (choice === 'displayLabel') {
       const displayLabel =

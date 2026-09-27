@@ -1952,6 +1952,15 @@ export const createRunAnalysis = ({
         processingStatus.value = String(message || '');
       }
     };
+    const onDiagramProgress = ({ stage }) => {
+      const message = {
+        'preparing-runtime': 'Preparing diagram runtime (first use)...',
+        'preparing-resources': 'Preparing diagram input resources...',
+        rendering: 'Rendering diagram...',
+        finalizing: 'Finalizing diagram results...'
+      }[stage];
+      if (message) setProcessingStatus(message);
+    };
     const throwIfGenerationCanceled = () => {
       if (!isReflow && generationCancelRequested.value) {
         throw new DiagramGenerationCanceledError();
@@ -2093,7 +2102,7 @@ export const createRunAnalysis = ({
 
     try {
       if (rulePreparation) {
-        colorCandidate = await rulePreparation.prepareCandidate(manualSpecificRules);
+        colorCandidate = await rulePreparation.prepareCandidate(manualSpecificRules, { onProgress: onDiagramProgress });
         throwIfGenerationCanceled();
         if (!colorCandidate || generationToken !== latestGenerationToken) return { status: 'stale' };
         candidateRules = colorCandidate.rules;
@@ -4602,15 +4611,7 @@ export const createRunAnalysis = ({
         shouldAdmit: () => (!colorCandidate || rulePreparation.isCurrent(colorCandidate.snapshot))
           && generationToken === latestGenerationToken
           && (isReflow || !generationCancelRequested.value),
-        onProgress: ({ stage }) => {
-          const message = {
-            'preparing-runtime': 'Preparing diagram runtime (first use)...',
-            'preparing-resources': 'Preparing diagram input resources...',
-            rendering: 'Rendering diagram...',
-            finalizing: 'Finalizing diagram results...'
-          }[stage];
-          if (message) setProcessingStatus(message);
-        },
+        onProgress: onDiagramProgress,
         prepareCommit: isReflow ? prepareReflowCommit : prepareCandidateCommit,
         prepareCommitInput: isReflow ? {
           featureColorOverrides: colorCandidate?.featureColorOverrides || featureColorOverrides,

@@ -465,7 +465,8 @@ const runAuxiliaryWorkerRequest = ({
   payload,
   operation = null,
   activeRequests,
-  prepareResources = null
+  prepareResources = null,
+  onProgress = null
 }) => {
   const requestId = nextRequestId;
   nextRequestId += 1;
@@ -481,6 +482,9 @@ const runAuxiliaryWorkerRequest = ({
     let request = null;
     let failureStage = 'initialization';
     try {
+      if (!workerInitialized && typeof onProgress === 'function') {
+        onProgress({ requestId, stage: 'preparing-runtime' });
+      }
       const currentWorker = await ensureWorkerInitialized();
       request = {
         requestId,
@@ -553,7 +557,7 @@ const runAuxiliaryWorkerRequest = ({
   return promise;
 };
 
-export const runDiagramHelperOperation = (operation, payload = {}) => {
+export const runDiagramHelperOperation = (operation, payload = {}, { onProgress = null } = {}) => {
   const normalizedOperation = String(operation || '').trim();
   if (!diagramHelperOperationNames.has(normalizedOperation)) {
     return Promise.reject(
@@ -572,7 +576,8 @@ export const runDiagramHelperOperation = (operation, payload = {}) => {
     prepareResources: projection ? () => resourceTransport.prepare({
       request: payload.projection.canonicalRequest, resources
     }) : null,
-    activeRequests: activeHelperRequests
+    activeRequests: activeHelperRequests,
+    onProgress
   });
 };
 

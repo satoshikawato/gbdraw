@@ -154,3 +154,41 @@ test('biological safety rows and hidden rendered features do not create unused l
   assert.deepEqual(candidate.rules.map(r=>r.cap),['Shared [#112233]','Shared [#445566]']);
   assert.deepEqual(candidate.intents,[]);
 });
+
+
+test('Generate preparation forwards its progress observer through caption and membership evaluation', async () => {
+  const observations = [];
+  const options = { onProgress: event => observations.push(event) };
+  const kinds = [];
+  const { preparation } = setup(async (payload, received) => {
+    assert.equal(received, options);
+    kinds.push(payload.kind);
+    received.onProgress({ stage: 'preparing-runtime', requestId: 17 });
+    return evaluatePythonRules(payload);
+  });
+  const candidate = await preparation.prepareCandidate([
+    { ...rule('NADH'), color: '#112233', cap: 'NADH' }
+  ], options);
+  assert.deepEqual(kinds, ['color-captions', 'color']);
+  assert.equal(candidate.intents[0].caption, 'NADH');
+  assert.equal(observations.length, 2);
+});
+
+
+test('derived comparison cache invalidation keeps prepared colors current while source replacement rejects them', async () => {
+  let release;
+  const gate = new Promise(resolve => { release = resolve; });
+  const { state, preparation } = setup(async payload => {
+    if (payload.kind === 'color-captions') await gate;
+    return evaluatePythonRules(payload);
+  });
+  state.files = { c_gb: {}, t_color: null, linearCanonicalComparisons: [] };
+  const pending = preparation.prepareCandidate([{ ...rule('NADH'), color: '#112233', cap: 'NADH' }]);
+  state.files.linearCanonicalComparisons = [];
+  release();
+  const candidate = await pending;
+  assert.ok(candidate, 'invalidating request-owned comparison reuse cannot invalidate color rules');
+  assert.equal(preparation.isCurrent(candidate.snapshot), true);
+  state.files.c_gb = {};
+  assert.equal(preparation.isCurrent(candidate.snapshot), false, 'replaced biological sources remain guarded');
+});

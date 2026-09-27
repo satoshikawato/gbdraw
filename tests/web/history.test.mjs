@@ -1475,9 +1475,13 @@ const createLayoutPreferences = () => ({
     addedLegendCaptions: ref(new Set()),
     semanticFileWatchersSuppressed: ref(false)
   };
+  state.legendEntries = Object.create({ value: [{ caption: 'tRNA', color: '#e8b441' }] });
+  state.deletedLegendEntries = Object.create({ value: [] });
+  const entryOwners = [{ target: 'feature_legend', entries: [{ caption: 'tRNA', owner: '' }] }];
   const snapshots = createHistorySnapshotService({
     state,
     fileStore,
+    buildLegendEntryOwners: () => entryOwners,
     buildConfigData: () => ({ form: state.form, adv: state.adv }),
     buildFeatureStateData: () => {
       forbiddenArtifactBuilds += 1;
@@ -1497,6 +1501,13 @@ const createLayoutPreferences = () => ({
     }
   });
   const intent = await snapshots.buildHistoryIntent();
+  assert.deepEqual(intent.editorState.legend.entries, [{ caption: 'tRNA', color: '#e8b441' }]);
+  state.legendEntries.value = [{ caption: 'tRNA', color: '#c026d3' }];
+  await snapshots.applyHistoryIntent(intent, { changes: [{ path: ['editorState'] }] });
+  assert.deepEqual(state.legendEntries.value, [{ caption: 'tRNA', color: '#e8b441' }]);
+  entryOwners[0].entries[0].owner = 'specific-color-file';
+  assert.equal(intent.editorState.legend.entryOwners[0].entries[0].owner, '');
+  assert.equal(state.legendEntries.value.some(entry => Object.hasOwn(entry, 'entryOwners')), false);
   assert.equal(forbiddenArtifactBuilds, 0);
   assert.equal(Object.prototype.hasOwnProperty.call(intent, 'results'), false);
   assert.equal(Object.prototype.hasOwnProperty.call(intent, 'runState'), false);

@@ -4197,7 +4197,7 @@ export const exportSession = async (
     resources: canonical.resources,
     webFiles: canonical.webFiles,
     results: logicalResults,
-    runMetadata: {
+    runMetadata: settingsOnly ? {} : {
       ...(state.trackSlotResolvedGeometry.value
         ? { trackSlotGeometry: cloneJsonData(state.trackSlotResolvedGeometry.value) } : {}),
       annotationWarnings: cloneJsonData(state.annotationWarnings.value)
@@ -4333,7 +4333,10 @@ export const importSession = async (e, options = {}) => {
     if (currentSchemaSession) {
       committedCanonicalSession = adoptedCanonicalSession;
       activeSessionResourceTable = currentResourceTable;
-      appliedGenerationIntent = projectAppliedGenerationIntent(adoptedCanonicalSession);
+      appliedGenerationIntent = projectAppliedGenerationIntent(adoptedCanonicalSession, {
+        editorState: projectionResult?.artifactState.editorState,
+        storedConfig: restoredConfig
+      });
     }
     const ui = canonicalSession
       ? {

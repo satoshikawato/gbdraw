@@ -453,12 +453,15 @@ those revised facts. A validation or rendering error shows the underlying
 failure and retains editable choices for retry. Failed, canceled, stale or
 superseded work leaves the previous Result and History intact.
 
-**Cancel** or **Escape** commits nothing and returns focus to the initiating
+**Cancel**, **Escape**, or Close commits nothing and returns focus to the initiating
 control when available. Start again if source, crop, group or committed Result
 changes during review. The review does not trap keyboard focus. On narrow
 screens it docks below the canvas with a scrolling list and reachable footer;
 Editor closes while retaining its tab, cannot reopen during review, and can be
-explicitly reopened afterward. On wide screens the review can be dragged.
+explicitly reopened afterward. The disabled Editor toggle explains why reopening
+is unavailable during review. Short screens may require page and list scrolling
+to reach the footer; narrow reviews cannot be freely dragged. On wide screens
+the review can be dragged.
 
 A successful Apply commits directions, positions and the plan together as one
 History action. Alignment uses the last committed diagram: pending form edits

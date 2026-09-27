@@ -1124,6 +1124,7 @@ export const createAppSetup = () => {
     applyConfigData,
     buildUiStateData,
     applyUiStateData,
+    buildLegendEntryOwners: () => legendActions.captureLegendEntryOwners(),
     buildCompositionIntent: () => {
       const svg = svgContainer.value?.querySelector?.('svg') || null;
       if (!svg) return null;
@@ -1232,7 +1233,7 @@ export const createAppSetup = () => {
     state,
     pending: ruleMatchingPending,
     notify: notice => { specificRuleNotice.value = notice; },
-    evaluate: async (payload) => (await runDiagramHelperOperation(DIAGRAM_HELPER_OPERATIONS.EVALUATE_RULES, payload)).result
+    evaluate: async (payload, options) => (await runDiagramHelperOperation(DIAGRAM_HELPER_OPERATIONS.EVALUATE_RULES, payload, options)).result
   });
   const legendActions = createLegendManager({
     state,
@@ -2557,7 +2558,7 @@ export const createAppSetup = () => {
       reconcileLabelOverrides();
     }
     if (changedDomains.has('editorState')) {
-      reconcileLegendEntries({ restoreColorState: true });
+      reconcileLegendEntries({ restoreColorState: true, entryOwners: _intent.editorState.legend.entryOwners });
       reconcileStrokeOverrides({ changes });
       reconcileLabelOverrides();
     }
