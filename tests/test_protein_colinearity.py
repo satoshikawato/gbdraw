@@ -4064,6 +4064,7 @@ def test_linear_cli_forwards_protein_blastp_options(
             losat_derived_cache_entries=(),
             protein_identity_manifest=None,
             request=resolved,
+            annotation_warnings=(),
         )
 
     monkeypatch.setattr(linear_cli_module, "render_request", fake_render)
@@ -4125,6 +4126,7 @@ def test_linear_cli_forwards_ncbi_blastp_bin(
             losat_derived_cache_entries=(),
             protein_identity_manifest=None,
             request=resolved,
+            annotation_warnings=(),
         )
 
     monkeypatch.setattr(linear_cli_module, "render_request", fake_render)

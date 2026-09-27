@@ -27,7 +27,7 @@
       "read_genbank",
       "read_gff"
     ],
-    "contract_sha256": "863992f788e0aeaff20d7d04b46c6561b333e916a2b0cfde46ff0aa7bb8fd2ae"
+    "contract_sha256": "64f0b8b01f3e630c507bfcbadba61b0c5c5f1d4e43ede238ee30e9ec24dc29bc"
   },
   "circular_cli": {
     "actions_sha256": "7b15a18a76d918aab160088fa3a1e581ad33886bd7040c51326e5d6840363bb9",

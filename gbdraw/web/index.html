@@ -219,6 +219,16 @@
             position: relative;
             z-index: 1;
         }
+        .track-slot-pixel-field .track-slot-geometry-input::placeholder {
+            color: transparent;
+        }
+        .track-slot-pixel-field:focus-within .track-slot-auto-placeholder {
+            display: none;
+        }
+        .track-slot-pixel-field .track-slot-geometry-input:focus::placeholder {
+            color: #94a3b8;
+            opacity: 1;
+        }
         .track-slot-auto-placeholder {
             position: absolute;
             inset: 0;
@@ -2588,9 +2598,11 @@
                         <div class="mt-2 space-y-2 pt-2 border-t border-slate-200">
                             <div class="flex gap-1">
                                 <button type="button" class="btn btn-secondary text-[10px] flex-1" @click="addAnnotationSet()"><i class="ph ph-plus"></i> Add set</button>
-                                <label class="btn btn-secondary text-[10px] flex-1 cursor-pointer"><i class="ph ph-upload-simple"></i> Import TSV<input data-history-managed type="file" accept=".tsv,.tab,.txt,text/tab-separated-values,text/plain" class="hidden" @change="importAnnotationTableFile"></label>
+                                <button type="button" data-history-ignore class="btn btn-secondary text-[10px] flex-1" @click="$refs.annotationTsvInput.click()"><i aria-hidden="true" class="ph ph-upload-simple"></i> Import TSV</button>
+                                <input ref="annotationTsvInput" data-history-managed type="file" accept=".tsv,.tab,.txt,text/tab-separated-values,text/plain" class="hidden" @change="importAnnotationTableFile">
                                 <button type="button" data-history-ignore class="btn btn-secondary text-[10px] flex-1" @click="downloadAnnotationTable()" :disabled="!canDownloadAnnotationTable()" :aria-describedby="!canDownloadAnnotationTable() ? 'annotation-download-help' : null"><i aria-hidden="true" class="ph ph-download-simple"></i> Download TSV</button>
                             </div>
+                            <p role="status" aria-live="polite" aria-atomic="true" class="text-[10px] text-slate-600 break-words">{{ annotationImportNotice }}</p>
                             <p v-if="!canDownloadAnnotationTable()" id="annotation-download-help" class="text-[10px] text-slate-500">Add an annotation row to download TSV.</p>
                             <div v-if="annotationSets.length === 0" class="rounded border border-dashed border-slate-200 p-2 text-[10px] text-slate-400">No annotation sets.</div>
                             <div v-for="set in annotationSets" :key="set.id" class="rounded border border-slate-200 bg-white p-2 space-y-2">
@@ -3008,23 +3020,23 @@
                                                     </div>
                                                     <div class="track-slot-geometry-grid">
                                                         <div class="track-slot-field">
-                                                            <label class="track-slot-field-label">h <help-tip :text="entry.slot.renderer === 'features' ? 'Minimum reserved height for the measured feature band, in pixels. The actual reservation is max(measured, configured); this does not change feature glyph thickness, which is controlled by Feature Height (--feature_height). Auto values vary by record.' : 'Linear track height in pixels. Leave blank for the automatic height.'"></help-tip></label>
-                                                            <div class="track-slot-value-field">
+                                                            <label class="track-slot-field-label">h <help-tip :text="entry.slot.renderer === 'features' ? 'Minimum reserved height for the measured feature band, in pixels (px optional; positive). The actual reservation is max(measured, configured); this does not change feature glyph thickness, which is controlled by Feature Height (--feature_height). Auto values vary by record.' : 'Linear track height in pixels (px optional; positive). Leave blank for the automatic height.'"></help-tip></label>
+                                                            <div class="track-slot-value-field track-slot-pixel-field">
                                                                 <span v-if="!linearTrackSlotGeometryHasManual(entry.slot, 'height')" class="track-slot-auto-placeholder">{{ linearTrackSlotGeometryAutoText(entry.slot, entry.index, 'height') }}</span>
                                                                 <input
                                                                     :value="linearTrackSlotHeightValue(entry.slot)"
                                                                     @input="setLinearTrackSlotHeight(entry.slot, $event.target.value)"
                                                                     class="form-input track-slot-geometry-input px-1 py-0.5 text-[10px]"
-                                                                    title="Height"
+                                                                    title="Height" placeholder="px optional"
                                                                 >
                                                                 <span v-if="linearTrackSlotGeometryUnitSuffix(entry.slot, 'height')" class="track-slot-unit-suffix">{{ linearTrackSlotGeometryUnitSuffix(entry.slot, 'height') }}</span>
                                                             </div>
                                                         </div>
                                                         <div class="track-slot-field">
-                                                            <label class="track-slot-field-label">spacing <help-tip :text="entry.slot.renderer === 'features' ? 'Clearance between the reserved feature band and its adjacent outer track, in pixels. Leave blank for the automatic record-specific value.' : 'Linear vertical spacing after the track, in pixels. Leave blank for the automatic spacing.'"></help-tip></label>
-                                                            <div class="track-slot-value-field">
+                                                            <label class="track-slot-field-label">spacing <help-tip :text="entry.slot.renderer === 'features' ? 'Clearance between the reserved feature band and its adjacent outer track, in pixels (px optional; nonnegative). Leave blank for the automatic record-specific value.' : 'Linear vertical spacing after the track, in pixels (px optional; nonnegative). Leave blank for the automatic spacing.'"></help-tip></label>
+                                                            <div class="track-slot-value-field track-slot-pixel-field">
                                                                 <span v-if="!linearTrackSlotGeometryHasManual(entry.slot, 'spacing')" class="track-slot-auto-placeholder">{{ linearTrackSlotGeometryAutoText(entry.slot, entry.index, 'spacing') }}</span>
-                                                                <input v-model.trim="entry.slot.spacing" class="form-input track-slot-geometry-input px-1 py-0.5 text-[10px]" title="Spacing">
+                                                                <input v-model.trim="entry.slot.spacing" class="form-input track-slot-geometry-input px-1 py-0.5 text-[10px]" title="Spacing" placeholder="px optional">
                                                                 <span v-if="linearTrackSlotGeometryUnitSuffix(entry.slot, 'spacing')" class="track-slot-unit-suffix">{{ linearTrackSlotGeometryUnitSuffix(entry.slot, 'spacing') }}</span>
                                                             </div>
                                                         </div>
@@ -3391,18 +3403,18 @@
                                                             </div>
                                                         </div>
                                                         <div class="track-slot-field">
-                                                            <label class="track-slot-field-label">inner gap <help-tip text="Physical radial gap on the side closer to the center, in pixels. Leave blank for auto."></help-tip></label>
-                                                            <div class="track-slot-value-field">
+                                                            <label class="track-slot-field-label">inner gap <help-tip text="Physical radial gap on the side closer to the center, in pixels (px optional; nonnegative). Leave blank for auto."></help-tip></label>
+                                                            <div class="track-slot-value-field track-slot-pixel-field">
                                                                 <span v-if="!circularTrackSlotGeometryHasManual(entry.slot, 'inner_gap_px')" class="track-slot-auto-placeholder">{{ circularTrackSlotGeometryAutoText(entry.slot, entry.index, 'inner_gap_px') }}</span>
-                                                                <input v-model.trim="entry.slot.inner_gap_px" class="form-input track-slot-geometry-input px-1 py-0.5 text-[10px]" title="Inner gap">
+                                                                <input v-model.trim="entry.slot.inner_gap_px" class="form-input track-slot-geometry-input px-1 py-0.5 text-[10px]" title="Inner gap" placeholder="px optional">
                                                                 <span v-if="circularTrackSlotGeometryUnitSuffix(entry.slot, 'inner_gap_px')" class="track-slot-unit-suffix">{{ circularTrackSlotGeometryUnitSuffix(entry.slot, 'inner_gap_px') }}</span>
                                                             </div>
                                                         </div>
                                                         <div class="track-slot-field">
-                                                            <label class="track-slot-field-label">outer gap <help-tip text="Physical radial gap on the side farther from the center, in pixels. Leave blank for auto."></help-tip></label>
-                                                            <div class="track-slot-value-field">
+                                                            <label class="track-slot-field-label">outer gap <help-tip text="Physical radial gap on the side farther from the center, in pixels (px optional; nonnegative). Leave blank for auto."></help-tip></label>
+                                                            <div class="track-slot-value-field track-slot-pixel-field">
                                                                 <span v-if="!circularTrackSlotGeometryHasManual(entry.slot, 'outer_gap_px')" class="track-slot-auto-placeholder">{{ circularTrackSlotGeometryAutoText(entry.slot, entry.index, 'outer_gap_px') }}</span>
-                                                                <input v-model.trim="entry.slot.outer_gap_px" class="form-input track-slot-geometry-input px-1 py-0.5 text-[10px]" title="Outer gap">
+                                                                <input v-model.trim="entry.slot.outer_gap_px" class="form-input track-slot-geometry-input px-1 py-0.5 text-[10px]" title="Outer gap" placeholder="px optional">
                                                                 <span v-if="circularTrackSlotGeometryUnitSuffix(entry.slot, 'outer_gap_px')" class="track-slot-unit-suffix">{{ circularTrackSlotGeometryUnitSuffix(entry.slot, 'outer_gap_px') }}</span>
                                                             </div>
                                                         </div>
@@ -3840,6 +3852,7 @@
                                     <option v-for="value in specificRuleQualifierSuggestions" :key="`specific-rule-qual-${value}`" :value="value"></option>
                                 </datalist>
 
+                                <p role="status" aria-live="polite" aria-atomic="true" class="mb-2 text-[10px] text-slate-600 break-words">{{ specificRuleNotice }}</p>
                                 <div class="space-y-1 mb-3">
                                     <div v-for="(rule, i) in manualSpecificRules" :key="i" class="bg-white p-1.5 rounded border border-slate-200 text-[10px] space-y-1">
                                         <div class="grid grid-cols-12 gap-1 items-center">
@@ -3881,7 +3894,7 @@
 
                                 <div class="mt-2">
                                     <div class="text-[10px] text-center text-slate-400 mb-1">- OR UPLOAD FILE -</div>
-                                    <file-uploader label="Specific Table (-t)" v-model="files.t_color" :after-change="waitForAuxiliaryFileImport" accept=".tsv,.tab,.txt,text/tab-separated-values,text/plain,text/*" :small="true"></file-uploader>
+                                    <file-uploader label="Specific Table (-t)" v-model="files.t_color" :after-change="waitForAuxiliaryFileImport" :artifact-history="true" accept=".tsv,.tab,.txt,text/tab-separated-values,text/plain,text/*" :small="true"></file-uploader>
                                     <div class="text-[9px] text-slate-400 mt-1">
                                         <help-tip text="TSV file that overrides the color palette for specific features based on qualifiers."></help-tip>
                                         Override colors for specific features.
@@ -4764,6 +4777,14 @@
                     </div>
                 </div>
 
+                <div v-if="annotationWarnings.length && !processing"
+                     role="status" aria-live="polite" aria-atomic="true" data-testid="annotation-resolution-notice"
+                     class="border-b border-amber-200 bg-amber-50 px-5 py-3 text-sm text-amber-900 shrink-0 break-words">
+                    <p class="font-semibold">Skipped {{ annotationWarnings.filter(w => w.code !== 'out_of_bounds_clipped').length }} annotation row(s).</p>
+                    <p v-for="(warning, index) in annotationWarnings" :key="index">
+                        {{ warning.setId }}/{{ warning.annotationId }} · record #{{ warning.recordIndex + 1 }} ({{ warning.recordId }}): {{ warning.message }}
+                    </p>
+                </div>
                 <div v-if="failedGeneratePreservedResult"
                      role="status"
                      class="-mx-4 border-b border-amber-200 bg-amber-50 px-5 py-3 text-sm text-amber-900 shrink-0">
