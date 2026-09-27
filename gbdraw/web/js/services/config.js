@@ -4196,11 +4196,11 @@ export const exportSession = async (
     resources: canonical.resources,
     webFiles: canonical.webFiles,
     results: logicalResults,
-    runMetadata: settingsOnly ? {} : {
+    ...(!settingsOnly ? { runMetadata: {
       ...(state.trackSlotResolvedGeometry.value
         ? { trackSlotGeometry: cloneJsonData(state.trackSlotResolvedGeometry.value) } : {}),
       annotationWarnings: cloneJsonData(state.annotationWarnings.value)
-    },
+    } } : {}),
     features: {
       selectedFeatureRecordIdx: state.selectedFeatureRecordIdx.value,
       featureColorOverrides: cloneJsonData(state.featureColorOverrides),

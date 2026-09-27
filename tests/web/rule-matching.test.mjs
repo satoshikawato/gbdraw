@@ -192,3 +192,46 @@ test('derived comparison cache invalidation keeps prepared colors current while 
   state.files.c_gb = {};
   assert.equal(preparation.isCurrent(candidate.snapshot), false, 'replaced biological sources remain guarded');
 });
+
+
+for (const replace of [
+  state => { state.files.c_gb = new File(['changed bases'], 'same.gb', { lastModified: 123 }); },
+  state => { state.linearSeqs[0].gb = new File(['changed bases'], 'same.gb', { lastModified: 123 }); },
+  state => { state.files.c_conservation_fastas[0] = new File(['changed bases'], 'same.gb', { lastModified: 123 }); }
+]) {
+  test('pending preparation rejects same-named biological replacement, including an in-place source list edit', async () => {
+    let release;
+    const gate = new Promise(resolve => { release = resolve; });
+    const original = new File(['original bases'], 'same.gb', { lastModified: 123 });
+    const { state, preparation } = setup(async payload => {
+      await gate;
+      return { rules: payload.rules };
+    });
+    state.files = { c_gb: original, c_conservation_fastas: [original], t_color: null };
+    state.linearSeqs = [{ gb: original, gff: null, fasta: null }];
+    const catalog = state.extractedFeatures.value;
+    const pending = preparation.prepareCandidate([]);
+    replace(state);
+    release();
+    assert.equal(await pending, null);
+    assert.equal(state.extractedFeatures.value, catalog);
+    assert.deepEqual(state.manualSpecificRules, []);
+  });
+}
+
+
+for (const owner of ['extractedFeatures', 'biologicalFeatures']) {
+  test('pending preparation rejects a replaced catalog owner even when its feature members are unchanged', async () => {
+    let release;
+    const gate = new Promise(resolve => { release = resolve; });
+    const { state, preparation } = setup(async payload => {
+      await gate;
+      return { rules: payload.rules };
+    });
+    state.biologicalFeatures = { value: state.extractedFeatures.value };
+    const pending = preparation.prepareCandidate([]);
+    state[owner].value = [...state[owner].value];
+    release();
+    assert.equal(await pending, null);
+  });
+}
