@@ -93,7 +93,8 @@ test('Session restoration cancels definition callbacks while normal Circular edi
     mode: ref('circular'), generatedMode: ref('circular'),
     semanticFileWatchersSuppressed: ref(true), shouldDeferCircularPreviewUpdates: ref(false)
   };
-  setup({ state, watch: (source, callback) => callbacks.push({ source, callback }),
+  setup({ state, ref, computed: getter => ({ get value() { return getter(); } }),
+    watch: (source, callback) => callbacks.push({ source, callback }),
     onMounted() {}, legendActions: {}, svgActions: {}, featureActions: {}, legendLayout: {},
     resultsManager: { scheduleDefinitionUpdate: () => scheduled++, cancelDefinitionUpdate: () => canceled++ }
   });
