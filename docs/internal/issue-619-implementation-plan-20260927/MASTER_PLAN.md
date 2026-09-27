@@ -20,8 +20,11 @@ nonfinite History の既知の限界は同結果へ明記し、全受入の完�
 
 [S01結果](SESSION_RESULTS/S01.md)でscalar owner統一とDOM-free codecを完了した。
 最新dev `a1450fdfd0cfb776645da74c142b89f6fc080276`のauthority revision 24でも
-PD-OI-048〜050は継続。S02の開始条件は成立し、実装は未着手。
-実controls/History wiring/geometry/SVGの最終受入は後続へ残す。
+PD-OI-048〜050は継続。
+[S02結果](SESSION_RESULTS/S02.md)でnumeric/unit controls、Auto/IME/History、
+必要なSession復元抑制を完了した。最新dev `494091aa`、authority revision 24を確認。
+S03の開始条件は成立。全browser matrix、Generate geometry/SVG/native render replay、
+public technical docsの最終受入はS03へ残し、本sessionでは着手しない。
 
 ## 2. 問題と現行契約
 

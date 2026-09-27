@@ -16,6 +16,13 @@
 
 S00/S01/S02のremote commits、authority、commands/input/environment、未完項目を確認する。同じ実装への有効な証拠は再利用し、changed/failing partsのみ再検証する。
 
+[S02結果](../SESSION_RESULTS/S02.md)は共通component、既存focus/change History adapter、
+Session復元中のdefinition watcher抑制を記録する。新browser specの7 scoped casesと
+実clipboard pasteは成立済み。source/input/environment/受入条件が同じ証拠は再利用できる。
+S03では同specへ未実行matrixを足し、Generate geometry/SVG download/native render replayと
+public technical docsを完成させる。S02のnative reader受理をnative render成功へ読み替えない。
+S01のinactive跨mode config差と内部nonfinite numberのHistory lossは、S02でも未修復。
+
 ## 作業
 
 1. browser specを既存functional config/discoveryへ接続する。自分のcheckout/専用port/serverを使い、server reuseで別branchのcodeを試さない。実際のsource/wheelを記録する。
