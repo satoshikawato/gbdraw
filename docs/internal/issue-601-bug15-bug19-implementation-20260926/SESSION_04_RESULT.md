@@ -1,5 +1,9 @@
 # S04 — Existing Color rule pattern drafts
 
+The implementation snapshot below records the pre-publication handoff. The
+[publication addendum](#publication-addendum--2026-09-27) records the subsequently
+authorized independent CI integration and supersedes the earlier hold.
+
 S04 implements only **KEEP_REJECTED_PATTERN_DRAFT**. A rejected existing Color
 rule pattern remains in its field with Not applied, a bounded cause, Retry and
 Revert. Python evaluation and the accepted rule, Result, History, Session and
@@ -48,10 +52,10 @@ from the synchronized parent. No BD number, new authority, export retirement,
 checker, allowlist, workflow or CI change is authored in S04. Received #598 and
 #602 independent requirements remain; export handoff `f0c8128a` was read.
 
-The one implementation commit is identified without embedding its future SHA:
+The one implementation commit is:
 
 ```sh
-git log -1 --format='%H %s' -- docs/internal/issue-601-bug15-bug19-implementation-20260926/SESSION_04_RESULT.md
+git show -s --format='%H %s' cf3ffe46f4422edbca0f4d3b0e11a51ff6bfb076
 ```
 
 Its exact SHA, committed-head checker results and publication state are reported
@@ -296,3 +300,44 @@ not supported-version, remote-CI, full dev staging or release evidence.
 Commit title: **Keep rejected color-rule edits available for correction**
 
 Summary: **Add focused transient draft recovery while preserving Python validation and canonical state.**
+
+## Publication addendum — 2026-09-27
+
+This addendum supersedes the publication hold in the implementation snapshot
+above. The owner explicitly authorized an independent CI PR and its integration
+into dev. The S04 implementation remains the single commit
+`cf3ffe46f4422edbca0f4d3b0e11a51ff6bfb076`; its title and behavior are unchanged.
+
+CI-only PR [#625](https://github.com/satoshikawato/gbdraw/pull/625), head
+`3b7d86ae29021bab57df3c470a376287e14e9c69`, passed both required remote statuses,
+`Web base policy (trusted base)` and `PR / gate`, before normal merge into dev.
+Its dev integration commit is `98c21116f6439d5721e7ea62ae1a21a7cf2d4319`. The ceiling correction is now
+accepted base content, rather than runtime self-authorization.
+
+The work branch first received latest dev `494091aa` by normal synchronization
+merge `1fd226232557ce2191e504e03bf8cbe9da436a27`. That increment contains the
+independent Issue #597 Worker-owner characterization and evidence, not a Session
+import runtime transfer. The updated architecture contract passes all **139**
+cases against actual S04. A further normal synchronization receives the
+independent CI integration and includes only this publication-record update as
+local documentation. No S04 runtime or behavior-test assertions were changed by these
+synchronizations; the CI inventory correction arrived through accepted dev. No reset, rebase, amend or force push was used.
+
+Final local CI contracts: **65 passed**, including the actual cumulative
+19-case inventory against its accepted ceiling. Latest-dev trusted checking of
+the exact committed final candidate remains **Gate PASS / Review REQUIRED**;
+the trusted CI plan remains **pr / full** with the seven required jobs listed
+above. Full browser/Python/Node evidence is reused only for unchanged code,
+inputs, environment and acceptance conditions. Runtime, generated artifacts,
+scientific references and PD-OI-046/047 receipts remain unchanged from the
+verified implementation. These statements do not claim S04 remote CI or a
+completed human review.
+
+Exact final synchronization HEAD, trusted base/head reports and the subsequent
+normal push verification are recorded outside their own commit in
+`/tmp/gbdraw-issue601-s04-YKjUuc/evidence/SESSION_04_PUBLICATION_HANDOFF.json`.
+The authorized publication target is only
+`origin/fix/issue-601-bug15-bug19`. S04 PR creation or integration is not
+included. S05 remains unstarted; its handoff retains the implementation evidence
+above and the export owner's `OWNER_HANDOFF_20260927.md`, with inherited limits
+unchanged.
