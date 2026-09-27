@@ -6,13 +6,13 @@ Issue: [#619](https://github.com/satoshikawato/gbdraw/issues/619)。Circular の
 
 作業ブランチは `fix/issue-619-circular-track-measure-inputs`。公開準備時に取得した最新 `origin/dev` は `88028fd242d263f0fe86aaf9da57b8dc9eb082f6`。この SHA まで fast-forward してから計画書をコミットする。この計画書の公開は runtime 実装の完了や Product authority の承認を意味しない。
 
-製品目標は数値と単位の分離。単位の表示 domain、切替動作、Auto 時の単位保持には独立した判断がある。各 [Decision Pack](DECISION_PACKS/README.md) の推奨 A は署名前の候補である。後述の実装詳細は **3 Pack の A が正式に選択された場合の具体案**。他の選択では該当部分だけを更新する。未署名の推奨案を実装者が承認済みとみなしてはならない。
+製品目標は数値と単位の分離。単位の表示 domain、切替動作、Auto 時の単位保持には独立した判断がある。各 [Decision Pack](DECISION_PACKS/README.md) の A 全文は `satoshikawato` が `2026-09-27` に明示署名し、既存 Product Contract の `PD-OI-048`〜`050` に記録した。後述の実装詳細はこの **3 Pack の A の組合せ**を実現する案であり、署名された維持条件・リスクを広げない。
 
 対象は Circular の width/radius。Linear、純 pixel の inner/outer gap、Python renderer の geometry、CLI の scalar grammar は変更しない。
 
 S00 の独立した検証成果は [SESSION_RESULTS/S00.md](SESSION_RESULTS/S00.md) に記録する。
-既存 typed numeric-text draft は受理されたが、3 Pack の署名と
-対象 authority の `origin/dev` 統合は未成立。settings-only の実 Save も既存 writer/validator 不整合で失敗。S01 の開始を許可しない。
+既存 typed numeric-text draft は rendered Session で受理された。3 Pack の署名と
+対象 authority の `origin/dev` 統合は [PR #621](https://github.com/satoshikawato/gbdraw/pull/621)、merge `252986d096011fcf1a0f5564e940480d3b92844d` で成立。settings-only の実 Save は既存 writer/validator 不整合で失敗したままであり、S01 の開始を許可しない。
 
 ## 2. 問題と現行契約
 

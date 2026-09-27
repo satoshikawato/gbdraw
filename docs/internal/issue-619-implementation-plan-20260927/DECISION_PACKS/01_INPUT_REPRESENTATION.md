@@ -1,6 +1,6 @@
 # Product Decision Pack 01 — 数値・単位入力と percent の表示
 
-Status: **unsigned proposal**。推奨Aのresponseは本文記入済み。Owner欄への署名は全文への明示同意として扱う。記入日が異なる場合はDecision dateも更新する。未署名の内容はProduct authorityではない。
+Status: **Choice A signed**。`satoshikawato` が推奨 A の全文を `2026-09-27` に明示署名。[PR #621](https://github.com/satoshikawato/gbdraw/pull/621) で既存 Product Contract revision 23 へ統合済み。正本は[既存契約](https://github.com/satoshikawato/gbdraw/blob/252986d096011fcf1a0f5564e940480d3b92844d/docs/internal/OPTION_INTEGRITY_PRODUCT_CONTRACT.md)。本 Pack は判断の原文を保持する参照文書。
 
 ## Identity
 
@@ -102,7 +102,7 @@ Rationale: 数値の意味を明示しつつ、通常操作の選択肢をpxと�
 Must preserve: 既存px/factor/%の値とunit、precision、typed request/Session、Auto、invaliddraft、draft/Result分離、適用時点、History、privacy、失敗復旧。
 May retire: 数値欄内に単位を恒常表示する旧UIと、percentをliteral spellingのまま通常表示することのみ。percent入力や既存Sessionの受理は退役しない。
 Accepted residual risk: percent入力を倍率表示へまとめるため、65%が0.65と読めることをhelpで説明する必要がある。suffix入力の途中と確定を区別する。
-Owner: ____________________ （maintainer loginによる署名）
+Owner: satoshikawato
 Decision date: 2026-09-27
 ```
 

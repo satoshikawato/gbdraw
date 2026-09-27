@@ -1,6 +1,6 @@
 # Product Decision Pack 02 — 単位変更の意味
 
-Status: **unsigned proposal**。推奨Aのresponseは本文記入済み。Owner欄への署名は全文への明示同意として扱う。記入日が異なる場合はDecision dateも更新する。未署名の内容はProduct authorityではない。
+Status: **Choice A signed**。`satoshikawato` が推奨 A の全文を `2026-09-27` に明示署名。[PR #621](https://github.com/satoshikawato/gbdraw/pull/621) で既存 Product Contract revision 23 へ統合済み。正本は[既存契約](https://github.com/satoshikawato/gbdraw/blob/252986d096011fcf1a0f5564e940480d3b92844d/docs/internal/OPTION_INTEGRITY_PRODUCT_CONTRACT.md)。本 Pack は判断の原文を保持する参照文書。
 
 ## Identity
 
@@ -104,7 +104,7 @@ Rationale: 単位選択を、入力した数値の意味を明示的に変更す
 Must preserve: numericdraftとunitの明示、Auto、Generateまで旧Resultを保つこと、History/Session、失敗復旧、既存scalarの科学的意味、local-only。
 May retire: なし。
 Accepted residual risk: 倍率からpxへ切り替えると図上の大きさが変わる。helpとPendingに、数値維持・次回Generate反映を明記する。
-Owner: ____________________ （maintainer loginによる署名）
+Owner: satoshikawato
 Decision date: 2026-09-27
 ```
 

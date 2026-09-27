@@ -6,15 +6,16 @@ Issue #619の表示不具合を修正し、Circular Width/Radiusを数値＋単�
 - [02 — 単位変更](02_UNIT_CHANGE.md): 数値維持か、geometry維持か。
 - [03 — Auto単位の寿命](03_AUTO_UNIT_LIFECYCLE.md): transientか、History/Sessionへ保存するか。
 
-推奨は各A。各responseはrationale、Must preserve、May retire、riskまで記入済みで、Owner署名だけが未記入。日付が異なる場合は更新する。方向としての数値＋単位分離を、三つの未署名の詳細仕様の承認へ拡張してはならない。
+各 A の全文を `satoshikawato` が `2026-09-27` に明示署名した。Owner/dateを含む全9項目を[既存 Product Contract](https://github.com/satoshikawato/gbdraw/blob/252986d096011fcf1a0f5564e940480d3b92844d/docs/internal/OPTION_INTEGRITY_PRODUCT_CONTRACT.md) revision 23 の `PD-OI-048`〜`050` へ正確に記録した。署名は各 Pack の本文に限定され、別の outcome や維持条件の退役を承認しない。
 
-このディレクトリはレビュー用の候補文書であり、新しいauthority registryではない。署名後はS00が既存のstatic Product Contractへ正確にserializeし、authority-only統合を確認する。別Packは別concernとして決裁する。
+このディレクトリは署名対象の原文を保持する参照文書であり、新しいauthority registryではない。正本は既存static Product Contract。別Packは別concernとして独立に記録する。
 
 ## S00 evidence handoff (2026-09-27)
 
-3 Pack は引き続き未署名。最新 authority search の基点は
-`origin/dev` = `d313b70b9f97c2c1d70f9ae885edbead80b62021`。
-対象の署名済み receipt / authority はなく、推奨 A は候補のまま。
+初回の authority search 基点は `origin/dev` =
+`d313b70b9f97c2c1d70f9ae885edbead80b62021`。その後、3 Pack の A 全文について
+Owner/dateを含む明示署名を受領し、[PR #621](https://github.com/satoshikawato/gbdraw/pull/621) で統合した。
+merge SHA: `252986d096011fcf1a0f5564e940480d3b92844d`。
 [S00結果](../SESSION_RESULTS/S00.md) に既存 authority と実測境界を記録する。
 
 既存 typed Web draft の `{value:"1.",unit:"px"}` /
