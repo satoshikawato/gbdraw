@@ -62,14 +62,18 @@ export const createRulePreparation = ({ state, evaluate, pending = { value: fals
     legendStrokes: JSON.stringify(state.legendStrokeOverrides || {}),
     featureColors: JSON.stringify(state.featureColorOverrides || {}),
     featureVisibility: JSON.stringify(state.featureVisibilityOverrides || {}),
-    // Comparison reuse artifacts are request-owned, not color-preparation inputs.
-    ...Object.fromEntries(Object.entries(state.files || {})
-      .filter(([key]) => key !== 'linearCanonicalComparisons')
-      .map(([key, value]) => [`file:${key}`, value]))
+    // Physical source, palette, and selector inputs retain their identity while
+    // request-owned comparison artifacts are published independently.
+    inputFiles: [
+      state.files?.c_gb, state.files?.c_gff, state.files?.c_fasta, state.files?.c_depth,
+      state.files?.d_color, state.files?.blacklist, state.files?.whitelist, state.files?.qualifier_priority,
+      state.files?.c_conservation_blasts, state.files?.c_conservation_blasts_source,
+      state.files?.c_conservation_fastas, state.files?.c_conservation_sequence_sources
+    ].flatMap(input => Array.isArray(input) ? [input, ...input] : [input])
   });
   const isCurrent = (before) => {
     const after = snapshot();
-    return Object.keys(before).every((key) => key === 'linearFiles'
+    return Object.keys(before).every((key) => key === 'linearFiles' || key === 'inputFiles'
       ? before[key].length === after[key].length && before[key].every((file, index) => file === after[key][index])
       : before[key] === after[key]);
   };
