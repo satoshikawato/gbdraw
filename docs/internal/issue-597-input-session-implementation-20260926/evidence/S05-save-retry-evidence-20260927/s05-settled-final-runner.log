@@ -1,0 +1,12 @@
+
+Running 5 tests using 1 worker
+
+(node:1415278) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  1 [chromium] › tests/web/contracts/active-result-edit-transaction.playwright.spec.js:238:3 › active Result Feature fill transaction › visible tRNA fill scope remains coherent through History, Session, Generate, and SVG export (27.3s)
+  ✓  2 [chromium] › tests/web/contracts/session-regenerate-intent.playwright.spec.js:1269:1 › no-draft session preserves preview, active config, canonical request, and catalog (27.5s)
+  ✓  3 [chromium] › tests/web/contracts/session-regenerate-intent.playwright.spec.js:1321:1 › loaded current preview supports direct edits before the first Generate (27.2s)
+  ✓  4 [chromium] › tests/web/contracts/session-regenerate-intent.playwright.spec.js:1888:1 › divergent draft and direct editor overrides survive repeated Save, Load, and Generate (42.1s)
+  ✓  5 [chromium] › tests/web/contracts/session-regenerate-intent.playwright.spec.js:2116:1 › bare legacy configuration drives the next canonical request and SVG (14.8s)
+
+  5 passed (2.3m)

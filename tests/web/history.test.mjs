@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { mkdir, mkdtemp, readFile, writeFile } from 'node:fs/promises';
+import { cp, mkdir, mkdtemp, readFile, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
@@ -15,6 +15,7 @@ await writeFile(
   await readFile(join(webSourceDir, 'web-ux-profile.js'), 'utf8'),
   'utf8'
 );
+await cp(webSourceDir, tempDir, {recursive:true});
 await mkdir(join(tempDir, 'services'), { recursive: true });
 await mkdir(join(tempDir, 'app'), { recursive: true });
 for (const filename of [
@@ -1474,9 +1475,13 @@ const createLayoutPreferences = () => ({
     addedLegendCaptions: ref(new Set()),
     semanticFileWatchersSuppressed: ref(false)
   };
+  state.legendEntries = Object.create({ value: [{ caption: 'tRNA', color: '#e8b441' }] });
+  state.deletedLegendEntries = Object.create({ value: [] });
+  const entryOwners = [{ target: 'feature_legend', entries: [{ caption: 'tRNA', owner: '' }] }];
   const snapshots = createHistorySnapshotService({
     state,
     fileStore,
+    buildLegendEntryOwners: () => entryOwners,
     buildConfigData: () => ({ form: state.form, adv: state.adv }),
     buildFeatureStateData: () => {
       forbiddenArtifactBuilds += 1;
@@ -1496,6 +1501,13 @@ const createLayoutPreferences = () => ({
     }
   });
   const intent = await snapshots.buildHistoryIntent();
+  assert.deepEqual(intent.editorState.legend.entries, [{ caption: 'tRNA', color: '#e8b441' }]);
+  state.legendEntries.value = [{ caption: 'tRNA', color: '#c026d3' }];
+  await snapshots.applyHistoryIntent(intent, { changes: [{ path: ['editorState'] }] });
+  assert.deepEqual(state.legendEntries.value, [{ caption: 'tRNA', color: '#e8b441' }]);
+  entryOwners[0].entries[0].owner = 'specific-color-file';
+  assert.equal(intent.editorState.legend.entryOwners[0].entries[0].owner, '');
+  assert.equal(state.legendEntries.value.some(entry => Object.hasOwn(entry, 'entryOwners')), false);
   assert.equal(forbiddenArtifactBuilds, 0);
   assert.equal(Object.prototype.hasOwnProperty.call(intent, 'results'), false);
   assert.equal(Object.prototype.hasOwnProperty.call(intent, 'runState'), false);
@@ -2277,3 +2289,74 @@ const createLayoutPreferences = () => ({
 }
 
 console.log('history tests passed');
+
+{
+  let file = 'original.tsv';
+  let rules = ['original'];
+  let svg = 'original legend';
+  const history = createHistoryManager({
+    buildIntent: () => ({ file, rules }),
+    applyIntent: (intent) => { file = intent.file; rules = [...intent.rules]; },
+    buildCheckpoint: () => ({ file, rules: [...rules], svg }),
+    applyCheckpoint: (checkpoint) => {
+      file = checkpoint.file;
+      rules = [...checkpoint.rules];
+      svg = checkpoint.svg;
+    }
+  });
+  await history.initializeIntentBaseline('Rejected artifact baseline');
+  await history.runUndoableCheckpoint('Import specific colors', async () => {
+    file = 'colors.tsv';
+    await history.runUndoableCheckpoint('Commit prepared rules', async () => {
+      rules = ['canonical caption'];
+      svg = 'canonical legend';
+      await history.runUndoable('Derived preview', () => { svg += ' and colors'; });
+    });
+  });
+  assert.equal(history.getUndoCount(), 1, 'an upload and its canonical rule/legend edit are one action');
+  assert.equal(history.getDiagnostics().artifactCheckpointBuilds, 2, 'nested edits share the outer capture');
+  await history.undo();
+  assert.deepEqual({ file, rules, svg }, { file: 'original.tsv', rules: ['original'], svg: 'original legend' });
+  await history.redo();
+  assert.deepEqual({ file, rules, svg }, { file: 'colors.tsv', rules: ['canonical caption'], svg: 'canonical legend and colors' });
+  await assert.rejects(history.runUndoableCheckpoint('Invalid import', async () => {
+    throw new Error('invalid known value');
+  }), /invalid known value/);
+  assert.equal(history.getUndoCount(), 1);
+  await history.runUndoable('Next edit', () => { rules = ['next']; });
+  assert.equal(history.getUndoCount(), 2, 'a failed checkpoint releases its nesting scope');
+  await history.undo();
+  assert.deepEqual(rules, ['canonical caption']);
+}
+
+for (const previousSuppressed of [false, true]) {
+  const state = { semanticFileWatchersSuppressed: ref(previousSuppressed) };
+  const snapshots = createHistorySnapshotService({
+    state,
+    fileStore: createHistoryFileStore(),
+    nextTick: async () => {
+      assert.equal(state.semanticFileWatchersSuppressed.value, true);
+      throw new Error('restore did not settle');
+    }
+  });
+  await assert.rejects(snapshots.applyArtifactCheckpoint({}), /restore did not settle/);
+  assert.equal(state.semanticFileWatchersSuppressed.value, previousSuppressed,
+    'checkpoint failure restores the prior semantic file-watcher suppression');
+}
+
+{
+  const before = { identity: { fingerprint: '', compactSignature: 'before' }, retainedBytes: 0, fileIds: [] };
+  const primary = {code:'RESULT_INVALID',stage:'result-admission',message:'PRIVATE_PRIMARY_SENTINEL'};
+  const history = createHistoryManager({buildIntent:async()=>({}),applyIntent:async()=>{},
+    buildCheckpoint:async()=>({}),applyCheckpoint:async()=>{},
+    captureGeneratedArtifactHandle:()=>before,restoreGeneratedArtifactHandle:async()=>{},
+    compareGeneratedArtifactHandles:()=>false});
+  await history.initializeIntentBaseline('Rejected artifact baseline');
+  let rollbackSettled = false;
+  await assert.rejects(history.runUndoableArtifactReplacement('Rejected artifact', async()=>{throw primary;}, {
+    restoreAppliedArtifact:async()=>{await Promise.resolve();rollbackSettled=true;throw new Error('PRIVATE_ROLLBACK_SENTINEL');}
+  }), error=>error===primary && error.artifactRestoreFailed===true);
+  assert.equal(rollbackSettled,true);
+  assert.equal(history.getUndoCount(),0);
+  assert.equal(history.getRedoCount(),0);
+}

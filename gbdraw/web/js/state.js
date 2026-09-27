@@ -49,9 +49,11 @@ const unmanagedConfigOverrides = reactive({});
 const results = ref([]);
 const selectedResultIndex = ref(0);
 const failedGeneratePreservedResult = ref(false);
+const generationFailureRecovery = ref(null);
 const resultPanelTab = ref('preview');
 const lastRunInfo = ref(null);
 const trackSlotResolvedGeometry = ref(null);
+const annotationWarnings = ref([]);
 // Store original pairwise match factors for re-interpolation
 const pairwiseMatchFactors = ref({}); // { pathId: factor }
 // Analysis-scoped materialized nucleotide sources used by match span popups.
@@ -288,6 +290,7 @@ const collinearGroups = ref([]);
 const featureOrthogroupIndex = ref(new Map());
 const selectedOrthogroupAlignmentFeature = ref('');
 const similarityAlignmentPlan = ref(null);
+const similarityAlignmentResetReceipt = ref(null);
 const linearRecordTranslations = ref([]);
 const legacySimilarityAlignment = ref(null);
 const orthogroupNameOverrides = reactive({});
@@ -798,9 +801,11 @@ export const state = {
   results,
   selectedResultIndex,
   failedGeneratePreservedResult,
+  generationFailureRecovery,
   resultPanelTab,
   lastRunInfo,
   trackSlotResolvedGeometry,
+  annotationWarnings,
   pairwiseMatchFactors,
   matchSequenceRegistry,
   svgContent,
@@ -850,6 +855,7 @@ export const state = {
   featureOrthogroupIndex,
   selectedOrthogroupAlignmentFeature,
   similarityAlignmentPlan,
+  similarityAlignmentResetReceipt,
   linearRecordTranslations,
   legacySimilarityAlignment,
   orthogroupNameOverrides,

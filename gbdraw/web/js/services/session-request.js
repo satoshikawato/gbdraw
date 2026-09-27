@@ -1,3 +1,4 @@
+import { writeCanonicalRecordReverseComplement } from '../app/record-display-options.js';
 import { canonicalFeaturePlacements } from './feature-placement.js';
 export { canonicalFeaturePlacements } from './feature-placement.js';
 import { buildDefaultColorOverrideTsv, normalizePaletteColors } from '../app/color-utils.js';
@@ -29,6 +30,7 @@ import {
   normalizeCircularTrackSlot,
   parseCircularTrackSlotSpecs
 } from '../app/circular-track-slots.js';
+import { projectCircularMeasureDraft } from '../app/circular-track-slots/measure-editor.js';
 import {
   buildLinearTrackSlotPayload,
   LINEAR_TRACK_RENDERERS,
@@ -60,6 +62,7 @@ import {
 import { resolveLinearLabelVisibility } from '../app/linear-label-visibility.js';
 import {
   assertValidCustomTrackPlan,
+  parseOptionalPixel,
   validateCustomTrackPlan,
   validateTrackSlotBindingInvariants
 } from '../app/track-slot-validation.js';
@@ -133,13 +136,15 @@ import {
   createSessionResourceFileView,
   validateWebFileBindings
 } from './session-resource-backing.js';
-import { normalizeLinearComparisonPlan } from '../app/linear-comparisons.js';
+import { normalizeLinearComparisonPlan, resolveLinearComparisonPlan } from '../app/linear-comparisons.js';
+import { validateCurrentWriterActiveConfig, createDefaultForm, createDefaultAdv } from './session-active-config-contract.js';
 import {
   getResourcePayloadOwner,
   setResourcePayloadOwner
 } from './resource-payload-owner.js';
 import { sha256Hex } from './byte-utils.js';
 import { cloneJsonData } from './json-clone.js';
+import { isCanonicalResourceReferenceField } from './canonical-resource-references.js';
 import { recordDisplayKey, requestedRecordTransform } from '../app/record-display-options.js';
 
 export const CANONICAL_REQUEST_SCHEMA = 8;
@@ -612,7 +617,10 @@ const normalizeOriginalResourceName = (name) => {
   return basename.slice(0, 1024);
 };
 
-const createResourceBuilder = () => {
+const generatedResourceValues = new WeakMap();
+const generationIntents = new WeakMap();
+
+const createResourceBuilder = ({ encode = true } = {}) => {
   const resources = {};
   const resourceOriginalNames = {};
   const fileResourceIds = new Map();
@@ -656,6 +664,11 @@ const createResourceBuilder = () => {
   const addText = (resourceId, kind, name, text) => {
     if (resources[resourceId]) return resourceId;
     const normalized = String(text || '');
+    if (!encode) {
+      resources[resourceId] = { kind };
+      generatedResourceValues.set(resources[resourceId], normalized);
+      return resourceId;
+    }
     const bytes = textToBytes(normalized);
     resources[resourceId] = {
       kind,
@@ -666,11 +679,17 @@ const createResourceBuilder = () => {
       encoding: 'base64',
       data: textToBase64(normalized)
     };
+    generatedResourceValues.set(resources[resourceId], normalized);
     return resourceId;
   };
 
   const addJson = (resourceId, kind, name, value) => {
     if (resources[resourceId]) return resourceId;
+    if (!encode) {
+      resources[resourceId] = { kind };
+      generatedResourceValues.set(resources[resourceId], { bindings: [value] });
+      return resourceId;
+    }
     const normalized = JSON.stringify(value);
     const bytes = textToBytes(normalized);
     resources[resourceId] = {
@@ -682,6 +701,7 @@ const createResourceBuilder = () => {
       encoding: 'base64',
       data: textToBase64(normalized)
     };
+    generatedResourceValues.set(resources[resourceId], { bindings: [value] });
     return resourceId;
   };
 
@@ -1474,6 +1494,14 @@ const automaticCircularAnnotationSlots = (state) => {
   return slots;
 };
 
+const conservationDiagramOptions = (conservation, entries, referenceDefault) => ({
+  conservationReference: String(conservation.reference || referenceDefault),
+  conservationLabels: entries.map((entry) => entry.label),
+  conservationColors: entries.map((entry) => entry.color),
+  conservationRingWidth: optionalNumber(conservation.ring_width),
+  conservationRingGap: optionalNumber(conservation.ring_gap)
+});
+
 const conservationSeriesForValidation = ({
   state,
   filesData,
@@ -2223,12 +2251,13 @@ export const buildCanonicalRequestState = ({ session, projection, config,
     featurePlacementOverrides: publicationClone(config.featurePlacementOverrides || {}), canonicalPublicationFiles
   };
 };
-export const buildCanonicalRenderRequest = ({
+const projectCanonicalRenderInput = ({
   state,
   filesData,
   comparisonPlanSnapshot = null,
   resolvedComparisons = [],
-  resolvedCircularConservation = []
+  resolvedCircularConservation = [],
+  resources = createResourceBuilder()
 }) => {
   requireCurrentWebStateFieldNames(state);
   requireCurrentCircularMultiRecordSizeMode(state.adv.multi_record_size_mode);
@@ -2252,7 +2281,6 @@ export const buildCanonicalRenderRequest = ({
   const comparisonOptionsRequested = (
     state.mode.value === 'circular' || hasLinearComparisonIntent
   );
-  const resources = createResourceBuilder();
   const webFiles = {};
   const recordPlan = buildRecords({ state, filesData, resources });
   const drafts = state.recordDisplayDrafts || [];
@@ -2456,11 +2484,7 @@ export const buildCanonicalRenderRequest = ({
             : null
         ));
       }
-      diagramOptions.conservationReference = String(state.circularConservation.reference || 'auto');
-      diagramOptions.conservationLabels = conservationEntries.map((entry) => entry.label);
-      diagramOptions.conservationColors = conservationEntries.map((entry) => entry.color);
-      diagramOptions.conservationRingWidth = optionalNumber(state.circularConservation.ring_width);
-      diagramOptions.conservationRingGap = optionalNumber(state.circularConservation.ring_gap);
+      Object.assign(diagramOptions, conservationDiagramOptions(state.circularConservation, conservationEntries, 'auto'));
       if (conservationBlastsAreDerived) {
         webFiles.conservationBlastSource = 'losat-cache';
       }
@@ -2510,21 +2534,11 @@ export const buildCanonicalRenderRequest = ({
       if (comparisonFastas.some(Boolean)) {
         diagramOptions.conservationFastaFiles = comparisonFastas;
       }
-      diagramOptions.conservationReference = String(
-        state.circularConservation.reference || 'subject'
-      );
-      diagramOptions.conservationLabels = resolvedCircularConservation.map(
-        (entry, index) => String(entry?.label || `Comparison ${index + 1}`)
-      );
-      diagramOptions.conservationColors = resolvedCircularConservation.map(
-        (entry) => String(entry?.color || '#D9EAF7')
-      );
-      diagramOptions.conservationRingWidth = optionalNumber(
-        state.circularConservation.ring_width
-      );
-      diagramOptions.conservationRingGap = optionalNumber(
-        state.circularConservation.ring_gap
-      );
+      Object.assign(diagramOptions, conservationDiagramOptions(state.circularConservation,
+        resolvedCircularConservation.map((entry, index) => ({
+          label: String(entry?.label || `Comparison ${index + 1}`),
+          color: String(entry?.color || '#D9EAF7')
+        })), 'subject'));
       webFiles.conservationBlastSource = 'losat-cache';
     }
   } else if (hasLinearComparisonIntent) {
@@ -2603,6 +2617,312 @@ export const buildCanonicalRenderRequest = ({
     resources: resources.resources,
     webFiles
   };
+};
+
+// The request writer and the inexpensive comparison use the same projection.
+// The latter retains bindings and generated table text, never resource bytes.
+const generationResourceIdentity = (resource) => {
+  if (!resource) return null;
+  if (generatedResourceValues.has(resource)) {
+    const value = generatedResourceValues.get(resource);
+    return typeof value === 'string' ? { text: value } : value;
+  }
+  const owner = getResourcePayloadOwner(resource);
+  const backing = getSessionResourceSource(owner);
+  if (backing?.descriptors) {
+    return { bindings: backing.descriptors.map((entry) => entry.descriptor) };
+  }
+  if (backing?.descriptor) return { bindings: [backing.descriptor] };
+  if (typeof owner?.arrayBuffer === 'function'
+    || (typeof owner?.data === 'string' && owner?.encoding)) {
+    return { bindings: [owner] };
+  }
+  return { bindings: null };
+};
+
+const generationComparisonPlan = (state, filesData, snapshot) => {
+  if (state.mode.value !== 'linear') return null;
+  const plan = snapshot || resolveLinearComparisonPlan({
+    plan: state.linearComparisonPlan,
+    sequences: filesData.linearSeqs || [],
+    layout: state.linearRecordLayoutEnabled?.value ? state.linearRecordRows || [] : [],
+    losatProgram: state.losatProgram?.value || 'blastn',
+    blastpMode: state.losat?.blastp?.mode || 'orthogroup'
+  });
+  requireLinearComparisonPlanSnapshot(plan);
+  return plan;
+};
+
+const generationAnalysisMeaning = (state, filesData, snapshot) => {
+  if (state.mode.value === 'circular' && state.circularConservation?.enabled
+    && state.circularConservation.source === 'losat') {
+    const entries = orderedConservationSources(filesData.c_conservation_fastas || [], state.circularConservation);
+    const program = state.circularConservation.losat_program || 'blastn';
+    return {
+      conservationSources: orderedOptionalConservationFiles(filesData.c_conservation_fastas, state.circularConservation)
+        .map(generationResourceIdentity),
+      diagramOptions: conservationDiagramOptions(state.circularConservation, entries, 'subject'),
+      program,
+      ...(program === 'tblastx' ? {
+        geneticCode: state.circularConservation.subject_gencode ?? 1,
+        geneticCodes: entries.map((entry) => entry.losat_gencode)
+      } : { task: state.losat?.blastn?.task || 'megablast' })
+    };
+  }
+  if (!snapshot?.hasComparisonIntent) return null;
+  const edges = orderedComparisonPlanEdges(snapshot);
+  const losat = edges.some((edge) => edge.source === 'losat');
+  if (!losat) return null;
+  const program = state.losatProgram?.value || 'blastn';
+  return {
+    retainedInputs: (filesData.linearCanonicalComparisons || []).filter((entry) => entry.canonicalInput === true)
+      .map(({ file, ...entry }) => ({ ...entry, file: generationResourceIdentity(file) })),
+    edges: edges.map((edge) => ({
+      query: edge.queryIndex, subject: edge.subjectIndex, source: edge.source,
+      ...(edge.source === 'upload' ? { file: generationResourceIdentity(
+        (filesData.linearComparisons || []).find((entry) => entry.id === edge.id)?.file
+      ) } : {})
+    })),
+    program,
+    settings: program === 'blastp' ? generatedProteinSettings(state)
+      : program === 'blastn' ? { task: state.losat?.blastn?.task || 'megablast' } : null,
+    ...(program !== 'blastn' ? { geneticCodes: (filesData.linearSeqs || []).map((record) => record.losat_gencode ?? 1) } : {})
+  };
+};
+
+const generationMeaning = (canonical, analysis = null) => {
+  const { schema: _schema, output: _output, ...request } = canonical.renderRequest;
+  const normalize = (value) => {
+    if (Array.isArray(value)) return value.map(normalize);
+    if (!value || typeof value !== 'object') return value;
+    return Object.fromEntries(Object.entries(value).map(([key, item]) => [key,
+      isCanonicalResourceReferenceField(key) && typeof item === 'string'
+        ? generationResourceIdentity(canonical.resources[item]) : normalize(item)]));
+  };
+  // Resolved LOSAT tables are outputs of the active analysis, not another draft
+  // input. Uploads and explicitly retained typed inputs still carry bindings.
+  const comparisons = analysis?.edges ? (request.comparisons || []).filter((comparison) => (
+    !analysis.edges.some((edge) => edge.source === 'losat'
+      && edge.query === comparison.queryRecordIndex && edge.subject === comparison.subjectRecordIndex)
+    && !['generatedProteinComparison', 'orthogroupResult', 'collinearityResult'].includes(comparison.kind)
+  )) : request.comparisons;
+  const meaning = normalize({ ...request, comparisons });
+  if (analysis?.diagramOptions) Object.assign(meaning.diagramOptions, analysis.diagramOptions);
+  if (analysis?.conservationSources && meaning.diagramOptions) {
+    delete meaning.diagramOptions.conservationBlastFiles;
+    delete meaning.diagramOptions.conservationFastaFiles;
+  }
+  if (meaning.diagramOptions?.configOverrides) {
+    const inactiveMode = request.mode === 'linear' ? 'circular' : 'linear';
+    meaning.diagramOptions.configOverrides = Object.fromEntries(
+      Object.entries(meaning.diagramOptions.configOverrides).filter(([path]) => !path.split('.').includes(inactiveMode))
+    );
+    // Explicit slots own renderer availability in the typed planners. Flat
+    // enabled flags are dormant inputs while those slots are authoritative.
+    const slots = meaning.diagramOptions.tracks?.circularTrackSlots
+      || meaning.diagramOptions.tracks?.linearTrackSlots;
+    if (slots) {
+      if (request.mode === 'circular' && !slots.some((slot) => slot.renderer === 'sequence_conservation')) {
+        for (const key of Object.keys(meaning.diagramOptions)) {
+          if (key.startsWith('conservation')) delete meaning.diagramOptions[key];
+        }
+        analysis = null;
+      }
+      delete meaning.diagramOptions.configOverrides[CONFIG_OVERRIDE_PATHS.showGc];
+      delete meaning.diagramOptions.configOverrides[CONFIG_OVERRIDE_PATHS.showSkew];
+      if (Array.isArray(meaning.diagramOptions.depthTracks)) {
+        const activeDepth = new Set(slots.filter((slot) => slot.renderer === 'depth')
+          .map((slot) => Number(slot.params?.track_index) || 0));
+        meaning.diagramOptions.depthTracks = meaning.diagramOptions.depthTracks.map(
+          (track, index) => activeDepth.has(index) ? track : null);
+      }
+    }
+  }
+  const { diagramOptions: _analysisOptions, ...analysisInputs } = analysis || {};
+  return { ...meaning, analysis: analysis ? analysisInputs : null };
+};
+
+export const buildCanonicalRenderRequest = (args) => {
+  const canonical = projectCanonicalRenderInput(args);
+  const analysis = generationAnalysisMeaning(args.state, args.filesData, args.comparisonPlanSnapshot);
+  generationIntents.set(canonical, { status: 'valid', meaning: generationMeaning(canonical, analysis) });
+  return canonical;
+};
+
+export const projectGenerationIntent = ({ state, filesData = {
+  ...state.files, linearSeqs: state.linearSeqs,
+  linearComparisons: state.linearComparisonPlan?.edges?.filter((edge) => edge.fileActive && edge.file)
+}, comparisonPlanSnapshot = null } = {}) => {
+  try {
+    validateCurrentWriterActiveConfig({ mode: state.mode.value,
+      storedConfig: { form: state.form, adv: state.adv, recordDisplayDrafts: state.recordDisplayDrafts,
+        featurePlacementOverrides: state.featurePlacementOverrides } });
+    const snapshot = generationComparisonPlan(state, filesData, comparisonPlanSnapshot);
+    const canonical = projectCanonicalRenderInput({ state, filesData,
+      comparisonPlanSnapshot: snapshot, resources: createResourceBuilder({ encode: false }) });
+    const unknownRecords = state.mode.value === 'circular'
+      && !filesData.circularRecords?.length && !state.circularRecordList?.value?.length;
+    const unknownPaths = unknownRecords
+      ? canonical.renderRequest.grouping !== 'single' ? ['$.records']
+        : canonical.renderRequest.records.flatMap((_, index) => [
+            `$.records.${index}.selector`, `$.records.${index}.recordKey`
+          ]) : [];
+    return { status: unknownRecords ? 'unknown' : 'valid', unknownPaths,
+      meaning: generationMeaning(canonical, generationAnalysisMeaning(state, filesData, snapshot)) };
+  } catch (error) {
+    return { status: 'invalid', error: String(error.message || error) };
+  }
+};
+
+// Called by the artifact owner at admission/restore, never from a draft. The
+// saved request owns rendering; saved config alone cannot advance applied intent.
+export const projectAppliedGenerationIntent = (canonical, {
+  editorState = canonical?.editorState, storedConfig = canonical?.config
+} = {}) => {
+  const existing = generationIntents.get(canonical);
+  if (existing) return existing;
+  if (!canonical?.renderRequest) return { status: 'unknown' };
+  try {
+    const { bindings: _draftBindings, ...webFiles } = canonical.webFiles || {};
+    const projection = projectCanonicalSessionRequest({ ...canonical, webFiles,
+      storedConfig: null, deferResourceContent: true,
+      sessionResourceTable: adoptCurrentSessionResources(canonical.resources) });
+    const config = { ...projection.config,
+      form: { ...createDefaultForm(), ...projection.config.form },
+      adv: { ...createDefaultAdv(projection.mode), ...projection.config.adv } };
+    const appliedState = buildCanonicalRequestState({ session: canonical, projection, config });
+    const appliedFiles = { ...projection.files };
+    // These resources are opaque when restored without bytes. Retain their
+    // existing identity; the comparator will report unknown against new text.
+    appliedState.canonicalPublicationFiles = appliedFiles;
+    const baseline = projectCanonicalRenderInput({ state: appliedState, filesData: appliedFiles,
+      comparisonPlanSnapshot: generationComparisonPlan(appliedState, appliedFiles),
+      resources: createResourceBuilder({ encode: false }) });
+    // Preserve every request field (including unmanaged/full config) that a
+    // current writer does not expose; defaults only fill normalized omissions.
+    const meaning = generationMeaning({ ...canonical, renderRequest: {
+      ...baseline.renderRequest, ...canonical.renderRequest,
+      diagramOptions: { ...baseline.renderRequest.diagramOptions, ...canonical.renderRequest.diagramOptions,
+        configOverrides: { ...baseline.renderRequest.diagramOptions.configOverrides,
+          ...canonical.renderRequest.diagramOptions.configOverrides } }
+    } });
+    const unknownPaths = [];
+    // A saved explicit global width is comparable to the editor's captured
+    // artifact width. The draft alone cannot prove that a live edit was applied.
+    // Automatic width remains request-owned; a measured width is not its intent.
+    const requestedWidth = optionalNumber(storedConfig?.adv?.block_stroke_width);
+    if (requestedWidth !== null) {
+      const path = SHARED_LENGTH_CONFIG_OVERRIDE_PATHS.blockStrokeWidth;
+      const width = editorState?.originalSvgStroke?.width;
+      for (const key of [`${path}.short`, `${path}.long`]) {
+        if (typeof width === 'number' && Number.isFinite(width) && width >= 0) {
+          meaning.diagramOptions.configOverrides[key] = width;
+        } else if (meaning.diagramOptions.configOverrides[key] !== requestedWidth) {
+          unknownPaths.push(`$.diagramOptions.configOverrides.${key}`);
+        }
+      }
+    }
+    return { status: unknownPaths.length ? 'unknown' : 'valid', meaning, unknownPaths };
+  } catch (error) {
+    return { status: 'unknown', error: String(error.message || error) };
+  }
+};
+
+// A live owner supplies only the fields for which it actually mutated targets.
+// Normalize them through the existing request inventory, not the current draft
+// as a whole. The resulting small value stays with the artifact's owner handle.
+export const projectAppliedGenerationFields = (applied, state, fields) => {
+  if (!applied?.meaning || applied.meaning.mode !== state.mode.value) return applied;
+  const normalized = buildConfigOverrides(state);
+  const overrides = { ...applied.meaning.diagramOptions.configOverrides };
+  const provenPaths = new Set();
+  for (const field of fields) {
+    const path = CONFIG_OVERRIDE_PATHS[field] || SHARED_LENGTH_CONFIG_OVERRIDE_PATHS[field];
+    if (!path) throw new Error(`Unknown applied generation field: ${field}.`);
+    for (const key of [path, `${path}.short`, `${path}.long`]) {
+      if (Object.hasOwn(normalized, key)) {
+        overrides[key] = normalized[key];
+        provenPaths.add(`$.diagramOptions.configOverrides.${key}`);
+      }
+    }
+  }
+  const unknownPaths = (applied.unknownPaths || []).filter(path => !provenPaths.has(path));
+  return { ...applied, unknownPaths,
+    status: applied.unknownPaths?.length && !unknownPaths.length ? 'valid' : applied.status,
+    meaning: { ...applied.meaning,
+      diagramOptions: { ...applied.meaning.diagramOptions, configOverrides: overrides } } };
+};
+
+const liveGenerationTables = (state) => {
+  const resources = createResourceBuilder({ encode: false });
+  const options = {};
+  addGeneratedTableResources({ ...state,
+    currentColors: state.appliedPaletteColors,
+    selectedPalette: state.appliedPaletteName
+  }, resources, options);
+  return generationMeaning({ renderRequest: { diagramOptions: options }, resources: resources.resources }).diagramOptions;
+};
+
+const compareGenerationValue = (left, right, path, differences, unknown, unknownPaths) => {
+  if (unknownPaths.has(path)) return;
+  if (left === right) {
+    if (left === null && isCanonicalResourceReferenceField(path.split('.').at(-1))) unknown.push(path);
+    return;
+  }
+  if (left?.bindings === null || right?.bindings === null) { unknown.push(path); return; }
+  if (left?.bindings || right?.bindings || left?.text !== undefined || right?.text !== undefined) {
+    if (left?.bindings && right?.bindings) {
+      if (left.bindings.length !== right.bindings.length
+        || left.bindings.some((binding, index) => binding !== right.bindings[index])) differences.push(path);
+    } else if (left?.text !== undefined && right?.text !== undefined) {
+      if (left.text !== right.text) differences.push(path);
+    } else unknown.push(path);
+    return;
+  }
+  if (left === null || right === null || typeof left !== 'object' || typeof right !== 'object') {
+    if (isCanonicalResourceReferenceField(path.split('.').at(-1)) && (left == null || right == null)) unknown.push(path);
+    else differences.push(path);
+    return;
+  }
+  if (Array.isArray(left) !== Array.isArray(right)) { differences.push(path); return; }
+  const keys = new Set([...Object.keys(left), ...Object.keys(right)]);
+  for (const key of keys) compareGenerationValue(left[key], right[key], `${path}.${key}`, differences, unknown, unknownPaths);
+};
+
+export const compareGenerationIntent = ({ draft, applied, liveState = null, hasResult = true }) => {
+  if (draft?.status === 'invalid') return { status: 'invalid', differences: [], unknown: [], error: draft.error };
+  if (!hasResult) return { status: 'ungenerated', differences: [], unknown: [] };
+  if (!draft?.meaning || !applied?.meaning) return { status: 'unknown', differences: [], unknown: ['$'] };
+  let baseline = applied.meaning;
+  if (liveState) {
+    const tables = liveGenerationTables(liveState);
+    const options = { ...baseline.diagramOptions, colors: tables.colors };
+    for (const field of ['featureVisibilityTableFile', 'labelOverrideFile']) {
+      delete options[field];
+      if (tables[field]) options[field] = tables[field];
+    }
+    baseline = { ...baseline, diagramOptions: options };
+  }
+  const unknownPaths = new Set([...(draft.unknownPaths || []), ...(applied.unknownPaths || [])]);
+  const differences = [], unknown = [...unknownPaths];
+  let draftMeaning = draft.meaning;
+  if (!baseline.analysis && draftMeaning.analysis) {
+    // A restored rendered table proves the Result, not the unsaved search
+    // inputs that produced it. Keep that domain unknown without adopting draft.
+    const omitUnprovenAnalysis = (meaning) => {
+      const { analysis: _analysis, comparisons: _comparisons, ...rest } = meaning;
+      const { conservationBlastFiles: _blasts, conservationFastaFiles: _fastas, ...options } = rest.diagramOptions;
+      return { ...rest, diagramOptions: options };
+    };
+    baseline = omitUnprovenAnalysis(baseline);
+    draftMeaning = omitUnprovenAnalysis(draftMeaning);
+    unknown.push('$.analysis');
+  }
+  compareGenerationValue(baseline, draftMeaning, '$', differences, unknown, unknownPaths);
+  if ((draft.status === 'unknown' && !draft.unknownPaths?.length)
+    || (applied.status === 'unknown' && !applied.unknownPaths?.length)) unknown.push('$');
+  if (liveState?.labelReflowProcessing?.value || liveState?.labelReflowLastError?.value) unknown.push('$live-render');
+  return { status: differences.length ? 'pending' : unknown.length ? 'unknown' : 'clean', differences, unknown };
 };
 
 const recordSourceResourceId = (record, field) => {
@@ -3361,26 +3681,28 @@ const projectCircularConservationConfig = (options, files) => {
   };
 };
 
-const projectCanonicalCircularMeasure = (measure) => {
-  if (measure === null || measure === undefined) return null;
-  if (!measure || typeof measure !== 'object' || Array.isArray(measure)) return measure;
-  const value = Number(measure.value);
-  if (!Number.isFinite(value)) return measure;
-  const unit = String(measure.unit || '').trim().toLowerCase();
-  if (!unit || unit === 'factor') return String(value);
-  return `${value}${unit}`;
+const projectCanonicalCircularPixel = (measure) => {
+  // Historical structured gaps/spacing are physical pixels, including zero.
+  if (measure && typeof measure === 'object' && !Array.isArray(measure)) {
+    if (String(measure.unit || '').trim().toLowerCase() !== 'px') {
+      throw new Error('Circular gap/spacing must use pixels.');
+    }
+    measure = measure.value;
+  }
+  const value = parseOptionalPixel(measure, 'Circular gap/spacing', { allowZero: true });
+  return value === null ? null : String(value);
 };
 
 const projectCanonicalCircularSlot = (slot) => ({
   ...slot,
-  width: projectCanonicalCircularMeasure(slot?.width),
-  radius: projectCanonicalCircularMeasure(slot?.radius),
-  inner_gap_px: projectCanonicalCircularMeasure(
+  width: projectCircularMeasureDraft(slot?.width),
+  radius: projectCircularMeasureDraft(slot?.radius),
+  inner_gap_px: projectCanonicalCircularPixel(
     slot?.innerGapPx ?? slot?.inner_gap_px
-  )?.replace?.(/px$/i, ''),
-  outer_gap_px: projectCanonicalCircularMeasure(
+  ),
+  outer_gap_px: projectCanonicalCircularPixel(
     slot?.outerGapPx ?? slot?.outer_gap_px
-  )?.replace?.(/px$/i, '')
+  )
 });
 
 const projectCurrentCanonicalCircularSlot = (slot) => {
@@ -3390,14 +3712,20 @@ const projectCurrentCanonicalCircularSlot = (slot) => {
       Object.prototype.hasOwnProperty.call(slot, field)
     ))
   ) throw new Error('Current canonical circular track slot uses an obsolete shape.');
+  for (const field of ['innerGapPx', 'outerGapPx']) {
+    const value = slot[field];
+    if (value !== null && value !== undefined && (typeof value !== 'number' || !Number.isFinite(value) || value < 0)) {
+      throw new Error(`Canonical Circular track ${field} must be a nonnegative finite number or null.`);
+    }
+  }
   const projected = projectCanonicalCircularSlot(slot);
   return {
     id: String(projected.id || ''),
     renderer: String(projected.renderer || ''),
     enabled: projected.enabled !== false,
     width: projected.width ?? null, radius: projected.radius ?? null,
-    inner_gap_px: projected.inner_gap_px ?? null,
-    outer_gap_px: projected.outer_gap_px ?? null,
+    inner_gap_px: slot.innerGapPx == null ? null : String(slot.innerGapPx),
+    outer_gap_px: slot.outerGapPx == null ? null : String(slot.outerGapPx),
     side: projected.side ?? null, z: Number(projected.z) || 0,
     params: cloneCanonicalJsonValue(projected.params || {})
   };
@@ -3405,7 +3733,7 @@ const projectCurrentCanonicalCircularSlot = (slot) => {
 const projectLegacyCanonicalCircularSlot = (slot) => {
   const projected = projectCanonicalCircularSlot(slot);
   if (Object.prototype.hasOwnProperty.call(slot, 'spacing')) {
-    projected.spacing = projectCanonicalCircularMeasure(slot.spacing);
+    projected.spacing = projectCanonicalCircularPixel(slot.spacing);
   }
   return migrateLegacyCircularTrackSlot(projected);
 };
@@ -4874,6 +5202,28 @@ export const projectCommittedRecordTransform = ({ committed, target, transform }
       reverseComplement: transform.reverseComplement
     })
   };
+};
+
+/** Project only alignment-owned fields of the last committed canonical artifact. */
+export const projectCommittedSimilarityAlignment = ({ committed, plan, translations, orientations }) => {
+  if (committed?.renderRequest?.schema !== CANONICAL_REQUEST_SCHEMA
+    || committed.renderRequest.mode !== 'linear' || !committed.resources) {
+    throw new Error('Alignment requires a committed canonical Linear artifact.');
+  }
+  const canonical = { ...committed, renderRequest: cloneCanonicalJsonValue(committed.renderRequest) };
+  const request = canonical.renderRequest;
+  const keys = request.records.map(({ recordKey }) => recordKey);
+  const byKey = new Map((orientations || []).map((entry) => [entry.recordKey, entry.reverseComplement]));
+  if (byKey.size !== keys.length || orientations.length !== keys.length
+    || keys.some(key => typeof byKey.get(key) !== 'boolean')) {
+    throw new Error('Alignment orientation coverage changed.');
+  }
+  request.records.forEach(record => writeCanonicalRecordReverseComplement(record, byKey.get(record.recordKey)));
+  request.layout = { recordGapPx: 24, multiRecordPositions: null, ...request.layout,
+    similarityAlignment: cloneCanonicalJsonValue(plan ?? null),
+    recordTranslations: cloneCanonicalJsonValue(translations) };
+  projectCanonicalSessionRequest({ ...canonical, deferResourceContent: true });
+  return canonical;
 };
 
 const normalizePublicationRequestAliases = (request) => {

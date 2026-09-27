@@ -1,3 +1,5 @@
+import { normalizeUserFacingError } from '../../services/error-normalization.js';
+import { resolveColorToHex, toNativeColorInputValue } from '../color-utils.js';
 import {
   getAllFeatureLegendGroups,
   getVisibleFeatureLegendGroup,
@@ -14,7 +16,10 @@ import {
   runDiagramHelperOperation
 } from '../../services/diagram-generation.js';
 
-const normalizedColor = (value) => String(value || '').trim().toLowerCase();
+const normalizedColor = (value) => {
+  const resolved = String(resolveColorToHex(String(value || '').trim()) || value || '').trim().toLowerCase();
+  return resolved.startsWith('#') ? toNativeColorInputValue(resolved) : resolved;
+};
 
 const legendEntryColor = (entryGroup) => {
   for (const path of entryGroup?.querySelectorAll?.('path') || []) {
@@ -148,7 +153,7 @@ export const createLegendEntryActions = ({
     console.log(`addLegendEntry called with caption="${caption}", color="${color}"`);
     if (!svgContainer.value) return false;
 
-    const svg = svgContainer.value.querySelector('svg');
+    const svg = options.svg || svgContainer.value.querySelector('svg');
     if (!svg) return false;
     const composition = parseCompositionMetadata(svg);
     const reflowMetrics = composition.legendReflow;
@@ -281,7 +286,7 @@ export const createLegendEntryActions = ({
         DIAGRAM_HELPER_OPERATIONS.MEASURE_LEGEND_TEXT,
         { caption, fontFamily, fontSize }
       );
-      if (widthResponse.result?.error) throw new Error(widthResponse.result.error);
+      if (widthResponse.result?.error) throw widthResponse.result.error;
       const measuredWidth = Number(widthResponse.result?.width);
       if (!Number.isFinite(measuredWidth) || measuredWidth < 0) {
         throw new Error('Python returned an invalid legend text width.');
@@ -387,7 +392,7 @@ export const createLegendEntryActions = ({
           }
         );
         const result = entryResponse.result;
-        if (result?.error) throw new Error(result.error);
+        if (result?.error) throw result.error;
 
         const entryGroup = document.createElementNS('http://www.w3.org/2000/svg', 'g');
         entryGroup.setAttribute('data-legend-key', caption);
@@ -431,7 +436,7 @@ export const createLegendEntryActions = ({
 
       return caption;
     } catch (e) {
-      console.error('Failed to add legend entry:', e);
+      console.error('Failed to add legend entry:', normalizeUserFacingError(e));
       if (options.throwOnError) throw e;
       return false;
     }
@@ -518,7 +523,18 @@ export const createLegendEntryActions = ({
     return removed;
   };
 
-  const reconcileLegendEntries = ({ restoreColorState = false } = {}) => {
+  const captureLegendEntryOwners = () => {
+    const svg = svgContainer.value?.querySelector?.('svg');
+    return svg ? getAllFeatureLegendGroups(svg).map((group, index) => ({
+      target: targetGroupKey(group, index),
+      entries: directLegendEntryGroups(group).map(entry => ({
+        caption: String(entry.getAttribute('data-legend-key') || '').trim(),
+        owner: String(entry.getAttribute('data-legend-owner') || '')
+      }))
+    })) : [];
+  };
+
+  const reconcileLegendEntries = ({ restoreColorState = false, entryOwners = [] } = {}) => {
     const svg = svgContainer.value?.querySelector?.('svg');
     if (!svg) return false;
     const targetGroups = getAllFeatureLegendGroups(svg);
@@ -533,11 +549,7 @@ export const createLegendEntryActions = ({
       seenCaptions.add(caption);
       const entryColor = String(entry?.color || '#cccccc');
       const color = restoreColorState
-        ? String(
-            legendColorOverrides[caption]
-            || originalLegendColors.value?.[caption]
-            || entryColor
-          )
+        ? String(legendColorOverrides[caption] || entryColor)
         : entryColor;
       if (normalizedColor(entry?.color) !== normalizedColor(color)) {
         entryColorStateChanged = true;
@@ -549,6 +561,8 @@ export const createLegendEntryActions = ({
     const restoredCaptions = new Set();
 
     targetGroups.forEach((targetGroup, targetIndex) => {
+      const owners = new Map((entryOwners.find(group => group.target === targetGroupKey(targetGroup, targetIndex))?.entries || [])
+        .map(entry => [entry.caption, entry.owner]));
       const initialGroups = directLegendEntryGroups(targetGroup);
       const groupsByCaption = new Map(
         initialGroups.map((group) => [String(group.getAttribute('data-legend-key') || '').trim(), group])
@@ -616,6 +630,14 @@ export const createLegendEntryActions = ({
       desiredEntries.forEach((entry, index) => {
         const group = assigned.get(entry.caption);
         if (!group) return;
+        if (owners.has(entry.caption)) {
+          const owner = owners.get(entry.caption);
+          if (String(group.getAttribute('data-legend-owner') || '') !== owner) {
+            if (owner) group.setAttribute('data-legend-owner', owner);
+            else group.removeAttribute('data-legend-owner');
+            changed = true;
+          }
+        }
         if (setLegendEntryColor(group, entry.color)) changed = true;
         const text = group.querySelector('text');
         if (text && String(text.textContent || '') !== entry.caption) {
@@ -648,24 +670,27 @@ export const createLegendEntryActions = ({
     return true;
   };
 
-  const syncFileLegendEntries = async (intents, { previousFileIntents = [] } = {}) => {
-    if (!svgContainer.value) {
-      return { add: [], update: [], remove: [], unchanged: [] };
+  const syncFileLegendEntries = async (intents, { previousFileIntents = [], isCurrent = () => true, commit = () => {}, transact = (_diff, apply) => apply() } = {}) => {
+    const mountedSvg = svgContainer.value?.querySelector('svg');
+    const svg = mountedSvg?.cloneNode(true);
+    const targetGroups = svg ? getAllFeatureLegendGroups(svg) : [];
+    if (targetGroups.length === 0) {
+      const diff = { add: [], update: [], remove: [], unchanged: [] };
+      return transact(diff, () => {
+        if (!isCurrent()) return false;
+        commit();
+        return diff;
+      });
     }
-    const svg = svgContainer.value.querySelector('svg');
-    if (!svg) return { add: [], update: [], remove: [], unchanged: [] };
-    const targetGroups = getAllFeatureLegendGroups(svg);
-    if (targetGroups.length === 0) return { add: [], update: [], remove: [], unchanged: [] };
 
-    const svgSnapshot = svg.cloneNode(true);
     const resultIndex = selectedResultIndex.value;
-    const resultSnapshot = resultIndex >= 0 && results.value.length > resultIndex
-      ? { ...results.value[resultIndex] }
-      : null;
-    const editorSnapshot = legendEntries.value.map((entry) => ({ ...entry }));
-    const provenance = new Map(
-      previousFileIntents.map((entry) => [String(entry?.caption || '').trim(), normalizedColor(entry?.color)])
-    );
+    let measurementHost;
+    const provenance = new Map();
+    for (const entry of previousFileIntents) {
+      const caption = String(entry?.caption || '').trim();
+      if (!provenance.has(caption)) provenance.set(caption, new Set());
+      provenance.get(caption).add(normalizedColor(entry?.color));
+    }
 
     try {
       const desiredByCaption = new Map(intents.map((intent) => [intent.caption, normalizedColor(intent.color)]));
@@ -674,7 +699,7 @@ export const createLegendEntryActions = ({
           const caption = entry.getAttribute('data-legend-key') || '';
           if (
             !entry.hasAttribute('data-legend-owner') &&
-            provenance.get(caption) === legendEntryColor(entry)
+            provenance.get(caption)?.has(legendEntryColor(entry))
           ) {
             entry.setAttribute('data-legend-owner', SPECIFIC_COLOR_FILE_OWNER);
           }
@@ -726,6 +751,7 @@ export const createLegendEntryActions = ({
       }
       for (const entry of diff.add) {
         await addLegendEntry(entry.caption, entry.color, {
+          svg,
           owner: SPECIFIC_COLOR_FILE_OWNER,
           conflictPolicy: 'error',
           commit: false,
@@ -737,29 +763,36 @@ export const createLegendEntryActions = ({
       const legendGroup = svg.getElementById('legend');
       const hasDualLegends =
         !!legendGroup?.querySelector('#legend_horizontal') && !!legendGroup?.querySelector('#legend_vertical');
+      if (!isCurrent() || svgContainer.value.querySelector('svg') !== mountedSvg) return false;
+      // Measure a disposable, hidden SVG before admitting any current state.
+      measurementHost = document.createElement('div');
+      measurementHost.style.cssText = 'position:fixed;left:-100000px;top:0;visibility:hidden;pointer-events:none';
+      measurementHost.appendChild(svg);
+      document.body.appendChild(measurementHost);
       if (hasDualLegends) reflowDualLegendLayout(svg);
       else updatePairwiseLegendPositions(svg);
-      onLegendGeometryChanged();
-      skipCaptureBaseConfig.value = true;
-      if (resultIndex >= 0 && results.value.length > resultIndex) {
-        const nextResults = [...results.value];
-        nextResults[resultIndex] = {
-          ...results.value[resultIndex],
-          content: serializeCleanSvg(svg)
-        };
-        results.value = nextResults;
-      }
-      extractLegendEntries();
-      return diff;
-    } catch (error) {
-      svg.replaceWith(svgSnapshot);
-      if (resultSnapshot && resultIndex >= 0 && results.value.length > resultIndex) {
-        const nextResults = [...results.value];
-        nextResults[resultIndex] = resultSnapshot;
-        results.value = nextResults;
-      }
-      legendEntries.value = editorSnapshot;
-      throw error;
+      return await transact(diff, () => {
+        if (!isCurrent() || svgContainer.value.querySelector('svg') !== mountedSvg) return false;
+        // Rules, mounted geometry and Result commit synchronously inside History.
+        commit();
+        const mountedLegend = mountedSvg.getElementById('legend');
+        const candidateLegend = svg.getElementById('legend');
+        if (mountedLegend && candidateLegend) mountedLegend.replaceWith(candidateLegend);
+        onLegendGeometryChanged();
+        skipCaptureBaseConfig.value = true;
+        if (resultIndex >= 0 && results.value.length > resultIndex) {
+          const nextResults = [...results.value];
+          nextResults[resultIndex] = {
+            ...results.value[resultIndex],
+            content: serializeCleanSvg(mountedSvg)
+          };
+          results.value = nextResults;
+        }
+        extractLegendEntries();
+        return diff;
+      });
+    } finally {
+      measurementHost?.remove();
     }
   };
 
@@ -999,6 +1032,7 @@ export const createLegendEntryActions = ({
 
   return {
     addLegendEntry,
+    captureLegendEntryOwners,
     addNewLegendEntry,
     deleteLegendEntry,
     extractLegendEntries,

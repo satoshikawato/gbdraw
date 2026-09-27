@@ -1,0 +1,13 @@
+============================= test session starts ==============================
+platform linux -- Python 3.13.3, pytest-9.0.2, pluggy-1.5.0
+rootdir: /mnt/c/Users/genom/GitHub/gbdraw
+configfile: pyproject.toml
+plugins: anyio-4.9.0, xdist-3.8.0, timeout-2.4.0, cov-7.0.0
+timeout: 300.0s
+timeout method: signal
+timeout func_only: False
+collected 9 items
+
+tests/test_web_rule_matching.py .........                                [100%]
+
+============================== 9 passed in 0.76s ===============================

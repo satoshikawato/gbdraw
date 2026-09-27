@@ -643,3 +643,64 @@ def test_display_unset_preserves_external_crop_source_length(crop_rc, reverse, r
         assert resolved.transforms[0].source_base == base
         assert resolved.transforms[0].source_step == step
         assert resolved.displays[0].start_coordinate is None
+
+
+@pytest.mark.parametrize("query_reverse,subject_reverse", [(True, False), (False, True), (True, True)])
+@pytest.mark.parametrize("cropped", [False, True])
+def test_source_bound_comparison_direction_projection_round_trip(tmp_path, query_reverse, subject_reverse, cropped):
+    """Saved evidence reprojects without analysis and preserves its source binding."""
+    from dataclasses import replace
+    import pandas as pd
+    from gbdraw.api.request_render import plan_linear_request
+    from gbdraw.features.ids import compute_feature_hash
+    from gbdraw.linear_comparison import LinearComparison
+
+    inputs = []
+    for key, strand in (("query", 1), ("subject", -1)):
+        record = _record(key, "ACGT" * 50)
+        record.features = [SeqFeature(FeatureLocation(30, 60, strand=strand), type="CDS")]
+        path = tmp_path / (key + ".gbk")
+        _write_genbank(path, record)
+        inputs.append(RecordInput(GenBankInputSource(path), record_key=key,
+            region=parse_region_spec(f"{key}:11-180") if cropped else None))
+    baseline = LinearDiagramRequest(records=tuple(inputs))
+    before = plan_linear_request(baseline)
+    row = {"qstart": 21 if cropped else 31, "qend": 50 if cropped else 60,
+           "sstart": 50 if cropped else 60, "send": 21 if cropped else 31,
+           "collinearity_orientation": "minus", "bitscore": 123.5}
+    for role, record, provenance in zip(("query", "subject"), before.records, before.provenance, strict=True):
+        source = provenance.source_feature_catalog[0]
+        row.update({f"{role}_feature_index": str(source.source_feature_index),
+                    f"{role}_feature_svg_id": source.stable_feature_id,
+                    f"{role}_view_feature_svg_id": compute_feature_hash(record.features[0], record_id=record.id)})
+    evidence = pd.DataFrame([row])
+    options = LinearDiagramOptions(linear_comparisons=(LinearComparison(0, 1, evidence),))
+    baseline = replace(baseline, options=options)
+    assert plan_linear_request(baseline).request.options.linear_comparisons[0].matches is evidence
+    reversed_request = replace(baseline, records=tuple(replace(item,
+        region=replace(item.region, reverse_complement=reverse) if item.region else None,
+        presentation=RecordPresentation(reverse_complement=reverse if not item.region else False))
+        for item, reverse in zip(inputs, (query_reverse, subject_reverse), strict=True)))
+    after = plan_linear_request(reversed_request)
+    projected = after.request.options.linear_comparisons[0].matches
+    assert evidence.to_dict("records") == [row]
+    for role, prefix, record, reverse in zip(("query", "subject"), ("q", "s"), after.records,
+                                            (query_reverse, subject_reverse), strict=True):
+        assert projected.iloc[0][f"{role}_feature_svg_id"] == row[f"{role}_feature_svg_id"]
+        assert projected.iloc[0][f"{role}_view_feature_svg_id"] == compute_feature_hash(record.features[0], record_id=record.id)
+        for endpoint in ("start", "end"):
+            key = prefix + endpoint
+            assert projected.iloc[0][key] == (len(record) + 1 - row[key] if reverse else row[key])
+    assert projected.iloc[0].bitscore == row["bitscore"]
+    assert projected.iloc[0].collinearity_orientation == ("plus" if query_reverse != subject_reverse else "minus")
+    restored = plan_linear_request(replace(baseline, options=after.request.options))
+    pd.testing.assert_frame_equal(restored.request.options.linear_comparisons[0].matches, evidence)
+    corrupted = evidence.copy(deep=True)
+    corrupted.at[0, "query_view_feature_svg_id"] = "fnot-source-bound"
+    with pytest.raises(ValidationError, match="source/crop binding"):
+        plan_linear_request(replace(reversed_request, options=replace(options,
+            linear_comparisons=(LinearComparison(0, 1, corrupted),))))
+    corrupted.at[0, "query_feature_svg_id"] = "fwrong-source"
+    with pytest.raises(ValidationError, match="source feature ID"):
+        plan_linear_request(replace(reversed_request, options=replace(options,
+            linear_comparisons=(LinearComparison(0, 1, corrupted),))))

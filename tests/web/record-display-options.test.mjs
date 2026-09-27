@@ -10,7 +10,7 @@ import { parseSequenceRecordText } from '../../gbdraw/web/js/app/record-discover
 
 import { createFeaturePlacementActions } from '../../gbdraw/web/js/app/feature-editor/placement-actions.js';
 import { createDefaultForm, createDefaultAdv } from '../../gbdraw/web/js/services/session-active-config-contract.js';
-import { adoptCurrentSessionResources, createCombinedSessionResourceFileView } from '../../gbdraw/web/js/services/session-resource-backing.js';
+import { adoptCurrentSessionResources, createCombinedSessionResourceFileView, createSessionResourceFileView } from '../../gbdraw/web/js/services/session-resource-backing.js';
 import { readFileBytes } from '../../gbdraw/web/js/services/file-content-cache.js';
 
 const source = {};
@@ -143,17 +143,17 @@ test('shortcuts reject stale, unbound, cross-record, empty, and unknown/mixed-st
 
 const descriptor = (name, text) => ({ kind: 'genbank', name, type: 'text/plain',
   lastModified: 0, size: Buffer.byteLength(text), encoding: 'base64', data: btoa(text) });
-const compositeControls = () => {
+const compositeControls = ({ linear = false, discovered = true } = {}) => {
   const resources = Object.fromEntries(['first', 'second'].map((id) => [id,
     descriptor(`${id}.gb`, `LOCUS       ${id} 100 bp DNA circular\n//\n`)]));
   const table = adoptCurrentSessionResources(resources);
   const components = Object.keys(resources).map((resourceId) => ({ resourceId }));
   const makeFile = () => createCombinedSessionResourceFileView(table, components);
   const file = makeFile();
-  let committed = { resources, renderRequest: { mode: 'circular', records: components.map(({ resourceId }, i) => ({
+  let committed = { resources, renderRequest: { mode: linear ? 'linear' : 'circular', records: components.map(({ resourceId }, i) => ({
     recordKey: `record-${i + 1}`, cardinality: 'exactly_one', source: { kind: 'genbank', resourceId },
     selector: null })) } };
-  const state = { mode: { value: 'circular' }, cInputType: { value: 'gb' },
+  const state = { mode: { value: linear ? 'linear' : 'circular' }, cInputType: { value: 'gb' },
     lInputType: { value: 'gb' }, files: { c_gb: file }, linearSeqs: [],
     form: createDefaultForm(), adv: createDefaultAdv('circular'),
     recordDisplayDrafts: [], featurePlacementOverrides: {},
@@ -161,10 +161,13 @@ const compositeControls = () => {
       record_id: resourceId, record_length: 100, selector: `#${i + 1}`, detectedTopology: 'circular' })) },
     featureCatalog: { value: { items: [{ recordKeys: ['record-1', 'record-2'] }] } } };
   state.form.track_type = 'middle';
+  if (linear) state.linearSeqs = components.map(({resourceId}, index) => ({
+    uid:`record-${index+1}`,gb:createSessionResourceFileView(table,resourceId),region_record_id:'',region_reverse:false
+  }));
   const getCommittedRequest = () => committed.renderRequest;
   const history = { runUndoable: (_label, fn) => fn() };
   const controls = createRecordDisplayControls({ state, computed: (fn) => ({ get value() { return fn(); } }),
-    watch: () => {}, linearRecordSelector: { recordsFor: () => [] }, history,
+    watch: () => {}, linearRecordSelector: { recordsFor: seq => discovered ? [{selector:'#1',recordId:components[Number(seq.uid.slice(-1))-1].resourceId,recordLength:100,detectedTopology:'circular'}] : [] }, history,
     getCommittedRequest, getCommittedSession: () => committed });
   const actions = createFeaturePlacementActions({ state, history, getCommittedRequest,
     isCurrentFeature: controls.isCurrentFeature });
@@ -250,4 +253,45 @@ test('unsupported draft lanes remain unavailable independently of current placem
   assert.equal(model.actions.valueFor(model.feature), 'outward');
   assert.deepEqual(model.enabled(), ['auto', 'main']);
   assert.throws(() => model.actions.setPlacement([model.feature], 'inward'), /Unavailable/);
+});
+
+
+test('alignment intent changes only its target direction and preserves pending display settings', () => {
+  const model=compositeControls({linear:true});
+  const rows=model.controls.allRows.value.filter(row=>row.scope==='linear');
+  model.controls.setStart(rows[0],25);model.controls.setStart(rows[1],40);
+  const pending=structuredClone(model.state.recordDisplayDrafts);
+  const directions=[{recordKey:'record-1',reverseComplement:true}];
+  const checkpoint=model.controls.captureAlignmentOrientationIntent(directions);
+  model.controls.commitAlignmentOrientations(directions);
+  assert.equal(model.state.linearSeqs[0].region_reverse,true);
+  assert.equal(model.state.linearSeqs[1].region_reverse,false);
+  assert.equal(model.state.recordDisplayDrafts.length,pending.length);
+  assert.equal(model.state.recordDisplayDrafts[0].startCoordinate,25);
+  assert.deepEqual(model.state.recordDisplayDrafts[1],pending[1]);
+  assert.equal(effectiveRecordReverseComplement({...rows[0],reverse:true},model.state.recordDisplayDrafts[0]),true);
+  // A later normal Reverse checkbox remains effective, with no forced override.
+  model.state.linearSeqs[0].region_reverse=false;
+  assert.equal(effectiveRecordReverseComplement({...rows[0],reverse:false},model.state.recordDisplayDrafts[0]),false);
+  model.controls.restoreAlignmentOrientationIntent(checkpoint);
+  assert.deepEqual(model.state.recordDisplayDrafts,pending);
+});
+
+
+test('fresh loaded alignment binds canonical sources before discovery and restores pending orientation', () => {
+  const model = compositeControls({linear:true, discovered:false});
+  model.state.linearSeqs[0].region_reverse = true;
+  const target = {recordKey:'record-1', reverseComplement:true};
+  assert.equal(model.controls.allRows.value.filter(row => row.scope === 'linear').length, 0);
+  const checkpoint = model.controls.captureAlignmentOrientationIntent([target]);
+  model.controls.commitAlignmentOrientations([target]);
+  assert.equal(model.state.linearSeqs[0].region_reverse, true);
+  assert.equal(model.state.linearSeqs[1].region_reverse, false);
+  // Artifact rollback restores its canonical direction first; the same owner
+  // then restores the pre-operation pending input, without needing discovery.
+  model.state.linearSeqs[0].region_reverse = false;
+  model.controls.restoreAlignmentOrientationIntent(checkpoint);
+  assert.equal(model.state.linearSeqs[0].region_reverse, true);
+  model.state.linearSeqs[0].gb = new Blob(['replacement']);
+  assert.throws(() => model.controls.captureAlignmentOrientationIntent([target]), /source binding changed/);
 });

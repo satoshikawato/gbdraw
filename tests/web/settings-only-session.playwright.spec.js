@@ -47,12 +47,28 @@ const save = async (page, testInfo, label) => {
 };
 
 const loadFile = async (page, file, message = 'Session loaded successfully!') => {
-  const dialog = page.waitForEvent('dialog');
-  await page.locator('input[accept^=".json,"]').setInputFiles(file);
-  const actual = (await dialog).message();
+  const dialog = typeof message === 'string' ? page.waitForEvent('dialog') : null;
+  const input = page.locator('input[accept^=".json,"]');
+  await input.setInputFiles(file);
+  if (dialog) {
+    expect((await dialog).message()).toBe(message);
+    await page.waitForFunction(() => !window.__GBDRAW_APP__.sessionImportPending);
+    return;
+  }
+  // Rejected Load uses the operation alert. Await the import owner's finally
+  // boundary before comparing the entire preserved Session below.
+  await expect.poll(() => input.inputValue()).toBe('');
   await page.waitForFunction(() => !window.__GBDRAW_APP__.sessionImportPending);
-  if (typeof message === 'string') expect(actual).toBe(message);
-  else expect(actual).toMatch(message);
+  const actual = await page.evaluate(() => window.__GBDRAW_APP__.errorLog);
+  const expected = await page.evaluate(async field => {
+    const { normalizeUserFacingError } = await import('./js/services/error-normalization.js');
+    return normalizeUserFacingError({ code: 'INPUT_INVALID', stage: 'request-validation',
+      context: { field, reason: 'FIELDS' } });
+  }, message.field);
+  expect(actual).toEqual(expected);
+  expect(JSON.stringify(actual)).not.toMatch(/absent|axis_stroke_color|Invalid managed flag|newer than/);
+  await expect(page.getByRole('alert', { name: 'Operation error' })).toContainText(expected.summary);
+  return actual;
 };
 
 test('version 42 Linear settings migrate historical Ribbon and label visibility', async ({ page }, testInfo) => {
@@ -122,8 +138,17 @@ test('settings-only Session preserves non-default Circular and Linear profiles t
     const before = await snapshot(page);
     expect(before.config.form.labels_mode).toBe('both');
     expect(before.config.form.track_type).toBe('middle');
+    // Stale run metadata must not turn source-free settings into a committed artifact.
+    await page.evaluate(async () => {
+      const { state } = await import('./js/state.js');
+      state.annotationWarnings.value = [{ code: 'feature_selector_unmatched', setId: 'prior',
+        annotationId: 'prior-row', recordId: 'prior-record', recordIndex: 0,
+        missingCount: 1, message: 'Prior unmatched selector', resultIndex: 0, resultName: 'prior.svg' }];
+      state.trackSlotResolvedGeometry.value = { schema: 1, records: [] };
+    });
     const saved = await save(page, testInfo, 'first');
     expect(saved.document.version).toBe(44);
+    expect(saved.document).not.toHaveProperty('runMetadata');
     expect(saved.document.config.adv).not.toHaveProperty('linear_show_accession');
     expect(saved.document.config.adv).not.toHaveProperty('linear_show_length');
     assertSourceFree(await snapshot(page));
@@ -193,6 +218,14 @@ test('settings-only Load replaces existing work and rejected candidates preserve
   page.on('dialog', dialog => dialog.accept(dialog.type() === 'prompt' ? 'Full control' : undefined));
   await openApp(page);
   await loadFile(page, path.join(process.cwd(), 'gbdraw/web/gallery/sessions/HmmtDNA_basic_circular.gbdraw-session.json'));
+  const runMetadata = await page.evaluate(async () => {
+    const { state } = await import('./js/state.js');
+    state.annotationWarnings.value = [{ code: 'feature_selector_unmatched', setId: 'annotation-set',
+      annotationId: 'missing-selector', recordId: 'record', recordIndex: 0, missingCount: 1,
+      message: 'Unmatched annotation selector', resultIndex: 0, resultName: state.results.value[0].name }];
+    state.trackSlotResolvedGeometry.value = { schema: 1, records: [] };
+    return { annotationWarnings: state.annotationWarnings.value, trackSlotGeometry: state.trackSlotResolvedGeometry.value };
+  });
   const committed = (await snapshot(page)).committed.renderRequest;
   await page.getByRole('button', { name: 'Linear', exact: true }).click();
   await settle(page);
@@ -202,7 +235,12 @@ test('settings-only Load replaces existing work and rejected candidates preserve
   await assertCoherent(await capture(page, testInfo, 'inactive-source'), 'mode switch preserves the full Session');
   const inactiveSave = await save(page, testInfo, 'inactive-source');
   expect(inactiveSave.document.renderRequest).toEqual({ ...committed, schema: 8 });
+  expect(inactiveSave.document.runMetadata).toEqual(runMetadata);
   await loadFile(page, inactiveSave.file);
+  expect(await page.evaluate(async () => {
+    const { state } = await import('./js/state.js');
+    return { annotationWarnings: state.annotationWarnings.value, trackSlotGeometry: state.trackSlotResolvedGeometry.value };
+  })).toEqual(runMetadata);
   expect((await snapshot(page)).circularSources[0]).toBe(true);
   expect((await snapshot(page)).committed.renderRequest).toEqual({ ...committed, schema: 8 });
   const full = await save(page, testInfo, 'full-control');
@@ -210,23 +248,23 @@ test('settings-only Load replaces existing work and rejected candidates preserve
   const visual = await capture(page, testInfo, 'before-rejected-loads');
   await assertCoherent(visual, 'prior valid Session');
   const cases = [
-    ['request', d => { delete d.renderRequest; }, /canonical render request/],
-    ['null-request-with-result', d => { d.renderRequest = null; }, /biological sources|committed render artifacts/],
-    ['resource', d => { d.resources = {}; }, /[Mm]issing.*resource|resource.*missing/],
-    ['config', d => { d.config.form = []; }, /active form/],
-    ['binding', d => { d.webFiles.bindings.c_gb.resourceId = 'absent'; }, /[Mm]issing.*resource/],
-    ['version', d => { d.version = 999; }, /newer than/],
+    ['request', d => { delete d.renderRequest; }, { field: 'schema' }],
+    ['null-request-with-result', d => { d.renderRequest = null; }, { field: 'schema' }],
+    ['resource', d => { d.resources = {}; }, { field: 'schema' }],
+    ['config', d => { d.config.form = []; }, { field: 'config' }],
+    ['binding', d => { d.webFiles.bindings.c_gb.resourceId = 'absent'; }, { field: 'schema' }],
+    ['version', d => { d.version = 999; }, { field: 'schema' }],
     // This valid-shaped profile reaches the existing apply transaction before
     // its managed flag is rejected, exercising rollback after reset has begun.
-    ['profile-rollback', d => { d.config.modeProfiles.profiles.circular.managed.axis_stroke_color = 'invalid'; }, /Invalid managed flag/]
+    ['profile-rollback', d => { d.config.modeProfiles.profiles.circular.managed.axis_stroke_color = 'invalid'; }, { field: 'config' }]
   ];
   for (const [name, mutate, error] of cases) {
     const candidate = structuredClone(full.document);
     mutate(candidate);
     const file = testInfo.outputPath(`${name}.json`);
     await fs.writeFile(file, JSON.stringify(candidate));
-    await loadFile(page, file, error);
-    expect(await snapshot(page), `${name}: complete state at failed Load completion`).toEqual(before);
+    const rejection = await loadFile(page, file, error);
+    expect(await snapshot(page), `${name}: complete state at failed Load completion`).toEqual({ ...before, error: rejection });
     const after = await capture(page, testInfo, `rejected-${name}`);
     await assertCoherent(after, `${name}: rejected Load`);
     expect(after.completed.selected).toEqual(visual.completed.selected);

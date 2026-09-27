@@ -132,37 +132,12 @@ export const buildGeneratedArtifactTransportIdentity = async (payload) => {
   });
 };
 
-export const serializeError = (error) => {
-  const normalized = normalizeUserFacingError(error);
-  return {
-    name: error?.name ? String(error.name) : 'Error',
-    message: normalized?.summary || 'Unknown diagram generation error',
-    details: Array.isArray(normalized?.details) ? normalized.details : [],
-    notes: Array.isArray(error?.notes) ? error.notes.map(String) : [],
-    stack: error?.stack ? String(error.stack) : ''
-  };
-};
+export const serializeError = (error, options = {}) => normalizeUserFacingError(error || {}, options);
 
-const errorDiagnostic = (error) => {
-  const name = error?.name ? String(error.name) : 'Error';
-  const message = error?.message ? String(error.message) : String(error || 'Unknown error');
-  return `${name}: ${message}`;
-};
-
-const attachCleanupDiagnostic = (
-  primary,
-  cleanupError,
-  label
-) => {
+const attachCleanupDiagnostic = (primary, cleanupError) => {
   if (!primary || typeof primary !== 'object' || !cleanupError) return primary;
-  const note = `${label}: ${errorDiagnostic(cleanupError)}`;
-  const notes = Array.isArray(primary.notes) ? [...primary.notes] : [];
-  if (!notes.includes(note)) notes.push(note);
-  primary.notes = notes;
-  for (const field of ['traceback', 'stack']) {
-    if (typeof primary[field] !== 'string' || primary[field].includes(note)) continue;
-    primary[field] = `${primary[field].trimEnd()}\n${note}`;
-  }
+  primary.secondary = [...(Array.isArray(primary.secondary) ? primary.secondary : []),
+    { code: 'CLEANUP_FAILED', stage: 'cleanup' }].slice(0, 2);
   return primary;
 };
 
@@ -180,19 +155,20 @@ export const resolveGenerationCleanupOutcome = ({
     ? result.error
     : null;
   const primary = primaryError || pythonError || destroyError || workspaceError;
+  if (!primaryError && !pythonError && primary) {
+    Object.assign(primary, { code: 'CLEANUP_FAILED', stage: 'cleanup' });
+  }
   if (primary) {
     if (primary !== destroyError && destroyError) {
       attachCleanupDiagnostic(
         primary,
-        destroyError,
-        'Temporary render handle cleanup also failed'
+        destroyError
       );
     }
     if (primary !== workspaceError && workspaceError) {
       attachCleanupDiagnostic(
         primary,
-        workspaceError,
-        'Temporary render workspace cleanup also failed'
+        workspaceError
       );
     }
   }
@@ -320,11 +296,10 @@ const withRequestWorkspace = async (pyodide, requestId, kind, callback) => {
       if (primaryError) {
         attachCleanupDiagnostic(
           primaryError,
-          cleanupError,
-          'Temporary helper workspace cleanup also failed'
+          cleanupError
         );
       } else {
-        throw cleanupError;
+        throw { code: 'CLEANUP_FAILED', stage: 'cleanup' };
       }
     }
   }
@@ -470,36 +445,65 @@ const stageRenderResources = async (
   return resourcePaths;
 };
 
+// Rendering and source-bound helpers enter the same canonical staging boundary.
+const prepareCanonicalResources = (
+  pyodide, workspace, { resourceManifest, stagedResources },
+  { testLifecycleEnabled = false, requestId = 0 } = {}
+) => stageRenderResources(
+  pyodide, workspace, resourceManifest, stagedResources, testLifecycleEnabled, requestId
+);
+
 const requireHelperFile = (paths, role, operation) => {
   const path = paths.get(role);
   if (!path) throw new TypeError(`Diagram helper '${operation}' requires the '${role}' file.`);
   return path;
 };
 
-const callJsonHelper = (pyodide, helperName, args) => {
-  const helper = pyodide.globals.get(helperName);
+export const callJsonHelper = (pyodide, helperName, args) => {
+  const helper = pyodide.globals.get('call_web_json_helper');
+  let result = null;
+  let primary = null;
   try {
-    if (typeof helper !== 'function') {
-      throw new Error(`Packaged Python helper '${helperName}' is unavailable.`);
+    if (typeof helper !== 'function') throw { code: 'HELPER_PROTOCOL', stage: 'helper' };
+    try {
+      result = JSON.parse(String(helper(helperName, ...args) || 'null'));
+    } catch (error) {
+      throw normalizeUserFacingError(error, { code: 'RESULT_INVALID', stage: 'helper' });
     }
-    const rawResult = helper(...args);
-    return JSON.parse(String(rawResult || 'null'));
-  } finally {
-    helper?.destroy?.();
+    if (result?.error) throw normalizeUserFacingError(result.error);
+  } catch (error) {
+    primary = serializeError(error, { stage: 'helper' });
   }
+  try {
+    helper?.destroy?.();
+  } catch (error) {
+    if (primary) attachCleanupDiagnostic(primary, error);
+    else primary = { code: 'CLEANUP_FAILED', stage: 'cleanup' };
+  }
+  if (primary) throw primary;
+  return result;
 };
 
 const jsonArgument = (value, fallback) => JSON.stringify(value ?? fallback);
 
 const HELPER_OPERATION_SPECS = Object.freeze({
   [DIAGRAM_HELPER_OPERATIONS.RESOLVE_SIMILARITY_ALIGNMENT]: {
-    keys: ['request'],
+    keys: ['request', 'projection', 'resourceManifest', 'stagedResources'],
     fileRoles: [],
-    run: (pyodide, payload) => callJsonHelper(
-      pyodide,
-      'resolve_similarity_alignment_json',
-      [jsonArgument(payload.request, null)]
-    )
+    run: async (pyodide, payload, _paths, _operation, workspace) => {
+      let resourcePaths = {};
+      if (payload.projection !== undefined) {
+        resourcePaths = await prepareCanonicalResources(
+          pyodide, `${workspace}/projection`, payload
+        );
+      } else if (payload.resourceManifest !== undefined || payload.stagedResources !== undefined) {
+        throw new TypeError('Alignment resources require a projection context.');
+      }
+      return callJsonHelper(pyodide, 'resolve_similarity_alignment_json', [
+        jsonArgument(payload.request, null), jsonArgument(payload.projection, null),
+        jsonArgument(resourcePaths, {}), workspace
+      ]);
+    }
   },
   [DIAGRAM_HELPER_OPERATIONS.EVALUATE_RULES]: {
     keys: ['features', 'rules', 'kind'],
@@ -798,7 +802,7 @@ const HELPER_OPERATION_SPECS = Object.freeze({
 
 const runHelperOperation = async ({ operation, payload, requestId } = {}) => {
   if (!runtime?.pyodide) {
-    throw new Error('Diagram generation worker has not been initialized.');
+    throw serializeError({ code: 'WORKER_INIT', operation, stage: 'initialization' });
   }
   const normalizedOperation = String(operation || '').trim();
   const spec = Object.prototype.hasOwnProperty.call(
@@ -808,26 +812,36 @@ const runHelperOperation = async ({ operation, payload, requestId } = {}) => {
     ? HELPER_OPERATION_SPECS[normalizedOperation]
     : null;
   if (!spec) {
-    throw new TypeError(`Unsupported diagram helper operation '${normalizedOperation || '(blank)'}'.`);
+    throw serializeError({ code: 'HELPER_PROTOCOL', operation: normalizedOperation, stage: 'request-validation' });
   }
-  const normalizedPayload = requirePayloadObject(payload, normalizedOperation);
-  assertAllowedPayloadKeys(normalizedPayload, normalizedOperation, [
-    ...spec.keys
-  ]);
-  return withRequestWorkspace(
-    runtime.pyodide,
-    requestId,
-    'helper',
-    async (workspace) => {
-      const paths = stageHelperFiles(
-        runtime.pyodide,
-        workspace,
-        normalizedPayload.files,
-        spec.fileRoles
-      );
-      return spec.run(runtime.pyodide, normalizedPayload, paths, normalizedOperation);
-    }
-  );
+  let failureStage = 'request-validation';
+  try {
+    const normalizedPayload = requirePayloadObject(payload, normalizedOperation);
+    assertAllowedPayloadKeys(normalizedPayload, normalizedOperation, [
+      ...spec.keys
+    ]);
+    failureStage = 'resource-staging';
+    return await withRequestWorkspace(
+      runtime.pyodide,
+      requestId,
+      'helper',
+      async (workspace) => {
+        const paths = stageHelperFiles(
+          runtime.pyodide,
+          workspace,
+          normalizedPayload.files,
+          spec.fileRoles
+        );
+        failureStage = 'helper';
+        return spec.run(runtime.pyodide, normalizedPayload, paths, normalizedOperation, workspace);
+      }
+    );
+  } catch (error) {
+    throw serializeError(error, {
+      operation: normalizedOperation, stage: failureStage,
+      code: failureStage === 'request-validation' ? 'HELPER_PROTOCOL' : 'UNKNOWN'
+    });
+  }
 };
 
 const runGeneration = async ({
@@ -838,10 +852,10 @@ const runGeneration = async ({
   testLifecycleEnabled = false
 } = {}) => {
   if (!runtime?.pyodide) {
-    throw new Error('Diagram generation worker has not been initialized.');
+    throw serializeError({ code: 'WORKER_INIT', operation: 'generate', stage: 'initialization' });
   }
   if (!request || typeof request !== 'object' || Array.isArray(request)) {
-    throw new Error('Diagram generation requires a canonical typed request.');
+    throw serializeError({ code: 'HELPER_PROTOCOL', operation: 'generate', stage: 'request-validation' });
   }
   const { pyodide } = runtime;
   const runWrapper = pyodide.globals.get('run_canonical_request_wrapper');
@@ -850,6 +864,7 @@ const runGeneration = async ({
   let resultHandle = null;
   let primaryError = null;
   let pythonWrapperStarted = false;
+  let failureStage = 'resource-staging';
   try {
     const newlyStagedResourceBytes = (
       Array.isArray(stagedResources) ? stagedResources : []
@@ -868,13 +883,9 @@ const runGeneration = async ({
       'worker-resource-linking-start'
     );
     self.postMessage({ type: 'progress', requestId, stage: 'preparing-resources' });
-    const resourcePaths = await stageRenderResources(
-      pyodide,
-      workspace,
-      resourceManifest,
-      stagedResources,
-      testLifecycleEnabled,
-      requestId
+    const resourcePaths = await prepareCanonicalResources(
+      pyodide, workspace, { resourceManifest, stagedResources },
+      { testLifecycleEnabled, requestId }
     );
     emitTestLifecycle(
       testLifecycleEnabled,
@@ -907,6 +918,7 @@ const runGeneration = async ({
     self.postMessage({ type: 'progress', requestId, stage: 'rendering' });
     emitTestLifecycle(testLifecycleEnabled, requestId, 'python-wrapper-start');
     pythonWrapperStarted = true;
+    failureStage = 'render';
     resultHandle = runWrapper(
       requestJson,
       resourcePathsJson,
@@ -917,6 +929,7 @@ const runGeneration = async ({
     emitTestLifecycle(testLifecycleEnabled, requestId, 'python-wrapper-end');
     self.postMessage({ type: 'progress', requestId, stage: 'finalizing' });
     emitTestLifecycle(testLifecycleEnabled, requestId, 'result-object-conversion-start');
+    failureStage = 'result-admission';
     result = typeof resultHandle?.toJs === 'function'
       ? resultHandle.toJs({ dict_converter: Object.fromEntries })
       : resultHandle;
@@ -943,7 +956,7 @@ const runGeneration = async ({
       )
     });
   } catch (error) {
-    primaryError = error;
+    primaryError = serializeError(error, { operation: 'generate', stage: failureStage });
   }
   emitTestLifecycle(testLifecycleEnabled, requestId, 'worker-cleanup-start');
   let destroyError = null;
@@ -958,8 +971,7 @@ const runGeneration = async ({
     if (destroyError) {
       attachCleanupDiagnostic(
         destroyError,
-        error,
-        'Additional temporary render handle cleanup also failed'
+        error
       );
     } else {
       destroyError = error;
@@ -1003,6 +1015,7 @@ const runGeneration = async ({
     destroyError,
     workspaceError
   });
+  if (outcome?.error) outcome.error = serializeError(outcome.error, { operation: 'generate' });
   if (!outcome?.error) {
     emitTestLifecycle(testLifecycleEnabled, requestId, 'worker-artifact-identity-start');
     outcome.artifactIdentity = await buildGeneratedArtifactTransportIdentity(outcome);
@@ -1028,17 +1041,17 @@ const runFeatureExtraction = async ({
   requestId = 0
 } = {}) => {
   if (!runtime?.pyodide) {
-    throw new Error('Diagram generation worker has not been initialized.');
+    throw serializeError({ code: 'WORKER_INIT', operation: 'feature-extraction', stage: 'initialization' });
   }
   const normalizedPath = String(path || '').trim();
   if (!normalizedPath) {
-    throw new Error('Feature extraction requires an input path.');
+    throw serializeError({ code: 'HELPER_PROTOCOL', operation: 'feature-extraction', stage: 'request-validation', context: { field: 'input', reason: 'REQUIRED' } });
   }
   const normalizedFormat = String(format || 'genbank').trim().toLowerCase();
   const isGff = normalizedFormat === 'gff';
   const normalizedFastaPath = String(fastaPath || '').trim();
   if (isGff && !normalizedFastaPath) {
-    throw new Error('GFF3 feature extraction requires a FASTA input path.');
+    throw serializeError({ code: 'FASTA_REQUIRED', operation: 'feature-extraction', stage: 'request-validation' });
   }
 
   const { pyodide } = runtime;
@@ -1059,45 +1072,51 @@ const runFeatureExtraction = async ({
     ...(visibilityFile ? [{ role: 'visibility', bytes: visibilityFile.bytes }] : [])
   ];
 
-  return withRequestWorkspace(pyodide, requestId, 'feature', async (workspace) => {
-    const paths = stageHelperFiles(
-      pyodide,
-      workspace,
-      workspaceFiles,
-      ['source', 'fasta', 'visibility']
-    );
-    const sourcePath = requireHelperFile(paths, 'source', 'feature-extraction');
-    const stagedFastaPath = isGff
-      ? requireHelperFile(paths, 'fasta', 'feature-extraction')
-      : null;
-    const selectedFeaturesJson = Array.isArray(selectedFeatures) && selectedFeatures.length
-      ? JSON.stringify(selectedFeatures)
-      : null;
-    return callJsonHelper(
-      pyodide,
-      isGff ? 'extract_features_from_gff_fasta' : 'extract_features_from_genbank',
-      isGff
-        ? [
-          sourcePath,
-          stagedFastaPath,
-          regionSpec || null,
-          recordSelector || null,
-          reverseFlag ? '1' : '0',
-          selectedFeaturesJson,
-          paths.get('visibility') || null,
-          Boolean(includeBiologicalFeatures)
-        ]
-        : [
-          sourcePath,
-          regionSpec || null,
-          recordSelector || null,
-          reverseFlag ? '1' : '0',
-          selectedFeaturesJson,
-          paths.get('visibility') || null,
-          Boolean(includeBiologicalFeatures)
-        ]
-    );
-  });
+  let failureStage = 'resource-staging';
+  try {
+    return await withRequestWorkspace(pyodide, requestId, 'feature', async (workspace) => {
+      const paths = stageHelperFiles(
+        pyodide,
+        workspace,
+        workspaceFiles,
+        ['source', 'fasta', 'visibility']
+      );
+      const sourcePath = requireHelperFile(paths, 'source', 'feature-extraction');
+      const stagedFastaPath = isGff
+        ? requireHelperFile(paths, 'fasta', 'feature-extraction')
+        : null;
+      const selectedFeaturesJson = Array.isArray(selectedFeatures) && selectedFeatures.length
+        ? JSON.stringify(selectedFeatures)
+        : null;
+      failureStage = 'helper';
+      return callJsonHelper(
+        pyodide,
+        isGff ? 'extract_features_from_gff_fasta' : 'extract_features_from_genbank',
+        isGff
+          ? [
+            sourcePath,
+            stagedFastaPath,
+            regionSpec || null,
+            recordSelector || null,
+            reverseFlag ? '1' : '0',
+            selectedFeaturesJson,
+            paths.get('visibility') || null,
+            Boolean(includeBiologicalFeatures)
+          ]
+          : [
+            sourcePath,
+            regionSpec || null,
+            recordSelector || null,
+            reverseFlag ? '1' : '0',
+            selectedFeaturesJson,
+            paths.get('visibility') || null,
+            Boolean(includeBiologicalFeatures)
+          ]
+      );
+    });
+  } catch (error) {
+    throw serializeError(error, { operation: 'feature-extraction', stage: failureStage });
+  }
 };
 
 const handleWorkerMessage = async (data) => {
@@ -1158,7 +1177,11 @@ const handleWorkerMessage = async (data) => {
       requestId,
       type: type || 'run',
       ok: false,
-      error: serializeError(error)
+      error: serializeError(error, {
+        operation: type === 'run' ? 'generate' : type === 'feature-extraction' ? 'feature-extraction' : data.operation,
+        stage: type === 'init' ? 'initialization' : 'unknown',
+        code: type === 'init' ? 'WORKER_INIT' : 'UNKNOWN'
+      })
     });
   }
 };

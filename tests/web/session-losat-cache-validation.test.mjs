@@ -1007,7 +1007,7 @@ const frozenV39Session = () => JSON.parse(gunzipSync(readFileSync(new URL(
   import.meta.url
 ))));
 
-test('released schema-7 alignment materializes exact typed anchors on import', async () => {
+test('current schema-8 alignment retains exact typed anchors and explicit historical receipt absence on import', async () => {
   const source = JSON.parse(readFileSync(new URL(
     '../test_inputs/BGC0000708-BGC0000713.gbdraw-session.json',
     import.meta.url
@@ -1175,13 +1175,11 @@ for (const unsupportedVersion of [34, 35, 36, 37, 38]) {
     const event = { target: { files: [file], value: 'selected' } };
     const result = await importSession(event);
     assert.equal(result.status, 'error');
-    assert.match(
-      String(result.error?.message || ''),
-      new RegExp(`Unsupported session version: ${unsupportedVersion}`)
-    );
-    assert.deepEqual(alerts, [
-      `Failed to load session: Unsupported session version: ${unsupportedVersion}.`
-    ]);
+    assert.equal(result.error.code, 'INPUT_INVALID');
+    assert.deepEqual(result.error.context, {field:'schema',reason:'FIELDS'});
+    assert.match(result.error.summary, /supported Session file/);
+    assert.deepEqual(state.errorLog.value, result.error);
+    assert.deepEqual(alerts, []);
     assert.equal(event.target.value, '');
   });
 }

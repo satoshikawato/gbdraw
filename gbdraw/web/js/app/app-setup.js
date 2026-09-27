@@ -22,9 +22,11 @@ import {
   buildRunStateData,
   buildUiStateData,
   canonicalRenderArtifactOwner,
+  commitAppliedGenerationFields,
   exportSession,
   getCommittedCanonicalSession,
   getCommittedCanonicalRenderRequest,
+  getGenerationApplicationStatus,
   importSession as importSessionFromFile,
   SESSION_VERSION,
   serializeActiveRenderFiles,
@@ -84,6 +86,7 @@ import {
   compositionUserDeltas
 } from './legend-layout/composition-actions.js';
 import { createResultsManager } from './results.js';
+import { describeGenerationApplication } from './generation-status.js';
 import { setupWatchers } from './watchers.js';
 import { setupHistoryInputs } from './history-inputs.js';
 import { setupHistoryShortcuts } from './history-shortcuts.js';
@@ -127,6 +130,7 @@ import {
 } from './linear-record-layout.js';
 import {
   describeLinearLabelVisibility,
+  requireLinearLabelVisibilityMode,
   resolveLinearLabelVisibility
 } from './linear-label-visibility.js';
 import {
@@ -245,8 +249,10 @@ export const createAppSetup = () => {
     results,
     selectedResultIndex,
     failedGeneratePreservedResult,
+    generationFailureRecovery,
     resultPanelTab,
     lastRunInfo,
+    annotationWarnings,
     pairwiseMatchFactors,
     matchSequenceRegistry,
     svgContent,
@@ -426,13 +432,19 @@ export const createAppSetup = () => {
     fileLegendCaptions,
     filteredFeatures
   } = state;
+  let featureActions = null;
+  const sessionImportPending = ref(false);
   let similarityAlignmentActions = null;
   let refreshSimilarityAlignmentCanvas = () => {};
   const linearTypography = createLinearTypographyController({
     adv,
     linked: linearTypographyLinked
   });
-  const rightDrawerActions = createRightDrawerController({ state, watch });
+  let alignmentReviewBlocksEditor = () => false;
+  const rightDrawerActions = createRightDrawerController({ state, watch,
+    onClose: () => featureActions?.suspendSpecificRulePatternDrafts(),
+    getOpenDisabledReason: () => alignmentReviewBlocksEditor()
+      ? 'Finish or cancel alignment review before opening Editor.' : '' });
 
   const comparisonHeightValidationError = computed(() => {
     if (
@@ -1115,6 +1127,7 @@ export const createAppSetup = () => {
     applyConfigData,
     buildUiStateData,
     applyUiStateData,
+    buildLegendEntryOwners: () => legendActions.captureLegendEntryOwners(),
     buildCompositionIntent: () => {
       const svg = svgContainer.value?.querySelector?.('svg') || null;
       if (!svg) return null;
@@ -1135,13 +1148,21 @@ export const createAppSetup = () => {
     buildRunStateData,
     applyRunStateData
   });
+  const restoreWithSpecificRuleDrafts = async (restore, ...args) => {
+    const drafts = featureActions?.captureSpecificRulePatternDrafts();
+    try {
+      return await restore(...args);
+    } finally {
+      if (drafts) featureActions.restoreSpecificRulePatternDrafts(drafts);
+    }
+  };
   const history = createHistoryManager({
     buildIntent: historySnapshots.buildHistoryIntent,
-    applyIntent: historySnapshots.applyHistoryIntent,
+    applyIntent: (...args) => restoreWithSpecificRuleDrafts(historySnapshots.applyHistoryIntent, ...args),
     buildCheckpoint: historySnapshots.buildArtifactCheckpoint,
-    applyCheckpoint: historySnapshots.applyArtifactCheckpoint,
+    applyCheckpoint: (...args) => restoreWithSpecificRuleDrafts(historySnapshots.applyArtifactCheckpoint, ...args),
     captureGeneratedArtifactHandle: historySnapshots.captureGeneratedArtifactHandle,
-    restoreGeneratedArtifactHandle: historySnapshots.restoreGeneratedArtifactHandle,
+    restoreGeneratedArtifactHandle: (...args) => restoreWithSpecificRuleDrafts(historySnapshots.restoreGeneratedArtifactHandle, ...args),
     compareGeneratedArtifactHandles: historySnapshots.compareGeneratedArtifactHandles,
     signatureFor: historySnapshots.snapshotSignature,
     fileStore: historyFileStore,
@@ -1151,6 +1172,13 @@ export const createAppSetup = () => {
   const recordDisplayControls = createRecordDisplayControls({ state, computed, watch, linearRecordSelector, history, getCommittedRequest: getCommittedCanonicalRenderRequest, getCommittedSession: getCommittedCanonicalSession });
   state.recordDisplayRows = recordDisplayControls.allRows;
   window.__GBDRAW_HISTORY__ = history;
+  const generationApplicationFeedback = computed(() => {
+    // Observe existing artifact/edit owners when the applied basis changes.
+    void history.revision.value;
+    void svgContent.value;
+    void results.value;
+    return describeGenerationApplication(getGenerationApplicationStatus());
+  });
   const canUndoHistory = computed(() => {
     void history.revision.value;
     return history.canUndo();
@@ -1210,32 +1238,37 @@ export const createAppSetup = () => {
   } = createPanZoom(state);
   const { startResizing } = createSidebarResize(state);
 
+  const specificRuleNotice = ref('');
   const ruleMatchingPending = ref(false);
   const rulePreparation = createRulePreparation({
     state,
     pending: ruleMatchingPending,
-    evaluate: async (payload) => (await runDiagramHelperOperation(DIAGRAM_HELPER_OPERATIONS.EVALUATE_RULES, payload)).result
+    notify: notice => { specificRuleNotice.value = notice; },
+    evaluate: async (payload, options) => (await runDiagramHelperOperation(DIAGRAM_HELPER_OPERATIONS.EVALUATE_RULES, payload, options)).result
   });
   const legendActions = createLegendManager({
     state,
+    commitSpecificRules: (...args) => featureActions.commitSpecificRules(...args),
     rulePreparation,
     history,
     previewRuntime
   });
   const svgActions = createSvgStyles({
+    commitAppliedGenerationFields,
     state,
     rulePreparation,
-    watch,
+    ref, computed, watch,
     nextTick,
     legendActions
   });
   const featureSelection = createFeatureSelection({ state, onMounted, onUnmounted });
-  const featureActions = createFeatureEditor({
+  featureActions = createFeatureEditor({
     state,
     rulePreparation,
     history,
     getCommittedRequest: getCommittedCanonicalRenderRequest,
     isCurrentFeature: recordDisplayControls.isCurrentFeature,
+    isPatternEditAvailable: () => !sessionImportPending.value,
     nextTick,
     legendActions,
     svgActions,
@@ -1262,9 +1295,15 @@ export const createAppSetup = () => {
     if (newIndex !== oldIndex) previewRuntime.flushActiveResult({ markIncremental: false });
     featureSelection.clearFeatureSelection({ clearStatus: true, syncDom: false });
   });
+  const setDiagramMode = (nextMode) => {
+    if (!['circular', 'linear'].includes(nextMode) || nextMode === mode.value) return;
+    featureActions.suspendSpecificRulePatternDrafts();
+    mode.value = nextMode;
+  };
   watch(mode, () => {
+    featureActions.suspendSpecificRulePatternDrafts();
     featureSelection.clearFeatureSelection({ clearStatus: true, syncDom: false });
-  });
+  }, { flush: 'sync' });
   watch(svgContent, () => {
     refreshSimilarityAlignmentCanvas();
     if (!skipCaptureBaseConfig.value) {
@@ -1343,7 +1382,11 @@ export const createAppSetup = () => {
   const circularConservationFastaInput = ref(null);
   const circularTrackSlotEditor = createCircularTrackSlotEditor({ state });
   const linearTrackSlotEditor = createLinearTrackSlotEditor({ state });
-  const annotationEditor = createAnnotationEditor({ state, getRecordCatalog: getAnnotationRecordCatalog });
+  const annotationImportNotice = ref('');
+  const annotationEditor = createAnnotationEditor({
+    state, getRecordCatalog: getAnnotationRecordCatalog,
+    onImportNotice: (notice) => { annotationImportNotice.value = notice; }
+  });
   watch(
     () => {
       const catalog = getAnnotationRecordCatalog();
@@ -1518,6 +1561,29 @@ export const createAppSetup = () => {
   const linearLabelVisibilitySummary = (mode) => describeLinearLabelVisibility(mode, {
     hasSharedRow: linearLabelHasSharedRow.value
   });
+  const linearLabelAutoFields = computed(() => definitionLineStyleRows.filter((row) => (
+    row.visibilityType === 'mode'
+    && requireLinearLabelVisibilityMode(adv[row.visibilityKey]) === 'auto'
+  )));
+  const linearLabelAutoDisclosure = computed(() => {
+    if (!linearLabelAutoFields.value.length) return '';
+    const fields = linearLabelAutoFields.value.map((row) => row.label).join(' and ');
+    const shown = resolveLinearLabelVisibility('auto', {
+      hasSharedRow: linearLabelHasSharedRow.value
+    });
+    return shown
+      ? `${fields}: Auto will show these fields throughout the diagram on the next successful Generate because no rendered row contains multiple records.`
+      : `${fields}: Auto will hide these fields throughout the diagram on the next successful Generate because at least one rendered row contains multiple records. Choose Show in Record Labels to keep a field visible.`;
+  });
+  const focusLinearLabelVisibility = async (key) => {
+    if (mode.value !== 'linear') return;
+    const select = document.getElementById(`linear-label-visibility-${key}`);
+    if (!select) return;
+    select.closest('details').open = true;
+    await nextTick();
+    select.scrollIntoView({ block: 'center' });
+    select.focus({ preventScroll: true });
+  };
   const legendPositionLabel = (position) => ({
     right: 'Right',
     left: 'Left',
@@ -2174,6 +2240,7 @@ export const createAppSetup = () => {
     runAnalysis: runGeneratedDiagramAnalysis,
     runCommittedCanonicalCandidate,
     projectCommittedRecordTransform,
+    projectCommittedSimilarityAlignment,
     cancelRunAnalysis,
     runLabelReflow,
     refreshCircularRecordOrder,
@@ -2187,6 +2254,7 @@ export const createAppSetup = () => {
     restoreGeneratedArtifactRuntimeState
   } = createRunAnalysis({
     state,
+    rulePreparation,
     isCurrentFeature: recordDisplayControls.isCurrentFeature,
     serializeCanonicalFiles: (comparisonPlanSnapshot, linearRecordCatalog, runState) => (
       serializeActiveRenderFiles(runState.mode.value, runState, {
@@ -2202,7 +2270,7 @@ export const createAppSetup = () => {
     captureGeneratedArtifactHandle: historySnapshots.captureGeneratedArtifactHandle,
     captureGeneratedArtifactOwnerSet: historySnapshots.captureGeneratedArtifactOwnerSet,
     installGeneratedArtifactOwnerSet: historySnapshots.installGeneratedArtifactOwnerSet,
-    restoreGeneratedArtifactHandle: historySnapshots.restoreGeneratedArtifactHandle,
+    restoreGeneratedArtifactHandle: (...args) => restoreWithSpecificRuleDrafts(historySnapshots.restoreGeneratedArtifactHandle, ...args),
     setGeneratedArtifactIdentity: historySnapshots.setGeneratedArtifactIdentity,
     runGeneratedArtifactReplacement: (...args) => (
       history.runUndoableArtifactReplacement(...args)
@@ -2313,10 +2381,10 @@ export const createAppSetup = () => {
     rerenderLinearDefinitions: runLabelReflow
   });
 
-  const { waitForAuxiliaryFileImport } = setupWatchers({
+  const { waitForAuxiliaryFileImport, canRetryAuxiliaryImportFailure, retryAuxiliaryImportFailure } = setupWatchers({
     state,
     rulePreparation,
-    watch,
+    ref, computed, watch,
     nextTick,
     onMounted,
     legendActions,
@@ -2333,7 +2401,6 @@ export const createAppSetup = () => {
     preparePaletteDefinitions: paletteLoader.loadPaletteAsset
   });
 
-  const sessionImportPending = ref(false);
   const sessionSavePending = ref(false);
   let sessionSaveInFlight = null;
   const circularRecordPresentationPanel = ref(null);
@@ -2353,6 +2420,8 @@ export const createAppSetup = () => {
         value: input.value
       }
     };
+    const patternDrafts = featureActions.captureSpecificRulePatternDrafts();
+    let sessionReplaced = false;
     sessionImportPending.value = true;
     recordSessionLifecycleEvent('session-import-pending-published');
     try {
@@ -2387,6 +2456,10 @@ export const createAppSetup = () => {
         })
       });
       if (result?.status === 'ok' || result?.status === 'legacy') {
+        sessionReplaced = true;
+        featureActions.clearSpecificRulePatternDrafts();
+        annotationImportNotice.value = '';
+        specificRuleNotice.value = '';
         historySnapshots.clearGeneratedArtifactIdentity({
           retainedBytes: result?.status === 'ok'
             ? Number(result.decompressedCharacters || 0) * 2
@@ -2400,6 +2473,7 @@ export const createAppSetup = () => {
       }
       return result;
     } finally {
+      if (!sessionReplaced) featureActions.restoreSpecificRulePatternDrafts(patternDrafts);
       sessionImportPending.value = false;
       input.value = '';
     }
@@ -2440,6 +2514,8 @@ export const createAppSetup = () => {
     moveSpecificRuleUp,
     removeSpecificRule,
     setSpecificRuleField,
+    specificRulePattern, specificRulePatternDraft, specificRulePatternFieldId,
+    editSpecificRulePattern, retrySpecificRulePattern, revertSpecificRulePattern,
     addFeatureVisibilityRule,
     downloadFeatureVisibilityRulesTsv,
     featureVisibilityQualifierSuggestions,
@@ -2506,7 +2582,7 @@ export const createAppSetup = () => {
       reconcileLabelOverrides();
     }
     if (changedDomains.has('editorState')) {
-      reconcileLegendEntries({ restoreColorState: true });
+      reconcileLegendEntries({ restoreColorState: true, entryOwners: _intent.editorState.legend.entryOwners });
       reconcileStrokeOverrides({ changes });
       reconcileLabelOverrides();
     }
@@ -2622,7 +2698,7 @@ export const createAppSetup = () => {
         if (status.value === 'Copied') status.value = '';
       }, 1600);
     } catch (error) {
-      console.warn(`Failed to copy ${description}:`, error);
+      console.warn('Failed to copy the requested command.', normalizeUserFacingError(error));
       status.value = 'Copy failed';
       setTimeout(() => {
         if (status.value === 'Copy failed') status.value = '';
@@ -2658,7 +2734,7 @@ export const createAppSetup = () => {
       try {
         await linearRecordSelector.refresh();
       } catch (error) {
-        console.warn('Failed to start Linear record discovery:', error);
+        return { catalog: null, error: normalizeUserFacingError(error, { operation: 'listSequenceRecords', stage: 'helper' }) };
       }
       catalog = getAnnotationRecordCatalog(loadComparison);
     }
@@ -2666,7 +2742,8 @@ export const createAppSetup = () => {
       ? { catalog, error: '' }
       : {
           catalog: null,
-          error: catalog.issues[0] || 'Could not read records from the Linear input file(s).'
+          error: linearSeqs.map(seq => linearRecordSelector.errorModelFor(seq)).find(error => error?.code)
+            || catalog.issues[0] || 'Could not read records from the Linear input file(s).'
         };
   }
 
@@ -2678,10 +2755,7 @@ export const createAppSetup = () => {
         await linearRecordSelector.refresh();
       }
     }
-    if (
-      !options?.skipSimilarityAlignmentValidation
-      && similarityAlignmentActions?.validateBeforeGenerate
-    ) {
+    if (similarityAlignmentActions?.validateBeforeGenerate) {
       const validation = await similarityAlignmentActions.validateBeforeGenerate();
       if (validation?.status !== 'ok') {
         failedGeneratePreservedResult.value = results.value.length > 0;
@@ -2699,24 +2773,28 @@ export const createAppSetup = () => {
       draftResolution: comparisonPlanSnapshot
     });
     if (!comparisonExecution.ok) {
-      errorLog.value = normalizeUserFacingError(new Error(comparisonExecution.message));
+      errorLog.value = normalizeUserFacingError(comparisonExecution.message, { operation: 'generate', stage: 'request-validation' });
       failedGeneratePreservedResult.value = results.value.length > 0;
+      generationFailureRecovery.value = results.value.length ? 'preserved' : 'no-result';
       if (mode.value === 'linear') await focusLinearComparisonIssue();
       return { status: 'error', error: errorLog.value };
     }
     cancelDefinitionUpdate();
+    const patternDrafts = featureActions.captureSpecificRulePatternDrafts();
     const result = await runGeneratedDiagramAnalysis(
       comparisonPlanSnapshot,
       null,
-      comparisonExecution,
-      options?.canonicalStateOverride || null
+      comparisonExecution
     );
     if (result?.status === 'error' && mode.value === 'linear') {
       await focusLinearComparisonIssue();
     }
     if (result?.status === 'ok') {
+      featureActions.clearSpecificRulePatternDrafts();
       await rulePreparation.prepare();
       featureSelection.clearFeatureSelection({ clearStatus: true });
+    } else {
+      featureActions.restoreSpecificRulePatternDrafts(patternDrafts);
     }
     return result;
   };
@@ -2730,7 +2808,7 @@ export const createAppSetup = () => {
         draftResolution: linearComparisonResolution.value
       });
       if (!outcome.ok) {
-        errorLog.value = new Error(outcome.message);
+        errorLog.value = normalizeUserFacingError(outcome.message, { operation: 'generate', stage: 'request-validation' });
         return false;
       }
       if (outcome.action === IMPORTED_COMPARISON_ACTIONS.CLEAR) {
@@ -2772,7 +2850,10 @@ export const createAppSetup = () => {
     getEnrichedOrthogroupMembers: orthogroupActions.getEnrichedOrthogroupMembers,
     getRecordCatalog: getAnnotationRecordCatalog,
     getCommittedRequest: getCommittedCanonicalRenderRequest,
-    runAnalysis,
+    getCommittedSession: getCommittedCanonicalSession,
+    projectCommittedAlignment: projectCommittedSimilarityAlignment,
+    runCommittedCanonicalCandidate,
+    recordDisplayControls,
     cancelRunAnalysis,
     runHelperOperation: runDiagramHelperOperation,
     resolveOperation: DIAGRAM_HELPER_OPERATIONS.RESOLVE_SIMILARITY_ALIGNMENT,
@@ -2809,10 +2890,28 @@ export const createAppSetup = () => {
   let similarityAlignmentReturnFocus = null;
   const similarityAlignmentPaletteRef = ref(null);
   const similarityAlignmentPalettePosition = reactive({ x: null, y: null });
+  const similarityAlignmentCompact = ref(false);
+  const syncSimilarityAlignmentCompact = () => {
+    const preview = document.querySelector('[aria-label="Result Preview"]');
+    similarityAlignmentCompact.value = Boolean(preview
+      && getComputedStyle(preview).getPropertyValue('--alignment-review-compact').trim() === '1');
+  };
+  const similarityAlignmentEditorDisabledReason = computed(() => (
+    similarityAlignmentCompact.value && similarityAlignmentActions.dialogOpen.value
+      ? 'Finish or cancel alignment review before opening Editor.' : ''
+  ));
+  alignmentReviewBlocksEditor = () => Boolean(similarityAlignmentEditorDisabledReason.value);
+  let similarityAlignmentPreviewObserver = null;
+  watch([similarityAlignmentActions.dialogOpen, similarityAlignmentCompact], ([open, compact]) => {
+    if (open && compact) {
+      stopSimilarityAlignmentPaletteDrag();
+      rightDrawerActions.closeRightDrawer();
+    }
+  }, { flush: 'sync' });
   let similarityAlignmentPaletteDrag = null;
   const clampSimilarityAlignmentPalette = () => {
     const palette = similarityAlignmentPaletteRef.value;
-    if (!palette) return;
+    if (!palette || similarityAlignmentCompact.value) return;
     const margin = 12;
     const maxX = Math.max(margin, window.innerWidth - palette.offsetWidth - margin);
     const maxY = Math.max(margin, window.innerHeight - palette.offsetHeight - margin);
@@ -2823,7 +2922,7 @@ export const createAppSetup = () => {
       Math.max(similarityAlignmentPalettePosition.y ?? margin, margin), maxY
     );
   };
-  const similarityAlignmentPaletteStyle = computed(() => ({
+  const similarityAlignmentPaletteStyle = computed(() => similarityAlignmentCompact.value ? {} : ({
     left: similarityAlignmentPalettePosition.x === null ? undefined : `${similarityAlignmentPalettePosition.x}px`,
     right: similarityAlignmentPalettePosition.x === null ? undefined : 'auto',
     top: similarityAlignmentPalettePosition.y === null ? undefined : `${similarityAlignmentPalettePosition.y}px`
@@ -2842,7 +2941,8 @@ export const createAppSetup = () => {
     document.removeEventListener('pointercancel', stopSimilarityAlignmentPaletteDrag);
   };
   const startSimilarityAlignmentPaletteDrag = (event) => {
-    if (event.button !== 0 || event.target.closest('button, a, input, select, textarea')) return;
+    if (similarityAlignmentCompact.value || event.button !== 0
+      || event.target.closest('button, a, input, select, textarea')) return;
     const rect = similarityAlignmentPaletteRef.value?.getBoundingClientRect();
     if (!rect) return;
     similarityAlignmentPaletteDrag = { x: event.clientX - rect.left, y: event.clientY - rect.top };
@@ -2859,10 +2959,12 @@ export const createAppSetup = () => {
     await nextTick();
     const target = similarityAlignmentReturnFocus;
     similarityAlignmentReturnFocus = null;
-    if (target?.isConnected && typeof target.focus === 'function') {
+    const hiddenEditorInvoker = target?.closest?.('.right-drawer') && !showRightDrawer.value;
+    if (!hiddenEditorInvoker && target?.isConnected && target.getClientRects().length && typeof target.focus === 'function') {
       target.focus();
       return;
     }
+    document.querySelector('.drawer-toggle')?.focus();
   };
   const focusSimilarityAlignmentDialog = async () => {
     await nextTick();
@@ -2877,7 +2979,16 @@ export const createAppSetup = () => {
     event.stopImmediatePropagation();
     void cancelSimilarityAlignmentDialog();
   };
-  watch(similarityAlignmentActions.dialogOpen, (open) => {
+  const openSimilarityAlignmentReset = (event) => {
+    rememberSimilarityAlignmentInvoker(event);
+    similarityAlignmentActions.openReset();
+  };
+  watch([similarityAlignmentActions.dialogOpen, similarityAlignmentActions.resetDialogOpen], async ([open, resetOpen]) => {
+    if (resetOpen) {
+      await nextTick();
+      document.getElementById('similarity-alignment-reset-title')?.focus();
+      return;
+    }
     if (open) return;
     stopSimilarityAlignmentPaletteDrag();
     similarityAlignmentPalettePosition.x = null;
@@ -2885,14 +2996,19 @@ export const createAppSetup = () => {
     void restoreSimilarityAlignmentFocus();
   });
   onMounted(() => {
+    similarityAlignmentPreviewObserver = new ResizeObserver(syncSimilarityAlignmentCompact);
+    const pane = document.querySelector('.result-pane');
+    if (pane) similarityAlignmentPreviewObserver.observe(pane);
     document.addEventListener('keydown', handleSimilarityAlignmentEscape, true);
     window.addEventListener('resize', clampSimilarityAlignmentPalette);
   });
   onUnmounted(() => {
+    similarityAlignmentPreviewObserver?.disconnect();
     stopSimilarityAlignmentPaletteDrag();
     document.removeEventListener('keydown', handleSimilarityAlignmentEscape, true);
     window.removeEventListener('resize', clampSimilarityAlignmentPalette);
   });
+  watch(() => results.value.length, syncSimilarityAlignmentCompact, { flush: 'post' });
   const finishSimilarityAlignmentStart = async (outcome) => {
     if (similarityAlignmentActions.dialogOpen.value) {
       if (similarityAlignmentActions.error.value) {
@@ -2911,11 +3027,11 @@ export const createAppSetup = () => {
   const cancelSimilarityAlignmentDialog = async () => {
     similarityAlignmentActions.cancel();
   };
-  const applySimilarityAlignmentDialog = async () => {
-    const outcome = await similarityAlignmentActions.applyDraft();
-    if (outcome.status === 'error') {
+  const applySimilarityAlignmentDialog = async (reset = false) => {
+    const outcome = await (reset ? similarityAlignmentActions.applyReset() : similarityAlignmentActions.applyDraft());
+    if (outcome.status === 'error' || outcome.status === 'reviewing') {
       await nextTick();
-      document.querySelector('[data-similarity-alignment-error]')?.focus();
+      document.querySelector('[data-similarity-alignment-error], [data-similarity-alignment-reset-error]')?.focus();
     }
     return outcome;
   };
@@ -3012,6 +3128,7 @@ export const createAppSetup = () => {
 
     return history.runUndoableCheckpoint('Reset settings', async () => {
       cancelDefinitionUpdate();
+      featureActions.clearSpecificRulePatternDrafts();
       resetSettingsState(state);
       invalidateLinearComparisonArtifacts();
       matchSequenceRegistry?.reset?.();
@@ -3348,6 +3465,7 @@ export const createAppSetup = () => {
   };
 
   const errorDisplay = computed(() => normalizeUserFacingError(errorLog.value));
+  const reloadAfterOperationError = () => window.location.reload();
 
   const sessionTitleLabel = computed(() => {
     const title = normalizeSessionTitle(sessionTitle.value);
@@ -3394,7 +3512,12 @@ export const createAppSetup = () => {
     downloadTextFile(String(filename || 'gbdraw.txt'), value, type);
   };
 
-  const runExportAction = async (methodName, label) => {
+  let latestExportOperation = 0;
+  const failedInteractiveSvgExport = ref(null);
+  const canRetryInteractiveSvgExport = computed(() => Boolean(failedInteractiveSvgExport.value
+    && errorLog.value === failedInteractiveSvgExport.value));
+  const runExportAction = async (methodName, operation) => {
+    const operationId = ++latestExportOperation;
     const previousError = errorLog.value;
     try {
       const snapshot = captureSvgExport(state, { interactive: methodName === 'downloadInteractiveSVG' });
@@ -3409,25 +3532,23 @@ export const createAppSetup = () => {
           return result.result.base64;
         }
       });
-      if (errorLog.value === previousError && previousError?.type === 'Export error') errorLog.value = null;
+      if (operationId === latestExportOperation && errorLog.value === previousError && previousError?.operation?.startsWith('export-')) errorLog.value = null;
       return result;
     } catch (error) {
-      const normalized = normalizeUserFacingError(error);
-      errorLog.value = {
-        type: 'Export error',
-        message: `${label} export failed: ${normalized?.summary || 'Unknown export error.'}`,
-        details: normalized?.details || []
-      };
-      return { status: 'error' };
+      const normalized = normalizeUserFacingError(error, { operation, stage: 'export-capture' });
+      if (operationId !== latestExportOperation || errorLog.value !== previousError) return { status: 'stale' };
+      errorLog.value = normalized;
+      failedInteractiveSvgExport.value = methodName === 'downloadInteractiveSVG' ? normalized : null;
+      return { status: 'error', error: normalized };
     }
   };
 
-  const downloadSVG = () => runExportAction('downloadSVG', 'SVG');
+  const downloadSVG = () => runExportAction('downloadSVG', 'export-svg');
   const downloadInteractiveSVG = () => (
-    runExportAction('downloadInteractiveSVG', 'Interactive SVG')
+    runExportAction('downloadInteractiveSVG', 'export-svg')
   );
-  const downloadPNG = () => runExportAction('downloadPNG', 'PNG');
-  const downloadPDF = () => runExportAction('downloadPDF', 'PDF');
+  const downloadPNG = () => runExportAction('downloadPNG', 'export-png');
+  const downloadPDF = () => runExportAction('downloadPDF', 'export-pdf');
 
   const specificRuleLegendOptions = computed(() => {
     const byCaption = new Map();
@@ -3474,6 +3595,7 @@ export const createAppSetup = () => {
     }
 
     const operation = Promise.resolve().then(async () => {
+      const previousAlert = errorLog.value;
       try {
         let title = normalizeSessionTitle(sessionTitle.value);
         if (!title) {
@@ -3509,12 +3631,14 @@ export const createAppSetup = () => {
         recordSessionLifecycleEvent('session-save-catalog-preparation-end', {
           reusedCommittedSession: Boolean(committedSession)
         });
-        if (error) throw new Error(error);
+        if (error) throw error;
         return await exportSession(title, { linearRecordCatalog: catalog });
       } catch (error) {
-        errorLog.value = normalizeUserFacingError(error);
+        const normalized = normalizeUserFacingError(error);
+        if (errorLog.value !== previousAlert) return { status: 'stale' };
+        errorLog.value = normalized;
         recordSessionLifecycleEvent('session-save-error');
-        return { status: 'error' };
+        return { status: 'error', error: normalized };
       }
     });
 
@@ -3929,6 +4053,7 @@ export const createAppSetup = () => {
 
   return {
     recordDisplayControls,
+    generationApplicationFeedback,
     featureRecordRotationDraft: featureRecordRotation.draft,
     recordActionsExpanded,
     toggleRecordActions,
@@ -3947,11 +4072,22 @@ export const createAppSetup = () => {
     generationCancelRequested,
     errorLog,
     errorDisplay,
+    canRetryInteractiveSvgExport,
+    reloadAfterOperationError,
+    setDiagramMode,
+    canRetrySpecificRuleFailure: featureActions.canRetrySpecificRuleFailure,
+    canEditSpecificRuleFailure: featureActions.canEditSpecificRuleFailure,
+    canRetryLabelImportFailure: featureActions.canRetryLabelImportFailure,
+    retryLabelImportFailure: undoableAction('Load label edits', featureActions.retryLabelImportFailure),
+    editLabelImportFailure: featureActions.editLabelImportFailure,
+    retrySpecificRuleFailure: featureActions.retrySpecificRuleFailure,
+    editSpecificRuleFailure: featureActions.editSpecificRuleFailure,
     sessionTitle,
     sessionTitleLabel,
     results,
     selectedResultIndex,
     failedGeneratePreservedResult,
+    generationFailureRecovery,
     importedComparisonIntent,
     importedComparisonNeedsResolution,
     importedComparisonCanInherit,
@@ -3962,6 +4098,7 @@ export const createAppSetup = () => {
     selectResult,
     resultPanelTab,
     lastRunInfo,
+    annotationWarnings,
     runInfoCopyStatus,
     exactReplayCopyStatus,
     svgContent,
@@ -3993,6 +4130,8 @@ export const createAppSetup = () => {
     addSelectedFeatureAnnotations: annotationEditor.addSelectedFeatures,
     removeAnnotation: annotationEditor.removeAnnotation,
     setAnnotationTargetKind: annotationEditor.setAnnotationTargetKind,
+    annotationImportNotice,
+    specificRuleNotice,
     importAnnotationTableFile: undoableAction('Import annotations', annotationEditor.importAnnotationTableFile),
     renameAnnotation: annotationEditor.renameAnnotation,
     setAnnotationStyle: annotationEditor.setAnnotationStyle,
@@ -4143,6 +4282,7 @@ export const createAppSetup = () => {
     toggleLinearTrackSlotsPanel,
     circularTrackRenderers: circularTrackSlotEditor.circularTrackRenderers,
     circularTrackSlotEditorKey: circularTrackSlotEditor.circularTrackSlotEditorKey,
+    updateCircularTrackSlotMeasure: circularTrackSlotEditor.updateCircularTrackSlotMeasure,
     circularTrackRendererLabel: circularTrackSlotEditor.circularTrackRendererLabel,
     resetCircularTrackSlotsFromSimpleControls: circularTrackSlotEditor.resetCircularTrackSlotsFromSimpleControls,
     resetCircularTrackSlotsToPreset: circularTrackSlotEditor.resetCircularTrackSlotsToPreset,
@@ -4310,13 +4450,22 @@ export const createAppSetup = () => {
     similarityAlignmentDrawerDisabledReason: similarityAlignmentActions.drawerDisabledReason,
     selectSimilarityAlignmentCandidate: similarityAlignmentActions.selectCandidate,
     skipSimilarityAlignmentRecord: similarityAlignmentActions.skipRecord,
-    similarityAlignmentDirectionMatch: similarityAlignmentActions.directionMatch,
-    setSimilarityAlignmentMatchReferenceDirection: similarityAlignmentActions.setMatchReferenceDirection,
-    applySimilarityAlignmentDraft: applySimilarityAlignmentDialog,
+    similarityAlignmentDirectionPreview: similarityAlignmentActions.directionPreview,
+    setSimilarityAlignmentDirectionMode: similarityAlignmentActions.setDirectionMode,
+    setSimilarityAlignmentCustomDirection: similarityAlignmentActions.setCustomDirection,
+    similarityAlignmentResetPreview: similarityAlignmentActions.resetPreview,
+    similarityAlignmentResetDialogOpen: similarityAlignmentActions.resetDialogOpen,
+    similarityAlignmentResetScope: similarityAlignmentActions.resetScope,
+    openSimilarityAlignmentReset,
+    cancelSimilarityAlignmentReset: similarityAlignmentActions.cancelReset,
+    applySimilarityAlignmentReset: () => applySimilarityAlignmentDialog(true),
+    applySimilarityAlignmentDraft: () => applySimilarityAlignmentDialog(),
     cancelSimilarityAlignmentDraft: cancelSimilarityAlignmentDialog,
     cancelSimilarityAlignmentDialog,
     similarityAlignmentPaletteRef,
     similarityAlignmentPaletteStyle,
+    similarityAlignmentCompact,
+    similarityAlignmentEditorDisabledReason,
     similarityAlignmentCanvasHover,
     startSimilarityAlignmentPaletteDrag,
     previewSimilarityAlignmentCandidate: similarityAlignmentActions.previewCandidate,
@@ -4328,7 +4477,8 @@ export const createAppSetup = () => {
     openOrthogroupInDrawer,
     circularRecordList,
     refreshCircularRecordOrder,
-    waitForAuxiliaryFileImport,
+    waitForAuxiliaryFileImport, canRetryAuxiliaryImportFailure,
+    retryAuxiliaryImportFailure: () => history.runUndoableCheckpoint('Change uploaded file', retryAuxiliaryImportFailure, { shouldCommit: result => result !== false }),
     circularRecordPresentationOptions,
     circularRecordPresentationError,
     circularSingleRecordPresentationEnabled,
@@ -4388,6 +4538,8 @@ export const createAppSetup = () => {
     moveSpecificRuleUp,
     removeSpecificRule,
     setSpecificRuleField,
+    specificRulePattern, specificRulePatternDraft, specificRulePatternFieldId,
+    editSpecificRulePattern, retrySpecificRulePattern, revertSpecificRulePattern,
     extractedFeatures,
     featureEditorStatus,
     featureEditorStatusText,
@@ -4571,6 +4723,9 @@ export const createAppSetup = () => {
     resetCanvasPadding,
     definitionLineStyleRows,
     linearLabelVisibilitySummary,
+    linearLabelAutoFields,
+    linearLabelAutoDisclosure,
+    focusLinearLabelVisibility,
     legendPositionLabel,
     getDefinitionLineStyleSize,
     setDefinitionLineStyleSize,

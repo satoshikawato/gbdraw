@@ -44,25 +44,47 @@ export const setupHistoryInputs = ({ root, history, nextTick }) => {
   if (!appRoot || !history) return () => {};
 
   const txByElement = new WeakMap();
+  const beginByElement = new WeakMap();
+  let pendingCommit = null;
   let activeButtonTx = null;
 
-  const beginForElement = async (element, source = 'input-adapter') => {
-    if (!element || element.disabled || isIgnoredTarget(element)) return null;
-    const existing = txByElement.get(element);
-    if (existing && !existing.closed) return existing;
-    const tx = await history.begin(controlLabel(element), { source });
-    if (tx) txByElement.set(element, tx);
-    return tx;
+  const beginForElement = (element, source = 'input-adapter') => {
+    if (!element || element.disabled || isIgnoredTarget(element)) return Promise.resolve(null);
+    const pendingBegin = beginByElement.get(element);
+    if (pendingBegin) return pendingBegin;
+    const start = (async () => {
+      // Focusout and the next focusin share one DOM event turn. Finish the old
+      // capture before beginning the next control's transaction.
+      if (pendingCommit) await pendingCommit;
+      const existing = txByElement.get(element);
+      if (existing && !existing.closed) return existing;
+      const tx = await history.begin(controlLabel(element), { source });
+      if (tx) txByElement.set(element, tx);
+      return tx;
+    })();
+    beginByElement.set(element, start);
+    void start.finally(() => beginByElement.delete(element));
+    return start;
   };
 
   const commitElement = async (element) => {
+    const pendingBegin = beginByElement.get(element);
+    if (pendingBegin) await pendingBegin;
     const tx = txByElement.get(element);
     if (!tx) return;
     if (tx.deferAdapterCommit) return;
     txByElement.delete(element);
     if (tx.closed) return;
-    await nextTick();
-    await history.commit(tx);
+    const commit = (async () => {
+      await nextTick();
+      await history.commit(tx);
+    })();
+    pendingCommit = commit;
+    try {
+      await commit;
+    } finally {
+      if (pendingCommit === commit) pendingCommit = null;
+    }
   };
 
   const findControl = (eventTarget) =>

@@ -90,21 +90,24 @@ record directions preserved; ambiguity or **Review alignment options…** opens
 the review palette. Python preselects usable anchors with visible
 reasons; ambiguous recommendations use a unique representative or stable
 candidate 1 as a convenience heuristic. Each target can replace its anchor
-or choose **Skip**. One **Match reference direction** checkbox reverses all
-selected targets with known opposite strands. The palette names the affected
-records and shows each selected anchor's direction before Apply. Local edits
-start no Worker job; Apply validates the full draft and generates one Result.
-The option starts off on every review and is disabled when no selected target
-faces the opposite direction. Unknown strands stay unchanged. Errors show the
-underlying failure once in the review and banner, keeping the draft for retry.
-Cancel and stale work leave the last Result and History intact.
+or choose **Skip**. Exclusive **Keep current directions**, **All selected arrows
+right →**, **All selected arrows left ←**, and **Custom** choices include the
+exact reference and selected known-direction anchors. Whole records reverse;
+source +/− strands remain unchanged. Unknown, skipped, missing and unusable
+anchors keep their directions with reasons. Local choices start no Worker job;
+Apply validates once per attempt. Changed final facts refresh the preview and
+require another Apply. Failures retain editable choices and the previous artifact.
 
 A successful Apply stores a fully resolved schema-2 plan containing anchors and
 Skip decisions. Record Reverse settings own orientation. Ordinary Generate,
-stable reorder, and manual Reverse preserve the plan. Reset Align restores the
-immediate pre-align positions and keeps record directions; Undo/Redo restores
-the complete artifact. The typed Python request accepts a resolved
-plan, while the CLI accepts an exact reference only when target choices are
+stable reorder, and manual Reverse preserve the plan. **Reset alignment…**
+restores immediate pre-Align positions and optionally the directions actually
+changed by the latest Align. Its preview identifies later manual edits that
+combined Reset replaces. Both scopes consume restoration evidence; Undo is
+needed before trying the other scope. Save/fresh Load preserves valid evidence;
+missing old evidence and an empty current change list have distinct reasons.
+Undo/Redo restores the complete artifact. The typed Python request accepts a
+resolved plan, while the CLI accepts an exact reference only when target choices are
 unambiguous. See [Web alignment](./REFERENCE/web-app.md#similarity-group-alignment-in-linear-view),
 [CLI behavior](./REFERENCE/command-line.md#strict-similarity-group-alignment),
 and [typed Python usage](./REFERENCE/python-api.md#typed-linear-similarity-group-alignment).

@@ -1,0 +1,202 @@
+# Web change policy
+
+- Context: ORDINARY
+- Base: `968d08211ce2315c274be14d879ef9ceb332bb66`
+- Head: `working tree`
+- Gate: **PASS**
+- Review: **CLEAR**
+- Privileged allowlist revision: `968d08211ce2315c274be14d879ef9ceb332bb66`
+- Architecture rule base: `968d08211ce2315c274be14d879ef9ceb332bb66`
+- Architecture rule candidate: `working tree`
+- Policy guide: `docs/internal/WEB_CHANGE_POLICY.md`
+- Selected profile: ordinary
+- Size-review threshold for production files: 8
+- Size-review threshold for gross churn: 800
+- Size-review threshold for net additions: 100
+- `architecture-change` label: absent
+
+## Blocking violations
+
+- None
+
+## Review reasons
+
+- None
+
+## Key architecture differential summary
+
+| Inventory | Before | Added | Removed | After | Delta | Classification |
+| --- | ---: | ---: | ---: | ---: | ---: | --- |
+| Registered Authority Location Count | 2 | 0 | 0 | 2 | 0 | registered rule |
+| Registered canonical-contract results | 2 | 0 | 0 | 2 | 0 | registered rule |
+| Privileged operator permission entries | 49 | 0 | 0 | 49 | 0 | hard authority |
+| Privileged importer permission entries | 55 | 0 | 0 | 55 | 0 | hard authority |
+| Production files | 204 | 0 | 0 | 204 | 0 | size-review |
+| Production modules | 157 | 0 | 0 | 157 | 0 | report-only |
+| Exports | 926 | 0 | 0 | 926 | 0 | report-only |
+| create* declarations | 98 | 0 | 0 | 98 | 0 | report-only |
+| Reactive declarations | 375 | 0 | 0 | 375 | 0 | report-only |
+| Watcher calls | 57 | 0 | 0 | 57 | 0 | report-only |
+| Compatibility-like names | 165 | 0 | 0 | 165 | 0 | report-only |
+| Resource-like names | 400 | 0 | 0 | 400 | 0 | report-only |
+| Session object keys | 1010 | 0 | 0 | 1010 | 0 | report-only |
+| Privileged import-target fan-out | 54 | 0 | 0 | 54 | 0 | report-only |
+| First-party static import cycles | 0 | 0 | 0 | 0 | 0 | hard |
+
+Production line change:
+
+- Additions: 0
+- Deletions: 0
+- Gross churn: 0
+- Net additions: 0
+
+## Differential inventory changes
+
+- None
+
+## First-party static import graph
+
+- Before: 157 modules, 513 edges, 0 cycles
+- After: 157 modules, 513 edges, 0 cycles
+- Delta: 0 cycles
+- Cycle definition: SCC size > 1, or a one-node SCC with a self-edge.
+- Head cycles (sorted nodes and internal edges):
+- None
+- Base graph resolution errors:
+- None
+- Head graph resolution errors:
+- None
+
+## Report-only privileged import-target fan-out
+
+| Production module | Before | After | Delta |
+| --- | ---: | ---: | ---: |
+| app/app-setup.js | 9 | 9 | 0 |
+| app/candidate-render.js | 1 | 1 | 0 |
+| app/feature-editor/label-actions.js | 1 | 1 | 0 |
+| app/feature-editor/svg-actions.js | 1 | 1 | 0 |
+| app/feature-metadata-extraction.js | 1 | 1 | 0 |
+| app/feature-search/preview-svg.js | 1 | 1 | 0 |
+| app/feature-selection.js | 1 | 1 | 0 |
+| app/legend-layout/canvas-actions.js | 1 | 1 | 0 |
+| app/legend-layout/diagram-drag.js | 1 | 1 | 0 |
+| app/legend-layout/reposition-actions.js | 1 | 1 | 0 |
+| app/legend/drag-actions.js | 1 | 1 | 0 |
+| app/legend/entry-actions.js | 2 | 2 | 0 |
+| app/legend/sort-actions.js | 1 | 1 | 0 |
+| app/legend/stroke-actions.js | 1 | 1 | 0 |
+| app/preview-runtime.js | 1 | 1 | 0 |
+| app/record-discovery.js | 1 | 1 | 0 |
+| app/results.js | 2 | 2 | 0 |
+| app/run-analysis.js | 2 | 2 | 0 |
+| app/session-feature-metadata.js | 1 | 1 | 0 |
+| app/svg-styles.js | 1 | 1 | 0 |
+| app/watchers.js | 1 | 1 | 0 |
+| services/config.js | 8 | 8 | 0 |
+| services/diagram-generation.js | 2 | 2 | 0 |
+| services/diagram-resource-staging.js | 1 | 1 | 0 |
+| services/export.js | 1 | 1 | 0 |
+| services/gallery-session-migration.js | 1 | 1 | 0 |
+| services/history-snapshot.js | 1 | 1 | 0 |
+| services/session-request.js | 1 | 1 | 0 |
+| services/session-resources.js | 1 | 1 | 0 |
+| services/standalone-interactivity.js | 1 | 1 | 0 |
+| services/svg-result-ingestion.js | 2 | 2 | 0 |
+| state.js | 1 | 1 | 0 |
+| workers/diagram-generation-worker.js | 2 | 2 | 0 |
+
+## Production files touched
+
+- None
+
+## Production additions/deletions
+
+- Additions: 0
+- Deletions: 0
+- Gross churn: 0
+- Net additions: 0
+- Binary production files: 0
+
+## Report-only new production modules
+
+- None
+
+## Report-only new exports and create* owners
+
+- None
+
+## Report-only new reactive state/watchers
+
+- None
+
+## Unapproved privileged capability owners/importers
+
+- None
+
+## Removed privileged allowlist entries
+
+- None
+
+## Added privileged allowlist entries
+
+- None
+
+## Active privileged owners/importers excluded by proposed policy
+
+- None
+
+## Missing base privileged allowlist keys
+
+- None
+
+## Added privileged allowlist keys
+
+- None
+
+## Candidate architecture authority delta
+
+- Classification: UNCHANGED
+- None
+
+## Candidate architecture admission observations
+
+- None
+
+## Candidate architecture rule errors
+
+- None
+
+## Active architecture rule results
+
+- canonical-path.current-result-admission | subject=app/candidate-render.js -> services/svg-result-ingestion.js | observation=CONFORMING | mode=HARD | baselineRelation=NOT_APPLICABLE | authorityResolution=NOT_APPLICABLE | decision=PASS | observedCanonicalEntryEdges=1/1
+- canonical-path.render-request | subject=app/run-analysis.js -> services/session-request.js | observation=CONFORMING | mode=HARD | baselineRelation=NOT_APPLICABLE | authorityResolution=NOT_APPLICABLE | decision=PASS | observedCanonicalEntryEdges=1/1
+- semantic-owner.current-result-admission | subject=services/svg-result-ingestion.js | observation=CONFORMING | mode=HARD | baselineRelation=NOT_APPLICABLE | authorityResolution=NOT_APPLICABLE | decision=PASS | registeredDefinitionLocations=1; observedDefinitions=1/1
+- semantic-owner.render-request | subject=services/session-request.js | observation=CONFORMING | mode=HARD | baselineRelation=NOT_APPLICABLE | authorityResolution=NOT_APPLICABLE | decision=PASS | registeredDefinitionLocations=1; observedDefinitions=1/1
+
+## Active architecture rule errors
+
+- None
+
+## Report-only cache/token/handle/journal/protocol/manager names
+
+- None
+
+## Report-only session object keys and compatibility names
+
+- None
+
+## Added binary runtime files
+
+- None
+
+## Changed vendored runtime files
+
+- None
+
+## Dependency changes
+
+- None
+
+## Guard files touched
+
+- None

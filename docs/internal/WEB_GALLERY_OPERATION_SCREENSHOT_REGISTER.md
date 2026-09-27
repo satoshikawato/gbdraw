@@ -1,19 +1,32 @@
 # Web Gallery operation screenshot register
 
-Last updated: 2026-09-26
+Last updated: 2026-09-27
 
 This register records task-specific decisions for Gallery operation media.
 Capture metadata remains the executable source of truth in each tutorial JSON.
 
-## Record-owned alignment direction (Session 04)
+## Circular Width/Radius numeric and unit controls (#619 S03)
 
-The BGC tutorial retains its existing reader route and media. Its alignment
-instruction now names the single Match reference direction option and eligible
-targets. No operation image shows the changed review: `manual-08-01-align-og1.webp`
-shows the unchanged feature-popup entry points, and the final preview follows
-ordinary Align with directions preserved. Disposition: **Keep** both images;
-no recapture is required. The desktop and 390 px review screenshots are acceptance
-evidence in the master plan, not additional public tutorial media.
+| Tutorial | Operation media | Decision | Required capture state | Status |
+| --- | --- | --- | --- | --- |
+| `tobacco-chloroplast` | `manual-07-01-custom-track-slots.webp` | Replace | Exact tobacco Session; features Auto; plastome_regions 20 px / 0.65 ×R; GC content 0.08 ×R / 0.56 ×R; explicit numeric/unit controls | Recaptured at DSF 3 / quality 94; eight value/unit controls passed; equal-width visual comparison accepted |
+
+Keep the three-row stack, annotation binding and all finished-preview media.
+Update the existing table and caption to name numeric values and units. A taller viewport keeps the added unit/help controls fully visible without widening
+the crop. The operation declares its own Session, app state and eight visible
+controls. The existing GUI Tutorial's corresponding track-controls crop uses
+its original `T-GUI-05` owner recipe; unrelated images remain unchanged.
+
+## Alignment direction and Reset (#598 S04)
+
+The existing BGC tutorial keeps its public reader route and media. The alignment
+instruction now names exclusive Keep/right/left/Custom and both Reset scopes.
+`manual-08-01-align-og1.webp` shows the feature-popup entry points, with no
+retired Match control. The final preview uses automatic Keep alignment. Both
+images remain truthful: **Keep**, with no recapture or new public smoke figure.
+The five-source GUI recipe regenerates the finished BGC example and verifies
+optional minority-reference reversal, both Reset scopes and Undo; see
+`docs/capture/README.md`. Internal acceptance captures remain internal.
 
 ## Optional Similarity Group alignment review (#586)
 

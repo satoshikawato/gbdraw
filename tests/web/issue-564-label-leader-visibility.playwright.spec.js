@@ -1,4 +1,5 @@
 const { test, expect } = require('@playwright/test');
+const { join } = require('node:path');
 const { openApp } = require('./helpers/app-lifecycle.cjs');
 const {
   seeds,
@@ -8,6 +9,9 @@ const {
 } = require('./helpers/mode-transition.cjs');
 
 test.describe.configure({ retries: 0 });
+
+// main@4556e04e929a4a85ad28d1833ce7304bd764881c: Gallery Session v42 before label bindings.
+const metadataFreeSession = join(__dirname, 'fixtures', 'issue-564-main42-lambda-metadata-free.gbdraw-session.json');
 
 const inspectUnit = (page, featureId) => page.evaluate((targetId) => {
   const collect = (root) => Array.from(root.querySelectorAll('[data-label-feature-id]'))
@@ -259,7 +263,7 @@ test('tracked metadata-free Session refreshes once and never exposes a partial v
   browser
 }) => {
   test.setTimeout(300000);
-  const page = await load(browser, seeds.linear);
+  const page = await load(browser, metadataFreeSession);
   try {
     const legacy = await prepareLegacyTarget(page);
     expect(legacy.mounted).not.toContain('data-gbdraw-label-binding-schema="1"');
@@ -324,7 +328,7 @@ test('metadata-free refresh failure retains the old visual and canonical overrid
   browser
 }) => {
   test.setTimeout(300000);
-  const page = await load(browser, seeds.linear);
+  const page = await load(browser, metadataFreeSession);
   try {
     const legacy = await prepareLegacyTarget(page);
     await page.evaluate(() => {
@@ -341,7 +345,7 @@ test('metadata-free refresh failure retains the old visual and canonical overrid
       error: window.__GBDRAW_APP__.labelReflowLastError
     })), { timeout: 180000 }).toEqual({
       processing: false,
-      error: 'Forced Issue 564 label refresh failure.'
+      error: 'The operation failed without recognized diagnostic information. Retry; if it continues, save a Session for investigation.'
     });
     const failed = await page.evaluate(async (targetId) => {
       const app = window.__GBDRAW_APP__;

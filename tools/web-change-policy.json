@@ -53,7 +53,8 @@
       "services/session-resources.js"
     ],
     "services/session-file.js": [
-      "services/config.js"
+      "services/config.js",
+      "workers/session-import-worker.js"
     ],
     "services/session-request.js": [
       "app/run-analysis.js",
@@ -106,6 +107,7 @@
       "app/run-analysis.js",
       "services/diagram-generation.js",
       "services/losat.js",
+      "services/session-import-client.js",
       "workers/diagram-generation-worker.js",
       "workers/losat-threaded-worker.js"
     ],

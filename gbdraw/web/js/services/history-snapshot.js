@@ -1,3 +1,4 @@
+import { validateSimilarityAlignmentResetReceipt } from './session-active-config-contract.js';
 import {
   normalizeFeatureVisibilityRule,
   normalizeVisibilityMode,
@@ -28,7 +29,7 @@ const replacePlainObject = (target, source) => {
 };
 
 const replaceRefArray = (target, source) => {
-  if (!target || typeof target !== 'object' || !Object.prototype.hasOwnProperty.call(target, 'value')) return;
+  if (!target || typeof target !== 'object' || !('value' in target)) return;
   target.value = Array.isArray(source) ? cloneJsonData(source) : [];
 };
 
@@ -49,6 +50,7 @@ const buildFeatureIntentData = (features = {}) => ({
 const buildEditorIntentData = (editorState = {}) => ({
   legend: {
     entries: cloneJsonData(editorState?.legend?.entries) || [],
+    ...(editorState?.legend?.entryOwners ? { entryOwners: cloneJsonData(editorState.legend.entryOwners) } : {}),
     deletedEntries: cloneJsonData(editorState?.legend?.deletedEntries) || [],
     colorOverrides: clonePlainObject(editorState?.legend?.colorOverrides),
     strokeOverrides: clonePlainObject(editorState?.legend?.strokeOverrides),
@@ -194,13 +196,13 @@ const replaceFeatureVisibilityState = (state, features = {}) => {
 };
 
 const setRef = (target, value) => {
-  if (target && typeof target === 'object' && Object.prototype.hasOwnProperty.call(target, 'value')) {
+  if (target && typeof target === 'object' && 'value' in target) {
     target.value = value;
   }
 };
 
 const getRef = (target, fallback = null) => (
-  target && typeof target === 'object' && Object.prototype.hasOwnProperty.call(target, 'value')
+  target && typeof target === 'object' && 'value' in target
     ? target.value
     : fallback
 );
@@ -645,6 +647,7 @@ export const createHistorySnapshotService = ({
   buildUiStateData = null,
   applyUiStateData = null,
   buildCompositionIntent = null,
+  buildLegendEntryOwners = null,
   buildFeatureStateData = null,
   applyFeatureStateData = null,
   buildEditorStateData = null,
@@ -721,6 +724,9 @@ export const createHistorySnapshotService = ({
         getGeneratedArtifactRef(state.featureOrthogroupIndex, null)
       ),
       collinearGroups: artifactOwnedValue(getGeneratedArtifactRef(state.collinearGroups, null)),
+      similarityAlignmentResetReceipt: artifactOwnedValue(
+        getGeneratedArtifactRef(state.similarityAlignmentResetReceipt, null)
+      ),
       similarityAlignmentPlan: artifactOwnedValue(
         getGeneratedArtifactRef(state.similarityAlignmentPlan, null)
       ),
@@ -728,6 +734,9 @@ export const createHistorySnapshotService = ({
         getGeneratedArtifactRef(state.linearRecordTranslations, null)
       ),
       linearRecordOrientations: artifactOwnedValue(captureLinearRecordOrientations()),
+      annotationWarnings: artifactOwnedValue(getGeneratedArtifactRef(state.annotationWarnings, null)),
+      specificRules: (state.manualSpecificRules || []).map(rule => ({ ...rule })),
+      fileLegendCaptions: new Set(state.fileLegendCaptions?.value || []),
       trackSlotResolvedGeometry: artifactOwnedValue(
         getGeneratedArtifactRef(state.trackSlotResolvedGeometry, null)
       ),
@@ -813,6 +822,10 @@ export const createHistorySnapshotService = ({
     );
     setGeneratedArtifactRef(state.collinearGroups, ownerSet.collinearGroups || []);
     setGeneratedArtifactRef(
+      state.similarityAlignmentResetReceipt,
+      ownerSet.similarityAlignmentResetReceipt ?? null
+    );
+    setGeneratedArtifactRef(
       state.similarityAlignmentPlan,
       ownerSet.similarityAlignmentPlan ?? null
     );
@@ -821,6 +834,11 @@ export const createHistorySnapshotService = ({
       ownerSet.linearRecordTranslations || []
     );
     installLinearRecordOrientations(ownerSet.linearRecordOrientations);
+    setGeneratedArtifactRef(state.annotationWarnings, ownerSet.annotationWarnings || []);
+    if (state.manualSpecificRules && ownerSet.specificRules) {
+      state.manualSpecificRules.splice(0, state.manualSpecificRules.length, ...ownerSet.specificRules.map(rule => ({ ...rule })));
+    }
+    if (state.fileLegendCaptions && ownerSet.fileLegendCaptions) state.fileLegendCaptions.value = new Set(ownerSet.fileLegendCaptions);
     setGeneratedArtifactRef(
       state.trackSlotResolvedGeometry,
       ownerSet.trackSlotResolvedGeometry ?? null
@@ -908,9 +926,11 @@ export const createHistorySnapshotService = ({
       'orthogroups',
       'featureOrthogroupIndex',
       'collinearGroups',
+      'similarityAlignmentResetReceipt',
       'similarityAlignmentPlan',
       'linearRecordTranslations',
       'trackSlotResolvedGeometry',
+      'annotationWarnings',
       'proteinIdentityManifest',
       'legacyProteinRawCandidates',
       'legacyProteinDerivedEvidence',
@@ -1046,6 +1066,7 @@ export const createHistorySnapshotService = ({
       editorState,
       orthogroupState,
       alignmentState: Object.freeze({
+        receipt: cloneJsonData(getGeneratedArtifactRef(state.similarityAlignmentResetReceipt, null)),
         plan: cloneJsonData(getGeneratedArtifactRef(state.similarityAlignmentPlan, null)),
         recordTranslations: cloneJsonData(
           getGeneratedArtifactRef(state.linearRecordTranslations, [])
@@ -1096,6 +1117,10 @@ export const createHistorySnapshotService = ({
     { clearFailedGeneratePresentation = false } = {}
   ) => {
     if (!handle || handle.kind !== 'GeneratedArtifactHandle') return false;
+    await validateSimilarityAlignmentResetReceipt(
+      handle.ownerSet?.similarityAlignmentResetReceipt,
+      handle.runtimeState?.canonical?.committedCanonicalSession
+    );
     if (clearFailedGeneratePresentation && state.failedGeneratePreservedResult) {
       state.failedGeneratePreservedResult.value = false;
     }
@@ -1150,6 +1175,7 @@ export const createHistorySnapshotService = ({
           featureStrokes: mutableIntent.editorState?.featureStrokes || {},
           originalSvgStroke: mutableIntent.editorState?.originalSvgStroke || {}
         }),
+        alignmentResetReceipt: handle.ownerSet?.similarityAlignmentResetReceipt ?? null,
         featureCatalog: handle.ownerSet?.featureCatalog || null
       };
       if (typeof applyEditorStateData === 'function') {
@@ -1342,6 +1368,7 @@ export const createHistorySnapshotService = ({
     const editorState = {
       legend: {
         entries: getRef(state.legendEntries, []),
+        ...(typeof buildLegendEntryOwners === 'function' ? { entryOwners: buildLegendEntryOwners() } : {}),
         deletedEntries: getRef(state.deletedLegendEntries, []),
         colorOverrides: state.legendColorOverrides,
         strokeOverrides: state.legendStrokeOverrides,
@@ -1366,6 +1393,7 @@ export const createHistorySnapshotService = ({
       config,
       files: buildIntentFilesData(state, fileStore),
       alignmentState: {
+        receipt: getGeneratedArtifactRef(state.similarityAlignmentResetReceipt, null),
         plan: getGeneratedArtifactRef(state.similarityAlignmentPlan, null),
         recordTranslations: getGeneratedArtifactRef(state.linearRecordTranslations, [])
       },
@@ -1389,6 +1417,15 @@ export const createHistorySnapshotService = ({
             'editorState', 'orthogroupState'
           ]
     );
+    if (domains.has('alignmentState')) {
+      const canonical = generatedArtifactRuntimeOwner?.capture?.()?.canonical?.committedCanonicalSession;
+      await validateSimilarityAlignmentResetReceipt(intent.alignmentState?.receipt, canonical && {
+        ...canonical,
+        renderRequest: { ...canonical.renderRequest, layout: {
+          ...canonical.renderRequest.layout, similarityAlignment: intent.alignmentState?.plan
+        } }
+      });
+    }
     const retainedComparisonFiles = domains.has('config') && !domains.has('files')
       ? new Map(
           (Array.isArray(state.linearComparisonPlan?.edges)
@@ -1450,6 +1487,8 @@ export const createHistorySnapshotService = ({
         applyFilesData(state, intent.files || {}, fileStore, normalizeLinearSeqList);
       }
       if (domains.has('alignmentState')) {
+        setGeneratedArtifactRef(state.similarityAlignmentResetReceipt,
+          cloneJsonData(intent.alignmentState?.receipt) || null);
         setGeneratedArtifactRef(
           state.similarityAlignmentPlan,
           cloneJsonData(intent.alignmentState?.plan) || null
@@ -1491,47 +1530,54 @@ export const createHistorySnapshotService = ({
 
   const applyArtifactCheckpoint = async (snapshot) => {
     if (!snapshot || typeof snapshot !== 'object') return;
-    closeTransientState(state);
+    const suppressRef = state.semanticFileWatchersSuppressed;
+    const previousSuppressed = getGeneratedArtifactRef(suppressRef, false);
+    setGeneratedArtifactRef(suppressRef, true);
+    try {
+      closeTransientState(state);
 
-    const ui = snapshot.ui || {};
-    if (ui.mode) setRef(state.mode, ui.mode === 'linear' ? 'linear' : 'circular');
-    if (ui.cInputType) setRef(state.cInputType, ui.cInputType);
-    if (ui.lInputType) setRef(state.lInputType, ui.lInputType);
-    // The mode watcher clears generated metadata. Let that reset finish before
-    // restoring snapshot-owned feature, label, and orthogroup state.
-    await nextTick();
+      const ui = snapshot.ui || {};
+      if (ui.mode) setRef(state.mode, ui.mode === 'linear' ? 'linear' : 'circular');
+      if (ui.cInputType) setRef(state.cInputType, ui.cInputType);
+      if (ui.lInputType) setRef(state.lInputType, ui.lInputType);
+      // The mode watcher clears generated metadata. Let that reset finish before
+      // restoring snapshot-owned feature, label, and orthogroup state.
+      await nextTick();
 
-    if (typeof applyConfigData === 'function' && snapshot.config) {
-      applyConfigData(snapshot.config);
-    } else if (snapshot.config?.linearComparisonPlan) {
-      replaceLinearComparisonPlan(
-        state.linearComparisonPlan,
-        snapshot.config.linearComparisonPlan
-      );
-    }
-    applyDraftIntentData(state, snapshot.drafts || {});
+      if (typeof applyConfigData === 'function' && snapshot.config) {
+        applyConfigData(snapshot.config);
+      } else if (snapshot.config?.linearComparisonPlan) {
+        replaceLinearComparisonPlan(
+          state.linearComparisonPlan,
+          snapshot.config.linearComparisonPlan
+        );
+      }
+      applyDraftIntentData(state, snapshot.drafts || {});
 
-    if (typeof applyUiStateData === 'function') {
-      applyUiStateData(ui, { restorePreviewNavigation: false });
-    } else {
-      applyFallbackUiStateData(state, ui);
-    }
-    await nextTick();
+      if (typeof applyUiStateData === 'function') {
+        applyUiStateData(ui, { restorePreviewNavigation: false });
+      } else {
+        applyFallbackUiStateData(state, ui);
+      }
+      await nextTick();
 
-    applyFilesData(state, snapshot.files || {}, fileStore, normalizeLinearSeqList);
+      applyFilesData(state, snapshot.files || {}, fileStore, normalizeLinearSeqList);
 
-    if (state.skipCaptureBaseConfig) state.skipCaptureBaseConfig.value = true;
-    if (state.skipPositionReapply) state.skipPositionReapply.value = true;
-    if (state.skipExtractOnSvgChange) state.skipExtractOnSvgChange.value = false;
+      if (state.skipCaptureBaseConfig) state.skipCaptureBaseConfig.value = true;
+      if (state.skipPositionReapply) state.skipPositionReapply.value = true;
+      if (state.skipExtractOnSvgChange) state.skipExtractOnSvgChange.value = false;
 
-    applyArtifactDomains(snapshot);
+      applyArtifactDomains(snapshot);
 
-    await nextTick();
-    await nextFrame();
-    if (typeof applyUiStateData === 'function') {
-      applyUiStateData(ui, { restorePreviewNavigation: false });
-    } else {
-      applyFallbackUiStateData(state, ui);
+      await nextTick();
+      await nextFrame();
+      if (typeof applyUiStateData === 'function') {
+        applyUiStateData(ui, { restorePreviewNavigation: false });
+      } else {
+        applyFallbackUiStateData(state, ui);
+      }
+    } finally {
+      setGeneratedArtifactRef(suppressRef, previousSuppressed);
     }
   };
 

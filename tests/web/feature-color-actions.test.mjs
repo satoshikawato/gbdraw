@@ -1,6 +1,6 @@
 import { evaluatePythonRules } from './helpers/python-rule-evaluator.mjs';
 import assert from 'node:assert/strict';
-import { mkdir, mkdtemp, readFile, writeFile } from 'node:fs/promises';
+import { cp, mkdtemp, readFile, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
@@ -9,25 +9,8 @@ const repoRoot = process.cwd();
 const sourceDir = join(repoRoot, 'gbdraw', 'web', 'js');
 const tempDir = await mkdtemp(join(tmpdir(), 'gbdraw-feature-color-actions-'));
 await writeFile(join(tempDir, 'package.json'), '{"type":"module"}\n', 'utf8');
-await mkdir(join(tempDir, 'app', 'feature-editor'), { recursive: true });
-await mkdir(join(tempDir, 'services'), { recursive: true });
+await cp(sourceDir, tempDir, { recursive: true });
 const colorActionsSource = await readFile(join(sourceDir, 'app', 'feature-editor', 'color-actions.js'), 'utf8');
-await writeFile(
-  join(tempDir, 'app', 'feature-editor', 'color-actions.js'),
-  colorActionsSource,
-  'utf8'
-);
-await writeFile(join(tempDir, 'app', 'rule-matching.js'), await readFile(join(sourceDir, 'app', 'rule-matching.js'), 'utf8'), 'utf8');
-await writeFile(join(tempDir, 'app', 'feature-utils.js'), await readFile(join(sourceDir, 'app', 'feature-utils.js'), 'utf8'), 'utf8');
-await writeFile(join(tempDir, 'app', 'feature-selector.js'), await readFile(join(sourceDir, 'app', 'feature-selector.js'), 'utf8'), 'utf8');
-await writeFile(join(tempDir, 'app', 'color-utils.js'), await readFile(join(sourceDir, 'app', 'color-utils.js'), 'utf8'), 'utf8');
-await writeFile(join(tempDir, 'app', 'losat-normalization.js'), await readFile(join(sourceDir, 'app', 'losat-normalization.js'), 'utf8'), 'utf8');
-await writeFile(join(tempDir, 'services', 'svg-serialization.js'), await readFile(join(sourceDir, 'services', 'svg-serialization.js'), 'utf8'), 'utf8');
-await writeFile(join(tempDir, 'services', 'feature-catalog.js'), await readFile(join(sourceDir, 'services', 'feature-catalog.js'), 'utf8'), 'utf8');
-await writeFile(join(tempDir, 'services', 'feature-identity.js'), await readFile(join(sourceDir, 'services', 'feature-identity.js'), 'utf8'), 'utf8');
-await writeFile(join(tempDir, 'services', 'orthogroup-feature-metadata.js'), await readFile(join(sourceDir, 'services', 'orthogroup-feature-metadata.js'), 'utf8'), 'utf8');
-await writeFile(join(tempDir, 'services', 'runtime-test-hooks.js'), await readFile(join(sourceDir, 'services', 'runtime-test-hooks.js'), 'utf8'), 'utf8');
-await writeFile(join(tempDir, 'services', 'feature-override-identity.js'), await readFile(join(sourceDir, 'services', 'feature-override-identity.js'), 'utf8'), 'utf8');
 
 const { createFeatureColorActions } = await import(
   pathToFileURL(join(tempDir, 'app', 'feature-editor', 'color-actions.js'))
@@ -79,6 +62,8 @@ const manualSpecificRules = [
   { feat: 'CDS', qual: 'hash', val: 'hash-z', color: '#444444', cap: 'Other' }
 ];
 const featureColorOverrides = {};
+const legendColorOverrides = {};
+const committedLegendIntents = [];
 const extractedFeatures = ref([featureA, featureB, hashOnlyFeature]);
 const biologicalFeatures = ref([featureA, featureB, hashOnlyFeature]);
 const legendEntries = ref([{ caption: 'Core', color: '#111111', featureIds: ['hash-a', 'hash-b', 'hash-c'] }]);
@@ -143,7 +128,8 @@ const previewRuntime = {
   }
 };
 
-const { createRulePreparation } = await import(pathToFileURL(join(tempDir, 'app', 'rule-matching.js')));
+const { featureOverrideKey } = await import(pathToFileURL(join(tempDir, 'services', 'feature-override-identity.js')));
+const { createRulePreparation, firstMatchingRule } = await import(pathToFileURL(join(tempDir, 'app', 'rule-matching.js')));
 const actions = createFeatureColorActions({
   rulePreparation: createRulePreparation({ state: { extractedFeatures, biologicalFeatures, manualSpecificRules }, evaluate: evaluatePythonRules }),
   state: {
@@ -161,7 +147,7 @@ const actions = createFeatureColorActions({
     legendRenameDialog: {},
     legendEntries,
     legendStrokeOverrides,
-    legendColorOverrides: {},
+    legendColorOverrides,
     originalLegendOrder: ref([]),
     originalLegendColors: ref({}),
     originalSvgStroke,
@@ -201,6 +187,24 @@ const actions = createFeatureColorActions({
     }
   },
   ruleActions: {
+    commitSpecificRules: async (rules, _label, {afterCommit = () => {}, previousLegendIntents = []} = {}) => {
+      committedLegendIntents.push(previousLegendIntents);
+      const preparation = createRulePreparation({state:{extractedFeatures,biologicalFeatures,manualSpecificRules},evaluate:evaluatePythonRules});
+      const candidate = await preparation.prepareCandidate(rules);
+      if (!candidate) return false;
+      manualSpecificRules.splice(0,manualSpecificRules.length,...candidate.rules);
+      legendEntries.value = candidate.intents.map(entry=>({...entry}));
+      for (const feature of extractedFeatures.value) {
+        const rule=firstMatchingRule(feature,manualSpecificRules);
+        if(rule) {
+          featureColorOverrides[featureOverrideKey(feature)]={color:rule.color,caption:rule.cap};
+          previewRuntime.applyFeatureFillChanges([{featureId:feature.svg_id,color:rule.color}]);
+        }else delete featureColorOverrides[featureOverrideKey(feature)];
+      }
+      applySpecificRulesCount++;
+      afterCommit(candidate);
+      return true;
+    },
     countFeaturesMatchingRule: () => 0,
     findExistingColorForCaption: () => null,
     findFeaturesWithSameDisplayedLabel: (currentFeature, label) => extractedFeatures.value.filter(
@@ -243,7 +247,7 @@ await actions.handleColorScopeChoice('caption');
 
 assert.equal(addLegendEntryCount, 0);
 assert.equal(applySpecificRulesCount, 1);
-assert.equal(specificRule.color, '#abcdef');
+assert.equal(manualSpecificRules.find(rule => rule.qual === 'gene_kind').color, '#abcdef');
 assert.equal(legendEntries.value[0].color, '#abcdef');
 assert.equal(manualSpecificRules.some((rule) => rule.qual === 'hash' && rule.val === 'hash-a'), false);
 assert.equal(manualSpecificRules.some((rule) => rule.qual === 'hash' && rule.val === 'hash-b'), false);
@@ -253,6 +257,27 @@ assert.deepEqual(featureColorOverrides['feature-a'], { color: '#abcdef', caption
 assert.deepEqual(featureColorOverrides['feature-b'], { color: '#abcdef', caption: 'Core' });
 assert.deepEqual(featureColorOverrides['feature-c'], { color: '#abcdef', caption: 'Core' });
 
+// Replacing an inherited caption requires every existing contributor.
+manualSpecificRules.splice(0);
+legendEntries.value = [{ caption: 'Core', color: '#111111' }];
+Object.assign(featureStyleScopeDialog, { show: true, feat: featureA, color: '#abcdef', legendName: 'Core' });
+await actions.handleColorScopeChoice('caption');
+assert.deepEqual(committedLegendIntents.at(-1), [{ caption: 'Core', color: '#111111' }]);
+assert.equal(legendColorOverrides.Core, '#abcdef');
+
+// A partial group or a new caption cannot adopt an unrelated existing row.
+manualSpecificRules.splice(0);
+legendEntries.value = [{ caption: 'Core', color: '#111111' }];
+delete legendColorOverrides.Core;
+await actions.setFeatureColor(featureA, '#abcdef', 'Core');
+assert.deepEqual(committedLegendIntents.at(-1), []);
+assert.equal(legendColorOverrides.Core, undefined);
+manualSpecificRules.splice(0);
+legendEntries.value = [{ caption: 'Manual row', color: '#111111' }];
+await actions.setFeatureColor(featureA, '#abcdef', 'Manual row');
+assert.deepEqual(committedLegendIntents.at(-1), []);
+assert.equal(legendColorOverrides['Manual row'], undefined);
+
 const labelFeatureA = {
   id: 'label-feature-a',
   svg_id: 'f11111111_record_1',
@@ -261,7 +286,7 @@ const labelFeatureA = {
   type: 'CDS',
   product: 'wsv360-like protein',
   qualifiers: { product: ['wsv360-like protein'] },
-  selector: { hash: 'faaaaaaaa', qualifiers: { product: ['wsv360-like protein'] } }
+  selector: { hash: 'f11111111', qualifiers: { product: ['wsv360-like protein'] } }
 };
 const labelFeatureB = {
   id: 'label-feature-b',
@@ -271,7 +296,7 @@ const labelFeatureB = {
   type: 'CDS',
   product: 'wsv360-like protein',
   qualifiers: { product: ['wsv360-like protein'] },
-  selector: { hash: 'fbbbbbbbb', qualifiers: { product: ['wsv360-like protein'] } }
+  selector: { hash: 'f22222222', qualifiers: { product: ['wsv360-like protein'] } }
 };
 
 manualSpecificRules.splice(
@@ -365,8 +390,10 @@ assert.equal(previewFlushCount, noOpFlushCount);
 const compoundFlushCount = previewFlushCount;
 assert.equal(await actions.setFeatureColor(labelFeatureA, '#654321', 'renamed feature'), true);
 assert.equal(previewFlushCount - compoundFlushCount, 1);
-assert.equal(addLegendEntryOptions.at(-1)?.commit, false);
-assert.equal(removeLegendEntryOptions.at(-1)?.commit, false);
+assert.equal(addLegendEntryCount, 0);
+assert.equal(removeLegendEntryOptions.length, 0);
+assert.equal(manualSpecificRules[0].cap, 'renamed feature');
+assert.equal(legendEntries.value[0].caption, 'renamed feature');
 legendEntries.value = [];
 
 const outsideLabelGroup = {
@@ -403,7 +430,7 @@ const conflictingFeatureA = {
   ...labelFeatureA,
   qualifiers: { product: ['wsv360-like protein'], gene: ['wsv360'] },
   selector: {
-    hash: 'faaaaaaaa',
+    hash: 'f11111111',
     record_location: 'RecA:0..90:+',
     qualifiers: { product: ['wsv360-like protein'], gene: ['wsv360'] }
   }
@@ -412,7 +439,7 @@ const conflictingFeatureB = {
   ...labelFeatureB,
   qualifiers: { product: ['wsv360-like protein'], gene: ['wsv360'] },
   selector: {
-    hash: 'fbbbbbbbb',
+    hash: 'f22222222',
     record_location: 'RecB:0..90:+',
     qualifiers: { product: ['wsv360-like protein'], gene: ['wsv360'] }
   }
@@ -455,7 +482,7 @@ const geneLabelFeature = {
   gene: 'wsv360-like protein',
   displayLabel: 'wsv360-like protein',
   qualifiers: { gene: ['wsv360-like protein'] },
-  selector: { hash: 'fbbbbbbbb', qualifiers: { gene: ['wsv360-like protein'] } }
+  selector: { hash: 'f22222222', qualifiers: { gene: ['wsv360-like protein'] } }
 };
 manualSpecificRules.splice(0);
 extractedFeatures.value = [labelFeatureA, geneLabelFeature];
@@ -539,6 +566,8 @@ const stableColorFeature = {
   biologicalFeatureId: 'biological-a'
 };
 const stableColorKey = 'record-key-a\u0000biological-a';
+extractedFeatures.value = [stableColorFeature];
+biologicalFeatures.value = [stableColorFeature];
 manualSpecificRules.splice(0);
 featureColorOverrides[stableColorKey] = {
   color: '#123456',
@@ -712,9 +741,6 @@ await actions.renameLegendEntry(0, 'Oxidative phosphorylation');
 assert.equal(legendGeometryChangedCount, 1);
 assert.equal(legendText.textContent, 'Oxidative phosphorylation');
 assert.equal(legendAttributes.get('data-legend-key'), 'Oxidative phosphorylation');
-assert.equal(addLegendEntryOptions.length > 0, true);
-assert.equal(removeLegendEntryOptions.length > 0, true);
-assert.equal(updateLegendEntryColorOptions.length > 0, true);
-assert.equal(addLegendEntryOptions.every((options) => options.commit === false), true);
-assert.equal(removeLegendEntryOptions.every((options) => options.commit === false), true);
-assert.equal(updateLegendEntryColorOptions.every((options) => options.commit === false), true);
+assert.equal(addLegendEntryOptions.length, 0);
+assert.equal(removeLegendEntryOptions.length, 0);
+assert.equal(updateLegendEntryColorOptions.length, 0);

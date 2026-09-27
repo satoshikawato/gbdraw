@@ -175,8 +175,10 @@ const { isCurrentWorkerGenerationResponse } = await import(
     runDiagramGeneration({ request: {}, resources: {} }),
     (error) => {
       assert.equal(error instanceof DiagramRuntimeCompatibilityError, true);
-      assert.equal(error.message, DIAGRAM_ENGINE_COMPATIBILITY_MESSAGE);
-      assert.match(error.diagnostic, /renderProtocol/);
+      assert.equal(error.code, 'RUNTIME_INCOMPATIBLE');
+      assert.equal(error.stage, 'initialization');
+      assert.match(error.message, /Reload the page/);
+      assert.equal(error.diagnostic, 'Capability contract mismatch.');
       return true;
     }
   );
@@ -194,8 +196,10 @@ const { isCurrentWorkerGenerationResponse } = await import(
     runDiagramGeneration({ request: {}, resources: {} }),
     (error) => {
       assert.equal(error instanceof DiagramRuntimeCompatibilityError, true);
-      assert.equal(error.message, DIAGRAM_ENGINE_COMPATIBILITY_MESSAGE);
-      assert.match(error.diagnostic, /rendering\.(?:featureRenderings|optionSchema)/);
+      assert.equal(error.code, 'RUNTIME_INCOMPATIBLE');
+      assert.equal(error.stage, 'initialization');
+      assert.match(error.message, /Reload the page/);
+      assert.equal(error.diagnostic, 'Capability contract mismatch.');
       return true;
     }
   );

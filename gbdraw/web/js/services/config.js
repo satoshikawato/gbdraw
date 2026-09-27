@@ -1,3 +1,4 @@
+import { normalizeUserFacingError } from './error-normalization.js';
 import { state, normalizeLinearSeqList, collapseEmptyLinearSeqList } from '../state.js';
 import { resolveColorToHex } from '../app/color-utils.js';
 import {
@@ -83,6 +84,10 @@ import {
   managedConfigOverridePathsForMode,
   promoteCanonicalRenderRequestToCurrent,
   projectCanonicalSessionRequest,
+  projectGenerationIntent,
+  projectAppliedGenerationIntent,
+  projectAppliedGenerationFields,
+  compareGenerationIntent,
   projectSettingsOnlySession
 } from './session-request.js';
 import {
@@ -197,6 +202,7 @@ import {
   requireCurrentWebStateFieldNames
 } from '../app/current-option-values.js';
 import {
+  validateSimilarityAlignmentResetReceipt,
   CIRCULAR_TRACK_SLOT_SCHEMA_VERSION,
   CURRENT_WRITER_ACTIVE_CONFIG_DOMAINS,
   createDefaultLosatpHitLimits,
@@ -863,6 +869,7 @@ const normalizeDepthTracks = (tracks, legacyAdv = {}) => {
 let lastSessionFilename = null;
 let preservedCliOptions = null;
 let committedCanonicalSession = null;
+let appliedGenerationIntent = null;
 let activeSessionResourceTable = null;
 let adoptedProteinIdentityManifest = null;
 // Current-session preflight receipts pair each adopted cache value with the
@@ -1031,6 +1038,7 @@ export const buildEditorStateData = ({ preserveAdoptedCatalog = false } = {}) =>
     color: state.originalSvgStroke.value?.color ?? null,
     width: state.originalSvgStroke.value?.width ?? null
   },
+  alignmentResetReceipt: cloneJsonValue(state.similarityAlignmentResetReceipt?.value, null),
   featureCatalog: serializableFeatureCatalog(preserveAdoptedCatalog)
 });
 
@@ -1062,6 +1070,7 @@ const normalizeEditorStateData = (editorState = {}, { featureCatalog = undefined
         ? normalizeStrokeWidth(originalSvgStroke.width)
         : defaults.originalSvgStroke.width
     },
+    alignmentResetReceipt: cloneJsonValue(source.alignmentResetReceipt, null),
     featureCatalog: featureCatalog !== undefined
       ? featureCatalog
       : isPlainObject(source.featureCatalog)
@@ -1138,6 +1147,9 @@ export const applyEditorStateData = (
       ? cloneJsonData(editorState)
       : normalizeEditorStateData(editorState);
 
+  if (state.similarityAlignmentResetReceipt) {
+    state.similarityAlignmentResetReceipt.value = normalized.alignmentResetReceipt ?? null;
+  }
   state.legendEntries.value = normalized.legend.entries;
   state.deletedLegendEntries.value = normalized.legend.deletedEntries;
   state.originalLegendOrder.value = normalized.legend.originalOrder;
@@ -1710,6 +1722,11 @@ const preflightSessionImport = (rawData) => {
   if (!canonicalProjection && restoredConfig) {
     hydrateMissingMultiRecordPositionsFromCliInvocation(restoredConfig, data.cliInvocation);
   }
+  // Saved omission means historical OFF, independently of fresh/reset defaults.
+  restoredConfig = {
+    ...restoredConfig,
+    form: { keep_definition_left_aligned: false, ...restoredConfig?.form }
+  };
   const hasCurrentStoredUnmanagedOverrides = currentSession
     && isPlainObject(runtimeStoredConfig)
     && Object.prototype.hasOwnProperty.call(
@@ -3028,8 +3045,10 @@ export const adoptCanonicalRenderArtifacts = (
 
   // Everything that can validate, project, or deserialize finishes before the
   // committed request and its comparison-backed draft resources are replaced.
+  const nextAppliedGenerationIntent = projectAppliedGenerationIntent(canonical);
   activeSessionResourceTable = sessionResourceTable;
   committedCanonicalSession = nextCommittedCanonicalSession;
+  appliedGenerationIntent = nextAppliedGenerationIntent;
   if (nextLinearComparisons) {
     state.files.linearCanonicalComparisons = nextLinearComparisons;
   }
@@ -3061,11 +3080,34 @@ export const getCommittedCanonicalRenderRequest = () => (
 
 export const getCommittedCanonicalSession = () => committedCanonicalSession;
 
+export const commitAppliedGenerationFields = (sourceState, fields) => {
+  appliedGenerationIntent = projectAppliedGenerationFields(appliedGenerationIntent, sourceState, fields);
+};
+
+// Data interface for application feedback. Operation facts are independent of
+// generation differences; reading it never advances the artifact baseline.
+export const getGenerationApplicationStatus = ({ sourceState = state, filesData,
+  comparisonPlanSnapshot } = {}) => ({
+  ...compareGenerationIntent({
+    draft: projectGenerationIntent({ state: sourceState, filesData, comparisonPlanSnapshot }),
+    applied: appliedGenerationIntent,
+    liveState: sourceState,
+    hasResult: Boolean(sourceState.results?.value?.length)
+  }),
+  operations: {
+    generating: Boolean(sourceState.processing?.value),
+    cancelRequested: Boolean(sourceState.generationCancelRequested?.value),
+    liveApplying: Boolean(sourceState.labelReflowProcessing?.value),
+    liveError: sourceState.labelReflowLastError?.value || null
+  }
+});
+
 export const canonicalRenderArtifactOwner = Object.freeze({
-  capture: () => Object.freeze({ committedCanonicalSession, activeSessionResourceTable }),
+  capture: () => Object.freeze({ committedCanonicalSession, activeSessionResourceTable, appliedGenerationIntent }),
   restore: (snapshot) => {
     committedCanonicalSession = snapshot.committedCanonicalSession;
     activeSessionResourceTable = snapshot.activeSessionResourceTable;
+    appliedGenerationIntent = snapshot.appliedGenerationIntent;
   }
 });
 
@@ -3527,6 +3569,7 @@ const captureSessionImportSnapshot = () => ({
     ? committedCanonicalSession
     : cloneCanonicalSession(committedCanonicalSession),
   activeSessionResourceTable,
+  appliedGenerationIntent,
   importedComparisonIntent: cloneJsonData(state.importedComparisonIntent),
   errorLog: state.errorLog.value,
   resultPanelTab: state.resultPanelTab.value,
@@ -3556,6 +3599,7 @@ const restoreSessionImportSnapshot = async (snapshot) => {
       ? snapshot.committedCanonicalSession
       : cloneCanonicalSession(snapshot.committedCanonicalSession);
     activeSessionResourceTable = snapshot.activeSessionResourceTable;
+    appliedGenerationIntent = snapshot.appliedGenerationIntent;
     Object.assign(
       state.importedComparisonIntent,
       createImportedComparisonIntentState(),
@@ -3590,6 +3634,7 @@ const resetSessionBaseline = () => {
   preservedCliOptions = null;
   committedCanonicalSession = null;
   activeSessionResourceTable = null;
+  appliedGenerationIntent = null;
   Object.assign(
     state.importedComparisonIntent,
     createImportedComparisonIntentState()
@@ -3610,6 +3655,7 @@ const resetSessionBaseline = () => {
   state.resultPanelTab.value = 'preview';
   state.lastRunInfo.value = null;
   state.trackSlotResolvedGeometry.value = null;
+  state.annotationWarnings.value = [];
   applyFiles(null);
   state.losatCache.value = new Map();
   state.losatDerivedCache.value = new Map();
@@ -3961,7 +4007,7 @@ const recoverSessionFeatureMetadataIfNeeded = async ({ generationId = 'session-f
       featureVisibilityTsv
     });
   } catch (error) {
-    console.warn('Session feature metadata recovery failed.', error);
+    console.warn('Session feature metadata recovery failed.', normalizeUserFacingError(error));
     plan = {
       status: 'failed',
       reason: 'recovery-plan-failed',
@@ -4010,7 +4056,7 @@ export const exportSession = async (
         { adopt: adoptedCatalog, mode: state.mode.value }
       );
     } catch (error) {
-      console.warn('Session feature catalog validation failed.', error);
+      console.warn('Session feature catalog validation failed.', normalizeUserFacingError(error));
       throw new Error(SESSION_FEATURE_CATALOG_SAVE_ERROR);
     }
   } else {
@@ -4056,7 +4102,7 @@ export const exportSession = async (
         storedConfig
       });
     } catch (error) {
-      console.warn('Session active configuration validation failed.', error);
+      console.warn('Session active configuration validation failed.', normalizeUserFacingError(error));
       throw new Error(SESSION_ACTIVE_CONFIG_SAVE_ERROR);
     }
   }
@@ -4104,6 +4150,7 @@ export const exportSession = async (
       : promoted;
   }
   const canonical = await assembleSessionResources(state, committed);
+  await validateSimilarityAlignmentResetReceipt(editorState.alignmentResetReceipt, canonical);
   const legacyRawCandidates = serializableLegacyProteinCandidateEnvelope(
     state.legacyProteinRawCandidates.value
   );
@@ -4150,9 +4197,11 @@ export const exportSession = async (
     resources: canonical.resources,
     webFiles: canonical.webFiles,
     results: logicalResults,
-    runMetadata: state.trackSlotResolvedGeometry.value
-      ? { trackSlotGeometry: cloneJsonData(state.trackSlotResolvedGeometry.value) }
-      : {},
+    ...(!settingsOnly ? { runMetadata: {
+      ...(state.trackSlotResolvedGeometry.value
+        ? { trackSlotGeometry: cloneJsonData(state.trackSlotResolvedGeometry.value) } : {}),
+      annotationWarnings: cloneJsonData(state.annotationWarnings.value)
+    } } : {}),
     features: {
       selectedFeatureRecordIdx: state.selectedFeatureRecordIdx.value,
       featureColorOverrides: cloneJsonData(state.featureColorOverrides),
@@ -4194,7 +4243,7 @@ export const exportSession = async (
   try {
     validateSessionAuthorityInventory(sessionData, SESSION_VERSION);
   } catch (error) {
-    console.error('Session writer validation failed.', error);
+    console.error('Session writer validation failed.', normalizeUserFacingError(error));
     throw new Error('Save Session could not validate the session data.');
   }
 
@@ -4231,6 +4280,7 @@ export const importSession = async (e, options = {}) => {
   let rollbackSnapshot = null;
   let rollbackExtensionSnapshot;
   let commitStarted = false;
+  const previousAlert = state.errorLog.value;
 
   try {
     recordSessionLifecycleEvent('gzip-to-text-start');
@@ -4248,6 +4298,10 @@ export const importSession = async (e, options = {}) => {
 
     recordSessionLifecycleEvent('current-session-preflight-start');
     const preflight = preflightSessionImport(data);
+    await validateSimilarityAlignmentResetReceipt(
+      data.editorState?.alignmentResetReceipt,
+      { renderRequest: data.renderRequest, resources: data.resources }
+    );
     recordSessionLifecycleEvent('current-session-preflight-end');
     data = preflight.data;
     const {
@@ -4279,6 +4333,10 @@ export const importSession = async (e, options = {}) => {
     if (currentSchemaSession) {
       committedCanonicalSession = adoptedCanonicalSession;
       activeSessionResourceTable = currentResourceTable;
+      appliedGenerationIntent = projectAppliedGenerationIntent(adoptedCanonicalSession, {
+        editorState: projectionResult?.artifactState.editorState,
+        storedConfig: restoredConfig
+      });
     }
     const ui = canonicalSession
       ? {
@@ -4487,7 +4545,7 @@ export const importSession = async (e, options = {}) => {
           circularConservation: state.circularConservation
         });
       } catch (sequenceError) {
-        console.warn('Session loaded, but match sequence recovery failed.', sequenceError);
+        console.warn('Session loaded, but match sequence recovery failed.', normalizeUserFacingError(sequenceError));
       }
     }
     state.matchSequenceRegistry?.reset?.([
@@ -4591,6 +4649,9 @@ export const importSession = async (e, options = {}) => {
     state.skipPositionReapply.value = true;
     recordSessionLifecycleEvent('preview-mount-start');
     applyResultsData(committedImportedResults, ui);
+    state.annotationWarnings.value = cloneJsonData(
+      projectionResult?.artifactState?.runMetadata?.annotationWarnings || []
+    );
     state.trackSlotResolvedGeometry.value = cloneJsonData(
       projectionResult?.artifactState?.runMetadata?.trackSlotGeometry ?? null
     );
@@ -4628,7 +4689,7 @@ export const importSession = async (e, options = {}) => {
         ]);
       } catch (sequenceError) {
         currentRecoveryError = sequenceError;
-        console.warn('Session preview loaded, but match sequence recovery failed.', sequenceError);
+        console.warn('Session preview loaded, but match sequence recovery failed.', normalizeUserFacingError(sequenceError));
       }
     }
 
@@ -4654,7 +4715,7 @@ export const importSession = async (e, options = {}) => {
       try {
         await recoverSessionFeatureMetadataIfNeeded({ generationId: 'session-load' });
       } catch (recoveryError) {
-        console.warn('Session loaded, but feature metadata recovery failed.', recoveryError);
+        console.warn('Session loaded, but feature metadata recovery failed.', normalizeUserFacingError(recoveryError));
       }
     }
 
@@ -4665,6 +4726,7 @@ export const importSession = async (e, options = {}) => {
     if (!currentSchemaSession) {
       committedCanonicalSession = cloneCanonicalSession(data);
       activeSessionResourceTable = null;
+      appliedGenerationIntent = projectAppliedGenerationIntent(data);
     }
     recordSessionLifecycleEvent('interactiveReady', {
       status: 'success',
@@ -4679,7 +4741,9 @@ export const importSession = async (e, options = {}) => {
       comparisonDisposition: state.importedComparisonIntent.disposition
     };
   } catch (err) {
-    console.error(err);
+    const error = normalizeUserFacingError(err, { stage: 'request-validation' });
+    const currentAlert = state.errorLog.value;
+    const canNotify = currentAlert === previousAlert || currentAlert === null;
     if (commitStarted && rollbackSnapshot) {
       try {
         await restoreSessionImportSnapshot(rollbackSnapshot);
@@ -4687,16 +4751,22 @@ export const importSession = async (e, options = {}) => {
           await rollbackStateExtension.restore(rollbackExtensionSnapshot);
         }
       } catch (rollbackError) {
-        console.error('Failed to roll back the interrupted session import.', rollbackError);
+        state.generationFailureRecovery.value = 'restore-failed';
       }
     }
-    const message = err?.message || 'Invalid JSON structure.';
+    const restoredPreviousAlert = JSON.stringify(normalizeUserFacingError(state.errorLog.value))
+      === JSON.stringify(normalizeUserFacingError(previousAlert));
+    if (!canNotify) {
+      if (restoredPreviousAlert) state.errorLog.value = currentAlert;
+      return { status: 'stale' };
+    }
+    if (state.errorLog.value !== previousAlert && state.errorLog.value !== null && !restoredPreviousAlert) return { status: 'stale' };
+    state.errorLog.value = error;
     recordSessionLifecycleEvent('interactiveReady', {
       status: 'error',
-      error: message
+      error: error.code
     });
-    alert(`Failed to load session: ${message}`);
-    return { status: 'error', error: err };
+    return { status: 'error', error };
   } finally {
     state.sessionResourceDiscoveryDeferred.value = false;
     state.semanticFileWatchersSuppressed.value =

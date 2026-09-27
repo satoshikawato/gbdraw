@@ -1,6 +1,6 @@
 import { buildPyodideAssetManifest } from './pyodide-assets.js';
 import { normalizeUserFacingError } from './error-normalization.js';
-import { validateWebRuntimeCapabilities } from './runtime-capabilities.js';
+import { validateWebRuntimeCapabilities, DiagramRuntimeCompatibilityError } from './runtime-capabilities.js';
 import {
   DIAGRAM_HELPER_OPERATION_NAMES,
   DIAGRAM_HELPER_OPERATIONS
@@ -169,22 +169,11 @@ const buildInitPayload = (id) => {
 
 export const deserializeWorkerError = (
   serialized,
-  fallbackMessage = 'Diagram generation worker failed'
+  options = {}
 ) => {
-  const message = serialized?.message ? String(serialized.message) : fallbackMessage;
-  const error = new Error(message);
-  error.name = serialized?.name ? String(serialized.name) : 'DiagramGenerationWorkerError';
-  if (Array.isArray(serialized?.details)) {
-    error.details = normalizeUserFacingError({
-      message,
-      details: serialized.details
-    })?.details || [];
-  }
-  if (Array.isArray(serialized?.notes)) {
-    error.notes = serialized.notes.map((note) => String(note));
-  }
-  if (serialized?.stack) error.stack = String(serialized.stack);
-  return error;
+  const compatibility = serialized instanceof DiagramRuntimeCompatibilityError;
+  const model = normalizeUserFacingError(compatibility ? { code: 'RUNTIME_INCOMPATIBLE', stage: 'initialization' } : serialized || { code: 'UNKNOWN' }, options);
+  return Object.assign(compatibility ? new DiagramRuntimeCompatibilityError('Capability contract mismatch.') : new Error(model.summary), model, { message: model.summary, stack: model.summary });
 };
 
 const getWorker = () => {
@@ -272,15 +261,15 @@ const ensureWorkerInitialized = () => {
       resolveInit(currentWorker);
       return;
     }
-    fail(deserializeWorkerError(data.error, 'Diagram generation worker initialization failed'));
+    fail(deserializeWorkerError(data.error, { code: 'WORKER_INIT', stage: 'initialization' }));
   }
 
-  function handleError(event) {
-    fail(new Error(event.message || 'Diagram generation worker initialization error'));
+  function handleError() {
+    fail(deserializeWorkerError({ code: 'WORKER_INIT', stage: 'initialization' }));
   }
 
   function handleMessageError() {
-    fail(new Error('Diagram generation worker initialization message could not be decoded'));
+    fail(deserializeWorkerError({ code: 'WORKER_INIT', stage: 'initialization' }));
   }
 
   currentWorker.addEventListener('message', handleMessage);
@@ -345,6 +334,7 @@ export const runDiagramGeneration = (payload = {}, { onProgress = null } = {}) =
   };
 
   (async () => {
+    let failureStage = 'initialization';
     try {
       const initializationWasWarm = workerInitialized;
       if (!initializationWasWarm) reportProgress('preparing-runtime');
@@ -358,6 +348,7 @@ export const runDiagramGeneration = (payload = {}, { onProgress = null } = {}) =
       });
       if (request.settled || activeRequest !== request) return;
       reportProgress('preparing-resources');
+      failureStage = 'resource-staging';
       const preparedResources = await resourceTransport.prepare(payload);
       if (request.settled || activeRequest !== request) return;
       const workerPayload = {
@@ -424,15 +415,15 @@ export const runDiagramGeneration = (payload = {}, { onProgress = null } = {}) =
           });
           return;
         }
-        failWorker(deserializeWorkerError(data.error, 'Diagram generation failed'));
+        failWorker(deserializeWorkerError(data.error, { operation: 'generate' }));
       }
 
-      function handleError(event) {
-        failWorker(new Error(event.message || 'Diagram generation worker error'));
+      function handleError() {
+        failWorker(deserializeWorkerError({ code: 'UNKNOWN', operation: 'generate', stage: 'unknown' }));
       }
 
       function handleMessageError() {
-        failWorker(new Error('Diagram generation worker message could not be decoded'));
+        failWorker(deserializeWorkerError({ code: 'RESULT_INVALID', operation: 'generate', stage: 'result-admission' }));
       }
 
       request.cleanup = cleanup;
@@ -452,7 +443,8 @@ export const runDiagramGeneration = (payload = {}, { onProgress = null } = {}) =
       recordSessionLifecycleEvent('worker-post-end', { requestId });
     } catch (error) {
       if (request.settled || activeRequest !== request) return;
-      settleActiveRequest(request, () => rejectRequest(error));
+      settleActiveRequest(request, () => rejectRequest(deserializeWorkerError(error, { operation: 'generate', stage: failureStage,
+        code: failureStage === 'initialization' ? 'WORKER_INIT' : 'RESOURCE_INVALID' })));
     }
   })();
 
@@ -464,7 +456,7 @@ export const runFeatureExtraction = (payload = {}) => {
     type: 'feature-extraction',
     payload,
     activeRequests: activeFeatureRequests,
-    fallbackMessage: 'Feature extraction failed'
+    operation: 'feature-extraction'
   });
 };
 
@@ -473,7 +465,8 @@ const runAuxiliaryWorkerRequest = ({
   payload,
   operation = null,
   activeRequests,
-  fallbackMessage
+  prepareResources = null,
+  onProgress = null
 }) => {
   const requestId = nextRequestId;
   nextRequestId += 1;
@@ -487,7 +480,11 @@ const runAuxiliaryWorkerRequest = ({
 
   (async () => {
     let request = null;
+    let failureStage = 'initialization';
     try {
+      if (!workerInitialized && typeof onProgress === 'function') {
+        onProgress({ requestId, stage: 'preparing-runtime' });
+      }
       const currentWorker = await ensureWorkerInitialized();
       request = {
         requestId,
@@ -503,6 +500,8 @@ const runAuxiliaryWorkerRequest = ({
       };
       request.cleanup = cleanup;
       activeRequests.add(request);
+      let preparedResources = null;
+      let workerPayload = payload;
 
       const fail = (error) => {
         cleanup();
@@ -514,20 +513,28 @@ const runAuxiliaryWorkerRequest = ({
         if (data.type !== type || data.requestId !== requestId) return;
         cleanup();
         if (data.ok) {
+          preparedResources?.commit();
           resolveRequest({ requestId, result: data.result });
           return;
         }
-        rejectRequest(deserializeWorkerError(data.error, fallbackMessage));
+        rejectRequest(deserializeWorkerError(data.error, { operation }));
       }
 
-      function handleError(event) {
-        fail(new Error(event.message || 'Diagram generation worker error'));
+      function handleError() {
+        fail(deserializeWorkerError({ code: 'UNKNOWN', operation, stage: 'unknown' }));
       }
 
       function handleMessageError() {
-        fail(new Error('Diagram generation worker message could not be decoded'));
+        fail(deserializeWorkerError({ code: 'RESULT_INVALID', operation, stage: 'result-admission' }));
       }
 
+      if (prepareResources) {
+        failureStage = 'resource-staging';
+        preparedResources = await prepareResources();
+        if (!activeRequests.has(request)) return;
+        workerPayload = { ...payload, resourceManifest: preparedResources.resourceManifest,
+          stagedResources: preparedResources.stagedResources };
+      }
       currentWorker.addEventListener('message', handleMessage);
       currentWorker.addEventListener('error', handleError);
       currentWorker.addEventListener('messageerror', handleMessageError);
@@ -536,35 +543,41 @@ const runAuxiliaryWorkerRequest = ({
           type,
           requestId,
           ...(operation ? { operation } : {}),
-          payload
+          payload: workerPayload
         },
-        collectTransferList(payload)
+        collectTransferList(workerPayload)
       );
     } catch (error) {
       request?.cleanup?.();
-      rejectRequest(error);
+      rejectRequest(isDiagramGenerationCanceled(error) ? error : deserializeWorkerError(error, { operation, stage: failureStage,
+        code: failureStage === 'initialization' ? 'WORKER_INIT' : 'RESOURCE_INVALID' }));
     }
   })();
 
   return promise;
 };
 
-export const runDiagramHelperOperation = (operation, payload = {}) => {
+export const runDiagramHelperOperation = (operation, payload = {}, { onProgress = null } = {}) => {
   const normalizedOperation = String(operation || '').trim();
   if (!diagramHelperOperationNames.has(normalizedOperation)) {
     return Promise.reject(
-      new TypeError(`Unsupported diagram helper operation '${normalizedOperation || '(blank)'}'.`)
+      deserializeWorkerError({ code: 'HELPER_PROTOCOL', stage: 'request-validation' })
     );
   }
   if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
-    return Promise.reject(new TypeError('Diagram helper payload must be an object.'));
+    return Promise.reject(deserializeWorkerError({ code: 'HELPER_PROTOCOL', operation: normalizedOperation, stage: 'request-validation' }));
   }
+  const projection = normalizedOperation === DIAGRAM_HELPER_OPERATIONS.RESOLVE_SIMILARITY_ALIGNMENT
+    && payload.projection !== undefined;
+  const { resources, ...helperPayload } = payload;
   return runAuxiliaryWorkerRequest({
-    type: 'helper',
-    operation: normalizedOperation,
-    payload,
+    type: 'helper', operation: normalizedOperation,
+    payload: projection ? helperPayload : payload,
+    prepareResources: projection ? () => resourceTransport.prepare({
+      request: payload.projection.canonicalRequest, resources
+    }) : null,
     activeRequests: activeHelperRequests,
-    fallbackMessage: `Diagram helper operation '${normalizedOperation}' failed`
+    onProgress
   });
 };
 

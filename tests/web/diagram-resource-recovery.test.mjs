@@ -56,7 +56,7 @@ class StagingWorker {
     if (message.type === 'init') {
       queueMicrotask(() => this.emit({ type: 'init', id: message.id, ok: true, capabilities: EXPECTED_WEB_RUNTIME_CAPABILITIES }));
     } else if (['helper', 'feature-extraction'].includes(message.type)) {
-      queueMicrotask(() => this.emit({ type: message.type, requestId: message.requestId, ok: false, error: { message: 'Invalid helper source' } }));
+      queueMicrotask(() => this.emit({ type: message.type, requestId: message.requestId, ok: false, error: { code: 'HELPER_PROTOCOL', stage: 'request-validation', operation: message.operation || 'feature-extraction' } }));
     } else {
       this.operation = this.run(structuredClone(message));
     }
@@ -72,11 +72,11 @@ class StagingWorker {
       if (this.mode === 'hold') return;
       if (this.mode === 'protocol-error') throw new Error('Worker protocol failure after staging');
       this.emit({ type: 'run', requestId, ok: true, results: this.mode === 'python-error'
-        ? { error: { type: 'ParseError', message: 'Rejected biological source' } }
+        ? { error: { code: 'INPUT_INVALID', operation: 'generate', stage: 'render' } }
         : [{ name: 'out.svg', content: JSON.stringify(content) }] });
     } catch (error) {
       this.fs.cleanWorkspace(workspace);
-      this.emit({ type: 'run', requestId, ok: false, error: { message: error.message } });
+      this.emit({ type: 'run', requestId, ok: false, error: { code: 'UNKNOWN', operation: 'generate', stage: this.mode === 'protocol-error' ? 'unknown' : 'resource-staging' } });
     }
   }
   latestRun() { return this.messages.filter(m => m.type === 'run').at(-1); }
@@ -142,7 +142,7 @@ test('W7: protocol failure after staging terminates the Worker and resets main k
   await run({ source: 'A' });
   const worker = current();
   worker.mode = 'protocol-error';
-  await assert.rejects(run({ source: 'B' }), /Worker protocol failure/);
+  await assert.rejects(run({ source: 'B' }), error => error.code === 'UNKNOWN' && error.operation === 'generate');
   assert.equal(worker.terminated, true);
   assert.equal(worker.fs.entries.size, 0);
   assert.deepEqual(content(await run({ source: 'A' })), { source: 'A' });
@@ -159,7 +159,7 @@ test('partial staging failure releases replaced files and cannot advertise the o
     if (++writes === 2) throw new Error('Injected cache file creation failure');
     create(...args);
   };
-  await assert.rejects(run({ first: 'C', second: 'D' }), /cache file creation failure/);
+  await assert.rejects(run({ first: 'C', second: 'D' }), error => error.code === 'UNKNOWN' && error.stage === 'resource-staging');
   assert.equal(writes, 2);
   assert.equal(worker.terminated, true);
   assert.equal(worker.fs.entries.size, 0);
@@ -172,10 +172,10 @@ test('pre-dispatch validation and auxiliary input errors leave the render resour
   const worker = current();
   const invalid = payload({ source: 'B' });
   invalid.resources.source.size = -1;
-  await assert.rejects(runDiagramGeneration(invalid), /invalid byte size/);
+  await assert.rejects(runDiagramGeneration(invalid), error => error.code === 'RESOURCE_INVALID' && error.stage === 'resource-staging');
   assert.equal(worker.messages.filter(m => m.type === 'run').length, 1);
-  await assert.rejects(runDiagramHelperOperation('listSequenceRecords', {}), /Invalid helper source/);
-  await assert.rejects(runFeatureExtraction({}), /Invalid helper source/);
+  await assert.rejects(runDiagramHelperOperation('listSequenceRecords', {}), error => error.code === 'HELPER_PROTOCOL' && error.stage === 'request-validation');
+  await assert.rejects(runFeatureExtraction({}), error => error.code === 'HELPER_PROTOCOL' && error.stage === 'request-validation');
   assert.deepEqual(content(await run({ source: 'A' })), { source: 'A' });
   assert.deepEqual(transferred(worker), []);
   assert.equal(current(), worker);

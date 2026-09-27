@@ -118,10 +118,25 @@ also accept their documented header row.
 | Label overrides | `record_id`, `feature_type`, `qualifier`, `value`, `label_text` |
 | Feature visibility | `record_id`, `feature_type`, `qualifier`, `value`, `action` |
 
-`priorities` is a comma-separated qualifier list. `value` and `keyword` fields
-are case-insensitive regular expressions. Selector qualifiers may also use the
-documented synthetic keys `location`, `record_location`, and `hash` where that
-surface supports exact feature identity. Visibility `action` is `show`, `off`,
+`priorities` is a comma-separated qualifier list. Pattern `value` and `keyword`
+fields use case-insensitive Python regular expressions. Specific-color and
+Label-override patterns accept Python-only syntax such as `(?i)NADH`,
+`(?P<enzyme>NADH)` and `NADH\Z`; Unicode matching follows Python semantics.
+The Web app prepares Color rules and Label TSV patterns with that same Python
+owner before committing live changes. Invalid syntax is rejected even when the
+feature catalog is empty or contains no matches. A table-structure error or
+runtime preparation failure is distinct from invalid regex syntax.
+
+Feature Search and search inside downloaded Interactive SVG use
+case-insensitive JavaScript regex instead. Python and JavaScript patterns are
+not translated between these surfaces. Existing Color pattern fields can hold
+an unapplied display draft; it is not part of the accepted TSV rule or saved
+Session. See [Color and Label patterns](web-app.md#color-and-label-patterns) for
+Retry, Revert and Save/Generate/Export behavior.
+
+Selector qualifiers may also use the documented synthetic keys `location`,
+`record_location`, and `hash` where that surface supports exact feature identity.
+Visibility `action` is `show`, `off`,
 or `exclude_matching`.
 
 Table precedence and the meaning of those actions are documented in [Feature

@@ -18,10 +18,9 @@ import {
   formatPxAuto,
   formatRadiusFactorAuto,
   isManualSlotValue,
-  normalizeOptionalText,
-  parseCircularScalarDisplay
+  normalizeOptionalText
 } from './track-slot-display.js';
-import { validateCustomTrackPlan } from './track-slot-validation.js';
+import { parseOptionalCircularScalar, parseOptionalPixel, validateCustomTrackPlan } from './track-slot-validation.js';
 import { visibleFeatureUnderlaysForState } from '../utils/feature-rendering.js';
 
 const SUPPORTED_RENDERERS = [
@@ -195,12 +194,13 @@ const normalizeSkewColorParams = (params) => {
   return params;
 };
 
-const normalizePxNumberText = (value) => {
-  const text = normalizeOptionalText(value);
-  if (text === null) return null;
-  const withoutUnit = text.endsWith('px') ? text.slice(0, -2) : text;
-  const numeric = Number(withoutUnit);
-  return Number.isFinite(numeric) && numeric >= 0 ? String(numeric) : null;
+const normalizeGapText = (value, field) => {
+  try {
+    const numeric = parseOptionalPixel(value, `Circular track slot ${field}`, { allowZero: true });
+    return numeric === null ? null : String(numeric);
+  } catch {
+    return value; // Invalid drafts remain visible and cannot become auto/zero.
+  }
 };
 
 const normalizePlacement = (value, fallback = 'inside') => {
@@ -897,8 +897,8 @@ export const normalizeCircularTrackSlot = (slot, index = 0, defaultNt = 'GC', pr
 
   let side = inheritsPresetDefaults ? null : normalizeSlotSide(source.side);
   const radius = source.radius ?? null;
-  const innerGapPx = normalizePxNumberText(source.inner_gap_px ?? source.innerGapPx);
-  const outerGapPx = normalizePxNumberText(source.outer_gap_px ?? source.outerGapPx);
+  const innerGapPx = normalizeGapText(source.inner_gap_px ?? source.innerGapPx, 'inner_gap_px');
+  const outerGapPx = normalizeGapText(source.outer_gap_px ?? source.outerGapPx, 'outer_gap_px');
 
   if (renderer === 'dinucleotide_content' || renderer === 'dinucleotide_skew') {
     const nt = normalizeOptionalText(params.nt ?? params.dinucleotide);
@@ -1062,6 +1062,12 @@ export const parseCircularTrackSlotSpec = (spec, index = 0, defaultNt = 'GC', pr
     );
   }
 
+  source.inner_gap_px = parseOptionalPixel(
+    source.inner_gap_px, `Circular track '${source.id}' inner_gap_px`, { allowZero: true }
+  );
+  source.outer_gap_px = parseOptionalPixel(
+    source.outer_gap_px, `Circular track '${source.id}' outer_gap_px`, { allowZero: true }
+  );
   return normalizeCircularTrackSlot(source, index, defaultNt, preset);
 };
 
@@ -1087,8 +1093,12 @@ export const buildCircularTrackSlotSpec = (slot, defaultNt = 'GC', preset = 'tuc
   if (!normalized.enabled) options.push('enabled=false');
   appendOption(options, 'w', normalized.width);
   appendOption(options, 'r', normalized.radius);
-  appendOption(options, 'inner_gap_px', normalized.inner_gap_px);
-  appendOption(options, 'outer_gap_px', normalized.outer_gap_px);
+  appendOption(options, 'inner_gap_px', parseOptionalPixel(
+    normalized.inner_gap_px, `Circular track '${normalized.id}' inner_gap_px`, { allowZero: true }
+  ));
+  appendOption(options, 'outer_gap_px', parseOptionalPixel(
+    normalized.outer_gap_px, `Circular track '${normalized.id}' outer_gap_px`, { allowZero: true }
+  ));
   if (includeSide || normalizePlacement(normalized.side) === 'overlay') {
     appendOption(options, 'side', normalized.side);
   }
@@ -1139,37 +1149,6 @@ export const buildCircularTrackSlotSpec = (slot, defaultNt = 'GC', preset = 'tuc
   appendOption(options, 'legend_label', params.legend_label);
 
   return `${normalized.id}:${normalized.renderer}${options.length ? `@${options.join(',')}` : ''}`;
-};
-
-const circularScalarPayload = (value, fieldName) => {
-  if (value === null || value === undefined || value === '') return null;
-  if (value && typeof value === 'object' && !Array.isArray(value)) {
-    const numeric = Number(value.value);
-    const unit = String(value.unit || '').trim().toLowerCase();
-    if (!Number.isFinite(numeric) || numeric <= 0 || !['px', 'factor'].includes(unit)) {
-      throw new Error(`${fieldName} must be a positive finite px or factor scalar.`);
-    }
-    return { value: numeric, unit };
-  }
-  const text = String(value).trim();
-  const isPx = /px$/i.test(text);
-  const isPercent = /%$/.test(text);
-  const numericText = isPx || isPercent ? text.slice(0, -2 + Number(isPercent)) : text;
-  const numeric = Number(numericText.trim());
-  const resolved = isPercent ? numeric / 100 : numeric;
-  if (!Number.isFinite(resolved) || resolved <= 0) {
-    throw new Error(`${fieldName} must be a positive finite px or factor scalar.`);
-  }
-  return { value: resolved, unit: isPx ? 'px' : 'factor' };
-};
-
-const circularGapPayload = (value, fieldName) => {
-  if (value === null || value === undefined || value === '') return null;
-  const numeric = Number(value);
-  if (!Number.isFinite(numeric) || numeric < 0) {
-    throw new Error(`${fieldName} must be a nonnegative finite pixel value.`);
-  }
-  return numeric;
 };
 
 const canonicalAnnotationParams = (params) => {
@@ -1235,17 +1214,19 @@ export const buildCircularTrackSlotPayload = (
     renderer: normalized.renderer,
     enabled: normalized.enabled,
     side,
-    radius: circularScalarPayload(normalized.radius, `Circular track '${normalized.id}' radius`),
-    width: circularScalarPayload(normalized.width, `Circular track '${normalized.id}' width`),
+    radius: parseOptionalCircularScalar(normalized.radius, `Circular track '${normalized.id}' radius`),
+    width: parseOptionalCircularScalar(normalized.width, `Circular track '${normalized.id}' width`),
     z: Number(normalized.z) || 0,
     params,
-    innerGapPx: circularGapPayload(
+    innerGapPx: parseOptionalPixel(
       normalized.inner_gap_px,
-      `Circular track '${normalized.id}' inner gap`
+      `Circular track '${normalized.id}' inner_gap_px`,
+      { allowZero: true }
     ),
-    outerGapPx: circularGapPayload(
+    outerGapPx: parseOptionalPixel(
       normalized.outer_gap_px,
-      `Circular track '${normalized.id}' outer gap`
+      `Circular track '${normalized.id}' outer_gap_px`,
+      { allowZero: true }
     )
   };
 };
@@ -2398,6 +2379,11 @@ export const createCircularTrackSlotEditor = ({ state }) => {
     return null;
   };
 
+  const updateCircularTrackSlotMeasure = (slot, field, scalar) => {
+    if (!['width', 'radius'].includes(field) || !state.adv.circular_track_slots.includes(slot)) return;
+    if (slot[field] !== scalar) slot[field] = scalar;
+  };
+
   const circularSlotManualValue = (slot, field) => {
     if (!slot) return '';
     if (field === 'width') return slot.width;
@@ -2465,11 +2451,7 @@ export const createCircularTrackSlotEditor = ({ state }) => {
   const circularTrackSlotGeometryUnitSuffix = (slot, field) => {
     const text = String(circularSlotManualValue(slot, field) ?? '').trim();
     if (!text) return '';
-    if (field === 'width') {
-      const parsed = parseCircularScalarDisplay(text);
-      return parsed?.unit === 'factor' ? 'R' : '';
-    }
-    if (field === 'radius') return /px$/i.test(text) ? '' : 'R';
+    if (!['inner_gap_px', 'outer_gap_px'].includes(field)) return '';
     return /px$/i.test(text) ? '' : 'px';
   };
 
@@ -2548,6 +2530,7 @@ export const createCircularTrackSlotEditor = ({ state }) => {
     canMoveCircularTrackSlotOutside,
     canMoveCircularTrackSlotInside,
     canMoveCircularTrackSlotToAxis,
+    updateCircularTrackSlotMeasure,
     updateCircularTrackSlotRenderer,
     updateCircularTrackSlotPlacement,
     updateCircularTrackFeatureLane,

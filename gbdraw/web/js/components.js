@@ -4,7 +4,9 @@ import {
   toNativeColorInputValue
 } from './app/color-utils.js';
 
-const { ref, reactive, computed, nextTick } = window.Vue;
+import { normalizeUserFacingError, operationErrorTitle, generationRecoveryGuidance } from './services/error-normalization.js';
+
+const { ref, reactive, computed, nextTick, watch } = window.Vue;
 
 export const HelpTip = {
   template: '#help-tip-template',
@@ -119,7 +121,7 @@ export const ColorValueControl = {
 
 export const FileUploader = {
   template: '#file-uploader-template',
-  props: ['label', 'accept', 'modelValue', 'small', 'multiple', 'testId', 'afterChange', 'requestClear'],
+  props: ['label', 'accept', 'modelValue', 'small', 'multiple', 'testId', 'afterChange', 'requestClear', 'artifactHistory'],
   emits: ['update:modelValue', 'clearRequest'],
   setup(props, { emit }) {
     const input = ref(null);
@@ -146,12 +148,15 @@ export const FileUploader = {
         }
       };
       const history = window.__GBDRAW_HISTORY__;
-      if (history?.runUndoable) {
-        void history.runUndoable('Change uploaded file', async () => {
-          update();
-          await nextTick();
-          await props.afterChange?.(nextFiles[0]);
-        });
+      const apply = async () => {
+        update();
+        await nextTick();
+        return await props.afterChange?.(nextFiles[0]);
+      };
+      if (props.artifactHistory) {
+        void history.runUndoableCheckpoint('Change uploaded file', apply, { shouldCommit: result => result !== false });
+      } else if (history?.runUndoable) {
+        void history.runUndoable('Change uploaded file', apply);
       } else {
         update();
       }
@@ -193,5 +198,43 @@ export const RecordDisplayControl = {
     };
     return { error, setStart, draft: computed(() => props.controller.draftFor(props.row)),
       surface: computed(() => props.controller.surfaceFor(props.row)) };
+  }
+};
+
+export const OperationError = {
+  template: '#operation-error-template',
+  props: ['error', 'recovery'],
+  setup(props) {
+    const model = computed(() => normalizeUserFacingError(props.error));
+    const title = computed(() => operationErrorTitle(model.value?.operation));
+    const recoveryText = computed(() => generationRecoveryGuidance(props.recovery));
+    const diagnostics = computed(() => (model.value?.details || []).map(section =>
+      `${section.label}\n${section.text}`).join('\n\n'));
+    const details = ref(null);
+    const diagnosticText = ref(null);
+    const copyStatus = ref('');
+    watch(() => props.error, () => {
+      if (details.value) details.value.open = false;
+      copyStatus.value = '';
+    }, { flush: 'sync' });
+    const selectDiagnostics = () => {
+      diagnosticText.value?.focus();
+      diagnosticText.value?.select();
+    };
+    const copyDiagnostics = async () => {
+      const displayed = props.error;
+      const text = diagnostics.value;
+      if (!details.value?.open || !text) return;
+      try {
+        if (!navigator.clipboard?.writeText) throw new Error('Clipboard unavailable');
+        await navigator.clipboard.writeText(text);
+        if (props.error === displayed) copyStatus.value = 'Diagnostics copied.';
+      } catch (_) {
+        if (props.error !== displayed) return;
+        copyStatus.value = 'Clipboard unavailable. Select diagnostics and copy manually.';
+      }
+    };
+    return { model, title, recoveryText, diagnostics, details, diagnosticText, copyStatus,
+      copyDiagnostics, selectDiagnostics };
   }
 };

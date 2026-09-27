@@ -1,0 +1,29 @@
+{
+  "command": [
+    "npx",
+    "--no-install",
+    "playwright",
+    "test",
+    "--config=/tmp/issue597-S05-resume2-20260927-t65_9osr/owned.functional.config.cjs",
+    "--workers=1",
+    "--retries=0",
+    "--reporter=list,/tmp/issue597-S05-resume2-20260927-t65_9osr/evidence-reporter-v2.cjs",
+    "--output=/tmp/issue597-S05-resume2-20260927-t65_9osr/dev-candidate-final/browser",
+    "tests/web/contracts/session-regenerate-intent.playwright.spec.js",
+    "tests/web/contracts/active-result-edit-transaction.playwright.spec.js"
+  ],
+  "cwd": "/tmp/issue597-S05-resume2-20260927-t65_9osr/evidence-view",
+  "environment": {
+    "GBDRAW_REPO": "/tmp/issue597-S05-resume2-20260927-t65_9osr/evidence-view",
+    "GBDRAW_WEB_TEST_PORT": "53267",
+    "S05_EVIDENCE_REPORT": "/tmp/issue597-S05-resume2-20260927-t65_9osr/dev-candidate-final/attachments"
+  },
+  "startedUtc": "2026-09-27T09:46:16Z",
+  "sourceHead": "968d08211ce2315c274be14d879ef9ceb332bb66",
+  "mappedBodySha256": "e9521f9b6fadd605712d56d94f9b22ace4d9b783956ebf7d998c7b8871c2745b",
+  "configSha256": "cbddd33bee4edcdc3de70e03e036e06108be47abed53d413ead7c80bc51074f1",
+  "ownership": "Fresh port and reuseExistingServer=false; context belongs to this invocation.",
+  "exit": 0,
+  "finishedUtc": "2026-09-27T09:48:04Z",
+  "logSha256": "558c7dfde4f13029f74bb69f7460c2af8daf8036c1c62d2641c0fffbbfcecdf7"
+}

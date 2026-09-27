@@ -91,13 +91,17 @@ malformed/empty diffs or missing Git objects fail closed.
 
 ### Evidence required for selection
 
-A narrower PR route requires successful exact-SHA `Dev staging / gate` evidence
-at the PR base. No older successful SHA can substitute. When a PR contains only
-documentation or policy-documentation paths and has no matching base staging run,
-it runs the complete PR tier without inherited evidence. Failed or unfinished
-base runs and API failures still stop documentation-only planning; they cannot
-become successful inherited evidence after a documentation-only commit. For other
-light changes, unavailable evidence selects the complete tier.
+Documentation-only PRs into `dev`, including exact policy documents and accompanying
+allowlisted metadata, run only the changed documentation or policy checks. Their
+`DOCUMENTATION_ONLY_PR` plan contains no inherited evidence and does not query base
+staging. Missing, failed, unfinished, or inaccessible base staging therefore cannot
+block the PR or expand it to the full tier. The required jobs and trusted-base
+checks still have to pass.
+
+Other narrower PR routes require successful exact-SHA `Dev staging / gate`
+evidence at the PR base. No older successful SHA can substitute; unavailable
+evidence selects the complete tier. Mixing runtime, CI, packaging, or unknown
+paths into documentation changes retains those capabilities' required coverage.
 `architecture-change`, control-plane changes, dependencies, unknown paths,
 unclassified/shared test inputs, and explicit dispatches require the full tier.
 
@@ -131,7 +135,9 @@ Full functional CI retains four shards and its existing retry policy.
 ## Trust and aggregate checks
 
 PR planning and `PR / gate` execute the PR base's helper under `.ci-trusted-base`.
-Candidate helpers are test inputs only. A missing or invalid base helper fails;
+Candidate helpers are test inputs only. The documentation-only PR exemption
+does not supply integrated-dev or promotion evidence. A missing or invalid base
+helper fails;
 there is no candidate fallback. `Web base policy (trusted base)` remains a separate
 `pull_request_target` check that treats candidate files as Git data.
 

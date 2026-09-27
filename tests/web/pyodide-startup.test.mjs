@@ -65,8 +65,8 @@ class FakeWorker {
           type: 'run',
           ok: false,
           error: {
-            name: 'RenderStageError',
-            message: 'diagram render stage failed',
+            code: 'UNKNOWN', operation: 'generate', stage: 'render',
+            message: 'PRIVATE_SENTINEL diagram render stage failed',
             details: [{ label: 'Stage', text: 'typed render request' }]
           }
         }));
@@ -100,7 +100,7 @@ const {
 
 await assert.rejects(
   runDiagramHelperOperation('runArbitraryPython', {}),
-  /Unsupported diagram helper operation/
+  error => error.code === 'HELPER_PROTOCOL' && error.stage === 'request-validation'
 );
 assert.equal(FakeWorker.instances.length, 0);
 const sourceBuffer = new TextEncoder().encode('>shared-worker\nACGT\n').buffer;
@@ -171,9 +171,10 @@ FakeWorker.failRuns = true;
 await assert.rejects(
   runDiagramGeneration({ request: {}, resources: {} }),
   (error) => {
-    assert.equal(error.name, 'RenderStageError');
-    assert.match(error.message, /render stage failed/);
-    assert.deepEqual(error.details, [{ label: 'Stage', text: 'typed render request' }]);
+    assert.equal(error.code, 'UNKNOWN');
+    assert.equal(error.operation, 'generate');
+    assert.equal(error.stage, 'render');
+    assert.doesNotMatch(JSON.stringify(error), /PRIVATE_SENTINEL/);
     return true;
   }
 );

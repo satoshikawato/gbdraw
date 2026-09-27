@@ -1,3 +1,4 @@
+import { normalizeSpecificRule, buildLegendIntents } from './specific-color-rules.js';
 import { normalizeFeatureSelectorMetadata } from './feature-selector.js';
 
 // Ephemeral Python results belong to feature objects, never a session or a SVG.
@@ -39,7 +40,7 @@ export const ruleFeaturePayload = (feature, label = '') => {
   };
 };
 
-export const createRulePreparation = ({ state, evaluate, pending = { value: false } }) => {
+export const createRulePreparation = ({ state, evaluate, pending = { value: false }, notify = () => {} }) => {
   let validated = new Set();
   let pendingCount = 0;
   const features = () => [...new Set([
@@ -50,13 +51,33 @@ export const createRulePreparation = ({ state, evaluate, pending = { value: fals
     biology: state.biologicalFeatures?.value,
     result: state.svgResultIdentity?.value,
     mode: state.mode?.value,
-    rules: JSON.stringify(state.manualSpecificRules)
+    inputKinds: JSON.stringify([state.cInputType?.value, state.lInputType?.value]),
+    rules: JSON.stringify(state.manualSpecificRules),
+    file: state.files?.t_color,
+    linearFiles: [...(state.linearSeqs || [])].flatMap(sequence => [sequence.gb, sequence.gff, sequence.fasta]),
+    resultNames: JSON.stringify((state.results?.value || []).map(result => result.name)),
+    selectedResult: state.selectedResultIndex?.value,
+    legend: JSON.stringify(state.legendEntries?.value || []),
+    legendColors: JSON.stringify(state.legendColorOverrides || {}),
+    legendStrokes: JSON.stringify(state.legendStrokeOverrides || {}),
+    featureColors: JSON.stringify(state.featureColorOverrides || {}),
+    featureVisibility: JSON.stringify(state.featureVisibilityOverrides || {}),
+    // Physical source, palette, and selector inputs retain their identity while
+    // request-owned comparison artifacts are published independently.
+    inputFiles: [
+      state.files?.c_gb, state.files?.c_gff, state.files?.c_fasta, state.files?.c_depth,
+      state.files?.d_color, state.files?.blacklist, state.files?.whitelist, state.files?.qualifier_priority,
+      state.files?.c_conservation_blasts, state.files?.c_conservation_blasts_source,
+      state.files?.c_conservation_fastas, state.files?.c_conservation_sequence_sources
+    ].flatMap(input => Array.isArray(input) ? [input, ...input] : [input])
   });
   const isCurrent = (before) => {
     const after = snapshot();
-    return Object.keys(before).every((key) => before[key] === after[key]);
+    return Object.keys(before).every((key) => key === 'linearFiles' || key === 'inputFiles'
+      ? before[key].length === after[key].length && before[key].every((file, index) => file === after[key][index])
+      : before[key] === after[key]);
   };
-  const prepare = (rules = state.manualSpecificRules) => {
+  const prepare = (rules = state.manualSpecificRules, options = {}) => {
     const targets = features();
     const draft = [...new Map(rules.map((rule) => [ruleKey(rule), { feat: rule.feat, qual: rule.qual, val: rule.val }])).values()];
     if (!draft.length) return true;
@@ -64,7 +85,7 @@ export const createRulePreparation = ({ state, evaluate, pending = { value: fals
     if (draft.every((rule) => validated.has(ruleKey(rule))) && ruleMatchesReady(targets, draft)) return true;
     const before = snapshot();
     pending.value = ++pendingCount > 0;
-    return evaluate({ features: targets.map((feature) => ruleFeaturePayload(feature)), rules: draft, kind: 'color' })
+    return evaluate({ features: targets.map((feature) => ruleFeaturePayload(feature)), rules: draft, kind: 'color' }, options)
       .then((result) => {
         if (!isCurrent(before)) return false;
         validated = new Set(draft.map(ruleKey));
@@ -82,5 +103,29 @@ export const createRulePreparation = ({ state, evaluate, pending = { value: fals
     if (prepared === true) return commit();
     return Promise.resolve(prepared).then((current) => current ? commit() : undefined);
   };
-  return { prepare, run, evaluate, snapshot, isCurrent };
+  const prepareCandidate = async (rules = state.manualSpecificRules, options = {}) => {
+    const before = snapshot();
+    const source = rules.map(rule => normalizeSpecificRule(rule));
+    const response = await evaluate({ features: [], rules: source, kind: 'color-captions' }, options);
+    if (!isCurrent(before)) return null;
+    const normalized = response.rules;
+    if (!await prepare(normalized, options) || !isCurrent(before)) return null;
+    const rendered = (state.extractedFeatures.value || []).filter(feature =>
+      state.featureVisibilityOverrides?.[feature.svg_id] !== 'off');
+    const used = new Set(rendered.map(feature => firstMatchingRule(feature, normalized)).filter(Boolean));
+    const intents = buildLegendIntents(normalized.filter(rule => used.has(rule))).intents;
+    const changes = normalized.flatMap((rule, index) => rule.cap !== source[index].cap
+      ? [{ index, before: source[index].cap, after: rule.cap }] : []);
+    // Rebind existing rule-derived overrides by their source row, never by suffix parsing.
+    const featureColorOverrides = Object.fromEntries(Object.entries(state.featureColorOverrides || {}).map(([key, override]) => {
+      const index = source.findIndex(rule => rule.cap === override?.caption
+        && rule.color === String(override?.color || '').toLowerCase());
+      return [key, index < 0 ? override : { ...override, caption: normalized[index].cap }];
+    }));
+    return { rules: normalized, intents, changes, featureColorOverrides, snapshot: before };
+  };
+  const notifyChanges = (candidate) => {
+    if (candidate?.changes.length) notify(`Updated ${candidate.changes.length} specific-color caption(s) to distinguish their colors.`);
+  };
+  return { prepare, prepareCandidate, notifyChanges, run, evaluate, snapshot, isCurrent };
 };

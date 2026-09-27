@@ -1328,6 +1328,8 @@ test('Invalid Annotation slot is rejected before worker startup and preserves co
       presentationWhileRepeatedAttemptStarts,
       repeatedPresentation: app.failedGeneratePreservedResult,
       errorSummary: String(app.errorLog?.summary || ''),
+      errorCode: app.errorLog?.code,
+      errorContext: app.errorLog?.context,
       diagramWorkerMessages:
         window.__GBDRAW_DIAGRAM_RUN_MESSAGES__ - workerMessagesBefore,
       beforeResultCount: before.results.length,
@@ -1351,7 +1353,11 @@ test('Invalid Annotation slot is rejected before worker startup and preserves co
   expect(outcome.firstPresentation).toBe(true);
   expect(outcome.presentationWhileRepeatedAttemptStarts).toBe(true);
   expect(outcome.repeatedPresentation).toBe(true);
-  expect(outcome.errorSummary).toContain("references unknown set 'missing'");
+  expect(outcome.errorCode).toBe('TRACK_INVALID');
+  expect(outcome.errorContext).toMatchObject({ field: 'set_id', reason: 'ANNOTATION_SET' });
+  expect(outcome.errorSummary).toContain('Select an existing annotation set.');
+  expect(outcome.errorSummary).not.toContain('missing');
+  expect(outcome.errorSummary).not.toContain('invalid_annotation');
   expect(outcome.diagramWorkerMessages).toBe(0);
   expect(outcome.beforeResultCount).toBeGreaterThan(0);
   expect(outcome.serializedSvgPreserved).toBe(true);
@@ -1366,7 +1372,8 @@ test('Invalid Annotation slot is rejected before worker startup and preserves co
 
   const generationError = page.getByRole('alert', { name: 'Generation Error' });
   await expect(generationError).toBeVisible();
-  await expect(generationError).toContainText("references unknown set 'missing'");
+  await expect(generationError).toContainText('Select an existing annotation set.');
+  await expect(generationError).not.toContainText('missing');
   await expect(
     page.getByRole('heading', { name: 'Last Successful Result', exact: true })
   ).toBeVisible();
@@ -2164,9 +2171,9 @@ test('P3 Custom Track drafts survive fresh-page session re-save and Reset histor
   const circularAnnotationRow = page.locator(
     '[data-capture="circular-track-slot-review_overlay"]'
   );
-  await page.locator(
-    '[data-capture="circular-track-slot-disabled_outer_space"] input[title="Width"]'
-  ).fill('15px');
+  await page.getByRole('textbox', {
+    name: 'Circular track slot disabled_outer_space Width value', exact: true
+  }).fill('15px');
   await circularAnnotationRow
     .locator('.track-slot-field')
     .filter({ hasText: 'padding' })
@@ -2247,7 +2254,7 @@ test('P3 Custom Track drafts survive fresh-page session re-save and Reset histor
       }
     };
   })).toEqual({
-    circularSpacerWidth: '15px',
+    circularSpacerWidth: { value: '15', unit: 'px' },
     circularAnnotation: {
       marks: ['line'],
       padding: 4,

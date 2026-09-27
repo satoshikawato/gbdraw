@@ -111,21 +111,13 @@ assert.deepEqual(second, {
   unchanged: [{ caption: 'Shared', color: '#112233' }]
 });
 
-assert.deepEqual(
-  buildLegendIntents([
-    { feat: 'CDS', qual: 'gene', val: 'a', color: '#112233', cap: 'Historical' },
-    { feat: 'CDS', qual: 'gene', val: 'b', color: '#445566', cap: 'Historical' }
-  ], { conflictPolicy: 'last-wins' }),
-  {
-    intents: [{ caption: 'Historical', color: '#445566' }],
-    conflicts: [{
-      caption: 'Historical',
-      previousColor: '#112233',
-      nextColor: '#445566',
-      ruleIndex: 1
-    }]
-  }
-);
+assert.deepEqual(buildLegendIntents([
+  { feat: 'CDS', qual: 'gene', val: 'a', color: '#112233', cap: 'Historical [#112233]' },
+  { feat: 'CDS', qual: 'gene', val: 'b', color: '#445566', cap: 'Historical [#445566]' }
+]).intents, [
+  { caption: 'Historical [#112233]', color: '#112233' },
+  { caption: 'Historical [#445566]', color: '#445566' }
+]);
 
 class MockElement {
   constructor(tagName, attributes = {}, textContent = '') {
@@ -302,6 +294,16 @@ const mockLegendEntry = (caption, color, x) => {
     'the sanitized mounted legend remains visual authority and mismatched metadata is ignored'
   );
 
+  const capturedOwners = actions.captureLegendEntryOwners();
+  featureLegend.children[0].setAttribute('data-legend-owner', 'specific-color-file');
+  featureLegend.children[0].querySelector('path').setAttribute('fill', '#112233');
+  assert.equal(actions.reconcileLegendEntries({ restoreColorState: true, entryOwners: capturedOwners }), true);
+  assert.equal(featureLegend.children[0].getAttribute('data-legend-owner'), null);
+  assert.equal(featureLegend.children[0].querySelector('path').getAttribute('fill'), '#abcdef',
+    'History restores the captured swatch, even when the original palette differs');
+  assert.equal(state.legendEntries.value[0].color, '#abcdef');
+  assert.equal(Object.hasOwn(state.legendEntries.value[0], 'owner'), false);
+
   const noOpDirtyMarks = dirtyMarks;
   assert.equal(actions.updateLegendEntryColor(0, '#abcdef'), false);
   assert.equal(actions.updateLegendEntryCaption(0, 'Beta'), false);
@@ -329,6 +331,9 @@ const mockLegendEntry = (caption, color, x) => {
   assert.equal(dirtyMarks, strokeWidthDirtyMarks);
 
   const betaSwatch = featureLegend.children[0].querySelector('path');
+  betaSwatch.setAttribute('fill', '#aabbcc');
+  assert.equal(actions.updateLegendEntryColorByCaption('Beta', '#abc', {commit:false}), false);
+  assert.equal(betaSwatch.getAttribute('fill'), '#aabbcc');
   betaSwatch.setAttribute('stroke', '#222222');
   betaSwatch.setAttribute('stroke-width', '2');
   assert.equal(strokeActions.resetLegendEntryStroke(0), true);

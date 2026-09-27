@@ -401,6 +401,9 @@ class ResolutionWarning:
     set_id: str
     annotation_id: str
     message: str
+    record_id: str = ""
+    record_index: int = 0
+    missing_count: int = 0
 
 
 @dataclass(frozen=True)

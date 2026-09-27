@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import json
 import re
 from dataclasses import dataclass
 from pathlib import Path
@@ -19,6 +20,8 @@ from assertions.svg_semantics import (
 )
 from config import (
     ACTION_TIMEOUT_MS,
+    CAPTURE_ROOT,
+    GENERATION_TIMEOUT_MS,
     GUI_BGC_FIXTURES,
 )
 from flows.web_capture import (
@@ -97,7 +100,12 @@ class BgcLosatpResult:
 def assert_bgc_fixtures() -> None:
     """Require five unchanged, whole, naturally linear BGC records."""
 
+    verified = json.loads((CAPTURE_ROOT / "bgc-source-verification.json").read_text())["records"]
     for path, size, digest, record_id, length, _organism in GUI_BGC_FIXTURES:
+        source = next(item for item in verified if Path(item["mirrorPath"]).name == path.name)
+        if not (source["equal"] and source["sourceSha256"] == source["mirrorSha256"] == digest
+                and source["sourceBytes"] == source["mirrorBytes"] == size):
+            raise AssertionError(f"Missing byte-matched MIBiG provenance: {path.name}")
         assert_fixture_identity(path, expected_size=size, expected_sha256=digest)
         records = list(SeqIO.parse(path, "genbank"))
         if len(records) != 1:
@@ -403,6 +411,9 @@ def _inspect_popup(page: Page, *, mode: str) -> dict[str, Any]:
 
 
 def _open_orthogroup_alignment_target(page: Page, orthogroup_id: str) -> Any:
+    previous_popup = page.locator(".feature-popup")
+    if previous_popup.is_visible():
+        previous_popup.get_by_role("button", name="Close feature popup", exact=True).click()
     target = page.evaluate(
         """
         (orthogroupId) => {
@@ -435,30 +446,7 @@ def _open_orthogroup_alignment_target(page: Page, orthogroup_id: str) -> Any:
         """,
         orthogroup_id,
     )
-    page.evaluate(
-        """
-        ({ featureId, x, y }) => {
-          const svg = document.querySelector('[data-gbdraw-feature-id]')?.ownerSVGElement
-            || document.querySelector('svg');
-          const element = Array.from(
-            svg?.querySelectorAll('path[data-gbdraw-feature-id], polygon[data-gbdraw-feature-id], rect[data-gbdraw-feature-id]') || []
-          ).find(
-            (candidate) => String(
-              candidate.getAttribute('data-gbdraw-feature-id') || ''
-            ).trim() === featureId
-          );
-          if (!element) throw new Error(`Rendered feature ${featureId} was not found`);
-          element.dispatchEvent(new MouseEvent('click', {
-            bubbles: true,
-            cancelable: true,
-            clientX: x,
-            clientY: y,
-            view: window
-          }));
-        }
-        """,
-        target,
-    )
+    page.locator(f'path[data-gbdraw-feature-id="{target["featureId"]}"], polygon[data-gbdraw-feature-id="{target["featureId"]}"], rect[data-gbdraw-feature-id="{target["featureId"]}"]').first.click(force=True)
     page.wait_for_function(
         """
         ({ featureId, orthogroupId }) => {
@@ -472,27 +460,85 @@ def _open_orthogroup_alignment_target(page: Page, orthogroup_id: str) -> Any:
     popup = page.locator(".feature-popup")
     expect(popup).to_be_visible()
     expect(popup).to_contain_text(orthogroup_id)
-    expect(popup.get_by_role("button", name=re.compile(r"Align"))).to_be_visible()
+    expect(popup.get_by_role("button", name="Align…", exact=True)).to_be_visible()
     return popup
 
 
+def _apply_alignment_review(page: Page, dialog: Any) -> None:
+    rows = page.evaluate("() => window.__GBDRAW_APP__.similarityAlignmentDraft.rows.filter(row => !row.choice).map(row => row.recordKey)")
+    for key in rows:
+        dialog.locator(f'[data-alignment-record-key="{key}"]').get_by_role(
+            "radio", name=re.compile(r"Select .*bp, strand")
+        ).first.check()
+    for attempt in range(2):
+        dialog.get_by_role("button", name="Apply", exact=True).click()
+        page.wait_for_function("() => !window.__GBDRAW_APP__.similarityAlignmentBusy", timeout=GENERATION_TIMEOUT_MS)
+        if not dialog.is_visible():
+            return
+        expect(dialog.get_by_role("alert")).to_contain_text("Validated directions or reference placement changed")
+    raise AssertionError("Alignment did not commit after accepting the refreshed preview")
+
+
 def _align_to_orthogroup(page: Page, popup: Any, orthogroup_id: str) -> None:
-    previous_run = page.evaluate(
-        "() => String(window.__GBDRAW_APP__?.lastRunInfo?.startedAtIso || '')"
-    )
-    popup.get_by_role("button", name=re.compile(r"Align")).click()
-    page.wait_for_function(
-        """
-        ({ orthogroupId, previousRun }) => {
-          const app = window.__GBDRAW_APP__;
-          return !app?.processing
-            && app?.selectedOrthogroupAlignmentFeature === orthogroupId
-            && String(app?.lastRunInfo?.startedAtIso || '') !== previousRun;
-        }
-        """,
-        arg={"orthogroupId": orthogroup_id, "previousRun": previous_run},
-        timeout=ACTION_TIMEOUT_MS,
-    )
+    history_before = page.evaluate("() => window.__GBDRAW_HISTORY__.revision.value")
+    popup.get_by_role("button", name="Align…", exact=True).click()
+    page.wait_for_function("""before => {
+      const app = window.__GBDRAW_APP__;
+      return !app.similarityAlignmentBusy && (app.similarityAlignmentDialogOpen
+        || app.similarityAlignmentError || window.__GBDRAW_HISTORY__.revision.value > before);
+    }""", arg=history_before, timeout=GENERATION_TIMEOUT_MS)
+    dialog = page.get_by_role("dialog", name="Select alignment anchors", exact=True)
+    if dialog.is_visible():
+        expect(dialog.get_by_role("radio", name="Keep current directions", exact=True)).to_be_checked()
+        _apply_alignment_review(page, dialog)
+    expect(page.get_by_role("alert", name="Generation Error")).to_have_count(0)
+    assert page.evaluate("() => window.__GBDRAW_HISTORY__.revision.value") > history_before
+    assert page.evaluate("() => window.__GBDRAW_APP__.similarityAlignmentPlanInspector?.groupId") == orthogroup_id
+
+
+def _verify_direction_reset(page: Page) -> None:
+    def snapshot() -> dict[str, Any]:
+        return page.evaluate("""async () => {
+          const {state} = await import('./js/state.js');
+          return {plan: state.similarityAlignmentPlan.value,
+            receipt: state.similarityAlignmentResetReceipt.value,
+            directions: state.linearSeqs.map(seq => Boolean(seq.region_reverse)),
+            svg: state.results.value[0].content,
+            translations: state.linearRecordTranslations.value};
+        }""")
+    before = snapshot()
+    popup = _open_orthogroup_alignment_target(page, "og_18")
+    popup.get_by_role("button", name="Review alignment options…", exact=True).click()
+    dialog = page.get_by_role("dialog", name="Select alignment anchors", exact=True)
+    expect(dialog).to_be_visible(timeout=GENERATION_TIMEOUT_MS)
+    expect(dialog.get_by_role("radio", name="Keep current directions", exact=True)).to_be_checked()
+    dialog.get_by_role("radio", name="All selected arrows right", exact=True).check()
+    changed = page.evaluate("() => window.__GBDRAW_APP__.similarityAlignmentDirectionPreview.records.filter(row => row.beforeReverseComplement !== row.afterReverseComplement).map(row => row.recordKey)")
+    assert changed == [before["plan"]["reference"]["recordKey"]], changed
+    _apply_alignment_review(page, dialog)
+    after = snapshot()
+    assert len(after["receipt"]["directions"]) == 1
+    assert after["receipt"]["directions"][0]["recordKey"] == changed[0]
+    page.get_by_role("button", name="Open editor", exact=True).click()
+    expect(page.locator(".right-drawer")).to_have_attribute("aria-hidden", "false")
+    page.get_by_role("button", name="Similarity groups").click()
+    for combined in (True, False):
+        page.get_by_role("button", name="Reset alignment…", exact=True).click()
+        reset = page.get_by_role("dialog", name="Reset alignment", exact=True)
+        expect(reset.get_by_role("radio", name="Reset positions", exact=True)).to_be_checked()
+        expect(reset.get_by_role("list", name="Alignment direction restoration targets").get_by_role("listitem")).to_have_count(1)
+        if combined:
+            reset.get_by_role("radio", name="Reset positions and alignment direction changes", exact=True).check()
+        reset.get_by_role("button", name="Reset", exact=True).click()
+        expect(reset).to_be_hidden(timeout=GENERATION_TIMEOUT_MS)
+        restored = snapshot()
+        assert restored["plan"] is None and restored["receipt"] is None
+        assert restored["directions"] == (before["directions"] if combined else after["directions"])
+        page.get_by_role("button", name="Undo", exact=True).click()
+        assert snapshot() == after
+    page.get_by_role("button", name="Undo", exact=True).click()
+    assert snapshot() == before
+    page.locator(".right-drawer").get_by_role("button", name="Close editor", exact=True).click()
 
 
 def _download_text_button(
@@ -649,11 +695,11 @@ def capture_bgc_losatp(
             fifth_file = fifth_source.get_by_role(
                 "group", name="GenBank / DDBJ File selection", exact=True
             )
-            fifth_source.get_by_role(
-                "button",
-                name="Depth tracks for file 5",
-                exact=True,
-            ).click()
+            depth_tracks = fifth_source.get_by_role(
+                "button", name="Depth tracks for file 5", exact=True
+            )
+            if depth_tracks.evaluate("element => element.parentElement.open"):
+                depth_tracks.click()
             reverse_complement = page.get_by_label(
                 "Reverse complement for sequence 5", exact=True
             )
@@ -664,7 +710,7 @@ def capture_bgc_losatp(
             )
             fifth_options.click()
             reverse_complement.evaluate(
-                "(element) => element.scrollIntoView({ block: 'end' })"
+                "(element) => element.closest('label').scrollIntoView({ block: 'end' })"
             )
             expect(fifth_file).to_contain_text("BGC0000713.gbk")
             expect(reverse_complement).to_be_checked()
@@ -796,13 +842,16 @@ def capture_bgc_losatp(
                 page, output_paths[alignment_name], "Linear"
             )
             _align_to_orthogroup(page, alignment_popup, align_orthogroup_id)
+            alignment_popup.get_by_role(
+                "button", name="Close feature popup", exact=True
+            ).click()
             result_region = page.get_by_role(
                 "region", name="Result Preview", exact=True
             )
             final_report = inspect_gui_bgc_losatp_svg(result_region)
             validator(final_report)
             aligned_state = page.evaluate(
-                "() => window.__GBDRAW_APP__?.selectedOrthogroupAlignmentFeature"
+                "() => window.__GBDRAW_APP__?.similarityAlignmentPlanInspector?.groupId"
             )
             if aligned_state != align_orthogroup_id:
                 raise AssertionError(
@@ -869,6 +918,10 @@ def capture_bgc_losatp(
                 normalized_fasta,
                 suggested_name=suggested,
             )
+
+        if scenario_id == "T-GUI-04":
+            popup.get_by_role("button", name="Close match popup", exact=True).click()
+            _verify_direction_reset(page)
 
         svg_button = page.get_by_role("button", name="SVG", exact=True)
         expected_svg_name = f"{output_prefix}.svg"

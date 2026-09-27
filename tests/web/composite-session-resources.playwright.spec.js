@@ -128,7 +128,7 @@ const save = async (page, testInfo, label) => {
 
 const prepareSeed = async (journey, testInfo) => {
   const bytes = await fs.readFile(seed);
-  expect(hash(bytes)).toBe('11009dd28a1d98afa79e8b5d22b94217f61d9f53cb6353010095c983c3a9d90e');
+  expect(hash(bytes)).toBe('4ac925ae659907774c7aaf6e4cb70c9b0aa05f95f83a89db9c912165d5d26ca4');
   const session = JSON.parse(gunzipSync(bytes));
   if (journey !== 'minimal') return { file: seed, session };
 
@@ -326,11 +326,11 @@ test('Session import rejects malformed composite bindings without replacing exis
     const seedPath = 'gbdraw/web/gallery/sessions/HmmtDNA_basic_circular.gbdraw-session.json';
     const { page, external } = await load(browser, seedPath, contexts);
     const before = await snapshot(page);
+    const beforeHistory = await page.evaluate(()=>window.__GBDRAW_HISTORY__.getUndoCount());
     const seedSession = JSON.parse(await fs.readFile(seedPath));
     const resourceId = seedSession.renderRequest.records[0].source.resourceId;
     const leaf = { resourceId, name: 'part.gb', type: 'text/plain', lastModified: 0 };
-    const dialogs = [];
-    page.on('dialog', dialog => { dialogs.push(dialog.message()); });
+
     const mutations = {
       schema: s => { s.webFiles.bindings.schema = 99; },
       kind: s => { s.webFiles.bindings.c_gb.kind = 'unknown'; },
@@ -353,15 +353,19 @@ test('Session import rejects malformed composite bindings without replacing exis
         components: [structuredClone(leaf), structuredClone(leaf)],
         name: 'logical.gb', type: 'text/plain', lastModified: 0 } };
       mutate(invalid);
-      const previous = dialogs.length;
+      await page.evaluate(()=>{window.__PREVIOUS_SESSION_IMPORT_ERROR__=window.__GBDRAW_APP__.errorLog;});
       await page.locator('input[accept^=".json,"]').setInputFiles({
         name: `${label}.gbdraw-session.json`, mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(invalid))
       });
-      await expect.poll(() => dialogs.length, { timeout: loadTimeout }).toBe(previous + 1);
+      await page.waitForFunction(()=>window.__GBDRAW_APP__.errorLog!==window.__PREVIOUS_SESSION_IMPORT_ERROR__,{},{timeout:loadTimeout});
       await expect.poll(() => page.evaluate(() => window.__GBDRAW_APP__.sessionImportPending), { timeout: loadTimeout }).toBe(false);
-      expect(dialogs.at(-1)).toMatch(/^Failed to load session:/);
-      expect(await snapshot(page)).toEqual(before);
-      rejected.push({ label, error: dialogs.at(-1) });
+      const error=await page.evaluate(()=>window.__GBDRAW_APP__.errorLog);
+      expect(error).toMatchObject({code:'INPUT_INVALID',stage:'request-validation'});
+      await expect(page.getByRole('alert',{name:'Operation error'})).toBeVisible();
+      expect(JSON.stringify(error)).not.toMatch(/logical\.gb|part\.gb|missing/);
+      expect(await snapshot(page)).toEqual({ ...before, error });
+      expect(await page.evaluate(()=>window.__GBDRAW_HISTORY__.getUndoCount())).toBe(beforeHistory);
+      rejected.push({ label, error });
     }
     expect(external).toEqual([]);
     await fs.writeFile(testInfo.outputPath('transactional-rejections.json'), JSON.stringify(rejected, null, 2));

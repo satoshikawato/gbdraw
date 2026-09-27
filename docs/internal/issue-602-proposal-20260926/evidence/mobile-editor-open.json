@@ -1,0 +1,219 @@
+{
+  "viewport": {
+    "width": 390,
+    "height": 844,
+    "pageWidth": 390
+  },
+  "media": {
+    "max760": true,
+    "mobile": true,
+    "compactPreview": true
+  },
+  "hitTargets": [
+    {
+      "name": "Close editor",
+      "zIndex": "20",
+      "hit": {
+        "tag": "I",
+        "className": "ph ph-sidebar-simple text-lg",
+        "text": ""
+      }
+    },
+    {
+      "name": "right-drawer absolute right-0 top-0 bottom-0 bg-white border-l border-slate-200 shadow-xl z-30 transition-transform duration-300 flex flex-col",
+      "zIndex": "30",
+      "hit": {
+        "tag": "P",
+        "className": "text-[10px] text-slate-400 truncate",
+        "text": "Label: terminase small subunit"
+      }
+    },
+    {
+      "name": "preview-controls absolute bottom-4 left-1/2 -translate-x-1/2 flex items-center gap-2 z-20 preview-controls--drawer-open",
+      "zIndex": "20",
+      "hit": {
+        "tag": "BUTTON",
+        "className": "text-[10px] px-2 py-1 rounded bg-blue-100 hover:bg-blue-200 text-blue-700 border border-blue-200",
+        "text": "Load Label TSV"
+      }
+    },
+    {
+      "name": "flex gap-1 bg-white shadow rounded-lg p-1.5 border border-slate-200",
+      "zIndex": "auto",
+      "hit": {
+        "tag": "BUTTON",
+        "className": "text-[10px] px-2 py-1 rounded bg-slate-200 hover:bg-slate-300 text-slate-700",
+        "text": "Reset Label Edits"
+      }
+    },
+    {
+      "name": "Reset layout",
+      "zIndex": "auto",
+      "hit": {
+        "tag": "DIV",
+        "className": "flex items-center gap-2",
+        "text": "CDS2632..2839head-tail adaptor Ad1Edit"
+      }
+    },
+    {
+      "name": "Toggle layout edit mode",
+      "zIndex": "auto",
+      "hit": {
+        "tag": "BUTTON",
+        "className": "text-[10px] px-2 py-1 rounded border border-slate-200 text-slate-600 hover:bg-slate-100 shrink-0",
+        "text": "Edit"
+      }
+    },
+    {
+      "name": "Toggle canvas padding controls",
+      "zIndex": "auto",
+      "hit": {
+        "tag": "BUTTON",
+        "className": "text-[10px] px-2 py-1 rounded bg-blue-600 hover:bg-blue-700 text-white",
+        "text": "Export Label TSV"
+      }
+    },
+    {
+      "name": "Zoom in",
+      "zIndex": "auto",
+      "hit": {
+        "tag": "BUTTON",
+        "className": "text-[10px] px-2 py-1 rounded bg-blue-100 hover:bg-blue-200 text-blue-700 border border-blue-200",
+        "text": "Load Label TSV"
+      }
+    },
+    {
+      "name": "Reset zoom",
+      "zIndex": "auto",
+      "hit": {
+        "tag": "BUTTON",
+        "className": "text-[10px] px-2 py-1 rounded bg-slate-200 hover:bg-slate-300 text-slate-700",
+        "text": "Reset Label Edits"
+      }
+    },
+    {
+      "name": "Zoom out",
+      "zIndex": "auto",
+      "hit": {
+        "tag": "BUTTON",
+        "className": "text-[10px] px-2 py-1 rounded bg-slate-200 hover:bg-slate-300 text-slate-700",
+        "text": "Reset Label Edits"
+      }
+    }
+  ],
+  "preview": {
+    "left": 8,
+    "top": 207.203125,
+    "right": 382,
+    "bottom": 684.703125,
+    "width": 374,
+    "height": 477.5
+  },
+  "toggle": {
+    "left": 10,
+    "top": 217.203125,
+    "right": 46,
+    "bottom": 277.203125,
+    "width": 36,
+    "height": 60
+  },
+  "controls": {
+    "left": 46,
+    "top": 574.703125,
+    "right": 400,
+    "bottom": 674.703125,
+    "width": 354,
+    "height": 100
+  },
+  "zoomControls": {
+    "left": 222,
+    "top": 620.703125,
+    "right": 388,
+    "bottom": 674.703125,
+    "width": 166,
+    "height": 54
+  },
+  "drawer": {
+    "left": 46,
+    "top": 209.203125,
+    "right": 380,
+    "bottom": 682.703125,
+    "width": 334,
+    "height": 473.5
+  },
+  "controlButtons": [
+    {
+      "name": "Reset layout",
+      "box": {
+        "left": 90.5,
+        "top": 574.703125,
+        "right": 225.5,
+        "bottom": 612.703125,
+        "width": 135,
+        "height": 38
+      },
+      "receivesPointerAtCenter": false
+    },
+    {
+      "name": "Toggle layout edit mode",
+      "box": {
+        "left": 233.5,
+        "top": 574.703125,
+        "right": 355.5,
+        "bottom": 612.703125,
+        "width": 122,
+        "height": 38
+      },
+      "receivesPointerAtCenter": false
+    },
+    {
+      "name": "Toggle canvas padding controls",
+      "box": {
+        "left": 58,
+        "top": 628.703125,
+        "right": 214,
+        "bottom": 666.703125,
+        "width": 156,
+        "height": 38
+      },
+      "receivesPointerAtCenter": false
+    },
+    {
+      "name": "Zoom in",
+      "box": {
+        "left": 229,
+        "top": 627.703125,
+        "right": 269,
+        "bottom": 667.703125,
+        "width": 40,
+        "height": 40
+      },
+      "receivesPointerAtCenter": false
+    },
+    {
+      "name": "Reset zoom",
+      "box": {
+        "left": 273,
+        "top": 627.703125,
+        "right": 337,
+        "bottom": 667.703125,
+        "width": 64,
+        "height": 40
+      },
+      "receivesPointerAtCenter": false
+    },
+    {
+      "name": "Zoom out",
+      "box": {
+        "left": 341,
+        "top": 627.703125,
+        "right": 381,
+        "bottom": 667.703125,
+        "width": 40,
+        "height": 40
+      },
+      "receivesPointerAtCenter": false
+    }
+  ],
+  "toggleReceivesPointerAtCenter": true
+}
