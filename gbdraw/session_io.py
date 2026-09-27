@@ -1512,8 +1512,9 @@ def normalize_current_session_artifacts(
 
     request = session.get("renderRequest")
     editor = session.get("editorState")
-    if (isinstance(request, Mapping) and isinstance(editor, dict)
-            and request.get("layout", {}).get("similarityAlignment") is not None):
+    if (isinstance(request, Mapping)
+            and request.get("layout", {}).get("similarityAlignment") is not None
+            and isinstance(editor, dict)):
         editor.setdefault("alignmentResetReceipt", None)
 
     source_manifest = (

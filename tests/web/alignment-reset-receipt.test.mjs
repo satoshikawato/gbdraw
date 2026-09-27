@@ -90,10 +90,12 @@ test('Python and Web admit the same source-bound compact receipt and reject corr
   const f = fixture(); const receipt = await build(f);
   const session = {...f.after, editorState:{alignmentResetReceipt:receipt}};
   const script = `import json,sys; from gbdraw.session_io import _validate_alignment_reset_receipt; _validate_alignment_reset_receipt(json.load(sys.stdin))`;
-  const valid = spawnSync('python', ['-c', script], {input:JSON.stringify(session),encoding:'utf8'});
+  const valid = spawnSync(process.env.PYTHON || 'python', ['-c', script], {input:JSON.stringify(session),encoding:'utf8'});
+  if (valid.error) throw valid.error;
   assert.equal(valid.status, 0, valid.stderr);
   session.editorState.alignmentResetReceipt.binding = '0'.repeat(64);
-  const invalid = spawnSync('python', ['-c', script], {input:JSON.stringify(session),encoding:'utf8'});
+  const invalid = spawnSync(process.env.PYTHON || 'python', ['-c', script], {input:JSON.stringify(session),encoding:'utf8'});
+  if (invalid.error) throw invalid.error;
   assert.notEqual(invalid.status, 0); assert.match(invalid.stderr, /binding changed/);
 });
 
@@ -108,8 +110,9 @@ test('Python and Web bind supplementary Unicode record keys in the same determin
   rename(f.before); rename(f.after);
   const receipt = await build(f);
   const script = 'import json,sys; from gbdraw.session_io import _validate_alignment_reset_receipt; _validate_alignment_reset_receipt(json.load(sys.stdin))';
-  const result = spawnSync('python', ['-c',script], {
+  const result = spawnSync(process.env.PYTHON || 'python', ['-c',script], {
     input:JSON.stringify({...f.after,editorState:{alignmentResetReceipt:receipt}}),encoding:'utf8'
   });
+  if (result.error) throw result.error;
   assert.equal(result.status,0,result.stderr);
 });

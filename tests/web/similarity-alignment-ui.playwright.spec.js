@@ -33,7 +33,7 @@ const artifactSnapshot = (page) => page.evaluate(async () => {
     receipt: JSON.parse(JSON.stringify(state.similarityAlignmentResetReceipt.value)),
     request: structuredClone(state.lastCommittedRequest?.value || null),
     results: state.results.value.map(({ name, content }) => ({ name, content })),
-    history: [history.getUndoCount(), history.getRedoCount()]
+    history: [history.getUndoCount(), history.getRedoCount(), history.revision.value]
   };
 });
 
@@ -548,7 +548,7 @@ test('Similarity alignment UI completes exact-reference, ambiguity, focus, summa
     path: testInfo.outputPath('narrow-ambiguity.png'),
     fullPage: false
   });
-  await dialog.getByRole('radio', { name: /Select .*bp, strand/ }).first().press('Escape');
+  await dialog.locator('[data-alignment-record-key] input[type="radio"]:checked').press('Escape');
   await expect(dialog).toBeHidden();
   await expect(popupReview).toBeFocused();
   await popup.getByRole('button', { name: 'Close feature popup' }).click();
@@ -1288,30 +1288,38 @@ test('Gallery explicit directions own receipts, Reset scopes, fresh Load and rib
     await expect(page.locator('.drawer-toggle')).toBeDisabled();
     await expect(page.locator('.drawer-toggle')).toHaveAttribute('title',/Finish or cancel alignment review/);
     expect(await page.evaluate(()=>window.__GBDRAW_APP__.showRightDrawer)).toBe(false);
-    await apply.scrollIntoViewIfNeeded();
-    const canvas=await page.locator('[data-preview-canvas]').boundingBox();
+    await page.locator('.preview-canvas').evaluate(element => element.scrollIntoView({ block: 'start' }));
+    const canvas=await page.locator('.preview-canvas').boundingBox();
     const palette=await dialog.boundingBox();
-    console.log('S02 compact layout',JSON.stringify(await page.evaluate(({canvas,palette})=>({canvas,palette,
-      header:document.querySelector('.app-header').getBoundingClientRect().bottom,
-      viewport:document.querySelector('.preview-viewport').getBoundingClientRect().toJSON(),
-      search:document.querySelector('.preview-feature-search').getBoundingClientRect().toJSON(),
-      toolbar:document.querySelector('.preview-controls').getBoundingClientRect().toJSON(),
-      generate:document.querySelector('.generate-bar').getBoundingClientRect().toJSON()}),{canvas,palette})));
-    await page.screenshot({path:testInfo.outputPath(`canvas-layout-${height}.png`)});
     expect(canvas.height).toBeGreaterThanOrEqual(200);
     expect(Math.abs(canvas.width-palette.width)).toBeLessThanOrEqual(2);
-    expect(palette.y+palette.height).toBeLessThanOrEqual(height);
-    const headerBottom=await page.locator('.app-header').evaluate(el=>el.getBoundingClientRect().bottom);
-    expect(Math.min(height,canvas.y+canvas.height)-Math.max(headerBottom,canvas.y)).toBeGreaterThanOrEqual(200);
+    const visible = await page.evaluate(box => {
+      const header = document.querySelector('.app-header').getBoundingClientRect();
+      const generate = document.querySelector('.generate-bar').getBoundingClientRect();
+      const overlaps = generate.left < box.x + box.width && generate.right > box.x;
+      return Math.min(box.y + box.height, window.innerHeight, overlaps ? generate.top : window.innerHeight)
+        - Math.max(box.y, 0, header.bottom);
+    }, canvas);
+    expect(visible).toBeGreaterThanOrEqual(200);
     await page.screenshot({path:testInfo.outputPath(`canvas-hit-${height}.png`)});
     const hit=await page.evaluate(box=>{
-      return [25,100,175].map(offset=>{
-        const element=document.elementFromPoint(box.x+box.width/2,box.y+offset);
-        return Boolean(element?.closest('[data-preview-canvas]'));
-      });
+      const element=document.elementFromPoint(box.x+box.width/2,Math.max(0,box.y)+100);
+      return {inside:Boolean(element?.closest('.preview-canvas')),tag:element?.tagName,classes:element?.className,
+        headerBottom:document.querySelector('.app-header').getBoundingClientRect().bottom,canvas:box};
     },canvas);
     console.log('S02 compact canvas hit',JSON.stringify(hit));
-    expect(hit).toEqual([true,true,true]);
+    expect(hit.inside).toBe(true);
+    expect(await page.evaluate(box => [25, 100, 175].map(offset => Boolean(
+      document.elementFromPoint(box.x + box.width / 2, box.y + offset)?.closest('.preview-canvas')
+    )), canvas)).toEqual([true, true, true]);
+    for (const control of [apply, dialog.getByRole('button', { name: 'Cancel', exact: true })]) {
+      expect(await control.evaluate(element => {
+        const box = element.getBoundingClientRect();
+        const hit = document.elementFromPoint(box.x + box.width / 2, box.y + box.height / 2);
+        return hit === element || element.contains(hit);
+      })).toBe(true);
+    }
+    console.log('Visible compact canvas height:', height, visible);
     await page.screenshot({ path: testInfo.outputPath(`direction-review-390-${height}.png`) });
   }
   await page.setViewportSize({ width: 1600, height: 1000 });
@@ -1340,8 +1348,8 @@ test('Gallery explicit directions own receipts, Reset scopes, fresh Load and rib
   await page.waitForFunction(() => !window.__GBDRAW_APP__.similarityAlignmentBusy, null, { timeout: 180000 });
   const applyStatus = await page.evaluate(() => ({ status: window.__GBDRAW_APP__.similarityAlignmentStatus,
     error: window.__GBDRAW_APP__.similarityAlignmentError?.message, globalError: window.__GBDRAW_APP__.errorLog }));
-  expect(applyStatus, JSON.stringify(applyStatus)).toMatchObject({ status: 'idle',globalError:null });
-  await expect(page.getByRole('alert',{name:'Generation Error'})).toHaveCount(0);
+  expect(applyStatus, JSON.stringify(applyStatus)).toMatchObject({ status: 'idle', globalError: null });
+  await expect(page.getByRole('alert', { name: 'Generation Error' })).toHaveCount(0);
   await expect(dialog).toBeHidden({ timeout: 180000 });
   const applied = await recordState();
   console.log('S02 Gallery: applied');
@@ -1537,7 +1545,6 @@ test('Gallery explicit directions own receipts, Reset scopes, fresh Load and rib
   await page.keyboard.press('Escape');
   expect(await downloadFormat('PNG', 'closed')).toEqual(reviewPng);
   expect(await downloadFormat('PDF', 'closed')).toEqual(reviewPdf);
-  console.log('S02 Gallery: Save/fresh Load, both Reset scopes and exports passed');
   // Reference-only Custom Align C preserves pending form and anchor-center x.
   const beforeC=await recordState(freshPage);
   const referenceCenter=()=>freshPage.evaluate(async anchor=>{
@@ -1609,6 +1616,96 @@ test('Gallery explicit directions own receipts, Reset scopes, fresh Load and rib
   await expectNoUnhandledRejections(freshPage);
   expect(pageErrors).toEqual([]);
   await freshContext.close();
+});
+
+test('exclusive directions include the minority reference and keep Custom Select/Skip local', async ({ page }, testInfo) => {
+  test.setTimeout(180000);
+  await page.addInitScript(() => {
+    window.__ALIGNMENT_POSTS__ = [];
+    const original = Worker.prototype.postMessage;
+    Worker.prototype.postMessage = function (message, ...options) {
+      window.__ALIGNMENT_POSTS__.push({ type: message.type, operation: message.operation });
+      return original.call(this, message, ...options);
+    };
+  });
+  await page.setViewportSize({ width: 1600, height: 1000 });
+  await page.goto('/gbdraw/web/index.html', { waitUntil: 'domcontentloaded' });
+  await page.waitForFunction(() => window.__GBDRAW_APP__);
+  await importSession(page, readFileSync('gbdraw/web/gallery/sessions/BGC0000708-BGC0000713.gbdraw-session.json'), 'directions.gbdraw-session.json');
+  const featureId = await page.evaluate(() => window.__GBDRAW_APP__.extractedFeatures
+    .find(feature => feature.protein_id === 'CAG38712.1' || feature.sourceProteinId === 'CAG38712.1').svg_id);
+  await page.locator(`[data-gbdraw-feature-id="${featureId}"]`).first()
+    .dispatchEvent('click', { clientX: -100, clientY: -100 });
+  await page.locator('.feature-popup[role="dialog"]')
+    .getByRole('button', { name: 'Review alignment options…' }).click();
+  const dialog = page.getByRole('dialog', { name: 'Select alignment anchors' });
+  await expect(dialog).toBeVisible({ timeout: 180000 });
+  for (const key of await page.evaluate(() => window.__GBDRAW_APP__.similarityAlignmentDraft.rows
+    .filter(row => !row.choice).map(row => row.recordKey))) {
+    await dialog.locator(`[data-alignment-record-key="${key}"]`)
+      .getByRole('radio', { name: /Select .*bp, strand/ }).first().check();
+  }
+  const changed = () => page.evaluate(() => window.__GBDRAW_APP__.similarityAlignmentDirectionPreview.records
+    .filter(record => record.beforeReverseComplement !== record.afterReverseComplement)
+    .map(record => record.recordKey));
+  const before = await artifactSnapshot(page);
+  const posts = await page.evaluate(() => window.__ALIGNMENT_POSTS__.length);
+  await expect(dialog.getByRole('radio', { name: 'Keep current directions', exact: true })).toBeChecked();
+  await expect(dialog.getByRole('combobox')).toHaveCount(0);
+  const right = dialog.getByRole('radio', { name: 'All selected arrows right', exact: true });
+  await right.focus();
+  await page.keyboard.press('Space');
+  expect(await changed()).toEqual(['record-1']);
+  await dialog.getByRole('radio', { name: 'All selected arrows left', exact: true }).check();
+  expect(await changed()).toEqual(['record-2', 'record-3', 'record-4', 'record-5']);
+  const custom = dialog.getByRole('radio', { name: 'Custom', exact: true });
+  await custom.focus();
+  await page.keyboard.press('Space');
+  await expect(dialog.getByRole('combobox')).toHaveCount(5);
+  expect(await changed()).toEqual([]);
+  await dialog.getByLabel('Direction for record-1', { exact: true }).selectOption('right');
+  await dialog.getByLabel('Direction for record-2', { exact: true }).selectOption('left');
+  expect(await changed()).toEqual(['record-1', 'record-2']);
+  const target = dialog.locator('[data-alignment-record-key="record-2"]');
+  await target.getByRole('radio', { name: /Skip / }).focus();
+  await page.keyboard.press('Space');
+  expect(await changed()).toEqual(['record-1']);
+  await expect(dialog.getByLabel('Direction for record-2', { exact: true })).toBeDisabled();
+  await expect(dialog.locator('[data-similarity-alignment-direction]').filter({ hasText: 'record-2:' }))
+    .toContainText('unchanged: Skipped by user.');
+  expect(await page.evaluate(() => window.__GBDRAW_APP__.similarityAlignmentDirectionPreview.records.find(record => record.recordKey === 'record-2').exclusion)).toBe('skipped_by_user');
+  await target.getByRole('radio', { name: /Select .*bp, strand/ }).first().check();
+  expect(await changed()).toEqual(['record-1', 'record-2']);
+  await page.setViewportSize({ width: 390, height: 740 });
+  await expect.poll(() => page.evaluate(() => window.__GBDRAW_APP__.similarityAlignmentCompact)).toBe(true);
+  await expect(custom).toBeChecked();
+  await expect(dialog.getByLabel('Direction for record-1', { exact: true })).toHaveValue('right');
+  await expect(dialog.getByLabel('Direction for record-2', { exact: true })).toHaveValue('left');
+  await page.setViewportSize({ width: 1600, height: 1000 });
+  await expect.poll(() => page.evaluate(() => window.__GBDRAW_APP__.similarityAlignmentCompact)).toBe(false);
+  expect(await artifactSnapshot(page)).toEqual(before);
+  expect(await page.evaluate(() => window.__ALIGNMENT_POSTS__.length)).toBe(posts);
+  await right.check();
+  const apply = dialog.getByRole('button', { name: 'Apply', exact: true });
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    const batches = await page.evaluate(() => window.__ALIGNMENT_POSTS__.filter(post => post.type === 'helper').length);
+    await apply.click();
+    await page.waitForFunction(() => !window.__GBDRAW_APP__.similarityAlignmentBusy, null, { timeout: 180000 });
+    expect(await page.evaluate(() => window.__ALIGNMENT_POSTS__.filter(post => post.type === 'helper').length)).toBe(batches + 1);
+    if (!await dialog.isVisible()) break;
+    await expect(dialog.locator('[data-similarity-alignment-error]')).toContainText('Validated directions or reference placement changed');
+    expect(await artifactSnapshot(page)).toEqual(before);
+  }
+  await expect(dialog).toBeHidden();
+  const committed = await page.evaluate(async () => {
+    const { state } = await import('./js/state.js');
+    return { receipt: state.similarityAlignmentResetReceipt.value,
+      history: window.__GBDRAW_HISTORY__.getUndoCount() };
+  });
+  expect(committed.receipt.directions).toHaveLength(1);
+  expect(committed.receipt.directions[0].recordKey).toBe('record-1');
+  expect(committed.history).toBe(before.history[0] + 1);
+  await page.screenshot({ path: testInfo.outputPath('minority-reference-right.png') });
 });
 
 const loadDirectionSession = async (page, testInfo) => {
@@ -1705,7 +1802,8 @@ test('minority reference, source strands and Reset scopes have truthful accessib
   await page.evaluate(() => window.__GBDRAW_APP__.openSimilarityAlignmentReset());
   await expect(reset).toHaveCount(0);
   await page.getByRole('button', { name: 'Undo', exact: true }).click();
-  await expect.poll(() => artifactSnapshot(page)).toEqual({ ...aligned, history: [aligned.history[0], 1] });
+  await expect.poll(() => artifactSnapshot(page)).toEqual({ ...aligned, history: [aligned.history[0], 1, expect.any(Number)] });
+  expect((await artifactSnapshot(page)).history[2]).toBeGreaterThan(aligned.history[2]);
   await resetButton.click(); await combined.check();
   await reset.getByRole('button', { name: 'Reset', exact: true }).press('Enter');
   await expect(reset).toBeHidden({ timeout: 180000 });

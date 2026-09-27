@@ -228,22 +228,46 @@ export const createRecordDisplayControls = ({ state, computed, watch, linearReco
   };
   const alignmentRows = (orientations) => {
     refreshCommittedRows();
+    const request = getCommittedRequest();
     return orientations.map(orientation => {
-      const matches = committedRows.filter(row => row.scope === 'linear' && row.recordKey === orientation.recordKey);
-      if (matches.length !== 1) throw new Error('Alignment record transform target is stale.');
-      return { row:matches[0], orientation };
+      const records = request?.mode === 'linear'
+        ? request.records.filter(record => record.recordKey === orientation.recordKey) : [];
+      const inputs = sources.value.filter(source => source.scope === 'linear'
+        && source.sourceUid === orientation.recordKey);
+      if (records.length !== 1 || inputs.length !== 1) {
+        throw new Error('Alignment record transform target is stale.');
+      }
+      const record = records[0];
+      const input = inputs[0];
+      if (!boundSources.some(source => source.scope === input.scope && source.sourceUid === input.sourceUid
+          && source.source === input.source && source.paired === input.paired)
+        || !input.source || !matchesSavedSource(input.source, record.source.resourceId || record.source.gffResourceId)
+        || (record.source.kind === 'gffFasta'
+          && (!input.paired || !matchesSavedSource(input.paired, record.source.fastaResourceId)))) {
+        throw new Error('Alignment record source binding changed.');
+      }
+      const selector = record.region?.selector || record.selector;
+      const drafts = state.recordDisplayDrafts.filter(draft => draft.scope === 'linear'
+        && draft.sourceUid === input.sourceUid && (selector?.kind === 'recordIndex'
+          ? draft.selector === `#${selector.index + 1}`
+          : selector?.kind === 'recordId' ? draft.recordId === selector.value : draft.selector === '#1'));
+      return { recordKey: orientation.recordKey, orientation, drafts,
+        sequence: state.linearSeqs.find(sequence => sequence.uid === input.sourceUid) };
     });
   };
   const captureAlignmentOrientationIntent = (orientations) => alignmentRows(orientations)
-    .map(({row}) => captureTargetDraft(row));
-  const restoreAlignmentOrientationIntent = (checkpoints) => checkpoints.forEach(restoreTargetDraft);
+    .map(({recordKey, sequence, drafts}) => ({ recordKey,
+      reverseComplement: Boolean(sequence.region_reverse), drafts: drafts.map(captureTargetDraft) }));
+  const restoreAlignmentOrientationIntent = (checkpoints) => {
+    alignmentRows(checkpoints).forEach(({sequence}, index) => {
+      sequence.region_reverse = checkpoints[index].reverseComplement;
+      checkpoints[index].drafts.forEach(restoreTargetDraft);
+    });
+  };
   const commitAlignmentOrientations = (orientations) => {
-    alignmentRows(orientations).forEach(({row, orientation}) => {
-      const sequence = state.linearSeqs.find(entry => entry.uid === row.sourceUid);
-      if (!sequence) throw new Error('Alignment record input is unavailable.');
+    alignmentRows(orientations).forEach(({sequence, orientation, drafts}) => {
       sequence.region_reverse = orientation.reverseComplement;
-      const draft = draftFor(row);
-      if (Object.hasOwn(draft, 'reverseComplementOverride')) draft.reverseComplementOverride = null;
+      drafts.forEach(draft => { draft.reverseComplementOverride = null; });
     });
   };
   const matchesSavedSource = (file, resourceId) => {

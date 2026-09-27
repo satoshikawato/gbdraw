@@ -143,7 +143,7 @@ test('shortcuts reject stale, unbound, cross-record, empty, and unknown/mixed-st
 
 const descriptor = (name, text) => ({ kind: 'genbank', name, type: 'text/plain',
   lastModified: 0, size: Buffer.byteLength(text), encoding: 'base64', data: btoa(text) });
-const compositeControls = ({ linear = false } = {}) => {
+const compositeControls = ({ linear = false, discovered = true } = {}) => {
   const resources = Object.fromEntries(['first', 'second'].map((id) => [id,
     descriptor(`${id}.gb`, `LOCUS       ${id} 100 bp DNA circular\n//\n`)]));
   const table = adoptCurrentSessionResources(resources);
@@ -167,7 +167,7 @@ const compositeControls = ({ linear = false } = {}) => {
   const getCommittedRequest = () => committed.renderRequest;
   const history = { runUndoable: (_label, fn) => fn() };
   const controls = createRecordDisplayControls({ state, computed: (fn) => ({ get value() { return fn(); } }),
-    watch: () => {}, linearRecordSelector: { recordsFor: seq => [{selector:'#1',recordId:components[Number(seq.uid.slice(-1))-1].resourceId,recordLength:100,detectedTopology:'circular'}] }, history,
+    watch: () => {}, linearRecordSelector: { recordsFor: seq => discovered ? [{selector:'#1',recordId:components[Number(seq.uid.slice(-1))-1].resourceId,recordLength:100,detectedTopology:'circular'}] : [] }, history,
     getCommittedRequest, getCommittedSession: () => committed });
   const actions = createFeaturePlacementActions({ state, history, getCommittedRequest,
     isCurrentFeature: controls.isCurrentFeature });
@@ -275,4 +275,23 @@ test('alignment intent changes only its target direction and preserves pending d
   assert.equal(effectiveRecordReverseComplement({...rows[0],reverse:false},model.state.recordDisplayDrafts[0]),false);
   model.controls.restoreAlignmentOrientationIntent(checkpoint);
   assert.deepEqual(model.state.recordDisplayDrafts,pending);
+});
+
+
+test('fresh loaded alignment binds canonical sources before discovery and restores pending orientation', () => {
+  const model = compositeControls({linear:true, discovered:false});
+  model.state.linearSeqs[0].region_reverse = true;
+  const target = {recordKey:'record-1', reverseComplement:true};
+  assert.equal(model.controls.allRows.value.filter(row => row.scope === 'linear').length, 0);
+  const checkpoint = model.controls.captureAlignmentOrientationIntent([target]);
+  model.controls.commitAlignmentOrientations([target]);
+  assert.equal(model.state.linearSeqs[0].region_reverse, true);
+  assert.equal(model.state.linearSeqs[1].region_reverse, false);
+  // Artifact rollback restores its canonical direction first; the same owner
+  // then restores the pre-operation pending input, without needing discovery.
+  model.state.linearSeqs[0].region_reverse = false;
+  model.controls.restoreAlignmentOrientationIntent(checkpoint);
+  assert.equal(model.state.linearSeqs[0].region_reverse, true);
+  model.state.linearSeqs[0].gb = new Blob(['replacement']);
+  assert.throws(() => model.controls.captureAlignmentOrientationIntent([target]), /source binding changed/);
 });

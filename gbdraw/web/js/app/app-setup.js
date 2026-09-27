@@ -2812,27 +2812,22 @@ export const createAppSetup = () => {
   let similarityAlignmentReturnFocus = null;
   const similarityAlignmentPaletteRef = ref(null);
   const similarityAlignmentPalettePosition = reactive({ x: null, y: null });
-  const similarityAlignmentPreviewWidth = ref(window.innerWidth);
-  const similarityAlignmentCompact = computed(() => similarityAlignmentPreviewWidth.value <= 640);
+  const similarityAlignmentCompact = ref(false);
+  const syncSimilarityAlignmentCompact = () => {
+    const preview = document.querySelector('[aria-label="Result Preview"]');
+    similarityAlignmentCompact.value = Boolean(preview
+      && getComputedStyle(preview).getPropertyValue('--alignment-review-compact').trim() === '1');
+  };
   const similarityAlignmentEditorDisabledReason = computed(() => (
     similarityAlignmentCompact.value && similarityAlignmentActions.dialogOpen.value
       ? 'Finish or cancel alignment review before opening Editor.' : ''
   ));
   alignmentReviewBlocksEditor = () => Boolean(similarityAlignmentEditorDisabledReason.value);
   let similarityAlignmentPreviewObserver = null;
-  const revealCompactAlignmentCanvas = () => {
-    if (!similarityAlignmentActions.dialogOpen.value
-      || !similarityAlignmentCompact.value || window.innerWidth > 768) return;
-    const canvas = document.querySelector('.preview-viewport');
-    const header = document.querySelector('.app-header');
-    if (canvas && header) window.scrollBy(0,
-      canvas.getBoundingClientRect().top - header.getBoundingClientRect().bottom);
-  };
-  watch([similarityAlignmentActions.dialogOpen, similarityAlignmentCompact], async ([open, compact]) => {
+  watch([similarityAlignmentActions.dialogOpen, similarityAlignmentCompact], ([open, compact]) => {
     if (open && compact) {
+      stopSimilarityAlignmentPaletteDrag();
       rightDrawerActions.closeRightDrawer();
-      await nextTick();
-      requestAnimationFrame(revealCompactAlignmentCanvas);
     }
   }, { flush: 'sync' });
   let similarityAlignmentPaletteDrag = null;
@@ -2896,8 +2891,7 @@ export const createAppSetup = () => {
   const focusSimilarityAlignmentDialog = async () => {
     await nextTick();
     clampSimilarityAlignmentPalette();
-    document.getElementById('similarity-alignment-dialog-title')?.focus({ preventScroll: similarityAlignmentCompact.value });
-    revealCompactAlignmentCanvas();
+    document.getElementById('similarity-alignment-dialog-title')?.focus();
   };
   const handleSimilarityAlignmentEscape = (event) => {
     if (event.key !== 'Escape' || !similarityAlignmentActions.dialogOpen.value) return;
@@ -2924,9 +2918,7 @@ export const createAppSetup = () => {
     void restoreSimilarityAlignmentFocus();
   });
   onMounted(() => {
-    similarityAlignmentPreviewObserver = new ResizeObserver(([entry]) => {
-      similarityAlignmentPreviewWidth.value = entry.contentRect.width;
-    });
+    similarityAlignmentPreviewObserver = new ResizeObserver(syncSimilarityAlignmentCompact);
     const pane = document.querySelector('.result-pane');
     if (pane) similarityAlignmentPreviewObserver.observe(pane);
     document.addEventListener('keydown', handleSimilarityAlignmentEscape, true);
@@ -2938,6 +2930,7 @@ export const createAppSetup = () => {
     document.removeEventListener('keydown', handleSimilarityAlignmentEscape, true);
     window.removeEventListener('resize', clampSimilarityAlignmentPalette);
   });
+  watch(() => results.value.length, syncSimilarityAlignmentCompact, { flush: 'post' });
   const finishSimilarityAlignmentStart = async (outcome) => {
     if (similarityAlignmentActions.dialogOpen.value) {
       if (similarityAlignmentActions.error.value) {
