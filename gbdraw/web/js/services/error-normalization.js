@@ -71,7 +71,7 @@ const REASONS = Object.freeze({
   SOURCE_INDEX: 'Check the comparison endpoints.', SOURCE_VIEW_CONFLICT: 'Check the comparison inputs and display transforms.'
 });
 const DEFINITIONS = Object.freeze({
-  UNKNOWN: ['The operation failed. Retry; if it continues, save a Session for investigation.', ['retry', 'save-session']],
+  UNKNOWN: ['The operation failed without recognized diagnostic information. Retry; if it continues, save a Session for investigation.', ['retry', 'save-session']],
   VALIDATION_UNCLASSIFIED: ['Input validation failed. Review the inputs before retrying.', ['review-input', 'retry']],
   INPUT_INVALID: ['An input value is invalid.', ['edit-input', 'retry']],
   INPUT_REQUIRED: ['Supply GenBank input or matching GFF3 and FASTA inputs.', ['select-input', 'retry']],
@@ -180,8 +180,38 @@ for (const message of ['The browser could not initialize PNG conversion.', 'The 
   { code: 'EXPORT_CONVERSION', operation: 'export-png', stage: 'export-conversion' });
 for (const message of ['The vendored jsPDF library did not initialize.', 'The vendored svg2pdf library did not initialize.'])
   NATIVE_VALIDATIONS.set(message, { code: 'PDF_LIBRARY', operation: 'export-pdf', stage: 'initialization' });
+for (const message of [
+  'Select an exact reference feature before aligning this Similarity Group.',
+  'An exact reference feature is required for alignment.',
+  'The resolver did not resolve every record. Review the choices and retry.'
+]) NATIVE_VALIDATIONS.set(message, { code: 'INPUT_INVALID', operation: 'align', stage: 'helper', context: { field: 'anchors', reason: 'TARGET_RECORD' } });
+NATIVE_VALIDATIONS.set('Validated directions or reference placement changed. Review the updated preview and Apply again.',
+  { code: 'INPUT_INVALID', operation: 'align', stage: 'helper', context: { field: 'direction', reason: 'SOURCE_VIEW_CONFLICT' } });
+for (const message of ['Failed to load the vendored jsPDF library.', 'Failed to load the vendored svg2pdf library.'])
+  NATIVE_VALIDATIONS.set(message, { code: 'PDF_LIBRARY', operation: 'export-pdf', stage: 'initialization' });
+NATIVE_VALIDATIONS.set('A sequence file is required.', { code: 'INPUT_REQUIRED', stage: 'request-validation' });
+NATIVE_VALIDATIONS.set('GFF3 and FASTA files are required.', { code: 'FASTA_REQUIRED', stage: 'request-validation' });
+for (const message of ['Current session is missing its active form or advanced settings.',
+  'Current session is missing its canonical configuration projection.']) NATIVE_VALIDATIONS.set(message,
+    { code: 'INPUT_INVALID', stage: 'request-validation', context: { field: 'config', reason: 'FIELDS' } });
+// Native Session binding validation emits these finite messages. Resource IDs
+// are discarded before the public model is constructed.
+for (const message of [
+  'Session webFiles.bindings must be an object.', 'Unsupported Web file binding schema.',
+  'Web binding schema 2 requires c_gb.', 'Invalid Web file binding metadata.',
+  'Web file bindings must be objects or null.',
+  'A composite component must be an ordinary Web file binding.',
+  'A Web file binding requires a canonical resourceId.', 'Unknown Web file binding field.',
+  'Unsupported Web composite file binding.', 'Unknown or mixed composite binding fields.',
+  'A composite binding requires at least two components.', 'Composite components require base64 resources.',
+  'Unknown Web binding inventory field.'
+]) NATIVE_VALIDATIONS.set(message, { code: 'INPUT_INVALID', stage: 'request-validation',
+  context: { field: 'schema', reason: 'FIELDS' } });
 const nativeValidation = (message) => {
   if (typeof message !== 'string') return null;
+  if (/^Missing canonical resource:/.test(message) || /^Session resource [\s\S]* has an unsupported encoded payload\.$/.test(message)) return { code: 'INPUT_INVALID', stage: 'request-validation', context: { field: 'schema', reason: 'FIELDS' } };
+  if (/^The SVG composition metadata is not valid JSON:/.test(message)) return { code: 'INPUT_INVALID', stage: 'request-validation', context: { field: 'schema', reason: 'JSON_FORMAT' } };
+  if (/^Unsupported session version: [0-9]+\.$/.test(message)) return { code: 'INPUT_INVALID', stage: 'request-validation', context: { field: 'schema', reason: 'FIELDS' } };
   if (NATIVE_VALIDATIONS.has(message)) return NATIVE_VALIDATIONS.get(message);
   if (/^Could not read records from the (?:circular|Linear) input file\(s\)\.$/.test(message)) {
     return { code: 'INPUT_UNREADABLE', stage: 'request-validation' };
@@ -225,6 +255,10 @@ const nativeValidation = (message) => {
   if (row) return { code: 'TABLE_INVALID', stage: 'request-validation', context: { row: Number(row[1]),
     field: ['feature_type', 'qualifier', 'pattern', 'color'][Number(row[3]) - 1],
     reason: row[3] ? 'REQUIRED' : 'SPECIFIC_COLUMNS' } };
+  const labelColumns = /^Invalid label TSV at line ([0-9]+): expected 5 columns, found ([0-9]+)\.$/.exec(message);
+  if (labelColumns) return { code: 'TABLE_INVALID', stage: 'request-validation', context: { row: Number(labelColumns[1]), columnCount: 5, reason: 'FIELDS' } };
+  const labelRequired = /^Invalid label TSV at line ([0-9]+): column ([1-4]) \((record_id|feature_type|qualifier|value)\) is required\.$/.exec(message);
+  if (labelRequired) return { code: 'TABLE_INVALID', stage: 'request-validation', context: { row: Number(labelRequired[1]), field: labelRequired[3], reason: 'REQUIRED' } };
   const color = /^Invalid specific-color value at line ([0-9]+): [\s\S]*$/.exec(message);
   if (color) return { code: 'TABLE_INVALID', stage: 'request-validation', context: { row: Number(color[1]), field: 'color', reason: 'COLOR' } };
   const series = /^Depth series #([0-9]+) \(logical track index ([0-9]+)\) has no TSV source in any record\.(?: Add a TSV or remove the series\.)?$/.exec(message);
@@ -281,10 +315,10 @@ export const normalizeUserFacingError = (value, {
 } = {}) => {
   if (!value) return null;
   const object = value && typeof value === 'object' ? value : {};
-  const source = object.code === 'CUSTOM_TRACK_PLAN_INVALID' ? typedTrackValidation(object) : object.code ? object : nativeValidation(typeof value === 'string' ? value : object.message) || object;
+  const source = object.code === 'CUSTOM_TRACK_PLAN_INVALID' ? typedTrackValidation(object) : CODES.has(object.code) ? object : nativeValidation(typeof value === 'string' ? value : object.message) || object;
   const result = {
     code: identifier(source.code, CODES, identifier(code, CODES, 'UNKNOWN')),
-    operation: identifier(source.operation === 'unknown' ? operation : source.operation, OPERATIONS, identifier(operation, OPERATIONS, 'unknown')),
+    operation: identifier(operation === 'unknown' ? source.operation : operation, OPERATIONS, 'unknown'),
     stage: identifier(source.stage === 'unknown' ? stage : source.stage, STAGES, identifier(stage, STAGES, 'unknown')),
     context: contextFor(source.context),
     secondary: []
@@ -299,7 +333,11 @@ export const normalizeUserFacingError = (value, {
   const position = result.context.position !== undefined ? ` Python character position ${result.context.position} (zero-based).` : '';
   const columns = result.context.columnCount !== undefined ? ` Required columns: ${result.context.columnCount}.` : '';
   const count = result.context.recordCount !== undefined ? ` Loaded records: ${result.context.recordCount}.` : '';
-  result.summary = `${message}${field}${guidance ? ` ${guidance}` : ''}${position}${columns}${count}`
+  const schemaGuidance = result.code === 'INPUT_INVALID' && result.context.field === 'schema'
+    ? ' Load a supported Session file or recreate it with the current writer.' : '';
+  const continuation = result.operation === 'align' && result.context.field === 'direction'
+    && result.context.reason === 'SOURCE_VIEW_CONFLICT' ? ' Review the updated preview and Apply again.' : '';
+  result.summary = `${message}${field}${guidance ? ` ${guidance}` : ''}${position}${columns}${count}${continuation}${schemaGuidance}`
     .slice(0, Number.isSafeInteger(summaryLimit) ? Math.max(0, Math.min(summaryLimit, 1000)) : 1000);
   const detail = [`Code: ${result.code}`, `Operation: ${result.operation}`, `Stage: ${result.stage}`,
     ...Object.entries(result.context).map(([key, item]) => `${key}: ${item}`),
@@ -309,3 +347,17 @@ export const normalizeUserFacingError = (value, {
   result.actions = [...actions];
   return result;
 };
+
+// Presentation of finite operation and transaction facts stays with public wording.
+export const operationErrorTitle = (operation) => ({
+  generate: 'Generation Error', align: 'Alignment error', evaluateRules: 'Rule error',
+  'export-svg': 'SVG export error', 'export-png': 'PNG export error', 'export-pdf': 'PDF export error',
+  listSequenceRecords: 'Input error', listGffFastaRecords: 'Input error',
+  'feature-extraction': 'Feature preparation error'
+}[operation] || 'Operation error');
+export const generationRecoveryGuidance = (recovery) => ({
+  'no-result': 'No successful Result is available yet. Correct the cause and retry.',
+  preserved: 'The last successful Result and committed request are unchanged.',
+  restored: 'The last successful Result and committed request were restored. Correct the cause and retry.',
+  'restore-failed': 'Restoration could not complete. Save a Session if available, then reload before retrying.'
+}[recovery] || '');

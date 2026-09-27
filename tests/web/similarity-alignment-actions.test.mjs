@@ -330,17 +330,20 @@ test('explicit review of a resolved response keeps the full local draft without 
 
 test('automatic generation failure opens the resolved draft for one Apply retry', async () => {
   let fail = true;
-  const renderError = { summary: 'Comparison source feature index conflicts with its view feature ID.', details: [] };
+  const renderError = { code: 'COMPARISON_IDENTITY', stage: 'render', context: { reason: 'SOURCE_VIEW_CONFLICT' }, message: 'PRIVATE_COMPARE_SENTINEL' };
   const fixture = create({ generation: async () => fail
     ? { status: 'error', error: renderError }
     : { status: 'ok' } });
   const previous = fixture.state.results.value;
-  assert.deepEqual(await startAlign(fixture), { status: 'error' });
+  assert.equal((await startAlign(fixture)).status, 'error');
   assert.equal(fixture.actions.status.value, 'reviewing');
   assert.equal(fixture.actions.dialogOpen.value, true);
   assert.equal(fixture.actions.draft.value.response.status, 'resolved');
-  assert.equal(fixture.actions.error.value.message, renderError.summary);
-  assert.equal(fixture.state.errorLog.value, renderError);
+  assert.equal(fixture.actions.error.value.code, 'COMPARISON_IDENTITY');
+  assert.equal(fixture.actions.error.value.operation, 'align');
+  assert.equal(fixture.actions.error.value.context.reason, 'SOURCE_VIEW_CONFLICT');
+  assert.doesNotMatch(JSON.stringify(fixture.actions.error.value), /PRIVATE_COMPARE_SENTINEL/);
+  assert.equal(fixture.state.errorLog.value, fixture.actions.error.value);
   assert.equal(fixture.state.results.value, previous);
   assert.equal(fixture.state.similarityAlignmentPlan.value, null);
   fail = false;
@@ -501,7 +504,7 @@ test('duplicate Apply while validation is pending starts one batch', async () =>
 test('validation and generation failures preserve editable draft and prior artifact', async () => {
   for (const failure of ['validation', 'generation']) {
     let fail = true;
-    const renderError = { summary: 'Comparison source feature index conflicts with its view feature ID.', details: [] };
+    const renderError = { code: 'COMPARISON_IDENTITY', stage: 'render', context: { reason: 'SOURCE_VIEW_CONFLICT' }, message: 'PRIVATE_COMPARE_SENTINEL' };
     const fixture = create({
       helper: (_operation, { request }, count) => {
         if (failure === 'validation' && count > 1 && fail) throw new Error('Invalid choice. Select another.');
@@ -523,10 +526,14 @@ test('validation and generation failures preserve editable draft and prior artif
     assert.deepEqual(fixture.state.results.value, [{ name: 'prior.svg' }]);
     assert.equal(fixture.state.similarityAlignmentPlan.value, null);
     if (failure === 'generation') {
-      assert.equal(fixture.actions.error.value.message, renderError.summary);
-      assert.equal(fixture.state.errorLog.value, renderError);
+      assert.equal(fixture.actions.error.value.code, 'COMPARISON_IDENTITY');
+  assert.equal(fixture.actions.error.value.operation, 'align');
+  assert.equal(fixture.actions.error.value.context.reason, 'SOURCE_VIEW_CONFLICT');
+  assert.doesNotMatch(JSON.stringify(fixture.actions.error.value), /PRIVATE_COMPARE_SENTINEL/);
+      assert.equal(fixture.state.errorLog.value, fixture.actions.error.value);
     } else {
-      assert.match(fixture.actions.error.value.message, /Select another/);
+      assert.equal(fixture.actions.error.value.code, 'UNKNOWN');
+      assert.doesNotMatch(fixture.actions.error.value.summary, /Invalid choice/);
     }
     fail = false;
     fixture.actions.skipRecord('b');
@@ -872,4 +879,17 @@ test('stable reorder retains receipt, invalidation consumes it through the exist
   f.actions.clearForMutation('Source changed.');
   assert.equal(f.state.similarityAlignmentPlan.value,null);
   assert.equal(f.state.similarityAlignmentResetReceipt.value,null);
+});
+
+
+test('missing caller diagnostic cannot borrow an unrelated global error',async()=>{
+  const fixture=create({generation:async()=>({status:'error'})});
+  fixture.state.errorLog.value={code:'INPUT_UNREADABLE',operation:'export-svg',summary:'unrelated'};
+  const outcome=await startAlign(fixture);
+  assert.equal(outcome.status,'error');
+  assert.equal(outcome.error.code,'UNKNOWN');
+  assert.equal(outcome.error.operation,'align');
+  assert.match(outcome.error.summary,/without recognized diagnostic information/);
+  assert.doesNotMatch(outcome.error.summary,/input could not be read|network/i);
+  assert.equal(fixture.actions.dialogOpen.value,true);
 });

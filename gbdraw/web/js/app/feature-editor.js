@@ -18,8 +18,9 @@ export const createFeatureEditor = ({
   previewRuntime = null,
   previewTransformInteraction = null
 }) => {
-  const ruleActions = createFeatureRuleActions({ state, nextTick, legendActions, rulePreparation, history, svgActions });
-  const labelActions = createFeatureLabelActions({ state, previewRuntime, rulePreparation });
+  const { ref, computed } = window.Vue;
+  const ruleActions = createFeatureRuleActions({ state, nextTick, legendActions, rulePreparation, history, svgActions, ref, computed });
+  const labelActions = createFeatureLabelActions({ state, previewRuntime, rulePreparation, ref, computed });
   const featureSvgActions = createFeatureSvgActions({
     state,
     getFeatureColor: ruleActions.getFeatureColor,
@@ -51,6 +52,10 @@ export const createFeatureEditor = ({
 
   return {
     placementActions: createFeaturePlacementActions({ state, history, getCommittedRequest, isCurrentFeature }),
+    canRetrySpecificRuleFailure: ruleActions.canRetrySpecificRuleFailure,
+    canEditSpecificRuleFailure: ruleActions.canEditSpecificRuleFailure,
+    retrySpecificRuleFailure: ruleActions.retrySpecificRuleFailure,
+    editSpecificRuleFailure: ruleActions.editSpecificRuleFailure,
     addCustomColor: ruleActions.addCustomColor,
     addPriorityRule: ruleActions.addPriorityRule,
     addFeature: ruleActions.addFeature,
@@ -117,6 +122,9 @@ export const createFeatureEditor = ({
     syncLabelEditor: labelActions.syncLabelEditor,
     downloadLabelOverrideTable: labelActions.downloadLabelOverrideTable,
     loadLabelOverrideTable: labelActions.loadLabelOverrideTable,
+    canRetryLabelImportFailure: labelActions.canRetryLabelImportFailure,
+    retryLabelImportFailure: labelActions.retryLabelImportFailure,
+    editLabelImportFailure: labelActions.editLabelImportFailure,
     updateClickedFeatureLabelText: labelActions.updateClickedFeatureLabelText,
     handleLabelTextScopeChoice: labelActions.handleLabelTextScopeChoice,
     handleGlobalLabelModeChoice: labelActions.handleGlobalLabelModeChoice,

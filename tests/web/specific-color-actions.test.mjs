@@ -19,7 +19,7 @@ const setup = () => {
   const preparation = createRulePreparation({state, evaluate:evaluatePythonRules, notify:message=>notices.push(message)});
   let prepareLegend = async () => {};
   let previousIntents = [];
-  const actions = createFeatureRuleActions({state, rulePreparation:preparation, history:{
+  const actions = createFeatureRuleActions({ref:value=>({value}),computed:get=>({get value(){return get();}}),state, rulePreparation:preparation, history:{
     runUndoableCheckpoint: async (label, commit) => {
       const before=JSON.stringify(state.manualSpecificRules);
       await commit();

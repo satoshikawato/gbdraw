@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { cp, mkdtemp, writeFile } from 'node:fs/promises';
+import { cp, mkdtemp, readFile, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
@@ -9,6 +9,8 @@ const sourceRoot = join(repoRoot, 'gbdraw', 'web', 'js', 'app');
 const tempRoot = await mkdtemp(join(tmpdir(), 'gbdraw-record-selector-'));
 await writeFile(join(tempRoot, 'package.json'), '{"type":"module"}', 'utf8');
 await cp(join(sourceRoot, 'linear-record-selector.js'), join(tempRoot, 'linear-record-selector.js'));
+await writeFile(join(tempRoot, 'linear-record-selector.js'), (await readFile(join(sourceRoot, 'linear-record-selector.js'), 'utf8'))
+  .replace('../services/error-normalization.js', pathToFileURL(join(sourceRoot, '../services/error-normalization.js')).href), 'utf8');
 await cp(join(sourceRoot, 'record-options.js'), join(tempRoot, 'record-options.js'));
 
 const {
@@ -214,7 +216,7 @@ const loggedErrors = [];
 const errorController = createLinearRecordSelector({
   state: errorState,
   reactive: (value) => value,
-  recordReader: async () => { throw new Error('parse details'); },
+  recordReader: async () => { throw {code:'INPUT_UNREADABLE',operation:'listSequenceRecords',stage:'helper',message:'PRIVATE_PARSE_SENTINEL'}; },
   logger: { warn: (...args) => loggedErrors.push(args) }
 });
 await errorController.refresh();
@@ -223,7 +225,9 @@ assert.deepEqual(errorController.optionsFor(errorState.linearSeqs[0]), [
 ]);
 errorState.linearSeqs[0].gb = { name: 'bad.gb' };
 await errorController.refresh();
-assert.equal(errorController.errorFor(errorState.linearSeqs[0]), 'Could not read records from this file.');
+assert.match(errorController.errorFor(errorState.linearSeqs[0]), /input could not be read/i);
+assert.equal(errorController.errorModelFor(errorState.linearSeqs[0]).code, 'INPUT_UNREADABLE');
+assert.doesNotMatch(JSON.stringify(loggedErrors), /PRIVATE_PARSE_SENTINEL/);
 assert.deepEqual(errorController.optionsFor(errorState.linearSeqs[0]), [
   { value: 'LegacyRec', label: 'Records could not be loaded', synthetic: true }
 ]);

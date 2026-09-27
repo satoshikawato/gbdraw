@@ -67,3 +67,148 @@ test('real Python adapters retain causes through one lazy Worker and successful 
   expect(activity.constructions).toBe(1);
   expect(activity.instances[0].initializations).toBe(1);
 });
+
+const { join } = require('node:path');
+const { pathToFileURL } = require('node:url');
+const { failNextNativeRender, inspectSafeDetails } = require('./helpers/operation-error.cjs');
+const { generateAndWaitForResult } = require('./helpers/app-lifecycle.cjs');
+for (const mode of ['circular', 'linear']) {
+  for (const width of [1600, 390]) {
+    test(`@pr-smoke native Generate failure keeps ${mode} Result and accessible diagnostics at ${width}px`, async ({ page }, info) => {
+      test.setTimeout(180000);
+      const logs = [];
+      page.on('console', message => logs.push(message.text()));
+      page.on('pageerror', error => logs.push(error.message));
+      page.on('dialog', dialog => dialog.accept());
+      await page.setViewportSize({ width, height: 900 });
+      await openApp(page);
+      if (mode === 'circular') {
+        const first = await page.evaluate(() => window.__GBDRAW_APP__.runAnalysis());
+        expect(first).toMatchObject({status:'error',error:{code:'INPUT_REQUIRED',operation:'generate'},recovery:'no-result'});
+        await expect(page.getByRole('alert', {name:'Generation Error'})).toContainText('No successful Result is available yet');
+      }
+      const session = mode === 'circular' ? 'HmmtDNA_basic_circular' : 'BGC0000708-BGC0000713';
+      await page.locator('input[accept^=".json,"]').setInputFiles(join(process.cwd(), `gbdraw/web/gallery/sessions/${session}.gbdraw-session.json`));
+      await page.waitForFunction(() => !window.__GBDRAW_APP__.sessionImportPending && window.__GBDRAW_APP__.results.length);
+      const snapshot = () => page.evaluate(async () => {
+        const { getCommittedCanonicalSession } = await import('./js/services/config.js');
+        const a = window.__GBDRAW_APP__, h = window.__GBDRAW_HISTORY__;
+        return { results: JSON.stringify(a.results), session: JSON.stringify(getCommittedCanonicalSession()),
+          undo: h.getUndoCount(), redo: h.getRedoCount() };
+      });
+      const before = await snapshot();
+      await failNextNativeRender(page);
+      const failed = await page.evaluate(() => window.__GBDRAW_APP__.runAnalysis());
+      expect(failed).toMatchObject({status:'error',error:{code:'REGEX_SYNTAX',operation:'generate',stage:'rule-validation',
+        context:{position:1,positionUnit:'python-character',reason:'UNTERMINATED_SET'}},recovery:'preserved'});
+      expect(await snapshot()).toEqual(before);
+      const alert = page.getByRole('alert', {name:'Generation Error'});
+      await expect(alert).toContainText('last successful Result and committed request are unchanged');
+      await inspectSafeDetails(page, alert, failed.error);
+      await alert.screenshot({path:info.outputPath('operation-error-alert.png')});
+      await page.locator('.preview-feature-search').screenshot({path:info.outputPath('search-controls.png')});
+      await page.screenshot({path:info.outputPath('operation-error.png'),fullPage:true});
+      expect(logs.join('\n')).not.toContain('PRIVATE_');
+      const retry = alert.getByRole('button', {name:'Retry Generate',exact:true});
+      await retry.scrollIntoViewIfNeeded(); await retry.focus(); await retry.press('Enter');
+      await page.waitForFunction(() => !window.__GBDRAW_APP__.processing, null, {timeout:180000});
+      await expect(alert).toHaveCount(0);
+      expect((await snapshot()).undo).toBe(before.undo + 1);
+      expect(logs.join('\n')).not.toContain('PRIVATE_');
+    });
+  }
+}
+
+test('@pr-smoke live and downloaded standalone search retain JavaScript regex and word targets', async ({page}, info) => {
+  test.setTimeout(180000);
+  page.on('dialog', dialog=>dialog.accept());
+  await openApp(page);
+  await page.locator('input[accept^=".json,"]').setInputFiles(join(process.cwd(),'gbdraw/web/gallery/sessions/HmmtDNA_basic_circular.gbdraw-session.json'));
+  await page.waitForFunction(()=>!window.__GBDRAW_APP__.sessionImportPending && window.__GBDRAW_APP__.extractedFeatures.length);
+  const query=page.getByRole('searchbox',{name:'Search features',exact:true});
+  await page.getByRole('combobox',{name:'Search field',exact:true}).selectOption('qualifier-value');
+  await page.getByRole('textbox',{name:'Qualifier key',exact:true}).fill('product');
+  const regex=page.getByRole('checkbox',{name:'Regex (JavaScript, i)',exact:true});
+  await regex.check(); await query.fill('(?<enzyme>nadh)'); await query.press('Enter');
+  const targets=await page.evaluate(()=>[...window.__GBDRAW_APP__.previewFeatureSearchMatches].sort());
+  expect(targets).toHaveLength(7);
+  await query.fill('(?P<enzyme>NADH)'); await query.press('Enter');
+  await expect(page.getByRole('status',{name:'Feature search status'})).toContainText('Invalid JavaScript regular expression. Turn off Regex to return to word search.');
+  await regex.uncheck(); await query.fill('NADH'); await query.press('Enter');
+  await expect.poll(()=>page.evaluate(()=>[...window.__GBDRAW_APP__.previewFeatureSearchMatches].sort())).toEqual(targets);
+  await page.evaluate(()=>{window.__GBDRAW_APP__.adv.rich_feature_popup=true;});
+  const pending=page.waitForEvent('download');
+  await page.evaluate(()=>window.__GBDRAW_APP__.downloadInteractiveSVG());
+  const download=await pending;
+  const stream=await download.createReadStream();const chunks=[];
+  for await(const chunk of stream)chunks.push(chunk);
+  const source=Buffer.concat(chunks).toString('utf8');
+  expect(source).toContain('Regex (JavaScript, i)');
+  expect(source).toContain('Invalid JavaScript regular expression. Turn off Regex to return to word search.');
+  const svgPath=info.outputPath('downloaded.interactive.svg');
+  await download.saveAs(svgPath);
+  await page.goto(pathToFileURL(svgPath).href);
+  await page.getByRole('button',{name:'Expand feature search',exact:true}).click();
+  const standaloneQuery=page.getByRole('searchbox',{name:'Search features',exact:true});
+  await page.getByRole('combobox',{name:'Search field',exact:true}).selectOption('qualifier-value');
+  await page.getByRole('textbox',{name:'Qualifier key for qualifier value search',exact:true}).fill('product');
+  const standaloneRegex=page.getByRole('checkbox',{name:'Regex (JavaScript, i)',exact:true});
+  await standaloneRegex.check();await standaloneQuery.fill('(?<enzyme>nadh)');await page.locator('[data-search-apply]').click();
+  const selected=()=>page.locator('.gbdraw-interactive-feature--match[data-gbdraw-feature-id]').evaluateAll(elements=>[...new Set(elements.map(e=>e.getAttribute('data-gbdraw-feature-id')))].sort());
+  await expect(page.locator('[data-search-count]')).toContainText('/ 7 features');
+  await expect.poll(selected).toEqual(targets);
+  await standaloneQuery.fill('(?P<enzyme>NADH)');await page.locator('[data-search-apply]').click();
+  await expect(page.locator('[data-search-count]')).toContainText('Invalid JavaScript regular expression');
+  await standaloneRegex.uncheck();await standaloneQuery.fill('NADH');await page.locator('[data-search-apply]').click();
+  await expect.poll(selected).toEqual(targets);
+  await page.screenshot({path:info.outputPath('standalone-search.png')});
+});
+
+test('table import failures retain exact cause and concrete retry without a draft lifecycle',async({page})=>{
+  test.setTimeout(180000);page.on('dialog',dialog=>dialog.accept());
+  await openApp(page);
+  await page.locator('input[accept^=".json,"]').setInputFiles(join(process.cwd(),'gbdraw/web/gallery/sessions/HmmtDNA_basic_circular.gbdraw-session.json'));
+  await page.waitForFunction(()=>!window.__GBDRAW_APP__.sessionImportPending && window.__GBDRAW_APP__.extractedFeatures.length);
+  const before=await page.evaluate(()=>({svg:window.__GBDRAW_APP__.svgContent,rules:JSON.stringify(window.__GBDRAW_APP__.manualSpecificRules),history:window.__GBDRAW_HISTORY__.getUndoCount()}));
+  const uploader=page.getByLabel('Specific Table (-t)',{exact:true});
+  await uploader.setInputFiles({name:'PRIVATE_FILE_SENTINEL.tsv',mimeType:'text/plain',buffer:Buffer.from('CDS\tproduct\t(?<enzyme>NADH)\t#ff0000\t\n')});
+  const alert=page.getByRole('alert',{name:'Rule error'});
+  await expect(alert).toContainText('Python regular expression is invalid',{timeout:180000});
+  await expect(alert.getByRole('button',{name:'Retry table import',exact:true})).toBeVisible();
+  await page.evaluate(()=>{window.__S03_PREVIOUS_IMPORT_ERROR__=window.__GBDRAW_APP__.errorLog;});
+  await alert.getByRole('button',{name:'Retry table import',exact:true}).click();
+  await page.waitForFunction(()=>window.__GBDRAW_APP__.errorLog!==window.__S03_PREVIOUS_IMPORT_ERROR__ && !window.__GBDRAW_APP__.files.t_color);
+  await expect(alert).toContainText('Python regular expression is invalid',{timeout:180000});
+  expect(await page.evaluate(()=>window.__GBDRAW_APP__.svgContent)).toBe(before.svg);
+  expect(await page.evaluate(()=>JSON.stringify(window.__GBDRAW_APP__.manualSpecificRules))).toBe(before.rules);
+  expect(await page.evaluate(()=>window.__GBDRAW_HISTORY__.getUndoCount())).toBe(before.history);
+  await uploader.setInputFiles({name:'corrected.tsv',mimeType:'text/plain',buffer:Buffer.from('CDS\tproduct\t(?P<enzyme>NADH)\t#ff0000\t\n')});
+  await page.waitForFunction(()=>window.__GBDRAW_APP__.manualSpecificRules.length===1);
+  await expect(alert).toHaveCount(0);
+  expect(await page.evaluate(()=>window.__GBDRAW_HISTORY__.getUndoCount())).toBe(before.history+1);
+});
+
+
+test('Label TSV retry retains its real reselect input and accepted History', async ({page})=>{
+  test.setTimeout(180000);page.on('dialog',dialog=>dialog.accept());
+  await openApp(page);
+  await page.locator('input[accept^=".json,"]').setInputFiles(join(process.cwd(),'gbdraw/web/gallery/sessions/HmmtDNA_basic_circular.gbdraw-session.json'));
+  await page.waitForFunction(()=>!window.__GBDRAW_APP__.sessionImportPending && window.__GBDRAW_APP__.extractedFeatures.length);
+  await page.evaluate(()=>window.__GBDRAW_APP__.openRightDrawerTab('features'));
+  const before=await page.evaluate(()=>({svg:window.__GBDRAW_APP__.svgContent,history:window.__GBDRAW_HISTORY__.getUndoCount()}));
+  const input=page.locator('input[accept=".tsv,.txt,text/tab-separated-values,text/plain"]');
+  await input.setInputFiles({name:'PRIVATE_LABEL_SENTINEL.tsv',mimeType:'text/plain',buffer:Buffer.from('*\tCDS\tproduct\t(?<enzyme>NADH)\tPRIVATE_LABEL_SENTINEL\n')});
+  const alert=page.getByRole('alert',{name:'Rule error'});
+  await expect(alert).toContainText('Python regular expression is invalid',{timeout:180000});
+  await page.evaluate(()=>window.__GBDRAW_APP__.retryLabelImportFailure());
+  await expect(alert).toContainText('Python regular expression is invalid');
+  expect(await page.evaluate(()=>window.__GBDRAW_APP__.svgContent)).toBe(before.svg);
+  expect(await page.evaluate(()=>window.__GBDRAW_HISTORY__.getUndoCount())).toBe(before.history);
+  const pending=page.waitForEvent('filechooser');
+  await alert.getByRole('button',{name:'Reselect Label TSV',exact:true}).click();
+  const chooser=await pending;
+  await chooser.setFiles({name:'corrected-labels.tsv',mimeType:'text/plain',buffer:Buffer.from('*\tCDS\tproduct\t(?P<enzyme>NADH)\tCORRECTED\n')});
+  await expect(page.locator('.origin-top svg text').filter({hasText:/^CORRECTED$/})).toHaveCount(7);
+  await expect(alert).toHaveCount(0);
+  expect(await page.evaluate(()=>window.__GBDRAW_HISTORY__.getUndoCount())).toBe(before.history+1);
+});

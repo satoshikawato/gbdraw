@@ -1,3 +1,4 @@
+import { normalizeUserFacingError } from './error-normalization.js';
 import { LOSAT_THREADED_WASM_URL, WASI_SHIM_URL } from '../config.js';
 import { resolveLosatThreadPlan } from './losat-thread-plan.js';
 import {
@@ -738,7 +739,7 @@ export const runLosatPairsParallel = async (jobs, options = {}) => {
         if (isAbortError(error, options.signal)) throw getAbortReason(options.signal);
         if (executionMode === 'threaded') throw error;
         threadedFallbackReason = error?.message ? String(error.message) : String(error || 'Threaded LOSAT failed.');
-        console.warn('Threaded LOSAT failed; falling back to serial browser execution.', error);
+        console.warn('Threaded LOSAT failed; falling back to serial browser execution.', normalizeUserFacingError(error));
       }
     } else if (executionMode === 'threaded') {
       throw new Error(support.message || 'Threaded LOSAT is unavailable.');
@@ -769,7 +770,7 @@ export const runLosatPairsParallel = async (jobs, options = {}) => {
     return await runLosatPairsWithWorkers(jobList, options);
   } catch (error) {
     if (isAbortError(error, options.signal)) throw getAbortReason(options.signal);
-    console.warn('LOSAT Worker pool failed; falling back to sequential execution.', error);
+    console.warn('LOSAT Worker pool failed; falling back to sequential execution.', normalizeUserFacingError(error));
     return runLosatPairsSequential(jobList, options);
   }
 };

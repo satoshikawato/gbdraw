@@ -1,3 +1,4 @@
+import { normalizeUserFacingError } from '../services/error-normalization.js';
 import {
   filterFeatureFillTargets,
   getFeatureElementIndex,
@@ -592,7 +593,7 @@ export const createPreviewRuntime = ({ state, serializeSvg }) => {
       if (typeof bindingSteps.afterReady === 'function') {
         queueMicrotask(() => {
           Promise.resolve(bindingSteps.afterReady(context)).catch((error) => {
-            console.error('Post-ready preview work failed.', error);
+            console.error('Post-ready preview work failed.', normalizeUserFacingError(error));
           });
         });
       }

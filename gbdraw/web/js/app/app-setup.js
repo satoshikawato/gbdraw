@@ -249,6 +249,7 @@ export const createAppSetup = () => {
     results,
     selectedResultIndex,
     failedGeneratePreservedResult,
+    generationFailureRecovery,
     resultPanelTab,
     lastRunInfo,
     annotationWarnings,
@@ -1244,7 +1245,7 @@ export const createAppSetup = () => {
     commitAppliedGenerationFields,
     state,
     rulePreparation,
-    watch,
+    ref, computed, watch,
     nextTick,
     legendActions
   });
@@ -2361,10 +2362,10 @@ export const createAppSetup = () => {
     rerenderLinearDefinitions: runLabelReflow
   });
 
-  const { waitForAuxiliaryFileImport } = setupWatchers({
+  const { waitForAuxiliaryFileImport, canRetryAuxiliaryImportFailure, retryAuxiliaryImportFailure } = setupWatchers({
     state,
     rulePreparation,
-    watch,
+    ref, computed, watch,
     nextTick,
     onMounted,
     legendActions,
@@ -2672,7 +2673,7 @@ export const createAppSetup = () => {
         if (status.value === 'Copied') status.value = '';
       }, 1600);
     } catch (error) {
-      console.warn(`Failed to copy ${description}:`, error);
+      console.warn('Failed to copy the requested command.', normalizeUserFacingError(error));
       status.value = 'Copy failed';
       setTimeout(() => {
         if (status.value === 'Copy failed') status.value = '';
@@ -2708,7 +2709,7 @@ export const createAppSetup = () => {
       try {
         await linearRecordSelector.refresh();
       } catch (error) {
-        console.warn('Failed to start Linear record discovery:', error);
+        return { catalog: null, error: normalizeUserFacingError(error, { operation: 'listSequenceRecords', stage: 'helper' }) };
       }
       catalog = getAnnotationRecordCatalog(loadComparison);
     }
@@ -2716,7 +2717,8 @@ export const createAppSetup = () => {
       ? { catalog, error: '' }
       : {
           catalog: null,
-          error: catalog.issues[0] || 'Could not read records from the Linear input file(s).'
+          error: linearSeqs.map(seq => linearRecordSelector.errorModelFor(seq)).find(error => error?.code)
+            || catalog.issues[0] || 'Could not read records from the Linear input file(s).'
         };
   }
 
@@ -2746,8 +2748,9 @@ export const createAppSetup = () => {
       draftResolution: comparisonPlanSnapshot
     });
     if (!comparisonExecution.ok) {
-      errorLog.value = normalizeUserFacingError(new Error(comparisonExecution.message));
+      errorLog.value = normalizeUserFacingError(comparisonExecution.message, { operation: 'generate', stage: 'request-validation' });
       failedGeneratePreservedResult.value = results.value.length > 0;
+      generationFailureRecovery.value = results.value.length ? 'preserved' : 'no-result';
       if (mode.value === 'linear') await focusLinearComparisonIssue();
       return { status: 'error', error: errorLog.value };
     }
@@ -2776,7 +2779,7 @@ export const createAppSetup = () => {
         draftResolution: linearComparisonResolution.value
       });
       if (!outcome.ok) {
-        errorLog.value = new Error(outcome.message);
+        errorLog.value = normalizeUserFacingError(outcome.message, { operation: 'generate', stage: 'request-validation' });
         return false;
       }
       if (outcome.action === IMPORTED_COMPARISON_ACTIONS.CLEAR) {
@@ -3432,6 +3435,7 @@ export const createAppSetup = () => {
   };
 
   const errorDisplay = computed(() => normalizeUserFacingError(errorLog.value));
+  const reloadAfterOperationError = () => window.location.reload();
 
   const sessionTitleLabel = computed(() => {
     const title = normalizeSessionTitle(sessionTitle.value);
@@ -3478,7 +3482,12 @@ export const createAppSetup = () => {
     downloadTextFile(String(filename || 'gbdraw.txt'), value, type);
   };
 
-  const runExportAction = async (methodName, label) => {
+  let latestExportOperation = 0;
+  const failedInteractiveSvgExport = ref(null);
+  const canRetryInteractiveSvgExport = computed(() => Boolean(failedInteractiveSvgExport.value
+    && errorLog.value === failedInteractiveSvgExport.value));
+  const runExportAction = async (methodName, operation) => {
+    const operationId = ++latestExportOperation;
     const previousError = errorLog.value;
     try {
       const snapshot = captureSvgExport(state, { interactive: methodName === 'downloadInteractiveSVG' });
@@ -3493,25 +3502,23 @@ export const createAppSetup = () => {
           return result.result.base64;
         }
       });
-      if (errorLog.value === previousError && previousError?.type === 'Export error') errorLog.value = null;
+      if (operationId === latestExportOperation && errorLog.value === previousError && previousError?.operation?.startsWith('export-')) errorLog.value = null;
       return result;
     } catch (error) {
-      const normalized = normalizeUserFacingError(error);
-      errorLog.value = {
-        type: 'Export error',
-        message: `${label} export failed: ${normalized?.summary || 'Unknown export error.'}`,
-        details: normalized?.details || []
-      };
-      return { status: 'error' };
+      const normalized = normalizeUserFacingError(error, { operation, stage: 'export-capture' });
+      if (operationId !== latestExportOperation || errorLog.value !== previousError) return { status: 'stale' };
+      errorLog.value = normalized;
+      failedInteractiveSvgExport.value = methodName === 'downloadInteractiveSVG' ? normalized : null;
+      return { status: 'error', error: normalized };
     }
   };
 
-  const downloadSVG = () => runExportAction('downloadSVG', 'SVG');
+  const downloadSVG = () => runExportAction('downloadSVG', 'export-svg');
   const downloadInteractiveSVG = () => (
-    runExportAction('downloadInteractiveSVG', 'Interactive SVG')
+    runExportAction('downloadInteractiveSVG', 'export-svg')
   );
-  const downloadPNG = () => runExportAction('downloadPNG', 'PNG');
-  const downloadPDF = () => runExportAction('downloadPDF', 'PDF');
+  const downloadPNG = () => runExportAction('downloadPNG', 'export-png');
+  const downloadPDF = () => runExportAction('downloadPDF', 'export-pdf');
 
   const specificRuleLegendOptions = computed(() => {
     const byCaption = new Map();
@@ -3558,6 +3565,7 @@ export const createAppSetup = () => {
     }
 
     const operation = Promise.resolve().then(async () => {
+      const previousAlert = errorLog.value;
       try {
         let title = normalizeSessionTitle(sessionTitle.value);
         if (!title) {
@@ -3593,12 +3601,14 @@ export const createAppSetup = () => {
         recordSessionLifecycleEvent('session-save-catalog-preparation-end', {
           reusedCommittedSession: Boolean(committedSession)
         });
-        if (error) throw new Error(error);
+        if (error) throw error;
         return await exportSession(title, { linearRecordCatalog: catalog });
       } catch (error) {
-        errorLog.value = normalizeUserFacingError(error);
+        const normalized = normalizeUserFacingError(error);
+        if (errorLog.value !== previousAlert) return { status: 'stale' };
+        errorLog.value = normalized;
         recordSessionLifecycleEvent('session-save-error');
-        return { status: 'error' };
+        return { status: 'error', error: normalized };
       }
     });
 
@@ -4032,11 +4042,21 @@ export const createAppSetup = () => {
     generationCancelRequested,
     errorLog,
     errorDisplay,
+    canRetryInteractiveSvgExport,
+    reloadAfterOperationError,
+    canRetrySpecificRuleFailure: featureActions.canRetrySpecificRuleFailure,
+    canEditSpecificRuleFailure: featureActions.canEditSpecificRuleFailure,
+    canRetryLabelImportFailure: featureActions.canRetryLabelImportFailure,
+    retryLabelImportFailure: undoableAction('Load label edits', featureActions.retryLabelImportFailure),
+    editLabelImportFailure: featureActions.editLabelImportFailure,
+    retrySpecificRuleFailure: featureActions.retrySpecificRuleFailure,
+    editSpecificRuleFailure: featureActions.editSpecificRuleFailure,
     sessionTitle,
     sessionTitleLabel,
     results,
     selectedResultIndex,
     failedGeneratePreservedResult,
+    generationFailureRecovery,
     importedComparisonIntent,
     importedComparisonNeedsResolution,
     importedComparisonCanInherit,
@@ -4425,7 +4445,8 @@ export const createAppSetup = () => {
     openOrthogroupInDrawer,
     circularRecordList,
     refreshCircularRecordOrder,
-    waitForAuxiliaryFileImport,
+    waitForAuxiliaryFileImport, canRetryAuxiliaryImportFailure,
+    retryAuxiliaryImportFailure: () => history.runUndoableCheckpoint('Change uploaded file', retryAuxiliaryImportFailure, { shouldCommit: result => result !== false }),
     circularRecordPresentationOptions,
     circularRecordPresentationError,
     circularSingleRecordPresentationEnabled,

@@ -99,7 +99,8 @@ for (const [label, mode, args, sourcePaths] of cases) {
         try {
           const rejected = await load(JSON.stringify({ ...session, config: { adv: {} } }));
           assert.equal(rejected.status, 'error');
-          assert.match(rejected.error.message, /missing its active form or advanced settings/);
+          assert.equal(rejected.error.code, 'INPUT_INVALID');
+          assert.deepEqual(rejected.error.context, {field:'config',reason:'FIELDS'});
           assert.deepEqual(getCommittedCanonicalRenderRequest(), before);
         } finally {
           console.error = errorLog;

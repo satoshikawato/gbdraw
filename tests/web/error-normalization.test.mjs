@@ -164,3 +164,12 @@ assert.deepEqual(glyphModel.context, { codepoint: 0x4e00 });
 assert.match(glyphModel.summary, /Use SVG to retain this text/);
 assert.deepEqual(glyphModel.actions, ['use-svg']);
 assert.equal(roundtrip(new Error('The selected PNG DPI is invalid.')).code, 'PNG_DPI');
+
+const alignCause=normalizeUserFacingError(source,{operation:'align',stage:'render'});
+assert.equal(alignCause.code,'REGEX_SYNTAX');
+assert.equal(alignCause.stage,'rule-validation');
+assert.equal(alignCause.operation,'align');
+assert.deepEqual(alignCause.context,normalized.context);
+assert.deepEqual(alignCause.secondary,normalized.secondary);
+assert.deepEqual(normalizeUserFacingError(alignCause),alignCause);
+assert.equal((alignCause.summary.match(/Python regular expression is invalid/g)||[]).length,1);

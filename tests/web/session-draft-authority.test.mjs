@@ -890,10 +890,8 @@ try {
   console.error = consoleErrorBeforeInvalidActiveConfig;
 }
 assert.equal(invalidActiveConfigImport.status, 'error');
-assert.match(
-  invalidActiveConfigImport.error?.message || '',
-  /Linear track layout must be one of: above, middle, below/
-);
+assert.equal(invalidActiveConfigImport.error.code, 'INPUT_INVALID');
+assert.deepEqual(invalidActiveConfigImport.error.context, {field:'linear_track_layout',reason:'LINEAR_TRACK_LAYOUT'});
 assert.deepEqual(compactActiveIntentSnapshot(), stateBeforeInvalidActiveConfig.activeIntent);
 assert.strictEqual(state.results.value, stateBeforeInvalidActiveConfig.results);
 assert.strictEqual(state.featureCatalog.value, stateBeforeInvalidActiveConfig.featureCatalog);
@@ -901,8 +899,8 @@ assert.strictEqual(state.files.c_gb, stateBeforeInvalidActiveConfig.primaryFile)
 assert.strictEqual(state.svgContainer.value, stateBeforeInvalidActiveConfig.svgContainer);
 assert.equal(state.sessionTitle.value, stateBeforeInvalidActiveConfig.sessionTitle);
 assert.equal(invalidActiveConfigEvent.target.value, '');
-assert.equal(alerts.length, 1);
-assert.match(alerts[0], /^Failed to load session: Linear track layout must be one of/);
+assert.deepEqual(state.errorLog.value, invalidActiveConfigImport.error);
+assert.equal(alerts.length, 0);
 
 const legacyActiveIntent = {
   form: {
@@ -1280,8 +1278,27 @@ try {
 }
 
 assert.equal(failedImport.status, 'error');
-assert.match(failedImport.error?.message || '', /composition metadata is not valid JSON/);
+assert.equal(failedImport.error.code, 'INPUT_INVALID');
+assert.deepEqual(failedImport.error.context, {field:'schema',reason:'JSON_FORMAT'});
 assert.deepEqual(rollbackState(), stateBeforeFailedImport);
-assert.equal(alerts.length, 1);
-assert.match(alerts[0], /^Failed to load session: .*composition metadata is not valid JSON/);
+assert.equal(alerts.length, 0);
+assert.deepEqual(state.errorLog.value, failedImport.error);
 assert.equal(failedImportEvent.target.value, '');
+
+
+// A late failed Session read cannot replace a notification from a later action.
+const { normalizeUserFacingError } = await import('../../gbdraw/web/js/services/error-normalization.js');
+const beforeLateRead = rollbackState();
+const lateFile = new File(['{}'], 'PRIVATE_LATE_SESSION.json');
+let failLateRead;
+lateFile.stream = () => new ReadableStream({ start(controller) {
+  failLateRead = () => controller.error(new Error('PRIVATE_LATE_READ_SENTINEL'));
+} });
+const lateRead = importSession({target:{files:[lateFile],value:'selected'}});
+while (!failLateRead) await new Promise(resolve=>setTimeout(resolve,0));
+const laterAlert = normalizeUserFacingError({code:'PDF_LIBRARY',operation:'export-pdf',stage:'initialization'});
+state.errorLog.value = laterAlert;
+failLateRead();
+assert.deepEqual(await lateRead,{status:'stale'});
+assert.equal(state.errorLog.value,laterAlert);
+assert.deepEqual(rollbackState(),beforeLateRead);

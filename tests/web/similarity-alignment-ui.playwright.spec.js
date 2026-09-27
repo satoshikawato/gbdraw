@@ -818,15 +818,15 @@ test('Apply error retains draft, focuses retry guidance, and accepts correction'
   const priorLayout = await page.evaluate(() => {
     const app = window.__GBDRAW_APP__;
     const prior = app.form.linear_track_layout;
-    const sanitize=window.DOMPurify.sanitize;window.DOMPurify.sanitize=(...args)=>{if(String(args[0]).includes('<svg')){window.DOMPurify.sanitize=sanitize;throw new Error('Forced candidate post-processing failure.');}return sanitize(...args);};
+    const sanitize=window.DOMPurify.sanitize;window.DOMPurify.sanitize=(...args)=>{if(String(args[0]).includes('<svg')){window.DOMPurify.sanitize=sanitize;throw Object.assign(new Error('PRIVATE_CAUSE_SENTINEL'), { code: 'COMPARISON_IDENTITY', stage: 'result-admission', context: { reason: 'SOURCE_VIEW_CONFLICT' }, cause: new Error('PRIVATE_CAUSE_SENTINEL'), stdout: 'PRIVATE_STDOUT_SENTINEL', secondary: [{code:'CLEANUP_FAILED',stage:'cleanup',message:'PRIVATE_CLEANUP_SENTINEL'}] });}return sanitize(...args);};
     return prior;
   });
   await dialog.getByRole('button', { name: 'Apply', exact: true }).click();
   const error = dialog.locator('[data-similarity-alignment-error]');
   await expect(error).toBeVisible({ timeout: 180000 });
-  await expect(error).toHaveText('Forced candidate post-processing failure.');
-  await expect(page.getByRole('alert', { name: 'Generation Error' })
-    .locator('.text-sm.font-semibold')).toHaveText('Forced candidate post-processing failure.');
+  await expect(error).toContainText('Comparison endpoints disagree');
+  expect(await page.evaluate(() => window.__GBDRAW_APP__.similarityAlignmentError)).toMatchObject({code:'COMPARISON_IDENTITY',operation:'align',stage:'result-admission',secondary:[{code:'CLEANUP_FAILED',stage:'cleanup'}]});
+  await expect(page.getByRole('alert', { name: 'Alignment error' })).toHaveCount(1);
   await expect(error).toBeFocused();
   await expect(dialog.getByRole('button', { name: 'Apply', exact: true })).toBeEnabled();
   await page.setViewportSize({ width: 390, height: 500 });
@@ -1024,15 +1024,15 @@ test('one usable member applies directly through one Worker resolve and one Hist
   const priorLayout = await page.evaluate(() => {
     const app = window.__GBDRAW_APP__;
     const prior = app.form.linear_track_layout;
-    const sanitize=window.DOMPurify.sanitize;window.DOMPurify.sanitize=(...args)=>{if(String(args[0]).includes('<svg')){window.DOMPurify.sanitize=sanitize;throw new Error('Forced candidate post-processing failure.');}return sanitize(...args);};
+    const sanitize=window.DOMPurify.sanitize;window.DOMPurify.sanitize=(...args)=>{if(String(args[0]).includes('<svg')){window.DOMPurify.sanitize=sanitize;throw Object.assign(new Error('PRIVATE_CAUSE_SENTINEL'), { code: 'COMPARISON_IDENTITY', stage: 'result-admission', context: { reason: 'SOURCE_VIEW_CONFLICT' }, cause: new Error('PRIVATE_CAUSE_SENTINEL'), stdout: 'PRIVATE_STDOUT_SENTINEL', secondary: [{code:'CLEANUP_FAILED',stage:'cleanup',message:'PRIVATE_CLEANUP_SENTINEL'}] });}return sanitize(...args);};
     return prior;
   });
   await normalAlign.click();
   await expect(resolvedReview).toBeVisible({ timeout: 180000 });
   const retryError = resolvedReview.locator('[data-similarity-alignment-error]');
-  await expect(retryError).toHaveText('Forced candidate post-processing failure.');
-  await expect(page.getByRole('alert', { name: 'Generation Error' })
-    .locator('.text-sm.font-semibold')).toHaveText('Forced candidate post-processing failure.');
+  await expect(retryError).toContainText('Comparison endpoints disagree with the displayed features.');
+  expect(await page.evaluate(() => window.__GBDRAW_APP__.similarityAlignmentError)).toMatchObject({code:'COMPARISON_IDENTITY',operation:'align',stage:'result-admission',secondary:[{code:'CLEANUP_FAILED',stage:'cleanup'}]});
+  await expect(page.getByRole('alert', { name: 'Alignment error' })).toHaveCount(1);
   await expect(retryError).toBeFocused();
   await expect(resolvedReview.locator('[data-alignment-record-key]')).toHaveCount(1);
   const failed = await artifactSnapshot(page);
@@ -1244,7 +1244,7 @@ test('Gallery explicit directions own receipts, Reset scopes, fresh Load and rib
     const historyBefore=(await recordState()).historyCount;
     await expect(apply).toBeEnabled();
     await apply.click();await page.waitForFunction(()=>!window.__GBDRAW_APP__.similarityAlignmentBusy,null,{timeout:180000});
-    const message=await page.evaluate(()=>window.__GBDRAW_APP__.similarityAlignmentError?.message||'');
+    const message=await page.evaluate(()=>window.__GBDRAW_APP__.similarityAlignmentError?.summary||'');
     console.log('S02 Gallery: final batch outcome',message,await page.evaluate(()=>{const e=window.__GBDRAW_APP__.errorLog;return {message:e?.message,stack:e?.stack,summary:e?.summary,details:e?.details};}));
     if(message.includes('Validated directions or reference placement changed')){
       expect((await recordState()).historyCount).toBe(historyBefore);
@@ -1267,7 +1267,7 @@ test('Gallery explicit directions own receipts, Reset scopes, fresh Load and rib
   console.log('S02 Gallery: default Align invoked');
   await expect.poll(() => page.evaluate(() => window.__GBDRAW_APP__.similarityAlignmentBusy),
     { timeout: 180000 }).toBe(false);
-  console.log('S02 Gallery: default Align finished',await page.evaluate(()=>({status:window.__GBDRAW_APP__.similarityAlignmentStatus,error:window.__GBDRAW_APP__.similarityAlignmentError?.message})));
+  console.log('S02 Gallery: default Align finished',await page.evaluate(()=>({status:window.__GBDRAW_APP__.similarityAlignmentStatus,error:window.__GBDRAW_APP__.similarityAlignmentError?.summary})));
   await expect(page.locator('[data-similarity-alignment-summary]')).toContainText('0 reversed');
   expect((await recordState()).orientations).toEqual(before.orientations);
   await expect(page.getByRole('dialog', { name: 'Select alignment anchors' })).toHaveCount(0);
@@ -1347,17 +1347,15 @@ test('Gallery explicit directions own receipts, Reset scopes, fresh Load and rib
   console.log('S02 Gallery: Apply requested');
   await applyReviewed();
   await expect(dialog.locator('[data-similarity-alignment-error]'))
-    .toHaveText('Forced direction candidate post-processing failure.');
-  await expect(page.getByRole('alert', { name: 'Generation Error' })
-    .locator('.text-sm.font-semibold'))
-    .toHaveText('Forced direction candidate post-processing failure.');
+    .toContainText('without recognized diagnostic information');
+  await expect(page.getByRole('alert', { name: 'Alignment error' })).toHaveCount(1);
   await expect(direction).toBeChecked();
   expect(await recordState()).toEqual(before);
   console.log('S02 Gallery: Apply requested');
   await applyReviewed();
   await page.waitForFunction(() => !window.__GBDRAW_APP__.similarityAlignmentBusy, null, { timeout: 180000 });
   const applyStatus = await page.evaluate(() => ({ status: window.__GBDRAW_APP__.similarityAlignmentStatus,
-    error: window.__GBDRAW_APP__.similarityAlignmentError?.message, globalError: window.__GBDRAW_APP__.errorLog }));
+    error: window.__GBDRAW_APP__.similarityAlignmentError?.summary, globalError: window.__GBDRAW_APP__.errorLog }));
   expect(applyStatus, JSON.stringify(applyStatus)).toMatchObject({ status: 'idle', globalError: null });
   await expect(page.getByRole('alert', { name: 'Generation Error' })).toHaveCount(0);
   await expect(dialog).toBeHidden({ timeout: 180000 });
@@ -1598,7 +1596,7 @@ test('Gallery explicit directions own receipts, Reset scopes, fresh Load and rib
   await customReview.getByRole('button',{name:'Apply',exact:true}).click();
   await freshPage.waitForFunction(()=>!window.__GBDRAW_APP__.similarityAlignmentBusy,null,{timeout:180000});
   expect(await freshPage.evaluate(()=>window.__S02FinalBatches)).toBe(1);
-  if(await freshPage.evaluate(()=>window.__GBDRAW_APP__.similarityAlignmentError?.message.includes('Validated directions or reference placement changed'))) {
+  if(await freshPage.evaluate(()=>window.__GBDRAW_APP__.similarityAlignmentError?.summary.includes('Validated directions or reference placement changed'))) {
     expect((await recordState(freshPage)).historyCount).toBe(beforeC.historyCount);
     await customReview.getByRole('button',{name:'Apply',exact:true}).click();
     await freshPage.waitForFunction(()=>!window.__GBDRAW_APP__.similarityAlignmentBusy,null,{timeout:180000});
@@ -1703,7 +1701,7 @@ test('exclusive directions include the minority reference and keep Custom Select
     await page.waitForFunction(() => !window.__GBDRAW_APP__.similarityAlignmentBusy, null, { timeout: 180000 });
     expect(await page.evaluate(() => window.__ALIGNMENT_POSTS__.filter(post => post.type === 'helper').length)).toBe(batches + 1);
     if (!await dialog.isVisible()) break;
-    await expect(dialog.locator('[data-similarity-alignment-error]')).toContainText('Validated directions or reference placement changed');
+    await expect(dialog.locator('[data-similarity-alignment-error]')).toContainText('Review the updated preview and Apply again');
     expect(await artifactSnapshot(page)).toEqual(before);
   }
   await expect(dialog).toBeHidden();
@@ -1747,7 +1745,7 @@ const openDirectionReview = async page => {
   await drawer.getByRole('button', { name: 'Review alignment options…' }).click();
   const dialog = page.getByRole('dialog', { name: 'Select alignment anchors' });
   await page.waitForFunction(() => !window.__GBDRAW_APP__.similarityAlignmentBusy, null, { timeout: 180000 });
-  expect(await page.evaluate(() => window.__GBDRAW_APP__.similarityAlignmentError?.message || '')).toBe('');
+  expect(await page.evaluate(() => window.__GBDRAW_APP__.similarityAlignmentError?.summary || '')).toBe('');
   await expect(dialog).toBeVisible({ timeout: 180000 });
   return dialog;
 };
@@ -1756,7 +1754,7 @@ const applyAndSettle = async (page, dialog) => {
   await dialog.getByRole('button', { name: 'Apply', exact: true }).press('Enter');
   await page.waitForFunction(() => !window.__GBDRAW_APP__.similarityAlignmentBusy, null, { timeout: 180000 });
   return page.evaluate(() => ({ status: window.__GBDRAW_APP__.similarityAlignmentStatus,
-    error: window.__GBDRAW_APP__.similarityAlignmentError?.message || '' }));
+    error: window.__GBDRAW_APP__.similarityAlignmentError?.summary || '' }));
 };
 
 test('minority reference, source strands and Reset scopes have truthful accessible previews', async ({ page }, testInfo) => {
@@ -1776,7 +1774,7 @@ test('minority reference, source strands and Reset scopes have truthful accessib
   expect(preview.reference.deltaX).not.toBe(0);
   await dialog.screenshot({ path: testInfo.outputPath('minority-reference-desktop.png') });
   let outcome = await applyAndSettle(page, dialog);
-  if (outcome.error.includes('Validated directions or reference placement changed')) outcome = await applyAndSettle(page, dialog);
+  if (outcome.error.includes('Review the updated preview and Apply again')) outcome = await applyAndSettle(page, dialog);
   expect(outcome.error).toBe('');
   await expect(dialog).toBeHidden();
   const aligned = await artifactSnapshot(page);
@@ -1827,7 +1825,7 @@ test('minority reference, source strands and Reset scopes have truthful accessib
   expect(await page.evaluate(() => window.__GBDRAW_APP__.similarityAlignmentDirectionPreview.records
     .filter(r => r.beforeReverseComplement !== r.afterReverseComplement).map(r => r.recordKey))).toEqual(['record-2']);
   outcome = await applyAndSettle(page, targetOnly);
-  if (outcome.error.includes('Validated directions or reference placement changed')) outcome = await applyAndSettle(page, targetOnly);
+  if (outcome.error.includes('Review the updated preview and Apply again')) outcome = await applyAndSettle(page, targetOnly);
   expect(outcome.error).toBe('');
   await expect(targetOnly).toBeHidden();
   expect((await artifactSnapshot(page)).receipt.directions).toEqual([{ recordKey: 'record-2', before: false, after: true }]);
@@ -1897,7 +1895,7 @@ test('changed final facts require a separate Apply and validation errors preserv
   expect(await page.evaluate(() => window.__GBDRAW_APP__.similarityAlignmentDirectionPreview.reference.deltaX)).not.toBe(oldDelta);
   await page.evaluate(() => { window.__s03ValidationFailure = true; });
   await applyAndSettle(page, dialog);
-  await expect(dialog.locator('[data-similarity-alignment-error]')).toContainText('Forced final batch validation failure');
+  await expect(dialog.locator('[data-similarity-alignment-error]')).toContainText('without recognized diagnostic information');
   await expect(dialog.getByLabel('Direction for record-1', { exact: true })).toHaveValue('right');
   expect(await artifactSnapshot(page)).toEqual(before);
   expect(await page.evaluate(() => window.__s03FinalBatches)).toBe(2);
@@ -1986,7 +1984,7 @@ for(const entry of ['resolved explicit','multiple target ambiguity','automatic r
     await expect.poll(()=>page.evaluate(()=>window.__GBDRAW_APP__.similarityAlignmentBusy),{timeout:180000}).toBe(false);
     if(entry==='multiple target ambiguity')expect(await page.evaluate(()=>window.__GBDRAW_APP__.similarityAlignmentDraft.rows.filter(row=>row.candidates.length>1).length)).toBeGreaterThanOrEqual(2);
     if(entry==='automatic render retry') {
-      await expect(dialog.locator('[data-similarity-alignment-error]')).toHaveText('S06 forced automatic render failure.');
+      await expect(dialog.locator('[data-similarity-alignment-error]')).toContainText('without recognized diagnostic information');
       // Aborting the existing artifact transaction increments an internal
       // invalidation revision; the previous artifact and both History stacks
       // remain unchanged. Resize and local review must retain this settled state.
@@ -1998,7 +1996,7 @@ for(const entry of ['resolved explicit','multiple target ambiguity','automatic r
         await exposeReviewControl(page,dialog.locator('[data-alignment-record-key]').first().getByRole('radio',{name:/Select .*bp, strand/}).first());
         await exposeReviewControl(page,dialog.getByRole('button',{name:'Cancel',exact:true}));
         await exposeReviewControl(page,dialog.locator('[data-similarity-alignment-error]'));
-        await expect(dialog.locator('[data-similarity-alignment-error]')).toHaveText('S06 forced automatic render failure.');
+        await expect(dialog.locator('[data-similarity-alignment-error]')).toContainText('without recognized diagnostic information');
         expect(await artifactSnapshot(page)).toEqual(before);
       }
       await page.setViewportSize({width:390,height:844});
@@ -2079,7 +2077,7 @@ for(const entry of ['resolved explicit','multiple target ambiguity','automatic r
         await exposeReviewControl(page,apply);await apply.click();await expect.poll(()=>page.evaluate(()=>window.__GBDRAW_APP__.similarityAlignmentBusy),{timeout:180000}).toBe(false);
         expect(await page.evaluate(()=>window.__S06_POSTS__.filter(post=>post.type==='helper').length)).toBe(batches+1);
         if(!await dialog.isVisible())break;
-        await expect(dialog.locator('[data-similarity-alignment-error]')).toContainText('Validated directions or reference placement changed');
+        await expect(dialog.locator('[data-similarity-alignment-error]')).toContainText('Review the updated preview and Apply again');
       }
       await expect(dialog).toBeHidden();expect((await artifactSnapshot(page)).history[0]).toBe(before.history[0]+1);
       expect(await page.evaluate(async()=>{const {state}=await import('./js/state.js');return {error:state.errorLog.value,preserved:state.failedGeneratePreservedResult.value}})).toEqual({error:null,preserved:false});
@@ -2098,3 +2096,47 @@ for(const entry of ['resolved explicit','multiple target ambiguity','automatic r
     expect(pageErrors).toEqual([]);await expectNoUnhandledRejections(page);
   });
 }
+
+test('@pr-smoke native Python engine error reaches Align review and retains choices for Apply retry', async ({page}, info) => {
+  test.setTimeout(300000);
+  const { failNextNativeRender, inspectSafeDetails } = require('./helpers/operation-error.cjs');
+  const logs=[];page.on('console', message=>logs.push(message.text()));page.on('pageerror',error=>logs.push(error.message));
+  await page.setViewportSize({width:1600,height:1000});
+  await page.goto('/gbdraw/web/index.html',{waitUntil:'domcontentloaded'});
+  await page.waitForFunction(()=>window.__GBDRAW_APP__);
+  await importSession(page,readFileSync('gbdraw/web/gallery/sessions/BGC0000708-BGC0000713.gbdraw-session.json'),'native-align.json');
+  await page.evaluate(()=>{const a=window.__GBDRAW_APP__;a.openRightDrawerTab('orthogroups');a.selectedOrthogroupId='og_1';a.losat.executionMode='serial';});
+  const drawer=page.locator('.right-drawer');
+  const key=await page.evaluate(()=>window.__GBDRAW_APP__.similarityAlignmentDrawerReferenceOptions('og_1').find(o=>o.anchor.recordKey==='record-1').key);
+  await drawer.getByLabel('Exact reference record and feature').selectOption(key);
+  await drawer.getByRole('button',{name:'Review alignment options…',exact:true}).click();
+  const dialog=page.getByRole('dialog',{name:'Select alignment anchors'});
+  await expect(dialog).toBeVisible({timeout:180000});
+  await page.waitForFunction(()=>!window.__GBDRAW_APP__.similarityAlignmentBusy);
+  for(const key of await page.evaluate(()=>window.__GBDRAW_APP__.similarityAlignmentDraft.rows.filter(r=>!r.choice).map(r=>r.recordKey))) {
+    await dialog.locator(`[data-alignment-record-key="${key}"]`).getByRole('radio',{name:/Select .*bp, strand/}).first().check();
+  }
+  const before=await artifactSnapshot(page);
+  const choices=await page.evaluate(()=>JSON.stringify(window.__GBDRAW_APP__.similarityAlignmentDraft));
+  await failNextNativeRender(page);
+  await applyAndSettle(page,dialog);
+  const alert=dialog.getByRole('alert',{name:'Alignment error'});
+  await expect(alert).toContainText('Python regular expression is invalid');
+  expect(await page.evaluate(()=>window.__GBDRAW_APP__.similarityAlignmentError)).toMatchObject({code:'REGEX_SYNTAX',operation:'align',stage:'rule-validation',context:{position:1,positionUnit:'python-character'}});
+  const after=await artifactSnapshot(page);
+  // Observer invalidation can advance revision; both History stacks and every
+  // artifact/request/orientation field must remain unchanged.
+  expect({...after,history:[...after.history.slice(0,2),before.history[2]]}).toEqual(before);
+  expect(await page.evaluate(()=>JSON.stringify(window.__GBDRAW_APP__.similarityAlignmentDraft))).toBe(choices);
+  await expect(alert).toBeFocused();
+  await expect(page.getByRole('alert',{name:'Alignment error'})).toHaveCount(1);
+  await page.setViewportSize({width:390,height:900});
+  await inspectSafeDetails(page,alert,{code:'REGEX_SYNTAX',operation:'align',stage:'rule-validation'});
+  expect(logs.join('\n')).not.toContain('PRIVATE_');
+  await exposeReviewControl(page,dialog.getByRole('button',{name:'Apply',exact:true}));
+  await applyAndSettle(page,dialog);
+  await expect(dialog).toBeHidden({timeout:180000});
+  expect((await artifactSnapshot(page)).history[0]).toBe(before.history[0]+1);
+  expect(await page.evaluate(()=>window.__GBDRAW_APP__.errorLog)).toBeNull();
+  expect(logs.join('\n')).not.toContain('PRIVATE_');
+});

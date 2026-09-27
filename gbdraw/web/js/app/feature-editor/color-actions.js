@@ -1,3 +1,4 @@
+import { normalizeUserFacingError } from '../../services/error-normalization.js';
 import { ruleMatchesFeature } from '../rule-matching.js';
 import { resolveColorToHex } from '../color-utils.js';
 import { getFeatureCaption, getFeatureHashCandidates } from '../feature-utils.js';
@@ -120,8 +121,9 @@ export const createFeatureColorActions = ({
       });
       return rulePreparation.run(candidates, () => runColorAction(() => action(...args)));
     };
+    const previousAlert = state.errorLog?.value;
     const result = rulePreparation.run(manualSpecificRules, prepareTargets);
-    return result?.catch ? result.catch((error) => { alert(`Cannot apply feature style: ${error.message}`); }) : result;
+    return result?.catch ? result.catch((error) => { state.errorLog && state.errorLog.value === previousAlert && (state.errorLog.value = normalizeUserFacingError(error, { operation: 'evaluateRules', stage: 'helper' })); }) : result;
   };
 
   const hashRuleTargetsFeatureExactly = (rule, feature) => {

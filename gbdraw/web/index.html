@@ -3841,7 +3841,7 @@
                             <div data-history-managed>
                                 <p v-if="ruleMatchingPending" role="status" class="text-xs text-slate-500">Checking color rules…</p>
                                 <div class="flex items-center justify-between mb-2">
-                                    <h4 class="text-[11px] font-bold text-slate-500">SPECIFIC RULES (-t) <help-tip text="Color features matching specific qualifier values (Regex supported). Choose a suggested qualifier or type any qualifier name."></help-tip></h4>
+                                    <h4 class="text-[11px] font-bold text-slate-500">SPECIFIC RULES (-t) <help-tip text="Color features matching qualifier values with case-insensitive Python regex. Examples: (?i)NADH and (?P&lt;name&gt;NADH). Choose a suggested qualifier or type any qualifier name."></help-tip></h4>
                                     <div v-if="manualSpecificRules.length > 0" class="flex items-center gap-2">
                                         <button @click="downloadSpecificRulesTsv" class="text-[10px] text-blue-600 hover:text-blue-700 hover:underline"><i class="ph ph-download-simple"></i> TSV</button>
                                         <button @click="clearAllSpecificRules" class="text-[10px] text-red-500 hover:text-red-700 hover:underline"><i class="ph ph-trash"></i> Clear All</button>
@@ -3868,7 +3868,7 @@
                                             </div>
                                         </div>
                                         <div class="grid grid-cols-12 gap-1">
-                                            <input :value="rule.val" @change="setSpecificRuleField(i, 'val', $event.target.value, $event.target)" placeholder="Regex" class="form-input form-input-compact col-span-7 font-mono">
+                                            <input :value="rule.val" @change="setSpecificRuleField(i, 'val', $event.target.value, $event.target)" :aria-label="`Color rule ${i + 1} pattern`" placeholder="Python regex" class="form-input form-input-compact col-span-7 font-mono">
                                             <input :value="rule.cap" @change="setSpecificRuleField(i, 'cap', $event.target.value, $event.target)" placeholder="Legend Caption" class="form-input form-input-compact col-span-5">
                                         </div>
                                     </div>
@@ -3883,7 +3883,7 @@
                                         <input v-model="newSpecRule.qual" list="specific-rule-qualifier-options" placeholder="Qualifier (choose or type)" aria-label="Qualifier name" class="form-input form-input-compact">
                                     </div>
                                     <div class="flex gap-1 mb-1">
-                                        <input v-model="newSpecRule.val" placeholder="Regex (e.g. hypothetical)" class="form-input form-input-compact flex-grow">
+                                        <input v-model="newSpecRule.val" data-new-specific-rule-pattern aria-label="New color rule pattern" placeholder="Python regex (e.g. (?i)NADH)" class="form-input form-input-compact flex-grow">
                                         <input type="color" v-model="newSpecRule.color" class="h-6 w-7 p-0 border rounded cursor-pointer shrink-0">
                                     </div>
                                     <div class="flex gap-1">
@@ -4146,7 +4146,7 @@
                                     </div>
 
                                     <div v-if="filterMode === 'Whitelist'" class="space-y-2 bg-white p-2 rounded border">
-                                        <p class="text-[10px] text-slate-500">Only show labels matching regex rules. Use <span class="font-mono">^...$</span> for exact matches.</p>
+                                        <p class="text-[10px] text-slate-500">Only show labels matching case-insensitive Python regex. Examples: <span class="font-mono">(?i)NADH</span> and <span class="font-mono">(?P&lt;name&gt;NADH)</span>. Use <span class="font-mono">^...$</span> for exact matches.</p>
                                         <div v-for="(row, i) in manualWhitelist" :key="i" class="flex gap-1 mb-1">
                                             <input v-model="row.feat" placeholder="Feat" class="form-input px-1 py-1 text-xs w-1/4">
                                             <input v-model="row.qual" placeholder="Qual" class="form-input px-1 py-1 text-xs w-1/4">
@@ -4707,19 +4707,25 @@
                 <p id="session-export-help" class="mt-1 text-[10px] text-slate-500">Save stores the current Result and settings draft. Export outputs the current Result. Neither applies pending settings.</p>
             </section>
 
-            <div v-if="errorDisplay" role="alert" aria-label="Generation Error" class="card border-l-4 border-l-red-500 bg-red-50 mb-0 shrink-0">
-                <div class="text-red-700 font-bold mb-2 flex items-center gap-2"><i class="ph ph-warning-circle"></i> Error Occurred</div>
-                <div class="text-sm font-semibold text-red-800 mb-2">{{ errorDisplay.summary }}</div>
-                <details v-if="errorDisplay.details && errorDisplay.details.length" class="bg-white/40 rounded border border-red-100 p-2">
-                        <summary class="cursor-pointer text-xs font-semibold text-red-700">Details</summary>
-                        <div class="mt-2 space-y-2">
-                            <div v-for="(section, idx) in errorDisplay.details" :key="idx" class="bg-white/60 border border-red-100 rounded p-2">
-                                <div class="text-[11px] font-bold uppercase tracking-wide text-red-700 mb-1">{{ section.label }}</div>
-                                <pre class="text-xs font-mono text-red-800 whitespace-pre-wrap overflow-auto max-h-40 custom-scrollbar">{{ section.text }}</pre>
-                            </div>
-                        </div>
-                </details>
-            </div>
+            <operation-error v-if="errorDisplay && !(errorDisplay.operation === 'align' && (similarityAlignmentDialogOpen || similarityAlignmentResetDialogOpen))"
+                :error="errorLog" :recovery="errorDisplay.operation === 'generate' || errorDisplay.operation === 'align' ? generationFailureRecovery : null"
+                class="card border-l-4 border-l-red-500 bg-red-50 mb-0 shrink-0">
+                <div class="mt-2 flex flex-wrap gap-2">
+                    <button v-if="errorDisplay.operation === 'generate' && errorDisplay.actions.includes('retry')" type="button" @click="runAnalysis" :disabled="processing" class="btn-secondary text-xs">Retry Generate</button>
+                    <button v-if="canRetryAuxiliaryImportFailure" type="button" @click="retryAuxiliaryImportFailure" class="btn-secondary text-xs">Retry table import</button>
+                    <button v-if="canRetryLabelImportFailure" type="button" @click="retryLabelImportFailure" class="btn-secondary text-xs">Retry Label TSV import</button>
+                    <button v-if="canRetryLabelImportFailure" type="button" @click="editLabelImportFailure" class="btn-secondary text-xs">Reselect Label TSV</button>
+                    <button v-if="canRetrySpecificRuleFailure" type="button" @click="retrySpecificRuleFailure" class="btn-secondary text-xs">Retry rule operation</button>
+                    <button v-if="canEditSpecificRuleFailure && errorDisplay.actions.includes('edit-pattern')" type="button" @click="editSpecificRuleFailure" class="btn-secondary text-xs">Edit pattern</button>
+                    <button v-if="errorDisplay.actions.includes('save-session') || generationFailureRecovery === 'restore-failed'" type="button" @click="saveSessionWithTitle" :disabled="sessionImportPending" class="btn-secondary text-xs">Save Session</button>
+                    <button v-if="generationFailureRecovery === 'restore-failed' || errorDisplay.actions.includes('reload')" type="button" @click="reloadAfterOperationError" class="btn-secondary text-xs">Reload</button>
+                    <button v-if="errorDisplay.operation.startsWith('export-') && errorDisplay.actions.includes('use-svg')" type="button" @click="downloadSVG" class="btn-secondary text-xs">Use SVG</button>
+                    <button v-if="errorDisplay.operation === 'export-svg' && !canRetryInteractiveSvgExport && errorDisplay.actions.includes('retry')" type="button" @click="downloadSVG" class="btn-secondary text-xs">Retry SVG export</button>
+                    <button v-if="canRetryInteractiveSvgExport && errorDisplay.actions.includes('retry')" type="button" @click="downloadInteractiveSVG" class="btn-secondary text-xs">Retry Interactive SVG export</button>
+                    <button v-if="errorDisplay.operation === 'export-png' && errorDisplay.actions.includes('retry')" type="button" @click="downloadPNG" class="btn-secondary text-xs">Retry PNG export</button>
+                    <button v-if="errorDisplay.operation === 'export-pdf' && errorDisplay.actions.includes('retry')" type="button" @click="downloadPDF" class="btn-secondary text-xs">Retry PDF export</button>
+                </div>
+            </operation-error>
 
             <div v-if="results.length > 0" role="region" aria-label="Result Preview" :class="{ 'alignment-review-compact': similarityAlignmentCompact && similarityAlignmentDialogOpen }" class="card border-2 border-green-100 ring-4 ring-green-50/50 flex flex-col flex-grow overflow-hidden relative">
                 <div class="card-header bg-green-50/50 -m-4 mb-0 p-3 pl-5 pr-6 border-green-100 flex justify-between items-center shrink-0 flex-wrap gap-2">
@@ -4804,7 +4810,7 @@
                      role="alert"
                      data-similarity-alignment-start-error
                      class="-mx-4 border-b border-red-200 bg-red-50 px-5 py-2 text-xs text-red-900 shrink-0">
-                    {{ similarityAlignmentError.message }} Check the exact reference and try again.
+                    {{ similarityAlignmentError.summary }}
                 </div>
                 <div v-if="similarityAlignmentSummary"
                      data-similarity-alignment-summary
@@ -4880,7 +4886,7 @@
                                    aria-label="Qualifier key">
                             <label class="gfs-toggle">
                                 <input type="checkbox" v-model="previewFeatureSearchUseRegex" data-history-ignore>
-                                <span>Regex</span>
+                                <span title="JavaScript regular expression, case-insensitive. Turn off Regex to return to word search.">Regex (JavaScript, i)</span>
                             </label>
                             <button type="button"
                                     @click.stop="goToPreviousPreviewFeatureSearchMatch"
@@ -6662,6 +6668,7 @@
                                 <div class="flex items-center gap-2 shrink-0">
                                     <button @click="downloadLabelOverrideTable" class="text-[10px] px-2 py-1 rounded bg-blue-600 hover:bg-blue-700 text-white">Export Label TSV</button>
                                     <button @click="$refs.labelTableInput.click()" class="text-[10px] px-2 py-1 rounded bg-blue-100 hover:bg-blue-200 text-blue-700 border border-blue-200">Load Label TSV</button>
+                                    <help-tip text="Label TSV value patterns use case-insensitive Python regex. Examples: (?i)NADH and (?P&lt;name&gt;NADH)."></help-tip>
                                     <input data-history-managed type="file" ref="labelTableInput" accept=".tsv,.txt,text/tab-separated-values,text/plain" class="hidden" @change="loadLabelOverrideTable">
                                     <button @click="resetAllLabelTextOverrides" class="text-[10px] px-2 py-1 rounded bg-slate-200 hover:bg-slate-300 text-slate-700">Reset Label Edits</button>
                                 </div>
@@ -7092,11 +7099,11 @@
                 <div class="min-h-0 min-w-0 flex-1 overflow-x-hidden overflow-y-auto p-3 custom-scrollbar sm:p-5">
                     <div class="space-y-4">
                             <p id="similarity-alignment-application-help" data-alignment-application-help class="mt-1 text-xs font-semibold text-blue-700">Apply required: selections stay in this review draft until Apply succeeds. Cancel keeps the current Result.</p>
-                            <p v-if="similarityAlignmentError" role="alert" tabindex="-1"
-                               class="mb-2 break-all text-xs text-red-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-red-700"
+                            <operation-error v-if="similarityAlignmentError" :error="similarityAlignmentError" :recovery="generationFailureRecovery"
+                               tabindex="-1" class="mb-2 text-xs text-red-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-red-700"
                                data-similarity-alignment-error>
-                                {{ similarityAlignmentError.message }}
-                            </p>
+                                <p class="mt-2">Keep these choices and retry Apply below, or edit the choices before applying.</p>
+                            </operation-error>
 
                             <p id="similarity-alignment-dialog-description" class="mt-1 text-xs leading-relaxed text-slate-600">
                                 Choose Select or Skip for ambiguous records. Direction choices include the exact reference and selected anchors with a known direction. Skipped, missing, unusable and unknown-direction anchors stay unchanged.
@@ -7283,7 +7290,7 @@
                 </ul>
             </div>
             <footer class="shrink-0 border-t border-slate-200 bg-slate-50 p-4">
-                <p v-if="similarityAlignmentError" role="alert" tabindex="-1" data-similarity-alignment-reset-error class="mb-2 break-all text-xs text-red-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-red-700">{{ similarityAlignmentError.message }}</p>
+                <operation-error v-if="similarityAlignmentError" :error="similarityAlignmentError" :recovery="generationFailureRecovery" tabindex="-1" data-similarity-alignment-reset-error class="mb-2 text-xs text-red-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-red-700"></operation-error>
                 <div class="flex justify-end gap-2">
                     <button type="button" @click="cancelSimilarityAlignmentReset" :disabled="similarityAlignmentBusy" class="btn btn-secondary">Cancel</button>
                     <button type="button" @click="applySimilarityAlignmentReset" :disabled="similarityAlignmentBusy" aria-describedby="alignment-reset-scope" class="btn btn-primary">{{ similarityAlignmentBusy ? 'Resetting…' : 'Reset' }}</button>
@@ -7379,6 +7386,24 @@
     <button data-history-managed type="button" @click="controller.resetStart(row)" class="text-blue-600">Reset start</button>
   </div>
 </script>
+
+    <script type="text/x-template" id="operation-error-template">
+        <div v-if="model" role="alert" :aria-label="title" class="min-w-0 break-words">
+            <p class="font-bold text-red-700">{{ title }}</p>
+            <p class="mt-1 text-sm text-red-800">{{ model.summary }}</p>
+            <p v-if="recoveryText" class="mt-1 text-xs text-red-800">{{ recoveryText }}</p>
+            <details ref="details" class="mt-2 rounded border border-red-100 bg-white/50 p-2">
+                <summary class="cursor-pointer text-xs font-semibold text-red-700">Details</summary>
+                <textarea ref="diagnosticText" :value="diagnostics" readonly aria-label="Safe diagnostics" rows="5" class="mt-2 w-full min-w-0 resize-y rounded border border-red-100 bg-white p-2 font-mono text-xs text-red-800" data-history-ignore></textarea>
+                <div class="mt-2 flex flex-wrap gap-2">
+                    <button type="button" @click="copyDiagnostics" class="btn-secondary text-xs">Copy diagnostics</button>
+                    <button type="button" @click="selectDiagnostics" class="btn-secondary text-xs">Select diagnostics</button>
+                </div>
+                <p role="status" aria-live="polite" class="mt-1 text-xs text-red-800">{{ copyStatus }}</p>
+            </details>
+            <slot></slot>
+        </div>
+    </script>
 
 <script type="text/x-template" id="help-tip-template">
     <div class="help-tip inline-block align-text-bottom">

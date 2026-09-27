@@ -1,3 +1,4 @@
+import { normalizeUserFacingError } from '../services/error-normalization.js';
 import { buildDisambiguatedRecordEntries, formatRecordLength } from './record-options.js';
 
 export const AUTOMATIC_RECORD_OPTION_LABEL = 'Automatic (no explicit selector)';
@@ -94,7 +95,7 @@ export const createLinearRecordSelector = ({
     selectorStateByUid[uid] = {
       status: nextState.status,
       records: Array.isArray(nextState.records) ? nextState.records : [],
-      error: String(nextState.error || ''),
+      error: nextState.error || '',
       inputType: String(nextState.inputType || ''),
       primaryFile: nextState.primaryFile || null,
       pairedFile: nextState.pairedFile || null
@@ -171,11 +172,11 @@ export const createLinearRecordSelector = ({
         if (onRecordsDiscovered?.({ uid, records }) === true) return true;
       } catch (error) {
         if (!isCurrentRequest({ generation, uid, primaryFile, pairedFile, inputType })) return;
-        logger.warn?.(`Failed to read records for ${uid}:`, error);
+        logger.warn?.('Input record discovery failed.', normalizeUserFacingError(error));
         replaceState(uid, {
           status: 'error',
           records: [],
-          error: 'Could not read records from this file.',
+          error: normalizeUserFacingError(error, { operation: inputType === 'gff' ? 'listGffFastaRecords' : 'listSequenceRecords', stage: 'helper' }),
           inputType,
           primaryFile,
           pairedFile
@@ -221,7 +222,8 @@ export const createLinearRecordSelector = ({
   const isDisabled = (seq) => stateFor(seq).status !== 'ready';
   const statusFor = (seq) => stateFor(seq).status;
   const recordsFor = (seq) => stateFor(seq).records.slice();
-  const errorFor = (seq) => stateFor(seq).error;
+  const errorModelFor = (seq) => stateFor(seq).error;
+  const errorFor = (seq) => errorModelFor(seq)?.summary || errorModelFor(seq);
   const warningFor = (seq) => {
     const selectorState = stateFor(seq);
     const currentValue = currentSelectorValue(seq);
@@ -239,6 +241,7 @@ export const createLinearRecordSelector = ({
     recordsFor,
     isDisabled,
     errorFor,
+    errorModelFor,
     warningFor
   };
 };

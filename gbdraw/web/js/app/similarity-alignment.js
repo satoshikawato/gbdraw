@@ -1,3 +1,4 @@
+import { normalizeUserFacingError } from '../services/error-normalization.js';
 import { plainTextLinearRecordLabel } from './linear-comparisons.js';
 import { canonicalRecordReverseComplement } from './record-display-options.js';
 import { validateSimilarityAlignmentResetReceipt } from '../services/session-active-config-contract.js';
@@ -837,7 +838,7 @@ export const createSimilarityAlignmentActions = ({
   let pendingRecordDragBaseline = null;
 
   const publishError = (value, notify = true) => {
-    const normalized = value instanceof Error ? value : new Error(String(value || 'Alignment failed.'));
+    const normalized = normalizeUserFacingError(value || { code: 'UNKNOWN' }, { operation: 'align', stage: 'helper' });
     error.value = normalized;
     if (notify && typeof onError === 'function') onError(normalized);
     return normalized;
@@ -963,7 +964,7 @@ export const createSimilarityAlignmentActions = ({
     const changed = canonical.renderRequest.records.filter(record => (
       baseReverseComplement(record) !== baseReverseComplement(beforeRecords.get(record.recordKey))
     )).map(record => ({recordKey: record.recordKey, reverseComplement: baseReverseComplement(record)}));
-    return runCommittedCanonicalCandidate({ canonical, label, alignmentResetBefore, alignmentResetReceipt,
+    return runCommittedCanonicalCandidate({ canonical, operation: 'align', label, alignmentResetBefore, alignmentResetReceipt,
       captureIntentCheckpoint: () => recordDisplayControls.captureAlignmentOrientationIntent(changed),
       restoreIntentCheckpoint: checkpoint => recordDisplayControls.restoreAlignmentOrientationIntent(checkpoint),
       commitIntent: () => recordDisplayControls.commitAlignmentOrientations(changed) });
@@ -980,12 +981,12 @@ export const createSimilarityAlignmentActions = ({
     const canonical = projectCommittedAlignment({ committed: activeBaseline.canonical,
       plan: response.plan, orientations,
       translations: projected.records.map(({ recordKey, translation }) => ({recordKey, ...translation})) });
-    const promise = runAlignmentCandidate({canonical, label: 'Align Similarity Group',
+    const promise = runAlignmentCandidate({canonical, operation: 'align', label: 'Align Similarity Group',
       alignmentResetBefore: activeBaseline.canonical});
     activeApply = promise;
     let outcome;
     try { outcome = await promise; }
-    catch (cause) { outcome = {status:'error', error:cause}; }
+    catch (cause) { outcome = cause?.canceled === true ? {status:'canceled'} : {status:'error', error:cause}; }
     finally { if (activeApply === promise) activeApply = null; }
     if (expectedActionId !== actionId) return {status:'stale'};
     if (outcome?.status === 'ok') {
@@ -996,9 +997,9 @@ export const createSimilarityAlignmentActions = ({
       return {status:'ok'};
     }
     status.value = 'reviewing';
-    const cause = outcome?.error || state.errorLog?.value;
-    publishError(new Error(cause?.summary || cause?.message || 'Alignment generation failed. Review the draft and retry Apply.'), !state.errorLog?.value?.summary);
-    return {status: outcome?.status || 'error'};
+    if (['canceled', 'stale', 'superseded'].includes(outcome?.status)) return outcome;
+    const cause = publishError(outcome?.error);
+    return { status: 'error', error: cause, recovery: outcome?.recovery };
   };
 
   const resolveRequest = async (request, expectedActionId, mode) => {
@@ -1016,8 +1017,8 @@ export const createSimilarityAlignmentActions = ({
       clearDraft();
       activeBaseline = null;
       status.value = 'idle';
-      publishError(cause);
-      return { status: 'error' };
+      if (cause?.canceled === true) return { status: 'canceled' };
+      return { status: 'error', error: publishError(cause) };
     }
     activeRequest = request;
     error.value = null;
@@ -1140,7 +1141,9 @@ export const createSimilarityAlignmentActions = ({
       return applyPlan(response, request, expectedActionId, final);
     } catch (cause) {
       if (expectedActionId !== actionId) return { status: 'stale' };
-      status.value = 'reviewing'; publishError(cause); return { status: 'error' };
+      status.value = 'reviewing';
+      if (cause?.canceled === true) return { status: 'canceled' };
+      return { status: 'error', error: publishError(cause) };
     }
   };
 
@@ -1272,7 +1275,7 @@ export const createSimilarityAlignmentActions = ({
         });
       }
       const canonical = projectCommittedAlignment({committed: current.canonical, plan:null, translations, orientations});
-      promise = runAlignmentCandidate({canonical, label: scope === 'positions'
+      promise = runAlignmentCandidate({canonical, operation: 'align', label: scope === 'positions'
         ? 'Reset alignment positions' : 'Reset alignment positions and direction changes', alignmentResetReceipt:null});
       activeApply = promise;
       const outcome = await promise;
@@ -1282,9 +1285,13 @@ export const createSimilarityAlignmentActions = ({
         error.value = null;
         publishNotice(scope === 'positions' ? 'Alignment reset: record positions restored; record directions unchanged.'
           : 'Alignment reset: positions and the latest Align direction changes restored.');
-      } else publishError(new Error(outcome?.error?.message || state.errorLog?.value?.summary || 'Alignment Reset failed. Retry the same scope.'));
+      } else if (!['canceled', 'stale', 'superseded'].includes(outcome?.status)) publishError(outcome?.error);
       return outcome;
-    } catch (cause) { publishError(cause); return {status:'error', error:cause}; }
+    } catch (cause) {
+      if (cause?.canceled === true) return { status: 'canceled' };
+      if (expectedActionId !== actionId) return { status: 'stale' };
+      return { status: 'error', error: publishError(cause) };
+    }
     finally { if (activeApply === promise) activeApply = null; if (expectedActionId === actionId) status.value = 'idle'; }
   };
 
