@@ -1,0 +1,102 @@
+{
+  "scope": "function probes; empty app-search catalog, standalone regex branch, cache-miss hash fallback, stubbed rule preparation rejection",
+  "corpus": [
+    "NADH",
+    "nadh",
+    "β-lactamase",
+    "ı",
+    "i",
+    "İ",
+    "unrelated"
+  ],
+  "rows": [
+    {
+      "pattern": "(?i)NADH",
+      "emptySearchError": "Invalid regex",
+      "standaloneError": "Invalid regex",
+      "standaloneCorpusTargets": []
+    },
+    {
+      "pattern": "(?P<enzyme>NADH)",
+      "emptySearchError": "Invalid regex",
+      "standaloneError": "Invalid regex",
+      "standaloneCorpusTargets": []
+    },
+    {
+      "pattern": "[",
+      "emptySearchError": "Invalid regex",
+      "standaloneError": "Invalid regex",
+      "standaloneCorpusTargets": []
+    },
+    {
+      "pattern": "(?<enzyme>NADH)",
+      "emptySearchError": "",
+      "standaloneError": "",
+      "standaloneCorpusTargets": [
+        0,
+        1
+      ]
+    },
+    {
+      "pattern": "NADH\\Z",
+      "emptySearchError": "",
+      "standaloneError": "",
+      "standaloneCorpusTargets": []
+    },
+    {
+      "pattern": "\\bβ",
+      "emptySearchError": "",
+      "standaloneError": "",
+      "standaloneCorpusTargets": []
+    },
+    {
+      "pattern": "i",
+      "emptySearchError": "",
+      "standaloneError": "",
+      "standaloneCorpusTargets": [
+        4
+      ]
+    },
+    {
+      "pattern": "β",
+      "emptySearchError": "",
+      "standaloneError": "",
+      "standaloneCorpusTargets": [
+        2
+      ]
+    }
+  ],
+  "visibilityFallback": [
+    {
+      "pattern": "(?i)^NADH$",
+      "result": "default"
+    },
+    {
+      "pattern": "(?P<enzyme>NADH)",
+      "result": "default"
+    },
+    {
+      "pattern": "(?<enzyme>NADH)",
+      "result": "off"
+    },
+    {
+      "pattern": "[",
+      "result": "default"
+    },
+    {
+      "pattern": "^NADH$",
+      "result": "off"
+    },
+    {
+      "pattern": "^nadh$",
+      "result": "on"
+    }
+  ],
+  "rejectedField": {
+    "alerts": [
+      "Invalid rule: Synthetic runtime unavailable"
+    ],
+    "displayedValue": "NADH",
+    "acceptedValue": "NADH"
+  }
+}
