@@ -241,7 +241,7 @@ const loadSyntheticSession = (page, variant = 'normal') => page.evaluate(
     return {
       status: result?.status,
       degradedRecovery: Boolean(result?.degradedRecovery),
-      message: String(result?.error?.message || '')
+      message: String(result?.error?.summary || '')
     };
   },
   { filename: syntheticSourceName, requestedVariant: variant }
@@ -1034,7 +1034,11 @@ test('preflight and lazy-access failures preserve the committed preview', async 
 
   const rejected = await loadSyntheticSession(page, 'invalid-size');
   expect(rejected.status).toBe('error');
-  expect(rejected.message).toMatch(/unused-lazy-contract.*invalid declared byte size/);
+  expect(rejected.message).toContain('Load a supported Session file or recreate it with the current writer.');
+  expect(await page.evaluate(() => window.__GBDRAW_APP__.errorLog)).toMatchObject({
+    code: 'INPUT_INVALID', stage: 'request-validation', context: { field: 'schema', reason: 'RESOURCE_SIZE' }
+  });
+  expect(rejected.message).not.toContain('unused-lazy-contract');
   expect(await page.evaluate(() => {
     const app = window.__GBDRAW_APP__;
     const baseline = window.__GBDRAW_LAZY_ROLLBACK_BASELINE__;

@@ -4287,7 +4287,16 @@ export const importSession = async (e, options = {}) => {
     const text = await readSessionText(file);
     recordSessionLifecycleEvent('gzip-to-text-end', { characters: text.length });
     recordSessionLifecycleEvent('json-parse-start');
-    let data = JSON.parse(text);
+    let data;
+    try {
+      data = JSON.parse(text);
+    } catch (error) {
+      if (error instanceof SyntaxError) Object.assign(error, {
+        code: 'INPUT_INVALID', stage: 'request-validation',
+        context: { field: 'schema', reason: 'JSON_FORMAT' }
+      });
+      throw error;
+    }
     recordSessionLifecycleEvent('json-parse-end');
     assertSafeObjectKeys(data, 'Session');
     if (isLegacyConfigPayload(data)) {

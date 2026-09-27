@@ -25,7 +25,7 @@ rule-validation render result-admission cleanup export-capture export-conversion
 FIELDS = frozenset("""
 pattern record_selector region start end sourceStart sourceEnd recordLength
 recordIndex queryIndex subjectIndex depth min_depth max_depth window step tick
-font_size plot_title_font_size height large_tick_interval small_tick_interval tick_font_size inner_gap_px outer_gap_px radius width color action feature_type
+font_size plot_title_font_size height large_tick_interval small_tick_interval tick_font_size inner_gap_px outer_gap_px radius width spacing arrow_head_length_ratio arrow_shaft_width_ratio keep_definition_left_aligned color action feature_type
 qualifier value record_id label_text config configOverrides records anchors schema
 recordKey groupId direction sourceStrand role blast files input comparison
 protein_blastp_max_hits orthogroup_member_max_hits bitscore evalue identity
@@ -98,6 +98,8 @@ _EXACT = {
 
 # Anchored producer templates; private interpolations are discarded, not shown.
 _TEMPLATES = (
+    (r"Unknown config override path: [\s\S]*\.", "INPUT_INVALID", "UNKNOWN_CONFIG_PATH"),
+    (r"No matching FASTA record found for GFF record [\s\S]*\. Please ensure that all GFF records have corresponding FASTA entries\.", "FASTA_REQUIRED", "GFF_FASTA_MATCH"),
     (r"Unsupported LOSATP blastp mode: [\s\S]*", "INPUT_INVALID", "BLASTP_MODE"),
     (r"LOSATP (?:record|pair) payload #[0-9]+ (?:must be an object\.|is missing [\s\S]*|has an invalid raw TSV range\.|references missing [\s\S]*)", "HELPER_PROTOCOL", "FIELDS"),
     (r"LOSATP record payload contains duplicate recordIndex [0-9]+\.", "HELPER_PROTOCOL", "UNIQUE_IDS"),
@@ -171,6 +173,8 @@ def _validation(error: BaseException) -> tuple[str, dict]:
         match = re.fullmatch(template, message)
         if match:
             context = {"reason": reason}
+            if reason == "UNKNOWN_CONFIG_PATH":
+                context["field"] = "configOverrides"
             if reason == "VISIBILITY_ACTION":
                 context.update(field="action", row=int(match[1]))
             if reason == "BLASTP_MODE":

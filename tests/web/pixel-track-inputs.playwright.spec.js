@@ -19,7 +19,8 @@ const inspect = (page, mode) => page.evaluate(async mode => {
     runs: window.__PIXEL_REQUESTS__?.length || 0,
     processing: s.processing.value,
     completedRuns: window.__MODE_EVENTS__.filter(event => event.name === 'generate.processing-cleared').length,
-    error: s.errorLog.value?.summary || null
+    error: s.errorLog.value?.summary || null,
+    diagnostic: s.errorLog.value
   };
 }, mode);
 
@@ -110,7 +111,12 @@ for (const width of [1440, 390]) {
             const state = await inspect(page, mode);
             return { completedRuns: state.completedRuns, processing: state.processing };
           }, { timeout: 180000 }).toEqual({ completedRuns: before.completedRuns + 1, processing: false });
-          await expect.poll(async () => (await inspect(page, mode)).error).toContain(`${fields[index]} must be ${relation} finite`);
+          await expect.poll(async () => (await inspect(page, mode)).diagnostic).toMatchObject({
+            code: 'TRACK_INVALID', operation: 'generate', stage: 'request-validation',
+            context: { field: fields[index], reason: relation === 'positive' ? 'PIXEL_POSITIVE' : 'PIXEL_NONNEGATIVE' }
+          });
+          const guidance = relation === 'positive' ? 'greater than zero' : 'zero or greater';
+          expect((await inspect(page, mode)).error).toContain(`finite number of pixels ${relation === 'positive' ? '' : 'of '}${guidance} (px optional)`);
           const failed = await inspect(page, mode);
           expect(failed.svg).toBe(control.svg);
           expect(failed.request).toEqual(control.request);
