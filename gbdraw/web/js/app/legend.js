@@ -12,6 +12,7 @@ import {
 export const createLegendManager = ({
   state,
   rulePreparation,
+  commitSpecificRules,
   history = null,
   previewRuntime = null
 }) => {
@@ -31,6 +32,20 @@ export const createLegendManager = ({
 
   return {
     ...entryActions,
+    updateLegendEntryColor: (index, color) => {
+      const caption = state.legendEntries.value[index]?.caption;
+      if (caption && state.manualSpecificRules.some(rule => rule.cap === caption)) {
+        return commitSpecificRules(state.manualSpecificRules.map(rule => rule.cap === caption ? { ...rule, color } : { ...rule }), 'Change legend color');
+      }
+      return entryActions.updateLegendEntryColor(index, color);
+    },
+    updateLegendEntryCaption: (index, caption) => {
+      const previous = state.legendEntries.value[index]?.caption;
+      if (previous && state.manualSpecificRules.some(rule => rule.cap === previous)) {
+        return commitSpecificRules(state.manualSpecificRules.map(rule => rule.cap === previous ? { ...rule, cap: caption } : { ...rule }), 'Rename legend item');
+      }
+      return entryActions.updateLegendEntryCaption(index, caption);
+    },
     ...layoutActions,
     ...sortActions,
     ...strokeActions,

@@ -54,7 +54,10 @@ from gbdraw.features.visibility import (
     read_feature_visibility_file,
     resolve_candidate_feature_types,
 )
-from gbdraw.annotations import AnnotationOptions, read_annotation_table
+from gbdraw.annotations import (
+    AnnotationOptions, ResolvedAnnotationBundle, ResolutionWarning,
+    read_annotation_table, resolve_annotations,
+)
 from gbdraw.io.comparisons import COMPARISON_COLUMNS
 from gbdraw.io.colors import load_default_colors, read_color_table
 from gbdraw.labels.filtering import (
@@ -80,6 +83,7 @@ from .diagram import (
 )
 from .io import load_gbks, load_gff_fasta
 from .options import (
+    ColorOptions,
     CircularDiagramOptions,
     CircularMultiRecordOptions,
     LinearDiagramOptions,
@@ -540,6 +544,11 @@ class PreparedDiagramRequest:
     losat_derived_cache_entries: tuple[Mapping[str, Any], ...] = ()
     protein_identity_manifest: Mapping[str, Any] | None = None
     transforms: tuple[RecordDisplayTransform, ...] = ()
+    resolved_annotations: ResolvedAnnotationBundle = ResolvedAnnotationBundle(())
+
+    @property
+    def annotation_warnings(self) -> tuple[ResolutionWarning, ...]:
+        return self.resolved_annotations.warnings
 
 
 @dataclass(frozen=True)
@@ -556,6 +565,7 @@ class RequestRenderResult:
     losat_cache_entries: tuple[Mapping[str, Any], ...] = ()
     losat_derived_cache_entries: tuple[Mapping[str, Any], ...] = ()
     protein_identity_manifest: Mapping[str, Any] | None = None
+    annotation_warnings: tuple[ResolutionWarning, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -638,6 +648,11 @@ def _initialize_plan_display_context(plan) -> None:
         plan.provenance, plan.displays, plan.transforms,
     )):
         raise ValidationError("Plan display context must align with its records.")
+    if plan.resolved_annotations is None:
+        object.__setattr__(plan, "resolved_annotations", resolve_annotations(
+            plan.request.options.annotations, plan.records,
+            mode=plan.mode, record_transforms=plan.transforms,
+        ))
 
 
 @dataclass(frozen=True)
@@ -653,6 +668,7 @@ class CircularRequestPlan:
     provenance: tuple[ResolvedRecordProvenance, ...] = ()
     displays: tuple[ResolvedRecordDisplay, ...] = ()
     transforms: tuple[RecordDisplayTransform, ...] = ()
+    resolved_annotations: ResolvedAnnotationBundle | None = None
 
     def __post_init__(self) -> None:
         if not isinstance(self.request, CircularDiagramRequest):
@@ -702,6 +718,7 @@ class CircularRequestPlan:
         )
         if self.inputs is not None and self.inputs.placements:
             shared_kwargs["_resolved_placement_inputs"] = self.inputs.placements
+        shared_kwargs["_resolved_annotations"] = self.resolved_annotations
         if self.layout is None:
             depth_kwargs: dict[str, Any] = dict(shared_kwargs)
             if self.precomputed_depth_track_specs is not None:
@@ -754,6 +771,7 @@ class CircularBatchRequestPlan:
     provenance: tuple[ResolvedRecordProvenance, ...] = ()
     displays: tuple[ResolvedRecordDisplay, ...] = ()
     transforms: tuple[RecordDisplayTransform, ...] = ()
+    resolved_annotations: ResolvedAnnotationBundle | None = None
 
     def __post_init__(self) -> None:
         if not isinstance(self.request, CircularBatchRequest):
@@ -827,6 +845,14 @@ class CircularBatchRequestPlan:
                     request=item_request,
                     records=(record,),
                     layout=None,
+                    resolved_annotations=ResolvedAnnotationBundle(
+                        annotations=tuple(replace(item, record_index=0)
+                            for item in self.resolved_annotations.annotations
+                            if item.record_index == index),
+                        warnings=tuple(item for item in self.resolved_annotations.warnings
+                            if item.record_index == index),
+                        set_ids=self.resolved_annotations.set_ids,
+                    ),
                     precomputed_depth_track_specs=(
                         tuple(normalized_depth[index])
                         if normalized_depth is not None
@@ -860,6 +886,7 @@ class LinearRequestPlan:
     provenance: tuple[ResolvedRecordProvenance, ...] = ()
     displays: tuple[ResolvedRecordDisplay, ...] = ()
     transforms: tuple[RecordDisplayTransform, ...] = ()
+    resolved_annotations: ResolvedAnnotationBundle | None = None
     alignment_anchor_centers: tuple[float | None, ...] = ()
 
     def __post_init__(self) -> None:
@@ -929,6 +956,7 @@ class LinearRequestPlan:
             kwargs["_resolved_feature_inputs"] = self.inputs.features
             if self.inputs.placements:
                 kwargs["_resolved_placement_inputs"] = self.inputs.placements
+        kwargs["_resolved_annotations"] = self.resolved_annotations
         kwargs["_record_transforms"] = self.transforms
         kwargs["similarity_alignment"] = self.request.similarity_alignment
         kwargs["_alignment_anchor_centers"] = self.alignment_anchor_centers
@@ -1044,6 +1072,18 @@ def _prepare_diagram_inputs(request: DiagramRequest) -> PreparedDiagramInputs:
         gff_keep_all_features=keep_all_features,
         comparison_sequences=comparison_sequences,
     )
+
+
+def _with_prepared_colors(request: DiagramRequest, inputs: PreparedDiagramInputs) -> DiagramRequest:
+    """Record the canonical table actually compiled for this request."""
+    if inputs.features.color_table is None:
+        return request
+    colors = replace(
+        request.options.colors or ColorOptions(),
+        color_table=inputs.features.color_table,
+        color_table_file=None,
+    )
+    return replace(request, options=replace(request.options, colors=colors))
 
 
 def _normalize_request_records(
@@ -1406,6 +1446,7 @@ def plan_circular_request(
             else replace(request, options=resolved_options)
         )
         inputs = _prepare_diagram_inputs(unresolved_request)
+        unresolved_request = _with_prepared_colors(unresolved_request, inputs)
     with _request_render_diagnostic_phase("recordLoad"):
         collection = _coerce_resolved_collection(
             unresolved_request,
@@ -1462,6 +1503,7 @@ def plan_circular_batch_request(
             else replace(request, options=resolved_options)
         )
         inputs = _prepare_diagram_inputs(unresolved_request)
+        unresolved_request = _with_prepared_colors(unresolved_request, inputs)
     with _request_render_diagnostic_phase("recordLoad"):
         collection = _coerce_resolved_collection(
             unresolved_request,
@@ -1518,6 +1560,7 @@ def plan_linear_request(
             ),
         )
         inputs = _prepare_diagram_inputs(unresolved_request)
+        unresolved_request = _with_prepared_colors(unresolved_request, inputs)
     with _request_render_diagnostic_phase("recordLoad"):
         collection = _coerce_resolved_collection(
             unresolved_request,
@@ -2020,6 +2063,7 @@ def build_request_plan_diagram(
                     drawing=item_plan.build(),
                     inputs=item_plan.inputs,
                     transforms=item_plan.transforms,
+                    resolved_annotations=item_plan.resolved_annotations,
                 )
                 for item_plan in plan.item_plans()
             )
@@ -2084,6 +2128,7 @@ def build_request_plan_diagram(
     return PreparedDiagramRequest(
         mode=plan.mode,
         transforms=plan.transforms,
+        resolved_annotations=plan.resolved_annotations,
         request=request,
         records=records,
         drawing=drawing,
@@ -2158,7 +2203,7 @@ def build_prepared_interactive_context(
             specific_color_rules=inputs.features.specific_color_rules,
             orthogroups=computed_orthogroups,
             linear_rendered_feature_ids=prepared.mode == "linear",
-            annotations=options.annotations,
+            annotations=prepared.resolved_annotations,
             mode=prepared.mode,
             comparison_sequence_records=comparison_sequence_records,
             collinearity_search_scope=collinearity_search_scope,
@@ -2620,6 +2665,7 @@ def _render_prepared_request(
         records=prepared.records,
         drawing=prepared.drawing,
         output_paths=tuple(Path(path) for path in paths),
+        annotation_warnings=prepared.annotation_warnings,
         interactive_context=interactive_context,
         linear_metadata=prepared.linear_metadata,
         losat_cache_entries=prepared.losat_cache_entries,

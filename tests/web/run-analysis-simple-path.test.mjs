@@ -351,7 +351,12 @@ const validCatalog = (name) => ({
 
 const response = (logicalResult, featureCatalog) => ({
   results: [logicalResult],
-  metadata: featureCatalog === undefined ? {} : { featureCatalog }
+  metadata: featureCatalog === undefined ? {} : { featureCatalog, annotationWarnings: [{
+    code: 'feature_selector_unmatched', setId: 's', annotationId: 'missing',
+    recordId: 'record-1', recordIndex: 0, missingCount: 1,
+    message: 'Skipped annotation: 1 feature selector(s) unmatched.',
+    resultIndex: 0, resultName: logicalResult.name
+  }] }
 });
 
 const storedZipEntries = async (blob) => {
@@ -377,6 +382,7 @@ const storedZipEntries = async (blob) => {
 
 const committedFeatureState = () => structuredClone({
   results: state.results.value,
+  annotationWarnings: state.annotationWarnings.value,
   selectedResultIndex: state.selectedResultIndex.value,
   featureCatalog: state.featureCatalog.value,
   extractedFeatures: state.extractedFeatures.value,
@@ -451,7 +457,7 @@ test('superseded canonical execution stops before catalog and SVG admission', as
     canonical: { renderRequest: { schema: 7 }, resources: {} },
     mode: 'circular',
     kind: 'target-record-transform',
-    generationExecutor: async () => ({ results: [], metadata: {} }),
+    generationExecutor: async () => ({ results: [], metadata: { annotationWarnings: ["stale-invalid-warning"] } }),
     shouldAdmit: () => false,
     catalogAdmission: () => { admissions += 1; },
     prepareCommit: () => { commits += 1; }

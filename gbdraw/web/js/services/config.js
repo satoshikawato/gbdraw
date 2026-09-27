@@ -3654,6 +3654,7 @@ const resetSessionBaseline = () => {
   state.resultPanelTab.value = 'preview';
   state.lastRunInfo.value = null;
   state.trackSlotResolvedGeometry.value = null;
+  state.annotationWarnings.value = [];
   applyFiles(null);
   state.losatCache.value = new Map();
   state.losatDerivedCache.value = new Map();
@@ -4195,9 +4196,11 @@ export const exportSession = async (
     resources: canonical.resources,
     webFiles: canonical.webFiles,
     results: logicalResults,
-    runMetadata: state.trackSlotResolvedGeometry.value
-      ? { trackSlotGeometry: cloneJsonData(state.trackSlotResolvedGeometry.value) }
-      : {},
+    runMetadata: {
+      ...(state.trackSlotResolvedGeometry.value
+        ? { trackSlotGeometry: cloneJsonData(state.trackSlotResolvedGeometry.value) } : {}),
+      annotationWarnings: cloneJsonData(state.annotationWarnings.value)
+    },
     features: {
       selectedFeatureRecordIdx: state.selectedFeatureRecordIdx.value,
       featureColorOverrides: cloneJsonData(state.featureColorOverrides),
@@ -4644,6 +4647,9 @@ export const importSession = async (e, options = {}) => {
     state.skipPositionReapply.value = true;
     recordSessionLifecycleEvent('preview-mount-start');
     applyResultsData(committedImportedResults, ui);
+    state.annotationWarnings.value = cloneJsonData(
+      projectionResult?.artifactState?.runMetadata?.annotationWarnings || []
+    );
     state.trackSlotResolvedGeometry.value = cloneJsonData(
       projectionResult?.artifactState?.runMetadata?.trackSlotGeometry ?? null
     );

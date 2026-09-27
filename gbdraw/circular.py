@@ -1186,6 +1186,10 @@ def run_circular_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
     session_biological_feature_metadata = []
     session_interactive_contexts = []
     for result_index, rendered_item in enumerate(rendered_items):
+        for warning in rendered_item.annotation_warnings:
+            logger.warning("%s: %s/%s record #%s (%s): %s", warning.code,
+                warning.set_id, warning.annotation_id, warning.record_index + 1,
+                warning.record_id, warning.message)
         if not rendered_item.output_paths:
             raise ValidationError("Circular request renderer did not produce an SVG output.")
         svg_path = Path(rendered_item.output_paths[0])
