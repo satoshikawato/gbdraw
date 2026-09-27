@@ -1,0 +1,5 @@
+{
+  "finalSaveHelperSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "reuse": "Final Save helper bytes unchanged from retry-probe-final. Only divergent snapshot settlement changed after that probe.",
+  "probeScope": "held real Worker run; unchanged checked busy/settlement/retry helper; one PASS supplemental, not sole mapped proof."
+}
