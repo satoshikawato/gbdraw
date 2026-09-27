@@ -18,6 +18,7 @@ const legendTransformSourcePath = join(
   'transform-utils.js'
 );
 const serviceNames = [
+  'error-normalization.js',
   'current-worker-result-source.js',
   'runtime-test-hooks.js',
   'session-feature-metadata.js',

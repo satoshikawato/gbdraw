@@ -1,3 +1,4 @@
+import { normalizeUserFacingError } from '../services/error-normalization.js';
 import { parseTransform } from './legend-layout/transform-utils.js';
 import { COMPOSITION_ROLE_ATTRIBUTE } from './legend-layout/composition-actions.js';
 import { COMPARISON_LEGEND_SELECTOR } from './legend/utils.js';
@@ -293,7 +294,7 @@ export const createResultsManager = ({
         const result = response.result;
 
         if (result.error) {
-          console.error('Definition update error:', result.error);
+          console.error('Definition update error:', normalizeUserFacingError(result.error));
           return;
         }
 
@@ -355,7 +356,7 @@ export const createResultsManager = ({
           console.log('Definition text updated');
         }
       } catch (e) {
-        console.error('Failed to update definition text:', e);
+        console.error('Failed to update definition text:', normalizeUserFacingError(e));
       }
       return;
     }

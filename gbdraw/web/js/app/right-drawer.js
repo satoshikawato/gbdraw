@@ -75,7 +75,7 @@ export const restoreRightDrawerState = (
   state.showRightDrawer.value = Boolean(snapshot?.showRightDrawer);
 };
 
-export const createRightDrawerController = ({ state, watch, getOpenDisabledReason = () => '' }) => {
+export const createRightDrawerController = ({ state, watch, getOpenDisabledReason = () => '', onClose = () => {} }) => {
   const currentOrthogroupCount = () => orthogroupTabContentCountFromState(state);
   const isTabAvailable = (tab) => isRightDrawerTabAvailable(
     tab,
@@ -89,8 +89,14 @@ export const createRightDrawerController = ({ state, watch, getOpenDisabledReaso
     if (getOpenDisabledReason()) return false;
     return openRightDrawerState(state, tab, currentOrthogroupCount());
   };
-  const closeRightDrawer = () => closeRightDrawerState(state);
-  const resetRightDrawer = () => resetRightDrawerState(state);
+  const closeRightDrawer = () => {
+    onClose();
+    closeRightDrawerState(state);
+  };
+  const resetRightDrawer = () => {
+    onClose();
+    resetRightDrawerState(state);
+  };
   const toggleRightDrawer = () => {
     if (state.showRightDrawer.value) {
       closeRightDrawer();

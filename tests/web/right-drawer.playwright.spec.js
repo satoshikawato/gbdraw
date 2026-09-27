@@ -1,5 +1,6 @@
 const { test, expect } = require('@playwright/test');
 const { writeFileSync } = require('node:fs');
+const { evaluateWithRetainedPromise } = require('./helpers/app-lifecycle.cjs');
 const { semantics, switchMode, snapshot: readSnapshot } = require('./helpers/mode-transition.cjs');
 const { semantics: svgSemantics } = require('./helpers/visual-state.cjs');
 
@@ -818,7 +819,9 @@ test(`individual Feature, Label, and Legend edits update the mounted SVG: ${live
     await input.fill('S05 direct label retained');
     await page.getByRole('button', { name: 'Apply Label', exact: true }).click();
     await expect.poll(() => page.evaluate(() => window.__GBDRAW_APP__.labelReflowLastError), { timeout: 180000 })
-      .toContain('S05 forced live rerender failure');
+      .toContain('without recognized diagnostic information');
+    expect(await page.evaluate(() => window.__GBDRAW_APP__.labelReflowLastError))
+      .not.toContain('S05 forced live rerender failure');
     await expect(page.locator('[data-live-application-feedback]')).toContainText('Live edit failed');
     expect(await page.evaluate((id) => window.__GBDRAW_APP__.labelTextFeatureOverrides[id], target)).toBe('S05 direct label retained');
     const retained = await snapshot(page);
@@ -957,7 +960,7 @@ test('adjacent Collinear mixed groups remain selectable after current-session sa
   expect(document.editorState.featureCatalog.items[0].orthogroups.map((group) => group.id)).toEqual(['og_1', 'og_2']);
   expect(await importSession(saved, download.suggestedFilename())).toMatchObject({ status: 'ok' });
   expect(await verifyGroups()).toEqual(before);
-  const rollback = await page.evaluate(async (bytes) => {
+  const rollback = await evaluateWithRetainedPromise(page, async (bytes) => {
     const { state } = await import('./js/state.js');
     const { importSession } = await import('./js/services/config.js');
     const previous = state.collinearGroups.value;
@@ -965,11 +968,11 @@ test('adjacent Collinear mixed groups remain selectable after current-session sa
       files: [new File([new Uint8Array(bytes)], 'failed.gbdraw-session.json.gz')], value: 'selected'
     } }, { beforePreviewMount: () => { throw new Error('Issue 460 rollback probe'); } });
     return {
-      status: result.status, message: result.error?.message,
+      status: result.status, error: { code: result.error?.code, stage: result.error?.stage },
       samePresentation: state.collinearGroups.value === previous
     };
   }, [...saved]);
-  expect(rollback).toEqual({ status: 'error', message: 'Issue 460 rollback probe', samePresentation: true });
+  expect(rollback).toEqual({ status: 'error', error: { code: 'UNKNOWN', stage: 'request-validation' }, samePresentation: true });
   expect(await verifyGroups()).toEqual(before);
 });
 
@@ -1166,16 +1169,17 @@ test('compact Editor reconciles availability and restores its tab after failed S
   expect((await loadGallerySession(page, 'majanivirus_orthogroup.gbdraw-session.json.gz')).status).toBe('ok');
   await page.evaluate(() => window.__GBDRAW_APP__.openRightDrawerTab('orthogroups'));
   const before = await snapshot(page);
-  const failure = await page.evaluate(async () => {
+  const failure = await evaluateWithRetainedPromise(page, async () => {
     const name = 'HmmtDNA_basic_circular.gbdraw-session.json';
     const file = new File([await (await fetch(`/gbdraw/web/gallery/sessions/${name}`)).arrayBuffer()], name);
     const { importSession } = await import('./js/services/config.js');
     const result = await importSession({ target: { files: [file], value: 'selected' } }, {
       beforePreviewMount: () => { throw new Error('S05 Session rollback probe'); }
     });
-    return { status: result.status, message: result.error?.message };
+    return { status: result.status, error: result.error };
   });
-  expect(failure).toEqual({ status: 'error', message: 'S05 Session rollback probe' });
+  expect(failure).toMatchObject({ status: 'error', error: { code: 'UNKNOWN', operation: 'unknown', stage: 'request-validation' } });
+  expect(JSON.stringify(failure)).not.toContain('S05 Session rollback probe');
   expect(await page.evaluate(() => ({
     open: window.__GBDRAW_APP__.showRightDrawer, tab: window.__GBDRAW_APP__.rightDrawerTab
   }))).toEqual({ open: true, tab: 'orthogroups' });
@@ -1225,8 +1229,5 @@ test('compact Editor reconciles availability and restores its tab after failed S
   await page.locator('.drawer-toggle').click();
   await centerPreview(page);
   assertMobileGeometry(await readOverlayGeometry(page), true);
-  expect(page.overlayDiagnostics).toEqual({
-    pageErrors: [], externalRequests: [],
-    consoleErrors: [expect.stringMatching(/^Error: S05 Session rollback probe\n/)]
-  });
+  assertNoOverlayErrors(page);
 });

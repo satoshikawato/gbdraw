@@ -294,11 +294,41 @@ const assertSessionLoadLeftWorkerIdle = (page) => assertDiagramWorkerIdle(
   'Loading a saved preview must not initialize the diagram Worker'
 );
 
+// A pending protocol evaluation can be collected during asynchronous rollback.
+// Start once, retain its outcome, and read it only after browser-side settlement.
+let retainedEvaluationIndex = 0;
+const evaluateWithRetainedPromise = async (page, callback, argument) => {
+  const key = `__GBDRAW_TEST_EVALUATION_${++retainedEvaluationIndex}`;
+  try {
+    await page.evaluate(`(() => {
+      const entry = window[${JSON.stringify(key)}] = { settled: false };
+      entry.promise = Promise.resolve((${callback.toString()})(${JSON.stringify(argument) ?? 'undefined'}));
+      entry.promise.then(value => {
+        entry.value = value;
+        entry.settled = true;
+      }, error => {
+        entry.error = error;
+        entry.failed = true;
+        entry.settled = true;
+      });
+    })()`);
+    // Like page.evaluate, the owning test deadline bounds this operation.
+    await page.waitForFunction(key => window[key]?.settled, key, { timeout: 0 });
+    return await page.evaluate(key => {
+      const entry = window[key];
+      if (entry.failed) throw entry.error;
+      return entry.value;
+    }, key);
+  } finally {
+    if (!page.isClosed()) await page.evaluate(key => { delete window[key]; }, key);
+  }
+};
+
 const generateAndWaitForResult = async (
   page,
   { expectedStatus = 'ok', requireCommittedResult = expectedStatus === 'ok' } = {}
 ) => {
-  const outcome = await page.evaluate(async () => {
+  const outcome = await evaluateWithRetainedPromise(page, async () => {
     const app = window.__GBDRAW_APP__;
     const result = await app.runAnalysis();
     return {
@@ -364,6 +394,7 @@ module.exports = {
   assertSessionLoadLeftWorkerIdle,
   assertSingleWorkerRun,
   assertWorkerReuseAcrossHelperAndRender,
+  evaluateWithRetainedPromise,
   generateAndWaitForResult,
   getDiagramWorkerActivity,
   openApp,

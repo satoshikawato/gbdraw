@@ -1,3 +1,4 @@
+import { normalizeUserFacingError } from './error-normalization.js';
 import { state, normalizeLinearSeqList, collapseEmptyLinearSeqList } from '../state.js';
 import { resolveColorToHex } from '../app/color-utils.js';
 import {
@@ -4006,7 +4007,7 @@ const recoverSessionFeatureMetadataIfNeeded = async ({ generationId = 'session-f
       featureVisibilityTsv
     });
   } catch (error) {
-    console.warn('Session feature metadata recovery failed.', error);
+    console.warn('Session feature metadata recovery failed.', normalizeUserFacingError(error));
     plan = {
       status: 'failed',
       reason: 'recovery-plan-failed',
@@ -4055,7 +4056,7 @@ export const exportSession = async (
         { adopt: adoptedCatalog, mode: state.mode.value }
       );
     } catch (error) {
-      console.warn('Session feature catalog validation failed.', error);
+      console.warn('Session feature catalog validation failed.', normalizeUserFacingError(error));
       throw new Error(SESSION_FEATURE_CATALOG_SAVE_ERROR);
     }
   } else {
@@ -4101,7 +4102,7 @@ export const exportSession = async (
         storedConfig
       });
     } catch (error) {
-      console.warn('Session active configuration validation failed.', error);
+      console.warn('Session active configuration validation failed.', normalizeUserFacingError(error));
       throw new Error(SESSION_ACTIVE_CONFIG_SAVE_ERROR);
     }
   }
@@ -4242,7 +4243,7 @@ export const exportSession = async (
   try {
     validateSessionAuthorityInventory(sessionData, SESSION_VERSION);
   } catch (error) {
-    console.error('Session writer validation failed.', error);
+    console.error('Session writer validation failed.', normalizeUserFacingError(error));
     throw new Error('Save Session could not validate the session data.');
   }
 
@@ -4279,13 +4280,23 @@ export const importSession = async (e, options = {}) => {
   let rollbackSnapshot = null;
   let rollbackExtensionSnapshot;
   let commitStarted = false;
+  const previousAlert = state.errorLog.value;
 
   try {
     recordSessionLifecycleEvent('gzip-to-text-start');
     const text = await readSessionText(file);
     recordSessionLifecycleEvent('gzip-to-text-end', { characters: text.length });
     recordSessionLifecycleEvent('json-parse-start');
-    let data = JSON.parse(text);
+    let data;
+    try {
+      data = JSON.parse(text);
+    } catch (error) {
+      if (error instanceof SyntaxError) Object.assign(error, {
+        code: 'INPUT_INVALID', stage: 'request-validation',
+        context: { field: 'schema', reason: 'JSON_FORMAT' }
+      });
+      throw error;
+    }
     recordSessionLifecycleEvent('json-parse-end');
     assertSafeObjectKeys(data, 'Session');
     if (isLegacyConfigPayload(data)) {
@@ -4543,7 +4554,7 @@ export const importSession = async (e, options = {}) => {
           circularConservation: state.circularConservation
         });
       } catch (sequenceError) {
-        console.warn('Session loaded, but match sequence recovery failed.', sequenceError);
+        console.warn('Session loaded, but match sequence recovery failed.', normalizeUserFacingError(sequenceError));
       }
     }
     state.matchSequenceRegistry?.reset?.([
@@ -4687,7 +4698,7 @@ export const importSession = async (e, options = {}) => {
         ]);
       } catch (sequenceError) {
         currentRecoveryError = sequenceError;
-        console.warn('Session preview loaded, but match sequence recovery failed.', sequenceError);
+        console.warn('Session preview loaded, but match sequence recovery failed.', normalizeUserFacingError(sequenceError));
       }
     }
 
@@ -4713,7 +4724,7 @@ export const importSession = async (e, options = {}) => {
       try {
         await recoverSessionFeatureMetadataIfNeeded({ generationId: 'session-load' });
       } catch (recoveryError) {
-        console.warn('Session loaded, but feature metadata recovery failed.', recoveryError);
+        console.warn('Session loaded, but feature metadata recovery failed.', normalizeUserFacingError(recoveryError));
       }
     }
 
@@ -4739,7 +4750,9 @@ export const importSession = async (e, options = {}) => {
       comparisonDisposition: state.importedComparisonIntent.disposition
     };
   } catch (err) {
-    console.error(err);
+    const error = normalizeUserFacingError(err, { stage: 'request-validation' });
+    const currentAlert = state.errorLog.value;
+    const canNotify = currentAlert === previousAlert || currentAlert === null;
     if (commitStarted && rollbackSnapshot) {
       try {
         await restoreSessionImportSnapshot(rollbackSnapshot);
@@ -4747,16 +4760,22 @@ export const importSession = async (e, options = {}) => {
           await rollbackStateExtension.restore(rollbackExtensionSnapshot);
         }
       } catch (rollbackError) {
-        console.error('Failed to roll back the interrupted session import.', rollbackError);
+        state.generationFailureRecovery.value = 'restore-failed';
       }
     }
-    const message = err?.message || 'Invalid JSON structure.';
+    const restoredPreviousAlert = JSON.stringify(normalizeUserFacingError(state.errorLog.value))
+      === JSON.stringify(normalizeUserFacingError(previousAlert));
+    if (!canNotify) {
+      if (restoredPreviousAlert) state.errorLog.value = currentAlert;
+      return { status: 'stale' };
+    }
+    if (state.errorLog.value !== previousAlert && state.errorLog.value !== null && !restoredPreviousAlert) return { status: 'stale' };
+    state.errorLog.value = error;
     recordSessionLifecycleEvent('interactiveReady', {
       status: 'error',
-      error: message
+      error: error.code
     });
-    alert(`Failed to load session: ${message}`);
-    return { status: 'error', error: err };
+    return { status: 'error', error };
   } finally {
     state.sessionResourceDiscoveryDeferred.value = false;
     state.semanticFileWatchersSuppressed.value =

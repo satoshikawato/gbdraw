@@ -2304,7 +2304,7 @@ console.log('history tests passed');
       svg = checkpoint.svg;
     }
   });
-  await history.initializeIntentBaseline();
+  await history.initializeIntentBaseline('Rejected artifact baseline');
   await history.runUndoableCheckpoint('Import specific colors', async () => {
     file = 'colors.tsv';
     await history.runUndoableCheckpoint('Commit prepared rules', async () => {
@@ -2342,4 +2342,21 @@ for (const previousSuppressed of [false, true]) {
   await assert.rejects(snapshots.applyArtifactCheckpoint({}), /restore did not settle/);
   assert.equal(state.semanticFileWatchersSuppressed.value, previousSuppressed,
     'checkpoint failure restores the prior semantic file-watcher suppression');
+}
+
+{
+  const before = { identity: { fingerprint: '', compactSignature: 'before' }, retainedBytes: 0, fileIds: [] };
+  const primary = {code:'RESULT_INVALID',stage:'result-admission',message:'PRIVATE_PRIMARY_SENTINEL'};
+  const history = createHistoryManager({buildIntent:async()=>({}),applyIntent:async()=>{},
+    buildCheckpoint:async()=>({}),applyCheckpoint:async()=>{},
+    captureGeneratedArtifactHandle:()=>before,restoreGeneratedArtifactHandle:async()=>{},
+    compareGeneratedArtifactHandles:()=>false});
+  await history.initializeIntentBaseline('Rejected artifact baseline');
+  let rollbackSettled = false;
+  await assert.rejects(history.runUndoableArtifactReplacement('Rejected artifact', async()=>{throw primary;}, {
+    restoreAppliedArtifact:async()=>{await Promise.resolve();rollbackSettled=true;throw new Error('PRIVATE_ROLLBACK_SENTINEL');}
+  }), error=>error===primary && error.artifactRestoreFailed===true);
+  assert.equal(rollbackSettled,true);
+  assert.equal(history.getUndoCount(),0);
+  assert.equal(history.getRedoCount(),0);
 }

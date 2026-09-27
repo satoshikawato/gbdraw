@@ -28,7 +28,7 @@ const setup = () => {
       transactionScopes.push(scope);
     }
   };
-  const actions = createFeatureRuleActions({state, rulePreparation:preparation, history:{
+  const actions = createFeatureRuleActions({ref:value=>({value}),computed:get=>({get value(){return get();}}),state, rulePreparation:preparation, history:{
     runUndoableCheckpoint: transact('checkpoint'),
     runUndoable: transact('intent')
   }, legendActions: {

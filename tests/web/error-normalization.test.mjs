@@ -1,62 +1,250 @@
 import assert from 'node:assert/strict';
-import {
-  normalizeUserFacingError,
-  safeErrorText
-} from '../../gbdraw/web/js/services/error-normalization.js';
-import {
-  deserializeWorkerError
-} from '../../gbdraw/web/js/services/diagram-generation.js';
+import { execFileSync } from 'node:child_process';
+import { normalizeUserFacingError } from '../../gbdraw/web/js/services/error-normalization.js';
+import { deserializeWorkerError, normalizeGenerationResponse } from '../../gbdraw/web/js/services/diagram-generation.js';
+globalThis.self = {};
+const { serializeError, callJsonHelper, resolveGenerationCleanupOutcome } = await import('../../gbdraw/web/js/workers/diagram-generation-worker.js');
 
-const structured = normalizeUserFacingError({
-  type: 'ValidationError',
-  message: { summary: 'Invalid annotation', field: 'set_id' },
-  stderr: 'Traceback (most recent call last):\n  File "request_render.py", line 1\nValueError: bad row',
-  stdout: 'validation stopped',
-  traceback: 'Traceback: private diagnostic',
-  notes: [{ message: 'temporary workspace cleanup failed' }]
+const sentinel = 'PRIVATE_SENTINEL_'.repeat(5000);
+const roundtrip = (source) => normalizeUserFacingError(deserializeWorkerError(structuredClone(serializeError(source))));
+const source = { code: 'REGEX_SYNTAX', operation: 'evaluateRules', stage: 'rule-validation',
+  context: { position: 1, positionUnit: 'python-character', reason: 'UNTERMINATED_SET',
+    row: 2, field: 'pattern', pattern: sentinel, sequence: sentinel, path: sentinel },
+  cause: new Error(sentinel), message: sentinel, name: sentinel, stdout: sentinel, stderr: sentinel,
+  traceback: sentinel, stack: sentinel, notes: [sentinel],
+  details: [{ label: sentinel, text: sentinel }],
+  secondary: [{ code: 'CLEANUP_FAILED', stage: 'cleanup', message: sentinel }] };
+const normalized = normalizeUserFacingError(source);
+assert.deepEqual(roundtrip(source), normalized);
+assert.deepEqual(normalizeUserFacingError(normalized), normalized);
+assert.match(normalized.summary, /Python character position 1/);
+assert.equal(normalized.context.row, 2);
+assert.deepEqual(normalized.actions, ['edit-pattern', 'retry']);
+assert.doesNotMatch(JSON.stringify(normalized), /PRIVATE_SENTINEL/);
+assert.doesNotMatch(JSON.stringify(serializeError(source)), /PRIVATE_SENTINEL/);
+assert.doesNotMatch(JSON.stringify(deserializeWorkerError(source)), /PRIVATE_SENTINEL/);
+assert(normalized.summary.length <= 1000);
+assert(normalized.details.length <= 8);
+assert(normalized.details.every(({ text }) => text.length <= 4000));
+for (const value of [sentinel, new Error(sentinel), { name: 'PythonError', message: `Traceback\nValueError: ${sentinel}` },
+  { ...source, code: sentinel, context: { field: sentinel, row: -1, position: 1.5, reason: sentinel } }]) {
+  const result = roundtrip(value);
+  assert.equal(result.code, 'UNKNOWN');
+  assert.doesNotMatch(JSON.stringify(result), /PRIVATE_SENTINEL|Traceback|ValueError/);
+}
+const unknown = normalizeUserFacingError({ code: 'UNKNOWN' });
+assert.equal(unknown.stage, 'unknown');
+assert.equal(unknown.context.position, undefined);
+assert.equal(normalizeUserFacingError({ code: 'REGEX_SYNTAX', context: { position: 2 } }).context.position, undefined);
+assert.deepEqual(normalizeUserFacingError({ ...source, context: { field: 'pattern', row: '2', position: Infinity,
+  positionUnit: 'utf16', reason: 'bogus' } }).context, { field: 'pattern' });
+assert(normalizeUserFacingError(source, { summaryLimit: 8 }).summary.length <= 8);
+assert(normalizeUserFacingError(source, { detailLimit: 8 }).details[0].text.length <= 8);
+assert(normalizeUserFacingError(source, { summaryLimit: 5000, detailLimit: 9000 }).summary.length <= 1000);
+
+// Diagnostic numeric boundaries must survive transport exactly, while larger,
+// fractional, nonfinite and nonnumeric values are omitted rather than clamped.
+for (const key of ['position', 'row', 'inputOrdinal', 'recordIndex', 'seriesIndex', 'slotIndex', 'recordCount', 'columnCount', 'codepoint']) {
+  const maximum = key === 'codepoint' ? 0x10ffff : 10000000;
+  const bounded = value => roundtrip({ ...source, context: { [key]: value, positionUnit: 'python-character' } });
+  for (const value of [0, maximum]) assert.equal(bounded(value).context[key], value, key);
+  for (const value of [-1, maximum + 1, 0.5, Infinity, NaN, String(maximum)]) {
+    assert.equal(bounded(value).context[key], undefined, key);
+  }
+}
+const manyCleanup = roundtrip({ ...source, secondary: Array.from({ length: 20 }, () => ({
+  code: 'CLEANUP_FAILED', stage: 'cleanup', message: sentinel
+})) });
+assert.equal(manyCleanup.code, 'REGEX_SYNTAX');
+assert.deepEqual(manyCleanup.secondary, Array.from({ length: 2 }, () => ({ code: 'CLEANUP_FAILED', stage: 'cleanup' })));
+assert.doesNotMatch(JSON.stringify(manyCleanup), /PRIVATE_SENTINEL/);
+
+// Real Python producers and exact embedded adapters, through Worker serializer/client.
+const invoke = (payload) => JSON.parse(execFileSync(process.env.PYTHON || 'python',
+  ['tests/web/helpers/structured-error-oracle.py'], { input: JSON.stringify(payload), encoding: 'utf8' }));
+const pattern = '😀[';
+const renderError = invoke({ render: true, pattern }).error;
+assert.equal(renderError.code, 'REGEX_SYNTAX');
+assert.equal(renderError.context.position, 1);
+assert.equal(renderError.operation, 'generate');
+assert.deepEqual(roundtrip(renderError).context, renderError.context);
+assert.deepEqual(normalizeGenerationResponse({ error: roundtrip(renderError) }).results.error.context, renderError.context);
+for (const kind of ['color', 'label']) {
+  for (const features of [[], [{ type: 'CDS', qualifiers: { product: ['unrelated'] }, selector: {}, record: 'private' }]]) {
+    const rule = kind === 'color' ? { feat: 'CDS', qual: 'product', val: pattern }
+      : { recordId: '*', featureType: 'CDS', qualifier: 'product', valueRegex: pattern };
+    const args = [JSON.stringify(features), JSON.stringify([rule]), kind];
+    let destroys = 0;
+    const proxy = (_helperName, ...arguments_) => JSON.stringify(invoke({ helper: _helperName, args: arguments_ }));
+    proxy.destroy = () => { destroys += 1; throw new Error(sentinel); };
+    assert.throws(() => callJsonHelper({ globals: { get: (name) => {
+      assert.equal(name, 'call_web_json_helper'); return proxy;
+    } } }, 'evaluate_rules_json', args), (error) => {
+      const model = roundtrip(error);
+      assert.equal(model.code, 'REGEX_SYNTAX');
+      assert.equal(model.stage, 'rule-validation');
+      assert.equal(model.operation, 'evaluateRules');
+      assert.equal(model.context.position, 1);
+      if (kind === 'label') assert.equal(model.context.row, 1);
+      assert.deepEqual(model.secondary, [{ code: 'CLEANUP_FAILED', stage: 'cleanup' }]);
+      assert.doesNotMatch(JSON.stringify(model), /PRIVATE_SENTINEL|😀|unrelated/);
+      return true;
+    });
+    assert.equal(destroys, 1);
+  }
+}
+const cleanupOnlyProxy = () => '{}';
+cleanupOnlyProxy.destroy = () => { throw new Error(sentinel); };
+assert.throws(() => callJsonHelper({ globals: { get: () => cleanupOnlyProxy } }, 'measure_legend_text_json', []),
+  (error) => error.code === 'CLEANUP_FAILED' && error.stage === 'cleanup');
+const primary = { ...source, secondary: [] };
+assert.equal(resolveGenerationCleanupOutcome({ result: { error: primary }, destroyError: new Error(sentinel) }).error, primary);
+assert.equal(roundtrip(primary).code, 'REGEX_SYNTAX');
+assert.deepEqual(roundtrip(primary).secondary, [{ code: 'CLEANUP_FAILED', stage: 'cleanup' }]);
+
+// Existing native validators feed finite corrections; changing a validator's
+// failure template must be detected rather than silently becoming UNKNOWN.
+const options = await import('../../gbdraw/web/js/app/current-option-values.js');
+for (const [validator, input, field, reason] of [
+  ['requireCurrentProteinBlastpMaxHits', 0, 'protein_blastp_max_hits', 'POSITIVE_INTEGER'],
+  ['requireCurrentProteinBlastpCandidateLimit', -1, 'protein_blastp_candidate_limit', 'POSITIVE_OR_AUTO'],
+  ['requireCurrentCollinearMinAnchors', 0, 'collinear_min_anchors', 'POSITIVE_INTEGER'],
+  ['requireCurrentCollinearMaxUnitGap', -1, 'collinear_max_unit_gap', 'NONNEGATIVE_INTEGER'],
+  ['requireCurrentCollinearMaxDiagonalDrift', -1, 'collinear_max_diagonal_drift', 'NONNEGATIVE_INTEGER'],
+  ['requireCurrentCollinearMaxConflicts', -1, 'collinear_max_conflicts', 'NONNEGATIVE_INTEGER'],
+  ['requireCurrentCollinearMaxParalogLinks', 0, 'collinear_max_paralog_links_per_orthogroup', 'POSITIVE_INTEGER'],
+  ['requireCurrentCollinearInferOrthogroups', 'PRIVATE_VALUE', 'collinear_infer_orthogroups', 'BOOLEAN'],
+  ['requireCurrentCircularMultiRecordSizeMode', 'PRIVATE_VALUE', 'circular_multi_record_size_mode', 'CIRCULAR_MULTI_RECORD_SIZE_MODE'],
+  ['requireCurrentLinearTrackLayout', 'PRIVATE_VALUE', 'linear_track_layout', 'LINEAR_TRACK_LAYOUT'],
+  ['requireCurrentLinearLabelPlacement', 'PRIVATE_VALUE', 'linear_label_placement', 'LINEAR_LABEL_PLACEMENT'],
+  ['requireCurrentProteinBlastpMode', 'PRIVATE_VALUE', 'protein_blastp_mode', 'PROTEIN_BLASTP_MODE'],
+  ['requireCurrentCollinearSearchScope', 'PRIVATE_VALUE', 'collinear_search_scope', 'COLLINEAR_SEARCH_SCOPE'],
+  ['requireCurrentCollinearUnitMode', 'PRIVATE_VALUE', 'collinear_unit_mode', 'COLLINEAR_UNIT_MODE'],
+  ['requireCurrentCollinearAnchorMode', 'PRIVATE_VALUE', 'collinear_anchor_mode', 'COLLINEAR_ANCHOR_MODE'],
+  ['requireCurrentCollinearMergeOrientation', 'PRIVATE_VALUE', 'collinear_merge_orientation', 'COLLINEAR_MERGE_ORIENTATION'],
+  ['requireCurrentCollinearColorMode', 'PRIVATE_VALUE', 'collinear_color_mode', 'COLLINEAR_COLOR_MODE'],
+  ['requireCurrentOrthogroupMembershipMode', 'PRIVATE_VALUE', 'orthogroup_membership_mode', 'ORTHOGROUP_MEMBERSHIP_MODE']
+]) assert.throws(() => options[validator](input), (error) => {
+  const model = roundtrip(error);
+  assert.equal(model.code, 'INPUT_INVALID', validator);
+  assert.deepEqual(model.context, { field, reason }, validator);
+  assert.equal(model.stage, 'request-validation');
+  assert.doesNotMatch(JSON.stringify(model), /PRIVATE_/);
+  assert.match(model.summary, /Use|Choose/);
+  return true;
 });
-assert.equal(structured.summary, 'ValidationError: Invalid annotation');
-assert.deepEqual(structured.details, [
-  { label: 'STDOUT', text: 'validation stopped' },
-  { label: 'Cleanup note', text: 'temporary workspace cleanup failed' }
-]);
+const { validateAnnotationRecordTargets } = await import('../../gbdraw/web/js/app/annotations/validation.js');
+const annotationError = validateAnnotationRecordTargets([{ id: 'PRIVATE_SET', annotations: [{ id: 'PRIVATE_ID',
+  target: { kind: 'coordinateSpan', start: 0, end: 1 } }] }], { records: [] });
+const annotationModel = roundtrip(new Error(annotationError));
+assert.equal(annotationModel.code, 'ANNOTATION_TARGET');
+assert.equal(annotationModel.context.reason, 'POSITIVE_INTEGER');
+assert.doesNotMatch(JSON.stringify(annotationModel), /PRIVATE_/);
+const { runDiagramHelperOperation } = await import('../../gbdraw/web/js/services/diagram-generation.js');
+await assert.rejects(runDiagramHelperOperation('PRIVATE_OPERATION'), error =>
+  error.code === 'HELPER_PROTOCOL' && error.stage === 'request-validation' && !JSON.stringify(error).includes('PRIVATE_'));
+await assert.rejects(runDiagramHelperOperation('evaluateRules', []), error =>
+  error.code === 'HELPER_PROTOCOL' && error.operation === 'evaluateRules');
 
-const arbitrary = normalizeUserFacingError({
-  code: 'bad_input',
-  sequence: 'ACGT'.repeat(5000),
-  content: 'private file contents',
-  field: 'track_slots'
+assert.equal(serializeError(null, { operation: 'generate', stage: 'render' }).code, 'UNKNOWN');
+// Keep independent Python and JS finite domains aligned without importing the
+// privileged Worker protocol into the public wording owner.
+const pythonContract = JSON.parse(execFileSync(process.env.PYTHON || 'python', ['-c',
+  'import json; from gbdraw.web_support.error_adapter import OPERATIONS, STAGES, FIELDS; print(json.dumps(dict(operations=sorted(OPERATIONS), stages=sorted(STAGES), fields=sorted(FIELDS))))'], { encoding: 'utf8' }));
+const { DIAGRAM_HELPER_OPERATION_NAMES } = await import('../../gbdraw/web/js/services/diagram-worker-protocol.js');
+assert.deepEqual(pythonContract.operations, ['unknown', 'generate', 'align', 'feature-extraction', 'export-svg', 'export-png', 'export-pdf', ...DIAGRAM_HELPER_OPERATION_NAMES].sort());
+for (const operation of pythonContract.operations) assert.equal(roundtrip({ code: 'UNKNOWN', operation }).operation, operation);
+for (const stage of pythonContract.stages) assert.equal(roundtrip({ code: 'UNKNOWN', stage }).stage, stage);
+for (const field of pythonContract.fields) assert.equal(roundtrip({ code: 'INPUT_INVALID', context: { field } }).context.field, field);
+
+const { validateCustomTrackPlan, assertValidCustomTrackPlan, CustomTrackPlanValidationError } =
+  await import('../../gbdraw/web/js/app/track-slot-validation.js');
+const trackPlan = validateCustomTrackPlan({ mode: 'linear', axisIndex: 0, annotationSetIds: [], slots: [
+  { id: 'PRIVATE_FEATURES', renderer: 'features', enabled: true, side: 'overlay', params: {} },
+  { id: 'PRIVATE_ANNOTATION', renderer: 'annotations', enabled: true, side: 'overlay',
+    params: { set_id: 'PRIVATE_SET', anchor_slot: 'PRIVATE_FEATURES', layer: 'foreground' } }
+] });
+assert.throws(() => assertValidCustomTrackPlan(trackPlan), error => {
+  const model = roundtrip(error);
+  assert.equal(model.code, 'TRACK_INVALID');
+  assert.deepEqual(model.context, { reason: 'ANNOTATION_SET', field: 'set_id', slotIndex: 1 });
+  assert.match(model.summary, /Select an existing annotation set/);
+  assert.doesNotMatch(JSON.stringify(model), /PRIVATE_/);
+  return true;
 });
-assert.equal(arbitrary.summary, 'code: bad_input\nfield: track_slots');
-assert.doesNotMatch(JSON.stringify(arbitrary), /ACGT|private file contents|\[object Object\]|Traceback/);
+assert.equal(roundtrip(new CustomTrackPlanValidationError([{ code: 'new-unmapped-issue', message: 'PRIVATE_MSG' }])).code, 'VALIDATION_UNCLASSIFIED');
 
-const workerError = deserializeWorkerError({
-  name: 'ValidationError',
-  message: 'Annotation target is missing.',
-  details: [{ label: 'Annotation row', text: 'Row 2 references an unknown set.' }]
+const glyphModel = roundtrip(new Error('PDF fonts do not contain U+4E00. Use SVG to retain this text.'));
+assert.equal(glyphModel.code, 'PDF_GLYPH');
+assert.equal(glyphModel.stage, 'font-validation');
+assert.deepEqual(glyphModel.context, { codepoint: 0x4e00 });
+assert.match(glyphModel.summary, /Use SVG to retain this text/);
+assert.deepEqual(glyphModel.actions, ['use-svg']);
+assert.equal(roundtrip(new Error('The selected PNG DPI is invalid.')).code, 'PNG_DPI');
+
+const alignCause=normalizeUserFacingError(source,{operation:'align',stage:'render'});
+assert.equal(alignCause.code,'REGEX_SYNTAX');
+assert.equal(alignCause.stage,'rule-validation');
+assert.equal(alignCause.operation,'align');
+assert.deepEqual(alignCause.context,normalized.context);
+assert.deepEqual(alignCause.secondary,normalized.secondary);
+assert.deepEqual(normalizeUserFacingError(alignCause),alignCause);
+assert.equal((alignCause.summary.match(/Python regular expression is invalid/g)||[]).length,1);
+
+// Native boundary diagnostics retain corrections while discarding private IDs.
+for (const [message, code, context] of [
+  ['Circular region End (60000) exceeds the selected record length (50466).', 'REGION_INVALID', { field: 'region', reason: 'RECORD_BOUNDS' }],
+  ['Circular region requires both Start and End coordinates.', 'REGION_INVALID', { field: 'region', reason: 'BOTH_ENDPOINTS' }],
+  ['Circular region Start and End must be positive integers.', 'REGION_INVALID', { field: 'region', reason: 'POSITIVE_INTEGER' }],
+  ['Circular region Start must not exceed End. Use Reverse complement to change display orientation.', 'REGION_INVALID', { field: 'region', reason: 'ORDER' }],
+  ['The preserved comparison is missing a required resource.', 'COMPARISON_INPUT', { field: 'comparison', reason: 'REQUIRED' }],
+  ['Canonical renderRequest records are required.', 'INPUT_INVALID', { field: 'schema', reason: 'RECORDS_REQUIRED' }],
+  ['Session resource PRIVATE_RESOURCE has an invalid declared byte size.', 'INPUT_INVALID', { field: 'schema', reason: 'RESOURCE_SIZE' }],
+  ['Custom Track Slots use an obsolete schema. Recreate the slots with schema version 2.', 'INPUT_INVALID', { field: 'schema', reason: 'TRACK_SCHEMA' }],
+  ['Session contains unclassified top-level field(s): PRIVATE_FIELD', 'INPUT_INVALID', { field: 'schema', reason: 'SESSION_FIELDS' }]
+]) {
+  const model = roundtrip(new Error(message));
+  assert.equal(model.code, code);
+  assert.deepEqual(model.context, context);
+  assert.equal(model.stage, 'request-validation');
+  assert.doesNotMatch(JSON.stringify(model), /PRIVATE_/);
+}
+assert.equal(roundtrip(new Error('Circular region End (PRIVATE_VALUE) exceeds the selected record length (50466).')).code, 'UNKNOWN');
+
+// Use actual track validators so producer wording and the public projection
+// cannot drift; every physical field keeps its own bound and unit guidance.
+for (const [mode, field, reason] of [
+  ['linear', 'height', 'PIXEL_POSITIVE'], ['linear', 'spacing', 'PIXEL_NONNEGATIVE'],
+  ['circular', 'inner_gap_px', 'PIXEL_NONNEGATIVE'], ['circular', 'outer_gap_px', 'PIXEL_NONNEGATIVE'],
+  ['circular', 'radius', 'POSITIVE_SCALAR'], ['circular', 'width', 'POSITIVE_SCALAR']
+]) {
+  const plan = validateCustomTrackPlan({ mode, axisIndex: 0, annotationSetIds: [], slots: [{
+    id: 'PRIVATE_SLOT', renderer: 'features', enabled: true, side: 'overlay', params: {}, [field]: '-1px'
+  }] });
+  assert.throws(() => assertValidCustomTrackPlan(plan), error => {
+    const model = roundtrip(error);
+    assert.equal(model.code, 'TRACK_INVALID');
+    assert.deepEqual(model.context, { field, reason, slotIndex: 0 });
+    assert.doesNotMatch(JSON.stringify(model), /PRIVATE_/);
+    assert.match(model.summary, /px/);
+    return true;
+  });
+}
+
+const arrows = await import('../../gbdraw/web/js/utils/feature-rendering.js');
+for (const [validator, field, reason] of [
+  ['normalizeArrowHeadLengthRatio', 'arrow_head_length_ratio', 'POSITIVE_OR_AUTO'],
+  ['normalizeArrowShaftWidthRatio', 'arrow_shaft_width_ratio', 'POSITIVE_UNIT_INTERVAL']
+]) assert.throws(() => arrows[validator](0), error => {
+  const model = roundtrip(error);
+  assert.equal(model.code, 'INPUT_INVALID');
+  assert.deepEqual(model.context, { field, reason });
+  assert.match(model.summary, /Arrow/);
+  return true;
 });
-assert.deepEqual(workerError.details, [
-  { label: 'Annotation row', text: 'Row 2 references an unknown set.' }
-]);
-assert.doesNotMatch(JSON.stringify(normalizeUserFacingError(workerError)), /\[object Object\]/);
 
-const nestedJson = normalizeUserFacingError(JSON.stringify({
-  summary: 'Could not render diagram',
-  details: [
-    { label: 'Details', text: 'Annotation set "missing" does not exist.' },
-    { label: 'Traceback', text: 'Traceback: hidden' }
-  ]
-}));
-assert.deepEqual(nestedJson, {
-  summary: 'Could not render diagram',
-  details: [{ label: 'Details', text: 'Annotation set "missing" does not exist.' }]
-});
-
-const bounded = safeErrorText('x'.repeat(5000), { limit: 80 });
-assert.ok(bounded.length <= 80);
-assert.match(bounded, /details truncated/);
-
-const pythonOnly = normalizeUserFacingError({name: 'PythonError', message:
-  'Traceback (most recent call last):\n  File "private.py", line 7\n    fail()\nValueError: Invalid source binding.\n'});
-assert.equal(pythonOnly.summary, 'PythonError: ValueError: Invalid source binding.');
-assert.doesNotMatch(JSON.stringify(pythonOnly), /Traceback|private\.py|fail\(\)/);
+const busy = roundtrip(new Error('A diagram generation request is already running.'));
+assert.equal(busy.code, 'GENERATION_BUSY');
+assert.equal(busy.stage, 'render');
+assert.match(busy.summary, /Wait for it to finish/);
+assert.deepEqual(busy.actions, ['retry', 'save-session']);

@@ -16,10 +16,12 @@ export const createFeatureEditor = ({
   svgActions,
   featureSelection = null,
   previewRuntime = null,
+  isPatternEditAvailable = () => true,
   previewTransformInteraction = null
 }) => {
-  const ruleActions = createFeatureRuleActions({ state, nextTick, legendActions, rulePreparation, history, svgActions });
-  const labelActions = createFeatureLabelActions({ state, previewRuntime, rulePreparation });
+  const { ref, computed } = window.Vue;
+  const ruleActions = createFeatureRuleActions({ state, nextTick, legendActions, rulePreparation, history, svgActions, ref, computed, isPatternEditAvailable });
+  const labelActions = createFeatureLabelActions({ state, previewRuntime, rulePreparation, ref, computed });
   const featureSvgActions = createFeatureSvgActions({
     state,
     getFeatureColor: ruleActions.getFeatureColor,
@@ -50,7 +52,21 @@ export const createFeatureEditor = ({
   };
 
   return {
+    specificRulePattern: ruleActions.specificRulePattern,
+    specificRulePatternDraft: ruleActions.specificRulePatternDraft,
+    specificRulePatternFieldId: ruleActions.specificRulePatternFieldId,
+    editSpecificRulePattern: ruleActions.editSpecificRulePattern,
+    retrySpecificRulePattern: ruleActions.retrySpecificRulePattern,
+    revertSpecificRulePattern: ruleActions.revertSpecificRulePattern,
+    suspendSpecificRulePatternDrafts: ruleActions.suspendSpecificRulePatternDrafts,
+    clearSpecificRulePatternDrafts: ruleActions.clearSpecificRulePatternDrafts,
+    captureSpecificRulePatternDrafts: ruleActions.captureSpecificRulePatternDrafts,
+    restoreSpecificRulePatternDrafts: ruleActions.restoreSpecificRulePatternDrafts,
     placementActions: createFeaturePlacementActions({ state, history, getCommittedRequest, isCurrentFeature }),
+    canRetrySpecificRuleFailure: ruleActions.canRetrySpecificRuleFailure,
+    canEditSpecificRuleFailure: ruleActions.canEditSpecificRuleFailure,
+    retrySpecificRuleFailure: ruleActions.retrySpecificRuleFailure,
+    editSpecificRuleFailure: ruleActions.editSpecificRuleFailure,
     addCustomColor: ruleActions.addCustomColor,
     addPriorityRule: ruleActions.addPriorityRule,
     addFeature: ruleActions.addFeature,
@@ -117,6 +133,9 @@ export const createFeatureEditor = ({
     syncLabelEditor: labelActions.syncLabelEditor,
     downloadLabelOverrideTable: labelActions.downloadLabelOverrideTable,
     loadLabelOverrideTable: labelActions.loadLabelOverrideTable,
+    canRetryLabelImportFailure: labelActions.canRetryLabelImportFailure,
+    retryLabelImportFailure: labelActions.retryLabelImportFailure,
+    editLabelImportFailure: labelActions.editLabelImportFailure,
     updateClickedFeatureLabelText: labelActions.updateClickedFeatureLabelText,
     handleLabelTextScopeChoice: labelActions.handleLabelTextScopeChoice,
     handleGlobalLabelModeChoice: labelActions.handleGlobalLabelModeChoice,

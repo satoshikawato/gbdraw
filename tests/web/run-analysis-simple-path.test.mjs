@@ -774,12 +774,16 @@ test('audit-5 owner: direct simple createRunAnalysis path is worker-only and cat
   const targetHistoryCount = generationHistory.getUndoCount();
   const targetStateBeforeFailure = committedFeatureState();
   workerResponses.push(response(result('target-rejected.svg', 'rejected'), undefined));
-  assert.deepEqual(await runner.runCommittedCanonicalCandidate({
+  const rejectedTarget = await runner.runCommittedCanonicalCandidate({
     canonical: targetCandidate,
     captureIntentCheckpoint: () => structuredClone(targetIntent),
     restoreIntentCheckpoint: (checkpoint) => { targetIntent = structuredClone(checkpoint); },
     commitIntent: () => { throw new Error('must not commit rejected target intent'); }
-  }), { status: 'error' });
+  });
+  assert.equal(rejectedTarget.status, 'error');
+  assert.equal(rejectedTarget.error.code, 'FEATURE_METADATA');
+  assert.equal(rejectedTarget.error.stage, 'result-admission');
+  assert.equal(rejectedTarget.recovery, 'preserved');
   assert.deepEqual(committedFeatureState(), targetStateBeforeFailure);
   assert.equal(targetIntent.startCoordinate, 3);
   assert.equal(generationHistory.getUndoCount(), targetHistoryCount);
@@ -838,10 +842,8 @@ test('audit-5 owner: direct simple createRunAnalysis path is worker-only and cat
   ));
   assert.equal((await runner.runAnalysis()).status, 'error');
   failCandidateAdmission = false;
-  assert.match(
-    state.errorLog.value?.summary || '',
-    /forced current Result admission failure/
-  );
+  assert.equal(state.errorLog.value?.code, 'UNKNOWN');
+  assert.doesNotMatch(JSON.stringify(state.errorLog.value), /forced current Result admission failure/);
   assert.deepEqual(committedFeatureState(), admissionFailureState);
   for (const metric of [
     'generatedArtifactCandidateBuildCount',
@@ -880,12 +882,12 @@ test('audit-5 owner: direct simple createRunAnalysis path is worker-only and cat
     lateFailureResult,
     validCatalog(lateFailureResult.name)
   ));
-  assert.equal((await runner.runAnalysis()).status, 'error');
+  const rolledBack = await runner.runAnalysis();
+  assert.equal(rolledBack.status, 'error');
+  assert.equal(rolledBack.recovery, 'restored');
   failArtifactAdoption = false;
-  assert.match(
-    state.errorLog.value?.summary || '',
-    /forced late canonical artifact adoption failure/
-  );
+  assert.equal(state.errorLog.value?.code, 'UNKNOWN');
+  assert.doesNotMatch(JSON.stringify(state.errorLog.value), /forced late canonical artifact adoption failure/);
   assert.deepEqual(committedFeatureState(), lateFailureState);
   assert.equal(state.extractedFeatures.value, committedExtractedFeatureIdentity);
   assert.equal(state.biologicalFeatures.value, committedBiologicalFeatureIdentity);
@@ -911,6 +913,24 @@ test('audit-5 owner: direct simple createRunAnalysis path is worker-only and cat
       < lateFailureEvents.indexOf('test.preview-restore-ready')
   );
   assert.equal(lateFailureEvents.includes('artifact.finalization-completed'), false);
+
+  // A failed readiness restoration must retain the initiating cause, and must
+  // never advertise completed rollback merely because the old Results exist.
+  const originalRestore = readinessRuntime.restorePreviousSelectedResult;
+  const checkpointBeforeRestoreFailure = await artifactSnapshots.captureGeneratedArtifactHandle();
+  readinessRuntime.restorePreviousSelectedResult = async () => { throw new Error('PRIVATE_ROLLBACK_SENTINEL'); };
+  failArtifactAdoption = true;
+  const restoreFailureResult = result('restore-failure.svg', 'restore-failure');
+  workerResponses.push(response(restoreFailureResult, validCatalog(restoreFailureResult.name)));
+  const failedRestore = await runner.runAnalysis();
+  assert.equal(failedRestore.status, 'error');
+  assert.equal(failedRestore.recovery, 'restore-failed');
+  assert.equal(failedRestore.error.code, 'UNKNOWN');
+  assert.equal(state.failedGeneratePreservedResult.value, false);
+  assert.doesNotMatch(JSON.stringify(failedRestore.error), /PRIVATE_ROLLBACK_SENTINEL/);
+  readinessRuntime.restorePreviousSelectedResult = originalRestore;
+  failArtifactAdoption = false;
+  await artifactSnapshots.restoreGeneratedArtifactHandle(checkpointBeforeRestoreFailure);
 
   const canceledState = committedFeatureState();
   const canceledResultIdentity = state.results.value;
@@ -944,7 +964,7 @@ test('audit-5 owner: direct simple createRunAnalysis path is worker-only and cat
   assert.equal(activePrimaryReads, 2);
   assert.equal(inactiveFileReads, 0);
   assert.equal(adoptedArtifacts, 2);
-  assert.equal(workerMessages.filter(({ type }) => type === 'run').length, 9);
+  assert.equal(workerMessages.filter(({ type }) => type === 'run').length, 10); // Includes the explicit failed-restoration attempt.
   assert.equal(workerMessages.filter(({ type }) => type === 'feature-extraction').length, 0);
 
   state.form.multi_record_canvas = true;
@@ -962,6 +982,23 @@ test('audit-5 owner: direct simple createRunAnalysis path is worker-only and cat
   assert.equal(state.failedGeneratePreservedResult.value, false);
   assert.equal(activePrimaryReads, 3);
 
+  // A later operation owns the notification while this Worker response is held.
+  const { normalizeUserFacingError } = await import('../../gbdraw/web/js/services/error-normalization.js');
+  let releaseOlderFailure;
+  workerResponses.push(new Promise(resolve => { releaseOlderFailure = resolve; }));
+  const runsBeforeOlderFailure = workerMessages.filter(message => message.type === 'run').length;
+  const olderFailure = runner.runAnalysis();
+  while (workerMessages.filter(message => message.type === 'run').length === runsBeforeOlderFailure) {
+    await new Promise(resolve => setTimeout(resolve, 0));
+  }
+  const laterAlert = normalizeUserFacingError({ code: 'PDF_GLYPH', operation: 'export-pdf',
+    stage: 'font-validation', context: { codepoint: 945 } });
+  state.errorLog.value = laterAlert;
+  releaseOlderFailure({ error: { code: 'REGEX_SYNTAX', operation: 'generate', stage: 'rule-validation',
+    context: { reason: 'UNTERMINATED_SET' }, message: 'PRIVATE_OLDER_FAILURE' } });
+  assert.deepEqual(await olderFailure, { status: 'stale' });
+  assert.equal(state.errorLog.value, laterAlert);
+
   Object.assign(state.circularRecordDiscovery, {
     status: 'idle',
     error: '',
@@ -978,7 +1015,7 @@ test('audit-5 owner: direct simple createRunAnalysis path is worker-only and cat
     .length;
   workerHelperResponses.push({
     ok: false,
-    error: { name: 'Error', message: 'injected record discovery helper failure' }
+    error: { code: 'INPUT_UNREADABLE', operation: 'listSequenceRecords', stage: 'helper', message: 'PRIVATE_DISCOVERY_SENTINEL' }
   });
   assert.equal((await runner.runAnalysis()).status, 'error');
   assert.equal(
@@ -991,7 +1028,7 @@ test('audit-5 owner: direct simple createRunAnalysis path is worker-only and cat
   );
   assert.match(
     state.errorLog.value?.summary || '',
-    /Could not read records from the circular input file/
+    /input could not be read/i
   );
   assert.doesNotMatch(
     JSON.stringify(state.errorLog.value),
@@ -1388,7 +1425,7 @@ test('neutral conservation replay delegates lazy resources to the shared reader'
     assert.equal((await runner.runAnalysis()).status, 'error');
     assert.match(
       state.errorLog.value?.summary || '',
-      /A File-like object with arrayBuffer\(\) or text\(\) is required/
+      /Input resource preparation failed/
     );
 
     resourceMetrics.splice(0);
@@ -1618,10 +1655,8 @@ test('neutral conservation replay delegates lazy resources to the shared reader'
     assert.equal(state.linearSeqs.find(({ uid }) => uid === 'middle').region_reverse, true);
     failLateArtifactAdoption = false;
     state.losat.blastn.task = 'megablast';
-    assert.match(
-      state.errorLog.value?.summary || '',
-      /injected LOSAT late artifact adoption failure/
-    );
+    assert.equal(state.errorLog.value?.code, 'UNKNOWN');
+    assert.doesNotMatch(JSON.stringify(state.errorLog.value), /injected LOSAT late artifact adoption failure/);
     assert.equal(state.losatCache.value, committedLosatCache);
     assert.deepEqual(
       Array.from(state.losatCache.value.entries()),
@@ -1796,14 +1831,12 @@ test('neutral conservation replay delegates lazy resources to the shared reader'
       validCatalog(rejectedAlignedResult.name)
     ));
     assert.deepEqual(
-      await runner.runCommittedCanonicalCandidate({canonical:runner.projectCommittedSimilarityAlignment({committed:committedCanonicalSession,plan:{...alignmentPlan,groupId:'og-rejected-candidate'},translations:alignmentTranslations,orientations:alignmentOrientations})}),
-      { status: 'error' }
+      (await runner.runCommittedCanonicalCandidate({canonical:runner.projectCommittedSimilarityAlignment({committed:committedCanonicalSession,plan:{...alignmentPlan,groupId:'og-rejected-candidate'},translations:alignmentTranslations,orientations:alignmentOrientations})})).status,
+      'error'
     );
     failLateArtifactAdoption = false;
-    assert.match(
-      state.errorLog.value?.summary || '',
-      /injected LOSAT late artifact adoption failure/
-    );
+    assert.equal(state.errorLog.value?.code, 'UNKNOWN');
+    assert.doesNotMatch(JSON.stringify(state.errorLog.value), /injected LOSAT late artifact adoption failure/);
     assert.equal(state.results.value, committedAlignedResult);
     assert.equal(state.similarityAlignmentPlan.value, committedAlignmentPlan);
     assert.equal(losatCalls, 2, 'failed alignment admission must not schedule LOSATP');
@@ -2131,7 +2164,8 @@ test('Linear mode none ignores dormant comparison state while active depth and a
 
   annotationValidationError = 'injected annotation target failure';
   assert.equal((await runner.runAnalysis(comparisonPlanSnapshot)).status, 'error');
-  assert.match(state.errorLog.value?.summary || '', /injected annotation target failure/);
+  assert.equal(state.errorLog.value?.code, 'UNKNOWN');
+  assert.doesNotMatch(JSON.stringify(state.errorLog.value), /injected annotation target failure/);
   assert.equal(serializeCalls, 1, 'invalid annotations must fail before serialization');
   assert.equal(
     workerMessages.filter(({ type }) => type === 'run').length,
@@ -2173,7 +2207,8 @@ test('Linear mode none ignores dormant comparison state while active depth and a
     throw new Error('injected record catalog failure');
   };
   assert.equal((await runner.runAnalysis(comparisonPlanSnapshot)).status, 'error');
-  assert.match(state.errorLog.value?.summary || '', /injected record catalog failure/);
+  assert.equal(state.errorLog.value?.code, 'UNKNOWN');
+  assert.doesNotMatch(JSON.stringify(state.errorLog.value), /injected record catalog failure/);
   assert.equal(state.processing.value, false);
 
   prepareLinearRecordCatalogImpl = async () => ({

@@ -1,3 +1,4 @@
+import { normalizeUserFacingError } from '../services/error-normalization.js';
 import {
   buildCircularTrackSlotSpec,
   parseCircularTrackSlotSpec
@@ -1517,7 +1518,7 @@ export const buildSourceRecipe = async ({
     };
   } catch (error) {
     if (error instanceof SourceRecipeUnavailable) return unavailable(error.message);
-    console.warn('Failed to project the committed render into a source CLI recipe.', error);
+    console.warn('Failed to project the committed render into a source CLI recipe.', normalizeUserFacingError(error));
     return unavailable('Source recipe unavailable: the committed render cannot be represented safely by the current CLI.');
   }
 };

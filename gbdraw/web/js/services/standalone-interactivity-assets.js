@@ -2695,7 +2695,7 @@ export const STANDALONE_INTERACTIVE_SCRIPT = `
           }
         };
       } catch (error) {
-        return { active: true, error: 'Invalid regex', test: function () { return false; } };
+        return { active: true, error: 'Invalid JavaScript regular expression. Turn off Regex to return to word search.', test: function () { return false; } };
       }
     }
     var needle = normalizeSearchText(trimmedQuery);
@@ -3332,13 +3332,13 @@ export const STANDALONE_INTERACTIVE_SCRIPT = `
       'aria-label': 'Qualifier key for qualifier value search',
       'data-search-qualifier': 'true'
     });
-    var regexLabel = createXhtmlNode('label', { className: 'gfs-toggle' });
+    var regexLabel = createXhtmlNode('label', { className: 'gfs-toggle', title: 'JavaScript regular expression, case-insensitive. Turn off Regex to return to word search.' });
     var regexInput = createXhtmlNode('input', {
       type: 'checkbox',
       'data-search-regex': 'true'
     });
     regexLabel.appendChild(regexInput);
-    regexLabel.appendChild(document.createTextNode('Regex'));
+    regexLabel.appendChild(document.createTextNode('Regex (JavaScript, i)'));
     var prevButton = createXhtmlNode('button', {
       type: 'button',
       className: 'gfs-button',

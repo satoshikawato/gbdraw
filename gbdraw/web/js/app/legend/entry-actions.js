@@ -1,3 +1,4 @@
+import { normalizeUserFacingError } from '../../services/error-normalization.js';
 import { resolveColorToHex, toNativeColorInputValue } from '../color-utils.js';
 import {
   getAllFeatureLegendGroups,
@@ -285,7 +286,7 @@ export const createLegendEntryActions = ({
         DIAGRAM_HELPER_OPERATIONS.MEASURE_LEGEND_TEXT,
         { caption, fontFamily, fontSize }
       );
-      if (widthResponse.result?.error) throw new Error(widthResponse.result.error);
+      if (widthResponse.result?.error) throw widthResponse.result.error;
       const measuredWidth = Number(widthResponse.result?.width);
       if (!Number.isFinite(measuredWidth) || measuredWidth < 0) {
         throw new Error('Python returned an invalid legend text width.');
@@ -391,7 +392,7 @@ export const createLegendEntryActions = ({
           }
         );
         const result = entryResponse.result;
-        if (result?.error) throw new Error(result.error);
+        if (result?.error) throw result.error;
 
         const entryGroup = document.createElementNS('http://www.w3.org/2000/svg', 'g');
         entryGroup.setAttribute('data-legend-key', caption);
@@ -435,7 +436,7 @@ export const createLegendEntryActions = ({
 
       return caption;
     } catch (e) {
-      console.error('Failed to add legend entry:', e);
+      console.error('Failed to add legend entry:', normalizeUserFacingError(e));
       if (options.throwOnError) throw e;
       return false;
     }

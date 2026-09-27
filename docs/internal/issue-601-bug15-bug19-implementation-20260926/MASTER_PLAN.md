@@ -9,6 +9,14 @@ Repository: https://github.com/satoshikawato/gbdraw.git
 新規参加者は本計画、Issue、承認記録、リポジトリから作業を開始できる。
 セッション別のINSTRUCTION PROMPTを順番に実行し、結果をコミット・プッシュして引き継ぐ。
 
+## 現在の担当と共有runtime基点
+
+2026-09-27の[owner・runtime引継ぎ結果](./SESSION_01_HANDOFF_RESULT.md)を先に読む。
+BUG-15/19の唯一の実行担当はこのbranchのS02–S05。export側のS03は移管済みで実行しない。
+#602 S07完了SHA `9a14db3af8fafd6f8374cfe2a8197a8927cf43f7`を通常mergeで取り込み、
+同じaccepted runtimeを基点とする。正式authorityはdevのPD-OI-046/047、PR #615。
+S02開始前は最新remote/resultとauthority ancestorを確認する。
+
 ## 問題と完成後の動作
 
 gbdrawはゲノム図を生成・編集するPythonアプリケーションで、Web版はブラウザ内で処理するSPAである。
@@ -160,11 +168,13 @@ OEは余剰semantic owner、PEは余剰production path、CBはpersisted compatib
 実装branchのwriterは常に一セッション。隔離treeでも並行pushは許可しない。
 開始前に先行writerの終了とpush済みresultを確認し、共有tree/index/editable環境を使わない。
 
-既存fix/issue-601-export-output-20260926にもBUG-15/19作業が含まれる。
-そのS03はnormalizer、Python glue、Worker/client、Generate/Align、index/searchを本計画と共有する。
-Issue #598/602のAlign/compositionにも共有fileがある。
-S00は各remote branchとresultを読み、BUG-15/19のowner引継ぎを確認するまで重複runtimeを編集しない。
-PDF側のbranchや計画を本セッションから変更しない。
+BUG-15/19はexport側からこのbranchへ移管済み。
+[移管元の公開記録](https://github.com/satoshikawato/gbdraw/blob/f0c8128ac9d252bbc1b64074cf995f536f789d03/docs/internal/issue-601-export-output-20260926/OWNER_HANDOFF_20260927.md)
+により、export側S03の重複実装と診断公開の第二active authority追加を停止した。
+元承認receiptは不変で、退役・concern key変更はしていない。PDF実装はexport担当に残す。
+#598は正式dev統合済み、#602はS07の公開済み受入SHAをこのbranchへ通常merge済み。
+共有fileは本handoffの順序で引き継ぎ、同一file・同名branchを複数sessionが並行編集しない。
+S02–S05はPDF scopeや別計画を変更せず、必要な共通code/actionを担当間handoffで扱う。
 
 既存別候補にはweb.errors.user-facing-diagnostic-disclosureがある。
 S01はその保存条件と今回のCopy/draft条件を比較し、同じ意味に競合するactive authorityを作らない。

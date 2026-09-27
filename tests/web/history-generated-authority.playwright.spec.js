@@ -4,6 +4,7 @@ const { gunzipSync } = require('node:zlib');
 const { readFileSync } = require('node:fs');
 const { semantics } = require('./helpers/visual-state.cjs');
 const { seeds, load, generate, snapshot, download, popup, closeEditor } = require('./helpers/mode-transition.cjs');
+const { evaluateWithRetainedPromise } = require('./helpers/app-lifecycle.cjs');
 
 const status = async (page, edit = null) => {
   const current = await page.evaluate(async edit => {
@@ -419,7 +420,7 @@ for (const mode of ['linear', 'circular']) {
       expect(roundTrip.status).toBe('pending');
       expect(roundTrip.differences.every(path => path.includes('scale.interval'))).toBe(true);
       expect((await snapshot(fresh)).request).toEqual(before.request);
-      const rollback = await fresh.evaluate(async () => {
+      const rollback = await evaluateWithRetainedPromise(fresh, async () => {
         const config = await import('./js/services/config.js');
         const { state } = await import('./js/state.js');
         const prior = config.canonicalRenderArtifactOwner.capture();
@@ -431,7 +432,7 @@ for (const mode of ['linear', 'circular']) {
         });
         const current = config.canonicalRenderArtifactOwner.capture();
         return {
-          status: result.status, error: result.error?.message,
+          status: result.status, error: { code: result.error?.code, stage: result.error?.stage },
           sameRequest: current.committedCanonicalSession === prior.committedCanonicalSession,
           sameResources: current.activeSessionResourceTable === prior.activeSessionResourceTable,
           sameApplied: current.appliedGenerationIntent === prior.appliedGenerationIntent,
@@ -441,7 +442,7 @@ for (const mode of ['linear', 'circular']) {
           ]), width: state.adv.block_stroke_width
         };
       });
-      expect(rollback).toEqual({ status: 'error', error: 'Status round-trip rollback probe',
+      expect(rollback).toEqual({ status: 'error', error: { code: 'UNKNOWN', stage: 'request-validation' },
         sameRequest: true, sameResources: true, sameApplied: true, sameDraft: true,
         sameHistory: true, width: 2 });
       expect(await status(fresh)).toMatchObject({ status: 'pending', differences: roundTrip.differences,
