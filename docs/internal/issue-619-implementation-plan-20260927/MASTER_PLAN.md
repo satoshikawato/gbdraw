@@ -12,7 +12,11 @@ Issue: [#619](https://github.com/satoshikawato/gbdraw/issues/619)。Circular の
 
 S00 の独立した検証成果は [SESSION_RESULTS/S00.md](SESSION_RESULTS/S00.md) に記録する。
 既存 typed numeric-text draft は rendered Session で受理された。3 Pack の署名と
-対象 authority の `origin/dev` 統合は [PR #621](https://github.com/satoshikawato/gbdraw/pull/621)、merge `252986d096011fcf1a0f5564e940480d3b92844d` で成立。settings-only の実 Save は既存 writer/validator 不整合で失敗したままであり、S01 の開始を許可しない。
+対象 authority の `origin/dev` 統合は [PR #621](https://github.com/satoshikawato/gbdraw/pull/621)、merge `252986d096011fcf1a0f5564e940480d3b92844d` で成立。settings-only の初回 Save 失敗は S00 の過去観測として保持した。
+[前提修復](SESSION_RESULTS/S00_SETTINGS_SAVE_REPAIR.md)で既存 writer の metadata 投影を修復し、
+実 Save/download→fresh Load→native reader の受理を確認した。S01 の開始条件は成立したが、
+この補助 session は S01 に着手していない。inactive 跨mode Load の config 差と
+nonfinite History の既知の限界は同結果へ明記し、全受入の完了とは扱わない。
 
 ## 2. 問題と現行契約
 

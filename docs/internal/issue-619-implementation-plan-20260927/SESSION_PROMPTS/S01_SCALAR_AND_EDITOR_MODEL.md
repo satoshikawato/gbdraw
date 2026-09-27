@@ -16,6 +16,12 @@ Circular measureの解釈を一つにし、保存scalarを数値text＋unitへ�
 
 S00結果の表現positive fixture、署名済み3outcomes、origin/devにあるactive authorityを確認する。署名待ちのAを実装しない。推奨以外が選ばれていればmasterの該当契約を更新してから作業する。
 
+settings-only の前提修復と実受理証拠は
+[補助 session 結果](../SESSION_RESULTS/S00_SETTINGS_SAVE_REPAIR.md)を確認する。
+同結果の inactive 跨mode config 差と nonfinite History の限界も読み、
+settings-only 開始条件の成立を全 runtime 受入の完了と混同しない。
+この補助 session は scalar owner/editor codec を実装していない。
+
 ## 作業
 
 1. validationとcircularScalarPayloadの重複scalar解釈を既存validation ownerへ収束させる。pair/nullを返し、payloadとrow validationが同じownerを呼ぶ。superseded parserを同じ変更で削除する。
