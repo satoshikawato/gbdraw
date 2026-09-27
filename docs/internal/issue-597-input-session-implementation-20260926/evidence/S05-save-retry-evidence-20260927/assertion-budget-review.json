@@ -1,0 +1,23 @@
+{
+  "originalAssertLines": 142,
+  "removedOriginalAssertLines": [],
+  "originalTestTimeouts": [
+    "420_000",
+    "600_000",
+    "600_000",
+    "300_000"
+  ],
+  "candidateTestTimeouts": [
+    "420_000",
+    "600_000",
+    "600_000",
+    "300_000"
+  ],
+  "originalDownloadDeadline": "single 180000 ms event waiter",
+  "candidateDownloadDeadline": "same event waiter, deadline shared by checked busy attempts and settlement; no reset",
+  "budgetsWorkerCriteriaFixturesReferences": "unchanged",
+  "featureFillBody": "unchanged",
+  "originalMappedFileSha256": "4b0f6e83c04ecfd75f245725c99335cd1d5ae587789b1f45b9af5a5de329a7a1",
+  "candidateMappedFileSha256": "732892b8d9c780cc4713fc41f4d28032e171860f5a176cb1b0bc49a1bf5693c7",
+  "snapshotSettlement": "180000 ms poll retains pre-Save evidence only when existing availability is clear and captured SVG still equals current mounted SVG, after asynchronous capture. Strict Load comparison unchanged."
+}

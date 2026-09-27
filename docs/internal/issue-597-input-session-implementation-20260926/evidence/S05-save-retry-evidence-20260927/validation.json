@@ -1,0 +1,56 @@
+{
+  "base": "968d08211ce2315c274be14d879ef9ceb332bb66",
+  "branch": "fix/issue-597-s05-reflow-retry-evidence-20260927",
+  "upstream": null,
+  "delivery": "READY FOR EXTERNAL REVIEW; uncommitted evidence-only candidate",
+  "S05Overall": "INCOMPLETE",
+  "trustedDevCandidateContracts": {
+    "pass": 5,
+    "fail": 0,
+    "exit": 0,
+    "invocation": "dev-settled-final-invocation.json"
+  },
+  "supplementalRealReflowRetryProbe": {
+    "pass": 1,
+    "exit": 0,
+    "qualification": "Same final helper with held real Worker run; explicit checked repeated busy retries. Supplemental timing experiment, not replacement mapped acceptance.",
+    "invocation": "retry-probe-final-invocation.json"
+  },
+  "featureFill": "unchanged body passes latest trusted dev and provisional S05+dev integration; separate FEATURE_FILL_REVIEW.md",
+  "productionChangedPaths": [],
+  "authorityChangedPaths": [],
+  "referenceAmendmentRequired": false,
+  "trustedCandidateCI": "NOT RUN: no commit/push/PR authorization",
+  "humanReview": "NOT RECEIVED",
+  "historicalFails": "retained; no budget, criterion or expected-output waiver",
+  "provisionalS05CandidateContracts": {
+    "pass": 5,
+    "fail": 0,
+    "exit": 0,
+    "invocation": "s05-settled-final-invocation.json"
+  },
+  "provisionalS05ExactDivergentRepeats": {
+    "pass": 2,
+    "fail": 0,
+    "invocations": [
+      "s05-settled-repeat1-invocation.json",
+      "s05-settled-repeat2-invocation.json"
+    ]
+  },
+  "historicalV4": "Five-case batch PASS, two separate divergent strict FAILs; queued update restarted during separate availability/capture calls, before Save. Preserved separately.",
+  "policyLocal": {
+    "gate": "PASS",
+    "review": "CLEAR",
+    "exit": 0,
+    "command": [
+      "node",
+      "/tmp/issue597-S05-resume2-20260927-t65_9osr/dev-view/tools/check-web-change-budget.mjs",
+      "--base",
+      "968d08211ce2315c274be14d879ef9ceb332bb66"
+    ],
+    "cwd": "/tmp/issue597-S05-resume2-20260927-t65_9osr/evidence-view",
+    "logSha256": "9fed67c2c802a9ad71031bde8df846fda8e1d5baa21df5c61d5e4a78888c49ac"
+  },
+  "prLanguage": "PASS",
+  "candidateMappedBodySha256": "732892b8d9c780cc4713fc41f4d28032e171860f5a176cb1b0bc49a1bf5693c7"
+}

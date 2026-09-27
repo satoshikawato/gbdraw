@@ -1,0 +1,30 @@
+{
+  "command": [
+    "npx",
+    "--no-install",
+    "playwright",
+    "test",
+    "--config=/tmp/issue597-S05-resume2-20260927-t65_9osr/owned.functional.config.cjs",
+    "--workers=1",
+    "--retries=0",
+    "--reporter=list,/tmp/issue597-S05-resume2-20260927-t65_9osr/evidence-reporter-v2.cjs",
+    "--output=/tmp/issue597-S05-resume2-20260927-t65_9osr/s05-settled-repeat1/browser",
+    "tests/web/contracts/session-regenerate-intent.playwright.spec.js",
+    "--grep",
+    "divergent draft and direct editor overrides survive repeated Save, Load, and Generate"
+  ],
+  "cwd": "/tmp/issue597-S05-resume2-20260927-t65_9osr/s05-view",
+  "environment": {
+    "GBDRAW_REPO": "/tmp/issue597-S05-resume2-20260927-t65_9osr/s05-view",
+    "GBDRAW_WEB_TEST_PORT": "45763",
+    "S05_EVIDENCE_REPORT": "/tmp/issue597-S05-resume2-20260927-t65_9osr/s05-settled-repeat1/attachments"
+  },
+  "startedUtc": "2026-09-27T10:05:53Z",
+  "sourceHead": "ee6b6207845cc861ae428b4890a091509e1736b6",
+  "mappedBodySha256": "732892b8d9c780cc4713fc41f4d28032e171860f5a176cb1b0bc49a1bf5693c7",
+  "configSha256": "cbddd33bee4edcdc3de70e03e036e06108be47abed53d413ead7c80bc51074f1",
+  "ownership": "Fresh port and reuseExistingServer=false; context belongs to this invocation.",
+  "exit": 0,
+  "finishedUtc": "2026-09-27T10:06:37Z",
+  "logSha256": "f79d705999024843610b1bc7a947a4b3f4d81d99449ff78ed8e1cc9790b0c31d"
+}
