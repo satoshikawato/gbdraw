@@ -207,8 +207,16 @@ for (const message of [
   'Unknown Web binding inventory field.'
 ]) NATIVE_VALIDATIONS.set(message, { code: 'INPUT_INVALID', stage: 'request-validation',
   context: { field: 'schema', reason: 'FIELDS' } });
+for (const message of [
+  'A canonical render request is required for adoptive ownership.',
+  'Settings-only Session cannot contain biological sources.',
+  'Settings-only Session cannot contain committed render artifacts.'
+]) NATIVE_VALIDATIONS.set(message, { code: 'INPUT_INVALID', stage: 'request-validation',
+  context: { field: 'schema', reason: 'FIELDS' } });
 const nativeValidation = (message) => {
   if (typeof message !== 'string') return null;
+  if (/^Session version [0-9]+ is newer than this gbdraw supports \([0-9]+\)\.$/.test(message)) return { code: 'INPUT_INVALID', stage: 'request-validation', context: { field: 'schema', reason: 'FIELDS' } };
+  if (/^Invalid managed flag for (?:circular|linear)\.[a-z_]+\.$/.test(message)) return { code: 'INPUT_INVALID', stage: 'request-validation', context: { field: 'config', reason: 'FIELDS' } };
   if (/^Missing canonical resource:/.test(message) || /^Session resource [\s\S]* has an unsupported encoded payload\.$/.test(message)) return { code: 'INPUT_INVALID', stage: 'request-validation', context: { field: 'schema', reason: 'FIELDS' } };
   if (/^The SVG composition metadata is not valid JSON:/.test(message)) return { code: 'INPUT_INVALID', stage: 'request-validation', context: { field: 'schema', reason: 'JSON_FORMAT' } };
   if (/^Unsupported session version: [0-9]+\.$/.test(message)) return { code: 'INPUT_INVALID', stage: 'request-validation', context: { field: 'schema', reason: 'FIELDS' } };

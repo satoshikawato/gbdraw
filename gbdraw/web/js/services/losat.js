@@ -123,7 +123,7 @@ export const getLosatThreadingSupport = async ({
     })().catch((error) =>
       buildThreadingStatus(
         'unavailable',
-        error?.message ? String(error.message) : String(error || 'Threaded LOSAT is unavailable.')
+        normalizeUserFacingError(error || { code: 'UNKNOWN' }, { operation: 'generate', stage: 'initialization' }).summary
       )
     ));
   }
@@ -632,9 +632,6 @@ const runLosatPairsThreaded = async (
           return;
         }
 
-        if (data.stderr) {
-          console.info(`Threaded LOSAT stderr for ${formatPairErrorPrefix(job)}:\n${data.stderr}`);
-        }
         results[index] = { ...job, text: data.text || '' };
         completed += 1;
         if (typeof onProgress === 'function') {
@@ -738,8 +735,9 @@ export const runLosatPairsParallel = async (jobs, options = {}) => {
       } catch (error) {
         if (isAbortError(error, options.signal)) throw getAbortReason(options.signal);
         if (executionMode === 'threaded') throw error;
-        threadedFallbackReason = error?.message ? String(error.message) : String(error || 'Threaded LOSAT failed.');
-        console.warn('Threaded LOSAT failed; falling back to serial browser execution.', normalizeUserFacingError(error));
+        const diagnostic = normalizeUserFacingError(error || { code: 'UNKNOWN' }, { operation: 'generate', stage: 'helper' });
+        threadedFallbackReason = diagnostic.summary;
+        console.warn('Threaded LOSAT failed; falling back to serial browser execution.', diagnostic);
       }
     } else if (executionMode === 'threaded') {
       throw new Error(support.message || 'Threaded LOSAT is unavailable.');
