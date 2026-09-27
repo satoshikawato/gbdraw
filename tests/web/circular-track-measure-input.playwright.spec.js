@@ -1,7 +1,8 @@
 const { test, expect } = require('@playwright/test');
-const { readFileSync } = require('node:fs');
+const { readFileSync, writeFileSync } = require('node:fs');
 const { resolve } = require('node:path');
 const { gunzipSync } = require('node:zlib');
+const { execFileSync } = require('node:child_process');
 const { openApp, reveal, getDiagramWorkerActivity } = require('./helpers/app-lifecycle.cjs');
 
 const fixture = resolve('gbdraw/web/gallery/sessions/tobacco-chloroplast.gbdraw-session.json');
@@ -88,6 +89,53 @@ const selectUnit = async (page, unit, slot = 'gc_content', field = 'Width') => {
 };
 const undo = async page => page.getByRole('button', { name: 'Undo', exact: true }).click();
 const redo = async page => page.getByRole('button', { name: 'Redo', exact: true }).click();
+
+const canonicalSlots = request => request.diagramOptions.tracks.circularTrackSlots;
+const geometry = page => page.evaluate(async () => (await import('./js/state.js')).state.trackSlotResolvedGeometry.value);
+const generate = async (page, valid = true) => {
+  const before = await getDiagramWorkerActivity(page);
+  await page.getByRole('button', { name: 'Generate Diagram', exact: true }).click();
+  if (valid) {
+    await expect.poll(async () => (await getDiagramWorkerActivity(page)).settledRuns,
+      { timeout: 180_000 }).toBe(before.settledRuns + 1);
+  }
+  await page.waitForFunction(() => !window.__GBDRAW_APP__.processing);
+  const error = await page.evaluate(() => window.__GBDRAW_APP__.errorLog);
+  if (valid) expect(error).toBeNull();
+  else expect(error).not.toBeNull();
+};
+const save = async (page, testInfo, name) => {
+  const pending = page.waitForEvent('download');
+  await page.getByRole('button', { name: 'Save Session', exact: true }).click();
+  const download = await pending;
+  const path = testInfo.outputPath(`${name}.gbdraw-session.json.gz`);
+  await download.saveAs(path);
+  await page.waitForFunction(() => !window.__GBDRAW_APP__.sessionSavePending);
+  return { path, document: JSON.parse(gunzipSync(readFileSync(path))) };
+};
+const freshLoad = async (browser, testInfo, file, verify) => {
+  const fresh = await browser.newPage({ baseURL: testInfo.project.use.baseURL });
+  try {
+    await prepare(fresh);
+    await load(fresh, file);
+    await verify(fresh);
+  } finally {
+    await fresh.close();
+  }
+};
+// Compare every drawing element independently of XML serialization and
+// transient preview/export attributes, including text and transforms.
+const svgGeometry = (page, svg) => page.evaluate(content => {
+  const doc = new DOMParser().parseFromString(content, 'image/svg+xml');
+  return [...doc.querySelectorAll('svg,g,path,circle,ellipse,rect,line,polyline,polygon,text,textPath')].map(node => ({
+    tag: node.localName,
+    attributes: [...node.attributes].filter(attr => [
+      'viewBox', 'transform', 'd', 'cx', 'cy', 'r', 'rx', 'ry', 'x', 'y',
+      'x1', 'x2', 'y1', 'y2', 'points', 'width', 'height', 'font-size', 'startOffset'
+    ].includes(attr.name)).map(attr => [attr.name, attr.value]).sort(),
+    text: ['text', 'textPath'].includes(node.localName) ? node.textContent : null
+  }));
+}, svg);
 
 test.beforeEach(async ({ page }) => {
   test.setTimeout(180_000);
@@ -327,4 +375,255 @@ test('DOM edits Save and fresh Load retain draft apart from committed Result; fa
   } finally {
     await fresh.close();
   }
+});
+
+test('typed and legacy scalars display without writes; decimal, exponent, and precision edits project exactly', async ({ page }, testInfo) => {
+  await openPanel(page);
+  const cases = [
+    [{ value: 20, unit: 'px' }, '20', 'px', 20],
+    [{ value: 0.08, unit: 'factor' }, '0.08', 'factor', 0.08],
+    [1.5, '1.5', 'factor', 1.5], ['1.5', '1.5', 'factor', 1.5],
+    ['20px', '20', 'px', 20], ['65%', '0.65', 'factor', 0.65],
+    [{ value: '1.', unit: 'px' }, '1.', 'px', 1],
+    [{ value: '1e-3', unit: 'factor' }, '1e-3', 'factor', 0.001],
+    [{ value: '0.12345678901234567', unit: 'factor' }, '0.12345678901234567', 'factor', Number('0.12345678901234567')],
+    [{ value: '1e-12', unit: 'px' }, '1e-12', 'px', 1e-12],
+    [{ value: '1.2345678901234567e+20', unit: 'px' }, '1.2345678901234567e+20', 'px', Number('1.2345678901234567e+20')],
+    [null, '', 'factor', null], ['', '', 'factor', null]
+  ];
+  const observations = [];
+  for (const [raw, text, unit, value] of cases) {
+    await page.evaluate(async raw => {
+      document.activeElement?.blur();
+      const app = window.__GBDRAW_APP__;
+      await window.__GBDRAW_HISTORY__.runUndoable('Set scalar fixture', () => {
+        app.updateCircularTrackSlotMeasure(app.adv.circular_track_slots.find(row => row.id === 'gc_content'), 'width', raw);
+      });
+    }, raw);
+    const before = await snapshot(page);
+    const workers = await workerCounts(page);
+    await expect(valueControl(page, 'gc_content', 'Width')).toHaveValue(text);
+    await expect(unitControl(page, 'gc_content', 'Width')).toHaveValue(unit);
+    await valueControl(page, 'gc_content', 'Width').focus();
+    await valueControl(page, 'gc_content', 'Width').press('Tab');
+    expect(await snapshot(page)).toEqual(before);
+    expect(await workerCounts(page)).toEqual(workers);
+    await edit(page, text);
+    const projected = await page.evaluate(async () => {
+      const { buildCircularTrackSlotPayload } = await import('./js/app/circular-track-slots.js');
+      return buildCircularTrackSlotPayload(window.__GBDRAW_APP__.adv.circular_track_slots.find(row => row.id === 'gc_content')).width;
+    });
+    expect(projected).toEqual(value === null ? null : { value, unit });
+    observations.push({ raw, text, unit, projected });
+  }
+  for (const unit of ['px', 'factor']) {
+    await selectUnit(page, unit);
+    await edit(page, '1.5');
+    expect(await scalar(page)).toEqual({ value: '1.5', unit });
+  }
+  await testInfo.attach('scalar-matrix', { body: JSON.stringify(observations), contentType: 'application/json' });
+});
+
+test('Generate preserves four canonical pairs and same-value geometry; unit edit affects only its track; SVG download matches Result', async ({ page, browser }, testInfo) => {
+  test.setTimeout(1_800_000);
+  await openPanel(page);
+  const original = await snapshot(page);
+  const originalGeometry = await geometry(page);
+  await generate(page);
+  const first = await snapshot(page);
+  expect(canonicalSlots(first.request)).toEqual(canonicalSlots(original.request));
+  const firstGeometry = await geometry(page);
+  const withoutOutputName = value => ({ ...value, records: value.records.map(({ resultName, ...record }) => record) });
+  expect(withoutOutputName(firstGeometry)).toEqual(withoutOutputName(originalGeometry));
+  const firstSvg = await page.evaluate(() => window.__GBDRAW_APP__.results[0].content);
+  for (const [slot, field, value] of [
+    ['plastome_regions', 'Width', '20'], ['plastome_regions', 'Radius', '0.65'],
+    ['gc_content', 'Width', '0.08'], ['gc_content', 'Radius', '0.56']
+  ]) await edit(page, value, slot, field);
+  await generate(page);
+  const same = await snapshot(page);
+  expect(canonicalSlots(same.request)).toEqual(canonicalSlots(first.request));
+  expect(await geometry(page)).toEqual(firstGeometry);
+  expect(await svgGeometry(page, await page.evaluate(() => window.__GBDRAW_APP__.results[0].content)))
+    .toEqual(await svgGeometry(page, firstSvg));
+  await selectUnit(page, 'px');
+  const pending = await snapshot(page);
+  expect(pending.request).toEqual(same.request);
+  expect(pending.resultHashes).toEqual(same.resultHashes);
+  await generate(page);
+  const changed = await snapshot(page);
+  const expected = structuredClone(canonicalSlots(same.request));
+  expected.find(row => row.id === 'gc_content').width = { value: 0.08, unit: 'px' };
+  expect(canonicalSlots(changed.request)).toEqual(expected);
+  const changedGeometry = await geometry(page);
+  const a = firstGeometry.records[0];
+  const b = changedGeometry.records[0];
+  expect(b.axisRadiusPx).toBe(a.axisRadiusPx);
+  for (const slot of a.slots.filter(row => row.slotId !== 'gc_content')) {
+    expect(b.slots.find(row => row.slotId === slot.slotId)).toEqual(slot);
+  }
+  expect(b.slots.find(row => row.slotId === 'gc_content').widthPx).toBe(0.08);
+  expect(b.slots.find(row => row.slotId === 'gc_content')).toEqual({
+    ...a.slots.find(row => row.slotId === 'gc_content'), widthPx: 0.08, widthFactor: null
+  });
+  const currentSvg = await page.evaluate(() => window.__GBDRAW_APP__.results[0].content);
+  const pendingDownload = page.waitForEvent('download');
+  await page.getByRole('button', { name: 'SVG', exact: true }).click();
+  const downloaded = await pendingDownload;
+  const svgPath = testInfo.outputPath('current-result.svg');
+  await downloaded.saveAs(svgPath);
+  expect(await svgGeometry(page, readFileSync(svgPath, 'utf8'))).toEqual(await svgGeometry(page, currentSvg));
+  const saved = await save(page, testInfo, 'generated');
+  await freshLoad(browser, testInfo, saved.path, async fresh => {
+    const restored = await snapshot(fresh);
+    expect(restored.request).toEqual(changed.request);
+    expect(restored.resultHashes).toEqual(changed.resultHashes);
+    expect(await geometry(fresh)).toEqual(changedGeometry);
+  });
+  writeFileSync(testInfo.outputPath('generate-geometry.json'), JSON.stringify({
+    originalPairs: canonicalSlots(original.request), first: firstGeometry, same: firstGeometry, changed: changedGeometry,
+    svgPath, sessionPath: saved.path
+  }, null, 2));
+  writeFileSync(testInfo.outputPath('result-source.svg'), currentSvg);
+});
+
+test('invalid Generate keeps draft, committed request and Result; correction regenerates successfully', async ({ page }, testInfo) => {
+  test.setTimeout(1_800_000);
+  await openPanel(page);
+  const before = await snapshot(page);
+  const observations = [];
+  for (const text of ['bad', '1e', '0', '-1', 'Infinity', 'NaN', '1e309', '20pxx']) {
+    const historyBeforeEdit = await counts(page);
+    await edit(page, text);
+    await expectCounts(page, historyBeforeEdit[0] + 1);
+    const draft = await scalar(page);
+    const beforeGenerate = await snapshot(page);
+    const workers = await workerCounts(page);
+    await generate(page, false);
+    await expect(valueControl(page, 'gc_content', 'Width')).toHaveValue(text);
+    await expect(valueControl(page, 'gc_content', 'Width')).toHaveAttribute('aria-invalid', 'true');
+    expect(await scalar(page)).toEqual(draft);
+    const failed = await snapshot(page);
+    expect(failed.config.adv.circular_track_slots).toEqual(beforeGenerate.config.adv.circular_track_slots);
+    expect(failed.history).toEqual(beforeGenerate.history);
+    expect(failed.request).toEqual(before.request);
+    expect(failed.resultHashes).toEqual(before.resultHashes);
+    expect((await workerCounts(page)).runs).toBe(workers.runs);
+    observations.push({ text, draft, resultPreserved: true, history: failed.history,
+      fullConfigEqual: JSON.stringify(failed.config) === JSON.stringify(beforeGenerate.config) });
+  }
+  await page.evaluate(() => {
+    const app = window.__GBDRAW_APP__;
+    app.updateCircularTrackSlotMeasure(app.adv.circular_track_slots.find(row => row.id === 'gc_content'), 'width', { value: 1, unit: 'em' });
+  });
+  await generate(page, false);
+  expect(await scalar(page)).toEqual({ value: 1, unit: 'em' });
+  const failed = await snapshot(page);
+  expect(failed.request).toEqual(before.request);
+  expect(failed.resultHashes).toEqual(before.resultHashes);
+  await selectUnit(page, 'factor');
+  await edit(page, '0.09');
+  await generate(page);
+  expect(canonicalSlots((await snapshot(page)).request).find(row => row.id === 'gc_content').width)
+    .toEqual({ value: 0.09, unit: 'factor' });
+  expect((await snapshot(page)).resultHashes).not.toEqual(before.resultHashes);
+  await testInfo.attach('failed-generate-recovery', { body: JSON.stringify(observations), contentType: 'application/json' });
+});
+
+for (const continuation of ['disabled', 'inactive biological']) {
+  test(`actual Save and fresh Load preserve ${continuation} Circular scalar drafts`, async ({ page, browser }, testInfo) => {
+    await openPanel(page);
+    await edit(page, '0.12345678901234567');
+    if (continuation === 'disabled') await page.evaluate(() => {
+      window.__GBDRAW_APP__.adv.circular_track_slots.find(row => row.id === 'gc_content').enabled = false;
+    });
+    if (continuation === 'inactive biological') await page.getByRole('button', { name: 'Linear', exact: true }).click();
+    const before = await snapshot(page);
+    const saved = await save(page, testInfo, continuation.replaceAll(' ', '-'));
+    expect(saved.document.config.adv.circular_track_slots).toEqual(before.config.adv.circular_track_slots);
+    await freshLoad(browser, testInfo, saved.path, async fresh => {
+      const restored = await snapshot(fresh);
+      expect(restored.config.adv.circular_track_slots).toEqual(before.config.adv.circular_track_slots);
+      expect(restored.request).toEqual(before.request);
+      expect(restored.resultHashes).toEqual(before.resultHashes);
+      await openPanel(fresh);
+      await expect(valueControl(fresh, 'gc_content', 'Width')).toHaveValue('0.12345678901234567');
+      if (continuation === 'inactive biological') {
+        expect(restored.config.modeProfiles.activeMode).toBe('circular');
+        expect(before.config.modeProfiles.activeMode).toBe('linear');
+      }
+    });
+  });
+}
+
+test('source-free settings Save and fresh Load retain an inactive disabled scalar and Auto', async ({ browser }, testInfo) => {
+  const page = await browser.newPage({ baseURL: testInfo.project.use.baseURL });
+  try {
+    await prepare(page);
+    await page.evaluate(slots => {
+      const app = window.__GBDRAW_APP__;
+      app.adv.circular_track_slots_enabled = true;
+      app.adv.circular_track_slots = slots.filter(row => row.renderer !== 'annotations');
+    }, JSON.parse(readFileSync(fixture, 'utf8')).config.adv.circular_track_slots);
+    await openPanel(page);
+    await edit(page, '1e-12');
+    await selectUnit(page, 'px');
+    await page.evaluate(() => { window.__GBDRAW_APP__.adv.circular_track_slots.find(row => row.id === 'gc_content').enabled = false; });
+    await selectUnit(page, 'px', 'features');
+    await page.getByRole('button', { name: 'Linear', exact: true }).click();
+    const before = await snapshot(page);
+    expect(before.request).toBeNull();
+    expect(before.resultHashes).toEqual([]);
+    const saved = await save(page, testInfo, 'settings-only');
+    expect(saved.document.runMetadata).toBeUndefined();
+    await freshLoad(browser, testInfo, saved.path, async fresh => {
+      const restored = await snapshot(fresh);
+      expect(restored.config).toEqual(before.config);
+      expect(restored.request).toBeNull();
+      expect(restored.resultHashes).toEqual([]);
+      await fresh.getByRole('button', { name: 'Circular', exact: true }).click();
+      await openPanel(fresh);
+      await expect(valueControl(fresh, 'gc_content', 'Width')).toHaveValue('1e-12');
+      await expect(unitControl(fresh, 'gc_content', 'Width')).toHaveValue('px');
+      await expect(valueControl(fresh, 'features', 'Width')).toHaveValue('');
+      await expect(unitControl(fresh, 'features', 'Width')).toHaveValue('factor');
+    });
+  } finally {
+    await page.close();
+  }
+});
+
+test('CLI-origin Session continues through numeric edits, Generate, Save and fresh Load', async ({ page, browser }, testInfo) => {
+  test.setTimeout(1_800_000);
+  const prefix = testInfo.outputPath('cli-origin');
+  const args = ['-m', 'gbdraw.cli', 'circular', '--gbk', resolve('tests/fixtures/sessions/cli-web-mito.gb'),
+    '--output', prefix, '--format', 'svg', '--save_session'];
+  execFileSync('python', args, { env: { ...process.env, PYTHONPATH: process.cwd() } });
+  const path = `${prefix}.gbdraw-session.json`;
+  const cli = JSON.parse(readFileSync(path, 'utf8'));
+  expect(cli.config).toBeUndefined();
+  await load(page, path);
+  const before = await snapshot(page);
+  expect(before.request).toEqual(cli.renderRequest);
+  expect(before.resultHashes).toHaveLength(1);
+  const panel = page.locator('button[aria-controls="circular-custom-track-slots-panel"]');
+  await reveal(panel);
+  if (await panel.getAttribute('aria-expanded') !== 'true') await panel.click();
+  await page.getByRole('checkbox', { name: 'Use custom stack', exact: true }).check();
+  await openPanel(page);
+  await selectUnit(page, 'px', 'features');
+  await edit(page, '20', 'features');
+  await generate(page);
+  const generated = await snapshot(page);
+  expect(canonicalSlots(generated.request).find(row => row.id === 'features').width).toEqual({ value: 20, unit: 'px' });
+  const saved = await save(page, testInfo, 'cli-continuation');
+  await freshLoad(browser, testInfo, saved.path, async fresh => {
+    const restored = await snapshot(fresh);
+    expect(restored.request).toEqual(generated.request);
+    expect(restored.resultHashes).toEqual(generated.resultHashes);
+    await openPanel(fresh);
+    await expect(valueControl(fresh, 'features', 'Width')).toHaveValue('20');
+    await expect(unitControl(fresh, 'features', 'Width')).toHaveValue('px');
+  });
+  writeFileSync(testInfo.outputPath('cli-origin-command.json'), JSON.stringify({ command: ['python', ...args], exit: 0, input: path }, null, 2));
 });

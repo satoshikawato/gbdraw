@@ -30,7 +30,7 @@ test('source-free Save emits no render metadata and preserves valid raw scalar d
   const freshConfig = buildConfigData();
   const fresh = await savedDocument('fresh settings');
   assert.equal(fresh.renderRequest, null);
-  assert.deepEqual(fresh.runMetadata, {});
+  assert.equal(fresh.runMetadata, undefined);
   assert.deepEqual(fresh.config, JSON.parse(JSON.stringify(freshConfig)));
   assert.deepEqual(buildConfigData(), freshConfig);
   assert.equal(adoptCurrentSessionDocument(fresh, 44).canonical, null);
@@ -47,11 +47,11 @@ test('source-free Save emits no render metadata and preserves valid raw scalar d
   assert.deepEqual(buildConfigData(), before);
   assert.deepEqual(saved.results, []);
   assert.equal(saved.editorState.featureCatalog, null);
-  assert.deepEqual(saved.runMetadata, {});
+  assert.equal(saved.runMetadata, undefined);
   assert.equal(adoptCurrentSessionDocument(saved, 44).canonical, null);
 
   const forbiddenMetadata = structuredClone(saved);
-  forbiddenMetadata.runMetadata.annotationWarnings = [];
+  forbiddenMetadata.runMetadata = { annotationWarnings: [] };
   assert.throws(() => adoptCurrentSessionDocument(forbiddenMetadata, 44), /committed render artifacts/);
   state.adv.circular_track_slots[0].width = { value: '1e', unit: 'px' };
   await assert.rejects(exportSession('unfinished settings'), /width|positive|scalar/i);
@@ -93,7 +93,7 @@ test('current gzip writer/admission keeps S00 valid scalars and codec drafts, in
       assert.deepEqual(restoredSlot.radius, scalar);
       assert.deepEqual(buildCircularTrackSlotPayload(restoredSlot).width, expected);
       assert.deepEqual(buildCircularTrackSlotPayload(restoredSlot).radius, expected);
-      assert.deepEqual(saved.runMetadata, {});
+      assert.equal(saved.runMetadata, undefined);
       assert.deepEqual(saved.results, []);
     }
   }

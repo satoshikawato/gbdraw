@@ -491,7 +491,7 @@ test('Gallery restores the tobacco chloroplast region-annotation example', async
   await expect(tutorialPanel.getByRole('row', { name: 'IRb 86,687 112,029 25,343 bp Bracket 0' })).toBeVisible();
   await expect(
     tutorialPanel.getByRole('row', {
-      name: 'plastome_regions Annotations Inside 0.65 20 px Set: plastome_regions; Labels: on; Overflow: Compress; gaps: 1 px'
+      name: 'plastome_regions Annotations Inside 0.65 ×R 20 px Set: plastome_regions; Labels: on; Overflow: Compress; gaps: 1 px'
     })
   ).toBeVisible();
   const tutorialImages = tutorialPanel.getByRole('img');
