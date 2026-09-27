@@ -16,10 +16,11 @@ export const createFeatureEditor = ({
   svgActions,
   featureSelection = null,
   previewRuntime = null,
+  isPatternEditAvailable = () => true,
   previewTransformInteraction = null
 }) => {
   const { ref, computed } = window.Vue;
-  const ruleActions = createFeatureRuleActions({ state, nextTick, legendActions, rulePreparation, history, svgActions, ref, computed });
+  const ruleActions = createFeatureRuleActions({ state, nextTick, legendActions, rulePreparation, history, svgActions, ref, computed, isPatternEditAvailable });
   const labelActions = createFeatureLabelActions({ state, previewRuntime, rulePreparation, ref, computed });
   const featureSvgActions = createFeatureSvgActions({
     state,
@@ -51,6 +52,16 @@ export const createFeatureEditor = ({
   };
 
   return {
+    specificRulePattern: ruleActions.specificRulePattern,
+    specificRulePatternDraft: ruleActions.specificRulePatternDraft,
+    specificRulePatternFieldId: ruleActions.specificRulePatternFieldId,
+    editSpecificRulePattern: ruleActions.editSpecificRulePattern,
+    retrySpecificRulePattern: ruleActions.retrySpecificRulePattern,
+    revertSpecificRulePattern: ruleActions.revertSpecificRulePattern,
+    suspendSpecificRulePatternDrafts: ruleActions.suspendSpecificRulePatternDrafts,
+    clearSpecificRulePatternDrafts: ruleActions.clearSpecificRulePatternDrafts,
+    captureSpecificRulePatternDrafts: ruleActions.captureSpecificRulePatternDrafts,
+    restoreSpecificRulePatternDrafts: ruleActions.restoreSpecificRulePatternDrafts,
     placementActions: createFeaturePlacementActions({ state, history, getCommittedRequest, isCurrentFeature }),
     canRetrySpecificRuleFailure: ruleActions.canRetrySpecificRuleFailure,
     canEditSpecificRuleFailure: ruleActions.canEditSpecificRuleFailure,

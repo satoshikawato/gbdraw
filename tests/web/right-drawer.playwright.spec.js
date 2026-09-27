@@ -1173,9 +1173,10 @@ test('compact Editor reconciles availability and restores its tab after failed S
     const result = await importSession({ target: { files: [file], value: 'selected' } }, {
       beforePreviewMount: () => { throw new Error('S05 Session rollback probe'); }
     });
-    return { status: result.status, message: result.error?.message };
+    return { status: result.status, error: result.error };
   });
-  expect(failure).toEqual({ status: 'error', message: 'S05 Session rollback probe' });
+  expect(failure).toMatchObject({ status: 'error', error: { code: 'UNKNOWN', operation: 'unknown', stage: 'request-validation' } });
+  expect(JSON.stringify(failure)).not.toContain('S05 Session rollback probe');
   expect(await page.evaluate(() => ({
     open: window.__GBDRAW_APP__.showRightDrawer, tab: window.__GBDRAW_APP__.rightDrawerTab
   }))).toEqual({ open: true, tab: 'orthogroups' });
@@ -1225,8 +1226,5 @@ test('compact Editor reconciles availability and restores its tab after failed S
   await page.locator('.drawer-toggle').click();
   await centerPreview(page);
   assertMobileGeometry(await readOverlayGeometry(page), true);
-  expect(page.overlayDiagnostics).toEqual({
-    pageErrors: [], externalRequests: [],
-    consoleErrors: [expect.stringMatching(/^Error: S05 Session rollback probe\n/)]
-  });
+  assertNoOverlayErrors(page);
 });

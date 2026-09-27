@@ -432,6 +432,8 @@ export const createAppSetup = () => {
     fileLegendCaptions,
     filteredFeatures
   } = state;
+  let featureActions = null;
+  const sessionImportPending = ref(false);
   let similarityAlignmentActions = null;
   let refreshSimilarityAlignmentCanvas = () => {};
   const linearTypography = createLinearTypographyController({
@@ -440,6 +442,7 @@ export const createAppSetup = () => {
   });
   let alignmentReviewBlocksEditor = () => false;
   const rightDrawerActions = createRightDrawerController({ state, watch,
+    onClose: () => featureActions?.suspendSpecificRulePatternDrafts(),
     getOpenDisabledReason: () => alignmentReviewBlocksEditor()
       ? 'Finish or cancel alignment review before opening Editor.' : '' });
 
@@ -1145,13 +1148,21 @@ export const createAppSetup = () => {
     buildRunStateData,
     applyRunStateData
   });
+  const restoreWithSpecificRuleDrafts = async (restore, ...args) => {
+    const drafts = featureActions?.captureSpecificRulePatternDrafts();
+    try {
+      return await restore(...args);
+    } finally {
+      if (drafts) featureActions.restoreSpecificRulePatternDrafts(drafts);
+    }
+  };
   const history = createHistoryManager({
     buildIntent: historySnapshots.buildHistoryIntent,
-    applyIntent: historySnapshots.applyHistoryIntent,
+    applyIntent: (...args) => restoreWithSpecificRuleDrafts(historySnapshots.applyHistoryIntent, ...args),
     buildCheckpoint: historySnapshots.buildArtifactCheckpoint,
-    applyCheckpoint: historySnapshots.applyArtifactCheckpoint,
+    applyCheckpoint: (...args) => restoreWithSpecificRuleDrafts(historySnapshots.applyArtifactCheckpoint, ...args),
     captureGeneratedArtifactHandle: historySnapshots.captureGeneratedArtifactHandle,
-    restoreGeneratedArtifactHandle: historySnapshots.restoreGeneratedArtifactHandle,
+    restoreGeneratedArtifactHandle: (...args) => restoreWithSpecificRuleDrafts(historySnapshots.restoreGeneratedArtifactHandle, ...args),
     compareGeneratedArtifactHandles: historySnapshots.compareGeneratedArtifactHandles,
     signatureFor: historySnapshots.snapshotSignature,
     fileStore: historyFileStore,
@@ -1251,12 +1262,13 @@ export const createAppSetup = () => {
     legendActions
   });
   const featureSelection = createFeatureSelection({ state, onMounted, onUnmounted });
-  const featureActions = createFeatureEditor({
+  featureActions = createFeatureEditor({
     state,
     rulePreparation,
     history,
     getCommittedRequest: getCommittedCanonicalRenderRequest,
     isCurrentFeature: recordDisplayControls.isCurrentFeature,
+    isPatternEditAvailable: () => !sessionImportPending.value,
     nextTick,
     legendActions,
     svgActions,
@@ -1283,9 +1295,15 @@ export const createAppSetup = () => {
     if (newIndex !== oldIndex) previewRuntime.flushActiveResult({ markIncremental: false });
     featureSelection.clearFeatureSelection({ clearStatus: true, syncDom: false });
   });
+  const setDiagramMode = (nextMode) => {
+    if (!['circular', 'linear'].includes(nextMode) || nextMode === mode.value) return;
+    featureActions.suspendSpecificRulePatternDrafts();
+    mode.value = nextMode;
+  };
   watch(mode, () => {
+    featureActions.suspendSpecificRulePatternDrafts();
     featureSelection.clearFeatureSelection({ clearStatus: true, syncDom: false });
-  });
+  }, { flush: 'sync' });
   watch(svgContent, () => {
     refreshSimilarityAlignmentCanvas();
     if (!skipCaptureBaseConfig.value) {
@@ -2252,7 +2270,7 @@ export const createAppSetup = () => {
     captureGeneratedArtifactHandle: historySnapshots.captureGeneratedArtifactHandle,
     captureGeneratedArtifactOwnerSet: historySnapshots.captureGeneratedArtifactOwnerSet,
     installGeneratedArtifactOwnerSet: historySnapshots.installGeneratedArtifactOwnerSet,
-    restoreGeneratedArtifactHandle: historySnapshots.restoreGeneratedArtifactHandle,
+    restoreGeneratedArtifactHandle: (...args) => restoreWithSpecificRuleDrafts(historySnapshots.restoreGeneratedArtifactHandle, ...args),
     setGeneratedArtifactIdentity: historySnapshots.setGeneratedArtifactIdentity,
     runGeneratedArtifactReplacement: (...args) => (
       history.runUndoableArtifactReplacement(...args)
@@ -2383,7 +2401,6 @@ export const createAppSetup = () => {
     preparePaletteDefinitions: paletteLoader.loadPaletteAsset
   });
 
-  const sessionImportPending = ref(false);
   const sessionSavePending = ref(false);
   let sessionSaveInFlight = null;
   const circularRecordPresentationPanel = ref(null);
@@ -2403,6 +2420,8 @@ export const createAppSetup = () => {
         value: input.value
       }
     };
+    const patternDrafts = featureActions.captureSpecificRulePatternDrafts();
+    let sessionReplaced = false;
     sessionImportPending.value = true;
     recordSessionLifecycleEvent('session-import-pending-published');
     try {
@@ -2437,6 +2456,8 @@ export const createAppSetup = () => {
         })
       });
       if (result?.status === 'ok' || result?.status === 'legacy') {
+        sessionReplaced = true;
+        featureActions.clearSpecificRulePatternDrafts();
         annotationImportNotice.value = '';
         specificRuleNotice.value = '';
         historySnapshots.clearGeneratedArtifactIdentity({
@@ -2452,6 +2473,7 @@ export const createAppSetup = () => {
       }
       return result;
     } finally {
+      if (!sessionReplaced) featureActions.restoreSpecificRulePatternDrafts(patternDrafts);
       sessionImportPending.value = false;
       input.value = '';
     }
@@ -2492,6 +2514,8 @@ export const createAppSetup = () => {
     moveSpecificRuleUp,
     removeSpecificRule,
     setSpecificRuleField,
+    specificRulePattern, specificRulePatternDraft, specificRulePatternFieldId,
+    editSpecificRulePattern, retrySpecificRulePattern, revertSpecificRulePattern,
     addFeatureVisibilityRule,
     downloadFeatureVisibilityRulesTsv,
     featureVisibilityQualifierSuggestions,
@@ -2756,6 +2780,7 @@ export const createAppSetup = () => {
       return { status: 'error', error: errorLog.value };
     }
     cancelDefinitionUpdate();
+    const patternDrafts = featureActions.captureSpecificRulePatternDrafts();
     const result = await runGeneratedDiagramAnalysis(
       comparisonPlanSnapshot,
       null,
@@ -2765,8 +2790,11 @@ export const createAppSetup = () => {
       await focusLinearComparisonIssue();
     }
     if (result?.status === 'ok') {
+      featureActions.clearSpecificRulePatternDrafts();
       await rulePreparation.prepare();
       featureSelection.clearFeatureSelection({ clearStatus: true });
+    } else {
+      featureActions.restoreSpecificRulePatternDrafts(patternDrafts);
     }
     return result;
   };
@@ -3100,6 +3128,7 @@ export const createAppSetup = () => {
 
     return history.runUndoableCheckpoint('Reset settings', async () => {
       cancelDefinitionUpdate();
+      featureActions.clearSpecificRulePatternDrafts();
       resetSettingsState(state);
       invalidateLinearComparisonArtifacts();
       matchSequenceRegistry?.reset?.();
@@ -4045,6 +4074,7 @@ export const createAppSetup = () => {
     errorDisplay,
     canRetryInteractiveSvgExport,
     reloadAfterOperationError,
+    setDiagramMode,
     canRetrySpecificRuleFailure: featureActions.canRetrySpecificRuleFailure,
     canEditSpecificRuleFailure: featureActions.canEditSpecificRuleFailure,
     canRetryLabelImportFailure: featureActions.canRetryLabelImportFailure,
@@ -4507,6 +4537,8 @@ export const createAppSetup = () => {
     moveSpecificRuleUp,
     removeSpecificRule,
     setSpecificRuleField,
+    specificRulePattern, specificRulePatternDraft, specificRulePatternFieldId,
+    editSpecificRulePattern, retrySpecificRulePattern, revertSpecificRulePattern,
     extractedFeatures,
     featureEditorStatus,
     featureEditorStatusText,

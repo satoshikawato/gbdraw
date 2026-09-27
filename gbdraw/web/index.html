@@ -1382,8 +1382,8 @@
                 </div>
 
                 <div class="mode-switch flex bg-slate-100 p-1 rounded-lg">
-                    <button type="button" aria-label="Circular" :aria-pressed="mode === 'circular'" @click="mode = 'circular'" :class="mode === 'circular' ? 'bg-white text-blue-600 shadow ring-1 ring-black/5' : 'text-slate-500 hover:text-slate-700'" class="app-mode-button px-3 py-1 rounded-md text-sm font-bold transition-all flex items-center gap-1.5"><i class="ph ph-circle"></i> Circular</button>
-                    <button type="button" aria-label="Linear" :aria-pressed="mode === 'linear'" @click="mode = 'linear'" :class="mode === 'linear' ? 'bg-white text-blue-600 shadow ring-1 ring-black/5' : 'text-slate-500 hover:text-slate-700'" class="app-mode-button px-3 py-1 rounded-md text-sm font-bold transition-all flex items-center gap-1.5"><i class="ph ph-ruler"></i> Linear</button>
+                    <button type="button" aria-label="Circular" :aria-pressed="mode === 'circular'" @click="setDiagramMode('circular')" :class="mode === 'circular' ? 'bg-white text-blue-600 shadow ring-1 ring-black/5' : 'text-slate-500 hover:text-slate-700'" class="app-mode-button px-3 py-1 rounded-md text-sm font-bold transition-all flex items-center gap-1.5"><i class="ph ph-circle"></i> Circular</button>
+                    <button type="button" aria-label="Linear" :aria-pressed="mode === 'linear'" @click="setDiagramMode('linear')" :class="mode === 'linear' ? 'bg-white text-blue-600 shadow ring-1 ring-black/5' : 'text-slate-500 hover:text-slate-700'" class="app-mode-button px-3 py-1 rounded-md text-sm font-bold transition-all flex items-center gap-1.5"><i class="ph ph-ruler"></i> Linear</button>
                 </div>
             </div>
         </div>
@@ -3854,7 +3854,7 @@
 
                                 <p role="status" aria-live="polite" aria-atomic="true" class="mb-2 text-[10px] text-slate-600 break-words">{{ specificRuleNotice }}</p>
                                 <div class="space-y-1 mb-3">
-                                    <div v-for="(rule, i) in manualSpecificRules" :key="i" class="bg-white p-1.5 rounded border border-slate-200 text-[10px] space-y-1">
+                                    <div v-for="(rule, i) in manualSpecificRules" :key="specificRulePatternFieldId(rule)" data-color-rule-row class="bg-white p-1.5 rounded border border-slate-200 text-[10px] space-y-1">
                                         <div class="grid grid-cols-12 gap-1 items-center">
                                             <select :value="rule.feat" @change="setSpecificRuleField(i, 'feat', $event.target.value, $event.target)" class="form-input form-input-compact col-span-4">
                                                 <option v-for="k in featureKeys" :value="k">{{ k }}</option>
@@ -3868,8 +3868,17 @@
                                             </div>
                                         </div>
                                         <div class="grid grid-cols-12 gap-1">
-                                            <input :value="rule.val" @change="setSpecificRuleField(i, 'val', $event.target.value, $event.target)" :aria-label="`Color rule ${i + 1} pattern`" placeholder="Python regex" class="form-input form-input-compact col-span-7 font-mono">
+                                            <input :id="specificRulePatternFieldId(rule)" :disabled="sessionImportPending" :value="specificRulePattern(rule)" @input="editSpecificRulePattern(rule, $event.target.value)" @change="retrySpecificRulePattern(rule)" :aria-label="`Color rule ${i + 1} pattern`" :aria-describedby="specificRulePatternDraft(rule) ? `${specificRulePatternFieldId(rule)}-status` : undefined" :aria-invalid="specificRulePatternDraft(rule)?.error?.code === 'REGEX_SYNTAX' ? 'true' : undefined" :aria-busy="specificRulePatternDraft(rule)?.pending ? 'true' : undefined" placeholder="Python regex" data-history-ignore class="form-input form-input-compact col-span-7 font-mono">
                                             <input :value="rule.cap" @change="setSpecificRuleField(i, 'cap', $event.target.value, $event.target)" placeholder="Legend Caption" class="form-input form-input-compact col-span-5">
+                                        </div>
+                                        <div v-if="specificRulePatternDraft(rule)" :id="`${specificRulePatternFieldId(rule)}-status`" class="rounded border border-amber-200 bg-amber-50 p-2 text-xs break-words" data-color-rule-pattern-status data-history-ignore>
+                                            <p role="status" aria-live="polite" class="font-semibold">Not applied<span v-if="specificRulePatternDraft(rule).pending"> — Checking color rule…</span></p>
+                                            <p class="mt-1">Save Session and Generate use the last accepted rule. Export uses the current Result. This draft is not saved.</p>
+                                            <operation-error v-if="specificRulePatternDraft(rule).error" :error="specificRulePatternDraft(rule).error" class="mt-2"></operation-error>
+                                            <div class="mt-2 flex flex-wrap gap-2">
+                                                <button type="button" @click="retrySpecificRulePattern(rule)" :disabled="sessionImportPending || specificRulePatternDraft(rule).pending" class="btn-secondary text-xs">Retry</button>
+                                                <button type="button" :disabled="sessionImportPending" @pointerdown.prevent @click="revertSpecificRulePattern(rule, $event.currentTarget.closest('[data-color-rule-row]').querySelector('input[data-history-ignore]'))" class="btn-secondary text-xs">Revert</button>
+                                            </div>
                                         </div>
                                     </div>
                                     <div v-if="manualSpecificRules.length === 0" class="text-[10px] text-slate-400 italic text-center py-2">No rules added</div>

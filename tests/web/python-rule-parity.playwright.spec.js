@@ -37,7 +37,7 @@ test('Python-only color rules commit atomically, retain History and agree with G
   expect(await fills(page)).toEqual(matched);
   const stable = await page.evaluate(() => ({ rules: JSON.stringify(window.__GBDRAW_APP__.manualSpecificRules), svg: window.__GBDRAW_APP__.svgContent }));
   await page.evaluate(() => window.__GBDRAW_APP__.setSpecificRuleField(0, 'val', '(?<enzyme>NADH)'));
-  expect(await page.evaluate(() => window.__GBDRAW_APP__.errorLog)).toMatchObject({code:'REGEX_SYNTAX',context:{reason:'UNKNOWN_EXTENSION'}});
+  expect(await page.evaluate(() => { const a = window.__GBDRAW_APP__; return a.specificRulePatternDraft(a.manualSpecificRules[0]).error; })).toMatchObject({code:'REGEX_SYNTAX',context:{reason:'UNKNOWN_EXTENSION'}});
   expect(await page.evaluate(() => ({ rules: JSON.stringify(window.__GBDRAW_APP__.manualSpecificRules), svg: window.__GBDRAW_APP__.svgContent }))).toEqual(stable);
   await page.evaluate(() => window.__GBDRAW_APP__.setSpecificRuleField(0, 'val', '(?P<enzyme>NADH)'));
   expect(await fills(page)).toEqual(matched);

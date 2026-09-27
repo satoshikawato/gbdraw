@@ -549,7 +549,7 @@ const runAuxiliaryWorkerRequest = ({
       );
     } catch (error) {
       request?.cleanup?.();
-      rejectRequest(deserializeWorkerError(error, { operation, stage: failureStage,
+      rejectRequest(isDiagramGenerationCanceled(error) ? error : deserializeWorkerError(error, { operation, stage: failureStage,
         code: failureStage === 'initialization' ? 'WORKER_INIT' : 'RESOURCE_INVALID' }));
     }
   })();
