@@ -331,3 +331,23 @@ test('managed Conservation removal rebases the Axis only when the row is before 
     gc_content: 'inside'
   });
 });
+
+test('Circular measure action updates only the owned scalar and preserves slot identity', () => {
+  const state = createState();
+  const editor = createCircularTrackSlotEditor({ state });
+  const slot = state.adv.circular_track_slots[0];
+  const key = editor.circularTrackSlotEditorKey(slot);
+  const scalar = { value: '1e', unit: 'px' };
+  const radius = slot.radius;
+  editor.updateCircularTrackSlotMeasure(slot, 'width', scalar);
+  assert.strictEqual(slot.width, scalar);
+  assert.strictEqual(slot.radius, radius);
+  assert.equal(editor.circularTrackSlotEditorKey(slot), key);
+  editor.updateCircularTrackSlotMeasure(slot, 'width', scalar);
+  assert.strictEqual(slot.width, scalar);
+  editor.updateCircularTrackSlotMeasure(slot, 'renderer', scalar);
+  assert.equal(slot.renderer, 'features');
+  const detached = { width: 'saved' };
+  editor.updateCircularTrackSlotMeasure(detached, 'width', null);
+  assert.equal(detached.width, 'saved');
+});

@@ -188,7 +188,11 @@ def _configure_feature_types(page: Page) -> None:
 def _configure_gallery_presentation(page: Page) -> None:
     page.get_by_label("Output Prefix", exact=True).fill("annotated_chloroplast_map")
     page.get_by_label("Species", exact=True).fill("<i>Nicotiana tabacum</i>")
-    page.get_by_label("Track Preset", exact=True).select_option("tuckin")
+    preset = page.get_by_label("Track Preset", exact=True)
+    for details in preset.locator("xpath=ancestor::details").all():
+        if details.get_attribute("open") is None:
+            details.locator(":scope > summary").click()
+    preset.select_option("tuckin")
     page.get_by_label("Separate Strands", exact=True).check()
     page.get_by_label("Hide GC Content", exact=True).uncheck()
     page.get_by_label("Hide GC Skew", exact=True).check()
@@ -248,10 +252,12 @@ def _remove_slot_if_present(page: Page, slot_id: str) -> None:
 
 
 def _configure_gallery_slots(page: Page) -> tuple[dict[str, Any], ...]:
-    custom_slots = page.get_by_role(
-        "button", name=re.compile(r"Custom Track Slots$"), exact=False
-    )
-    custom_slots.click()
+    custom_slots = page.locator("button[aria-controls='circular-custom-track-slots-panel']")
+    for details in custom_slots.locator("xpath=ancestor::details").all():
+        if details.get_attribute("open") is None:
+            details.locator(":scope > summary").click()
+    if custom_slots.get_attribute("aria-expanded") != "true":
+        custom_slots.click()
     page.get_by_role("checkbox", name="Use custom stack", exact=True).check()
     _remove_slot_if_present(page, "ticks")
     _remove_slot_if_present(page, "gc_skew")
@@ -286,8 +292,10 @@ def _configure_gallery_slots(page: Page) -> tuple[dict[str, Any], ...]:
     annotation_slot = page.get_by_role(
         "group", name="Circular track slot plastome_regions", exact=True
     )
-    annotation_slot.get_by_title("Width", exact=True).fill("20px")
-    annotation_slot.get_by_title("Radius", exact=True).fill("0.65")
+    annotation_slot.get_by_role("textbox", name="Circular track slot plastome_regions Width value", exact=True).fill("20")
+    annotation_slot.get_by_role("combobox", name="Circular track slot plastome_regions Width unit", exact=True).select_option("px")
+    annotation_slot.get_by_role("textbox", name="Circular track slot plastome_regions Radius value", exact=True).fill("0.65")
+    annotation_slot.get_by_role("combobox", name="Circular track slot plastome_regions Radius unit", exact=True).select_option("factor")
     annotation_slot.get_by_title("Inner gap", exact=True).fill("1")
     annotation_slot.get_by_title("Outer gap", exact=True).fill("1")
     annotation_slot.get_by_label("Show annotation labels", exact=True).check()
@@ -301,8 +309,10 @@ def _configure_gallery_slots(page: Page) -> tuple[dict[str, Any], ...]:
     gc_slot = page.get_by_role(
         "group", name="Circular track slot gc_content", exact=True
     )
-    gc_slot.get_by_title("Width", exact=True).fill("0.08")
-    gc_slot.get_by_title("Radius", exact=True).fill("0.56")
+    gc_slot.get_by_role("textbox", name="Circular track slot gc_content Width value", exact=True).fill("0.08")
+    gc_slot.get_by_role("combobox", name="Circular track slot gc_content Width unit", exact=True).select_option("factor")
+    gc_slot.get_by_role("textbox", name="Circular track slot gc_content Radius value", exact=True).fill("0.56")
+    gc_slot.get_by_role("combobox", name="Circular track slot gc_content Radius unit", exact=True).select_option("factor")
 
     slots = _track_slot_snapshot(page)
     enabled = tuple(
@@ -385,9 +395,9 @@ def capture_gui_annotated_chloroplast(
         )
         annotations = page.get_by_label("Region Annotations", exact=True)
         annotations.click()
-        page.get_by_label("Import TSV", exact=True).set_input_files(
-            GUI_ANNOTATION_TABLE_PATH
-        )
+        with page.expect_file_chooser() as chooser:
+            page.get_by_role("button", name="Import TSV", exact=True).click()
+        chooser.value.set_files(GUI_ANNOTATION_TABLE_PATH)
         expect(page.get_by_label("Annotation set id", exact=True)).to_have_value(
             "plastome_regions"
         )

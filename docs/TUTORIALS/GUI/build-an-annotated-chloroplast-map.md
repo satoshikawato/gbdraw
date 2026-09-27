@@ -108,8 +108,11 @@ Open **Custom Track Slots**, turn on **Use custom stack**, and remove the
 | Slot | Renderer | Position | Radius | Width | Other settings |
 | --- | --- | --- | ---: | ---: | --- |
 | `features` | Features | On axis | Auto | Auto | Feature on axis / split |
-| `plastome_regions` | Annotations | Inside | `0.65` | `20px` | Set `plastome_regions`; labels on; compress; inner/outer gap `1`; padding `1` |
-| `gc_content` | Dinucleotide content | Inside | `0.56` | `0.08` | GC |
+| `plastome_regions` | Annotations | Inside | `0.65 ×R` | `20 px` | Set `plastome_regions`; labels on; compress; inner/outer gap `1`; padding `1` |
+| `gc_content` | Dinucleotide content | Inside | `0.56 ×R` | `0.08 ×R` | GC |
+
+Enter the number and select **px** or **×R** in each Width/Radius control.
+R is the base circle radius. Keep the features fields empty for Auto.
 
 The region annotations belong between the feature ring and GC content. They
 are not alternating outer decoration and do not need a separate legend item.

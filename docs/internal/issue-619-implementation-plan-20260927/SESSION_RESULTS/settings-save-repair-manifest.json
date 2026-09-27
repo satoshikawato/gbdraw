@@ -1,0 +1,219 @@
+{
+  "branch": "fix/issue-619-circular-track-measure-inputs",
+  "upstream": "origin/fix/issue-619-circular-track-measure-inputs",
+  "handoffSha": "74f9db766708d90e867dbd47fb970cf731b70fb0",
+  "devSha": "252986d096011fcf1a0f5564e940480d3b92844d",
+  "mergedBaseSha": "c75abf72d227443cbc01e0d892e4bc37851b2558",
+  "authority": {
+    "revision": 23,
+    "decisions": [
+      "PD-OI-048",
+      "PD-OI-049",
+      "PD-OI-050"
+    ],
+    "owner": "satoshikawato",
+    "decisionDate": "2026-09-27",
+    "candidateAuthorityChanged": false
+  },
+  "environment": {
+    "python": "3.13.3",
+    "playwright": "1.61.0",
+    "chromium": "149.0.7827.55",
+    "nativePackage": "/mnt/c/Users/genom/GitHub/gbdraw/gbdraw/__init__.py",
+    "url": "http://127.0.0.1:36309/gbdraw/web/index.html",
+    "sourceRoot": "/tmp/gbdraw-619-settings-save-20260927/source",
+    "node": "v26.8.2",
+    "nodePlaywright": "1.61.1"
+  },
+  "artifactRoot": "/tmp/gbdraw-619-settings-save-20260927",
+  "snapshotPreparation": "git archive HEAD streamed to tar -x -C /tmp/gbdraw-619-settings-save-20260927/source; copy only modified gbdraw/web/js/services/config.js from checkout into snapshot; byte-compare all tracked gbdraw files in the probe; prepare snapshot wheel",
+  "snapshotMatchesCheckout": true,
+  "wheelSha256": "e1cd1c3feafec3cd19f376decd81cbcd020aeb3e3483d01905b17616b766a18e",
+  "wheelPythonFilesMatched": 214,
+  "sourceSha256": {
+    "gbdraw/web/js/services/config.js": "1e850ee587a49c23ce653f2b3329d535d54ca6b02a07ed41a7a105a387b49729",
+    "gbdraw/web/js/services/session-authority.js": "62dd342b1982a89584983f3661014a7ea936a526de6da4e7f4980d91283ee718",
+    "gbdraw/web/js/services/session-active-config-contract.js": "7d12b467e91d89f2244cb9fc485569c8fd2282878708753adc56df8355a17ac6",
+    "gbdraw/web/js/app/circular-track-slots.js": "a93094d3db695a366adf637b06aa0902e36ea051509e596b9e643b2503dcb902"
+  },
+  "sourcePatchSha256": "d01320a2ea107cb1f4f8c240c63a1899d52a91a26eee8c5b6f4b6ce8bfa172d6",
+  "commands": [
+    {
+      "id": "handoff",
+      "command": "git status --short --branch; git worktree list; git fetch origin; git branch --show-current; git rev-parse --abbrev-ref --symbolic-full-name @{upstream}; git pull --ff-only origin fix/issue-619-circular-track-measure-inputs; git merge-base --is-ancestor 74f9db766708d90e867dbd47fb970cf731b70fb0 HEAD",
+      "exitCode": 0
+    },
+    {
+      "id": "dev-authority",
+      "command": "git fetch origin refs/heads/dev:refs/remotes/origin/dev; git show origin/dev:docs/internal/OPTION_INTEGRITY_PRODUCT_CONTRACT.md; git merge --no-edit origin/dev",
+      "exitCode": 0
+    },
+    {
+      "id": "writer-before",
+      "command": "node --test tests/web/settings-only-session-writer.test.mjs",
+      "exitCode": 1,
+      "log": "/tmp/gbdraw-619-settings-save-20260927/logs/writer-before.log",
+      "logSha256": "7841c9999ab22dc06f18be8dfef0a1b8bcd9a5346783d0cc88da51ce220fc4db"
+    },
+    {
+      "id": "focused-node",
+      "command": "node --test tests/web/settings-only-session-writer.test.mjs tests/web/settings-only-session.test.mjs tests/web/session-export-validation.test.mjs tests/web/session-draft-authority.test.mjs tests/web/session-active-config-contract.test.mjs tests/web/session-authority.test.mjs tests/web/session-active-files.test.mjs tests/web/session-feature-metadata.test.mjs",
+      "exitCode": 0,
+      "log": "/tmp/gbdraw-619-settings-save-20260927/logs/focused-node.log",
+      "logSha256": "83bd39e49e34bbd9b7cd7d14ad4adef35a35ef4e483b2d629bb5dbf02448aa6e"
+    },
+    {
+      "id": "architecture",
+      "command": "node --test tests/web/architecture-contracts.test.mjs",
+      "exitCode": 0,
+      "log": "/tmp/gbdraw-619-settings-save-20260927/logs/architecture.log",
+      "logSha256": "3014633cbf02e5ca0baac50fd932386fe60992a354ba9c7ce69b85fd18e272b8"
+    },
+    {
+      "id": "native-tests",
+      "command": "pytest -q tests/test_settings_only_session.py",
+      "exitCode": 0,
+      "log": "/tmp/gbdraw-619-settings-save-20260927/logs/native-tests.log",
+      "logSha256": "7e88e3754aaaf702536a413b5832e59225982dbc0a34cfa314cd432111751a64"
+    },
+    {
+      "id": "wheel",
+      "command": "python /tmp/gbdraw-619-settings-save-20260927/source/tools/prepare_browser_wheel.py --no-build-isolation",
+      "exitCode": 0,
+      "log": "/tmp/gbdraw-619-settings-save-20260927/logs/wheel.log",
+      "logSha256": "a609c50c54f5b3107cc67eb97dc671b03ac1c933b844fb2a3b037092c6f2a8c8"
+    },
+    {
+      "id": "existing-browser",
+      "command": "node node_modules/@playwright/test/cli.js test --config=/tmp/gbdraw-619-settings-save-20260927/playwright.config.cjs",
+      "exitCode": 0,
+      "log": "/tmp/gbdraw-619-settings-save-20260927/logs/existing-browser.log",
+      "logSha256": "d1aeaf2d1a4feae738df3ce5426c73d63973ede49d71ac3a0a2144bfac091124"
+    },
+    {
+      "id": "browser-native",
+      "command": "PYTHONPATH=. python docs/internal/issue-619-implementation-plan-20260927/SESSION_RESULTS/observe_settings_save_repair.py --source-root /tmp/gbdraw-619-settings-save-20260927/source --artifacts /tmp/gbdraw-619-settings-save-20260927/downloads-complete --output docs/internal/issue-619-implementation-plan-20260927/SESSION_RESULTS/settings-save-repair-observations.json",
+      "exitCode": 0,
+      "log": "/tmp/gbdraw-619-settings-save-20260927/logs/browser-native-verified.log",
+      "logSha256": "e50494958fbe310e51d68ec13e777c1fd2f630a134cb9471eca4dcf0fb27130e"
+    },
+    {
+      "id": "inactive-diagnostic",
+      "command": "PYTHONPATH=. python /tmp/gbdraw-619-settings-save-20260927/diagnose-inactive.py",
+      "exitCode": 0
+    },
+    {
+      "id": "probe-static",
+      "command": "ruff check docs/internal/issue-619-implementation-plan-20260927/SESSION_RESULTS/observe_settings_save_repair.py; node --check tests/web/settings-only-session-writer.test.mjs",
+      "exitCode": 0
+    },
+    {
+      "id": "policy-runtime",
+      "command": "node tools/check-web-change-budget.mjs --base 252986d096011fcf1a0f5564e940480d3b92844d",
+      "exitCode": 0,
+      "log": "/tmp/gbdraw-619-settings-save-20260927/logs/policy-runtime.log",
+      "logSha256": "3ecc488671750aa9265e12e9004fa3a5984f6e4bb30b69c6abdfeb79f54eb0d8"
+    },
+    {
+      "id": "policy-final",
+      "command": "node tools/check-web-change-budget.mjs --base 252986d096011fcf1a0f5564e940480d3b92844d",
+      "exitCode": 0,
+      "log": "/tmp/gbdraw-619-settings-save-20260927/logs/policy-final.log",
+      "logSha256": "3ecc488671750aa9265e12e9004fa3a5984f6e4bb30b69c6abdfeb79f54eb0d8"
+    },
+    {
+      "id": "diff-check",
+      "command": "git diff --check; git diff --cached --check",
+      "exitCode": 0
+    }
+  ],
+  "results": {
+    "focusedNode": 20,
+    "architecture": 139,
+    "nativeTests": 12,
+    "existingBrowser": 5,
+    "settingsOnlyRoundTrips": 14,
+    "renderedRoundTrips": 2,
+    "negativeControls": 6,
+    "pageErrors": 0,
+    "externalRequests": 0,
+    "resourceChecks": [
+      {
+        "name": "rendered-metadata",
+        "sourceResourcesEqual": true
+      },
+      {
+        "name": "inactive-biological",
+        "sourceResourcesEqual": true
+      }
+    ],
+    "policyRuntime": {
+      "gate": "PASS",
+      "review": "REQUIRED",
+      "blockingViolations": [],
+      "reason": "Registered session/compatibility path changed: services/config.js"
+    },
+    "policyFinal": {
+      "gate": "PASS",
+      "review": "REQUIRED",
+      "blockingViolations": [],
+      "stagedPaths": 10,
+      "reason": "Registered session/compatibility path changed: services/config.js"
+    }
+  },
+  "diagnosticFailures": [
+    {
+      "exitCode": 1,
+      "log": "writer-after.log",
+      "reason": "Harness compared in-memory undefined field with JSON omission; corrected representation comparison."
+    },
+    {
+      "exitCode": 1,
+      "log": "browser-native.log",
+      "reason": "Same undefined transport issue in Python probe; corrected JSON snapshot."
+    },
+    {
+      "exitCode": 1,
+      "log": "browser-native-retry.log",
+      "reason": "Named title prompt intentionally added History; fresh control now retains empty title."
+    },
+    {
+      "exitCode": 1,
+      "log": "browser-native-diagnostic.log",
+      "reason": "Confirmed title change is the sole Save-state difference."
+    },
+    {
+      "exitCode": 1,
+      "log": "browser-native-final.log",
+      "reason": "Probe mistakenly required zero Workers for rendered Gallery Load; compares same admitted baseline instead."
+    },
+    {
+      "exitCode": 1,
+      "log": "browser-native-accepted.log",
+      "reason": "Execution context destroyed during fixture setup; retried same source and checks in new output directory."
+    },
+    {
+      "exitCode": 1,
+      "log": "browser-native-complete.log",
+      "reason": "Inactive cross-mode Load restores committed Circular mode, so full config equality is unestablished. Difference explicitly recorded; source/scalar/metadata continuity checked independently."
+    }
+  ],
+  "limits": [
+    "S01 not started; no schema/validator/controls/renderer changes.",
+    "Inactive cross-mode full config equality remains unestablished; five observed fields are recorded in the result report.",
+    "S00 nonfinite-number History loss and typed Boolean coercion remain outside this repair.",
+    "No full pytest, slow/performance, all-browser matrix, native render replay, remote CI, PR, dev merge or deployment."
+  ],
+  "historicalEvidenceSha256": {
+    "browser-native-observations.json": "f803d319e0d14e8cad3a5fd542ad7cb2f8842485174b7d25d191cd2b9edc7fe6",
+    "continuity-observations.json": "d4328ed8d161aa26e954718c7110546c9ebc0a0be51c8712c771448fb959aecb",
+    "native-request-observations.json": "3585e89b44cb3b784d11c2b7bfd2374f8df0bbd8b3db5d6888dc96f601557f40",
+    "nonfinite-browser-observations.json": "684c52897340b256d63a12eb5d08d065f8beb1112a9867901aec4e7297613737",
+    "scalar-fixtures.json": "633cef73a7b5fd87eef558ebb5dbc139d25879e9dd5e2fac2e4a9b04ca1bda2d",
+    "scalar-observations.json": "049cb3c29eefd78d13763ef61bd7850e6550179548c802ff897708c41af9ebca"
+  },
+  "newEvidenceSha256": {
+    "settings-save-repair-observations.json": "0e5fae17a40c08b26a8058e131a5b3573b1b8ae47be983fa260dbb005812e082"
+  },
+  "purpose": "Observed verification provenance, not Product authority or checker input."
+}

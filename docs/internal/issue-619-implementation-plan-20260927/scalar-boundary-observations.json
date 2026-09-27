@@ -1,0 +1,143 @@
+{
+  "sourceSha": "88028fd242d263f0fe86aaf9da57b8dc9eb082f6",
+  "sourceSha256": {
+    "gbdraw/web/js/app/circular-track-slots.js": "a93094d3db695a366adf637b06aa0902e36ea051509e596b9e643b2503dcb902",
+    "gbdraw/web/js/app/track-slot-validation.js": "d920c6dc21f4b5f336945e13564a2c284b61fd85c7acfe9a94c77862a5649353",
+    "gbdraw/web/js/services/session-active-config-contract.js": "7d12b467e91d89f2244cb9fc485569c8fd2282878708753adc56df8355a17ac6"
+  },
+  "observations": [
+    {
+      "name": "typed_px",
+      "input": {
+        "value": 20,
+        "unit": "px"
+      },
+      "acceptedByActiveConfigAndSlotValidation": true,
+      "draftRetained": true,
+      "canonical": {
+        "value": 20,
+        "unit": "px"
+      }
+    },
+    {
+      "name": "typed_factor",
+      "input": {
+        "value": 0.08,
+        "unit": "factor"
+      },
+      "acceptedByActiveConfigAndSlotValidation": true,
+      "draftRetained": true,
+      "canonical": {
+        "value": 0.08,
+        "unit": "factor"
+      }
+    },
+    {
+      "name": "typed_numeric_text",
+      "input": {
+        "value": "1.",
+        "unit": "px"
+      },
+      "acceptedByActiveConfigAndSlotValidation": true,
+      "draftRetained": true,
+      "canonical": {
+        "value": 1,
+        "unit": "px"
+      }
+    },
+    {
+      "name": "typed_exponent_text",
+      "input": {
+        "value": "1e-3",
+        "unit": "factor"
+      },
+      "acceptedByActiveConfigAndSlotValidation": true,
+      "draftRetained": true,
+      "canonical": {
+        "value": 0.001,
+        "unit": "factor"
+      }
+    },
+    {
+      "name": "legacy_px",
+      "input": "20px",
+      "acceptedByActiveConfigAndSlotValidation": true,
+      "draftRetained": true,
+      "canonical": {
+        "value": 20,
+        "unit": "px"
+      }
+    },
+    {
+      "name": "legacy_percent",
+      "input": "65%",
+      "acceptedByActiveConfigAndSlotValidation": true,
+      "draftRetained": true,
+      "canonical": {
+        "value": 0.65,
+        "unit": "factor"
+      }
+    },
+    {
+      "name": "legacy_bare",
+      "input": "1.5",
+      "acceptedByActiveConfigAndSlotValidation": true,
+      "draftRetained": true,
+      "canonical": {
+        "value": 1.5,
+        "unit": "factor"
+      }
+    },
+    {
+      "name": "auto",
+      "input": null,
+      "acceptedByActiveConfigAndSlotValidation": true,
+      "draftRetained": true,
+      "canonical": null
+    },
+    {
+      "input": {
+        "value": "bad",
+        "unit": "px"
+      },
+      "rejectedBySlotValidationAndPayload": true,
+      "draftRetained": true
+    },
+    {
+      "input": {
+        "value": "1e",
+        "unit": "factor"
+      },
+      "rejectedBySlotValidationAndPayload": true,
+      "draftRetained": true
+    },
+    {
+      "input": {
+        "value": 0,
+        "unit": "px"
+      },
+      "rejectedBySlotValidationAndPayload": true,
+      "draftRetained": true
+    },
+    {
+      "input": {
+        "value": -1,
+        "unit": "factor"
+      },
+      "rejectedBySlotValidationAndPayload": true,
+      "draftRetained": true
+    },
+    {
+      "input": {
+        "value": 1,
+        "unit": "em"
+      },
+      "rejectedBySlotValidationAndPayload": true,
+      "draftRetained": true
+    }
+  ],
+  "limits": [
+    "DOM-free normalization, active-config validation, slot validation and payload only.",
+    "No actual Save/Load, native Session reader, History or new UI was executed."
+  ]
+}

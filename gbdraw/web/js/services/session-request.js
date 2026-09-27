@@ -30,6 +30,7 @@ import {
   normalizeCircularTrackSlot,
   parseCircularTrackSlotSpecs
 } from '../app/circular-track-slots.js';
+import { projectCircularMeasureDraft } from '../app/circular-track-slots/measure-editor.js';
 import {
   buildLinearTrackSlotPayload,
   LINEAR_TRACK_RENDERERS,
@@ -61,6 +62,7 @@ import {
 import { resolveLinearLabelVisibility } from '../app/linear-label-visibility.js';
 import {
   assertValidCustomTrackPlan,
+  parseOptionalPixel,
   validateCustomTrackPlan,
   validateTrackSlotBindingInvariants
 } from '../app/track-slot-validation.js';
@@ -3679,26 +3681,28 @@ const projectCircularConservationConfig = (options, files) => {
   };
 };
 
-const projectCanonicalCircularMeasure = (measure) => {
-  if (measure === null || measure === undefined) return null;
-  if (!measure || typeof measure !== 'object' || Array.isArray(measure)) return measure;
-  const value = Number(measure.value);
-  if (!Number.isFinite(value)) return measure;
-  const unit = String(measure.unit || '').trim().toLowerCase();
-  if (!unit || unit === 'factor') return String(value);
-  return `${value}${unit}`;
+const projectCanonicalCircularPixel = (measure) => {
+  // Historical structured gaps/spacing are physical pixels, including zero.
+  if (measure && typeof measure === 'object' && !Array.isArray(measure)) {
+    if (String(measure.unit || '').trim().toLowerCase() !== 'px') {
+      throw new Error('Circular gap/spacing must use pixels.');
+    }
+    measure = measure.value;
+  }
+  const value = parseOptionalPixel(measure, 'Circular gap/spacing', { allowZero: true });
+  return value === null ? null : String(value);
 };
 
 const projectCanonicalCircularSlot = (slot) => ({
   ...slot,
-  width: projectCanonicalCircularMeasure(slot?.width),
-  radius: projectCanonicalCircularMeasure(slot?.radius),
-  inner_gap_px: projectCanonicalCircularMeasure(
+  width: projectCircularMeasureDraft(slot?.width),
+  radius: projectCircularMeasureDraft(slot?.radius),
+  inner_gap_px: projectCanonicalCircularPixel(
     slot?.innerGapPx ?? slot?.inner_gap_px
-  )?.replace?.(/px$/i, ''),
-  outer_gap_px: projectCanonicalCircularMeasure(
+  ),
+  outer_gap_px: projectCanonicalCircularPixel(
     slot?.outerGapPx ?? slot?.outer_gap_px
-  )?.replace?.(/px$/i, '')
+  )
 });
 
 const projectCurrentCanonicalCircularSlot = (slot) => {
@@ -3729,7 +3733,7 @@ const projectCurrentCanonicalCircularSlot = (slot) => {
 const projectLegacyCanonicalCircularSlot = (slot) => {
   const projected = projectCanonicalCircularSlot(slot);
   if (Object.prototype.hasOwnProperty.call(slot, 'spacing')) {
-    projected.spacing = projectCanonicalCircularMeasure(slot.spacing);
+    projected.spacing = projectCanonicalCircularPixel(slot.spacing);
   }
   return migrateLegacyCircularTrackSlot(projected);
 };
