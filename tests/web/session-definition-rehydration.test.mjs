@@ -1,3 +1,4 @@
+import { installSessionImportWorker } from './helpers/session-import-node.mjs';
 import assert from 'node:assert/strict';
 import { File } from 'node:buffer';
 import { readFile } from 'node:fs/promises';
@@ -17,6 +18,8 @@ globalThis.document = {};
 installFakeSvgDom();
 globalThis.File = File;
 globalThis.alert = () => {};
+
+installSessionImportWorker();
 
 const { importSession } = await import('../../gbdraw/web/js/services/config.js');
 const { state } = await import('../../gbdraw/web/js/state.js');

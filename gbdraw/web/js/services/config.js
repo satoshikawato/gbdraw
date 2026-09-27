@@ -134,9 +134,9 @@ import {
 } from './gallery-session-migration.js';
 import {
   compressSessionData,
-  confirmLargeSessionBlob,
-  readSessionText
+  confirmLargeSessionBlob
 } from './session-file.js';
+import { importSessionFile } from './session-import-client.js';
 import { downloadBlob } from './text-download.js';
 import { normalizeAnnotationSets } from '../app/annotations/state.js';
 import { applySpecificRuleProvenance } from '../app/specific-color-rules.js';
@@ -4084,7 +4084,7 @@ const exportSessionDocument = async (
     resources: canonical.resources,
     webFiles: canonical.webFiles,
     results: logicalResults,
-    runMetadata: {
+    runMetadata: settingsOnly ? {} : {
       ...(state.trackSlotResolvedGeometry.value
         ? { trackSlotGeometry: cloneJsonData(state.trackSlotResolvedGeometry.value) } : {}),
       annotationWarnings: cloneJsonData(state.annotationWarnings.value)
@@ -4171,13 +4171,10 @@ const importSessionDocument = async (e, options = {}) => {
   let commitStarted = false;
 
   try {
-    recordSessionLifecycleEvent('gzip-to-text-start');
-    const text = await readSessionText(file);
+    const candidate = await importSessionFile(file, { signal: options.signal });
     if (!options.isCurrent()) return { status: 'canceled' };
-    recordSessionLifecycleEvent('gzip-to-text-end', { characters: text.length });
-    recordSessionLifecycleEvent('json-parse-start');
-    let data = JSON.parse(text);
-    recordSessionLifecycleEvent('json-parse-end');
+    recordSessionLifecycleEvent('session-import-codec-completed', candidate.timings);
+    let data = candidate.data;
     assertSafeObjectKeys(data, 'Session');
     if (isLegacyConfigPayload(data)) {
       applyLegacyConfigPayload(data);
@@ -4631,17 +4628,18 @@ const importSessionDocument = async (e, options = {}) => {
       degradedRecovery: Boolean(currentRecoveryError)
     });
     if (!options.isCurrent()) throw new Error('Session loading was canceled.');
-    await options.afterImport?.({ status: 'ok', decompressedCharacters: text.length, isCurrent: options.isCurrent });
+    await options.afterImport?.({ status: 'ok', decompressedCharacters: candidate.characters, isCurrent: options.isCurrent });
     if (!options.isCurrent()) throw new Error('Session loading was canceled.');
     alert('Session loaded successfully!');
     return {
       status: 'ok',
       data,
-      decompressedCharacters: text.length,
+      decompressedCharacters: candidate.characters,
       degradedRecovery: Boolean(currentRecoveryError),
       comparisonDisposition: state.importedComparisonIntent.disposition
     };
   } catch (err) {
+    if (err?.name === 'AbortError' && !commitStarted) return { status: 'canceled' };
     console.error(err);
     if (commitStarted && rollbackSnapshot) {
       try {
@@ -4674,7 +4672,10 @@ let activeSessionImport = null;
 
 export const disposeSessionOperations = () => {
   if (sessionSaveInFlight) sessionSaveInFlight.canceled = true;
-  if (activeSessionImport) activeSessionImport.canceled = true;
+  if (activeSessionImport) {
+    activeSessionImport.canceled = true;
+    activeSessionImport.controller.abort();
+  }
   sessionSaveInFlight = null;
   activeSessionImport = null;
   state.sessionSavePending.value = false;
@@ -4755,7 +4756,7 @@ export const importSession = async (event, options = {}) => {
     input.value = '';
     return busy;
   }
-  const operation = { canceled: false };
+  const operation = { canceled: false, controller: new AbortController() };
   activeSessionImport = operation;
   const isCurrent = () => activeSessionImport === operation && !operation.canceled;
   state.sessionImportPending.value = true;
@@ -4764,7 +4765,7 @@ export const importSession = async (event, options = {}) => {
     await options.beforeImport?.();
     if (!isCurrent()) return { status: 'canceled' };
     const result = await importSessionDocument({ target: { files: [file], value: input.value } }, {
-      ...options, isCurrent
+      ...options, isCurrent, signal: operation.controller.signal
     });
     return result;
   } finally {

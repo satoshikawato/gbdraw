@@ -1,3 +1,4 @@
+import { installSessionImportWorker } from './helpers/session-import-node.mjs';
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
 import { mkdtemp, readFile, rm } from 'node:fs/promises';
@@ -25,6 +26,8 @@ globalThis.File = class File extends Blob {
   }
 };
 globalThis.alert = () => {};
+
+installSessionImportWorker();
 
 const { importSession, getCommittedCanonicalRenderRequest, setUnmanagedConfigOverrideValidator } = await import('../../gbdraw/web/js/services/config.js');
 const { state } = await import('../../gbdraw/web/js/state.js');

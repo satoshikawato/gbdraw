@@ -1,3 +1,4 @@
+import { installSessionImportWorker } from './helpers/session-import-node.mjs';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { installFakeSvgDom } from './fake-svg-dom.mjs';
@@ -22,6 +23,8 @@ globalThis.File = class File extends Blob {
 };
 const alerts = [];
 globalThis.alert = (message) => alerts.push(String(message));
+
+installSessionImportWorker();
 
 const {
   buildConfigData,

@@ -1,0 +1,835 @@
+{
+  "commands": [
+    {
+      "command": [
+        "/home/kawato/micromamba/bin/python",
+        "tools/verify_issue597_s01_outputs.py",
+        "--source",
+        "/tmp/gbdraw-issue597-S05.ujOWyl/gbdraw/web/gallery/sessions/vibrio-harveyi-group-collinear.gbdraw-session.json.gz",
+        "--saved",
+        "/tmp/issue597-S05-resume-evidence/pipeline/vibrio-0-saved.gbdraw-session.json.gz",
+        "--output",
+        "/tmp/issue597-S05-resume-evidence/replay-vibrio-0",
+        "--replay"
+      ],
+      "exit": 0,
+      "output": "/tmp/issue597-S05-resume-evidence/replay-vibrio-0"
+    },
+    {
+      "command": [
+        "/home/kawato/micromamba/bin/python",
+        "tools/verify_issue597_s01_outputs.py",
+        "--source",
+        "/tmp/gbdraw-issue597-S05.ujOWyl/gbdraw/web/gallery/sessions/vibrio-harveyi-group-collinear.gbdraw-session.json.gz",
+        "--saved",
+        "/tmp/issue597-S05-resume-evidence/pipeline/vibrio-1-saved.gbdraw-session.json.gz",
+        "--output",
+        "/tmp/issue597-S05-resume-evidence/replay-vibrio-1"
+      ],
+      "exit": 0,
+      "output": "/tmp/issue597-S05-resume-evidence/replay-vibrio-1"
+    },
+    {
+      "command": [
+        "/home/kawato/micromamba/bin/python",
+        "tools/verify_issue597_s01_outputs.py",
+        "--source",
+        "/tmp/gbdraw-issue597-S05.ujOWyl/gbdraw/web/gallery/sessions/vibrio-harveyi-group-collinear.gbdraw-session.json.gz",
+        "--saved",
+        "/tmp/issue597-S05-resume-evidence/pipeline/vibrio-2-saved.gbdraw-session.json.gz",
+        "--output",
+        "/tmp/issue597-S05-resume-evidence/replay-vibrio-2"
+      ],
+      "exit": 0,
+      "output": "/tmp/issue597-S05-resume-evidence/replay-vibrio-2"
+    },
+    {
+      "command": [
+        "/home/kawato/micromamba/bin/python",
+        "tools/verify_issue597_s01_outputs.py",
+        "--source",
+        "/tmp/issue597-S05-resume-evidence/fixture/real-full-pairwise.gbdraw-session.json.gz",
+        "--saved",
+        "/tmp/issue597-S05-resume-evidence/pipeline/real-0-saved.gbdraw-session.json.gz",
+        "--output",
+        "/tmp/issue597-S05-resume-evidence/replay-real-0",
+        "--replay"
+      ],
+      "exit": 0,
+      "output": "/tmp/issue597-S05-resume-evidence/replay-real-0"
+    },
+    {
+      "command": [
+        "/home/kawato/micromamba/bin/python",
+        "tools/verify_issue597_s01_outputs.py",
+        "--source",
+        "/tmp/issue597-S05-resume-evidence/fixture/real-full-pairwise.gbdraw-session.json.gz",
+        "--saved",
+        "/tmp/issue597-S05-resume-evidence/pipeline/real-1-saved.gbdraw-session.json.gz",
+        "--output",
+        "/tmp/issue597-S05-resume-evidence/replay-real-1"
+      ],
+      "exit": 0,
+      "output": "/tmp/issue597-S05-resume-evidence/replay-real-1"
+    },
+    {
+      "command": [
+        "/home/kawato/micromamba/bin/python",
+        "tools/verify_issue597_s01_outputs.py",
+        "--source",
+        "/tmp/issue597-S05-resume-evidence/fixture/real-full-pairwise.gbdraw-session.json.gz",
+        "--saved",
+        "/tmp/issue597-S05-resume-evidence/pipeline/real-2-saved.gbdraw-session.json.gz",
+        "--output",
+        "/tmp/issue597-S05-resume-evidence/replay-real-2"
+      ],
+      "exit": 0,
+      "output": "/tmp/issue597-S05-resume-evidence/replay-real-2"
+    },
+    {
+      "command": [
+        "/home/kawato/micromamba/bin/python",
+        "tools/verify_issue597_s01_outputs.py",
+        "--source",
+        "/tmp/issue597-S05-resume-evidence/journey/vibrio-0-generated.json.gz",
+        "--saved",
+        "/tmp/issue597-S05-resume-evidence/journey/vibrio-0-generated.json.gz",
+        "--output",
+        "/tmp/issue597-S05-resume-evidence/replay-generated-vibrio",
+        "--replay"
+      ],
+      "exit": 0,
+      "output": "/tmp/issue597-S05-resume-evidence/replay-generated-vibrio",
+      "sourceSavedSameOperand": true
+    }
+  ],
+  "results": [
+    {
+      "artifact": "/tmp/issue597-S05-resume-evidence/replay-generated-vibrio/semantic-checks.json",
+      "source": {
+        "sha256": "7eb2d422146832b32ab056430254df3c2d6b330d213d4bebd5fd34862b7b2634",
+        "bytes": 29203146,
+        "version": 44,
+        "requestSchema": 8,
+        "records": 4,
+        "features": 18782,
+        "cacheEntries": 12,
+        "hashes": {
+          "format": "a565d6c86d89f5062657493c80eed1b314a7d52b81c7504622b0ee9084307f4f",
+          "version": "71ee45a3c0db9a9865f7313dd3372cf60dca6479d46261f3542eb9346e4a04d6",
+          "createdAt": "e37a944eeec9c6c9ff335ced5097da02a214519a2ccc77759e495a80ccae1817",
+          "title": "ac30c716d0421def682061f4575a9cc1a9344ba91c2e6bc8362d8022504894b8",
+          "config": "87e14e6c88d78064af0bcb6cbf5bd81d89c15f47e039307019803502cb727892",
+          "ui": "8bdd3575c36df8ee41a6d1e682cf509c15219ad30b068b734b4ccf608746faab",
+          "renderRequest": "37a03ecc91e37b975c55567ade8bf51ec660ea83fe643451d8bdd8d77c7f2045",
+          "resources": "c388f0608f4476bc55cbdd2332a6220ce89cdeed1f2c9a47a6614d08a6ebaceb",
+          "webFiles": "8b7b6af2ed79d317af9b6a1fbcd6fca8aac7d8cbcaf34b21d057258f2d7c619d",
+          "results": "435c8eb3507a7c09ab097fa18d4f9935a60303188ea8be989fd5476422f0f6d3",
+          "runMetadata": "6449ac2797d2974fe3d0b0f6f5f787de4a9d4230446bbec7a8f1a67b50ba5ef3",
+          "features": "6b4e3687049ef90433ac03d66c81efa02f47cc29e96dde51bd834cac7d6419e0",
+          "editorState": "1541874b4e1f735be97c7913ade34f78a01a868899640b799afeb5e0fd1e7822",
+          "orthogroupState": "2ef835f9b003a3b9c0300376225b8799ca37512ee954c8e425e3e067e893fc68",
+          "losatCache": "4fe18374134bf854b2996382c5159bdd20b3470bbb964638427be95bb0bdfcb8",
+          "losatDerivedCache": "d801aa1fb7ddcc330a5e3173372ea6af4a3d08ec58074478e85aa5603e926658",
+          "proteinIdentityManifest": "7971621217011a486d90f526ddf0e75f09ca4e67a4e60107f69c203ea71a18e0"
+        },
+        "wholeHash": "4da5969288b7ca3764ab2c1b8270380f525137f7ab230612cd736d8d9eaac89b"
+      },
+      "saved": {
+        "sha256": "7eb2d422146832b32ab056430254df3c2d6b330d213d4bebd5fd34862b7b2634",
+        "bytes": 29203146,
+        "version": 44,
+        "requestSchema": 8,
+        "records": 4,
+        "features": 18782,
+        "cacheEntries": 12,
+        "hashes": {
+          "format": "a565d6c86d89f5062657493c80eed1b314a7d52b81c7504622b0ee9084307f4f",
+          "version": "71ee45a3c0db9a9865f7313dd3372cf60dca6479d46261f3542eb9346e4a04d6",
+          "createdAt": "e37a944eeec9c6c9ff335ced5097da02a214519a2ccc77759e495a80ccae1817",
+          "title": "ac30c716d0421def682061f4575a9cc1a9344ba91c2e6bc8362d8022504894b8",
+          "config": "87e14e6c88d78064af0bcb6cbf5bd81d89c15f47e039307019803502cb727892",
+          "ui": "8bdd3575c36df8ee41a6d1e682cf509c15219ad30b068b734b4ccf608746faab",
+          "renderRequest": "37a03ecc91e37b975c55567ade8bf51ec660ea83fe643451d8bdd8d77c7f2045",
+          "resources": "c388f0608f4476bc55cbdd2332a6220ce89cdeed1f2c9a47a6614d08a6ebaceb",
+          "webFiles": "8b7b6af2ed79d317af9b6a1fbcd6fca8aac7d8cbcaf34b21d057258f2d7c619d",
+          "results": "435c8eb3507a7c09ab097fa18d4f9935a60303188ea8be989fd5476422f0f6d3",
+          "runMetadata": "6449ac2797d2974fe3d0b0f6f5f787de4a9d4230446bbec7a8f1a67b50ba5ef3",
+          "features": "6b4e3687049ef90433ac03d66c81efa02f47cc29e96dde51bd834cac7d6419e0",
+          "editorState": "1541874b4e1f735be97c7913ade34f78a01a868899640b799afeb5e0fd1e7822",
+          "orthogroupState": "2ef835f9b003a3b9c0300376225b8799ca37512ee954c8e425e3e067e893fc68",
+          "losatCache": "4fe18374134bf854b2996382c5159bdd20b3470bbb964638427be95bb0bdfcb8",
+          "losatDerivedCache": "d801aa1fb7ddcc330a5e3173372ea6af4a3d08ec58074478e85aa5603e926658",
+          "proteinIdentityManifest": "7971621217011a486d90f526ddf0e75f09ca4e67a4e60107f69c203ea71a18e0"
+        },
+        "wholeHash": "4da5969288b7ca3764ab2c1b8270380f525137f7ab230612cd736d8d9eaac89b"
+      },
+      "checks": {
+        "renderRequest": true,
+        "resources": true,
+        "proteinIdentityManifest": true,
+        "losatDerivedCache": true,
+        "sourceEditorStateFields": true,
+        "featureCatalog": true,
+        "rawCacheSourceFields": true,
+        "cacheOnlyExistingRestoreMetadataAdded": true,
+        "savedSvgSemanticEqual": true,
+        "pythonReaderRecords": true,
+        "cliReplay": true
+      },
+      "svg": {
+        "equal": true,
+        "message": "SVGs are semantically equivalent",
+        "differences": []
+      },
+      "addedCacheFields": [],
+      "addedEditorFieldNames": [],
+      "pythonReader": {
+        "version": 44,
+        "mode": "linear",
+        "records": 4
+      },
+      "cliReplayExit": 0,
+      "cliSvgBytes": 5128555,
+      "identityOperands": true
+    },
+    {
+      "artifact": "/tmp/issue597-S05-resume-evidence/replay-real-0/semantic-checks.json",
+      "source": {
+        "sha256": "d3cafef9664bff958aec4932eea6e264ae872cce89762a7cbe617447af975388",
+        "bytes": 134471323,
+        "version": 44,
+        "requestSchema": 8,
+        "records": 12,
+        "features": 62089,
+        "cacheEntries": 144,
+        "hashes": {
+          "format": "a565d6c86d89f5062657493c80eed1b314a7d52b81c7504622b0ee9084307f4f",
+          "version": "71ee45a3c0db9a9865f7313dd3372cf60dca6479d46261f3542eb9346e4a04d6",
+          "createdAt": "d5c6127bab299c94eed55d31430169045de4083da95c0302752185455f671c5e",
+          "title": "41fa90b2b3984145805f4505c76707d3d75551814b5c9510fa868a912eed18de",
+          "ui": "e8c5aea1f0ebcbaa58a50e79b261e2d7940b78b685fe0d57b9c33e6cc13f312d",
+          "results": "3fc1e5206c155d14a4c33650310bc6ad73b9accd3c7356af9e9c738714f9b018",
+          "editorState": "5a9921e3c4c007a3870c3e7ee910af6df5dc0ec177c9df85cbb1d5dadd9327df",
+          "features": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a",
+          "orthogroupState": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a",
+          "cliInvocation": "6bcd9d92822c296df3466cf407d7aabbf003f4b8c764e8a03c30af4ca1c38d59",
+          "renderRequest": "4a24e726f9b038fdf0b999bfdd808cb34963ce4054e6df5ecdd963b39cac489b",
+          "resources": "600846eea4986e6d4fa92002870566c5ede14d6f3abd7c9ab2c98d7e1cec7688",
+          "webFiles": "b0be9635048d1dddaa08db919832436f5522a16b3feba07bee85d2e34d110088",
+          "losatCache": "21a45656d0a4c352003e7c1a49a2ad63ac49ce3fefff0c63e62cf4f73403e677",
+          "losatDerivedCache": "d801aa1fb7ddcc330a5e3173372ea6af4a3d08ec58074478e85aa5603e926658",
+          "proteinIdentityManifest": "b0e1ac56011c6f04e76a1b9af7c3431df72911762986163b37f63f7802b51cce"
+        },
+        "wholeHash": "1482237e2b867d2603226b4e4ae30584ecccc64c5689d6964c04490d2242255f"
+      },
+      "saved": {
+        "sha256": "19eec3c024d4240739ea4d9d6a9946e97e34283f2ca639b6ba2e0df584a94a0b",
+        "bytes": 133518068,
+        "version": 44,
+        "requestSchema": 8,
+        "records": 12,
+        "features": 62089,
+        "cacheEntries": 144,
+        "hashes": {
+          "format": "a565d6c86d89f5062657493c80eed1b314a7d52b81c7504622b0ee9084307f4f",
+          "version": "71ee45a3c0db9a9865f7313dd3372cf60dca6479d46261f3542eb9346e4a04d6",
+          "createdAt": "3cdda322cdf24be14b5c0aecb6def0138ede6f3086c54eb63eb59154f7541c29",
+          "title": "7ebd154623dc1eac803167beddb7bae56174627d1c61f085a8d15040524c8190",
+          "config": "649e11097333bc97ad20586e84e25defe13f5efad47e5840853d8f41ca3ff623",
+          "ui": "8bdd3575c36df8ee41a6d1e682cf509c15219ad30b068b734b4ccf608746faab",
+          "renderRequest": "4a24e726f9b038fdf0b999bfdd808cb34963ce4054e6df5ecdd963b39cac489b",
+          "resources": "600846eea4986e6d4fa92002870566c5ede14d6f3abd7c9ab2c98d7e1cec7688",
+          "webFiles": "9cd94f7d34e0a7c9eb685273bfcd349bb1cf8f8a1fc48ad3e718e3a3992118df",
+          "results": "8eadde508b13b0d3c273bc147cef8c162e7b8c344741fe4fb1aad7031582d687",
+          "runMetadata": "9839a2f476149cacc6f3fcb8e89b4542f417c336db7c7e68e5b19a8181d67a08",
+          "features": "6b4e3687049ef90433ac03d66c81efa02f47cc29e96dde51bd834cac7d6419e0",
+          "editorState": "855570853dec9e05f5bbac125fedc16a3eace9d54d8f0795c8f9c76b2c80b563",
+          "orthogroupState": "2ef835f9b003a3b9c0300376225b8799ca37512ee954c8e425e3e067e893fc68",
+          "losatCache": "21a45656d0a4c352003e7c1a49a2ad63ac49ce3fefff0c63e62cf4f73403e677",
+          "losatDerivedCache": "d801aa1fb7ddcc330a5e3173372ea6af4a3d08ec58074478e85aa5603e926658",
+          "proteinIdentityManifest": "b0e1ac56011c6f04e76a1b9af7c3431df72911762986163b37f63f7802b51cce"
+        },
+        "wholeHash": "c1abbeba9b25a1f6b0b64a7fbe08b9f26d79efa9448a341ce6424942c7f342ce"
+      },
+      "checks": {
+        "renderRequest": true,
+        "resources": true,
+        "proteinIdentityManifest": true,
+        "losatDerivedCache": true,
+        "sourceEditorStateFields": true,
+        "featureCatalog": true,
+        "rawCacheSourceFields": true,
+        "cacheOnlyExistingRestoreMetadataAdded": true,
+        "savedSvgSemanticEqual": true,
+        "pythonReaderRecords": true,
+        "cliReplay": true
+      },
+      "svg": {
+        "equal": true,
+        "message": "SVGs are semantically equivalent",
+        "differences": []
+      },
+      "addedCacheFields": [],
+      "addedEditorFieldNames": [
+        "legend",
+        "featureStrokes",
+        "originalSvgStroke",
+        "alignmentResetReceipt"
+      ],
+      "pythonReader": {
+        "version": 44,
+        "mode": "linear",
+        "records": 12
+      },
+      "cliReplayExit": 0,
+      "cliSvgBytes": 19621657,
+      "identityOperands": false
+    },
+    {
+      "artifact": "/tmp/issue597-S05-resume-evidence/replay-real-1/semantic-checks.json",
+      "source": {
+        "sha256": "d3cafef9664bff958aec4932eea6e264ae872cce89762a7cbe617447af975388",
+        "bytes": 134471323,
+        "version": 44,
+        "requestSchema": 8,
+        "records": 12,
+        "features": 62089,
+        "cacheEntries": 144,
+        "hashes": {
+          "format": "a565d6c86d89f5062657493c80eed1b314a7d52b81c7504622b0ee9084307f4f",
+          "version": "71ee45a3c0db9a9865f7313dd3372cf60dca6479d46261f3542eb9346e4a04d6",
+          "createdAt": "d5c6127bab299c94eed55d31430169045de4083da95c0302752185455f671c5e",
+          "title": "41fa90b2b3984145805f4505c76707d3d75551814b5c9510fa868a912eed18de",
+          "ui": "e8c5aea1f0ebcbaa58a50e79b261e2d7940b78b685fe0d57b9c33e6cc13f312d",
+          "results": "3fc1e5206c155d14a4c33650310bc6ad73b9accd3c7356af9e9c738714f9b018",
+          "editorState": "5a9921e3c4c007a3870c3e7ee910af6df5dc0ec177c9df85cbb1d5dadd9327df",
+          "features": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a",
+          "orthogroupState": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a",
+          "cliInvocation": "6bcd9d92822c296df3466cf407d7aabbf003f4b8c764e8a03c30af4ca1c38d59",
+          "renderRequest": "4a24e726f9b038fdf0b999bfdd808cb34963ce4054e6df5ecdd963b39cac489b",
+          "resources": "600846eea4986e6d4fa92002870566c5ede14d6f3abd7c9ab2c98d7e1cec7688",
+          "webFiles": "b0be9635048d1dddaa08db919832436f5522a16b3feba07bee85d2e34d110088",
+          "losatCache": "21a45656d0a4c352003e7c1a49a2ad63ac49ce3fefff0c63e62cf4f73403e677",
+          "losatDerivedCache": "d801aa1fb7ddcc330a5e3173372ea6af4a3d08ec58074478e85aa5603e926658",
+          "proteinIdentityManifest": "b0e1ac56011c6f04e76a1b9af7c3431df72911762986163b37f63f7802b51cce"
+        },
+        "wholeHash": "1482237e2b867d2603226b4e4ae30584ecccc64c5689d6964c04490d2242255f"
+      },
+      "saved": {
+        "sha256": "6abf72ebe043c775a1cfb2bfa594af12c8a93ce6265aeb4a4443bb39fef4ad8c",
+        "bytes": 133518077,
+        "version": 44,
+        "requestSchema": 8,
+        "records": 12,
+        "features": 62089,
+        "cacheEntries": 144,
+        "hashes": {
+          "format": "a565d6c86d89f5062657493c80eed1b314a7d52b81c7504622b0ee9084307f4f",
+          "version": "71ee45a3c0db9a9865f7313dd3372cf60dca6479d46261f3542eb9346e4a04d6",
+          "createdAt": "2827be415b63fd0014357b22eb4a17388e757217c49a615faa0978ec9b6efffa",
+          "title": "7ebd154623dc1eac803167beddb7bae56174627d1c61f085a8d15040524c8190",
+          "config": "c5b36c10a8f1fec98679985fd2b0f09e92b216edeb54e83c17192b1c053aecfc",
+          "ui": "8bdd3575c36df8ee41a6d1e682cf509c15219ad30b068b734b4ccf608746faab",
+          "renderRequest": "4a24e726f9b038fdf0b999bfdd808cb34963ce4054e6df5ecdd963b39cac489b",
+          "resources": "600846eea4986e6d4fa92002870566c5ede14d6f3abd7c9ab2c98d7e1cec7688",
+          "webFiles": "9921b1f2ea29412256cc5f92f5f0e4278d31ca2a872a808a0dbbc19d55c77edc",
+          "results": "8eadde508b13b0d3c273bc147cef8c162e7b8c344741fe4fb1aad7031582d687",
+          "runMetadata": "9839a2f476149cacc6f3fcb8e89b4542f417c336db7c7e68e5b19a8181d67a08",
+          "features": "6b4e3687049ef90433ac03d66c81efa02f47cc29e96dde51bd834cac7d6419e0",
+          "editorState": "855570853dec9e05f5bbac125fedc16a3eace9d54d8f0795c8f9c76b2c80b563",
+          "orthogroupState": "2ef835f9b003a3b9c0300376225b8799ca37512ee954c8e425e3e067e893fc68",
+          "losatCache": "21a45656d0a4c352003e7c1a49a2ad63ac49ce3fefff0c63e62cf4f73403e677",
+          "losatDerivedCache": "d801aa1fb7ddcc330a5e3173372ea6af4a3d08ec58074478e85aa5603e926658",
+          "proteinIdentityManifest": "b0e1ac56011c6f04e76a1b9af7c3431df72911762986163b37f63f7802b51cce"
+        },
+        "wholeHash": "09e2401bb2904c73e468150f99833d7f872bb7f781f9843c55d0651028a5ae95"
+      },
+      "checks": {
+        "renderRequest": true,
+        "resources": true,
+        "proteinIdentityManifest": true,
+        "losatDerivedCache": true,
+        "sourceEditorStateFields": true,
+        "featureCatalog": true,
+        "rawCacheSourceFields": true,
+        "cacheOnlyExistingRestoreMetadataAdded": true,
+        "savedSvgSemanticEqual": true
+      },
+      "svg": {
+        "equal": true,
+        "message": "SVGs are semantically equivalent",
+        "differences": []
+      },
+      "addedCacheFields": [],
+      "addedEditorFieldNames": [
+        "legend",
+        "featureStrokes",
+        "originalSvgStroke",
+        "alignmentResetReceipt"
+      ],
+      "pythonReader": null,
+      "cliReplayExit": null,
+      "cliSvgBytes": null,
+      "identityOperands": false
+    },
+    {
+      "artifact": "/tmp/issue597-S05-resume-evidence/replay-real-2/semantic-checks.json",
+      "source": {
+        "sha256": "d3cafef9664bff958aec4932eea6e264ae872cce89762a7cbe617447af975388",
+        "bytes": 134471323,
+        "version": 44,
+        "requestSchema": 8,
+        "records": 12,
+        "features": 62089,
+        "cacheEntries": 144,
+        "hashes": {
+          "format": "a565d6c86d89f5062657493c80eed1b314a7d52b81c7504622b0ee9084307f4f",
+          "version": "71ee45a3c0db9a9865f7313dd3372cf60dca6479d46261f3542eb9346e4a04d6",
+          "createdAt": "d5c6127bab299c94eed55d31430169045de4083da95c0302752185455f671c5e",
+          "title": "41fa90b2b3984145805f4505c76707d3d75551814b5c9510fa868a912eed18de",
+          "ui": "e8c5aea1f0ebcbaa58a50e79b261e2d7940b78b685fe0d57b9c33e6cc13f312d",
+          "results": "3fc1e5206c155d14a4c33650310bc6ad73b9accd3c7356af9e9c738714f9b018",
+          "editorState": "5a9921e3c4c007a3870c3e7ee910af6df5dc0ec177c9df85cbb1d5dadd9327df",
+          "features": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a",
+          "orthogroupState": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a",
+          "cliInvocation": "6bcd9d92822c296df3466cf407d7aabbf003f4b8c764e8a03c30af4ca1c38d59",
+          "renderRequest": "4a24e726f9b038fdf0b999bfdd808cb34963ce4054e6df5ecdd963b39cac489b",
+          "resources": "600846eea4986e6d4fa92002870566c5ede14d6f3abd7c9ab2c98d7e1cec7688",
+          "webFiles": "b0be9635048d1dddaa08db919832436f5522a16b3feba07bee85d2e34d110088",
+          "losatCache": "21a45656d0a4c352003e7c1a49a2ad63ac49ce3fefff0c63e62cf4f73403e677",
+          "losatDerivedCache": "d801aa1fb7ddcc330a5e3173372ea6af4a3d08ec58074478e85aa5603e926658",
+          "proteinIdentityManifest": "b0e1ac56011c6f04e76a1b9af7c3431df72911762986163b37f63f7802b51cce"
+        },
+        "wholeHash": "1482237e2b867d2603226b4e4ae30584ecccc64c5689d6964c04490d2242255f"
+      },
+      "saved": {
+        "sha256": "20dd57a9b01a6b4ee70526bd06790b6a6dbb66594eb3536e6a22d41de50e5a3d",
+        "bytes": 133518081,
+        "version": 44,
+        "requestSchema": 8,
+        "records": 12,
+        "features": 62089,
+        "cacheEntries": 144,
+        "hashes": {
+          "format": "a565d6c86d89f5062657493c80eed1b314a7d52b81c7504622b0ee9084307f4f",
+          "version": "71ee45a3c0db9a9865f7313dd3372cf60dca6479d46261f3542eb9346e4a04d6",
+          "createdAt": "d54571e10f0d2908c0625f2bb7c195beeb3ad7b36267e5c0b8cc1f33cb69d727",
+          "title": "7ebd154623dc1eac803167beddb7bae56174627d1c61f085a8d15040524c8190",
+          "config": "2e59dd36474a8c60acc1c42eb5949621b317ffab6a3aa122bc1d0b7121f9a2d2",
+          "ui": "8bdd3575c36df8ee41a6d1e682cf509c15219ad30b068b734b4ccf608746faab",
+          "renderRequest": "4a24e726f9b038fdf0b999bfdd808cb34963ce4054e6df5ecdd963b39cac489b",
+          "resources": "600846eea4986e6d4fa92002870566c5ede14d6f3abd7c9ab2c98d7e1cec7688",
+          "webFiles": "ac6e288222aa50e42048a1affd4774e1b2c069e8b5ea6a5ed4e6120fb0520a2b",
+          "results": "8eadde508b13b0d3c273bc147cef8c162e7b8c344741fe4fb1aad7031582d687",
+          "runMetadata": "9839a2f476149cacc6f3fcb8e89b4542f417c336db7c7e68e5b19a8181d67a08",
+          "features": "6b4e3687049ef90433ac03d66c81efa02f47cc29e96dde51bd834cac7d6419e0",
+          "editorState": "855570853dec9e05f5bbac125fedc16a3eace9d54d8f0795c8f9c76b2c80b563",
+          "orthogroupState": "2ef835f9b003a3b9c0300376225b8799ca37512ee954c8e425e3e067e893fc68",
+          "losatCache": "21a45656d0a4c352003e7c1a49a2ad63ac49ce3fefff0c63e62cf4f73403e677",
+          "losatDerivedCache": "d801aa1fb7ddcc330a5e3173372ea6af4a3d08ec58074478e85aa5603e926658",
+          "proteinIdentityManifest": "b0e1ac56011c6f04e76a1b9af7c3431df72911762986163b37f63f7802b51cce"
+        },
+        "wholeHash": "00ea0522dd1b1f401dcfd875bc36123a93955259d9b953adc9890a5854029e45"
+      },
+      "checks": {
+        "renderRequest": true,
+        "resources": true,
+        "proteinIdentityManifest": true,
+        "losatDerivedCache": true,
+        "sourceEditorStateFields": true,
+        "featureCatalog": true,
+        "rawCacheSourceFields": true,
+        "cacheOnlyExistingRestoreMetadataAdded": true,
+        "savedSvgSemanticEqual": true
+      },
+      "svg": {
+        "equal": true,
+        "message": "SVGs are semantically equivalent",
+        "differences": []
+      },
+      "addedCacheFields": [],
+      "addedEditorFieldNames": [
+        "legend",
+        "featureStrokes",
+        "originalSvgStroke",
+        "alignmentResetReceipt"
+      ],
+      "pythonReader": null,
+      "cliReplayExit": null,
+      "cliSvgBytes": null,
+      "identityOperands": false
+    },
+    {
+      "artifact": "/tmp/issue597-S05-resume-evidence/replay-vibrio-0/semantic-checks.json",
+      "source": {
+        "sha256": "a3cfba6c8d883a0050529c89b1fd0849348254cdfa46dbf938a69cebef5379aa",
+        "bytes": 23739973,
+        "version": 44,
+        "requestSchema": 8,
+        "records": 4,
+        "features": 18782,
+        "cacheEntries": 12,
+        "hashes": {
+          "format": "a565d6c86d89f5062657493c80eed1b314a7d52b81c7504622b0ee9084307f4f",
+          "version": "71ee45a3c0db9a9865f7313dd3372cf60dca6479d46261f3542eb9346e4a04d6",
+          "createdAt": "6858d08977dc6786f29612b38948216f5b53bcffed49376230ab9f88aee928a1",
+          "title": "63b97e56589c5dddca834bbb236f8c1c3d6248f7aa103168dd058354ea026694",
+          "ui": "e8c5aea1f0ebcbaa58a50e79b261e2d7940b78b685fe0d57b9c33e6cc13f312d",
+          "results": "2fb2b6de292f58fec96ed320e358a45df78ed05f5df7fe448fd93370d0251d27",
+          "editorState": "8e51664e18040185ea1f7123a11fbae33866eba4d7ac259bf6b66b32681035a9",
+          "features": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a",
+          "orthogroupState": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a",
+          "cliInvocation": "cd961c45b149a9a4ff76f25deb96c9369e88bc0322d668535c9c6df69500f54b",
+          "renderRequest": "cc326c351cd302304ad8ba922fb18fe933af136d816cc704169f8a7e38317dd5",
+          "resources": "dc83883c064512b2ff3fc48fff51b84b3d82e7e0eb3e5e4ae2999d2ea5c43c5e",
+          "webFiles": "d6c2bcf75638ba0d97f39e4e41a0b9308fe72fb28e92376aa7233744bfcc4653",
+          "losatCache": "df2eb320d47d86749998dfebabf92f2eea8b74a096b76b22f69c863c7e07c4d5",
+          "losatDerivedCache": "d801aa1fb7ddcc330a5e3173372ea6af4a3d08ec58074478e85aa5603e926658",
+          "proteinIdentityManifest": "7971621217011a486d90f526ddf0e75f09ca4e67a4e60107f69c203ea71a18e0",
+          "config": "3a6163809d2c4aa8e82d3c7960b9e676f96f34b7e38c92c75870e3cbec74565e",
+          "runMetadata": "adc6b075522aae7d63150a56fe94d9b0f766ad68ee987b45a2afaaba6acefaba"
+        },
+        "wholeHash": "50bd821d25dc81912d9d5beaa52ecf541a511d53a740b91739d6043147f5650b"
+      },
+      "saved": {
+        "sha256": "8be73b7293f7049248be6066d52df6c7bbd72327dbd34e1cf316c2eb08cea0f1",
+        "bytes": 23738966,
+        "version": 44,
+        "requestSchema": 8,
+        "records": 4,
+        "features": 18782,
+        "cacheEntries": 12,
+        "hashes": {
+          "format": "a565d6c86d89f5062657493c80eed1b314a7d52b81c7504622b0ee9084307f4f",
+          "version": "71ee45a3c0db9a9865f7313dd3372cf60dca6479d46261f3542eb9346e4a04d6",
+          "createdAt": "5469c85b1fcc556c8faecc6d646ef268e4a399a7796fbba3dfc206f03544c11d",
+          "title": "7ebd154623dc1eac803167beddb7bae56174627d1c61f085a8d15040524c8190",
+          "config": "87e14e6c88d78064af0bcb6cbf5bd81d89c15f47e039307019803502cb727892",
+          "ui": "8bdd3575c36df8ee41a6d1e682cf509c15219ad30b068b734b4ccf608746faab",
+          "renderRequest": "cc326c351cd302304ad8ba922fb18fe933af136d816cc704169f8a7e38317dd5",
+          "resources": "dc83883c064512b2ff3fc48fff51b84b3d82e7e0eb3e5e4ae2999d2ea5c43c5e",
+          "webFiles": "8b7b6af2ed79d317af9b6a1fbcd6fca8aac7d8cbcaf34b21d057258f2d7c619d",
+          "results": "2931f0e13a7b44c7076ad10fcff01b3499718ac2673a70b344a0ae7e237aaea3",
+          "runMetadata": "45f5dfe4be26e8f0aaece5b1fb03ccd7309545891ecec8e4db1a4addf904aaac",
+          "features": "6b4e3687049ef90433ac03d66c81efa02f47cc29e96dde51bd834cac7d6419e0",
+          "editorState": "b4f1919ef1f6ba706bf535a642218c48c9b73c17c96f1b706424d35abed4b38f",
+          "orthogroupState": "2ef835f9b003a3b9c0300376225b8799ca37512ee954c8e425e3e067e893fc68",
+          "losatCache": "8c4baf3ebd1658085174b3726535add360a871d806094c26cb63e8e9373b4f62",
+          "losatDerivedCache": "d801aa1fb7ddcc330a5e3173372ea6af4a3d08ec58074478e85aa5603e926658",
+          "proteinIdentityManifest": "7971621217011a486d90f526ddf0e75f09ca4e67a4e60107f69c203ea71a18e0"
+        },
+        "wholeHash": "b8a192bcc332f6300203e85d6ad88b83c87fd475622b2cd7b3b1bc3e52f174a7"
+      },
+      "checks": {
+        "renderRequest": true,
+        "resources": true,
+        "proteinIdentityManifest": true,
+        "losatDerivedCache": true,
+        "sourceEditorStateFields": true,
+        "featureCatalog": true,
+        "rawCacheSourceFields": true,
+        "cacheOnlyExistingRestoreMetadataAdded": true,
+        "savedSvgSemanticEqual": true,
+        "pythonReaderRecords": true,
+        "cliReplay": true
+      },
+      "svg": {
+        "equal": true,
+        "message": "SVGs are semantically equivalent",
+        "differences": []
+      },
+      "addedCacheFields": [
+        "edgeKey",
+        "ordinal",
+        "queryIndex",
+        "queryUid",
+        "subjectIndex",
+        "subjectUid"
+      ],
+      "addedEditorFieldNames": [
+        "legend",
+        "featureStrokes",
+        "originalSvgStroke",
+        "alignmentResetReceipt"
+      ],
+      "pythonReader": {
+        "version": 44,
+        "mode": "linear",
+        "records": 4
+      },
+      "cliReplayExit": 0,
+      "cliSvgBytes": 5128555,
+      "identityOperands": false
+    },
+    {
+      "artifact": "/tmp/issue597-S05-resume-evidence/replay-vibrio-1/semantic-checks.json",
+      "source": {
+        "sha256": "a3cfba6c8d883a0050529c89b1fd0849348254cdfa46dbf938a69cebef5379aa",
+        "bytes": 23739973,
+        "version": 44,
+        "requestSchema": 8,
+        "records": 4,
+        "features": 18782,
+        "cacheEntries": 12,
+        "hashes": {
+          "format": "a565d6c86d89f5062657493c80eed1b314a7d52b81c7504622b0ee9084307f4f",
+          "version": "71ee45a3c0db9a9865f7313dd3372cf60dca6479d46261f3542eb9346e4a04d6",
+          "createdAt": "6858d08977dc6786f29612b38948216f5b53bcffed49376230ab9f88aee928a1",
+          "title": "63b97e56589c5dddca834bbb236f8c1c3d6248f7aa103168dd058354ea026694",
+          "ui": "e8c5aea1f0ebcbaa58a50e79b261e2d7940b78b685fe0d57b9c33e6cc13f312d",
+          "results": "2fb2b6de292f58fec96ed320e358a45df78ed05f5df7fe448fd93370d0251d27",
+          "editorState": "8e51664e18040185ea1f7123a11fbae33866eba4d7ac259bf6b66b32681035a9",
+          "features": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a",
+          "orthogroupState": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a",
+          "cliInvocation": "cd961c45b149a9a4ff76f25deb96c9369e88bc0322d668535c9c6df69500f54b",
+          "renderRequest": "cc326c351cd302304ad8ba922fb18fe933af136d816cc704169f8a7e38317dd5",
+          "resources": "dc83883c064512b2ff3fc48fff51b84b3d82e7e0eb3e5e4ae2999d2ea5c43c5e",
+          "webFiles": "d6c2bcf75638ba0d97f39e4e41a0b9308fe72fb28e92376aa7233744bfcc4653",
+          "losatCache": "df2eb320d47d86749998dfebabf92f2eea8b74a096b76b22f69c863c7e07c4d5",
+          "losatDerivedCache": "d801aa1fb7ddcc330a5e3173372ea6af4a3d08ec58074478e85aa5603e926658",
+          "proteinIdentityManifest": "7971621217011a486d90f526ddf0e75f09ca4e67a4e60107f69c203ea71a18e0",
+          "config": "3a6163809d2c4aa8e82d3c7960b9e676f96f34b7e38c92c75870e3cbec74565e",
+          "runMetadata": "adc6b075522aae7d63150a56fe94d9b0f766ad68ee987b45a2afaaba6acefaba"
+        },
+        "wholeHash": "50bd821d25dc81912d9d5beaa52ecf541a511d53a740b91739d6043147f5650b"
+      },
+      "saved": {
+        "sha256": "f94194cb09a3cb0d3464955d77418e1e6f3bcc2b499e7d062dc23d8c9937ea55",
+        "bytes": 23738966,
+        "version": 44,
+        "requestSchema": 8,
+        "records": 4,
+        "features": 18782,
+        "cacheEntries": 12,
+        "hashes": {
+          "format": "a565d6c86d89f5062657493c80eed1b314a7d52b81c7504622b0ee9084307f4f",
+          "version": "71ee45a3c0db9a9865f7313dd3372cf60dca6479d46261f3542eb9346e4a04d6",
+          "createdAt": "ec5f76698e95dafbffc0af4c749ee798c4e4ee111be1bc6fb421c442e7b6c963",
+          "title": "7ebd154623dc1eac803167beddb7bae56174627d1c61f085a8d15040524c8190",
+          "config": "87e14e6c88d78064af0bcb6cbf5bd81d89c15f47e039307019803502cb727892",
+          "ui": "8bdd3575c36df8ee41a6d1e682cf509c15219ad30b068b734b4ccf608746faab",
+          "renderRequest": "cc326c351cd302304ad8ba922fb18fe933af136d816cc704169f8a7e38317dd5",
+          "resources": "dc83883c064512b2ff3fc48fff51b84b3d82e7e0eb3e5e4ae2999d2ea5c43c5e",
+          "webFiles": "8b7b6af2ed79d317af9b6a1fbcd6fca8aac7d8cbcaf34b21d057258f2d7c619d",
+          "results": "2931f0e13a7b44c7076ad10fcff01b3499718ac2673a70b344a0ae7e237aaea3",
+          "runMetadata": "45f5dfe4be26e8f0aaece5b1fb03ccd7309545891ecec8e4db1a4addf904aaac",
+          "features": "6b4e3687049ef90433ac03d66c81efa02f47cc29e96dde51bd834cac7d6419e0",
+          "editorState": "b4f1919ef1f6ba706bf535a642218c48c9b73c17c96f1b706424d35abed4b38f",
+          "orthogroupState": "2ef835f9b003a3b9c0300376225b8799ca37512ee954c8e425e3e067e893fc68",
+          "losatCache": "8c4baf3ebd1658085174b3726535add360a871d806094c26cb63e8e9373b4f62",
+          "losatDerivedCache": "d801aa1fb7ddcc330a5e3173372ea6af4a3d08ec58074478e85aa5603e926658",
+          "proteinIdentityManifest": "7971621217011a486d90f526ddf0e75f09ca4e67a4e60107f69c203ea71a18e0"
+        },
+        "wholeHash": "c979f8e2f04a6b2d2736efae6e208300a078da0e4412179b16229cfaddabb832"
+      },
+      "checks": {
+        "renderRequest": true,
+        "resources": true,
+        "proteinIdentityManifest": true,
+        "losatDerivedCache": true,
+        "sourceEditorStateFields": true,
+        "featureCatalog": true,
+        "rawCacheSourceFields": true,
+        "cacheOnlyExistingRestoreMetadataAdded": true,
+        "savedSvgSemanticEqual": true
+      },
+      "svg": {
+        "equal": true,
+        "message": "SVGs are semantically equivalent",
+        "differences": []
+      },
+      "addedCacheFields": [
+        "edgeKey",
+        "ordinal",
+        "queryIndex",
+        "queryUid",
+        "subjectIndex",
+        "subjectUid"
+      ],
+      "addedEditorFieldNames": [
+        "legend",
+        "featureStrokes",
+        "originalSvgStroke",
+        "alignmentResetReceipt"
+      ],
+      "pythonReader": null,
+      "cliReplayExit": null,
+      "cliSvgBytes": null,
+      "identityOperands": false
+    },
+    {
+      "artifact": "/tmp/issue597-S05-resume-evidence/replay-vibrio-2/semantic-checks.json",
+      "source": {
+        "sha256": "a3cfba6c8d883a0050529c89b1fd0849348254cdfa46dbf938a69cebef5379aa",
+        "bytes": 23739973,
+        "version": 44,
+        "requestSchema": 8,
+        "records": 4,
+        "features": 18782,
+        "cacheEntries": 12,
+        "hashes": {
+          "format": "a565d6c86d89f5062657493c80eed1b314a7d52b81c7504622b0ee9084307f4f",
+          "version": "71ee45a3c0db9a9865f7313dd3372cf60dca6479d46261f3542eb9346e4a04d6",
+          "createdAt": "6858d08977dc6786f29612b38948216f5b53bcffed49376230ab9f88aee928a1",
+          "title": "63b97e56589c5dddca834bbb236f8c1c3d6248f7aa103168dd058354ea026694",
+          "ui": "e8c5aea1f0ebcbaa58a50e79b261e2d7940b78b685fe0d57b9c33e6cc13f312d",
+          "results": "2fb2b6de292f58fec96ed320e358a45df78ed05f5df7fe448fd93370d0251d27",
+          "editorState": "8e51664e18040185ea1f7123a11fbae33866eba4d7ac259bf6b66b32681035a9",
+          "features": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a",
+          "orthogroupState": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a",
+          "cliInvocation": "cd961c45b149a9a4ff76f25deb96c9369e88bc0322d668535c9c6df69500f54b",
+          "renderRequest": "cc326c351cd302304ad8ba922fb18fe933af136d816cc704169f8a7e38317dd5",
+          "resources": "dc83883c064512b2ff3fc48fff51b84b3d82e7e0eb3e5e4ae2999d2ea5c43c5e",
+          "webFiles": "d6c2bcf75638ba0d97f39e4e41a0b9308fe72fb28e92376aa7233744bfcc4653",
+          "losatCache": "df2eb320d47d86749998dfebabf92f2eea8b74a096b76b22f69c863c7e07c4d5",
+          "losatDerivedCache": "d801aa1fb7ddcc330a5e3173372ea6af4a3d08ec58074478e85aa5603e926658",
+          "proteinIdentityManifest": "7971621217011a486d90f526ddf0e75f09ca4e67a4e60107f69c203ea71a18e0",
+          "config": "3a6163809d2c4aa8e82d3c7960b9e676f96f34b7e38c92c75870e3cbec74565e",
+          "runMetadata": "adc6b075522aae7d63150a56fe94d9b0f766ad68ee987b45a2afaaba6acefaba"
+        },
+        "wholeHash": "50bd821d25dc81912d9d5beaa52ecf541a511d53a740b91739d6043147f5650b"
+      },
+      "saved": {
+        "sha256": "fd46ca095dd34fffabe65251b53c700691755096f4206b03541574e4961736a8",
+        "bytes": 23738966,
+        "version": 44,
+        "requestSchema": 8,
+        "records": 4,
+        "features": 18782,
+        "cacheEntries": 12,
+        "hashes": {
+          "format": "a565d6c86d89f5062657493c80eed1b314a7d52b81c7504622b0ee9084307f4f",
+          "version": "71ee45a3c0db9a9865f7313dd3372cf60dca6479d46261f3542eb9346e4a04d6",
+          "createdAt": "f196c6ed638401002994278350fc0ee9ea09498d9bc83c68b3a228b82694d7b3",
+          "title": "7ebd154623dc1eac803167beddb7bae56174627d1c61f085a8d15040524c8190",
+          "config": "87e14e6c88d78064af0bcb6cbf5bd81d89c15f47e039307019803502cb727892",
+          "ui": "8bdd3575c36df8ee41a6d1e682cf509c15219ad30b068b734b4ccf608746faab",
+          "renderRequest": "cc326c351cd302304ad8ba922fb18fe933af136d816cc704169f8a7e38317dd5",
+          "resources": "dc83883c064512b2ff3fc48fff51b84b3d82e7e0eb3e5e4ae2999d2ea5c43c5e",
+          "webFiles": "8b7b6af2ed79d317af9b6a1fbcd6fca8aac7d8cbcaf34b21d057258f2d7c619d",
+          "results": "2931f0e13a7b44c7076ad10fcff01b3499718ac2673a70b344a0ae7e237aaea3",
+          "runMetadata": "45f5dfe4be26e8f0aaece5b1fb03ccd7309545891ecec8e4db1a4addf904aaac",
+          "features": "6b4e3687049ef90433ac03d66c81efa02f47cc29e96dde51bd834cac7d6419e0",
+          "editorState": "b4f1919ef1f6ba706bf535a642218c48c9b73c17c96f1b706424d35abed4b38f",
+          "orthogroupState": "2ef835f9b003a3b9c0300376225b8799ca37512ee954c8e425e3e067e893fc68",
+          "losatCache": "8c4baf3ebd1658085174b3726535add360a871d806094c26cb63e8e9373b4f62",
+          "losatDerivedCache": "d801aa1fb7ddcc330a5e3173372ea6af4a3d08ec58074478e85aa5603e926658",
+          "proteinIdentityManifest": "7971621217011a486d90f526ddf0e75f09ca4e67a4e60107f69c203ea71a18e0"
+        },
+        "wholeHash": "703e8a41b0218c2e3d000f476c397c024a8101153fae96e61af0bd4155c660c1"
+      },
+      "checks": {
+        "renderRequest": true,
+        "resources": true,
+        "proteinIdentityManifest": true,
+        "losatDerivedCache": true,
+        "sourceEditorStateFields": true,
+        "featureCatalog": true,
+        "rawCacheSourceFields": true,
+        "cacheOnlyExistingRestoreMetadataAdded": true,
+        "savedSvgSemanticEqual": true
+      },
+      "svg": {
+        "equal": true,
+        "message": "SVGs are semantically equivalent",
+        "differences": []
+      },
+      "addedCacheFields": [
+        "edgeKey",
+        "ordinal",
+        "queryIndex",
+        "queryUid",
+        "subjectIndex",
+        "subjectUid"
+      ],
+      "addedEditorFieldNames": [
+        "legend",
+        "featureStrokes",
+        "originalSvgStroke",
+        "alignmentResetReceipt"
+      ],
+      "pythonReader": null,
+      "cliReplayExit": null,
+      "cliSvgBytes": null,
+      "identityOperands": false
+    }
+  ],
+  "note": "Six different-operand pipeline documents pass nine fidelity checks each. Generated Vibrio identity-operand checks are not Save-fidelity evidence; its Python reader and CLI replay are separate validations. Original verifier certifies CLI execution, not equality of CLI SVG with the browser-generated SVG.",
+  "additionalCliSvgComparison": {
+    "rawArtifact": "/tmp/issue597-S05-resume-evidence/cli-svg-comparison.json",
+    "unchangedVerifierStrictResults": "3 FAIL, each one root attribute difference",
+    "rows": [
+      {
+        "label": "vibrio-pipeline",
+        "session": "/tmp/issue597-S05-resume-evidence/pipeline/vibrio-0-saved.gbdraw-session.json.gz",
+        "cliSvg": "/tmp/issue597-S05-resume-evidence/replay-vibrio-0/cli-replay.svg",
+        "comparison": {
+          "equal": false,
+          "message": "Found 1 difference(s)",
+          "differences": [
+            "Line 1:\n  Expected: <svg data-gbdraw-composition=\"{\"legend\":{\"automaticTranslation\":[649.6429,227.8939],\"localBounds\":{\"\n  Actual:   <svg baseProfile=\"full\" data-gbdraw-composition=\"{\"legend\":{\"automaticTranslation\":[649.6429,227.893"
+          ]
+        },
+        "rootAttributeDifferences": {
+          "baseProfile": {
+            "saved": null,
+            "cli": "full"
+          }
+        },
+        "comparisonExcludingRootBaseProfileOnly": {
+          "equal": true,
+          "message": "SVGs are semantically equivalent",
+          "differences": []
+        }
+      },
+      {
+        "label": "real-pipeline",
+        "session": "/tmp/issue597-S05-resume-evidence/pipeline/real-0-saved.gbdraw-session.json.gz",
+        "cliSvg": "/tmp/issue597-S05-resume-evidence/replay-real-0/cli-replay.svg",
+        "comparison": {
+          "equal": false,
+          "message": "Found 1 difference(s)",
+          "differences": [
+            "Line 1:\n  Expected: <svg data-gbdraw-composition=\"{\"legend\":{\"automaticTranslation\":[686.1853,568.388],\"localBounds\":{\"h\n  Actual:   <svg baseProfile=\"full\" data-gbdraw-composition=\"{\"legend\":{\"automaticTranslation\":[686.1853,568.388"
+          ]
+        },
+        "rootAttributeDifferences": {
+          "baseProfile": {
+            "saved": null,
+            "cli": "full"
+          }
+        },
+        "comparisonExcludingRootBaseProfileOnly": {
+          "equal": true,
+          "message": "SVGs are semantically equivalent",
+          "differences": []
+        }
+      },
+      {
+        "label": "vibrio-generated",
+        "session": "/tmp/issue597-S05-resume-evidence/journey/vibrio-0-generated.json.gz",
+        "cliSvg": "/tmp/issue597-S05-resume-evidence/replay-generated-vibrio/cli-replay.svg",
+        "comparison": {
+          "equal": false,
+          "message": "Found 1 difference(s)",
+          "differences": [
+            "Line 1:\n  Expected: <svg data-gbdraw-composition=\"{\"legend\":{\"automaticTranslation\":[649.6429,227.8939],\"localBounds\":{\"\n  Actual:   <svg baseProfile=\"full\" data-gbdraw-composition=\"{\"legend\":{\"automaticTranslation\":[649.6429,227.893"
+          ]
+        },
+        "rootAttributeDifferences": {
+          "baseProfile": {
+            "saved": null,
+            "cli": "full"
+          }
+        },
+        "comparisonExcludingRootBaseProfileOnly": {
+          "equal": true,
+          "message": "SVGs are semantically equivalent",
+          "differences": []
+        }
+      }
+    ],
+    "acceptance": "Strict failures retained. Additional diagnostic removes only root baseProfile from disposable parsed trees; all remaining SVG geometry, text, style and metadata compare equal. Active verifier, tests and references unchanged."
+  }
+}
