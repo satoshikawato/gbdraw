@@ -2164,9 +2164,9 @@ test('P3 Custom Track drafts survive fresh-page session re-save and Reset histor
   const circularAnnotationRow = page.locator(
     '[data-capture="circular-track-slot-review_overlay"]'
   );
-  await page.locator(
-    '[data-capture="circular-track-slot-disabled_outer_space"] input[title="Width"]'
-  ).fill('15px');
+  await page.getByRole('textbox', {
+    name: 'Circular track slot disabled_outer_space Width value', exact: true
+  }).fill('15px');
   await circularAnnotationRow
     .locator('.track-slot-field')
     .filter({ hasText: 'padding' })
@@ -2247,7 +2247,7 @@ test('P3 Custom Track drafts survive fresh-page session re-save and Reset histor
       }
     };
   })).toEqual({
-    circularSpacerWidth: '15px',
+    circularSpacerWidth: { value: '15', unit: 'px' },
     circularAnnotation: {
       marks: ['line'],
       padding: 4,
