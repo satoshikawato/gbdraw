@@ -228,6 +228,43 @@ const importersOf = (target) => [...directImports]
   .map(([owner]) => owner)
   .sort();
 
+// These two request/Session callers may use the pure warning validator, not
+// rendered-identity collection. The metadata admission callers remain exact.
+const assertMetadataImportOwners = (sources) => {
+  const target = 'services/session-feature-metadata.js';
+  const validationCallers = new Set(['app/run-analysis.js', 'services/session-authority.js']);
+  const identityCallers = [];
+  for (const [owner, source] of sources) {
+    const imports = literalImportSpecifiers(source).filter(specifier => {
+      const resolved = resolveRelativeImport(join(JAVASCRIPT_ROOT, owner), specifier);
+      return resolved && relativeModulePath(resolved) === target;
+    });
+    if (!imports.length) continue;
+    if (!validationCallers.has(owner)) { identityCallers.push(owner); continue; }
+    assert.equal(imports.length, 1, `${owner}: one warning validation import`);
+    const code = maskJavaScript(source);
+    const declarations = [...maskJavaScript(source, { strings: false }).matchAll(
+      /(?:^|\n)\s*import\s*\{\s*validateAnnotationWarnings\s*\}\s*from\s*(['"])([^'"]+)\1/g
+    )];
+    assert.ok(declarations.some(match => match[2] === imports[0]
+      && code.slice(match.index + match[0].indexOf('import')).startsWith('import')),
+    `${owner}: only the named pure warning validator is permitted`);
+  }
+  assert.deepEqual(identityCallers.sort(), [
+    'app/session-feature-metadata.js', 'services/svg-result-ingestion.js'
+  ]);
+};
+
+// A removed replacement is a contraction, not a missing canonical owner.
+// Keep the required operator location and the existing five-operator ceiling.
+const legendReplacementCount = (detected) => {
+  const match = detected.operatorMatchesByCapability['Mounted SVG/Result replacement']
+    .find(({ path }) => path === 'app/legend/entry-actions.js');
+  assert.ok(match && match.count > 0 && match.count <= 5,
+    'legend replacement owner must remain present without operator growth');
+  return match.count;
+};
+
 test('the main application import graph excludes Worker-only modules', () => {
   const reachable = reachableModules(APP_ENTRY);
   assert.ok(reachable.has('app/run-analysis.js'), 'render owner must remain reachable');
@@ -394,10 +431,7 @@ test('History intent and SVG admission have one production ownership path', () =
     'services/config.js',
     'state.js'
   ]);
-  assert.deepEqual(importersOf('services/session-feature-metadata.js'), [
-    'app/session-feature-metadata.js',
-    'services/svg-result-ingestion.js'
-  ]);
+  assertMetadataImportOwners(productionSources);
   assert.deepEqual(importersOf('services/svg-result-normalization.js'), [
     'app/svg-styles.js',
     'services/config.js',
@@ -548,7 +582,7 @@ test('shared privileged detectors preserve the characterized current-source fact
       { path: 'app/legend-layout/diagram-drag.js', count: 2 },
       { path: 'app/legend-layout/reposition-actions.js', count: 2 },
       { path: 'app/legend/drag-actions.js', count: 4 },
-      { path: 'app/legend/entry-actions.js', count: 5 },
+      { path: 'app/legend/entry-actions.js', count: legendReplacementCount(detected) },
       { path: 'app/legend/sort-actions.js', count: 2 },
       { path: 'app/legend/stroke-actions.js', count: 2 },
       { path: 'app/preview-runtime.js', count: 4 },
@@ -587,6 +621,44 @@ test('shared privileged detectors preserve the characterized current-source fact
       { path: 'services/session-file.js', count: 1 }
     ]
   });
+});
+
+test('metadata validation callers cannot acquire identity or namespace access', () => {
+  const admission = new Map([
+    ['app/session-feature-metadata.js', "import { normalizeRenderedFeatureId } from '../services/session-feature-metadata.js';"],
+    ['services/svg-result-ingestion.js', "import { collectRenderedFeatureIdentitiesFromSvgRoot } from './session-feature-metadata.js';"]
+  ]);
+  assertMetadataImportOwners(admission);
+  for (const owner of ['app/run-analysis.js', 'services/session-authority.js']) {
+    const specifier = owner.startsWith('app/') ? '../services/session-feature-metadata.js' : './session-feature-metadata.js';
+    const valid = `import { validateAnnotationWarnings } from '${specifier}';`;
+    assertMetadataImportOwners(new Map([...admission, [owner, valid]]));
+    for (const invalid of [
+      `import { collectRenderedFeatureIdentitiesFromSvgRoot } from '${specifier}';`,
+      `import { validateAnnotationWarnings, normalizeRenderedFeatureId } from '${specifier}';`,
+      `import * as metadata from '${specifier}';`,
+      `import metadata from '${specifier}';`,
+      `const metadata = await import('${specifier}');`,
+      `${valid}\nimport { normalizeRenderedFeatureId } from '${specifier}';`,
+      `const fake = \`${valid}\`;\nimport metadata from '${specifier}';`
+    ]) assert.throws(() => assertMetadataImportOwners(new Map([...admission, [owner, invalid]])));
+  }
+  assert.throws(() => assertMetadataImportOwners(new Map([...admission,
+    ['app/unapproved.js', "import { validateAnnotationWarnings } from '../services/session-feature-metadata.js';"]
+  ])));
+  assert.throws(() => assertMetadataImportOwners(new Map([...admission].slice(1))));
+});
+
+test('legend replacement characterization permits contraction but rejects growth or lost ownership', () => {
+  for (const count of [4, 5, 6, 0]) {
+    const code = 'results.value = candidate;\n'.repeat(count)
+      + '// results.value = comment;\nconst text = "results.value = string;";';
+    const detected = detectPrivilegedWebCapabilities(new Map([['app/legend/entry-actions.js', code]]));
+    assert.deepEqual(detected.operatorMatchesByCapability['Mounted SVG/Result replacement'],
+      count ? [{ path: 'app/legend/entry-actions.js', count }] : []);
+    if (count === 4 || count === 5) assert.equal(legendReplacementCount(detected), count);
+    else assert.throws(() => legendReplacementCount(detected));
+  }
 });
 
 test('versioned architecture detectors expose stable normalized subjects', () => {
