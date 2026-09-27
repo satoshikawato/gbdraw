@@ -173,3 +173,22 @@ test('Generate preparation forwards its progress observer through caption and me
   assert.equal(candidate.intents[0].caption, 'NADH');
   assert.equal(observations.length, 2);
 });
+
+
+test('derived comparison cache invalidation keeps prepared colors current while source replacement rejects them', async () => {
+  let release;
+  const gate = new Promise(resolve => { release = resolve; });
+  const { state, preparation } = setup(async payload => {
+    if (payload.kind === 'color-captions') await gate;
+    return evaluatePythonRules(payload);
+  });
+  state.files = { c_gb: {}, t_color: null, linearCanonicalComparisons: [] };
+  const pending = preparation.prepareCandidate([{ ...rule('NADH'), color: '#112233', cap: 'NADH' }]);
+  state.files.linearCanonicalComparisons = [];
+  release();
+  const candidate = await pending;
+  assert.ok(candidate, 'invalidating request-owned comparison reuse cannot invalidate color rules');
+  assert.equal(preparation.isCurrent(candidate.snapshot), true);
+  state.files.c_gb = {};
+  assert.equal(preparation.isCurrent(candidate.snapshot), false, 'replaced biological sources remain guarded');
+});

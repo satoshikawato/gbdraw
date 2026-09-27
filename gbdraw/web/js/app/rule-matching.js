@@ -62,7 +62,10 @@ export const createRulePreparation = ({ state, evaluate, pending = { value: fals
     legendStrokes: JSON.stringify(state.legendStrokeOverrides || {}),
     featureColors: JSON.stringify(state.featureColorOverrides || {}),
     featureVisibility: JSON.stringify(state.featureVisibilityOverrides || {}),
-    ...Object.fromEntries(Object.entries(state.files || {}).map(([key, value]) => [`file:${key}`, value]))
+    // Comparison reuse artifacts are request-owned, not color-preparation inputs.
+    ...Object.fromEntries(Object.entries(state.files || {})
+      .filter(([key]) => key !== 'linearCanonicalComparisons')
+      .map(([key, value]) => [`file:${key}`, value]))
   });
   const isCurrent = (before) => {
     const after = snapshot();

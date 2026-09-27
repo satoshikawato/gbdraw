@@ -4196,7 +4196,7 @@ export const exportSession = async (
     resources: canonical.resources,
     webFiles: canonical.webFiles,
     results: logicalResults,
-    runMetadata: {
+    runMetadata: settingsOnly ? {} : {
       ...(state.trackSlotResolvedGeometry.value
         ? { trackSlotGeometry: cloneJsonData(state.trackSlotResolvedGeometry.value) } : {}),
       annotationWarnings: cloneJsonData(state.annotationWarnings.value)
