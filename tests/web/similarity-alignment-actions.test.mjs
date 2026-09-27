@@ -439,7 +439,8 @@ test('missing target is explicitly unchanged and complete Apply includes every t
   assert.equal(fixture.helperCalls.length, 2);
   assert.equal(fixture.generationCalls.length, 1);
   assert.deepEqual(fixture.helperCalls[1].payload.request.choices.map(({ recordKey, kind }) =>
-    [recordKey, kind]), [['b', 'select'], ['c', 'skip']]);
+    [recordKey, kind]), [['b', 'select']]);
+  assert.equal(fixture.state.similarityAlignmentPlan.value.records.find(row => row.recordKey === 'c').rationale, 'skipped_no_candidate');
   assert.equal(fixture.state.similarityAlignmentPlan.value.schema, 2);
   assert.deepEqual(fixture.state.results.value, [{ name: 'aligned.svg' }]);
 });
