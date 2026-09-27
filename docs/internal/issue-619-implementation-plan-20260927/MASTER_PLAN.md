@@ -10,6 +10,10 @@ Issue: [#619](https://github.com/satoshikawato/gbdraw/issues/619)。Circular の
 
 対象は Circular の width/radius。Linear、純 pixel の inner/outer gap、Python renderer の geometry、CLI の scalar grammar は変更しない。
 
+S00 の独立した検証成果は [SESSION_RESULTS/S00.md](SESSION_RESULTS/S00.md) に記録する。
+既存 typed numeric-text draft は受理されたが、3 Pack の署名と
+対象 authority の `origin/dev` 統合は未成立。settings-only の実 Save も既存 writer/validator 不整合で失敗。S01 の開始を許可しない。
+
 ## 2. 問題と現行契約
 
 基準の tobacco chloroplast Gallery Session は Session 44 / request schema 8。`config.adv.circular_track_slots` に width/radius の `{value, unit}` object が保存されている。
