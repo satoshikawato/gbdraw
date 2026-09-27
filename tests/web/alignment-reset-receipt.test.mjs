@@ -98,3 +98,21 @@ test('Python and Web admit the same source-bound compact receipt and reject corr
   if (invalid.error) throw invalid.error;
   assert.notEqual(invalid.status, 0); assert.match(invalid.stderr, /binding changed/);
 });
+
+test('Python and Web bind supplementary Unicode record keys in the same deterministic order', async () => {
+  const f = fixture();
+  const rename = value => {
+    if (Array.isArray(value)) return value.forEach(rename);
+    if (!value || typeof value !== 'object') return;
+    if (value.recordKey) value.recordKey = ({a:'record-\u{10000}',b:'record-\uE000',c:'record-c'})[value.recordKey];
+    Object.values(value).forEach(rename);
+  };
+  rename(f.before); rename(f.after);
+  const receipt = await build(f);
+  const script = 'import json,sys; from gbdraw.session_io import _validate_alignment_reset_receipt; _validate_alignment_reset_receipt(json.load(sys.stdin))';
+  const result = spawnSync(process.env.PYTHON || 'python', ['-c',script], {
+    input:JSON.stringify({...f.after,editorState:{alignmentResetReceipt:receipt}}),encoding:'utf8'
+  });
+  if (result.error) throw result.error;
+  assert.equal(result.status,0,result.stderr);
+});
