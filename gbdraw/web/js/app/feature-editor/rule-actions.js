@@ -1,3 +1,5 @@
+import { createSpecificRulePatternDrafts } from './pattern-drafts.js';
+import { normalizeUserFacingError } from '../../services/error-normalization.js';
 import { ruleMatchesFeature, firstMatchingRule, ruleMatchesReady } from '../rule-matching.js';
 import { resolveColorToHex } from '../color-utils.js';
 import { parseSpecificRules, serializeSpecificRules } from '../file-imports.js';
@@ -14,7 +16,7 @@ import {
   normalizeFeatureRendering
 } from '../../utils/feature-rendering.js';
 
-export const createFeatureRuleActions = ({ state, nextTick, legendActions, rulePreparation, history, svgActions }) => {
+export const createFeatureRuleActions = ({ state, nextTick, legendActions, rulePreparation, history, svgActions, ref, computed, isPatternEditAvailable = () => true }) => {
   const {
     currentColors,
     appliedPaletteColors,
@@ -45,7 +47,21 @@ export const createFeatureRuleActions = ({ state, nextTick, legendActions, ruleP
   const specificRuleFields = new Set(['feat', 'qual', 'val', 'color', 'cap']);
 
   let preparationRevision = 0;
-  const commitSpecificRules = async (rules, label = 'Change specific color rules', { isCurrent = () => true, afterCommit = () => {}, previousLegendIntents = [] } = {}) => {
+  const patternDrafts = createSpecificRulePatternDrafts({
+    rules: manualSpecificRules, ref, invalidate: () => { preparationRevision += 1; }
+  });
+  const ruleFailure = ref(null);
+  const canRetrySpecificRuleFailure = computed(() => Boolean(ruleFailure.value
+    && state.errorLog?.value === ruleFailure.value.error
+    && rulePreparation.isCurrent(ruleFailure.value.snapshot)
+    && (!ruleFailure.value.presetId || selectedSpecificPreset.value === ruleFailure.value.presetId)));
+  const canEditSpecificRuleFailure = computed(() => canRetrySpecificRuleFailure.value
+    && Boolean(ruleFailure.value.input?.isConnected));
+  const retrySpecificRuleFailure = () => canRetrySpecificRuleFailure.value ? ruleFailure.value.retry() : false;
+  const editSpecificRuleFailure = () => {
+    if (canEditSpecificRuleFailure.value) ruleFailure.value.input.focus();
+  };
+  const commitSpecificRules = async (rules, label = 'Change specific color rules', { isCurrent = () => true, afterCommit = () => {}, previousLegendIntents = [], sourceRows = rules.map(rule => manualSpecificRules.includes(rule) ? rule : null) } = {}) => {
     const revision = ++preparationRevision;
     const candidate = await rulePreparation.prepareCandidate(rules);
     if (!candidate) return false;
@@ -63,7 +79,14 @@ export const createFeatureRuleActions = ({ state, nextTick, legendActions, ruleP
       transact: (diff, apply) => (diff.add.length || diff.remove.length
         ? history.runUndoableCheckpoint : history.runUndoable)(label, apply),
       commit: () => {
-        manualSpecificRules.splice(0, manualSpecificRules.length, ...candidate.rules);
+        manualSpecificRules.splice(0, manualSpecificRules.length, ...candidate.rules.map((rule, index) => {
+          const row = sourceRows[index];
+          if (!row) return rule;
+          Object.assign(row, rule);
+          if (!Object.hasOwn(rule, 'fromFile')) delete row.fromFile;
+          return row;
+        }));
+        patternDrafts.reconcile();
         fileLegendCaptions.value = new Set(candidate.rules.filter(rule => rule.fromFile && rule.cap).map(rule => rule.cap));
         addedLegendCaptions.value = new Set([
           ...[...addedLegendCaptions.value].filter(caption => !previousCaptions.has(caption)),
@@ -77,35 +100,90 @@ export const createFeatureRuleActions = ({ state, nextTick, legendActions, ruleP
     if (applied) rulePreparation.notifyChanges(candidate);
     return applied;
   };
-  const commitPrepared = (rules, label, afterCommit = () => {}) => commitSpecificRules(rules, label, { afterCommit })
-    .catch(error => { alert(`Invalid rule: ${error.message}`); return false; });
+  const commitPrepared = async (rules, label, afterCommit = () => {}, input = null, sourceRows = rules.map(rule => manualSpecificRules.includes(rule) ? rule : null)) => {
+    patternDrafts.suspend();
+    const snapshot = rulePreparation.snapshot();
+    const previousError = state.errorLog?.value;
+    try {
+      const applied = await commitSpecificRules(rules, label, { afterCommit, sourceRows });
+      if (applied && state.errorLog?.value === ruleFailure.value?.error) state.errorLog.value = null;
+      if (applied) ruleFailure.value = null;
+      return applied;
+    } catch (cause) {
+      if (!rulePreparation.isCurrent(snapshot) || state.errorLog?.value !== previousError) return false;
+      const error = normalizeUserFacingError(cause, { operation: 'evaluateRules', stage: 'resource-staging' });
+      if (state.errorLog) state.errorLog.value = error;
+      ruleFailure.value = { error, snapshot, input, retry: () => commitPrepared(rules, label, afterCommit, input, sourceRows) };
+      return false;
+    }
+  };
   const applyRulePreview = () => {
     refreshFeatureOverrides(extractedFeatures.value);
     svgActions.applyPaletteToSvg();
     svgActions.applySpecificRulesToSvg();
   };
 
+  const editSpecificRulePattern = (row, value) => patternDrafts.edit(row, value);
+  const revertSpecificRulePattern = (row, input = null) => {
+    patternDrafts.revert(row);
+    if (input?.isConnected) {
+      input.value = row.val;
+      input.focus();
+    }
+  };
+  const applySpecificRulePattern = async (row, value) => {
+    if (!manualSpecificRules.includes(row) || !isPatternEditAvailable()
+      || (state.generatedMode?.value && state.mode?.value !== state.generatedMode.value)) return false;
+    const token = patternDrafts.begin(row, value);
+    const snapshot = rulePreparation.snapshot();
+    const attemptRevision = preparationRevision + 1;
+    const current = () => preparationRevision === attemptRevision && patternDrafts.isCurrent(row, token) && rulePreparation.isCurrent(snapshot)
+      && isPatternEditAvailable();
+    const sourceRows = [...manualSpecificRules];
+    const rules = sourceRows.map(rule => {
+      if (rule !== row) return { ...rule };
+      const next = { ...rule, val: String(value ?? '') };
+      delete next.fromFile;
+      return next;
+    });
+    try {
+      const applied = await commitSpecificRules(rules, 'Edit specific color rule', { isCurrent: current, sourceRows });
+      if (applied && patternDrafts.isCurrent(row, token)) patternDrafts.revert(row);
+      return applied;
+    } catch (cause) {
+      if (!current() || cause?.canceled || cause?.name === 'AbortError' || ['canceled', 'stale', 'superseded'].includes(cause?.status)) return false;
+      patternDrafts.get(row).error = normalizeUserFacingError(cause, { operation: 'evaluateRules', stage: 'resource-staging' });
+      return false;
+    } finally {
+      if (patternDrafts.isCurrent(row, token)) patternDrafts.get(row).pending = false;
+    }
+  };
+  const retrySpecificRulePattern = (row) => {
+    const draft = patternDrafts.get(row);
+    return draft && !draft.pending ? applySpecificRulePattern(row, draft.text) : false;
+  };
   const setSpecificRuleField = (index, field, value, input = null) => {
     if (!specificRuleFields.has(field)) return;
     const current = manualSpecificRules[index];
     if (!current) return;
+    if (field === 'val') return applySpecificRulePattern(current, value);
     const nextValue = field === 'color' ? resolveColorToHex(String(value || '#000000')) : String(value ?? '');
-
     const nextRule = { ...current, [field]: nextValue };
     delete nextRule.fromFile;
-    const rules = manualSpecificRules.map((rule, i) => i === index ? nextRule : { ...rule });
-    return commitPrepared(rules, 'Edit specific color rule')?.finally(() => {
-      if (input?.isConnected) input.value = manualSpecificRules[index]?.[field] ?? '';
+    const sourceRows = [...manualSpecificRules];
+    const rules = sourceRows.map(rule => rule === current ? nextRule : { ...rule });
+    return commitPrepared(rules, 'Edit specific color rule', () => {}, input, sourceRows)?.finally(() => {
+      if (input?.isConnected && manualSpecificRules.includes(current)) input.value = current[field] ?? '';
     });
   };
 
   const moveSpecificRule = (index, offset) => {
-    const rules = manualSpecificRules.map(rule => ({ ...rule }));
+    const sourceRows = [...manualSpecificRules];
     const target = index + offset;
-    if (target < 0 || target >= rules.length) return;
-    const [rule] = rules.splice(index, 1);
-    rules.splice(target, 0, rule);
-    return commitPrepared(rules, 'Move specific color rule');
+    if (target < 0 || target >= sourceRows.length) return;
+    const [row] = sourceRows.splice(index, 1);
+    sourceRows.splice(target, 0, row);
+    return commitPrepared(sourceRows.map(rule => ({ ...rule })), 'Move specific color rule', () => {}, null, sourceRows);
   };
 
   const downloadSpecificRulesTsv = () => {
@@ -217,7 +295,7 @@ export const createFeatureRuleActions = ({ state, nextTick, legendActions, ruleP
     };
     return commitPrepared([...manualSpecificRules, rule], 'Add specific color rule', () => {
       if (newSpecRule.val === rule.val) newSpecRule.val = '';
-    });
+    }, document.querySelector?.('[data-new-specific-rule-pattern]'));
   };
 
   const applySpecificRulePreset = async () => {
@@ -231,11 +309,12 @@ export const createFeatureRuleActions = ({ state, nextTick, legendActions, ruleP
     }
 
     const presetContext = rulePreparation.snapshot();
+    const previousError = state.errorLog?.value;
     specificRulePresetLoading.value = true;
     try {
       const response = await fetch(preset.path, { cache: 'no-store' });
       if (!response.ok) {
-        throw new Error(`Preset fetch failed: ${response.status}`);
+        throw { code: 'INPUT_UNREADABLE', operation: 'evaluateRules', stage: 'resource-staging' };
       }
       const text = await response.text();
       const { rules } = parseSpecificRules(text);
@@ -251,8 +330,11 @@ export const createFeatureRuleActions = ({ state, nextTick, legendActions, ruleP
         }
       });
     } catch (e) {
-      console.error('Failed to load specific rule preset:', e);
-      alert(`Invalid rule: ${e.message}`);
+      if (selectedSpecificPreset.value !== presetId || !rulePreparation.isCurrent(presetContext)
+        || state.errorLog?.value !== previousError) return;
+      const error = normalizeUserFacingError(e, { operation: 'evaluateRules', stage: 'resource-staging' });
+      if (state.errorLog) state.errorLog.value = error;
+      ruleFailure.value = { error, snapshot: presetContext, presetId, retry: applySpecificRulePreset };
     } finally {
       specificRulePresetLoading.value = false;
     }
@@ -418,6 +500,15 @@ export const createFeatureRuleActions = ({ state, nextTick, legendActions, ruleP
   };
 
   return {
+    specificRulePattern: patternDrafts.text,
+    specificRulePatternDraft: patternDrafts.get,
+    specificRulePatternFieldId: patternDrafts.fieldId,
+    editSpecificRulePattern, retrySpecificRulePattern, revertSpecificRulePattern,
+    suspendSpecificRulePatternDrafts: patternDrafts.suspend,
+    clearSpecificRulePatternDrafts: patternDrafts.clear,
+    captureSpecificRulePatternDrafts: patternDrafts.capture,
+    restoreSpecificRulePatternDrafts: patternDrafts.restore,
+    canRetrySpecificRuleFailure, canEditSpecificRuleFailure, retrySpecificRuleFailure, editSpecificRuleFailure,
     addCustomColor,
     addFeature,
     removeFeature,
@@ -447,7 +538,10 @@ export const createFeatureRuleActions = ({ state, nextTick, legendActions, ruleP
     moveSpecificRuleDown: (index) => moveSpecificRule(index, 1),
     moveSpecificRuleUp: (index) => moveSpecificRule(index, -1),
     refreshFeatureOverrides,
-    removeSpecificRule: (index) => commitPrepared(manualSpecificRules.filter((_, i) => i !== index), 'Remove specific color rule'),
+    removeSpecificRule: (index) => {
+      const sourceRows = manualSpecificRules.filter((_, i) => i !== index);
+      return commitPrepared(sourceRows.map(rule => ({ ...rule })), 'Remove specific color rule', () => {}, null, sourceRows);
+    },
     setSpecificRuleField
   };
 };

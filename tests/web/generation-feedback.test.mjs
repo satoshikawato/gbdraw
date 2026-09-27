@@ -82,7 +82,7 @@ test('Cancel and failure clean progress listeners and permit a fresh run', async
   for (const terminal of ['cancel-init', 'cancel-render', 'error']) {
     const events = [];
     const pending = runDiagramGeneration(payload(), { onProgress: event => events.push(event) });
-    const rejection = assert.rejects(pending, terminal === 'error' ? /render failed/ : /cancel/i);
+    const rejection = assert.rejects(pending, terminal === 'error' ? error => error.code === 'UNKNOWN' && error.stage === 'render' : /cancel/i);
     const worker = ControlledWorker.instances.at(-1);
     if (terminal !== 'cancel-init') {
       worker.initialize();
@@ -90,7 +90,7 @@ test('Cancel and failure clean progress listeners and permit a fresh run', async
       const requestId = latestRequest(worker);
       worker.emit({ type: 'progress', requestId, stage: 'rendering' });
       if (terminal === 'error') {
-        worker.emit({ type: 'run', requestId, ok: false, error: { message: 'render failed' } });
+        worker.emit({ type: 'run', requestId, ok: false, error: { code: 'UNKNOWN', operation: 'generate', stage: 'render' } });
       }
     }
     if (terminal !== 'error') await cancelDiagramGeneration();

@@ -1,4 +1,5 @@
 import {
+  OperationError,
   RecordDisplayControl,
   AutoValueField,
   ColorValueControl,
@@ -11,7 +12,7 @@ import { createAppSetup } from './app/app-setup.js';
 const { createApp } = window.Vue;
 
 const app = createApp({
-  components: { CircularMeasureInput, RecordDisplayControl, AutoValueField, ColorValueControl, FileUploader, HelpTip },
+  components: { OperationError, CircularMeasureInput, RecordDisplayControl, AutoValueField, ColorValueControl, FileUploader, HelpTip },
   setup: createAppSetup
 });
 

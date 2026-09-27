@@ -27,6 +27,7 @@ from gbdraw.features.visibility import (
     should_render_feature,
 )
 from gbdraw.svg.ids import instance_svg_id
+from gbdraw.web_support.error_adapter import serialize_web_error
 
 
 _NULLISH_TEXT = {"", "none", "null", "jsnull", "undefined", "jsundefined", "-"}
@@ -615,7 +616,7 @@ def extract_features_from_genbank_json(
             include_biological_features=include_biological_features,
         )
     except Exception as exc:
-        return json.dumps({"error": str(exc)})
+        return json.dumps({"error": serialize_web_error(exc, operation="feature-extraction", stage="helper")})
     return json.dumps(payload)
 
 
@@ -643,5 +644,5 @@ def extract_features_from_gff_fasta_json(
             include_biological_features=include_biological_features,
         )
     except Exception as exc:
-        return json.dumps({"error": str(exc)})
+        return json.dumps({"error": serialize_web_error(exc, operation="feature-extraction", stage="helper")})
     return json.dumps(payload)

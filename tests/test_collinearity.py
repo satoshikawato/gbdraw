@@ -2742,8 +2742,12 @@ def test_web_losatp_blastp_payload_helper_applies_collinear_search_scope(
     assert "error" not in adjacent
     assert "error" not in all_records
     assert "error" not in multi_row_adjacent
-    assert "collinear_search_scope must be one of: adjacent, all" in invalid_scope["error"]
-    assert "Unsupported LOSATP blastp mode" in invalid_mode["error"]
+    assert invalid_scope["error"] == {
+        "code": "INPUT_INVALID", "operation": "convertLosatpPairsToGenomicPayload",
+        "stage": "helper", "context": {"field": "collinear_search_scope", "reason": "ADJACENT_ALL"},
+    }
+    assert invalid_mode["error"]["code"] == "INPUT_INVALID"
+    assert invalid_mode["error"]["context"] == {"field": "protein_blastp_mode", "reason": "BLASTP_MODE"}
 
     def member_sets(result: dict[str, object]) -> list[set[str]]:
         groups = result["collinearityResult"]["value"]["fields"][

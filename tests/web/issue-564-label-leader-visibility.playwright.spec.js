@@ -345,7 +345,7 @@ test('metadata-free refresh failure retains the old visual and canonical overrid
       error: window.__GBDRAW_APP__.labelReflowLastError
     })), { timeout: 180000 }).toEqual({
       processing: false,
-      error: 'Forced Issue 564 label refresh failure.'
+      error: 'The operation failed without recognized diagnostic information. Retry; if it continues, save a Session for investigation.'
     });
     const failed = await page.evaluate(async (targetId) => {
       const app = window.__GBDRAW_APP__;

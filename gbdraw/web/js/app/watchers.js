@@ -1,3 +1,4 @@
+import { normalizeUserFacingError } from '../services/error-normalization.js';
 import {
   parseBlacklistWords,
   parseColorTable,
@@ -37,7 +38,7 @@ export const runRecordDiscoveryWatcher = async ({
 export const setupWatchers = ({
   state,
   rulePreparation,
-  watch,
+  ref, computed, watch,
   nextTick,
   onMounted,
   legendActions,
@@ -305,11 +306,7 @@ export const setupWatchers = ({
           'PREVIEW_BIND_SUPERSEDED',
           'PREVIEW_ROOT_MISMATCH'
         ].includes(error?.code)) return;
-        errorLog.value = {
-          summary: error?.message || 'The mounted preview could not be prepared.',
-          details: []
-        };
-        console.error('Could not bind the mounted SVG Result.', error);
+        errorLog.value = normalizeUserFacingError(error, { operation: 'generate', stage: 'result-admission' });
       }
     });
   }, { flush: 'post' });
@@ -424,10 +421,16 @@ export const setupWatchers = ({
     }
   );
 
+  const auxiliaryImportFailure = ref(null);
+  const canRetryAuxiliaryImportFailure = computed(() => Boolean(auxiliaryImportFailure.value
+    && errorLog.value === auxiliaryImportFailure.value.error
+    && files[auxiliaryImportFailure.value.key] === auxiliaryImportFailure.value.selection
+    && (!auxiliaryImportFailure.value.snapshot || rulePreparation.isCurrent(auxiliaryImportFailure.value.snapshot))));
+  const retryAuxiliaryImportFailure = () => canRetryAuxiliaryImportFailure.value ? auxiliaryImportFailure.value.retry() : false;
   const pendingFileImports = new WeakMap();
   let fileImportApplications = Promise.resolve();
   const restoredFileSelections = new Map();
-  const watchFileImport = (key, apply) => watch(() => files[key], (file, previousFile) => {
+  const applyFileImport = (key, apply, file, previousFile) => {
     const restored = restoredFileSelections.has(key) && restoredFileSelections.get(key) === file;
     restoredFileSelections.delete(key);
     if (restored) return;
@@ -435,22 +438,46 @@ export const setupWatchers = ({
     const ruleContext = key === 't_color' ? rulePreparation.snapshot() : null;
     const isCurrent = () => files[key] === file && !semanticFileWatchersSuppressed.value
       && (!ruleContext || rulePreparation.isCurrent(ruleContext));
+    const previousError = errorLog.value;
+    const retainFailure = () => {
+      auxiliaryImportFailure.value = { error: errorLog.value, key, selection: files[key], snapshot: ruleContext ? rulePreparation.snapshot() : null,
+        retry: async () => {
+          if (files[key] === file) return applyFileImport(key, apply, file, previousFile);
+          files[key] = file;
+          await nextTick();
+          return pendingFileImports.get(file);
+        } };
+    };
     const pending = readFileText(file).then((text) => {
       // Reads may finish out of order; serialize only their live application.
       const application = fileImportApplications.then(async () => {
-        if (!isCurrent()) return;
+        if (!isCurrent()) return false;
         if (await apply(text, isCurrent) === false && isCurrent()) {
           restoredFileSelections.set(key, previousFile);
           files[key] = previousFile;
+          if (errorLog.value !== previousError) retainFailure();
+          return false;
+        } else if (files[key] === file && errorLog.value === auxiliaryImportFailure.value?.error) {
+          errorLog.value = null;
+          auxiliaryImportFailure.value = null;
         }
+        return true;
       });
       fileImportApplications = application.catch(() => {});
       return application;
     }).catch((error) => {
-      if (isCurrent()) alert(`Failed to read ${file.name || 'uploaded table'}: ${error.message}`);
+      if (isCurrent() && errorLog.value === previousError) {
+        errorLog.value = normalizeUserFacingError(error, { operation: key === 't_color' ? 'evaluateRules' : 'unknown', stage: 'resource-staging' });
+        restoredFileSelections.set(key, previousFile);
+        files[key] = previousFile;
+        retainFailure();
+      }
+      return false;
     });
     pendingFileImports.set(file, pending);
-  });
+    return pending;
+  };
+  const watchFileImport = (key, apply) => watch(() => files[key], (file, previousFile) => applyFileImport(key, apply, file, previousFile));
   const waitForAuxiliaryFileImport = (file) => pendingFileImports.get(file);
 
   watchFileImport('d_color', (text) => {
@@ -461,19 +488,18 @@ export const setupWatchers = ({
       });
       console.log(`Loaded ${count} colors from file.`);
     } catch (e) {
-      console.error('Failed to load color file:', e);
-      alert('Failed to load color file. Please check the TSV format.');
+      errorLog.value = normalizeUserFacingError(e, { stage: 'request-validation' });
+      return false;
     }
   });
 
   watchFileImport('t_color', async (text, isCurrent) => {
     try {
       const prepared = prepareSpecificColorImport(text, manualSpecificRules);
-      if (!await featureActions.commitSpecificRules(prepared.nextRules, 'Import specific color rules', { isCurrent })) return;
+      if (!await featureActions.commitSpecificRules(prepared.nextRules, 'Import specific color rules', { isCurrent })) return false;
       console.log(`Loaded ${prepared.importedCount} rules from file.`);
     } catch (e) {
-      console.error('Failed to load rules file:', e);
-      if (isCurrent()) alert(`Failed to load rules file. ${e?.message || 'Please check the TSV format.'}`);
+      if (isCurrent()) errorLog.value = normalizeUserFacingError(e, { operation: 'evaluateRules', stage: 'rule-validation' });
       return false;
     }
   });
@@ -491,8 +517,8 @@ export const setupWatchers = ({
       });
       console.log(`Loaded ${count} priority rules.`);
     } catch (e) {
-      console.error('Failed to load priority file:', e);
-      alert('Failed to load priority file.');
+      errorLog.value = normalizeUserFacingError(e, { stage: 'request-validation' });
+      return false;
     }
   });
 
@@ -502,8 +528,8 @@ export const setupWatchers = ({
       rules.forEach((rule) => manualWhitelist.push(rule));
       console.log(`Loaded ${count} whitelist rules.`);
     } catch (e) {
-      console.error('Failed to load whitelist file:', e);
-      alert('Failed to load whitelist file.');
+      errorLog.value = normalizeUserFacingError(e, { stage: 'request-validation' });
+      return false;
     }
   });
 
@@ -517,8 +543,8 @@ export const setupWatchers = ({
         console.log(`Loaded ${count} blacklist words.`);
       }
     } catch (e) {
-      console.error('Failed to load blacklist file:', e);
-      alert('Failed to load blacklist file.');
+      errorLog.value = normalizeUserFacingError(e, { stage: 'request-validation' });
+      return false;
     }
   });
 
@@ -592,8 +618,8 @@ export const setupWatchers = ({
     try {
       await preparePaletteDefinitions();
     } catch (error) {
-      console.warn('Could not load browser palette definitions.', error);
+      console.warn('Could not load browser palette definitions.', normalizeUserFacingError(error, { stage: 'initialization' }));
     }
   });
-  return { waitForAuxiliaryFileImport };
+  return { waitForAuxiliaryFileImport, canRetryAuxiliaryImportFailure, retryAuxiliaryImportFailure };
 };

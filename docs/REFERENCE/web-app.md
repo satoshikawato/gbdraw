@@ -118,6 +118,31 @@ For Linear diagrams, the DOM and keyboard order is **Input Genomes**,
 layout**. The fixed Generate bar remains visible while its DOM anchor stays in
 that order.
 
+### Operation errors and diagnostics
+
+A failed operation shows a short cause and correction or recovery action under
+its own heading, such as **Generation Error**, **Alignment error**, or an export
+error. The summary stays visible. **Details** is optional and initially closed;
+it can be opened with the keyboard. **Copy diagnostics** copies only the safe
+information displayed there, after an explicit action. If Clipboard access is
+unavailable or rejected, **Select diagnostics** selects the text for manual
+copying; the cause and recovery controls remain available.
+
+Diagnostics contain a bounded failure code, operation, actual known stage,
+permitted context such as field, table row or Python character position, and
+cleanup failure facts. Unknown failures retain a stable code and the observed
+stage without inventing a cause. Original patterns, sequences, file or record
+names, paths, SVG, raw exception text, traceback, stdout and stderr are excluded
+from diagnostics and automatic console output. A saved Session can contain
+private inputs, so share one only deliberately.
+
+Generation recovery distinguishes no successful Result, an unchanged previous
+Result, completed rollback, and failed rollback. A rollback failure does not
+claim that the previous state was restored. Canceling an operation, replacing
+it with a newer operation, or receiving a stale completion does not create a
+new failure notification or apply the old result. Align failures retain the
+review choices and the last successful artifact for corrected **Apply** retry.
+
 ### Circular track Width and Radius
 
 In **Layout → Custom Track Slots**, **Width** and **Radius** each have a
@@ -554,8 +579,11 @@ objects. Feature search can target **All**, **Label**, **Feature type**,
 **Record ID**, **Location**, **Strand**, or **Similarity group**. When rich
 feature popups are enabled, the **Field** menu also includes **Qualifier key**,
 **Qualifier value**, **Nucleotide**, and **Amino acid**. Search may use a
-literal value or **Regex**, and the previous and next controls move through
-rendered matches.
+literal value or **Regex (JavaScript, i)**, and the previous and next controls
+move through rendered matches. Regex search is case-insensitive JavaScript in
+both the app and downloaded Interactive SVG. Python-only syntax such as
+`(?P<name>...)` is rejected here; the message identifies JavaScript regex and
+explains returning to word search by turning Regex off.
 
 A normal feature click opens its identity, location, strand, qualifiers, and
 available sequence actions. Match popups report mapped endpoints and evidence;
@@ -606,6 +634,33 @@ pairs**, and **Use uploaded BLAST TSV for all adjacent pairs**. The buttons do
 not expose pressed state because they are commands. The separate current-plan
 status, native disclosure summaries, record uploaders, and pair actions remain
 keyboard reachable.
+
+### Color and Label patterns
+
+Color rules and Label TSV selectors use case-insensitive **Python regular
+expressions**, including `(?i)NADH` and `(?P<enzyme>NADH)`. They use the same
+Python matching semantics for live preparation and Generate. This differs from
+Feature Search and Interactive SVG search. TSV columns and pattern semantics
+are specified in [Input formats and TSV schemas](input-formats-and-tsv-schemas.md#styling-tables).
+
+A rejected edit to an existing Color rule's pattern remains visible in that
+field as **Not applied**, with its cause and **Retry** / **Revert** controls.
+The displayed text is a temporary draft; the accepted rule, Result and History
+remain unchanged. Syntax errors are distinguished from runtime initialization
+or preparation failures. Correcting the text and applying it, or a successful
+Retry, commits the rule and live Result together as one History action. Failed
+Retry adds no History action. Revert restores the accepted pattern and field
+focus without evaluating Python or adding History.
+
+**Save Session** and **Generate Diagram** use the last accepted rule, while
+Export uses the current Result. The rejected pattern draft is not saved in a
+Session or included in diagnostics. Closing and reopening Editor, or temporarily
+switching diagram modes in the same document, retains it. Removing its rule,
+Undo/Redo that replaces that rule, successful document or Session replacement,
+and Reset Settings release it. Unrelated History changes retain it; a failed
+Session replacement retains it after rollback. A successful Generate replaces
+the document and clears it. This recovery applies only to existing Color pattern
+fields; new rules, TSV imports, presets and Search keep their own input behavior.
 
 ## Rotate a record and place a feature
 

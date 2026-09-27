@@ -45,6 +45,7 @@ const copyModule = async (source, destination) => {
   );
 };
 
+await copyModule('services/error-normalization.js', 'services/error-normalization.js');
 await copyModule('app/ui.js', 'app/ui.js');
 await copyModule('app/feature-dom.js', 'app/feature-dom.js');
 await copyModule('app/feature-editor/svg-actions.js', 'app/feature-editor/svg-actions.js');

@@ -824,27 +824,31 @@ export const createHistoryManager = ({
       recordSessionLifecycleEvent('history.finalization-completed', { label });
       return result;
     } catch (error) {
-      if (transaction) {
-        transaction.closed = true;
-        if (typeof options.restoreAppliedArtifact === 'function') {
-          restoring.value = true;
-          try {
-            await options.restoreAppliedArtifact(transaction.before);
-          } finally {
-            restoring.value = false;
+      try {
+        if (transaction) {
+          transaction.closed = true;
+          if (typeof options.restoreAppliedArtifact === 'function') {
+            restoring.value = true;
+            try {
+              await options.restoreAppliedArtifact(transaction.before);
+            } finally {
+              restoring.value = false;
+            }
+            clearCurrentCheckpoint();
+          } else {
+            recordStructuralMetric('generatedArtifactRollbackCount', 1);
+            await restoreArtifactHandle(transaction.before, { refreshIntent: false });
           }
-          clearCurrentCheckpoint();
-        } else {
-          recordStructuralMetric('generatedArtifactRollbackCount', 1);
-          await restoreArtifactHandle(transaction.before, { refreshIntent: false });
+          await restoreReplacementIntentCheckpoint(
+            transaction.beforeIntentCheckpoint,
+            options.restoreIntentCheckpoint
+          );
+          await refreshCurrentIntent();
         }
-        await restoreReplacementIntentCheckpoint(
-          transaction.beforeIntentCheckpoint,
-          options.restoreIntentCheckpoint
-        );
-        await refreshCurrentIntent();
+        releaseUnreferencedFiles();
+      } catch (_) {
+        if (error && typeof error === 'object') error.artifactRestoreFailed = true;
       }
-      releaseUnreferencedFiles();
       throw error;
     }
   };
