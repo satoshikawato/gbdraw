@@ -865,6 +865,9 @@
             justify-content: center;
             flex-wrap: wrap;
         }
+        .preview-editor-layout {
+            display: contents;
+        }
         @media (max-width: 760px) {
             .feature-popup-grid {
                 grid-template-columns: minmax(0, 1fr);
@@ -977,7 +980,7 @@
             .settings-scroll {
                 overflow: visible !important;
                 padding-right: 0 !important;
-                padding-bottom: 7rem !important;
+                padding-bottom: 10rem !important;
                 margin-bottom: 0 !important;
             }
 
@@ -1007,9 +1010,9 @@
 
             .result-pane {
                 flex: none;
-                height: 72dvh !important;
-                min-height: 26rem !important;
-                overflow: hidden !important;
+                height: auto !important;
+                min-height: 0 !important;
+                overflow: visible !important;
             }
 
             .preview-toolbar {
@@ -1087,26 +1090,43 @@
             }
         }
 
-        /* Narrow Preview: keep the Editor in a side lane and let search scroll
-           above the naturally wrapped controls, including in landscape. */
+        /* One Preview and Editor: compact canvases have a full-width dock.
+           Search precedes the canvas so page scroll can expose the dock below
+           the sticky header and above Generate, including on short screens. */
         @container (max-width: 40rem) {
             .result-pane > [aria-label="Result Preview"] {
+                flex: none;
                 --alignment-review-compact: 1;
                 min-height: 0;
                 overflow: clip;
                 --editor-toggle-width: 2.25rem;
-                --right-drawer-width: min(var(--right-drawer-max-width), calc(100% - var(--editor-toggle-width)));
+                --compact-preview-space: calc(100dvh - 21rem - env(safe-area-inset-bottom));
             }
             [aria-label="Result Preview"] > .card-header {
                 padding-right: calc(var(--editor-toggle-width) + 0.75rem);
             }
-            .preview-viewport {
+            .preview-editor-layout {
                 display: grid;
-                grid-template-rows: minmax(0, 1fr) auto;
+                position: relative;
+                grid-template-columns: minmax(0, 1fr);
+                grid-template-rows: auto minmax(200px, calc(var(--compact-preview-space) * 0.5)) auto;
                 gap: 0.5rem;
-                padding: 0.5rem;
-                min-height: 0;
+                min-width: 0;
                 isolation: isolate;
+            }
+            .preview-editor-layout:has(.right-drawer[aria-hidden="false"]),
+            .preview-editor-layout:has(.alignment-review-panel) {
+                grid-template-rows: auto minmax(200px, calc(var(--compact-preview-space) * 0.5)) auto var(--compact-dock-height, clamp(11rem, calc(var(--compact-preview-space) * 0.4), 18rem));
+            }
+            .preview-editor-layout:has(.alignment-review-panel) {
+                --compact-dock-height: clamp(15rem, 29dvh, 18rem);
+            }
+            .alignment-review-dock {
+                grid-area: 4 / 1;
+                min-height: 0;
+            }
+            .preview-viewport {
+                display: contents;
             }
             .preview-feature-search {
                 position: relative;
@@ -1114,27 +1134,39 @@
                 inset: auto !important;
                 width: auto;
                 min-height: 0;
-                max-height: 100% !important;
+                max-height: 12rem !important;
                 overflow: auto;
-                align-self: start;
+                transform: none !important;
+                margin-right: var(--editor-toggle-width);
+            }
+            .preview-viewport .preview-canvas {
+                position: relative;
+                grid-area: 2 / 1;
+                inset: auto;
+                min-width: 0;
+                min-height: 0;
             }
             .preview-viewport .preview-controls {
                 position: relative;
-                grid-area: 2 / 1;
+                grid-area: 3 / 1;
                 inset: auto !important;
                 transform: none !important;
                 justify-content: center;
                 flex-wrap: wrap;
+                gap: 0.25rem;
             }
-            /* The open drawer covers the underlying controls in this narrow
-               region. Keep whole hit targets behind its edge. */
-            .preview-viewport .preview-controls--drawer-open,
-            .preview-viewport:has(.preview-controls--drawer-open) .preview-feature-search {
-                transform: translateX(max(calc(var(--editor-toggle-width) - 0.5rem), calc(100% - var(--right-drawer-max-width) + 0.5rem))) !important;
+            .preview-controls > button {
+                padding: 0.5rem;
+            }
+            .preview-controls > button span {
+                display: none;
+            }
+            .preview-controls [aria-label="Reset zoom"] {
+                width: 3rem;
             }
             .preview-viewport .preview-canvas-padding {
                 position: relative;
-                grid-area: 1 / 1;
+                grid-area: 2 / 1;
                 inset: auto;
                 transform: none;
                 place-self: end center;
@@ -1142,14 +1174,36 @@
                 overflow: auto;
                 z-index: 31;
             }
+            .preview-editor-layout .right-drawer {
+                position: relative;
+                grid-area: 4 / 1;
+                inset: auto;
+                width: 100% !important;
+                min-height: 0;
+                border-left: 0;
+                border-top: 1px solid #e2e8f0;
+                transform: none;
+            }
+            .right-drawer[aria-hidden="true"] {
+                display: none;
+            }
+            .right-drawer > .flex-1 {
+                overflow-y: auto;
+            }
+            .right-drawer > .flex-1 > .overflow-y-auto {
+                height: 8rem;
+                min-height: 8rem;
+                flex: none;
+            }
             .drawer-toggle {
                 top: 0.5rem !important;
                 bottom: auto !important;
+                right: 0;
                 width: var(--editor-toggle-width);
                 transform: none !important;
             }
             .drawer-toggle[aria-expanded="true"] {
-                right: var(--right-drawer-width);
+                right: 0;
                 transform: none !important;
             }
         }
@@ -1235,7 +1289,7 @@
             bottom: 2rem;
             width: var(--settings-pane-width);
         }
-        .settings-scroll { margin-bottom: 8rem; }
+        .settings-scroll { margin-bottom: 10rem; }
 
         details > summary { @apply list-none cursor-pointer font-bold text-slate-600 hover:text-blue-600 transition-colors flex items-center gap-2 select-none text-xs; }
         details > summary::-webkit-details-marker { display: none; }
@@ -1248,25 +1302,17 @@
             min-height: 0 !important;
             overflow-y: auto !important;
         }
-        .alignment-review-dock { height: clamp(15rem, 29dvh, 18rem); }
-        .alignment-review-compact { flex: none; min-height: 0; }
-        .alignment-review-compact .preview-viewport {
-            flex: none;
-            grid-template-rows: auto minmax(200px, calc((100dvh - 21rem) * .5)) auto;
-            min-height: 0;
-            padding: 0;
-        }
-        .alignment-review-compact .preview-feature-search { grid-area: 1 / 1; max-height: 12rem !important; }
-        .alignment-review-compact .preview-canvas { position: relative; grid-area: 2 / 1; inset: auto; scroll-margin-top: 9rem; }
-        .alignment-review-compact .preview-controls { grid-area: 3 / 1; gap: .25rem; }
-        .alignment-review-compact .preview-controls > button { padding: .5rem; }
-        .alignment-review-compact .preview-controls > button span { display: none; }
-        .alignment-review-compact .preview-controls [aria-label="Reset zoom"] { width: 3rem; }
+        .alignment-review-compact .preview-canvas { scroll-margin-top: 9rem; }
         .alignment-review-panel > header, .alignment-review-panel > footer { padding: .5rem .75rem; }
         .alignment-review-panel > header { cursor: default; touch-action: auto; }
         .alignment-review-panel > footer > .flex { flex-direction: row; }
         .alignment-review-panel > footer .btn { flex: 1; min-width: 0; }
         .alignment-review-compact .drawer-toggle:disabled { opacity: .55; cursor: not-allowed; }
+        /* A wrapped sticky header can consume the entire short viewport.
+           During compact review, page scroll must expose its native controls. */
+        @media (max-height: 32rem) {
+            body:has(.alignment-review-compact) .app-header { position: relative; }
+        }
     </style>
 </head>
 <body class="antialiased pb-0 overflow-hidden">
@@ -1276,7 +1322,7 @@
     <div v-if="processing" class="fixed inset-0 bg-white/90 backdrop-blur-sm z-50 flex flex-col items-center justify-center">
         <div class="animate-spin w-16 h-16 border-4 border-blue-600 border-t-transparent rounded-full mb-6"></div>
         <h3 class="text-xl font-bold text-slate-800 animate-pulse">Generating Diagram...</h3>
-        <p role="status" aria-live="polite" aria-atomic="true" class="text-xs text-slate-500 mt-3 font-mono" v-text="processingStatus"></p>
+        <p data-generation-progress role="status" aria-live="polite" aria-atomic="true" class="text-xs text-slate-500 mt-3 font-mono" v-text="processingStatus"></p>
         <button @click="cancelGeneration"
                 :disabled="generationCancelRequested"
                 class="btn mt-6 px-5 py-2 text-sm bg-white text-slate-700 border border-slate-300 hover:bg-slate-50 disabled:opacity-60 disabled:cursor-wait flex items-center gap-2">
@@ -1306,7 +1352,7 @@
                     <button data-history-managed @click="resetSettings" class="app-config-button text-[11px] font-bold text-slate-500 hover:text-amber-700 px-1 py-0.5 rounded border border-amber-200 bg-amber-50 flex items-center gap-0.5" title="Reset Settings" aria-label="Reset Settings">
                         <i class="ph ph-arrow-clockwise"></i> Reset Settings
                     </button>
-                    <button @click="saveSessionWithTitle" :disabled="sessionSavePending" :aria-busy="sessionSavePending" class="app-config-button text-[11px] font-bold text-slate-600 hover:text-blue-700 px-1 py-0.5 rounded border border-blue-200 bg-blue-50 flex items-center gap-0.5 disabled:opacity-40 disabled:cursor-wait" title="Save Session" aria-label="Save Session">
+                    <button @click="saveSessionWithTitle" :disabled="sessionSavePending" :aria-busy="sessionSavePending" class="app-config-button text-[11px] font-bold text-slate-600 hover:text-blue-700 px-1 py-0.5 rounded border border-blue-200 bg-blue-50 flex items-center gap-0.5 disabled:opacity-40 disabled:cursor-wait" title="Save the current Result and settings draft without generating" aria-label="Save Session" aria-describedby="session-save-help">
                         <i :class="sessionSavePending ? 'ph ph-spinner animate-spin' : 'ph ph-archive'"></i> Save Session
                     </button>
                     <button data-history-managed @click="$refs.sessionInput.click()" :disabled="sessionImportPending" :aria-busy="sessionImportPending" class="app-config-button text-[11px] font-bold text-slate-600 hover:text-blue-700 px-1 py-0.5 rounded border border-blue-200 bg-blue-50 flex items-center gap-0.5 disabled:opacity-40 disabled:cursor-not-allowed" title="Load Session" aria-label="Load Session">
@@ -1316,6 +1362,7 @@
                     <span v-if="sessionSavePending" data-session-save-status role="status" aria-live="polite" class="text-[10px] font-semibold text-blue-700 whitespace-nowrap">Saving session…</span>
                     <span v-if="sessionImportPending" data-session-import-status role="status" aria-live="polite" class="text-[10px] font-semibold text-blue-700 whitespace-nowrap">Loading session…</span>
                 </div>
+                <span id="session-save-help" class="sr-only">Save stores the current Result and generation settings draft. It does not Generate.</span>
                 <div class="app-session-actions flex items-center gap-1 min-w-0">
                     <span class="app-session-label text-[10px] uppercase tracking-wide text-slate-400 font-semibold">Session</span>
                     <button @click="editSessionTitle" class="app-session-button text-[11px] font-semibold text-slate-600 hover:text-blue-700 px-1 py-0.5 rounded border border-slate-200 bg-white flex items-center gap-0.5 w-32 min-w-0 justify-start">
@@ -1345,7 +1392,7 @@
                         <span class="min-w-0 flex-1">Input Genomes</span>
                     </div>
 
-                    <p v-if="recordDisplayControls.hasPendingChanges.value" role="status" class="mb-2 text-xs text-amber-700">Rotation, feature placement, or tolerance has changes pending Generate. The Result shows the last successful settings.</p>
+                    <p v-if="recordDisplayControls.hasPendingChanges.value" role="status" class="mb-2 text-xs text-amber-700">Record rotation, feature placement, or tolerance has changes pending Generate. This notice covers record display only; the Result keeps its applied settings.</p>
                     <div v-if="mode === 'circular'" class="space-y-4">
                         <div class="flex gap-4 text-sm font-bold bg-slate-50 p-2 rounded-lg inline-flex">
                             <label class="flex items-center gap-2 cursor-pointer hover:text-blue-600"><input type="radio" v-model="cInputType" value="gb" class="text-blue-600 focus:ring-blue-500"> GenBank</label>
@@ -1359,6 +1406,7 @@
                             <file-uploader label="FASTA File" v-model="files.c_fasta" accept=".fa,.fas,.fasta,.fna,.ffn,.faa,.txt,text/plain,text/*"></file-uploader>
                         </div>
                         <section aria-label="Record rotation" class="space-y-2">
+                            <p class="text-[10px] text-slate-500">Applies on Generate: record rotation.</p>
                             <button v-if="(cInputType === 'gff' ? files.c_gff && files.c_fasta : files.c_gb) && !recordDisplayControls.rowsFor('circular').length" type="button" @click="refreshCircularRecordOrder" class="text-xs text-blue-600">Load record rotation controls</button>
                             <record-display-control v-for="row in recordDisplayControls.rowsFor('circular')" :key="row.key" :row="row" :controller="recordDisplayControls"></record-display-control>
                         </section>
@@ -1412,7 +1460,7 @@
                                     </div>
                                     <div class="pt-1 border-t border-slate-200 border-dashed">
                                         <div class="text-[10px] text-slate-500 font-bold mb-1 flex items-center gap-1">
-                                            <i class="ph ph-crop"></i> Region (optional)
+                                            <i class="ph ph-crop"></i> Region (optional) <span class="text-[9px] font-normal">Applies on Generate</span>
                                             <help-tip text="Use 1-based inclusive coordinates within the selected record. Both values are required and must be within record bounds."></help-tip>
                                         </div>
                                         <div class="grid grid-cols-2 gap-2">
@@ -1806,7 +1854,7 @@
                             </div>
                             <div class="mt-2 pt-2 border-t border-slate-200 border-dashed">
                                 <div class="text-[10px] text-slate-500 font-bold mb-1 flex items-center gap-1">
-                                    <i class="ph ph-crop"></i> Region (optional)
+                                    <i class="ph ph-crop"></i> Region (optional) <span class="text-[9px] font-normal">Applies on Generate</span>
                                     <help-tip text="Show only a sub-region (1-based, inclusive). For multi-record files, specify the record ID or #index."></help-tip>
                                 </div>
                                 <div class="grid grid-cols-1 gap-2">
@@ -2387,7 +2435,10 @@
                 <i class="ph ph-warning-circle text-sm mt-0.5"></i>
                 <span>{{ circularConservationLayoutWarning }}</span>
             </div>
-            <button data-history-managed type="button" aria-label="Generate Diagram" @click="runAnalysis" :disabled="processing"
+            <p class="mb-2 text-xs text-slate-700" data-generation-application-summary><strong>{{ generationApplicationFeedback.label }}</strong> · Generation settings</p>
+            <p id="generate-help" class="mb-2 text-[10px] text-slate-600">Generate recalculates placement and resets zoom. Undo restores the previous Result.</p>
+            <p class="sr-only" data-generation-application-announcement role="status" aria-live="polite" aria-atomic="true" v-text="generationApplicationFeedback.announcement"></p>
+            <button data-history-managed type="button" aria-label="Generate Diagram" @click="runAnalysis" :disabled="processing" aria-describedby="generate-help"
                 class="btn w-full py-4 text-lg relative overflow-hidden group text-white bg-blue-600 hover:bg-blue-700 shadow-lg shadow-blue-200 border-b-4 border-blue-800 active:border-b-0 active:translate-y-1 active:shadow-none transition-all">
                 <span v-if="!processing" class="flex items-center justify-center gap-2"><i class="ph ph-rocket-launch text-2xl"></i> Generate Diagram</span>
                 <span v-else class="flex items-center justify-center gap-2"><i class="ph ph-spinner animate-spin text-xl"></i> {{ generationCancelRequested ? 'Canceling...' : 'Processing...' }}</span>
@@ -2806,6 +2857,12 @@
                         <summary aria-label="Layout"><i class="ph ph-layout"></i> Layout <help-tip text="Control track placement and layout-related options."></help-tip></summary>
                         <div class="mt-2 space-y-3 pt-2 border-t border-slate-200">
                             <template v-if="mode === 'linear'">
+                                <div class="text-[11px] text-slate-600 space-y-1" data-linear-label-auto-layout>
+                                    <p role="status" aria-live="polite" aria-atomic="true">{{ linearLabelAutoDisclosure }}</p>
+                                    <div v-if="linearLabelAutoFields.length" class="flex flex-wrap gap-2">
+                                        <button v-for="row in linearLabelAutoFields" :key="row.key" type="button" class="text-blue-600 underline" :aria-controls="'linear-label-visibility-' + row.key" @click="focusLinearLabelVisibility(row.key)">Record Labels: {{ row.label }}</button>
+                                    </div>
+                                </div>
                                 <div>
                                     <label for="linear-track-layout" class="input-label text-[10px] mb-1">Track Layout <help-tip text="Simple mode only. Above places features above the axis, Features on axis centers them on it, and Below places them below it. Use Reset to copy this choice into the custom stack."></help-tip></label>
                                     <select id="linear-track-layout" v-model="form.linear_track_layout" class="form-input text-xs py-1" :disabled="adv.linear_track_slots_enabled" :title="adv.linear_track_slots_enabled ? 'Simple mode only. Use Reset to rebuild the custom stack from this setting.' : ''">
@@ -2831,9 +2888,10 @@
                                         <input type="checkbox" v-model="form.align_center" class="form-checkbox">
                                         <span class="inline-flex items-center gap-1">Align to Center <help-tip text="Align the linear map to the center of the page."></help-tip></span>
                                     </label>
-                                    <label class="option-label flex items-center gap-2 text-xs text-slate-700 cursor-pointer select-none">
-                                        <input type="checkbox" v-model="form.keep_definition_left_aligned" class="form-checkbox">
+                                    <label class="option-label flex flex-wrap items-center gap-2 text-xs text-slate-700 cursor-pointer select-none">
+                                        <input type="checkbox" v-model="form.keep_definition_left_aligned" class="form-checkbox" aria-label="Lock Definition Column" aria-describedby="linear-definition-lock-help">
                                         <span class="inline-flex items-center gap-1">Lock Definition Column <help-tip text="Align Linear definitions in a shared left column. When off, definitions use a common column center and follow their row offset, including center or similarity alignment."></help-tip></span>
+                                        <span id="linear-definition-lock-help" class="basis-full block text-[10px] text-slate-500">ON aligns definitions in a common left column. OFF centers them in a common column width and follows row offsets. Changes apply on Generate.</span>
                                     </label>
                                     <label class="option-label flex items-center gap-2 text-xs text-slate-700 cursor-pointer select-none">
                                         <input type="checkbox" v-model="form.normalize_length" class="form-checkbox">
@@ -2870,6 +2928,7 @@
                                             >
                                                 <i class="ph" :class="linearTrackSlotsPanelOpen ? 'ph-caret-down' : 'ph-caret-right'"></i>
                                                 <span class="truncate">Custom Track Slots</span>
+                                                <span class="text-[9px] font-normal">Applies on Generate</span>
                                             </button>
                                             <help-tip text="Edit the explicit linear track stack. Opening or closing this panel does not enable or alter the stack. Arrows reorder within the current side; Axis buttons move rows across the boundary."></help-tip>
                                         </div>
@@ -3187,6 +3246,7 @@
                                             >
                                                 <i class="ph" :class="circularTrackSlotsPanelOpen ? 'ph-caret-down' : 'ph-caret-right'"></i>
                                                 <span class="truncate">Custom Track Slots</span>
+                                                <span class="text-[9px] font-normal">Applies on Generate</span>
                                             </button>
                                             <help-tip text="Edit the explicit circular stack. Opening or closing this panel does not enable or alter the stack. Rows above Axis render outside and rows below Axis render inside."></help-tip>
                                         </div>
@@ -3607,6 +3667,7 @@
                                 </div>
 
                                 <div v-if="mode === 'linear'" class="space-y-1.5">
+                                    <p v-if="linearLabelAutoDisclosure" class="text-[11px] text-slate-600" data-linear-label-auto-labels>{{ linearLabelAutoDisclosure }}</p>
                                     <div v-for="row in definitionLineStyleRows" :key="row.key" class="rounded border border-slate-200 bg-white px-2 py-1.5">
                                         <div class="flex items-center justify-between gap-2">
                                             <span class="text-[10px] font-semibold text-slate-700">{{ row.label }}</span>
@@ -3614,7 +3675,7 @@
                                                 <input type="checkbox" v-model="adv[row.visibilityKey]" class="form-checkbox" :aria-label="row.label + ' visibility'">
                                                 <span>Show</span>
                                             </label>
-                                            <select v-else-if="row.visibilityType === 'mode'" v-model="adv[row.visibilityKey]" class="form-input form-input-compact w-28 text-[10px]" :aria-label="row.label + ' visibility'">
+                                            <select v-else-if="row.visibilityType === 'mode'" :id="'linear-label-visibility-' + row.key" v-model="adv[row.visibilityKey]" class="form-input form-input-compact w-28 text-[10px]" :aria-label="row.label + ' visibility'">
                                                 <option value="auto">{{ linearLabelVisibilitySummary('auto') }}</option>
                                                 <option value="show">Show</option>
                                                 <option value="hide">Hide</option>
@@ -3721,12 +3782,14 @@
                                         <help-tip text="When off, changing the palette only updates the swatches. The preview keeps the current palette until you click Generate Diagram."></help-tip>
                                     </label>
                                     <div v-if="hasPendingPaletteDraft" class="text-[9px] text-amber-700 bg-amber-50 border border-amber-200 rounded px-2 py-1">
-                                        Palette <span class="font-semibold">{{ pendingPaletteName }}</span> is queued and will apply on the next Generate Diagram.
+                                        Palette <span class="font-semibold">{{ pendingPaletteName }}</span> is queued for the next Generate. This notice covers palette selection only.
                                     </div>
                                 </div>
+                                <p data-palette-application-help class="mb-1 text-[10px] text-slate-600">{{ paletteInstantPreviewEnabled ? 'Live edit: palette selection updates the current Result.' : 'Applies on Generate: palette selection updates swatches only; the current Result keeps its applied palette.' }}</p>
                                 <select v-model="selectedPalette" @change="updatePalette" aria-label="Palette" class="form-input form-input-compact mb-2">
                                     <option v-for="p in paletteNames" :value="p">{{ p }}</option>
                                 </select>
+                                <p data-default-color-application-help class="mb-1 text-[10px] text-slate-500">{{ hasPendingPaletteDraft ? 'Applies on Generate: default color edits update the queued palette swatches.' : 'Live edit: individual default colors update the current Result.' }}</p>
                                 <div class="grid grid-cols-2 gap-1.5 bg-white p-2 rounded border border-slate-200">
                                     <div v-for="(color, feat) in currentColors" :key="feat" class="min-w-0">
                                         <span class="text-[9px] text-slate-500 truncate block mb-0.5" :title="feat">{{ feat }}</span>
@@ -4251,6 +4314,7 @@
                 <div v-if="mode === 'linear'" class="card bg-slate-50/50">
                     <details>
                         <summary aria-label="Axis &amp; Scale"><i class="ph ph-ruler"></i> Axis &amp; Scale <help-tip text="Adjust axis stroke settings plus the linear scale bar or ruler style."></help-tip></summary>
+                        <p class="mt-2 text-[10px] text-slate-500">Applies on Generate: scale visibility, style, interval, and label sizes. Live edit: axis and scale line colors and widths on existing targets.</p>
                         <div class="mt-2 space-y-3 pt-2 border-t border-slate-200">
                             <label class="option-label flex items-center gap-2 text-xs text-slate-700 cursor-pointer select-none">
                                 <input
@@ -4379,6 +4443,7 @@
                 <div v-if="mode === 'circular'" class="card bg-slate-50/50">
                     <details>
                         <summary><i class="ph ph-paint-brush"></i> Axis &amp; Scale <help-tip text="Adjust axis stroke settings and the circular scale interval."></help-tip></summary>
+                        <p class="mt-2 text-[10px] text-slate-500">Applies on Generate: scale visibility, style, interval, and label sizes. Live edit: axis and scale line colors and widths on existing targets.</p>
                         <div class="mt-2 space-y-3 pt-2 border-t border-slate-200">
                             <label
                                 :class="[
@@ -4618,7 +4683,16 @@
              @mousedown="startResizing"
              title="Drag to resize"></div>
 
-        <div class="result-pane flex-1 space-y-4 flex flex-col h-full overflow-hidden min-w-0">
+        <div class="result-pane flex-1 space-y-4 flex flex-col h-full overflow-y-auto min-w-0">
+            <section data-generation-application-feedback aria-label="Generation application status" class="rounded border border-slate-200 bg-white px-3 py-2 text-xs text-slate-700 shrink-0">
+                <p><strong>{{ generationApplicationFeedback.label }}</strong> · {{ generationApplicationFeedback.message }}</p>
+                <p v-if="generationApplicationFeedback.unknownMessage" class="mt-1 text-amber-800">{{ generationApplicationFeedback.unknownMessage }}</p>
+                <p v-if="generationApplicationFeedback.error" class="mt-1 text-red-700">{{ generationApplicationFeedback.error }}</p>
+                <p v-if="generationApplicationFeedback.generationMessage" class="mt-1">{{ generationApplicationFeedback.generationMessage }}</p>
+                <p v-if="generationApplicationFeedback.liveMessage" data-live-application-feedback class="mt-1 text-amber-800">{{ generationApplicationFeedback.liveMessage }}</p>
+                <p class="mt-1 text-[10px] text-slate-500">Supported color, label, visibility, and record layout edits carry forward on Generate; manual positions may change.</p>
+                <p id="session-export-help" class="mt-1 text-[10px] text-slate-500">Save stores the current Result and settings draft. Export outputs the current Result. Neither applies pending settings.</p>
+            </section>
 
             <div v-if="errorDisplay" role="alert" aria-label="Generation Error" class="card border-l-4 border-l-red-500 bg-red-50 mb-0 shrink-0">
                 <div class="text-red-700 font-bold mb-2 flex items-center gap-2"><i class="ph ph-warning-circle"></i> Error Occurred</div>
@@ -4672,7 +4746,7 @@
                             </button>
                         </div>
                     </div>
-                    <div v-if="resultPanelTab === 'preview'" class="preview-toolbar flex gap-2 items-center flex-wrap mr-2">
+                    <div v-if="resultPanelTab === 'preview'" class="preview-toolbar flex gap-2 items-center flex-wrap mr-2" aria-describedby="session-export-help">
                         <div class="flex items-center gap-2 bg-white px-3 py-1.5 rounded border border-green-200">
                             <span class="text-sm font-bold text-green-700">DPI</span>
                             <select v-model="downloadDpi" aria-label="PNG DPI" class="text-sm bg-transparent border-none focus:ring-0 p-0 text-slate-600 font-mono outline-none cursor-pointer">
@@ -4683,10 +4757,10 @@
                                 <option value="600">600 (High)</option>
                             </select>
                         </div>
-                        <button type="button" aria-label="SVG" @click="downloadSVG" class="btn btn-secondary text-sm" title="Download a static SVG for publication and conversion workflows"><i class="ph ph-download-simple"></i> SVG</button>
-                        <button @click="downloadInteractiveSVG" class="btn btn-secondary text-sm" title="Browser-oriented SVG with embedded controls. Rich Feature Popup controls how much feature detail is embedded."><i class="ph ph-cursor-click"></i> Interactive SVG</button>
-                        <button @click="downloadPNG" class="btn btn-primary text-sm"><i class="ph ph-download-simple"></i> PNG</button>
-                        <button @click="downloadPDF" class="btn btn-secondary text-sm"><i class="ph ph-file-pdf"></i> PDF</button>
+                        <button type="button" aria-label="SVG" @click="downloadSVG" aria-describedby="session-export-help" class="btn btn-secondary text-sm" title="Download a static SVG for publication and conversion workflows"><i class="ph ph-download-simple"></i> SVG</button>
+                        <button @click="downloadInteractiveSVG" aria-describedby="session-export-help" class="btn btn-secondary text-sm" title="Browser-oriented SVG with embedded controls. Rich Feature Popup controls how much feature detail is embedded."><i class="ph ph-cursor-click"></i> Interactive SVG</button>
+                        <button @click="downloadPNG" aria-describedby="session-export-help" class="btn btn-primary text-sm"><i class="ph ph-download-simple"></i> PNG</button>
+                        <button @click="downloadPDF" aria-describedby="session-export-help" class="btn btn-secondary text-sm"><i class="ph ph-file-pdf"></i> PDF</button>
                     </div>
                 </div>
 
@@ -4736,6 +4810,7 @@
                     {{ similarityAlignmentNotice }}
                 </div>
 
+                <div class="preview-editor-layout">
                 <div v-show="resultPanelTab === 'preview'" class="preview-viewport relative flex-grow overflow-hidden bg-slate-50/30">
 
                     <div v-if="svgContent"
@@ -4972,7 +5047,7 @@
                             <span>Canvas padding</span>
                         </button>
                         <!-- Zoom controls -->
-                        <div class="flex gap-1 bg-white shadow rounded-lg p-1.5 border border-slate-200">
+                        <div data-history-ignore class="flex gap-1 bg-white shadow rounded-lg p-1.5 border border-slate-200">
                             <button @click="zoom+=0.1" class="w-10 h-10 flex items-center justify-center hover:bg-slate-100 text-slate-600 rounded text-lg" aria-label="Zoom in"><i class="ph ph-plus"></i></button>
                             <button @click="zoom = 1.0" class="w-16 h-10 flex items-center justify-center hover:bg-slate-100 text-slate-600 text-sm font-mono rounded" aria-label="Reset zoom">{{Math.round(zoom*100)}}%</button>
                             <button @click="zoom = Math.max(0.1, zoom-0.1)" class="w-10 h-10 flex items-center justify-center hover:bg-slate-100 text-slate-600 rounded text-lg" aria-label="Zoom out"><i class="ph ph-minus"></i></button>
@@ -5120,6 +5195,7 @@
                             </button>
                         </div>
                         <div class="feature-popup-body custom-scrollbar" data-nodrag="true">
+                        <p v-if="!adv.rich_feature_popup || clickedFeature.activeTab === 'edit'" class="mb-2 text-[10px] text-slate-500">Live edit: feature color, label text, and visibility update the current Result; geometry changes may rerender automatically.</p>
                         <div v-if="!adv.rich_feature_popup || clickedFeature.activeTab === 'edit'" class="feature-popup-grid">
                         <div v-if="clickedFeature?.feat" class="col-span-full mb-2" data-nodrag="true">
                             <button type="button" @click="toggleRecordActions"
@@ -6443,6 +6519,7 @@
                     </div>
 
                     <div v-show="rightDrawerTab === 'legend'" class="flex-1 min-h-0 flex flex-col">
+                        <p class="px-4 py-2 text-[10px] text-slate-500">Live edit: legend text, color, and visibility update the current Result.</p>
                         <div class="px-3 py-2 border-b border-slate-100 bg-slate-50/50 shrink-0">
                             <div class="flex items-center justify-between">
                                 <span class="text-[10px] text-slate-500 flex items-center gap-1">
@@ -6513,6 +6590,7 @@
                     </div>
 
                     <div v-if="isFeatureDrawerMounted" class="flex-1 min-h-0 flex flex-col">
+                        <p class="px-4 py-2 text-[10px] text-slate-500">Live edit: feature color, label text, and visibility update the current Result; geometry may rerender automatically.</p>
                         <div class="px-4 py-2 border-b border-slate-100 shrink-0 bg-white">
                             <div class="flex items-center justify-between gap-2">
                                 <p class="text-xs font-semibold text-slate-600">Features ({{ filteredFeatures.length }})</p>
@@ -6938,6 +7016,7 @@
                         </div>
                     </div>
                 </div>
+                </div>
             </div>
 
             <div v-else class="h-full flex flex-col items-center justify-center text-slate-300 border-4 border-dashed border-slate-200 rounded-3xl p-12 bg-slate-50/30">
@@ -6964,7 +7043,7 @@
                  ref="similarityAlignmentPaletteRef"
                  role="dialog"
                  aria-labelledby="similarity-alignment-dialog-title"
-                 aria-describedby="similarity-alignment-dialog-description"
+                 aria-describedby="similarity-alignment-dialog-description similarity-alignment-application-help"
                  data-history-scope="transient"
                  data-similarity-alignment-overlay
                  data-similarity-alignment-dialog
@@ -6991,6 +7070,13 @@
 
                 <div class="min-h-0 min-w-0 flex-1 overflow-x-hidden overflow-y-auto p-3 custom-scrollbar sm:p-5">
                     <div class="space-y-4">
+                            <p id="similarity-alignment-application-help" data-alignment-application-help class="mt-1 text-xs font-semibold text-blue-700">Apply required: selections stay in this review draft until Apply succeeds. Cancel keeps the current Result.</p>
+                            <p v-if="similarityAlignmentError" role="alert" tabindex="-1"
+                               class="mb-2 break-all text-xs text-red-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-red-700"
+                               data-similarity-alignment-error>
+                                {{ similarityAlignmentError.message }}
+                            </p>
+
                             <p id="similarity-alignment-dialog-description" class="mt-1 text-xs leading-relaxed text-slate-600">
                                 Choose Select or Skip for ambiguous records. Direction choices include the exact reference and selected anchors with a known direction. Skipped, missing, unusable and unknown-direction anchors stay unchanged.
                             </p>
@@ -7129,11 +7215,6 @@
                        class="mb-2 text-xs"
                        :class="canApplySimilarityAlignment ? 'text-emerald-700' : 'text-amber-700'">
                         {{ canApplySimilarityAlignment ? 'Apply validates the complete draft with Python, then regenerates the diagram.' : similarityAlignmentApplyDisabledReason }}
-                    </p>
-                    <p v-if="similarityAlignmentError" role="alert" tabindex="-1"
-                       class="mb-2 break-all text-xs text-red-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-red-700"
-                       data-similarity-alignment-error>
-                        {{ similarityAlignmentError.message }}
                     </p>
                     <div class="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
                         <button type="button"

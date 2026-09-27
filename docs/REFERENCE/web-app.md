@@ -81,14 +81,88 @@ for every record while preserving existing assignments.
 4. Select **Generate Diagram**.
 5. Inspect **Result Preview**, then export a file or select **Save Session**.
 
-Settings are committed to a result only after generation succeeds. The form
-may contain newer draft values than the visible result, so a session records
-the committed request together with supported editable state.
+The **Generation application status** beside the Result and Generate bar
+compares the generation settings with the current Result. **Pending** means
+that an effective setting has changed; returning to its applied value removes
+that difference. Opening a tab, scrolling, or changing an unused setting does
+not make it Pending. **Unknown** means the comparison lacks sufficient evidence,
+**Invalid settings** means the draft is invalid, and **Not generated** means
+there is no Result. None of these states means Applied.
+
+| Operation label | When the Result changes |
+|---|---|
+| **Applies on Generate** | A successful **Generate Diagram** applies crop, row layout, Definition Lock, scale label sizes, and track slots. |
+| **Live edit** | Feature color, label text, and visibility update the current Result directly; geometry changes may rerender automatically. Palette selection is live when **Instant Preview** is on. |
+| **Apply required** | Alignment choices stay in the review draft until **Apply** succeeds. |
+
+A live edit can succeed while another setting stays Pending. **Live edit applying**
+and **Live edit failed** describe that operation independently of generation
+settings. A rerender failure retains any direct edit already applied and keeps
+the previous diagram geometry; correct the edit and retry. An unapplied alignment
+review is a local selection, not an applied Result or a generation-setting change.
+
+**Generate Diagram** recalculates placement and resets zoom. Supported color,
+label, visibility, and record-layout edits are carried forward; arbitrary manual
+positions are not guaranteed to survive regeneration. **Undo** restores the
+previous Result. Failed, canceled, or superseded generation keeps the last
+successful Result.
+
+**Save Session** saves the current Result and supported settings draft together.
+**Load Session** displays that saved Result without applying a newer draft.
+**SVG**, **PNG**, and **PDF** export the current Result. Save and Export do not
+Generate or apply Pending settings. A review's guide, candidate numbers, and
+unapplied choices are excluded from saved and exported artifacts.
 
 For Linear diagrams, the DOM and keyboard order is **Input Genomes**,
 **Comparison**, **Basic**, **Generate Diagram**, then **Advanced comparison and
 layout**. The fixed Generate bar remains visible while its DOM anchor stays in
 that order.
+
+### Follow a Result and its Pending draft
+
+For a small Linear comparison, download the complete GenBank records
+[Lambda (NC_001416.1)](https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi?db=nuccore&id=NC_001416.1&rettype=gbwithparts&retmode=text)
+and [DE3 (NC_042057.1)](https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi?db=nuccore&id=NC_042057.1&rettype=gbwithparts&retmode=text).
+Save them as `NC_001416.1.gb` and `NC_042057.1.gb`. Check the VERSION lines and
+complete lengths, 48,502 and 42,925 bp, before uploading them to two Linear File
+cards. A sequence version does not freeze its annotation table; the capture's
+exact source retrieval and hashes are recorded in the
+[reproduction receipt](../capture/linear-live-edit-source-verification.json).
+
+1. Open **Advanced comparison and layout**, enable **Arrange in rows**, and put
+   both records in row 1. The Auto explanation describes hiding Accession and
+   Length throughout the next generated diagram. Follow **Record Labels:
+   Accession** to its unchanged Auto selection. Choose Show for both fields,
+   then put DE3 in row 2 to return to a stacked comparison.
+2. In **Linear Layout**, turn **Lock Definition Column** OFF and back ON.
+   Choose **Run LOSAT**, retain LOSATN, and enable all labels under **Labels**.
+   To reproduce the figure, set **Label Font Size** and Record Labels' **Default
+   font size** to `24`, and upload `cds_gene_qualifier_priority.tsv` as the
+   **Priority File (TSV)**. Generate; the generation status becomes Applied.
+3. Open **Editor**, turn **Auto Reflow** off for this direct-label example,
+   find the Lambda portal protein, and use **Edit** and **Apply Label** to change
+   its label to `portal`. Close the popup and Editor.
+   This live edit is already part of the current Result.
+4. Under **Axis & Scale**, set **Scale Font Size** to `19`. The status becomes
+   Pending; the current Result still contains its earlier scale and the live label.
+5. Save as `lambda_de3_pending`, then Load that downloaded Session. Pending
+   remains. Export SVG to obtain the saved Result with the live label, without
+   applying the new scale font size.
+6. Generate to apply the draft. Undo restores the saved Result with its Pending
+   draft; Redo restores the regenerated Result and Applied status.
+
+Create `cds_gene_qualifier_priority.tsv` with this one tab-separated line:
+
+```tsv
+CDS	gene
+```
+
+![Pending generation settings above a Lambda–DE3 comparison containing the live portal label, record metadata, feature labels, legend, and comparison ribbons.](../assets/web-app/linear-current-result.png)
+
+The figure retains a gene-label priority rule and uses larger label fonts for
+readability. Use preview zoom and pan to inspect individual features. The
+[documentation capture instructions](../capture/README.md#linear-result-and-draft-checkpoints)
+regenerate the image and verify all checkpoints through the UI.
 
 ## Circular multi-record canvas
 
@@ -145,10 +219,16 @@ beside that row, while a value that varies within the row, such as a per-record
 replicon name, is drawn above its own record; a row whose records disagree on
 the organism gets no row-level text.
 
-With **Lock Definition Column** off, definitions beside rows use a common column
-center and follow each row's horizontal offset. Turning it on aligns them at a
-shared left edge. The definition gap separates the reserved column from the row;
-shorter text can leave more space. Record-local text stays above its own sequence.
+New Web diagrams and **Reset Settings** start with **Lock Definition Column**
+on. Definitions then share a left edge, with the configured definition gap
+before the nearest sequence. Turn it off explicitly to use a common column
+center that follows each row's horizontal offset. Shorter text can leave more
+space; record-local text stays above its own sequence. Apply either selection
+with **Generate Diagram**.
+
+Loading a session preserves its saved ON or OFF selection and its saved Result.
+Supported older sessions that omitted the setting keep their former OFF meaning.
+The CLI and Python API still default to OFF when the option is omitted.
 
 **Show Replicon** controls one automatic name per record, taking the first available
 source qualifier in the order chromosome, plasmid, organelle. It is off by default.
@@ -158,12 +238,20 @@ Apply these settings with **Generate**. Saved subtitles and previews retain thei
 values on load; see [Session compatibility](session-and-request-compatibility.md#linear-file-level-defaults).
 
 Under **Titles & Record Labels**, **Accession** and **Length / Coordinates**
-each have an independent **Auto**, **Show**, or **Hide** selection. Auto is shown
+each start at **Auto** on fresh pages and **Reset Settings**, with independent
+**Show** and **Hide** alternatives. Auto is shown
 as **Auto · Shown** while every rendered row contains one record. If any rendered
 row contains two or more records, that Auto field becomes **Auto · Hidden** for
 the entire diagram. Turning **Arrange in rows** off ignores dormant shared-row
 assignments. Changing the layout recalculates Auto but never rewrites an explicit
 Show or Hide selection. **Replicon** remains a separate checkbox.
+
+The Auto explanation in **Linear Layout** and **Record Labels** names the affected
+fields and describes the next successful Generate, which may differ from the
+current Result. Select **Record Labels: Accession** or **Record Labels: Length /
+Coordinates** beside that explanation to open the label controls and focus the
+matching selection. This navigation changes no value and creates no Undo entry.
+Choose **Show** yourself if shared rows should retain that field, then Generate.
 
 Plot-title text, position, and size share the **Plot Title** subsection. Record
 label defaults and the per-line **Style** disclosures share **Record Labels**.
@@ -186,6 +274,7 @@ biological coordinates.
 | Comparison | No rings until configured | No comparison until a command creates a plan |
 | Pairwise match style | Ribbon | Curve |
 | Accession / Length visibility | Not applicable | Auto · Shown |
+| Lock Definition Column | Not applicable | On |
 
 Loading a session restores its saved values instead of applying these
 defaults. Turning off **Use custom stack** preserves its draft slots. **Reset
@@ -290,86 +379,95 @@ filters, direction, and interpretation.
 
 Generate a Linear diagram with **LOSATP → Similarity groups**, then choose
 **Align…** from a feature popup. The exact clicked feature is the reference,
-even when it is not the group representative; its record does not move. The
-Similarity Groups drawer offers the same action after you select an exact
-reference record and feature. Group selection alone cannot choose a reference.
-Both controls show **Resolving…** while Python determines the target anchors.
-When every target has a deterministic resolution, **Align…** applies that plan
-with current orientations preserved and shows the Result summary without
-opening a palette. A missing or unusable target remains unchanged. If
-generation fails, the complete draft opens for correction and retry.
+even when it is not the group representative. The Similarity Groups editor
+offers the same action after you select an exact reference record and feature.
+Group selection alone cannot choose a reference. **Resolving…** means Python is
+determining the target anchors. A resolved normal **Align…** applies automatically
+in **Keep current directions** mode without opening a review. Missing or
+unusable targets stay unchanged. If rendering fails, the Keep draft opens with
+the underlying error for correction and retry.
 
-Choose **Review alignment options…** beside **Align…** in either entry point to
-inspect or change anchors, **Skip**, or **Match reference direction** before
-commitment, even when every target resolves. The exact same selected reference
-is used. Ambiguous targets also open the movable **Select alignment anchors**
-palette automatically from **Align…**. It lists every other displayed record in
-diagram order. The Python resolver automatically selects the only usable
-candidate or the unique direct reciprocal-best-hit (RBH) candidate. For a
-remaining ambiguity, it recommends the unique representative or candidate 1
-in stable identity order. Each row states its recommendation reason: **only
-usable candidate**, **unique direct RBH**, **unique representative**, or
-**deterministic candidate 1**. Recommendations are convenience heuristics, not
-proof that an anchor is biologically superior. You can replace any selected
-anchor or choose **Skip** before Apply. A hidden member is usable when its center
-maps into the displayed crop; one outside the crop is not. RBH query/subject
-direction is symmetric.
+Choose **Review alignment options…** to inspect anchors and directions before
+commitment, including a fully resolved plan. Ambiguity also opens **Select
+alignment anchors** automatically. The review lists other displayed records in
+diagram order. Python selects the only usable candidate or unique direct
+reciprocal-best-hit (RBH) candidate. For remaining ambiguity, it recommends the
+unique representative or candidate 1 in stable identity order. The row states
+its reason. Recommendations are convenience heuristics, not evidence that an
+anchor is biologically superior. Choose a candidate with **Select**, or **Skip**
+that record. A hidden member can be usable when its center maps into the crop;
+a member outside the crop is unusable. RBH query/subject direction is symmetric.
 
-Each candidate shows its biological name or feature ID, source coordinates,
-strand, representative status, direct evidence, and the internal feature ID.
-A thin line marks the reference center; numbered
-badges locate visible candidates in the preview. Hovering a candidate or its
-feature highlights the other. Clicking a feature or badge makes the same local
-choice as its row control. Candidates without a visible badge remain selectable
-in the palette. You can pan and zoom while reviewing. The guide, badges, and
-recommendation markers are preview-only and are absent from downloads and saved
-Sessions.
+Candidates show names or feature IDs, source coordinates, strand,
+representative status, and direct evidence. A guide marks the reference center;
+numbered badges locate visible candidates. Hovering a candidate or its feature
+highlights the other. Clicking a feature or badge makes the same local choice
+as its row control. Candidates without visible badges remain selectable in the
+list. Pan and zoom remain available during review.
 
-One **Match reference direction** checkbox below the exact reference is initially
-off each time the review opens. When checked, its status reads **Apply reverses
-N record(s):** followed by the record names; when unchecked, it reads **Record
-directions stay unchanged.** Each target row shows **Direction: same as reference**,
-**Direction: opposite to reference**, or **Direction: unknown strand — unchanged**.
-An opposite target adds **— reversed on Apply** when the checkbox is checked.
-The checkbox is disabled with **All selected anchors already face the reference
-direction.** when no selected target faces the opposite direction. Unknown strands
-are named separately as unchanged. Matching reverses only when both displayed
-anchor strands are known and opposite. The reference and every target's vertical
-position stay fixed; selected target anchor centers
-align horizontally after any reversal. Text stays readable. Skipped and missing
-records keep their positions and orientations. Unselected inparalogs follow their
-record's position and direction, retaining their memberships and comparison
-links. **rev** beside a record name in the Active plan inspector reports its
-effective direction relative to the source.
+Choose exactly one direction mode:
 
-Anchor choices and the Match reference direction checkbox are local; they start
-no Worker job. **Apply** sends the complete choices for one Python validation
-and diagram generation, then commits the plan, record Reverse settings, and Result in one History entry.
-A validation or generation error keeps the draft and checkbox state for retry.
-The review and Generation Error banner each show the underlying error once.
-**Cancel** or **Escape** commits nothing and returns focus to the initiating
-control when it is still present.
-If the source, crop, group, or committed Result changes during review, start
-again. The palette does not trap keyboard focus. The operation summary counts
-aligned, unchanged, skipped, missing, and reversed records; the active-plan
-inspector lists exact anchors and selection reasons.
+| Direction mode | Scope |
+|---|---|
+| **Keep current directions** | Preserve all current record directions. |
+| **All selected arrows right** | Make selected known-strand anchors, including the reference, right-facing. |
+| **All selected arrows left** | Make those anchors left-facing. |
+| **Custom** | Choose Keep, right, or left independently for each selected record. |
 
-The active plan survives ordinary **Generate Diagram** after style, label, or
-canvas changes and survives a stable record reorder. A manual **Reverse
-complement** keeps the plan; the next Generate aligns the same anchors in the
-new direction. Source replacement, crop, selector, and manual record drag clear
-it with a visible reason. A stale reference blocks Generate until **Reselect** or
-**Clear**; a stale target requires **Select** or **Skip**. Pending or failed
-repair keeps the last successful Result visible. **Reset Align** restores the
-record positions immediately before the latest Apply and clears that plan,
-leaving record directions unchanged. For Apply A, then Apply B, Reset B restores
-the positions after A without restoring A's plan; **Undo** restores the complete
-preceding artifact, including record orientations, and **Redo** reapplies the
-reset. Each successful Apply, Reset, or manual clear uses one History action.
+The arrows describe displayed anchors, not rewritten biological strands.
+Unknown-strand, skipped, missing, and unusable records stay unchanged with a
+reason. The before/after arrows show which whole records will reverse. The
+reference participates in an explicit direction choice, while its selected
+feature center keeps its pre-Align horizontal position. All vertical positions
+stay fixed; selected target centers align with that center. Text stays readable,
+and unselected features and ribbons follow their record's transform.
 
-Alignment changes display only and does not rerun LOSATP or group inference.
-Collinear alignment controls, anchor TSV, scored inference, support-count
-ranking, and multi-hop automatic selection are unsupported.
+Candidate, Skip, direction-mode, and Custom edits are local and start no Worker
+job. **Apply** performs final Python batch validation and renders one atomic
+Result with directions, placement, plan, and one History entry. If final facts
+materially change the displayed directions or reference-center placement, the
+review updates and requires another **Apply**. A validation or render failure
+keeps the editable draft and underlying error for retry. **Cancel**, **Escape**,
+and Close commit nothing; focus returns to the initiating control when it is
+still present. Changed source, crop, group, or Result can invalidate a review;
+restart it using the current reference. The review does not trap keyboard focus.
+
+On wide previews the review floats and can be dragged. On narrow previews it
+sits below the same canvas, with a scrolling candidate list and reachable
+**Apply** and **Cancel**. Opening a narrow review closes the Editor while retaining
+its selected tab. The Editor toggle explains why reopening is unavailable until
+the review ends; reopen it explicitly afterward. Short screens may require page
+and list scrolling to reach the footer. Narrow reviews cannot be freely dragged.
+
+The active plan survives style regeneration and stable record reorder. Manual
+**Reverse complement** keeps the anchors; the next Generate aligns them in the
+new direction. Source replacement, crop, selector changes, and manual record
+movement clear the plan with a reason. Repair a stale reference with **Reselect**
+or **Clear**, and a stale target with **Select** or **Skip**. Pending or failed
+repair retains the last successful Result.
+
+**Reset Align** offers two scopes:
+
+| Reset scope | Result |
+|---|---|
+| **Reset positions** (default) | Restore positions immediately before the latest successful Align, retain current directions, and clear its plan. |
+| **Reset positions and alignment direction changes** | Restore the same positions and the before-Align directions only for records actually reversed by that Align, including the reference if changed. |
+
+The combined preview lists target names, count, and current/restored directions.
+It replaces later manual direction edits on those targets; other records and
+unrelated Pending settings are preserved. Both scopes consume the latest plan
+and restoration evidence. To change scope after Reset, Undo that Reset first.
+Older sessions without direction evidence retain positions Reset and explain
+why combined Reset is unavailable. A modern plan with no direction changes is
+a separate no-change case. Save/fresh Load and style regeneration preserve valid
+restoration evidence. **Undo** and **Redo** restore complete artifacts, including
+directions, plan, and restoration evidence. Failed, canceled, stale, or
+superseded operations retain the previous artifact and create no committed
+History entry.
+
+Alignment and Reset change display only; they do not rerun LOSATP or group
+inference. Collinear alignment controls, anchor TSV, scored inference,
+support-count ranking, and multi-hop automatic selection are unsupported.
 
 ## Preview, search, and editor
 
@@ -398,11 +496,16 @@ feature. Identical duplicate records can share the same hash, so a regenerated
 diagram cannot preserve a one-instance-only rule for indistinguishable
 duplicates.
 
+On a narrow preview, the same **Editor** sits below the canvas and toolbar.
+Its content scrolls independently, while its header, Close action, and tabs stay
+reachable. **Close** and **Escape** change visibility only and retain the selected
+tab. On short screens, scroll the page and Editor content to reach all controls;
+on wide previews the Editor remains beside the canvas.
+
 **Layout edit** moves supported legends and other layout objects without
 changing record geometry. **Undo** and **Redo** traverse supported form and
 editor changes. **Reset Settings** is broader than undo and requires
-confirmation. Regenerate after rule-backed edits when the exported figure must
-match the current form state.
+confirmation. Generate when the exported figure should include Pending settings.
 
 The export actions and session handoff rules are documented in [Output formats
 and export](output-formats-and-export.md) and [Session and request
