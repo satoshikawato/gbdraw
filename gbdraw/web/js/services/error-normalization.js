@@ -5,7 +5,7 @@ const OPERATIONS = new Set(['unknown', 'generate', 'align', 'feature-extraction'
   'resolveSimilarityAlignment', 'validateConfigOverrides']);
 const STAGES = new Set(['unknown', 'initialization', 'resource-staging', 'request-validation',
   'helper', 'rule-validation', 'render', 'result-admission', 'cleanup', 'export-capture', 'export-conversion', 'font-validation']);
-const FIELDS = new Set(`pattern record_selector region start end sourceStart sourceEnd recordLength
+const FIELDS = new Set(`legend title scale decorations pattern record_selector region start end sourceStart sourceEnd recordLength
 recordIndex queryIndex subjectIndex depth min_depth max_depth window step tick font_size plot_title_font_size height large_tick_interval small_tick_interval tick_font_size
 inner_gap_px outer_gap_px radius width color action feature_type qualifier value record_id label_text
 config configOverrides records anchors schema recordKey groupId direction sourceStrand role blast files
@@ -17,6 +17,9 @@ collinear_min_score collinear_min_block_span record_gap_px record_axis_height de
 depth_min depth_max min_gc max_gc gc_tick_interval gc_axis_font_size depth_tick_interval
 depth_axis_font_size protein_blastp_mode protein_blastp_candidate_limit collinear_search_scope collinear_unit_mode collinear_anchor_mode collinear_merge_orientation collinear_color_mode orthogroup_membership_mode collinear_max_unit_gap collinear_max_conflicts collinear_max_paralog_links_per_orthogroup circular_multi_record_size_mode linear_track_layout linear_label_placement set_id anchor_slot side renderer lane_gap_px padding_px cover_anchor overflow layer z axis match_height source fasta gff annotations featurePlacements output_prefix`.split(/\s+/));
 const REASONS = Object.freeze({
+  DECORATION_IDENTITY: 'Source, region, mode, grouping or record identity changed, is unknown, or is ambiguous.',
+  DECORATION_TARGET: 'The decoration target is missing or ambiguous.',
+  DECORATION_METADATA: 'Composition metadata is invalid or unavailable.',
   ANNOTATION_SET: 'Select an existing annotation set.', ANNOTATION_MARKS: 'Use supported annotation mark filters.',
   OVERFLOW: 'Choose error, compress, or clip.', LAYER: 'Choose foreground or underlay.',
   OVERLAY_ANCHOR: 'Select an eligible enabled anchor for an Overlay annotation track.',
@@ -71,6 +74,7 @@ const REASONS = Object.freeze({
   SOURCE_INDEX: 'Check the comparison endpoints.', SOURCE_VIEW_CONFLICT: 'Check the comparison inputs and display transforms.'
 });
 const DEFINITIONS = Object.freeze({
+  DECORATION_CONTINUITY: ['Could not preserve decoration placement. Reset the affected position or use Reset Layout on the previous Result, or restore matching settings, then Generate again.', ['edit-input', 'retry', 'save-session']],
   UNKNOWN: ['The operation failed without recognized diagnostic information. Retry; if it continues, save a Session for investigation.', ['retry', 'save-session']],
   VALIDATION_UNCLASSIFIED: ['Input validation failed. Review the inputs before retrying.', ['review-input', 'retry']],
   INPUT_INVALID: ['An input value is invalid.', ['edit-input', 'retry']],
@@ -345,7 +349,9 @@ export const normalizeUserFacingError = (value, {
     ? ' Load a supported Session file or recreate it with the current writer.' : '';
   const continuation = result.operation === 'align' && result.context.field === 'direction'
     && result.context.reason === 'SOURCE_VIEW_CONFLICT' ? ' Review the updated preview and Apply again.' : '';
-  result.summary = `${message}${field}${guidance ? ` ${guidance}` : ''}${position}${columns}${count}${continuation}${schemaGuidance}`
+  const decorationResult = result.code === 'DECORATION_CONTINUITY' && result.context.inputOrdinal !== undefined
+    ? ` Result ${result.context.inputOrdinal}.` : '';
+  result.summary = `${message}${decorationResult}${field}${guidance ? ` ${guidance}` : ''}${position}${columns}${count}${continuation}${schemaGuidance}`
     .slice(0, Number.isSafeInteger(summaryLimit) ? Math.max(0, Math.min(summaryLimit, 1000)) : 1000);
   const detail = [`Code: ${result.code}`, `Operation: ${result.operation}`, `Stage: ${result.stage}`,
     ...Object.entries(result.context).map(([key, item]) => `${key}: ${item}`),
