@@ -1,0 +1,252 @@
+{
+ "python": "3.13.3",
+ "gbdraw.__file__": "<S00_BASELINE_DIR>/main-4556e04e/gbdraw/__init__.py",
+ "fixture": {
+  "path": "<git show origin/main:gbdraw/web/gallery/sessions/BGC0000708-BGC0000713.gbdraw-session.json>",
+  "sha256": "077da546fc6f12c71173b5ba505f498b2e679be1c5baddbdd0592fc7d2ef1056",
+  "gitBlob": "e508a48cc01a559eedd6865dbb79ad5a0d1d6e3a",
+  "sessionVersion": 41
+ },
+ "resource": {
+  "id": "comparison-canonical-orthogroups-1",
+  "kind": "orthogroup-result",
+  "envelopeEncoding": "base64",
+  "declaredSize": 376139,
+  "decodedBytes": 376139,
+  "decodedSha256": "295ee47f12dbeaf5d763436b9e279480b51143989ca892863a36ff3451d3b1dc",
+  "typedKind": "orthogroupResult",
+  "typedSchema": 2,
+  "decodedType": "OrthogroupGraphResult"
+ },
+ "og18Members": [
+  {
+   "gene": "livA",
+   "proteinId": "h_gvshfeiln7xoekigkeaw5zzxxi",
+   "sourceProteinId": "CAG38712.1",
+   "recordIndex": 0,
+   "recordKey": "record-1",
+   "recordId": "BGC0000708",
+   "sourceResource": "record-1-genbank",
+   "featureIndex": 59,
+   "featureSvgId": "fa7a0b1fc",
+   "start": 29240,
+   "end": 33308,
+   "strand": -1,
+   "representative": true,
+   "role": "anchor",
+   "assignmentReason": "cross-record reciprocal best anchor",
+   "memberByProteinIdGroup": "og_18"
+  },
+  {
+   "gene": "neoA",
+   "proteinId": "h_kfzusybqrdtusnghswxoeu7fxm",
+   "sourceProteinId": "CAF33324.1",
+   "recordIndex": 1,
+   "recordKey": "record-2",
+   "recordId": "BGC0000709",
+   "sourceResource": "record-2-genbank",
+   "featureIndex": 51,
+   "featureSvgId": "f8b692a7b",
+   "start": 31439,
+   "end": 35321,
+   "strand": 1,
+   "representative": true,
+   "role": "anchor",
+   "assignmentReason": "cross-record reciprocal best anchor",
+   "memberByProteinIdGroup": "og_18"
+  },
+  {
+   "gene": null,
+   "proteinId": "h_euqc4xggaon5wt76jzpzx4dgte",
+   "sourceProteinId": "CAH58702.1",
+   "recordIndex": 2,
+   "recordKey": "record-3",
+   "recordId": "BGC0000711",
+   "sourceResource": "record-3-genbank",
+   "featureIndex": 25,
+   "featureSvgId": "fcf65bf05",
+   "start": 22830,
+   "end": 26772,
+   "strand": 1,
+   "representative": true,
+   "role": "anchor",
+   "assignmentReason": "cross-record reciprocal best anchor",
+   "memberByProteinIdGroup": "og_18"
+  },
+  {
+   "gene": "parA",
+   "proteinId": "h_k2nbhy4teu2er62ryvseis5nje",
+   "sourceProteinId": "CAF32386.2",
+   "recordIndex": 3,
+   "recordKey": "record-4",
+   "recordId": "BGC0000712",
+   "sourceResource": "record-4-genbank",
+   "featureIndex": 82,
+   "featureSvgId": "f42916142",
+   "start": 30304,
+   "end": 34213,
+   "strand": 1,
+   "representative": true,
+   "role": "anchor",
+   "assignmentReason": "cross-record near-reciprocal anchor",
+   "memberByProteinIdGroup": "og_18"
+  },
+  {
+   "gene": "racL",
+   "proteinId": "h_3ktpxj2sv3qdpyqkitdzhlpp3e",
+   "sourceProteinId": "CAG34708.1",
+   "recordIndex": 4,
+   "recordKey": "record-5",
+   "recordId": "BGC0000713",
+   "sourceResource": "record-5-genbank",
+   "featureIndex": 50,
+   "featureSvgId": "f29ea74f5",
+   "start": 24642,
+   "end": 26817,
+   "strand": 1,
+   "representative": false,
+   "role": "anchor",
+   "assignmentReason": "cross-record reciprocal best anchor",
+   "memberByProteinIdGroup": "og_18"
+  },
+  {
+   "gene": "racM",
+   "proteinId": "h_cqjof2rvqcccf5lyuhbubnm3ly",
+   "sourceProteinId": "CAG34707.1",
+   "recordIndex": 4,
+   "recordKey": "record-5",
+   "recordId": "BGC0000713",
+   "sourceResource": "record-5-genbank",
+   "featureIndex": 52,
+   "featureSvgId": "f940ebf06",
+   "start": 26869,
+   "end": 28372,
+   "strand": 1,
+   "representative": true,
+   "role": "anchor",
+   "assignmentReason": "cross-record near-reciprocal anchor",
+   "memberByProteinIdGroup": "og_18"
+  }
+ ],
+ "og18Edges": {
+  "count": 14,
+  "livA": [
+   {
+    "query": "livA",
+    "subject": "neoA",
+    "edgeKind": "rbh",
+    "renderRole": "block_anchor",
+    "identity": 45.954,
+    "bitscore": 853.0
+   },
+   {
+    "query": "livA",
+    "subject": "CAH58702.1",
+    "edgeKind": "rbh",
+    "renderRole": "block_anchor",
+    "identity": 45.954,
+    "bitscore": 853.0
+   },
+   {
+    "query": "livA",
+    "subject": "parA",
+    "edgeKind": "rbh",
+    "renderRole": "block_anchor",
+    "identity": 47.249,
+    "bitscore": 934.0
+   },
+   {
+    "query": "livA",
+    "subject": "racL",
+    "edgeKind": "coortholog",
+    "renderRole": "block_anchor",
+    "identity": 51.316,
+    "bitscore": 447.0
+   },
+   {
+    "query": "livA",
+    "subject": "racM",
+    "edgeKind": "rbh",
+    "renderRole": "block_anchor",
+    "identity": 49.307,
+    "bitscore": 410.0
+   }
+  ],
+  "parA_to_record5": [
+   {
+    "query": "parA",
+    "subject": "racL",
+    "edgeKind": "rbh",
+    "renderRole": "block_anchor",
+    "identity": 55.472,
+    "bitscore": 516.0
+   },
+   {
+    "query": "parA",
+    "subject": "racM",
+    "edgeKind": "coortholog",
+    "renderRole": "block_anchor",
+    "identity": 53.908,
+    "bitscore": 462.0
+   }
+  ],
+  "relatedEdges": 0
+ },
+ "catalog": {
+  "serializedPayload.orthologEdges": 14,
+  "freshCatalog.hasOrthologEdges": false,
+  "freshCatalog.orthologEdgeCount": 14,
+  "freshCatalog.orthologPathCount": "16",
+  "freshCatalog.groupKeys": [
+   "description",
+   "id",
+   "member_count",
+   "members",
+   "nameCandidates",
+   "nameConfidence",
+   "orthologEdgeCount",
+   "orthologPathCount",
+   "rbhOrthogroupIds",
+   "record_coverage_count",
+   "scope"
+  ],
+  "savedCatalog.hasOrthologEdges": false,
+  "savedCatalog.orthologEdgeCount": 14
+ },
+ "uiInputs": {
+  "reference": {
+   "recordKey": "record-1",
+   "biologicalFeatureId": "fa7a0b1fc",
+   "sourceFeatureIndex": 59,
+   "stableFeatureSvgId": "fa7a0b1fc"
+  },
+  "directEdgeCountUiWouldSend": 0,
+  "directEdgeCountAvailable": 14
+ },
+ "resolver": {
+  "available": false,
+  "importError": "cannot import name 'similarity_alignment' from 'gbdraw.layout' (/home/kawato/gbdraw-baselines/gui-remediation-20260928/main-4556e04e/gbdraw/layout/__init__.py)",
+  "legacySelector": {
+   "og_18": {
+    "anchor": "livA",
+    "perRecord": {
+     "record-1": "livA",
+     "record-2": "neoA",
+     "record-3": "CAH58702.1",
+     "record-4": "parA",
+     "record-5": "racM"
+    }
+   },
+   "h_gvshfeiln7xoekigkeaw5zzxxi": {
+    "anchor": "livA",
+    "perRecord": {
+     "record-1": "livA",
+     "record-2": "neoA",
+     "record-3": "CAH58702.1",
+     "record-4": "parA",
+     "record-5": "racM"
+    }
+   }
+  }
+ }
+}

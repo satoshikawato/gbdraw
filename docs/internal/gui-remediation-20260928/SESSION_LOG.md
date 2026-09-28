@@ -11,9 +11,14 @@ Product契約の同時更新例外、計算重複防止契約も未実装であ�
 
 計画書作成時の検証: 10 Markdownの相対リンク・書式・branch指定・要求IDを確認済み。git diff --cached --checkは成功。node tools/check-web-change-budget.mjs --base origin/devはGate PASS / Review CLEAR。独立レビューで計算契約の範囲、旧Session、規約移行、BGC手順を確認した。runtime差分がないため製品テストはこの計画書commitでは実行していない。
 
+2026-09-29: S00 を実施。runtime・規約・checker・期待出力は未変更。
+dev と main を `git archive` で `$S00_BASELINE_DIR=/home/kawato/gbdraw-baselines/gui-remediation-20260928/` へ抽出し、各 snapshot 自身の source から browser wheel を準備した（tracked source 不変を manifest で確認）。
+計測 harness は results/s00/ にあり、各 pass は直列に実行した（coverage dev/main、timing dev/main）。raw data は `$S00_BASELINE_DIR/perf/`、機能証拠は `$S00_BASELINE_DIR/evidence/`。
+主要な結果と未確定事項は results/S00.md 第 1 節と第 11 節。commit title: "Record S00 baseline evidence and decision scope"。
+
 | Session | 状態 | 証拠・次の条件 |
 | --- | --- | --- |
-| S00 | 未着手 | baseline・旧Session・方向の再現、判断範囲 |
+| S00 | 完了（証拠採取のみ） | [results/S00.md](results/S00.md)。開始 a351c01d、dev 57cef3ba・main 4556e04e の snapshot/wheel、性能 baseline、G03/G06/G07 再現、R01/R02 範囲。S04 の値変更は第 11.3 節の判断 1〜3 待ち。commit SHA は次セッションで追記 |
 | S01 | 未着手 | S00後。規約のみの取り込み |
 | S02 | 未着手 | S01がdevへ反映後。checkerのみの取り込み |
 | S03 | 未着手 | S02反映後。応答・CW検証 |
