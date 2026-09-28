@@ -11,6 +11,9 @@ from Bio.Seq import Seq
 from Bio.SeqRecord import SeqRecord
 from pandas import DataFrame
 
+# Resolve native producers from the same checkout as the embedded Web helpers.
+sys.path.insert(0, str(Path(__file__).resolve().parents[3]))
+
 from gbdraw.api import CircularDiagramOptions, CircularDiagramRequest, ColorOptions, InMemoryRecordSource, RecordInput
 from gbdraw.session import build_session_document
 

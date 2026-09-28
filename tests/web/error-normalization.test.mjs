@@ -248,3 +248,16 @@ assert.equal(busy.code, 'GENERATION_BUSY');
 assert.equal(busy.stage, 'render');
 assert.match(busy.summary, /Wait for it to finish/);
 assert.deepEqual(busy.actions, ['retry', 'save-session']);
+
+for (const [message, code] of [
+  ['Session file is too large.', 'SESSION_SIZE_LIMIT'],
+  ['Expanded session file is too large.', 'SESSION_SIZE_LIMIT'],
+  ['This browser does not support gzip session export.', 'SESSION_BROWSER_UNSUPPORTED'],
+  ['This browser does not support gzip session import.', 'SESSION_BROWSER_UNSUPPORTED']
+]) {
+  const model = roundtrip(new Error(message));
+  assert.equal(model.code, code);
+  assert.notEqual(model.code, 'UNKNOWN');
+}
+assert.equal(roundtrip(Object.assign(new Error('This browser does not support Session import Workers.'),
+  { code: 'SESSION_IMPORT_UNAVAILABLE', stage: 'transport' })).code, 'SESSION_IMPORT_UNAVAILABLE');

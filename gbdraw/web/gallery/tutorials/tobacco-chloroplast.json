@@ -308,7 +308,7 @@
             "actions": [
               {
                 "type": "click",
-                "selector": "button:text-is('Load record rotation controls')"
+                "selector": "button:text-is('Inspect source records')"
               },
               {
                 "type": "waitForFunction",

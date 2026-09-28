@@ -1,0 +1,200 @@
+{
+  "scope": "S05 prerequisite evidence only; no runtime admission",
+  "head": "b092499d27705092d84037d5acd51032177c619a",
+  "dev": "88028fd242d263f0fe86aaf9da57b8dc9eb082f6",
+  "prerequisites": {
+    "S01": {
+      "sha": "15bcbca89392cbd63a88fe80dc44b71ad4868061",
+      "headAncestor": true
+    },
+    "S03": {
+      "sha": "e3684d496df7a3b2a7492443cad50168f6959b36",
+      "headAncestor": true
+    },
+    "S04Integration": {
+      "sha": "eed70f05d04f638a5a4ab6c6567982d45e774596",
+      "headAncestor": true
+    },
+    "S04": {
+      "sha": "b092499d27705092d84037d5acd51032177c619a",
+      "headAncestor": true
+    }
+  },
+  "productAuthorityMerge": "af5d942af60353dda199aa487da9152a3576b3fe",
+  "productAuthorityAncestry": {
+    "head": true,
+    "dev": true
+  },
+  "contractRevisions": {
+    "historical": 21,
+    "head": 22,
+    "dev": 22
+  },
+  "contractBytesEqualLatestDev": true,
+  "contractSha256": "5451db7da8e4de970f05afd5d19b003b7de77d52eb84c05d71ff85a533d4b1fb",
+  "receipts": [
+    {
+      "id": "PD-OI-044",
+      "fieldsEqual": [
+        "concern",
+        "scenarioRevision",
+        "choice",
+        "rationale",
+        "mustPreserve",
+        "mayRetire",
+        "acceptedResidualRisk",
+        "owner",
+        "decisionDate"
+      ],
+      "receiptSha256": "9f3589dec70a8f86b4718b68cb4dd4b3ef9ad83b6ab93935a437879d64eb539a"
+    },
+    {
+      "id": "PD-OI-045",
+      "fieldsEqual": [
+        "concern",
+        "scenarioRevision",
+        "choice",
+        "rationale",
+        "mustPreserve",
+        "mayRetire",
+        "acceptedResidualRisk",
+        "owner",
+        "decisionDate"
+      ],
+      "receiptSha256": "8b9c8d7f185b2c1e65113d1a97062bf96661e2265b8e20e01c39e8583057e859"
+    }
+  ],
+  "permissions": [
+    {
+      "kind": "constructor",
+      "capability": "Diagram Worker",
+      "subject": "services/session-import-client.js",
+      "present": false
+    },
+    {
+      "kind": "importer",
+      "target": "services/session-file.js",
+      "subject": "workers/session-import-worker.js",
+      "present": false
+    }
+  ],
+  "missingPermissions": [
+    {
+      "kind": "constructor",
+      "capability": "Diagram Worker",
+      "subject": "services/session-import-client.js",
+      "present": false
+    },
+    {
+      "kind": "importer",
+      "target": "services/session-file.js",
+      "subject": "workers/session-import-worker.js",
+      "present": false
+    }
+  ],
+  "policyBytesEqualLatestDev": true,
+  "policySha256": "fee8541705ea8bce25939c8aef2f727f64b2cfb1ff2bea12114471452df9b47f",
+  "productMapBytesEqualLatestDev": true,
+  "mappedEvidence": [
+    {
+      "concern": "product.canonical-render-request-boundary",
+      "ref": "tests/web/architecture-contracts.test.mjs::production rendering crosses the canonical request and Worker boundary",
+      "execution": "PR_GATE",
+      "devSha256": "28d51a52a2fc7bdfdd874536f3d42f2a142cbea9645dd8c0dfe9cfaa765b3c26",
+      "headBytesEqualDev": true
+    },
+    {
+      "concern": "product.canonical-render-request-boundary",
+      "ref": "tests/web/contracts/session-regenerate-intent.playwright.spec.js::no-draft session preserves preview, active config, canonical request, and catalog",
+      "execution": "DEV_STAGING",
+      "devSha256": "4b0f6e83c04ecfd75f245725c99335cd1d5ae587789b1f45b9af5a5de329a7a1",
+      "headBytesEqualDev": true
+    },
+    {
+      "concern": "product.canonical-render-request-boundary",
+      "ref": "tests/web/session-request.test.mjs::canonical Session projection rebuilds the same render request",
+      "execution": "PR_GATE",
+      "devSha256": "9f59fd2f47d24dff36d035beef9409004d21287b31eefaf8ffac299bd71c144d",
+      "headBytesEqualDev": false
+    },
+    {
+      "concern": "product.saved-session-regeneration-continuity",
+      "ref": "tests/web/architecture-contracts.test.mjs::History intent and SVG admission have one production ownership path",
+      "execution": "PR_GATE",
+      "devSha256": "28d51a52a2fc7bdfdd874536f3d42f2a142cbea9645dd8c0dfe9cfaa765b3c26",
+      "headBytesEqualDev": true
+    },
+    {
+      "concern": "product.saved-session-regeneration-continuity",
+      "ref": "tests/web/contracts/active-result-edit-transaction.playwright.spec.js::visible tRNA fill scope remains coherent through History, Session, Generate, and SVG export",
+      "execution": "PR_GATE",
+      "devSha256": "dbca5a8c8e7461429dc1a8f548c6f1c0d04d08cb587925b8dd741c655d33b63f",
+      "headBytesEqualDev": true
+    },
+    {
+      "concern": "product.saved-session-regeneration-continuity",
+      "ref": "tests/web/contracts/session-regenerate-intent.playwright.spec.js::no-draft session preserves preview, active config, canonical request, and catalog",
+      "execution": "DEV_STAGING",
+      "devSha256": "4b0f6e83c04ecfd75f245725c99335cd1d5ae587789b1f45b9af5a5de329a7a1",
+      "headBytesEqualDev": true
+    },
+    {
+      "concern": "product.saved-session-regeneration-continuity",
+      "ref": "tests/web/feature-catalog.test.mjs::one catalog admission produces identities, indexes, scalar footprint, and zero secondary traversal",
+      "execution": "PR_GATE",
+      "devSha256": "c9d4479019d1ebf5ff10f28292f612f38b5393de3da438d09cdd7141bba1cb48",
+      "headBytesEqualDev": true
+    },
+    {
+      "concern": "product.saved-session-regeneration-continuity",
+      "ref": "tests/web/hepatoplasmataceae-session-regeneration.performance.playwright.spec.js::exact saved Session regenerates twice with bounded work and fresh readiness",
+      "execution": "DEV_STAGING",
+      "devSha256": "6a7040cd2898c0900f3a017b96c4f1bde531ab0774af2d4e72b59e02ff54253a",
+      "headBytesEqualDev": true
+    },
+    {
+      "concern": "product.saved-session-regeneration-continuity",
+      "ref": "tests/web/session-regeneration-contract.test.mjs::accepts failure-before-activation, rollback-restoration, and stale matrices",
+      "execution": "PR_GATE",
+      "devSha256": "98991f0f535c402e61192ebf4aa084695f08e585e28c0d4ae2359b8caad9b076",
+      "headBytesEqualDev": true
+    },
+    {
+      "concern": "product.saved-session-regeneration-continuity",
+      "ref": "tests/web/session-regeneration-contract.test.mjs::accepts saved-preview, first Generate, and second Generate matrices",
+      "execution": "PR_GATE",
+      "devSha256": "98991f0f535c402e61192ebf4aa084695f08e585e28c0d4ae2359b8caad9b076",
+      "headBytesEqualDev": true
+    },
+    {
+      "concern": "product.saved-session-regeneration-continuity",
+      "ref": "tests/web/session-regeneration-contract.test.mjs::rejects second-Generate Worker, renderer, and resource reuse regressions",
+      "execution": "PR_GATE",
+      "devSha256": "98991f0f535c402e61192ebf4aa084695f08e585e28c0d4ae2359b8caad9b076",
+      "headBytesEqualDev": true
+    },
+    {
+      "concern": "product.saved-session-regeneration-continuity",
+      "ref": "tests/web/session-regeneration-contract.test.mjs::rejects success and processing-clear lifecycle inversions",
+      "execution": "PR_GATE",
+      "devSha256": "98991f0f535c402e61192ebf4aa084695f08e585e28c0d4ae2359b8caad9b076",
+      "headBytesEqualDev": true
+    },
+    {
+      "concern": "product.saved-session-regeneration-continuity",
+      "ref": "tests/web/session-request.test.mjs::canonical Session projection rebuilds the same render request",
+      "execution": "PR_GATE",
+      "devSha256": "9f59fd2f47d24dff36d035beef9409004d21287b31eefaf8ffac299bd71c144d",
+      "headBytesEqualDev": false
+    },
+    {
+      "concern": "product.saved-session-regeneration-continuity",
+      "ref": "tests/web/svg-result-ingestion.test.mjs::current-worker EMPTY admission sanitizes once and performs zero application SVG work",
+      "execution": "PR_GATE",
+      "devSha256": "f1fb978a226aaa4747e5a17919c55ce35c5e5c348b448d44c5bc97d0411b9057",
+      "headBytesEqualDev": true
+    }
+  ],
+  "readiness": "BLOCKED_MISSING_PRIVILEGED_PERMISSION",
+  "runtimeStarted": false
+}

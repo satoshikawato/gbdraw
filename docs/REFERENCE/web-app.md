@@ -120,6 +120,40 @@ For Linear diagrams, the DOM and keyboard order is **Input Genomes**,
 layout**. The fixed Generate bar remains visible while its DOM anchor stays in
 that order.
 
+### Save and Load Sessions
+
+**Save Session** asks for a **Session title** when none is set and downloads
+`<title>.gbdraw-session.json.gz`. Saving again under the same file name first
+asks whether to download that file again. When the compressed Session is larger
+than 50 MiB, Save reports its size and asks whether to continue. **Cancel** in
+either dialog saves nothing. **Load Session** accepts `.gbdraw-session.json` and
+`.gbdraw-session.json.gz` files.
+
+While **Saving session…** or **Loading session…** is shown, the operation works
+on one consistent document. **Generate Diagram**, file inputs, mode, settings,
+editor changes, **Undo**, **Redo**, **Reset Settings**, and the other Session
+button stay unavailable until it finishes. You can still scroll the settings,
+pan and zoom the Preview, and type in feature search. A second **Save Session**
+click during a save does not download a second file. While a diagram is
+generating or updating, **Save Session** and **Load Session** are unavailable,
+and the header names the reason, such as **Generating diagram. Retry after
+generation finishes.**
+
+A plain Session file larger than 200 MiB, or a gzip Session that expands beyond
+512 MiB, is rejected. Save needs browser gzip compression. Load needs Web
+Workers and, for `.gz` files, gzip decompression. A rejected or failed Save or
+Load shows an **Operation error** and keeps the current Result, settings, and
+Undo history.
+
+A loaded Circular Session shows its saved Result without reading the embedded
+source again. **Source records** shows **Records not inspected**, and **Record**
+lists no records. Select **Inspect source records** to list them and show their
+rotation rows; the Result and Undo history do not change. **Generate Diagram**
+inspects the source before rendering, and uploading a new file inspects it at
+once. Loading a saved preview does not start LOSATP. The diagram engine starts
+during Load only to validate saved settings that have no web control, such as
+the configuration that a command-line Session stores.
+
 ### Operation errors and diagnostics
 
 A failed operation shows a short cause and correction or recovery action under
@@ -223,6 +257,46 @@ The figure retains a gene-label priority rule and uses larger label fonts for
 readability. Use preview zoom and pan to inspect individual features. The
 [documentation capture instructions](../capture/README.md#linear-result-and-draft-checkpoints)
 regenerate the image and verify all checkpoints through the UI.
+
+## Circular source records and one-record settings
+
+The browser inspects a Circular source as soon as you choose a **GenBank/DDBJ
+File**, or both the **GFF3 File** and **FASTA File**; no separate load action is
+needed. **Source records** shows **Inspecting source records…** and then the
+count, such as **1 source record(s) inspected**. Each record's rotation row
+appears at the same time, before **Generate Diagram**. A GFF3 file alone shows
+**Upload both GFF3 and FASTA files to inspect records.** Replacing the file
+inspects the new source.
+
+If a source cannot be inspected, **Source records** reports the failure and
+offers **Retry source inspection**. Replace or remove the file to continue. The
+current Result stays in the Preview until the next successful Generate.
+
+**Record** chooses the records drawn by the next Circular Generate:
+
+| Source | **Record** choice | Next Generate |
+|---|---|---|
+| One record | **Automatic (only record)** | One diagram of that record |
+| Several records | **All records (separate diagrams)** | One diagram per record |
+| Several records | One listed record | One diagram of that record |
+
+**Multi-Record Canvas** is on in new pages and after **Reset Settings**. It
+draws every record on one grid, so **Record** is unavailable and reads **Multi-Record
+Canvas uses a grid. Turn it off to select one record.** Select **Show
+Multi-Record Canvas setting** to move to that checkbox.
+
+**Single-record crop, orientation and titles** contains **Record label**,
+**Subtitle**, **Region (optional)** with 1-based inclusive **Start** and **End**,
+and **Reverse complement**. These controls are editable only when the next
+diagram draws one record: **Multi-Record Canvas** is off, and the source has one
+record or **Record** names one. With several records and **All records**, the
+app shows **Select one record to edit crop, orientation, and title lines.** The
+section opens when an upload, a **Record** choice, or turning off
+**Multi-Record Canvas** makes it editable, and focus stays on the control you
+used. After you close it, later edits leave it closed. The app does not choose a
+record or change **Multi-Record Canvas** for you. Empty **Record label** and
+**Subtitle** keep the inferred title lines. A region needs both coordinates
+within the record. These settings apply on **Generate Diagram**.
 
 ## Circular multi-record canvas
 
@@ -684,9 +758,11 @@ fields; new rules, TSV imports, presets and Search keep their own input behavior
 
 ## Rotate a record and place a feature
 
-After loading a saved session, click **Load record rotation controls** if its
-record rows are not yet shown. For a complete record, use its **Records** row in Circular mode or
-**Record options** in Linear mode. **Detected** reports the source topology;
+After **Load Session**, a Circular record's rotation row appears once you select
+**Inspect source records** or **Generate Diagram**. A Linear File card whose
+record rows are not shown offers **Load record rotation controls**. For a
+complete record, use its rotation row in Circular mode or **Record options** in
+Linear mode. **Detected** reports the source topology;
 **Circular record** overrides it and **Reset to detected** removes that override.
 Enter a 1-based source coordinate in **Display start**. It becomes the base at
 12 o'clock in Circular or at the left edge of a wrapped Linear record after

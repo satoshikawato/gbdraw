@@ -1,0 +1,913 @@
+{
+  "cwd": "/tmp/gbdraw-issue597-S05.ujOWyl",
+  "rawRoot": "/tmp/issue597-S05-resume-evidence",
+  "measurementHead": "c11d4854a899349cd66863c859f6f871724ba3ab",
+  "trustedDev": "d313b70b9f97c2c1d70f9ae885edbead80b62021",
+  "commandQualification": "Runner inputs for tests were recovered from retained logs where shell command text was not separately saved. Reproduction commands specify tested selection; unretained redirection/env/grep flags are not claimed exact. Use named contract selections from unchanged mapped refs/raw logs. Measurement and semantic commands/recipes are recorded exactly.",
+  "environment": {
+    "platform": "Linux-5.15.167.4-microsoft-standard-WSL2-x86_64-with-glibc2.39",
+    "python": "3.13.3",
+    "versions": {
+      "playwright": "1.61.0",
+      "psutil": "7.0.0",
+      "websocket-client": "1.8.0",
+      "biopython": "1.85"
+    },
+    "browser": "149.0.7827.55",
+    "cpuCount": 32,
+    "cpuModel": "Intel(R) Core(TM) i9-14900HX",
+    "ramBytes": 33518579712,
+    "launchArgs": [
+      "--enable-precise-memory-info",
+      "--remote-debugging-port=44591"
+    ]
+  },
+  "invocations": [
+    {
+      "name": "browser-corrected",
+      "exit": 0,
+      "log": "/tmp/issue597-S05-resume-evidence/browser-corrected.log",
+      "logSha256": "703bda3be16e277b14adbab622a731881aa3c543fc2e4b46d5f80b85d1f1a02a",
+      "runnerSummary": [
+        "24 passed (11.2m)"
+      ],
+      "reproductionCommand": [
+        "npx",
+        "playwright",
+        "test",
+        "--config=playwright.functional.config.js",
+        "tests/web/composite-session-resources.playwright.spec.js",
+        "tests/web/session-cli-compatibility.playwright.spec.js",
+        "tests/web/session-import-worker.playwright.spec.js",
+        "tests/web/session-operation-consistency.playwright.spec.js",
+        "tests/web/settings-only-session.playwright.spec.js",
+        "--workers=1",
+        "--retries=0"
+      ]
+    },
+    {
+      "name": "browser",
+      "exit": 1,
+      "log": "/tmp/issue597-S05-resume-evidence/browser.log",
+      "logSha256": "f30de517399a43836cef206055b8648935f73a7d8d455593a69803229db83abc",
+      "runnerSummary": [
+        "3 failed",
+        "36 passed (3.7m)"
+      ],
+      "reproductionCommand": [
+        "npx",
+        "playwright",
+        "test",
+        "--config=playwright.functional.config.js",
+        "tests/web/auxiliary-file-history.playwright.spec.js",
+        "tests/web/circular-record-presentation.playwright.spec.js",
+        "tests/web/palette-history-preservation.playwright.spec.js",
+        "tests/web/record-display-discovery.playwright.spec.js",
+        "tests/web/session-import-worker.playwright.spec.js",
+        "tests/web/session-loading-feedback.playwright.spec.js",
+        "tests/web/session-operation-consistency.playwright.spec.js",
+        "tests/web/session-save-lifecycle.playwright.spec.js",
+        "tests/web/settings-only-session.playwright.spec.js",
+        "--workers=1",
+        "--retries=0"
+      ]
+    },
+    {
+      "name": "ci-node",
+      "exit": 0,
+      "log": "/tmp/issue597-S05-resume-evidence/ci-node.log",
+      "logSha256": "19cadf979a95aa772bcd52241c3fdd1227d2d813e833c55bbb0bdfbae9a58522",
+      "runnerSummary": [
+        "\u2139 tests 65",
+        "\u2139 pass 65",
+        "\u2139 fail 0",
+        "\u2139 skipped 0",
+        "\u2139 duration_ms 6010.310924"
+      ],
+      "reproductionCommand": [
+        "node",
+        "--test",
+        "tests/ci/*.test.mjs"
+      ]
+    },
+    {
+      "name": "draft-candidate-owner",
+      "exit": 1,
+      "log": "/tmp/issue597-S05-resume-evidence/draft-candidate-owner.log",
+      "logSha256": "d1e2396def39afe5a9a69f6ea83aba2fe04fc0f36ad6b2c2867a85a6b4b14464",
+      "runnerSummary": [
+        "1 failed"
+      ],
+      "reproductionCommand": null
+    },
+    {
+      "name": "draft-candidate-retry",
+      "exit": 1,
+      "log": "/tmp/issue597-S05-resume-evidence/draft-candidate-retry.log",
+      "logSha256": "0951de3242415f36894f9cda8e0bbec0dcc50a81c41bae2fc3a477d6bf5023b7",
+      "runnerSummary": [
+        "1 failed",
+        "1 passed (26.5s)"
+      ],
+      "reproductionCommand": null
+    },
+    {
+      "name": "draft-candidate",
+      "exit": 1,
+      "log": "/tmp/issue597-S05-resume-evidence/draft-candidate.log",
+      "logSha256": "c77d311858c8f6d9a6da4ddb5bb071654a8baa713d06ab20215f26fd9a11fd53",
+      "runnerSummary": [
+        "1 failed"
+      ],
+      "reproductionCommand": null
+    },
+    {
+      "name": "feature-diagnosis",
+      "exit": 0,
+      "log": "/tmp/issue597-S05-resume-evidence/feature-diagnosis.log",
+      "logSha256": "bc21a5cde6a075e82e0dc51c84ca65888ed7c0a7dc2479508b159a8ddee343d4",
+      "runnerSummary": [],
+      "reproductionCommand": null
+    },
+    {
+      "name": "fixture",
+      "exit": 0,
+      "log": "/tmp/issue597-S05-resume-evidence/fixture.log",
+      "logSha256": "3eda62404a453fb7b3dc44a7059f3fe3bed37365d8d9a96e6a5244639f4d5f33",
+      "runnerSummary": [],
+      "reproductionCommand": [
+        "python",
+        "tools/prepare_issue597_s01_fixture.py",
+        "--output",
+        "/tmp/issue597-S05-resume-evidence/fixture",
+        "--threads",
+        "8"
+      ]
+    },
+    {
+      "name": "guard-candidate-base",
+      "exit": 0,
+      "log": "/tmp/issue597-S05-resume-evidence/guard-candidate-base.log",
+      "logSha256": "a591bac0c2fae99af63e3076ed10e1d887c43d0302fcb3e5ab006f8bf597fc66",
+      "runnerSummary": [
+        "\u2139 tests 4",
+        "\u2139 pass 4",
+        "\u2139 fail 0",
+        "\u2139 skipped 0",
+        "\u2139 duration_ms 1420.860181"
+      ],
+      "reproductionCommand": null
+    },
+    {
+      "name": "guard-candidate-local",
+      "exit": 0,
+      "log": "/tmp/issue597-S05-resume-evidence/guard-candidate-local.log",
+      "logSha256": "3e8b53488bdebafe9ee2c2525de90f7d8f74a6e43921f88bba470c98a724750b",
+      "runnerSummary": [
+        "\u2139 tests 4",
+        "\u2139 pass 4",
+        "\u2139 fail 0",
+        "\u2139 skipped 0",
+        "\u2139 duration_ms 1625.608266"
+      ],
+      "reproductionCommand": null
+    },
+    {
+      "name": "guard-focused",
+      "exit": 1,
+      "log": "/tmp/issue597-S05-resume-evidence/guard-focused.log",
+      "logSha256": "6135f49984e927f750cbdb47fb87f66d2763fa82b69c082330068a44cd36a46c",
+      "runnerSummary": [
+        "\u2139 tests 4",
+        "\u2139 pass 2",
+        "\u2139 fail 2",
+        "\u2139 skipped 0",
+        "\u2139 duration_ms 1423.031019"
+      ],
+      "reproductionCommand": null
+    },
+    {
+      "name": "import-node-final",
+      "exit": 0,
+      "log": "/tmp/issue597-S05-resume-evidence/import-node-final.log",
+      "logSha256": "8ecf0276b9f450a1cd223ebe8c65c95a7c2941649b9703404a73aebb0223b3b6",
+      "runnerSummary": [
+        "\u2139 tests 8",
+        "\u2139 pass 8",
+        "\u2139 fail 0",
+        "\u2139 skipped 0",
+        "\u2139 duration_ms 729.157393"
+      ],
+      "reproductionCommand": [
+        "node",
+        "--test",
+        "tests/web/session-import-client.test.mjs",
+        "tests/web/session-import-codec.test.mjs"
+      ]
+    },
+    {
+      "name": "import-node",
+      "exit": 0,
+      "log": "/tmp/issue597-S05-resume-evidence/import-node.log",
+      "logSha256": "b83e297aebaddfe11cd4e211ca512f2abe90820bfdde64af187768fe06bdd14e",
+      "runnerSummary": [
+        "\u2139 tests 8",
+        "\u2139 pass 8",
+        "\u2139 fail 0",
+        "\u2139 skipped 0",
+        "\u2139 duration_ms 518.422839"
+      ],
+      "reproductionCommand": null
+    },
+    {
+      "name": "journey-base",
+      "exit": 0,
+      "log": "/tmp/issue597-S05-resume-evidence/journey-base.log",
+      "logSha256": "3abdf3d78a25431c5189e6ad4a0f96e84142f5b37acc7dceca80e3ad8a4c5211",
+      "runnerSummary": [],
+      "reproductionCommand": null
+    },
+    {
+      "name": "journey-diagnosis",
+      "exit": 0,
+      "log": "/tmp/issue597-S05-resume-evidence/journey-diagnosis.log",
+      "logSha256": "3abdf3d78a25431c5189e6ad4a0f96e84142f5b37acc7dceca80e3ad8a4c5211",
+      "runnerSummary": [],
+      "reproductionCommand": null
+    },
+    {
+      "name": "journey",
+      "exit": 0,
+      "log": "/tmp/issue597-S05-resume-evidence/journey.log",
+      "logSha256": "45e91124b1584fd86f0651185e8edceb977a37ff654c13c8ff415118eefc42a0",
+      "runnerSummary": [],
+      "reproductionCommand": [
+        "python",
+        "docs/internal/issue-597-input-session-implementation-20260926/evidence/S05_MEASURE.py",
+        "--mode",
+        "journey",
+        "--repetitions",
+        "1",
+        "--fixture",
+        "/tmp/issue597-S05-resume-evidence/fixture/real-full-pairwise.gbdraw-session.json.gz",
+        "--output",
+        "/tmp/issue597-S05-resume-evidence/journey"
+      ]
+    },
+    {
+      "name": "limits",
+      "exit": 0,
+      "log": "/tmp/issue597-S05-resume-evidence/limits.log",
+      "logSha256": "8f8e28c9265d667e0af28eb00b7a81e6711987589a9010abb0df1b5c7d408605",
+      "runnerSummary": [],
+      "reproductionCommand": [
+        "python",
+        "docs/internal/issue-597-input-session-implementation-20260926/evidence/S05_MEASURE.py",
+        "--mode",
+        "limits",
+        "--repetitions",
+        "1",
+        "--fixture",
+        "/tmp/issue597-S05-resume-evidence/fixture/real-full-pairwise.gbdraw-session.json.gz",
+        "--output",
+        "/tmp/issue597-S05-resume-evidence/limits"
+      ]
+    },
+    {
+      "name": "mapped-base-browser",
+      "exit": 1,
+      "log": "/tmp/issue597-S05-resume-evidence/mapped-base-browser.log",
+      "logSha256": "b21934ee1ff45a74b339d55bbe02e6063efa6bddbaf8b2f7cbb6c2df11755e2f",
+      "runnerSummary": [
+        "1 failed"
+      ],
+      "reproductionCommand": [
+        "npx",
+        "playwright",
+        "test",
+        "--config=playwright.functional.config.js",
+        "tests/web/contracts/active-result-edit-transaction.playwright.spec.js",
+        "--workers=1",
+        "--retries=0"
+      ]
+    },
+    {
+      "name": "mapped-draft",
+      "exit": 1,
+      "log": "/tmp/issue597-S05-resume-evidence/mapped-draft.log",
+      "logSha256": "5dadef9bbcc9e70b2b51905c626cc8d4d752723780bd2d68f2d7367d6b17716b",
+      "runnerSummary": [
+        "1 failed"
+      ],
+      "reproductionCommand": [
+        "npx",
+        "playwright",
+        "test",
+        "--config=playwright.functional.config.js",
+        "tests/web/contracts/session-regenerate-intent.playwright.spec.js",
+        "--workers=1",
+        "--retries=0"
+      ]
+    },
+    {
+      "name": "mapped-legacy",
+      "exit": 0,
+      "log": "/tmp/issue597-S05-resume-evidence/mapped-legacy.log",
+      "logSha256": "6bee43201c7bbda5b0c309cf6998fa7023916f1ba971481b2329f4c6615466ea",
+      "runnerSummary": [
+        "1 passed (9.0s)"
+      ],
+      "reproductionCommand": [
+        "npx",
+        "playwright",
+        "test",
+        "--config=playwright.functional.config.js",
+        "tests/web/contracts/session-regenerate-intent.playwright.spec.js",
+        "--workers=1",
+        "--retries=0"
+      ]
+    },
+    {
+      "name": "mapped-performance",
+      "exit": 0,
+      "log": "/tmp/issue597-S05-resume-evidence/mapped-performance.log",
+      "logSha256": "b6306b384d3902c866e8e88c588046b64f7f48f66d87a1f61baf27be3adfb07b",
+      "runnerSummary": [
+        "1 passed (36.8s)"
+      ],
+      "reproductionCommand": [
+        "npx",
+        "playwright",
+        "test",
+        "--config=playwright.perf.config.js",
+        "tests/web/hepatoplasmataceae-session-regeneration.performance.playwright.spec.js",
+        "--workers=1",
+        "--retries=0"
+      ]
+    },
+    {
+      "name": "merge-history",
+      "exit": 0,
+      "log": "/tmp/issue597-S05-resume-evidence/merge-history.log",
+      "logSha256": "0a067402a557ef93cb4d075c0ea48060fd26b59a4929cdb6ae13d933dfe9fe66",
+      "runnerSummary": [
+        "\u2139 tests 1",
+        "\u2139 pass 1",
+        "\u2139 fail 0",
+        "\u2139 skipped 0",
+        "\u2139 duration_ms 114.583642"
+      ],
+      "reproductionCommand": null
+    },
+    {
+      "name": "node-all",
+      "exit": 1,
+      "log": "/tmp/issue597-S05-resume-evidence/node-all.log",
+      "logSha256": "90035327c87e4d84ca9db6c8f23aab1b8691a4515d4d6af7d00477ea261bc30b",
+      "runnerSummary": [
+        "\u2139 tests 1000",
+        "\u2139 pass 980",
+        "\u2139 fail 20",
+        "\u2139 skipped 0",
+        "\u2139 duration_ms 148726.436481"
+      ],
+      "reproductionCommand": null
+    },
+    {
+      "name": "node-final",
+      "exit": 1,
+      "log": "/tmp/issue597-S05-resume-evidence/node-final.log",
+      "logSha256": "e4c966dd07f20ea9113326f537dc49c786cf13439483d3999474d2baa736fc36",
+      "runnerSummary": [
+        "\u2139 tests 1000",
+        "\u2139 pass 998",
+        "\u2139 fail 2",
+        "\u2139 skipped 0",
+        "\u2139 duration_ms 176482.043424"
+      ],
+      "reproductionCommand": [
+        "node",
+        "--test",
+        "tests/web/*.test.mjs"
+      ]
+    },
+    {
+      "name": "node-import-adapted",
+      "exit": 1,
+      "log": "/tmp/issue597-S05-resume-evidence/node-import-adapted.log",
+      "logSha256": "cf12ad9d1fa36b7176ea68af6a748182be6e63649a5e47e932ee8e30702960f5",
+      "runnerSummary": [
+        "\u2139 tests 14",
+        "\u2139 pass 13",
+        "\u2139 fail 0",
+        "\u2139 skipped 0",
+        "\u2139 duration_ms 108685.38222"
+      ],
+      "reproductionCommand": null
+    },
+    {
+      "name": "node-import-final",
+      "exit": 0,
+      "log": "/tmp/issue597-S05-resume-evidence/node-import-final.log",
+      "logSha256": "ff91c128a8f09c172dfa5fd185f2a6b7f3dcf3cd4d93db7aaf7615bb0bb93188",
+      "runnerSummary": [
+        "\u2139 tests 45",
+        "\u2139 pass 45",
+        "\u2139 fail 0",
+        "\u2139 skipped 0",
+        "\u2139 duration_ms 25127.693108"
+      ],
+      "reproductionCommand": null
+    },
+    {
+      "name": "npm",
+      "exit": 0,
+      "log": "/tmp/issue597-S05-resume-evidence/npm.log",
+      "logSha256": "915a4bc4072452a1487556f6b71fd88930ff34ad75a7435fe7ad3cfb0ecafe8d",
+      "runnerSummary": [],
+      "reproductionCommand": [
+        "npm",
+        "install",
+        "--no-save",
+        "--package-lock=false",
+        "--ignore-scripts",
+        "@playwright/test@1.61.0"
+      ]
+    },
+    {
+      "name": "output-comparison",
+      "exit": 0,
+      "log": "/tmp/issue597-S05-resume-evidence/output-comparison.log",
+      "logSha256": "e11fe8fd45900f34758a0f7a9cd22e6790a6251faa1166c36ae78e6dfd4efc58",
+      "runnerSummary": [
+        "============================= 16 passed in 33.90s =============================="
+      ],
+      "reproductionCommand": [
+        "python",
+        "-m",
+        "pytest",
+        "tests/test_output_comparison.py::TestOutputComparison",
+        "-v"
+      ]
+    },
+    {
+      "name": "packaging",
+      "exit": 0,
+      "log": "/tmp/issue597-S05-resume-evidence/packaging.log",
+      "logSha256": "8072b5c77afba5445347eafc2fde02306e8a0957ec1ad2f5678f0d6affdd4a1a",
+      "runnerSummary": [
+        "12 deselected / 34 selected",
+        "====================== 34 passed, 12 deselected in 13.64s ======================"
+      ],
+      "reproductionCommand": [
+        "python",
+        "-m",
+        "pytest",
+        "tests/test_web_packaging.py",
+        "-m",
+        "not slow and not browser",
+        "-v"
+      ]
+    },
+    {
+      "name": "pipeline",
+      "exit": 0,
+      "log": "/tmp/issue597-S05-resume-evidence/pipeline.log",
+      "logSha256": "232d6c0cc1f8755404d843718e92d649b95ae8b71eae9a1fe520cec9c77f4d77",
+      "runnerSummary": [],
+      "reproductionCommand": [
+        "python",
+        "docs/internal/issue-597-input-session-implementation-20260926/evidence/S05_MEASURE.py",
+        "--mode",
+        "pipeline",
+        "--repetitions",
+        "3",
+        "--fixture",
+        "/tmp/issue597-S05-resume-evidence/fixture/real-full-pairwise.gbdraw-session.json.gz",
+        "--output",
+        "/tmp/issue597-S05-resume-evidence/pipeline"
+      ]
+    },
+    {
+      "name": "policy-runtime-staged",
+      "exit": 0,
+      "log": "/tmp/issue597-S05-resume-evidence/policy-runtime-staged.log",
+      "logSha256": "6f53d6e0efdf79e1b22f477757ca977a55169f07d188044401848a9b7dcdec58",
+      "runnerSummary": [],
+      "reproductionCommand": null
+    },
+    {
+      "name": "pr-smoke",
+      "exit": 0,
+      "log": "/tmp/issue597-S05-resume-evidence/pr-smoke.log",
+      "logSha256": "a6114cba25813d330eef0ebbc9423c0689c353fac641becfc45325981e3e3bba",
+      "runnerSummary": [
+        "13 passed (4.4m)"
+      ],
+      "reproductionCommand": [
+        "npx",
+        "playwright",
+        "test",
+        "--config=playwright.pr-smoke.config.js",
+        "--workers=1",
+        "--retries=0"
+      ]
+    },
+    {
+      "name": "probe-smoke-corrected",
+      "exit": 0,
+      "log": "/tmp/issue597-S05-resume-evidence/probe-smoke-corrected.log",
+      "logSha256": "c7fef78ba96591be7e14131472aee2ab87d55ceae70877af8859f5a437e56268",
+      "runnerSummary": [],
+      "reproductionCommand": null
+    },
+    {
+      "name": "project-session-hepatoplasmataceae",
+      "exit": 0,
+      "log": "/tmp/issue597-S05-resume-evidence/project-session-hepatoplasmataceae.log",
+      "logSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "runnerSummary": [],
+      "reproductionCommand": [
+        "node",
+        "tests/web/session-request.test.mjs",
+        "--project-session",
+        "gbdraw/web/gallery/sessions/hepatoplasmataceae_orthogroup.gbdraw-session.json.gz"
+      ]
+    },
+    {
+      "name": "project-session-tobacco",
+      "exit": 0,
+      "log": "/tmp/issue597-S05-resume-evidence/project-session-tobacco.log",
+      "logSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "runnerSummary": [],
+      "reproductionCommand": [
+        "node",
+        "tests/web/session-request.test.mjs",
+        "--project-session",
+        "gbdraw/web/gallery/sessions/tobacco-chloroplast.gbdraw-session.json"
+      ]
+    },
+    {
+      "name": "python-focused",
+      "exit": 0,
+      "log": "/tmp/issue597-S05-resume-evidence/python-focused.log",
+      "logSha256": "67c98f4913f3368cba43e68fa7790cd3fefc6e17fc63bf885d24367cf8e79301",
+      "runnerSummary": [
+        "====================== 459 passed, 10 warnings in 55.26s ======================="
+      ],
+      "reproductionCommand": [
+        "python",
+        "-m",
+        "pytest",
+        "tests/test_api_session.py",
+        "tests/test_record_metadata.py",
+        "tests/test_session_compat.py",
+        "tests/test_session_io.py",
+        "tests/test_session_request_codec.py",
+        "tests/test_settings_only_session.py",
+        "tests/test_web_mode_profiles.py",
+        "tests/test_web_ux_profile.py",
+        "-v"
+      ]
+    },
+    {
+      "name": "replay-all",
+      "exit": 0,
+      "log": "/tmp/issue597-S05-resume-evidence/replay-all.log",
+      "logSha256": "3577e1d7c73dc242ece43615a47e60b0625f5d4ca6d2570f3b92dca88bd06282",
+      "runnerSummary": [],
+      "reproductionCommand": null
+    },
+    {
+      "name": "replay-generated-vibrio",
+      "exit": 0,
+      "log": "/tmp/issue597-S05-resume-evidence/replay-generated-vibrio.log",
+      "logSha256": "bc1ef92d18dcb830df12ceddf152e0afaff8b0c8e7d9fcd43152ce0bd4cb9996",
+      "runnerSummary": [],
+      "reproductionCommand": null
+    },
+    {
+      "name": "replay-real-0",
+      "exit": 0,
+      "log": "/tmp/issue597-S05-resume-evidence/replay-real-0.log",
+      "logSha256": "bc1ef92d18dcb830df12ceddf152e0afaff8b0c8e7d9fcd43152ce0bd4cb9996",
+      "runnerSummary": [],
+      "reproductionCommand": null
+    },
+    {
+      "name": "replay-real-1",
+      "exit": 0,
+      "log": "/tmp/issue597-S05-resume-evidence/replay-real-1.log",
+      "logSha256": "f822a502ce0d632bc559ab676aa2c6a9706496f46a0d6b3774e4f5a39326858a",
+      "runnerSummary": [],
+      "reproductionCommand": null
+    },
+    {
+      "name": "replay-real-2",
+      "exit": 0,
+      "log": "/tmp/issue597-S05-resume-evidence/replay-real-2.log",
+      "logSha256": "f822a502ce0d632bc559ab676aa2c6a9706496f46a0d6b3774e4f5a39326858a",
+      "runnerSummary": [],
+      "reproductionCommand": null
+    },
+    {
+      "name": "replay-vibrio-0",
+      "exit": 0,
+      "log": "/tmp/issue597-S05-resume-evidence/replay-vibrio-0.log",
+      "logSha256": "bc1ef92d18dcb830df12ceddf152e0afaff8b0c8e7d9fcd43152ce0bd4cb9996",
+      "runnerSummary": [],
+      "reproductionCommand": null
+    },
+    {
+      "name": "replay-vibrio-1",
+      "exit": 0,
+      "log": "/tmp/issue597-S05-resume-evidence/replay-vibrio-1.log",
+      "logSha256": "f822a502ce0d632bc559ab676aa2c6a9706496f46a0d6b3774e4f5a39326858a",
+      "runnerSummary": [],
+      "reproductionCommand": null
+    },
+    {
+      "name": "replay-vibrio-2",
+      "exit": 0,
+      "log": "/tmp/issue597-S05-resume-evidence/replay-vibrio-2.log",
+      "logSha256": "f822a502ce0d632bc559ab676aa2c6a9706496f46a0d6b3774e4f5a39326858a",
+      "runnerSummary": [],
+      "reproductionCommand": null
+    },
+    {
+      "name": "ruff",
+      "exit": 0,
+      "log": "/tmp/issue597-S05-resume-evidence/ruff.log",
+      "logSha256": "82b3e6a6c090a57601d22943bd23fca9218d1031dbe5a7b754092f9a156b4f18",
+      "runnerSummary": [],
+      "reproductionCommand": [
+        "ruff",
+        "check",
+        "--no-cache",
+        "gbdraw/"
+      ]
+    },
+    {
+      "name": "sequence-coverage",
+      "exit": 0,
+      "log": "/tmp/issue597-S05-resume-evidence/sequence-coverage.log",
+      "logSha256": "83b5a226ab5ad2e9c6355e6ea832976fd15bdfcbe675a634ebbefdce37963645",
+      "runnerSummary": [
+        "\u2139 tests 3",
+        "\u2139 pass 3",
+        "\u2139 fail 0",
+        "\u2139 skipped 0",
+        "\u2139 duration_ms 998.111838"
+      ],
+      "reproductionCommand": [
+        "node",
+        "--test",
+        "--test-concurrency=1",
+        "tests/web/contracts/vibrio-sequence-source-coverage.test.mjs"
+      ]
+    },
+    {
+      "name": "transport",
+      "exit": 0,
+      "log": "/tmp/issue597-S05-resume-evidence/transport.log",
+      "logSha256": "53489ffce84c67a49940a7616758198606f4f3bef2f616f77dce7452069930ea",
+      "runnerSummary": [],
+      "reproductionCommand": [
+        "python",
+        "docs/internal/issue-597-input-session-implementation-20260926/evidence/S05_MEASURE.py",
+        "--mode",
+        "transport",
+        "--repetitions",
+        "3",
+        "--fixture",
+        "/tmp/issue597-S05-resume-evidence/fixture/real-full-pairwise.gbdraw-session.json.gz",
+        "--output",
+        "/tmp/issue597-S05-resume-evidence/transport"
+      ]
+    },
+    {
+      "name": "vibrio-budget",
+      "exit": 0,
+      "log": "/tmp/issue597-S05-resume-evidence/vibrio-budget.log",
+      "logSha256": "babb834ab8d96f16cb58b26cf65d624c9d5193d3b111f6c24d33373335a3187e",
+      "runnerSummary": [
+        "1 passed (1.2m)"
+      ],
+      "reproductionCommand": [
+        "npx",
+        "playwright",
+        "test",
+        "--config=playwright.perf.config.js",
+        "tests/web/vibrio-session-save.performance.playwright.spec.js",
+        "--workers=1",
+        "--retries=0"
+      ]
+    },
+    {
+      "name": "wheel",
+      "exit": 0,
+      "log": "/tmp/issue597-S05-resume-evidence/wheel.log",
+      "logSha256": "8a74a8ca5a813281d34e1aa2da09a90c723c2160e171cd5672fe0cff53a3613b",
+      "runnerSummary": [],
+      "reproductionCommand": [
+        "python",
+        "tools/prepare_browser_wheel.py",
+        "--no-build-isolation"
+      ]
+    }
+  ],
+  "semanticCommands": [
+    {
+      "command": [
+        "/home/kawato/micromamba/bin/python",
+        "tools/verify_issue597_s01_outputs.py",
+        "--source",
+        "/tmp/gbdraw-issue597-S05.ujOWyl/gbdraw/web/gallery/sessions/vibrio-harveyi-group-collinear.gbdraw-session.json.gz",
+        "--saved",
+        "/tmp/issue597-S05-resume-evidence/pipeline/vibrio-0-saved.gbdraw-session.json.gz",
+        "--output",
+        "/tmp/issue597-S05-resume-evidence/replay-vibrio-0",
+        "--replay"
+      ],
+      "exit": 0,
+      "output": "/tmp/issue597-S05-resume-evidence/replay-vibrio-0"
+    },
+    {
+      "command": [
+        "/home/kawato/micromamba/bin/python",
+        "tools/verify_issue597_s01_outputs.py",
+        "--source",
+        "/tmp/gbdraw-issue597-S05.ujOWyl/gbdraw/web/gallery/sessions/vibrio-harveyi-group-collinear.gbdraw-session.json.gz",
+        "--saved",
+        "/tmp/issue597-S05-resume-evidence/pipeline/vibrio-1-saved.gbdraw-session.json.gz",
+        "--output",
+        "/tmp/issue597-S05-resume-evidence/replay-vibrio-1"
+      ],
+      "exit": 0,
+      "output": "/tmp/issue597-S05-resume-evidence/replay-vibrio-1"
+    },
+    {
+      "command": [
+        "/home/kawato/micromamba/bin/python",
+        "tools/verify_issue597_s01_outputs.py",
+        "--source",
+        "/tmp/gbdraw-issue597-S05.ujOWyl/gbdraw/web/gallery/sessions/vibrio-harveyi-group-collinear.gbdraw-session.json.gz",
+        "--saved",
+        "/tmp/issue597-S05-resume-evidence/pipeline/vibrio-2-saved.gbdraw-session.json.gz",
+        "--output",
+        "/tmp/issue597-S05-resume-evidence/replay-vibrio-2"
+      ],
+      "exit": 0,
+      "output": "/tmp/issue597-S05-resume-evidence/replay-vibrio-2"
+    },
+    {
+      "command": [
+        "/home/kawato/micromamba/bin/python",
+        "tools/verify_issue597_s01_outputs.py",
+        "--source",
+        "/tmp/issue597-S05-resume-evidence/fixture/real-full-pairwise.gbdraw-session.json.gz",
+        "--saved",
+        "/tmp/issue597-S05-resume-evidence/pipeline/real-0-saved.gbdraw-session.json.gz",
+        "--output",
+        "/tmp/issue597-S05-resume-evidence/replay-real-0",
+        "--replay"
+      ],
+      "exit": 0,
+      "output": "/tmp/issue597-S05-resume-evidence/replay-real-0"
+    },
+    {
+      "command": [
+        "/home/kawato/micromamba/bin/python",
+        "tools/verify_issue597_s01_outputs.py",
+        "--source",
+        "/tmp/issue597-S05-resume-evidence/fixture/real-full-pairwise.gbdraw-session.json.gz",
+        "--saved",
+        "/tmp/issue597-S05-resume-evidence/pipeline/real-1-saved.gbdraw-session.json.gz",
+        "--output",
+        "/tmp/issue597-S05-resume-evidence/replay-real-1"
+      ],
+      "exit": 0,
+      "output": "/tmp/issue597-S05-resume-evidence/replay-real-1"
+    },
+    {
+      "command": [
+        "/home/kawato/micromamba/bin/python",
+        "tools/verify_issue597_s01_outputs.py",
+        "--source",
+        "/tmp/issue597-S05-resume-evidence/fixture/real-full-pairwise.gbdraw-session.json.gz",
+        "--saved",
+        "/tmp/issue597-S05-resume-evidence/pipeline/real-2-saved.gbdraw-session.json.gz",
+        "--output",
+        "/tmp/issue597-S05-resume-evidence/replay-real-2"
+      ],
+      "exit": 0,
+      "output": "/tmp/issue597-S05-resume-evidence/replay-real-2"
+    },
+    {
+      "command": [
+        "/home/kawato/micromamba/bin/python",
+        "tools/verify_issue597_s01_outputs.py",
+        "--source",
+        "/tmp/issue597-S05-resume-evidence/journey/vibrio-0-generated.json.gz",
+        "--saved",
+        "/tmp/issue597-S05-resume-evidence/journey/vibrio-0-generated.json.gz",
+        "--output",
+        "/tmp/issue597-S05-resume-evidence/replay-generated-vibrio",
+        "--replay"
+      ],
+      "exit": 0,
+      "output": "/tmp/issue597-S05-resume-evidence/replay-generated-vibrio",
+      "sourceSavedSameOperand": true
+    }
+  ],
+  "mappedBrowserCommandCompletion": {
+    "toolSession": 32492,
+    "toolExitCode": 143,
+    "runnerReport": {
+      "passed": 1,
+      "failed": 2,
+      "notRun": 2
+    },
+    "note": "Runner printed the complete failing report; no shell .exit marker was produced. Tool completion reported 143. This is not a passing invocation."
+  },
+  "guardCandidates": {
+    "readyInertPatch": "/tmp/gbdraw-issue597-S05.ujOWyl/docs/internal/issue-597-input-session-implementation-20260926/evidence/S05-guard-characterization-candidate.patch",
+    "patchSha256": "3be46759633de6851bfaebd28eb0d1b4afb82bb2e81069ad8e6def2a002de4dd",
+    "localAndBaseCommand": "node --test --test-name-pattern=\"Worker construction and the diagram-generation client have explicit owners|shared privileged detectors preserve the characterized current-source facts|production rendering crosses the canonical request and Worker boundary|History intent and SVG admission have one production ownership path\" tests/web/architecture-contracts.test.mjs (disposable overlays only)",
+    "activeApplied": false,
+    "rejectedDraftPatch": "/tmp/issue597-S05-resume-evidence/rejected-draft-contract-candidate.patch"
+  },
+  "historical": {
+    "S04FullPython": "6262 PASS / 6 FAIL / 17 skipped / 11 deselected; unchanged historical invocation",
+    "obsoleteRevision21Probe": "Prior FAIL retained; script unchanged, not rerun as current authority."
+  },
+  "requiredGateConclusion": "NOT all passing: protected Worker inventories and mapped browser tRNA/direct edits/divergent Save remain unresolved. Local policy Gate PASS / Review REQUIRED is not trusted CI or review waiver.",
+  "sandbox": "Default bubblewrap cannot mount /mnt/wslg/distro; identical local commands ran with escalation. One read-only approval timed out; simpler retry succeeded.",
+  "diffReviews": {
+    "production": "Single lifetime owner; Worker reuses codec; superseded main parse removed; S04 transaction retained.",
+    "tests": "Focused new tests; production Worker Node adapter and handoff gate; protected bodies/budgets/timeouts unchanged.",
+    "docs": "Resume evidence/result/inert guard candidate; pinned evidence unchanged.",
+    "generated": "No tracked wheel/dist/egg-info/cache-bust/Gallery/reference/social preview or LOSAT mode changes."
+  },
+  "laterHandoff": "Final policy --head HEAD, nonforce push, remote SHA equality and clean tree are captured externally.",
+  "namedBrowserSelections": {
+    "mapped-draft": [
+      "divergent draft and direct editor overrides survive repeated Save, Load, and Generate ",
+      "divergent draft and direct editor overrides survive repeated Save, Load, and Generate (8.7s)"
+    ],
+    "mapped-legacy": [
+      "bare legacy configuration drives the next canonical request and SVG (8.5s)"
+    ],
+    "mapped-base-browser": [
+      "active Result Feature fill transaction \u203a visible tRNA fill scope remains coherent through History, Session, Generate, and SVG export ",
+      "active Result Feature fill transaction \u203a visible tRNA fill scope remains coherent through History, Session, Generate, and SVG export (19.8s)"
+    ]
+  },
+  "recipeRuffFinal": {
+    "command": [
+      "ruff",
+      "check",
+      "--no-cache",
+      "docs/internal/issue-597-input-session-implementation-20260926/evidence/S05_MEASURE.py"
+    ],
+    "exit": 0,
+    "result": "All checks passed!"
+  },
+  "lateVerifiedDevTransition": {
+    "remoteDev": "252986d096011fcf1a0f5564e940480d3b92844d",
+    "permissionDevMeasured": "d313b70b9f97c2c1d70f9ae885edbead80b62021",
+    "newCommits": [
+      "617f112b0256dde1da93c45ae31736c044965ca5",
+      "252986d096011fcf1a0f5564e940480d3b92844d"
+    ],
+    "changedPaths": [
+      "docs/internal/OPTION_INTEGRITY_PRODUCT_CONTRACT.md"
+    ],
+    "change": "PR #621 adds signed Issue #619 decisions PD-OI-048/049/050 and contract revision 23; no runtime/test/checker/policy changes. Existing PD-OI-044/045 sections byte-identical.",
+    "exactContractSha256": {
+      "measurementBase": "5451db7da8e4de970f05afd5d19b003b7de77d52eb84c05d71ff85a533d4b1fb",
+      "latestDev": "ecdcd4ed82d66cba414a2e38435e2de2a9549661d7e10482e432f52fd4bfa512"
+    },
+    "unchangedIssue597DecisionSectionSha256": {
+      "PD-OI-044": "1635853bd7ebd2052b671ac616ff588322d675ded305716ee956d8d8187917b5",
+      "PD-OI-045": "57837aa4f688d9d46c9ad8cbdd31c914ea0f423cd05062a49f950f842347217d"
+    },
+    "fetch": "Only newly advanced dev fetched; target remote unchanged.",
+    "integrationRoute": "Commit the one implementation delivery, then merge this verified dev into the now-clean implementation branch. Preserve both commits; record final integration SHA/postcommit checker/remote equality externally at handoff. No new branch, stash or reset."
+  },
+  "finalPrecommitPolicy": {
+    "command": [
+      "node",
+      "tools/check-web-change-budget.mjs",
+      "--base",
+      "origin/dev"
+    ],
+    "baseAtExecution": "d313b70b9f97c2c1d70f9ae885edbead80b62021",
+    "exit": 0,
+    "gate": "PASS",
+    "review": "REQUIRED",
+    "log": "/tmp/issue597-S05-resume-evidence/policy-final-precommit.log",
+    "logSha256": "6f53d6e0efdf79e1b22f477757ca977a55169f07d188044401848a9b7dcdec58",
+    "phase": "Before discovery/fetch of newly advanced dev. Final postcommit checker runs against the new base after clean merge."
+  }
+}

@@ -1,0 +1,245 @@
+{
+  "session": "S05",
+  "status": "BLOCKED_PENDING_AUTHORITY",
+  "scope": [
+    "BUG-02",
+    "BUG-20",
+    "prerequisite evidence only"
+  ],
+  "runtimeImplemented": false,
+  "runtimeMeasured": false,
+  "startingHead": "b092499d27705092d84037d5acd51032177c619a",
+  "startingTarget": "b092499d27705092d84037d5acd51032177c619a",
+  "trustedDev": "88028fd242d263f0fe86aaf9da57b8dc9eb082f6",
+  "main": "4556e04e929a4a85ad28d1833ce7304bd764881c",
+  "checkout": "/tmp/gbdraw-issue597-S05.ujOWyl",
+  "branch": "fix/issue-597-input-session-20260926",
+  "upstream": "origin/fix/issue-597-input-session-20260926",
+  "productAuthorityMerge": "af5d942af60353dda199aa487da9152a3576b3fe",
+  "workerAuthorityMerge": null,
+  "s05IntegrationMerge": null,
+  "runtimeFiles": 372,
+  "runtimeManifestSha256": "20f51b6c90b46575c7ef20bad43f57e0eca75f644c5f32cb1bd88a05d29cea73",
+  "runtimeBytesEqualS04": true,
+  "allRecordedS04SourceTestInputBytesEqual": true,
+  "sourceSha256": {
+    "gbdraw/web/js/services/session-file.js": "864ccb104f6fb900af95b209a38bda8d7a35226379261028d60651c789ab461e",
+    "gbdraw/web/js/services/config.js": "51b513067ef127723a66c0861c91416ef7f4fd61a309e7c7fd0f322ce5fd8c0b",
+    "gbdraw/web/js/services/diagram-generation.js": "0f88e507bc22058b2cbfb5a32c31dd3b4e2d9feb0d0727bcc1c879aed64092dc",
+    "gbdraw/web/js/app/session-feature-metadata.js": "7dee1e424fa3e543792deeee6fe4e69d51fd1f14370528027154a6bd38a78104",
+    "gbdraw/web/js/app/record-discovery.js": "9d62b5df649f5ac97032f43d93fdda6a48b6c8b33f54c37dc2d634b1b331455e",
+    "gbdraw/web/js/state.js": "5cb2cb673344c8b8ca2d49f3fa8659b22eaf9f8be4fbb8b2c0655cf294bb75a7",
+    "gbdraw/web/js/services/history.js": "7acf8de8185a210471e5c11fbb8dde5561056fe2007dd9582643841e633501f3"
+  },
+  "trustedCheckerAuthoritySha256": {
+    "tools/check-web-change-budget.mjs": "c7888ffb9c6d136284b567712f6e11a474e6b08f54d4daaee7d78e1a402d7f1c",
+    "tools/web-architecture-detectors.mjs": "e05a4d4ffa394db8af69f27d82e4673e0e0c2533ba6b0cd7b43dd16e4e227274",
+    "tools/web-architecture-evaluation.mjs": "6f1dda5eeb5fb88500baf1de79e730cb4aeff9861562802af8491eaea4bb1a4e",
+    "tools/web-change-source.mjs": "b23bd352475c14cc044fa7c14c70e69f0da04631f67bc7f2207eb79549c73756",
+    "tools/web-promotion-context.mjs": "44e88fd3f24ca1d98571a12daf29e996cefc3b8552093e6105c69b626ebc56dd",
+    "tools/web-product-impact-evaluation.mjs": "8031bc2a68ab1315387dbcf5485971054cf91e1669659edebec46f9cb87d62da",
+    "tools/web-product-impact-decision-source.mjs": "11f7332880ff4ec256cfbca6d15286c809dcebef80465987fa22759a8ed17f07",
+    "tools/web-change-policy.json": "fee8541705ea8bce25939c8aef2f727f64b2cfb1ff2bea12114471452df9b47f",
+    "tools/web-architecture-rules.json": "5ed342ad89f394a8621d0faa7910c3c6d15deaf19ef4ebefd96ec65172326282",
+    "tools/web-product-impact-map.json": "dfd88850f67162f6046542e53d3136f51818e127a1320ecbf589b6cf97e14885",
+    "tools/web-product-decisions.json": "23b1843c9cc1d5d1e974f75c647b2dc299c53d5c117cfdf45830003eda5ef3b6",
+    "docs/internal/OPTION_INTEGRITY_PRODUCT_CONTRACT.md": "5451db7da8e4de970f05afd5d19b003b7de77d52eb84c05d71ff85a533d4b1fb"
+  },
+  "trustedCheckerAuthorityBytesEqualDev": true,
+  "inputSha256": {
+    "gbdraw/web/gallery/sessions/HmmtDNA_basic_circular.gbdraw-session.json": "d53cf930db19cbe2f8c201909d06c69ba02140ffd06498021e7582ddebed83db",
+    "gbdraw/web/gallery/sessions/lambda_basic_linear.gbdraw-session.json": "c416dcd7edfff23837fb02e3fd65ff9f90cdec7f1512e28d200f0ae995fa5c45",
+    "gbdraw/web/gallery/sessions/vibrio-harveyi-group-collinear.gbdraw-session.json.gz": "a3cfba6c8d883a0050529c89b1fd0849348254cdfa46dbf938a69cebef5379aa",
+    "tests/fixtures/sessions/settings-only.v42.json.gz": "bd11fa0406d40d09c72ff20500a49a3c74be781dbfa9253a4c3c696f28b2d34c",
+    "tests/fixtures/sessions/cli-web-mito.gb": "f2e922c26561d37a8d3b410ba972526c709cad5635f598bbdcfc234f02642c92",
+    "tests/test_inputs/MjeNMV.gbk": "7b46d2cc4baa301a76ac1917bd5f2d41553c1271930e20e2904024986219ddd0",
+    "tests/web/helpers/app-lifecycle.cjs": "bb36d5a7a28f22f8ddfafb88b5e502462652c6f4719b991e563b08173458d618",
+    "tests/web/helpers/visual-state.cjs": "ecee93c255cb68cdf9783fe8fc127f4a0ea416000556e59588b45588139c55f6",
+    "playwright.config.js": "15bd5138d7fe48f6f7ef4ebce61c12d2cc67f291aae943ee764f3985a0242000",
+    "playwright.functional.config.js": "6dde379836ed909fea1d0a7983b2d7978f0d0d2f199b0ab4a2a30346f8b49b77",
+    "playwright.perf.config.js": "7c0581f969bf3753e46b298294628bf515c3139a2093ac4078455f462ed66431",
+    "package.json": "c093d1ea634d4615984e341868a558033f38138c1f597834229601c7e9081080",
+    "tools/web-change-policy.json": "fee8541705ea8bce25939c8aef2f727f64b2cfb1ff2bea12114471452df9b47f",
+    "tools/check-web-change-budget.mjs": "c7888ffb9c6d136284b567712f6e11a474e6b08f54d4daaee7d78e1a402d7f1c",
+    "docs/internal/OPTION_INTEGRITY_PRODUCT_CONTRACT.md": "5451db7da8e4de970f05afd5d19b003b7de77d52eb84c05d71ff85a533d4b1fb"
+  },
+  "realSourceFingerprints": [
+    {
+      "path": "tests/test_inputs/GCF_000196095.1_ASM19609v1_genomic.gbff",
+      "recordedSha256": "c785f2feed7dbef0a7ad881aef4a43860f65318e1a44db66b032fc65c9cc34dc",
+      "existsInDedicatedCheckout": true,
+      "currentSha256": "c785f2feed7dbef0a7ad881aef4a43860f65318e1a44db66b032fc65c9cc34dc"
+    },
+    {
+      "path": "tests/test_inputs/GCF_000354175.2_ASM35417v2_genomic.gbff",
+      "recordedSha256": "4357443d248ab3d5c08b1854dcbcca1f59adbf064640fd99d5504f6ee4d59096",
+      "existsInDedicatedCheckout": true,
+      "currentSha256": "4357443d248ab3d5c08b1854dcbcca1f59adbf064640fd99d5504f6ee4d59096"
+    },
+    {
+      "path": "tests/test_inputs/GCF_000801275.2_ASM80127v1_genomic.gbff",
+      "recordedSha256": "a11f12277c34c46e2161f354e50ef39bdca4c5b618dd1905c1829ba20b35d5d1",
+      "existsInDedicatedCheckout": true,
+      "currentSha256": "a11f12277c34c46e2161f354e50ef39bdca4c5b618dd1905c1829ba20b35d5d1"
+    },
+    {
+      "path": "tests/test_inputs/GCF_002021755.1_ASM202175v1_genomic.gbff",
+      "recordedSha256": "483ecea116a7399b87a37040b49095a26f5e8c02b4931c607364a0a46e07321f",
+      "existsInDedicatedCheckout": true,
+      "currentSha256": "483ecea116a7399b87a37040b49095a26f5e8c02b4931c607364a0a46e07321f"
+    },
+    {
+      "path": "tests/test_inputs/GCF_002906475.1_ASM290647v1_genomic.gbff",
+      "recordedSha256": "6238c42c332f9e0ef65ea6d9f6e5da41d7a5a13d1eb135aeb2b14b700d643908",
+      "existsInDedicatedCheckout": true,
+      "currentSha256": "6238c42c332f9e0ef65ea6d9f6e5da41d7a5a13d1eb135aeb2b14b700d643908"
+    },
+    {
+      "path": "tests/test_inputs/GCF_015097735.1_ASM1509773v1_genomic.gbff",
+      "recordedSha256": "a2f696d584451866032339eb17de4eadad55372a36bc87b9eb85583a482ad027",
+      "existsInDedicatedCheckout": true,
+      "currentSha256": "a2f696d584451866032339eb17de4eadad55372a36bc87b9eb85583a482ad027"
+    }
+  ],
+  "evidenceSha256": {
+    "docs/internal/issue-597-input-session-implementation-20260926/evidence/S05_READINESS.py": "f17268b10b9f218c416ec98c3bc153dace1cecdd5f523e50e2af3a69c4042292",
+    "docs/internal/issue-597-input-session-implementation-20260926/evidence/S05-readiness.json": "b0507150b0db8768e005bb474f3b4dee0ea64ffbf56d903ca1b8303da4bf3d30",
+    "docs/internal/issue-597-input-session-implementation-20260926/evidence/S01_REPRODUCTION.md": "c02e328459e102570ec2c6236fae734cd81b65345463736dadfa0f5a0f820ec5",
+    "docs/internal/issue-597-input-session-implementation-20260926/evidence/S01-final-transport.json": "66d9385d51ca0434c58f5c8498f511f89ff51afa8118075fe0d93cb1f4b311e2",
+    "docs/internal/issue-597-input-session-implementation-20260926/evidence/S01-real-fixture.json": "0bfff99bfe14c5d431ea40e1489168c1b9994be3fa1acee4575b1dec90f5e7ec",
+    "docs/internal/issue-597-input-session-implementation-20260926/evidence/S04-validation.json": "86bad50a4ede02a51ae6508879d0bcb551d2c8650ea358ab354b96e5890bbf0e",
+    "docs/internal/issue-597-input-session-implementation-20260926/evidence/S04_MUTATION_INVENTORY.md": "f3077a4feb98729f86a178f73114cdd1ed2ad3d50d9ddb9a4e8d83fb0889d105",
+    "docs/internal/issue-597-input-session-implementation-20260926/evidence/S04-mutation-inventory.json": "ae506cf37a27685a52a2cbafd4d625cc30adf0a9aef8f8b358ec4b8593a73b06",
+    "docs/internal/issue-597-input-session-implementation-20260926/authority-candidates/02-import-worker-permission.patch": "fff1b56ceb6ee3baf2e6a7f1e82a6e95e5856a1c533c70d58a764d93d9b65f78"
+  },
+  "environment": {
+    "python": "3.13.3",
+    "pythonExecutable": "/home/kawato/micromamba/bin/python",
+    "node": "v26.8.2",
+    "ruff": "ruff 0.15.12",
+    "pythonPlaywright": "1.61.0",
+    "nodePlaywright": "absent in dedicated checkout",
+    "platform": "Linux-5.15.167.4-microsoft-standard-WSL2-x86_64-with-glibc2.39",
+    "browserRuns": 0,
+    "installedDependencies": false,
+    "browserWheelBuilt": false,
+    "serversStarted": 0
+  },
+  "environmentSha256": "092118163eedd16322b6c9b41bc7103c2f34c9afd94a9576eff3175673e2a29c",
+  "artifactRoot": "/tmp/issue597-S05-evidence-ujOWyl",
+  "commands": {
+    "originalRevision21Probe": {
+      "command": "python tools/inspect_issue597_s01_contracts.py",
+      "exit": 1,
+      "result": "FAIL: unchanged revision-21 assertion",
+      "log": "original-revision21-probe.log"
+    },
+    "s04PinnedAuthority": {
+      "command": "python docs/internal/issue-597-input-session-implementation-20260926/evidence/S04_AUTHORITY.py",
+      "exit": 0,
+      "result": "PASS only historical/S04 pinned comparisons",
+      "log": "s04-pinned-authority.json"
+    },
+    "currentReadiness": {
+      "command": "python docs/internal/issue-597-input-session-implementation-20260926/evidence/S05_READINESS.py --head b092499d27705092d84037d5acd51032177c619a --dev 88028fd242d263f0fe86aaf9da57b8dc9eb082f6",
+      "exit": 2,
+      "result": "BLOCKED_MISSING_PRIVILEGED_PERMISSION; receipts/ancestry assertions hold",
+      "output": "S05-readiness.json"
+    },
+    "candidateApplyCheck": {
+      "command": "git apply --check docs/internal/issue-597-input-session-implementation-20260926/authority-candidates/02-import-worker-permission.patch",
+      "exit": 0,
+      "result": "inert candidate applies; no authority"
+    },
+    "candidateInert": {
+      "command": "python docs/internal/issue-597-input-session-implementation-20260926/authority-candidates/verify_candidate.py privileged \"$PWD\" --inert",
+      "exit": 0,
+      "result": "shape/detector PASS only",
+      "log": "inert-candidate.log"
+    },
+    "focusedNode": {
+      "command": "node --test tests/web/session-file.test.mjs tests/web/session-request.test.mjs tests/web/session-active-files.test.mjs tests/web/record-display-options.test.mjs tests/web/record-metadata-inference.test.mjs tests/web/session-operation-consistency.test.mjs tests/web/session-save-lifecycle.test.mjs tests/web/settings-only-session.test.mjs tests/web/session-resource-backing.test.mjs tests/web/session-losat-cache-validation.test.mjs tests/web/session-feature-metadata.test.mjs",
+      "exit": 0,
+      "passed": 104,
+      "failed": 0,
+      "skipped": 0,
+      "elapsedMilliseconds": 461.506321,
+      "log": "node-focused.log"
+    },
+    "outputComparison": {
+      "command": "PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=\"$PWD\" pytest tests/test_output_comparison.py::TestOutputComparison -v --basetemp=/tmp/issue597-S05-evidence-ujOWyl/pytest-output",
+      "exit": 0,
+      "passed": 16,
+      "elapsedSeconds": 19.95,
+      "log": "output-comparison.log"
+    },
+    "ruff": {
+      "command": "ruff check --no-cache gbdraw/",
+      "exit": 0,
+      "result": "PASS",
+      "log": "ruff.log"
+    },
+    "evidenceRuff": {
+      "command": "ruff check --no-cache docs/internal/issue-597-input-session-implementation-20260926/evidence/S05_READINESS.py",
+      "exit": 0,
+      "result": "PASS"
+    },
+    "policyBefore": {
+      "command": "node tools/check-web-change-budget.mjs --base origin/dev",
+      "result": "Local trusted-base Gate PASS / Review REQUIRED; not trusted CI or review waiver",
+      "log": "policy-before-commit.log",
+      "exit": 0,
+      "gate": "PASS",
+      "review": "REQUIRED"
+    },
+    "policyAfter": {
+      "command": "node tools/check-web-change-budget.mjs --base origin/dev --head HEAD",
+      "result": "required at handoff after commit; external log and final report",
+      "log": "policy-after-commit.log"
+    }
+  },
+  "artifactSha256": {
+    "inert-candidate.log": "748c11d56d27a68cb38e43547879d95db1eb67a1a2dd0dde49287a97020aec28",
+    "node-focused.log": "cc575e5e21b57bd64f41657d959e413a403ab8d9ed18a0c8ab3fe09de713ec9a",
+    "original-revision21-probe.log": "f353f488928bb0d8112c5c14cfd52e9b7993c6b1b6f7dd895d912ef9c002b1b8",
+    "output-comparison.log": "11ad1ed40f13a518bfa95edeff3774384a4e0c7cfe2e25f79bfa735d69bc1d2d",
+    "ruff.log": "82b3e6a6c090a57601d22943bd23fca9218d1031dbe5a7b754092f9a156b4f18",
+    "s04-pinned-authority.json": "a8dcb27210ede22b8692f27ab84b58004d3fe3d1bcb762ecd82ca8994a0c690e",
+    "policy-before-commit.log": "34c678598c73135dffd9f4aac9c09a4b135023e7790818c5121959ede749587c"
+  },
+  "s05Metrics": {
+    "stageAndWallMs": null,
+    "heartbeat100ms": null,
+    "longTasks": null,
+    "mainMemory": null,
+    "workerMemory": null,
+    "processMemory": null,
+    "transferredBufferBytes": null,
+    "nativeStructuredCloneWireBytes": null,
+    "nativeStructuredCloneCopyBytes": null,
+    "contentEquivalence": null,
+    "workerActivity": null,
+    "repeatImportResourceLeak": null
+  },
+  "acceptance": {
+    "S-01": "existing focused assertions only; Worker runtime not run",
+    "S-02": "existing focused assertions only; Worker lifecycle not implemented",
+    "S-03/S-04": "S05 transport measurements not run",
+    "S-05": "historical S01 full-pipeline FAIL remains",
+    "A-01": "runtime blocked by two absent permission subjects",
+    "W-01": "same-target push/local-remote verification required at handoff"
+  },
+  "performanceEvidenceReusedAsS05Pass": false,
+  "remaining": [
+    "Separate permission-only authority dev merge of the exact constructor/importer subjects",
+    "Verify mapped evidence and integrate authorized latest dev before S05 runtime",
+    "Complete S05 implementation and requested lifecycle/transport/browser measurements",
+    "Trace real large Linear fresh-preview Python/helper startup; preserve zero-Python acceptance",
+    "S06 remains dependent on completed S05; no S06 work started"
+  ],
+  "remoteRefsRecheckedBeforeCommit": {
+    "target": "b092499d27705092d84037d5acd51032177c619a",
+    "dev": "88028fd242d263f0fe86aaf9da57b8dc9eb082f6",
+    "changedSinceIntake": false
+  }
+}

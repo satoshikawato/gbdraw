@@ -40,6 +40,8 @@ export const createLegendCanvasActions = ({ state }) => {
   };
 
   const applyCanvasPadding = () => {
+    const busy = state.sessionOperationAvailability?.();
+    if (busy) return busy;
     const svg = currentSvg();
     if (!svg) return;
     bindCompositionMetadata(svg);
@@ -65,6 +67,8 @@ export const createLegendCanvasActions = ({ state }) => {
   };
 
   const resetCanvasPadding = () => {
+    const busy = state.sessionOperationAvailability?.();
+    if (busy) return busy;
     canvasPadding.top = 0;
     canvasPadding.right = 0;
     canvasPadding.bottom = 0;

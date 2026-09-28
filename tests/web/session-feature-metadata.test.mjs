@@ -30,6 +30,7 @@ await copyModule(
   'app/legend-layout/transform-utils.js'
 );
 await copyModule('gbdraw/web/js/services/diagram-generation.js', 'services/diagram-generation.js');
+await copyModule('gbdraw/web/js/services/bounded-json-transport.js', 'services/bounded-json-transport.js');
 await copyModule(
   'gbdraw/web/js/services/current-worker-result-source.js',
   'services/current-worker-result-source.js'

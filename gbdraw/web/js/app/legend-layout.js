@@ -26,6 +26,8 @@ export const createLegendLayout = ({
   });
 
   const resetAllPositions = () => {
+    const sessionBusy = state.sessionOperationAvailability?.();
+    if (sessionBusy) return sessionBusy;
     const svg = state.svgContainer.value?.querySelector?.('svg') || null;
     if (!svg) return;
     diagramActions.resetLengthBarPosition();
@@ -35,6 +37,8 @@ export const createLegendLayout = ({
   };
 
   const reconcileCompositionUserDeltas = (deltas) => {
+    const sessionBusy = state.sessionOperationAvailability?.();
+    if (sessionBusy) return sessionBusy;
     const svg = state.svgContainer.value?.querySelector?.('svg') || null;
     if (!svg || !deltas) return false;
     const { binding, changed } = applyCompositionUserDeltas(svg, deltas);

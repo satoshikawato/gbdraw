@@ -1,6 +1,6 @@
 const UNSAFE_OBJECT_KEYS = new Set(['__proto__', 'constructor', 'prototype']);
 
-export const assertSafeObjectKeys = (value, path = 'value') => {
+function* safeObjectKeySteps(value, path) {
   if (!value || typeof value !== 'object') return;
   const pending = [value];
   const seen = new WeakSet();
@@ -13,6 +13,22 @@ export const assertSafeObjectKeys = (value, path = 'value') => {
         throw new Error(`${path} contains unsafe key ${key}.`);
       }
       pending.push(current[key]);
+      yield;
+    }
+  }
+};
+
+
+export const assertSafeObjectKeys = (value, path = 'value') => {
+  for (const _step of safeObjectKeySteps(value, path)) { /* exhaust validation */ }
+};
+
+export const assertSafeObjectKeysForImport = async (value, path = 'value') => {
+  let deadline = performance.now() + 16;
+  for (const _step of safeObjectKeySteps(value, path)) {
+    if (performance.now() >= deadline) {
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      deadline = performance.now() + 16;
     }
   }
 };

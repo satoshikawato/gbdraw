@@ -3842,6 +3842,34 @@ def test_web_losatp_blastp_payload_helper_uses_rbh_edges_for_orthogroups(
     assert inactive_pairwise_limit_result["cache"]["convertedPayloadHit"] is True
     assert inactive_pairwise_limit_result["pairs"] == result["pairs"]
 
+    canonical_outputs = []
+    for name in ("miss.json", "hit.json"):
+        canonical_path = tmp_path / name
+        canonical_result = json.loads(str(namespace["convert_losatp_blastp_pairs_to_genomic_payload"](
+            str(pairs_path),
+            str(raw_tsv_path),
+            "orthogroup",
+            2,
+            49,
+            "1e-5",
+            0,
+            0,
+            orthogroup_membership_mode="rbh",
+            canonical_resource_path=str(canonical_path),
+        )))
+        assert "orthogroupResult" not in canonical_result
+        assert canonical_result["canonicalResource"] == {
+            "kind": "orthogroup-result",
+            "size": canonical_path.stat().st_size,
+        }
+        canonical_outputs.append((canonical_result, canonical_path.read_bytes()))
+    (miss, miss_bytes), (hit, hit_bytes) = canonical_outputs
+    assert miss["cache"]["convertedPayloadHit"] is False
+    assert hit["cache"]["convertedPayloadHit"] is True
+    assert hit_bytes == miss_bytes
+    assert json.loads(miss_bytes) == result["orthogroupResult"]
+    assert hit["pairs"] == miss["pairs"] == result["pairs"]
+
 
 @pytest.mark.linear
 def test_web_losatp_blastp_payload_helper_rejects_legacy_list_payload(

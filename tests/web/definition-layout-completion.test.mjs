@@ -10,8 +10,8 @@ const loadOwner = async (path, name, dependencies) => {
   const source = (await readFile(new URL(`../../gbdraw/web/js/app/${path}`, import.meta.url), 'utf8'))
     .replace(/import\s+\{([\s\S]*?)\}\s+from\s+['"][^'"]+['"];?/g, 'const {$1} = dependencies;')
     .replace(/export const /g, 'const ');
-  return new Function('dependencies', 'setTimeout', 'clearTimeout', `${source}\nreturn ${name};`)(
-    dependencies, dependencies.setTimeout, dependencies.clearTimeout);
+  return new Function('dependencies', 'setTimeout', 'clearTimeout', 'window', `${source}\nreturn ${name};`)(
+    dependencies, dependencies.setTimeout, dependencies.clearTimeout, { Vue: { reactive: value => value } });
 };
 const ref = value => ({ value });
 const group = (id, transform) => {

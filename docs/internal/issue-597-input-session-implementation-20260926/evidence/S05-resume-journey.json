@@ -1,0 +1,325 @@
+{
+  "mode": "journey",
+  "head": "c11d4854a899349cd66863c859f6f871724ba3ab",
+  "platform": "Linux-5.15.167.4-microsoft-standard-WSL2-x86_64-with-glibc2.39",
+  "python": "3.13.3",
+  "cpuCount": 32,
+  "ramBytes": 33518579712,
+  "cpuModel": "Intel(R) Core(TM) i9-14900HX",
+  "versions": {
+    "playwright": "1.61.0",
+    "psutil": "7.0.0",
+    "websocket-client": "1.8.0",
+    "biopython": "1.85"
+  },
+  "codecProbeSha256": "aa8511a22b8d833aa4496c5f6c37eb23890d48e729b2c11b5f2572151a45e3e5",
+  "traceSha256": "3716977b65fca8d99f06e2a8971b6b15c87bdcd38b3c8c019b9324568bc58b91",
+  "observerSha256": "19b0d2468f1efd36b2d8bb59aa9af6a4758e5c8b90939aeeea8840846b863c4c",
+  "recipeSha256": "d020db6de7995d39617adb6ed0898de55de87d9fe55499303d512dfbe5e2e68e",
+  "s01RecipeSha256": "c2ea0bbfc389fa0da1f4440a7d164961729814020097096daa4e0fe9cd48a6e7",
+  "url": "http://127.0.0.1:45193",
+  "debugPort": 47555,
+  "launchArgs": [
+    "--enable-precise-memory-info",
+    "--remote-debugging-port=47555"
+  ],
+  "startedUtc": "2026-09-27T05:46:10Z",
+  "browser": "149.0.7827.55",
+  "rawArtifact": "/tmp/issue597-S05-resume-evidence/journey/metrics.json",
+  "note": "Real Generate failed; its generated-named download contains the retained preview. Original error formatting lost the summary; separate diagnostic preserves the normalized summary.",
+  "fixtures": {
+    "vibrio": {
+      "sha256": "a3cfba6c8d883a0050529c89b1fd0849348254cdfa46dbf938a69cebef5379aa",
+      "results": [
+        {
+          "generate": {
+            "status": "ok",
+            "error": "",
+            "results": 1,
+            "preview": true,
+            "workers": [
+              {
+                "url": "http://127.0.0.1:45193/gbdraw/web/js/workers/session-import-worker.js",
+                "stack": "Error\n    at new window.Worker (eval at evaluate (:303:30), <anonymous>:5:79)\n    at http://127.0.0.1:45193/gbdraw/web/js/services/session-import-client.js:67:14\n    at new Promise (<anonymous>)\n    at importSessionFile (http://127.0.0.1:45193/gbdraw/web/js/services/session-import-client.js:10:61)\n    at importSessionDocument (http://127.0.0.1:45193/gbdraw/web/js/services/config.js:4174:29)\n    at importSession (http://127.0.0.1:45193/gbdraw/web/js/services/config.js:4767:26)",
+                "messages": [
+                  {
+                    "type": null,
+                    "operation": null,
+                    "operationId": 1,
+                    "fileBytes": 23739973,
+                    "stack": "Error\n    at window.Worker.postMessage (eval at evaluate (:303:30), <anonymous>:9:49)\n    at http://127.0.0.1:45193/gbdraw/web/js/services/session-import-client.js:73:12\n    at new Promise (<anonymous>)\n    at importSessionFile (http://127.0.0.1:45193/gbdraw/web/js/services/session-import-client.js:10:61)\n    at importSessionDocument (http://127.0.0.1:45193/gbdraw/web/js/services/config.js:4174:29)\n    at importSession (http://127.0.0.1:45193/gbdraw/web/js/services/config.js:4767:26)"
+                  }
+                ],
+                "listeners": 0,
+                "terminations": 1
+              },
+              {
+                "url": "http://127.0.0.1:45193/gbdraw/web/js/workers/diagram-generation-worker.js",
+                "stack": "Error\n    at new window.Worker (eval at evaluate (:303:30), <anonymous>:5:79)\n    at getWorker (http://127.0.0.1:45193/gbdraw/web/js/services/diagram-generation.js:192:14)\n    at ensureWorkerInitialized (http://127.0.0.1:45193/gbdraw/web/js/services/diagram-generation.js:234:25)\n    at http://127.0.0.1:45193/gbdraw/web/js/services/diagram-generation.js:492:35\n    at runAuxiliaryWorkerRequest (http://127.0.0.1:45193/gbdraw/web/js/services/diagram-generation.js:557:5)\n    at runDiagramHelperOperation (http://127.0.0.1:45193/gbdraw/web/js/services/diagram-generation.js:575:10)\n    at evaluate (http://127.0.0.1:45193/gbdraw/web/js/app/app-setup.js:1261:41)\n    at Object.prepareCandidate (http://127.0.0.1:45193/gbdraw/web/js/app/rule-matching.js:104:28)\n    at runAnalysisInternal (http://127.0.0.1:45193/gbdraw/web/js/app/run-analysis.js:2101:48)\n    at async Object.runUndoableArtifactReplacement (http://127.0.0.1:45193/gbdraw/web/js/services/history.js:831:22)",
+                "messages": [
+                  {
+                    "type": "init",
+                    "operation": null,
+                    "operationId": null,
+                    "fileBytes": null,
+                    "stack": "Error\n    at window.Worker.postMessage (eval at evaluate (:303:30), <anonymous>:9:49)\n    at ensureWorkerInitialized (http://127.0.0.1:45193/gbdraw/web/js/services/diagram-generation.js:291:17)\n    at http://127.0.0.1:45193/gbdraw/web/js/services/diagram-generation.js:492:35\n    at runAuxiliaryWorkerRequest (http://127.0.0.1:45193/gbdraw/web/js/services/diagram-generation.js:557:5)\n    at runDiagramHelperOperation (http://127.0.0.1:45193/gbdraw/web/js/services/diagram-generation.js:575:10)\n    at evaluate (http://127.0.0.1:45193/gbdraw/web/js/app/app-setup.js:1261:41)\n    at Object.prepareCandidate (http://127.0.0.1:45193/gbdraw/web/js/app/rule-matching.js:104:28)\n    at runAnalysisInternal (http://127.0.0.1:45193/gbdraw/web/js/app/run-analysis.js:2101:48)\n    at async Object.runUndoableArtifactReplacement (http://127.0.0.1:45193/gbdraw/web/js/services/history.js:831:22)\n    at async runAnalysis (http://127.0.0.1:45193/gbdraw/web/js/app/run-analysis.js:5031:11)"
+                  },
+                  {
+                    "type": "helper",
+                    "operation": "evaluateRules",
+                    "operationId": null,
+                    "fileBytes": null,
+                    "stack": "Error\n    at window.Worker.postMessage (eval at evaluate (:303:30), <anonymous>:9:49)\n    at http://127.0.0.1:45193/gbdraw/web/js/services/diagram-generation.js:544:21"
+                  },
+                  {
+                    "type": "helper",
+                    "operation": "extractCdsProteinFasta",
+                    "operationId": null,
+                    "fileBytes": null,
+                    "stack": "Error\n    at window.Worker.postMessage (eval at evaluate (:303:30), <anonymous>:9:49)\n    at http://127.0.0.1:45193/gbdraw/web/js/services/diagram-generation.js:544:21"
+                  },
+                  {
+                    "type": "helper",
+                    "operation": "extractCdsProteinFasta",
+                    "operationId": null,
+                    "fileBytes": null,
+                    "stack": "Error\n    at window.Worker.postMessage (eval at evaluate (:303:30), <anonymous>:9:49)\n    at http://127.0.0.1:45193/gbdraw/web/js/services/diagram-generation.js:544:21"
+                  },
+                  {
+                    "type": "helper",
+                    "operation": "extractCdsProteinFasta",
+                    "operationId": null,
+                    "fileBytes": null,
+                    "stack": "Error\n    at window.Worker.postMessage (eval at evaluate (:303:30), <anonymous>:9:49)\n    at http://127.0.0.1:45193/gbdraw/web/js/services/diagram-generation.js:544:21"
+                  },
+                  {
+                    "type": "helper",
+                    "operation": "extractCdsProteinFasta",
+                    "operationId": null,
+                    "fileBytes": null,
+                    "stack": "Error\n    at window.Worker.postMessage (eval at evaluate (:303:30), <anonymous>:9:49)\n    at http://127.0.0.1:45193/gbdraw/web/js/services/diagram-generation.js:544:21"
+                  },
+                  {
+                    "type": "helper",
+                    "operation": "buildProteinLosatCacheKeys",
+                    "operationId": null,
+                    "fileBytes": null,
+                    "stack": "Error\n    at window.Worker.postMessage (eval at evaluate (:303:30), <anonymous>:9:49)\n    at http://127.0.0.1:45193/gbdraw/web/js/services/diagram-generation.js:544:21"
+                  },
+                  {
+                    "type": "helper",
+                    "operation": "convertLosatpPairsToGenomicPayload",
+                    "operationId": null,
+                    "fileBytes": null,
+                    "stack": "Error\n    at window.Worker.postMessage (eval at evaluate (:303:30), <anonymous>:9:49)\n    at http://127.0.0.1:45193/gbdraw/web/js/services/diagram-generation.js:544:21"
+                  },
+                  {
+                    "type": "run",
+                    "operation": null,
+                    "operationId": null,
+                    "fileBytes": null,
+                    "stack": "Error\n    at window.Worker.postMessage (eval at evaluate (:303:30), <anonymous>:9:49)\n    at http://127.0.0.1:45193/gbdraw/web/js/services/diagram-generation.js:443:21"
+                  }
+                ],
+                "listeners": 0,
+                "terminations": 0
+              }
+            ]
+          },
+          "saveStatus": "saved",
+          "saved": "/tmp/issue597-S05-resume-evidence/journey/vibrio-0-generated.json.gz",
+          "pageErrors": [],
+          "externalRequests": [],
+          "pythonPreviewWorkerCount": 0,
+          "previewWorkerFreeAcceptance": true,
+          "generateAcceptance": true,
+          "beforeGenerate": {
+            "requestRecords": 4,
+            "requestSha256": "cc326c351cd302304ad8ba922fb18fe933af136d816cc704169f8a7e38317dd5",
+            "preview": true,
+            "workers": [
+              {
+                "url": "http://127.0.0.1:45193/gbdraw/web/js/workers/session-import-worker.js",
+                "stack": "Error\n    at new window.Worker (eval at evaluate (:303:30), <anonymous>:5:79)\n    at http://127.0.0.1:45193/gbdraw/web/js/services/session-import-client.js:67:14\n    at new Promise (<anonymous>)\n    at importSessionFile (http://127.0.0.1:45193/gbdraw/web/js/services/session-import-client.js:10:61)\n    at importSessionDocument (http://127.0.0.1:45193/gbdraw/web/js/services/config.js:4174:29)\n    at importSession (http://127.0.0.1:45193/gbdraw/web/js/services/config.js:4767:26)",
+                "messages": [
+                  {
+                    "type": null,
+                    "operation": null,
+                    "operationId": 1,
+                    "fileBytes": 23739973,
+                    "stack": "Error\n    at window.Worker.postMessage (eval at evaluate (:303:30), <anonymous>:9:49)\n    at http://127.0.0.1:45193/gbdraw/web/js/services/session-import-client.js:73:12\n    at new Promise (<anonymous>)\n    at importSessionFile (http://127.0.0.1:45193/gbdraw/web/js/services/session-import-client.js:10:61)\n    at importSessionDocument (http://127.0.0.1:45193/gbdraw/web/js/services/config.js:4174:29)\n    at importSession (http://127.0.0.1:45193/gbdraw/web/js/services/config.js:4767:26)"
+                  }
+                ],
+                "listeners": 0,
+                "terminations": 1
+              }
+            ]
+          }
+        }
+      ]
+    },
+    "real": {
+      "sha256": "d3cafef9664bff958aec4932eea6e264ae872cce89762a7cbe617447af975388",
+      "results": [
+        {
+          "generate": {
+            "status": "error",
+            "error": "[object Object]",
+            "results": 1,
+            "preview": true,
+            "workers": [
+              {
+                "url": "http://127.0.0.1:45193/gbdraw/web/js/workers/session-import-worker.js",
+                "stack": "Error\n    at new window.Worker (eval at evaluate (:303:30), <anonymous>:5:79)\n    at http://127.0.0.1:45193/gbdraw/web/js/services/session-import-client.js:67:14\n    at new Promise (<anonymous>)\n    at importSessionFile (http://127.0.0.1:45193/gbdraw/web/js/services/session-import-client.js:10:61)\n    at importSessionDocument (http://127.0.0.1:45193/gbdraw/web/js/services/config.js:4174:29)\n    at importSession (http://127.0.0.1:45193/gbdraw/web/js/services/config.js:4767:26)",
+                "messages": [
+                  {
+                    "type": null,
+                    "operation": null,
+                    "operationId": 1,
+                    "fileBytes": 134471323,
+                    "stack": "Error\n    at window.Worker.postMessage (eval at evaluate (:303:30), <anonymous>:9:49)\n    at http://127.0.0.1:45193/gbdraw/web/js/services/session-import-client.js:73:12\n    at new Promise (<anonymous>)\n    at importSessionFile (http://127.0.0.1:45193/gbdraw/web/js/services/session-import-client.js:10:61)\n    at importSessionDocument (http://127.0.0.1:45193/gbdraw/web/js/services/config.js:4174:29)\n    at importSession (http://127.0.0.1:45193/gbdraw/web/js/services/config.js:4767:26)"
+                  }
+                ],
+                "listeners": 0,
+                "terminations": 1
+              },
+              {
+                "url": "http://127.0.0.1:45193/gbdraw/web/js/workers/diagram-generation-worker.js",
+                "stack": "Error\n    at new window.Worker (eval at evaluate (:303:30), <anonymous>:5:79)\n    at getWorker (http://127.0.0.1:45193/gbdraw/web/js/services/diagram-generation.js:192:14)\n    at ensureWorkerInitialized (http://127.0.0.1:45193/gbdraw/web/js/services/diagram-generation.js:234:25)\n    at http://127.0.0.1:45193/gbdraw/web/js/services/diagram-generation.js:492:35\n    at runAuxiliaryWorkerRequest (http://127.0.0.1:45193/gbdraw/web/js/services/diagram-generation.js:557:5)\n    at runDiagramHelperOperation (http://127.0.0.1:45193/gbdraw/web/js/services/diagram-generation.js:575:10)\n    at http://127.0.0.1:45193/gbdraw/web/js/app/app-setup.js:235:52\n    at validateUnmanagedConfigOverrides (http://127.0.0.1:45193/gbdraw/web/js/services/config.js:1118:24)\n    at importSessionDocument (http://127.0.0.1:45193/gbdraw/web/js/services/config.js:4204:55)\n    at async importSession (http://127.0.0.1:45193/gbdraw/web/js/services/config.js:4767:20)",
+                "messages": [
+                  {
+                    "type": "init",
+                    "operation": null,
+                    "operationId": null,
+                    "fileBytes": null,
+                    "stack": "Error\n    at window.Worker.postMessage (eval at evaluate (:303:30), <anonymous>:9:49)\n    at ensureWorkerInitialized (http://127.0.0.1:45193/gbdraw/web/js/services/diagram-generation.js:291:17)\n    at http://127.0.0.1:45193/gbdraw/web/js/services/diagram-generation.js:492:35\n    at runAuxiliaryWorkerRequest (http://127.0.0.1:45193/gbdraw/web/js/services/diagram-generation.js:557:5)\n    at runDiagramHelperOperation (http://127.0.0.1:45193/gbdraw/web/js/services/diagram-generation.js:575:10)\n    at http://127.0.0.1:45193/gbdraw/web/js/app/app-setup.js:235:52\n    at validateUnmanagedConfigOverrides (http://127.0.0.1:45193/gbdraw/web/js/services/config.js:1118:24)\n    at importSessionDocument (http://127.0.0.1:45193/gbdraw/web/js/services/config.js:4204:55)\n    at async importSession (http://127.0.0.1:45193/gbdraw/web/js/services/config.js:4767:20)"
+                  },
+                  {
+                    "type": "helper",
+                    "operation": "validateConfigOverrides",
+                    "operationId": null,
+                    "fileBytes": null,
+                    "stack": "Error\n    at window.Worker.postMessage (eval at evaluate (:303:30), <anonymous>:9:49)\n    at http://127.0.0.1:45193/gbdraw/web/js/services/diagram-generation.js:544:21"
+                  },
+                  {
+                    "type": "helper",
+                    "operation": "evaluateRules",
+                    "operationId": null,
+                    "fileBytes": null,
+                    "stack": "Error\n    at window.Worker.postMessage (eval at evaluate (:303:30), <anonymous>:9:49)\n    at http://127.0.0.1:45193/gbdraw/web/js/services/diagram-generation.js:544:21"
+                  }
+                ],
+                "listeners": 0,
+                "terminations": 0
+              }
+            ]
+          },
+          "saveStatus": "saved",
+          "saved": "/tmp/issue597-S05-resume-evidence/journey/real-0-generated.json.gz",
+          "pageErrors": [],
+          "externalRequests": [],
+          "pythonPreviewWorkerCount": 1,
+          "previewWorkerFreeAcceptance": false,
+          "generateAcceptance": false,
+          "beforeGenerate": {
+            "requestRecords": 12,
+            "requestSha256": "4a24e726f9b038fdf0b999bfdd808cb34963ce4054e6df5ecdd963b39cac489b",
+            "preview": true,
+            "workers": [
+              {
+                "url": "http://127.0.0.1:45193/gbdraw/web/js/workers/session-import-worker.js",
+                "stack": "Error\n    at new window.Worker (eval at evaluate (:303:30), <anonymous>:5:79)\n    at http://127.0.0.1:45193/gbdraw/web/js/services/session-import-client.js:67:14\n    at new Promise (<anonymous>)\n    at importSessionFile (http://127.0.0.1:45193/gbdraw/web/js/services/session-import-client.js:10:61)\n    at importSessionDocument (http://127.0.0.1:45193/gbdraw/web/js/services/config.js:4174:29)\n    at importSession (http://127.0.0.1:45193/gbdraw/web/js/services/config.js:4767:26)",
+                "messages": [
+                  {
+                    "type": null,
+                    "operation": null,
+                    "operationId": 1,
+                    "fileBytes": 134471323,
+                    "stack": "Error\n    at window.Worker.postMessage (eval at evaluate (:303:30), <anonymous>:9:49)\n    at http://127.0.0.1:45193/gbdraw/web/js/services/session-import-client.js:73:12\n    at new Promise (<anonymous>)\n    at importSessionFile (http://127.0.0.1:45193/gbdraw/web/js/services/session-import-client.js:10:61)\n    at importSessionDocument (http://127.0.0.1:45193/gbdraw/web/js/services/config.js:4174:29)\n    at importSession (http://127.0.0.1:45193/gbdraw/web/js/services/config.js:4767:26)"
+                  }
+                ],
+                "listeners": 0,
+                "terminations": 1
+              },
+              {
+                "url": "http://127.0.0.1:45193/gbdraw/web/js/workers/diagram-generation-worker.js",
+                "stack": "Error\n    at new window.Worker (eval at evaluate (:303:30), <anonymous>:5:79)\n    at getWorker (http://127.0.0.1:45193/gbdraw/web/js/services/diagram-generation.js:192:14)\n    at ensureWorkerInitialized (http://127.0.0.1:45193/gbdraw/web/js/services/diagram-generation.js:234:25)\n    at http://127.0.0.1:45193/gbdraw/web/js/services/diagram-generation.js:492:35\n    at runAuxiliaryWorkerRequest (http://127.0.0.1:45193/gbdraw/web/js/services/diagram-generation.js:557:5)\n    at runDiagramHelperOperation (http://127.0.0.1:45193/gbdraw/web/js/services/diagram-generation.js:575:10)\n    at http://127.0.0.1:45193/gbdraw/web/js/app/app-setup.js:235:52\n    at validateUnmanagedConfigOverrides (http://127.0.0.1:45193/gbdraw/web/js/services/config.js:1118:24)\n    at importSessionDocument (http://127.0.0.1:45193/gbdraw/web/js/services/config.js:4204:55)\n    at async importSession (http://127.0.0.1:45193/gbdraw/web/js/services/config.js:4767:20)",
+                "messages": [
+                  {
+                    "type": "init",
+                    "operation": null,
+                    "operationId": null,
+                    "fileBytes": null,
+                    "stack": "Error\n    at window.Worker.postMessage (eval at evaluate (:303:30), <anonymous>:9:49)\n    at ensureWorkerInitialized (http://127.0.0.1:45193/gbdraw/web/js/services/diagram-generation.js:291:17)\n    at http://127.0.0.1:45193/gbdraw/web/js/services/diagram-generation.js:492:35\n    at runAuxiliaryWorkerRequest (http://127.0.0.1:45193/gbdraw/web/js/services/diagram-generation.js:557:5)\n    at runDiagramHelperOperation (http://127.0.0.1:45193/gbdraw/web/js/services/diagram-generation.js:575:10)\n    at http://127.0.0.1:45193/gbdraw/web/js/app/app-setup.js:235:52\n    at validateUnmanagedConfigOverrides (http://127.0.0.1:45193/gbdraw/web/js/services/config.js:1118:24)\n    at importSessionDocument (http://127.0.0.1:45193/gbdraw/web/js/services/config.js:4204:55)\n    at async importSession (http://127.0.0.1:45193/gbdraw/web/js/services/config.js:4767:20)"
+                  },
+                  {
+                    "type": "helper",
+                    "operation": "validateConfigOverrides",
+                    "operationId": null,
+                    "fileBytes": null,
+                    "stack": "Error\n    at window.Worker.postMessage (eval at evaluate (:303:30), <anonymous>:9:49)\n    at http://127.0.0.1:45193/gbdraw/web/js/services/diagram-generation.js:544:21"
+                  }
+                ],
+                "listeners": 0,
+                "terminations": 0
+              }
+            ]
+          }
+        }
+      ]
+    }
+  },
+  "diagnostics": {
+    "journey-diagnosis": {
+      "served": "candidate",
+      "rawArtifact": "/tmp/issue597-S05-resume-evidence/journey-diagnosis/result.json",
+      "status": "error",
+      "errorSummary": "Sequence #1: Missing GenBank file.",
+      "previewPreserved": true,
+      "saveStatus": "saved",
+      "pythonPreviewWorkerCount": 1,
+      "diagnosticFunctionSha256": "f97f6325a4f874c307e116cf96629a5fa3fe4d28eda3a490503945f9d596d7e7",
+      "recipeSha256": "d020db6de7995d39617adb6ed0898de55de87d9fe55499303d512dfbe5e2e68e"
+    },
+    "journey-base": {
+      "served": "trusted dev d313b70b9f97c2c1d70f9ae885edbead80b62021",
+      "rawArtifact": "/tmp/issue597-S05-resume-evidence/journey-base/result.json",
+      "status": "error",
+      "errorSummary": "Sequence #1: Missing GenBank file.",
+      "previewPreserved": true,
+      "saveStatus": "saved",
+      "pythonPreviewWorkerCount": 1,
+      "diagnosticFunctionSha256": "f97f6325a4f874c307e116cf96629a5fa3fe4d28eda3a490503945f9d596d7e7",
+      "recipeSha256": "d020db6de7995d39617adb6ed0898de55de87d9fe55499303d512dfbe5e2e68e"
+    }
+  },
+  "fixtureWebBindings": {
+    "ui": {
+      "mode": "linear",
+      "lInputType": null
+    },
+    "webFilesKeys": [
+      "bindings"
+    ],
+    "bindings": {
+      "schema": 2,
+      "c_gb": null,
+      "c_gff": null,
+      "c_fasta": null,
+      "c_depth": null,
+      "c_conservation_blasts": [],
+      "c_conservation_blasts_source": null,
+      "c_conservation_fastas": [],
+      "c_conservation_sequence_sources": null,
+      "d_color": null,
+      "t_color": null,
+      "blacklist": null,
+      "whitelist": null,
+      "qualifier_priority": null,
+      "linearSeqs": [],
+      "linearComparisons": []
+    },
+    "fileKeys": [],
+    "linearCount": 0
+  }
+}

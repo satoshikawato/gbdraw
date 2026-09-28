@@ -1,0 +1,710 @@
+{
+  "source": "ecb96a065d808addff0fb088f9eb6b6ba3c92a6d + uncommitted S05 candidate",
+  "nativeWireBytes": null,
+  "nativeCopyBytes": null,
+  "status": "INCOMPLETE",
+  "performance": {
+    "pipeline": {
+      "vibrio": {
+        "fixtureSha256": "a3cfba6c8d883a0050529c89b1fd0849348254cdfa46dbf938a69cebef5379aa",
+        "rows": [
+          {
+            "run": 0,
+            "load": {
+              "wallMs": 7586.099999964237,
+              "heartbeat": {
+                "intervalMs": 100,
+                "count": 52,
+                "p95Ms": 116.5,
+                "maxMs": 2528.199999988079
+              },
+              "responsiveness": "FAIL",
+              "stagesMs": {
+                "session-authority-validation": 65.60000002384186,
+                "feature-catalog-validation": 1761.8999999761581,
+                "editor-state-normalization": 0.30000001192092896,
+                "resource-table-adoption": 0.0,
+                "losat-artifact-validation": 193.30000001192093,
+                "canonical-request-projection": 2.600000023841858,
+                "current-draft-validation": 0.5,
+                "artifact-projection": 0.09999996423721313,
+                "current-session-preflight": 2025.199999988079,
+                "svg-admission": 236.80000001192093,
+                "preview-mount": 697.8999999761581,
+                "history-baseline": 54.5,
+                "restoreBeforeSvgAdmission": 12.5
+              },
+              "pythonWorkerCount": 0,
+              "sessionWorkerCount": 1,
+              "transferredBufferBytes": 128254176,
+              "transferredBufferCount": 501,
+              "nativeWireBytes": null,
+              "nativeCopyBytes": null
+            },
+            "save": {
+              "wallMs": 4009.5,
+              "heartbeat": {
+                "intervalMs": 100,
+                "count": 37,
+                "p95Ms": 137.89999997615814,
+                "maxMs": 405.5
+              },
+              "responsiveness": "PASS",
+              "stagesMs": {
+                "session-save-catalog-preparation": 0.0,
+                "session-save-projection": 82.30000001192093,
+                "session-save-compression": 3291.199999988079
+              },
+              "pythonWorkerCount": 0,
+              "sessionWorkerCount": 1,
+              "transferredBufferBytes": null,
+              "transferredBufferCount": null,
+              "nativeWireBytes": null,
+              "nativeCopyBytes": null
+            },
+            "sectionEquality": {
+              "renderRequest": true,
+              "resources": true,
+              "webFiles": false,
+              "editorState": false,
+              "losatCache": false,
+              "losatDerivedCache": true,
+              "proteinIdentityManifest": true
+            },
+            "pageErrors": [],
+            "externalRequests": []
+          },
+          {
+            "run": 1,
+            "load": {
+              "wallMs": 8133.600000023842,
+              "heartbeat": {
+                "intervalMs": 100,
+                "count": 55,
+                "p95Ms": 132.69999998807907,
+                "maxMs": 2810.2999999523163
+              },
+              "responsiveness": "FAIL",
+              "stagesMs": {
+                "session-authority-validation": 69.5,
+                "feature-catalog-validation": 1874.8999999761581,
+                "editor-state-normalization": 0.19999998807907104,
+                "resource-table-adoption": 0.19999998807907104,
+                "losat-artifact-validation": 216.60000002384186,
+                "canonical-request-projection": 2.800000011920929,
+                "current-draft-validation": 0.5,
+                "artifact-projection": 0.10000002384185791,
+                "current-session-preflight": 2165.699999988079,
+                "svg-admission": 260.0,
+                "preview-mount": 772.0,
+                "history-baseline": 63.0,
+                "restoreBeforeSvgAdmission": 13.5
+              },
+              "pythonWorkerCount": 0,
+              "sessionWorkerCount": 1,
+              "transferredBufferBytes": 128254176,
+              "transferredBufferCount": 501,
+              "nativeWireBytes": null,
+              "nativeCopyBytes": null
+            },
+            "save": {
+              "wallMs": 3933.399999976158,
+              "heartbeat": {
+                "intervalMs": 100,
+                "count": 37,
+                "p95Ms": 129.19999998807907,
+                "maxMs": 411.89999997615814
+              },
+              "responsiveness": "PASS",
+              "stagesMs": {
+                "session-save-catalog-preparation": 0.09999996423721313,
+                "session-save-projection": 78.0,
+                "session-save-compression": 3274.100000023842
+              },
+              "pythonWorkerCount": 0,
+              "sessionWorkerCount": 1,
+              "transferredBufferBytes": null,
+              "transferredBufferCount": null,
+              "nativeWireBytes": null,
+              "nativeCopyBytes": null
+            },
+            "sectionEquality": {
+              "renderRequest": true,
+              "resources": true,
+              "webFiles": false,
+              "editorState": false,
+              "losatCache": false,
+              "losatDerivedCache": true,
+              "proteinIdentityManifest": true
+            },
+            "pageErrors": [],
+            "externalRequests": []
+          },
+          {
+            "run": 2,
+            "load": {
+              "wallMs": 7537.199999988079,
+              "heartbeat": {
+                "intervalMs": 100,
+                "count": 51,
+                "p95Ms": 128.79999995231628,
+                "maxMs": 2556.699999988079
+              },
+              "responsiveness": "FAIL",
+              "stagesMs": {
+                "session-authority-validation": 63.40000003576279,
+                "feature-catalog-validation": 1735.699999988079,
+                "editor-state-normalization": 0.10000002384185791,
+                "resource-table-adoption": 0.09999996423721313,
+                "losat-artifact-validation": 197.5,
+                "canonical-request-projection": 2.599999964237213,
+                "current-draft-validation": 0.5,
+                "artifact-projection": 0.0,
+                "current-session-preflight": 2000.699999988079,
+                "svg-admission": 235.69999998807907,
+                "preview-mount": 676.8999999761581,
+                "history-baseline": 55.89999997615814,
+                "restoreBeforeSvgAdmission": 12.700000047683716
+              },
+              "pythonWorkerCount": 0,
+              "sessionWorkerCount": 1,
+              "transferredBufferBytes": 128254176,
+              "transferredBufferCount": 501,
+              "nativeWireBytes": null,
+              "nativeCopyBytes": null
+            },
+            "save": {
+              "wallMs": 4006.399999976158,
+              "heartbeat": {
+                "intervalMs": 100,
+                "count": 36,
+                "p95Ms": 186.29999995231628,
+                "maxMs": 439.69999998807907
+              },
+              "responsiveness": "PASS",
+              "stagesMs": {
+                "session-save-catalog-preparation": 0.0,
+                "session-save-projection": 86.0,
+                "session-save-compression": 3274.900000035763
+              },
+              "pythonWorkerCount": 0,
+              "sessionWorkerCount": 1,
+              "transferredBufferBytes": null,
+              "transferredBufferCount": null,
+              "nativeWireBytes": null,
+              "nativeCopyBytes": null
+            },
+            "sectionEquality": {
+              "renderRequest": true,
+              "resources": true,
+              "webFiles": false,
+              "editorState": false,
+              "losatCache": false,
+              "losatDerivedCache": true,
+              "proteinIdentityManifest": true
+            },
+            "pageErrors": [],
+            "externalRequests": []
+          }
+        ]
+      },
+      "real": {
+        "fixtureSha256": "d3cafef9664bff958aec4932eea6e264ae872cce89762a7cbe617447af975388",
+        "rows": [
+          {
+            "run": 0,
+            "load": {
+              "wallMs": 38301.19999998808,
+              "heartbeat": {
+                "intervalMs": 100,
+                "count": 290,
+                "p95Ms": 106.69999998807907,
+                "maxMs": 9037.599999964237
+              },
+              "responsiveness": "FAIL",
+              "stagesMs": {
+                "session-authority-validation": 335.30000001192093,
+                "feature-catalog-validation": 6884.599999964237,
+                "editor-state-normalization": 0.20000004768371582,
+                "resource-table-adoption": 0.09999996423721313,
+                "losat-artifact-validation": 1949.1000000238419,
+                "canonical-request-projection": 3.199999988079071,
+                "artifact-projection": 0.0,
+                "current-session-preflight": 9173.699999988079,
+                "svg-admission": 831.1000000238419,
+                "preview-mount": 2307.0,
+                "history-baseline": 84.39999997615814,
+                "restoreBeforeSvgAdmission": 5577.800000011921
+              },
+              "pythonWorkerCount": 1,
+              "sessionWorkerCount": 1,
+              "transferredBufferBytes": 695553402,
+              "transferredBufferCount": 2741,
+              "nativeWireBytes": null,
+              "nativeCopyBytes": null
+            },
+            "save": {
+              "wallMs": 16540.200000047684,
+              "heartbeat": {
+                "intervalMs": 100,
+                "count": 146,
+                "p95Ms": 127.40000003576279,
+                "maxMs": 457.39999997615814
+              },
+              "responsiveness": "PASS",
+              "stagesMs": {
+                "session-save-catalog-preparation": 0.09999996423721313,
+                "session-save-projection": 438.5,
+                "session-save-compression": 14335.5
+              },
+              "pythonWorkerCount": 1,
+              "sessionWorkerCount": 1,
+              "transferredBufferBytes": null,
+              "transferredBufferCount": null,
+              "nativeWireBytes": null,
+              "nativeCopyBytes": null
+            },
+            "sectionEquality": {
+              "renderRequest": true,
+              "resources": true,
+              "webFiles": false,
+              "editorState": false,
+              "losatCache": false,
+              "losatDerivedCache": true,
+              "proteinIdentityManifest": true
+            },
+            "pageErrors": [],
+            "externalRequests": []
+          },
+          {
+            "run": 1,
+            "load": {
+              "wallMs": 35701.200000047684,
+              "heartbeat": {
+                "intervalMs": 100,
+                "count": 269,
+                "p95Ms": 107.69999998807907,
+                "maxMs": 8502.599999964237
+              },
+              "responsiveness": "FAIL",
+              "stagesMs": {
+                "session-authority-validation": 275.30000001192093,
+                "feature-catalog-validation": 6178.5,
+                "editor-state-normalization": 0.30000001192092896,
+                "resource-table-adoption": 0.19999998807907104,
+                "losat-artifact-validation": 2059.699999988079,
+                "canonical-request-projection": 3.900000035762787,
+                "artifact-projection": 0.10000002384185791,
+                "current-session-preflight": 8519.0,
+                "svg-admission": 847.5,
+                "preview-mount": 2151.300000011921,
+                "history-baseline": 93,
+                "restoreBeforeSvgAdmission": 5568.399999976158
+              },
+              "pythonWorkerCount": 1,
+              "sessionWorkerCount": 1,
+              "transferredBufferBytes": 695553402,
+              "transferredBufferCount": 2741,
+              "nativeWireBytes": null,
+              "nativeCopyBytes": null
+            },
+            "save": {
+              "wallMs": 25192.399999976158,
+              "heartbeat": {
+                "intervalMs": 100,
+                "count": 223,
+                "p95Ms": 137.19999998807907,
+                "maxMs": 587.8000000119209
+              },
+              "responsiveness": "FAIL",
+              "stagesMs": {
+                "session-save-catalog-preparation": 0.0,
+                "session-save-projection": 567.4000000357628,
+                "session-save-compression": 22039.19999998808
+              },
+              "pythonWorkerCount": 1,
+              "sessionWorkerCount": 1,
+              "transferredBufferBytes": null,
+              "transferredBufferCount": null,
+              "nativeWireBytes": null,
+              "nativeCopyBytes": null
+            },
+            "sectionEquality": {
+              "renderRequest": true,
+              "resources": true,
+              "webFiles": false,
+              "editorState": false,
+              "losatCache": false,
+              "losatDerivedCache": true,
+              "proteinIdentityManifest": true
+            },
+            "pageErrors": [],
+            "externalRequests": []
+          },
+          {
+            "run": 2,
+            "load": {
+              "wallMs": 55882.30000001192,
+              "heartbeat": {
+                "intervalMs": 100,
+                "count": 430,
+                "p95Ms": 105.5,
+                "maxMs": 12413.300000011921
+              },
+              "responsiveness": "FAIL",
+              "stagesMs": {
+                "session-authority-validation": 428.30000001192093,
+                "feature-catalog-validation": 9648.599999964237,
+                "editor-state-normalization": 0.20000004768371582,
+                "resource-table-adoption": 0.3999999761581421,
+                "losat-artifact-validation": 2731.199999988079,
+                "canonical-request-projection": 4.199999988079071,
+                "artifact-projection": 0.10000002384185791,
+                "current-session-preflight": 12814.199999988079,
+                "svg-admission": 1377.5999999642372,
+                "preview-mount": 3232.199999988079,
+                "history-baseline": 149.0,
+                "restoreBeforeSvgAdmission": 8494.100000023842
+              },
+              "pythonWorkerCount": 1,
+              "sessionWorkerCount": 1,
+              "transferredBufferBytes": 695553402,
+              "transferredBufferCount": 2741,
+              "nativeWireBytes": null,
+              "nativeCopyBytes": null
+            },
+            "save": {
+              "wallMs": 23115.30000001192,
+              "heartbeat": {
+                "intervalMs": 100,
+                "count": 200,
+                "p95Ms": 127.89999997615814,
+                "maxMs": 659.8000000119209
+              },
+              "responsiveness": "FAIL",
+              "stagesMs": {
+                "session-save-catalog-preparation": 0.10000002384185791,
+                "session-save-projection": 638.5,
+                "session-save-compression": 19821.69999998808
+              },
+              "pythonWorkerCount": 1,
+              "sessionWorkerCount": 1,
+              "transferredBufferBytes": null,
+              "transferredBufferCount": null,
+              "nativeWireBytes": null,
+              "nativeCopyBytes": null
+            },
+            "sectionEquality": {
+              "renderRequest": true,
+              "resources": true,
+              "webFiles": false,
+              "editorState": false,
+              "losatCache": false,
+              "losatDerivedCache": true,
+              "proteinIdentityManifest": true
+            },
+            "pageErrors": [],
+            "externalRequests": []
+          }
+        ]
+      }
+    },
+    "transport": {
+      "vibrio": {
+        "fixtureSha256": "a3cfba6c8d883a0050529c89b1fd0849348254cdfa46dbf938a69cebef5379aa",
+        "rows": [
+          {
+            "run": 0,
+            "transport": {
+              "wallMs": 5181.299999952316,
+              "heartbeat": {
+                "intervalMs": 100,
+                "count": 52,
+                "p95Ms": 102.39999997615814,
+                "maxMs": 105.89999997615814
+              },
+              "responsiveness": "PASS",
+              "stagesMs": {},
+              "pythonWorkerCount": 0,
+              "sessionWorkerCount": 1,
+              "transferredBufferBytes": 128254176,
+              "transferredBufferCount": 501,
+              "nativeWireBytes": null,
+              "nativeCopyBytes": null
+            },
+            "exactJsonEquality": true
+          },
+          {
+            "run": 1,
+            "transport": {
+              "wallMs": 4656.399999976158,
+              "heartbeat": {
+                "intervalMs": 100,
+                "count": 47,
+                "p95Ms": 101.89999997615814,
+                "maxMs": 102.39999997615814
+              },
+              "responsiveness": "PASS",
+              "stagesMs": {},
+              "pythonWorkerCount": 0,
+              "sessionWorkerCount": 1,
+              "transferredBufferBytes": 128254176,
+              "transferredBufferCount": 501,
+              "nativeWireBytes": null,
+              "nativeCopyBytes": null
+            },
+            "exactJsonEquality": true
+          },
+          {
+            "run": 2,
+            "transport": {
+              "wallMs": 5429.199999988079,
+              "heartbeat": {
+                "intervalMs": 100,
+                "count": 54,
+                "p95Ms": 103.30000001192093,
+                "maxMs": 105.39999997615814
+              },
+              "responsiveness": "PASS",
+              "stagesMs": {},
+              "pythonWorkerCount": 0,
+              "sessionWorkerCount": 1,
+              "transferredBufferBytes": 128254176,
+              "transferredBufferCount": 501,
+              "nativeWireBytes": null,
+              "nativeCopyBytes": null
+            },
+            "exactJsonEquality": true
+          }
+        ]
+      },
+      "real": {
+        "fixtureSha256": "d3cafef9664bff958aec4932eea6e264ae872cce89762a7cbe617447af975388",
+        "rows": [
+          {
+            "run": 0,
+            "transport": {
+              "wallMs": 22885.100000023842,
+              "heartbeat": {
+                "intervalMs": 100,
+                "count": 229,
+                "p95Ms": 102.5,
+                "maxMs": 105.70000004768372
+              },
+              "responsiveness": "PASS",
+              "stagesMs": {},
+              "pythonWorkerCount": 0,
+              "sessionWorkerCount": 1,
+              "transferredBufferBytes": 695553402,
+              "transferredBufferCount": 2741,
+              "nativeWireBytes": null,
+              "nativeCopyBytes": null
+            },
+            "exactJsonEquality": true
+          },
+          {
+            "run": 1,
+            "transport": {
+              "wallMs": 11779.699999988079,
+              "heartbeat": {
+                "intervalMs": 100,
+                "count": 118,
+                "p95Ms": 101.5,
+                "maxMs": 102.70000004768372
+              },
+              "responsiveness": "PASS",
+              "stagesMs": {},
+              "pythonWorkerCount": 0,
+              "sessionWorkerCount": 1,
+              "transferredBufferBytes": 695553402,
+              "transferredBufferCount": 2741,
+              "nativeWireBytes": null,
+              "nativeCopyBytes": null
+            },
+            "exactJsonEquality": true
+          },
+          {
+            "run": 2,
+            "transport": {
+              "wallMs": 12939.599999964237,
+              "heartbeat": {
+                "intervalMs": 100,
+                "count": 129,
+                "p95Ms": 101.5,
+                "maxMs": 106.30000001192093
+              },
+              "responsiveness": "PASS",
+              "stagesMs": {},
+              "pythonWorkerCount": 0,
+              "sessionWorkerCount": 1,
+              "transferredBufferBytes": 695553402,
+              "transferredBufferCount": 2741,
+              "nativeWireBytes": null,
+              "nativeCopyBytes": null
+            },
+            "exactJsonEquality": true
+          }
+        ]
+      },
+      "small-plain": {
+        "fixtureSha256": "d53cf930db19cbe2f8c201909d06c69ba02140ffd06498021e7582ddebed83db",
+        "rows": [
+          {
+            "run": 0,
+            "transport": {
+              "wallMs": 226.4000000357628,
+              "heartbeat": {
+                "intervalMs": 100,
+                "count": 2,
+                "p95Ms": 99.89999997615814,
+                "maxMs": 99.89999997615814
+              },
+              "responsiveness": "PASS",
+              "stagesMs": {},
+              "pythonWorkerCount": 0,
+              "sessionWorkerCount": 1,
+              "transferredBufferBytes": 345830,
+              "transferredBufferCount": 2,
+              "nativeWireBytes": null,
+              "nativeCopyBytes": null
+            },
+            "exactJsonEquality": true
+          },
+          {
+            "run": 1,
+            "transport": {
+              "wallMs": 228.89999997615814,
+              "heartbeat": {
+                "intervalMs": 100,
+                "count": 2,
+                "p95Ms": 100,
+                "maxMs": 100
+              },
+              "responsiveness": "PASS",
+              "stagesMs": {},
+              "pythonWorkerCount": 0,
+              "sessionWorkerCount": 1,
+              "transferredBufferBytes": 345830,
+              "transferredBufferCount": 2,
+              "nativeWireBytes": null,
+              "nativeCopyBytes": null
+            },
+            "exactJsonEquality": true
+          },
+          {
+            "run": 2,
+            "transport": {
+              "wallMs": 234.20000004768372,
+              "heartbeat": {
+                "intervalMs": 100,
+                "count": 2,
+                "p95Ms": 99.90000003576279,
+                "maxMs": 99.90000003576279
+              },
+              "responsiveness": "PASS",
+              "stagesMs": {},
+              "pythonWorkerCount": 0,
+              "sessionWorkerCount": 1,
+              "transferredBufferBytes": 345830,
+              "transferredBufferCount": 2,
+              "nativeWireBytes": null,
+              "nativeCopyBytes": null
+            },
+            "exactJsonEquality": true
+          }
+        ]
+      }
+    }
+  },
+  "strictCLI": [
+    {
+      "run": 0,
+      "equal": true,
+      "differenceCount": 0,
+      "expectedSha256": "12ba12af0dc139c8f1a0cf786778c2eac84d00418541bac408bc69e98c8afe8d",
+      "actualSha256": "676f161154d8402213642e25b818c4f219abd2131c0fcc2b60b2258bf8496a9a"
+    },
+    {
+      "run": 1,
+      "equal": true,
+      "differenceCount": 0,
+      "expectedSha256": "12ba12af0dc139c8f1a0cf786778c2eac84d00418541bac408bc69e98c8afe8d",
+      "actualSha256": "676f161154d8402213642e25b818c4f219abd2131c0fcc2b60b2258bf8496a9a"
+    },
+    {
+      "run": 2,
+      "equal": true,
+      "differenceCount": 0,
+      "expectedSha256": "12ba12af0dc139c8f1a0cf786778c2eac84d00418541bac408bc69e98c8afe8d",
+      "actualSha256": "676f161154d8402213642e25b818c4f219abd2131c0fcc2b60b2258bf8496a9a"
+    }
+  ],
+  "nativeTrace": {
+    "traceSha256": "429b1cc893567cdfdaa099644ccfdf588dbb00e6a75e7b1a66a2436c43c35f03",
+    "eventCount": 1665213,
+    "nativeDurations": [
+      {
+        "name": "SerializedScriptValueFactory::create",
+        "pid": 2661570,
+        "tid": 2661570,
+        "threadName": "CrRendererMain",
+        "count": 69474,
+        "maxDurationMs": 0.122
+      },
+      {
+        "name": "HandlePostMessage",
+        "pid": 2661570,
+        "tid": 2661619,
+        "threadName": "DedicatedWorker thread",
+        "count": 69521,
+        "maxDurationMs": 1.563
+      },
+      {
+        "name": "SerializedScriptValueFactory::deserialize",
+        "pid": 2661570,
+        "tid": 2661619,
+        "threadName": "DedicatedWorker thread",
+        "count": 68992,
+        "maxDurationMs": 0.061
+      },
+      {
+        "name": "SerializedScriptValueFactory::create",
+        "pid": 2661570,
+        "tid": 2661619,
+        "threadName": "DedicatedWorker thread",
+        "count": 69521,
+        "maxDurationMs": 1.417
+      },
+      {
+        "name": "HandlePostMessage",
+        "pid": 2661570,
+        "tid": 2661570,
+        "threadName": "CrRendererMain",
+        "count": 69521,
+        "maxDurationMs": 29.697
+      },
+      {
+        "name": "SerializedScriptValueFactory::deserialize",
+        "pid": 2661570,
+        "tid": 2661570,
+        "threadName": "CrRendererMain",
+        "count": 69521,
+        "maxDurationMs": 0.224
+      }
+    ],
+    "serializeDeserializeHandlePostMessageNumericByteFields": {},
+    "nativeStructuredCloneWireBytes": null,
+    "nativeStructuredCloneCopyBytes": null,
+    "status": "UNAVAILABLE",
+    "qualification": "Native clone/receiver events expose no attributed numeric wire/copy fields. Mojo packet sizes are not Dedicated Worker clone bytes. Transfer buffer lengths, JSON sizes and heap deltas are not replacements. Supplementary tracing overhead does not replace primary three-run heartbeat measurements.",
+    "enclosingMainReceiverTasks": [
+      {
+        "pid": 2661570,
+        "tid": 2661570,
+        "matchingHandleCount": 69521,
+        "totalHandleCount": 69521,
+        "maximumEnclosingReceiverTaskMs": 29.71
+      }
+    ]
+  }
+}

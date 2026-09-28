@@ -18,6 +18,7 @@ from flows.web_capture import (
     assert_output_paths,
     capture_screenshot,
     generate_and_inspect,
+    open_ancestor_details,
     open_browser_capture,
     wait_for_app_shell,
 )
@@ -634,7 +635,7 @@ def _open_human_circular(page: Page, prefix: str) -> None:
     output_prefix = page.get_by_label("Output Prefix", exact=True)
     output_prefix.fill(prefix)
     expect(output_prefix).to_have_value(prefix)
-    track_preset = page.get_by_label("Track Preset", exact=True)
+    track_preset = open_ancestor_details(page.get_by_label("Track Preset", exact=True))
     track_preset.select_option("middle")
     expect(track_preset).to_have_value("middle")
 

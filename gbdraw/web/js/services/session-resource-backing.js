@@ -1,6 +1,6 @@
 import {
   base64DecodedLastByte,
-  base64ToBytes,
+  base64ToBytesInTasks,
   bytesToText,
   sha256Hex,
   textToBytes
@@ -153,7 +153,7 @@ const requireBacking = (table, resourceId) => {
   return backing;
 };
 
-const decodedResourceBytes = (backing) => {
+const decodedResourceBytes = async (backing) => {
   if (isEncodedDepthFileEntry(backing.descriptor)) {
     return textToBytes(decodeDepthText(backing.descriptor.data));
   }
@@ -161,7 +161,7 @@ const decodedResourceBytes = (backing) => {
     resourceId: backing.resourceId,
     resourceName: backing.name
   });
-  return base64ToBytes(backing.descriptor.data);
+  return base64ToBytesInTasks(backing.descriptor.data);
 };
 
 const materializeBytes = (backing) => {
@@ -173,7 +173,7 @@ const materializeBytes = (backing) => {
     backing.bytesPromise = Promise.resolve().then(async () => {
       let bytes;
       try {
-        bytes = decodedResourceBytes(backing);
+        bytes = await decodedResourceBytes(backing);
       } catch (error) {
         throw new Error(
           `Session resource ${backing.resourceId} (${backing.name}) contains invalid encoded data.`,

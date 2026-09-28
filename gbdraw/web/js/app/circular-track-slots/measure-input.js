@@ -11,7 +11,8 @@ export const CircularMeasureInput = {
     slotId: { type: String, required: true },
     field: { type: String, required: true },
     controlId: { type: String, required: true },
-    autoText: { type: String, default: '' }
+    autoText: { type: String, default: '' },
+    disabled: { type: Boolean, default: false }
   },
   emits: ['update:modelValue'],
   setup(props, { emit }) {

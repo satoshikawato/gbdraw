@@ -86,9 +86,12 @@ compatible render request needed to continue editing.
 ## Step 6: Reproduce the figure in a fresh context
 
 Open a fresh gbdraw page with no files selected, select **Load Session**, and
-choose `interactive_handoff.gbdraw-session.json.gz`. The app is now in the
-loaded-session state. After the result is restored, change **Output Prefix** to
+choose `interactive_handoff.gbdraw-session.json.gz`. Editing controls wait
+while **Loading session…** is shown. After the result is restored, **Source
+records** shows **Records not inspected** because the saved preview is displayed
+without reading the embedded GenBank record again. Change **Output Prefix** to
 `restored_interactive_figure`, select **Generate Diagram**, and export **SVG**.
+Generate inspects the embedded record before rendering.
 
 The saved file is `restored_interactive_figure.svg`. Its record, feature IDs,
 texts, labels, track groups, and placement match the original figure; only

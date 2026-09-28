@@ -13,6 +13,8 @@ import {
 import {
   projectCompositionRecordIdentity,
   buildCanonicalRenderRequest,
+  bindCanonicalTypedResource,
+  projectGeneratedProteinRecipe,
   projectCommittedRecordTransform,
   projectCommittedSimilarityAlignment,
   readCanonicalResourceRecordCount
@@ -76,6 +78,7 @@ import { requireLinearLabelVisibilityMode } from './linear-label-visibility.js';
 import { createZipBlob } from '../utils/zip.js';
 import { classifyOptionalPositiveNumber } from '../utils/optional-positive-number.js';
 import { cloneJsonData, cloneJsonValue } from '../services/json-clone.js';
+import { bytesToBase64, bytesToText } from '../services/byte-utils.js';
 import { downloadBlob, downloadTextFile } from '../services/text-download.js';
 import {
   normalizeCircularPlotTitlePosition,
@@ -104,6 +107,7 @@ import {
   requireCurrentProteinBlastpMode
 } from './current-option-values.js';
 import {
+  circularDiscoveryForInput,
   discoverGffFastaRecords,
   discoverSequenceRecords
 } from './record-discovery.js';
@@ -548,11 +552,10 @@ const canReuseResolvedProteinArtifacts = ({
 };
 
 const stripRuntimeCacheStats = (payload) => {
-  const cloned = cloneJsonData(payload);
-  if (cloned && typeof cloned === 'object' && !Array.isArray(cloned)) {
-    delete cloned.cache;
-  }
-  return cloned;
+  // Canonical comparison data is read-only across rendering and cache reuse.
+  // Only the transient statistics owner differs; do not duplicate the full result.
+  const { cache: _cache, ...stored } = payload;
+  return stored;
 };
 
 const LEGACY_PROTEIN_REFERENCE_RE = /p_[A-Za-z0-9._%+-]+?_\d+_\d+_(?:-1|0|1)_[0-9a-f]{12}(?:_[2-9][0-9]*)?/g;
@@ -636,6 +639,37 @@ const setLosatDerivedCacheEntry = (cacheMap, key, { mode, payload, manifest }) =
 const makeSafeFilename = (name) => {
   const cleaned = String(name || '').replace(/[^\w.-]+/g, '_').replace(/^_+|_+$/g, '');
   return cleaned || 'losat';
+};
+// The deferred replay builder outlives its Generate through the CLI helper
+// files. Build it outside that scope so it retains only the published artifact,
+// not the pre-Generate rollback handle and, through it, every earlier artifact.
+const createCanonicalReplayTextBuilder = ({
+  version,
+  startedAtIso,
+  renderRequest,
+  resources,
+  publishedArtifact
+}) => () => {
+  recordSessionLifecycleEvent('canonical-replay-json-start');
+  const replayText = JSON.stringify({
+    format: 'gbdraw-session',
+    version,
+    createdAt: startedAtIso || new Date().toISOString(),
+    renderRequest,
+    resources,
+    // Export only after successful generation; reuse the published artifact.
+    results: publishedArtifact.results,
+    editorState: { featureCatalog: publishedArtifact.featureCatalog },
+    losatCache: { entries: [] },
+    losatDerivedCache: { entries: [] },
+    proteinIdentityManifest: emptyProteinIdentityManifest()
+  });
+  recordStructuralMetric('canonicalReplayFullSerializationCount');
+  recordSessionLifecycleEvent('canonical-replay-json-end');
+  recordSessionLifecycleEvent('canonical-replay-json-characters', {
+    value: replayText.length
+  });
+  return replayText;
 };
 const normalizeRecordSelectorText = (value) => {
   const normalized = String(value ?? '').trim();
@@ -1594,9 +1628,11 @@ export const createRunAnalysis = ({
       customName,
       entry.filename || defaultName || `losat_pair_${fallbackOrdinal + 1}.tsv`
     );
-    losatCacheInfo.value = losatCacheInfo.value.map((candidate) => (
-      candidate === entry ? { ...candidate, filename } : candidate
-    ));
+    if (!state.sessionOperationAvailability?.()) {
+      losatCacheInfo.value = losatCacheInfo.value.map((candidate) => (
+        candidate === entry ? { ...candidate, filename } : candidate
+      ));
+    }
     const hydrated = await hydrateLosatDownloadText(entry.key, cached);
     downloadTextFile(
       filename || 'losat.tsv',
@@ -1606,6 +1642,8 @@ export const createRunAnalysis = ({
   };
 
   const setLosatPairFilename = (edgeKey, customName) => {
+    const sessionBusy = state.sessionOperationAvailability?.();
+    if (sessionBusy) return sessionBusy;
     const entry = getLosatCacheInfoEntry(edgeKey);
     if (!entry) return;
     const defaultName = getLosatPairDefaultName(entry.edgeKey || edgeKey);
@@ -1630,16 +1668,7 @@ export const createRunAnalysis = ({
     labelTextScopeDialog.matchingCount = 0;
   };
 
-  const circularDiscoveryTargetsCurrentInput = () => {
-    const inputType = cInputType.value;
-    const primaryFile = inputType === 'gff' ? files.c_gff : files.c_gb;
-    const pairedFile = inputType === 'gff' ? files.c_fasta : null;
-    return (
-      circularRecordDiscovery.inputType === inputType &&
-      circularRecordDiscovery.primaryFile === primaryFile &&
-      circularRecordDiscovery.pairedFile === pairedFile
-    );
-  };
+  const circularDiscoveryTargetsCurrentInput = () => circularDiscoveryForInput(state).current;
 
   const circularDiscoveryMatchesCurrentInput = () => (
     circularRecordDiscovery.status === 'ready' &&
@@ -1704,7 +1733,10 @@ export const createRunAnalysis = ({
     return '';
   };
 
-  const runCircularRecordRefresh = async ({ suppress = false } = {}) => {
+  const runCircularRecordRefresh = async ({ suppress = false, automatic = false } = {}) => {
+    if (automatic && circularDiscoveryTargetsCurrentInput()
+      && (circularRecordDiscovery.status === 'deferred'
+        || (mode.value === 'circular' && ['ready', 'error'].includes(circularRecordDiscovery.status)))) return;
     const refreshGeneration = ++circularRecordRefreshGeneration;
     if (suppress || recordDiscoverySuppressed()) return;
     if (!Array.isArray(adv.multi_record_positions)) {
@@ -1743,10 +1775,8 @@ export const createRunAnalysis = ({
         ? circularRecordDiscovery.canonicalRecordIdentities
         : []
     });
-    if (
-      !hasActiveInput
-    ) {
-      circularRecordList.value = [];
+    circularRecordList.value = [];
+    if (!hasActiveInput) {
       adv.multi_record_positions.splice(0, adv.multi_record_positions.length);
       return;
     }
@@ -1779,6 +1809,12 @@ export const createRunAnalysis = ({
         (inputType === 'gff' ? files.c_gff : files.c_gb) !== primaryFile ||
         (inputType === 'gff' ? files.c_fasta : null) !== pairedFile
       ) return;
+      const busy = state.sessionOperationAvailability?.();
+      if (busy) {
+        circularRecordDiscovery.status = 'deferred';
+        circularRecordDiscovery.primaryFile = null;
+        return busy;
+      }
       const nextRecords = records.map((entry) => {
         const recordKey = preservedRecordKeys.get(String(entry.selector || '').trim())
           || preservedRecordKeys.get(String(entry.recordId || '').trim())
@@ -1808,6 +1844,12 @@ export const createRunAnalysis = ({
         (inputType === 'gff' ? files.c_gff : files.c_gb) !== primaryFile ||
         (inputType === 'gff' ? files.c_fasta : null) !== pairedFile
       ) return;
+      const busy = state.sessionOperationAvailability?.();
+      if (busy) {
+        circularRecordDiscovery.status = 'deferred';
+        circularRecordDiscovery.primaryFile = null;
+        return busy;
+      }
 
       circularRecordList.value = [];
       circularRecordDiscovery.status = 'error';
@@ -1817,6 +1859,8 @@ export const createRunAnalysis = ({
   };
 
   const refreshCircularRecordOrder = (options = {}) => {
+    const sessionBusy = state.sessionOperationAvailability?.();
+    if (sessionBusy) return sessionBusy;
     const inputType = cInputType.value;
     const fingerprint = [
       Boolean(options.suppress || recordDiscoverySuppressed()),
@@ -2088,7 +2132,6 @@ export const createRunAnalysis = ({
     let pendingLosatCacheCommit = null;
 
     if (isReflow) {
-      labelReflowProcessing.value = true;
       labelReflowLastError.value = null;
       skipCaptureBaseConfig.value = true;
       skipPositionReapply.value = true;
@@ -2134,6 +2177,7 @@ export const createRunAnalysis = ({
       let recordSelectors = [];
       let reverseFlags = [];
       const resolvedComparisons = [];
+      let generatedProteinRecipeMode = null;
       let resolvedCircularConservation = [];
       const runInfoFileMap = new Map();
       const generatedCliFileMap = new Map();
@@ -3845,6 +3889,16 @@ export const createRunAnalysis = ({
           if (useProteinBlastp && preparedJobs.length > 0 && !identityIndex) {
             throw new Error('Protein comparison identity manifest is invalid.');
           }
+          // CLI Sessions can specify a complete two-dimensional row layout.
+          // For collinearity, every pair across adjacent rows is displayed;
+          // the Web comparison-plan edges alone do not represent those pairs.
+          const canonicalGridRows = useCollinearBlastp && linearRecordLayoutEnabled.value
+            ? linearSeqs.map((seq) => linearRecordRows.find((entry) => entry.uid === seq.uid))
+            : null;
+          const hasCanonicalGridRows = canonicalGridRows?.length > 1
+            && canonicalGridRows.every((entry) => entry?.canonicalRow === entry.row
+              && Number.isInteger(entry.canonicalColumn) && entry.canonicalColumn > 0
+              && entry.canonicalCardinality === 'exactly_one');
           try {
             for (const [jobIndex, { spec, losatArgs, cacheMetadata, batch }] of preparedJobs.entries()) {
               throwIfGenerationCanceled();
@@ -3890,11 +3944,16 @@ export const createRunAnalysis = ({
               const resolvedEdge = comparisonResolution.edges.find(
                 (edge) => edge.edgeKey === spec.edgeKey
               );
-              const isResolvedDisplayPair = Boolean(
-                resolvedEdge &&
-                spec.queryIndex === resolvedEdge.queryIndex &&
-                spec.subjectIndex === resolvedEdge.subjectIndex
-              );
+              const isResolvedDisplayPair = hasCanonicalGridRows
+                ? spec.queryIndex < spec.subjectIndex && Math.abs(
+                    canonicalGridRows[spec.queryIndex].row
+                    - canonicalGridRows[spec.subjectIndex].row
+                  ) === 1
+                : Boolean(
+                    resolvedEdge &&
+                    spec.queryIndex === resolvedEdge.queryIndex &&
+                    spec.subjectIndex === resolvedEdge.subjectIndex
+                  );
               const pair = {
                 pairIndex: spec.ordinal,
                 ordinal: spec.ordinal,
@@ -4137,6 +4196,7 @@ export const createRunAnalysis = ({
                 collinearInferOrthogroups,
                 orthogroupMembershipMode,
                 orthogroupMemberMaxHits,
+                explicitDisplayPairs: Boolean(hasCanonicalGridRows),
                 recordPayloads,
                 pairPayloads
               });
@@ -4195,10 +4255,24 @@ export const createRunAnalysis = ({
                   collinearSearchScope,
                   collinearInferOrthogroups,
                   orthogroupMembershipMode,
-                  orthogroupMemberMaxHits
+                  orthogroupMemberMaxHits,
+                  explicitDisplayPairs: Boolean(hasCanonicalGridRows)
                 }
               );
               convertedPayload = response.result;
+              if (["orthogroup", "collinear"].includes(blastpMode)) {
+                const resourceKey = blastpMode === "collinear" ? "collinearityResult" : "orthogroupResult";
+                const canonical = convertedPayload.canonicalResource;
+                if (!(canonical?.bytes instanceof Uint8Array) || canonical.bytes.byteLength !== canonical.size) {
+                  throw new Error("Analysis canonical resource bytes are missing.");
+                }
+                convertedPayload[resourceKey] = JSON.parse(bytesToText(canonical.bytes));
+                bindCanonicalTypedResource(convertedPayload[resourceKey], {
+                  kind: canonical.kind, type: "application/json", size: canonical.size,
+                  lastModified: 0, encoding: "base64", data: bytesToBase64(canonical.bytes)
+                });
+                delete convertedPayload.canonicalResource;
+              }
               if (useDerivedProteinPayloadCache && !convertedPayload?.error) {
                 setLosatDerivedCacheEntry(derivedCacheMap, derivedCacheKey, {
                   mode: blastpMode,
@@ -4221,11 +4295,13 @@ export const createRunAnalysis = ({
               conversionCache.simultaneousParsedTables || 0
             );
             if (useCollinearBlastp) {
+              generatedProteinRecipeMode = 'collinear';
               resolvedComparisons.push({
                 kind: 'collinearityResult',
                 typedResource: convertedPayload.collinearityResult
               });
             } else if (useOrthogroupBlastp) {
+              generatedProteinRecipeMode = 'orthogroup';
               resolvedComparisons.push({
                 kind: 'orthogroupResult',
                 typedResource: convertedPayload.orthogroupResult
@@ -4552,28 +4628,14 @@ export const createRunAnalysis = ({
       const canonicalReplayName = makeSafeFilename(
         `${normalizedOutputPrefix || 'out'}.gbdraw-session.json`
       );
-      const buildCanonicalReplayText = () => {
-        recordSessionLifecycleEvent('canonical-replay-json-start');
-        const replayText = JSON.stringify({
-          format: 'gbdraw-session',
-          version: canonicalSessionVersion,
-          createdAt: manualRunStartedAtIso || new Date().toISOString(),
-          renderRequest: canonical.renderRequest,
-          resources: canonical.resources,
-          // Export only after successful generation; reuse the published artifact.
-          results: candidateCommit.results,
-          editorState: { featureCatalog: candidateCatalog },
-          losatCache: { entries: [] },
-          losatDerivedCache: { entries: [] },
-          proteinIdentityManifest: emptyProteinIdentityManifest()
-        });
-        recordStructuralMetric('canonicalReplayFullSerializationCount');
-        recordSessionLifecycleEvent('canonical-replay-json-end');
-        recordSessionLifecycleEvent('canonical-replay-json-characters', {
-          value: replayText.length
-        });
-        return replayText;
-      };
+      const publishedReplayArtifact = { results: null, featureCatalog: null };
+      const buildCanonicalReplayText = createCanonicalReplayTextBuilder({
+        version: canonicalSessionVersion,
+        startedAtIso: manualRunStartedAtIso,
+        renderRequest: canonical.renderRequest,
+        resources: canonical.resources,
+        publishedArtifact: publishedReplayArtifact
+      });
       registerRunInfoFile(canonicalReplayPath, {
         name: canonicalReplayName,
         slot: 'generatedFiles.canonical_render_session',
@@ -4679,6 +4741,8 @@ export const createRunAnalysis = ({
         catalog: candidateCatalog,
         commit: candidateCommit
       } = canonicalExecution;
+      publishedReplayArtifact.results = candidateCommit.results;
+      publishedReplayArtifact.featureCatalog = candidateCatalog;
 
       if (isReflow && requestId !== pendingReflowRequestId) {
         return { status: 'stale' };
@@ -4939,7 +5003,11 @@ export const createRunAnalysis = ({
           });
         }
         if (typeof adoptCanonicalRenderArtifacts === 'function') {
-          adoptCanonicalRenderArtifacts(canonical, { adoptOwnedRequest: true });
+          // Same-row layouts can compute reusable protein evidence without any displayed comparison.
+          const committedCanonical = generatedProteinRecipeMode && canonical.renderRequest.comparisons.length > 0
+            ? projectGeneratedProteinRecipe(canonical, generatedProteinRecipeMode)
+            : canonical;
+          adoptCanonicalRenderArtifacts(committedCanonical, { adoptOwnedRequest: true });
         }
         if (!useCommittedComparison && importedComparisonIntent) {
           Object.assign(
@@ -4980,9 +5048,7 @@ export const createRunAnalysis = ({
       return await failOperation(e, { handle: committedArtifactHandle, stage: failureStage,
         restore: restoreCommittedArtifact, isCurrent: isCurrentAlert, isCurrentOperation });
     } finally {
-      if (isReflow) {
-        labelReflowProcessing.value = false;
-      } else {
+      if (!isReflow) {
         if (activeLosatAbortController === generationAbortController) {
           activeLosatAbortController = null;
         }
@@ -4996,8 +5062,11 @@ export const createRunAnalysis = ({
   const runAnalysis = async (
     comparisonPlanSnapshot = null,
     generatedArtifactHandle = null,
-    comparisonExecution = null
+    comparisonExecution = null,
+    { prepareGenerate = null, afterGenerate = null } = {}
   ) => {
+    const sessionBusy = state.sessionOperationAvailability?.();
+    if (sessionBusy) return sessionBusy;
     let outcome = null;
     const operationId = ++latestOperationId;
     const isCurrentOperation = () => operationId === latestOperationId;
@@ -5022,6 +5091,12 @@ export const createRunAnalysis = ({
         outcome = { status: 'canceled' };
         failedGeneratePreservedResult.value = results.value.length > 0;
         return outcome;
+      }
+      if (prepareGenerate) {
+        const prepared = await prepareGenerate();
+        if (prepared.status !== 'ready') return prepared;
+        comparisonPlanSnapshot = prepared.comparisonPlanSnapshot;
+        comparisonExecution = prepared.comparisonExecution;
       }
       const execute = (handle) => {
         beforeHandle = handle || generatedArtifactHandle;
@@ -5077,6 +5152,7 @@ export const createRunAnalysis = ({
         failedGeneratePreservedResult.value = false;
         if (generationFailureRecovery) generationFailureRecovery.value = null;
       }
+      await afterGenerate?.(outcome);
       return outcome;
     } catch (cause) {
       outcome = await failOperation(cause, { handle: beforeHandle, isCurrent: isCurrentAlert, isCurrentOperation,
@@ -5340,6 +5416,8 @@ export const createRunAnalysis = ({
     alignmentResetReceipt = undefined,
     operation = 'generate'
   }) => {
+    const sessionBusy = state.sessionOperationAvailability?.();
+    if (sessionBusy) return sessionBusy;
     let outcome = null;
     const operationId = ++latestOperationId;
     const isCurrentOperation = () => operationId === latestOperationId;
@@ -5404,6 +5482,8 @@ export const createRunAnalysis = ({
   };
 
   const cancelRunAnalysis = () => {
+    const sessionBusy = state.sessionOperationAvailability?.();
+    if (sessionBusy) return sessionBusy;
     const canceledGenerationToken = latestGenerationToken;
     latestGenerationToken += 1;
     generationCancelRequested.value = true;
@@ -5421,29 +5501,32 @@ export const createRunAnalysis = ({
   };
 
   const runLabelReflow = async (reason = 'label-edit') => {
+    const sessionBusy = state.sessionOperationAvailability?.();
+    if (sessionBusy) return sessionBusy;
     pendingReflowRequestId += 1;
     pendingReflowReason = String(reason || 'label-edit');
     if (activeReflowRequestId !== 0) return;
 
-    while (activeReflowRequestId < pendingReflowRequestId) {
-      activeReflowRequestId = pendingReflowRequestId;
-      let decorationContinuity;
-      try {
-        decorationContinuity = captureDecorationContinuity(getCommittedCanonicalSession?.(), projectCompositionRecordIdentity);
-      } catch (error) {
-        labelReflowLastError.value = formatError(error).summary;
-        activeReflowRequestId = 0;
-        return;
+    labelReflowProcessing.value = true;
+    try {
+      while (activeReflowRequestId < pendingReflowRequestId) {
+        activeReflowRequestId = pendingReflowRequestId;
+        let decorationContinuity;
+        try {
+          decorationContinuity = captureDecorationContinuity(getCommittedCanonicalSession?.(), projectCompositionRecordIdentity);
+        } catch (error) {
+          labelReflowLastError.value = formatError(error).summary;
+          return;
+        }
+        await runAnalysisInternal({
+          decorationContinuity,
+          runMode: 'reflow', requestId: activeReflowRequestId, reason: pendingReflowReason
+        });
       }
-      await runAnalysisInternal({
-        decorationContinuity,
-        runMode: 'reflow',
-        requestId: activeReflowRequestId,
-        reason: pendingReflowReason
-      });
+    } finally {
+      activeReflowRequestId = 0;
+      labelReflowProcessing.value = false;
     }
-
-    activeReflowRequestId = 0;
   };
 
   const downloadLosatCache = async () => {
@@ -5478,6 +5561,8 @@ export const createRunAnalysis = ({
   };
 
   const clearLosatCache = () => {
+    const sessionBusy = state.sessionOperationAvailability?.();
+    if (sessionBusy) return sessionBusy;
     completedLosatSearch = null;
     losatCache.value = new Map();
     losatDerivedCache.value = new Map();

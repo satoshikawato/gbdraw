@@ -807,6 +807,8 @@ const exercisePairLoop = async ({failure = null, promote = false, mutateSource =
   const cancellation = new Error('canceled inside pair preparation');
   const context = {
     useProteinBlastp: true,
+    useCollinearBlastp: false,
+    linearRecordLayoutEnabled: {value: false},
     preparedJobs: entries.map((entry, index) => ({
       spec: {ordinal: index, queryIndex: 0, subjectIndex: 1, edgeKey: String(index)},
       losatArgs: [], cacheMetadata: entry, batch: {}

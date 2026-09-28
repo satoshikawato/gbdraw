@@ -69,6 +69,8 @@ export const createLegendSortActions = ({ state, extractLegendEntries }) => {
   };
 
   const applyLegendEntryOrder = (captionOrder) => {
+    const sessionBusy = state.sessionOperationAvailability?.();
+    if (sessionBusy) return sessionBusy;
     const svg = getCurrentSvg();
     if (!svg) return;
 
@@ -128,16 +130,22 @@ export const createLegendSortActions = ({ state, extractLegendEntries }) => {
   const getVisibleLegendOrder = () => legendEntries.value.map((entry) => entry.caption).filter(Boolean);
 
   const moveLegendEntryUp = (idx) => {
+    const sessionBusy = state.sessionOperationAvailability?.();
+    if (sessionBusy) return sessionBusy;
     if (idx <= 0) return;
     swapLegendEntries(idx, idx - 1);
   };
 
   const moveLegendEntryDown = (idx) => {
+    const sessionBusy = state.sessionOperationAvailability?.();
+    if (sessionBusy) return sessionBusy;
     if (idx >= legendEntries.value.length - 1) return;
     swapLegendEntries(idx, idx + 1);
   };
 
   const sortLegendEntries = (direction = 'asc') => {
+    const sessionBusy = state.sessionOperationAvailability?.();
+    if (sessionBusy) return sessionBusy;
     const currentOrder = getVisibleLegendOrder();
     if (currentOrder.length < 2) return;
 
@@ -154,6 +162,8 @@ export const createLegendSortActions = ({ state, extractLegendEntries }) => {
   };
 
   const sortLegendEntriesByDefault = () => {
+    const sessionBusy = state.sessionOperationAvailability?.();
+    if (sessionBusy) return sessionBusy;
     const currentOrder = getVisibleLegendOrder();
     if (currentOrder.length < 2) return;
     if (originalLegendOrder.value.length === 0) return;
@@ -177,6 +187,8 @@ export const createLegendSortActions = ({ state, extractLegendEntries }) => {
   };
 
   const swapLegendEntries = (idx1, idx2) => {
+    const sessionBusy = state.sessionOperationAvailability?.();
+    if (sessionBusy) return sessionBusy;
     const currentOrder = getVisibleLegendOrder();
     if (idx1 < 0 || idx2 < 0 || idx1 >= currentOrder.length || idx2 >= currentOrder.length) return;
 

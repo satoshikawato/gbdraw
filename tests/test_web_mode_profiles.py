@@ -62,7 +62,9 @@ def test_web_mode_profile_consumers_use_mode_specific_defaults() -> None:
     assert "'data-gbdraw-orientation'" in sanitization_source
     assert "createDefaultAdv(state.mode.value)" in reset_source
     assert "modeProfileStateManager?.reset?" in reset_source
-    assert "modeProfileStateManager.invalidate(nextMode)" in setup_source
+    mode_watch = setup_source.split("watch(mode, (nextMode, previousMode) => {", 1)[1].split("});", 1)[0]
+    assert "if (state.semanticFileWatchersSuppressed.value) return;" in mode_watch
+    assert "modeProfileStateManager.invalidate(nextMode)" not in mode_watch
     assert (
         "modeProfileStateManager.transition(adv, previousMode, nextMode)"
         in setup_source

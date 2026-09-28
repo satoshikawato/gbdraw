@@ -1,0 +1,228 @@
+{
+  "head": "9584ed904c7d1ee93f5a07ea4f3a2a465b061724",
+  "platform": "Linux-5.15.167.4-microsoft-standard-WSL2-x86_64-with-glibc2.39",
+  "observations": {
+    "duplicateNative": {
+      "status": "ready",
+      "error": "",
+      "records": [
+        {
+          "selector": "#1",
+          "record_id": "NC_012920.1",
+          "record_length": 16569,
+          "detectedTopology": "circular"
+        },
+        {
+          "selector": "#2",
+          "record_id": "NC_012920.1",
+          "record_length": 16569,
+          "detectedTopology": "circular"
+        }
+      ],
+      "workers": [],
+      "inputType": "gb",
+      "primaryName": "duplicate.gb",
+      "resultCount": 0,
+      "committedRecords": null,
+      "controls": 2,
+      "panelOpen": false
+    },
+    "ddbjAccessionNative": {
+      "status": "ready",
+      "error": "",
+      "records": [
+        {
+          "selector": "#1",
+          "record_id": "LC738868.1",
+          "record_length": 306008,
+          "detectedTopology": "linear"
+        }
+      ],
+      "workers": [],
+      "inputType": "gb",
+      "primaryName": "MjeNMV.gbk",
+      "resultCount": 0,
+      "committedRecords": null,
+      "controls": 1,
+      "panelOpen": false
+    },
+    "rapidReplaceStaleSettlement": {
+      "status": "ready",
+      "error": "",
+      "records": [
+        {
+          "selector": "#1",
+          "record_id": "LC738868.1",
+          "record_length": 306008,
+          "detectedTopology": "linear"
+        }
+      ],
+      "workers": [],
+      "inputType": "gb",
+      "primaryName": "fast-new.gb",
+      "resultCount": 0,
+      "committedRecords": null,
+      "controls": 1,
+      "panelOpen": false
+    },
+    "remove": {
+      "status": "idle",
+      "error": "",
+      "records": [],
+      "workers": [],
+      "inputType": "gb",
+      "primaryName": null,
+      "resultCount": 0,
+      "committedRecords": null,
+      "controls": 0,
+      "panelOpen": false
+    },
+    "incompleteGffPair": {
+      "status": "idle",
+      "error": "",
+      "records": [],
+      "workers": [],
+      "inputType": "gff",
+      "primaryName": "NC_013668.gff3",
+      "resultCount": 0,
+      "committedRecords": null,
+      "controls": 0,
+      "panelOpen": false
+    },
+    "completeGffPair": {
+      "status": "ready",
+      "error": "",
+      "records": [
+        {
+          "selector": "#1",
+          "record_id": "NC_013668.3",
+          "record_length": 248526,
+          "detectedTopology": "unknown"
+        }
+      ],
+      "workers": [],
+      "inputType": "gff",
+      "primaryName": "NC_013668.gff3",
+      "resultCount": 0,
+      "committedRecords": null,
+      "controls": 1,
+      "panelOpen": false
+    },
+    "savedPreview": {
+      "status": "loading",
+      "error": "",
+      "records": [],
+      "workers": [],
+      "inputType": "gb",
+      "primaryName": "HmmtDNA.gbk",
+      "resultCount": 1,
+      "committedRecords": 1,
+      "controls": 0,
+      "panelOpen": false
+    },
+    "draftDiffersFromArtifact": {
+      "status": "ready",
+      "error": "",
+      "records": [
+        {
+          "selector": "#1",
+          "record_id": "LC738868.1",
+          "record_length": 306008,
+          "detectedTopology": "linear"
+        }
+      ],
+      "workers": [],
+      "inputType": "gb",
+      "primaryName": "MjeNMV.gbk",
+      "resultCount": 1,
+      "committedRecords": 1,
+      "controls": 1,
+      "panelOpen": false
+    },
+    "existingHelperSettlement": {
+      "records": [
+        {
+          "selector": "#1",
+          "recordId": "LC738868.1",
+          "recordLength": 306008,
+          "detectedTopology": "linear",
+          "organism": "Marsupenaeus japonicus endogenous nimavirus",
+          "strain": "Ginoza2017",
+          "inferredDefinition": "<i>Marsupenaeus japonicus</i> endogenous nimavirus Ginoza2017"
+        }
+      ],
+      "workers": [
+        "http://127.0.0.1:42517/gbdraw/web/js/workers/diagram-generation-worker.js"
+      ]
+    },
+    "invalidSource": {
+      "status": "error",
+      "error": "Could not read records from the circular input file(s).",
+      "records": [],
+      "workers": [
+        "http://127.0.0.1:42517/gbdraw/web/js/workers/diagram-generation-worker.js"
+      ],
+      "inputType": "gb",
+      "primaryName": "invalid.gb",
+      "resultCount": 1,
+      "committedRecords": 1,
+      "controls": 0,
+      "panelOpen": false
+    },
+    "settingsOnly": {
+      "status": "idle",
+      "error": "",
+      "records": [],
+      "workers": [],
+      "inputType": "gb",
+      "primaryName": null,
+      "resultCount": 0,
+      "committedRecords": null,
+      "controls": 0,
+      "panelOpen": false
+    }
+  },
+  "fixtures": {
+    "tests/fixtures/sessions/cli-web-mito.gb": "f2e922c26561d37a8d3b410ba972526c709cad5635f598bbdcfc234f02642c92",
+    "tests/test_inputs/MjeNMV.gbk": "7b46d2cc4baa301a76ac1917bd5f2d41553c1271930e20e2904024986219ddd0",
+    "tests/test_inputs/NC_013668.gff3": "1b114942994b5bb9c152cf58cc9d21e56a1a7dfba3c70e9e9cea060d72a13494",
+    "tests/test_inputs/NC_013668.fasta": "22c9c71db3878d005fc7355f3a903372f9b873303fa8622d48367f442a163973",
+    "gbdraw/web/gallery/sessions/HmmtDNA_basic_circular.gbdraw-session.json": "d53cf930db19cbe2f8c201909d06c69ba02140ffd06498021e7582ddebed83db",
+    "tests/fixtures/sessions/settings-only.v42.json.gz": "bd11fa0406d40d09c72ff20500a49a3c74be781dbfa9253a4c3c696f28b2d34c"
+  },
+  "browser": "149.0.7827.55",
+  "pageErrors": [],
+  "externalRequests": [],
+  "dialogs": [
+    {
+      "type": "alert",
+      "message": "Session loaded successfully!"
+    },
+    {
+      "type": "alert",
+      "message": "Session loaded successfully!"
+    }
+  ],
+  "unicodeTransport": {
+    "json-whole": {
+      "wholeDocumentEqual": true,
+      "maximumMessageUpperBytes": null,
+      "transferredBytes": 0
+    },
+    "json-bounded": {
+      "wholeDocumentEqual": true,
+      "maximumMessageUpperBytes": 262144,
+      "transferredBytes": 662150
+    },
+    "gzip-whole": {
+      "wholeDocumentEqual": true,
+      "maximumMessageUpperBytes": null,
+      "transferredBytes": 0
+    },
+    "gzip-bounded": {
+      "wholeDocumentEqual": true,
+      "maximumMessageUpperBytes": 262144,
+      "transferredBytes": 662150
+    }
+  }
+}
