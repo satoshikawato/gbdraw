@@ -199,10 +199,22 @@ test('alignment canvas guide and candidates stay transient and share palette cho
   await expect.poll(() => page.evaluate(() => window.__GBDRAW_APP__.zoom)).toBeGreaterThan(zoomBefore);
   await expect.poll(geometryIsAligned).toBe(true);
   const panBefore = await page.evaluate(() => window.__GBDRAW_APP__.canvasPan.x);
-  const canvasBox = await canvas.boundingBox();
-  await page.mouse.move(canvasBox.x + 240, canvasBox.y + 220);
+  // The dialog and feature shapes own their pointer input. Pan from a real
+  // exposed canvas margin rather than a fixed point that may hit either one.
+  const panPoint = await canvas.evaluate((element) => {
+    const box = element.getBoundingClientRect();
+    for (const y of [box.top + 4, box.bottom - 4, box.top + 20, box.bottom - 20]) {
+      for (let x = box.left + 4; x < box.right - 40; x += 12) {
+        const hit = document.elementFromPoint(x, y);
+        if (hit && element.contains(hit) && !hit.closest('svg')) return { x, y };
+      }
+    }
+    return null;
+  });
+  expect(panPoint).not.toBeNull();
+  await page.mouse.move(panPoint.x, panPoint.y);
   await page.mouse.down();
-  await page.mouse.move(canvasBox.x + 270, canvasBox.y + 220, { steps: 3 });
+  await page.mouse.move(panPoint.x + 30, panPoint.y, { steps: 3 });
   await page.mouse.up();
   await expect.poll(() => page.evaluate(() => window.__GBDRAW_APP__.canvasPan.x))
     .toBeGreaterThan(panBefore);

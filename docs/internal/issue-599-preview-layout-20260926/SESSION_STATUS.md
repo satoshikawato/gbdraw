@@ -3,7 +3,7 @@
 対象ブランチ: `fix/issue-599-preview-layout-20260926`。
 計画基準: `origin/dev@d457b7189b137185a8dec800819a312c30b969fa`。
 
-2026-09-28更新。製品結果の3案 A を OIPC revision 25 の PD-OI-052–054 に記録・検証し、[PR #634](https://github.com/satoshikawato/gbdraw/pull/634) の必須 checks 成功後に dev `007388567222638b707fbb16fe82dbeba61551c9` へ merge 済み。**S00–S03 完了。S04 のローカル統合検証と既存ユーザー文書更新は完了、delivery は未完了**。S01 の装飾差分継承、S02 の明示 Layout edit 操作説明・保存/export、S03 の検索・toolbar 専用行と旧 drag 撤去を統合検査した。公開 SHA は同名 branch の Git 履歴・終了報告で確認する。PR required statuses、human review、正確な integrated dev SHA の staging は後続の権限境界である。
+2026-09-28更新。製品結果の3案 A を OIPC revision 25 の PD-OI-052–054 に記録・検証し、[PR #634](https://github.com/satoshikawato/gbdraw/pull/634) の必須 checks 成功後に dev `007388567222638b707fbb16fe82dbeba61551c9` へ merge 済み。**S00–S04 完了。PR #637/#638 は protected dev へ merge 済みで、統合 dev `8f2d8ed058fd5e55c6c8d4f8e5350c3ededa2dd0` の Dev staging と Gallery readiness は成功**。S01 の装飾差分継承、S02 の明示 Layout edit 操作説明・保存/export、S03 の検索・toolbar 専用行と旧 drag 撤去を統合検査した。公開 SHA は同名 branch の Git 履歴・終了報告で確認する。初回統合 staging の drawer/テスト位置失敗は PR #638 で修正し、修正版の exact-SHA staging を通過した。main promotion/deploy は対象外である。
 担当者は開始前に前セッションの commit/push と単一 writer を確認し、終了時にこの表と担当結果文書を更新する。
 
 | セッション | 状態 | 結果文書 | 次の開始条件 |
@@ -13,7 +13,7 @@
 | S01 / 配置継承 | 実装・担当検証完了。同名branchへcommit/push | [results/S01.md](results/S01.md) | 公開SHAのlocal/remote一致・clean treeとS01証拠を確認してS02へ |
 | S02 / 操作説明 | 実装・担当検証完了。同名branchへcommit/push | [results/S02.md](results/S02.md) | S02公開SHAのlocal/remote一致・clean treeと証拠を確認してS03へ |
 | S03 / chrome | 実装・担当検証完了。同名branchへcommit/push | [results/S03.md](results/S03.md) | S03公開SHAのlocal/remote一致・clean tree、最新dev authorityとP01–P03証拠を確認してS04へ |
-| S04 / 統合 | ローカル統合検証・既存文書更新完了。同名 branch へcommit/push。remote gate・human review・dev merge後 staging未達 | [results/S04.md](results/S04.md) | PR作成/required checksは別途承認が必要。dev merge後に正確な SHA の全matrix/Gallery staging |
+| S04 / 統合 | ローカル統合検証・既存文書更新、PR #637/#638 merge、修正版 exact-dev staging 完了 | [results/S04.md](results/S04.md) | 追加の Issue #599 runtime 作業なし。main promotion/deploy は別件 |
 
 結果文書は事実だけを記載する。入力 SHA、検査対象 SHA/環境、authority base、コマンドと結果、artifact、制限、未完了条件、次の担当者の開始条件を残す。
 結果文書を含む自身の commit SHA を事前に埋め込む必要はない。公開 SHA は `git log` と終了報告で追跡する。
@@ -51,3 +51,7 @@ S00 の authority base は `origin/dev@ecb96a065d808addff0fb088f9eb6b6ba3c92a6d`
 ## PR #637 dev sync
 
 PR #637 の初回 required checks は検証済み S04 head で成功したが、protected dev が Issue #619 authority-only PR #636 の merge `e5f5f1fb6475aa7a026721a34cece7644fcd309c` へ進み、strict protection が branch 更新を要求した。新 dev の OIPC revision 26 / PD-OI-055 を通常 merge し、Issue #599 の PD-OI-052–054 と runtime/test bytes を維持。影響する Node contract 190/190 成功。詳細は [S04](results/S04.md) の追記。新 head の required checks と merge後の exact-SHA staging は別に確認する。
+
+## S04 delivery closure
+
+追加承認に基づき [PR #637](https://github.com/satoshikawato/gbdraw/pull/637) を `dev@775473f4ee7c825c888f705146bcbec71b11cc4b` へ merge した。初回 exact-dev staging は短い drawer の Feature/Similarity group 行が押せず失敗し、Gallery readiness は成功。既存 `index.html` の drawer owner と alignment browser 操作点を修正した [PR #638](https://github.com/satoshikawato/gbdraw/pull/638) を `dev@8f2d8ed058fd5e55c6c8d4f8e5350c3ededa2dd0` へ merge した。修正版の [Dev staging / gate](https://github.com/satoshikawato/gbdraw/actions/runs/36381397991) と [Gallery readiness / gate](https://github.com/satoshikawato/gbdraw/actions/runs/36381397971) は同じ統合 SHA で SUCCESS。失敗・修正・検査の詳細は [S04](results/S04.md) を参照。
