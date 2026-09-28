@@ -6553,7 +6553,7 @@
                         </div>
                     </div>
 
-                    <div v-if="isFeatureDrawerMounted" class="flex-1 min-h-0 flex flex-col">
+                    <div v-if="isFeatureDrawerMounted" class="flex-1 min-h-0 flex flex-col overflow-y-auto">
                         <p class="px-4 py-2 text-[10px] text-slate-500">Live edit: feature color, label text, and visibility update the current Result; geometry may rerender automatically.</p>
                         <div class="px-4 py-2 border-b border-slate-100 shrink-0 bg-white">
                             <div class="flex items-center justify-between gap-2">
@@ -6569,7 +6569,7 @@
                         <div class="px-4 py-2 border-b border-slate-100 shrink-0">
                             <input v-model="featureSearchInput" data-history-ignore placeholder="Search by feature or annotation..." class="form-input text-xs w-full">
                         </div>
-                        <div ref="featureListScrollRef" class="flex-grow overflow-y-auto custom-scrollbar" @scroll="handleFeatureListScroll">
+                        <div ref="featureListScrollRef" class="flex-grow min-h-[64px] overflow-y-auto custom-scrollbar" @scroll="handleFeatureListScroll">
                             <div v-if="featureExtractionPending && extractedFeatures.length === 0" class="p-4 text-center text-slate-400 text-xs">
                                 <i class="ph ph-circle-notch animate-spin"></i> Preparing features...
                             </div>
