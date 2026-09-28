@@ -4868,7 +4868,7 @@ export const exportSession = (titleOverride = null, options = {}) => {
     }
     if (typeof options.onError !== 'function') throw error;
     options.onError(error);
-    return { status: 'error' };
+    return { status: 'error', error: normalizeUserFacingError(error) };
   }).finally(() => {
     if (sessionSaveInFlight === operation) {
       state.sessionSavePending.value = false;

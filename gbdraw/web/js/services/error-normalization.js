@@ -4,7 +4,7 @@ const OPERATIONS = new Set(['unknown', 'generate', 'align', 'feature-extraction'
   'promoteLegacyLosatpCache', 'regenerateDefinitionSvgs', 'resolveLegacyProteinReferences',
   'resolveSimilarityAlignment', 'validateConfigOverrides']);
 const STAGES = new Set(['unknown', 'initialization', 'resource-staging', 'request-validation',
-  'helper', 'rule-validation', 'render', 'result-admission', 'cleanup', 'export-capture', 'export-conversion', 'font-validation']);
+  'helper', 'rule-validation', 'render', 'result-admission', 'cleanup', 'export-capture', 'export-conversion', 'font-validation', 'transport', 'read']);
 const FIELDS = new Set(`legend title scale decorations pattern record_selector region start end sourceStart sourceEnd recordLength
 recordIndex queryIndex subjectIndex depth min_depth max_depth window step tick font_size plot_title_font_size height large_tick_interval small_tick_interval tick_font_size
 inner_gap_px outer_gap_px radius width spacing arrow_head_length_ratio arrow_shaft_width_ratio keep_definition_left_aligned color action feature_type qualifier value record_id label_text
@@ -86,6 +86,9 @@ const REASONS = Object.freeze({
   SOURCE_INDEX: 'Check the comparison endpoints.', SOURCE_VIEW_CONFLICT: 'Check the comparison inputs and display transforms.'
 });
 const DEFINITIONS = Object.freeze({
+  SESSION_SIZE_LIMIT: ['The Session exceeds the browser size limit. Use a smaller Session file.', ['select-input', 'retry']],
+  SESSION_BROWSER_UNSUPPORTED: ['This browser cannot complete this Session operation. Use a browser with the required gzip and Worker support.', ['retry']],
+  SESSION_IMPORT_UNAVAILABLE: ['This browser cannot load Sessions because Session import Workers are unavailable. Use a browser with Worker support.', ['retry']],
   DECORATION_CONTINUITY: ['Could not preserve decoration placement. Reset the affected position or use Reset Layout on the previous Result, or restore matching settings, then Generate again.', ['edit-input', 'retry', 'save-session']],
   GENERATION_BUSY: ['A diagram generation request is already running. Wait for it to finish before retrying.', ['retry', 'save-session']],
   UNKNOWN: ['The operation failed without recognized diagnostic information. Retry; if it continues, save a Session for investigation.', ['retry', 'save-session']],
@@ -128,7 +131,11 @@ const CODES = new Set(Object.keys(DEFINITIONS));
 const NATIVE_VALIDATIONS = new Map([
   ['The diagram engine returned incompatible feature metadata. Reload the page and Generate again.', { code: 'FEATURE_METADATA', stage: 'result-admission' }],
   ['A File-like object with arrayBuffer() or text() is required.', { code: 'RESOURCE_INVALID', stage: 'resource-staging' }],
-  ['A File-like object with arrayBuffer() is required.', { code: 'RESOURCE_INVALID', stage: 'resource-staging' }]
+  ['A File-like object with arrayBuffer() is required.', { code: 'RESOURCE_INVALID', stage: 'resource-staging' }],
+  ['Session file is too large.', { code: 'SESSION_SIZE_LIMIT', stage: 'read' }],
+  ['Expanded session file is too large.', { code: 'SESSION_SIZE_LIMIT', stage: 'read' }],
+  ['This browser does not support gzip session export.', { code: 'SESSION_BROWSER_UNSUPPORTED', stage: 'transport' }],
+  ['This browser does not support gzip session import.', { code: 'SESSION_BROWSER_UNSUPPORTED', stage: 'read' }]
 ]);
 for (const [message, field, reason] of [
   ['Depth minimum must be less than or equal to depth maximum.', 'min_depth', 'ORDER'],

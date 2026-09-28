@@ -30,7 +30,6 @@ from flows.web_capture import (
     generate_and_inspect,
     open_ancestor_details,
     open_browser_capture,
-    set_feature_search_visible,
     wait_for_app_shell,
 )
 
@@ -377,10 +376,9 @@ def capture_gui_annotated_chloroplast(
         generate_and_inspect(page, _inspect_tracks_svg, _assert_plain_plastome)
         _fit_circular_preview(
             page,
-            target_zoom="70%",
+            target_zoom="40%",
             pan_left_ratio=0.0,
         )
-        set_feature_search_visible(page, visible=False)
         screenshot_bytes[SCREENSHOT_NAMES[1]] = capture_screenshot(
             page, output_paths[SCREENSHOT_NAMES[1]], "Circular"
         )
@@ -388,7 +386,7 @@ def capture_gui_annotated_chloroplast(
         _configure_gallery_presentation(page)
         _fit_circular_preview(
             page,
-            target_zoom="70%",
+            target_zoom="40%",
             pan_left_ratio=0.0,
         )
         annotations = page.get_by_label("Region Annotations", exact=True)
@@ -419,7 +417,7 @@ def capture_gui_annotated_chloroplast(
             page, _inspect_tracks_svg, _assert_gallery_chloroplast
         )
         _fit_circular_preview(
-            page, target_zoom="50%", pan_left_ratio=0.32
+            page, target_zoom="40%", pan_left_ratio=0.45
         )
         popup = page.get_by_role("dialog", name=re.compile(r"^Feature details:"))
         if popup.is_visible():

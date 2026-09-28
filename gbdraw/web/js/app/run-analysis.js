@@ -5003,7 +5003,8 @@ export const createRunAnalysis = ({
           });
         }
         if (typeof adoptCanonicalRenderArtifacts === 'function') {
-          const committedCanonical = generatedProteinRecipeMode
+          // Same-row layouts can compute reusable protein evidence without any displayed comparison.
+          const committedCanonical = generatedProteinRecipeMode && canonical.renderRequest.comparisons.length > 0
             ? projectGeneratedProteinRecipe(canonical, generatedProteinRecipeMode)
             : canonical;
           adoptCanonicalRenderArtifacts(committedCanonical, { adoptOwnedRequest: true });

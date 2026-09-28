@@ -172,7 +172,10 @@ test('replacement draft does not inherit saved catalog; invalid, Retry, Replace 
   await waitStatus(page, 'error');
   expect((await snapshot(page)).primary).toBe('invalid.gb');
   expect((await snapshot(page)).result).toBe(original.result);
-  await expect(page.locator('[data-circular-discovery-status]')).toContainText('invalid.gb');
+  await expect(page.locator('[data-circular-discovery-status]')).toHaveText(
+    'No records were found. Choose input containing records.'
+  );
+  await expect(page.locator('[data-circular-discovery-status]')).not.toContainText('invalid.gb');
   await page.getByRole('button', { name: 'Retry source inspection' }).click();
   await waitStatus(page, 'error');
   expect((await snapshot(page)).result).toBe(original.result);
