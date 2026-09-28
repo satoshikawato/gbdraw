@@ -6629,7 +6629,7 @@
                         </div>
                     </div>
 
-                    <div v-show="rightDrawerTab === 'orthogroups'" class="flex-1 min-h-0 flex flex-col">
+                    <div v-show="rightDrawerTab === 'orthogroups'" class="flex-1 min-h-0 flex flex-col overflow-y-auto">
                         <div class="px-4 py-2 border-b border-slate-100 bg-white shrink-0 space-y-2">
                             <div class="flex items-center justify-between text-xs">
                                 <span class="font-semibold text-slate-600">{{ orthogroupCount }} similarity groups</span>
@@ -6710,7 +6710,7 @@
                             </div>
                         </div>
 
-                        <div class="h-48 overflow-y-auto border-b border-slate-100 custom-scrollbar">
+                        <div class="h-48 min-h-[64px] overflow-y-auto border-b border-slate-100 custom-scrollbar">
                             <button v-for="group in filteredOrthogroups"
                                     :key="group.id"
                                     @click="selectOrthogroup(group.id)"
@@ -6734,7 +6734,7 @@
                             <div v-if="filteredOrthogroups.length === 0" class="p-4 text-center text-slate-400 text-xs">No similarity groups found</div>
                         </div>
 
-                        <div v-if="selectedOrthogroup" class="flex-1 min-h-0 overflow-y-auto p-4 space-y-4 custom-scrollbar">
+                        <div v-if="selectedOrthogroup" class="flex-1 min-h-[96px] overflow-y-auto p-4 space-y-4 custom-scrollbar">
                             <div class="space-y-2">
                                 <div class="flex items-center justify-between">
                                     <span class="text-[10px] font-mono text-slate-400">{{ selectedOrthogroup.id }}</span>
