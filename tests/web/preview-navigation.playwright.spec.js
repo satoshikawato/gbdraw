@@ -19,6 +19,8 @@ const geometry = (page) => page.evaluate(() => {
     scroll: { x: container.scrollLeft, y: container.scrollTop },
     points: [point(0, 0), point(100, 100)],
     anchor: { x: bounds.x + bounds.width / 2, y: bounds.y },
+    ctm: { a: matrix.a, b: matrix.b, c: matrix.c, d: matrix.d, e: matrix.e, f: matrix.f },
+    wrapperBounds: { x: bounds.x, y: bounds.y, width: bounds.width, height: bounds.height },
     panning: app.isPanning
   };
 });
@@ -30,6 +32,22 @@ const settle = async (page) => {
     return Math.max(Math.abs(transform.a - app.zoom),
       Math.abs(transform.e - app.canvasPan.x), Math.abs(transform.f - app.canvasPan.y));
   })).toBeLessThan(0.001);
+  await expect.poll(() => page.evaluate(() => new Promise(resolve => {
+    const sample = () => {
+      const wrapper = window.__GBDRAW_APP__.svgContainer;
+      const matrix = wrapper.querySelector('svg').getScreenCTM();
+      const bounds = wrapper.getBoundingClientRect();
+      return [matrix.a, matrix.b, matrix.c, matrix.d,
+        bounds.x, bounds.y, bounds.width, bounds.height];
+    };
+    requestAnimationFrame(() => {
+      const before = sample();
+      requestAnimationFrame(() => {
+        const after = sample();
+        resolve(before.every((value, index) => value === after[index]));
+      });
+    });
+  }))).toBe(true);
 };
 
 const backgroundPoint = (page) => page.evaluate(() => {

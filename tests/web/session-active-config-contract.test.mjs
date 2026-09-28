@@ -156,3 +156,20 @@ for (const malformed of [null, 'false', 'true', 0, 1, [], {}, undefined]) {
     }
   }), /keep_definition_left_aligned must be a boolean/);
 }
+
+for (const field of ['width', 'radius']) {
+  for (const number of [NaN, Infinity, -Infinity]) {
+    for (const value of [number, { value: number, unit: 'px' }]) {
+      const invalid = structuredClone(storedConfig);
+      invalid.adv.circular_track_slots = [{
+        id: 'features', renderer: 'features', enabled: true, side: 'outside', z: 0,
+        params: { lane_direction: 'outside' }, width: null, radius: null,
+        inner_gap_px: null, outer_gap_px: null,
+        [field]: value
+      }];
+      assert.throws(() => validateCurrentWriterActiveConfig({
+        mode: 'circular', storedConfig: invalid
+      }), /positive finite px or factor scalar/);
+    }
+  }
+}

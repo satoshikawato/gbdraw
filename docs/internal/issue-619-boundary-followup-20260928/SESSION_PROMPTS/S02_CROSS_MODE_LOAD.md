@@ -1,0 +1,15 @@
+# S02 instruction prompt — restore the saved active editor mode
+
+You have no prior chat context. Read [MASTER_PLAN.md](../MASTER_PLAN.md), S01 result at `../SESSION_RESULTS/S01.md`, repository `AGENTS.md`, `CLAUDE.md`, `gbdraw/web/CLAUDE.md`, and the Product/architecture ratchets. Issue #619 controls already exist. This task covers a current biological Session saved with a Circular committed Result and an active Linear editor/draft. OS Japanese IME is outside scope.
+
+Start in `<repo>/.worktrees/issue-619-boundary-followup-20260928`. **Reuse the branch first checked out in S01:** `fix/issue-619-boundary-followup-20260928`. Run `git switch` only inside this dedicated worktree; inspect status/HEAD/upstream; fetch and fast-forward the same-named remote branch if necessary. Do not create another implementation branch/worktree, touch the shared root checkout, or overwrite another session's edits.
+
+## Product and implementation task
+
+The public [Session compatibility contract](../../../REFERENCE/session-and-request-compatibility.md) says Save Session retains editable state separately from the committed Result and Load restores saved values. `PD-OI-045` requires atomic Load and recovery. S01 must have confirmed that the current writer saves `ui.mode` and that current Load replaces it with committed render mode in `services/config.js`. If S01 finds conflicting merged authority or a material unselected outcome, stop dependent runtime, document it, and follow the Product Decision route.
+
+Within the existing `services/config.js` import transaction, select the saved active UI mode for **current writer Sessions that explicitly contain it**. Keep the committed render mode as `generatedMode` and the saved request/Result authority; they may differ. Preserve the existing fallback for a missing historical/CLI-origin UI mode, and keep settings-only behavior. Apply the saved current-writer config through `restoreCurrentWriterActiveConfig()`; do not overwrite dormant mode profiles from the committed request. Make no new Session version, compatibility migration, reactive mirror, watcher, or second import path.
+
+Focus tests on actual Save/download → fresh Load → re-save for the divergent current Session. Assert saved active mode, both mode profiles, pending scalar draft, source/resource bytes and metadata, committed request, Result SVG, History, selected UI state, and Generate from the restored draft. Include failed import rollback, settings-only Load, matching-mode current Session, and supported historical/CLI-origin fallback. An older reader need not learn a branch-only format. Preserve lazy Worker construction for preview-only Load.
+
+Before commit, compare production, test, docs, and generated diffs separately; run focused Node and browser checks plus applicable policy/architecture checks. Record exact commands, output, owner/path evidence, Product classification, and rollback in `SESSION_RESULTS/S02.md`. Commit only the S02 scope with an English title, verify branch/upstream, and push `HEAD:refs/heads/fix/issue-619-boundary-followup-20260928` without force. Report commit and remote SHA. Do not open a PR or merge.

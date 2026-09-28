@@ -4347,11 +4347,17 @@ export const importSession = async (e, options = {}) => {
         storedConfig: restoredConfig
       });
     }
+    const committedMode = projectionResult?.renderState.mode;
+    const savedCurrentWriterMode = sourceSessionVersion === SESSION_VERSION
+      ? data.ui?.mode
+      : null;
     const ui = canonicalSession
       ? {
           ...projectionResult.editorMetadata.ui,
           ...projectionResult.artifactState.ui,
-          mode: projectionResult.renderState.mode
+          mode: ['circular', 'linear'].includes(savedCurrentWriterMode)
+            ? savedCurrentWriterMode
+            : committedMode
         }
       : (data.ui || {});
     state.sessionTitle.value = canonicalSession
@@ -4380,11 +4386,11 @@ export const importSession = async (e, options = {}) => {
     } else {
       state.featurePanelTab.value = 'colors';
     }
-    state.generatedMode.value = ui.mode === 'linear' ? 'linear' : 'circular';
+    state.generatedMode.value = committedMode === 'linear' ? 'linear' : 'circular';
     if (ui.generatedLegendPosition) {
       state.generatedLegendPosition.value = normalizeLegendPosition(
         ui.generatedLegendPosition,
-        ui.mode === 'linear' ? 'bottom' : 'left'
+        committedMode === 'linear' ? 'bottom' : 'left'
       );
     }
     state.generatedMultiRecordCanvas.value = Boolean(ui.generatedMultiRecordCanvas);
@@ -4490,7 +4496,7 @@ export const importSession = async (e, options = {}) => {
     if (currentSchemaSession && validatedSessionCatalog) {
       currentCatalogFeatureState = featureStateFromCatalog(
         validatedSessionCatalog,
-        { mode: state.mode.value }
+        { mode: committedMode }
       );
     }
 
@@ -4522,7 +4528,7 @@ export const importSession = async (e, options = {}) => {
     const catalogSequenceSources = currentSchemaSession
       ? (currentCatalogFeatureState?.sequenceSources || [])
       : [];
-    const comparisonSourceAvailability = state.mode.value === 'circular'
+    const comparisonSourceAvailability = committedMode === 'circular'
       ? resolveCircularComparisonSequenceAvailability({
           files: state.files,
           circularConservation: state.circularConservation
@@ -4533,7 +4539,7 @@ export const importSession = async (e, options = {}) => {
       && validatedSessionCatalog
     )
       ? analyzeCatalogSequenceSourceCoverage({
-          mode: state.mode.value,
+          mode: committedMode,
           catalogFeatureState: validatedSessionCatalog,
           renderRequest: data.renderRequest,
           comparisonSourceAvailability
@@ -4635,7 +4641,7 @@ export const importSession = async (e, options = {}) => {
           const catalogAdmission = admitFeatureCatalog(
             validatedSessionCatalog,
             logicalImportedResults,
-            { adopt: true, mode: state.mode.value }
+            { adopt: true, mode: committedMode }
           );
           return admitCurrentSessionResults(
             createCurrentSessionResultSource(logicalImportedResults, catalogAdmission),

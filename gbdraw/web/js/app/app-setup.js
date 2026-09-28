@@ -2573,7 +2573,11 @@ export const createAppSetup = () => {
       legendLayout.reconcileCompositionUserDeltas(_intent?.ui?.compositionUserDeltas);
     }
     if (changedDomains.has('config') || changedDomains.has('features')) {
-      if (!await rulePreparation.prepare()) return;
+      const rulesChanged = Array.isArray(changes) && changes.some((change) => (
+        change?.path?.[0] === 'config' && change.path[1] === 'rules'
+      ));
+      if ((changedDomains.has('features') || rulesChanged || !rulePreparation.isPrepared())
+        && !await rulePreparation.prepare()) return;
       svgActions.applyPaletteToSvg();
       svgActions.applySpecificRulesToSvg();
     }
