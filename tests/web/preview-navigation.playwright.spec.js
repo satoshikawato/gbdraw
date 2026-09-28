@@ -32,6 +32,22 @@ const settle = async (page) => {
     return Math.max(Math.abs(transform.a - app.zoom),
       Math.abs(transform.e - app.canvasPan.x), Math.abs(transform.f - app.canvasPan.y));
   })).toBeLessThan(0.001);
+  await expect.poll(() => page.evaluate(() => new Promise(resolve => {
+    const sample = () => {
+      const wrapper = window.__GBDRAW_APP__.svgContainer;
+      const matrix = wrapper.querySelector('svg').getScreenCTM();
+      const bounds = wrapper.getBoundingClientRect();
+      return [matrix.a, matrix.b, matrix.c, matrix.d,
+        bounds.x, bounds.y, bounds.width, bounds.height];
+    };
+    requestAnimationFrame(() => {
+      const before = sample();
+      requestAnimationFrame(() => {
+        const after = sample();
+        resolve(before.every((value, index) => value === after[index]));
+      });
+    });
+  }))).toBe(true);
 };
 
 const backgroundPoint = (page) => page.evaluate(() => {
