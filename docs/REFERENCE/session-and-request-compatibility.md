@@ -37,6 +37,16 @@ Generate deliberately preserves the newer draft alongside the earlier Result. Lo
 record placement, comparison artifacts, and supported editor state; SVG bytes
 or text metrics can still differ across gbdraw versions.
 
+A Web Session also preserves supported manual legend, plot title, and Linear
+scale positions in its saved Result. After loading, **Generate Diagram** carries
+each matched item's offset into the new automatic layout for the same diagram;
+it does not pin an absolute page position. If the source, selected region,
+record set, or layout no longer matches a moved item, Generate keeps the saved
+Result and asks for that item's position reset, **Reset Layout**, or matching
+settings. Preview search placement and Layout edit hints are not saved. Keep
+the Session when browser positioning must be reproduced; a raw Python render
+request alone does not contain those manual positions.
+
 Fresh CLI sessions omit `config` because they have no independent Web draft.
 Web initializes their settings from `renderRequest` and restores original input
 files from their bindings. A present `config` must contain valid `form` and `adv`

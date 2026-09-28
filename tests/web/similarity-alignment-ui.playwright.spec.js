@@ -199,10 +199,22 @@ test('alignment canvas guide and candidates stay transient and share palette cho
   await expect.poll(() => page.evaluate(() => window.__GBDRAW_APP__.zoom)).toBeGreaterThan(zoomBefore);
   await expect.poll(geometryIsAligned).toBe(true);
   const panBefore = await page.evaluate(() => window.__GBDRAW_APP__.canvasPan.x);
-  const canvasBox = await canvas.boundingBox();
-  await page.mouse.move(canvasBox.x + 240, canvasBox.y + 220);
+  // The dialog and feature shapes own their pointer input. Pan from a real
+  // exposed canvas margin rather than a fixed point that may hit either one.
+  const panPoint = await canvas.evaluate((element) => {
+    const box = element.getBoundingClientRect();
+    for (const y of [box.top + 4, box.bottom - 4, box.top + 20, box.bottom - 20]) {
+      for (let x = box.left + 4; x < box.right - 40; x += 12) {
+        const hit = document.elementFromPoint(x, y);
+        if (hit && element.contains(hit) && !hit.closest('svg')) return { x, y };
+      }
+    }
+    return null;
+  });
+  expect(panPoint).not.toBeNull();
+  await page.mouse.move(panPoint.x, panPoint.y);
   await page.mouse.down();
-  await page.mouse.move(canvasBox.x + 270, canvasBox.y + 220, { steps: 3 });
+  await page.mouse.move(panPoint.x + 30, panPoint.y, { steps: 3 });
   await page.mouse.up();
   await expect.poll(() => page.evaluate(() => window.__GBDRAW_APP__.canvasPan.x))
     .toBeGreaterThan(panBefore);
@@ -1009,6 +1021,49 @@ test('one usable member applies directly through one Worker resolve and one Hist
     resolves: window.__alignmentWorkerResolves,
     paletteMounts: window.__alignmentPaletteMounts
   }))).toEqual({ resolves: 1, paletteMounts: 0 });
+
+  // Layout editing keeps record drag ahead of pan and consumes the active plan
+  // through the existing alignment lifecycle, as one undoable action.
+  if (await page.evaluate(() => window.__GBDRAW_APP__.showRightDrawer)) {
+    await page.locator('.drawer-toggle').click();
+  }
+  await page.getByRole('button', { name: 'Toggle layout edit mode' }).click();
+  await page.evaluate(() => { window.__GBDRAW_APP__.zoom = 0.6; });
+  await expect.poll(() => page.evaluate(() => new DOMMatrix(
+    getComputedStyle(window.__GBDRAW_APP__.svgContainer).transform).a)).toBeCloseTo(0.6, 5);
+  const recordPoint = await page.evaluate(async () => {
+    const a = window.__GBDRAW_APP__;
+    const { closestRecordGroup } = await import('./js/app/record-groups.js');
+    for (const line of a.svgContainer.querySelectorAll('g[data-gbdraw-record-id] line')) {
+      const rect = line.getBoundingClientRect();
+      const x = rect.x + rect.width / 2, y = rect.y + rect.height / 2;
+      const hit = document.elementFromPoint(x, y);
+      const group = closestRecordGroup(hit);
+      if (group && !hit.closest('[data-gbdraw-feature-id], text[data-label-editable="true"]')) {
+        return { x, y, groupId: group.id };
+      }
+    }
+    throw new Error('No visible record axis drag target');
+  });
+  const beforeRecordDrag = await artifactSnapshot(page);
+  const panBeforeRecordDrag = await page.evaluate(() => ({ ...window.__GBDRAW_APP__.canvasPan }));
+  await page.mouse.move(recordPoint.x, recordPoint.y);
+  await page.mouse.down();
+  await expect(page.locator(`[id="${recordPoint.groupId}"]`)).toHaveCSS('cursor', 'grabbing');
+  await page.mouse.move(recordPoint.x + 12, recordPoint.y + 6, { steps: 6 });
+  await page.mouse.up();
+  await expect.poll(() => page.evaluate(() => window.__GBDRAW_HISTORY__.getUndoCount()))
+    .toBe(beforeRecordDrag.history[0] + 1);
+  const afterRecordDrag = await artifactSnapshot(page);
+  expect(afterRecordDrag.plan).toBeNull();
+  expect(afterRecordDrag.results).not.toEqual(beforeRecordDrag.results);
+  expect(await page.evaluate(() => ({ ...window.__GBDRAW_APP__.canvasPan }))).toEqual(panBeforeRecordDrag);
+  expect(await page.evaluate(() => window.__alignmentWorkerResolves)).toBe(1);
+  await page.evaluate(() => window.__GBDRAW_APP__.undoHistory());
+  expect((await artifactSnapshot(page)).plan).toEqual(beforeRecordDrag.plan);
+  await page.evaluate(() => window.__GBDRAW_APP__.redoHistory());
+  expect((await artifactSnapshot(page)).plan).toBeNull();
+  await page.getByRole('button', { name: 'Toggle layout edit mode' }).click();
 
   await importSession(page, session, 'one-candidate-retry.gbdraw-session.json');
   if (!await page.evaluate(() => window.__GBDRAW_APP__.showRightDrawer)) {

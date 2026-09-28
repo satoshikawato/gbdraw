@@ -1409,6 +1409,33 @@ def test_current_circular_writer_uses_only_canonical_layout_fields() -> None:
     assert {"spacing", "strict", "compress", "reserve"}.isdisjoint(slot)
 
 
+@pytest.mark.parametrize("field", ["width", "radius"])
+@pytest.mark.parametrize("value", [float("nan"), float("inf"), -float("inf")])
+@pytest.mark.parametrize("typed", [False, True])
+def test_current_circular_request_rejects_nonfinite_scalar(
+    tmp_path: Path, field: str, value: float, typed: bool
+) -> None:
+    record = SeqRecord(Seq("ATGC"), id="record", annotations={"molecule_type": "DNA"})
+    encoded = encode_canonical_request(
+        CircularDiagramRequest(
+            records=(RecordInput(source=InMemoryRecordSource(record)),),
+            options=CircularDiagramOptions(tracks=CircularTrackOptions(
+                circular_track_slots=(CircularTrackSlot(id="features", renderer="features"),)
+            )),
+        )
+    )
+    payload = copy.deepcopy(encoded.payload)
+    payload["diagramOptions"]["tracks"]["circularTrackSlots"][0][field] = (
+        {"value": value, "unit": "px"} if typed else value
+    )
+    with pytest.raises(CanonicalRequestDecodingError, match=field):
+        decode_canonical_request(
+            payload,
+            resource_paths=_materialize_resources(encoded, tmp_path / "resources"),
+            output_directory=tmp_path / "output",
+        )
+
+
 def test_current_schema_rejects_private_circular_track_params(tmp_path: Path) -> None:
     record = SeqRecord(Seq("ATGC"), id="record", annotations={"molecule_type": "DNA"})
     encoded = encode_canonical_request(

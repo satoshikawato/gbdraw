@@ -23,7 +23,6 @@ export const createPreviewFeatureSearch = ({
   watch,
   nextTick,
   computed,
-  reactive,
   openFeatureEditorForFeature,
   resolveOrthogroups = () => state.orthogroups.value,
   previewRuntime = null
@@ -48,11 +47,9 @@ export const createPreviewFeatureSearch = ({
     previewFeatureSearchActiveIndex,
     previewFeatureSearchError,
     previewFeatureSearchRenderedCount,
-    clickedFeature,
-    showRightDrawer
+    clickedFeature
   } = state;
 
-  const RIGHT_DRAWER_WIDTH_PX = 360;
   const getPopupMode = () => (adv?.rich_feature_popup === false ? 'simple' : 'rich');
   let refreshRequestId = 0;
   let appliedSearchField = normalizeFeatureSearchField(previewFeatureSearchField.value, { popupMode: getPopupMode() });
@@ -62,8 +59,6 @@ export const createPreviewFeatureSearch = ({
   let featureElementIndex = null;
   let featureElementIndexSvg = null;
   const appliedSearchDomState = createPreviewFeatureSearchDomState();
-  const dragOffset = reactive({ x: 0, y: 0 });
-  let activeDrag = null;
   const getSvg = () => resolvePreviewSvg(svgContainer.value);
   const getActiveMatchId = () => (
     previewFeatureSearchActiveIndex.value >= 0
@@ -115,13 +110,6 @@ export const createPreviewFeatureSearch = ({
     }
     return featureElementIndex;
   };
-  const previewFeatureSearchX = computed(() => (
-    showRightDrawer?.value ? Math.min(dragOffset.x, -RIGHT_DRAWER_WIDTH_PX) : dragOffset.x
-  ));
-  const previewFeatureSearchStyle = computed(() => ({
-    transform: `translate(${previewFeatureSearchX.value}px, ${dragOffset.y}px)`
-  }));
-
   const previewFeatureSearchFieldOptions = computed(() => getFeatureSearchFieldOptions({ popupMode: getPopupMode() }));
   const previewFeatureSearchQualifierEnabled = computed(() => (
     getPopupMode() !== 'simple' && previewFeatureSearchField.value === 'qualifier-value'
@@ -224,41 +212,6 @@ export const createPreviewFeatureSearch = ({
 
   const setField = (field) => {
     previewFeatureSearchField.value = normalizeFeatureSearchField(field, { popupMode: getPopupMode() });
-  };
-
-  const moveDrag = (event) => {
-    if (!activeDrag) return;
-    const nextX = activeDrag.originX + ((Number(event.clientX) || 0) - activeDrag.startX);
-    dragOffset.x = showRightDrawer?.value ? Math.min(nextX, -RIGHT_DRAWER_WIDTH_PX) : nextX;
-    dragOffset.y = activeDrag.originY + ((Number(event.clientY) || 0) - activeDrag.startY);
-    event.preventDefault();
-  };
-
-  const stopDrag = () => {
-    if (!activeDrag) return;
-    activeDrag = null;
-    document.removeEventListener('pointermove', moveDrag, true);
-    document.removeEventListener('pointerup', stopDrag, true);
-    document.removeEventListener('pointercancel', stopDrag, true);
-    window.removeEventListener('blur', stopDrag);
-  };
-
-  const startDrag = (event) => {
-    if (event.button != null && event.button !== 0) return;
-    if (event.target?.closest?.('input, select, button, label, textarea, a')) return;
-    stopDrag();
-    activeDrag = {
-      startX: Number(event.clientX) || 0,
-      startY: Number(event.clientY) || 0,
-      originX: Number(previewFeatureSearchX.value) || 0,
-      originY: Number(dragOffset.y) || 0
-    };
-    document.addEventListener('pointermove', moveDrag, true);
-    document.addEventListener('pointerup', stopDrag, true);
-    document.addEventListener('pointercancel', stopDrag, true);
-    window.addEventListener('blur', stopDrag);
-    event.preventDefault();
-    event.stopPropagation();
   };
 
   const applySearch = () => {
@@ -418,12 +371,10 @@ export const createPreviewFeatureSearch = ({
 
   const dispose = () => {
     refreshRequestId += 1;
-    stopDrag();
     disposePreviewFeatureSearchDomState(appliedSearchDomState);
   };
 
   return {
-    previewFeatureSearchStyle,
     previewFeatureSearchFieldOptions,
     previewFeatureSearchQualifierEnabled,
     previewFeatureSearchHasMatches,
@@ -433,7 +384,6 @@ export const createPreviewFeatureSearch = ({
     previewFeatureSearchActiveDetail,
     setQuery,
     setField,
-    startDrag,
     applySearch,
     goToNext,
     goToPrevious,

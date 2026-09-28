@@ -351,3 +351,26 @@ test('Circular measure action updates only the owned scalar and preserves slot i
   editor.updateCircularTrackSlotMeasure(detached, 'width', null);
   assert.equal(detached.width, 'saved');
 });
+
+test('Circular measure action refuses nonfinite numeric leaves before changing a slot', () => {
+  const state = createState();
+  const editor = createCircularTrackSlotEditor({ state });
+  const slot = state.adv.circular_track_slots[0];
+  for (const field of ['width', 'radius']) {
+    const before = slot[field];
+    for (const scalar of [NaN, Infinity, -Infinity,
+      { value: NaN, unit: 'px' }, { value: Infinity, unit: 'factor' },
+      { value: -Infinity, unit: 'px' }]) {
+      assert.throws(() => editor.updateCircularTrackSlotMeasure(slot, field, scalar), /positive finite px or factor scalar/);
+      assert.strictEqual(slot[field], before);
+    }
+  }
+  for (const scalar of [0.5, { value: 20, unit: 'px' }, null,
+    { value: '1e-3', unit: 'factor' }, { value: 'Infinity', unit: 'px' },
+    { value: '1e', unit: 'px' }, { value: '20em', unit: 'px' }]) {
+    editor.updateCircularTrackSlotMeasure(slot, 'width', scalar);
+    assert.strictEqual(slot.width, scalar);
+    editor.updateCircularTrackSlotMeasure(slot, 'width', scalar);
+    assert.strictEqual(slot.width, scalar);
+  }
+});

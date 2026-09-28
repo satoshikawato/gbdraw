@@ -86,6 +86,8 @@ test('selected D-loop without gene or locus_tag generates a feature annotation',
 test('label search includes live edits and reports the initial rendered feature count', async ({ page }) => {
   test.setTimeout(180000);
   await session(page);
+  await page.getByRole('button', { name: 'Toggle layout edit mode' }).click();
+  await expect(page.getByRole('button', { name: 'Toggle layout edit mode' })).toHaveAttribute('aria-pressed', 'true');
   const status = page.getByRole('status', { name: 'Feature search status' });
   await expect(status).toHaveText('0 / 37 features');
   const search = page.getByRole('searchbox', { name: 'Search features', exact: true });

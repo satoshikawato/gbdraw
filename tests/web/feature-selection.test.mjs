@@ -140,6 +140,7 @@ assert.equal(anchor.getAttribute('class'), null);
 assert.equal(candidate.getAttribute('class'), null);
 
 const searchMatch = new FakeElement('gbdraw-preview-feature-search-match gbdraw-feature-selected keep');
+const layoutTarget = new FakeElement('gbdraw-preview-layout-target keep-layout', 'cursor: help');
 const cursorStyle = new FakeElement('', 'cursor: pointer; opacity: 0.8');
 const pairwise = new FakeElement();
 for (const [name, value] of Object.entries({
@@ -147,10 +148,12 @@ for (const [name, value] of Object.entries({
   role: 'button', tabindex: '0', 'aria-label': 'Pairwise match 1'
 })) pairwise.setAttribute(name, value);
 const previewRoot = fakeSvg(
-  [searchMatch, cursorStyle, pairwise],
+  [searchMatch, cursorStyle, layoutTarget, pairwise],
   'gbdraw-preview-feature-search-results-active gbdraw-preview-feature-search-updating keep-root'
 );
 stripTransientPreviewState(previewRoot);
+assert.equal(layoutTarget.getAttribute('class'), 'keep-layout');
+assert.equal(layoutTarget.getAttribute('style'), null);
 assert.equal(searchMatch.getAttribute('class'), 'keep');
 assert.equal(cursorStyle.getAttribute('style'), 'opacity: 0.8');
 assert.equal(previewRoot.getAttribute('class'), 'keep-root');

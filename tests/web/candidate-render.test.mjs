@@ -156,3 +156,13 @@ test('plan construction uses admission indexes and never enumerates catalog Feat
     color: '#112233'
   }]);
 });
+
+
+test('decoration transforms mutate only their matched batch output; zero keeps EMPTY', () => {
+  const catalogAdmission = { ...admission(), resultNames: ['a', 'b'] };
+  const transform = () => {};
+  const plan = compileDirectEditorMutationPlan({ catalogAdmission, resultTransforms: [null, transform] });
+  assert.equal(plan.operationsByResult[0].callerTransforms.length, 0);
+  assert.deepEqual(plan.operationsByResult[1].callerTransforms, [transform]);
+  assert.equal(compileDirectEditorMutationPlan({ catalogAdmission, resultTransforms: [null, null] }).kind, 'EMPTY');
+});

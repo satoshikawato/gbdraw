@@ -173,10 +173,6 @@ const assertOverlayGeometry = (geometry, label, drawerOpen) => {
       insidePreview(button.box),
       `${label}: ${button.name || 'unnamed control'} is outside Preview bounds`
     ).toBe(true);
-    expect(
-      button.receivesPointerAtCenter,
-      `${label}: ${button.name || 'unnamed control'} is blocked`
-    ).toBe(true);
   }
 };
 
@@ -297,6 +293,19 @@ const centerPreview = async (page) => {
   });
 };
 
+const assertDockedControlsReachable = async (page) => {
+  for (const control of await page.locator('.preview-controls button').all()) {
+    await control.evaluate((element) => element.scrollIntoView({ block: 'center' }));
+    const target = await control.evaluate((element) => {
+      const box = element.getBoundingClientRect();
+      const hit = document.elementFromPoint(box.left + box.width / 2, box.top + box.height / 2);
+      return { received: element.contains(hit), rect: [box.left, box.top, box.right, box.bottom],
+        hit: hit?.outerHTML?.slice(0, 120), size: [innerWidth, innerHeight], scrollY };
+    });
+    expect(target.received, `${await control.getAttribute('aria-label') || await control.textContent()} ${JSON.stringify(target)}`).toBe(true);
+  }
+};
+
 const assertMobileGeometry = (geometry, drawerOpen) => {
   const { preview, canvas, toggle, drawer, viewport, header, generate } = geometry;
   expect(viewport.pageWidth).toBeLessThanOrEqual(viewport.width);
@@ -310,7 +319,6 @@ const assertMobileGeometry = (geometry, drawerOpen) => {
     expect(boxOverlap(button.box, drawer).intersects && drawerOpen, button.name).toBe(false);
     expect(button.box.left).toBeGreaterThanOrEqual(canvas.left);
     expect(button.box.right).toBeLessThanOrEqual(canvas.right);
-    expect(button.receivesPointerAtCenter, `${button.name} blocked`).toBe(true);
   }
   expect(canvas.left).toBe(preview.left + 2);
   expect(canvas.right).toBe(preview.right - 2);
@@ -443,6 +451,7 @@ test('mobile overlays preserve mode, source replacement, and resize behavior', a
       const geometry = await readOverlayGeometry(page);
       if (viewport.width === 390) assertMobileGeometry(geometry, open);
       else assertOverlayGeometry(geometry, 'resized desktop', open);
+      await assertDockedControlsReachable(page);
     }
     await toggle.click();
     await expect(toggle).toHaveAttribute('aria-expanded', 'false');
@@ -454,6 +463,7 @@ test('mobile overlays preserve mode, source replacement, and resize behavior', a
     await expect(toggle).toHaveCount(1);
     await centerPreview(page);
     assertMobileGeometry(await readOverlayGeometry(page), false);
+    await assertDockedControlsReachable(page);
     await toggle.click();
     await expect(toggle).toHaveAttribute('aria-expanded', 'true');
     await waitForSettledDrawer(page);
@@ -474,6 +484,7 @@ test('mobile overlays preserve mode, source replacement, and resize behavior', a
   await expect(page.locator('.right-drawer')).toHaveCount(1);
   await centerPreview(page);
   assertMobileGeometry(await readOverlayGeometry(page), false);
+  await assertDockedControlsReachable(page);
   await toggle.click();
   await expect(toggle).toHaveAttribute('aria-expanded', 'true');
   await page.locator('.right-drawer').getByRole('button', { name: 'Close editor', exact: true }).click();

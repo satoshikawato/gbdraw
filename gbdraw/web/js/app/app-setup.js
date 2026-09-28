@@ -1324,7 +1324,6 @@ export const createAppSetup = () => {
     watch,
     nextTick,
     computed,
-    reactive,
     previewRuntime,
     resolveOrthogroups: () => orthogroups.value.map((group) => ({
       ...group,
@@ -2350,6 +2349,7 @@ export const createAppSetup = () => {
     adoptCanonicalRenderArtifacts,
     getCommittedCanonicalRenderRequest,
     getCommittedCanonicalSession,
+    captureDecorationContinuity: legendLayout.captureDecorationContinuity,
     captureGeneratedArtifactHandle: historySnapshots.captureGeneratedArtifactHandle,
     captureGeneratedArtifactOwnerSet: historySnapshots.captureGeneratedArtifactOwnerSet,
     installGeneratedArtifactOwnerSet: historySnapshots.installGeneratedArtifactOwnerSet,
@@ -2652,7 +2652,11 @@ export const createAppSetup = () => {
       legendLayout.reconcileCompositionUserDeltas(_intent?.ui?.compositionUserDeltas);
     }
     if (changedDomains.has('config') || changedDomains.has('features')) {
-      if (!await rulePreparation.prepare()) return;
+      const rulesChanged = Array.isArray(changes) && changes.some((change) => (
+        change?.path?.[0] === 'config' && change.path[1] === 'rules'
+      ));
+      if ((changedDomains.has('features') || rulesChanged || !rulePreparation.isPrepared())
+        && !await rulePreparation.prepare()) return;
       svgActions.applyPaletteToSvg();
       svgActions.applySpecificRulesToSvg();
     }
@@ -4759,8 +4763,6 @@ export const createAppSetup = () => {
     previewFeatureSearchCanSearch: previewFeatureSearch.previewFeatureSearchCanSearch,
     previewFeatureSearchStatusText: previewFeatureSearch.previewFeatureSearchStatusText,
     previewFeatureSearchActiveDetail: previewFeatureSearch.previewFeatureSearchActiveDetail,
-    previewFeatureSearchStyle: previewFeatureSearch.previewFeatureSearchStyle,
-    startPreviewFeatureSearchDrag: previewFeatureSearch.startDrag,
     applyPreviewFeatureSearch: previewFeatureSearch.applySearch,
     goToNextPreviewFeatureSearchMatch: previewFeatureSearch.goToNext,
     goToPreviousPreviewFeatureSearchMatch: previewFeatureSearch.goToPrevious,
@@ -4900,7 +4902,7 @@ export const createAppSetup = () => {
     moveLegendEntryDown,
     sortLegendEntries,
     sortLegendEntriesByDefault,
-    resetLegendPosition,
+    resetLegendPosition: undoableAction('Reset legend position', resetLegendPosition),
     getLegendEntryStrokeColor,
     getLegendEntryStrokeWidth,
     setLegendEntryStrokeColorValue: setLegendEntryStrokeColorValueWithHistory,
@@ -4908,8 +4910,8 @@ export const createAppSetup = () => {
     updateLegendEntryStrokeWidth,
     resetLegendEntryStroke,
     resetAllStrokes,
-    resetAllPositions,
-    resetLayout,
+    resetAllPositions: undoableAction('Reset positions', resetAllPositions),
+    resetLayout: undoableAction('Reset layout', resetLayout),
     canvasPadding,
     showCanvasControls,
     resetCanvasPadding,

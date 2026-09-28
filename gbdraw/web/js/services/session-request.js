@@ -2698,6 +2698,57 @@ const generationResourceIdentity = (resource) => {
   return { bindings: null };
 };
 
+// Successful render/import already validates these backings. Compare immutable
+// owners or their encoded payloads, without another genome read or digest.
+const compositionSourceIdentity = (source, resources) => {
+  if (!source || typeof source !== 'object') return null;
+  const fields = Object.keys(source).sort();
+  const identity = fields.map((key) => {
+    if (!isCanonicalResourceReferenceField(key)) return [key, source[key]];
+    const descriptor = resources?.[source[key]];
+    if (!descriptor) return [key, null];
+    const parts = generationResourceIdentity(descriptor)?.bindings;
+    if (!Array.isArray(parts) || !parts.length) return [key, null];
+    return [key, parts.map(part => ({
+      payload: typeof part?.data === 'string' ? part.data : part,
+      size: part?.size,
+      encoding: part?.encoding || 'file'
+    }))];
+  });
+  return identity;
+};
+
+export const projectCompositionRecordIdentity = (canonical, keys) => {
+  const request = canonical?.renderRequest;
+  if (!request || !Array.isArray(keys) || !keys.length || new Set(keys).size !== keys.length) return null;
+  const records = [];
+  for (const key of [...keys].sort()) {
+    // The renderer's validated catalog expands an ALL source as
+    // <recordKey>:<one-based biological source selector>. This is a source
+    // record binding, never a Result index or display order.
+    const matches = (request.records || []).flatMap(record => {
+      if (record.recordKey === key) {
+        // With no region/selector, successful EXACTLY_ONE selects the sole
+        // source record; FIRST selects #1, and unexpanded ALL also proves one.
+        const selector = record.selector ?? (!record.region && ['exactly_one', 'first', 'all'].includes(record.cardinality)
+          ? { kind: 'recordIndex', index: 0 } : null);
+        return [{ record, selector }];
+      }
+      const suffix = key.startsWith(`${record.recordKey}:`) ? key.slice(record.recordKey.length + 1) : '';
+      if (record.cardinality !== 'all' || !/^[1-9]\d*$/.test(suffix)) return [];
+      return [{ record, selector: { kind: 'recordIndex', index: Number(suffix) - 1 } }];
+    });
+    if (matches.length !== 1) return null;
+    const { record, selector } = matches[0];
+    const source = compositionSourceIdentity(record.source, canonical.resources);
+    if (!source || source.some(([field, value]) => isCanonicalResourceReferenceField(field)
+      && (!value || value.some(part => !part.payload || !Number.isSafeInteger(part.size))))) return null;
+    records.push({ key, source, selector: publicationClone(selector),
+      region: publicationClone(record.region ?? null) });
+  }
+  return { mode: request.mode, grouping: request.grouping, records };
+};
+
 const generationComparisonPlan = (state, filesData, snapshot) => {
   if (state.mode.value !== 'linear') return null;
   const plan = snapshot || resolveLinearComparisonPlan({

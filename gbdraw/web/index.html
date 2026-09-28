@@ -520,11 +520,8 @@
             grid-template-columns: minmax(0, 1fr);
         }
         .preview-feature-search {
-            position: absolute;
-            top: 1rem;
-            right: 3rem;
-            z-index: 30;
-            width: min(39.5rem, calc(100% - 4rem));
+            min-width: 0;
+            margin: 0.5rem;
             padding: 7px;
             border: 1px solid #cbd5e1;
             border-radius: 8px;
@@ -533,8 +530,6 @@
             box-shadow: 0 12px 28px rgba(15, 23, 42, 0.16);
             font-family: Arial, Helvetica, sans-serif;
             font-size: 11px;
-            cursor: grab;
-            pointer-events: auto;
         }
         .preview-feature-search * {
             box-sizing: border-box;
@@ -544,6 +539,7 @@
             gap: 5px;
             align-items: center;
             min-width: 0;
+            flex-wrap: wrap;
         }
         .preview-feature-search .gfs-row + .gfs-row {
             margin-top: 6px;
@@ -725,6 +721,21 @@
             color: white;
             outline: 2px solid white;
         }
+        .preview-layout-off .gbdraw-preview-layout-target:hover {
+            outline: 1px dashed #94a3b8;
+            outline-offset: 4px;
+        }
+        .preview-layout-hint {
+            display: none;
+            pointer-events: none;
+        }
+        .preview-layout-off:has(.gbdraw-preview-layout-target:hover) .preview-layout-hint {
+            display: block;
+        }
+        .drag-hint {
+            pointer-events: none;
+        }
+
         .gbdraw-preview-surface :is(
             path[data-gbdraw-feature-id],
             polygon[data-gbdraw-feature-id],
@@ -867,6 +878,8 @@
         [aria-label="Result Preview"] { --alignment-review-compact: 0; }
         .right-drawer {
             width: var(--right-drawer-width);
+            min-height: 0;
+            overflow: hidden;
             transform: translateX(0);
             visibility: visible;
             pointer-events: auto;
@@ -885,15 +898,32 @@
                 -50%
             );
         }
-        .preview-controls.preview-controls--drawer-open {
-            left: 0;
-            right: var(--right-drawer-width);
-            transform: none;
+        .preview-editor-layout {
+            display: grid;
+            grid-template-rows: auto minmax(200px, 1fr) auto;
+            min-width: 0;
+            min-height: 0;
+            flex: 1 0 auto;
+        }
+        .preview-workspace {
+            position: relative;
+            display: flex;
+            min-width: 0;
+            min-height: 200px;
+            isolation: isolate;
+        }
+        .preview-viewport {
+            width: 100%;
+            min-width: 0;
+            min-height: 0;
+        }
+        .preview-controls {
+            min-width: 0;
+            padding: 0.5rem;
             justify-content: center;
             flex-wrap: wrap;
-        }
-        .preview-editor-layout {
-            display: contents;
+            background: #f8fafc;
+            border-top: 1px solid #e2e8f0;
         }
         @media (max-width: 760px) {
             .feature-popup-grid {
@@ -1051,59 +1081,8 @@
                 flex: 1 1 auto !important;
             }
 
-            .preview-feature-search {
-                top: 0.5rem !important;
-                right: 0.5rem !important;
-                left: 0.5rem !important;
-                width: auto !important;
-                max-height: calc(100% - 1rem) !important;
-                overflow: auto !important;
-            }
-
-            .preview-feature-search .gfs-row {
-                flex-wrap: wrap !important;
-            }
-
-            .preview-feature-search .gfs-query,
-            .preview-feature-search .gfs-select,
-            .preview-feature-search .gfs-qualifier,
-            .preview-feature-search .gfs-count,
-            .preview-feature-search .gfs-match-detail {
-                flex: 1 1 100% !important;
-                min-width: 0 !important;
-            }
-
-            .preview-feature-search .gfs-count {
-                margin-left: 0 !important;
-            }
-
-            .preview-controls {
-                left: 0.5rem !important;
-                right: 0.5rem !important;
-                bottom: 0.5rem !important;
-                transform: none !important;
-                justify-content: center !important;
-                flex-wrap: wrap !important;
-            }
-
             .drag-hint {
                 display: none !important;
-            }
-
-            .right-drawer {
-                width: var(--right-drawer-width) !important;
-            }
-
-            .drawer-toggle {
-                top: auto !important;
-                bottom: 5rem !important;
-                transform: none !important;
-            }
-
-            .drawer-toggle[aria-expanded="true"] {
-                transform: translateX(
-                    calc(-1 * var(--right-drawer-width))
-                ) !important;
             }
 
             footer[data-app-footer] {
@@ -1117,96 +1096,49 @@
             }
         }
 
-        /* One Preview and Editor: compact canvases have a full-width dock.
-           Search precedes the canvas so page scroll can expose the dock below
-           the sticky header and above Generate, including on short screens. */
+        /* The same canvas and Editor dock below the search on compact cards. */
         @container (max-width: 40rem) {
             .result-pane > [aria-label="Result Preview"] {
                 flex: none;
                 --alignment-review-compact: 1;
                 min-height: 0;
-                overflow: clip;
+                overflow: visible;
                 --editor-toggle-width: 2.25rem;
                 --compact-preview-space: calc(100dvh - 21rem - env(safe-area-inset-bottom));
             }
             [aria-label="Result Preview"] > .card-header {
+                margin-inline: 0;
                 padding-right: calc(var(--editor-toggle-width) + 0.75rem);
             }
             .preview-editor-layout {
-                display: grid;
-                position: relative;
-                grid-template-columns: minmax(0, 1fr);
-                grid-template-rows: auto minmax(200px, calc(var(--compact-preview-space) * 0.5)) auto;
+                grid-template-rows: auto auto auto;
                 gap: 0.5rem;
-                min-width: 0;
-                isolation: isolate;
             }
-            .preview-editor-layout:has(.right-drawer[aria-hidden="false"]),
-            .preview-editor-layout:has(.alignment-review-panel) {
-                grid-template-rows: auto minmax(200px, calc(var(--compact-preview-space) * 0.5)) auto var(--compact-dock-height, clamp(11rem, calc(var(--compact-preview-space) * 0.4), 18rem));
+            .preview-workspace {
+                display: grid;
+                grid-template-columns: minmax(0, 1fr);
+                grid-template-rows: minmax(200px, calc(var(--compact-preview-space) * 0.5)) auto auto;
             }
-            .preview-editor-layout:has(.alignment-review-panel) {
-                --compact-dock-height: clamp(15rem, 29dvh, 18rem);
-            }
-            .alignment-review-dock {
-                grid-area: 4 / 1;
-                min-height: 0;
+            .preview-workspace:has(.alignment-review-panel) {
+                grid-template-rows: minmax(200px, calc(var(--compact-preview-space) * 0.5)) clamp(15rem, 29dvh, 18rem) auto;
             }
             .preview-viewport {
-                display: contents;
-            }
-            .preview-feature-search {
                 position: relative;
                 grid-area: 1 / 1;
-                inset: auto !important;
-                width: auto;
-                min-height: 0;
-                max-height: 12rem !important;
-                overflow: auto;
-                transform: none !important;
-                margin-right: var(--editor-toggle-width);
+                min-height: 200px;
             }
-            .preview-viewport .preview-canvas {
-                position: relative;
+            .alignment-review-dock {
                 grid-area: 2 / 1;
-                inset: auto;
                 min-width: 0;
                 min-height: 0;
             }
-            .preview-viewport .preview-controls {
+            .preview-workspace .right-drawer {
                 position: relative;
                 grid-area: 3 / 1;
-                inset: auto !important;
-                transform: none !important;
-                justify-content: center;
-                flex-wrap: wrap;
-                gap: 0.25rem;
-            }
-            .preview-controls > button {
-                padding: 0.5rem;
-            }
-            .preview-controls > button span {
-                display: none;
-            }
-            .preview-controls [aria-label="Reset zoom"] {
-                width: 3rem;
-            }
-            .preview-viewport .preview-canvas-padding {
-                position: relative;
-                grid-area: 2 / 1;
                 inset: auto;
-                transform: none;
-                place-self: end center;
-                max-height: 100%;
-                overflow: auto;
-                z-index: 31;
-            }
-            .preview-editor-layout .right-drawer {
-                position: relative;
-                grid-area: 4 / 1;
-                inset: auto;
-                width: 100% !important;
+                width: 100%;
                 min-height: 0;
+                max-height: clamp(11rem, calc(var(--compact-preview-space) * 0.4), 18rem);
                 border-left: 0;
                 border-top: 1px solid #e2e8f0;
                 transform: none;
@@ -1222,16 +1154,25 @@
                 min-height: 8rem;
                 flex: none;
             }
-            .drawer-toggle {
-                top: 0.5rem !important;
-                bottom: auto !important;
+            .preview-workspace .drawer-toggle {
+                top: 0.5rem;
+                bottom: auto;
                 right: 0;
                 width: var(--editor-toggle-width);
-                transform: none !important;
+                transform: none;
             }
-            .drawer-toggle[aria-expanded="true"] {
+            .preview-workspace .drawer-toggle[aria-expanded="true"] {
                 right: 0;
-                transform: none !important;
+                transform: none;
+            }
+            .preview-controls > button {
+                padding: 0.5rem;
+            }
+            .preview-controls > button span {
+                display: none;
+            }
+            .preview-controls [aria-label="Reset zoom"] {
+                width: 3rem;
             }
         }
 
@@ -4800,6 +4741,7 @@
                         </div>
                     </div>
                     <div v-if="resultPanelTab === 'preview'" class="preview-toolbar flex gap-2 items-center flex-wrap mr-2" aria-describedby="session-export-help">
+                        <p id="preview-layout-help" class="basis-full text-xs text-slate-600">Turn on Layout edit to move a legend, title, or Linear scale. When off, drag to pan. Use the Layout edit button with click, tap, Space, or Enter.</p>
                         <div class="flex items-center gap-2 bg-white px-3 py-1.5 rounded border border-green-200">
                             <span class="text-sm font-bold text-green-700">DPI</span>
                             <select v-model="downloadDpi" aria-label="PNG DPI" class="text-sm bg-transparent border-none focus:ring-0 p-0 text-slate-600 font-mono outline-none cursor-pointer">
@@ -4872,13 +4814,10 @@
                 </div>
 
                 <div class="preview-editor-layout">
-                <div v-show="resultPanelTab === 'preview'" class="preview-viewport relative flex-grow overflow-hidden bg-slate-50/30">
-
                     <div v-if="svgContent"
+                         v-show="resultPanelTab === 'preview'"
                          :class="['preview-feature-search', { 'is-invalid': previewFeatureSearchError }]"
-                         :style="previewFeatureSearchStyle"
                          @click.stop
-                         @pointerdown.stop="startPreviewFeatureSearchDrag"
                          @mousedown.stop
                          @mousemove.stop
                          @mouseup.stop
@@ -4955,6 +4894,10 @@
                             {{ previewFeatureSearchActiveDetail }}
                         </div>
                     </div>
+
+                <div class="preview-workspace">
+                <div v-show="resultPanelTab === 'preview'" class="preview-viewport relative flex-grow overflow-hidden bg-slate-50/30"
+                     :class="{ 'preview-layout-off': !layoutRepositionMode }">
 
                     <div v-if="featureSelectionStatus"
                          class="feature-selection-status"
@@ -5116,10 +5059,15 @@
                         </div>
                     </div>
 
+                    <!-- Preview-only target hint; the toolbar also explains keyboard/touch activation. -->
+                    <div v-if="svgContent && !layoutRepositionMode" class="preview-layout-hint drag-hint absolute top-4 left-4 bg-white/90 shadow rounded-lg px-4 py-2 z-20 border border-slate-200" aria-hidden="true">
+                        <p class="text-sm text-slate-600">Turn on Layout edit to move this item</p>
+                    </div>
+
                     <!-- Drag hint -->
                     <div v-if="svgContent && layoutRepositionMode" class="drag-hint absolute top-4 left-4 bg-white/90 shadow rounded-lg px-4 py-2 z-20 border border-slate-200">
                         <p class="text-sm text-slate-500 flex items-center gap-2">
-                            <i class="ph ph-hand-grabbing text-base"></i> Drag record or legend to reposition
+                            <i class="ph ph-hand-grabbing text-base"></i> Drag a record, legend, title, or Linear scale to reposition
                         </p>
                     </div>
 
@@ -6651,7 +6599,7 @@
                         </div>
                     </div>
 
-                    <div v-if="isFeatureDrawerMounted" class="flex-1 min-h-0 flex flex-col">
+                    <div v-if="isFeatureDrawerMounted" class="flex-1 min-h-0 flex flex-col overflow-y-auto">
                         <p class="px-4 py-2 text-[10px] text-slate-500">Live edit: feature color, label text, and visibility update the current Result; geometry may rerender automatically.</p>
                         <div class="px-4 py-2 border-b border-slate-100 shrink-0 bg-white">
                             <div class="flex items-center justify-between gap-2">
@@ -6667,7 +6615,7 @@
                         <div class="px-4 py-2 border-b border-slate-100 shrink-0">
                             <input v-model="featureSearchInput" data-history-ignore placeholder="Search by feature or annotation..." class="form-input text-xs w-full">
                         </div>
-                        <div ref="featureListScrollRef" class="flex-grow overflow-y-auto custom-scrollbar" @scroll="handleFeatureListScroll">
+                        <div ref="featureListScrollRef" class="flex-grow min-h-[64px] overflow-y-auto custom-scrollbar" @scroll="handleFeatureListScroll">
                             <div v-if="featureExtractionPending && extractedFeatures.length === 0" class="p-4 text-center text-slate-400 text-xs">
                                 <i class="ph ph-circle-notch animate-spin"></i> Preparing features...
                             </div>
@@ -6727,7 +6675,7 @@
                         </div>
                     </div>
 
-                    <div v-show="rightDrawerTab === 'orthogroups'" class="flex-1 min-h-0 flex flex-col">
+                    <div v-show="rightDrawerTab === 'orthogroups'" class="flex-1 min-h-0 flex flex-col overflow-y-auto">
                         <div class="px-4 py-2 border-b border-slate-100 bg-white shrink-0 space-y-2">
                             <div class="flex items-center justify-between text-xs">
                                 <span class="font-semibold text-slate-600">{{ orthogroupCount }} similarity groups</span>
@@ -6808,7 +6756,7 @@
                             </div>
                         </div>
 
-                        <div class="h-48 overflow-y-auto border-b border-slate-100 custom-scrollbar">
+                        <div class="h-48 min-h-[64px] overflow-y-auto border-b border-slate-100 custom-scrollbar">
                             <button v-for="row in orthogroupRows"
                                     :key="row.id"
                                     v-memo="[row, selectedOrthogroup && selectedOrthogroup.id === row.id]"
@@ -6833,7 +6781,7 @@
                             <div v-if="filteredOrthogroups.length === 0" class="p-4 text-center text-slate-400 text-xs">No similarity groups found</div>
                         </div>
 
-                        <div v-if="selectedOrthogroup" class="flex-1 min-h-0 overflow-y-auto p-4 space-y-4 custom-scrollbar">
+                        <div v-if="selectedOrthogroup" class="flex-1 min-h-[96px] overflow-y-auto p-4 space-y-4 custom-scrollbar">
                             <div class="space-y-2">
                                 <div class="flex items-center justify-between">
                                     <span class="text-[10px] font-mono text-slate-400">{{ selectedOrthogroup.id }}</span>
@@ -7080,6 +7028,44 @@
                         </div>
                     </div>
                 </div>
+                </div>
+                    <div v-show="resultPanelTab === 'preview'" class="preview-controls flex items-center gap-2">
+                        <!-- Reset preview layout button -->
+                        <button v-if="svgContent" @click="resetLayout"
+                                class="flex items-center gap-2 px-3 py-2 bg-white shadow rounded-lg border border-slate-200 hover:bg-slate-100 text-slate-600 text-sm"
+                                title="Reset layout"
+                                aria-label="Reset layout">
+                            <i class="ph ph-arrow-counter-clockwise"></i>
+                            <span>Reset Layout</span>
+                        </button>
+                        <!-- Layout reposition mode toggle -->
+                        <button v-if="svgContent" @click="layoutRepositionMode = !layoutRepositionMode"
+                                class="flex items-center gap-2 px-3 py-2 bg-white shadow rounded-lg border border-slate-200 hover:bg-slate-100 text-slate-600 text-sm"
+                                :class="{ 'bg-amber-50 text-amber-700 border-amber-300': layoutRepositionMode }"
+                                :title="layoutRepositionMode ? 'Disable layout edit mode' : 'Enable layout edit mode'"
+                                :aria-pressed="layoutRepositionMode"
+                                aria-label="Toggle layout edit mode"
+                                aria-describedby="preview-layout-help">
+                            <i class="ph ph-arrows-out-cardinal"></i>
+                            <span>Layout edit</span>
+                        </button>
+                        <!-- Canvas size toggle -->
+                        <button v-if="svgContent" @click="showCanvasControls = !showCanvasControls"
+                                class="flex items-center gap-2 px-3 py-2 bg-white shadow rounded-lg border border-slate-200 hover:bg-slate-100 text-slate-600 text-sm"
+                                :class="{ 'bg-blue-50 text-blue-600 border-blue-300': showCanvasControls }"
+                                title="Canvas padding controls"
+                                aria-label="Toggle canvas padding controls">
+                            <i class="ph ph-frame-corners"></i>
+                            <span>Canvas padding</span>
+                        </button>
+                        <!-- Zoom controls -->
+                        <div data-history-ignore class="flex gap-1 bg-white shadow rounded-lg p-1.5 border border-slate-200">
+                            <button @click="zoom+=0.1" class="w-10 h-10 flex items-center justify-center hover:bg-slate-100 text-slate-600 rounded text-lg" aria-label="Zoom in"><i class="ph ph-plus"></i></button>
+                            <button @click="zoom = 1.0" class="w-16 h-10 flex items-center justify-center hover:bg-slate-100 text-slate-600 text-sm font-mono rounded" aria-label="Reset zoom">{{Math.round(zoom*100)}}%</button>
+                            <button @click="zoom = Math.max(0.1, zoom-0.1)" class="w-10 h-10 flex items-center justify-center hover:bg-slate-100 text-slate-600 rounded text-lg" aria-label="Zoom out"><i class="ph ph-minus"></i></button>
+                        </div>
+                    </div>
+
                 </div>
             </div>
 

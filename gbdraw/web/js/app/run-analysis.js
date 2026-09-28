@@ -11,6 +11,7 @@ import {
   runDiagramHelperOperation
 } from '../services/diagram-generation.js';
 import {
+  projectCompositionRecordIdentity,
   buildCanonicalRenderRequest,
   bindCanonicalTypedResource,
   projectGeneratedProteinRecipe,
@@ -1000,6 +1001,7 @@ export const executeCanonicalRenderCandidate = async ({
   catalogAdmission = admitFeatureCatalog,
   prepareCommit = prepareCandidateRenderCommit,
   prepareCommitInput = {},
+  decorationContinuity = null,
   timingEntries = []
 }) => {
   if (!canonical?.renderRequest || !canonical?.resources) {
@@ -1055,7 +1057,8 @@ export const executeCanonicalRenderCandidate = async ({
       results,
       catalog: catalogState.catalog,
       mode,
-      ...prepareCommitInput
+      ...prepareCommitInput,
+      resultTransforms: decorationContinuity?.(canonical, catalogState) || []
     })
   );
   recordSessionLifecycleEvent('result-admission-end');
@@ -1081,6 +1084,7 @@ export const createRunAnalysis = ({
   adoptCanonicalRenderArtifacts,
   getCommittedCanonicalRenderRequest = null,
   getCommittedCanonicalSession = null,
+  captureDecorationContinuity = () => null,
   captureGeneratedArtifactHandle,
   captureGeneratedArtifactOwnerSet,
   installGeneratedArtifactOwnerSet,
@@ -1883,6 +1887,7 @@ export const createRunAnalysis = ({
   };
 
   const runAnalysisInternal = async ({
+    decorationContinuity = null,
     runMode = 'manual',
     requestId = 0,
     comparisonPlanSnapshot = null,
@@ -4668,6 +4673,7 @@ export const createRunAnalysis = ({
       failureStage = 'render';
       const canonicalExecution = await executeCanonicalCandidate({
         canonical,
+        decorationContinuity,
         mode: mode.value,
         kind: isReflow ? 'reflow' : 'generate',
         shouldAdmit: () => (!colorCandidate || rulePreparation.isCurrent(colorCandidate.snapshot))
@@ -5067,12 +5073,14 @@ export const createRunAnalysis = ({
     const isCurrentAlert = () => isCurrentOperation()
       && (errorLog.value === previousAlert || errorLog.value === null);
     let beforeHandle = null;
+    const initialResults = results.value;
     let historyRecovery = null;
     processing.value = true;
     processingStatus.value = 'Preparing input files...';
     generationCancelRequested.value = false;
     recordSessionLifecycleEvent('generate.processing-published');
     try {
+      const decorationContinuity = captureDecorationContinuity(getCommittedCanonicalSession?.(), projectCompositionRecordIdentity);
       await nextTick();
       await waitForAfterPaint();
       if (!isCurrentOperation()) return { status: 'stale' };
@@ -5092,7 +5100,7 @@ export const createRunAnalysis = ({
       const execute = (handle) => {
         beforeHandle = handle || generatedArtifactHandle;
         return runAnalysisInternal({
-          runMode: 'manual', comparisonPlanSnapshot, generatedArtifactHandle: beforeHandle,
+          decorationContinuity, runMode: 'manual', comparisonPlanSnapshot, generatedArtifactHandle: beforeHandle,
           comparisonExecution, isCurrentOperation, isCurrentAlert
         });
       };
@@ -5147,7 +5155,8 @@ export const createRunAnalysis = ({
       return outcome;
     } catch (cause) {
       outcome = await failOperation(cause, { handle: beforeHandle, isCurrent: isCurrentAlert, isCurrentOperation,
-        recovery: cause?.artifactRestoreFailed ? 'restore-failed' : historyRecovery });
+        recovery: cause?.artifactRestoreFailed ? 'restore-failed'
+          : historyRecovery || (!beforeHandle && results.value === initialResults && initialResults.length ? 'preserved' : null) });
       return outcome;
     } finally {
       if (isCurrentOperation()) {
@@ -5163,6 +5172,7 @@ export const createRunAnalysis = ({
 
   const runCommittedCanonicalCandidateInternal = async ({
     canonical,
+    decorationContinuity = null,
     generatedArtifactHandle = null,
     commitIntent = null,
     alignmentResetBefore = null,
@@ -5217,6 +5227,7 @@ export const createRunAnalysis = ({
       const timingEntries = [];
       const execution = await executeCanonicalCandidate({
         canonical,
+        decorationContinuity,
         mode: canonical.renderRequest.mode,
         kind: 'target-record-transform',
         shouldAdmit: () => generationToken === latestGenerationToken
@@ -5413,18 +5424,20 @@ export const createRunAnalysis = ({
     const isCurrentAlert = () => isCurrentOperation()
       && (errorLog.value === previousAlert || errorLog.value === null);
     let beforeHandle = null;
+    const initialResults = results.value;
     let historyRecovery = null;
     processing.value = true;
     processingStatus.value = 'Preparing target record...';
     generationCancelRequested.value = false;
     try {
+      const decorationContinuity = captureDecorationContinuity(getCommittedCanonicalSession?.(), projectCompositionRecordIdentity);
       await nextTick();
       await waitForAfterPaint();
       if (!isCurrentOperation()) return { status: 'stale' };
       const execute = (handle) => {
         beforeHandle = handle;
         return runCommittedCanonicalCandidateInternal({
-          canonical, generatedArtifactHandle: beforeHandle,
+          canonical, decorationContinuity, generatedArtifactHandle: beforeHandle,
           commitIntent, alignmentResetBefore, alignmentResetReceipt, operation, isCurrentOperation, isCurrentAlert
         });
       };
@@ -5455,7 +5468,8 @@ export const createRunAnalysis = ({
       return outcome;
     } catch (cause) {
       outcome = await failOperation(cause, { handle: beforeHandle, operation, isCurrent: isCurrentAlert, isCurrentOperation,
-        recovery: cause?.artifactRestoreFailed ? 'restore-failed' : historyRecovery });
+        recovery: cause?.artifactRestoreFailed ? 'restore-failed'
+          : historyRecovery || (!beforeHandle && results.value === initialResults && initialResults.length ? 'preserved' : null) });
       return outcome;
     } finally {
       if (isCurrentOperation()) {
@@ -5496,7 +5510,15 @@ export const createRunAnalysis = ({
     try {
       while (activeReflowRequestId < pendingReflowRequestId) {
         activeReflowRequestId = pendingReflowRequestId;
+        let decorationContinuity;
+        try {
+          decorationContinuity = captureDecorationContinuity(getCommittedCanonicalSession?.(), projectCompositionRecordIdentity);
+        } catch (error) {
+          labelReflowLastError.value = formatError(error).summary;
+          return;
+        }
         await runAnalysisInternal({
+          decorationContinuity,
           runMode: 'reflow', requestId: activeReflowRequestId, reason: pendingReflowReason
         });
       }

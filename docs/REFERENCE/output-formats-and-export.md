@@ -42,6 +42,14 @@ script, searchable metadata, popups, zoom and reset controls, and supported
 sequence downloads. Open it in a modern browser; many image viewers display
 only the static artwork or block its script.
 
+In the Web app, SVG, Interactive SVG, PNG, and PDF export the current Result.
+Supported manual legend, title, and Linear scale positions in that Result are
+included. Preview-only Layout edit hints, hover outlines, cursors, and the
+search and toolbar rows are excluded. Export does not apply Pending settings;
+select **Generate Diagram** first if they should affect the file. A command or
+raw Python recipe alone does not reproduce positions dragged in the browser;
+keep the Web Session with the exported figure for that handoff.
+
 Interactive output intentionally contains script. Input-derived text must not
 become executable markup, event-handler attributes, or unsafe links. SVG
 optimizers and vector editors can remove the IDs, data attributes, metadata,

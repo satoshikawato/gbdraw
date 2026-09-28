@@ -2415,6 +2415,11 @@ export const createCircularTrackSlotEditor = ({ state }) => {
 
   const updateCircularTrackSlotMeasure = (slot, field, scalar) => {
     if (!['width', 'radius'].includes(field) || !state.adv.circular_track_slots.includes(slot)) return;
+    const numericLeaf = scalar && typeof scalar === 'object' && !Array.isArray(scalar)
+      ? scalar.value : scalar;
+    if (typeof numericLeaf === 'number' && !Number.isFinite(numericLeaf)) {
+      parseOptionalCircularScalar(scalar, `Circular track slot '${slot.id}' ${field}`);
+    }
     if (slot[field] !== scalar) slot[field] = scalar;
   };
 
