@@ -198,3 +198,39 @@ its offline copies. Public readers obtain inputs from MIBiG, as the Tutorial
 specifies. No login, stored authentication or seed data is needed. `config.py`
 owns the existing viewport/theme/locale; `web_server.py` selects a free loopback
 port. The existing screenshot density remains unchanged.
+
+## Preview layout, search rows, and current Result (Issue 599)
+
+The [Web app reference](../REFERENCE/web-app.md#preview-search-and-editor) is
+the public owner of this procedure. Its Session and export continuations live
+in the existing [Session](../REFERENCE/session-and-request-compatibility.md#what-a-session-preserves)
+and [export](../REFERENCE/output-formats-and-export.md#static-interactive-and-raster-output)
+references. No public screenshot is replaced by this prose update.
+
+Reproduce the real Gallery Circular, Linear, and two-output batch journey from
+the retained checkout with the ignored, source-matched browser wheel:
+
+```bash
+python tools/prepare_browser_wheel.py
+python tests/web/decoration-continuity.playwright.py --evidence-dir /tmp/issue599-s04-continuity
+python tests/web/layout-affordance.playwright.py --evidence-dir /tmp/issue599-s04-affordance
+```
+
+These committed scripts load the existing Gallery sessions, use real pointer
+drag on eligible items, Generate twice, change color/font/title/legend settings,
+exercise Undo/Redo/Reset, save and load a Session, and download the current
+Result. The second script also uses keyboard and touch for **Layout edit** and
+checks Preview-only hints are absent from saved SVG, Interactive SVG, PNG, PDF,
+and Session output. Both scripts write `observations.json`, real downloads, and
+browser screenshots into their chosen evidence directories. The docked search
+and toolbar matrix, drawer transitions, focus, zoom, short viewport, and soft
+keyboard viewport are reproduced by:
+
+```bash
+GBDRAW_WEB_TEST_PORT=46211 PYTHONPATH="$PWD" npx playwright test --config=playwright.functional.config.js tests/web/preview-navigation.playwright.spec.js tests/web/right-drawer.playwright.spec.js --grep 'docked search and controls|background pan preserves|preview pan leaves|zoom controls do not overlap|mobile overlays preserve mode|compact Editor scroll recovery' --workers=1 --retries=0
+```
+
+These are loopback-only regression captures. The source Gallery sessions are
+stable local fixtures for executable QA; public readers use their own input and
+save the Session created from that input. Review generated figures at readable
+scale before using them as publication examples.
