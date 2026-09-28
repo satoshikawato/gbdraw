@@ -1,24 +1,24 @@
 # Conditional Product Decision Pack 01 — bindings after failed Generate
 
-Status: **PRODUCT_DECISION_REQUIRED; no Product Decision Owner receipt or approved authority**. S01 reproduced a persisted Session difference after failed Generate. The two outcomes below remain product-valid under the merged authority search. This Pack remains a proposal until an explicit complete human receipt and the required authority sequence. See the [Product Impact Ratchet](../../PRODUCT_IMPACT_RATCHET.md) and [master plan](../MASTER_PLAN.md).
+Status: **RESOLVED — IMPLEMENT_EXISTING_AUTHORITY**. S01 reproduced a persisted Session difference after failed Generate. The Product Decision Owner subsequently selected Choice A in the complete `PD-OI-055` receipt, merged into `dev` by `e5f5f1fb`. Choice B below is the unselected engineering proposal. See the [Product Impact Ratchet](../../PRODUCT_IMPACT_RATCHET.md) and [master plan](../MASTER_PLAN.md).
 
 ## Identity and trigger
 
 - Concern key: `web.generate.failed-source-binding-continuation` (developer preflight key; not yet a registered concern or `BD-###`).
 - Discovery lane: Product Impact Ratchet developer preflight (unmapped material Save continuation).
-- Scenario revision: `1` for this proposed outcome comparison.
-- Base: `origin/dev` `c2818ce72168e3a35124468e41bb869623ac3148`; refresh the search if dev moves.
+- Scenario revision: `1` for the approved Choice A outcome and the historical comparison.
+- S01 evidence base: `origin/dev` `c2818ce72168e3a35124468e41bb869623ac3148`. S04 authority base: `origin/dev` `775473f4ee7c825c888f705146bcbec71b11cc4b`.
 - Proposed implementation branch: `fix/issue-619-boundary-followup-20260928`.
 - Related scope: Issue #619 follow-up, failed Generate source preparation (finding 5).
-- Prepared by: implementation-plan author. Product Decision Owner receipt: **pending**.
+- Prepared by: implementation-plan author. Product Decision Owner receipt: `PD-OI-055`, approved by `satoshikawato` on `2026-09-28`; authority-only commit `82ad5330dd0dc06ddcca13254e0dd615a845f5bd`, merged by `e5f5f1fb`.
 
-A user has a committed diagram and an editable draft. A new Generate begins to resolve record or annotation bindings but fails before admitting a new Result. Existing evidence shows that scalar draft, History, committed request, and Result survive, while some internal bindings may be supplemented. S01 confirmed that subsequent Save Session and fresh Load retain those new bindings. The unresolved Product question is whether this persisted continuation should remain supported or whether binding changes made solely by the failed attempt must be absent.
+A user has a committed diagram and an editable draft. A new Generate begins to resolve record or annotation bindings but fails before admitting a new Result. Existing evidence shows that scalar draft, History, committed request, and Result survive, while some internal bindings may be supplemented. S01 confirmed that subsequent Save Session and fresh Load retain those new bindings. That saved-document difference posed the Product question now resolved by `PD-OI-055` in favor of retaining only validated same-source enrichment.
 
 ## Authority search and current evidence
 
 | Source | Result and limit |
 | --- | --- |
-| Product Impact map / active `BD-###` | No registered decision is claimed for this exact failure-binding choice. Recheck current base before activation. |
+| Product Impact map / active `BD-###` | No registered `BD-###` is claimed for this exact choice. The static Product Contract now contains accepted `PD-OI-055`, selecting Choice A for scenario revision 1. |
 | `PD-OI-037` | Failed Generate keeps previous Result/History and pending draft; it does not explicitly decide generation-only binding enrichment in a subsequent Save. |
 | `PD-OI-045` | Save/Load must represent one coherent document, preserve source bytes/cache/evidence/provenance, and recover atomically; it does not authorize a mixed, stale, or dangling binding. |
 | `PD-OI-046` | Error guidance and retry must preserve request, draft, Result, History, cancel/stale/superseded continuation. |
@@ -26,7 +26,7 @@ A user has a committed diagram and an editable draft. A new Generate begins to r
 | Scientific/integrity rules | Record identity, annotation target, resource identity, and actual source bytes cannot change merely to satisfy a Product choice. |
 | Current code/tests | S01 browser evidence on source `807f579082db9e0f60d71f2454f2547e4c179d1f` confirms an actual saved-document change; code and tests remain evidence, not authority. |
 
-Authority search result: **UNRESOLVED**; no conflicting active authority found. Procedural classification **now: `PRODUCT_DECISION_REQUIRED`**. On a current writer Session 44 / request schema 8 from the tracked tobacco Gallery fixture, a post-render/pre-admission fault changed `config.adv.multi_record_positions` from `[]` to `[{"selector":"#1","row":1}]` and added `_gbdraw_web_target_record_key` to each of four annotation metadata rows. These five fields were present in the actual failed-attempt download and its fresh Load/re-save; the only other before/after saved-document path difference was `createdAt`. The canonical request, prior Result, embedded resource bytes, scalar draft, History, and annotation record IDs were unchanged. Retry succeeded. The one-record binding key resolved to the same `NC_001879.2` source record; this evidence does not show a different rendered diagram. The changed user-owned Session file and future continuation still distinguish A from B. Merged authority protects coherent Save/Load and failure recovery but does not select whether valid generation-only binding enrichment persists, so neither choice can be selected by the implementation branch. `NOT_ALLOWED` applies to any candidate with stale/dangling/wrong source identity, lost draft/request/Result/History, leaked private data, or weakened required tests. Exact commands, input hashes, and limits are in [S01](../SESSION_RESULTS/S01.md).
+Authority search result on the S04 base: **RESOLVED** by `PD-OI-055` (`A / RETAIN_VALIDATED_BINDING_ENRICHMENT`). Procedural classification: `IMPLEMENT_EXISTING_AUTHORITY`. S01 and S04 actual Save/download → fresh Load show one position entry and four annotation binding keys retained after a post-render/pre-admission fault. The keys resolve to the same `NC_001879.2` source record; source hashes, annotation targets, scalar draft, committed request, Result, and History remain unchanged. S04 also verifies export of the old SVG, canceled/stale completion, and a newly enriched key for an explicit RecB target in a two-record source at the same boundary. A concurrent second Generate is rejected as `GENERATION_BUSY`, so it is not a supported supersession route. Choice A permits this complete validated metadata enrichment; it does not permit incorrect, partial, stale, dangling, or wrong-source bindings. Choice B remains below as the historical comparison and must not be implemented under the selected authority. Exact commands and limits are in [S04](../SESSION_RESULTS/S04.md).
 
 ## User journey and checkpoints
 
@@ -86,13 +86,13 @@ Authority search result: **UNRESOLVED**; no conflicting active authority found. 
 
 ## Evidence-first work and engineering recommendation
 
-S01 used an actual browser Save/download → fresh Load before and after one fault injected after binding preparation and before Result admission. The S01 result compares source byte hashes, binding referents, annotation targets, draft, request, Result, History, and retry. Export and same-boundary cancel/stale binding persistence remain S04 acceptance work; the existing Linear cancel/stale guard passed separately in S01. Record exact source SHA, fixture, injection point, measurements, and limitations. An evidence-only commit must not change runtime selection, authority, schema, expected-output baseline, deadlines, or retries.
+S01 used an actual browser Save/download → fresh Load before and after one fault injected after binding preparation and before Result admission. The S01 result compares source byte hashes, binding referents, annotation targets, draft, request, Result, History, and retry. S04 completed the actual Export, two-record target, and same-boundary cancel/stale Save/fresh Load checks; the existing Linear guard was also rerun. The exact source SHA, fixture, injection point, measurements, and limitations are in S04. No runtime selection, authority, schema, expected-output baseline, deadline, or retry was changed by the S04 commit.
 
-**Engineering recommendation: Choice B; not an approval.** It aligns generation-only binding changes with the already atomic Result admission using a small provisional candidate. This recommendation is not Product authority and must not be implemented while `PRODUCT_DECISION_REQUIRED` remains unresolved.
+**Historical engineering recommendation: Choice B.** The Product Decision Owner selected Choice A in `PD-OI-055`; the recommendation is superseded and is not implementation authority.
 
-## Proposed response for Product Decision Owner, only if activated
+## Historical proposed Choice B response (unselected)
 
-If the Product Decision Owner chooses the recommendation after reviewing the updated Pack and S01 evidence, they may send the following completed response in chat. They must supply their own identity and decision date and may edit any proposed term; a choice letter alone is insufficient.
+This pre-decision template is retained for the option comparison. The actual complete Choice A receipt and nine-field representation are in `PD-OI-055`; this Choice B text is not a request for another decision.
 
 ```text
 PRODUCT_DECISION
@@ -107,4 +107,4 @@ Owner: <Product Decision Owner identity>
 Decision date: <YYYY-MM-DD>
 ```
 
-After an explicit complete response, serialize **only** the chosen outcome; show the generated machine representation for review. A material public-contract choice requires authority-only integration into `dev` before dependent runtime. Do not infer missing rationale, retirement, risk, owner, or date from this proposal or from plan-branch approval.
+The approved Choice A representation was merged separately into `dev` before S04 verification. This Pack does not change or expand that authority.
