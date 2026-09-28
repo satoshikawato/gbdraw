@@ -48,7 +48,7 @@ Use `N/A` and leave `decisions` empty for the normal path.
 Nonempty decisions are Product Decision Owner-only and bind to the exact head SHA.
 The human selects an outcome with the documented `PRODUCT_DECISION` response; Codex fills the machine-only fields and shows the generated block for review.
 Every nonempty current decision requires a product-level `rationale`.
-This block does not waive any other gate. Product change or retirement requires durable base authority.
+This block does not waive any other gate. Product change or retirement requires durable base authority, or a static Product Contract co-change that carries the explicit receipt (Review REQUIRED).
 -->
 
 - Product-impact role: N/A | EVIDENCE_ONLY | DECISION_ONLY | IMPLEMENTATION
