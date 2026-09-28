@@ -19,6 +19,8 @@ const geometry = (page) => page.evaluate(() => {
     scroll: { x: container.scrollLeft, y: container.scrollTop },
     points: [point(0, 0), point(100, 100)],
     anchor: { x: bounds.x + bounds.width / 2, y: bounds.y },
+    ctm: { a: matrix.a, b: matrix.b, c: matrix.c, d: matrix.d, e: matrix.e, f: matrix.f },
+    wrapperBounds: { x: bounds.x, y: bounds.y, width: bounds.width, height: bounds.height },
     panning: app.isPanning
   };
 });

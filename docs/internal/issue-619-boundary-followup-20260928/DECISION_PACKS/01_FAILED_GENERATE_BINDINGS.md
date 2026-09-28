@@ -1,17 +1,18 @@
 # Conditional Product Decision Pack 01 — bindings after failed Generate
 
-Status: **working proposal, not approved Product authority**. This Pack becomes signable only if S01's deterministic evidence establishes a user-visible difference after failed Generate and merged authority leaves both outcomes product-valid. A difference confined to equivalent internal object representation requires no new Product Decision. See the [Product Impact Ratchet](../../PRODUCT_IMPACT_RATCHET.md) and [master plan](../MASTER_PLAN.md).
+Status: **PRODUCT_DECISION_REQUIRED; no Product Decision Owner receipt or approved authority**. S01 reproduced a persisted Session difference after failed Generate. The two outcomes below remain product-valid under the merged authority search. This Pack remains a proposal until an explicit complete human receipt and the required authority sequence. See the [Product Impact Ratchet](../../PRODUCT_IMPACT_RATCHET.md) and [master plan](../MASTER_PLAN.md).
 
 ## Identity and trigger
 
 - Concern key: `web.generate.failed-source-binding-continuation` (developer preflight key; not yet a registered concern or `BD-###`).
+- Discovery lane: Product Impact Ratchet developer preflight (unmapped material Save continuation).
 - Scenario revision: `1` for this proposed outcome comparison.
 - Base: `origin/dev` `c2818ce72168e3a35124468e41bb869623ac3148`; refresh the search if dev moves.
 - Proposed implementation branch: `fix/issue-619-boundary-followup-20260928`.
 - Related scope: Issue #619 follow-up, failed Generate source preparation (finding 5).
 - Prepared by: implementation-plan author. Product Decision Owner receipt: **pending**.
 
-A user has a committed diagram and an editable draft. A new Generate begins to resolve record or annotation bindings but fails before admitting a new Result. Existing evidence shows that scalar draft, History, committed request, and Result survive, while some internal bindings may be supplemented. The unresolved question is whether a subsequent Save Session and fresh Load may retain those new bindings, or whether binding changes made solely by the failed attempt must be absent.
+A user has a committed diagram and an editable draft. A new Generate begins to resolve record or annotation bindings but fails before admitting a new Result. Existing evidence shows that scalar draft, History, committed request, and Result survive, while some internal bindings may be supplemented. S01 confirmed that subsequent Save Session and fresh Load retain those new bindings. The unresolved Product question is whether this persisted continuation should remain supported or whether binding changes made solely by the failed attempt must be absent.
 
 ## Authority search and current evidence
 
@@ -23,9 +24,9 @@ A user has a committed diagram and an editable draft. A new Generate begins to r
 | `PD-OI-046` | Error guidance and retry must preserve request, draft, Result, History, cancel/stale/superseded continuation. |
 | Public Session compatibility | Save preserves committed Result and editable state separately; Load restores saved values. Source bindings must remain valid and source bytes exact. |
 | Scientific/integrity rules | Record identity, annotation target, resource identity, and actual source bytes cannot change merely to satisfy a Product choice. |
-| Current code/tests | The original Issue #619 final result observed possible record/annotation binding supplementation but did not establish a user-visible saved outcome. Code and tests are evidence, not authority. |
+| Current code/tests | S01 browser evidence on source `807f579082db9e0f60d71f2454f2547e4c179d1f` confirms an actual saved-document change; code and tests remain evidence, not authority. |
 
-Procedural classification **now: `EVIDENCE_REQUIRED`**. S01 must compare actual Save/download/fresh Load and retry/cancel/stale outcomes before this Pack asks for judgment. If a material difference remains and two valid options survive, change to `PRODUCT_DECISION_REQUIRED`. If merged authority selects one outcome, use `IMPLEMENT_EXISTING_AUTHORITY`. `NOT_ALLOWED` applies to any candidate with stale/dangling/wrong source identity, lost draft/request/Result/History, leaked private data, or weakened required tests.
+Authority search result: **UNRESOLVED**; no conflicting active authority found. Procedural classification **now: `PRODUCT_DECISION_REQUIRED`**. On a current writer Session 44 / request schema 8 from the tracked tobacco Gallery fixture, a post-render/pre-admission fault changed `config.adv.multi_record_positions` from `[]` to `[{"selector":"#1","row":1}]` and added `_gbdraw_web_target_record_key` to each of four annotation metadata rows. These five fields were present in the actual failed-attempt download and its fresh Load/re-save; the only other before/after saved-document path difference was `createdAt`. The canonical request, prior Result, embedded resource bytes, scalar draft, History, and annotation record IDs were unchanged. Retry succeeded. The one-record binding key resolved to the same `NC_001879.2` source record; this evidence does not show a different rendered diagram. The changed user-owned Session file and future continuation still distinguish A from B. Merged authority protects coherent Save/Load and failure recovery but does not select whether valid generation-only binding enrichment persists, so neither choice can be selected by the implementation branch. `NOT_ALLOWED` applies to any candidate with stale/dangling/wrong source identity, lost draft/request/Result/History, leaked private data, or weakened required tests. Exact commands, input hashes, and limits are in [S01](../SESSION_RESULTS/S01.md).
 
 ## User journey and checkpoints
 
@@ -47,7 +48,7 @@ Procedural classification **now: `EVIDENCE_REQUIRED`**. S01 must compare actual 
 - Validation/failure: malformed, stale, partial, or wrong-source bindings fail closed; no private data in diagnostics.
 - Scientific/cache/performance: scientific identity unchanged; possibly less retry discovery, with bounded cache reuse and no extra Worker.
 - Compatibility/architecture: current schema and single source-binding owner; no second reader or generation path.
-- Evidence missing: exact before/after downloaded Session and fresh Load, target identity, retry/cancel/stale results, resource cost.
+- Evidence remaining: multi-record target identity, same-boundary cancel/stale/superseded binding persistence, and resource cost. Single-record Save/fresh Load and retry were observed in S01.
 - Residual risk: binding metadata may change after an unsuccessful action and surprise users comparing saved documents.
 - Route if material: `DURABLE_AUTHORITY_REQUIRED` before runtime that intentionally establishes this as a public continuation.
 - Next action if selected: use the existing preparation owner; prove all coherence and identity constraints, then document the visible Save behavior.
@@ -64,7 +65,7 @@ Procedural classification **now: `EVIDENCE_REQUIRED`**. S01 must compare actual 
 - Validation/failure: stale/partial/wrong-source candidates never commit; privacy-safe bounded diagnostics remain.
 - Scientific/cache/performance: source/record/annotation identity exact; small provisional binding data, no full-app snapshot or extra Worker, retry cost measured.
 - Compatibility/architecture: current schema and existing preparation/commit owners; no parallel binding store, compatibility reader, or global rollback.
-- Evidence missing: exact failing checkpoint, whether a prepared binding is already public before Generate, retry cost and cache behavior.
+- Evidence remaining: multi-record target identity, whether a binding from independent pre-Generate discovery is already public, same-boundary cancel/stale/superseded persistence, retry cost, and cache behavior. S01 located the post-render/pre-admission fault and saved difference.
 - Residual risk: a retry may redo bounded binding preparation; measure it and retain valid cache reuse without promoting candidate document state.
 - Route if material: `DURABLE_AUTHORITY_REQUIRED` before dependent runtime.
 - Next action if selected: merge the exact human-approved durable authority into `dev`, then implement candidate staging at the existing owner on this work branch.
@@ -85,13 +86,13 @@ Procedural classification **now: `EVIDENCE_REQUIRED`**. S01 must compare actual 
 
 ## Evidence-first work and engineering recommendation
 
-S01 must use an actual browser Save/download → fresh Load before and after one fault injected after binding preparation and before Result admission. Compare source byte hashes, binding referents, annotation targets, draft, request, Result, History, export and retry; repeat the same boundary for cancel/stale only if reachable. Record exact source SHA, fixture, injection point, measurements, and limitations. An evidence-only commit must not change runtime selection, authority, schema, expected-output baseline, deadlines, or retries.
+S01 used an actual browser Save/download → fresh Load before and after one fault injected after binding preparation and before Result admission. The S01 result compares source byte hashes, binding referents, annotation targets, draft, request, Result, History, and retry. Export and same-boundary cancel/stale binding persistence remain S04 acceptance work; the existing Linear cancel/stale guard passed separately in S01. Record exact source SHA, fixture, injection point, measurements, and limitations. An evidence-only commit must not change runtime selection, authority, schema, expected-output baseline, deadlines, or retries.
 
-**Engineering recommendation: Choice B, conditional on S01 proving a material difference.** It aligns generation-only binding changes with the already atomic Result admission using a small provisional candidate. This recommendation is not Product authority and must not be implemented while `PRODUCT_DECISION_REQUIRED` remains unresolved.
+**Engineering recommendation: Choice B; not an approval.** It aligns generation-only binding changes with the already atomic Result admission using a small provisional candidate. This recommendation is not Product authority and must not be implemented while `PRODUCT_DECISION_REQUIRED` remains unresolved.
 
 ## Proposed response for Product Decision Owner, only if activated
 
-If S01 evidence leaves both outcomes product-valid and the Product Decision Owner chooses the recommendation, they may send the following completed response in chat after reviewing the updated Pack. They must supply their own identity and decision date and may edit any proposed term; a choice letter alone is insufficient.
+If the Product Decision Owner chooses the recommendation after reviewing the updated Pack and S01 evidence, they may send the following completed response in chat. They must supply their own identity and decision date and may edit any proposed term; a choice letter alone is insufficient.
 
 ```text
 PRODUCT_DECISION
