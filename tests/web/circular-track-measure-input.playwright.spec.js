@@ -557,10 +557,15 @@ for (const continuation of ['disabled', 'inactive biological']) {
       expect(restored.config.adv.circular_track_slots).toEqual(before.config.adv.circular_track_slots);
       expect(restored.request).toEqual(before.request);
       expect(restored.resultHashes).toEqual(before.resultHashes);
+      if (continuation === 'inactive biological') {
+        await expect(fresh.getByRole('button', { name: 'Linear', exact: true }))
+          .toHaveAttribute('aria-pressed', 'true');
+        expect(restored.config.modeProfiles.activeMode).toBe('linear');
+        await fresh.getByRole('button', { name: 'Circular', exact: true }).click();
+      }
       await openPanel(fresh);
       await expect(valueControl(fresh, 'gc_content', 'Width')).toHaveValue('0.12345678901234567');
       if (continuation === 'inactive biological') {
-        expect(restored.config.modeProfiles.activeMode).toBe('circular');
         expect(before.config.modeProfiles.activeMode).toBe('linear');
       }
     });
