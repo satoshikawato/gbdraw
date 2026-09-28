@@ -208,6 +208,20 @@ Node Playwright launched once browser profiles were on native Linux; the S06
   (`S07/final/fingerprint-final.json`); any runtime or fixture change requires
   rerunning `S07/tools/observe_*.py`.
 
+## Delivery
+
+- `3f74d507ccd5af737987a71837a18323c9405cb2` concludes the pending merge of
+  `0073885` with the inherited S05, S06 and S06 follow-up work.
+- `6c8baf3e8bd50cbab883cc2b96665770e80ac173` contains the S07 changes and this
+  result. Both were pushed non-force to the same-named branch; local and remote
+  matched. Post-commit policy: Gate PASS / Review REQUIRED
+  (`S07/gates/web-policy-postcommit.log`).
+- PR [#641](https://github.com/satoshikawato/gbdraw/pull/641) targets `dev`
+  and reports `CONFLICTING`/`DIRTY` against `57cef3b`, so it was not merged.
+  Handoff: `S07/final/HANDOFF.md`.
+- Next-session prompt:
+  [S08_RESUME_AFTER_S07_20260928.md](../sessions/S08_RESUME_AFTER_S07_20260928.md).
+
 ## S08 entry
 
 1. In a clean checkout of the pushed branch, integrate `dev` (57cef3b or
