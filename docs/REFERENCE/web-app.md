@@ -102,10 +102,12 @@ the previous diagram geometry; correct the edit and retry. An unapplied alignmen
 review is a local selection, not an applied Result or a generation-setting change.
 
 **Generate Diagram** recalculates placement and resets zoom. Supported color,
-label, visibility, and record-layout edits are carried forward; arbitrary manual
-positions are not guaranteed to survive regeneration. **Undo** restores the
-previous Result. Failed, canceled, or superseded generation keeps the last
-successful Result.
+label, visibility, and record-layout edits are carried forward. For the same
+diagram, a manually moved legend, plot title, or Linear scale keeps its offset
+from the newly calculated position. The absolute position can change when
+settings change. Other manual positions have no new regeneration guarantee.
+**Undo** restores the previous Result. Failed, canceled, or superseded
+generation keeps the last successful Result.
 
 **Save Session** saves the current Result and supported settings draft together.
 **Load Session** displays that saved Result without applying a newer draft.
@@ -601,14 +603,32 @@ feature. Identical duplicate records can share the same hash, so a regenerated
 diagram cannot preserve a one-instance-only rule for indistinguishable
 duplicates.
 
-On a narrow preview, the same **Editor** sits below the canvas and toolbar.
+On a narrow preview, the same **Editor** sits below the canvas.
 Its content scrolls independently, while its header, Close action, and tabs stay
 reachable. **Close** and **Escape** change visibility only and retain the selected
 tab. On short screens, scroll the page and Editor content to reach all controls;
 on wide previews the Editor remains beside the canvas.
 
-**Layout edit** moves supported legends and other layout objects without
-changing record geometry. **Undo** and **Redo** traverse supported form and
+Feature search stays in its own row above the canvas, and the zoom and layout
+controls stay in a row below it. Open or close **Editor** without moving the
+search bar over the diagram; the search bar can no longer be dragged to a free
+position. On a short screen, scroll the Result or page to reach both rows.
+
+To adjust a legend, plot title, or Linear scale, select **Layout edit** in the
+lower control row, then drag the item in the Preview. The explanation beside
+the Preview export buttons also names these targets. With **Layout edit** off,
+dragging pans the canvas; hovering over an eligible item points to the toggle.
+The button also works with tap, Space, or Enter. These decoration drags do
+not alter biological coordinates; the existing record positioning controls
+remain available.
+
+Generate again after changing color, font, title text, or legend side: the same
+diagram keeps each supported item's manual offset relative to its new automatic
+position, including after a second Generate. If the new diagram cannot match a
+moved item, the previous Result remains available. Use that item's position
+reset or **Reset Layout**, or restore the matching settings, then Generate again.
+An offset near an edge may still clip or overlap another item; adjust canvas
+padding or reset its position. **Undo** and **Redo** traverse supported form and
 editor changes. **Reset Settings** is broader than undo and requires
 confirmation. Generate when the exported figure should include Pending settings.
 

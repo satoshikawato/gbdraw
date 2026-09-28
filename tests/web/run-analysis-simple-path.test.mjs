@@ -541,6 +541,8 @@ test('audit-5 owner: direct simple createRunAnalysis path is worker-only and cat
   let failArtifactAdoption = false;
   let cancelDuringPreview = false;
   let failCandidateAdmission = false;
+  let failDecorationCorrespondence = false;
+  let failDecorationSnapshot = false;
   const activationOwnerSets = [];
   const captureForHistory = (...args) => {
     assert.equal(state.processing.value, true);
@@ -598,6 +600,16 @@ test('audit-5 owner: direct simple createRunAnalysis path is worker-only and cat
       generationHistory.runUndoableArtifactReplacement(...args)
     ),
     state,
+    captureDecorationContinuity: () => {
+      if (failDecorationSnapshot) throw Object.assign(new Error('Invalid offset'), { code: 'DECORATION_CONTINUITY' });
+      const mismatch = failDecorationCorrespondence;
+      return mismatch ? () => {
+        throw Object.assign(new Error('Cannot preserve title placement. Reset Layout.'), {
+          code: 'DECORATION_CONTINUITY', stage: 'result-admission',
+          context: { field: 'title', inputOrdinal: 1, reason: 'DECORATION_TARGET' }
+        });
+      } : null;
+    },
     serializeCanonicalFiles: () => {
       assert.equal(state.processingStatus.value, 'Preparing render inputs and session...');
       return serializeActiveRenderFiles(state.mode.value, state);
@@ -832,6 +844,32 @@ test('audit-5 owner: direct simple createRunAnalysis path is worker-only and cat
     metricsBeforePreActivationFailure.generatedArtifactRollbackCount || 0
   );
 
+  const decorationFailureState = committedFeatureState();
+  const decorationRequest = lastAdoptedCanonical;
+  const decorationHistoryCount = generationHistory.getUndoCount();
+  const decorationActivationCount = structuralMetrics.generatedArtifactActivationCount;
+  failDecorationCorrespondence = true;
+  const unmatchedResult = result('unmatched.svg', 'unmatched');
+  workerResponses.push(response(unmatchedResult, validCatalog(unmatchedResult.name)));
+  const unmatched = await runner.runAnalysis();
+  failDecorationCorrespondence = false;
+  assert.equal(unmatched.status, 'error');
+  assert.equal(unmatched.error.code, 'DECORATION_CONTINUITY');
+  assert.match(unmatched.error.summary, /Reset Layout.*Result 1.*title.*missing/);
+  assert.deepEqual(committedFeatureState(), decorationFailureState);
+  assert.equal(lastAdoptedCanonical, decorationRequest);
+  assert.equal(generationHistory.getUndoCount(), decorationHistoryCount);
+  assert.equal(structuralMetrics.generatedArtifactActivationCount, decorationActivationCount);
+
+  failDecorationSnapshot = true;
+  const snapshotFailure = await runner.runAnalysis();
+  failDecorationSnapshot = false;
+  assert.equal(snapshotFailure.status, 'error');
+  assert.equal(snapshotFailure.recovery, 'preserved');
+  assert.equal(state.failedGeneratePreservedResult.value, true);
+  assert.deepEqual(committedFeatureState(), decorationFailureState);
+  assert.equal(generationHistory.getUndoCount(), decorationHistoryCount);
+
   const admissionFailureState = committedFeatureState();
   const metricsBeforeAdmissionFailure = { ...structuralMetrics };
   failCandidateAdmission = true;
@@ -874,6 +912,24 @@ test('audit-5 owner: direct simple createRunAnalysis path is worker-only and cat
   state.zoom.value = 1.7;
   state.canvasPan.x = 31;
   state.canvasPan.y = -12;
+  const bindFailureState = committedFeatureState();
+  const bindHistoryCount = generationHistory.getUndoCount();
+  const registerReadiness = readinessRuntime.registerReadinessExpectation;
+  readinessRuntime.registerReadinessExpectation = options => {
+    const expectation = registerReadiness(options);
+    const promise = Promise.reject(new Error('forced candidate bind failure'));
+    void promise.catch(() => {});
+    return { ...expectation, promise };
+  };
+  const bindFailureResult = result('bind-failure.svg', 'bind-failure');
+  workerResponses.push(response(bindFailureResult, validCatalog(bindFailureResult.name)));
+  const bindFailure = await runner.runAnalysis();
+  readinessRuntime.registerReadinessExpectation = registerReadiness;
+  assert.equal(bindFailure.status, 'error');
+  assert.equal(bindFailure.recovery, 'restored');
+  assert.deepEqual(committedFeatureState(), bindFailureState);
+  assert.equal(generationHistory.getUndoCount(), bindHistoryCount);
+
   const lateFailureState = committedFeatureState();
   const metricsBeforeLateFailure = { ...structuralMetrics };
   failArtifactAdoption = true;
@@ -964,7 +1020,7 @@ test('audit-5 owner: direct simple createRunAnalysis path is worker-only and cat
   assert.equal(activePrimaryReads, 2);
   assert.equal(inactiveFileReads, 0);
   assert.equal(adoptedArtifacts, 2);
-  assert.equal(workerMessages.filter(({ type }) => type === 'run').length, 10); // Includes the explicit failed-restoration attempt.
+  assert.equal(workerMessages.filter(({ type }) => type === 'run').length, 12); // Includes the explicit failed-restoration attempt.
   assert.equal(workerMessages.filter(({ type }) => type === 'feature-extraction').length, 0);
 
   state.form.multi_record_canvas = true;
@@ -2243,4 +2299,29 @@ test('Linear mode none ignores dormant comparison state while active depth and a
   assert.deepEqual(state.results.value, [newestResult]);
   assert.equal(state.failedGeneratePreservedResult.value, false);
   assert.equal(state.processing.value, false);
+});
+
+
+test('decoration candidate transform runs once after catalog validation for every candidate kind', async () => {
+  for (const kind of ['generate', 'reflow', 'target-record-transform']) {
+    const generatedResult = result('decoration.svg', 'candidate');
+    const canonical = { renderRequest: { mode: 'linear' }, resources: {} };
+    let transforms = 0;
+    const candidate = await executeCanonicalRenderCandidate({ canonical, mode: 'linear', kind,
+      generationExecutor: async () => response(generatedResult, validCatalog(generatedResult.name)),
+      decorationContinuity: (actual, admission) => {
+        assert.equal(actual, canonical);
+        assert.equal(admission.catalog.items[0].resultName, generatedResult.name);
+        transforms++;
+        return [svg => { svg.decoration = [40, 20]; }];
+      },
+      prepareCommit: ({ resultTransforms }) => {
+        const svg = { recordDelta: [9, 7] };
+        resultTransforms?.[0](svg);
+        return { svg };
+      }
+    });
+    assert.equal(transforms, 1, kind);
+    assert.deepEqual(candidate.commit.svg, { recordDelta: [9, 7], decoration: [40, 20] });
+  }
 });

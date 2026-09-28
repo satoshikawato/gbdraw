@@ -1,5 +1,5 @@
 import { parseTransform } from './utils.js';
-import { serializeCleanSvg } from '../../services/svg-serialization.js';
+import { serializeCleanSvg, setClassToken } from '../../services/svg-serialization.js';
 import {
   bindCompositionMetadata,
   COMPOSITION_SCHEMA_ATTRIBUTE,
@@ -89,6 +89,7 @@ export const createLegendDragActions = ({ state, extractLegendEntries, history =
     const currentTransform = parseTransform(legendGroup.getAttribute('transform'));
     legendOriginalTransform.value = { ...currentTransform };
     legendGroup.style.willChange = 'transform';
+    setElementCursor(legendGroup, 'grabbing');
   };
 
   const onLegendDrag = (e) => {
@@ -117,6 +118,7 @@ export const createLegendDragActions = ({ state, extractLegendEntries, history =
     const completedLegendGroup = completedDragContext?.binding.legend.targets[0] || null;
     if (completedLegendGroup) {
       completedLegendGroup.style.willChange = '';
+      setElementCursor(completedLegendGroup, isLayoutRepositionModeEnabled() ? 'grab' : 'help');
     }
 
     pendingLegendPointer = null;
@@ -147,7 +149,8 @@ export const createLegendDragActions = ({ state, extractLegendEntries, history =
     const legendGroup = bindCompositionMetadata(svg).legend.targets[0] || null;
     if (!legendGroup) return;
 
-    setElementCursor(legendGroup, isLayoutRepositionModeEnabled() ? 'grab' : '');
+    setClassToken(legendGroup, 'gbdraw-preview-layout-target', true);
+    setElementCursor(legendGroup, legendDragging.value ? 'grabbing' : isLayoutRepositionModeEnabled() ? 'grab' : 'help');
   };
 
   const resetLegendPositionOnly = () => {

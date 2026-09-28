@@ -1,3 +1,4 @@
+import { captureDecorationContinuity } from './legend-layout/decoration-continuity.js';
 import { createLegendCanvasActions } from './legend-layout/canvas-actions.js';
 import { createDiagramDragActions } from './legend-layout/diagram-drag.js';
 import { createLegendRepositionActions } from './legend-layout/reposition-actions.js';
@@ -44,6 +45,11 @@ export const createLegendLayout = ({
   };
 
   return {
+    captureDecorationContinuity: (canonical, projectRecordIdentity) => captureDecorationContinuity({
+      canonical, projectRecordIdentity, results: state.results.value, catalog: state.featureCatalog.value,
+      mountedSvg: state.svgContainer.value?.querySelector?.('svg') || null,
+      selectedResultIndex: state.selectedResultIndex.value
+    }),
     ...canvasActions,
     ...repositionActions,
     refreshDiagramDragAffordances: diagramActions.refreshDiagramDragAffordances,

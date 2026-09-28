@@ -83,8 +83,7 @@ const state = {
   previewFeatureSearchActiveIndex: ref(-1),
   previewFeatureSearchError: ref(''),
   previewFeatureSearchRenderedCount: ref(0),
-  clickedFeature: ref(null),
-  showRightDrawer: ref(false)
+  clickedFeature: ref(null)
 };
 
 const { createPreviewFeatureSearch } = await import(
@@ -102,7 +101,6 @@ const search = createPreviewFeatureSearch({
   computed(getter) {
     return { get value() { return getter(); } };
   },
-  reactive: (value) => value,
   previewRuntime: { isActiveResultReady: () => true },
   openFeatureEditorForFeature() {}
 });
