@@ -47,3 +47,7 @@ S00 の authority base は `origin/dev@ecb96a065d808addff0fb088f9eb6b6ba3c92a6d`
 ## S04 handoff
 
 入力 HEAD / S03 公開 SHA は `85df90dae320b50e4e12d01f164d672ee7787c0c`、authority base と merge-base は `origin/dev@c2818ce72168e3a35124468e41bb869623ac3148`。既存 Pack 3件と PD-OI-052–054 の完全 outcome を照合した。実 Gallery Circular/Linear/batch、Layout edit と保存/export、専用検索/操作行の実hit・focus/zoom/scroll/drawer、zero/nonzero/batch性能を統合再検査。fast Web JS 931/931、focused Python 320/320、Node browser 12/12、PR smoke local 19/19、trusted dev checker Gate PASS / Review REQUIRED。公開 Web reference と Session/export owner、capture再生成案内を更新した。受入ID対応、失敗した初回環境検査と修正後の結果、artifact、human review/remote gate/merge後 staging の未完了を [S04](results/S04.md) に記録した。S04後のbranch公開 SHAは同名remoteのGit履歴と終了報告を正本とする。
+
+## PR #637 dev sync
+
+PR #637 の初回 required checks は検証済み S04 head で成功したが、protected dev が Issue #619 authority-only PR #636 の merge `e5f5f1fb6475aa7a026721a34cece7644fcd309c` へ進み、strict protection が branch 更新を要求した。新 dev の OIPC revision 26 / PD-OI-055 を通常 merge し、Issue #599 の PD-OI-052–054 と runtime/test bytes を維持。影響する Node contract 190/190 成功。詳細は [S04](results/S04.md) の追記。新 head の required checks と merge後の exact-SHA staging は別に確認する。
