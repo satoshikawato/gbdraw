@@ -18,7 +18,7 @@ dev と main を `git archive` で `$S00_BASELINE_DIR=/home/kawato/gbdraw-baseli
 
 | Session | 状態 | 証拠・次の条件 |
 | --- | --- | --- |
-| S00 | 完了（証拠採取のみ） | [results/S00.md](results/S00.md)。開始 a351c01d、dev 57cef3ba・main 4556e04e の snapshot/wheel、性能 baseline、G03/G06/G07 再現、R01/R02 範囲。S04 の値変更は第 11.3 節の判断 1〜3 待ち。commit SHA は次セッションで追記 |
+| S00 | 完了（証拠採取のみ） | [results/S00.md](results/S00.md)。開始 a351c01d、dev 57cef3ba・main 4556e04e の snapshot/wheel、性能 baseline、G03/G06/G07 再現、R01/R02 範囲。旧 Session 方針と receipt 文言は第 11.4 節で取得済み。commit SHA は次セッションで追記 |
 | S01 | 未着手 | S00後。規約のみの取り込み |
 | S02 | 未着手 | S01がdevへ反映後。checkerのみの取り込み |
 | S03 | 未着手 | S02反映後。応答・CW検証 |
