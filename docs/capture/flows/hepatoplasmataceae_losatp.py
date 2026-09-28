@@ -100,9 +100,9 @@ def _set_source_inputs(page: Page) -> None:
     linear.click()
     expect(linear).to_have_attribute("aria-pressed", "true")
     page.get_by_role("radio", name="GenBank", exact=True).check()
-    expect(page.get_by_role("status").filter(has_text="Current:")).to_contain_text(
-        "Current: No comparison"
-    )
+    expect(
+        page.get_by_role("button", name="Set no comparison", exact=True)
+    ).to_have_attribute("aria-pressed", "true")
 
     first_fixture = GUI_HEPATOPLASMATACEAE_FIXTURES[0]
     page.get_by_test_id("linear-genbank-1").set_input_files(first_fixture[0])
@@ -195,12 +195,11 @@ def _configure_all_record_collinear(
     commands = page.get_by_role(
         "group", name="Set all adjacent comparisons", exact=True
     )
-    commands.get_by_role(
+    run_losat = commands.get_by_role(
         "button", name="Run LOSAT for all adjacent pairs", exact=True
-    ).click()
-    expect(page.get_by_role("status").filter(has_text="Current:")).to_contain_text(
-        "Current: Run LOSAT for all adjacent pairs"
     )
+    run_losat.click()
+    expect(run_losat).to_have_attribute("aria-pressed", "true")
 
     selected_pairs = open_linear_comparison_disclosure(
         page,

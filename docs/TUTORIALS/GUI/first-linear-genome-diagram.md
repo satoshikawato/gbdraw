@@ -45,8 +45,8 @@ The uploader should show `NC_001416.gb` in green. Keep one input row only; this 
 
 ![Linear GenBank input showing NC_001416.gb selected](../../images/t-gui-02/01-input-ready.png)
 
-*Confirm Linear, GenBank, the `NC_001416.gb` upload, and the separate **Current:
-No comparison** status before generating.*
+*Confirm Linear, GenBank, the `NC_001416.gb` upload, and the pressed **No
+comparison** command before generating.*
 
 ## Step 2: Generate the first diagram
 

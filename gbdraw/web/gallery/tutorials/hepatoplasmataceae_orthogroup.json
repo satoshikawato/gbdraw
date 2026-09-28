@@ -117,8 +117,8 @@
           "dataDependent": true,
           "media": {
             "src": "./media/hepatoplasmataceae_orthogroup/manual-03-01-browser-losat.webp",
-            "alt": "Comparison card with Run LOSAT active, Current: Run LOSAT status, closed Settings, and Selected pairs 4.",
-            "caption": "Choose Run LOSAT for all four adjacent comparisons; the status confirms the active command."
+            "alt": "Comparison card with Run LOSAT pressed, closed Settings, and Selected pairs 4.",
+            "caption": "Choose Run LOSAT for all four adjacent comparisons; the pressed command confirms it."
           },
           "capture": {
             "source": "webapp",
@@ -143,7 +143,7 @@
               "linearComparisonPlan.defaultSource": "losat",
               "losatProgram": "blastp"
             },
-            "visibleText": ["Comparison", "Run LOSAT", "Current: Run LOSAT", "Settings", "Selected pairs (4)"]
+            "visibleText": ["Comparison", "Run LOSAT", "Settings", "Selected pairs (4)"]
           }
         },
         {

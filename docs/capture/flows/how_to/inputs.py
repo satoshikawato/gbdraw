@@ -107,9 +107,9 @@ def capture_gui_inputs(
         linear = page.get_by_role("button", name="Linear", exact=True)
         linear.click()
         expect(linear).to_have_attribute("aria-pressed", "true")
-        expect(page.get_by_role("status").filter(has_text="Current:")).to_contain_text(
-            "Current: No comparison"
-        )
+        expect(
+            page.get_by_role("button", name="Set no comparison", exact=True)
+        ).to_have_attribute("aria-pressed", "true")
 
         genbank = page.get_by_role("radio", name="GenBank", exact=True)
         genbank.check()

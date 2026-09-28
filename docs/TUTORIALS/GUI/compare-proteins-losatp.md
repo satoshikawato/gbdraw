@@ -49,8 +49,8 @@ Keep the first four records in their source orientation; turn on
 
 ## Step 1: Load the five Linear records
 
-Select **Linear** and **GenBank**. Confirm the fresh **Current: No comparison**
-status. Upload `BGC0000708.gbk`, then use **Add sequence** in the **Input
+Select **Linear** and **GenBank**. Confirm that **No comparison** is pressed in
+the **Comparison** command group. Upload `BGC0000708.gbk`, then use **Add sequence** in the **Input
 Genomes** header four times and upload the remaining files in the table order.
 
 For the fifth row, `BGC0000713`, open **Record options** and turn on **Reverse

@@ -26,6 +26,8 @@ dev と main を `git archive` で `$S00_BASELINE_DIR=/home/kawato/gbdraw-baseli
 
 2026-09-29: S05 を実施。Similarity alignment の直接 RBH を、committed request の orthogroup resource から Worker adapter が取得するようにした（UI catalog の edge は常に空だった）。PR #641 の recipe-only 確定（`projectGeneratedProteinRecipe`）は、新規 LOSATP Generate 後の Align と record rotation を browser で失敗させていたため撤回した（Owner-delegated、第 2 節）。Review と plan inspector は record 名・accession と gene・protein ID を表示する。Node 1,116 passed、Python 561 passed、browser は既存の #641 由来の失敗を除き passed。commit title: "Resolve alignment RBH from committed orthogroup evidence and show biological names"。
 
+2026-09-29: S06 を実施。Preview の Editor を上端から開き、検索（最大 39.5rem）と toolbar を Editor 幅を除いた残り幅に置いた。Align と Review を popup・drawer の同じ行へ移した。Align と Lock の常時説明を help-tip（hover・focus・tap、accessible description）へ、比較の「Current:」状態と要約を削除して `aria-pressed` にした。全 browser 実行で S04 の mode 復元が Circular 定義を live 更新する退行を見つけ、別 commit で修正した。commit title: "Open the Editor from the Preview top and move always-on help into help-tips"。
+
 | Session | 状態 | 証拠・次の条件 |
 | --- | --- | --- |
 | S00 | 完了（証拠採取のみ） | [results/S00.md](results/S00.md)。開始 a351c01d、dev 57cef3ba・main 4556e04e の snapshot/wheel、性能 baseline、G03/G06/G07 再現、R01/R02 範囲。旧 Session 方針と receipt 文言は第 11.4 節で取得済み。commit SHA は次セッションで追記 |
@@ -34,7 +36,7 @@ dev と main を `git archive` で `$S00_BASELINE_DIR=/home/kawato/gbdraw-baseli
 | S03 | commit 済み・dev 未反映 | [results/S03.md](results/S03.md)。PR #641 を merge（70bca139）後に実装。Pending と表示専用 intent を除去し、PD-OI-037/049 を co-change で revision 2 にした。CW-01〜04 の自動検証と変異 3 件を検出。性能は全操作が提案予算内 |
 | S04 | commit 済み・dev 未反映 | [results/S04.md](results/S04.md)。S03（3bd092af）の上。判断 1〜3 を既存 mode-profiles・config・projection・publication の owner で実装。v41/v44 Vnig の受入と Save→fresh Load・拒否 Load を確認。#641 由来の既存 browser 失敗 4 件を特定（S07 へ）。Gallery 再生成は S07 |
 | S05 | commit 済み・dev 未反映 | [results/S05.md](results/S05.md)。S04 の上。直接 edge を committed orthogroup resource から Worker adapter へ渡し、CLI と束縛 helper を共有。#641 の recipe-only 確定を撤回して新規 LOSATP 後の Align と record rotation を回復。Review・inspector の名前を共有 helper へ。実 Gallery と新規 LOSATP で livA→racM、parA→racL を確認 |
-| S06 | 未着手 | S02反映後。Product契約とUIを同時改修 |
+| S06 | commit 済み・dev 未反映 | [results/S06.md](results/S06.md)。S05 と S04 follow-up（636d09f2）の上。Contract revision 28（PD-OI-024 rev 3、PD-OI-054 rev 2）を co-change。Editor を Preview 上端から開き検索は残り幅（最大 39.5rem）。Align/Review を同じ行へ。2 つの常時説明を help-tip へ、Current 状態と要約を削除して `aria-pressed`。docs・capture の screenshot 再生成は S07 |
 | S07 | 未着手 | S03〜S06の統合検証 |
 
 各セッション終了時に、結果文書へのリンク、実際のSHA、検証結果、次の条件をこの表へ反映する。

@@ -430,38 +430,6 @@ const projectTopology = (plan, activePairCount) => {
   });
 };
 
-const projectStatusLabel = ({ intentKey, activePairCount, sourceBreakdown }) => {
-  if (intentKey === LINEAR_COMPARISON_INTENT_KEYS.NONE) return 'Current: No comparison';
-  if (intentKey === LINEAR_COMPARISON_INTENT_KEYS.LOSAT) {
-    return 'Current: Run LOSAT for all adjacent pairs';
-  }
-  if (intentKey === LINEAR_COMPARISON_INTENT_KEYS.UPLOAD) {
-    return 'Current: Upload BLAST TSV for all adjacent pairs';
-  }
-  const sources = sourceBreakdown.key === 'none' ? '' : `; ${sourceBreakdown.label}`;
-  return `Current: Selected pairs (${activePairCount}${sources})`;
-};
-
-const projectSummaryText = ({
-  intentKey,
-  topology,
-  planned,
-  sourceBreakdown,
-  losatMethodSummaryLabel,
-  filterSummary
-}) => {
-  if (intentKey === LINEAR_COMPARISON_INTENT_KEYS.NONE) return 'No comparison';
-  const parts = [];
-  if (planned.hasLosat) parts.push(losatMethodSummaryLabel);
-  if (intentKey === LINEAR_COMPARISON_INTENT_KEYS.UPLOAD) parts.push('Upload BLAST TSV');
-  parts.push(topology.pairLabel);
-  if (intentKey === LINEAR_COMPARISON_INTENT_KEYS.CUSTOM) {
-    parts.push(sourceBreakdown.label);
-  }
-  parts.push(filterSummary.text);
-  return parts.join(' · ');
-};
-
 export const projectLinearComparisonLosatModeSelection = ({
   modeKey = ''
 } = {}) => {
@@ -528,9 +496,6 @@ export const projectLinearComparisonUi = ({
   const losatpModeKey = normalizeBlastpMode(blastpMode);
   const losatModeLabel = LOSAT_MODE_BY_KEY.get(losatModeKey).label;
   const losatpModeLabel = LOSATP_MODE_BY_KEY.get(losatpModeKey).label;
-  const losatMethodSummaryLabel = losatModeKey === LINEAR_COMPARISON_LOSAT_MODE_KEYS.LOSATP
-    ? `${losatModeLabel} · ${losatpModeLabel}`
-    : losatModeLabel;
   const sourceBreakdown = projectSourceBreakdown(activeEdges);
   const activePairCount = activeEdges.length;
   const dormantDraftCount = retainedDormantDraftCount(normalizedPlan, activeEdges);
@@ -569,15 +534,6 @@ export const projectLinearComparisonUi = ({
     errorBadge: errorRouting.badge,
     errorDisclosureKey: errorRouting.primaryDisclosureKey,
     errorDisclosureKeys: errorRouting.disclosureKeys,
-    errorTargets: errorRouting.targets,
-    currentStatusLabel: projectStatusLabel({ intentKey, activePairCount, sourceBreakdown }),
-    summaryText: projectSummaryText({
-      intentKey,
-      topology,
-      planned,
-      sourceBreakdown,
-      losatMethodSummaryLabel,
-      filterSummary
-    })
+    errorTargets: errorRouting.targets
   });
 };

@@ -132,8 +132,8 @@
           "dataDependent": true,
           "media": {
             "src": "./media/lambda_basic_linear/manual-02-03-no-comparison.webp",
-            "alt": "Comparison card with the No comparison command and Current: No comparison status.",
-            "caption": "Choose No comparison; the status reads Current: No comparison."
+            "alt": "Comparison card with the No comparison command pressed.",
+            "caption": "Choose No comparison; the pressed command shows the comparison state."
           },
           "capture": {
             "source": "webapp",
@@ -153,7 +153,6 @@
             },
             "visibleText": [
               "No comparison",
-              "Current: No comparison",
               "Settings",
               "Selected pairs (0)"
             ]

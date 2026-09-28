@@ -207,7 +207,8 @@ test('fresh Linear keeps primary input visible and uses command/status semantics
   for (const name of expectedNames) {
     const button = commands.getByRole('button', { name, exact: true });
     await expect(button).toBeVisible();
-    await expect(button).not.toHaveAttribute('aria-pressed');
+    // The pressed action is the comparison state; no separate status text.
+    await expect(button).toHaveAttribute('aria-pressed', String(name === 'Set no comparison'));
   }
   await expect(commands.getByRole('button', {
     name: 'Run LOSAT for all adjacent pairs', exact: true
@@ -215,8 +216,7 @@ test('fresh Linear keeps primary input visible and uses command/status semantics
   await expect(comparisonCard(page)).toContainText(
     'Run LOSAT requires at least 2 loaded sequences.'
   );
-  const currentStatus = comparisonCard(page).getByRole('status');
-  await expect(currentStatus).toHaveText('Current: No comparison');
+  await expect(comparisonCard(page)).not.toContainText('Current:');
   await expect(commands.getByRole('status')).toHaveCount(0);
 
   await expect(comparisonSettings(page)).toHaveCount(1);
@@ -322,9 +322,7 @@ test('uploader, comparison commands, and native summaries work from the keyboard
   await runLosat.focus();
   await expectKeyboardFocusIndicator(runLosat);
   await page.keyboard.press('Enter');
-  await expect(comparisonCard(page).getByRole('status')).toContainText(
-    'Current: Run LOSAT for all adjacent pairs'
-  );
+  await expect(runLosat).toHaveAttribute('aria-pressed', 'true');
 
   const useUpload = commands.getByRole('button', {
     name: 'Use uploaded BLAST TSV for all adjacent pairs'
@@ -332,17 +330,14 @@ test('uploader, comparison commands, and native summaries work from the keyboard
   await useUpload.focus();
   await expectKeyboardFocusIndicator(useUpload);
   await page.keyboard.press('Space');
-  await expect(comparisonCard(page).getByRole('status')).toContainText(
-    'Current: Upload BLAST TSV for all adjacent pairs'
-  );
+  await expect(useUpload).toHaveAttribute('aria-pressed', 'true');
+  await expect(runLosat).toHaveAttribute('aria-pressed', 'false');
 
   const noComparison = commands.getByRole('button', { name: 'Set no comparison' });
   await noComparison.focus();
   await expectKeyboardFocusIndicator(noComparison);
   await page.keyboard.press('Enter');
-  await expect(comparisonCard(page).getByRole('status')).toContainText(
-    'Current: No comparison'
-  );
+  await expect(noComparison).toHaveAttribute('aria-pressed', 'true');
 
   await runLosat.focus();
   await page.keyboard.press('Space');
@@ -561,10 +556,8 @@ test('imported comparison resolutions are explicit and create one History entry 
   await expect(resolution).toContainText('Selected action: CLEAR');
   expect(await page.evaluate(() => window.__GBDRAW_HISTORY__.getUndoCount()))
     .toBe(beforeClear + 1);
-  await expect(comparisonCard(page).locator('[role="status"][aria-live="polite"]'))
-    .toContainText(
-    'Current: No comparison'
-    );
+  await expect(comparisonCommands(page).getByRole('button', { name: 'Set no comparison' }))
+    .toHaveAttribute('aria-pressed', 'true');
 });
 
 test('preserved imported comparison generates only after explicit inheritance', async ({ page }) => {
@@ -731,13 +724,8 @@ test('LOSAT and LOSATP modes own their controls and mixed plans require explicit
     await losatpMode.selectOption(value);
     await expect(losatpMode).toHaveValue(value);
     expect(await controlCounts()).toEqual(expected);
-    await expect(comparisonCard(page).locator('.linear-comparison-summary')).toContainText(
-      `LOSATP · ${value === 'pairwise'
-        ? 'Pairwise matches'
-        : value === 'orthogroup'
-          ? 'Similarity groups'
-          : 'Collinear blocks'}`
-    );
+    expect(await page.evaluate(() => window.__GBDRAW_APP__.linearComparisonUi.activeLosatpModeKey))
+      .toBe(value);
     if (value === 'collinear') {
       const scope = page.getByRole('combobox', {
         name: 'Collinear evidence scope'
@@ -766,10 +754,12 @@ test('LOSAT and LOSATP modes own their controls and mixed plans require explicit
   });
   expect(mixed.mode).toBe('selected');
   expect(mixed.edges).toEqual(['upload', 'losat']);
-  await expect(comparisonCard(page).getByRole('status')).toContainText(
-    'Current: Selected pairs (2; 1 LOSAT, 1 upload)'
-  );
-  await expect(comparisonCard(page).getByText('Custom', { exact: true })).toBeVisible();
+  await expect(comparisonCard(page).getByRole('status')).toContainText('Custom');
+  for (const name of ['Run LOSAT for all adjacent pairs', 'Set no comparison',
+    'Use uploaded BLAST TSV for all adjacent pairs']) {
+    await expect(comparisonCommands(page).getByRole('button', { name, exact: true }))
+      .toHaveAttribute('aria-pressed', 'false');
+  }
   for (const modeKey of ['blastn', 'blastp', 'tblastx']) {
     await expect(losatMode.locator(
       `[data-linear-comparison-losat-mode-option="${modeKey}"]`
@@ -789,9 +779,9 @@ test('LOSAT and LOSATP modes own their controls and mixed plans require explicit
   await comparisonSettings(page).getByRole('button', {
     name: 'Use all adjacent LOSAT'
   }).click();
-  await expect(comparisonCard(page).getByRole('status')).toContainText(
-    'Current: Run LOSAT for all adjacent pairs'
-  );
+  await expect(comparisonCommands(page).getByRole('button', {
+    name: 'Run LOSAT for all adjacent pairs', exact: true
+  })).toHaveAttribute('aria-pressed', 'true');
   await expect(losatpMode.locator('option[value="orthogroup"]')).toBeEnabled();
   await expect(losatpMode.locator('option[value="collinear"]')).toBeEnabled();
 });

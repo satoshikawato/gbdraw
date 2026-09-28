@@ -898,15 +898,29 @@
                 -50%
             );
         }
+        /* The Editor opens from the Preview top edge; search and controls keep the
+           remaining width (PD-OI-054 revision 2). */
         .preview-editor-layout {
+            --preview-editor-reserve: 0px;
+            position: relative;
             display: grid;
             grid-template-rows: auto minmax(200px, 1fr) auto;
             min-width: 0;
             min-height: 0;
             flex: 1 0 auto;
         }
+        .preview-editor-layout:has(> .preview-workspace > .right-drawer[aria-hidden="false"]) {
+            --preview-editor-reserve: var(--right-drawer-width);
+        }
+        .preview-editor-layout > .preview-feature-search {
+            justify-self: end;
+            width: min(39.5rem, calc(100% - 1rem - var(--preview-editor-reserve)));
+            margin-right: calc(0.5rem + var(--preview-editor-reserve));
+        }
+        .preview-editor-layout > .preview-controls {
+            margin-right: var(--preview-editor-reserve);
+        }
         .preview-workspace {
-            position: relative;
             display: flex;
             min-width: 0;
             min-height: 200px;
@@ -1110,11 +1124,21 @@
                 margin-inline: 0;
                 padding-right: calc(var(--editor-toggle-width) + 0.75rem);
             }
+            .preview-editor-layout,
+            .preview-editor-layout:has(> .preview-workspace > .right-drawer[aria-hidden="false"]) {
+                --preview-editor-reserve: 0px;
+            }
             .preview-editor-layout {
                 grid-template-rows: auto auto auto;
                 gap: 0.5rem;
             }
+            .preview-editor-layout > .preview-feature-search {
+                justify-self: stretch;
+                width: auto;
+                margin-right: 0.5rem;
+            }
             .preview-workspace {
+                position: relative;
                 display: grid;
                 grid-template-columns: minmax(0, 1fr);
                 grid-template-rows: minmax(200px, calc(var(--compact-preview-space) * 0.5)) auto auto;
@@ -2069,18 +2093,15 @@
                                 </div>
                             </div>
                             <div role="group" aria-label="Set all adjacent comparisons" data-history-managed data-capture="linear-blast-source" class="linear-comparison-actions">
-                                <button type="button" aria-label="Run LOSAT for all adjacent pairs" @click="setLinearComparisonGlobalAction('losat')" :disabled="!semanticMutationAvailable || (!canRunLinearLosat)" :title="canRunLinearLosat ? 'Run LOSAT for all adjacent pairs' : 'Requires at least 2 loaded sequences to compare'" :class="linearComparisonGlobalAction === 'losat' ? 'border-blue-500 bg-blue-50 text-blue-700' : 'border-slate-300 bg-white text-slate-700 hover:bg-slate-50'" class="btn rounded-lg border text-xs font-bold shadow-sm">Run LOSAT</button>
-                                <button type="button" aria-label="Set no comparison" @click="setLinearComparisonGlobalAction('none')" :class="linearComparisonGlobalAction === 'none' ? 'border-blue-500 bg-blue-50 text-blue-700' : 'border-slate-300 bg-white text-slate-700 hover:bg-slate-50'" class="btn rounded-lg border text-xs font-bold shadow-sm" :disabled="!semanticMutationAvailable">No comparison</button>
-                                <button type="button" aria-label="Use uploaded BLAST TSV for all adjacent pairs" @click="setLinearComparisonGlobalAction('upload')" :class="linearComparisonGlobalAction === 'upload' ? 'border-blue-500 bg-blue-50 text-blue-700' : 'border-slate-300 bg-white text-slate-700 hover:bg-slate-50'" class="btn rounded-lg border text-xs font-bold shadow-sm" :disabled="!semanticMutationAvailable">Upload BLAST TSV</button>
+                                <button type="button" aria-label="Run LOSAT for all adjacent pairs" :aria-pressed="linearComparisonGlobalAction === 'losat'" @click="setLinearComparisonGlobalAction('losat')" :disabled="!semanticMutationAvailable || (!canRunLinearLosat)" :title="canRunLinearLosat ? 'Run LOSAT for all adjacent pairs' : 'Requires at least 2 loaded sequences to compare'" :class="linearComparisonGlobalAction === 'losat' ? 'border-blue-500 bg-blue-50 text-blue-700' : 'border-slate-300 bg-white text-slate-700 hover:bg-slate-50'" class="btn rounded-lg border text-xs font-bold shadow-sm">Run LOSAT</button>
+                                <button type="button" aria-label="Set no comparison" :aria-pressed="linearComparisonGlobalAction === 'none'" @click="setLinearComparisonGlobalAction('none')" :class="linearComparisonGlobalAction === 'none' ? 'border-blue-500 bg-blue-50 text-blue-700' : 'border-slate-300 bg-white text-slate-700 hover:bg-slate-50'" class="btn rounded-lg border text-xs font-bold shadow-sm" :disabled="!semanticMutationAvailable">No comparison</button>
+                                <button type="button" aria-label="Use uploaded BLAST TSV for all adjacent pairs" :aria-pressed="linearComparisonGlobalAction === 'upload'" @click="setLinearComparisonGlobalAction('upload')" :class="linearComparisonGlobalAction === 'upload' ? 'border-blue-500 bg-blue-50 text-blue-700' : 'border-slate-300 bg-white text-slate-700 hover:bg-slate-50'" class="btn rounded-lg border text-xs font-bold shadow-sm" :disabled="!semanticMutationAvailable">Upload BLAST TSV</button>
                             </div>
                             <p v-if="!canRunLinearLosat" class="text-[10px] leading-snug text-slate-500">Run LOSAT requires at least 2 loaded sequences.</p>
-                            <div class="min-w-0 rounded border border-slate-200 bg-white px-2 py-2" role="status" aria-live="polite">
-                                <div class="flex min-w-0 flex-wrap items-center gap-1.5">
-                                    <span class="linear-primary-label min-w-0">{{ linearComparisonUi.currentStatusLabel }}</span>
-                                    <span v-if="linearComparisonUi.intentKey === 'custom'" class="rounded-full bg-indigo-100 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-indigo-700">Custom</span>
-                                    <span v-if="linearComparisonUi.errorBadge" class="rounded-full bg-red-100 px-1.5 py-0.5 text-[10px] font-bold text-red-700">{{ linearComparisonUi.errorBadge.label }}</span>
-                                </div>
-                                <p v-if="linearComparisonUi.intentKey !== 'none'" class="linear-comparison-summary mt-1 text-[10px] leading-snug text-slate-500">{{ linearComparisonUi.summaryText }}</p>
+                            <!-- The pressed action shows the intent; only Custom and real errors need a badge. -->
+                            <div class="flex min-w-0 flex-wrap items-center gap-1.5 empty:hidden" role="status" aria-live="polite" data-linear-comparison-status>
+                                <span v-if="linearComparisonUi.intentKey === 'custom'" class="rounded-full bg-indigo-100 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-indigo-700">Custom</span>
+                                <span v-if="linearComparisonUi.errorBadge" class="rounded-full bg-red-100 px-1.5 py-0.5 text-[10px] font-bold text-red-700">{{ linearComparisonUi.errorBadge.label }}</span>
                             </div>
                             <p v-if="!linearComparisonResolution.valid" class="rounded border border-red-200 bg-red-50 px-2 py-1.5 text-[10px] text-red-700">
                                 {{ linearComparisonResolution.error }}
@@ -2866,8 +2887,7 @@
                                     </label>
                                     <label class="option-label flex flex-wrap items-center gap-2 text-xs text-slate-700 cursor-pointer select-none">
                                         <input type="checkbox" v-model="form.keep_definition_left_aligned" class="form-checkbox" aria-label="Lock Definition Column" aria-describedby="linear-definition-lock-help" :disabled="!semanticMutationAvailable">
-                                        <span class="inline-flex items-center gap-1">Lock Definition Column <help-tip text="Align Linear definitions in a shared left column. When off, definitions use a common column center and follow their row offset, including center or similarity alignment."></help-tip></span>
-                                        <span id="linear-definition-lock-help" class="basis-full block text-[10px] text-slate-500">ON aligns definitions in a common left column. OFF centers them in a common column width and follows row offsets. Changes apply on Generate.</span>
+                                        <span class="inline-flex items-center gap-1">Lock Definition Column <help-tip id="linear-definition-lock-help" text="ON aligns Linear definitions in a common left column. OFF centers them in a common column width and follows row offsets, including center or similarity alignment. Changes apply on Generate."></help-tip></span>
                                     </label>
                                     <label class="option-label flex items-center gap-2 text-xs text-slate-700 cursor-pointer select-none">
                                         <input type="checkbox" v-model="form.normalize_length" class="form-checkbox" :disabled="!semanticMutationAvailable">
@@ -5291,29 +5311,30 @@
                                 <i class="ph ph-target"></i>
                                 <span>Highlight</span>
                             </button>
-                            <button type="button"
-                                    data-history-managed
-                                    @click="alignByClickedOrthogroup($event)"
-                                    :disabled="!clickedOrthogroupDetail?.currentMember || similarityAlignmentBusy"
-                                    :aria-busy="similarityAlignmentBusy"
-                                    aria-describedby="clicked-alignment-action-description"
-                                    class="px-2 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-slate-200 disabled:text-slate-400 disabled:cursor-not-allowed text-white rounded-lg text-xs font-medium flex items-center justify-center gap-1"
-                                    title="Align to this exact feature">
-                                <i class="ph ph-arrows-left-right" aria-hidden="true"></i>
-                                <span>{{ similarityAlignmentStatus === 'resolving' ? 'Resolving…' : similarityAlignmentStatus === 'applying' ? 'Applying…' : 'Align…' }}</span>
-                            </button>
-                            <button type="button"
-                                    data-history-managed
-                                    data-similarity-alignment-popup-review
-                                    @click="alignByClickedOrthogroup($event, 'review')"
-                                    :disabled="!clickedOrthogroupDetail?.currentMember || similarityAlignmentBusy"
-                                    :aria-busy="similarityAlignmentBusy"
-                                    aria-describedby="clicked-alignment-action-description"
-                                    class="col-span-2 px-2 py-2 bg-slate-100 hover:bg-slate-200 disabled:text-slate-400 disabled:cursor-not-allowed text-slate-700 rounded-lg text-xs font-medium focus-visible:outline focus-visible:outline-2 focus-visible:outline-blue-600"
-                                    title="Review alignment options for this exact feature">Review alignment options…</button>
-                            <p id="clicked-alignment-action-description" class="col-span-2 text-[10px] text-slate-500">
-                                Align applies resolved targets immediately; ambiguity opens review. Review alignment options… lets you inspect or change anchors, Skip, and direction before applying.
-                            </p>
+                            <div class="col-span-2 flex min-w-0 items-center gap-2">
+                                <button type="button"
+                                        data-history-managed
+                                        @click="alignByClickedOrthogroup($event)"
+                                        :disabled="!clickedOrthogroupDetail?.currentMember || similarityAlignmentBusy"
+                                        :aria-busy="similarityAlignmentBusy"
+                                        aria-describedby="clicked-alignment-action-description"
+                                        class="flex-1 min-w-0 px-2 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-slate-200 disabled:text-slate-400 disabled:cursor-not-allowed text-white rounded-lg text-xs font-medium flex items-center justify-center gap-1"
+                                        title="Align to this exact feature">
+                                    <i class="ph ph-arrows-left-right" aria-hidden="true"></i>
+                                    <span>{{ similarityAlignmentStatus === 'resolving' ? 'Resolving…' : similarityAlignmentStatus === 'applying' ? 'Applying…' : 'Align…' }}</span>
+                                </button>
+                                <button type="button"
+                                        data-history-managed
+                                        data-similarity-alignment-popup-review
+                                        @click="alignByClickedOrthogroup($event, 'review')"
+                                        :disabled="!clickedOrthogroupDetail?.currentMember || similarityAlignmentBusy"
+                                        :aria-busy="similarityAlignmentBusy"
+                                        aria-describedby="clicked-alignment-action-description"
+                                        class="flex-1 min-w-0 px-2 py-2 bg-slate-100 hover:bg-slate-200 disabled:text-slate-400 disabled:cursor-not-allowed text-slate-700 rounded-lg text-xs font-medium leading-tight focus-visible:outline focus-visible:outline-2 focus-visible:outline-blue-600"
+                                        title="Review alignment options for this exact feature">Review alignment options…</button>
+                                <help-tip id="clicked-alignment-action-description" label="About Align and Review"
+                                          text="Align applies resolved targets immediately; ambiguity opens review. Review alignment options… lets you inspect or change anchors, Skip, and direction before applying."></help-tip>
+                            </div>
                         </div>
                         <div v-if="clickedOrthogroupDetail" class="border-y border-slate-100 py-3">
                             <div class="flex items-center justify-between mb-2">
@@ -6665,11 +6686,7 @@
                                         </button>
                                     </div>
                                     <div>
-                                        <span class="font-semibold text-slate-700">Exact reference:</span>
-                                        <span class="break-all">
-                                            {{ similarityAlignmentPlanInspector.reference.recordLabel }} ·
-                                            {{ similarityAlignmentPlanInspector.reference.label }}
-                                        </span>
+                                        <span class="font-semibold text-slate-700">Exact reference:</span> <span class="break-all">{{ similarityAlignmentPlanInspector.reference.recordLabel }} · {{ similarityAlignmentPlanInspector.reference.label }}</span>
                                     </div>
                                     <div class="max-h-32 overflow-auto rounded border border-blue-100 bg-white custom-scrollbar">
                                         <div v-for="record in similarityAlignmentPlanInspector.records"
@@ -6963,7 +6980,7 @@
                                     :aria-busy="similarityAlignmentBusy"
                                     aria-describedby="similarity-alignment-drawer-reason"
                                     title="Align to the selected exact feature"
-                                    class="col-span-2 text-xs px-2 py-1.5 bg-blue-600 hover:bg-blue-700 disabled:bg-slate-200 disabled:text-slate-400 disabled:cursor-not-allowed text-white rounded flex items-center justify-center gap-1">
+                                    class="min-w-0 text-xs px-2 py-1.5 bg-blue-600 hover:bg-blue-700 disabled:bg-slate-200 disabled:text-slate-400 disabled:cursor-not-allowed text-white rounded flex items-center justify-center gap-1">
                                 <i class="ph ph-arrows-left-right" aria-hidden="true"></i>
                                 {{ similarityAlignmentStatus === 'resolving' ? 'Resolving…' : similarityAlignmentStatus === 'applying' ? 'Applying…' : 'Align…' }}
                             </button>
@@ -6975,7 +6992,7 @@
                                     :aria-busy="similarityAlignmentBusy"
                                     aria-describedby="similarity-alignment-drawer-reason"
                                     title="Review alignment options for the selected exact feature"
-                                    class="col-span-2 text-xs px-2 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded focus-visible:outline focus-visible:outline-2 focus-visible:outline-blue-600 disabled:text-slate-400 disabled:cursor-not-allowed">Review alignment options…</button>
+                                    class="min-w-0 text-xs leading-tight px-2 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded focus-visible:outline focus-visible:outline-2 focus-visible:outline-blue-600 disabled:text-slate-400 disabled:cursor-not-allowed">Review alignment options…</button>
                             <button @click="resetOrthogroupRename(selectedOrthogroup.id)" class="text-xs px-2 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded flex items-center justify-center gap-1" :disabled="!semanticMutationAvailable">
                                 <i class="ph ph-text-aa"></i> Reset Rename
                             </button>
@@ -7395,15 +7412,23 @@
     </script>
 
 <script type="text/x-template" id="help-tip-template">
-    <div class="help-tip inline-block align-text-bottom">
-        <i class="ph ph-question text-slate-400 hover:text-blue-500 cursor-help" aria-hidden="true"
-           @mouseenter="show" @mouseleave="hide" ref="trigger"></i>
+    <span class="help-tip inline-block align-text-bottom">
+        <button v-if="id" type="button" ref="trigger" data-history-ignore
+                class="help-tip-trigger inline-flex text-slate-400 hover:text-blue-500 focus-visible:text-blue-600 cursor-help rounded focus-visible:outline focus-visible:outline-2 focus-visible:outline-blue-600"
+                :aria-label="label || 'Help'" :aria-describedby="id" :aria-expanded="visible"
+                @mouseenter="onEnter" @mouseleave="onLeave" @focus="onFocus" @blur="close"
+                @click.stop.prevent="toggle" @keydown.esc.stop="close">
+            <i class="ph ph-question" aria-hidden="true"></i>
+        </button>
+        <i v-else ref="trigger" class="ph ph-question text-slate-400 hover:text-blue-500 cursor-help" aria-hidden="true"
+           @mouseenter="onEnter" @mouseleave="onLeave"></i>
+        <span v-if="id" :id="id" class="sr-only">{{ text }}</span>
         <Teleport to="body">
-            <div v-if="visible" :style="style" class="fixed z-[9999] px-3 py-2 bg-slate-800 text-white text-xs rounded-md shadow-lg max-w-[250px] pointer-events-none transition-opacity text-left leading-relaxed">
+            <div v-if="visible" :style="style" role="tooltip" aria-hidden="true" class="fixed z-[9999] px-3 py-2 bg-slate-800 text-white text-xs rounded-md shadow-lg max-w-[250px] pointer-events-none transition-opacity text-left leading-relaxed">
                  {{ text }}
             </div>
         </Teleport>
-    </div>
+    </span>
 </script>
 
 <script type="text/x-template" id="file-uploader-template">

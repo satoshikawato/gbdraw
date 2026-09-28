@@ -425,10 +425,9 @@ table has been imported and an annotation set is available.
 
 The browser runs LOSATN, TLOSATX, and LOSATP. Linear **Comparison** follows the
 record list. Its **No comparison**, **Run LOSAT**, and **Upload BLAST TSV**
-buttons are bulk commands for all adjacent pairs, not radio options. A separate
-**Current:** status reports the effective plan. A selected or mixed plan shows
-**Current: Selected pairs (N; ...)** with a **Custom** badge instead of making
-one of the three commands look selected. Fresh Linear pages and **Reset
+buttons are bulk commands for all adjacent pairs. The button that matches the
+effective plan is pressed (`aria-pressed`). A selected or mixed plan presses none
+of them and shows a **Custom** badge. Fresh Linear pages and **Reset
 Settings** use **No comparison**. Loading a saved Web session restores its
 saved comparison intent.
 

@@ -1,6 +1,7 @@
 // CW-01..04 (docs/internal/ARCHITECTURE_FITNESS_FUNCTION_RATCHET.md#computation-ownership):
-// comparison switching, ordinary input, and Generate acceptance build no
-// status-only tables, and each Generate builds its label table once.
+// comparison switching, ordinary input, Editor placement, help-tips, and
+// Generate acceptance build no status-only tables, and each Generate builds
+// its label table once.
 const { test, expect } = require('@playwright/test');
 const { readFileSync } = require('node:fs');
 const { join } = require('node:path');
@@ -179,6 +180,20 @@ test('@pr-smoke status, selection, and input build no tables; each Generate buil
   expect(blur.undo).toBe(1);
   expectNoStatusWork(blur, 'blur');
   await expect(page.locator('[data-generation-application-feedback]')).toHaveCount(0);
+
+  // CW-01 for presentation-only changes: Editor placement and help-tips.
+  const toggle = page.locator('.drawer-toggle');
+  for (const expanded of ['true', 'false']) {
+    const op = await observe(page, cdp, () => toggle.click());
+    await expect(toggle).toHaveAttribute('aria-expanded', expanded);
+    expect(op.undo).toBe(0);
+    expectNoStatusWork(op, `Editor aria-expanded=${expanded}`);
+  }
+  const help = page.locator('.help-tip:has(#linear-definition-lock-help) > button');
+  const tip = await observe(page, cdp, () => help.click());
+  await expect(page.locator('[role="tooltip"]')).toContainText('Changes apply on Generate');
+  expect(tip.undo).toBe(0);
+  expectNoStatusWork(tip, 'help-tip');
 });
 
 test('a double press on Generate starts one operation', async ({ page }) => {

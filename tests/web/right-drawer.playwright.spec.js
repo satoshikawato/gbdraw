@@ -50,10 +50,13 @@ const readSettledPreviewSurface = async (page) => page.locator(
   await Promise.all(
     surface.getAnimations().map((animation) => animation.finished.catch(() => {}))
   );
+  // Relative to its canvas: the search row may wrap in the width left by the
+  // Editor (PD-OI-054 revision 2), which moves the canvas but not the camera.
   const box = surface.getBoundingClientRect();
+  const canvas = surface.closest('.preview-viewport').getBoundingClientRect();
   return {
-    left: box.left,
-    top: box.top,
+    left: box.left - canvas.left,
+    top: box.top - canvas.top,
     width: box.width,
     height: box.height,
     transform: surface.style.transform

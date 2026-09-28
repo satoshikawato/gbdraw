@@ -233,9 +233,9 @@ def _load_complete_linear_inputs(page: Page) -> None:
     linear.click()
     expect(linear).to_have_attribute("aria-pressed", "true")
     page.get_by_role("radio", name="GenBank", exact=True).check()
-    expect(page.get_by_role("status").filter(has_text="Current:")).to_contain_text(
-        "Current: No comparison"
-    )
+    expect(
+        page.get_by_role("button", name="Set no comparison", exact=True)
+    ).to_have_attribute("aria-pressed", "true")
     add_sequence = page.get_by_role(
         "button", name="Add sequence", exact=True
     )
@@ -342,9 +342,7 @@ def capture_gui_uploaded_comparison(
             exact=True,
         )
         use_upload.click()
-        expect(page.get_by_role("status").filter(has_text="Current:")).to_contain_text(
-            "Current: Upload BLAST TSV for all adjacent pairs"
-        )
+        expect(use_upload).to_have_attribute("aria-pressed", "true")
         open_linear_comparison_disclosure(
             page,
             "settings",
@@ -448,9 +446,7 @@ def capture_gui_tlosatx(
             "button", name="Run LOSAT for all adjacent pairs", exact=True
         )
         run_losat.click()
-        expect(page.get_by_role("status").filter(has_text="Current:")).to_contain_text(
-            "Current: Run LOSAT for all adjacent pairs"
-        )
+        expect(run_losat).to_have_attribute("aria-pressed", "true")
         settings = open_linear_comparison_disclosure(
             page,
             "settings",

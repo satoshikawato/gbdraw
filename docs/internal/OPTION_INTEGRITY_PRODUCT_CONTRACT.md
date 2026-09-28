@@ -5,7 +5,7 @@ Status: active Product authority
 ## Authority metadata
 
 - Contract ID: `OIPC`
-- Contract revision: `27`
+- Contract revision: `28`
 - Product Decision Owner: `satoshikawato`
 - Decision date: `2026-08-28`
 - Decision source: explicit Product Decision Owner selection of one (`1`) after
@@ -228,6 +228,16 @@ Status: active Product authority
   - Both revisions use the reviewed static Product Contract co-change route
     and merge with their implementation. The lifecycle text below records
     that route.
+- Revision 28 changes: `PD-OI-024` is replaced for scenario revision `3` and
+  `PD-OI-054` for scenario revision `2`, through the same co-change route.
+  - Both use the receipt text that `satoshikawato` approved on `2026-09-29`
+    (GUI remediation S00 decision 4) for Rationale and Accepted residual risk.
+  - `PD-OI-024`: the always-on Lock explanation moves into the existing
+    help-tip and the checkbox's accessible description. D1-B, D2-P, and D3-A
+    are otherwise unchanged.
+  - `PD-OI-054`: the approved additional scope places search and toolbar in
+    the width left by the Editor, which opens from the Preview top edge and
+    covers neither.
 - Records remaining `EVIDENCE_REQUIRED`: none
 - Excluded records: none
 
@@ -1023,9 +1033,10 @@ corrected. Passing evidence does not make incorrect behavior normative.
 ### PD-OI-024: Linear Definition alignment and automatic Replicon visibility
 
 - Concern key: `linear.definition-display`
-- Scenario revision: `2`
-- Supersedes: `PD-OI-024`, scenario revision `1`, only D1's Web fresh/reset
-  Lock=false default; D2-P and D3-A remain required in full.
+- Scenario revision: `3`
+- Supersedes: `PD-OI-024`, scenario revision `2`, only the requirement that
+  Linear Layout always explains ON/OFF and application on Generate. D1-B,
+  D2-P, and D3-A otherwise remain required in full.
 - Status: `ACCEPTED`
 - Selected outcomes: `D1-B-WEB-LOCKED-FRESH`, `D2-P`, `D3-A`
 - Normative outcome:
@@ -1035,7 +1046,9 @@ corrected. Passing evidence does not make incorrect behavior normative.
      Single, shared, and mixed rows, the existing accepted `text_anchor`
      domain, explicit saved values, supported old omission meanings, the
      saved Result on Load, and CLI/Python omitted defaults remain supported.
-     Linear Layout always explains ON/OFF and application on Generate.
+     The Lock Definition Column help-tip (hover, keyboard focus, tap) and the
+     checkbox's accessible description explain ON/OFF and application on
+     Generate from one text source.
   2. **D2-P — 保存値を保持:** 保存済みSubtitleは、自動／手入力を推測したり、
      Replicon名と文字列が一致したりすることを理由に削除しない。
      読み込みだけでは保存Resultを変えず、Generateで新しい表示契約を適用する。
@@ -1047,25 +1060,25 @@ corrected. Passing evidence does not make incorrect behavior normative.
      organelleの表記は既存の自動Subtitle表記を引き継ぐ。
      Web・CLI・Pythonの共通描画に適用し、Show Repliconの既定値falseを維持する。
      自動名のオン／オフは手入力Subtitleの表示を変更しない。
-- Decision source: The complete issue `#602` response for
-  `linear.definition-display`, scenario revision `2`, signed in full by
-  `satoshikawato` on `2026-09-26`, reproduced below without changing any
-  supplied field. The retained D2-P/D3-A clauses above are unchanged from
-  scenario revision `1`. This is serialization in the existing static
-  authority document; dependent runtime requires it merged into its base.
+- Decision source: the receipt text approved by `satoshikawato` on
+  `2026-09-29` (GUI remediation S00 decision 4) supplies the Rationale and
+  the Accepted residual risk. The Owner's confirmed requirement supplies the
+  change: move the always-on Lock explanation into the existing help-tip.
+  Every other clause repeats scenario revision `2` (signed on `2026-09-26`)
+  without change. This serialization adds no other terms.
 - Acceptance contracts: `OIC-004`, `OIC-005`, `OIC-006`, `OIC-023`.
 
 ```json
 {
   "concern": "linear.definition-display",
-  "scenarioRevision": 2,
-  "choice": "A / D1-B-WEB-LOCKED-FRESH; retain D2-P and D3-A",
-  "rationale": "Webで新しく作るLinear比較図ではDefinitionを共通左列にそろえ、行のalignやoffset後も名前を比較しやすくする。",
-  "mustPreserve": "Lock=trueの共通左端とconfigured gap、明示Lock=falseの共通幅中央とrow追従、単一/共有/混在行、既存text_anchorの受入範囲、保存Sessionの明示値と対応済み旧省略意味、読込時の保存Result、CLI/Python省略default。PD-OI-024のD2-Pの保存/手入力Subtitleと継承・ラベル区別、およびD3-AのReplicon/Organelle選択順・独立制御・既定falseをすべて維持する。Linear LayoutでON/OFFの違いとGenerate適用を常時説明する。",
-  "mayRetire": "D1-Aのうち、Web fresh/resetがLock=falseを初期値として選ぶ部分だけ。OFFの明示操作とCLI/Python既定は退役しない。",
-  "acceptedResidualRisk": "新しいWeb図のDefinition外観が従来のfresh図と変わり、Definitionがrowに追従しなくなる。利用者はOFFを選べ、既存Sessionの値と保存Resultは勝手に変更しない。",
+  "scenarioRevision": 3,
+  "choice": "A / D1-B-WEB-LOCKED-FRESH; retain D2-P and D3-A; explain Lock in its help-tip",
+  "rationale": "派生 status と常時説明が操作応答を損ない（Result 後の比較切替 約 1.3 s）、画面を圧迫するため削除・help-tip 化する。",
+  "mustPreserve": "Lock=trueの共通左端とconfigured gap、明示Lock=falseの共通幅中央とrow追従、単一/共有/混在行、既存text_anchorの受入範囲、保存Sessionの明示値と対応済み旧省略意味、読込時の保存Result、CLI/Python省略default。PD-OI-024のD2-Pの保存/手入力Subtitleと継承・ラベル区別、およびD3-AのReplicon/Organelle選択順・独立制御・既定falseをすべて維持する。Lock Definition ColumnのON/OFFの違いとGenerate適用は、既存help-tip（hover・keyboard focus・tap）とcheckboxのaccessible descriptionで一つのtext sourceから説明する。",
+  "mayRetire": "Linear Layoutの常時段落によるON/OFFとGenerate適用の説明だけ。説明はhelp-tipとaccessible descriptionに残す。",
+  "acceptedResidualRisk": "help-tip を開かない利用者は Generate/Save/Lock の事前説明を見ない。実 error・Processing/Canceling・recovery は保持する。",
   "owner": "satoshikawato",
-  "decisionDate": "2026-09-26"
+  "decisionDate": "2026-09-29"
 }
 ```
 
@@ -2217,61 +2230,42 @@ Decision date: 2026-09-26
 ### PD-OI-054: Docked Preview search and controls
 
 - Concern key: `web.preview-search-placement`
-- Scenario revision: `1`
+- Scenario revision: `2`
+- Supersedes: `PD-OI-054`, scenario revision `1` (`A / DOCKED-SEARCH-AND-CONTROLS`).
 - Status: `ACCEPTED`
-- Selected outcome: `A / DOCKED-SEARCH-AND-CONTROLS`
-- Normative outcome: searchを専用top row、toolbarを専用bottom row、canvasと同じeditorを中間workspaceへ配置。drawerがsearch/toolbarを覆わない構造にし、全幅で検索自由dragを退役。wrap/scrollで全機能を維持。通常高さ740px以上の受入条件はworkspace高さ200px以上、short viewport/keyboardでは全操作へscroll到達可能
+- Selected outcome: `A / DOCKED-SEARCH-WITH-TOP-EDITOR`
+- Normative outcome: exactly the receipt below.
 - Discoverability/accessibility / feedback: 安定した順序、keyboard、wrap/scroll、focus維持。short高さでoverflow clipによる隠れなし
 - Canonical state update: query等は既存search owner。geometryはCSSのみ、新座標ref/observerなし
 - Undo/Redo: chromeはartifact Historyに入れず、図の履歴を維持
 - Session / regeneration: chrome位置は新たに保存しない。既存Session/Result/draftを維持
 - Export/artifact: HTML chromeは図/SVG/PNG/PDF/保存Resultへ入らない
-- Validation/error: CSSで専用row/workspaceを分離し、短い高さで到達性検査
+- Validation/error: 通常幅でsearch/toolbarとEditorの重なりなし、EditorはPreview上端から開始、検索は利用可能幅内。短い高さで到達性検査
 - Failure/recovery / next action: drawer/resizeでquery/active/focus保持。Result消失は既存visibilityで閉じる
 - Scientific-output: chromeのみ、生物学的値/比較/scale不変
 - Cache/provenance: chromeをWorker/cache/requestに入れない
-- Performance: CSSのみ。位置computed/global drag listenerを削除
-- Compatibility: 保存形式維持、自由drag退役を明示
-- Decision source: the complete Choice A outcome and nine-field receipt in
-  [DECISION_03_PREVIEW_CHROME.md](https://github.com/satoshikawato/gbdraw/blob/bcc4e0aa5ffcf4bdf9a12952caa8bf5de2cfee08/docs/internal/issue-599-preview-layout-20260926/DECISION_03_PREVIEW_CHROME.md)
-  at published planning commit `bcc4e0aa5ffcf4bdf9a12952caa8bf5de2cfee08`.
-  `satoshikawato` explicitly approved all three independent recommended A
-  outcomes with 「すべて推奨案で承認します。」 on `2026-09-26`.
-  The receipt and JSON below reproduce this concern's supplied fields without
-  translation or additional rationale, retirement, or risk terms. This record
-  does not supersede another decision. Dependent runtime requires this
-  authority merged into its base; this amendment contains no runtime or
-  runtime acceptance evidence.
-- Receipt SHA-256 (UTF-8, excluding the final newline):
-  `4a215b8ffb32217529703db8c3ae83d0ea104f69b2fe32e6d5153af791e05f63`.
-- Acceptance contracts: `OIC-006`, `OIC-013`, `OIC-014`, `OIC-025`, `OIC-026`. These existing obligations and the
-  complete selected outcome are jointly required; their citation does not
-  claim completed dependent-runtime checks.
-
-```text
-PRODUCT_DECISION
-Concern: web.preview-search-placement
-Scenario revision: 1
-Choice: A / DOCKED-SEARCH-AND-CONTROLS
-Rationale: 検索とzoom/resetをdrawer開閉や画面幅にかかわらず操作できることを優先し、検索バーの自由移動に伴う衝突と場外配置をなくす。
-Must preserve: searchの全field/query/regex/Prev/Next/Open/Enter、active match/focus、全toolbar操作、drawer tab/Close/Escape、同じsearch/canvas/SVG/editor DOM、既存Session/Export/Historyを維持する。search/toolbarをworkspace外の専用rowへ置きdrawer被覆を防ぐ。通常高さ740px以上の受入条件でworkspace200px以上、short viewport/keyboard/200%zoomで全操作へscroll到達可能にする。JS位置判断と競合CSSを削除する。alignment reviewとeditor上下dockの仕様は変更しない。
-May retire: 全幅での検索バー自由drag、固定360px退避、search/toolbarの旧absolute translateと競合CSSだけ。検索/編集機能、保存意味、editor/reviewの製品仕様は退役しない。
-Accepted residual risk: 専用rowがcanvasの縦領域を減らし、検索を図の近くへ動かせなくなる。wrap/scroll、canvas最低高さ、実hit targetとkeyboard/touch検証で実操作を確保する。
-Owner: satoshikawato
-Decision date: 2026-09-26
-```
+- Performance: CSSのみ。位置computed/global drag listenerなし
+- Compatibility: 保存形式維持、自由drag退役を維持
+- Decision source: the receipt text approved by `satoshikawato` on
+  `2026-09-29` (GUI remediation S00 decision 4) supplies the Rationale, the
+  Accepted residual risk, and the additional scope (search and toolbar in the
+  width left by the Editor, which covers neither). The Owner's confirmed
+  requirement supplies the rest: search at most 39.5 rem within the available
+  width and the Editor from the Preview top edge. The remaining fields repeat
+  scenario revision `1`. This serialization adds no other terms.
+- Acceptance contracts: `OIC-006`, `OIC-013`, `OIC-014`, `OIC-025`, `OIC-026`.
 
 ```json
 {
   "concern": "web.preview-search-placement",
-  "scenarioRevision": 1,
-  "choice": "A / DOCKED-SEARCH-AND-CONTROLS",
-  "rationale": "検索とzoom/resetをdrawer開閉や画面幅にかかわらず操作できることを優先し、検索バーの自由移動に伴う衝突と場外配置をなくす。",
-  "mustPreserve": "searchの全field/query/regex/Prev/Next/Open/Enter、active match/focus、全toolbar操作、drawer tab/Close/Escape、同じsearch/canvas/SVG/editor DOM、既存Session/Export/Historyを維持する。search/toolbarをworkspace外の専用rowへ置きdrawer被覆を防ぐ。通常高さ740px以上の受入条件でworkspace200px以上、short viewport/keyboard/200%zoomで全操作へscroll到達可能にする。JS位置判断と競合CSSを削除する。alignment reviewとeditor上下dockの仕様は変更しない。",
-  "mayRetire": "全幅での検索バー自由drag、固定360px退避、search/toolbarの旧absolute translateと競合CSSだけ。検索/編集機能、保存意味、editor/reviewの製品仕様は退役しない。",
-  "acceptedResidualRisk": "専用rowがcanvasの縦領域を減らし、検索を図の近くへ動かせなくなる。wrap/scroll、canvas最低高さ、実hit targetとkeyboard/touch検証で実操作を確保する。",
+  "scenarioRevision": 2,
+  "choice": "A / DOCKED-SEARCH-WITH-TOP-EDITOR",
+  "rationale": "派生 status と常時説明が操作応答を損ない（Result 後の比較切替 約 1.3 s）、画面を圧迫するため削除・help-tip 化する。",
+  "mustPreserve": "searchの全field/query/regex/Prev/Next/Open/Enter、active match/focus、全toolbar操作、drawer tab/Close/Escape、同じsearch/canvas/SVG/editor DOM、既存Session/Export/Historyを維持する。通常幅では検索（最大39.5rem、利用可能幅内）とtoolbarをEditor幅を除いた残り幅に置き、EditorはPreview上端から開いて両方を覆わない。drawer幅は同一CSS変数を共有する。通常高さ740px以上の受入条件でworkspace200px以上、short viewport/keyboard/200%zoomで全操作へscroll到達可能にする。狭幅のEditor/reviewのcanvas確保、scroll、Close、keyboard操作とalignment reviewの仕様は変更しない。",
+  "mayRetire": "通常幅での全幅の検索専用rowと、EditorがPreviewの検索rowより下から始まる配置だけ。検索の自由drag、固定360pxのJS退避、新座標ref/observerは導入しない。",
+  "acceptedResidualRisk": "help-tip を開かない利用者は Generate/Save/Lock の事前説明を見ない。実 error・Processing/Canceling・recovery は保持する。",
   "owner": "satoshikawato",
-  "decisionDate": "2026-09-26"
+  "decisionDate": "2026-09-29"
 }
 ```
 

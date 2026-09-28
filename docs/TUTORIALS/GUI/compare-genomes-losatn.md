@@ -41,8 +41,8 @@ filename, `lambda-de3.losatn.tsv`.
 
 ## Step 1: Load both complete genomes
 
-Select **Linear**. A fresh Linear page reports **Current: No comparison** under
-the record list. Under **Input Genomes**, keep **GenBank** selected.
+Select **Linear**. On a fresh Linear page, **No comparison** is pressed in the
+**Comparison** command group. Under **Input Genomes**, keep **GenBank** selected.
 
 1. In the first **GenBank / DDBJ File** control, choose `NC_001416.gb`.
 2. Select **Add sequence** below the File list.

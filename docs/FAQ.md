@@ -152,8 +152,8 @@ section lists the empty-result cases.
 
 Fresh Linear pages and **Reset Settings** start with **No comparison**. If a
 comparison is active, select **No comparison** in the **Comparison** command
-group. The three buttons there apply one choice to every adjacent pair; the
-separate **Current:** status reports the effective plan. Open **Selected pairs
+group. The three buttons there apply one choice to every adjacent pair, and the
+button that matches the effective plan is pressed. Open **Selected pairs
 (N)** to inspect or edit a custom pair plan. Choosing **No comparison** keeps
 retained pair files and raw-result names inactive for later reuse. See the [web
 comparison controls](./REFERENCE/web-app.md#comparison-surfaces) and

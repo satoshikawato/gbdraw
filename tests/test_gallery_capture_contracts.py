@@ -240,15 +240,16 @@ def test_linear_comparison_panels_capture_the_command_and_current_status() -> No
             for _, operation in iter_operation_contexts(sample, tutorial)
             if operation.get("capture", {}).get("selector")
             == "[data-linear-comparison-card]"
-            and "Current: Run LOSAT"
-            in operation.get("capture", {}).get("visibleText", [])
+            and "setLinearComparisonGlobalAction('losat')" in " ".join(
+                action.get("script", "") for action in operation.get("capture", {}).get("actions", [])
+            )
         ]
 
         assert len(panel_operations) == 1
         capture = panel_operations[0]["capture"]
         assert panel_operations[0]["dataDependent"] is True
         assert capture["session"] == sample["session"]
-        assert {"Comparison", "Run LOSAT", "Current: Run LOSAT", "Settings"} <= set(
+        assert {"Comparison", "Run LOSAT", "Settings"} <= set(
             capture["visibleText"]
         )
         assert any(text.startswith("Selected pairs") for text in capture["visibleText"])

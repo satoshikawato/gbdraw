@@ -329,8 +329,8 @@ def test_protein_flows_separate_bgc_groups_from_hepatoplasma_collinear() -> None
     for fragment in (
         'get_by_role("button", name="Linear", exact=True)',
         'get_by_role("radio", name="GenBank", exact=True)',
-        'get_by_role("status")',
-        '"Current: No comparison"',
+        'name="Set no comparison", exact=True',
+        'to_have_attribute("aria-pressed", "true")',
         'get_by_role("button", name="Add sequence", exact=True)',
         'expect(add_sequence).to_have_count(1)',
         'add_sequence.click()',
@@ -510,7 +510,7 @@ def test_hepatoplasmataceae_collinear_guards_pin_evidence_and_span_fasta() -> No
     for fragment in (
         'name="Set all adjacent comparisons", exact=True',
         'name="Run LOSAT for all adjacent pairs", exact=True',
-        '"Current: No comparison"',
+        'name="Set no comparison", exact=True',
         "_set_source_inputs(page)",
         'page.get_by_test_id("linear-genbank-1").set_input_files',
         'name=f"Record options for sequence {index}"',
