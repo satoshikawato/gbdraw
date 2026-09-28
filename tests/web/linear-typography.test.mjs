@@ -47,7 +47,8 @@ assert.deepEqual(importedUnequal, { scale_font_size: 17, ruler_label_font_size: 
 
 const importedEqual = { scale_font_size: 14, ruler_label_font_size: 14 };
 for (const [ui, expected] of [
-  [{}, false],
+  // Omission means the fresh linked default (S00 decision 3).
+  [{}, true],
   [{ linearTypographyLinked: false }, false],
   [{ linearTypographyLinked: true }, true]
 ]) {

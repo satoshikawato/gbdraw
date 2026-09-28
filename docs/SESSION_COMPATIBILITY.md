@@ -45,6 +45,13 @@ hides that field diagram-wide when any row contains two or more records.
 Disabled Record Layout ignores dormant shared-row values, and changing row
 placement does not rewrite the selected mode.
 
+Session 44 mode profiles also hold the per-mode Plot Title, Plot Title font
+size, and Definition font size. A flat value without a per-mode entry, as in
+Session 42 and earlier Session 44 files, belongs to the active mode only; the
+inactive mode starts from fresh defaults. In every accepted version a missing
+`config.linearRecordLayout` means Arrange in rows is on, and a missing
+`ui.linearTypographyLinked` means linked while both font sizes are equal.
+
 Canonical request schema 8 retains the effective booleans introduced in schema 7.
 Version-42 editable `true` values migrate to Show, `false` values migrate to
 Hide, and missing booleans migrate to historical Show. A selected-mode field,

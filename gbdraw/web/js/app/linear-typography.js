@@ -11,8 +11,9 @@ const linearTypographyValuesMatch = (adv = {}) => (
 
 export const reconcileImportedLinearTypographyLink = ({ adv, linked, ui = {} }) => {
   if (!linked || typeof linked !== 'object' || !('value' in linked)) return false;
+  // Omission takes the fresh linked default; unequal values still open unlinked.
   linked.value = (
-    ui.linearTypographyLinked === true
+    (ui.linearTypographyLinked ?? true) === true
     && linearTypographyValuesMatch(adv)
   );
   return linked.value;

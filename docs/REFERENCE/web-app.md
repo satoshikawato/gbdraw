@@ -385,8 +385,11 @@ Coordinates** beside that explanation to open the label controls and focus the
 matching selection. This navigation changes no value and creates no Undo entry.
 Choose **Show** yourself if shared rows should retain that field, then Generate.
 
-Plot-title text, position, and size share the **Plot Title** subsection. Record
-label defaults and the per-line **Style** disclosures share **Record Labels**.
+Plot-title text, position, and size share the **Plot Title** subsection.
+Circular and Linear keep their own plot-title text, plot-title **Font size**,
+and **Record Labels** **Default font size**; switching modes restores the values
+last used in that mode. Record label defaults and the per-line **Style** disclosures share
+**Record Labels**.
 The independent **Legend · position** section owns legend position, swatch size,
 and font size. Opening or closing these native disclosures is not saved.
 

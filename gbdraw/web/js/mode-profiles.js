@@ -7,10 +7,19 @@ const COMPARISON_STATE_FIELDS = Object.freeze([
   'identity',
   'alignment_length'
 ]);
+// Per-mode title and definition fonts follow the same profile ownership as
+// comparison settings (GUI remediation S00 decision 2).
 const PROFILE_MANAGED_ADV_FIELDS = Object.freeze([
   ...COMPARISON_STATE_FIELDS,
   'axis_stroke_color',
-  'pairwise_match_style'
+  'pairwise_match_style',
+  'plot_title_font_size',
+  'def_font_size'
+]);
+const PROFILE_MANAGED_FORM_FIELDS = Object.freeze(['plot_title']);
+const PROFILE_MANAGED_FIELDS = Object.freeze([
+  ...PROFILE_MANAGED_ADV_FIELDS,
+  ...PROFILE_MANAGED_FORM_FIELDS
 ]);
 const isPlainObject = (value) => (
   Boolean(value) && typeof value === 'object' && !Array.isArray(value)
@@ -96,8 +105,12 @@ export const comparisonProfileDefault = (mode, field) => {
 export const managedAdvStateForMode = (mode) => ({
   ...comparisonStateForMode(mode),
   axis_stroke_color: modeProfile(mode).linearAxisColor,
-  pairwise_match_style: normalizeMode(mode) === 'linear' ? 'curve' : 'ribbon'
+  pairwise_match_style: normalizeMode(mode) === 'linear' ? 'curve' : 'ribbon',
+  plot_title_font_size: null,
+  def_font_size: null
 });
+
+const managedStateForMode = (mode) => ({ ...managedAdvStateForMode(mode), plot_title: '' });
 
 export const effectiveLinearAxisColor = ({
   axisColor = null,
@@ -116,25 +129,32 @@ export const effectiveLinearAxisColor = ({
   ) || normalized || null;
 };
 
-const readManagedAdvState = (source) => Object.fromEntries(
-  PROFILE_MANAGED_ADV_FIELDS.map((field) => [field, source?.[field] ?? null])
-);
+const readManagedState = (adv, form) => ({
+  ...Object.fromEntries(PROFILE_MANAGED_ADV_FIELDS.map((field) => [field, adv?.[field] ?? null])),
+  ...Object.fromEntries(PROFILE_MANAGED_FORM_FIELDS.map((field) => [field, form?.[field] ?? null]))
+});
 
-const writeManagedAdvState = (target, values) => {
+const writeManagedState = (adv, form, values) => {
   PROFILE_MANAGED_ADV_FIELDS.forEach((field) => {
-    target[field] = values[field];
+    adv[field] = values[field];
+  });
+  if (!form) return;
+  PROFILE_MANAGED_FORM_FIELDS.forEach((field) => {
+    form[field] = values[field] ?? '';
   });
 };
 
 const managedFlagsFor = (values, defaults) => Object.fromEntries(
-  PROFILE_MANAGED_ADV_FIELDS.map((field) => [
+  PROFILE_MANAGED_FIELDS.map((field) => [
     field,
     valuesEquivalent(values[field], defaults[field])
   ])
 );
 
-export const createModeProfileStateManager = (initialMode, initialState) => {
+export const createModeProfileStateManager = (initialMode, initialState, formState = null) => {
   const snapshots = new Map();
+  const readProfileValues = (source) => readManagedState(source, formState);
+  const writeProfileValues = (target, values) => writeManagedState(target, formState, values);
   let activeMode = normalizeMode(initialMode);
   let activeBaseline = null;
   let activeManaged = null;
@@ -148,25 +168,26 @@ export const createModeProfileStateManager = (initialMode, initialState) => {
       values: { ...snapshot.values },
       managed: { ...snapshot.managed }
     });
-    if (target) writeManagedAdvState(target, snapshot.values);
+    if (target) writeProfileValues(target, snapshot.values);
   };
 
   const defaultSnapshot = (mode) => {
-    const values = managedAdvStateForMode(mode);
+    const values = managedStateForMode(mode);
     return {
       values,
       managed: Object.fromEntries(
-        PROFILE_MANAGED_ADV_FIELDS.map((field) => [field, true])
+        PROFILE_MANAGED_FIELDS.map((field) => [field, true])
       )
     };
   };
 
   const detectEdits = (source) => {
     if (!activeBaseline || !activeManaged) return;
-    PROFILE_MANAGED_ADV_FIELDS.forEach((field) => {
+    const current = readProfileValues(source);
+    PROFILE_MANAGED_FIELDS.forEach((field) => {
       if (
         activeManaged[field] &&
-        !valuesEquivalent(source?.[field], activeBaseline[field])
+        !valuesEquivalent(current[field], activeBaseline[field])
       ) {
         activeManaged[field] = false;
       }
@@ -175,8 +196,8 @@ export const createModeProfileStateManager = (initialMode, initialState) => {
 
   const reset = (mode, source = null) => {
     const normalizedMode = normalizeMode(mode);
-    const defaults = managedAdvStateForMode(normalizedMode);
-    const values = source ? readManagedAdvState(source) : defaults;
+    const defaults = managedStateForMode(normalizedMode);
+    const values = source ? readProfileValues(source) : defaults;
     if (source) stateSource = source;
     snapshots.clear();
     install(normalizedMode, {
@@ -202,26 +223,26 @@ export const createModeProfileStateManager = (initialMode, initialState) => {
       detectEdits(source);
     } else {
       activeMode = previous;
-      activeBaseline = readManagedAdvState(source);
+      activeBaseline = readProfileValues(source);
       activeManaged = Object.fromEntries(
-        PROFILE_MANAGED_ADV_FIELDS.map((field) => [field, false])
+        PROFILE_MANAGED_FIELDS.map((field) => [field, false])
       );
     }
     snapshots.set(previous, {
-      values: readManagedAdvState(source),
+      values: readProfileValues(source),
       managed: { ...activeManaged }
     });
 
     const targetSnapshot = snapshots.get(next) || defaultSnapshot(next);
-    const before = readManagedAdvState(source);
+    const before = readProfileValues(source);
     install(next, targetSnapshot, source);
-    return PROFILE_MANAGED_ADV_FIELDS.filter(
+    return PROFILE_MANAGED_FIELDS.filter(
       (field) => !valuesEquivalent(before[field], targetSnapshot.values[field])
     );
   };
 
   const isManaged = (source, field) => {
-    if (!PROFILE_MANAGED_ADV_FIELDS.includes(field)) return false;
+    if (!PROFILE_MANAGED_FIELDS.includes(field)) return false;
     if (!activeBaseline || !activeManaged) return false;
     stateSource = source;
     detectEdits(source);
@@ -230,15 +251,15 @@ export const createModeProfileStateManager = (initialMode, initialState) => {
 
   const snapshotCurrentMode = () => {
     if (!activeBaseline || !activeManaged) {
-      const values = readManagedAdvState(stateSource);
-      const defaults = managedAdvStateForMode(activeMode);
+      const values = readProfileValues(stateSource);
+      const defaults = managedStateForMode(activeMode);
       activeBaseline = { ...values };
       activeManaged = managedFlagsFor(values, defaults);
     } else {
       detectEdits(stateSource);
     }
     snapshots.set(activeMode, {
-      values: readManagedAdvState(stateSource),
+      values: readProfileValues(stateSource),
       managed: { ...activeManaged }
     });
   };
@@ -263,8 +284,16 @@ export const createModeProfileStateManager = (initialMode, initialState) => {
     };
   };
 
-  const normalizeImportedSnapshot = (mode, candidate) => {
+  // A field missing from a saved snapshot takes the flat value for the active
+  // mode (the only value an older writer stored) and the fresh default otherwise.
+  const normalizeImportedSnapshot = (mode, candidate, activeValues = null) => {
     const defaults = defaultSnapshot(mode);
+    if (activeValues) {
+      PROFILE_MANAGED_FIELDS.forEach((field) => {
+        defaults.values[field] = activeValues[field];
+        defaults.managed[field] = valuesEquivalent(activeValues[field], managedStateForMode(mode)[field]);
+      });
+    }
     if (candidate === undefined || candidate === null) return defaults;
     if (!isPlainObject(candidate)) {
       throw new TypeError(`Invalid ${mode} mode profile snapshot.`);
@@ -279,7 +308,7 @@ export const createModeProfileStateManager = (initialMode, initialState) => {
     }
     const values = { ...defaults.values };
     const managed = { ...defaults.managed };
-    PROFILE_MANAGED_ADV_FIELDS.forEach((field) => {
+    PROFILE_MANAGED_FIELDS.forEach((field) => {
       if (Object.prototype.hasOwnProperty.call(valuesSource || {}, field)) {
         values[field] = valuesSource[field] ?? null;
       }
@@ -302,8 +331,8 @@ export const createModeProfileStateManager = (initialMode, initialState) => {
       MODE_NAMES.forEach((profileMode) => {
         snapshots.set(profileMode, defaultSnapshot(profileMode));
       });
-      const defaults = managedAdvStateForMode(nextMode);
-      const values = readManagedAdvState(stateSource);
+      const defaults = managedStateForMode(nextMode);
+      const values = readProfileValues(stateSource);
       snapshots.set(nextMode, {
         values,
         managed: managedFlagsFor(values, defaults)
@@ -318,10 +347,15 @@ export const createModeProfileStateManager = (initialMode, initialState) => {
       if (!isPlainObject(payload.profiles)) {
         throw new TypeError('Invalid mode profile state profiles.');
       }
+      const activeValues = readProfileValues(stateSource);
       MODE_NAMES.forEach((profileMode) => {
         snapshots.set(
           profileMode,
-          normalizeImportedSnapshot(profileMode, payload.profiles[profileMode])
+          normalizeImportedSnapshot(
+            profileMode,
+            payload.profiles[profileMode],
+            profileMode === nextMode ? activeValues : null
+          )
         );
       });
     }

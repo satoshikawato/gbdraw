@@ -4438,7 +4438,10 @@ export const projectCanonicalSessionRequest = ({
     ),
     plot_title: options.plotTitle || '',
     legend: options.output?.legend || 'right',
-    multi_record_canvas: renderRequest.mode === 'circular' && grouping === 'grid',
+    // A Linear request has no Circular grouping; keep the fresh default.
+    multi_record_canvas: renderRequest.mode === 'circular'
+      ? grouping === 'grid'
+      : WEB_UX_PROFILE.circular.gridByDefault,
     circular_record_selector: circularPresentationRecord
       ? (canonicalRecordSelector(circularPresentationRecord) || '')
       : '',
@@ -4559,12 +4562,11 @@ export const projectCanonicalSessionRequest = ({
     track_axis_gap: overrides.linear_track_axis_gap ?? null,
     linear_definition_line_styles: overrides.linear_definition_line_styles || {},
     linear_show_replicon: Boolean(overrides.linear_definition_show_replicon),
-    linear_accession_visibility: overrides.linear_definition_show_accession !== false
-      ? 'show'
-      : 'hide',
-    linear_length_visibility: overrides.linear_definition_show_length !== false
-      ? 'show'
-      : 'hide',
+    // A Circular request has no Linear display values; keep the fresh Auto.
+    linear_accession_visibility: renderRequest.mode !== 'linear' ? 'auto'
+      : overrides.linear_definition_show_accession !== false ? 'show' : 'hide',
+    linear_length_visibility: renderRequest.mode !== 'linear' ? 'auto'
+      : overrides.linear_definition_show_length !== false ? 'show' : 'hide',
     keep_full_definition_with_plot_title: Boolean(options.keepFullDefinitionWithPlotTitle),
     gc_content_mode: overrides.gc_content_mode || 'deviation',
     gc_content_min_percent: overrides.gc_content_min_percent ?? 0,

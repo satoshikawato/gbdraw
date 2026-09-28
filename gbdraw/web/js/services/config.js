@@ -187,6 +187,7 @@ import {
   recordStructuralMetric
 } from './runtime-test-hooks.js';
 import { setResourcePayloadOwner } from './resource-payload-owner.js';
+import { WEB_UX_PROFILE } from '../web-ux-profile.js';
 import {
   migratePersistedCircularMultiRecordSizeMode,
   migratePersistedLinearLabelPlacement,
@@ -1923,7 +1924,10 @@ export const applyConfigData = (data, { resolveTrackPlacements = true } = {}) =>
   const linearLayout = data.linearRecordLayout && typeof data.linearRecordLayout === 'object'
     ? data.linearRecordLayout
     : null;
-  state.linearRecordLayoutEnabled.value = Boolean(linearLayout?.enabled);
+  // Omission takes the fresh default in every Session version.
+  state.linearRecordLayoutEnabled.value = typeof linearLayout?.enabled === 'boolean'
+    ? linearLayout.enabled
+    : WEB_UX_PROFILE.linear.arrangeInRowsByDefault;
   const linearRecordGap = Number(linearLayout?.recordGap);
   state.linearRecordGap.value = Number.isFinite(linearRecordGap) && linearRecordGap >= 0
     ? linearRecordGap

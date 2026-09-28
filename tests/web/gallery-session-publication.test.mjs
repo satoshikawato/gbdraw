@@ -89,6 +89,15 @@ for (const name of sessionNames) {
   );
   const readiness = await validateGalleryPublicationReadiness(result.session);
   assert.equal(readiness.equivalence.equivalent, true, name);
+  // The unused mode has no published draft intent: fresh Linear display values
+  // for Circular files and the fresh Circular grid default for Linear files.
+  const { form: publishedForm, adv: publishedAdv } = result.session.config;
+  if (result.session.renderRequest.mode === 'circular') {
+    assert.deepEqual([publishedAdv.linear_show_replicon, publishedAdv.linear_accession_visibility,
+      publishedAdv.linear_length_visibility], [false, 'auto', 'auto'], name);
+  } else {
+    assert.equal(publishedForm.multi_record_canvas, true, name);
+  }
   if (name === 'tobacco-chloroplast.gbdraw-session.json') {
     assert.equal(result.session.config.rules.length, 71, name);
     assert.deepEqual(result.session.config.qualifierPriorityRules, [

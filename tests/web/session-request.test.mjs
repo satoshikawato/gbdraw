@@ -762,6 +762,12 @@ assert.deepEqual(selectedCircularCanonical.renderRequest.records[0].presentation
 assert.equal(selectedCircularCanonical.renderRequest.output.prefix, 'second-record');
 
 const selectedCircularProjection = projectCanonicalSessionRequest(selectedCircularCanonical);
+// A request never invents the other mode's draft values (GUI remediation S04).
+assert.deepEqual([
+  selectedCircularProjection.config.adv.linear_show_replicon,
+  selectedCircularProjection.config.adv.linear_accession_visibility,
+  selectedCircularProjection.config.adv.linear_length_visibility
+], [false, 'auto', 'auto']);
 assert.deepEqual(
   {
     selector: selectedCircularProjection.config.form.circular_record_selector,
@@ -2188,6 +2194,7 @@ assert.equal(styledLinearOverrides['objects.scale.font_size.long'], 21);
 assert.equal(styledLinearOverrides['objects.scale.ruler_label_font_size.short'], 12);
 assert.equal(styledLinearOverrides['objects.scale.ruler_label_font_size.long'], 12);
 const styledLinearProjection = projectCanonicalSessionRequest(styledLinearCanonical);
+assert.equal(styledLinearProjection.config.form.multi_record_canvas, true);
 assert.equal(styledLinearProjection.config.adv.scale_font_size, 21);
 assert.equal(styledLinearProjection.config.adv.ruler_label_font_size, 12);
 assert.equal(
@@ -4955,7 +4962,7 @@ assert.deepEqual(resolvedProteinMarker.pairs, []);
 
 assert.equal(characterizedRequests.length, 83);
 assert.equal(createHash('sha256').update(JSON.stringify(characterizedRequests)).digest('hex'),
-  '999b5d4358b9db6892be52117d3fd9db96a3a708773c6a536678a7ea62893730',
+  '6d8276e6b67c5d00f88c46c9994d1c85c2d1be41e7ef6617672f69f304694d91',
   'Extraction preserves the 83 characterized request meanings, including topology, tracks and typed comparisons');
 
 const projectSessionIndex = process.argv.indexOf('--project-session');

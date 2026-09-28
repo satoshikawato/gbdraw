@@ -228,7 +228,7 @@ const form = reactive(createDefaultForm());
 // Extended Advanced Config
 const adv = reactive(createDefaultAdv(mode.value));
 const linearTypographyLinked = ref(true);
-const modeProfileStateManager = createModeProfileStateManager(mode.value, adv);
+const modeProfileStateManager = createModeProfileStateManager(mode.value, adv, form);
 const activeLayoutPreferences = computed(() => resolveActiveLayoutPreference(
   layoutPreferences,
   mode.value,

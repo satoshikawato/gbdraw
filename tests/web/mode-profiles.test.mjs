@@ -208,12 +208,71 @@ assert.equal(importedLinearState.axis_stroke_color, 'gray');
   assert.equal(exported.profiles.linear.managed.identity, false);
   assert.deepEqual(
     exported.profiles.circular.values,
-    managedAdvStateForMode('circular')
+    { ...managedAdvStateForMode('circular'), plot_title: '' }
   );
   assert.throws(
     () => restoredManager.importState({ schema: 999, profiles: {} }, 'linear', restoredState),
     /mode profile state schema/
   );
+}
+
+{
+  // Title and title/definition fonts are per-mode (GUI remediation S00 decision 2).
+  const adv = { ...managedAdvStateForMode('circular'), plot_title_font_size: 32, def_font_size: 18 };
+  const form = { plot_title: 'Circular title' };
+  const profileManager = createModeProfileStateManager('circular', adv, form);
+  const changed = profileManager.transition(adv, 'circular', 'linear');
+  assert.equal(form.plot_title, '');
+  assert.equal(adv.plot_title_font_size, null);
+  assert.equal(adv.def_font_size, null);
+  assert.ok(['plot_title', 'plot_title_font_size', 'def_font_size'].every((field) => changed.includes(field)));
+  form.plot_title = 'Linear title';
+  adv.def_font_size = 12;
+  profileManager.transition(adv, 'linear', 'circular');
+  assert.deepEqual([form.plot_title, adv.plot_title_font_size, adv.def_font_size], ['Circular title', 32, 18]);
+  profileManager.transition(adv, 'circular', 'linear');
+  assert.deepEqual([form.plot_title, adv.plot_title_font_size, adv.def_font_size], ['Linear title', null, 12]);
+
+  const exported = profileManager.exportState();
+  assert.equal(exported.profiles.circular.values.plot_title, 'Circular title');
+  assert.equal(exported.profiles.circular.managed.plot_title, false);
+  assert.equal(exported.profiles.linear.values.plot_title, 'Linear title');
+  assert.equal(exported.profiles.linear.values.def_font_size, 12);
+
+  // Save -> fresh Load keeps each mode's explicit values.
+  const restoredAdv = { ...managedAdvStateForMode('linear'), def_font_size: 12 };
+  const restoredForm = { plot_title: 'Linear title' };
+  const restoredManager = createModeProfileStateManager('circular', {}, restoredForm);
+  restoredManager.importState(exported, 'linear', restoredAdv);
+  restoredManager.transition(restoredAdv, 'linear', 'circular');
+  assert.deepEqual([restoredForm.plot_title, restoredAdv.plot_title_font_size, restoredAdv.def_font_size], ['Circular title', 32, 18]);
+}
+
+{
+  // An older writer stored one flat title/font value. It belongs to the active
+  // mode only; the inactive mode starts from fresh defaults.
+  const legacyProfiles = {
+    schema: MODE_PROFILE_STATE_SCHEMA,
+    activeMode: 'circular',
+    profiles: {
+      circular: { values: { identity: 70 }, managed: { identity: true } },
+      linear: { values: { identity: 0 }, managed: { identity: true } }
+    }
+  };
+  for (const payload of [legacyProfiles, null]) {
+    const adv = { ...managedAdvStateForMode('circular'), plot_title_font_size: 32, def_font_size: 18 };
+    const form = { plot_title: 'Vibrio nigripulchritudo' };
+    const profileManager = createModeProfileStateManager('circular', {}, form);
+    profileManager.importState(payload, 'circular', adv);
+    assert.equal(form.plot_title, 'Vibrio nigripulchritudo');
+    profileManager.transition(adv, 'circular', 'linear');
+    assert.deepEqual([form.plot_title, adv.plot_title_font_size, adv.def_font_size], ['', null, null]);
+    profileManager.transition(adv, 'linear', 'circular');
+    assert.deepEqual([form.plot_title, adv.plot_title_font_size, adv.def_font_size], ['Vibrio nigripulchritudo', 32, 18]);
+    const exported = profileManager.exportState();
+    assert.equal(exported.profiles.circular.managed.plot_title, false);
+    assert.equal(exported.profiles.linear.values.plot_title, '');
+  }
 }
 
 assert.equal(
@@ -429,11 +488,11 @@ assert.deepEqual(
   const resetProfiles = state.modeProfileStateManager.exportState();
   assert.deepEqual(
     resetProfiles.profiles.circular.values,
-    managedAdvStateForMode('circular')
+    { ...managedAdvStateForMode('circular'), plot_title: '' }
   );
   assert.deepEqual(
     resetProfiles.profiles.linear.values,
-    managedAdvStateForMode('linear')
+    { ...managedAdvStateForMode('linear'), plot_title: '' }
   );
   assert.ok(Object.values(resetProfiles.profiles.circular.managed).every(Boolean));
   assert.ok(Object.values(resetProfiles.profiles.linear.managed).every(Boolean));
@@ -528,6 +587,15 @@ assert.deepEqual(
   state.modeProfileStateManager.transition(state.adv, 'linear', 'circular');
   assert.equal(state.adv.identity, 88);
 
+  // Arrange in rows: omission takes the fresh default; explicit false is kept.
+  for (const [layout, expected] of [[undefined, true], [{ rows: [] }, true], [{ enabled: false, rows: [] }, false]]) {
+    const layoutConfig = structuredClone(savedConfig);
+    if (layout === undefined) delete layoutConfig.linearRecordLayout;
+    else layoutConfig.linearRecordLayout = layout;
+    applyConfigData(layoutConfig);
+    assert.equal(state.linearRecordLayoutEnabled.value, expected, JSON.stringify(layout));
+  }
+
   const cliProjectedNumericConfig = structuredClone(savedConfig);
   cliProjectedNumericConfig.adv.arrow_head_length_ratio = '1.25';
   cliProjectedNumericConfig.adv.arrow_shaft_width_ratio = '0.25';
@@ -553,7 +621,7 @@ assert.deepEqual(
   assert.equal(migratedProfiles.profiles.linear.managed.identity, false);
   assert.deepEqual(
     migratedProfiles.profiles.circular.values,
-    managedAdvStateForMode('circular')
+    { ...managedAdvStateForMode('circular'), plot_title: '' }
   );
   Object.keys(state.unmanagedConfigOverrides).forEach((path) => {
     delete state.unmanagedConfigOverrides[path];

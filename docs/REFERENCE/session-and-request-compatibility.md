@@ -100,6 +100,18 @@ Python render model did not gain a new field. A version-42 `true` becomes Show,
 selected-mode field is already present, it takes precedence. Current writers do
 not write the retired booleans.
 
+Plot-title text (`plot_title`), plot-title font size (`plot_title_font_size`),
+and the record-label default font size (`def_font_size`) are kept per mode in
+`config.modeProfiles`; the active mode's values also remain in the
+flat `form` and `adv` fields. When a Session has no per-mode entry, its saved
+flat value belongs to the active mode only, and the other mode starts with an
+empty title and automatic font sizes. Other explicit values saved for the
+inactive mode are kept. A missing `config.linearRecordLayout` means **Arrange in
+rows** is on. A missing `ui.linearTypographyLinked` means the scale and ruler
+label font sizes are linked while they are equal. A Circular request supplies no
+Linear display values, so a Session without a saved draft keeps Accession and
+Length at Auto and Replicon off.
+
 When several records share a Linear row, a label or subtitle that no record of
 the row contradicts describes the whole row and is drawn once beside it. An
 empty value does not contradict anything, so a records table may name a row on
