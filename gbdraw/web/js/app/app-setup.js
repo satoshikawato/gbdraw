@@ -1968,10 +1968,15 @@ export const createAppSetup = () => {
     },
     { immediate: true }
   );
+  // A mode switch restores that mode's title and fonts, which its Result
+  // already shows; the restore must not start a live definition edit.
+  let restoringModeProfile = false;
   watch(mode, (nextMode, previousMode) => {
     if (nextMode === previousMode) return;
     if (state.semanticFileWatchersSuppressed.value) return;
+    restoringModeProfile = true;
     state.modeProfileStateManager.transition(adv, previousMode, nextMode);
+    nextTick(() => { restoringModeProfile = false; });
     matchSequenceRegistry?.reset?.();
     clickedPairwiseMatch.value = null;
   });
@@ -2456,6 +2461,7 @@ export const createAppSetup = () => {
 
   const { waitForAuxiliaryFileImport, auxiliaryFileImportPending, canRetryAuxiliaryImportFailure, retryAuxiliaryImportFailure } = setupWatchers({
     state,
+    isRestoringModeProfile: () => restoringModeProfile,
     rulePreparation,
     ref, computed, watch,
     nextTick,
