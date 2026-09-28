@@ -115,6 +115,7 @@ const compilePlanBundle = ({
   legendColorOverrides = {},
   legendStrokeOverrides = {},
   manualSpecificRules = [],
+  resultTransforms = [],
   transformSvg = null
 }) => {
   if (!catalogAdmission || !Array.isArray(catalogAdmission.resultNames)) {
@@ -292,6 +293,10 @@ const compilePlanBundle = ({
     // Explicit deletions remain valid while their category is absent, including
     // subsequent Generate calls after a source replacement.
     addToResults(operationsByResult, allResultIndexes, 'legendDeletes', { caption, allowMissing: true });
+  });
+
+  resultTransforms.forEach((transform, index) => {
+    if (typeof transform === 'function') operationsByResult[index].callerTransforms.push(transform);
   });
 
   if (typeof transformSvg === 'function') {

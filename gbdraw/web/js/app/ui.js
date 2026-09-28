@@ -220,7 +220,7 @@ export const createPanZoom = (state) => {
     const closestGroup = target.closest?.('g[id]');
     if (closestGroup) {
       const groupId = closestGroup.id;
-      if (groupId.startsWith('f')) {
+      if (groupId.startsWith('f') && !target.closest('.gbdraw-preview-layout-target')) {
         return;
       }
       if (isLayoutRepositionModeEnabled() && target.closest('svg')) return;

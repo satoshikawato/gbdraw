@@ -5,7 +5,7 @@ Status: active Product authority
 ## Authority metadata
 
 - Contract ID: `OIPC`
-- Contract revision: `25`
+- Contract revision: `26`
 - Product Decision Owner: `satoshikawato`
 - Decision date: `2026-08-28`
 - Decision source: explicit Product Decision Owner selection of one (`1`) after
@@ -30,7 +30,7 @@ Status: active Product authority
   `PD-OI-036`, `PD-OI-037`, `PD-OI-038`, `PD-OI-039`, `PD-OI-040`,
   `PD-OI-041`, `PD-OI-042`, `PD-OI-043`, `PD-OI-044`, `PD-OI-045`,
   `PD-OI-046`, `PD-OI-047`, `PD-OI-048`, `PD-OI-049`, `PD-OI-050`,
-  `PD-OI-051`, `PD-OI-052`, `PD-OI-053`, and `PD-OI-054`
+  `PD-OI-051`, `PD-OI-052`, `PD-OI-053`, `PD-OI-054`, and `PD-OI-055`
 - Revision 3 addition: `PD-OI-018`, accepted by `satoshikawato` on
   `2026-09-13` after confirming the complete record/search outcome, no feature
   retirement, and the runtime/memory cost of complete comparisons. The initial
@@ -208,6 +208,14 @@ Status: active Product authority
   their independent preservation requirements retain their scope. This
   authority-only amendment contains no runtime or runtime acceptance evidence;
   dependent implementation requires these records merged into its base.
+- Revision 26 addition: `PD-OI-055`, selected as
+  `A / RETAIN_VALIDATED_BINDING_ENRICHMENT` by `satoshikawato` on
+  `2026-09-28` through explicit approval of the complete nine-field
+  `PRODUCT_DECISION` text below for Issue `#619` finding 5. The receipt and
+  JSON preserve only that outcome and its supplied preservation, retirement,
+  and risk terms. Earlier decisions retain their scope. This authority-only
+  amendment contains no runtime or runtime acceptance evidence; dependent
+  runtime requires this authority merged into its base.
 - Records remaining `EVIDENCE_REQUIRED`: none
 - Excluded records: none
 
@@ -2243,6 +2251,53 @@ Decision date: 2026-09-26
   "acceptedResidualRisk": "専用rowがcanvasの縦領域を減らし、検索を図の近くへ動かせなくなる。wrap/scroll、canvas最低高さ、実hit targetとkeyboard/touch検証で実操作を確保する。",
   "owner": "satoshikawato",
   "decisionDate": "2026-09-26"
+}
+```
+
+### PD-OI-055: Valid bindings after failed Generate
+
+- Concern key: `web.generate.failed-source-binding-continuation`
+- Scenario revision: `1`
+- Status: `ACCEPTED`
+- Selected outcome: `A / RETAIN_VALIDATED_BINDING_ENRICHMENT`
+- Normative outcome: exactly the complete approved `PRODUCT_DECISION` receipt
+  and its nine-field JSON representation below.
+- Decision source: the complete Choice A text presented to the Product Decision
+  Owner for Issue `#619` finding 5, explicitly approved in full, including
+  Owner and Decision date, by `satoshikawato` on `2026-09-28`. The receipt
+  and JSON below reproduce the approved fields without translation or
+  additional terms. This record does not supersede another decision.
+  Dependent runtime requires this authority merged into its base; this
+  amendment supplies no runtime acceptance evidence.
+- Receipt SHA-256 (UTF-8, excluding the final newline): `472b82ef4731c8656827a1c0903e80cc3b46d60e0b424ea0568de9f95fdb7f7b`.
+- Acceptance contracts: `OIC-005`, `OIC-013`, `OIC-014`, and `OIC-015` remain
+  jointly required with the selected outcome; citation does not claim the
+  remaining multi-record, cancel/stale, Export, or retry evidence is complete.
+
+```text
+PRODUCT_DECISION
+Concern: web.generate.failed-source-binding-continuation
+Scenario revision: 1
+Choice: A / RETAIN_VALIDATED_BINDING_ENRICHMENT
+Rationale: Preserve the continuation observed in S01. Valid source bindings resolved during a failed Generate may remain in the editable document and a subsequently saved Session, although no new Result was admitted.
+Must preserve: The previous Result and canonical request, editable drafts, History, exact source bytes, record and annotation identity, coherent Save/Load, Export of the previous Result, retry, and cancel, stale, and superseded recovery. Only complete, validated bindings to the same source may persist. Independent source discovery completed before Generate remains valid.
+May retire: None of the existing supported behavior. A strict guarantee that every saved binding field remains unchanged after a failed Generate is not adopted.
+Accepted residual risk: A failed Generate may change binding metadata in a later saved Session while the displayed Result remains unchanged; this may surprise someone comparing Session files. Incorrect, incomplete, stale, dangling, or wrong-source bindings are not accepted.
+Owner: satoshikawato
+Decision date: 2026-09-28
+```
+
+```json
+{
+  "concern": "web.generate.failed-source-binding-continuation",
+  "scenarioRevision": 1,
+  "choice": "A / RETAIN_VALIDATED_BINDING_ENRICHMENT",
+  "rationale": "Preserve the continuation observed in S01. Valid source bindings resolved during a failed Generate may remain in the editable document and a subsequently saved Session, although no new Result was admitted.",
+  "mustPreserve": "The previous Result and canonical request, editable drafts, History, exact source bytes, record and annotation identity, coherent Save/Load, Export of the previous Result, retry, and cancel, stale, and superseded recovery. Only complete, validated bindings to the same source may persist. Independent source discovery completed before Generate remains valid.",
+  "mayRetire": "None of the existing supported behavior. A strict guarantee that every saved binding field remains unchanged after a failed Generate is not adopted.",
+  "acceptedResidualRisk": "A failed Generate may change binding metadata in a later saved Session while the displayed Result remains unchanged; this may surprise someone comparing Session files. Incorrect, incomplete, stale, dangling, or wrong-source bindings are not accepted.",
+  "owner": "satoshikawato",
+  "decisionDate": "2026-09-28"
 }
 ```
 
