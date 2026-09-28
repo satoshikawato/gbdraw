@@ -26,11 +26,18 @@ for (const composite of [false, true]) {
         await openApp(page);
         await page.locator('input[accept^=".json,"]').setInputFiles(file);
         await page.waitForFunction(() => !window.__GBDRAW_APP__.sessionImportPending && window.__GBDRAW_APP__.results.length > 0);
-        // This completion log is emitted by the existing definition owner after
-        // its Worker helper and composition update. No fixed 700 ms oracle and
-        // no polling selected/mounted equality.
         if (phase === 'web') {
-          await expect.poll(() => completed, { timeout: 180000 }).toBeGreaterThan(0);
+          // Loading the saved preview does not edit its definition. Start a
+          // real edit before awaiting the definition owner's helper completion.
+          const beforeEdit = completed;
+          await page.getByLabel('Titles and Record Labels', { exact: true }).click();
+          await page.getByLabel('Default font size', { exact: true }).fill('19');
+          await expect.poll(() => completed, { timeout: 180000 }).toBeGreaterThan(beforeEdit);
+          expect(await page.evaluate(async () => (
+            Array.from((await import('./js/state.js')).state.svgContainer.value
+              .querySelectorAll('g[data-gbdraw-role="record-definition"]'))
+              .map(group => Number(group.querySelector('text').getAttribute('font-size')))
+          ))).toEqual(Array(composite ? 2 : 1).fill(19));
           await assertCoherent(await capture(page, info, 'web-loaded-definition-completed'), 'loaded definition', true);
         }
         await generate(page);

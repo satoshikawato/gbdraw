@@ -61,6 +61,16 @@ test('feature popup record rotation works by pointer and keyboard in rich and si
 }) => {
   test.setTimeout(240000);
   page.on('dialog', (dialog) => dialog.dismiss());
+  await page.addInitScript(() => {
+    window.__ROTATION_HISTORY_COMMITS__ = [];
+    window.__GBDRAW_TEST_HOOKS__ = {
+      onHistoryDiagnostic: (event) => {
+        if (event.type === 'commit' && event.created) {
+          window.__ROTATION_HISTORY_COMMITS__.push({ scope: event.scope, label: event.label });
+        }
+      }
+    };
+  });
   await installDiagramRequestObserver(page);
   await openApp(page);
   await page.getByLabel('GenBank/DDBJ File', { exact: true }).setInputFiles(join(
@@ -72,6 +82,8 @@ test('feature popup record rotation works by pointer and keyboard in rich and si
     return {
       svg: window.__GBDRAW_APP__.svgContent,
       prefix: window.__GBDRAW_DIAGRAM_RUNS__.at(-1).output.prefix,
+      request: (await import('/gbdraw/web/js/services/config.js'))
+        .getCommittedCanonicalRenderRequest(),
       history: window.__GBDRAW_HISTORY__.getUndoCount(),
       biological: state.biologicalFeatures.value.map((feature) => [
         feature.record_key,
@@ -98,6 +110,9 @@ test('feature popup record rotation works by pointer and keyboard in rich and si
   await expect(actions.getByLabel('Record rotation anchor')).toHaveValue('five-prime');
   await expect(actions.getByLabel('Record rotation signed offset')).toHaveValue('0');
 
+  expect(await page.evaluate(() => window.__GBDRAW_HISTORY__.getUndoCount()))
+    .toBe(before.history);
+  expect(await page.evaluate(() => window.__GBDRAW_APP__.svgContent)).toBe(before.svg);
   await actions.getByLabel('Record rotation anchor').selectOption('midpoint');
   await actions.getByLabel('Record rotation signed offset').fill('2');
   await disclosure.click();
@@ -105,6 +120,12 @@ test('feature popup record rotation works by pointer and keyboard in rich and si
   await disclosure.click();
   await expect(actions.getByLabel('Record rotation anchor')).toHaveValue('midpoint');
   await expect(actions.getByLabel('Record rotation signed offset')).toHaveValue('2');
+  expect(await page.evaluate(() => window.__GBDRAW_HISTORY__.getUndoCount()))
+    .toBe(before.history);
+  expect(await page.evaluate(async () => (
+    (await import('/gbdraw/web/js/services/config.js')).getCommittedCanonicalRenderRequest()
+  ))).toEqual(before.request);
+  expect(await page.evaluate(() => window.__GBDRAW_APP__.svgContent)).toBe(before.svg);
   const expectedStart = await page.evaluate(() => (
     window.__GBDRAW_APP__.featureRecordRotationDraft.startCoordinate
   ));
@@ -157,6 +178,13 @@ test('feature popup record rotation works by pointer and keyboard in rich and si
     prefix: before.prefix,
     history: before.history + 1
   });
+  expect(await page.evaluate(() => window.__ROTATION_HISTORY_COMMITS__
+    .slice(-1))).toEqual([{ scope: 'artifact-replacement', label: 'Rotate record to feature' }]);
+  const rotatedRequest = await page.evaluate(async () => (
+    (await import('/gbdraw/web/js/services/config.js')).getCommittedCanonicalRenderRequest()
+  ));
+  expect(rotatedRequest.records[0].display.startCoordinate).toBe(expectedStart);
+  expect(rotatedRequest.output.prefix).toBe(before.prefix);
   expect(committed.biological).toEqual(before.biological);
   expect(committed.target.recordKey).toBeTruthy();
   expect(committed.target.biologicalFeatureId).toBeTruthy();
@@ -170,6 +198,13 @@ test('feature popup record rotation works by pointer and keyboard in rich and si
     const { state } = await import('/gbdraw/web/js/state.js');
     return state.recordDisplayDrafts.length;
   })).toBe(0);
+  expect(await page.evaluate(async () => (
+    (await import('/gbdraw/web/js/services/config.js')).getCommittedCanonicalRenderRequest()
+  ))).toEqual(before.request);
+  expect(await page.evaluate(() => window.__GBDRAW_APP__.form.prefix))
+    .toBe('UNRELATED_PENDING_PREFIX');
+  expect(await page.evaluate(() => window.__GBDRAW_HISTORY__.getUndoCount()))
+    .toBe(before.history);
   await page.evaluate(() => window.__GBDRAW_HISTORY__.redo());
   await expect.poll(() => page.evaluate(() => window.__GBDRAW_APP__.svgContent)).toBe(transformedSvg);
   expect(await page.evaluate(async () => {
@@ -185,6 +220,13 @@ test('feature popup record rotation works by pointer and keyboard in rich and si
     }
   });
 
+  expect(await page.evaluate(async () => (
+    (await import('/gbdraw/web/js/services/config.js')).getCommittedCanonicalRenderRequest()
+  ))).toEqual(rotatedRequest);
+  expect(await page.evaluate(() => window.__GBDRAW_APP__.form.prefix))
+    .toBe('UNRELATED_PENDING_PREFIX');
+  expect(await page.evaluate(() => window.__GBDRAW_HISTORY__.getUndoCount()))
+    .toBe(before.history + 1);
   await page.setViewportSize({ width: 390, height: 844 });
   await page.evaluate(() => { window.__GBDRAW_APP__.adv.rich_feature_popup = false; });
   await page.getByRole('button', { name: 'Open active feature', exact: true }).click();

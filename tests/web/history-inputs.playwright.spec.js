@@ -46,12 +46,12 @@ const expectHistory = async (page, undo, redo, label) => {
 
 for (const inputMethod of ['keyboard', 'pointer']) {
   test(`Label Mode ${inputMethod} edit has one Undo step and survives generation and fresh Load`, async ({
-    page, context, browser
+    page, context, browser, baseURL
   }, testInfo) => {
     test.setTimeout(300_000);
     const externalRequests = [];
     const allowLocal = (route) => {
-      if (new URL(route.request().url()).origin === 'http://127.0.0.1:4173') {
+      if (new URL(route.request().url()).origin === new URL(baseURL).origin) {
         return route.continue();
       }
       externalRequests.push(route.request().url());
@@ -119,7 +119,7 @@ for (const inputMethod of ['keyboard', 'pointer']) {
     expect(saved.config.form.labels_mode).toBe('out');
     expect(await generate(page)).toBe(originalSvg);
 
-    const freshContext = await browser.newContext({ baseURL: 'http://127.0.0.1:4173' });
+    const freshContext = await browser.newContext({ baseURL });
     try {
       await freshContext.route('**/*', allowLocal);
       const freshPage = await freshContext.newPage();

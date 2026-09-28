@@ -477,7 +477,7 @@ jobs:
       ((github.event_name == 'push' && github.ref == 'refs/heads/dev') ||
       (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/dev'))
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 45
     strategy:
       fail-fast: false
       matrix:
@@ -509,10 +509,12 @@ jobs:
         run: python tools/prepare_browser_wheel.py
 
       - name: Run Playwright functional tests
-        run: npm run test:web:functional-full -- --shard=${{ matrix.shard }}/4
+        env:
+          PLAYWRIGHT_JSON_OUTPUT_NAME: test-results/functional-report.json
+        run: npm run test:web:functional-full -- --shard=${{ matrix.shard }}/4 --reporter=line,github,json
 
-      - name: Upload Playwright functional traces
-        if: failure()
+      - name: Upload Playwright functional traces and report
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: playwright-functional-shard-${{ matrix.shard }}-traces-${{ github.run_id }}-${{ github.run_attempt }}
