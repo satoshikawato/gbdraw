@@ -2412,10 +2412,7 @@
                 <i class="ph ph-warning-circle text-sm mt-0.5"></i>
                 <span>{{ circularConservationLayoutWarning }}</span>
             </div>
-            <p class="mb-2 text-xs text-slate-700" data-generation-application-summary><strong>{{ generationApplicationFeedback.label }}</strong> · Generation settings</p>
-            <p id="generate-help" class="mb-2 text-[10px] text-slate-600">Generate recalculates placement and resets zoom. Undo restores the previous Result.</p>
-            <p class="sr-only" data-generation-application-announcement role="status" aria-live="polite" aria-atomic="true" v-text="generationApplicationFeedback.announcement"></p>
-            <button data-history-managed type="button" aria-label="Generate Diagram" @click="runAnalysis" :disabled="!semanticMutationAvailable || (processing)" aria-describedby="generate-help"
+            <button data-history-managed type="button" aria-label="Generate Diagram" @click="runAnalysis" :disabled="!semanticMutationAvailable || (processing)"
                 class="btn w-full py-4 text-lg relative overflow-hidden group text-white bg-blue-600 hover:bg-blue-700 shadow-lg shadow-blue-200 border-b-4 border-blue-800 active:border-b-0 active:translate-y-1 active:shadow-none transition-all">
                 <span v-if="!processing" class="flex items-center justify-center gap-2"><i class="ph ph-rocket-launch text-2xl"></i> Generate Diagram</span>
                 <span v-else class="flex items-center justify-center gap-2"><i class="ph ph-spinner animate-spin text-xl"></i> {{ generationCancelRequested ? 'Canceling...' : 'Processing...' }}</span>
@@ -4672,15 +4669,7 @@
              title="Drag to resize"></div>
 
         <div class="result-pane flex-1 space-y-4 flex flex-col h-full overflow-y-auto min-w-0">
-            <section data-generation-application-feedback aria-label="Generation application status" class="rounded border border-slate-200 bg-white px-3 py-2 text-xs text-slate-700 shrink-0">
-                <p><strong>{{ generationApplicationFeedback.label }}</strong> · {{ generationApplicationFeedback.message }}</p>
-                <p v-if="generationApplicationFeedback.unknownMessage" class="mt-1 text-amber-800">{{ generationApplicationFeedback.unknownMessage }}</p>
-                <p v-if="generationApplicationFeedback.error" class="mt-1 text-red-700">{{ generationApplicationFeedback.error }}</p>
-                <p v-if="generationApplicationFeedback.generationMessage" class="mt-1">{{ generationApplicationFeedback.generationMessage }}</p>
-                <p v-if="generationApplicationFeedback.liveMessage" data-live-application-feedback class="mt-1 text-amber-800">{{ generationApplicationFeedback.liveMessage }}</p>
-                <p class="mt-1 text-[10px] text-slate-500">Supported color, label, visibility, and record layout edits carry forward on Generate; manual positions may change.</p>
-                <p id="session-export-help" class="mt-1 text-[10px] text-slate-500">Save stores the current Result and settings draft. Export outputs the current Result. Neither applies pending settings.</p>
-            </section>
+            <p v-if="labelReflowProcessing || labelReflowLastError" data-live-application-feedback role="status" aria-live="polite" class="rounded border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800 shrink-0">{{ labelReflowProcessing ? 'Live edit applying: geometry is being updated. Direct edits already applied are kept.' : 'Live edit failed: direct edits already applied are kept; geometry may still need updating. Retry the live edit or use Generate.' }}</p>
 
             <operation-error v-if="errorDisplay && !(errorDisplay.operation === 'align' && (similarityAlignmentDialogOpen || similarityAlignmentResetDialogOpen))"
                 :error="errorLog" :recovery="errorDisplay.operation === 'generate' || errorDisplay.operation === 'align' ? generationFailureRecovery : null"
@@ -4740,6 +4729,7 @@
                             </button>
                         </div>
                     </div>
+                    <span id="session-export-help" class="sr-only">Save stores the current Result and settings draft. Export outputs the current Result. Neither applies pending settings.</span>
                     <div v-if="resultPanelTab === 'preview'" class="preview-toolbar flex gap-2 items-center flex-wrap mr-2" aria-describedby="session-export-help">
                         <p id="preview-layout-help" class="basis-full text-xs text-slate-600">Turn on Layout edit to move a legend, title, or Linear scale. When off, drag to pan. Use the Layout edit button with click, tap, Space, or Enter.</p>
                         <div class="flex items-center gap-2 bg-white px-3 py-1.5 rounded border border-green-200">

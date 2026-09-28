@@ -5,7 +5,7 @@ Status: active Product authority
 ## Authority metadata
 
 - Contract ID: `OIPC`
-- Contract revision: `26`
+- Contract revision: `27`
 - Product Decision Owner: `satoshikawato`
 - Decision date: `2026-08-28`
 - Decision source: explicit Product Decision Owner selection of one (`1`) after
@@ -216,6 +216,18 @@ Status: active Product authority
   and risk terms. Earlier decisions retain their scope. This authority-only
   amendment contains no runtime or runtime acceptance evidence; dependent
   runtime requires this authority merged into its base.
+- Revision 27 changes: `PD-OI-037` and `PD-OI-049` are replaced for scenario
+  revision `2`.
+  - `PD-OI-037`: the Product Decision Owner `satoshikawato` approved the
+    receipt text on `2026-09-29` (GUI remediation S00 decision 4), covering
+    Rationale and Accepted residual risk. Choice, Must preserve, and May
+    retire come from the Owner's confirmed requirement to remove the always-on
+    Pending display and the named always-on explanations.
+  - `PD-OI-049`: on the same date, the Owner approved a help-only mitigation
+    in place of help and Pending. The other fields are unchanged.
+  - Both revisions use the reviewed static Product Contract co-change route
+    and merge with their implementation. The lifecycle text below records
+    that route.
 - Records remaining `EVIDENCE_REQUIRED`: none
 - Excluded records: none
 
@@ -245,10 +257,17 @@ authority already present on its base and does not change the decision it
 implements. Evidence precedes a decision when a record is
 `EVIDENCE_REQUIRED`; evidence does not select its own outcome.
 
-To correct an active outcome, use an authority-only replacement. Increment the
-scenario revision, identify the prior decision and revision in `Supersedes`,
-record the complete replacement outcome, and merge that authority before
-changing dependent runtime. Git history retains the former text; the active
+To correct an active outcome, increment the scenario revision, identify the
+prior decision and revision in `Supersedes`, and record the complete
+replacement outcome with its explicit receipt. The replacement either merges
+as an authority-only change before dependent runtime, or merges together with
+its implementation through the reviewed static Product Contract co-change
+route in [`WEB_CHANGE_POLICY.md`](./WEB_CHANGE_POLICY.md#static-product-contract-co-change).
+Where a record says that dependent runtime requires its authority merged into
+its base, a reviewed co-change that merges the record and its implementation
+together satisfies that requirement. That route changes only this procedure.
+It does not change any recorded outcome, preservation condition, or
+compatibility commitment. Git history retains the former text; the active
 contract does not accumulate superseded records.
 
 ## Cross-surface clauses
@@ -1495,31 +1514,34 @@ corrected. Passing evidence does not make incorrect behavior normative.
 }
 ```
 
-### PD-OI-037: Derived edit-application feedback
+### PD-OI-037: Operation feedback without derived application status
 
 - Concern key: `web.edit-application-feedback`
-- Scenario revision: `1`
+- Scenario revision: `2`
+- Supersedes: `PD-OI-037`, scenario revision `1` (`A / DERIVED-APPLICATION-STATUS`).
 - Status: `ACCEPTED`
-- Selected outcome: `A / DERIVED-APPLICATION-STATUS`
-- Normative outcome: exactly the signed `PRODUCT_DECISION` receipt below.
-- Decision source: the complete issue `#602` response signed in full by
-  `satoshikawato` on `2026-09-26`. This serialization preserves all nine
-  supplied fields without translation or extension. It is not a new decision
-  store or a `BD-###` record and cannot authorize dependent runtime until
-  merged into its base.
+- Selected outcome: `A / OPERATION-FEEDBACK-WITHOUT-DERIVED-STATUS`
+- Normative outcome: exactly the receipt below.
+- Decision source: the receipt text approved by `satoshikawato` on
+  `2026-09-29` (GUI remediation S00 decision 4) supplies the Rationale and
+  the Accepted residual risk. The Owner's confirmed requirement supplies the
+  Choice, Must preserve, and May retire: remove the always-on Pending display
+  and the named always-on explanations, and keep Processing/Canceling, real
+  errors, and recovery. This serialization adds no other terms. It is not a
+  new decision store or a `BD-###` record.
 - Acceptance contracts: `OIC-005`, `OIC-013`, `OIC-014`, `OIC-024`.
 
 ```json
 {
   "concern": "web.edit-application-feedback",
-  "scenarioRevision": 1,
-  "choice": "A / DERIVED-APPLICATION-STATUS",
-  "rationale": "利用者が編集後の図と次回Generateの変更を区別できるよう、操作の適用タイミングと生成設定の未適用状態を事実から表示する。",
-  "mustPreserve": "操作単位のLive edit、Applies on Generate、Apply requiredを区別し、左Palette Instant Previewと右Alignment reviewを例外なく正しく分類する。canonical即時commitと必要時自動rerender、reviewのlocal draft、target-only操作とpending設定の分離、対応済みoverride継承、atomic Generate、失敗/Cancel/stale時の旧ResultとHistory、Undo/Redo、SessionのResult/draft分離、Exportの現在Result出力を維持する。Pendingとlive applying/errorを独立に示し、invalid/unknownをAppliedとしない。Generateによる配置再計算とzoom reset、Save/Exportの意味を事前に説明する。",
-  "mayRetire": "製品の適用タイミング・保存・復旧・編集機能は退役しない。全DOM座標や手動位置を再生成後にも無条件に保持する保証は新設しない。",
-  "acceptedResidualRisk": "生成intent比較の漏れや比較基準の誤更新は誤表示を生みうる。生成・live commit・履歴・Sessionの一致テストを必須とし、根拠不足はunknownとして表示する。Status目的のWorker呼出、genome byte読取り/hash、SVG/checkpoint cloneは受け入れない。",
+  "scenarioRevision": 2,
+  "choice": "A / OPERATION-FEEDBACK-WITHOUT-DERIVED-STATUS",
+  "rationale": "派生 status と常時説明が操作応答を損ない（Result 後の比較切替 約 1.3 s）、画面を圧迫するため削除・help-tip 化する。",
+  "mustPreserve": "操作単位のLive edit、Applies on Generate、Apply requiredの分類表示、live edit適用中/失敗の通知、Generateボタン内のProcessing/Canceling、実際のerrorとrecovery、canonical即時commitと必要時自動rerender、reviewのlocal draft、atomic Generate、失敗/Cancel/stale時の旧ResultとHistory、Undo/Redo、SessionのResult/draft分離、Exportの現在Result出力を維持する。",
+  "mayRetire": "Result上とGenerate上の常時Pending/Applied/Unknown/Invalid/Not generated表示とその派生計算、生成intentの比較基準と更新処理、Generate recalculates placement…、Supported color…、Save stores…の常時説明を退役する。製品の適用タイミング・保存・復旧・編集機能は退役しない。",
+  "acceptedResidualRisk": "help-tip を開かない利用者は Generate/Save/Lock の事前説明を見ない。実 error・Processing/Canceling・recovery は保持する。",
   "owner": "satoshikawato",
-  "decisionDate": "2026-09-26"
+  "decisionDate": "2026-09-29"
 }
 ```
 
@@ -1936,46 +1958,45 @@ Decision date: 2026-09-27
 ### PD-OI-049: Circular Width/Radius unit changes
 
 - Concern key: `tracks.circular-measure-unit-change`
-- Scenario revision: `1`
+- Scenario revision: `2`
+- Supersedes: `PD-OI-049`, scenario revision `1`. Only the Accepted residual
+  risk and the decision date change.
 - Status: `ACCEPTED`
 - Selected outcome: `A / KEEP_NUMBER_CHANGE_UNIT`
 - Normative outcome: exactly the complete approved `PRODUCT_DECISION` receipt
   and its nine-field JSON representation below.
-- Decision source: the complete Choice A text reviewed in
-  [02_UNIT_CHANGE.md](https://github.com/satoshikawato/gbdraw/blob/727b876214b58d4233790ce1feb4913eaf48bf4d/docs/internal/issue-619-implementation-plan-20260927/DECISION_PACKS/02_UNIT_CHANGE.md)
-  at S00 commit `727b876214b58d4233790ce1feb4913eaf48bf4d`. On `2026-09-27`,
-  `satoshikawato` explicitly confirmed signing all three Choice A texts with
-  that Owner and Decision date. All nine supplied fields are reproduced
-  without translation or additional terms. This record does not supersede
-  another decision. Dependent runtime requires this authority merged into
-  its base; this amendment supplies no runtime acceptance evidence.
+- Decision source: `PD-OI-037` revision 2 retires the always-on Pending
+  display, which removes the Pending half of this record's mitigation. On
+  `2026-09-29`, `satoshikawato` explicitly approved the help-only mitigation
+  below and kept every other field unchanged. This revision merges with its
+  implementation through the reviewed co-change route.
 - Receipt SHA-256 (UTF-8, excluding the final newline):
-  `f5832c5e43cb0d175c320197e47b7f04466608220e47e5b46806aef4f0ec59c8`.
+  `b879318bb23587d4695706d0102b7e2d0a211229467fcef07658ba407f77c596`.
 
 ```text
 PRODUCT_DECISION
 Concern: tracks.circular-measure-unit-change
-Scenario revision: 1
+Scenario revision: 2
 Choice: A / KEEP_NUMBER_CHANGE_UNIT
 Rationale: 単位選択を、入力した数値の意味を明示的に変更する編集として統一する。現在の円半径や古いResultに依存せず、生成前や複数recordでも同じ操作を使える。
 Must preserve: numericdraftとunitの明示、Auto、Generateまで旧Resultを保つこと、History/Session、失敗復旧、既存scalarの科学的意味、local-only。
 May retire: なし。
-Accepted residual risk: 倍率からpxへ切り替えると図上の大きさが変わる。helpとPendingに、数値維持・次回Generate反映を明記する。
+Accepted residual risk: 倍率からpxへ切り替えると図上の大きさが変わる。helpに、数値維持・次回Generate反映を明記する。
 Owner: satoshikawato
-Decision date: 2026-09-27
+Decision date: 2026-09-29
 ```
 
 ```json
 {
   "concern": "tracks.circular-measure-unit-change",
-  "scenarioRevision": 1,
+  "scenarioRevision": 2,
   "choice": "A / KEEP_NUMBER_CHANGE_UNIT",
   "rationale": "単位選択を、入力した数値の意味を明示的に変更する編集として統一する。現在の円半径や古いResultに依存せず、生成前や複数recordでも同じ操作を使える。",
   "mustPreserve": "numericdraftとunitの明示、Auto、Generateまで旧Resultを保つこと、History/Session、失敗復旧、既存scalarの科学的意味、local-only。",
   "mayRetire": "なし。",
-  "acceptedResidualRisk": "倍率からpxへ切り替えると図上の大きさが変わる。helpとPendingに、数値維持・次回Generate反映を明記する。",
+  "acceptedResidualRisk": "倍率からpxへ切り替えると図上の大きさが変わる。helpに、数値維持・次回Generate反映を明記する。",
   "owner": "satoshikawato",
-  "decisionDate": "2026-09-27"
+  "decisionDate": "2026-09-29"
 }
 ```
 
@@ -2328,7 +2349,7 @@ Decision date: 2026-09-28
 | `OIC-021` | Feature-popup record rotation uses the explicit popup target and source coordinates, changes only one effectively circular record through a target-only atomic transaction, preserves pending edits and the prior artifact on every no-op path, round-trips the absolute transform, and reuses compatible LOSAT evidence without additional executor jobs. |
 | `OIC-022` | `PD-OI-036`: independent fresh/reset Auto, explicit Show/Hide, diagram-wide resolution excluding dormant rows, saved Session/Result and Undo/Redo remain supported; Layout and Labels disclose the effective Auto result, affected fields, reason, scope, next Generate effect, and route to Record Labels. |
 | `OIC-023` | `PD-OI-024`: only Web fresh/reset selects Lock ON; explicit OFF, saved values and supported omission meanings, saved Result on Load, CLI/Python defaults, accepted anchors, D2-P and D3-A remain supported. ON/OFF and Generate application are always explained in Linear Layout. |
-| `OIC-024` | `PD-OI-037`: operation-level Live edit, Applies on Generate, and Apply required are truthful, including Palette Instant Preview and Alignment review. Pending and live applying/error are independent; invalid/unknown is never Applied. Generate/live commit/History/Session observations agree, with no status-only Worker, genome-byte read/hash, or SVG/checkpoint clone. |
+| `OIC-024` | `PD-OI-037` revision 2: operation-level Live edit, Applies on Generate, and Apply required remain truthful, including Palette Instant Preview and Alignment review. No always-on derived Pending/Applied status or its computation remains. Live applying/error, Processing/Canceling, real errors, and recovery are shown when they occur, with no status-only Worker, genome-byte read/hash, canonical request projection, generated-table build, or SVG/checkpoint clone. |
 | `OIC-025` | `PD-OI-038`: one SVG and Editor retain live commit/rerender, all tabs, availability, History/Session/Export, camera, keyboard, visibility-only Close/Escape, selected tab and Result recovery. At 390×844/740 the canvas uses the available full width and at least 200 px height; content scroll, reachable header/Close/toolbar, short-viewport/soft-keyboard access, and wide side drawer remain required. Pointer/keyboard/browser verification is required; duplicated Preview/SVG/editor is not accepted. |
 | `OIC-026` | `PD-OI-035` and `PD-OI-039`: identity, keyboard Select/Skip, non-rendered candidates, no position-only selection, desktop canvas, focus and transient overlay exclusion remain required with all PD-OI-031/034 outcomes. Compact review retains visible, operable canvas at full available width and at least 200 px height at 390×844/740, scrollable candidates and reachable Apply/Cancel, local no-Worker draft edits, atomic batch validation, failure/error/retry and artifact/orientation/History recovery. Narrow review closes Editor through its owner while retaining tab, disables reopening with a reason until review ends, then permits explicit reopen; wide drag remains. Browser verification must show presentation changes leave draft and Result unchanged. |
 

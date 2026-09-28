@@ -20,12 +20,14 @@ dev と main を `git archive` で `$S00_BASELINE_DIR=/home/kawato/gbdraw-baseli
 
 2026-09-29: S02 を実施（checker と fixture test のみ）。co-change 条件を companion 拒否と runtime＋guard 拒否の 2 か所へ同一条件で適用し、Review 理由を必須にした。governance test 221 passed、変異 4 件すべて検出。commit title: "Admit reviewed Product Contract co-changes in the Web checker"。
 
+2026-09-29: PR #641（a9333e79）を S02 の後に merge（70bca139）。S03 を実施し、Pending status と表示専用 intent bookkeeping を除去した。Generate 1 回の label 表構築を 1 回にし、前処理中の Cancel と stale を判定するようにした。CW test を追加した。Node 1,115 passed。移行した Playwright は 52 passed、2 failed（#641 由来の既存失敗）。commit title: "Remove derived Pending status and guard duplicate table builds"。
+
 | Session | 状態 | 証拠・次の条件 |
 | --- | --- | --- |
 | S00 | 完了（証拠採取のみ） | [results/S00.md](results/S00.md)。開始 a351c01d、dev 57cef3ba・main 4556e04e の snapshot/wheel、性能 baseline、G03/G06/G07 再現、R01/R02 範囲。旧 Session 方針と receipt 文言は第 11.4 節で取得済み。commit SHA は次セッションで追記 |
 | S01 | commit 済み・dev 未反映 | [results/S01.md](results/S01.md)。docs-only。base checker で Gate PASS・Review REQUIRED。dev 取り込みは push/merge 承認待ち |
 | S02 | commit 済み・dev 未反映 | [results/S02.md](results/S02.md)。checker＋fixture のみ。S01 未 merge のため S01 commit を base に局所検証。PR は S01 の dev 取り込み後 |
-| S03 | 未着手 | S02反映後。応答・CW検証 |
+| S03 | commit 済み・dev 未反映 | [results/S03.md](results/S03.md)。PR #641 を merge（70bca139）後に実装。Pending と表示専用 intent を除去し、PD-OI-037/049 を co-change で revision 2 にした。CW-01〜04 の自動検証と変異 3 件を検出。性能は全操作が提案予算内 |
 | S04 | 未着手 | S00の旧Session方針とS02反映後 |
 | S05 | 未着手 | canonical edge/provenanceの実装とbrowser確認 |
 | S06 | 未着手 | S02反映後。Product契約とUIを同時改修 |

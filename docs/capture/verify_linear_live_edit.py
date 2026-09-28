@@ -45,15 +45,13 @@ def checkpoint(page, name, output):
     )
     result = page.evaluate("""async () => {
       const { state: s } = await import('./js/state.js');
-      const { buildConfigData, getCommittedCanonicalRenderRequest,
-              getGenerationApplicationStatus } = await import('./js/services/config.js');
+      const { buildConfigData, getCommittedCanonicalRenderRequest } = await import('./js/services/config.js');
       const { serializeCleanSvg } = await import('./js/services/svg-serialization.js');
       const root = s.svgContainer.value?.querySelector('svg');
       return {
         result: s.results.value[s.selectedResultIndex.value]?.content || '',
         mounted: root ? serializeCleanSvg(root) : '',
         request: getCommittedCanonicalRenderRequest(), draft: await buildConfigData(),
-        status: getGenerationApplicationStatus(),
         identity: s.extractedFeatures.value.map(f => ({id:f.id, biologicalFeatureId:f.biologicalFeatureId,
           record:f.record_id, start:f.start, end:f.end, strand:f.strand})),
         history: [window.__GBDRAW_HISTORY__.getUndoCount(), window.__GBDRAW_HISTORY__.getRedoCount()],
@@ -66,7 +64,6 @@ def checkpoint(page, name, output):
     (output / f"{name}.json").write_text(json.dumps(result, indent=2) + "\n")
     print(
         name,
-        result["status"]["status"],
         result["history"],
         result["resultSha256"],
         flush=True,
@@ -189,7 +186,6 @@ def main():
             page.get_by_label("Output Prefix", exact=True).fill("lambda_de3_live_edit")
             generate_and_wait_for_result(page)
             generated = checkpoint(page, "04-generated", args.output)
-            assert generated["status"]["status"] == "clean"
             assert len(generated["identity"]) >= 130
             assert (
                 "NC_001416.1" in generated["mounted"]
@@ -218,17 +214,17 @@ def main():
             scale.fill("19")
             scale.press("Tab")
             edited = checkpoint(page, "06-pending", args.output)
-            assert edited["status"]["status"] == "pending"
+            # The scale edit is draft only; the committed request and Result are unchanged.
+            assert edited["draft"]["adv"]["scale_font_size"] == 19
             same_artifact(live, edited)
             fit_complete_linear_preview(page, target_zoom="40%")
             set_feature_search_visible(page, visible=False)
             camera = checkpoint(page, "06b-camera", args.output)
             same_artifact(edited, camera)
             assert edited["history"] == camera["history"]
-            feedback = page.get_by_label("Generation application status", exact=True)
-            feedback.scroll_into_view_if_needed()
-            top = feedback.bounding_box()
             preview = page.get_by_role("region", name="Result Preview", exact=True)
+            preview.scroll_into_view_if_needed()
+            top = preview.bounding_box()
             # CSS finding: generated SVG has no independent accessible capture name.
             figure = preview.locator("svg").bounding_box()
             assert top and figure
@@ -275,13 +271,12 @@ def main():
             assert loaded["request"] == edited["request"]
             assert loaded["identity"] == edited["identity"]
             assert loaded["draft"]["adv"]["scale_font_size"] == 19
-            assert loaded["status"]["status"] == "pending"
             exported = export_svg(fresh, args.output, "current-result")
             assert exported == loaded["mounted"]
             same_artifact(loaded, checkpoint(fresh, "09-exported", args.output))
             generate_and_wait_for_result(fresh)
             final = checkpoint(fresh, "10-regenerated", args.output)
-            assert final["status"]["status"] == "clean"
+            assert final["request"] != loaded["request"]
             assert EDIT_LABEL in final["mounted"]
             assert final["identity"] == loaded["identity"]
             fresh.get_by_role("button", name="Undo", exact=True).click()
@@ -290,14 +285,12 @@ def main():
                 undone["result"] == loaded["result"]
                 and undone["request"] == loaded["request"]
             )
-            assert undone["status"]["status"] == "pending"
             fresh.get_by_role("button", name="Redo", exact=True).click()
             redone = checkpoint(fresh, "12-redo", args.output)
             assert (
                 redone["result"] == final["result"]
                 and redone["request"] == final["request"]
             )
-            assert redone["status"]["status"] == "clean"
             assert (
                 export_svg(fresh, args.output, "regenerated-result")
                 == redone["mounted"]
@@ -309,7 +302,7 @@ def main():
                     (args.output / "linear-current-result.png").read_bytes()
                 )
             print(
-                "PASS: raw sources, Auto navigation, Lock, live edits, Pending, Save/fresh Load, Export, Generate, Undo/Redo",
+                "PASS: raw sources, Auto navigation, Lock, live edits, draft, Save/fresh Load, Export, Generate, Undo/Redo",
                 flush=True,
             )
         finally:

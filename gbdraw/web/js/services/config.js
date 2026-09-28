@@ -84,10 +84,6 @@ import {
   managedConfigOverridePathsForMode,
   promoteCanonicalRenderRequestToCurrent,
   projectCanonicalSessionRequest,
-  projectGenerationIntent,
-  projectAppliedGenerationIntent,
-  projectAppliedGenerationFields,
-  compareGenerationIntent,
   projectSettingsOnlySession
 } from './session-request.js';
 import {
@@ -870,7 +866,6 @@ const normalizeDepthTracks = (tracks, legacyAdv = {}) => {
 let lastSessionFilename = null;
 let preservedCliOptions = null;
 let committedCanonicalSession = null;
-let appliedGenerationIntent = null;
 let activeSessionResourceTable = null;
 let adoptedProteinIdentityManifest = null;
 // Current-session preflight receipts pair each adopted cache value with the
@@ -3086,10 +3081,8 @@ export const adoptCanonicalRenderArtifacts = (
 
   // Everything that can validate, project, or deserialize finishes before the
   // committed request and its comparison-backed draft resources are replaced.
-  const nextAppliedGenerationIntent = projectAppliedGenerationIntent(canonical);
   activeSessionResourceTable = sessionResourceTable;
   committedCanonicalSession = nextCommittedCanonicalSession;
-  appliedGenerationIntent = nextAppliedGenerationIntent;
   if (nextLinearComparisons) {
     state.files.linearCanonicalComparisons = nextLinearComparisons;
   }
@@ -3121,34 +3114,11 @@ export const getCommittedCanonicalRenderRequest = () => (
 
 export const getCommittedCanonicalSession = () => committedCanonicalSession;
 
-export const commitAppliedGenerationFields = (sourceState, fields) => {
-  appliedGenerationIntent = projectAppliedGenerationFields(appliedGenerationIntent, sourceState, fields);
-};
-
-// Data interface for application feedback. Operation facts are independent of
-// generation differences; reading it never advances the artifact baseline.
-export const getGenerationApplicationStatus = ({ sourceState = state, filesData,
-  comparisonPlanSnapshot } = {}) => ({
-  ...compareGenerationIntent({
-    draft: projectGenerationIntent({ state: sourceState, filesData, comparisonPlanSnapshot }),
-    applied: appliedGenerationIntent,
-    liveState: sourceState,
-    hasResult: Boolean(sourceState.results?.value?.length)
-  }),
-  operations: {
-    generating: Boolean(sourceState.processing?.value),
-    cancelRequested: Boolean(sourceState.generationCancelRequested?.value),
-    liveApplying: Boolean(sourceState.labelReflowProcessing?.value),
-    liveError: sourceState.labelReflowLastError?.value || null
-  }
-});
-
 export const canonicalRenderArtifactOwner = Object.freeze({
-  capture: () => Object.freeze({ committedCanonicalSession, activeSessionResourceTable, appliedGenerationIntent }),
+  capture: () => Object.freeze({ committedCanonicalSession, activeSessionResourceTable }),
   restore: (snapshot) => {
     committedCanonicalSession = snapshot.committedCanonicalSession;
     activeSessionResourceTable = snapshot.activeSessionResourceTable;
-    appliedGenerationIntent = snapshot.appliedGenerationIntent;
   }
 });
 
@@ -3620,7 +3590,6 @@ const captureSessionImportSnapshot = () => ({
     ? committedCanonicalSession
     : cloneCanonicalSession(committedCanonicalSession),
   activeSessionResourceTable,
-  appliedGenerationIntent,
   importedComparisonIntent: cloneJsonData(state.importedComparisonIntent),
   errorLog: state.errorLog.value,
   resultPanelTab: state.resultPanelTab.value,
@@ -3649,7 +3618,6 @@ const restoreSessionImportSnapshot = async (snapshot) => {
       ? snapshot.committedCanonicalSession
       : cloneCanonicalSession(snapshot.committedCanonicalSession);
     activeSessionResourceTable = snapshot.activeSessionResourceTable;
-    appliedGenerationIntent = snapshot.appliedGenerationIntent;
     Object.assign(
       state.importedComparisonIntent,
       createImportedComparisonIntentState(),
@@ -3686,7 +3654,6 @@ const resetSessionBaseline = () => {
   preservedCliOptions = null;
   committedCanonicalSession = null;
   activeSessionResourceTable = null;
-  appliedGenerationIntent = null;
   Object.assign(
     state.importedComparisonIntent,
     createImportedComparisonIntentState()
@@ -4513,10 +4480,6 @@ const importSessionDocument = async (e, options = {}) => {
     if (currentSchemaSession) {
       committedCanonicalSession = adoptedCanonicalSession;
       activeSessionResourceTable = currentResourceTable;
-      appliedGenerationIntent = projectAppliedGenerationIntent(adoptedCanonicalSession, {
-        editorState: projectionResult?.artifactState.editorState,
-        storedConfig: restoredConfig
-      });
     }
     state.sessionTitle.value = canonicalSession
       ? projectionResult.documentMetadata.title
@@ -4740,7 +4703,6 @@ const importSessionDocument = async (e, options = {}) => {
     if (!currentSchemaSession) {
       committedCanonicalSession = cloneCanonicalSession(data);
       activeSessionResourceTable = null;
-      appliedGenerationIntent = projectAppliedGenerationIntent(data);
     }
     recordSessionLifecycleEvent('interactiveReady', {
       status: 'success',

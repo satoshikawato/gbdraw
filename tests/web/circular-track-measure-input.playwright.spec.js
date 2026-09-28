@@ -193,7 +193,7 @@ for (const width of [1440, 390]) {
   });
 }
 
-test('numeric and unit edits each have one History step, Pending feedback, and exact restores', async ({ page }) => {
+test('numeric and unit edits each have one History step, no derived status, and exact restores', async ({ page }) => {
   await openPanel(page);
   const before = await snapshot(page);
   const workers = await workerCounts(page);
@@ -201,7 +201,7 @@ test('numeric and unit edits each have one History step, Pending feedback, and e
   await selectUnit(page, 'px');
   await expectCounts(page, initial[0] + 1);
   expect(await scalar(page)).toEqual({ value: 0.08, unit: 'px' });
-  await expect(page.locator('[data-generation-application-summary]')).toContainText('Pending');
+  await expect(page.locator('[data-generation-application-summary]')).toHaveCount(0);
   await edit(page, ' 1. ');
   await expectCounts(page, initial[0] + 2);
   expect(await scalar(page)).toEqual({ value: '1.', unit: 'px' });

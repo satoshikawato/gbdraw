@@ -266,13 +266,14 @@ for (const width of [1440, 390]) {
     try {
       const evidence = () => page.evaluate(async () => {
         const a = window.__GBDRAW_APP__;
-        const { getGenerationApplicationStatus } = await import('./js/services/config.js');
+        const { getCommittedCanonicalRenderRequest } = await import('./js/services/config.js');
         const root = a.svgContainer.querySelector('svg');
         const result = new DOMParser().parseFromString(a.results[a.selectedResultIndex].content, 'image/svg+xml');
         const ids = new Set(a.extractedFeatures.filter(f => f.type === 'tRNA').map(f => f.svg_id));
         const colors = svg => [...new Set([...svg.querySelectorAll('path[data-gbdraw-feature-part="block"]')].filter(e => ids.has(e.getAttribute('data-gbdraw-feature-id'))).map(e => e.getAttribute('fill')))];
         return { mounted: colors(root), result: colors(result),
-          undo: window.__GBDRAW_HISTORY__.getUndoCount(), status: getGenerationApplicationStatus() };
+          undo: window.__GBDRAW_HISTORY__.getUndoCount(),
+          committedScaleInterval: getCommittedCanonicalRenderRequest()?.diagramOptions?.configOverrides?.['objects.scale.interval'] ?? null };
       });
       const target = await page.evaluate(() => {
         const a = window.__GBDRAW_APP__, feature = a.extractedFeatures.find(f => f.type === 'tRNA');
@@ -292,9 +293,10 @@ for (const width of [1440, 390]) {
       const after = await evidence();
       expect(after.result).toEqual(['#c026d3']);
       expect(after.undo).toBe(before.undo + 1);
-      expect(after.status.status).toBe('pending');
-      expect(after.status.differences).toEqual(before.status.differences);
-      expect(after.status.differences.some(path => path.includes('scale.interval'))).toBe(true);
+      // The scale draft stays out of the committed request; no derived status exists.
+      expect(after.committedScaleInterval).toBe(before.committedScaleInterval);
+      expect(after.committedScaleInterval).not.toBe(12345);
+      await expect(page.locator('[data-generation-application-feedback]')).toHaveCount(0);
       const live = await inspect(page);
       expect(live.result.find(entry => entry.caption === 'tRNA')?.color).toBe('#c026d3');
       await history(page, 'Undo');

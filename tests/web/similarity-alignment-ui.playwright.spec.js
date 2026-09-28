@@ -93,12 +93,11 @@ test('alignment canvas guide and candidates stay transient and share palette cho
   await referenceSelect.selectOption(referenceKey);
   const align = drawer.getByRole('button', { name: 'Align…', exact: true });
   const before = await artifactSnapshot(page);
-  const initialApplicationText = await page.locator('[data-generation-application-feedback]').textContent();
   await align.click();
   const dialog = page.getByRole('dialog', { name: 'Select alignment anchors' });
   await expect(dialog).toBeVisible({ timeout: 180000 });
   await expect(dialog.locator('[data-alignment-application-help]')).toContainText('Apply required');
-  await expect(page.locator('[data-generation-application-feedback]')).toHaveText(initialApplicationText);
+  await expect(page.locator('[data-generation-application-feedback]')).toHaveCount(0);
   const overlay = page.locator('[data-similarity-alignment-canvas]');
   const guide = overlay.locator('.gbdraw-alignment-guide');
   const badges = overlay.locator('.gbdraw-alignment-badge');
@@ -821,10 +820,9 @@ test('Apply error retains draft, focuses retry guidance, and accepts correction'
   await dialog.getByRole('radio',{name:/Select .*bp, strand/}).first().check();
   const before = await artifactSnapshot(page);
   await expect(dialog.locator('[data-alignment-application-help]')).toContainText('Apply required');
-  const application = page.locator('[data-generation-application-feedback] strong');
-  const initialApplication = await application.textContent();
+  const application = page.locator('[data-generation-application-feedback]');
   await dialog.getByRole('radio', { name: /Skip / }).check();
-  await expect(application).toHaveText(initialApplication);
+  await expect(application).toHaveCount(0);
   expect(await artifactSnapshot(page)).toEqual(before);
   await dialog.getByRole('radio', { name: /Select .*bp, strand/ }).first().check();
   const priorLayout = await page.evaluate(() => {
@@ -852,7 +850,7 @@ test('Apply error retains draft, focuses retry guidance, and accepts correction'
     (element) => element.scrollWidth <= element.clientWidth
   )).toBe(true);
   // Candidate sanitization failed; the independent settings draft was not changed.
-  await expect(application).toHaveText(initialApplication);
+  await expect(application).toHaveCount(0);
   const afterFailure = await artifactSnapshot(page);
   expect(afterFailure.results).toEqual(before.results);
   expect(afterFailure.history.slice(0, 2)).toEqual(before.history.slice(0, 2));
@@ -864,8 +862,7 @@ test('Apply error retains draft, focuses retry guidance, and accepts correction'
   await dialog.getByRole('button', { name: 'Apply', exact: true }).click();
   await expect(dialog).toBeHidden({ timeout: 180000 });
   await expect(page.locator('[data-similarity-alignment-summary]')).toContainText('explicitly skipped');
-  const applied = await page.evaluate(async () => (await import('./js/services/config.js')).getGenerationApplicationStatus());
-  await expect(application).toHaveText({clean:'Applied',unknown:'Unknown',pending:'Pending'}[applied.status]);
+  await expect(application).toHaveCount(0);
 });
 
 test('one usable member applies directly through one Worker resolve and one History action', async ({ page }, testInfo) => {

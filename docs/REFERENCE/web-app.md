@@ -81,13 +81,10 @@ for every record while preserving existing assignments.
 4. Select **Generate Diagram**.
 5. Inspect **Result Preview**, then export a file or select **Save Session**.
 
-The **Generation application status** beside the Result and Generate bar
-compares the generation settings with the current Result. **Pending** means
-that an effective setting has changed; returning to its applied value removes
-that difference. Opening a tab, scrolling, or changing an unused setting does
-not make it Pending. **Unknown** means the comparison lacks sufficient evidence,
-**Invalid settings** means the draft is invalid, and **Not generated** means
-there is no Result. None of these states means Applied.
+The operation labels below state when each kind of edit reaches the Result.
+Settings marked **Applies on Generate** stay in the settings draft until the
+next successful **Generate Diagram**; until then the Result keeps its applied
+settings. The app does not show a separate always-on application status.
 
 | Operation label | When the Result changes |
 |---|---|
@@ -95,9 +92,9 @@ there is no Result. None of these states means Applied.
 | **Live edit** | Feature color, label text, and visibility update the current Result directly; geometry changes may rerender automatically. Palette selection is live when **Instant Preview** is on. |
 | **Apply required** | Alignment choices stay in the review draft until **Apply** succeeds. |
 
-A live edit can succeed while another setting stays Pending. **Live edit applying**
-and **Live edit failed** describe that operation independently of generation
-settings. A rerender failure retains any direct edit already applied and keeps
+A live edit can succeed while other settings stay in the draft. **Live edit
+applying** and **Live edit failed** appear above the Result while a live
+rerender runs or after it fails. A rerender failure retains any direct edit already applied and keeps
 the previous diagram geometry; correct the edit and retry. An unapplied alignment
 review is a local selection, not an applied Result or a generation-setting change.
 
@@ -112,7 +109,7 @@ generation keeps the last successful Result.
 **Save Session** saves the current Result and supported settings draft together.
 **Load Session** displays that saved Result without applying a newer draft.
 **SVG**, **PNG**, and **PDF** export the current Result. Save and Export do not
-Generate or apply Pending settings. A review's guide, candidate numbers, and
+Generate or apply draft settings. A review's guide, candidate numbers, and
 unapplied choices are excluded from saved and exported artifacts.
 
 For Linear diagrams, the DOM and keyboard order is **Input Genomes**,
@@ -193,8 +190,8 @@ A plain number uses the selected unit: `1.5` with **px** means 1.5 pixels,
 while `1.5` with **×R** means 1.5 times R. Changing the selector keeps the
 number and changes its meaning; it does not convert the physical size.
 Manual numeric and unit edits support **Undo** and **Redo**. Effective changes
-become **Pending** and reach the diagram on the next successful
-**Generate Diagram**. Export continues to use the current Result.
+reach the diagram on the next successful **Generate Diagram**. Export
+continues to use the current Result.
 
 Clear the numeric field for **Auto**. Its resolved geometry appears separately
 with units. While the field is empty, the selector chooses the next input's
@@ -212,7 +209,7 @@ editing draft separately from the committed Result, including disabled and
 inactive track values. Loading it shows the saved preview; Generate applies
 the restored draft. Invalid drafts cannot be saved as valid Sessions.
 
-### Follow a Result and its Pending draft
+### Follow a Result and its settings draft
 
 For a small Linear comparison, download the complete GenBank records
 [Lambda (NC_001416.1)](https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi?db=nuccore&id=NC_001416.1&rettype=gbwithparts&retmode=text)
@@ -232,18 +229,19 @@ exact source retrieval and hashes are recorded in the
    Choose **Run LOSAT**, retain LOSATN, and enable all labels under **Labels**.
    To reproduce the figure, set **Label Font Size** and Record Labels' **Default
    font size** to `24`, and upload `cds_gene_qualifier_priority.tsv` as the
-   **Priority File (TSV)**. Generate; the generation status becomes Applied.
+   **Priority File (TSV)**. Generate.
 3. Open **Editor**, turn **Auto Reflow** off for this direct-label example,
    find the Lambda portal protein, and use **Edit** and **Apply Label** to change
    its label to `portal`. Close the popup and Editor.
    This live edit is already part of the current Result.
-4. Under **Axis & Scale**, set **Scale Font Size** to `19`. The status becomes
-   Pending; the current Result still contains its earlier scale and the live label.
-5. Save as `lambda_de3_pending`, then Load that downloaded Session. Pending
-   remains. Export SVG to obtain the saved Result with the live label, without
-   applying the new scale font size.
-6. Generate to apply the draft. Undo restores the saved Result with its Pending
-   draft; Redo restores the regenerated Result and Applied status.
+4. Under **Axis & Scale**, set **Scale Font Size** to `19`. The settings draft
+   now differs; the current Result still contains its earlier scale and the
+   live label.
+5. Save as `lambda_de3_pending`, then Load that downloaded Session. The draft
+   scale font size returns with the saved Result. Export SVG to obtain the
+   saved Result with the live label, without applying the new scale font size.
+6. Generate to apply the draft. Undo restores the saved Result with its draft;
+   Redo restores the regenerated Result.
 
 Create `cds_gene_qualifier_priority.tsv` with this one tab-separated line:
 
@@ -251,7 +249,7 @@ Create `cds_gene_qualifier_priority.tsv` with this one tab-separated line:
 CDS	gene
 ```
 
-![Pending generation settings above a Lambda–DE3 comparison containing the live portal label, record metadata, feature labels, legend, and comparison ribbons.](../assets/web-app/linear-current-result.png)
+![A Lambda–DE3 comparison containing the live portal label, record metadata, feature labels, legend, and comparison ribbons.](../assets/web-app/linear-current-result.png)
 
 The figure retains a gene-label priority rule and uses larger label fonts for
 readability. Use preview zoom and pan to inspect individual features. The
@@ -704,7 +702,7 @@ reset or **Reset Layout**, or restore the matching settings, then Generate again
 An offset near an edge may still clip or overlap another item; adjust canvas
 padding or reset its position. **Undo** and **Redo** traverse supported form and
 editor changes. **Reset Settings** is broader than undo and requires
-confirmation. Generate when the exported figure should include Pending settings.
+confirmation. Generate when the exported figure should include draft settings.
 
 The export actions and session handoff rules are documented in [Output formats
 and export](output-formats-and-export.md) and [Session and request
