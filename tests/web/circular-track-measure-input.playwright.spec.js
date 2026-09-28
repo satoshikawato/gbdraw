@@ -638,3 +638,74 @@ test('CLI-origin Session continues through numeric edits, Generate, Save and fre
   });
   writeFileSync(testInfo.outputPath('cli-origin-command.json'), JSON.stringify({ command: ['python', ...args], exit: 0, input: path }, null, 2));
 });
+
+test('nonfinite numeric action writes are rejected before History; finite, Auto, and text drafts retain their behavior', async ({ page }) => {
+  await openPanel(page);
+  const baseline = await snapshot(page);
+  const workers = await workerCounts(page);
+  for (const kind of ['nan', 'infinity', 'negativeInfinity', 'typedNan', 'typedInfinity', 'typedNegativeInfinity']) {
+    const rejected = await page.evaluate(async kind => {
+      const app = window.__GBDRAW_APP__, history = window.__GBDRAW_HISTORY__;
+      const row = app.adv.circular_track_slots.find(slot => slot.id === 'gc_content');
+      const before = row.width;
+      const values = { nan: NaN, infinity: Infinity, negativeInfinity: -Infinity,
+        typedNan: { value: NaN, unit: 'px' }, typedInfinity: { value: Infinity, unit: 'factor' },
+        typedNegativeInfinity: { value: -Infinity, unit: 'px' } };
+      let error = null;
+      try {
+        await history.runUndoable('Rejected numeric measure', () => app.updateCircularTrackSlotMeasure(row, 'width', values[kind]));
+      } catch (caught) { error = caught.message; }
+      return { error, same: row.width === before };
+    }, kind);
+    expect(rejected.error).toMatch(/positive finite px or factor scalar/);
+    expect(rejected.same).toBe(true);
+    expect(await snapshot(page)).toEqual(baseline);
+    expect(await workerCounts(page)).toEqual(workers);
+  }
+  await page.evaluate(async () => {
+    const app = window.__GBDRAW_APP__, row = app.adv.circular_track_slots.find(slot => slot.id === 'gc_content');
+    await window.__GBDRAW_HISTORY__.runUndoable('Same measure', () => app.updateCircularTrackSlotMeasure(row, 'width', row.width));
+  });
+  expect(await snapshot(page)).toEqual(baseline);
+  for (const [kind, expected] of [
+    ['bareFinite', 0.12], ['typedFinite', { value: 3, unit: 'px' }],
+    ['auto', null], ['typedLexeme', { value: '1e-3', unit: 'factor' }],
+    ['textInfinity', { value: 'Infinity', unit: 'px' }],
+    ['textIncomplete', { value: '1e', unit: 'px' }],
+    ['textSuffix', { value: '20em', unit: 'px' }]
+  ]) {
+    await page.evaluate(async kind => {
+      const app = window.__GBDRAW_APP__, row = app.adv.circular_track_slots.find(slot => slot.id === 'gc_content');
+      const values = { bareFinite: 0.12, typedFinite: { value: 3, unit: 'px' }, auto: null,
+        typedLexeme: { value: '1e-3', unit: 'factor' },
+        textInfinity: { value: 'Infinity', unit: 'px' },
+        textIncomplete: { value: '1e', unit: 'px' },
+        textSuffix: { value: '20em', unit: 'px' } };
+      await window.__GBDRAW_HISTORY__.runUndoable('Accepted measure draft', () => app.updateCircularTrackSlotMeasure(row, 'width', values[kind]));
+    }, kind);
+    expect(await scalar(page)).toEqual(expected);
+    const edited = await snapshot(page);
+    await page.evaluate(() => window.__GBDRAW_HISTORY__.undo());
+    await page.evaluate(() => window.__GBDRAW_HISTORY__.redo());
+    expect(await scalar(page)).toEqual(expected);
+    const restored = await snapshot(page);
+    expect(restored).toEqual(edited);
+    expect(restored.request).toEqual(baseline.request);
+    expect(restored.resultHashes).toEqual(baseline.resultHashes);
+  }
+  await expect(valueControl(page, 'gc_content', 'Width')).toHaveValue('20em');
+  const beforeSave = await snapshot(page);
+  const downloads = [];
+  page.on('download', download => downloads.push(download));
+  await page.getByRole('button', { name: 'Save Session', exact: true }).click();
+  await expect.poll(() => page.evaluate(() => window.__GBDRAW_APP__.errorLog?.stage)).not.toBeNull();
+  await page.waitForFunction(() => !window.__GBDRAW_APP__.sessionSavePending);
+  expect(downloads).toEqual([]);
+  expect(await snapshot(page)).toEqual(beforeSave);
+  await generate(page, false);
+  await expect(valueControl(page, 'gc_content', 'Width')).toHaveValue('20em');
+  const failed = await snapshot(page);
+  expect(failed.history).toEqual(beforeSave.history);
+  expect(failed.request).toEqual(baseline.request);
+  expect(failed.resultHashes).toEqual(baseline.resultHashes);
+});

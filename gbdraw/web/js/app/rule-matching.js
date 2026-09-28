@@ -77,12 +77,18 @@ export const createRulePreparation = ({ state, evaluate, pending = { value: fals
       ? before[key].length === after[key].length && before[key].every((file, index) => file === after[key][index])
       : before[key] === after[key]);
   };
+  const matchesPrepared = (targets, draft) => !draft.length || (
+    draft.every((rule) => validated.has(ruleKey(rule))) && ruleMatchesReady(targets, draft)
+  );
+  const isPrepared = (rules = state.manualSpecificRules) => {
+    const draft = [...new Map(rules.map((rule) => [ruleKey(rule), rule])).values()];
+    return matchesPrepared(features(), draft);
+  };
   const prepare = (rules = state.manualSpecificRules, options = {}) => {
     const targets = features();
     const draft = [...new Map(rules.map((rule) => [ruleKey(rule), { feat: rule.feat, qual: rule.qual, val: rule.val }])).values()];
-    if (!draft.length) return true;
     // Empty catalogs still require syntax validation at input boundaries.
-    if (draft.every((rule) => validated.has(ruleKey(rule))) && ruleMatchesReady(targets, draft)) return true;
+    if (matchesPrepared(targets, draft)) return true;
     const before = snapshot();
     pending.value = ++pendingCount > 0;
     return evaluate({ features: targets.map((feature) => ruleFeaturePayload(feature)), rules: draft, kind: 'color' }, options)
@@ -127,5 +133,5 @@ export const createRulePreparation = ({ state, evaluate, pending = { value: fals
   const notifyChanges = (candidate) => {
     if (candidate?.changes.length) notify(`Updated ${candidate.changes.length} specific-color caption(s) to distinguish their colors.`);
   };
-  return { prepare, prepareCandidate, notifyChanges, run, evaluate, snapshot, isCurrent };
+  return { prepare, isPrepared, prepareCandidate, notifyChanges, run, evaluate, snapshot, isCurrent };
 };

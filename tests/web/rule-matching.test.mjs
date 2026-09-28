@@ -235,3 +235,24 @@ for (const owner of ['extractedFeatures', 'biologicalFeatures']) {
     assert.equal(await pending, null);
   });
 }
+
+test('prepared-rule readiness distinguishes warm config, new predicates, and new feature objects', async () => {
+  let calls = 0;
+  const { state, preparation } = setup(async payload => { calls++; return evaluatePythonRules(payload); });
+  const first = { ...rule('NADH'), color: '#00662c' };
+  state.manualSpecificRules.push(first);
+  assert.equal(preparation.isPrepared(), false);
+  assert.equal(await preparation.prepare(), true);
+  assert.equal(calls, 1);
+  assert.equal(preparation.isPrepared(), true);
+  first.color = '#ff0000';
+  assert.equal(preparation.isPrepared(), true, 'color-only changes reuse the validated match');
+  first.val = 'other';
+  assert.equal(preparation.isPrepared(), false);
+  assert.equal(await preparation.prepare(), true);
+  assert.equal(calls, 2);
+  state.extractedFeatures.value = state.extractedFeatures.value.map(feature => ({ ...feature }));
+  assert.equal(preparation.isPrepared(), false);
+  assert.equal(await preparation.prepare(), true);
+  assert.equal(calls, 3);
+});
