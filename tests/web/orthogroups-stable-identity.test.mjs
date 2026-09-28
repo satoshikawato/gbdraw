@@ -1858,3 +1858,19 @@ assert.equal(visibleElement.getAttribute('stroke'), '#111111');
 assert.equal(visibleElement.getAttribute('stroke-width'), '0.5');
 
 console.log('orthogroup stable identity tests passed');
+
+// Resolving one member must not read or normalize every unrelated source sequence.
+{
+  const unrelated = { recordKey: 'unrelated-record', biologicalFeatureId: 'unrelated-feature',
+    fileIdx: 3, stable_svg_id: 'unrelated-stable' };
+  Object.defineProperty(unrelated, 'nucleotide_sequence', {
+    get() { throw new Error('Unrelated sequence must not be materialized'); }
+  });
+  const lazyState = { ...state,
+    biologicalFeatures: ref([...originalBiologicalFeatures, unrelated]) };
+  const lazyEditor = createOrthogroupEditor({ state: lazyState });
+  const member = lazyEditor.getEnrichedOrthogroupMembers({ id: 'selected-only',
+    members: [{ recordKey: 'record-key-c', biologicalFeatureId: 'biological-c' }] })[0];
+  assert.equal(member.nucleotideSequence, 'GGGG');
+  assert.equal(member.aminoAcidSequence, 'MQ');
+}

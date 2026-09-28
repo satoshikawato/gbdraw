@@ -67,9 +67,12 @@ const closeEditor = async page => {
 };
 
 const download = async (page, button, path) => {
-  const pending = page.waitForEvent('download');
-  await page.getByRole('button', { name: button, exact: true }).click();
-  await (await pending).saveAs(path);
+  const control = button === 'Save Session' ? page.getByRole('banner') : page;
+  const [download] = await Promise.all([
+    page.waitForEvent('download'),
+    control.getByRole('button', { name: button, exact: true }).click()
+  ]);
+  await download.saveAs(path);
   return fs.readFile(path);
 };
 

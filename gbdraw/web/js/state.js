@@ -51,6 +51,7 @@ const unmanagedConfigOverrides = reactive({});
 const results = ref([]);
 const selectedResultIndex = ref(0);
 const failedGeneratePreservedResult = ref(false);
+const generationFailureRecovery = ref(null);
 const resultPanelTab = ref('preview');
 const lastRunInfo = ref(null);
 const trackSlotResolvedGeometry = ref(null);
@@ -818,6 +819,7 @@ export const state = {
   results,
   selectedResultIndex,
   failedGeneratePreservedResult,
+  generationFailureRecovery,
   resultPanelTab,
   lastRunInfo,
   trackSlotResolvedGeometry,

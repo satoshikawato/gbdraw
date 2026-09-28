@@ -9,8 +9,8 @@ const loadOwner = async (path, name, dependencies) => {
   const source = (await readFile(new URL(`../../gbdraw/web/js/app/${path}`, import.meta.url), 'utf8'))
     .replace(/import\s+\{([\s\S]*?)\}\s+from\s+['"][^'"]+['"];?/g, 'const {$1} = dependencies;')
     .replace(/export const /g, 'const ');
-  return new Function('dependencies', 'setTimeout', 'clearTimeout', `${source}\nreturn ${name};`)(
-    dependencies, dependencies.setTimeout, dependencies.clearTimeout);
+  return new Function('dependencies', 'setTimeout', 'clearTimeout', 'window', `${source}\nreturn ${name};`)(
+    dependencies, dependencies.setTimeout, dependencies.clearTimeout, { Vue: { reactive: value => value } });
 };
 const ref = value => ({ value });
 const group = (id, transform) => {
@@ -82,4 +82,35 @@ test('controlled definition callbacks complete for the active root and ignore su
   await new Promise(setImmediate);
   assert.equal(mutations, 1, 'superseded callback must not reflow the current root');
   assert.equal(state.results.value[0].content, 'replacement');
+});
+
+test('Session restoration cancels definition callbacks while normal Circular edits still schedule them', async () => {
+  const callbacks = [];
+  let scheduled = 0;
+  let canceled = 0;
+  const setup = await loadOwner('watchers.js', 'setupWatchers', {});
+  const state = {
+    mode: ref('circular'), generatedMode: ref('circular'),
+    semanticFileWatchersSuppressed: ref(true), shouldDeferCircularPreviewUpdates: ref(false)
+  };
+  setup({ state, ref, computed: getter => ({ get value() { return getter(); } }),
+    watch: (source, callback) => callbacks.push({ source, callback }),
+    onMounted() {}, legendActions: {}, svgActions: {}, featureActions: {}, legendLayout: {},
+    resultsManager: { scheduleDefinitionUpdate: () => scheduled++, cancelDefinitionUpdate: () => canceled++ }
+  });
+  const callback = callbacks.find(({ source }) => String(source).includes('form.species')).callback;
+  callback();
+  assert.equal(scheduled, 0);
+  assert.equal(canceled, 1);
+  state.semanticFileWatchersSuppressed.value = false;
+  callback();
+  assert.equal(scheduled, 1);
+  state.shouldDeferCircularPreviewUpdates.value = true;
+  callback();
+  assert.equal(scheduled, 1);
+  assert.equal(canceled, 2);
+  state.mode.value = 'linear';
+  callback();
+  assert.equal(scheduled, 1);
+  assert.equal(canceled, 2);
 });

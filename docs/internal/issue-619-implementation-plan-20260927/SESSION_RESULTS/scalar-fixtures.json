@@ -1,0 +1,284 @@
+[
+  {
+    "name": "typed_px",
+    "input": {
+      "value": 20,
+      "unit": "px"
+    },
+    "valid": true,
+    "canonical": {
+      "value": 20.0,
+      "unit": "px"
+    }
+  },
+  {
+    "name": "typed_factor",
+    "input": {
+      "value": 0.08,
+      "unit": "factor"
+    },
+    "valid": true,
+    "canonical": {
+      "value": 0.08,
+      "unit": "factor"
+    }
+  },
+  {
+    "name": "typed_decimal_px",
+    "input": {
+      "value": "1.",
+      "unit": "px"
+    },
+    "valid": true,
+    "canonical": {
+      "value": 1.0,
+      "unit": "px"
+    }
+  },
+  {
+    "name": "typed_decimal_factor",
+    "input": {
+      "value": "1.",
+      "unit": "factor"
+    },
+    "valid": true,
+    "canonical": {
+      "value": 1.0,
+      "unit": "factor"
+    }
+  },
+  {
+    "name": "typed_exponent_px",
+    "input": {
+      "value": "1e-3",
+      "unit": "px"
+    },
+    "valid": true,
+    "canonical": {
+      "value": 0.001,
+      "unit": "px"
+    }
+  },
+  {
+    "name": "typed_exponent_factor",
+    "input": {
+      "value": "1e-3",
+      "unit": "factor"
+    },
+    "valid": true,
+    "canonical": {
+      "value": 0.001,
+      "unit": "factor"
+    }
+  },
+  {
+    "name": "precision",
+    "input": {
+      "value": "0.12345678901234567",
+      "unit": "factor"
+    },
+    "valid": true,
+    "canonical": {
+      "value": 0.12345678901234566,
+      "unit": "factor"
+    }
+  },
+  {
+    "name": "bare_number",
+    "input": 1.5,
+    "valid": true,
+    "canonical": {
+      "value": 1.5,
+      "unit": "factor"
+    }
+  },
+  {
+    "name": "bare_text",
+    "input": "1.5",
+    "valid": true,
+    "canonical": {
+      "value": 1.5,
+      "unit": "factor"
+    }
+  },
+  {
+    "name": "px_suffix",
+    "input": "20px",
+    "valid": true,
+    "canonical": {
+      "value": 20,
+      "unit": "px"
+    }
+  },
+  {
+    "name": "percent",
+    "input": "65%",
+    "valid": true,
+    "canonical": {
+      "value": 0.65,
+      "unit": "factor"
+    }
+  },
+  {
+    "name": "null",
+    "input": null,
+    "valid": true,
+    "canonical": null
+  },
+  {
+    "name": "blank",
+    "input": "",
+    "valid": true,
+    "canonical": null
+  },
+  {
+    "name": "invalid_text",
+    "input": "bad",
+    "valid": false,
+    "canonical": null
+  },
+  {
+    "name": "incomplete_text",
+    "input": "1e",
+    "valid": false,
+    "canonical": null
+  },
+  {
+    "name": "typed_invalid",
+    "input": {
+      "value": "bad",
+      "unit": "px"
+    },
+    "valid": false,
+    "canonical": null
+  },
+  {
+    "name": "typed_incomplete",
+    "input": {
+      "value": "1e",
+      "unit": "factor"
+    },
+    "valid": false,
+    "canonical": null
+  },
+  {
+    "name": "typed_empty",
+    "input": {
+      "value": "",
+      "unit": "px"
+    },
+    "valid": false,
+    "canonical": null
+  },
+  {
+    "name": "typed_suffix",
+    "input": {
+      "value": "20px",
+      "unit": "px"
+    },
+    "valid": false,
+    "canonical": null
+  },
+  {
+    "name": "typed_percent_unit",
+    "input": {
+      "value": 65,
+      "unit": "%"
+    },
+    "valid": false,
+    "canonical": null
+  },
+  {
+    "name": "zero",
+    "input": 0,
+    "valid": false,
+    "canonical": null
+  },
+  {
+    "name": "negative",
+    "input": -1,
+    "valid": false,
+    "canonical": null
+  },
+  {
+    "name": "typed_zero",
+    "input": {
+      "value": 0,
+      "unit": "px"
+    },
+    "valid": false,
+    "canonical": null
+  },
+  {
+    "name": "typed_negative",
+    "input": {
+      "value": -1,
+      "unit": "factor"
+    },
+    "valid": false,
+    "canonical": null
+  },
+  {
+    "name": "infinity",
+    "input": {
+      "$number": "Infinity"
+    },
+    "valid": false,
+    "canonical": null
+  },
+  {
+    "name": "nan",
+    "input": {
+      "$number": "NaN"
+    },
+    "valid": false,
+    "canonical": null
+  },
+  {
+    "name": "typed_infinity",
+    "input": {
+      "value": {
+        "$number": "Infinity"
+      },
+      "unit": "px"
+    },
+    "valid": false,
+    "canonical": null
+  },
+  {
+    "name": "unsupported_unit",
+    "input": {
+      "value": 1,
+      "unit": "em"
+    },
+    "valid": false,
+    "canonical": null
+  },
+  {
+    "name": "nonfinite_text",
+    "input": "Infinity",
+    "valid": false,
+    "canonical": null
+  },
+  {
+    "name": "whitespace",
+    "input": "   ",
+    "valid": false,
+    "canonical": null
+  },
+  {
+    "name": "bare_boolean",
+    "input": true,
+    "valid": false,
+    "canonical": null
+  },
+  {
+    "name": "typed_boolean",
+    "input": {
+      "value": true,
+      "unit": "px"
+    },
+    "valid": false,
+    "canonical": null
+  }
+]

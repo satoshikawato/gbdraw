@@ -196,10 +196,64 @@ const saveCurrentSession = async (page, title) => {
   await page.evaluate((nextTitle) => {
     window.__GBDRAW_APP__.sessionTitle = nextTitle;
   }, title);
+  const saveDeadline = Date.now() + 180_000;
   const downloadPromise = page.waitForEvent('download', { timeout: 180_000 });
-  const result = await page.evaluate(() => (
-    window.__GBDRAW_APP__.saveSessionWithTitle()
-  ));
+  const attemptSave = () => page.evaluate(async () => {
+    const { state } = await import('/gbdraw/web/js/state.js');
+    const { getCommittedCanonicalRenderRequest } = await import(
+      '/gbdraw/web/js/services/config.js'
+    );
+    const resultBefore = state.results.value;
+    const requestBefore = getCommittedCanonicalRenderRequest();
+    const overridesBefore = JSON.stringify([
+      state.featureColorOverrides, state.featureStrokeOverrides,
+      state.featureVisibilityOverrides, state.labelTextFeatureOverrides,
+      state.labelVisibilityOverrides, state.legendColorOverrides,
+      state.legendStrokeOverrides
+    ]);
+    const result = await window.__GBDRAW_APP__.saveSessionWithTitle();
+    return {
+      result,
+      busyCheckpoint: result.status === 'busy' ? {
+        resultUnchanged: state.results.value === resultBefore,
+        requestUnchanged: getCommittedCanonicalRenderRequest() === requestBefore,
+        overridesUnchanged: JSON.stringify([
+          state.featureColorOverrides, state.featureStrokeOverrides,
+          state.featureVisibilityOverrides, state.labelTextFeatureOverrides,
+          state.labelVisibilityOverrides, state.legendColorOverrides,
+          state.legendStrokeOverrides
+        ]) === overridesBefore,
+        savePending: state.sessionSavePending.value,
+        availability: state.sessionOperationAvailability('save')
+      } : null
+    };
+  });
+  let attempt = await attemptSave();
+  while (attempt.result.status === 'busy') {
+    const result = attempt.result;
+    expect(result.reason).toBe('Updating diagram. Retry after the update finishes.');
+    expect(attempt.busyCheckpoint).toEqual({
+      resultUnchanged: true, requestUnchanged: true, overridesUnchanged: true,
+      savePending: false, availability: {
+        status: 'busy', reason: 'Updating diagram. Retry after the update finishes.'
+      }
+    });
+    expect(Date.now()).toBeLessThan(saveDeadline);
+    await page.waitForFunction(async () => {
+      const { state } = await import('/gbdraw/web/js/state.js');
+      return state.sessionOperationAvailability('save') === null;
+    }, null, { timeout: Math.max(1, saveDeadline - Date.now()) });
+    expect(await page.evaluate(() => window.__GBDRAW_APP__.labelReflowLastError))
+      .toBeFalsy();
+    const previous = attempt;
+    attempt = await attemptSave();
+    await test.info().attach(`save-retry-${title}.json`, {
+      body: JSON.stringify({ busy: previous.result, checkpoint: previous.busyCheckpoint,
+        retryStatus: attempt.result.status }),
+      contentType: 'application/json'
+    });
+  }
+  const result = attempt.result;
   expect(result).toMatchObject({ status: 'saved' });
   const download = await downloadPromise;
   const path = await download.path();
@@ -783,7 +837,7 @@ const expectDirectEditFlushed = (before, after) => {
   expectBiologicalOwnersUnchanged(after);
 };
 
-const capturePageEvidence = (page) => page.evaluate(async () => {
+const capturePageEvidence = (page, savedSvg = null) => page.evaluate(async (savedSvg) => {
   const { state } = await import('/gbdraw/web/js/state.js');
   const { resolveColorToHex } = await import('/gbdraw/web/js/app/color-utils.js');
   const { serializeCleanSvg } = await import('/gbdraw/web/js/services/svg-serialization.js');
@@ -802,9 +856,9 @@ const capturePageEvidence = (page) => page.evaluate(async () => {
     return { length: text.length, hash: hash >>> 0 };
   };
   const mountedSvg = state.svgContainer.value?.querySelector?.('svg');
-  const svgContent = mountedSvg
+  const svgContent = savedSvg ?? (mountedSvg
     ? serializeCleanSvg(mountedSvg)
-    : String(app.results?.[app.selectedResultIndex]?.content || '');
+    : String(app.results?.[app.selectedResultIndex]?.content || ''));
   const svgDocument = new DOMParser().parseFromString(svgContent, 'image/svg+xml');
   const root = svgDocument.documentElement;
   if (!root || root.localName === 'parsererror') {
@@ -1018,7 +1072,7 @@ const capturePageEvidence = (page) => page.evaluate(async () => {
       )
     }
   };
-});
+}, savedSvg);
 
 const runGenerate = async (page) => {
   const result = await page.evaluate(async () => {
@@ -1849,7 +1903,24 @@ test('divergent draft and direct editor overrides survive repeated Save, Load, a
   });
   expect(actions.undoCount).toBeGreaterThan(0);
 
-  const savedDraftIntent = await capturePageEvidence(page);
+  // A queued update can restart while the asynchronous evidence capture runs.
+  let savedDraftIntent;
+  await expect.poll(async () => {
+    const evidence = await capturePageEvidence(page);
+    const settled = await page.evaluate(async (capturedSvg) => {
+      const { state } = await import('/gbdraw/web/js/state.js');
+      const { serializeCleanSvg } = await import(
+        '/gbdraw/web/js/services/svg-serialization.js'
+      );
+      const svg = state.svgContainer.value?.querySelector('svg');
+      return state.sessionOperationAvailability?.('save') == null
+        && Boolean(svg) && serializeCleanSvg(svg) === capturedSvg;
+    }, evidence.svg.raw);
+    if (settled) savedDraftIntent = evidence;
+    return settled;
+  }, { timeout: 180_000 }).toBe(true);
+  expect(await page.evaluate(() => window.__GBDRAW_APP__.labelReflowLastError))
+    .toBeFalsy();
   expect(savedDraftIntent.active.palette).toMatchObject({
     selected: 'orange',
     instantPreview: false,
@@ -1876,6 +1947,13 @@ test('divergent draft and direct editor overrides survive repeated Save, Load, a
   });
 
   const divergentSave = await saveCurrentSession(page, 'intent-divergent-draft');
+  // Save serializes the current preview, which can advance after the earlier
+  // asynchronous capture. Fresh Load must preserve the actual saved artifact.
+  const savedPreview = await capturePageEvidence(
+    page, divergentSave.session.results[0].content
+  );
+  expect(savedPreview.active).toEqual(savedDraftIntent.active);
+  expect(savedPreview.history).toEqual(savedDraftIntent.history);
   expect(divergentSave.session.config.palette).toBe('orange');
   expect(divergentSave.session.config.colors).toMatchObject({
     CDS: '#0b4f6c',
@@ -1894,10 +1972,14 @@ test('divergent draft and direct editor overrides survive repeated Save, Load, a
   await openIntentApp(freshPage);
   await loadCurrentSession(freshPage, divergentSave.path, divergentSave.session);
   const loadedDraft = await capturePageEvidence(freshPage);
+  await testInfo.attach('divergent-preview-checkpoints.json', {
+    body: JSON.stringify({ savedDraftIntent, savedPreview, loadedDraft, savedSvg: divergentSave.session.results[0].content }),
+    contentType: 'application/json'
+  });
   expect(loadedDraft.active).toEqual(savedDraftIntent.active);
   expectSvgEquivalent(
     loadedDraft.svg,
-    savedDraftIntent.svg,
+    savedPreview.svg,
     'divergent session must retain the saved committed preview'
   );
   expect(svgEquivalence(loadedDraft.svg, expectedB.svg).visual).toBe(false);

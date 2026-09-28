@@ -30,6 +30,7 @@ import {
   normalizeCircularTrackSlot,
   parseCircularTrackSlotSpecs
 } from '../app/circular-track-slots.js';
+import { projectCircularMeasureDraft } from '../app/circular-track-slots/measure-editor.js';
 import {
   buildLinearTrackSlotPayload,
   LINEAR_TRACK_RENDERERS,
@@ -61,6 +62,7 @@ import {
 import { resolveLinearLabelVisibility } from '../app/linear-label-visibility.js';
 import {
   assertValidCustomTrackPlan,
+  parseOptionalPixel,
   validateCustomTrackPlan,
   validateTrackSlotBindingInvariants
 } from '../app/track-slot-validation.js';
@@ -616,6 +618,49 @@ const normalizeOriginalResourceName = (name) => {
 };
 
 const generatedResourceValues = new WeakMap();
+const canonicalTypedResourceBackings = new WeakMap();
+
+// The analysis helper supplies the bytes already emitted by the Python typed codec.
+export const bindCanonicalTypedResource = (value, descriptor) => {
+  const expectedKind = value?.kind === "result" ? "collinearity-result" : "orthogroup-result";
+  if (!value || value.schema !== 3 || !["result", "orthogroupResult"].includes(value.kind)
+    || descriptor?.kind !== expectedKind || descriptor.encoding !== "base64"
+    || descriptor.type !== "application/json" || typeof descriptor.data !== "string"
+    || !Number.isSafeInteger(descriptor.size) || descriptor.size < 0) {
+    throw new Error("Analysis canonical resource backing is invalid.");
+  }
+  canonicalTypedResourceBackings.set(value, descriptor);
+};
+// The renderer consumes a computed typed result for this run. The saved
+// request retains its reproducible protein recipe and raw LOSAT inputs instead
+// of storing the same large derived graph a second time.
+export const projectGeneratedProteinRecipe = (canonical, mode) => {
+  const kind = mode === 'collinear' ? 'collinearityResult'
+    : mode === 'orthogroup' ? 'orthogroupResult' : null;
+  const comparisons = canonical?.renderRequest?.comparisons;
+  if (!kind || !Array.isArray(comparisons)) {
+    throw new Error('Generated protein recipe is invalid.');
+  }
+  const typed = comparisons.filter((entry) => entry?.kind === kind);
+  const pipelines = comparisons.filter((entry) => entry?.kind === 'generatedProteinComparison');
+  if (typed.length !== 1 || pipelines.length !== 1 || pipelines[0].mode !== 'none'
+    || !Object.hasOwn(canonical.resources || {}, typed[0].resourceId)) {
+    throw new Error('Generated protein recipe does not match the computed resource.');
+  }
+  const resources = { ...canonical.resources };
+  delete resources[typed[0].resourceId];
+  return {
+    ...canonical,
+    resources,
+    renderRequest: {
+      ...canonical.renderRequest,
+      comparisons: comparisons.filter((entry) => entry !== typed[0]).map((entry) => (
+        entry === pipelines[0] ? { ...entry, mode } : entry
+      ))
+    }
+  };
+};
+
 const generationIntents = new WeakMap();
 
 const createResourceBuilder = ({ encode = true } = {}) => {
@@ -675,7 +720,7 @@ const createResourceBuilder = ({ encode = true } = {}) => {
       size: bytes.byteLength,
       lastModified: 0,
       encoding: 'base64',
-      data: textToBase64(normalized)
+      data: bytesToBase64(bytes)
     };
     generatedResourceValues.set(resources[resourceId], normalized);
     return resourceId;
@@ -688,6 +733,13 @@ const createResourceBuilder = ({ encode = true } = {}) => {
       generatedResourceValues.set(resources[resourceId], { bindings: [value] });
       return resourceId;
     }
+    const backing = canonicalTypedResourceBackings.get(value);
+    if (backing) {
+      if (backing.kind !== kind) throw new Error("Analysis canonical resource kind does not match.");
+      resources[resourceId] = { ...backing, name: normalizeResourceName(resourceId, name) };
+      generatedResourceValues.set(resources[resourceId], { bindings: [value] });
+      return resourceId;
+    }
     const normalized = JSON.stringify(value);
     const bytes = textToBytes(normalized);
     resources[resourceId] = {
@@ -697,7 +749,7 @@ const createResourceBuilder = ({ encode = true } = {}) => {
       size: bytes.byteLength,
       lastModified: 0,
       encoding: 'base64',
-      data: textToBase64(normalized)
+      data: bytesToBase64(bytes)
     };
     generatedResourceValues.set(resources[resourceId], { bindings: [value] });
     return resourceId;
@@ -793,13 +845,14 @@ const presentationPayload = ({
   label = null,
   subtitle = null,
   reverseComplement = false,
-  gridRow = null
+  gridRow = null,
+  gridColumn = null
 } = {}) => ({
   label: String(label || '').trim() || null,
   subtitle: String(subtitle || '').trim() || null,
   reverseComplement: Boolean(reverseComplement),
   gridRow,
-  gridColumn: null
+  gridColumn
 });
 
 const circularPresentationPayload = (form, { hasRegion = false } = {}) => (
@@ -869,6 +922,9 @@ const buildRecords = ({ state, filesData, resources }) => {
       state.linearRecordRows,
       { enabled: Boolean(state.linearRecordLayoutEnabled?.value) }
     );
+    const canonicalCardinalityByUid = new Map(
+      (state.linearRecordRows || []).map((entry) => [entry.uid, entry.canonicalCardinality])
+    );
     const records = (filesData.linearSeqs || []).map((seq, index) => {
       const source = state.lInputType.value === 'gff'
         ? {
@@ -884,7 +940,8 @@ const buildRecords = ({ state, filesData, resources }) => {
       const selector = region ? null : selectorPayload(seq.region_record_id);
       return {
         recordKey: String(seq.uid || `record-${index + 1}`),
-        cardinality: seq.cardinality || (selector || region ? 'exactly_one' : 'all'),
+        cardinality: canonicalCardinalityByUid.get(seq.uid)
+          || seq.cardinality || (selector || region ? 'exactly_one' : 'all'),
         source,
         selector,
         region,
@@ -894,6 +951,9 @@ const buildRecords = ({ state, filesData, resources }) => {
             subtitle: resolveLinearRecordEffectiveSubtitle(seq),
             gridRow: state.linearRecordLayoutEnabled?.value
               ? (resolvedRows[index]?.row ?? null)
+              : null,
+            gridColumn: state.linearRecordLayoutEnabled?.value
+              ? (resolvedRows[index]?.canonicalColumn ?? null)
               : null
           }),
           reverseComplement: region ? false : Boolean(seq.region_reverse)
@@ -3679,26 +3739,28 @@ const projectCircularConservationConfig = (options, files) => {
   };
 };
 
-const projectCanonicalCircularMeasure = (measure) => {
-  if (measure === null || measure === undefined) return null;
-  if (!measure || typeof measure !== 'object' || Array.isArray(measure)) return measure;
-  const value = Number(measure.value);
-  if (!Number.isFinite(value)) return measure;
-  const unit = String(measure.unit || '').trim().toLowerCase();
-  if (!unit || unit === 'factor') return String(value);
-  return `${value}${unit}`;
+const projectCanonicalCircularPixel = (measure) => {
+  // Historical structured gaps/spacing are physical pixels, including zero.
+  if (measure && typeof measure === 'object' && !Array.isArray(measure)) {
+    if (String(measure.unit || '').trim().toLowerCase() !== 'px') {
+      throw new Error('Circular gap/spacing must use pixels.');
+    }
+    measure = measure.value;
+  }
+  const value = parseOptionalPixel(measure, 'Circular gap/spacing', { allowZero: true });
+  return value === null ? null : String(value);
 };
 
 const projectCanonicalCircularSlot = (slot) => ({
   ...slot,
-  width: projectCanonicalCircularMeasure(slot?.width),
-  radius: projectCanonicalCircularMeasure(slot?.radius),
-  inner_gap_px: projectCanonicalCircularMeasure(
+  width: projectCircularMeasureDraft(slot?.width),
+  radius: projectCircularMeasureDraft(slot?.radius),
+  inner_gap_px: projectCanonicalCircularPixel(
     slot?.innerGapPx ?? slot?.inner_gap_px
-  )?.replace?.(/px$/i, ''),
-  outer_gap_px: projectCanonicalCircularMeasure(
+  ),
+  outer_gap_px: projectCanonicalCircularPixel(
     slot?.outerGapPx ?? slot?.outer_gap_px
-  )?.replace?.(/px$/i, '')
+  )
 });
 
 const projectCurrentCanonicalCircularSlot = (slot) => {
@@ -3729,7 +3791,7 @@ const projectCurrentCanonicalCircularSlot = (slot) => {
 const projectLegacyCanonicalCircularSlot = (slot) => {
   const projected = projectCanonicalCircularSlot(slot);
   if (Object.prototype.hasOwnProperty.call(slot, 'spacing')) {
-    projected.spacing = projectCanonicalCircularMeasure(slot.spacing);
+    projected.spacing = projectCanonicalCircularPixel(slot.spacing);
   }
   return migrateLegacyCircularTrackSlot(projected);
 };
@@ -3887,6 +3949,7 @@ export const projectCanonicalSessionRequest = ({
   webFiles = {},
   legacyFiles = null,
   storedConfig = null,
+  initializeCliInputs = false,
   fileBindings = [],
   linearTrackSlotSchemaVersion = LINEAR_TRACK_SLOT_SCHEMA_VERSION,
   repairInvalidComparisonHeight = false,
@@ -3971,10 +4034,29 @@ export const projectCanonicalSessionRequest = ({
   const outputPrefixes = grouping === 'batch'
     ? reorderRecordIndexedValues(sourceOutputPrefixes)
     : sourceOutputPrefixes;
-  const webMetadata = webFiles && typeof webFiles === 'object' && !Array.isArray(webFiles)
+  let webMetadata = webFiles && typeof webFiles === 'object' && !Array.isArray(webFiles)
     ? webFiles
     : {};
-  const explicitBindings = validateWebFileBindings(webMetadata, canonicalResources);
+  let explicitBindings = validateWebFileBindings(webMetadata, canonicalResources);
+  // A CLI sidecar has no saved Web draft. Its empty writer slots are initial
+  // values, not a user's cleared inputs. Keep real original CLI bindings (in
+  // particular GFF + FASTA), and initialize absent slots from the typed request.
+  // A saved Web draft, including explicit null/[] inputs, always wins unchanged.
+  if (initializeCliInputs && storedConfig == null && explicitBindings) {
+    const originalInputFields = renderRequest.mode === 'circular'
+      ? ['c_gb', 'c_gff', 'c_fasta']
+      : ['linearSeqs'];
+    const hasOriginalInputs = originalInputFields.some((field) => (
+      Array.isArray(explicitBindings[field])
+        ? explicitBindings[field].length > 0
+        : explicitBindings[field] != null
+    ));
+    explicitBindings = Object.fromEntries(Object.entries(explicitBindings).filter(
+      ([field, value]) => (hasOriginalInputs && originalInputFields.includes(field))
+        || (value != null && (!Array.isArray(value) || value.length > 0))
+    ));
+    webMetadata = { ...webMetadata, bindings: explicitBindings };
+  }
   const storedResourceOriginalNames = webMetadata.resourceOriginalNames;
   const originalNameHints = {
     ...legacyResourceOriginalNames({ renderRequest, legacyFiles, fileBindings }),
@@ -4782,10 +4864,22 @@ export const projectCanonicalSessionRequest = ({
     (record) => record.presentation?.gridRow != null
   );
   const linearLayoutRows = presentationOwnsLinearRows
-    ? records.map((record, index) => ({
-        uid: files.linearSeqs[index]?.uid || '',
-        row: Number(record.presentation?.gridRow) || index + 1
-      }))
+    ? records.map((record, index) => {
+        const row = Number(record.presentation?.gridRow) || index + 1;
+        const sourceColumn = sourceRecords[
+          normalizedRecordOrdering.sourceIndexByProjectedIndex[index]
+        ]?.presentation?.gridColumn;
+        return {
+          uid: files.linearSeqs[index]?.uid || '', row,
+          ...(initializeCliInputs && storedConfig == null
+            && sourceRecords[normalizedRecordOrdering.sourceIndexByProjectedIndex[index]]?.cardinality === 'exactly_one'
+            ? { canonicalCardinality: 'exactly_one' } : {}),
+          ...(initializeCliInputs && storedConfig == null
+            && Number.isInteger(sourceColumn) && sourceColumn > 0
+            ? { canonicalRow: row, canonicalColumn: sourceColumn }
+            : {})
+        };
+      })
     : (renderRequest.layout?.multiRecordPositions || []).map((token, index) => {
         const split = String(token).lastIndexOf('@');
         return {

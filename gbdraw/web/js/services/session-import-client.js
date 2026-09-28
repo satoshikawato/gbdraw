@@ -1,3 +1,4 @@
+import { createBoundedJsonReceiver } from './bounded-json-transport.js';
 import { recordSessionLifecycleEvent } from './runtime-test-hooks.js';
 
 let nextOperationId = 1;
@@ -11,6 +12,7 @@ export const importSessionFile = (file, { signal } = {}) => new Promise((resolve
   const operationId = nextOperationId++;
   let worker = null;
   let settled = false;
+  const assembly = createBoundedJsonReceiver();
   const settle = (error, reply) => {
     if (settled) return;
     settled = true;
@@ -41,16 +43,22 @@ export const importSessionFile = (file, { signal } = {}) => new Promise((resolve
   ));
   const receive = ({ data: reply }) => {
     if (reply?.operationId !== operationId || settled) return;
-    if (reply.status === 'error') {
+    if (reply.status === 'part') {
+      try {
+        assembly.receivePart(reply);
+        worker.postMessage({ operationId, ack: true });
+      } catch { unreadable(); }
+    } else if (reply.status === 'error') {
       settle(importError(
         reply.error?.message || 'Session import failed.',
         reply.error?.code || 'SESSION_IMPORT_FAILED',
         reply.error?.stage || 'transport',
         reply.error?.name || 'Error'
       ));
-    } else if (reply.status === 'ok' && Object.hasOwn(reply, 'data')
-      && Number.isSafeInteger(reply.characters) && reply.characters >= 0) {
-      settle(null, { data: reply.data, characters: reply.characters, timings: reply.timings });
+    } else if (reply.status === 'ok' && Number.isSafeInteger(reply.characters) && reply.characters >= 0) {
+      try {
+        settle(null, { data: assembly.getValue(), characters: reply.characters, timings: reply.timings });
+      } catch { unreadable(); }
     } else {
       unreadable();
     }

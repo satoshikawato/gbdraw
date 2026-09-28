@@ -1149,7 +1149,12 @@ test('PR-to-dev jobs and aggregate use the trusted selective plan', () => {
   assert.match(webPrSmoke, /npm run test:web:pr-smoke/);
   assert.match(
     webPrSmoke,
-    /Prepare browser wheel[\s\S]+Run Playwright PR smoke[\s\S]+Verify Gallery first-Generate parity[\s\S]+npm run test:web:gallery-publication/
+    /Prepare browser wheel[\s\S]+Run Playwright PR smoke[\s\S]+npm run test:web:pr-smoke/
+  );
+  assert.doesNotMatch(webPrSmoke, /test:web:gallery-publication/);
+  assert.match(
+    workflowJob('gallery'),
+    /Prepare Gallery browser wheel[\s\S]+Verify Gallery first-Generate parity[\s\S]+npm run test:web:gallery-publication/
   );
   assert.match(webPrSmoke, /if: failure\(\)[\s\S]+path: test-results\//);
   assert.doesNotMatch(

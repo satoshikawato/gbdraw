@@ -1,0 +1,1054 @@
+{
+  "sourceSha": "eef7c9469912af22a07eb0eaece5d6e9a8a06497",
+  "pythonVersion": "3.13.3",
+  "observations": [
+    {
+      "name": "typed_px",
+      "field": "width",
+      "representation": "rawDraft",
+      "input": {
+        "value": 20,
+        "unit": "px"
+      },
+      "nativeCanonicalRequest": {
+        "accepted": true
+      }
+    },
+    {
+      "name": "typed_px",
+      "field": "width",
+      "representation": "canonical",
+      "input": {
+        "value": 20.0,
+        "unit": "px"
+      },
+      "nativeCanonicalRequest": {
+        "accepted": true
+      }
+    },
+    {
+      "name": "typed_px",
+      "field": "radius",
+      "representation": "rawDraft",
+      "input": {
+        "value": 20,
+        "unit": "px"
+      },
+      "nativeCanonicalRequest": {
+        "accepted": true
+      }
+    },
+    {
+      "name": "typed_px",
+      "field": "radius",
+      "representation": "canonical",
+      "input": {
+        "value": 20.0,
+        "unit": "px"
+      },
+      "nativeCanonicalRequest": {
+        "accepted": true
+      }
+    },
+    {
+      "name": "typed_factor",
+      "field": "width",
+      "representation": "rawDraft",
+      "input": {
+        "value": 0.08,
+        "unit": "factor"
+      },
+      "nativeCanonicalRequest": {
+        "accepted": true
+      }
+    },
+    {
+      "name": "typed_factor",
+      "field": "width",
+      "representation": "canonical",
+      "input": {
+        "value": 0.08,
+        "unit": "factor"
+      },
+      "nativeCanonicalRequest": {
+        "accepted": true
+      }
+    },
+    {
+      "name": "typed_factor",
+      "field": "radius",
+      "representation": "rawDraft",
+      "input": {
+        "value": 0.08,
+        "unit": "factor"
+      },
+      "nativeCanonicalRequest": {
+        "accepted": true
+      }
+    },
+    {
+      "name": "typed_factor",
+      "field": "radius",
+      "representation": "canonical",
+      "input": {
+        "value": 0.08,
+        "unit": "factor"
+      },
+      "nativeCanonicalRequest": {
+        "accepted": true
+      }
+    },
+    {
+      "name": "typed_decimal_px",
+      "field": "width",
+      "representation": "rawDraft",
+      "input": {
+        "value": "1.",
+        "unit": "px"
+      },
+      "nativeCanonicalRequest": {
+        "accepted": false,
+        "error": "renderRequest.diagramOptions.tracks.circularTrackSlots[2].width.value does not match its typed contract."
+      }
+    },
+    {
+      "name": "typed_decimal_px",
+      "field": "width",
+      "representation": "canonical",
+      "input": {
+        "value": 1.0,
+        "unit": "px"
+      },
+      "nativeCanonicalRequest": {
+        "accepted": true
+      }
+    },
+    {
+      "name": "typed_decimal_px",
+      "field": "radius",
+      "representation": "rawDraft",
+      "input": {
+        "value": "1.",
+        "unit": "px"
+      },
+      "nativeCanonicalRequest": {
+        "accepted": false,
+        "error": "renderRequest.diagramOptions.tracks.circularTrackSlots[2].radius.value does not match its typed contract."
+      }
+    },
+    {
+      "name": "typed_decimal_px",
+      "field": "radius",
+      "representation": "canonical",
+      "input": {
+        "value": 1.0,
+        "unit": "px"
+      },
+      "nativeCanonicalRequest": {
+        "accepted": true
+      }
+    },
+    {
+      "name": "typed_decimal_factor",
+      "field": "width",
+      "representation": "rawDraft",
+      "input": {
+        "value": "1.",
+        "unit": "factor"
+      },
+      "nativeCanonicalRequest": {
+        "accepted": false,
+        "error": "renderRequest.diagramOptions.tracks.circularTrackSlots[2].width.value does not match its typed contract."
+      }
+    },
+    {
+      "name": "typed_decimal_factor",
+      "field": "width",
+      "representation": "canonical",
+      "input": {
+        "value": 1.0,
+        "unit": "factor"
+      },
+      "nativeCanonicalRequest": {
+        "accepted": true
+      }
+    },
+    {
+      "name": "typed_decimal_factor",
+      "field": "radius",
+      "representation": "rawDraft",
+      "input": {
+        "value": "1.",
+        "unit": "factor"
+      },
+      "nativeCanonicalRequest": {
+        "accepted": false,
+        "error": "renderRequest.diagramOptions.tracks.circularTrackSlots[2].radius.value does not match its typed contract."
+      }
+    },
+    {
+      "name": "typed_decimal_factor",
+      "field": "radius",
+      "representation": "canonical",
+      "input": {
+        "value": 1.0,
+        "unit": "factor"
+      },
+      "nativeCanonicalRequest": {
+        "accepted": true
+      }
+    },
+    {
+      "name": "typed_exponent_px",
+      "field": "width",
+      "representation": "rawDraft",
+      "input": {
+        "value": "1e-3",
+        "unit": "px"
+      },
+      "nativeCanonicalRequest": {
+        "accepted": false,
+        "error": "renderRequest.diagramOptions.tracks.circularTrackSlots[2].width.value does not match its typed contract."
+      }
+    },
+    {
+      "name": "typed_exponent_px",
+      "field": "width",
+      "representation": "canonical",
+      "input": {
+        "value": 0.001,
+        "unit": "px"
+      },
+      "nativeCanonicalRequest": {
+        "accepted": true
+      }
+    },
+    {
+      "name": "typed_exponent_px",
+      "field": "radius",
+      "representation": "rawDraft",
+      "input": {
+        "value": "1e-3",
+        "unit": "px"
+      },
+      "nativeCanonicalRequest": {
+        "accepted": false,
+        "error": "renderRequest.diagramOptions.tracks.circularTrackSlots[2].radius.value does not match its typed contract."
+      }
+    },
+    {
+      "name": "typed_exponent_px",
+      "field": "radius",
+      "representation": "canonical",
+      "input": {
+        "value": 0.001,
+        "unit": "px"
+      },
+      "nativeCanonicalRequest": {
+        "accepted": true
+      }
+    },
+    {
+      "name": "typed_exponent_factor",
+      "field": "width",
+      "representation": "rawDraft",
+      "input": {
+        "value": "1e-3",
+        "unit": "factor"
+      },
+      "nativeCanonicalRequest": {
+        "accepted": false,
+        "error": "renderRequest.diagramOptions.tracks.circularTrackSlots[2].width.value does not match its typed contract."
+      }
+    },
+    {
+      "name": "typed_exponent_factor",
+      "field": "width",
+      "representation": "canonical",
+      "input": {
+        "value": 0.001,
+        "unit": "factor"
+      },
+      "nativeCanonicalRequest": {
+        "accepted": true
+      }
+    },
+    {
+      "name": "typed_exponent_factor",
+      "field": "radius",
+      "representation": "rawDraft",
+      "input": {
+        "value": "1e-3",
+        "unit": "factor"
+      },
+      "nativeCanonicalRequest": {
+        "accepted": false,
+        "error": "renderRequest.diagramOptions.tracks.circularTrackSlots[2].radius.value does not match its typed contract."
+      }
+    },
+    {
+      "name": "typed_exponent_factor",
+      "field": "radius",
+      "representation": "canonical",
+      "input": {
+        "value": 0.001,
+        "unit": "factor"
+      },
+      "nativeCanonicalRequest": {
+        "accepted": true
+      }
+    },
+    {
+      "name": "precision",
+      "field": "width",
+      "representation": "rawDraft",
+      "input": {
+        "value": "0.12345678901234567",
+        "unit": "factor"
+      },
+      "nativeCanonicalRequest": {
+        "accepted": false,
+        "error": "renderRequest.diagramOptions.tracks.circularTrackSlots[2].width.value does not match its typed contract."
+      }
+    },
+    {
+      "name": "precision",
+      "field": "width",
+      "representation": "canonical",
+      "input": {
+        "value": 0.12345678901234566,
+        "unit": "factor"
+      },
+      "nativeCanonicalRequest": {
+        "accepted": true
+      }
+    },
+    {
+      "name": "precision",
+      "field": "radius",
+      "representation": "rawDraft",
+      "input": {
+        "value": "0.12345678901234567",
+        "unit": "factor"
+      },
+      "nativeCanonicalRequest": {
+        "accepted": false,
+        "error": "renderRequest.diagramOptions.tracks.circularTrackSlots[2].radius.value does not match its typed contract."
+      }
+    },
+    {
+      "name": "precision",
+      "field": "radius",
+      "representation": "canonical",
+      "input": {
+        "value": 0.12345678901234566,
+        "unit": "factor"
+      },
+      "nativeCanonicalRequest": {
+        "accepted": true
+      }
+    },
+    {
+      "name": "bare_number",
+      "field": "width",
+      "representation": "rawDraft",
+      "input": 1.5,
+      "nativeCanonicalRequest": {
+        "accepted": false,
+        "error": "renderRequest.diagramOptions.tracks.circularTrackSlots[2].width does not match its typed contract."
+      }
+    },
+    {
+      "name": "bare_number",
+      "field": "width",
+      "representation": "canonical",
+      "input": {
+        "value": 1.5,
+        "unit": "factor"
+      },
+      "nativeCanonicalRequest": {
+        "accepted": true
+      }
+    },
+    {
+      "name": "bare_number",
+      "field": "radius",
+      "representation": "rawDraft",
+      "input": 1.5,
+      "nativeCanonicalRequest": {
+        "accepted": false,
+        "error": "renderRequest.diagramOptions.tracks.circularTrackSlots[2].radius does not match its typed contract."
+      }
+    },
+    {
+      "name": "bare_number",
+      "field": "radius",
+      "representation": "canonical",
+      "input": {
+        "value": 1.5,
+        "unit": "factor"
+      },
+      "nativeCanonicalRequest": {
+        "accepted": true
+      }
+    },
+    {
+      "name": "bare_text",
+      "field": "width",
+      "representation": "rawDraft",
+      "input": "1.5",
+      "nativeCanonicalRequest": {
+        "accepted": false,
+        "error": "renderRequest.diagramOptions.tracks.circularTrackSlots[2].width does not match its typed contract."
+      }
+    },
+    {
+      "name": "bare_text",
+      "field": "width",
+      "representation": "canonical",
+      "input": {
+        "value": 1.5,
+        "unit": "factor"
+      },
+      "nativeCanonicalRequest": {
+        "accepted": true
+      }
+    },
+    {
+      "name": "bare_text",
+      "field": "radius",
+      "representation": "rawDraft",
+      "input": "1.5",
+      "nativeCanonicalRequest": {
+        "accepted": false,
+        "error": "renderRequest.diagramOptions.tracks.circularTrackSlots[2].radius does not match its typed contract."
+      }
+    },
+    {
+      "name": "bare_text",
+      "field": "radius",
+      "representation": "canonical",
+      "input": {
+        "value": 1.5,
+        "unit": "factor"
+      },
+      "nativeCanonicalRequest": {
+        "accepted": true
+      }
+    },
+    {
+      "name": "px_suffix",
+      "field": "width",
+      "representation": "rawDraft",
+      "input": "20px",
+      "nativeCanonicalRequest": {
+        "accepted": false,
+        "error": "renderRequest.diagramOptions.tracks.circularTrackSlots[2].width does not match its typed contract."
+      }
+    },
+    {
+      "name": "px_suffix",
+      "field": "width",
+      "representation": "canonical",
+      "input": {
+        "value": 20,
+        "unit": "px"
+      },
+      "nativeCanonicalRequest": {
+        "accepted": true
+      }
+    },
+    {
+      "name": "px_suffix",
+      "field": "radius",
+      "representation": "rawDraft",
+      "input": "20px",
+      "nativeCanonicalRequest": {
+        "accepted": false,
+        "error": "renderRequest.diagramOptions.tracks.circularTrackSlots[2].radius does not match its typed contract."
+      }
+    },
+    {
+      "name": "px_suffix",
+      "field": "radius",
+      "representation": "canonical",
+      "input": {
+        "value": 20,
+        "unit": "px"
+      },
+      "nativeCanonicalRequest": {
+        "accepted": true
+      }
+    },
+    {
+      "name": "percent",
+      "field": "width",
+      "representation": "rawDraft",
+      "input": "65%",
+      "nativeCanonicalRequest": {
+        "accepted": false,
+        "error": "renderRequest.diagramOptions.tracks.circularTrackSlots[2].width does not match its typed contract."
+      }
+    },
+    {
+      "name": "percent",
+      "field": "width",
+      "representation": "canonical",
+      "input": {
+        "value": 0.65,
+        "unit": "factor"
+      },
+      "nativeCanonicalRequest": {
+        "accepted": true
+      }
+    },
+    {
+      "name": "percent",
+      "field": "radius",
+      "representation": "rawDraft",
+      "input": "65%",
+      "nativeCanonicalRequest": {
+        "accepted": false,
+        "error": "renderRequest.diagramOptions.tracks.circularTrackSlots[2].radius does not match its typed contract."
+      }
+    },
+    {
+      "name": "percent",
+      "field": "radius",
+      "representation": "canonical",
+      "input": {
+        "value": 0.65,
+        "unit": "factor"
+      },
+      "nativeCanonicalRequest": {
+        "accepted": true
+      }
+    },
+    {
+      "name": "null",
+      "field": "width",
+      "representation": "rawDraft",
+      "input": null,
+      "nativeCanonicalRequest": {
+        "accepted": true
+      }
+    },
+    {
+      "name": "null",
+      "field": "width",
+      "representation": "canonical",
+      "input": null,
+      "nativeCanonicalRequest": {
+        "accepted": true
+      }
+    },
+    {
+      "name": "null",
+      "field": "radius",
+      "representation": "rawDraft",
+      "input": null,
+      "nativeCanonicalRequest": {
+        "accepted": true
+      }
+    },
+    {
+      "name": "null",
+      "field": "radius",
+      "representation": "canonical",
+      "input": null,
+      "nativeCanonicalRequest": {
+        "accepted": true
+      }
+    },
+    {
+      "name": "blank",
+      "field": "width",
+      "representation": "rawDraft",
+      "input": "",
+      "nativeCanonicalRequest": {
+        "accepted": false,
+        "error": "renderRequest.diagramOptions.tracks.circularTrackSlots[2].width does not match its typed contract."
+      }
+    },
+    {
+      "name": "blank",
+      "field": "width",
+      "representation": "canonical",
+      "input": null,
+      "nativeCanonicalRequest": {
+        "accepted": true
+      }
+    },
+    {
+      "name": "blank",
+      "field": "radius",
+      "representation": "rawDraft",
+      "input": "",
+      "nativeCanonicalRequest": {
+        "accepted": false,
+        "error": "renderRequest.diagramOptions.tracks.circularTrackSlots[2].radius does not match its typed contract."
+      }
+    },
+    {
+      "name": "blank",
+      "field": "radius",
+      "representation": "canonical",
+      "input": null,
+      "nativeCanonicalRequest": {
+        "accepted": true
+      }
+    },
+    {
+      "name": "invalid_text",
+      "field": "width",
+      "representation": "rawDraft",
+      "input": "bad",
+      "nativeCanonicalRequest": {
+        "accepted": false,
+        "error": "renderRequest.diagramOptions.tracks.circularTrackSlots[2].width does not match its typed contract."
+      }
+    },
+    {
+      "name": "invalid_text",
+      "field": "radius",
+      "representation": "rawDraft",
+      "input": "bad",
+      "nativeCanonicalRequest": {
+        "accepted": false,
+        "error": "renderRequest.diagramOptions.tracks.circularTrackSlots[2].radius does not match its typed contract."
+      }
+    },
+    {
+      "name": "incomplete_text",
+      "field": "width",
+      "representation": "rawDraft",
+      "input": "1e",
+      "nativeCanonicalRequest": {
+        "accepted": false,
+        "error": "renderRequest.diagramOptions.tracks.circularTrackSlots[2].width does not match its typed contract."
+      }
+    },
+    {
+      "name": "incomplete_text",
+      "field": "radius",
+      "representation": "rawDraft",
+      "input": "1e",
+      "nativeCanonicalRequest": {
+        "accepted": false,
+        "error": "renderRequest.diagramOptions.tracks.circularTrackSlots[2].radius does not match its typed contract."
+      }
+    },
+    {
+      "name": "typed_invalid",
+      "field": "width",
+      "representation": "rawDraft",
+      "input": {
+        "value": "bad",
+        "unit": "px"
+      },
+      "nativeCanonicalRequest": {
+        "accepted": false,
+        "error": "renderRequest.diagramOptions.tracks.circularTrackSlots[2].width.value does not match its typed contract."
+      }
+    },
+    {
+      "name": "typed_invalid",
+      "field": "radius",
+      "representation": "rawDraft",
+      "input": {
+        "value": "bad",
+        "unit": "px"
+      },
+      "nativeCanonicalRequest": {
+        "accepted": false,
+        "error": "renderRequest.diagramOptions.tracks.circularTrackSlots[2].radius.value does not match its typed contract."
+      }
+    },
+    {
+      "name": "typed_incomplete",
+      "field": "width",
+      "representation": "rawDraft",
+      "input": {
+        "value": "1e",
+        "unit": "factor"
+      },
+      "nativeCanonicalRequest": {
+        "accepted": false,
+        "error": "renderRequest.diagramOptions.tracks.circularTrackSlots[2].width.value does not match its typed contract."
+      }
+    },
+    {
+      "name": "typed_incomplete",
+      "field": "radius",
+      "representation": "rawDraft",
+      "input": {
+        "value": "1e",
+        "unit": "factor"
+      },
+      "nativeCanonicalRequest": {
+        "accepted": false,
+        "error": "renderRequest.diagramOptions.tracks.circularTrackSlots[2].radius.value does not match its typed contract."
+      }
+    },
+    {
+      "name": "typed_empty",
+      "field": "width",
+      "representation": "rawDraft",
+      "input": {
+        "value": "",
+        "unit": "px"
+      },
+      "nativeCanonicalRequest": {
+        "accepted": false,
+        "error": "renderRequest.diagramOptions.tracks.circularTrackSlots[2].width.value does not match its typed contract."
+      }
+    },
+    {
+      "name": "typed_empty",
+      "field": "radius",
+      "representation": "rawDraft",
+      "input": {
+        "value": "",
+        "unit": "px"
+      },
+      "nativeCanonicalRequest": {
+        "accepted": false,
+        "error": "renderRequest.diagramOptions.tracks.circularTrackSlots[2].radius.value does not match its typed contract."
+      }
+    },
+    {
+      "name": "typed_suffix",
+      "field": "width",
+      "representation": "rawDraft",
+      "input": {
+        "value": "20px",
+        "unit": "px"
+      },
+      "nativeCanonicalRequest": {
+        "accepted": false,
+        "error": "renderRequest.diagramOptions.tracks.circularTrackSlots[2].width.value does not match its typed contract."
+      }
+    },
+    {
+      "name": "typed_suffix",
+      "field": "radius",
+      "representation": "rawDraft",
+      "input": {
+        "value": "20px",
+        "unit": "px"
+      },
+      "nativeCanonicalRequest": {
+        "accepted": false,
+        "error": "renderRequest.diagramOptions.tracks.circularTrackSlots[2].radius.value does not match its typed contract."
+      }
+    },
+    {
+      "name": "typed_percent_unit",
+      "field": "width",
+      "representation": "rawDraft",
+      "input": {
+        "value": 65,
+        "unit": "%"
+      },
+      "nativeCanonicalRequest": {
+        "accepted": false,
+        "error": "renderRequest.diagramOptions.tracks.circularTrackSlots[2].width.unit does not match its typed contract."
+      }
+    },
+    {
+      "name": "typed_percent_unit",
+      "field": "radius",
+      "representation": "rawDraft",
+      "input": {
+        "value": 65,
+        "unit": "%"
+      },
+      "nativeCanonicalRequest": {
+        "accepted": false,
+        "error": "renderRequest.diagramOptions.tracks.circularTrackSlots[2].radius.unit does not match its typed contract."
+      }
+    },
+    {
+      "name": "zero",
+      "field": "width",
+      "representation": "rawDraft",
+      "input": 0,
+      "nativeCanonicalRequest": {
+        "accepted": false,
+        "error": "renderRequest.diagramOptions.tracks.circularTrackSlots[2].width does not match its typed contract."
+      }
+    },
+    {
+      "name": "zero",
+      "field": "radius",
+      "representation": "rawDraft",
+      "input": 0,
+      "nativeCanonicalRequest": {
+        "accepted": false,
+        "error": "renderRequest.diagramOptions.tracks.circularTrackSlots[2].radius does not match its typed contract."
+      }
+    },
+    {
+      "name": "negative",
+      "field": "width",
+      "representation": "rawDraft",
+      "input": -1,
+      "nativeCanonicalRequest": {
+        "accepted": false,
+        "error": "renderRequest.diagramOptions.tracks.circularTrackSlots[2].width does not match its typed contract."
+      }
+    },
+    {
+      "name": "negative",
+      "field": "radius",
+      "representation": "rawDraft",
+      "input": -1,
+      "nativeCanonicalRequest": {
+        "accepted": false,
+        "error": "renderRequest.diagramOptions.tracks.circularTrackSlots[2].radius does not match its typed contract."
+      }
+    },
+    {
+      "name": "typed_zero",
+      "field": "width",
+      "representation": "rawDraft",
+      "input": {
+        "value": 0,
+        "unit": "px"
+      },
+      "nativeCanonicalRequest": {
+        "accepted": true
+      }
+    },
+    {
+      "name": "typed_zero",
+      "field": "radius",
+      "representation": "rawDraft",
+      "input": {
+        "value": 0,
+        "unit": "px"
+      },
+      "nativeCanonicalRequest": {
+        "accepted": true
+      }
+    },
+    {
+      "name": "typed_negative",
+      "field": "width",
+      "representation": "rawDraft",
+      "input": {
+        "value": -1,
+        "unit": "factor"
+      },
+      "nativeCanonicalRequest": {
+        "accepted": true
+      }
+    },
+    {
+      "name": "typed_negative",
+      "field": "radius",
+      "representation": "rawDraft",
+      "input": {
+        "value": -1,
+        "unit": "factor"
+      },
+      "nativeCanonicalRequest": {
+        "accepted": true
+      }
+    },
+    {
+      "name": "infinity",
+      "field": "width",
+      "representation": "rawDraft",
+      "input": {
+        "$number": "Infinity"
+      },
+      "nativeCanonicalRequest": {
+        "accepted": false,
+        "error": "renderRequest.diagramOptions.tracks.circularTrackSlots[2].width does not match its typed contract."
+      }
+    },
+    {
+      "name": "infinity",
+      "field": "radius",
+      "representation": "rawDraft",
+      "input": {
+        "$number": "Infinity"
+      },
+      "nativeCanonicalRequest": {
+        "accepted": false,
+        "error": "renderRequest.diagramOptions.tracks.circularTrackSlots[2].radius does not match its typed contract."
+      }
+    },
+    {
+      "name": "nan",
+      "field": "width",
+      "representation": "rawDraft",
+      "input": {
+        "$number": "NaN"
+      },
+      "nativeCanonicalRequest": {
+        "accepted": false,
+        "error": "renderRequest.diagramOptions.tracks.circularTrackSlots[2].width does not match its typed contract."
+      }
+    },
+    {
+      "name": "nan",
+      "field": "radius",
+      "representation": "rawDraft",
+      "input": {
+        "$number": "NaN"
+      },
+      "nativeCanonicalRequest": {
+        "accepted": false,
+        "error": "renderRequest.diagramOptions.tracks.circularTrackSlots[2].radius does not match its typed contract."
+      }
+    },
+    {
+      "name": "typed_infinity",
+      "field": "width",
+      "representation": "rawDraft",
+      "input": {
+        "value": {
+          "$number": "Infinity"
+        },
+        "unit": "px"
+      },
+      "nativeCanonicalRequest": {
+        "accepted": false,
+        "error": "renderRequest.diagramOptions.tracks.circularTrackSlots[2].width.value does not match its typed contract."
+      }
+    },
+    {
+      "name": "typed_infinity",
+      "field": "radius",
+      "representation": "rawDraft",
+      "input": {
+        "value": {
+          "$number": "Infinity"
+        },
+        "unit": "px"
+      },
+      "nativeCanonicalRequest": {
+        "accepted": false,
+        "error": "renderRequest.diagramOptions.tracks.circularTrackSlots[2].radius.value does not match its typed contract."
+      }
+    },
+    {
+      "name": "unsupported_unit",
+      "field": "width",
+      "representation": "rawDraft",
+      "input": {
+        "value": 1,
+        "unit": "em"
+      },
+      "nativeCanonicalRequest": {
+        "accepted": false,
+        "error": "renderRequest.diagramOptions.tracks.circularTrackSlots[2].width.unit does not match its typed contract."
+      }
+    },
+    {
+      "name": "unsupported_unit",
+      "field": "radius",
+      "representation": "rawDraft",
+      "input": {
+        "value": 1,
+        "unit": "em"
+      },
+      "nativeCanonicalRequest": {
+        "accepted": false,
+        "error": "renderRequest.diagramOptions.tracks.circularTrackSlots[2].radius.unit does not match its typed contract."
+      }
+    },
+    {
+      "name": "nonfinite_text",
+      "field": "width",
+      "representation": "rawDraft",
+      "input": "Infinity",
+      "nativeCanonicalRequest": {
+        "accepted": false,
+        "error": "renderRequest.diagramOptions.tracks.circularTrackSlots[2].width does not match its typed contract."
+      }
+    },
+    {
+      "name": "nonfinite_text",
+      "field": "radius",
+      "representation": "rawDraft",
+      "input": "Infinity",
+      "nativeCanonicalRequest": {
+        "accepted": false,
+        "error": "renderRequest.diagramOptions.tracks.circularTrackSlots[2].radius does not match its typed contract."
+      }
+    },
+    {
+      "name": "whitespace",
+      "field": "width",
+      "representation": "rawDraft",
+      "input": "   ",
+      "nativeCanonicalRequest": {
+        "accepted": false,
+        "error": "renderRequest.diagramOptions.tracks.circularTrackSlots[2].width does not match its typed contract."
+      }
+    },
+    {
+      "name": "whitespace",
+      "field": "radius",
+      "representation": "rawDraft",
+      "input": "   ",
+      "nativeCanonicalRequest": {
+        "accepted": false,
+        "error": "renderRequest.diagramOptions.tracks.circularTrackSlots[2].radius does not match its typed contract."
+      }
+    },
+    {
+      "name": "bare_boolean",
+      "field": "width",
+      "representation": "rawDraft",
+      "input": true,
+      "nativeCanonicalRequest": {
+        "accepted": false,
+        "error": "renderRequest.diagramOptions.tracks.circularTrackSlots[2].width does not match its typed contract."
+      }
+    },
+    {
+      "name": "bare_boolean",
+      "field": "radius",
+      "representation": "rawDraft",
+      "input": true,
+      "nativeCanonicalRequest": {
+        "accepted": false,
+        "error": "renderRequest.diagramOptions.tracks.circularTrackSlots[2].radius does not match its typed contract."
+      }
+    },
+    {
+      "name": "typed_boolean",
+      "field": "width",
+      "representation": "rawDraft",
+      "input": {
+        "value": true,
+        "unit": "px"
+      },
+      "nativeCanonicalRequest": {
+        "accepted": false,
+        "error": "renderRequest.diagramOptions.tracks.circularTrackSlots[2].width.value does not match its typed contract."
+      }
+    },
+    {
+      "name": "typed_boolean",
+      "field": "radius",
+      "representation": "rawDraft",
+      "input": {
+        "value": true,
+        "unit": "px"
+      },
+      "nativeCanonicalRequest": {
+        "accepted": false,
+        "error": "renderRequest.diagramOptions.tracks.circularTrackSlots[2].radius.value does not match its typed contract."
+      }
+    }
+  ],
+  "limits": [
+    "Native request conversion only; no render, geometry, CLI replay or export.",
+    "Acceptance of raw Web draft by native decoder does not authorize widening canonical Web request output."
+  ]
+}

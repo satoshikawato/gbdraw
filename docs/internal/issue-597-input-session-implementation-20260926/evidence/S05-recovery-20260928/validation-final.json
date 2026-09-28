@@ -1,0 +1,416 @@
+{
+  "status": "INCOMPLETE",
+  "scope": "Fresh reconstructed fixture observations; original lost-gzip acceptance remains unmeasured",
+  "originalFixtureSha256": "d3cafef9664bff958aec4932eea6e264ae872cce89762a7cbe617447af975388",
+  "reconstructedFixtureSha256": "1a89693457e8bbe56a99eb2565e3f7a45e597d8aa6eaa47b802415aa98d05808",
+  "runtimeFingerprint": "source-fingerprints-final.json",
+  "runtimeFiles": 402,
+  "runtimeFrozenThroughFinalMeasurementAndGenerate": true,
+  "budgets": {
+    "heartbeatP95Ms": 250,
+    "heartbeatMaxMs": 500,
+    "intervalMs": 100,
+    "unchanged": true
+  },
+  "pipeline": {
+    "vibrio": [
+      {
+        "loadWallMs": 7010.0999999996275,
+        "saveWallMs": 4005.9000000003725,
+        "loadHeartbeat": {
+          "intervalMs": 100,
+          "count": 49,
+          "p95Ms": 126.40000000037253,
+          "maxMs": 2264.199999999255
+        },
+        "saveHeartbeat": {
+          "intervalMs": 100,
+          "count": 39,
+          "p95Ms": 128.30000000074506,
+          "maxMs": 261.3999999985099
+        },
+        "loadResponsiveness": "FAIL",
+        "saveResponsiveness": "PASS",
+        "previewPythonWorkers": 0,
+        "sectionEquality": {
+          "renderRequest": true,
+          "resources": true,
+          "webFiles": false,
+          "editorState": false,
+          "losatCache": false,
+          "losatDerivedCache": true,
+          "proteinIdentityManifest": true
+        }
+      },
+      {
+        "loadWallMs": 6991,
+        "saveWallMs": 3934.199999999255,
+        "loadHeartbeat": {
+          "intervalMs": 100,
+          "count": 49,
+          "p95Ms": 119,
+          "maxMs": 2225.699999999255
+        },
+        "saveHeartbeat": {
+          "intervalMs": 100,
+          "count": 39,
+          "p95Ms": 136.2999999988824,
+          "maxMs": 205.19999999925494
+        },
+        "loadResponsiveness": "FAIL",
+        "saveResponsiveness": "PASS",
+        "previewPythonWorkers": 0,
+        "sectionEquality": {
+          "renderRequest": true,
+          "resources": true,
+          "webFiles": false,
+          "editorState": false,
+          "losatCache": false,
+          "losatDerivedCache": true,
+          "proteinIdentityManifest": true
+        }
+      },
+      {
+        "loadWallMs": 7132.199999999255,
+        "saveWallMs": 3917,
+        "loadHeartbeat": {
+          "intervalMs": 100,
+          "count": 49,
+          "p95Ms": 129.40000000037253,
+          "maxMs": 2288.4000000003725
+        },
+        "saveHeartbeat": {
+          "intervalMs": 100,
+          "count": 38,
+          "p95Ms": 137.2999999988824,
+          "maxMs": 195
+        },
+        "loadResponsiveness": "FAIL",
+        "saveResponsiveness": "PASS",
+        "previewPythonWorkers": 0,
+        "sectionEquality": {
+          "renderRequest": true,
+          "resources": true,
+          "webFiles": false,
+          "editorState": false,
+          "losatCache": false,
+          "losatDerivedCache": true,
+          "proteinIdentityManifest": true
+        }
+      }
+    ],
+    "real": [
+      {
+        "loadWallMs": 32358.099999999627,
+        "saveWallMs": 16959.299999998882,
+        "loadHeartbeat": {
+          "intervalMs": 100,
+          "count": 246,
+          "p95Ms": 108.5,
+          "maxMs": 7429
+        },
+        "saveHeartbeat": {
+          "intervalMs": 100,
+          "count": 160,
+          "p95Ms": 127.60000000149012,
+          "maxMs": 718.4000000003725
+        },
+        "loadResponsiveness": "FAIL",
+        "saveResponsiveness": "FAIL",
+        "previewPythonWorkers": 1,
+        "sectionEquality": {
+          "renderRequest": true,
+          "resources": true,
+          "webFiles": false,
+          "editorState": false,
+          "losatCache": false,
+          "losatDerivedCache": true,
+          "proteinIdentityManifest": true
+        }
+      },
+      {
+        "loadWallMs": 32694.799999998882,
+        "saveWallMs": 17127.699999999255,
+        "loadHeartbeat": {
+          "intervalMs": 100,
+          "count": 250,
+          "p95Ms": 108.5,
+          "maxMs": 7465.9000000003725
+        },
+        "saveHeartbeat": {
+          "intervalMs": 100,
+          "count": 162,
+          "p95Ms": 118.59999999962747,
+          "maxMs": 712.7000000011176
+        },
+        "loadResponsiveness": "FAIL",
+        "saveResponsiveness": "FAIL",
+        "previewPythonWorkers": 1,
+        "sectionEquality": {
+          "renderRequest": true,
+          "resources": true,
+          "webFiles": false,
+          "editorState": false,
+          "losatCache": false,
+          "losatDerivedCache": true,
+          "proteinIdentityManifest": true
+        }
+      },
+      {
+        "loadWallMs": 32765.300000000745,
+        "saveWallMs": 16998.900000000373,
+        "loadHeartbeat": {
+          "intervalMs": 100,
+          "count": 251,
+          "p95Ms": 106.09999999962747,
+          "maxMs": 7529.5999999996275
+        },
+        "saveHeartbeat": {
+          "intervalMs": 100,
+          "count": 162,
+          "p95Ms": 124,
+          "maxMs": 672.5999999996275
+        },
+        "loadResponsiveness": "FAIL",
+        "saveResponsiveness": "FAIL",
+        "previewPythonWorkers": 1,
+        "sectionEquality": {
+          "renderRequest": true,
+          "resources": true,
+          "webFiles": false,
+          "editorState": false,
+          "losatCache": false,
+          "losatDerivedCache": true,
+          "proteinIdentityManifest": true
+        }
+      }
+    ]
+  },
+  "transport": {
+    "vibrio": [
+      {
+        "heartbeat": {
+          "intervalMs": 100,
+          "count": 27,
+          "p95Ms": 101.59999999962747,
+          "maxMs": 103.8999999994412
+        },
+        "wholeDocumentEqual": true,
+        "acceptance": "PASS",
+        "actualTransferredBufferBytes": 128254176,
+        "nativeWireBytes": null,
+        "nativeCopyBytes": null
+      },
+      {
+        "heartbeat": {
+          "intervalMs": 100,
+          "count": 28,
+          "p95Ms": 101.19999999925494,
+          "maxMs": 102.29999999981374
+        },
+        "wholeDocumentEqual": true,
+        "acceptance": "PASS",
+        "actualTransferredBufferBytes": 128254176,
+        "nativeWireBytes": null,
+        "nativeCopyBytes": null
+      },
+      {
+        "heartbeat": {
+          "intervalMs": 100,
+          "count": 29,
+          "p95Ms": 100.8999999994412,
+          "maxMs": 101.20000000018626
+        },
+        "wholeDocumentEqual": true,
+        "acceptance": "PASS",
+        "actualTransferredBufferBytes": 128254176,
+        "nativeWireBytes": null,
+        "nativeCopyBytes": null
+      }
+    ],
+    "real": [
+      {
+        "heartbeat": {
+          "intervalMs": 100,
+          "count": 115,
+          "p95Ms": 101.40000000037253,
+          "maxMs": 102
+        },
+        "wholeDocumentEqual": true,
+        "acceptance": "PASS",
+        "actualTransferredBufferBytes": 695553402,
+        "nativeWireBytes": null,
+        "nativeCopyBytes": null
+      },
+      {
+        "heartbeat": {
+          "intervalMs": 100,
+          "count": 115,
+          "p95Ms": 101.3999999994412,
+          "maxMs": 102.29999999981374
+        },
+        "wholeDocumentEqual": true,
+        "acceptance": "PASS",
+        "actualTransferredBufferBytes": 695553402,
+        "nativeWireBytes": null,
+        "nativeCopyBytes": null
+      },
+      {
+        "heartbeat": {
+          "intervalMs": 100,
+          "count": 113,
+          "p95Ms": 101.29999999981374,
+          "maxMs": 102.20000000018626
+        },
+        "wholeDocumentEqual": true,
+        "acceptance": "PASS",
+        "actualTransferredBufferBytes": 695553402,
+        "nativeWireBytes": null,
+        "nativeCopyBytes": null
+      }
+    ],
+    "small-plain": [
+      {
+        "heartbeat": {
+          "intervalMs": 100,
+          "count": 2,
+          "p95Ms": 100.20000000018626,
+          "maxMs": 100.20000000018626
+        },
+        "wholeDocumentEqual": true,
+        "acceptance": "PASS",
+        "actualTransferredBufferBytes": 345830,
+        "nativeWireBytes": null,
+        "nativeCopyBytes": null
+      },
+      {
+        "heartbeat": {
+          "intervalMs": 100,
+          "count": 3,
+          "p95Ms": 100.40000000037253,
+          "maxMs": 100.40000000037253
+        },
+        "wholeDocumentEqual": true,
+        "acceptance": "PASS",
+        "actualTransferredBufferBytes": 345830,
+        "nativeWireBytes": null,
+        "nativeCopyBytes": null
+      },
+      {
+        "heartbeat": {
+          "intervalMs": 100,
+          "count": 2,
+          "p95Ms": 100,
+          "maxMs": 100
+        },
+        "wholeDocumentEqual": true,
+        "acceptance": "PASS",
+        "actualTransferredBufferBytes": 345830,
+        "nativeWireBytes": null,
+        "nativeCopyBytes": null
+      }
+    ]
+  },
+  "transportReuse": {
+    "sourceStage": "source-before-final-browser-and-measurement.json",
+    "currentChangedFiles": [
+      "gbdraw/web/index.html",
+      "gbdraw/web/js/app/app-setup.js",
+      "gbdraw/web/js/app/orthogroups.js",
+      "gbdraw/web/js/app/right-drawer.js"
+    ],
+    "unchangedCodecImportWorkerSessionReaderByteOwner": true,
+    "fixtureEnvironmentAcceptanceUnchanged": true,
+    "qualifiedAsReconstructedTransportOnly": true
+  },
+  "savedPreviewStrict": {
+    "pass": 3,
+    "runs": 3,
+    "allAttributesStructureText": true,
+    "ignoredAttributes": [],
+    "normalizations": [],
+    "byteExact": false,
+    "allOriginalRawCacheFieldsExactEqual": true,
+    "originalFeatureCatalogExact": true,
+    "wholeContentEquality": false
+  },
+  "generate": {
+    "status": "FAIL",
+    "observed": "Browser page crash at canonical-request-construction-start after serialized inputs",
+    "before": {
+      "inputCount": 12,
+      "allInputsPresent": true,
+      "requestRecords": 12,
+      "preview": true,
+      "renderedCount": 30993,
+      "biologicalCount": 62089
+    },
+    "wallSeconds": 220.85332471199945,
+    "exactNativeTerminationReason": "UNAVAILABLE in this observer; historical native V8 OOM remains separately proven",
+    "continuation": "UNMEASURED: generated catalog, edits, History, Save/fresh Load/export and regenerated strict SVG",
+    "noExternalRequests": true
+  },
+  "requiredNativeWireCopyBytes": "NULL / UNAVAILABLE; transferred buffer lengths are not substitutes",
+  "mappedAssertionsAndProtectedFiles": "trusted-identities-final.json and mapped-identity.json; original mapped bodies unchanged",
+  "policy": {
+    "gate": "PASS",
+    "review": "REQUIRED",
+    "source": "web-policy-final-current.log",
+    "checker": "trusted origin/dev; unchanged"
+  },
+  "historicalEvidence": "All historical FAIL and missing raw files retained; transcript numbers are not fresh observations",
+  "experimentalJsonWriter": "WITHDRAWN; isolated Generate success and repeats that fail are not current acceptance",
+  "tests": {
+    "focusedCurrentNode": {
+      "pass": 10,
+      "fail": 0,
+      "log": "node-final-current.log"
+    },
+    "displayRowsBrowser": {
+      "pass": 5,
+      "fail": 0,
+      "log": "browser-display-rows-settled.log",
+      "source": "Before final group reference/click binding adjustment"
+    },
+    "finalAffectedClickBindingBrowser": {
+      "pass": 1,
+      "fail": 0,
+      "log": "browser-display-row-binding-final.log"
+    },
+    "baselineFullNode": {
+      "pass": 1166,
+      "source": "402-file baseline before four-file UI optimization; unchanged cases reused plus current focused checks",
+      "log": "node-final.log"
+    },
+    "nativeS05": {
+      "pass": 920,
+      "skip": 1,
+      "reusedCondition": "215 Python sources unchanged",
+      "log": "python-s05-native.log"
+    },
+    "references": {
+      "pass": 16,
+      "source": "unchanged Python geometry; reference files untouched",
+      "log": "reference.log"
+    },
+    "relatedBrowserEarlier": {
+      "pass": 57,
+      "source": "Mixed earlier source stage; no frozen-current blanket claim",
+      "log": "browser.log"
+    },
+    "comparisonContracts": {
+      "pass": 16,
+      "source": "unchanged comparison worker/runtime; later group interactions independently rechecked",
+      "log": "comparison-browser.log"
+    },
+    "broaderPython": {
+      "exitCode": 2,
+      "pass": 3076,
+      "fail": 6,
+      "deselected": 11,
+      "classification": "Interrupted after 35:13; failures retained. Four unchanged FIFO tests later pass on native Linux; two nested browser wrapper/server failures retained."
+    }
+  },
+  "externalOperations": false,
+  "s06Started": false
+}

@@ -324,7 +324,11 @@ test('S04 Linear Generate cancel, stale completion, failure and retry retain the
     });
     await page.getByRole('button',{name:'Generate Diagram',exact:true}).click();
     await expect.poll(()=>page.evaluate(()=>window.__GBDRAW_APP__.processing),{timeout:180000}).toBe(false);
-    await expect(page.getByRole('alert',{name:'Generation Error'})).toContainText('S04 forced Generate failure');
+    await expect(page.getByRole('alert',{name:'Generation Error'})).toContainText('without recognized diagnostic information');
+    expect(await page.evaluate(()=>window.__GBDRAW_APP__.errorLog)).toMatchObject({
+      code: 'UNKNOWN', operation: 'generate', stage: 'render'
+    });
+    await expect(page.getByRole('alert',{name:'Generation Error'})).not.toContainText('S04 forced Generate failure');
     await preserved();
     await page.screenshot({path:info.outputPath('linear-generate-failure-pending.png')});
     await page.evaluate(()=>{delete window.__GBDRAW_TEST_HOOKS__.beforeDiagramGenerationResponse;});

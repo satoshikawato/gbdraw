@@ -1,0 +1,1417 @@
+{
+  "sourceSha": "eef7c9469912af22a07eb0eaece5d6e9a8a06497",
+  "nodeVersion": "v26.8.2",
+  "sourceSha256": {
+    "gbdraw/web/js/app/circular-track-slots.js": "a93094d3db695a366adf637b06aa0902e36ea051509e596b9e643b2503dcb902",
+    "gbdraw/web/js/app/track-slot-validation.js": "d920c6dc21f4b5f336945e13564a2c284b61fd85c7acfe9a94c77862a5649353",
+    "gbdraw/web/js/services/session-active-config-contract.js": "7d12b467e91d89f2244cb9fc485569c8fd2282878708753adc56df8355a17ac6"
+  },
+  "observations": [
+    {
+      "name": "typed_px",
+      "field": "width",
+      "input": {
+        "value": 20,
+        "unit": "px"
+      },
+      "normalizationRetained": true,
+      "validation": {
+        "accepted": true,
+        "output": null
+      },
+      "activeConfig": {
+        "accepted": true,
+        "output": null
+      },
+      "payload": {
+        "accepted": true,
+        "output": {
+          "value": 20,
+          "unit": "px"
+        }
+      },
+      "sourceUnchanged": true
+    },
+    {
+      "name": "typed_px",
+      "field": "radius",
+      "input": {
+        "value": 20,
+        "unit": "px"
+      },
+      "normalizationRetained": true,
+      "validation": {
+        "accepted": true,
+        "output": null
+      },
+      "activeConfig": {
+        "accepted": true,
+        "output": null
+      },
+      "payload": {
+        "accepted": true,
+        "output": {
+          "value": 20,
+          "unit": "px"
+        }
+      },
+      "sourceUnchanged": true
+    },
+    {
+      "name": "typed_factor",
+      "field": "width",
+      "input": {
+        "value": 0.08,
+        "unit": "factor"
+      },
+      "normalizationRetained": true,
+      "validation": {
+        "accepted": true,
+        "output": null
+      },
+      "activeConfig": {
+        "accepted": true,
+        "output": null
+      },
+      "payload": {
+        "accepted": true,
+        "output": {
+          "value": 0.08,
+          "unit": "factor"
+        }
+      },
+      "sourceUnchanged": true
+    },
+    {
+      "name": "typed_factor",
+      "field": "radius",
+      "input": {
+        "value": 0.08,
+        "unit": "factor"
+      },
+      "normalizationRetained": true,
+      "validation": {
+        "accepted": true,
+        "output": null
+      },
+      "activeConfig": {
+        "accepted": true,
+        "output": null
+      },
+      "payload": {
+        "accepted": true,
+        "output": {
+          "value": 0.08,
+          "unit": "factor"
+        }
+      },
+      "sourceUnchanged": true
+    },
+    {
+      "name": "typed_decimal_px",
+      "field": "width",
+      "input": {
+        "value": "1.",
+        "unit": "px"
+      },
+      "normalizationRetained": true,
+      "validation": {
+        "accepted": true,
+        "output": null
+      },
+      "activeConfig": {
+        "accepted": true,
+        "output": null
+      },
+      "payload": {
+        "accepted": true,
+        "output": {
+          "value": 1,
+          "unit": "px"
+        }
+      },
+      "sourceUnchanged": true
+    },
+    {
+      "name": "typed_decimal_px",
+      "field": "radius",
+      "input": {
+        "value": "1.",
+        "unit": "px"
+      },
+      "normalizationRetained": true,
+      "validation": {
+        "accepted": true,
+        "output": null
+      },
+      "activeConfig": {
+        "accepted": true,
+        "output": null
+      },
+      "payload": {
+        "accepted": true,
+        "output": {
+          "value": 1,
+          "unit": "px"
+        }
+      },
+      "sourceUnchanged": true
+    },
+    {
+      "name": "typed_decimal_factor",
+      "field": "width",
+      "input": {
+        "value": "1.",
+        "unit": "factor"
+      },
+      "normalizationRetained": true,
+      "validation": {
+        "accepted": true,
+        "output": null
+      },
+      "activeConfig": {
+        "accepted": true,
+        "output": null
+      },
+      "payload": {
+        "accepted": true,
+        "output": {
+          "value": 1,
+          "unit": "factor"
+        }
+      },
+      "sourceUnchanged": true
+    },
+    {
+      "name": "typed_decimal_factor",
+      "field": "radius",
+      "input": {
+        "value": "1.",
+        "unit": "factor"
+      },
+      "normalizationRetained": true,
+      "validation": {
+        "accepted": true,
+        "output": null
+      },
+      "activeConfig": {
+        "accepted": true,
+        "output": null
+      },
+      "payload": {
+        "accepted": true,
+        "output": {
+          "value": 1,
+          "unit": "factor"
+        }
+      },
+      "sourceUnchanged": true
+    },
+    {
+      "name": "typed_exponent_px",
+      "field": "width",
+      "input": {
+        "value": "1e-3",
+        "unit": "px"
+      },
+      "normalizationRetained": true,
+      "validation": {
+        "accepted": true,
+        "output": null
+      },
+      "activeConfig": {
+        "accepted": true,
+        "output": null
+      },
+      "payload": {
+        "accepted": true,
+        "output": {
+          "value": 0.001,
+          "unit": "px"
+        }
+      },
+      "sourceUnchanged": true
+    },
+    {
+      "name": "typed_exponent_px",
+      "field": "radius",
+      "input": {
+        "value": "1e-3",
+        "unit": "px"
+      },
+      "normalizationRetained": true,
+      "validation": {
+        "accepted": true,
+        "output": null
+      },
+      "activeConfig": {
+        "accepted": true,
+        "output": null
+      },
+      "payload": {
+        "accepted": true,
+        "output": {
+          "value": 0.001,
+          "unit": "px"
+        }
+      },
+      "sourceUnchanged": true
+    },
+    {
+      "name": "typed_exponent_factor",
+      "field": "width",
+      "input": {
+        "value": "1e-3",
+        "unit": "factor"
+      },
+      "normalizationRetained": true,
+      "validation": {
+        "accepted": true,
+        "output": null
+      },
+      "activeConfig": {
+        "accepted": true,
+        "output": null
+      },
+      "payload": {
+        "accepted": true,
+        "output": {
+          "value": 0.001,
+          "unit": "factor"
+        }
+      },
+      "sourceUnchanged": true
+    },
+    {
+      "name": "typed_exponent_factor",
+      "field": "radius",
+      "input": {
+        "value": "1e-3",
+        "unit": "factor"
+      },
+      "normalizationRetained": true,
+      "validation": {
+        "accepted": true,
+        "output": null
+      },
+      "activeConfig": {
+        "accepted": true,
+        "output": null
+      },
+      "payload": {
+        "accepted": true,
+        "output": {
+          "value": 0.001,
+          "unit": "factor"
+        }
+      },
+      "sourceUnchanged": true
+    },
+    {
+      "name": "precision",
+      "field": "width",
+      "input": {
+        "value": "0.12345678901234567",
+        "unit": "factor"
+      },
+      "normalizationRetained": true,
+      "validation": {
+        "accepted": true,
+        "output": null
+      },
+      "activeConfig": {
+        "accepted": true,
+        "output": null
+      },
+      "payload": {
+        "accepted": true,
+        "output": {
+          "value": 0.12345678901234566,
+          "unit": "factor"
+        }
+      },
+      "sourceUnchanged": true
+    },
+    {
+      "name": "precision",
+      "field": "radius",
+      "input": {
+        "value": "0.12345678901234567",
+        "unit": "factor"
+      },
+      "normalizationRetained": true,
+      "validation": {
+        "accepted": true,
+        "output": null
+      },
+      "activeConfig": {
+        "accepted": true,
+        "output": null
+      },
+      "payload": {
+        "accepted": true,
+        "output": {
+          "value": 0.12345678901234566,
+          "unit": "factor"
+        }
+      },
+      "sourceUnchanged": true
+    },
+    {
+      "name": "bare_number",
+      "field": "width",
+      "input": 1.5,
+      "normalizationRetained": true,
+      "validation": {
+        "accepted": true,
+        "output": null
+      },
+      "activeConfig": {
+        "accepted": true,
+        "output": null
+      },
+      "payload": {
+        "accepted": true,
+        "output": {
+          "value": 1.5,
+          "unit": "factor"
+        }
+      },
+      "sourceUnchanged": true
+    },
+    {
+      "name": "bare_number",
+      "field": "radius",
+      "input": 1.5,
+      "normalizationRetained": true,
+      "validation": {
+        "accepted": true,
+        "output": null
+      },
+      "activeConfig": {
+        "accepted": true,
+        "output": null
+      },
+      "payload": {
+        "accepted": true,
+        "output": {
+          "value": 1.5,
+          "unit": "factor"
+        }
+      },
+      "sourceUnchanged": true
+    },
+    {
+      "name": "bare_text",
+      "field": "width",
+      "input": "1.5",
+      "normalizationRetained": true,
+      "validation": {
+        "accepted": true,
+        "output": null
+      },
+      "activeConfig": {
+        "accepted": true,
+        "output": null
+      },
+      "payload": {
+        "accepted": true,
+        "output": {
+          "value": 1.5,
+          "unit": "factor"
+        }
+      },
+      "sourceUnchanged": true
+    },
+    {
+      "name": "bare_text",
+      "field": "radius",
+      "input": "1.5",
+      "normalizationRetained": true,
+      "validation": {
+        "accepted": true,
+        "output": null
+      },
+      "activeConfig": {
+        "accepted": true,
+        "output": null
+      },
+      "payload": {
+        "accepted": true,
+        "output": {
+          "value": 1.5,
+          "unit": "factor"
+        }
+      },
+      "sourceUnchanged": true
+    },
+    {
+      "name": "px_suffix",
+      "field": "width",
+      "input": "20px",
+      "normalizationRetained": true,
+      "validation": {
+        "accepted": true,
+        "output": null
+      },
+      "activeConfig": {
+        "accepted": true,
+        "output": null
+      },
+      "payload": {
+        "accepted": true,
+        "output": {
+          "value": 20,
+          "unit": "px"
+        }
+      },
+      "sourceUnchanged": true
+    },
+    {
+      "name": "px_suffix",
+      "field": "radius",
+      "input": "20px",
+      "normalizationRetained": true,
+      "validation": {
+        "accepted": true,
+        "output": null
+      },
+      "activeConfig": {
+        "accepted": true,
+        "output": null
+      },
+      "payload": {
+        "accepted": true,
+        "output": {
+          "value": 20,
+          "unit": "px"
+        }
+      },
+      "sourceUnchanged": true
+    },
+    {
+      "name": "percent",
+      "field": "width",
+      "input": "65%",
+      "normalizationRetained": true,
+      "validation": {
+        "accepted": true,
+        "output": null
+      },
+      "activeConfig": {
+        "accepted": true,
+        "output": null
+      },
+      "payload": {
+        "accepted": true,
+        "output": {
+          "value": 0.65,
+          "unit": "factor"
+        }
+      },
+      "sourceUnchanged": true
+    },
+    {
+      "name": "percent",
+      "field": "radius",
+      "input": "65%",
+      "normalizationRetained": true,
+      "validation": {
+        "accepted": true,
+        "output": null
+      },
+      "activeConfig": {
+        "accepted": true,
+        "output": null
+      },
+      "payload": {
+        "accepted": true,
+        "output": {
+          "value": 0.65,
+          "unit": "factor"
+        }
+      },
+      "sourceUnchanged": true
+    },
+    {
+      "name": "null",
+      "field": "width",
+      "input": null,
+      "normalizationRetained": true,
+      "validation": {
+        "accepted": true,
+        "output": null
+      },
+      "activeConfig": {
+        "accepted": true,
+        "output": null
+      },
+      "payload": {
+        "accepted": true,
+        "output": null
+      },
+      "sourceUnchanged": true
+    },
+    {
+      "name": "null",
+      "field": "radius",
+      "input": null,
+      "normalizationRetained": true,
+      "validation": {
+        "accepted": true,
+        "output": null
+      },
+      "activeConfig": {
+        "accepted": true,
+        "output": null
+      },
+      "payload": {
+        "accepted": true,
+        "output": null
+      },
+      "sourceUnchanged": true
+    },
+    {
+      "name": "blank",
+      "field": "width",
+      "input": "",
+      "normalizationRetained": true,
+      "validation": {
+        "accepted": true,
+        "output": null
+      },
+      "activeConfig": {
+        "accepted": true,
+        "output": null
+      },
+      "payload": {
+        "accepted": true,
+        "output": null
+      },
+      "sourceUnchanged": true
+    },
+    {
+      "name": "blank",
+      "field": "radius",
+      "input": "",
+      "normalizationRetained": true,
+      "validation": {
+        "accepted": true,
+        "output": null
+      },
+      "activeConfig": {
+        "accepted": true,
+        "output": null
+      },
+      "payload": {
+        "accepted": true,
+        "output": null
+      },
+      "sourceUnchanged": true
+    },
+    {
+      "name": "invalid_text",
+      "field": "width",
+      "input": "bad",
+      "normalizationRetained": true,
+      "validation": {
+        "accepted": false,
+        "error": "Circular track slot 'gc_content' width must be a positive finite px or factor scalar."
+      },
+      "activeConfig": {
+        "accepted": false,
+        "error": "Circular track slot 'gc_content' width must be a positive finite px or factor scalar."
+      },
+      "payload": {
+        "accepted": false,
+        "error": "Circular track 'gc_content' width must be a positive finite px or factor scalar."
+      },
+      "sourceUnchanged": true
+    },
+    {
+      "name": "invalid_text",
+      "field": "radius",
+      "input": "bad",
+      "normalizationRetained": true,
+      "validation": {
+        "accepted": false,
+        "error": "Circular track slot 'gc_content' radius must be a positive finite px or factor scalar."
+      },
+      "activeConfig": {
+        "accepted": false,
+        "error": "Circular track slot 'gc_content' radius must be a positive finite px or factor scalar."
+      },
+      "payload": {
+        "accepted": false,
+        "error": "Circular track 'gc_content' radius must be a positive finite px or factor scalar."
+      },
+      "sourceUnchanged": true
+    },
+    {
+      "name": "incomplete_text",
+      "field": "width",
+      "input": "1e",
+      "normalizationRetained": true,
+      "validation": {
+        "accepted": false,
+        "error": "Circular track slot 'gc_content' width must be a positive finite px or factor scalar."
+      },
+      "activeConfig": {
+        "accepted": false,
+        "error": "Circular track slot 'gc_content' width must be a positive finite px or factor scalar."
+      },
+      "payload": {
+        "accepted": false,
+        "error": "Circular track 'gc_content' width must be a positive finite px or factor scalar."
+      },
+      "sourceUnchanged": true
+    },
+    {
+      "name": "incomplete_text",
+      "field": "radius",
+      "input": "1e",
+      "normalizationRetained": true,
+      "validation": {
+        "accepted": false,
+        "error": "Circular track slot 'gc_content' radius must be a positive finite px or factor scalar."
+      },
+      "activeConfig": {
+        "accepted": false,
+        "error": "Circular track slot 'gc_content' radius must be a positive finite px or factor scalar."
+      },
+      "payload": {
+        "accepted": false,
+        "error": "Circular track 'gc_content' radius must be a positive finite px or factor scalar."
+      },
+      "sourceUnchanged": true
+    },
+    {
+      "name": "typed_invalid",
+      "field": "width",
+      "input": {
+        "value": "bad",
+        "unit": "px"
+      },
+      "normalizationRetained": true,
+      "validation": {
+        "accepted": false,
+        "error": "Circular track slot 'gc_content' width must be a positive finite px or factor scalar."
+      },
+      "activeConfig": {
+        "accepted": false,
+        "error": "Circular track slot 'gc_content' width must be a positive finite px or factor scalar."
+      },
+      "payload": {
+        "accepted": false,
+        "error": "Circular track 'gc_content' width must be a positive finite px or factor scalar."
+      },
+      "sourceUnchanged": true
+    },
+    {
+      "name": "typed_invalid",
+      "field": "radius",
+      "input": {
+        "value": "bad",
+        "unit": "px"
+      },
+      "normalizationRetained": true,
+      "validation": {
+        "accepted": false,
+        "error": "Circular track slot 'gc_content' radius must be a positive finite px or factor scalar."
+      },
+      "activeConfig": {
+        "accepted": false,
+        "error": "Circular track slot 'gc_content' radius must be a positive finite px or factor scalar."
+      },
+      "payload": {
+        "accepted": false,
+        "error": "Circular track 'gc_content' radius must be a positive finite px or factor scalar."
+      },
+      "sourceUnchanged": true
+    },
+    {
+      "name": "typed_incomplete",
+      "field": "width",
+      "input": {
+        "value": "1e",
+        "unit": "factor"
+      },
+      "normalizationRetained": true,
+      "validation": {
+        "accepted": false,
+        "error": "Circular track slot 'gc_content' width must be a positive finite px or factor scalar."
+      },
+      "activeConfig": {
+        "accepted": false,
+        "error": "Circular track slot 'gc_content' width must be a positive finite px or factor scalar."
+      },
+      "payload": {
+        "accepted": false,
+        "error": "Circular track 'gc_content' width must be a positive finite px or factor scalar."
+      },
+      "sourceUnchanged": true
+    },
+    {
+      "name": "typed_incomplete",
+      "field": "radius",
+      "input": {
+        "value": "1e",
+        "unit": "factor"
+      },
+      "normalizationRetained": true,
+      "validation": {
+        "accepted": false,
+        "error": "Circular track slot 'gc_content' radius must be a positive finite px or factor scalar."
+      },
+      "activeConfig": {
+        "accepted": false,
+        "error": "Circular track slot 'gc_content' radius must be a positive finite px or factor scalar."
+      },
+      "payload": {
+        "accepted": false,
+        "error": "Circular track 'gc_content' radius must be a positive finite px or factor scalar."
+      },
+      "sourceUnchanged": true
+    },
+    {
+      "name": "typed_empty",
+      "field": "width",
+      "input": {
+        "value": "",
+        "unit": "px"
+      },
+      "normalizationRetained": true,
+      "validation": {
+        "accepted": false,
+        "error": "Circular track slot 'gc_content' width must be a positive finite px or factor scalar."
+      },
+      "activeConfig": {
+        "accepted": false,
+        "error": "Circular track slot 'gc_content' width must be a positive finite px or factor scalar."
+      },
+      "payload": {
+        "accepted": false,
+        "error": "Circular track 'gc_content' width must be a positive finite px or factor scalar."
+      },
+      "sourceUnchanged": true
+    },
+    {
+      "name": "typed_empty",
+      "field": "radius",
+      "input": {
+        "value": "",
+        "unit": "px"
+      },
+      "normalizationRetained": true,
+      "validation": {
+        "accepted": false,
+        "error": "Circular track slot 'gc_content' radius must be a positive finite px or factor scalar."
+      },
+      "activeConfig": {
+        "accepted": false,
+        "error": "Circular track slot 'gc_content' radius must be a positive finite px or factor scalar."
+      },
+      "payload": {
+        "accepted": false,
+        "error": "Circular track 'gc_content' radius must be a positive finite px or factor scalar."
+      },
+      "sourceUnchanged": true
+    },
+    {
+      "name": "typed_suffix",
+      "field": "width",
+      "input": {
+        "value": "20px",
+        "unit": "px"
+      },
+      "normalizationRetained": true,
+      "validation": {
+        "accepted": false,
+        "error": "Circular track slot 'gc_content' width must be a positive finite px or factor scalar."
+      },
+      "activeConfig": {
+        "accepted": false,
+        "error": "Circular track slot 'gc_content' width must be a positive finite px or factor scalar."
+      },
+      "payload": {
+        "accepted": false,
+        "error": "Circular track 'gc_content' width must be a positive finite px or factor scalar."
+      },
+      "sourceUnchanged": true
+    },
+    {
+      "name": "typed_suffix",
+      "field": "radius",
+      "input": {
+        "value": "20px",
+        "unit": "px"
+      },
+      "normalizationRetained": true,
+      "validation": {
+        "accepted": false,
+        "error": "Circular track slot 'gc_content' radius must be a positive finite px or factor scalar."
+      },
+      "activeConfig": {
+        "accepted": false,
+        "error": "Circular track slot 'gc_content' radius must be a positive finite px or factor scalar."
+      },
+      "payload": {
+        "accepted": false,
+        "error": "Circular track 'gc_content' radius must be a positive finite px or factor scalar."
+      },
+      "sourceUnchanged": true
+    },
+    {
+      "name": "typed_percent_unit",
+      "field": "width",
+      "input": {
+        "value": 65,
+        "unit": "%"
+      },
+      "normalizationRetained": true,
+      "validation": {
+        "accepted": false,
+        "error": "Circular track slot 'gc_content' width must be a positive finite px or factor scalar."
+      },
+      "activeConfig": {
+        "accepted": false,
+        "error": "Circular track slot 'gc_content' width must be a positive finite px or factor scalar."
+      },
+      "payload": {
+        "accepted": false,
+        "error": "Circular track 'gc_content' width must be a positive finite px or factor scalar."
+      },
+      "sourceUnchanged": true
+    },
+    {
+      "name": "typed_percent_unit",
+      "field": "radius",
+      "input": {
+        "value": 65,
+        "unit": "%"
+      },
+      "normalizationRetained": true,
+      "validation": {
+        "accepted": false,
+        "error": "Circular track slot 'gc_content' radius must be a positive finite px or factor scalar."
+      },
+      "activeConfig": {
+        "accepted": false,
+        "error": "Circular track slot 'gc_content' radius must be a positive finite px or factor scalar."
+      },
+      "payload": {
+        "accepted": false,
+        "error": "Circular track 'gc_content' radius must be a positive finite px or factor scalar."
+      },
+      "sourceUnchanged": true
+    },
+    {
+      "name": "zero",
+      "field": "width",
+      "input": 0,
+      "normalizationRetained": true,
+      "validation": {
+        "accepted": false,
+        "error": "Circular track slot 'gc_content' width must be a positive finite px or factor scalar."
+      },
+      "activeConfig": {
+        "accepted": false,
+        "error": "Circular track slot 'gc_content' width must be a positive finite px or factor scalar."
+      },
+      "payload": {
+        "accepted": false,
+        "error": "Circular track 'gc_content' width must be a positive finite px or factor scalar."
+      },
+      "sourceUnchanged": true
+    },
+    {
+      "name": "zero",
+      "field": "radius",
+      "input": 0,
+      "normalizationRetained": true,
+      "validation": {
+        "accepted": false,
+        "error": "Circular track slot 'gc_content' radius must be a positive finite px or factor scalar."
+      },
+      "activeConfig": {
+        "accepted": false,
+        "error": "Circular track slot 'gc_content' radius must be a positive finite px or factor scalar."
+      },
+      "payload": {
+        "accepted": false,
+        "error": "Circular track 'gc_content' radius must be a positive finite px or factor scalar."
+      },
+      "sourceUnchanged": true
+    },
+    {
+      "name": "negative",
+      "field": "width",
+      "input": -1,
+      "normalizationRetained": true,
+      "validation": {
+        "accepted": false,
+        "error": "Circular track slot 'gc_content' width must be a positive finite px or factor scalar."
+      },
+      "activeConfig": {
+        "accepted": false,
+        "error": "Circular track slot 'gc_content' width must be a positive finite px or factor scalar."
+      },
+      "payload": {
+        "accepted": false,
+        "error": "Circular track 'gc_content' width must be a positive finite px or factor scalar."
+      },
+      "sourceUnchanged": true
+    },
+    {
+      "name": "negative",
+      "field": "radius",
+      "input": -1,
+      "normalizationRetained": true,
+      "validation": {
+        "accepted": false,
+        "error": "Circular track slot 'gc_content' radius must be a positive finite px or factor scalar."
+      },
+      "activeConfig": {
+        "accepted": false,
+        "error": "Circular track slot 'gc_content' radius must be a positive finite px or factor scalar."
+      },
+      "payload": {
+        "accepted": false,
+        "error": "Circular track 'gc_content' radius must be a positive finite px or factor scalar."
+      },
+      "sourceUnchanged": true
+    },
+    {
+      "name": "typed_zero",
+      "field": "width",
+      "input": {
+        "value": 0,
+        "unit": "px"
+      },
+      "normalizationRetained": true,
+      "validation": {
+        "accepted": false,
+        "error": "Circular track slot 'gc_content' width must be a positive finite px or factor scalar."
+      },
+      "activeConfig": {
+        "accepted": false,
+        "error": "Circular track slot 'gc_content' width must be a positive finite px or factor scalar."
+      },
+      "payload": {
+        "accepted": false,
+        "error": "Circular track 'gc_content' width must be a positive finite px or factor scalar."
+      },
+      "sourceUnchanged": true
+    },
+    {
+      "name": "typed_zero",
+      "field": "radius",
+      "input": {
+        "value": 0,
+        "unit": "px"
+      },
+      "normalizationRetained": true,
+      "validation": {
+        "accepted": false,
+        "error": "Circular track slot 'gc_content' radius must be a positive finite px or factor scalar."
+      },
+      "activeConfig": {
+        "accepted": false,
+        "error": "Circular track slot 'gc_content' radius must be a positive finite px or factor scalar."
+      },
+      "payload": {
+        "accepted": false,
+        "error": "Circular track 'gc_content' radius must be a positive finite px or factor scalar."
+      },
+      "sourceUnchanged": true
+    },
+    {
+      "name": "typed_negative",
+      "field": "width",
+      "input": {
+        "value": -1,
+        "unit": "factor"
+      },
+      "normalizationRetained": true,
+      "validation": {
+        "accepted": false,
+        "error": "Circular track slot 'gc_content' width must be a positive finite px or factor scalar."
+      },
+      "activeConfig": {
+        "accepted": false,
+        "error": "Circular track slot 'gc_content' width must be a positive finite px or factor scalar."
+      },
+      "payload": {
+        "accepted": false,
+        "error": "Circular track 'gc_content' width must be a positive finite px or factor scalar."
+      },
+      "sourceUnchanged": true
+    },
+    {
+      "name": "typed_negative",
+      "field": "radius",
+      "input": {
+        "value": -1,
+        "unit": "factor"
+      },
+      "normalizationRetained": true,
+      "validation": {
+        "accepted": false,
+        "error": "Circular track slot 'gc_content' radius must be a positive finite px or factor scalar."
+      },
+      "activeConfig": {
+        "accepted": false,
+        "error": "Circular track slot 'gc_content' radius must be a positive finite px or factor scalar."
+      },
+      "payload": {
+        "accepted": false,
+        "error": "Circular track 'gc_content' radius must be a positive finite px or factor scalar."
+      },
+      "sourceUnchanged": true
+    },
+    {
+      "name": "infinity",
+      "field": "width",
+      "input": {
+        "$number": "Infinity"
+      },
+      "normalizationRetained": true,
+      "validation": {
+        "accepted": false,
+        "error": "Circular track slot 'gc_content' width must be a positive finite px or factor scalar."
+      },
+      "activeConfig": {
+        "accepted": false,
+        "error": "Circular track slot 'gc_content' width must be a positive finite px or factor scalar."
+      },
+      "payload": {
+        "accepted": false,
+        "error": "Circular track 'gc_content' width must be a positive finite px or factor scalar."
+      },
+      "sourceUnchanged": true
+    },
+    {
+      "name": "infinity",
+      "field": "radius",
+      "input": {
+        "$number": "Infinity"
+      },
+      "normalizationRetained": true,
+      "validation": {
+        "accepted": false,
+        "error": "Circular track slot 'gc_content' radius must be a positive finite px or factor scalar."
+      },
+      "activeConfig": {
+        "accepted": false,
+        "error": "Circular track slot 'gc_content' radius must be a positive finite px or factor scalar."
+      },
+      "payload": {
+        "accepted": false,
+        "error": "Circular track 'gc_content' radius must be a positive finite px or factor scalar."
+      },
+      "sourceUnchanged": true
+    },
+    {
+      "name": "nan",
+      "field": "width",
+      "input": {
+        "$number": "NaN"
+      },
+      "normalizationRetained": true,
+      "validation": {
+        "accepted": false,
+        "error": "Circular track slot 'gc_content' width must be a positive finite px or factor scalar."
+      },
+      "activeConfig": {
+        "accepted": false,
+        "error": "Circular track slot 'gc_content' width must be a positive finite px or factor scalar."
+      },
+      "payload": {
+        "accepted": false,
+        "error": "Circular track 'gc_content' width must be a positive finite px or factor scalar."
+      },
+      "sourceUnchanged": true
+    },
+    {
+      "name": "nan",
+      "field": "radius",
+      "input": {
+        "$number": "NaN"
+      },
+      "normalizationRetained": true,
+      "validation": {
+        "accepted": false,
+        "error": "Circular track slot 'gc_content' radius must be a positive finite px or factor scalar."
+      },
+      "activeConfig": {
+        "accepted": false,
+        "error": "Circular track slot 'gc_content' radius must be a positive finite px or factor scalar."
+      },
+      "payload": {
+        "accepted": false,
+        "error": "Circular track 'gc_content' radius must be a positive finite px or factor scalar."
+      },
+      "sourceUnchanged": true
+    },
+    {
+      "name": "typed_infinity",
+      "field": "width",
+      "input": {
+        "value": {
+          "$number": "Infinity"
+        },
+        "unit": "px"
+      },
+      "normalizationRetained": true,
+      "validation": {
+        "accepted": false,
+        "error": "Circular track slot 'gc_content' width must be a positive finite px or factor scalar."
+      },
+      "activeConfig": {
+        "accepted": false,
+        "error": "Circular track slot 'gc_content' width must be a positive finite px or factor scalar."
+      },
+      "payload": {
+        "accepted": false,
+        "error": "Circular track 'gc_content' width must be a positive finite px or factor scalar."
+      },
+      "sourceUnchanged": true
+    },
+    {
+      "name": "typed_infinity",
+      "field": "radius",
+      "input": {
+        "value": {
+          "$number": "Infinity"
+        },
+        "unit": "px"
+      },
+      "normalizationRetained": true,
+      "validation": {
+        "accepted": false,
+        "error": "Circular track slot 'gc_content' radius must be a positive finite px or factor scalar."
+      },
+      "activeConfig": {
+        "accepted": false,
+        "error": "Circular track slot 'gc_content' radius must be a positive finite px or factor scalar."
+      },
+      "payload": {
+        "accepted": false,
+        "error": "Circular track 'gc_content' radius must be a positive finite px or factor scalar."
+      },
+      "sourceUnchanged": true
+    },
+    {
+      "name": "unsupported_unit",
+      "field": "width",
+      "input": {
+        "value": 1,
+        "unit": "em"
+      },
+      "normalizationRetained": true,
+      "validation": {
+        "accepted": false,
+        "error": "Circular track slot 'gc_content' width must be a positive finite px or factor scalar."
+      },
+      "activeConfig": {
+        "accepted": false,
+        "error": "Circular track slot 'gc_content' width must be a positive finite px or factor scalar."
+      },
+      "payload": {
+        "accepted": false,
+        "error": "Circular track 'gc_content' width must be a positive finite px or factor scalar."
+      },
+      "sourceUnchanged": true
+    },
+    {
+      "name": "unsupported_unit",
+      "field": "radius",
+      "input": {
+        "value": 1,
+        "unit": "em"
+      },
+      "normalizationRetained": true,
+      "validation": {
+        "accepted": false,
+        "error": "Circular track slot 'gc_content' radius must be a positive finite px or factor scalar."
+      },
+      "activeConfig": {
+        "accepted": false,
+        "error": "Circular track slot 'gc_content' radius must be a positive finite px or factor scalar."
+      },
+      "payload": {
+        "accepted": false,
+        "error": "Circular track 'gc_content' radius must be a positive finite px or factor scalar."
+      },
+      "sourceUnchanged": true
+    },
+    {
+      "name": "nonfinite_text",
+      "field": "width",
+      "input": "Infinity",
+      "normalizationRetained": true,
+      "validation": {
+        "accepted": false,
+        "error": "Circular track slot 'gc_content' width must be a positive finite px or factor scalar."
+      },
+      "activeConfig": {
+        "accepted": false,
+        "error": "Circular track slot 'gc_content' width must be a positive finite px or factor scalar."
+      },
+      "payload": {
+        "accepted": false,
+        "error": "Circular track 'gc_content' width must be a positive finite px or factor scalar."
+      },
+      "sourceUnchanged": true
+    },
+    {
+      "name": "nonfinite_text",
+      "field": "radius",
+      "input": "Infinity",
+      "normalizationRetained": true,
+      "validation": {
+        "accepted": false,
+        "error": "Circular track slot 'gc_content' radius must be a positive finite px or factor scalar."
+      },
+      "activeConfig": {
+        "accepted": false,
+        "error": "Circular track slot 'gc_content' radius must be a positive finite px or factor scalar."
+      },
+      "payload": {
+        "accepted": false,
+        "error": "Circular track 'gc_content' radius must be a positive finite px or factor scalar."
+      },
+      "sourceUnchanged": true
+    },
+    {
+      "name": "whitespace",
+      "field": "width",
+      "input": "   ",
+      "normalizationRetained": true,
+      "validation": {
+        "accepted": false,
+        "error": "Circular track slot 'gc_content' width must be a positive finite px or factor scalar."
+      },
+      "activeConfig": {
+        "accepted": false,
+        "error": "Circular track slot 'gc_content' width must be a positive finite px or factor scalar."
+      },
+      "payload": {
+        "accepted": false,
+        "error": "Circular track 'gc_content' width must be a positive finite px or factor scalar."
+      },
+      "sourceUnchanged": true
+    },
+    {
+      "name": "whitespace",
+      "field": "radius",
+      "input": "   ",
+      "normalizationRetained": true,
+      "validation": {
+        "accepted": false,
+        "error": "Circular track slot 'gc_content' radius must be a positive finite px or factor scalar."
+      },
+      "activeConfig": {
+        "accepted": false,
+        "error": "Circular track slot 'gc_content' radius must be a positive finite px or factor scalar."
+      },
+      "payload": {
+        "accepted": false,
+        "error": "Circular track 'gc_content' radius must be a positive finite px or factor scalar."
+      },
+      "sourceUnchanged": true
+    },
+    {
+      "name": "bare_boolean",
+      "field": "width",
+      "input": true,
+      "normalizationRetained": true,
+      "validation": {
+        "accepted": false,
+        "error": "Circular track slot 'gc_content' width must be a positive finite px or factor scalar."
+      },
+      "activeConfig": {
+        "accepted": false,
+        "error": "Circular track slot 'gc_content' width must be a positive finite px or factor scalar."
+      },
+      "payload": {
+        "accepted": false,
+        "error": "Circular track 'gc_content' width must be a positive finite px or factor scalar."
+      },
+      "sourceUnchanged": true
+    },
+    {
+      "name": "bare_boolean",
+      "field": "radius",
+      "input": true,
+      "normalizationRetained": true,
+      "validation": {
+        "accepted": false,
+        "error": "Circular track slot 'gc_content' radius must be a positive finite px or factor scalar."
+      },
+      "activeConfig": {
+        "accepted": false,
+        "error": "Circular track slot 'gc_content' radius must be a positive finite px or factor scalar."
+      },
+      "payload": {
+        "accepted": false,
+        "error": "Circular track 'gc_content' radius must be a positive finite px or factor scalar."
+      },
+      "sourceUnchanged": true
+    },
+    {
+      "name": "typed_boolean",
+      "field": "width",
+      "input": {
+        "value": true,
+        "unit": "px"
+      },
+      "normalizationRetained": true,
+      "validation": {
+        "accepted": true,
+        "output": null
+      },
+      "activeConfig": {
+        "accepted": true,
+        "output": null
+      },
+      "payload": {
+        "accepted": true,
+        "output": {
+          "value": 1,
+          "unit": "px"
+        }
+      },
+      "sourceUnchanged": true
+    },
+    {
+      "name": "typed_boolean",
+      "field": "radius",
+      "input": {
+        "value": true,
+        "unit": "px"
+      },
+      "normalizationRetained": true,
+      "validation": {
+        "accepted": true,
+        "output": null
+      },
+      "activeConfig": {
+        "accepted": true,
+        "output": null
+      },
+      "payload": {
+        "accepted": true,
+        "output": {
+          "value": 1,
+          "unit": "px"
+        }
+      },
+      "sourceUnchanged": true
+    }
+  ],
+  "limits": [
+    "DOM-free only. Actual browser Save/Load, native reader and History are recorded separately.",
+    "Observed coercions are not Product authority or permission to expand admission."
+  ]
+}

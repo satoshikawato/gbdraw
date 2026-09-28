@@ -5,7 +5,7 @@ Status: active Product authority
 ## Authority metadata
 
 - Contract ID: `OIPC`
-- Contract revision: `24`
+- Contract revision: `26`
 - Product Decision Owner: `satoshikawato`
 - Decision date: `2026-08-28`
 - Decision source: explicit Product Decision Owner selection of one (`1`) after
@@ -29,7 +29,8 @@ Status: active Product authority
   `PD-OI-031`, `PD-OI-032`, `PD-OI-033`, `PD-OI-034`, `PD-OI-035`,
   `PD-OI-036`, `PD-OI-037`, `PD-OI-038`, `PD-OI-039`, `PD-OI-040`,
   `PD-OI-041`, `PD-OI-042`, `PD-OI-043`, `PD-OI-044`, `PD-OI-045`,
-  `PD-OI-046`, `PD-OI-047`, `PD-OI-048`, `PD-OI-049`, `PD-OI-050`, and `PD-OI-051`
+  `PD-OI-046`, `PD-OI-047`, `PD-OI-048`, `PD-OI-049`, `PD-OI-050`,
+  `PD-OI-051`, `PD-OI-052`, `PD-OI-053`, `PD-OI-054`, and `PD-OI-055`
 - Revision 3 addition: `PD-OI-018`, accepted by `satoshikawato` on
   `2026-09-13` after confirming the complete record/search outcome, no feature
   retirement, and the runtime/memory cost of complete comparisons. The initial
@@ -198,6 +199,23 @@ Status: active Product authority
   their scope. This authority-only amendment contains no runtime or runtime
   acceptance evidence; dependent implementation requires the record merged
   into its base.
+- Revision 25 additions: `PD-OI-052` through `PD-OI-054`, approved by
+  `satoshikawato` on `2026-09-26` as the three complete independent Choice A
+  outcomes for issue `#599`. The approval receipt is
+  「すべて推奨案で承認します。」; each published Decision Pack and its exact
+  receipt are identified below. These additions preserve all supplied fields
+  without extending rationale, retirement, or risk. Earlier outcomes and
+  their independent preservation requirements retain their scope. This
+  authority-only amendment contains no runtime or runtime acceptance evidence;
+  dependent implementation requires these records merged into its base.
+- Revision 26 addition: `PD-OI-055`, selected as
+  `A / RETAIN_VALIDATED_BINDING_ENRICHMENT` by `satoshikawato` on
+  `2026-09-28` through explicit approval of the complete nine-field
+  `PRODUCT_DECISION` text below for Issue `#619` finding 5. The receipt and
+  JSON preserve only that outcome and its supplied preservation, retirement,
+  and risk terms. Earlier decisions retain their scope. This authority-only
+  amendment contains no runtime or runtime acceptance evidence; dependent
+  runtime requires this authority merged into its base.
 - Records remaining `EVIDENCE_REQUIRED`: none
 - Excluded records: none
 
@@ -2050,6 +2068,236 @@ Decision date: 2026-09-27
   "acceptedResidualRisk": "none",
   "owner": "satoshikawato",
   "decisionDate": "2026-09-27"
+}
+```
+
+### PD-OI-052: Matched decoration deltas across regeneration
+
+- Concern key: `web.composition-decoration-continuity`
+- Scenario revision: `1`
+- Status: `ACCEPTED`
+- Selected outcome: `A / CARRY-MATCHED-DECORATION-DELTAS`
+- Normative outcome: 同じ図の legend/title/Linear scale の delta を新 automatic 配置へ1回加算。mode/grouping、validated source/region、record identity で照合。prefix/配列順/DOM順を使わず、batchの各出力も別々に対応。非ゼロ target の消失・未知対応は候補を公開せず、旧 Result を保持して対象 Reset または設定修正を案内。zero/fresh は自動 Generate
+- Discoverability/accessibility / immediate feedback: 通常は自動継承。対応不能の理由・対象・Reset/修正を keyboard/touch から到達可能に表示
+- Canonical state update: Result SVG を差分の正本とし、transaction-local snapshot を candidate に適用。UI refs は同期値。latent/global map なし
+- Undo/Redo: Generate は継承を含む1 replacement。保存 Result を復元し delta を再加算しない
+- Session / regeneration: 保存 Result から次の Generate の差分を取得。通常 load は保存 Result を維持。未知対応は無言破棄しない
+- Export/artifact: 適用済みの current Result を各形式へ出力。raw Python recipeだけで手動位置を再現する保証なし
+- Validation/error: finite delta、一意 target、図の同一性を検査。source/region/mode/grouping/record集合変更や欠落/重複/未知が転用不能なら候補公開前のエラー
+- Failure/recovery / next available action: render/transform/bind失敗、Cancel/staleは旧Result/request/History保持。対応不能は対象 Reset または設定修正→Generate
+- Scientific-output: 装飾位置のみ。recordTranslations/active alignment の record delta を二重加算しない
+- Cache/provenance: 既存 validated identity/digest 使用。raw search/cache key に delta を追加しない。candidate と保存Resultを一致
+- Performance: 非ゼロ対象のみ。候補の既存parse/serialize共用、batch旧SVGは必要分のみ、zero fast path維持
+- Compatibility: writer/readerを維持。照合できない保存図は明示回復
+- Decision source: the complete Choice A outcome and nine-field receipt in
+  [DECISION_01_COMPOSITION_CONTINUITY.md](https://github.com/satoshikawato/gbdraw/blob/bcc4e0aa5ffcf4bdf9a12952caa8bf5de2cfee08/docs/internal/issue-599-preview-layout-20260926/DECISION_01_COMPOSITION_CONTINUITY.md)
+  at published planning commit `bcc4e0aa5ffcf4bdf9a12952caa8bf5de2cfee08`.
+  `satoshikawato` explicitly approved all three independent recommended A
+  outcomes with 「すべて推奨案で承認します。」 on `2026-09-26`.
+  The receipt and JSON below reproduce this concern's supplied fields without
+  translation or additional rationale, retirement, or risk terms. This record
+  does not supersede another decision. Dependent runtime requires this
+  authority merged into its base; this amendment contains no runtime or
+  runtime acceptance evidence.
+- Receipt SHA-256 (UTF-8, excluding the final newline):
+  `c7668d708ac6cd90b4373df0a685e418f21be7e653e99cbe899b82fba25e5e7d`.
+- Acceptance contracts: `OIC-005`, `OIC-006`, `OIC-013`, `OIC-014`. These existing obligations and the
+  complete selected outcome are jointly required; their citation does not
+  claim completed dependent-runtime checks.
+
+```text
+PRODUCT_DECISION
+Concern: web.composition-decoration-continuity
+Scenario revision: 1
+Choice: A / CARRY-MATCHED-DECORATION-DELTAS
+Rationale: 色やfontを直すたびに装飾の配置をやり直す負担をなくし、別の図に位置を誤転用しない。
+Must preserve: legend/title/Linear scaleのdrag・適用・Reset・History・Session・current Result export、source/region/record同一性、既存record/alignmentの意味、zero fast path、失敗/Cancel/stale時の旧Resultとcommitted requestを保持する。未知/欠落からの無言削除、別sourceへの誤転用、record deltaの二重加算、新schema/Worker/全History cloneを認めない。通常Generate/committed-candidate/automatic reflowに同じ候補境界を使い、batch全出力を対応identityへだけ適用する。
+May retire: 通常Generateがlegend/title/Linear scaleの非ゼロdeltaを無言で捨てる動作だけ。diagram全体、個別record、padding、legend順の新しい継承保証は含めない。
+Accepted residual risk: 新automatic配置に同じdeltaを加えるので絶対位置は変わり、clipping/overlapが残りうる。自動clampせずpadding/Resetで調整する。対応不能は候補公開前に止まり、明示Reset/設定修正が必要。
+Owner: satoshikawato
+Decision date: 2026-09-26
+```
+
+```json
+{
+  "concern": "web.composition-decoration-continuity",
+  "scenarioRevision": 1,
+  "choice": "A / CARRY-MATCHED-DECORATION-DELTAS",
+  "rationale": "色やfontを直すたびに装飾の配置をやり直す負担をなくし、別の図に位置を誤転用しない。",
+  "mustPreserve": "legend/title/Linear scaleのdrag・適用・Reset・History・Session・current Result export、source/region/record同一性、既存record/alignmentの意味、zero fast path、失敗/Cancel/stale時の旧Resultとcommitted requestを保持する。未知/欠落からの無言削除、別sourceへの誤転用、record deltaの二重加算、新schema/Worker/全History cloneを認めない。通常Generate/committed-candidate/automatic reflowに同じ候補境界を使い、batch全出力を対応identityへだけ適用する。",
+  "mayRetire": "通常Generateがlegend/title/Linear scaleの非ゼロdeltaを無言で捨てる動作だけ。diagram全体、個別record、padding、legend順の新しい継承保証は含めない。",
+  "acceptedResidualRisk": "新automatic配置に同じdeltaを加えるので絶対位置は変わり、clipping/overlapが残りうる。自動clampせずpadding/Resetで調整する。対応不能は候補公開前に止まり、明示Reset/設定修正が必要。",
+  "owner": "satoshikawato",
+  "decisionDate": "2026-09-26"
+}
+```
+
+### PD-OI-053: Explicit Layout edit with discoverable targets
+
+- Concern key: `web.layout-edit-affordance`
+- Scenario revision: `1`
+- Status: `ACCEPTED`
+- Selected outcome: `A / EXPLICIT-MODE-WITH-DISCOVERABLE-TARGETS`
+- Normative outcome: OFF の drag は従来の canvas pan。supported target は help cursor/hover枠と「Turn on Layout edit to move this item」を表示。toolbar の常設説明、keyboard focus、touch でも同じ情報へ到達。ON は grab、drag 中は grabbing。target 上で mode を自動ONにしない
+- Discoverability/accessibility / feedback: 常設説明、toggle aria-pressed/説明、focus/touch。大量の SVG tab stop は追加しない
+- Canonical state update: 既存mode ref。hintは派生表示でSVG/History/canonicalを変更しない
+- Undo/Redo: hover/hint は履歴なし。実 drag のみ既存1操作
+- Session / regeneration: mode/Result復元後に表示をrebind。hintは保存しない。Generate継承はPack01が決める
+- Export/artifact: cursor/outline/hint は Preview 専用。plain/interactive SVG、PNG/PDF、保存Resultへ入れない
+- Validation/error: 既存 composition eligibility で対象限定。未対応targetを動かせると説明しない
+- Failure/recovery / next action: Result/load/Historyの既存bind。hintが出せない場合も常設説明とtoggleを使用可能
+- Scientific-output: 発見方法だけ。生物学的意味/comparison/alignment不変
+- Cache/provenance: hintをrequest/cache keyに含めず、Preview transientをclean serializationで除去
+- Performance: 既存bindで対象限定、hoverで全走査/Worker/History cloneなし
+- Compatibility: Session/modeの意味、writer/readerを維持
+- Decision source: the complete Choice A outcome and nine-field receipt in
+  [DECISION_02_LAYOUT_AFFORDANCE.md](https://github.com/satoshikawato/gbdraw/blob/bcc4e0aa5ffcf4bdf9a12952caa8bf5de2cfee08/docs/internal/issue-599-preview-layout-20260926/DECISION_02_LAYOUT_AFFORDANCE.md)
+  at published planning commit `bcc4e0aa5ffcf4bdf9a12952caa8bf5de2cfee08`.
+  `satoshikawato` explicitly approved all three independent recommended A
+  outcomes with 「すべて推奨案で承認します。」 on `2026-09-26`.
+  The receipt and JSON below reproduce this concern's supplied fields without
+  translation or additional rationale, retirement, or risk terms. This record
+  does not supersede another decision. Dependent runtime requires this
+  authority merged into its base; this amendment contains no runtime or
+  runtime acceptance evidence.
+- Receipt SHA-256 (UTF-8, excluding the final newline):
+  `0365e0057b61e6b606c6714dc17f0e5c89d755ce651c1a8eec66d0139e0c65ec`.
+- Acceptance contracts: `OIC-006`, `OIC-013`, `OIC-014`. These existing obligations and the
+  complete selected outcome are jointly required; their citation does not
+  claim completed dependent-runtime checks.
+
+```text
+PRODUCT_DECISION
+Concern: web.layout-edit-affordance
+Scenario revision: 1
+Choice: A / EXPLICIT-MODE-WITH-DISCOVERABLE-TARGETS
+Rationale: canvas panと配置編集の区別を保ちながら、対象と有効化方法を初めての利用者にも示す。
+Must preserve: OFFの従来panと明示toggle、ONのtarget drag、supported targetへのhelp/hover説明とtoolbarの常設説明、keyboard focus/touchで同じ説明へ到達すること、feature/label/legend個別編集とShift/Ctrlの優先順位、record/alignmentの既存動作、実dragの1 History操作、Session/Exportを維持する。hintだけでcanonical値を変えず、成果物へhintを保存しない。modeを自動ONにしない。
+May retire: OFF/ONの意味を区別できないcursorと説明不足だけ。gesture/編集機能/保存意味は退役しない。
+Accepted residual risk: 移動前に有効化の1手順が残る。常設説明とkeyboard/touch検証で発見可能性を補う。
+Owner: satoshikawato
+Decision date: 2026-09-26
+```
+
+```json
+{
+  "concern": "web.layout-edit-affordance",
+  "scenarioRevision": 1,
+  "choice": "A / EXPLICIT-MODE-WITH-DISCOVERABLE-TARGETS",
+  "rationale": "canvas panと配置編集の区別を保ちながら、対象と有効化方法を初めての利用者にも示す。",
+  "mustPreserve": "OFFの従来panと明示toggle、ONのtarget drag、supported targetへのhelp/hover説明とtoolbarの常設説明、keyboard focus/touchで同じ説明へ到達すること、feature/label/legend個別編集とShift/Ctrlの優先順位、record/alignmentの既存動作、実dragの1 History操作、Session/Exportを維持する。hintだけでcanonical値を変えず、成果物へhintを保存しない。modeを自動ONにしない。",
+  "mayRetire": "OFF/ONの意味を区別できないcursorと説明不足だけ。gesture/編集機能/保存意味は退役しない。",
+  "acceptedResidualRisk": "移動前に有効化の1手順が残る。常設説明とkeyboard/touch検証で発見可能性を補う。",
+  "owner": "satoshikawato",
+  "decisionDate": "2026-09-26"
+}
+```
+
+### PD-OI-054: Docked Preview search and controls
+
+- Concern key: `web.preview-search-placement`
+- Scenario revision: `1`
+- Status: `ACCEPTED`
+- Selected outcome: `A / DOCKED-SEARCH-AND-CONTROLS`
+- Normative outcome: searchを専用top row、toolbarを専用bottom row、canvasと同じeditorを中間workspaceへ配置。drawerがsearch/toolbarを覆わない構造にし、全幅で検索自由dragを退役。wrap/scrollで全機能を維持。通常高さ740px以上の受入条件はworkspace高さ200px以上、short viewport/keyboardでは全操作へscroll到達可能
+- Discoverability/accessibility / feedback: 安定した順序、keyboard、wrap/scroll、focus維持。short高さでoverflow clipによる隠れなし
+- Canonical state update: query等は既存search owner。geometryはCSSのみ、新座標ref/observerなし
+- Undo/Redo: chromeはartifact Historyに入れず、図の履歴を維持
+- Session / regeneration: chrome位置は新たに保存しない。既存Session/Result/draftを維持
+- Export/artifact: HTML chromeは図/SVG/PNG/PDF/保存Resultへ入らない
+- Validation/error: CSSで専用row/workspaceを分離し、短い高さで到達性検査
+- Failure/recovery / next action: drawer/resizeでquery/active/focus保持。Result消失は既存visibilityで閉じる
+- Scientific-output: chromeのみ、生物学的値/比較/scale不変
+- Cache/provenance: chromeをWorker/cache/requestに入れない
+- Performance: CSSのみ。位置computed/global drag listenerを削除
+- Compatibility: 保存形式維持、自由drag退役を明示
+- Decision source: the complete Choice A outcome and nine-field receipt in
+  [DECISION_03_PREVIEW_CHROME.md](https://github.com/satoshikawato/gbdraw/blob/bcc4e0aa5ffcf4bdf9a12952caa8bf5de2cfee08/docs/internal/issue-599-preview-layout-20260926/DECISION_03_PREVIEW_CHROME.md)
+  at published planning commit `bcc4e0aa5ffcf4bdf9a12952caa8bf5de2cfee08`.
+  `satoshikawato` explicitly approved all three independent recommended A
+  outcomes with 「すべて推奨案で承認します。」 on `2026-09-26`.
+  The receipt and JSON below reproduce this concern's supplied fields without
+  translation or additional rationale, retirement, or risk terms. This record
+  does not supersede another decision. Dependent runtime requires this
+  authority merged into its base; this amendment contains no runtime or
+  runtime acceptance evidence.
+- Receipt SHA-256 (UTF-8, excluding the final newline):
+  `4a215b8ffb32217529703db8c3ae83d0ea104f69b2fe32e6d5153af791e05f63`.
+- Acceptance contracts: `OIC-006`, `OIC-013`, `OIC-014`, `OIC-025`, `OIC-026`. These existing obligations and the
+  complete selected outcome are jointly required; their citation does not
+  claim completed dependent-runtime checks.
+
+```text
+PRODUCT_DECISION
+Concern: web.preview-search-placement
+Scenario revision: 1
+Choice: A / DOCKED-SEARCH-AND-CONTROLS
+Rationale: 検索とzoom/resetをdrawer開閉や画面幅にかかわらず操作できることを優先し、検索バーの自由移動に伴う衝突と場外配置をなくす。
+Must preserve: searchの全field/query/regex/Prev/Next/Open/Enter、active match/focus、全toolbar操作、drawer tab/Close/Escape、同じsearch/canvas/SVG/editor DOM、既存Session/Export/Historyを維持する。search/toolbarをworkspace外の専用rowへ置きdrawer被覆を防ぐ。通常高さ740px以上の受入条件でworkspace200px以上、short viewport/keyboard/200%zoomで全操作へscroll到達可能にする。JS位置判断と競合CSSを削除する。alignment reviewとeditor上下dockの仕様は変更しない。
+May retire: 全幅での検索バー自由drag、固定360px退避、search/toolbarの旧absolute translateと競合CSSだけ。検索/編集機能、保存意味、editor/reviewの製品仕様は退役しない。
+Accepted residual risk: 専用rowがcanvasの縦領域を減らし、検索を図の近くへ動かせなくなる。wrap/scroll、canvas最低高さ、実hit targetとkeyboard/touch検証で実操作を確保する。
+Owner: satoshikawato
+Decision date: 2026-09-26
+```
+
+```json
+{
+  "concern": "web.preview-search-placement",
+  "scenarioRevision": 1,
+  "choice": "A / DOCKED-SEARCH-AND-CONTROLS",
+  "rationale": "検索とzoom/resetをdrawer開閉や画面幅にかかわらず操作できることを優先し、検索バーの自由移動に伴う衝突と場外配置をなくす。",
+  "mustPreserve": "searchの全field/query/regex/Prev/Next/Open/Enter、active match/focus、全toolbar操作、drawer tab/Close/Escape、同じsearch/canvas/SVG/editor DOM、既存Session/Export/Historyを維持する。search/toolbarをworkspace外の専用rowへ置きdrawer被覆を防ぐ。通常高さ740px以上の受入条件でworkspace200px以上、short viewport/keyboard/200%zoomで全操作へscroll到達可能にする。JS位置判断と競合CSSを削除する。alignment reviewとeditor上下dockの仕様は変更しない。",
+  "mayRetire": "全幅での検索バー自由drag、固定360px退避、search/toolbarの旧absolute translateと競合CSSだけ。検索/編集機能、保存意味、editor/reviewの製品仕様は退役しない。",
+  "acceptedResidualRisk": "専用rowがcanvasの縦領域を減らし、検索を図の近くへ動かせなくなる。wrap/scroll、canvas最低高さ、実hit targetとkeyboard/touch検証で実操作を確保する。",
+  "owner": "satoshikawato",
+  "decisionDate": "2026-09-26"
+}
+```
+
+### PD-OI-055: Valid bindings after failed Generate
+
+- Concern key: `web.generate.failed-source-binding-continuation`
+- Scenario revision: `1`
+- Status: `ACCEPTED`
+- Selected outcome: `A / RETAIN_VALIDATED_BINDING_ENRICHMENT`
+- Normative outcome: exactly the complete approved `PRODUCT_DECISION` receipt
+  and its nine-field JSON representation below.
+- Decision source: the complete Choice A text presented to the Product Decision
+  Owner for Issue `#619` finding 5, explicitly approved in full, including
+  Owner and Decision date, by `satoshikawato` on `2026-09-28`. The receipt
+  and JSON below reproduce the approved fields without translation or
+  additional terms. This record does not supersede another decision.
+  Dependent runtime requires this authority merged into its base; this
+  amendment supplies no runtime acceptance evidence.
+- Receipt SHA-256 (UTF-8, excluding the final newline): `472b82ef4731c8656827a1c0903e80cc3b46d60e0b424ea0568de9f95fdb7f7b`.
+- Acceptance contracts: `OIC-005`, `OIC-013`, `OIC-014`, and `OIC-015` remain
+  jointly required with the selected outcome; citation does not claim the
+  remaining multi-record, cancel/stale, Export, or retry evidence is complete.
+
+```text
+PRODUCT_DECISION
+Concern: web.generate.failed-source-binding-continuation
+Scenario revision: 1
+Choice: A / RETAIN_VALIDATED_BINDING_ENRICHMENT
+Rationale: Preserve the continuation observed in S01. Valid source bindings resolved during a failed Generate may remain in the editable document and a subsequently saved Session, although no new Result was admitted.
+Must preserve: The previous Result and canonical request, editable drafts, History, exact source bytes, record and annotation identity, coherent Save/Load, Export of the previous Result, retry, and cancel, stale, and superseded recovery. Only complete, validated bindings to the same source may persist. Independent source discovery completed before Generate remains valid.
+May retire: None of the existing supported behavior. A strict guarantee that every saved binding field remains unchanged after a failed Generate is not adopted.
+Accepted residual risk: A failed Generate may change binding metadata in a later saved Session while the displayed Result remains unchanged; this may surprise someone comparing Session files. Incorrect, incomplete, stale, dangling, or wrong-source bindings are not accepted.
+Owner: satoshikawato
+Decision date: 2026-09-28
+```
+
+```json
+{
+  "concern": "web.generate.failed-source-binding-continuation",
+  "scenarioRevision": 1,
+  "choice": "A / RETAIN_VALIDATED_BINDING_ENRICHMENT",
+  "rationale": "Preserve the continuation observed in S01. Valid source bindings resolved during a failed Generate may remain in the editable document and a subsequently saved Session, although no new Result was admitted.",
+  "mustPreserve": "The previous Result and canonical request, editable drafts, History, exact source bytes, record and annotation identity, coherent Save/Load, Export of the previous Result, retry, and cancel, stale, and superseded recovery. Only complete, validated bindings to the same source may persist. Independent source discovery completed before Generate remains valid.",
+  "mayRetire": "None of the existing supported behavior. A strict guarantee that every saved binding field remains unchanged after a failed Generate is not adopted.",
+  "acceptedResidualRisk": "A failed Generate may change binding metadata in a later saved Session while the displayed Result remains unchanged; this may surprise someone comparing Session files. Incorrect, incomplete, stale, dangling, or wrong-source bindings are not accepted.",
+  "owner": "satoshikawato",
+  "decisionDate": "2026-09-28"
 }
 ```
 

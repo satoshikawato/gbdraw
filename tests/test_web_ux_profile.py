@@ -96,7 +96,8 @@ def test_first_linear_tutorial_controls_have_stable_accessible_selectors() -> No
     assert '@change="setLinearComparisonLosatpMode($event.target.value)"' in index
     assert "sectionKeys.settings.includes('losatp-mode')" in index
     assert 'Comparison search method' not in index
-    assert 'role="alert" aria-label="Generation Error"' in index
+    assert 'role="alert" :aria-label="title"' in index
+    assert ':error="errorLog"' in index
     assert (
         'aria-label="Add sequence" data-linear-file-add '
         '@click="addLinearSeq()"'

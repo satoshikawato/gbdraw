@@ -1,6 +1,8 @@
 #!/usr/bin/env python
 # coding: utf-8
 
+from gbdraw.exceptions import ComparisonIdentityError
+
 import math
 from typing import Dict, Sequence, Tuple
 
@@ -251,26 +253,26 @@ class PairWiseMatchGroup:
         if not any(view_ids):
             return ""
         if any(not view_id for view_id in view_ids):
-            raise ValueError("Comparison view feature IDs contain an empty endpoint.")
+            raise ComparisonIdentityError("Comparison view feature IDs contain an empty endpoint.", reason="EMPTY_ENDPOINT")
         raw_indexes = _attribute_text(feature_index_value)
         feature_indexes: list[int | None]
         if raw_indexes:
             index_parts = [part.strip() for part in raw_indexes.split(";")]
             if len(index_parts) != len(view_ids):
-                raise ValueError(
-                    "Comparison feature IDs and source feature indexes are not aligned."
+                raise ComparisonIdentityError(
+                    "Comparison feature IDs and source feature indexes are not aligned.", reason="INDEX_ALIGNMENT"
                 )
             feature_indexes = []
             for part in index_parts:
                 try:
                     feature_index = int(part)
                 except (TypeError, ValueError):
-                    raise ValueError(
-                        "Comparison source feature index must be a nonnegative integer."
+                    raise ComparisonIdentityError(
+                        "Comparison source feature index must be a nonnegative integer.", reason="SOURCE_INDEX"
                     ) from None
                 if feature_index < 0 or str(feature_index) != part:
-                    raise ValueError(
-                        "Comparison source feature index must be a nonnegative integer."
+                    raise ComparisonIdentityError(
+                        "Comparison source feature index must be a nonnegative integer.", reason="SOURCE_INDEX"
                     )
                 feature_indexes.append(feature_index)
         else:
@@ -296,8 +298,8 @@ class PairWiseMatchGroup:
                     (),
                 )
                 if rendered_id is not None and rendered_id not in candidates:
-                    raise ValueError(
-                        "Comparison source feature index conflicts with its view feature ID."
+                    raise ComparisonIdentityError(
+                        "Comparison source feature index conflicts with its view feature ID.", reason="SOURCE_VIEW_CONFLICT"
                     )
             else:
                 candidates = feature_dom_index.by_view_id.get(

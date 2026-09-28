@@ -23,7 +23,7 @@ const clean = worker => {
   assert.equal(worker.listeners.size, 0);
 };
 
-test('whole-object success terminates before candidate use and ignores stale/duplicate replies', async () => {
+test('bounded success terminates before candidate use and ignores stale/duplicate replies', async () => {
   globalThis.Worker = ImportWorker;
   const pending = importSessionFile(blob);
   const worker = ImportWorker.instances.at(-1);
@@ -35,7 +35,9 @@ test('whole-object success terminates before candidate use and ignores stale/dup
   worker.reply({ operationId: operationId - 1, status: 'ok', data: {} });
   assert.equal(worker.terminations, 0);
   const data = { nested: ['kept', null, 1] };
-  worker.reply({ operationId, status: 'ok', data, characters: 42 });
+  worker.reply({ operationId, status: 'part', kind: 'value', path: [], value: data });
+  assert.deepEqual(worker.message, { operationId, ack: true });
+  worker.reply({ operationId, status: 'ok', characters: 42 });
   clean(worker);
   receive({ data: { operationId, status: 'error', error: { message: 'late' } } });
   const candidate = await pending;
@@ -101,5 +103,30 @@ test('Worker unavailable, constructor and postMessage failures have no main pars
   globalThis.Worker = class extends ImportWorker { postMessage() { throw new Error('clone failed'); } };
   await assert.rejects(importSessionFile(blob), { code: 'SESSION_IMPORT_START_FAILED' });
   clean(ImportWorker.instances.at(-1));
+  delete globalThis.Worker;
+});
+
+
+test('bounded assembly preserves empty containers, batches, Unicode code units and own unsafe keys', async () => {
+  globalThis.Worker = ImportWorker;
+  const pending = importSessionFile(blob);
+  const worker = ImportWorker.instances.at(-1);
+  const operationId = worker.message.operationId;
+  const part = (data) => worker.reply({ operationId, status: 'part', ...data });
+  part({ kind: 'value', path: [], value: {} });
+  part({ kind: 'value', path: ['array'], value: [] });
+  part({ kind: 'batch', path: ['array'], index: 0, value: [null, {}, []] });
+  part({ kind: 'string-start', path: ['text'] });
+  part({ kind: 'string-chunk', units: new Uint16Array([0xd800, 0x61, 0xd83d, 0xde00]) });
+  part({ kind: 'string-end' });
+  part({ kind: 'value', path: ['__proto__'], value: { preserved: true } });
+  worker.reply({ operationId, status: 'ok', characters: 4 });
+  const { data } = await pending;
+  assert.deepEqual(data.array, [null, {}, []]);
+  assert.equal(data.text, '\ud800a😀');
+  assert.equal(Object.getPrototypeOf(data), Object.prototype);
+  assert.equal(Object.hasOwn(data, '__proto__'), true);
+  assert.deepEqual(data.__proto__, { preserved: true });
+  clean(worker);
   delete globalThis.Worker;
 });

@@ -1,0 +1,61 @@
+{
+  "scope": "Local S05 computation change, no new Product outcome or public API",
+  "owner": "Existing feature-identity uniqueOrthogroupEntries remains the identity and duplicate authority; existing Vue computed owns derived lifetime",
+  "visibleOutcome": "Same searchable/selectable unique groups, names, descriptions, copy/sequence actions and drawer availability before and after ID edits, alias conflicts, duplicate insertion, removal and input replacement",
+  "removedWork": [
+    "Repeated full ID normalization/duplicate scans per getOrthogroupById, orthogroupCount and filteredOrthogroups consumers",
+    "Unconditional group count evaluation for always-available Features/Legend tabs"
+  ],
+  "invalidation": "Vue tracks current ID values plus absence/presence of every supported ID alias; no second ID predicate, per-size path, persisted cache or compatibility fallback",
+  "evidence": [
+    "orthogroup-reactivity-focused-rerun.log",
+    "node-orthogroup-final.log",
+    "browser-final-mapped-and-groups.log",
+    "save-cpu-profile/profile.json",
+    "save-cpu-profile/last-call-stacks.json",
+    "node-row-memo-final.log",
+    "web-policy-row-memo-final.log"
+  ],
+  "architecture": "Adds one derived computed in existing orthogroup editor. No new semantic owner, entry point or importer permission. See trusted-base web-policy-final-settled.log Gate PASS / Review REQUIRED.",
+  "testMigration": {
+    "file": "tests/web/right-drawer.playwright.spec.js",
+    "mappedReference": false,
+    "reason": "Trusted dev importSession returns normalizeUserFacingError envelope, not raw native Error.message. Production error owner is byte-identical to trusted dev.",
+    "preserved": [
+      "Same induced exception",
+      "Explicit check that beforePreviewMount hook executed",
+      "Error status, UNKNOWN code and request-validation stage",
+      "Same collinearGroups object after rollback",
+      "Existing before/after geometry and selection assertions"
+    ]
+  },
+  "humanReview": "REQUIRED; local review is not approval",
+  "externalOperationsAuthorized": false,
+  "rowMemo": {
+    "owner": "One existing orthogroup editor computed display-row projection and Vue keyed-list memo; prior per-row memo helper removed",
+    "visibleOutcome": "All existing row text, selected class, identity keys, immediate click identity and retained closed-drawer scroll/form state remain",
+    "dependencies": [
+      "group object / current group ID for click binding",
+      "render key and displayed group id",
+      "selected-group predicate outside cached metadata",
+      "resolved display name",
+      "scope label",
+      "Vue-formatted member count and existing fallback",
+      "Vue-formatted record coverage count",
+      "renamed marker"
+    ],
+    "opaqueMetadata": "Same Vue toDisplayString formatter as interpolation; nested opaque legacy count edits invalidate. Description override key presence is tracked because renamed markers depend on keys rather than description text.",
+    "removedWork": [
+      "Per-frame ID/label/scope/count normalization and reactive property reads for unchanged rows",
+      "Per-frame creation of all unchanged row VNodes"
+    ],
+    "evidence": [
+      "node-display-rows-final.log",
+      "browser-display-rows-settled.log: 5 passed",
+      "browser-display-row-binding-final.log: 1 passed, including click before Vue paints and detached prior-object binding"
+    ],
+    "performance": "Three-run observation in display-rows-reconstructed-pipeline; preceding list-only and per-row memo FAILs remain",
+    "productDelta": "No registered material outcome delta, persisted state, lazy unmount, alternate renderer or second ID/display predicate",
+    "scope": "Replaces temporary per-row helper with one derived computed projection; existing app binding and template remain sole consumers"
+  }
+}

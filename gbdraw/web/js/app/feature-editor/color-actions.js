@@ -1,3 +1,4 @@
+import { normalizeUserFacingError } from '../../services/error-normalization.js';
 import { ruleMatchesFeature } from '../rule-matching.js';
 import { resolveColorToHex } from '../color-utils.js';
 import { getFeatureCaption, getFeatureHashCandidates } from '../feature-utils.js';
@@ -120,8 +121,9 @@ export const createFeatureColorActions = ({
       });
       return rulePreparation.run(candidates, () => runColorAction(() => action(...args)));
     };
+    const previousAlert = state.errorLog?.value;
     const result = rulePreparation.run(manualSpecificRules, prepareTargets);
-    return result?.catch ? result.catch((error) => { alert(`Cannot apply feature style: ${error.message}`); }) : result;
+    return result?.catch ? result.catch((error) => { state.errorLog && state.errorLog.value === previousAlert && (state.errorLog.value = normalizeUserFacingError(error, { operation: 'evaluateRules', stage: 'helper' })); }) : result;
   };
 
   const hashRuleTargetsFeatureExactly = (rule, feature) => {
@@ -840,10 +842,22 @@ export const createFeatureColorActions = ({
 
   const applyColorToFeatureGroup = async (features, caption, color, options = {}) => {
     if (!features?.length || !normalizeCaption(caption)) return false;
+    const existingEntry = findLegendEntryByCaption(caption);
+    const contributors = getFeaturesForLegendCaption(caption);
+    const selectedIds = new Set(features.map(feature => feature.svg_id));
+    const replacesExistingGroup = existingEntry && contributors.length > 0
+      && features.every(feature => captionsMatch(getEffectiveLegendCaption(feature), caption))
+      && contributors.every(feature => selectedIds.has(feature.svg_id));
     const rules = featureRuleCandidate(features, color, normalizeCaption(caption), options);
     return ruleActions.commitSpecificRules(rules, 'Change feature color', {
-      previousLegendIntents: options.previousLegendIntents || [],
-      afterCommit: () => {
+      previousLegendIntents: replacesExistingGroup
+        ? [{ caption: existingEntry.caption, color: existingEntry.color }] : [],
+      afterCommit: candidate => {
+        if (replacesExistingGroup) {
+          const intent = candidate.intents.find(entry => captionsMatch(entry.caption, caption)
+            && colorsMatch(entry.color, color));
+          if (intent) legendColorOverrides[intent.caption] = intent.color;
+        }
         for (const feature of features) updateClickedFeatureLegendState(feature, getEffectiveLegendCaption(feature), color);
       }
     });
@@ -1028,12 +1042,7 @@ export const createFeatureColorActions = ({
       const siblings = findFeaturesWithSameLegendItem(feat, targetLegendName);
       const allFeatures = [feat, ...siblings];
       if (!(await applyColorToLegendSpecificRules(targetLegendName, color, allFeatures))) {
-        // Recoloring the complete caption group replaces its proven default
-        // swatch through the same atomic legend owner as canonical rule edits.
-        const entry = findLegendEntryByCaption(targetLegendName);
-        await applyColorToFeatureGroup(allFeatures, targetLegendName, color, {
-          previousLegendIntents: entry ? [{ caption: entry.caption, color: entry.color }] : []
-        });
+        await applyColorToFeatureGroup(allFeatures, targetLegendName, color);
       }
     } else if (choice === 'displayLabel') {
       const displayLabel =

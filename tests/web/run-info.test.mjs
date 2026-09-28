@@ -289,7 +289,6 @@ test('source recipe counts survive transfer and follow same-name source replacem
         }
         let reads = 0;
         let decodes = 0;
-        const nativeAtob = globalThis.atob;
         const file = input === 'native'
           ? new class extends File {
             async arrayBuffer() {
@@ -305,9 +304,11 @@ test('source recipe counts survive transfer and follow same-name source replacem
           )
         });
         setResourcePayloadOwner(descriptor, file);
-        globalThis.atob = (encoded) => {
-          if (encoded === descriptor.data) decodes += 1;
-          return nativeAtob(encoded);
+        // Count decodes through the resource owner, independent of the decoder API.
+        globalThis.__GBDRAW_TEST_HOOKS__ = {
+          onStructuralMetric: ({ name, resourceId }) => {
+            if (name === 'base64DecodeCount' && resourceId === 'source') decodes += 1;
+          }
         };
         try {
           assert.equal(await readFileText(file), text);
@@ -338,7 +339,7 @@ test('source recipe counts survive transfer and follow same-name source replacem
           assert.equal(reads, input === 'native' ? 2 : 0);
           assert.equal(decodes, input === 'lazy' ? 2 : 0);
         } finally {
-          globalThis.atob = nativeAtob;
+          delete globalThis.__GBDRAW_TEST_HOOKS__;
         }
       }
     }

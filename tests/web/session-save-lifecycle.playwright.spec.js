@@ -1,7 +1,7 @@
 const { test, expect } = require('@playwright/test');
 const { readFileSync } = require('node:fs');
 const { join, resolve } = require('node:path');
-const { openApp } = require('./helpers/app-lifecycle.cjs');
+const { openApp, evaluateWithRetainedPromise } = require('./helpers/app-lifecycle.cjs');
 
 const repoRoot = resolve(process.env.GBDRAW_REPO || process.cwd());
 const sessionFile = {
@@ -134,7 +134,7 @@ test('Save Session is single-flight, paints pending state, and releases every se
     && window.__GBDRAW_APP__?.results?.length === 1
   ));
 
-  const saveButton = page.getByRole('button', { name: 'Save Session', exact: true });
+  const saveButton = page.getByRole('banner').getByRole('button', { name: 'Save Session', exact: true });
   const saveStatus = page.locator('[data-session-save-status]');
   await captureSaveInvariant(page);
   await resetSaveProbe(page);
@@ -243,7 +243,7 @@ test('Save Session is single-flight, paints pending state, and releases every se
   ]);
 
   await resetSaveProbe(page);
-  const compressionFailure = await page.evaluate(async () => {
+  const compressionFailure = await evaluateWithRetainedPromise(page, async () => {
     const NativeCompressionStream = window.CompressionStream;
     window.__GBDRAW_APP__.sessionTitle = 'compression-error-save';
     window.CompressionStream = class FailingCompressionStream {
@@ -259,9 +259,11 @@ test('Save Session is single-flight, paints pending state, and releases every se
       errorSummary: String(window.__GBDRAW_APP__.errorLog?.summary || '')
     };
   });
-  expect(compressionFailure.result).toEqual({ status: 'error' });
+  expect(compressionFailure.result).toMatchObject({ status: 'error',
+    error: { code: 'UNKNOWN', operation: 'unknown', stage: 'unknown' } });
   expect(compressionFailure.pending).toBe(false);
-  expect(compressionFailure.errorSummary).toContain('controlled compression failure');
+  expect(compressionFailure.errorSummary).toContain('without recognized diagnostic information');
+  expect(compressionFailure.errorSummary).not.toContain('controlled compression failure');
   expectOrderedEvents(await saveProbe(page), [
     'session-save-compression-start',
     'session-save-error',

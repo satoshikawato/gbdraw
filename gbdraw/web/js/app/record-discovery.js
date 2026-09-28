@@ -98,7 +98,7 @@ export const extractGenBankMetadata = (chunk) => {
 };
 
 export const normalizeSequenceRecords = (payload) => {
-  if (payload?.error) throw new Error(String(payload.error));
+  if (payload?.error) throw payload.error;
   if (!Array.isArray(payload?.records)) throw new Error('Record list response is invalid.');
 
   const records = [];

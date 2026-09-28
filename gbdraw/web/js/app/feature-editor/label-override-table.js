@@ -115,11 +115,15 @@ export const buildLabelOverrideRows = (featureOverrides, bulkOverrides, options 
   let skippedFeatureSourceCount = 0;
   let skippedMissingSourceCount = 0;
   let fallbackHashCount = 0;
+  const visibilityOverridesByFeatureId = normalizeVisibilityOverrides(options.visibilityOverrides);
+  if (toSortedKeys(featureOverrides).length === 0 && toSortedKeys(bulkOverrides).length === 0
+    && visibilityOverridesByFeatureId.size === 0) {
+    return { rows, skippedFeatureCount, skippedFeatureSourceCount, skippedMissingSourceCount, fallbackHashCount };
+  }
   const featureMetadataById = buildFeatureMetadataMap(options.extractedFeatures);
   const editableLabelByFeatureId = buildEditableLabelByFeatureId(options.editableLabels);
   const featureIdsBySourceText = buildFeatureIdsBySourceText(options.editableLabels);
   const featureUniquenessIndex = buildFeatureUniquenessIndexFromMetadata(featureMetadataById);
-  const visibilityOverridesByFeatureId = normalizeVisibilityOverrides(options.visibilityOverrides);
   const featureOverrideKeyById = new Map();
   toSortedKeys(featureOverrides).forEach((featureIdRaw) => {
     const key = normalizeFeatureIdKey(featureIdRaw);

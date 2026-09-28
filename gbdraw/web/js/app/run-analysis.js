@@ -12,6 +12,8 @@ import {
 } from '../services/diagram-generation.js';
 import {
   buildCanonicalRenderRequest,
+  bindCanonicalTypedResource,
+  projectGeneratedProteinRecipe,
   projectCommittedRecordTransform,
   projectCommittedSimilarityAlignment,
   readCanonicalResourceRecordCount
@@ -75,6 +77,7 @@ import { requireLinearLabelVisibilityMode } from './linear-label-visibility.js';
 import { createZipBlob } from '../utils/zip.js';
 import { classifyOptionalPositiveNumber } from '../utils/optional-positive-number.js';
 import { cloneJsonData, cloneJsonValue } from '../services/json-clone.js';
+import { bytesToBase64, bytesToText } from '../services/byte-utils.js';
 import { downloadBlob, downloadTextFile } from '../services/text-download.js';
 import {
   normalizeCircularPlotTitlePosition,
@@ -548,11 +551,10 @@ const canReuseResolvedProteinArtifacts = ({
 };
 
 const stripRuntimeCacheStats = (payload) => {
-  const cloned = cloneJsonData(payload);
-  if (cloned && typeof cloned === 'object' && !Array.isArray(cloned)) {
-    delete cloned.cache;
-  }
-  return cloned;
+  // Canonical comparison data is read-only across rendering and cache reuse.
+  // Only the transient statistics owner differs; do not duplicate the full result.
+  const { cache: _cache, ...stored } = payload;
+  return stored;
 };
 
 const LEGACY_PROTEIN_REFERENCE_RE = /p_[A-Za-z0-9._%+-]+?_\d+_\d+_(?:-1|0|1)_[0-9a-f]{12}(?:_[2-9][0-9]*)?/g;
@@ -636,6 +638,37 @@ const setLosatDerivedCacheEntry = (cacheMap, key, { mode, payload, manifest }) =
 const makeSafeFilename = (name) => {
   const cleaned = String(name || '').replace(/[^\w.-]+/g, '_').replace(/^_+|_+$/g, '');
   return cleaned || 'losat';
+};
+// The deferred replay builder outlives its Generate through the CLI helper
+// files. Build it outside that scope so it retains only the published artifact,
+// not the pre-Generate rollback handle and, through it, every earlier artifact.
+const createCanonicalReplayTextBuilder = ({
+  version,
+  startedAtIso,
+  renderRequest,
+  resources,
+  publishedArtifact
+}) => () => {
+  recordSessionLifecycleEvent('canonical-replay-json-start');
+  const replayText = JSON.stringify({
+    format: 'gbdraw-session',
+    version,
+    createdAt: startedAtIso || new Date().toISOString(),
+    renderRequest,
+    resources,
+    // Export only after successful generation; reuse the published artifact.
+    results: publishedArtifact.results,
+    editorState: { featureCatalog: publishedArtifact.featureCatalog },
+    losatCache: { entries: [] },
+    losatDerivedCache: { entries: [] },
+    proteinIdentityManifest: emptyProteinIdentityManifest()
+  });
+  recordStructuralMetric('canonicalReplayFullSerializationCount');
+  recordSessionLifecycleEvent('canonical-replay-json-end');
+  recordSessionLifecycleEvent('canonical-replay-json-characters', {
+    value: replayText.length
+  });
+  return replayText;
 };
 const normalizeRecordSelectorText = (value) => {
   const normalized = String(value ?? '').trim();
@@ -1074,6 +1107,7 @@ export const createRunAnalysis = ({
     results,
     selectedResultIndex,
     failedGeneratePreservedResult,
+    generationFailureRecovery,
     resultGenerationKey,
     resultPanelTab,
     lastRunInfo,
@@ -1187,6 +1221,7 @@ export const createRunAnalysis = ({
   let pendingReflowReason = 'label-edit';
   let featureExtractionRequestId = 0;
   let latestGenerationToken = 0;
+  let latestOperationId = 0;
   let circularRecordRefreshGeneration = 0;
   let activeCircularRecordRefresh = null;
   let activeLosatAbortController = null;
@@ -1255,7 +1290,16 @@ export const createRunAnalysis = ({
     },
     async restore(handle) {
       recordStructuralMetric('generatedArtifactRollbackCount', 1);
-      await restoreGeneratedArtifactHandle(handle);
+      const currentAlert = errorLog.value;
+      try {
+        await restoreGeneratedArtifactHandle(handle);
+      } finally {
+        // Snapshot restoration clones presentation. Retain the notification
+        // that owned the rollback boundary, without deriving its cause here.
+        const restoredAlert = handle.mutableIntent?.presentation?.errorLog;
+        if (JSON.stringify(normalizeUserFacingError(errorLog.value))
+          === JSON.stringify(normalizeUserFacingError(restoredAlert))) errorLog.value = currentAlert;
+      }
     }
   });
   const recordDiscoverySuppressed = () => Boolean(
@@ -1331,35 +1375,30 @@ export const createRunAnalysis = ({
     downloadBlob(createZipBlob(materializedFiles), latestCliHelperArchiveName);
   };
 
-  const extractCircularTrackSlotError = (err) => {
-    const texts = [
-      err?.message,
-      err?.stderr,
-      err?.stdout,
-      err?.traceback
-    ];
-    for (const text of texts) {
-      const lines = String(text || '').split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
-      for (const line of lines) {
-        const cleaned = line.replace(/^(ValueError|RuntimeError|ValidationError):\s*/, '');
-        if (/^Circular track slot '.+' cannot fit inside\b/.test(cleaned)) {
-          return cleaned;
-        }
-      }
+  const formatError = (cause, operation = 'generate', stage = 'request-validation') =>
+    normalizeUserFacingError(cause || { code: 'UNKNOWN' }, { operation, stage });
+  const failOperation = async (cause, { handle, restore = null, operation = 'generate',
+    stage = 'render', isCurrent = () => true, isCurrentOperation = () => true, recovery = null } = {}) => {
+    if (!isCurrentOperation()) return { status: 'stale' };
+    const error = formatError(cause, operation, stage);
+    const previousResults = handle?.ownerSet?.results || [];
+    if (!recovery) {
+      try {
+        const restored = restore ? await restore() : false;
+        const currentResults = captureGeneratedArtifactOwnerSet().results;
+        const unchanged = currentResults.length === previousResults.length
+          && currentResults.every((result, index) => result === previousResults[index]);
+        recovery = !handle ? (results.value.length ? 'restore-failed' : 'no-result')
+          : previousResults.length === 0 ? 'no-result'
+          : restored ? 'restored' : unchanged ? 'preserved' : 'restore-failed';
+      } catch (_) { recovery = 'restore-failed'; }
     }
-    return '';
+    if (!isCurrent()) return { status: 'stale' };
+    errorLog.value = error;
+    if (generationFailureRecovery) generationFailureRecovery.value = recovery;
+    failedGeneratePreservedResult.value = ['preserved', 'restored'].includes(recovery);
+    return { status: 'error', error, recovery };
   };
-
-  const formatPythonError = (err) => {
-    const circularTrackSlotError = extractCircularTrackSlotError(err);
-    return normalizeUserFacingError(
-      circularTrackSlotError
-        ? { type: err?.type || 'ValidationError', message: circularTrackSlotError, notes: err?.notes }
-        : err
-    );
-  };
-
-  const formatJsError = (err) => normalizeUserFacingError(err);
 
   // Raw searches finish before the artifact transaction. Keep only the latest
   // search's entries for retry, without changing the saved Result. Cache owner
@@ -1807,10 +1846,10 @@ export const createRunAnalysis = ({
         circularRecordDiscovery.primaryFile = null;
         return busy;
       }
-      console.warn('Failed to inspect circular source records.', error);
+
       circularRecordList.value = [];
       circularRecordDiscovery.status = 'error';
-      circularRecordDiscovery.error = `Could not read records from the circular input file(s): ${primaryFile.name || 'unnamed source'}. Replace or remove the input, or retry inspection.`;
+      circularRecordDiscovery.error = formatError(error, inputType === 'gff' ? 'listGffFastaRecords' : 'listSequenceRecords', 'helper');
       adv.multi_record_positions.splice(0, adv.multi_record_positions.length);
     }
   };
@@ -1848,13 +1887,16 @@ export const createRunAnalysis = ({
     requestId = 0,
     comparisonPlanSnapshot = null,
     generatedArtifactHandle = null,
-    comparisonExecution = null
+    comparisonExecution = null,
+    isCurrentOperation = () => true,
+    isCurrentAlert = () => true
   } = {}) => {
     const runState = { ...state };
     const { linearSeqs } = runState;
     let colorCandidate = null;
     let candidateRules = manualSpecificRules;
     const isReflow = runMode === 'reflow';
+    let failureStage = 'request-validation';
     if (!isReflow) {
       recordSessionLifecycleEvent('generate-start');
       recordSessionLifecycleEvent('generation-input-resolution-start');
@@ -1915,6 +1957,7 @@ export const createRunAnalysis = ({
     let workingSelectedOrthogroupAlignmentFeature = selectedOrthogroupAlignmentFeature.value;
     const restoreCommittedArtifact = async () => {
       if (!committedArtifactHandle || !activatedGeneratedArtifactCandidate) return false;
+      if (captureGeneratedArtifactOwnerSet().results !== activatedGeneratedArtifactCandidate.ownerSet.results) return false;
       if (acceptedCandidateReadyReceipt) {
         previewRuntime.invalidateReadyReceipt(
           acceptedCandidateReadyReceipt,
@@ -1937,12 +1980,13 @@ export const createRunAnalysis = ({
       return true;
     };
     const finishCanceledManualRun = async () => {
-      if (latestGenerationToken !== generationToken + 1) {
+      if (!isCurrentOperation() || latestGenerationToken !== generationToken + 1) {
         return { status: 'stale' };
       }
       canceledAttemptOwnsPresentation = true;
       await restoreCommittedArtifact();
-      errorLog.value = null;
+      if (!isCurrentOperation()) return { status: 'stale' };
+      if (isCurrentAlert()) errorLog.value = null;
       processingStatus.value = 'Canceled.';
       generationCancelRequested.value = false;
       return { status: 'canceled' };
@@ -1985,7 +2029,7 @@ export const createRunAnalysis = ({
       } catch (error) {
         prepared = {
           catalog: null,
-          error: error?.message || 'Could not read records from the Linear input file(s).'
+          error
         };
       } finally {
         if (!isReflow && generationToken === latestGenerationToken) {
@@ -2001,16 +2045,13 @@ export const createRunAnalysis = ({
           : { status: 'stale' };
       }
       if (prepared?.error) {
-        const message = String(prepared.error);
-        if (isReflow) labelReflowLastError.value = message;
-        else {
-          await restoreCommittedArtifact();
-          errorLog.value = formatJsError(new Error(message));
-        }
+        const error = formatError(prepared.error);
+        if (isReflow) labelReflowLastError.value = error.summary;
         if (activeLosatAbortController === generationAbortController) {
           activeLosatAbortController = null;
         }
-        return isReflow ? { status: 'error' } : { status: 'error', error: errorLog.value };
+        return isReflow ? { status: 'error', error } : failOperation(error, { handle: committedArtifactHandle,
+          restore: restoreCommittedArtifact, isCurrent: isCurrentAlert, isCurrentOperation });
       }
       linearRecordCatalog = prepared?.catalog || null;
     }
@@ -2041,27 +2082,24 @@ export const createRunAnalysis = ({
         }
         if (!circularDiscoveryMatchesCurrentInput()) {
           const message = circularRecordDiscovery.error || 'Could not read records from the circular input file(s).';
-          await restoreCommittedArtifact();
-          errorLog.value = formatJsError(new Error(message));
+          const outcome = await failOperation(message, { handle: committedArtifactHandle,
+            restore: restoreCommittedArtifact, isCurrent: isCurrentAlert, isCurrentOperation });
           if (activeLosatAbortController === generationAbortController) {
             activeLosatAbortController = null;
           }
-          return { status: 'error', error: errorLog.value };
+          return outcome;
         }
       }
     }
     const depthInputError = validateDepthInputPresence();
     if (depthInputError) {
-      if (isReflow) {
-        labelReflowLastError.value = depthInputError;
-      } else {
-        await restoreCommittedArtifact();
-        errorLog.value = formatJsError(new Error(depthInputError));
-      }
+      const error = formatError(depthInputError);
+      if (isReflow) labelReflowLastError.value = error.summary;
       if (activeLosatAbortController === generationAbortController) {
         activeLosatAbortController = null;
       }
-      return isReflow ? { status: 'error' } : { status: 'error', error: errorLog.value };
+      return isReflow ? { status: 'error', error } : failOperation(error, { handle: committedArtifactHandle,
+        restore: restoreCommittedArtifact, isCurrent: isCurrentAlert, isCurrentOperation });
     }
     const previousSelectedResultIndex = selectedResultIndex.value;
     const editableLabelsSnapshot = Array.isArray(editableLabels.value)
@@ -2096,7 +2134,7 @@ export const createRunAnalysis = ({
       featureExtractionRequestId += 1;
       processingStatus.value = 'Preparing input files...';
       resultPanelTab.value = 'preview';
-      errorLog.value = null;
+      if (isCurrentAlert()) errorLog.value = null;
       skipCaptureBaseConfig.value = false;
       skipPositionReapply.value = false;
       resetLabelScopeDialogState();
@@ -2134,6 +2172,7 @@ export const createRunAnalysis = ({
       let recordSelectors = [];
       let reverseFlags = [];
       const resolvedComparisons = [];
+      let generatedProteinRecipeMode = null;
       let resolvedCircularConservation = [];
       const runInfoFileMap = new Map();
       const generatedCliFileMap = new Map();
@@ -2777,7 +2816,7 @@ export const createRunAnalysis = ({
             if (losatJobs.length > 0) {
               setProcessingStatus('Preparing comparison search runtime...');
               const runtime = await prepareLosatRuntime({ includeThreaded: executionMode !== 'serial' }).catch((error) => {
-                console.warn('LOSAT runtime warmup failed; execution will report the error.', error);
+                console.warn('LOSAT runtime warmup failed; execution will report the error.', formatError(error));
                 return null;
               });
               if (runtime?.threaded && losatThreadingStatus) {
@@ -3225,7 +3264,7 @@ export const createRunAnalysis = ({
               }
               return runtime;
             }).catch((error) => {
-              console.warn('LOSAT runtime warmup failed; execution will report the error if LOSAT is used.', error);
+              console.warn('LOSAT runtime warmup failed; execution will report the error if LOSAT is used.', formatError(error));
               return null;
             })
           : null;
@@ -3329,7 +3368,7 @@ export const createRunAnalysis = ({
                 }
               );
               const res = response.result;
-              if (res.error) throw new Error(res.error);
+              if (res.error) throw res.error;
               const fastaHash = await hashText(res.fasta || '');
               const proteinCacheKey = String(res.display_binding_hash || '');
               entry = {
@@ -3375,7 +3414,7 @@ export const createRunAnalysis = ({
                   }
                 );
                 const res = response.result;
-                if (res.error) throw new Error(res.error);
+                if (res.error) throw res.error;
                 entry = {
                   fasta: res.fasta,
                   recordId: res.record_id || `seq_${idx + 1}`,
@@ -3383,7 +3422,7 @@ export const createRunAnalysis = ({
                 };
                 if (losatTiming) {
                   losatTiming.fastaWorkerFallbacks += 1;
-                  console.warn('LOSAT browser FASTA extraction fell back to the diagram Worker:', fastError);
+                  console.warn('LOSAT browser FASTA extraction fell back to the diagram Worker.', formatError(fastError));
                 }
               }
             }
@@ -3504,7 +3543,7 @@ export const createRunAnalysis = ({
           );
           const result = response.result;
           if (result.status === 'error') {
-            throw new Error(result.error || 'Legacy protein cache migration failed.');
+            throw result.error || new Error('Legacy protein cache migration failed.');
           }
           const candidateIndex = Number(result.candidateIndex);
           if (
@@ -3686,9 +3725,7 @@ export const createRunAnalysis = ({
             );
             const result = response.result;
             if (result.status !== 'resolved' || !result.proteinIdMap) {
-              throw new Error(
-                result.error || 'Legacy protein UI reference migration failed.'
-              );
+              throw result.error || new Error('Legacy protein UI reference migration failed.');
             }
             const proteinIdMap = result.proteinIdMap;
             workingOrthogroups = rewriteMappedProteinReferences(
@@ -3832,7 +3869,7 @@ export const createRunAnalysis = ({
               || result.keys.length !== preparedJobs.length
               || result.keys.some((key) => !/^[0-9a-f]{64}$/.test(key))
             ) {
-              throw new Error(result.error || 'Protein cache key generation failed.');
+              throw result.error || new Error('Protein cache key generation failed.');
             }
             proteinCacheKeys = result.keys;
           }
@@ -3847,6 +3884,16 @@ export const createRunAnalysis = ({
           if (useProteinBlastp && preparedJobs.length > 0 && !identityIndex) {
             throw new Error('Protein comparison identity manifest is invalid.');
           }
+          // CLI Sessions can specify a complete two-dimensional row layout.
+          // For collinearity, every pair across adjacent rows is displayed;
+          // the Web comparison-plan edges alone do not represent those pairs.
+          const canonicalGridRows = useCollinearBlastp && linearRecordLayoutEnabled.value
+            ? linearSeqs.map((seq) => linearRecordRows.find((entry) => entry.uid === seq.uid))
+            : null;
+          const hasCanonicalGridRows = canonicalGridRows?.length > 1
+            && canonicalGridRows.every((entry) => entry?.canonicalRow === entry.row
+              && Number.isInteger(entry.canonicalColumn) && entry.canonicalColumn > 0
+              && entry.canonicalCardinality === 'exactly_one');
           try {
             for (const [jobIndex, { spec, losatArgs, cacheMetadata, batch }] of preparedJobs.entries()) {
               throwIfGenerationCanceled();
@@ -3892,11 +3939,16 @@ export const createRunAnalysis = ({
               const resolvedEdge = comparisonResolution.edges.find(
                 (edge) => edge.edgeKey === spec.edgeKey
               );
-              const isResolvedDisplayPair = Boolean(
-                resolvedEdge &&
-                spec.queryIndex === resolvedEdge.queryIndex &&
-                spec.subjectIndex === resolvedEdge.subjectIndex
-              );
+              const isResolvedDisplayPair = hasCanonicalGridRows
+                ? spec.queryIndex < spec.subjectIndex && Math.abs(
+                    canonicalGridRows[spec.queryIndex].row
+                    - canonicalGridRows[spec.subjectIndex].row
+                  ) === 1
+                : Boolean(
+                    resolvedEdge &&
+                    spec.queryIndex === resolvedEdge.queryIndex &&
+                    spec.subjectIndex === resolvedEdge.subjectIndex
+                  );
               const pair = {
                 pairIndex: spec.ordinal,
                 ordinal: spec.ordinal,
@@ -4139,6 +4191,7 @@ export const createRunAnalysis = ({
                 collinearInferOrthogroups,
                 orthogroupMembershipMode,
                 orthogroupMemberMaxHits,
+                explicitDisplayPairs: Boolean(hasCanonicalGridRows),
                 recordPayloads,
                 pairPayloads
               });
@@ -4197,10 +4250,24 @@ export const createRunAnalysis = ({
                   collinearSearchScope,
                   collinearInferOrthogroups,
                   orthogroupMembershipMode,
-                  orthogroupMemberMaxHits
+                  orthogroupMemberMaxHits,
+                  explicitDisplayPairs: Boolean(hasCanonicalGridRows)
                 }
               );
               convertedPayload = response.result;
+              if (["orthogroup", "collinear"].includes(blastpMode)) {
+                const resourceKey = blastpMode === "collinear" ? "collinearityResult" : "orthogroupResult";
+                const canonical = convertedPayload.canonicalResource;
+                if (!(canonical?.bytes instanceof Uint8Array) || canonical.bytes.byteLength !== canonical.size) {
+                  throw new Error("Analysis canonical resource bytes are missing.");
+                }
+                convertedPayload[resourceKey] = JSON.parse(bytesToText(canonical.bytes));
+                bindCanonicalTypedResource(convertedPayload[resourceKey], {
+                  kind: canonical.kind, type: "application/json", size: canonical.size,
+                  lastModified: 0, encoding: "base64", data: bytesToBase64(canonical.bytes)
+                });
+                delete convertedPayload.canonicalResource;
+              }
               if (useDerivedProteinPayloadCache && !convertedPayload?.error) {
                 setLosatDerivedCacheEntry(derivedCacheMap, derivedCacheKey, {
                   mode: blastpMode,
@@ -4209,7 +4276,7 @@ export const createRunAnalysis = ({
                 });
               }
             }
-            if (convertedPayload.error) throw new Error(convertedPayload.error);
+            if (convertedPayload.error) throw convertedPayload.error;
             if (!hasRequiredCanonicalAnalysisResource(blastpMode, convertedPayload)) {
               throw new Error(
                 'Protein comparison analysis did not return its canonical typed result.'
@@ -4223,11 +4290,13 @@ export const createRunAnalysis = ({
               conversionCache.simultaneousParsedTables || 0
             );
             if (useCollinearBlastp) {
+              generatedProteinRecipeMode = 'collinear';
               resolvedComparisons.push({
                 kind: 'collinearityResult',
                 typedResource: convertedPayload.collinearityResult
               });
             } else if (useOrthogroupBlastp) {
+              generatedProteinRecipeMode = 'orthogroup';
               resolvedComparisons.push({
                 kind: 'orthogroupResult',
                 typedResource: convertedPayload.orthogroupResult
@@ -4278,7 +4347,7 @@ export const createRunAnalysis = ({
                 }
               );
               const converted = response.result;
-              if (converted.error) throw new Error(converted.error);
+              if (converted.error) throw converted.error;
               const blastPath = `/blast_${pair.pairIndex}.txt`;
               const blastName = pair.filename || getPayloadName(blastPath);
               const blastSlot = `generatedFiles.losat_blasts[${pair.pairIndex}]`;
@@ -4554,28 +4623,14 @@ export const createRunAnalysis = ({
       const canonicalReplayName = makeSafeFilename(
         `${normalizedOutputPrefix || 'out'}.gbdraw-session.json`
       );
-      const buildCanonicalReplayText = () => {
-        recordSessionLifecycleEvent('canonical-replay-json-start');
-        const replayText = JSON.stringify({
-          format: 'gbdraw-session',
-          version: canonicalSessionVersion,
-          createdAt: manualRunStartedAtIso || new Date().toISOString(),
-          renderRequest: canonical.renderRequest,
-          resources: canonical.resources,
-          // Export only after successful generation; reuse the published artifact.
-          results: candidateCommit.results,
-          editorState: { featureCatalog: candidateCatalog },
-          losatCache: { entries: [] },
-          losatDerivedCache: { entries: [] },
-          proteinIdentityManifest: emptyProteinIdentityManifest()
-        });
-        recordStructuralMetric('canonicalReplayFullSerializationCount');
-        recordSessionLifecycleEvent('canonical-replay-json-end');
-        recordSessionLifecycleEvent('canonical-replay-json-characters', {
-          value: replayText.length
-        });
-        return replayText;
-      };
+      const publishedReplayArtifact = { results: null, featureCatalog: null };
+      const buildCanonicalReplayText = createCanonicalReplayTextBuilder({
+        version: canonicalSessionVersion,
+        startedAtIso: manualRunStartedAtIso,
+        renderRequest: canonical.renderRequest,
+        resources: canonical.resources,
+        publishedArtifact: publishedReplayArtifact
+      });
       registerRunInfoFile(canonicalReplayPath, {
         name: canonicalReplayName,
         slot: 'generatedFiles.canonical_render_session',
@@ -4610,6 +4665,7 @@ export const createRunAnalysis = ({
         throwIfGenerationCanceled();
       }
       const postGbdrawTimingEntries = [];
+      failureStage = 'render';
       const canonicalExecution = await executeCanonicalCandidate({
         canonical,
         mode: mode.value,
@@ -4664,14 +4720,12 @@ export const createRunAnalysis = ({
       if (canonicalExecution.status === 'engine-error') {
         logPostGbdrawTimings(postGbdrawTimingEntries);
         if (isReflow) {
-          labelReflowLastError.value = formatPythonError(
-            canonicalExecution.engineError
-          )?.summary || 'Auto reflow failed';
-          return { status: 'error' };
+          const error = formatError(canonicalExecution.engineError, 'generate', 'render');
+          labelReflowLastError.value = error.summary;
+          return { status: 'error', error };
         }
-        await restoreCommittedArtifact();
-        errorLog.value = formatPythonError(canonicalExecution.engineError);
-        return { status: 'error', error: errorLog.value };
+        return await failOperation(canonicalExecution.engineError, { handle: committedArtifactHandle,
+          restore: restoreCommittedArtifact, isCurrent: isCurrentAlert, isCurrentOperation });
       }
       const {
         generationResponse,
@@ -4681,6 +4735,8 @@ export const createRunAnalysis = ({
         catalog: candidateCatalog,
         commit: candidateCommit
       } = canonicalExecution;
+      publishedReplayArtifact.results = candidateCommit.results;
+      publishedReplayArtifact.featureCatalog = candidateCatalog;
 
       if (isReflow && requestId !== pendingReflowRequestId) {
         return { status: 'stale' };
@@ -4941,7 +4997,10 @@ export const createRunAnalysis = ({
           });
         }
         if (typeof adoptCanonicalRenderArtifacts === 'function') {
-          adoptCanonicalRenderArtifacts(canonical, { adoptOwnedRequest: true });
+          const committedCanonical = generatedProteinRecipeMode
+            ? projectGeneratedProteinRecipe(canonical, generatedProteinRecipeMode)
+            : canonical;
+          adoptCanonicalRenderArtifacts(committedCanonical, { adoptOwnedRequest: true });
         }
         if (!useCommittedComparison && importedComparisonIntent) {
           Object.assign(
@@ -4975,12 +5034,12 @@ export const createRunAnalysis = ({
         return { status: 'stale' };
       }
       if (isReflow) {
-        labelReflowLastError.value = formatJsError(e)?.summary || 'Auto reflow failed';
-        return { status: 'error' };
+        const error = formatError(e, 'generate', failureStage);
+        labelReflowLastError.value = error.summary;
+        return { status: 'error', error };
       }
-      await restoreCommittedArtifact();
-      errorLog.value = formatJsError(e);
-      return { status: 'error', error: errorLog.value };
+      return await failOperation(e, { handle: committedArtifactHandle, stage: failureStage,
+        restore: restoreCommittedArtifact, isCurrent: isCurrentAlert, isCurrentOperation });
     } finally {
       if (!isReflow) {
         if (activeLosatAbortController === generationAbortController) {
@@ -5002,6 +5061,13 @@ export const createRunAnalysis = ({
     const sessionBusy = state.sessionOperationAvailability?.();
     if (sessionBusy) return sessionBusy;
     let outcome = null;
+    const operationId = ++latestOperationId;
+    const isCurrentOperation = () => operationId === latestOperationId;
+    const previousAlert = errorLog.value;
+    const isCurrentAlert = () => isCurrentOperation()
+      && (errorLog.value === previousAlert || errorLog.value === null);
+    let beforeHandle = null;
+    let historyRecovery = null;
     processing.value = true;
     processingStatus.value = 'Preparing input files...';
     generationCancelRequested.value = false;
@@ -5009,6 +5075,7 @@ export const createRunAnalysis = ({
     try {
       await nextTick();
       await waitForAfterPaint();
+      if (!isCurrentOperation()) return { status: 'stale' };
       recordSessionLifecycleEvent('generate.paint-opportunity-completed');
       if (generationCancelRequested.value) {
         processingStatus.value = 'Canceled.';
@@ -5022,12 +5089,13 @@ export const createRunAnalysis = ({
         comparisonPlanSnapshot = prepared.comparisonPlanSnapshot;
         comparisonExecution = prepared.comparisonExecution;
       }
-      const execute = (beforeHandle) => runAnalysisInternal({
-        runMode: 'manual',
-        comparisonPlanSnapshot,
-        generatedArtifactHandle: beforeHandle || generatedArtifactHandle,
-        comparisonExecution
-      });
+      const execute = (handle) => {
+        beforeHandle = handle || generatedArtifactHandle;
+        return runAnalysisInternal({
+          runMode: 'manual', comparisonPlanSnapshot, generatedArtifactHandle: beforeHandle,
+          comparisonExecution, isCurrentOperation, isCurrentAlert
+        });
+      };
       outcome = typeof runGeneratedArtifactReplacement === 'function'
         ? await runGeneratedArtifactReplacement(
             'Generate diagram',
@@ -5036,6 +5104,7 @@ export const createRunAnalysis = ({
               shouldCommit: (result) => result?.status === 'ok',
               onCheckpointCapture: onGeneratedArtifactCheckpointCapture,
               restoreAppliedArtifact: async (beforeHandle) => {
+                historyRecovery = 'restore-failed';
                 const activeReceipt = previewRuntime.getActiveRuntime?.()?.readyReceipt || null;
                 if (activeReceipt) {
                   previewRuntime.invalidateReadyReceipt(
@@ -5054,6 +5123,7 @@ export const createRunAnalysis = ({
                 recordSessionLifecycleEvent('artifact.rollback-completed', {
                   phase: 'history-finalization'
                 });
+                historyRecovery = beforeHandle.ownerSet.results.length ? 'restored' : 'no-result';
               }
             }
           )
@@ -5064,22 +5134,30 @@ export const createRunAnalysis = ({
         recordSessionLifecycleEvent('generate.completed');
       }
       if (Object.prototype.hasOwnProperty.call(outcome || {}, 'generatedArtifactCandidate')) {
-        outcome = { status: outcome.status };
+        const { generatedArtifactCandidate, ...publicOutcome } = outcome;
+        outcome = publicOutcome;
       }
-      if (['error', 'canceled'].includes(outcome?.status)) {
+      if (outcome?.status === 'canceled' && isCurrentOperation()) {
         failedGeneratePreservedResult.value = results.value.length > 0;
       } else if (outcome?.status === 'ok') {
         failedGeneratePreservedResult.value = false;
+        if (generationFailureRecovery) generationFailureRecovery.value = null;
       }
       await afterGenerate?.(outcome);
       return outcome;
+    } catch (cause) {
+      outcome = await failOperation(cause, { handle: beforeHandle, isCurrent: isCurrentAlert, isCurrentOperation,
+        recovery: cause?.artifactRestoreFailed ? 'restore-failed' : historyRecovery });
+      return outcome;
     } finally {
-      if (outcome?.status !== 'canceled') processingStatus.value = '';
-      generationCancelRequested.value = false;
-      processing.value = false;
-      recordSessionLifecycleEvent('generate.processing-cleared', {
-        status: outcome?.status || 'error'
-      });
+      if (isCurrentOperation()) {
+        if (outcome?.status !== 'canceled') processingStatus.value = '';
+        generationCancelRequested.value = false;
+        processing.value = false;
+        recordSessionLifecycleEvent('generate.processing-cleared', {
+          status: outcome?.status || 'error'
+        });
+      }
     }
   };
 
@@ -5088,7 +5166,10 @@ export const createRunAnalysis = ({
     generatedArtifactHandle = null,
     commitIntent = null,
     alignmentResetBefore = null,
-    alignmentResetReceipt = undefined
+    alignmentResetReceipt = undefined,
+    operation = 'generate',
+    isCurrentOperation = () => true,
+    isCurrentAlert = () => true
   }) => {
     const generationToken = ++latestGenerationToken;
     const generationAbortController = typeof AbortController === 'function'
@@ -5102,6 +5183,7 @@ export const createRunAnalysis = ({
     let acceptedReadyReceipt = null;
     const restoreCommittedArtifact = async () => {
       if (!activatedCandidate) return false;
+      if (captureGeneratedArtifactOwnerSet().results !== activatedCandidate.ownerSet.results) return false;
       if (acceptedReadyReceipt) {
         previewRuntime.invalidateReadyReceipt(
           acceptedReadyReceipt,
@@ -5124,8 +5206,10 @@ export const createRunAnalysis = ({
       return true;
     };
     const finishCanceled = async () => {
+      if (!isCurrentOperation()) return { status: 'stale' };
       await restoreCommittedArtifact();
-      errorLog.value = null;
+      if (!isCurrentOperation()) return { status: 'stale' };
+      if (isCurrentAlert()) errorLog.value = null;
       processingStatus.value = 'Canceled.';
       return { status: 'canceled' };
     };
@@ -5174,8 +5258,8 @@ export const createRunAnalysis = ({
         return { status: 'stale' };
       }
       if (execution.status === 'engine-error') {
-        errorLog.value = formatPythonError(execution.engineError);
-        return { status: 'error' };
+        return await failOperation(execution.engineError, { handle: committedArtifactHandle, operation,
+          restore: restoreCommittedArtifact, isCurrent: isCurrentAlert, isCurrentOperation });
       }
       processingStatus.value = 'Preparing preview...';
       const candidateCommit = execution.commit;
@@ -5287,8 +5371,9 @@ export const createRunAnalysis = ({
         adoptCanonicalRenderArtifacts(canonical, { adoptOwnedRequest: true });
       }
       if (typeof commitIntent === 'function') await commitIntent();
-      errorLog.value = null;
+      if (isCurrentAlert()) errorLog.value = null;
       failedGeneratePreservedResult.value = false;
+      if (generationFailureRecovery) generationFailureRecovery.value = null;
       logPostGbdrawTimings(timingEntries);
       return { status: 'ok', generatedArtifactCandidate: activatedCandidate };
     } catch (error) {
@@ -5297,9 +5382,8 @@ export const createRunAnalysis = ({
         await restoreCommittedArtifact();
         return { status: 'stale' };
       }
-      await restoreCommittedArtifact();
-      errorLog.value = formatJsError(error);
-      return { status: 'error' };
+      return await failOperation(error, { handle: committedArtifactHandle, operation,
+        restore: restoreCommittedArtifact, isCurrent: isCurrentAlert, isCurrentOperation });
     } finally {
       if (activeLosatAbortController === generationAbortController) {
         activeLosatAbortController = null;
@@ -5317,22 +5401,33 @@ export const createRunAnalysis = ({
     restoreIntentCheckpoint = null,
     commitIntent = null,
     alignmentResetBefore = null,
-    alignmentResetReceipt = undefined
+    alignmentResetReceipt = undefined,
+    operation = 'generate'
   }) => {
     const sessionBusy = state.sessionOperationAvailability?.();
     if (sessionBusy) return sessionBusy;
     let outcome = null;
+    const operationId = ++latestOperationId;
+    const isCurrentOperation = () => operationId === latestOperationId;
+    const previousAlert = errorLog.value;
+    const isCurrentAlert = () => isCurrentOperation()
+      && (errorLog.value === previousAlert || errorLog.value === null);
+    let beforeHandle = null;
+    let historyRecovery = null;
     processing.value = true;
     processingStatus.value = 'Preparing target record...';
     generationCancelRequested.value = false;
     try {
       await nextTick();
       await waitForAfterPaint();
-      const execute = (beforeHandle) => runCommittedCanonicalCandidateInternal({
-        canonical,
-        generatedArtifactHandle: beforeHandle,
-        commitIntent, alignmentResetBefore, alignmentResetReceipt
-      });
+      if (!isCurrentOperation()) return { status: 'stale' };
+      const execute = (handle) => {
+        beforeHandle = handle;
+        return runCommittedCanonicalCandidateInternal({
+          canonical, generatedArtifactHandle: beforeHandle,
+          commitIntent, alignmentResetBefore, alignmentResetReceipt, operation, isCurrentOperation, isCurrentAlert
+        });
+      };
       outcome = typeof runGeneratedArtifactReplacement === 'function'
         ? await runGeneratedArtifactReplacement(label, execute, {
             shouldCommit: (result) => result?.status === 'ok',
@@ -5340,11 +5435,13 @@ export const createRunAnalysis = ({
             restoreIntentCheckpoint,
             onCheckpointCapture: onGeneratedArtifactCheckpointCapture,
             restoreAppliedArtifact: async (beforeHandle) => {
+              historyRecovery = 'restore-failed';
               await previewRuntime.restorePreviousSelectedResult({
                 handle: beforeHandle,
                 phase: 'target-history-finalization-rollback',
                 restore: () => generatedArtifactTransactionOwner.restore(beforeHandle)
               });
+              historyRecovery = beforeHandle.ownerSet.results.length ? 'restored' : 'no-result';
             }
           })
         : await execute(await captureGeneratedArtifactHandle());
@@ -5352,13 +5449,20 @@ export const createRunAnalysis = ({
         generatedArtifactTransactionOwner.finalize();
       }
       if (Object.prototype.hasOwnProperty.call(outcome || {}, 'generatedArtifactCandidate')) {
-        outcome = { status: outcome.status };
+        const { generatedArtifactCandidate, ...publicOutcome } = outcome;
+        outcome = publicOutcome;
       }
       return outcome;
+    } catch (cause) {
+      outcome = await failOperation(cause, { handle: beforeHandle, operation, isCurrent: isCurrentAlert, isCurrentOperation,
+        recovery: cause?.artifactRestoreFailed ? 'restore-failed' : historyRecovery });
+      return outcome;
     } finally {
-      if (outcome?.status !== 'canceled') processingStatus.value = '';
-      generationCancelRequested.value = false;
-      processing.value = false;
+      if (isCurrentOperation()) {
+        if (outcome?.status !== 'canceled') processingStatus.value = '';
+        generationCancelRequested.value = false;
+        processing.value = false;
+      }
     }
   };
 

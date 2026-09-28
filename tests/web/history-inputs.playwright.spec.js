@@ -4,7 +4,6 @@ const { resolve } = require('node:path');
 const { gunzipSync } = require('node:zlib');
 const { openApp } = require('./helpers/app-lifecycle.cjs');
 
-const appOrigin = `http://127.0.0.1:${Number(process.env.GBDRAW_WEB_TEST_PORT || 4173)}`;
 const seed = resolve('gbdraw/web/gallery/sessions/HmmtDNA_basic_circular.gbdraw-session.json');
 const sessionInput = 'input[type="file"][accept^=".json,"]';
 
@@ -47,12 +46,12 @@ const expectHistory = async (page, undo, redo, label) => {
 
 for (const inputMethod of ['keyboard', 'pointer']) {
   test(`Label Mode ${inputMethod} edit has one Undo step and survives generation and fresh Load`, async ({
-    page, context, browser
+    page, context, browser, baseURL
   }, testInfo) => {
     test.setTimeout(300_000);
     const externalRequests = [];
     const allowLocal = (route) => {
-      if (new URL(route.request().url()).origin === appOrigin) {
+      if (new URL(route.request().url()).origin === new URL(baseURL).origin) {
         return route.continue();
       }
       externalRequests.push(route.request().url());
@@ -120,7 +119,7 @@ for (const inputMethod of ['keyboard', 'pointer']) {
     expect(saved.config.form.labels_mode).toBe('out');
     expect(await generate(page)).toBe(originalSvg);
 
-    const freshContext = await browser.newContext({ baseURL: appOrigin });
+    const freshContext = await browser.newContext({ baseURL });
     try {
       await freshContext.route('**/*', allowLocal);
       const freshPage = await freshContext.newPage();

@@ -3,7 +3,7 @@ const { readFileSync, writeFileSync } = require('node:fs');
 const { join, resolve } = require('node:path');
 const { gunzipSync } = require('node:zlib');
 const { createHash } = require('node:crypto');
-const { openApp, waitForAppShell } = require('./helpers/app-lifecycle.cjs');
+const { openApp, waitForAppShell, evaluateWithRetainedPromise } = require('./helpers/app-lifecycle.cjs');
 
 const repoRoot = resolve(process.env.GBDRAW_REPO || process.cwd());
 
@@ -402,15 +402,15 @@ test('Web fresh/reset Lock ON preserves explicit drafts, Result on Load, and reg
       invalid.config.form.keep_definition_left_aligned = malformed;
       const stable = await measureDefinitionColumns(page);
       const runs = await page.evaluate(() => window.__GBDRAW_DIAGRAM_RUNS__.length);
-      page.once('dialog', dialog => dialog.accept());
       const outcome = await page.evaluate(async raw => {
         const result = await window.__GBDRAW_APP__.importSession({
           target: { files: [new File([raw], 'malformed.gbdraw-session.json')], value: 'selected' }
         });
-        return { status: result.status, error: result.error?.message };
+        return { status: result.status, error: result.error };
       }, JSON.stringify(invalid));
       expect(outcome.status).toBe('error');
-      expect(outcome.error).toMatch(/keep_definition_left_aligned must be a boolean/);
+      expect(outcome.error).toMatchObject({ code: 'INPUT_INVALID', stage: 'request-validation',
+        context: { field: 'keep_definition_left_aligned', reason: 'BOOLEAN' }, summary: expect.stringContaining('Use true or false.') });
       await expect(lock).toBeChecked({ checked: locked });
       expect(await measureDefinitionColumns(page)).toEqual(stable);
       expect(await page.evaluate(() => window.__GBDRAW_DIAGRAM_RUNS__.length)).toBe(runs);
@@ -1211,7 +1211,7 @@ test('Normalize Record Lengths rejects a shared Linear row and remains recoverab
       result,
       errorSummary: String(app.errorLog?.summary || ''),
       errorDetails: Array.isArray(app.errorLog?.details)
-        ? app.errorLog.details.map((detail) => String(detail))
+        ? app.errorLog.details.map((detail) => detail.text)
         : [],
       dispatchedRequests: window.__GBDRAW_DIAGRAM_RUNS__.length,
       normalizeLength: app.form.normalize_length
@@ -1219,7 +1219,7 @@ test('Normalize Record Lengths rejects a shared Linear row and remains recoverab
   });
   expect(invalid.result.status).toBe('error');
   expect([invalid.errorSummary, ...invalid.errorDetails].join(' ')).toMatch(
-    /Normalize Record Lengths.*same Linear row/i
+    /Turn Normalize Record Lengths off or assign each record to a separate Linear row/
   );
   expect(invalid.dispatchedRequests).toBe(0);
   expect(invalid.normalizeLength).toBe(true);
@@ -2474,7 +2474,7 @@ ${origin}
   expect(regenerated.legendFills).toContain('#ff00ff');
   expect(regenerated.rules).toEqual(edited.rules);
 
-  const postprocessingFailure = await page.evaluate(async () => {
+  const postprocessingFailure = await evaluateWithRetainedPromise(page, async () => {
     const app = window.__GBDRAW_APP__;
     const targetId = String(app.extractedFeatures?.[0]?.svg_id || '');
     app.selectedFeatureIds = new Set(targetId ? [targetId] : []);
@@ -2508,14 +2508,30 @@ ${origin}
     });
     const before = snapshot();
     const originalSanitize = window.DOMPurify.sanitize;
+    const hooks = window.__GBDRAW_TEST_HOOKS__ ||= {};
+    const priorLifecycle = hooks.onSessionLifecycleEvent;
+    let admissionStarted = false;
+    let sanitizeRejected = false;
+    hooks.onSessionLifecycleEvent = event => {
+      priorLifecycle?.(event);
+      if (event.name === 'result-admission-start') admissionStarted = true;
+    };
     let result;
     try {
-      window.DOMPurify.sanitize = () => {
-        throw new Error('Forced candidate post-processing failure.');
+      window.DOMPurify.sanitize = (...args) => {
+        if (admissionStarted && !sanitizeRejected) {
+          sanitizeRejected = true;
+          window.DOMPurify.sanitize = originalSanitize;
+          throw Object.assign(new Error('Forced candidate post-processing failure.'), {
+            code: 'UNKNOWN', stage: 'result-admission'
+          });
+        }
+        return originalSanitize(...args);
       };
       result = await app.runAnalysis();
     } finally {
       window.DOMPurify.sanitize = originalSanitize;
+      hooks.onSessionLifecycleEvent = priorLifecycle;
     }
     await window.Vue.nextTick();
     const beforeState = JSON.parse(before);
@@ -2523,22 +2539,25 @@ ${origin}
     return {
       result,
       errorSummary: String(app.errorLog?.summary || ''),
+      sanitizeRejected,
       snapshotPreserved: JSON.stringify(afterState) === before,
       changedFields: Object.keys(beforeState).filter(
         (key) => JSON.stringify(beforeState[key]) !== JSON.stringify(afterState[key])
       )
     };
   });
-  expect(postprocessingFailure).toEqual({
+  expect(postprocessingFailure).toMatchObject({
     result: { status: 'error', error: {
-      summary: 'Forced candidate post-processing failure.', details: []
+      code: 'UNKNOWN', operation: 'generate', stage: 'result-admission'
     } },
-    errorSummary: 'Forced candidate post-processing failure.',
+    errorSummary: expect.stringContaining('without recognized diagnostic information'),
+    sanitizeRejected: true,
     snapshotPreserved: true,
     changedFields: []
   });
+  expect(postprocessingFailure.errorSummary).not.toContain('Forced candidate post-processing failure.');
 
-  const staleResponse = await page.evaluate(async () => {
+  const staleResponse = await evaluateWithRetainedPromise(page, async () => {
     const app = window.__GBDRAW_APP__;
     app.errorLog = null;
     const snapshot = () => JSON.stringify({
@@ -2599,18 +2618,19 @@ ${origin}
       )
     };
   });
-  expect(staleResponse).toEqual({
+  expect(staleResponse).toMatchObject({
     firstResult: { status: 'stale' },
-    secondResult: { status: 'error', error: {
-      summary: 'A diagram generation request is already running.', details: []
+    secondResult: { status: 'error', recovery: 'preserved', error: {
+      code: 'GENERATION_BUSY', operation: 'generate', stage: 'render'
     } },
     errorLog: {
-      summary: 'A diagram generation request is already running.',
-      details: []
+      code: 'GENERATION_BUSY', operation: 'generate', stage: 'render',
+      summary: expect.stringContaining('Wait for it to finish before retrying.')
     },
     snapshotPreserved: true,
     changedFields: []
   });
+  expect(staleResponse.secondResult.error).toEqual(staleResponse.errorLog);
 
   const reset = await page.evaluate(async () => {
     const app = window.__GBDRAW_APP__;
@@ -2722,7 +2742,10 @@ ORIGIN
 
   const rejected = await page.evaluate(() => window.__GBDRAW_APP__.runAnalysis());
   expect(rejected.status).toBe('error');
-  await expect(page.getByText('Choose a target record for region annotation review/region_1.')).toBeVisible();
+  await expect(page.getByRole('alert', { name: 'Generation Error' }))
+    .toContainText('Choose an available target record.');
+  expect(rejected.error).toMatchObject({ code: 'ANNOTATION_TARGET',
+    context: { reason: 'TARGET_RECORD' } });
 
   await selector.selectOption({ label: '#2 · RecB · 12 bp' });
   await expect(page.getByText('Choose the record that this annotation targets.')).toHaveCount(0);

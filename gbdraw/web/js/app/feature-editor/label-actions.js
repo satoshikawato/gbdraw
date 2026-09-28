@@ -1,3 +1,4 @@
+import { normalizeUserFacingError } from '../../services/error-normalization.js';
 import { ruleFeaturePayload } from '../rule-matching.js';
 import {
   buildFeatureMetadataMap,
@@ -362,7 +363,7 @@ const hasFeatureScopedOverrideInSvg = (svg, ...overrideMaps) => {
   ));
 };
 
-export const createFeatureLabelActions = ({ state, previewRuntime = null, rulePreparation }) => {
+export const createFeatureLabelActions = ({ state, previewRuntime = null, rulePreparation, ref, computed }) => {
   const {
     mode,
     generatedMode,
@@ -1005,6 +1006,16 @@ export const createFeatureLabelActions = ({ state, previewRuntime = null, rulePr
   };
 
   let labelImportRevision = 0;
+  const labelImportFailure = ref(null);
+  const canRetryLabelImportFailure = computed(() => Boolean(labelImportFailure.value
+    && state.errorLog?.value === labelImportFailure.value.error
+    && labelImportFailure.value.revision === labelImportRevision
+    && rulePreparation.isCurrent(labelImportFailure.value.snapshot)
+    && labelImportFailure.value.intent === labelIntentSignature()));
+  const retryLabelImportFailure = () => canRetryLabelImportFailure.value ? labelImportFailure.value.retry() : false;
+  const editLabelImportFailure = () => {
+    if (canRetryLabelImportFailure.value) labelImportFailure.value.input?.click?.();
+  };
   const labelIntentSignature = () => JSON.stringify([
     labelTextFeatureOverrides, labelTextBulkOverrides, labelVisibilityOverrides
   ]);
@@ -1018,6 +1029,7 @@ export const createFeatureLabelActions = ({ state, previewRuntime = null, rulePr
     const before = rulePreparation.snapshot();
     const labelIntent = labelIntentSignature();
     const revision = ++labelImportRevision;
+    const previousError = state.errorLog?.value;
 
     try {
       const text = await readFileText(file);
@@ -1113,10 +1125,17 @@ export const createFeatureLabelActions = ({ state, previewRuntime = null, rulePr
       if (skippedNonTrackableCount > 0) {
         message += ` ${skippedNonTrackableCount} match(es) lacked a feature key and were not tracked for re-export.`;
       }
+      if (state.errorLog?.value === labelImportFailure.value?.error) state.errorLog.value = null;
+      labelImportFailure.value = null;
       window.alert(message);
     } catch (error) {
-      console.error('Failed to load label TSV:', error);
-      window.alert(`Failed to load label TSV. ${error?.message || 'Please check the 5-column TSV format.'}`);
+      if (revision !== labelImportRevision || input.files?.[0] !== file || !rulePreparation.isCurrent(before)
+        || state.errorLog?.value !== previousError) return;
+      const model = normalizeUserFacingError(error, { operation: 'evaluateRules', stage: 'resource-staging' });
+      if (state.errorLog) state.errorLog.value = model;
+      labelImportFailure.value = { error: model, snapshot: before, intent: labelIntent, revision,
+        input: event.sourceInput || input,
+        retry: () => loadLabelOverrideTable({ target: { files: [file], value: '' }, sourceInput: event.sourceInput || input }) };
     } finally {
       if (input?.files?.[0] === file) input.value = '';
     }
@@ -1174,7 +1193,7 @@ export const createFeatureLabelActions = ({ state, previewRuntime = null, rulePr
 
   return {
     downloadLabelOverrideTable,
-    loadLabelOverrideTable,
+    loadLabelOverrideTable, canRetryLabelImportFailure, retryLabelImportFailure, editLabelImportFailure,
     getEditableLabelByFeatureId,
     handleGlobalLabelModeChoice,
     handleLabelTextScopeChoice,

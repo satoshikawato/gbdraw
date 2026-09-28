@@ -210,13 +210,16 @@ export const createSessionImportRollbackState = ({
   depthTracks,
   featureListScrollTop,
   featureListScrollRef,
-  selectedPairwiseBlockOrthogroupId
+  selectedPairwiseBlockOrthogroupId,
+  captureSpecificRulePatternDrafts = null,
+  restoreSpecificRulePatternDrafts = null
 }) => ({
   capture: () => ({
     circularDepthTrackUiCount: depthTrackUiCounts.circular,
     depthTracks: cloneJsonData(depthTracks),
     featureListScrollTop: featureListScrollTop.value,
-    selectedPairwiseBlockOrthogroupId: selectedPairwiseBlockOrthogroupId.value
+    selectedPairwiseBlockOrthogroupId: selectedPairwiseBlockOrthogroupId.value,
+    ...(captureSpecificRulePatternDrafts ? { specificRulePatternDrafts: captureSpecificRulePatternDrafts() } : {})
   }),
   restore: async (snapshot) => {
     depthTrackUiCounts.circular = snapshot.circularDepthTrackUiCount;
@@ -232,6 +235,9 @@ export const createSessionImportRollbackState = ({
     }
     selectedPairwiseBlockOrthogroupId.value =
       snapshot.selectedPairwiseBlockOrthogroupId;
+    if (Object.hasOwn(snapshot, 'specificRulePatternDrafts')) {
+      restoreSpecificRulePatternDrafts?.(snapshot.specificRulePatternDrafts);
+    }
   }
 });
 
@@ -252,6 +258,7 @@ export const createAppSetup = () => {
     results,
     selectedResultIndex,
     failedGeneratePreservedResult,
+    generationFailureRecovery,
     resultPanelTab,
     lastRunInfo,
     annotationWarnings,
@@ -434,6 +441,7 @@ export const createAppSetup = () => {
     fileLegendCaptions,
     filteredFeatures
   } = state;
+  let featureActions = null;
   let similarityAlignmentActions = null;
   let refreshSimilarityAlignmentCanvas = () => {};
   const linearTypography = createLinearTypographyController({
@@ -443,6 +451,7 @@ export const createAppSetup = () => {
   });
   let alignmentReviewBlocksEditor = () => false;
   const rightDrawerActions = createRightDrawerController({ state, watch,
+    onClose: () => featureActions?.suspendSpecificRulePatternDrafts(),
     getOpenDisabledReason: () => alignmentReviewBlocksEditor()
       ? 'Finish or cancel alignment review before opening Editor.' : '' });
 
@@ -1181,13 +1190,21 @@ export const createAppSetup = () => {
     buildRunStateData,
     applyRunStateData
   });
+  const restoreWithSpecificRuleDrafts = async (restore, ...args) => {
+    const drafts = featureActions?.captureSpecificRulePatternDrafts();
+    try {
+      return await restore(...args);
+    } finally {
+      if (drafts) featureActions.restoreSpecificRulePatternDrafts(drafts);
+    }
+  };
   const history = createHistoryManager({
     buildIntent: historySnapshots.buildHistoryIntent,
-    applyIntent: historySnapshots.applyHistoryIntent,
+    applyIntent: (...args) => restoreWithSpecificRuleDrafts(historySnapshots.applyHistoryIntent, ...args),
     buildCheckpoint: historySnapshots.buildArtifactCheckpoint,
-    applyCheckpoint: historySnapshots.applyArtifactCheckpoint,
+    applyCheckpoint: (...args) => restoreWithSpecificRuleDrafts(historySnapshots.applyArtifactCheckpoint, ...args),
     captureGeneratedArtifactHandle: historySnapshots.captureGeneratedArtifactHandle,
-    restoreGeneratedArtifactHandle: historySnapshots.restoreGeneratedArtifactHandle,
+    restoreGeneratedArtifactHandle: (...args) => restoreWithSpecificRuleDrafts(historySnapshots.restoreGeneratedArtifactHandle, ...args),
     compareGeneratedArtifactHandles: historySnapshots.compareGeneratedArtifactHandles,
     signatureFor: historySnapshots.snapshotSignature,
     fileStore: historyFileStore,
@@ -1283,17 +1300,18 @@ export const createAppSetup = () => {
     commitAppliedGenerationFields,
     state,
     rulePreparation,
-    watch,
+    ref, computed, watch,
     nextTick,
     legendActions
   });
   const featureSelection = createFeatureSelection({ state, onMounted, onUnmounted });
-  const featureActions = createFeatureEditor({
+  featureActions = createFeatureEditor({
     state,
     rulePreparation,
     history,
     getCommittedRequest: getCommittedCanonicalRenderRequest,
     isCurrentFeature: recordDisplayControls.isCurrentFeature,
+    isPatternEditAvailable: () => !sessionImportPending.value,
     nextTick,
     legendActions,
     svgActions,
@@ -1320,9 +1338,17 @@ export const createAppSetup = () => {
     if (newIndex !== oldIndex) previewRuntime.flushActiveResult({ markIncremental: false });
     featureSelection.clearFeatureSelection({ clearStatus: true, syncDom: false });
   });
+  const setDiagramMode = (nextMode) => {
+    if (!['circular', 'linear'].includes(nextMode) || nextMode === mode.value) return;
+    const busy = sessionOperationAvailability();
+    if (busy) return busy;
+    featureActions.suspendSpecificRulePatternDrafts();
+    return setMode(nextMode);
+  };
   watch(mode, () => {
+    featureActions.suspendSpecificRulePatternDrafts();
     featureSelection.clearFeatureSelection({ clearStatus: true, syncDom: false });
-  });
+  }, { flush: 'sync' });
   watch(svgContent, () => {
     refreshSimilarityAlignmentCanvas();
     if (!skipCaptureBaseConfig.value) {
@@ -2327,7 +2353,7 @@ export const createAppSetup = () => {
     captureGeneratedArtifactHandle: historySnapshots.captureGeneratedArtifactHandle,
     captureGeneratedArtifactOwnerSet: historySnapshots.captureGeneratedArtifactOwnerSet,
     installGeneratedArtifactOwnerSet: historySnapshots.installGeneratedArtifactOwnerSet,
-    restoreGeneratedArtifactHandle: historySnapshots.restoreGeneratedArtifactHandle,
+    restoreGeneratedArtifactHandle: (...args) => restoreWithSpecificRuleDrafts(historySnapshots.restoreGeneratedArtifactHandle, ...args),
     setGeneratedArtifactIdentity: historySnapshots.setGeneratedArtifactIdentity,
     runGeneratedArtifactReplacement: (...args) => (
       history.runUndoableArtifactReplacement(...args)
@@ -2439,10 +2465,10 @@ export const createAppSetup = () => {
     makeRef: ref
   });
 
-  const { waitForAuxiliaryFileImport, auxiliaryFileImportPending } = setupWatchers({
+  const { waitForAuxiliaryFileImport, auxiliaryFileImportPending, canRetryAuxiliaryImportFailure, retryAuxiliaryImportFailure } = setupWatchers({
     state,
     rulePreparation,
-    watch,
+    ref, computed, watch,
     nextTick,
     onMounted,
     legendActions,
@@ -2503,7 +2529,9 @@ export const createAppSetup = () => {
       depthTracks: adv.depth_tracks,
       featureListScrollTop,
       featureListScrollRef,
-      selectedPairwiseBlockOrthogroupId
+      selectedPairwiseBlockOrthogroupId,
+      captureSpecificRulePatternDrafts: featureActions.captureSpecificRulePatternDrafts,
+      restoreSpecificRulePatternDrafts: featureActions.restoreSpecificRulePatternDrafts
     }),
     afterImport: async (result) => {
       if (result?.status === 'ok' || result?.status === 'legacy') {
@@ -2512,6 +2540,7 @@ export const createAppSetup = () => {
         if (!await history.initializeIntentBaseline('Loaded session', { isCurrent: result.isCurrent })) {
           throw new Error('Session loading canceled.');
         }
+        featureActions.clearSpecificRulePatternDrafts();
         annotationImportNotice.value = '';
         specificRuleNotice.value = '';
         historySnapshots.clearGeneratedArtifactIdentity({
@@ -2564,6 +2593,8 @@ export const createAppSetup = () => {
     moveSpecificRuleUp,
     removeSpecificRule,
     setSpecificRuleField,
+    specificRulePattern, specificRulePatternDraft, specificRulePatternFieldId,
+    editSpecificRulePattern, retrySpecificRulePattern, revertSpecificRulePattern,
     addFeatureVisibilityRule,
     downloadFeatureVisibilityRulesTsv,
     featureVisibilityQualifierSuggestions,
@@ -2746,7 +2777,7 @@ export const createAppSetup = () => {
         if (status.value === 'Copied') status.value = '';
       }, 1600);
     } catch (error) {
-      console.warn(`Failed to copy ${description}:`, error);
+      console.warn('Failed to copy the requested command.', normalizeUserFacingError(error));
       status.value = 'Copy failed';
       setTimeout(() => {
         if (status.value === 'Copy failed') status.value = '';
@@ -2801,7 +2832,7 @@ export const createAppSetup = () => {
       try {
         await linearRecordSelector.refresh();
       } catch (error) {
-        console.warn('Failed to start Linear record discovery:', error);
+        return { catalog: null, error: normalizeUserFacingError(error, { operation: 'listSequenceRecords', stage: 'helper' }) };
       }
       catalog = getAnnotationRecordCatalog(loadComparison);
     }
@@ -2809,55 +2840,63 @@ export const createAppSetup = () => {
       ? { catalog, error: '' }
       : {
           catalog: null,
-          error: catalog.issues[0] || 'Could not read records from the Linear input file(s).'
+          error: linearSeqs.map(seq => linearRecordSelector.errorModelFor(seq)).find(error => error?.code)
+            || catalog.issues[0] || 'Could not read records from the Linear input file(s).'
         };
   }
 
-  const runAnalysis = (options = null) => runGeneratedDiagramAnalysis(null, null, null, {
-    prepareGenerate: async () => {
-      if (mode.value === 'linear') {
-        if (importedComparisonIntent.disposition === IMPORTED_COMPARISON_DISPOSITIONS.EDITABLE) {
-          await materializeAutomaticLinearRecords();
-        } else {
-          await linearRecordSelector.refresh();
-        }
-      }
-      if (similarityAlignmentActions?.validateBeforeGenerate) {
-        const validation = await similarityAlignmentActions.validateBeforeGenerate();
-        if (validation?.status !== 'ok') {
-          failedGeneratePreservedResult.value = results.value.length > 0;
-          if (similarityAlignmentActions.dialogOpen.value) {
-            await focusSimilarityAlignmentDialog();
+  const runAnalysis = (options = null) => {
+    const patternDrafts = featureActions.captureSpecificRulePatternDrafts();
+    return runGeneratedDiagramAnalysis(null, null, null, {
+      prepareGenerate: async () => {
+        if (mode.value === 'linear') {
+          if (importedComparisonIntent.disposition === IMPORTED_COMPARISON_DISPOSITIONS.EDITABLE) {
+            await materializeAutomaticLinearRecords();
+          } else {
+            await linearRecordSelector.refresh();
           }
-          return validation;
+        }
+        if (similarityAlignmentActions?.validateBeforeGenerate) {
+          const validation = await similarityAlignmentActions.validateBeforeGenerate();
+          if (validation?.status !== 'ok') {
+            failedGeneratePreservedResult.value = results.value.length > 0;
+            if (similarityAlignmentActions.dialogOpen.value) {
+              await focusSimilarityAlignmentDialog();
+            }
+            return validation;
+          }
+        }
+        const comparisonPlanSnapshot = mode.value === 'linear'
+          ? linearComparisonResolution.value
+          : null;
+        const comparisonExecution = importedComparisonExecution({
+          intent: importedComparisonIntent,
+          draftResolution: comparisonPlanSnapshot
+        });
+        if (!comparisonExecution.ok) {
+          errorLog.value = normalizeUserFacingError(comparisonExecution.message, { operation: 'generate', stage: 'request-validation' });
+          generationFailureRecovery.value = results.value.length ? 'preserved' : 'no-result';
+          failedGeneratePreservedResult.value = results.value.length > 0;
+          if (mode.value === 'linear') await focusLinearComparisonIssue();
+          return { status: 'error', error: errorLog.value };
+        }
+        cancelDefinitionUpdate();
+        return { status: 'ready', comparisonPlanSnapshot, comparisonExecution };
+      },
+      afterGenerate: async (result) => {
+        if (result?.status === 'error' && mode.value === 'linear') {
+          await focusLinearComparisonIssue();
+        }
+        if (result?.status === 'ok') {
+          featureActions.clearSpecificRulePatternDrafts();
+          await rulePreparation.prepare();
+          featureSelection.clearFeatureSelection({ clearStatus: true });
+        } else {
+          featureActions.restoreSpecificRulePatternDrafts(patternDrafts);
         }
       }
-      const comparisonPlanSnapshot = mode.value === 'linear'
-        ? linearComparisonResolution.value
-        : null;
-      const comparisonExecution = importedComparisonExecution({
-        intent: importedComparisonIntent,
-        draftResolution: comparisonPlanSnapshot
-      });
-      if (!comparisonExecution.ok) {
-        errorLog.value = normalizeUserFacingError(new Error(comparisonExecution.message));
-        failedGeneratePreservedResult.value = results.value.length > 0;
-        if (mode.value === 'linear') await focusLinearComparisonIssue();
-        return { status: 'error', error: errorLog.value };
-      }
-      cancelDefinitionUpdate();
-      return { status: 'ready', comparisonPlanSnapshot, comparisonExecution };
-    },
-    afterGenerate: async (result) => {
-      if (result?.status === 'error' && mode.value === 'linear') {
-        await focusLinearComparisonIssue();
-      }
-      if (result?.status === 'ok') {
-        await rulePreparation.prepare();
-        featureSelection.clearFeatureSelection({ clearStatus: true });
-      }
-    }
-  });
+    });
+  };
 
   const chooseImportedComparisonAction = (action) => history.runUndoable(
     `${String(action || '').toLowerCase()} imported comparison`,
@@ -2868,7 +2907,7 @@ export const createAppSetup = () => {
         draftResolution: linearComparisonResolution.value
       });
       if (!outcome.ok) {
-        errorLog.value = new Error(outcome.message);
+        errorLog.value = normalizeUserFacingError(outcome.message, { operation: 'generate', stage: 'request-validation' });
         return false;
       }
       if (outcome.action === IMPORTED_COMPARISON_ACTIONS.CLEAR) {
@@ -3190,6 +3229,7 @@ export const createAppSetup = () => {
 
     return history.runUndoableCheckpoint('Reset settings', async () => {
       cancelDefinitionUpdate();
+      featureActions.clearSpecificRulePatternDrafts();
       resetSettingsState(state);
       invalidateLinearComparisonArtifacts();
       matchSequenceRegistry?.reset?.();
@@ -3528,6 +3568,7 @@ export const createAppSetup = () => {
   };
 
   const errorDisplay = computed(() => normalizeUserFacingError(errorLog.value));
+  const reloadAfterOperationError = () => window.location.reload();
 
   const sessionTitleLabel = computed(() => {
     const title = normalizeSessionTitle(sessionTitle.value);
@@ -3574,7 +3615,12 @@ export const createAppSetup = () => {
     downloadTextFile(String(filename || 'gbdraw.txt'), value, type);
   };
 
-  const runExportAction = async (methodName, label) => {
+  let latestExportOperation = 0;
+  const failedInteractiveSvgExport = ref(null);
+  const canRetryInteractiveSvgExport = computed(() => Boolean(failedInteractiveSvgExport.value
+    && errorLog.value === failedInteractiveSvgExport.value));
+  const runExportAction = async (methodName, operation) => {
+    const operationId = ++latestExportOperation;
     const previousError = errorLog.value;
     try {
       const snapshot = captureSvgExport(state, { interactive: methodName === 'downloadInteractiveSVG' });
@@ -3589,25 +3635,23 @@ export const createAppSetup = () => {
           return result.result.base64;
         }
       });
-      if (errorLog.value === previousError && previousError?.type === 'Export error') errorLog.value = null;
+      if (operationId === latestExportOperation && errorLog.value === previousError && previousError?.operation?.startsWith('export-')) errorLog.value = null;
       return result;
     } catch (error) {
-      const normalized = normalizeUserFacingError(error);
-      errorLog.value = {
-        type: 'Export error',
-        message: `${label} export failed: ${normalized?.summary || 'Unknown export error.'}`,
-        details: normalized?.details || []
-      };
-      return { status: 'error' };
+      const normalized = normalizeUserFacingError(error, { operation, stage: 'export-capture' });
+      if (operationId !== latestExportOperation || errorLog.value !== previousError) return { status: 'stale' };
+      errorLog.value = normalized;
+      failedInteractiveSvgExport.value = methodName === 'downloadInteractiveSVG' ? normalized : null;
+      return { status: 'error', error: normalized };
     }
   };
 
-  const downloadSVG = () => runExportAction('downloadSVG', 'SVG');
+  const downloadSVG = () => runExportAction('downloadSVG', 'export-svg');
   const downloadInteractiveSVG = () => (
-    runExportAction('downloadInteractiveSVG', 'Interactive SVG')
+    runExportAction('downloadInteractiveSVG', 'export-svg')
   );
-  const downloadPNG = () => runExportAction('downloadPNG', 'PNG');
-  const downloadPDF = () => runExportAction('downloadPDF', 'PDF');
+  const downloadPNG = () => runExportAction('downloadPNG', 'export-png');
+  const downloadPDF = () => runExportAction('downloadPDF', 'export-pdf');
 
   const specificRuleLegendOptions = computed(() => {
     const byCaption = new Map();
@@ -3682,7 +3726,7 @@ export const createAppSetup = () => {
       recordSessionLifecycleEvent('session-save-catalog-preparation-end', {
         reusedCommittedSession: Boolean(committedSession)
       });
-      if (error) throw new Error(error);
+      if (error) throw error;
       return { linearRecordCatalog: catalog };
     },
     onError: (error) => { errorLog.value = normalizeUserFacingError(error); }
@@ -4208,11 +4252,22 @@ export const createAppSetup = () => {
     generationCancelRequested,
     errorLog,
     errorDisplay,
+    canRetryInteractiveSvgExport,
+    reloadAfterOperationError,
+    setDiagramMode,
+    canRetrySpecificRuleFailure: featureActions.canRetrySpecificRuleFailure,
+    canEditSpecificRuleFailure: featureActions.canEditSpecificRuleFailure,
+    canRetryLabelImportFailure: featureActions.canRetryLabelImportFailure,
+    retryLabelImportFailure: undoableAction('Load label edits', featureActions.retryLabelImportFailure),
+    editLabelImportFailure: featureActions.editLabelImportFailure,
+    retrySpecificRuleFailure: featureActions.retrySpecificRuleFailure,
+    editSpecificRuleFailure: featureActions.editSpecificRuleFailure,
     sessionTitle,
     sessionTitleLabel,
     results,
     selectedResultIndex,
     failedGeneratePreservedResult,
+    generationFailureRecovery,
     importedComparisonIntent,
     importedComparisonNeedsResolution,
     importedComparisonCanInherit,
@@ -4409,6 +4464,7 @@ export const createAppSetup = () => {
     toggleLinearTrackSlotsPanel,
     circularTrackRenderers: circularTrackSlotEditor.circularTrackRenderers,
     circularTrackSlotEditorKey: circularTrackSlotEditor.circularTrackSlotEditorKey,
+    updateCircularTrackSlotMeasure: circularTrackSlotEditor.updateCircularTrackSlotMeasure,
     circularTrackRendererLabel: circularTrackSlotEditor.circularTrackRendererLabel,
     resetCircularTrackSlotsFromSimpleControls: circularTrackSlotEditor.resetCircularTrackSlotsFromSimpleControls,
     resetCircularTrackSlotsToPreset: circularTrackSlotEditor.resetCircularTrackSlotsToPreset,
@@ -4540,6 +4596,7 @@ export const createAppSetup = () => {
     resolveOrthogroupDescription: orthogroupActions.resolveOrthogroupDescription,
     orthogroupScope: orthogroupActions.orthogroupScope,
     orthogroupScopeLabel: orthogroupActions.orthogroupScopeLabel,
+    orthogroupRows: orthogroupActions.orthogroupRows,
     isOrthogroupRenamed: orthogroupActions.isOrthogroupRenamed,
     getOrthogroupSequenceCount: orthogroupActions.getOrthogroupSequenceCount,
     hasOrthogroupSequence: orthogroupActions.hasOrthogroupSequence,
@@ -4603,7 +4660,8 @@ export const createAppSetup = () => {
     openOrthogroupInDrawer,
     circularRecordList,
     refreshCircularRecordOrder,
-    waitForAuxiliaryFileImport,
+    waitForAuxiliaryFileImport, canRetryAuxiliaryImportFailure,
+    retryAuxiliaryImportFailure: () => history.runUndoableCheckpoint('Change uploaded file', retryAuxiliaryImportFailure, { shouldCommit: result => result !== false }),
     circularRecordPresentationOptions,
     circularRecordPresentationError,
     circularSingleRecordPresentationEnabled,
@@ -4672,6 +4730,8 @@ export const createAppSetup = () => {
     moveSpecificRuleUp,
     removeSpecificRule,
     setSpecificRuleField,
+    specificRulePattern, specificRulePatternDraft, specificRulePatternFieldId,
+    editSpecificRulePattern, retrySpecificRulePattern, revertSpecificRulePattern,
     extractedFeatures,
     featureEditorStatus,
     featureEditorStatusText,

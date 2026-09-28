@@ -18,10 +18,9 @@ import {
   formatPxAuto,
   formatRadiusFactorAuto,
   isManualSlotValue,
-  normalizeOptionalText,
-  parseCircularScalarDisplay
+  normalizeOptionalText
 } from './track-slot-display.js';
-import { parseOptionalPixel, validateCustomTrackPlan } from './track-slot-validation.js';
+import { parseOptionalCircularScalar, parseOptionalPixel, validateCustomTrackPlan } from './track-slot-validation.js';
 import { visibleFeatureUnderlaysForState } from '../utils/feature-rendering.js';
 
 const SUPPORTED_RENDERERS = [
@@ -1152,28 +1151,6 @@ export const buildCircularTrackSlotSpec = (slot, defaultNt = 'GC', preset = 'tuc
   return `${normalized.id}:${normalized.renderer}${options.length ? `@${options.join(',')}` : ''}`;
 };
 
-const circularScalarPayload = (value, fieldName) => {
-  if (value === null || value === undefined || value === '') return null;
-  if (value && typeof value === 'object' && !Array.isArray(value)) {
-    const numeric = Number(value.value);
-    const unit = String(value.unit || '').trim().toLowerCase();
-    if (!Number.isFinite(numeric) || numeric <= 0 || !['px', 'factor'].includes(unit)) {
-      throw new Error(`${fieldName} must be a positive finite px or factor scalar.`);
-    }
-    return { value: numeric, unit };
-  }
-  const text = String(value).trim();
-  const isPx = /px$/i.test(text);
-  const isPercent = /%$/.test(text);
-  const numericText = isPx || isPercent ? text.slice(0, -2 + Number(isPercent)) : text;
-  const numeric = Number(numericText.trim());
-  const resolved = isPercent ? numeric / 100 : numeric;
-  if (!Number.isFinite(resolved) || resolved <= 0) {
-    throw new Error(`${fieldName} must be a positive finite px or factor scalar.`);
-  }
-  return { value: resolved, unit: isPx ? 'px' : 'factor' };
-};
-
 const canonicalAnnotationParams = (params) => {
   const next = { ...params };
   if (!Array.isArray(next.marks) || next.marks.length === 0) {
@@ -1237,8 +1214,8 @@ export const buildCircularTrackSlotPayload = (
     renderer: normalized.renderer,
     enabled: normalized.enabled,
     side,
-    radius: circularScalarPayload(normalized.radius, `Circular track '${normalized.id}' radius`),
-    width: circularScalarPayload(normalized.width, `Circular track '${normalized.id}' width`),
+    radius: parseOptionalCircularScalar(normalized.radius, `Circular track '${normalized.id}' radius`),
+    width: parseOptionalCircularScalar(normalized.width, `Circular track '${normalized.id}' width`),
     z: Number(normalized.z) || 0,
     params,
     innerGapPx: parseOptionalPixel(
@@ -2436,6 +2413,11 @@ export const createCircularTrackSlotEditor = ({ state }) => {
     return null;
   };
 
+  const updateCircularTrackSlotMeasure = (slot, field, scalar) => {
+    if (!['width', 'radius'].includes(field) || !state.adv.circular_track_slots.includes(slot)) return;
+    if (slot[field] !== scalar) slot[field] = scalar;
+  };
+
   const circularSlotManualValue = (slot, field) => {
     if (!slot) return '';
     if (field === 'width') return slot.width;
@@ -2503,11 +2485,7 @@ export const createCircularTrackSlotEditor = ({ state }) => {
   const circularTrackSlotGeometryUnitSuffix = (slot, field) => {
     const text = String(circularSlotManualValue(slot, field) ?? '').trim();
     if (!text) return '';
-    if (field === 'width') {
-      const parsed = parseCircularScalarDisplay(text);
-      return parsed?.unit === 'factor' ? 'R' : '';
-    }
-    if (field === 'radius') return /px$/i.test(text) ? '' : 'R';
+    if (!['inner_gap_px', 'outer_gap_px'].includes(field)) return '';
     return /px$/i.test(text) ? '' : 'px';
   };
 
@@ -2586,6 +2564,7 @@ export const createCircularTrackSlotEditor = ({ state }) => {
     canMoveCircularTrackSlotOutside,
     canMoveCircularTrackSlotInside,
     canMoveCircularTrackSlotToAxis,
+    updateCircularTrackSlotMeasure,
     updateCircularTrackSlotRenderer,
     updateCircularTrackSlotPlacement,
     updateCircularTrackFeatureLane,

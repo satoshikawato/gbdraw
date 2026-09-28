@@ -206,8 +206,11 @@ test('failed session loading clears pending state and preserves the prior sessio
   await expect(loadingStatus).toBeHidden();
   await expect(loadButton).toBeEnabled();
   await expect(sessionInput).toHaveValue('');
-  expect(dialogs).toHaveLength(1);
-  expect(dialogs[0]).toMatch(/^Failed to load session:/);
+  expect(dialogs).toEqual([]);
+  await expect(page.getByRole('alert', { name: 'Operation error' })).toContainText('Use valid JSON.');
+  expect(await page.evaluate(() => window.__GBDRAW_APP__.errorLog)).toMatchObject({
+    code: 'INPUT_INVALID', stage: 'request-validation', context: { field: 'schema', reason: 'JSON_FORMAT' }
+  });
   expect(await importSnapshot(page)).toEqual(before);
 
   await sessionInput.setInputFiles(invalidSession);
@@ -216,8 +219,8 @@ test('failed session loading clears pending state and preserves the prior sessio
       .filter(({ name }) => name === 'interactiveReady').length === 2
     && window.__GBDRAW_APP__?.sessionImportPending === false
   ));
-  expect(dialogs).toHaveLength(2);
-  expect(dialogs[1]).toMatch(/^Failed to load session:/);
+  expect(dialogs).toEqual([]);
+  await expect(page.getByRole('alert', { name: 'Operation error' })).toContainText('Use valid JSON.');
   expect(await importSnapshot(page)).toEqual(before);
   await expect(sessionInput).toHaveValue('');
 });

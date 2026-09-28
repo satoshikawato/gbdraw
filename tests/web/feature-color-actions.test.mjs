@@ -62,6 +62,8 @@ const manualSpecificRules = [
   { feat: 'CDS', qual: 'hash', val: 'hash-z', color: '#444444', cap: 'Other' }
 ];
 const featureColorOverrides = {};
+const legendColorOverrides = {};
+const committedLegendIntents = [];
 const extractedFeatures = ref([featureA, featureB, hashOnlyFeature]);
 const biologicalFeatures = ref([featureA, featureB, hashOnlyFeature]);
 const legendEntries = ref([{ caption: 'Core', color: '#111111', featureIds: ['hash-a', 'hash-b', 'hash-c'] }]);
@@ -145,7 +147,7 @@ const actions = createFeatureColorActions({
     legendRenameDialog: {},
     legendEntries,
     legendStrokeOverrides,
-    legendColorOverrides: {},
+    legendColorOverrides,
     originalLegendOrder: ref([]),
     originalLegendColors: ref({}),
     originalSvgStroke,
@@ -185,7 +187,8 @@ const actions = createFeatureColorActions({
     }
   },
   ruleActions: {
-    commitSpecificRules: async (rules, _label, {afterCommit = () => {}} = {}) => {
+    commitSpecificRules: async (rules, _label, {afterCommit = () => {}, previousLegendIntents = []} = {}) => {
+      committedLegendIntents.push(previousLegendIntents);
       const preparation = createRulePreparation({state:{extractedFeatures,biologicalFeatures,manualSpecificRules},evaluate:evaluatePythonRules});
       const candidate = await preparation.prepareCandidate(rules);
       if (!candidate) return false;
@@ -253,6 +256,27 @@ assert.equal(manualSpecificRules.find((rule) => rule.qual === 'hash' && rule.val
 assert.deepEqual(featureColorOverrides['feature-a'], { color: '#abcdef', caption: 'Core' });
 assert.deepEqual(featureColorOverrides['feature-b'], { color: '#abcdef', caption: 'Core' });
 assert.deepEqual(featureColorOverrides['feature-c'], { color: '#abcdef', caption: 'Core' });
+
+// Replacing an inherited caption requires every existing contributor.
+manualSpecificRules.splice(0);
+legendEntries.value = [{ caption: 'Core', color: '#111111' }];
+Object.assign(featureStyleScopeDialog, { show: true, feat: featureA, color: '#abcdef', legendName: 'Core' });
+await actions.handleColorScopeChoice('caption');
+assert.deepEqual(committedLegendIntents.at(-1), [{ caption: 'Core', color: '#111111' }]);
+assert.equal(legendColorOverrides.Core, '#abcdef');
+
+// A partial group or a new caption cannot adopt an unrelated existing row.
+manualSpecificRules.splice(0);
+legendEntries.value = [{ caption: 'Core', color: '#111111' }];
+delete legendColorOverrides.Core;
+await actions.setFeatureColor(featureA, '#abcdef', 'Core');
+assert.deepEqual(committedLegendIntents.at(-1), []);
+assert.equal(legendColorOverrides.Core, undefined);
+manualSpecificRules.splice(0);
+legendEntries.value = [{ caption: 'Manual row', color: '#111111' }];
+await actions.setFeatureColor(featureA, '#abcdef', 'Manual row');
+assert.deepEqual(committedLegendIntents.at(-1), []);
+assert.equal(legendColorOverrides['Manual row'], undefined);
 
 const labelFeatureA = {
   id: 'label-feature-a',

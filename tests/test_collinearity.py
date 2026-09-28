@@ -2688,6 +2688,7 @@ def test_web_losatp_blastp_payload_helper_applies_collinear_search_scope(
         scope: str,
         input_payload: Path = pairs_path,
         input_raw_tsv: Path = raw_tsv_path,
+        explicit_display_pairs: bool = False,
     ) -> dict[str, object]:
         raw_result = namespace["convert_losatp_blastp_pairs_to_genomic_payload"](
             str(input_payload),
@@ -2708,6 +2709,11 @@ def test_web_losatp_blastp_payload_helper_applies_collinear_search_scope(
             2,
             scope,
             "rbh",
+            None,
+            "either",
+            True,
+            None,
+            explicit_display_pairs,
         )
         return json.loads(str(raw_result))
 
@@ -2738,12 +2744,23 @@ def test_web_losatp_blastp_payload_helper_applies_collinear_search_scope(
         multi_row_pairs_path,
         multi_row_raw_tsv_path,
     )
+    multi_row_all = convert(
+        "all",
+        multi_row_pairs_path,
+        multi_row_raw_tsv_path,
+        explicit_display_pairs=True,
+    )
 
     assert "error" not in adjacent
     assert "error" not in all_records
     assert "error" not in multi_row_adjacent
-    assert "collinear_search_scope must be one of: adjacent, all" in invalid_scope["error"]
-    assert "Unsupported LOSATP blastp mode" in invalid_mode["error"]
+    assert "error" not in multi_row_all
+    assert invalid_scope["error"] == {
+        "code": "INPUT_INVALID", "operation": "convertLosatpPairsToGenomicPayload",
+        "stage": "helper", "context": {"field": "collinear_search_scope", "reason": "ADJACENT_ALL"},
+    }
+    assert invalid_mode["error"]["code"] == "INPUT_INVALID"
+    assert invalid_mode["error"]["context"] == {"field": "protein_blastp_mode", "reason": "BLASTP_MODE"}
 
     def member_sets(result: dict[str, object]) -> list[set[str]]:
         groups = result["collinearityResult"]["value"]["fields"][
@@ -2766,6 +2783,10 @@ def test_web_losatp_blastp_payload_helper_applies_collinear_search_scope(
             block["fields"]["subjectRecordIndex"],
         )
         for block in multi_row_adjacent["collinearityResult"]["value"]["fields"]["blocks"]
+    } == {(0, 2)}
+    assert {
+        (block["fields"]["queryRecordIndex"], block["fields"]["subjectRecordIndex"])
+        for block in multi_row_all["collinearityResult"]["value"]["fields"]["blocks"]
     } == {(0, 2)}
     assert all(
         block["fields"]["subjectRecordIndex"]

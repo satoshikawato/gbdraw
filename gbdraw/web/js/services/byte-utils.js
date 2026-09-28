@@ -14,17 +14,51 @@ export const asBytes = (value) => (
 
 export const bytesToBase64 = (value) => {
   const bytes = asBytes(value);
-  let binary = '';
-  const chunkSize = 0x8000;
+  const chunks = [];
+  // Complete triplets let encoded chunks concatenate without interior padding.
+  const chunkSize = 0x6000;
   for (let index = 0; index < bytes.length; index += chunkSize) {
-    binary += String.fromCharCode(...bytes.subarray(index, index + chunkSize));
+    chunks.push(btoa(String.fromCharCode(...bytes.subarray(index, index + chunkSize))));
   }
-  return btoa(binary);
+  return chunks.join('');
 };
 
 export const base64ToBytes = (value) => {
   const binary = atob(String(value || ''));
   return Uint8Array.from(binary, (character) => character.charCodeAt(0));
+};
+
+// Modern engines decode large adopted resources directly into their final
+// buffer in bounded tasks, leaving room for paint and input without a
+// resource-sized binary-string copy.
+export const base64ToBytesInTasks = async (value) => {
+  const raw = String(value || '');
+  // Older engines keep their existing decoder and error behavior.
+  if (typeof Uint8Array.prototype.setFromBase64 !== 'function') return base64ToBytes(raw);
+  const encoded = /[ \t\n\f\r]/.test(raw)
+    ? raw.replace(/[ \t\n\f\r]/g, '')
+    : raw;
+  const firstPadding = encoded.indexOf('=');
+  if (firstPadding >= 0 && firstPadding < encoded.length - 2) {
+    throw new Error('Invalid base64 padding.');
+  }
+  const padding = encoded.endsWith('==') ? 2 : encoded.endsWith('=') ? 1 : 0;
+  const bytes = new Uint8Array(Math.max(0, Math.floor(encoded.length * 3 / 4) - padding));
+  const chunkSize = 0x10000; // A multiple of four keeps each nonfinal chunk unpadded.
+  let offset = 0;
+  let deadline = performance.now() + 16;
+  for (let start = 0; start < encoded.length; start += chunkSize) {
+    const part = encoded.slice(start, start + chunkSize);
+    const { read, written } = bytes.subarray(offset).setFromBase64(part);
+    if (read !== part.length) throw new Error('Invalid base64 length.');
+    offset += written;
+    if (performance.now() >= deadline) {
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      deadline = performance.now() + 16;
+    }
+  }
+  if (offset !== bytes.byteLength) throw new Error('Invalid base64 length.');
+  return bytes;
 };
 
 export const base64DecodedLastByte = (value, byteLength) => {

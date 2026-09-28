@@ -893,10 +893,8 @@ try {
   console.error = consoleErrorBeforeInvalidActiveConfig;
 }
 assert.equal(invalidActiveConfigImport.status, 'error');
-assert.match(
-  invalidActiveConfigImport.error?.message || '',
-  /Linear track layout must be one of: above, middle, below/
-);
+assert.equal(invalidActiveConfigImport.error.code, 'INPUT_INVALID');
+assert.deepEqual(invalidActiveConfigImport.error.context, {field:'linear_track_layout',reason:'LINEAR_TRACK_LAYOUT'});
 assert.deepEqual(compactActiveIntentSnapshot(), stateBeforeInvalidActiveConfig.activeIntent);
 assert.strictEqual(state.results.value, stateBeforeInvalidActiveConfig.results);
 assert.strictEqual(state.featureCatalog.value, stateBeforeInvalidActiveConfig.featureCatalog);
@@ -904,8 +902,8 @@ assert.strictEqual(state.files.c_gb, stateBeforeInvalidActiveConfig.primaryFile)
 assert.strictEqual(state.svgContainer.value, stateBeforeInvalidActiveConfig.svgContainer);
 assert.equal(state.sessionTitle.value, stateBeforeInvalidActiveConfig.sessionTitle);
 assert.equal(invalidActiveConfigEvent.target.value, '');
-assert.equal(alerts.length, 1);
-assert.match(alerts[0], /^Failed to load session: Linear track layout must be one of/);
+assert.deepEqual(state.errorLog.value, invalidActiveConfigImport.error);
+assert.equal(alerts.length, 0);
 
 const legacyActiveIntent = {
   form: {
@@ -1283,8 +1281,50 @@ try {
 }
 
 assert.equal(failedImport.status, 'error');
-assert.match(failedImport.error?.message || '', /composition metadata is not valid JSON/);
+assert.equal(failedImport.error.code, 'INPUT_INVALID');
+assert.deepEqual(failedImport.error.context, {field:'schema',reason:'JSON_FORMAT'});
 assert.deepEqual(rollbackState(), stateBeforeFailedImport);
-assert.equal(alerts.length, 1);
-assert.match(alerts[0], /^Failed to load session: .*composition metadata is not valid JSON/);
+assert.equal(alerts.length, 0);
+assert.deepEqual(state.errorLog.value, failedImport.error);
 assert.equal(failedImportEvent.target.value, '');
+
+
+// A late failed Session read cannot replace a notification from a later action.
+const { normalizeUserFacingError } = await import('../../gbdraw/web/js/services/error-normalization.js');
+const beforeLateRead = rollbackState();
+const lateFile = new File(['{}'], 'PRIVATE_LATE_SESSION.json');
+let failLateRead;
+// File methods do not cross structured clone. Hold the actual Worker reply
+// boundary so this fixture exercises a late transport failure, not an ignored
+// main-thread stream override.
+const SessionWorker = globalThis.Worker;
+globalThis.Worker = class extends SessionWorker {
+  postMessage(message) {
+    if (message.file === lateFile) {
+      failLateRead = () => this.emit('error', { message: 'PRIVATE_LATE_READ_SENTINEL' });
+    } else super.postMessage(message);
+  }
+};
+const lateRead = importSession({target:{files:[lateFile],value:'selected'}});
+while (!failLateRead) await new Promise(resolve=>setTimeout(resolve,0));
+globalThis.Worker = SessionWorker;
+const laterAlert = normalizeUserFacingError({code:'PDF_LIBRARY',operation:'export-pdf',stage:'initialization'});
+state.errorLog.value = laterAlert;
+failLateRead();
+assert.deepEqual(await lateRead,{status:'stale'});
+assert.equal(state.errorLog.value,laterAlert);
+assert.deepEqual(rollbackState(),beforeLateRead);
+
+// The same sole Session owner keeps a late Save error from replacing a newer alert.
+const { exportSession } = await import('../../gbdraw/web/js/services/config.js');
+let failLateSave;
+const lateSave = exportSession('late save', { beforeExport: () => new Promise((_, reject) => {
+  failLateSave = reject;
+}), onError: () => assert.fail('A stale Save must not publish its error') });
+while (!failLateSave) await new Promise(resolve => setTimeout(resolve, 0));
+const saveLaterAlert = normalizeUserFacingError({ code: 'PDF_LIBRARY', operation: 'export-pdf', stage: 'initialization' });
+state.errorLog.value = saveLaterAlert;
+failLateSave(new Error('PRIVATE_LATE_SAVE_SENTINEL'));
+assert.deepEqual(await lateSave, { status: 'stale' });
+assert.equal(state.errorLog.value, saveLaterAlert);
+assert.equal(state.sessionSavePending.value, false);

@@ -73,17 +73,28 @@ test('unsafe keys, malformed JSON/gzip, fatal UTF-8 and Worker crash preserve th
   await openApp(page);
   await load(page, baseline);
   await retained(page);
-  for (const buffer of [Buffer.from('{"nested":{"__proto__":{}}}'), Buffer.from('{private broken'),
-    Buffer.from([0xff]), Buffer.from([0x1f, 0x8b, 1, 2, 3]), gzipSync(Buffer.from([0xc3]))]) {
+  for (const [index, buffer] of [Buffer.from('{"nested":{"__proto__":{}}}'), Buffer.from('{private broken'),
+    Buffer.from([0xff]), Buffer.from([0x1f, 0x8b, 1, 2, 3]), gzipSync(Buffer.from([0xc3]))].entries()) {
     await load(page, buffer);
-    expect(dialogs.at(-1)).toMatch(/^Failed to load session:/);
+    const alert = page.getByRole('alert', { name: 'Operation error' });
+    await expect(alert).toBeVisible();
+    const error = await page.evaluate(() => window.__GBDRAW_APP__.errorLog);
+    expect(error).toMatchObject(index === 1
+      ? { code: 'INPUT_INVALID', operation: 'unknown', stage: 'request-validation', context: { field: 'schema', reason: 'JSON_FORMAT' } }
+      : { code: 'UNKNOWN', operation: 'unknown', stage: 'request-validation' });
+    expect(JSON.stringify(error)).not.toMatch(/private broken|__proto__|Traceback/);
+    expect(dialogs).toEqual(['Session loaded successfully!']);
     await expectRetained(page);
   }
   await context.route('**/workers/session-import-worker.js', route => route.fulfill({
     contentType: 'text/javascript', body: 'throw new Error("controlled Worker crash")'
   }));
   await load(page, baseline);
-  expect(dialogs.at(-1)).toContain('Session import Worker failed');
+  await expect(page.getByRole('alert', { name: 'Operation error' })).toBeVisible();
+  expect(await page.evaluate(() => window.__GBDRAW_APP__.errorLog)).toMatchObject({
+    code: 'UNKNOWN', operation: 'unknown', stage: 'request-validation'
+  });
+  expect(dialogs).toEqual(['Session loaded successfully!']);
   await expectRetained(page);
   const entries = await page.evaluate(() => window.__importWorkers.entries);
   for (const entry of entries) expect([entry.terminated, entry.listeners]).toEqual([1, 0]);

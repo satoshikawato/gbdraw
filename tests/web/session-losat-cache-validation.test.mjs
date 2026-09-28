@@ -1178,13 +1178,11 @@ for (const unsupportedVersion of [34, 35, 36, 37, 38]) {
     const event = { target: { files: [file], value: 'selected' } };
     const result = await importSession(event);
     assert.equal(result.status, 'error');
-    assert.match(
-      String(result.error?.message || ''),
-      new RegExp(`Unsupported session version: ${unsupportedVersion}`)
-    );
-    assert.deepEqual(alerts, [
-      `Failed to load session: Unsupported session version: ${unsupportedVersion}.`
-    ]);
+    assert.equal(result.error.code, 'INPUT_INVALID');
+    assert.deepEqual(result.error.context, {field:'schema',reason:'FIELDS'});
+    assert.match(result.error.summary, /supported Session file/);
+    assert.deepEqual(state.errorLog.value, result.error);
+    assert.deepEqual(alerts, []);
     assert.equal(event.target.value, '');
   });
 }

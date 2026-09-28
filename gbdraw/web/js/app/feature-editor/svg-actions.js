@@ -1,3 +1,4 @@
+import { normalizeUserFacingError } from '../../services/error-normalization.js';
 import { resolveColorToHex } from '../color-utils.js';
 import { getFeatureCaption, normalizeStringArray, resolveDisplayProteinId } from '../feature-utils.js';
 import {
@@ -430,9 +431,10 @@ export const createFeatureSvgActions = ({
   };
 
   const openFeatureEditorForFeature = (feat, eventLike = null) => {
+    const previousAlert = state.errorLog?.value;
     const opened = () => openPreparedFeatureEditor(feat, eventLike);
     const result = rulePreparation ? rulePreparation.run(state.manualSpecificRules, opened) : opened();
-    return result?.catch ? result.catch((error) => { alert(`Cannot open feature editor: ${error.message}`); }) : result;
+    return result?.catch ? result.catch((error) => { state.errorLog && state.errorLog.value === previousAlert && (state.errorLog.value = normalizeUserFacingError(error, { operation: 'feature-extraction', stage: 'helper' })); }) : result;
   };
 
   const hoverSummaryIsAllowed = () => {
@@ -657,7 +659,7 @@ export const createFeatureSvgActions = ({
         console.log(`Instant preview: element ${svgId} not found in SVG`);
       }
     } catch (e) {
-      console.error('Instant preview error:', e);
+      console.error('Instant preview error:', normalizeUserFacingError(e));
     }
   };
 
@@ -742,7 +744,7 @@ export const createFeatureSvgActions = ({
       }
       return true;
     } catch (e) {
-      console.error('Instant visibility preview error:', e);
+      console.error('Instant visibility preview error:', normalizeUserFacingError(e));
       return false;
     }
   };

@@ -80,6 +80,7 @@ const buildHarness = ({
     labelReflowLastError: ref(null)
   };
   const actions = createFeatureLabelActions({
+    ref, computed: get => ({ get value() { return get(); } }),
     state,
     previewRuntime: {
       markActiveResultDirty() {

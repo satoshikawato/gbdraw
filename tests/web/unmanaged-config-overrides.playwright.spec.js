@@ -3,6 +3,7 @@ const { readFileSync } = require('node:fs');
 const { join, resolve } = require('node:path');
 const { gunzipSync } = require('node:zlib');
 const {
+  evaluateWithRetainedPromise,
   generateAndWaitForResult,
   openApp,
   waitForAppShell
@@ -122,9 +123,16 @@ test('GUI-unmanaged config survives disclosure, Generate, save/reload, reset, an
   rejectedSession.renderRequest.diagramOptions.configOverrides[
     'objects.gc_content.unknown'
   ] = 1;
-  const rejectedMessage = await loadSessionPayload(page, rejectedSession);
-  expect(rejectedMessage).toContain('Unknown config override path');
-  expect(rejectedMessage).toContain('objects.gc_content.unknown');
+  const outcome = await evaluateWithRetainedPromise(page, async payload => {
+    const file = new File([JSON.stringify(payload)], 'invalid-overrides.gbdraw-session.json', { type: 'application/json' });
+    return await window.__GBDRAW_APP__.importSession({ target: { files: [file], value: 'selected' } });
+  }, rejectedSession);
+  expect(outcome).toMatchObject({ status: 'error', error: {
+    code: 'INPUT_INVALID', operation: 'validateConfigOverrides', stage: 'helper', context: { field: 'configOverrides', reason: 'UNKNOWN_CONFIG_PATH' }
+  } });
+  await expect(page.getByRole('alert', { name: 'Operation error' }))
+    .toContainText('Remove unknown configuration overrides or use a supported setting.');
+  expect(JSON.stringify(outcome.error)).not.toContain('objects.gc_content.unknown');
   await expect(disclosure).toHaveCount(0);
   expect(await page.evaluate(() => window.__GBDRAW_APP__.form.plot_title)).toBe(
     'Preserved overlay journey'
