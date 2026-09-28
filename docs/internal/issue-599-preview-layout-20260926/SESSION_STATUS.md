@@ -3,7 +3,7 @@
 対象ブランチ: `fix/issue-599-preview-layout-20260926`。
 計画基準: `origin/dev@d457b7189b137185a8dec800819a312c30b969fa`。
 
-2026-09-28更新。製品結果の3案 A を OIPC revision 25 の PD-OI-052–054 に記録・検証し、[PR #634](https://github.com/satoshikawato/gbdraw/pull/634) の必須 checks 成功後に dev `007388567222638b707fbb16fe82dbeba61551c9` へ merge 済み。**S00 / S01 / S02 完了、次は S03**。S01 の装飾差分継承と S02 の明示 Layout edit 操作説明・保存/export 担当検証を完了した。公開 SHA は同名 branch の Git 履歴・終了報告で確認する。全統合・remote checks・integrated dev staging は S04 の残件である。
+2026-09-28更新。製品結果の3案 A を OIPC revision 25 の PD-OI-052–054 に記録・検証し、[PR #634](https://github.com/satoshikawato/gbdraw/pull/634) の必須 checks 成功後に dev `007388567222638b707fbb16fe82dbeba61551c9` へ merge 済み。**S00 / S01 / S02 / S03 完了、次は S04**。S01 の装飾差分継承、S02 の明示 Layout edit 操作説明・保存/export、S03 の検索・toolbar 専用行と旧 drag 撤去の担当検証を完了した。公開 SHA は同名 branch の Git 履歴・終了報告で確認する。全統合・remote checks・integrated dev staging は S04 の残件である。
 担当者は開始前に前セッションの commit/push と単一 writer を確認し、終了時にこの表と担当結果文書を更新する。
 
 | セッション | 状態 | 結果文書 | 次の開始条件 |
@@ -12,7 +12,7 @@
 | S00 / authority | 完了。OIPC単独PR #634はrequired checks成功・dev merge済み。同期後のdocs-only Gate PASS | [results/S00.md](results/S00.md) | retained checkout で最新devの完全な3 outcomeと関連authorityを確認してS01へ |
 | S01 / 配置継承 | 実装・担当検証完了。同名branchへcommit/push | [results/S01.md](results/S01.md) | 公開SHAのlocal/remote一致・clean treeとS01証拠を確認してS02へ |
 | S02 / 操作説明 | 実装・担当検証完了。同名branchへcommit/push | [results/S02.md](results/S02.md) | S02公開SHAのlocal/remote一致・clean treeと証拠を確認してS03へ |
-| S03 / chrome | 未着手 | 終了時に `results/S03.md` を作成 | S03 commit/push、P01–P03 の証拠 |
+| S03 / chrome | 実装・担当検証完了。同名branchへcommit/push | [results/S03.md](results/S03.md) | S03公開SHAのlocal/remote一致・clean tree、最新dev authorityとP01–P03証拠を確認してS04へ |
 | S04 / 統合 | 未着手 | 終了時に `results/S04.md` を作成 | 全受入と適用 gate、文書・diff review。未達の merge後 staging は別記 |
 
 結果文書は事実だけを記載する。入力 SHA、検査対象 SHA/環境、authority base、コマンドと結果、artifact、制限、未完了条件、次の担当者の開始条件を残す。
@@ -39,3 +39,7 @@ S00 の authority base は `origin/dev@ecb96a065d808addff0fb088f9eb6b6ba3c92a6d`
 ## S02 handoff
 
 入力 HEAD / S01 公開 SHA は `72eca074fa5ead71a8bb849e577e7cffaf21bc29`、開始 authority base は `origin/dev@007388567222638b707fbb16fe82dbeba61551c9`。終了 fetch の新 dev `f8577629189db36dfff0fa6aa0d7ee00d6b4f964` は通常mergeで取り込み、診断定義を両側保持して統合検査した。PD-OI-052–054 の完全 outcome / receipt / 全9フィールドを確認した。OFF の eligible target に help/hover説明、ON grab/drag中 grabbing、keyboard/touchへ常設説明と明示toggleを接続した。実 Circular/Linear、編集/modifier、record/alignment、History/Session/Generate再bind、実SVG/interactive SVG/PNG/PDFとshared clean sourceを検証。trusted-base Gate PASS / Review REQUIRED。詳細・修正前失敗・source blob SHA・残件は [S02](results/S02.md)。S03/S04は未実装。S03は共通開始手順とS02公開状態を確認して開始し、公開文書/Gallery更新はS04へ引き継ぐ。
+
+## S03 handoff
+
+入力 HEAD / S02 公開 SHA は `acd53d232100ca75795b178138a676d096128846`、authority base は `origin/dev@c2818ce72168e3a35124468e41bb869623ac3148`。CI専用の新dev差分を通常 merge `a7c62e99a5ca9b7f2862d41b9171d474373945a5` で統合。PD-OI-054の完全 outcome と9フィールドを確認し、検索上部・操作下部・同一canvas/editor中央 workspace に変更して検索dragのJS/CSSを退役した。幅/高さ10条件で全14操作のscroll後実hit、同一DOM/query/active、740px以上workspace>=200px、実settings resize、drawer/tab/Close/Escape、CDP 200% visual viewport と focus中の480px縮小を検査。S02の実Gallery Circular/Linear/保存/export/hint再bindとcompact alignment reviewを再検証した。trusted-base Gate PASS / Review REQUIRED。詳細、source SHA、制限は [S03](results/S03.md)。S04は公開文書/Gallery、累積human review、remote checks、正確な統合dev SHA stagingを担当する。PR作成・dev merge・deployは未実施。
