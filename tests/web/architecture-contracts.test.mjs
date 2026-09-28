@@ -3145,7 +3145,7 @@ test('candidate Product Impact authority is validation-only and cannot authorize
     },
     ({ status, output }) => {
       assert.equal(status, 1, output);
-      assert.match(output, /Candidate authority validation: VALID \(inert data only\)/);
+      assert.match(output, /Candidate authority validation: VALID \(inert map and decision data only\)/);
       assert.match(output, /candidate data does not alter this head runtime admission/);
       assert.match(output, /Observation: INSUFFICIENT_EVIDENCE/);
       assert.doesNotMatch(output, /Observation: CONFORMING/);
@@ -3999,6 +3999,151 @@ test('the Product Contract authority path is exact and isolated', () => {
   assert.match(
     ambiguousBundle.output,
     /Product Contract authority changes must be isolated from other changed paths: docs\/internal\/OPTION_INTEGRITY_PRODUCT_CONTRACT_COPY\.md/
+  );
+});
+
+const PRODUCT_CONTRACT_BASE_SOURCE = '# Option Integrity Product Contract\n\n### PD-OI-900: Fixture record\n';
+const PRODUCT_CONTRACT_CHANGED_SOURCE = `${PRODUCT_CONTRACT_BASE_SOURCE}\nRevised outcome with its receipt.\n`;
+const PRODUCT_CONTRACT_CO_CHANGE_REVIEW =
+  /static Product Contract co-change requires human review that each changed record serializes the explicit Product Decision Owner receipt/;
+const writeProductContractCoChangeRuntime = (write) => {
+  write('gbdraw/web/js/services/session-file.js', 'export const readSession = () => ({ version: 2 });\n');
+  write('tests/web/session-file.test.mjs', "test('reads the revised Session', () => {});\n");
+  write('docs/SESSION_COMPATIBILITY.md', '# Session compatibility\n\nRevised outcome.\n');
+};
+// The Contract exists at the base, as it does in the repository, so the
+// candidate modifies it in place.
+const runProductContractRevisionCase = (mutate) => withChangeBudgetRepository(
+  ({ commit, execute, write }) => {
+    write(PRODUCT_CONTRACT_AUTHORITY_PATH, PRODUCT_CONTRACT_BASE_SOURCE);
+    const base = commit('Product Contract baseline');
+    mutate(write);
+    const head = commit('candidate');
+    return execute({ base, head });
+  }
+);
+
+test('a static Product Contract co-change with runtime, tests, and docs requires review only', () => {
+  const coChange = runProductContractRevisionCase((write) => {
+    write(PRODUCT_CONTRACT_AUTHORITY_PATH, PRODUCT_CONTRACT_CHANGED_SOURCE);
+    writeProductContractCoChangeRuntime(write);
+  });
+  assert.equal(coChange.status, 0, coChange.output);
+  assert.match(coChange.output, /Gate: \*\*PASS\*\*/);
+  assert.match(coChange.output, /Review: \*\*REQUIRED\*\*/);
+  assert.match(reportSection(coChange.output, 'Review reasons'), PRODUCT_CONTRACT_CO_CHANGE_REVIEW);
+  assert.match(coChange.output, /Static Product Contract: co-change with its implementation; human Review verifies the receipt/);
+  assert.doesNotMatch(coChange.output, /production runtime files and Web guard\/CI files changed together/);
+  assert.doesNotMatch(coChange.output, /Product Contract authority changes must be isolated/);
+
+  const contractOnly = runProductContractRevisionCase((write) => {
+    write(PRODUCT_CONTRACT_AUTHORITY_PATH, PRODUCT_CONTRACT_CHANGED_SOURCE);
+  });
+  assert.equal(contractOnly.status, 0, contractOnly.output);
+  assert.match(contractOnly.output, /Review: \*\*REQUIRED\*\*/);
+  assert.doesNotMatch(contractOnly.output, PRODUCT_CONTRACT_CO_CHANGE_REVIEW);
+  assert.match(contractOnly.output, /Static Product Contract: isolated change for human Review/);
+
+  const runtimeOnly = runProductContractRevisionCase(writeProductContractCoChangeRuntime);
+  assert.equal(runtimeOnly.status, 0, runtimeOnly.output);
+  assert.doesNotMatch(runtimeOnly.output, PRODUCT_CONTRACT_CO_CHANGE_REVIEW);
+  assert.equal(reportSection(runtimeOnly.output, 'Guard files touched').trim(), '- None');
+
+  const lookalikeCompanion = runProductContractRevisionCase((write) => {
+    write(PRODUCT_CONTRACT_AUTHORITY_PATH, PRODUCT_CONTRACT_CHANGED_SOURCE);
+    write('docs/internal/OPTION_INTEGRITY_PRODUCT_CONTRACT_COPY.md', '# Similar name, ordinary document\n');
+  });
+  assert.equal(lookalikeCompanion.status, 0, lookalikeCompanion.output);
+  assert.match(reportSection(lookalikeCompanion.output, 'Review reasons'), PRODUCT_CONTRACT_CO_CHANGE_REVIEW);
+  assert.equal(
+    reportSection(lookalikeCompanion.output, 'Guard files touched').trim(),
+    `- ${PRODUCT_CONTRACT_AUTHORITY_PATH}`
+  );
+});
+
+test('a static Product Contract co-change cannot carry any other guard or authority change', () => {
+  [
+    'tools/check-web-change-budget.mjs',
+    'tools/web-product-impact-evaluation.mjs',
+    'tools/web-architecture-detectors.mjs',
+    '.github/workflows/test.yml',
+    '.github/workflows/web-base-policy.yml',
+    'tools/web-product-impact-map.json',
+    'tools/web-product-decisions.json',
+    'tools/web-architecture-rules.json',
+    'tools/web-change-policy.json',
+    'docs/internal/PRODUCT_IMPACT_RATCHET.md',
+    'docs/internal/WEB_CHANGE_POLICY.md',
+    '.github/pull_request_template.md',
+    'tests/web/architecture-contracts.test.mjs'
+  ].forEach((extraPath) => {
+    const result = runProductContractRevisionCase((write) => {
+      write(PRODUCT_CONTRACT_AUTHORITY_PATH, PRODUCT_CONTRACT_CHANGED_SOURCE);
+      writeProductContractCoChangeRuntime(write);
+      const baseline = BUDGET_FIXTURE[extraPath];
+      write(
+        extraPath,
+        !baseline ? reservedPathContent(extraPath)
+          : extraPath.endsWith('.json') ? `${baseline}\n` : `${baseline}\n// changed\n`
+      );
+    });
+    assert.equal(result.status, 1, `${extraPath}\n${result.output}`);
+    assert.match(result.output, /Gate: \*\*FAIL\*\*/, extraPath);
+    assert.match(result.output, /production runtime files and Web guard\/CI files changed together/, extraPath);
+    assert.match(result.output, /Product Contract authority changes must be isolated from other changed paths/, extraPath);
+    assert.doesNotMatch(result.output, PRODUCT_CONTRACT_CO_CHANGE_REVIEW, extraPath);
+  });
+});
+
+test('deleting or moving the static Product Contract never uses the co-change route', () => {
+  [
+    ['deleted', (write, root) => rmSync(join(root, PRODUCT_CONTRACT_AUTHORITY_PATH))],
+    ['moved', (write, root) => {
+      rmSync(join(root, PRODUCT_CONTRACT_AUTHORITY_PATH));
+      write('docs/internal/OPTION_INTEGRITY_PRODUCT_CONTRACT_COPY.md', PRODUCT_CONTRACT_CHANGED_SOURCE);
+    }]
+  ].forEach(([label, mutate]) => {
+    const result = withChangeBudgetRepository(({ commit, execute, root, write }) => {
+      write(PRODUCT_CONTRACT_AUTHORITY_PATH, PRODUCT_CONTRACT_BASE_SOURCE);
+      const base = commit('Product Contract baseline');
+      mutate(write, root);
+      writeProductContractCoChangeRuntime(write);
+      const head = commit(`candidate ${label}`);
+      return execute({ base, head });
+    });
+    assert.equal(result.status, 1, `${label}\n${result.output}`);
+    assert.match(result.output, /production runtime files and Web guard\/CI files changed together/, label);
+    assert.match(result.output, /Product Contract authority changes must be isolated from other changed paths/, label);
+  });
+});
+
+test('a static Product Contract co-change cannot replace mapped hard evidence', () => {
+  const hardEvidenceMap = JSON.parse(canonicalTransitionProductImpactMapSource({ enforcement: 'hard' }));
+  hardEvidenceMap.concerns[0].contracts[0].ref = (
+    'tests/web/contracts/product-impact-entry.test.mjs::canonical alternate entry'
+  );
+  withTrustedArchitectureRepository(
+    (write) => {
+      write(PRODUCT_CONTRACT_AUTHORITY_PATH, PRODUCT_CONTRACT_CHANGED_SOURCE);
+      moveCanonicalEntry(write);
+      write(
+        'tests/web/contracts/product-impact-entry.test.mjs',
+        "test('canonical alternate entry', () => { /* candidate modified */ });\n"
+      );
+    },
+    ({ status, output }) => {
+      assert.equal(status, 1, output);
+      assert.match(output, /Product Impact hard enforcement:.*INSUFFICIENT_EVIDENCE/);
+      assert.match(output, /integrity=CANDIDATE_MODIFIED/);
+      assert.match(reportSection(output, 'Review reasons'), PRODUCT_CONTRACT_CO_CHANGE_REVIEW);
+      assert.doesNotMatch(output, /Product Contract authority changes must be isolated/);
+    },
+    {
+      ...preauthorizedProductBaseFiles(`${JSON.stringify(hardEvidenceMap, null, 2)}\n`),
+      [PRODUCT_CONTRACT_AUTHORITY_PATH]: PRODUCT_CONTRACT_BASE_SOURCE,
+      'tests/web/contracts/product-impact-entry.test.mjs': "test('canonical alternate entry', () => {});\n"
+    },
+    productImpactPullRequestEnvironment()
   );
 });
 
