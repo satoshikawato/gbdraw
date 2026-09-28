@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from pathlib import Path
 
 import pytest
 
@@ -219,3 +220,118 @@ def test_web_crop_after_presentation_reverse_uses_source_coordinates() -> None:
     target_record["region"]["reverseComplement"] = True
     with pytest.raises(ValidationError, match="both region and presentation"):
         resolve_similarity_alignment_payload(request)
+
+
+BGC_SESSION = (
+    Path(__file__).resolve().parents[1]
+    / "gbdraw/web/gallery/sessions/BGC0000708-BGC0000713.gbdraw-session.json"
+)
+
+
+@pytest.fixture(scope="module")
+def bgc_og18(tmp_path_factory):
+    """og_18 helper inputs built as the Web UI builds them: catalog members, no edges."""
+
+    import base64
+
+    from gbdraw.analysis.protein_colinearity import OrthogroupGraphResult, OrthogroupResult
+    from gbdraw.session_io import materialize_embedded_file
+    from gbdraw.session_request_codec import decode_canonical_typed_resource
+    from gbdraw.web_support.request_render import render_embedded_canonical_web_request
+
+    session = json.loads(BGC_SESSION.read_text())
+    resource = decode_canonical_typed_resource(
+        base64.b64decode(session["resources"]["comparison-canonical-orthogroups-1"]["data"]),
+        value_kind="orthogroupResult", expected=OrthogroupResult | OrthogroupGraphResult,
+    )
+    gene = {m.protein_id: m.gene or m.label for m in resource.orthogroups["og_18"]}
+    tmp = tmp_path_factory.mktemp("bgc-og18")
+    rendered = render_embedded_canonical_web_request(
+        session["renderRequest"], resources=session["resources"], workspace=str(tmp / "render")
+    )
+    item = rendered["metadata"]["featureCatalog"]["items"][0]
+    group = next(entry for entry in item["orthogroups"] if entry["id"] == "og_18")
+    features = {(f["recordKey"], f["biologicalFeatureId"]): f for f in item["biologicalFeatures"]}
+    lengths = dict(zip(item["recordKeys"], (len(s["sequence"]) for s in item["sequenceSources"])))
+    members, anchors = [], {}
+    for member in group["members"]:
+        feature = features[(member["recordKey"], member["biologicalFeatureId"])]
+        anchor = {
+            "recordKey": member["recordKey"],
+            "biologicalFeatureId": member["biologicalFeatureId"],
+            "sourceFeatureIndex": feature.get("sourceFeatureIndex"),
+            "stableFeatureSvgId": feature.get("stableFeatureId") or member["biologicalFeatureId"],
+        }
+        members.append({
+            "groupId": "og_18", "anchor": anchor, "sourceStart": feature["start"],
+            "sourceEnd": feature["end"], "sourceStrand": {"+": 1, "-": -1}.get(feature["strand"], feature["strand"]),
+            "identityIsUnique": True, "hidden": bool(member.get("hidden")),
+            "representative": bool(member.get("representative")), "role": str(member.get("role") or ""),
+        })
+        anchors[gene[feature["protein_id"]]] = anchor
+    paths = {
+        rid: str(materialize_embedded_file(entry, temp_dir=tmp / "resources", role=rid, prefix_role=False))
+        for rid, entry in session["resources"].items()
+    }
+    records = [{
+        "recordKey": record["recordKey"], "recordLength": lengths[record["recordKey"]],
+        "region": record["region"],
+        "presentation": {"reverseComplement": bool(record["presentation"]["reverseComplement"])},
+    } for record in session["renderRequest"]["records"]]
+    return session, members, anchors, paths, records, tmp
+
+
+def _resolve_bgc(bgc_og18, reference, *, choices=(), canonical=None, records=None, edges=()):
+    session, members, anchors, paths, default_records, tmp = bgc_og18
+    request = {"schema": 2, "groupId": "og_18", "records": records or default_records,
+               "reference": anchors[reference], "members": members,
+               "directEdges": list(edges), "choices": list(choices)}
+    projection = {"canonicalRequest": canonical or session["renderRequest"], "orientations": None}
+    return json.loads(resolve_similarity_alignment_json(
+        json.dumps(request), json.dumps(projection), json.dumps(paths), str(tmp / "helper")))
+
+
+def _record5(response):
+    return next(r for r in response["records"] if r["recordKey"] == "record-5")
+
+
+def test_committed_orthogroup_resource_supplies_direct_rbh_evidence(bgc_og18) -> None:
+    anchors = bgc_og18[2]
+    liv_a = _resolve_bgc(bgc_og18, "livA")
+    assert liv_a["status"] == "resolved"
+    row = _record5(liv_a)
+    assert (row["rationale"], row["anchor"]) == ("unique_direct_rbh", anchors["racM"])
+    evidence = {tuple(sorted(c["anchor"].items())): c["directEvidence"] for c in row["candidates"]}
+    assert evidence[tuple(sorted(anchors["racM"].items()))] == ["rbh"]
+    assert evidence[tuple(sorted(anchors["racL"].items()))] == ["coortholog"]
+
+    # A representative-only selector would pick racM here too; parA's RBH is racL.
+    par_a = _record5(_resolve_bgc(bgc_og18, "parA"))
+    assert (par_a["rationale"], par_a["anchor"]) == ("unique_direct_rbh", anchors["racL"])
+
+    explicit = _record5(_resolve_bgc(bgc_og18, "livA", choices=[
+        {"recordKey": "record-5", "kind": "select", "anchor": anchors["racL"]}]))
+    assert (explicit["rationale"], explicit["anchor"]) == ("user_selected", anchors["racL"])
+
+
+def test_resource_edges_are_the_only_authority_and_never_guessed(bgc_og18) -> None:
+    session, _members, anchors, _paths, records, _tmp = bgc_og18
+    with pytest.raises(ValidationError, match="directEdges must be empty"):
+        _resolve_bgc(bgc_og18, "livA", edges=[{
+            "groupId": "og_18", "query": anchors["livA"], "subject": anchors["racL"], "edgeKind": "rbh"}])
+
+    # A reorder with index-bound pairwise tables is rejected at decode.
+    canonical = json.loads(json.dumps(session["renderRequest"]))
+    order = [4, 1, 2, 3, 0]
+    canonical["records"] = [canonical["records"][index] for index in order]
+    reordered = [records[index] for index in order]
+    with pytest.raises(ValidationError):
+        _resolve_bgc(bgc_og18, "livA", canonical=canonical, records=reordered)
+    # With only the orthogroup resource left, its member record indexes are
+    # stale; the endpoints no longer bind, so record-5 needs Review, not a guess.
+    canonical["comparisons"] = [
+        item for item in canonical["comparisons"] if item["kind"] == "orthogroupResult"]
+    stale = _resolve_bgc(bgc_og18, "livA", canonical=canonical, records=reordered)
+    assert stale["status"] == "ambiguous"
+    assert _record5(stale)["kind"] == "ambiguous"
+    assert _record5(stale)["directRbhCandidates"] == []

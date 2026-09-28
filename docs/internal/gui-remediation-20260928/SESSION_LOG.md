@@ -24,6 +24,8 @@ dev と main を `git archive` で `$S00_BASELINE_DIR=/home/kawato/gbdraw-baseli
 
 2026-09-29: S04 を実施。S00 第 11.4 節の判断 1〜3 を実装した。Plot title・title font・定義 font を既存 mode-profile manager の per-mode 値にし、`linearRecordLayout`・`linearTypographyLinked` の欠落を fresh 既定にした。Circular/Linear request の projection が他 mode の値を発明しないようにし、Gallery publication は未使用 mode を fresh 既定で書く。Node 1,115 passed。browser は 124 passed、5 failed（追加 test の selector 1 件は修正済み、残り 4 件は PR #641 head でも失敗する既存失敗）。commit title: "Keep title and fonts per mode and restore fresh defaults for omitted layout"。
 
+2026-09-29: S05 を実施。Similarity alignment の直接 RBH を、committed request の orthogroup resource から Worker adapter が取得するようにした（UI catalog の edge は常に空だった）。PR #641 の recipe-only 確定（`projectGeneratedProteinRecipe`）は、新規 LOSATP Generate 後の Align と record rotation を browser で失敗させていたため撤回した（Owner-delegated、第 2 節）。Review と plan inspector は record 名・accession と gene・protein ID を表示する。Node 1,116 passed、Python 561 passed、browser は既存の #641 由来の失敗を除き passed。commit title: "Resolve alignment RBH from committed orthogroup evidence and show biological names"。
+
 | Session | 状態 | 証拠・次の条件 |
 | --- | --- | --- |
 | S00 | 完了（証拠採取のみ） | [results/S00.md](results/S00.md)。開始 a351c01d、dev 57cef3ba・main 4556e04e の snapshot/wheel、性能 baseline、G03/G06/G07 再現、R01/R02 範囲。旧 Session 方針と receipt 文言は第 11.4 節で取得済み。commit SHA は次セッションで追記 |
@@ -31,7 +33,7 @@ dev と main を `git archive` で `$S00_BASELINE_DIR=/home/kawato/gbdraw-baseli
 | S02 | commit 済み・dev 未反映 | [results/S02.md](results/S02.md)。checker＋fixture のみ。S01 未 merge のため S01 commit を base に局所検証。PR は S01 の dev 取り込み後 |
 | S03 | commit 済み・dev 未反映 | [results/S03.md](results/S03.md)。PR #641 を merge（70bca139）後に実装。Pending と表示専用 intent を除去し、PD-OI-037/049 を co-change で revision 2 にした。CW-01〜04 の自動検証と変異 3 件を検出。性能は全操作が提案予算内 |
 | S04 | commit 済み・dev 未反映 | [results/S04.md](results/S04.md)。S03（3bd092af）の上。判断 1〜3 を既存 mode-profiles・config・projection・publication の owner で実装。v41/v44 Vnig の受入と Save→fresh Load・拒否 Load を確認。#641 由来の既存 browser 失敗 4 件を特定（S07 へ）。Gallery 再生成は S07 |
-| S05 | 未着手 | canonical edge/provenanceの実装とbrowser確認 |
+| S05 | commit 済み・dev 未反映 | [results/S05.md](results/S05.md)。S04 の上。直接 edge を committed orthogroup resource から Worker adapter へ渡し、CLI と束縛 helper を共有。#641 の recipe-only 確定を撤回して新規 LOSATP 後の Align と record rotation を回復。Review・inspector の名前を共有 helper へ。実 Gallery と新規 LOSATP で livA→racM、parA→racL を確認 |
 | S06 | 未着手 | S02反映後。Product契約とUIを同時改修 |
 | S07 | 未着手 | S03〜S06の統合検証 |
 

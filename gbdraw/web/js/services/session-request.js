@@ -631,36 +631,6 @@ export const bindCanonicalTypedResource = (value, descriptor) => {
   }
   canonicalTypedResourceBackings.set(value, descriptor);
 };
-// The renderer consumes a computed typed result for this run. The saved
-// request retains its reproducible protein recipe and raw LOSAT inputs instead
-// of storing the same large derived graph a second time.
-export const projectGeneratedProteinRecipe = (canonical, mode) => {
-  const kind = mode === 'collinear' ? 'collinearityResult'
-    : mode === 'orthogroup' ? 'orthogroupResult' : null;
-  const comparisons = canonical?.renderRequest?.comparisons;
-  if (!kind || !Array.isArray(comparisons)) {
-    throw new Error('Generated protein recipe is invalid.');
-  }
-  const typed = comparisons.filter((entry) => entry?.kind === kind);
-  const pipelines = comparisons.filter((entry) => entry?.kind === 'generatedProteinComparison');
-  if (typed.length !== 1 || pipelines.length !== 1 || pipelines[0].mode !== 'none'
-    || !Object.hasOwn(canonical.resources || {}, typed[0].resourceId)) {
-    throw new Error('Generated protein recipe does not match the computed resource.');
-  }
-  const resources = { ...canonical.resources };
-  delete resources[typed[0].resourceId];
-  return {
-    ...canonical,
-    resources,
-    renderRequest: {
-      ...canonical.renderRequest,
-      comparisons: comparisons.filter((entry) => entry !== typed[0]).map((entry) => (
-        entry === pipelines[0] ? { ...entry, mode } : entry
-      ))
-    }
-  };
-};
-
 const createResourceBuilder = ({ encode = true } = {}) => {
   const resources = {};
   const resourceOriginalNames = {};

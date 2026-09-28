@@ -6666,23 +6666,24 @@
                                     </div>
                                     <div>
                                         <span class="font-semibold text-slate-700">Exact reference:</span>
-                                        <span class="font-mono break-all">
-                                            {{ similarityAlignmentPlanInspector.reference.recordKey }} ·
+                                        <span class="break-all">
+                                            {{ similarityAlignmentPlanInspector.reference.recordLabel }} ·
                                             {{ similarityAlignmentPlanInspector.reference.label }}
                                         </span>
                                     </div>
                                     <div class="max-h-32 overflow-auto rounded border border-blue-100 bg-white custom-scrollbar">
                                         <div v-for="record in similarityAlignmentPlanInspector.records"
                                              :key="`alignment-plan-${record.recordKey}`"
+                                             :data-alignment-record-key="record.recordKey"
                                              class="grid grid-cols-[minmax(0,1fr)_auto] gap-2 border-b border-slate-100 px-2 py-1.5 last:border-b-0">
                                             <div class="min-w-0">
-                                                <div class="font-mono truncate" :title="record.recordKey">{{ record.recordKey }}</div>
+                                                <div class="truncate font-medium" :title="record.recordLabel">{{ record.recordLabel }}</div>
                                                 <div class="truncate" :title="record.anchorLabel">{{ record.anchorLabel }}</div>
                                                 <div class="text-slate-400">{{ record.rationaleLabel }}</div>
                                             </div>
                                             <span v-if="record.reversedFromSource"
                                                   class="self-start rounded bg-indigo-100 px-1.5 py-0.5 font-bold text-indigo-700"
-                                                  :aria-label="`${record.recordKey} reversed relative to source`">rev</span>
+                                                  :aria-label="`${record.recordLabel} reversed relative to source`">rev</span>
                                         </div>
                                     </div>
                                 </div>
@@ -7091,8 +7092,7 @@
                                  aria-label="Exact alignment reference">
                             <h3 class="font-semibold text-blue-900">Exact reference</h3>
                             <p class="mt-1 break-all font-semibold">{{ similarityAlignmentDraft?.reference.label }}</p>
-                            <p class="mt-1 break-all">Record: {{ similarityAlignmentDraft?.reference.recordLabel }} ({{ similarityAlignmentDraft?.reference.recordKey }})</p>
-                            <p class="mt-1 break-all">Feature ID: {{ similarityAlignmentDraft?.reference.featureIdentifier }}</p>
+                            <p class="mt-1 break-all">Record: {{ similarityAlignmentDraft?.reference.recordLabel }}</p>
                             <p class="mt-1">Coordinates: {{ similarityAlignmentDraft?.reference.coordinates }} · Strand: {{ similarityAlignmentDraft?.reference.displayedStrand }} (current display)</p>
                         </section>
                         <fieldset class="min-w-0 text-xs text-slate-700" data-similarity-alignment-direction-mode aria-describedby="alignment-direction-scope alignment-direction-transform">
@@ -7112,15 +7112,15 @@
                             <p id="alignment-direction-transform" class="mt-2">A direction change reverses the whole record, including features, labels and comparison ribbons. Biological source strands (+/−) stay unchanged.</p>
                             <p class="mt-2">Current to after Align (selected anchor arrows):</p>
                             <div v-for="record in (similarityAlignmentDirectionPreview?.records || [])" :key="record.recordKey" class="mt-2 flex flex-wrap items-center gap-2" data-similarity-alignment-direction>
-                                <span class="min-w-0 break-words" :id="'alignment-direction-' + record.recordKey">{{ record.label }} · {{ record.recordKey }}{{ record.status === 'reference' ? ' · exact reference' : '' }}:
+                                <span class="min-w-0 break-words" :id="'alignment-direction-' + record.recordKey">{{ record.label }}{{ record.status === 'reference' ? ' · exact reference' : '' }}:
                                     <span aria-hidden="true">{{ record.beforeArrow === 1 ? '→' : record.beforeArrow === -1 ? '←' : 'unknown' }} → {{ record.afterArrow === 1 ? '→' : record.afterArrow === -1 ? '←' : 'unknown' }}</span>
                                     <span class="sr-only">Current {{ record.beforeDirection }}; after Align {{ record.afterDirection }}.</span>
                                     <span v-if="record.exclusion"> · unchanged: {{ record.exclusionLabel }}</span>
                                 </span>
                                 <label v-if="similarityAlignmentDraft?.intent.mode === 'custom'">
-                                    <span class="sr-only">Direction for {{ record.recordKey }}</span>
+                                    <span class="sr-only">Direction for {{ record.label }}</span>
                                     <select :value="similarityAlignmentDraft.intent.byRecordKey[record.recordKey] || 'keep'"
-                                            :aria-label="'Direction for ' + record.recordKey"
+                                            :aria-label="'Direction for ' + record.label"
                                             :aria-describedby="'alignment-direction-' + record.recordKey"
                                             :disabled="!semanticMutationAvailable || (similarityAlignmentBusy || Boolean(record.exclusion))"
                                             @change="setSimilarityAlignmentCustomDirection(record.recordKey, $event.target.value)"
@@ -7141,7 +7141,6 @@
                             <legend class="max-w-full break-all px-1 text-sm font-semibold text-slate-700">
                                 {{ record.recordLabel }}
                             </legend>
-                            <p class="mb-2 break-all text-[11px] text-slate-500">Record ID: {{ record.recordKey }}</p>
                             <p class="mb-2 text-xs font-medium text-slate-700">
                                 {{ record.choice?.kind === 'select' ? 'Selected anchor' : record.choice?.kind === 'skip' ? 'Unchanged: ' + record.reasonLabel : 'Select or Skip is required.' }}
                             </p>
@@ -7187,9 +7186,6 @@
                                             <span class="mt-1 block break-all text-[11px] text-slate-600">
                                                 {{ candidate.representative ? 'Representative' : 'Not representative' }} ·
                                                 Direct evidence: {{ candidate.directEvidence.join(', ') }}
-                                            </span>
-                                            <span class="mt-1 block break-all text-[10px] text-slate-500">
-                                                Internal ID: {{ candidate.featureIdentifier }}
                                             </span>
                                         </span>
                                     </span>
@@ -7258,7 +7254,7 @@
                 <p class="mt-3">{{ similarityAlignmentResetPreview.targets.length }} records changed direction in the latest Align. Only combined Reset restores their directions.</p>
                 <ul aria-label="Alignment direction restoration targets" class="mt-2 space-y-3">
                     <li v-for="target in similarityAlignmentResetPreview.targets" :key="target.recordKey" class="break-words">
-                        <strong>{{ target.label }}</strong> ({{ target.recordKey }}): current {{ target.current ? 'reverse' : 'forward' }}; restored {{ target.restored ? 'reverse' : 'forward' }} relative to source.
+                        <strong>{{ target.label }}</strong>: current {{ target.current ? 'reverse' : 'forward' }}; restored {{ target.restored ? 'reverse' : 'forward' }} relative to source.
                         <span v-if="target.laterManualEdit">This record was manually changed after Align; combined Reset replaces that direction edit.</span>
                         <span v-else>Combined Reset restores this record's direction before the latest Align.</span>
                     </li>

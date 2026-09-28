@@ -289,7 +289,8 @@ test('normal Align uses Python unique-direct-RBH plan without a review or second
   const fixture = create({ members: [reference, targetA, targetB, targetC],
     helper: (_operation, { request }) => {
       assert.equal(request.members.filter(({ anchor: item }) => item.recordKey === 'b').length, 2);
-      assert.equal(request.directEdges.length, 1);
+      // The Worker reads direct evidence from the committed resource; a catalog graph is ignored.
+      assert.deepEqual(request.directEdges, []);
       const response = responseFor(request);
       response.records[1].rationale = 'unique_direct_rbh';
       response.records[1].reviewReason = 'unique_direct_rbh';
@@ -421,7 +422,9 @@ test('explicit review opens an applicable Python-selected draft for either respo
       JSON.stringify(anchor('b', 'target-a', 1)));
     assert.equal(fixture.actions.draft.value.rows[0].reason,
       ambiguous ? 'user_selected' : 'only_usable_candidate');
-    assert.equal(fixture.actions.draft.value.reference.featureIdentifier, 'clicked');
+    // Names come from biological metadata; the feature hash stays binding-only.
+    assert.equal(fixture.actions.draft.value.reference.label, 'gene-clicked · clicked');
+    assert.equal(Object.hasOwn(fixture.actions.draft.value.reference, 'featureIdentifier'), false);
     assert.equal(fixture.actions.draft.value.reference.coordinates, '51..70 bp');
     assert.equal(fixture.actions.draft.value.rows[0].recommendedKey,
       fixture.actions.draft.value.rows[0].choice.candidateKey);
@@ -754,7 +757,7 @@ test('candidate labels retain biological metadata and displayed record names', a
   await startReview(fixture);
   const row = fixture.actions.draft.value.rows[0];
   assert.equal(row.recordLabel, 'Genome B');
-  assert.equal(row.candidates[0].label, 'gene-target-a');
+  assert.equal(row.candidates[0].label, 'gene-target-a · target-a');
   assert.equal(row.candidates[0].coordinates, '21..40 bp');
   assert.equal(row.candidates[0].displayedStrand, '-');
 });
@@ -892,4 +895,27 @@ test('missing caller diagnostic cannot borrow an unrelated global error',async()
   assert.match(outcome.error.summary,/without recognized diagnostic information/);
   assert.doesNotMatch(outcome.error.summary,/input could not be read|network/i);
   assert.equal(fixture.actions.dialogOpen.value,true);
+});
+
+test('Review and the active-plan inspector use names, never internal keys or hashes', async () => {
+  const unnamed = { ...targetC, gene: undefined, proteinId: undefined, sourceProteinId: undefined, type: 'CDS' };
+  const fixture = create({ members: [reference, targetA, unnamed] });
+  Object.assign(fixture.state.linearSeqs[0], { definition: 'Genome A', accession: 'ACC-A' });
+  fixture.state.linearSeqs[1].definition = 'Genome B';
+  fixture.state.linearSeqs[2].definition = 'Genome B';
+  assert.deepEqual(await startReview(fixture), { status: 'reviewing' });
+  const draft = fixture.actions.draft.value;
+  assert.equal(draft.reference.recordLabel, 'Genome A · ACC-A');
+  assert.deepEqual(draft.rows.map(({ recordLabel }) => recordLabel),
+    ['Genome B · Record 2', 'Genome B · Record 3']);
+  assert.equal(draft.rows[1].candidates[0].label, 'CDS 41..60 bp');
+  assert.deepEqual(await fixture.actions.applyDraft(), { status: 'ok' });
+  const inspector = fixture.actions.activePlanInspector.value;
+  assert.equal(inspector.reference.recordLabel, 'Genome A · ACC-A');
+  assert.equal(inspector.reference.label, 'gene-clicked · clicked');
+  assert.deepEqual(inspector.records.map(({ recordLabel, anchorLabel }) => [recordLabel, anchorLabel]), [
+    ['Genome A · ACC-A', 'gene-clicked · clicked'],
+    ['Genome B · Record 2', 'gene-target-a · target-a'],
+    ['Genome B · Record 3', 'CDS 41..60 bp']
+  ]);
 });

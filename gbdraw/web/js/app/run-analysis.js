@@ -14,7 +14,6 @@ import {
   projectCompositionRecordIdentity,
   buildCanonicalRenderRequest,
   bindCanonicalTypedResource,
-  projectGeneratedProteinRecipe,
   projectCommittedRecordTransform,
   projectCommittedSimilarityAlignment,
   readCanonicalResourceRecordCount
@@ -2177,7 +2176,6 @@ export const createRunAnalysis = ({
       let recordSelectors = [];
       let reverseFlags = [];
       const resolvedComparisons = [];
-      let generatedProteinRecipeMode = null;
       let resolvedCircularConservation = [];
       const runInfoFileMap = new Map();
       const generatedCliFileMap = new Map();
@@ -4301,13 +4299,11 @@ export const createRunAnalysis = ({
               conversionCache.simultaneousParsedTables || 0
             );
             if (useCollinearBlastp) {
-              generatedProteinRecipeMode = 'collinear';
               resolvedComparisons.push({
                 kind: 'collinearityResult',
                 typedResource: convertedPayload.collinearityResult
               });
             } else if (useOrthogroupBlastp) {
-              generatedProteinRecipeMode = 'orthogroup';
               resolvedComparisons.push({
                 kind: 'orthogroupResult',
                 typedResource: convertedPayload.orthogroupResult
@@ -5009,11 +5005,9 @@ export const createRunAnalysis = ({
           });
         }
         if (typeof adoptCanonicalRenderArtifacts === 'function') {
-          // Same-row layouts can compute reusable protein evidence without any displayed comparison.
-          const committedCanonical = generatedProteinRecipeMode && canonical.renderRequest.comparisons.length > 0
-            ? projectGeneratedProteinRecipe(canonical, generatedProteinRecipeMode)
-            : canonical;
-          adoptCanonicalRenderArtifacts(committedCanonical, { adoptOwnedRequest: true });
+          // The committed request keeps the computed typed analysis resource, so
+          // target-only renders and Similarity alignment use it without LOSATP.
+          adoptCanonicalRenderArtifacts(canonical, { adoptOwnedRequest: true });
         }
         if (!useCommittedComparison && importedComparisonIntent) {
           Object.assign(

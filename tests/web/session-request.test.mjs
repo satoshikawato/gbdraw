@@ -15,7 +15,6 @@ await writeFile(join(tempRoot, 'package.json'), '{"type":"module"}', 'utf8');
 const {
   buildCanonicalRenderRequest: buildCanonicalRenderRequestRaw,
   bindCanonicalTypedResource,
-  projectGeneratedProteinRecipe,
   managedConfigOverridePathsForMode,
   normalizeWebGridColumnOrdering,
   promoteCanonicalRenderRequestToCurrent,
@@ -5271,22 +5270,6 @@ for (const invalid of ['10', '10px', true, [], {}, Infinity, NaN]) {
   const resource = built.resources['comparison-canonical-collinearity-1'];
   assert.equal(resource.data, backing.data);
   assert.equal(resource.size, backing.size);
-  const runtime = {
-    ...built,
-    renderRequest: {
-      ...built.renderRequest,
-      comparisons: [
-        ...built.renderRequest.comparisons,
-        { kind: 'generatedProteinComparison', mode: 'none', settings: { collinearitySearchScope: 'all' } }
-      ]
-    }
-  };
-  const persisted = projectGeneratedProteinRecipe(runtime, 'collinear');
-  assert.equal(persisted.resources['comparison-canonical-collinearity-1'], undefined);
-  assert.equal(persisted.renderRequest.comparisons.some((item) => item.kind === 'collinearityResult'), false);
-  assert.equal(persisted.renderRequest.comparisons.find(
-    (item) => item.kind === 'generatedProteinComparison'
-  ).mode, 'collinear');
   assert.equal(built.resources['comparison-canonical-collinearity-1'], resource);
   assert.deepEqual(JSON.parse(Buffer.from(resource.data, 'base64').toString('utf8')),
     { schema: 3, kind: 'result', value: { type: 'CollinearityResult', fields: {} } });

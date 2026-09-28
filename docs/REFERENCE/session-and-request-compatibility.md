@@ -193,6 +193,15 @@ partial, malformed, mismatched, or unsupported plans. Schema 1 of the nested
 plan was never released and has no reader. There is no Circular form or generic
 transform matrix.
 
+Web **Align…** and **Review alignment options…** take the direct ortholog
+evidence for the selected Similarity Group from the orthogroup result in the
+committed `renderRequest`, not from the feature catalog. An edge counts only
+when both endpoints bind to current members of their own source records;
+missing or unbound evidence leaves the usual Review rules in place instead of
+a guess. A Web LOSATP Generate commits its typed orthogroup or Collinear result
+with the request, so Align, record rotation, and Save and Load use the same
+evidence without running LOSATP again.
+
 Released request schemas 1, 2, 5, 6, and 7 remain readable. Their
 `alignOrthogroupFeature` protein-setting string is confined to a reader-only
 legacy path. Current writers emit neither that field nor the old Session-only

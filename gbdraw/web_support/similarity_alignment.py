@@ -12,6 +12,7 @@ from typing import Any
 from gbdraw.exceptions import ValidationError
 from gbdraw.api.record_planning import (
     ResolvedRecordCollection, project_similarity_alignment_anchor_fact,
+    similarity_alignment_evidence_edges,
 )
 from gbdraw.api.request_render import plan_linear_request
 from gbdraw.api.requests import LinearDiagramRequest
@@ -369,11 +370,11 @@ def _projection_context(value: object, resource_paths: Mapping[str, str], output
         else:
             flipped_records.append(replace(record, presentation=replace(record.presentation, reverse_complement=reverse)))
     flipped = plan_linear_request(replace(request, records=tuple(flipped_records)))
-    return raw, before, before_collection, after, flipped
+    return raw, before, before_collection, after, flipped, request.options.orthogroups
 
 
 def _serialize_projection(context, candidates, raw_request):
-    raw, before, collection, after, flipped = context
+    raw, before, collection, after, flipped, _orthogroups = context
     before_placements = getattr(before.build().drawing, "_gbdraw_alignment_placements")
     after_placements = getattr(after.build().drawing, "_gbdraw_alignment_placements")
     flipped_collection = ResolvedRecordCollection(flipped.records, flipped.provenance)
@@ -439,6 +440,32 @@ def _serialize_projection(context, candidates, raw_request):
                                      for item, transform in zip(after.provenance, after.transforms, strict=True)},
             "records": records}
 
+def _resource_evidence_edges(context, group_id, candidates) -> list[AlignmentEvidenceEdge]:
+    """Bind resource edges to the current members; unbound endpoints are omitted."""
+
+    collection, orthogroups = context[2], context[5]
+    by_key = {candidate.anchor.canonical_key: candidate.anchor for candidate in candidates}
+
+    def current(anchor: AlignmentAnchorIdentity) -> AlignmentAnchorIdentity | None:
+        match = by_key.get(anchor.canonical_key)
+        if match is None or any(
+            left is not None and right is not None and left != right
+            for left, right in (
+                (anchor.source_feature_index, match.source_feature_index),
+                (anchor.stable_feature_svg_id, match.stable_feature_svg_id),
+            )
+        ):
+            return None
+        return match
+
+    edges = []
+    for edge in similarity_alignment_evidence_edges(collection, orthogroups, group_id):
+        query, subject = current(edge.query), current(edge.subject)
+        if query is not None and subject is not None:
+            edges.append(replace(edge, query=query, subject=subject))
+    return edges
+
+
 def resolve_similarity_alignment_payload(
     payload: object, *, projection: object = None,
     resource_paths: Mapping[str, str] | None = None, output_directory: str = "/tmp",
@@ -497,7 +524,17 @@ def resolve_similarity_alignment_payload(
         candidates = verified
     candidate_keys = {candidate.anchor.canonical_key for candidate in candidates}
     edges = []
-    for index, value in enumerate(_list(raw["directEdges"], "request.directEdges")):
+    direct_edges = _list(raw["directEdges"], "request.directEdges")
+    if context is not None:
+        # The committed request's orthogroup resource is the only evidence
+        # authority; the UI catalog carries no graph.
+        if direct_edges:
+            raise ValidationError(
+                "request.directEdges must be empty; direct evidence comes from "
+                "the committed orthogroup resource."
+            )
+        edges = _resource_evidence_edges(context, group_id, candidates)
+    for index, value in enumerate(direct_edges):
         path = f"request.directEdges[{index}]"
         edge = _object(value, {"groupId", "query", "subject", "edgeKind"}, path)
         edge_group_id = _text(edge["groupId"], f"{path}.groupId")
