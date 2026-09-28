@@ -165,6 +165,23 @@ A cached search is reused only when its biological inputs, direction, program,
 and meaningful search settings still match. See [saved comparison results and
 cache reuse](./REFERENCE/session-and-request-compatibility.md#saved-comparison-results-and-cache-reuse).
 
+### Why does a loaded Circular session say Records not inspected?
+
+**Load Session** shows the saved Result without reading the embedded source
+again. Select **Inspect source records**, or **Generate Diagram**, to list the
+records and show their rotation rows. A newly uploaded file is inspected at
+once. See [Save and Load Sessions](./REFERENCE/web-app.md#save-and-load-sessions)
+and [Circular source records](./REFERENCE/web-app.md#circular-source-records-and-one-record-settings).
+
+### Why are controls unavailable while a session saves or loads?
+
+Save and Load work on one consistent document, so edits, **Generate Diagram**,
+and the other Session button wait until **Saving session…** or **Loading
+session…** disappears. Scrolling, preview pan and zoom, and feature search stay
+available. If Load reports an **Operation error**, check that a plain Session
+file is at most 200 MiB and that a gzip Session expands to at most 512 MiB. See
+[Save and Load Sessions](./REFERENCE/web-app.md#save-and-load-sessions).
+
 ### Why does Save Raw LOSAT TSV not contain the internal `h_` IDs?
 
 Generated protein results export stable readable aliases instead of

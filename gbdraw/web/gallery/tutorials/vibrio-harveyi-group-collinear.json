@@ -66,10 +66,6 @@
             "openDetails": ["Record options"],
             "actions": [
               {
-                "type": "click",
-                "selector": "button:text-is('Load record rotation controls')"
-              },
-              {
                 "type": "waitForFunction",
                 "script": "() => { const select = document.querySelector(\"select[aria-label='Record selector for sequence 1']\"); return select && !select.disabled && [...select.options].some((option) => option.value === 'NC_004603.1'); }"
               },

@@ -208,7 +208,7 @@ def test_h_gui_15_validates_every_actual_export() -> None:
         "assert_finished_circular_svg(report)",
         'root.attrib.get("data-gbdraw-interactive-svg") != "true"',
         "INTERACTIVE_ASSET_IDS.issubset(ids)",
-        'payload.get("schema") != 3',
+        'payload.get("schema") != 4',
         'page.goto(path.resolve().as_uri(), wait_until="load")',
         'name="Expand feature search", exact=True',
         'fill("COX1")',

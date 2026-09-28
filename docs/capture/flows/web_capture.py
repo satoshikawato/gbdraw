@@ -216,6 +216,24 @@ def wait_for_app_shell(page: Page, *, timeout_ms: int = GENERATION_TIMEOUT_MS) -
         raise AssertionError("Capture page is not cross-origin isolated")
 
 
+def open_ancestor_details(locator: Locator) -> Locator:
+    """Open every closed disclosure that contains one control."""
+
+    for details in locator.locator("xpath=ancestor::details").all():
+        if details.get_attribute("open") is None:
+            details.locator(":scope > summary").click()
+    return locator
+
+
+def expect_circular_source_status(page: Page, text: str) -> None:
+    """Wait until the Circular Source records status shows the documented text."""
+
+    status = page.get_by_role("region", name="Source records", exact=True).get_by_role(
+        "status"
+    )
+    expect(status).to_have_text(text)
+
+
 def generate_and_wait_for_result(
     page: Page,
     *,
