@@ -549,6 +549,7 @@ const runLosatPairsThreaded = async (
   const effectiveThreads = Math.max(1, Number(threadsPerJob) || 1);
   const results = new Array(jobs.length);
   const activeWorkers = new Set();
+  const faultChannels = new Set();
   let nextJobIndex = 0;
   let completed = 0;
   let requestId = 0;
@@ -560,6 +561,8 @@ const runLosatPairsThreaded = async (
       if (handleAbort) signal?.removeEventListener?.('abort', handleAbort);
       activeWorkers.forEach((worker) => worker.terminate());
       activeWorkers.clear();
+      faultChannels.forEach((channel) => channel.close());
+      faultChannels.clear();
     };
     const fail = (error) => {
       if (settled) return;
@@ -608,6 +611,13 @@ const runLosatPairsThreaded = async (
         return;
       }
       activeWorkers.add(worker);
+      // A trapped WASI thread cannot notify its job worker, which is blocked in
+      // wasm, so it reports here and the job fails instead of waiting forever.
+      const faultChannelName = typeof BroadcastChannel === 'function'
+        ? `gbdraw-losat-thread-fault:${id}:${Math.random().toString(36).slice(2)}`
+        : '';
+      const faultChannel = faultChannelName ? new BroadcastChannel(faultChannelName) : null;
+      if (faultChannel) faultChannels.add(faultChannel);
 
       const cleanupWorker = () => {
         worker.removeEventListener('message', handleMessage);
@@ -615,6 +625,10 @@ const runLosatPairsThreaded = async (
         worker.removeEventListener('messageerror', handleMessageError);
         worker.terminate();
         activeWorkers.delete(worker);
+        if (faultChannel) {
+          faultChannel.close();
+          faultChannels.delete(faultChannel);
+        }
       };
 
       const handleMessage = (event) => {
@@ -651,9 +665,18 @@ const runLosatPairsThreaded = async (
         fail(new Error(`${formatPairErrorPrefix(job)}: Threaded LOSAT worker message could not be decoded`));
       };
 
+      const handleThreadFault = (event) => {
+        const data = event.data || {};
+        if (data.type !== 'thread-fault') return;
+        cleanupWorker();
+        const detail = [data.error || 'LOSAT WASI thread trapped', data.stderr].filter(Boolean).join('\n');
+        fail(new Error(`${formatPairErrorPrefix(job)}: LOSAT thread ${data.tid} failed: ${detail}`));
+      };
+
       worker.addEventListener('message', handleMessage);
       worker.addEventListener('error', handleError);
       worker.addEventListener('messageerror', handleMessageError);
+      faultChannel?.addEventListener('message', handleThreadFault);
       worker.postMessage({
         type: 'run',
         id,
@@ -663,7 +686,8 @@ const runLosatPairsThreaded = async (
         job,
         queryFasta: payloadJob.queryFasta,
         subjectFasta: payloadJob.subjectFasta,
-        threadsPerJob: effectiveThreads
+        threadsPerJob: effectiveThreads,
+        faultChannel: faultChannelName
       });
     };
 

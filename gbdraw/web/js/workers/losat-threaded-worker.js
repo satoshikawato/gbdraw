@@ -118,6 +118,7 @@ const prepareThreadWorker = ({
   args,
   env,
   wasiShimUrl,
+  faultChannel,
   workers,
   encoder,
   stdoutChunks,
@@ -200,7 +201,8 @@ const prepareThreadWorker = ({
         memory: mainMemory,
         args,
         env,
-        wasiShimUrl
+        wasiShimUrl,
+        faultChannel
       });
     } catch (error) {
       settle(() => {
@@ -222,7 +224,8 @@ const runThreadedLosat = async ({
   subjectFasta,
   threadsPerJob,
   memoryInitialPages,
-  memoryMaximumPages
+  memoryMaximumPages,
+  faultChannel
 }) => {
   if (typeof SharedArrayBuffer !== 'function') {
     throw new Error('SharedArrayBuffer is unavailable; threaded LOSAT requires cross-origin isolation.');
@@ -346,7 +349,8 @@ const runThreadedLosat = async ({
       control,
       args,
       env,
-      wasiShimUrl
+      wasiShimUrl,
+      faultChannel
     });
     return waitForThreadStart({ tid, worker, controlView, timeoutMs: WORKER_PREPARE_TIMEOUT_MS });
   };
@@ -385,6 +389,7 @@ const runThreadedLosat = async ({
             args,
             env,
             wasiShimUrl,
+            faultChannel,
             workers,
             encoder,
             stdoutChunks,
