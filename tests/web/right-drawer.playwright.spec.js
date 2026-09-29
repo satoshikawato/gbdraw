@@ -268,6 +268,27 @@ for (const viewport of ISSUE_461_VIEWPORTS) {
   });
 }
 
+test('a hidden search row leaves the canvas in the flexible Preview row', async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  const imported = await loadGallerySession(page, 'majanivirus_orthogroup.gbdraw-session.json.gz');
+  expect(imported.status).toBe('ok');
+  const rows = () => page.locator('.preview-editor-layout').evaluate((layout) => {
+    const height = (selector) => layout.querySelector(`:scope > ${selector}`).getBoundingClientRect().height;
+    return {
+      search: height('.preview-feature-search'),
+      workspace: height('.preview-workspace'),
+      controls: height('.preview-controls')
+    };
+  });
+  const shown = await rows();
+  // Capture tools hide the search; the canvas, not the toolbar, takes the space.
+  await page.locator('.preview-feature-search').evaluate((search) => { search.style.display = 'none'; });
+  const hidden = await rows();
+  expect(hidden.search).toBe(0);
+  expect(hidden.controls).toBe(shown.controls);
+  expect(hidden.workspace).toBeGreaterThan(shown.workspace);
+});
+
 const MOBILE_VIEWPORTS = [
   { id: 'MOB1', width: 390, height: 844 },
   { id: 'MOB2', width: 375, height: 667 },

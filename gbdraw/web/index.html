@@ -912,12 +912,18 @@
         .preview-editor-layout:has(> .preview-workspace > .right-drawer[aria-hidden="false"]) {
             --preview-editor-reserve: var(--right-drawer-width);
         }
+        /* Fixed rows keep the canvas in the flexible row when the search is hidden. */
         .preview-editor-layout > .preview-feature-search {
+            grid-row: 1;
             justify-self: end;
             width: min(39.5rem, calc(100% - 1rem - var(--preview-editor-reserve)));
             margin-right: calc(0.5rem + var(--preview-editor-reserve));
         }
+        .preview-editor-layout > .preview-workspace {
+            grid-row: 2;
+        }
         .preview-editor-layout > .preview-controls {
+            grid-row: 3;
             margin-right: var(--preview-editor-reserve);
         }
         .preview-workspace {
