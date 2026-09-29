@@ -81,7 +81,9 @@ def test_first_linear_tutorial_controls_have_stable_accessible_selectors() -> No
             index.index('aria-label="Set all adjacent comparisons"'),
         )
     ]
-    assert "aria-pressed" not in command_group
+    # The pressed command shows the comparison state; no status line repeats it.
+    for action in ("losat", "none", "upload"):
+        assert f":aria-pressed=\"linearComparisonGlobalAction === '{action}'\"" in command_group
     assert 'role="status" aria-live="polite"' in index
     assert 'data-linear-comparison-disclosure="settings"' in index
     assert 'aria-label="Comparison Settings"' in index
@@ -207,7 +209,8 @@ def test_phase_one_web_ergonomics_are_encoded_in_the_template() -> None:
     assert "if (attachedCount === 0) return 'No depth track attached';" in app_setup
     assert 'Attached to all records' in index
     assert 'Requires at least 2 loaded sequences to compare' in index
-    assert 'v-if="linearComparisonUi.intentKey !== \'none\'"' in index
+    assert 'v-if="linearComparisonUi.intentKey !== \'none\'"' not in index
+    assert 'v-if="linearComparisonUi.intentKey === \'custom\'"' in index
     assert 'placeholder="e.g., <i>' not in index
     assert "'e.g., <i>" not in index
     assert '[class~="text-[9px]"]' in index

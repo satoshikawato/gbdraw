@@ -303,7 +303,8 @@ def test_nucleotide_manifest_records_the_executable_evidence() -> None:
 
     faq = FAQ_PATH.read_text(encoding="utf-8")
     assert "**Comparison** command" in faq
-    assert "**Current:** status" in faq
+    assert "button that matches the effective plan is pressed" in faq
+    assert "**Current:**" not in faq
     assert "**Selected pairs" in faq
     assert "Fresh Linear pages and **Reset Settings** start with **No comparison**" in faq
     assert "**Apply to all adjacent gaps**" not in faq
