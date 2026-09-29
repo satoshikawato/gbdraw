@@ -128,7 +128,7 @@ const save = async (page, testInfo, label) => {
 
 const prepareSeed = async (journey, testInfo) => {
   const bytes = await fs.readFile(seed);
-  expect(hash(bytes)).toBe('4ac925ae659907774c7aaf6e4cb70c9b0aa05f95f83a89db9c912165d5d26ca4');
+  expect(hash(bytes)).toBe('43bd1caf3c144f6b0070cc8705e0b8d891608eaa64d9cc9f3d595a33e42c3af1');
   const session = JSON.parse(gunzipSync(bytes));
   if (journey !== 'minimal') return { file: seed, session };
 

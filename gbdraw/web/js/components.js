@@ -9,14 +9,22 @@ import { normalizeUserFacingError, operationErrorTitle, generationRecoveryGuidan
 
 const { ref, reactive, computed, nextTick, watch } = window.Vue;
 
+// A tip with `id` replaces always-on text: one text source feeds the visible
+// tooltip and the accessible description that the described control
+// references. Hover and keyboard focus show it, a click or tap pins it, and
+// Escape or blur closes it. A tip without `id` stays a hover-only icon that
+// leaves the accessible name of a surrounding label unchanged.
 export const HelpTip = {
   template: '#help-tip-template',
-  props: ['text'],
+  props: ['text', 'id', 'label'],
   setup() {
-    const visible = ref(false);
+    const hovered = ref(false);
+    const keyboardFocus = ref(false);
+    const pinned = ref(false);
+    const visible = computed(() => hovered.value || keyboardFocus.value || pinned.value);
     const style = reactive({ top: '0px', left: '0px' });
     const trigger = ref(null);
-    const show = () => {
+    const position = () => {
       if (!trigger.value) return;
       const rect = trigger.value.getBoundingClientRect();
 
@@ -48,13 +56,18 @@ export const HelpTip = {
       style.top = `${top}px`;
       style.left = `${left}px`;
       style.transform = transform;
-
-      visible.value = true;
     };
-    const hide = () => {
-      visible.value = false;
+    watch(visible, (open) => { if (open) position(); });
+    const onEnter = () => { hovered.value = true; };
+    const onLeave = () => { hovered.value = false; };
+    const onFocus = () => { keyboardFocus.value = Boolean(trigger.value?.matches?.(':focus-visible')); };
+    const close = () => {
+      hovered.value = false;
+      keyboardFocus.value = false;
+      pinned.value = false;
     };
-    return { visible, style, trigger, show, hide };
+    const toggle = () => { pinned.value = !pinned.value; };
+    return { visible, style, trigger, onEnter, onLeave, onFocus, close, toggle };
   }
 };
 

@@ -433,8 +433,8 @@ def test_first_linear_flow_uses_accessible_real_actions_without_state_shortcuts(
     for required in (
         'get_by_role("button", name="Linear", exact=True)',
         'get_by_role("radio", name="GenBank", exact=True)',
-        'get_by_role("status")',
-        '"Current: No comparison"',
+        'name="Set no comparison", exact=True',
+        'to_have_attribute("aria-pressed", "true")',
         'get_by_label("GenBank / DDBJ File", exact=True).set_input_files',
         'get_by_label("Output Prefix", exact=True)',
         'get_by_label("Track Layout", exact=True)',
@@ -485,8 +485,8 @@ def test_gui_inputs_flow_uses_whole_files_real_actions_and_actual_error() -> Non
         'get_by_role("button", name="Linear", exact=True)',
         'get_by_role("radio", name="GenBank", exact=True)',
         'name="GFF3 + FASTA", exact=True',
-        'get_by_role("status")',
-        '"Current: No comparison"',
+        'name="Set no comparison", exact=True',
+        'to_have_attribute("aria-pressed", "true")',
         'get_by_label("GenBank / DDBJ File", exact=True).set_input_files',
         'get_by_label("GFF3", exact=True).set_input_files',
         'get_by_label("FASTA", exact=True).set_input_files',
@@ -501,8 +501,8 @@ def test_gui_inputs_flow_uses_whole_files_real_actions_and_actual_error() -> Non
         assert required in source
 
     for message_part in (
-        "No matching FASTA record found for GFF record NC_001416.1.",
-        "Please ensure that all GFF records have corresponding FASTA entries.",
+        "Supply a matching FASTA input for each GFF3 input.",
+        "Ensure every GFF3 record has a matching FASTA entry.",
     ):
         assert message_part in source
 
@@ -609,8 +609,8 @@ def test_gui_losatn_flow_runs_the_real_serial_one_thread_journey() -> None:
 
     for required in (
         'get_by_role("button", name="Linear", exact=True)',
-        'get_by_role("status")',
-        '"Current: No comparison"',
+        'name="Set no comparison", exact=True',
+        'to_have_attribute("aria-pressed", "true")',
         '"button", name="Add sequence", exact=True',
         'expect(add_sequence).to_have_count(1)',
         'add_sequence.click()',

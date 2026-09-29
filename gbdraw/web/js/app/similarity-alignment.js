@@ -113,15 +113,58 @@ const displayText = (...values) => values
   .map((value) => String(value ?? '').trim())
   .find((value) => value && !isInternalProteinDisplayId(value)) || '';
 
-const featureLabel = (anchor, displayFacts, fallback = '') => {
-  const facts = displayFacts.get(anchorKey(anchor)) || {};
-  const feature = facts.sequenceFeature || {};
-  const gene = displayText(feature.gene, facts.gene, feature.qualifiers?.gene);
+// Human-readable names shared by Review, the direction and Reset previews, and
+// the active-plan inspector. Record keys and feature hashes stay binding-only.
+const featureName = (anchor, facts = {}, fallback = '') => {
+  const feature = facts.sequenceFeature || facts;
+  const qualifiers = feature.qualifiers || {};
+  const gene = displayText(feature.gene, facts.gene, qualifiers.gene);
   const locusTag = displayText(feature.locus_tag, feature.locusTag,
-    facts.locus_tag, facts.locusTag, feature.qualifiers?.locus_tag);
-  const product = displayText(feature.product, facts.product, feature.qualifiers?.product);
-  return [gene, locusTag].filter(Boolean).join(' · ')
-    || product || displayText(fallback) || anchor.biologicalFeatureId;
+    facts.locus_tag, facts.locusTag, qualifiers.locus_tag);
+  const proteinId = displayText(facts.displayProteinId, feature.protein_id, feature.proteinId,
+    facts.proteinId, facts.sourceProteinId, qualifiers.protein_id);
+  const product = displayText(feature.product, facts.product, qualifiers.product);
+  const name = gene || product || locusTag || proteinId
+    || (fallback === anchor.biologicalFeatureId ? '' : displayText(fallback));
+  if (name) return [name, ...[locusTag, proteinId].filter((value) => value && value !== name)].join(' · ');
+  const start = Number(feature.start ?? facts.start);
+  const end = Number(feature.end ?? facts.end);
+  const coordinates = Number.isSafeInteger(start) && Number.isSafeInteger(end)
+    ? `${(start + 1).toLocaleString('en-US')}..${end.toLocaleString('en-US')} bp` : '';
+  return [displayText(feature.type, facts.type) || 'Feature', coordinates].filter(Boolean).join(' ');
+};
+
+const featureLabel = (anchor, displayFacts, fallback = '') => (
+  featureName(anchor, displayFacts.get(anchorKey(anchor)) || {}, fallback)
+);
+
+const catalogBiologicalFeatures = (catalog) => (Array.isArray(catalog?.items) ? catalog.items : [])
+  .flatMap((item) => (Array.isArray(item?.biologicalFeatures) ? item.biologicalFeatures : []));
+
+// Presentation label or definition plus accession; the display position is
+// appended only to tell otherwise identical records apart.
+const recordNames = ({ recordKeys, request = null, linearSeqs = [], catalog = null }) => {
+  const accessions = new Map();
+  catalogBiologicalFeatures(catalog).forEach((feature) => {
+    const key = String(feature?.recordKey || '');
+    const id = displayText(feature?.record_id, feature?.recordId);
+    if (key && id && !accessions.has(key)) accessions.set(key, id);
+  });
+  const labels = recordKeys.map((recordKey, index) => {
+    const record = request?.records?.find((entry) => entry?.recordKey === recordKey);
+    const sequence = (Array.isArray(linearSeqs) ? linearSeqs : [])
+      .find((entry) => String(entry?.uid || '') === recordKey);
+    const name = plainTextLinearRecordLabel(displayText(record?.presentation?.label,
+      sequence?.definition, sequence?.file_definition));
+    const accession = displayText(sequence?.accession, accessions.get(recordKey));
+    return [...new Set([name, accession].filter(Boolean))].join(' · ')
+      || plainTextLinearRecordLabel(displayText(sequence?.gb?.name, sequence?.gff?.name))
+      || `Record ${index + 1}`;
+  });
+  const counts = new Map();
+  labels.forEach((label) => counts.set(label, (counts.get(label) || 0) + 1));
+  return new Map(recordKeys.map((recordKey, index) => [recordKey,
+    counts.get(labels[index]) > 1 ? `${labels[index]} · Record ${index + 1}` : labels[index]]));
 };
 
 const candidateView = (candidate, request, displayFacts = new Map()) => {
@@ -135,7 +178,6 @@ const candidateView = (candidate, request, displayFacts = new Map()) => {
     label: featureLabel(candidate.anchor, displayFacts, candidate.displayName),
     coordinates,
     displayedStrand: strandLabel(candidate.displayedStrand),
-    featureIdentifier: candidate.anchor.biologicalFeatureId,
     representative: candidate.representative,
     role: candidate.role || 'member',
     directEvidence: candidate.directEvidence.length ? candidate.directEvidence : ['None'],
@@ -149,8 +191,7 @@ const referenceView = (response, request, displayFacts, recordLabels) => {
   if (!member) throw new Error('Alignment reference has no current member facts.');
   return {
     label: featureLabel(response.reference, displayFacts),
-    featureIdentifier: response.reference.biologicalFeatureId,
-    recordLabel: recordLabels.get(response.reference.recordKey) || response.reference.recordKey,
+    recordLabel: recordLabels.get(response.reference.recordKey),
     recordKey: response.reference.recordKey,
     coordinates: (member.sourceStart + 1).toLocaleString('en-US') + '..'
       + member.sourceEnd.toLocaleString('en-US') + ' bp',
@@ -171,9 +212,7 @@ const reviewRows = (response, request, displayFacts, recordLabels) => response.r
       ? anchorKey(selectedAnchor) : null;
     return {
       recordKey: record.recordKey,
-      recordLabel: recordLabels.get(record.recordKey) || `Record ${request.records.findIndex(
-        ({ recordKey }) => recordKey === record.recordKey
-      ) + 1}`,
+      recordLabel: recordLabels.get(record.recordKey),
       candidates: record.candidates.filter(({ usable }) => usable)
         .map((candidate) => candidateView(candidate, request, displayFacts)),
       reason,
@@ -212,23 +251,34 @@ const successfulSummary = (plan, reversed) => {
 
 const baseReverseComplement = canonicalRecordReverseComplement;
 
-const inspectActivePlan = (plan, linearSeqs) => {
+const inspectActivePlan = (plan, { linearSeqs = [], catalog = null, request = null } = {}) => {
   if (!plan || plan.schema !== 2 || !Array.isArray(plan.records)) return null;
   const records = new Map(
     (Array.isArray(linearSeqs) ? linearSeqs : [])
       .map((record) => [String(record?.uid || ''), Boolean(record.region_reverse)])
   );
+  const features = new Map();
+  catalogBiologicalFeatures(catalog).forEach((feature) => {
+    const key = `${feature?.recordKey}\0${feature?.biologicalFeatureId}`;
+    if (!features.has(key)) features.set(key, feature);
+  });
+  const nameOf = (anchor) => featureName(anchor,
+    features.get(`${anchor.recordKey}\0${anchor.biologicalFeatureId}`) || {});
+  const names = recordNames({ recordKeys: plan.records.map(({ recordKey }) => recordKey),
+    request, linearSeqs, catalog });
   return deepFreeze({
     groupId: plan.groupId,
     modeLabel: 'Align',
     reference: {
       ...plan.reference,
-      label: plan.reference.biologicalFeatureId
+      label: nameOf(plan.reference),
+      recordLabel: names.get(plan.reference.recordKey)
     },
     records: plan.records.map((decision) => {
       return {
         recordKey: decision.recordKey,
-        anchorLabel: decision.anchor?.biologicalFeatureId || 'Skip',
+        recordLabel: names.get(decision.recordKey),
+        anchorLabel: decision.anchor ? nameOf(decision.anchor) : 'Skip',
         status: decision.status,
         rationale: decision.rationale,
         rationaleLabel: rationaleLabels[decision.rationale] || decision.rationale,
@@ -705,47 +755,14 @@ const buildHelperRequest = ({ group, members, reference, request, catalog,
     throw new Error('The reference identity conflicts with current group metadata.');
   }
 
-  const endpointIndex = new Map();
-  normalizedMembers.forEach(({ source, payload }) => {
-    const recordIndex = Number(source?.recordIndex);
-    [source?.proteinId, source?.sourceProteinId].forEach((proteinId) => {
-      const id = String(proteinId || '').trim();
-      if (!Number.isSafeInteger(recordIndex) || recordIndex < 0 || !id) return;
-      const key = `${recordIndex}\0${id}`;
-      const entries = endpointIndex.get(key) || [];
-      if (!entries.some((anchor) => sameJson(anchor, payload.anchor))) entries.push(payload.anchor);
-      endpointIndex.set(key, entries);
-    });
-  });
-  const directEdges = (Array.isArray(group?.orthologEdges) ? group.orthologEdges : [])
-    .map((edge, index) => {
-      const edgeGroup = text(edge?.orthogroupId, `orthologEdges[${index}].orthogroupId`);
-      if (edgeGroup !== groupStatus.value) {
-        throw new Error(`orthologEdges[${index}] belongs to another Similarity Group.`);
-      }
-      const endpoint = (side) => {
-        const recordIndex = Number(edge?.[`${side}RecordIndex`]);
-        const proteinId = text(edge?.[`${side}ProteinId`], `orthologEdges[${index}].${side}ProteinId`);
-        const matches = endpointIndex.get(`${recordIndex}\0${proteinId}`) || [];
-        if (matches.length !== 1) {
-          throw new Error(`orthologEdges[${index}] does not resolve to one current member.`);
-        }
-        return matches[0];
-      };
-      return {
-        groupId: edgeGroup,
-        query: endpoint('query'),
-        subject: endpoint('subject'),
-        edgeKind: text(edge?.edgeKind, `orthologEdges[${index}].edgeKind`)
-      };
-    });
   return deepFreeze({
     schema: 2,
     groupId: groupStatus.value,
     records,
     reference: exactMember.payload.anchor,
     members: normalizedMembers.map(({ payload }) => payload),
-    directEdges,
+    // Direct evidence comes from the committed orthogroup resource in the Worker.
+    directEdges: [],
     choices: cloneJson(choices)
   });
 };
@@ -1060,14 +1077,7 @@ export const createSimilarityAlignmentActions = ({
         linearSeqs: state.linearSeqs,
         choices: []
       });
-      displayFacts = new Map(members.map((member) => [
-        anchorKey(anchorFromSource(member, 'Alignment member')), member
-      ]));
-      recordLabels = new Map(request.records.map(({ recordKey }, index) => {
-        const sequence = (state.linearSeqs || []).find((entry) => String(entry?.uid) === recordKey);
-        return [recordKey, plainTextLinearRecordLabel(displayText(sequence?.definition, sequence?.accession,
-          sequence?.gb?.name, sequence?.gff?.name) || `Record ${index + 1}`)];
-      }));
+      setReviewNames(request, members, activeBaseline.request);
       activeRequest = request;
       artifactStamp = captureArtifact(request.groupId);
       return resolveRequest(request, expectedActionId, mode);
@@ -1204,7 +1214,8 @@ export const createSimilarityAlignmentActions = ({
 
   const activePlanInspector = computed(() => {
     try {
-      return inspectActivePlan(state.similarityAlignmentPlan?.value, state.linearSeqs);
+      return inspectActivePlan(state.similarityAlignmentPlan?.value, { linearSeqs: state.linearSeqs,
+        catalog: state.featureCatalog?.value, request: currentRequest() });
     } catch (_error) {
       return null;
     }
@@ -1213,10 +1224,11 @@ export const createSimilarityAlignmentActions = ({
   const resetPreview = computed(() => {
     const receipt = state.similarityAlignmentResetReceipt.value;
     const request = currentRequest();
+    const names = recordNames({ recordKeys: (request?.records || []).map(({ recordKey }) => recordKey),
+      request, linearSeqs: state.linearSeqs, catalog: state.featureCatalog?.value });
     const targets = (receipt?.directions || []).map(delta => {
       const record = request?.records.find(({recordKey}) => recordKey === delta.recordKey);
-      const sequence = state.linearSeqs.find(({uid}) => uid === delta.recordKey);
-      return {recordKey: delta.recordKey, label: plainTextLinearRecordLabel(displayText(record?.presentation?.label, sequence?.definition, sequence?.file_definition, sequence?.accession) || delta.recordKey),
+      return {recordKey: delta.recordKey, label: names.get(delta.recordKey) || 'Unavailable record',
         current: baseReverseComplement(record), restored: delta.before,
         laterManualEdit: baseReverseComplement(record) !== delta.after};
     });
@@ -1259,7 +1271,7 @@ export const createSimilarityAlignmentActions = ({
           if (matches.length !== 1) throw new Error('Alignment Reset source anchor is unavailable or ambiguous.');
           return {...matches[0], ...anchor};
         });
-        const request = buildHelperRequest({group:{id:plan.groupId,orthologEdges:[]}, members,
+        const request = buildHelperRequest({group:{id:plan.groupId}, members,
           reference:plan.reference, request:current.request, catalog:state.featureCatalog?.value,
           recordCatalog:getRecordCatalog?.(), linearSeqs:state.linearSeqs, choices:planChoices(plan)});
         const vector = Object.fromEntries(orientations.map(direction => [direction.recordKey,direction.reverseComplement]));
@@ -1304,6 +1316,14 @@ export const createSimilarityAlignmentActions = ({
         anchor: decision.status === 'aligned' ? decision.anchor : null
       }))
   );
+
+  const setReviewNames = (request, members, canonicalRequest) => {
+    displayFacts = new Map(members.flatMap((member) => {
+      try { return [[anchorKey(anchorFromSource(member, 'Alignment member')), member]]; } catch (_error) { return []; }
+    }));
+    recordLabels = recordNames({ recordKeys: request.records.map(({ recordKey }) => recordKey),
+      request: canonicalRequest, linearSeqs: state.linearSeqs, catalog: state.featureCatalog?.value });
+  };
 
   const markStaleReference = (reason) => {
     clearDraft();
@@ -1393,6 +1413,7 @@ export const createSimilarityAlignmentActions = ({
     } catch (cause) {
       return markStaleReference(cause?.message || cause);
     }
+    setReviewNames(request, members, currentRequest());
     const currentAnchors = members.map((member) => {
       try { return anchorFromSource(member, 'Current Similarity Group member'); } catch (_error) { return null; }
     }).filter(Boolean);

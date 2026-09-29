@@ -5,6 +5,13 @@ import { migrateLegacyFeatureCatalog } from './feature-catalog.js';
 import { adoptCurrentSessionResources } from './session-resource-backing.js';
 const CURRENT_VERSION = 44, CURRENT_REQUEST_SCHEMA = 8, ACCEPTED_REQUEST_SCHEMAS = new Set([CURRENT_REQUEST_SCHEMA]), HISTORICAL_VERSIONS = new Set([31, 32, 33, 39]), CACHE_LIMIT_BYTES = 64 * 1024 * 1024;
 const ARTIFACT_FIELDS = ['results', 'features', 'editorState', 'orthogroupState', 'runMetadata', 'losatCache', 'losatDerivedCache', 'proteinIdentityManifest'];
+// A published Gallery file carries no draft intent for its unused mode (GUI
+// remediation S00 decision 1). These fields, read only by the other mode, are
+// written with fresh defaults; mode profiles own the per-mode title and fonts.
+const UNUSED_MODE_FRESH_FIELDS = Object.freeze({
+  circular: Object.freeze({ adv: Object.freeze(['linear_show_replicon', 'linear_accession_visibility', 'linear_length_visibility']) }),
+  linear: Object.freeze({ form: Object.freeze(['multi_record_canvas']) })
+});
 const isObject = (value) => Boolean(value) && typeof value === 'object' && !Array.isArray(value);
 const clone = (value) => value === undefined ? undefined : JSON.parse(JSON.stringify(value));
 const has = (value, key) => Object.prototype.hasOwnProperty.call(value, key);
@@ -48,6 +55,9 @@ const publicationConfig = (session, projection) => {
   if (!colors?.defaultColors && !colors?.defaultColorsFile) Object.assign(config, { colors: {}, colorsAreOverrides: false });
   for (const key of ['webEdits', 'paletteInstantPreviewEnabled']) if (has(stored, key)) config[key] = clone(stored[key]);
   delete config.blastSource; delete config.adv.losatProgram;
+  const fresh = { form: createDefaultForm(), adv: createDefaultAdv(projection.mode) };
+  for (const [domain, fields] of Object.entries(UNUSED_MODE_FRESH_FIELDS[projection.mode]))
+    for (const field of fields) config[domain][field] = fresh[domain][field];
   return config;
 };
 const publicationCanonicalRequest = (

@@ -43,9 +43,10 @@ from flows.web_capture import (
 )
 
 
+# The Generation Error shows the normalized FASTA_REQUIRED guidance.
 EXPECTED_ID_MISMATCH = (
-    "No matching FASTA record found for GFF record NC_001416.1. "
-    "Please ensure that all GFF records have corresponding FASTA entries."
+    "Supply a matching FASTA input for each GFF3 input. "
+    "Ensure every GFF3 record has a matching FASTA entry."
 )
 
 
@@ -107,9 +108,9 @@ def capture_gui_inputs(
         linear = page.get_by_role("button", name="Linear", exact=True)
         linear.click()
         expect(linear).to_have_attribute("aria-pressed", "true")
-        expect(page.get_by_role("status").filter(has_text="Current:")).to_contain_text(
-            "Current: No comparison"
-        )
+        expect(
+            page.get_by_role("button", name="Set no comparison", exact=True)
+        ).to_have_attribute("aria-pressed", "true")
 
         genbank = page.get_by_role("radio", name="GenBank", exact=True)
         genbank.check()

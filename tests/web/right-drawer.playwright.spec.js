@@ -50,10 +50,13 @@ const readSettledPreviewSurface = async (page) => page.locator(
   await Promise.all(
     surface.getAnimations().map((animation) => animation.finished.catch(() => {}))
   );
+  // Relative to its canvas: the search row may wrap in the width left by the
+  // Editor (PD-OI-054 revision 2), which moves the canvas but not the camera.
   const box = surface.getBoundingClientRect();
+  const canvas = surface.closest('.preview-viewport').getBoundingClientRect();
   return {
-    left: box.left,
-    top: box.top,
+    left: box.left - canvas.left,
+    top: box.top - canvas.top,
     width: box.width,
     height: box.height,
     transform: surface.style.transform
@@ -264,6 +267,27 @@ for (const viewport of ISSUE_461_VIEWPORTS) {
     expect(await readSettledPreviewSurface(page)).toEqual(initialSurface);
   });
 }
+
+test('a hidden search row leaves the canvas in the flexible Preview row', async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  const imported = await loadGallerySession(page, 'majanivirus_orthogroup.gbdraw-session.json.gz');
+  expect(imported.status).toBe('ok');
+  const rows = () => page.locator('.preview-editor-layout').evaluate((layout) => {
+    const height = (selector) => layout.querySelector(`:scope > ${selector}`).getBoundingClientRect().height;
+    return {
+      search: height('.preview-feature-search'),
+      workspace: height('.preview-workspace'),
+      controls: height('.preview-controls')
+    };
+  });
+  const shown = await rows();
+  // Capture tools hide the search; the canvas, not the toolbar, takes the space.
+  await page.locator('.preview-feature-search').evaluate((search) => { search.style.display = 'none'; });
+  const hidden = await rows();
+  expect(hidden.search).toBe(0);
+  expect(hidden.controls).toBe(shown.controls);
+  expect(hidden.workspace).toBeGreaterThan(shown.workspace);
+});
 
 const MOBILE_VIEWPORTS = [
   { id: 'MOB1', width: 390, height: 844 },

@@ -165,7 +165,7 @@
             "session": "./sessions/BGC0000708-BGC0000713.gbdraw-session.json",
             "viewport": {
               "width": 1600,
-              "height": 1100
+              "height": 1600
             },
             "openDetails": ["Settings"],
             "actions": [
@@ -193,7 +193,6 @@
             "visibleText": [
               "Comparison",
               "Run LOSAT",
-              "Current: Run LOSAT",
               "Settings",
               "Selected pairs (4)"
             ],
@@ -729,7 +728,11 @@
             "actions": [
               {
                 "type": "evaluate",
-                "script": "document.querySelector('.preview-feature-search')?.style.setProperty('display', 'none', 'important'); const app = window.__GBDRAW_APP__; if (app) { app.resultPanelTab = 'preview'; app.zoom = 1.35; if (app.svgContainer) app.svgContainer.style.transform = 'translate(-130px, -40px) scale(1.35)'; }"
+                "script": "document.querySelector('.preview-feature-search')?.style.setProperty('display', 'none', 'important'); const app = window.__GBDRAW_APP__; if (app) { app.resultPanelTab = 'preview'; app.zoom = 1.35; if (app.canvasPan) { app.canvasPan.x = -900; app.canvasPan.y = -40; } }"
+              },
+              {
+                "type": "wait",
+                "ms": 500
               },
               {
                 "type": "click",

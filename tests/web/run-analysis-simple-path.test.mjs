@@ -1038,6 +1038,38 @@ test('audit-5 owner: direct simple createRunAnalysis path is worker-only and cat
   assert.equal(state.failedGeneratePreservedResult.value, false);
   assert.equal(activePrimaryReads, 3);
 
+  // Cancel requested while preparation is pending ends before rendering.
+  const runCount = () => workerMessages.filter(({ type }) => type === 'run').length;
+  const runsBeforePreparedCancel = runCount();
+  let releasePreparation;
+  const canceledDuringPreparation = runner.runAnalysis(null, null, null, {
+    prepareGenerate: () => new Promise((resolve) => { releasePreparation = resolve; })
+  });
+  while (!releasePreparation) await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(state.processing.value, true);
+  runner.cancelRunAnalysis();
+  releasePreparation({ status: 'ready', comparisonPlanSnapshot: null, comparisonExecution: null });
+  assert.deepEqual(await canceledDuringPreparation, { status: 'canceled' });
+  assert.equal(runCount(), runsBeforePreparedCancel);
+  assert.equal(state.processing.value, false);
+  assert.equal(state.failedGeneratePreservedResult.value, true);
+
+  // A preparation that settles after a newer Generate is discarded as stale.
+  let releaseStalePreparation;
+  const stalePreparation = runner.runAnalysis(null, null, null, {
+    prepareGenerate: () => new Promise((resolve) => { releaseStalePreparation = resolve; })
+  });
+  while (!releaseStalePreparation) await new Promise((resolve) => setImmediate(resolve));
+  const newerResult = result('newer.svg', 'newer');
+  workerResponses.push(response(newerResult, validCatalog(newerResult.name)));
+  assert.deepEqual(await runner.runAnalysis(), { status: 'ok' });
+  const runsAfterNewer = runCount();
+  releaseStalePreparation({ status: 'ready', comparisonPlanSnapshot: null, comparisonExecution: null });
+  assert.deepEqual(await stalePreparation, { status: 'stale' });
+  assert.equal(runCount(), runsAfterNewer);
+  assert.deepEqual(state.results.value, [newerResult]);
+  assert.equal(state.processing.value, false);
+
   // A later operation owns the notification while this Worker response is held.
   const { normalizeUserFacingError } = await import('../../gbdraw/web/js/services/error-normalization.js');
   let releaseOlderFailure;

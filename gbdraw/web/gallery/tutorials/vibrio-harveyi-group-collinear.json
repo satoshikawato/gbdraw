@@ -163,7 +163,7 @@
           "title": "Run LOSAT for adjacent pairs",
           "media": {
             "src": "./media/vibrio-harveyi-group-collinear/manual-04-00-run-adjacent-losat.webp",
-            "alt": "Comparison card with Run LOSAT active, Current: Run LOSAT status, closed Settings, and the Selected pairs disclosure.",
+            "alt": "Comparison card with Run LOSAT pressed, closed Settings, and the Selected pairs disclosure.",
             "caption": "Choose Run LOSAT to activate comparisons across adjacent display rows."
           },
           "capture": {
@@ -175,7 +175,8 @@
                 "type": "evaluate",
                 "script": "async () => { const app = window.__GBDRAW_APP__; app.sidebarWidth = 480; await app.setLinearComparisonGlobalAction('losat'); app.setLinearComparisonLosatMode('blastp'); app.setLinearComparisonLosatpMode('collinear'); }"
               },
-              {"type": "wait", "ms": 300}
+              {"type": "wait", "ms": 300},
+              {"type": "evaluate", "script": "() => { const settings = document.querySelector(\"[data-linear-comparison-disclosure='settings']\"); if (settings) settings.open = false; }"}
             ],
             "selector": "[data-linear-comparison-card]",
             "cropPadding": 14,
@@ -186,7 +187,7 @@
               "losatProgram": "blastp",
               "losat.blastp.mode": "collinear"
             },
-            "visibleText": ["Comparison", "Run LOSAT", "Current: Run LOSAT", "Settings", "Selected pairs"]
+            "visibleText": ["Comparison", "Run LOSAT", "Settings", "Selected pairs"]
           }
         },
         {

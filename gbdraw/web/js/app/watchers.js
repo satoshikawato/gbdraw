@@ -52,7 +52,8 @@ export const setupWatchers = ({
   resetPreviewViewport,
   resetRightDrawer,
   previewRuntime = null,
-  preparePaletteDefinitions = null
+  preparePaletteDefinitions = null,
+  isRestoringModeProfile = () => false
 }) => {
   const {
     manualSpecificRules,
@@ -184,6 +185,7 @@ export const setupWatchers = ({
 
   const scheduleCircularDefinitionUpdate = () => {
     if (mode.value !== 'circular') return;
+    if (isRestoringModeProfile()) return;
     if (generatedMode.value !== mode.value) return;
     if (semanticFileWatchersSuppressed.value || shouldDeferCircularPreviewUpdates.value) {
       cancelDefinitionUpdate();

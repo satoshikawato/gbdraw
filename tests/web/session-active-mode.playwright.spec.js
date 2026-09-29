@@ -146,6 +146,55 @@ test('current biological Save, fresh Load, and re-save keep a Linear draft besid
   }
 });
 
+test('each mode keeps its own title and fonts while missing Linear layout starts fresh', async ({ page, browser }, info) => {
+  test.setTimeout(360_000);
+  await openApp(page);
+  await load(page, fixture);
+  const titles = page.locator('summary[aria-label="Titles and Record Labels"]');
+  if (!(await titles.evaluate(summary => summary.parentElement.open))) await titles.click();
+  const plotTitle = page.getByRole('textbox', { name: 'Plot Title', exact: true });
+  await plotTitle.fill('Circular title');
+  await plotTitle.press('Tab');
+  const draft = target => target.evaluate(async () => {
+    const { state } = await import('./js/state.js');
+    const size = value => (value === null || value === undefined || value === '' ? null : Number(value));
+    return {
+      title: state.form.plot_title, titleFont: size(state.adv.plot_title_font_size),
+      definitionFont: size(state.adv.def_font_size),
+      rows: state.linearRecordLayoutEnabled.value, replicon: state.adv.linear_show_replicon
+    };
+  });
+  const circular = await draft(page);
+  expect(circular).toMatchObject({ title: 'Circular title', titleFont: 32, definitionFont: 28 });
+
+  // The fixture omits config.linearRecordLayout; Linear starts from fresh defaults.
+  await page.getByRole('button', { name: 'Linear', exact: true }).click();
+  expect(await draft(page)).toEqual({ title: '', titleFont: null, definitionFont: null, rows: true, replicon: false });
+  await expect(plotTitle).toHaveValue('');
+  await plotTitle.fill('Linear title');
+  await plotTitle.press('Tab');
+  await page.getByRole('button', { name: 'Circular', exact: true }).click();
+  expect(await draft(page)).toMatchObject({ title: 'Circular title', titleFont: 32, definitionFont: 28 });
+
+  const file = info.outputPath('per-mode-title.gbdraw-session.json.gz');
+  const saved = await save(page, file);
+  expect(saved.config.modeProfiles.profiles.circular.values.plot_title).toBe('Circular title');
+  expect(saved.config.modeProfiles.profiles.linear.values.plot_title).toBe('Linear title');
+  const context = await browser.newContext({
+    baseURL: `http://127.0.0.1:${process.env.GBDRAW_WEB_TEST_PORT || 4173}`
+  });
+  try {
+    const fresh = await context.newPage();
+    await openApp(fresh);
+    await load(fresh, file);
+    expect(await draft(fresh)).toMatchObject({ title: 'Circular title', titleFont: 32, definitionFont: 28 });
+    await fresh.getByRole('button', { name: 'Linear', exact: true }).click();
+    expect(await draft(fresh)).toEqual({ title: 'Linear title', titleFont: null, definitionFont: null, rows: true, replicon: false });
+  } finally {
+    await context.close();
+  }
+});
+
 test('matching current, historical, CLI-origin, and settings-only modes keep their Load behavior', async ({ page, browser }, info) => {
   test.setTimeout(360_000);
   await openApp(page);

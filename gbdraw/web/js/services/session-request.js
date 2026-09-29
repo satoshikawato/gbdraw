@@ -136,8 +136,7 @@ import {
   createSessionResourceFileView,
   validateWebFileBindings
 } from './session-resource-backing.js';
-import { normalizeLinearComparisonPlan, resolveLinearComparisonPlan } from '../app/linear-comparisons.js';
-import { validateCurrentWriterActiveConfig, createDefaultForm, createDefaultAdv } from './session-active-config-contract.js';
+import { normalizeLinearComparisonPlan } from '../app/linear-comparisons.js';
 import {
   getResourcePayloadOwner,
   setResourcePayloadOwner
@@ -145,6 +144,7 @@ import {
 import { sha256Hex } from './byte-utils.js';
 import { cloneJsonData } from './json-clone.js';
 import { isCanonicalResourceReferenceField } from './canonical-resource-references.js';
+import { recordStructuralMetric } from './runtime-test-hooks.js';
 import { recordDisplayKey, requestedRecordTransform } from '../app/record-display-options.js';
 
 export const CANONICAL_REQUEST_SCHEMA = 8;
@@ -631,8 +631,6 @@ export const bindCanonicalTypedResource = (value, descriptor) => {
   }
   canonicalTypedResourceBackings.set(value, descriptor);
 };
-const generationIntents = new WeakMap();
-
 const createResourceBuilder = ({ encode = true } = {}) => {
   const resources = {};
   const resourceOriginalNames = {};
@@ -1284,6 +1282,7 @@ const buildConfigOverrides = (
 };
 
 const addGeneratedTableResources = (state, resources, diagramOptions) => {
+  recordStructuralMetric('generatedTableBuildCount');
   const paletteName = String(state.selectedPalette.value || 'default');
   const paletteColors = state.canonicalPublicationFiles && !state.canonicalPublicationFiles.d_color ? {}
     : state.normalizePaletteColors(state.paletteDefinitions.value?.[paletteName]
@@ -1354,17 +1353,19 @@ const addGeneratedTableResources = (state, resources, diagramOptions) => {
       'qualifier-priority-file', 'qualifier-priority-file', 'qualifier-priority.tsv', `${priority}\n`
     ));
   }
-  const labelOverride = buildLabelOverrideTsv(
-    state.labelTextFeatureOverrides,
-    state.labelTextBulkOverrides,
-    {
-      editableLabels: state.editableLabels?.value || [],
-      extractedFeatures: state.extractedFeatures.value,
-      featureOverrideSources: state.labelTextFeatureOverrideSources,
-      visibilityOverrides: state.labelVisibilityOverrides
-    }
-  );
-  const labelOverrideTsv = serializeLabelOverrideRows(state.canonicalLabelOverrideRows?.value) || labelOverride.tsv;
+  // Generate supplies the table it already built for this operation (CW-02).
+  const labelOverrideTsv = serializeLabelOverrideRows(state.canonicalLabelOverrideRows?.value)
+    || (typeof state.generatedLabelOverrideTsv === 'string' ? state.generatedLabelOverrideTsv
+      : buildLabelOverrideTsv(
+        state.labelTextFeatureOverrides,
+        state.labelTextBulkOverrides,
+        {
+          editableLabels: state.editableLabels?.value || [],
+          extractedFeatures: state.extractedFeatures.value,
+          featureOverrideSources: state.labelTextFeatureOverrideSources,
+          visibilityOverrides: state.labelVisibilityOverrides
+        }
+      ).tsv);
   if (labelOverrideTsv) {
     diagramOptions.labelOverrideFile = fileRef(resources.addText(
       'label-override-file', 'label-override-file', 'label-overrides.tsv', labelOverrideTsv
@@ -2287,6 +2288,7 @@ const projectCanonicalRenderInput = ({
   resolvedCircularConservation = [],
   resources = createResourceBuilder()
 }) => {
+  recordStructuralMetric('canonicalRequestProjectionCount');
   requireCurrentWebStateFieldNames(state);
   requireCurrentCircularMultiRecordSizeMode(state.adv.multi_record_size_mode);
   requireCurrentLinearTrackLayout(state.form.linear_track_layout);
@@ -2719,290 +2721,7 @@ export const projectCompositionRecordIdentity = (canonical, keys) => {
   return { mode: request.mode, grouping: request.grouping, records };
 };
 
-const generationComparisonPlan = (state, filesData, snapshot) => {
-  if (state.mode.value !== 'linear') return null;
-  const plan = snapshot || resolveLinearComparisonPlan({
-    plan: state.linearComparisonPlan,
-    sequences: filesData.linearSeqs || [],
-    layout: state.linearRecordLayoutEnabled?.value ? state.linearRecordRows || [] : [],
-    losatProgram: state.losatProgram?.value || 'blastn',
-    blastpMode: state.losat?.blastp?.mode || 'orthogroup'
-  });
-  requireLinearComparisonPlanSnapshot(plan);
-  return plan;
-};
-
-const generationAnalysisMeaning = (state, filesData, snapshot) => {
-  if (state.mode.value === 'circular' && state.circularConservation?.enabled
-    && state.circularConservation.source === 'losat') {
-    const entries = orderedConservationSources(filesData.c_conservation_fastas || [], state.circularConservation);
-    const program = state.circularConservation.losat_program || 'blastn';
-    return {
-      conservationSources: orderedOptionalConservationFiles(filesData.c_conservation_fastas, state.circularConservation)
-        .map(generationResourceIdentity),
-      diagramOptions: conservationDiagramOptions(state.circularConservation, entries, 'subject'),
-      program,
-      ...(program === 'tblastx' ? {
-        geneticCode: state.circularConservation.subject_gencode ?? 1,
-        geneticCodes: entries.map((entry) => entry.losat_gencode)
-      } : { task: state.losat?.blastn?.task || 'megablast' })
-    };
-  }
-  if (!snapshot?.hasComparisonIntent) return null;
-  const edges = orderedComparisonPlanEdges(snapshot);
-  const losat = edges.some((edge) => edge.source === 'losat');
-  if (!losat) return null;
-  const program = state.losatProgram?.value || 'blastn';
-  return {
-    retainedInputs: (filesData.linearCanonicalComparisons || []).filter((entry) => entry.canonicalInput === true)
-      .map(({ file, ...entry }) => ({ ...entry, file: generationResourceIdentity(file) })),
-    edges: edges.map((edge) => ({
-      query: edge.queryIndex, subject: edge.subjectIndex, source: edge.source,
-      ...(edge.source === 'upload' ? { file: generationResourceIdentity(
-        (filesData.linearComparisons || []).find((entry) => entry.id === edge.id)?.file
-      ) } : {})
-    })),
-    program,
-    settings: program === 'blastp' ? generatedProteinSettings(state)
-      : program === 'blastn' ? { task: state.losat?.blastn?.task || 'megablast' } : null,
-    ...(program !== 'blastn' ? { geneticCodes: (filesData.linearSeqs || []).map((record) => record.losat_gencode ?? 1) } : {})
-  };
-};
-
-const generationMeaning = (canonical, analysis = null) => {
-  const { schema: _schema, output: _output, ...request } = canonical.renderRequest;
-  const normalize = (value) => {
-    if (Array.isArray(value)) return value.map(normalize);
-    if (!value || typeof value !== 'object') return value;
-    return Object.fromEntries(Object.entries(value).map(([key, item]) => [key,
-      isCanonicalResourceReferenceField(key) && typeof item === 'string'
-        ? generationResourceIdentity(canonical.resources[item]) : normalize(item)]));
-  };
-  // Resolved LOSAT tables are outputs of the active analysis, not another draft
-  // input. Uploads and explicitly retained typed inputs still carry bindings.
-  const comparisons = analysis?.edges ? (request.comparisons || []).filter((comparison) => (
-    !analysis.edges.some((edge) => edge.source === 'losat'
-      && edge.query === comparison.queryRecordIndex && edge.subject === comparison.subjectRecordIndex)
-    && !['generatedProteinComparison', 'orthogroupResult', 'collinearityResult'].includes(comparison.kind)
-  )) : request.comparisons;
-  const meaning = normalize({ ...request, comparisons });
-  if (analysis?.diagramOptions) Object.assign(meaning.diagramOptions, analysis.diagramOptions);
-  if (analysis?.conservationSources && meaning.diagramOptions) {
-    delete meaning.diagramOptions.conservationBlastFiles;
-    delete meaning.diagramOptions.conservationFastaFiles;
-  }
-  if (meaning.diagramOptions?.configOverrides) {
-    const inactiveMode = request.mode === 'linear' ? 'circular' : 'linear';
-    meaning.diagramOptions.configOverrides = Object.fromEntries(
-      Object.entries(meaning.diagramOptions.configOverrides).filter(([path]) => !path.split('.').includes(inactiveMode))
-    );
-    // Explicit slots own renderer availability in the typed planners. Flat
-    // enabled flags are dormant inputs while those slots are authoritative.
-    const slots = meaning.diagramOptions.tracks?.circularTrackSlots
-      || meaning.diagramOptions.tracks?.linearTrackSlots;
-    if (slots) {
-      if (request.mode === 'circular' && !slots.some((slot) => slot.renderer === 'sequence_conservation')) {
-        for (const key of Object.keys(meaning.diagramOptions)) {
-          if (key.startsWith('conservation')) delete meaning.diagramOptions[key];
-        }
-        analysis = null;
-      }
-      delete meaning.diagramOptions.configOverrides[CONFIG_OVERRIDE_PATHS.showGc];
-      delete meaning.diagramOptions.configOverrides[CONFIG_OVERRIDE_PATHS.showSkew];
-      if (Array.isArray(meaning.diagramOptions.depthTracks)) {
-        const activeDepth = new Set(slots.filter((slot) => slot.renderer === 'depth')
-          .map((slot) => Number(slot.params?.track_index) || 0));
-        meaning.diagramOptions.depthTracks = meaning.diagramOptions.depthTracks.map(
-          (track, index) => activeDepth.has(index) ? track : null);
-      }
-    }
-  }
-  const { diagramOptions: _analysisOptions, ...analysisInputs } = analysis || {};
-  return { ...meaning, analysis: analysis ? analysisInputs : null };
-};
-
-export const buildCanonicalRenderRequest = (args) => {
-  const canonical = projectCanonicalRenderInput(args);
-  const analysis = generationAnalysisMeaning(args.state, args.filesData, args.comparisonPlanSnapshot);
-  generationIntents.set(canonical, { status: 'valid', meaning: generationMeaning(canonical, analysis) });
-  return canonical;
-};
-
-export const projectGenerationIntent = ({ state, filesData = {
-  ...state.files, linearSeqs: state.linearSeqs,
-  linearComparisons: state.linearComparisonPlan?.edges?.filter((edge) => edge.fileActive && edge.file)
-}, comparisonPlanSnapshot = null } = {}) => {
-  try {
-    validateCurrentWriterActiveConfig({ mode: state.mode.value,
-      storedConfig: { form: state.form, adv: state.adv, recordDisplayDrafts: state.recordDisplayDrafts,
-        featurePlacementOverrides: state.featurePlacementOverrides } });
-    const snapshot = generationComparisonPlan(state, filesData, comparisonPlanSnapshot);
-    const canonical = projectCanonicalRenderInput({ state, filesData,
-      comparisonPlanSnapshot: snapshot, resources: createResourceBuilder({ encode: false }) });
-    const unknownRecords = state.mode.value === 'circular'
-      && !filesData.circularRecords?.length && !state.circularRecordList?.value?.length;
-    const unknownPaths = unknownRecords
-      ? canonical.renderRequest.grouping !== 'single' ? ['$.records']
-        : canonical.renderRequest.records.flatMap((_, index) => [
-            `$.records.${index}.selector`, `$.records.${index}.recordKey`
-          ]) : [];
-    return { status: unknownRecords ? 'unknown' : 'valid', unknownPaths,
-      meaning: generationMeaning(canonical, generationAnalysisMeaning(state, filesData, snapshot)) };
-  } catch (error) {
-    return { status: 'invalid', error: String(error.message || error) };
-  }
-};
-
-// Called by the artifact owner at admission/restore, never from a draft. The
-// saved request owns rendering; saved config alone cannot advance applied intent.
-export const projectAppliedGenerationIntent = (canonical, {
-  editorState = canonical?.editorState, storedConfig = canonical?.config
-} = {}) => {
-  const existing = generationIntents.get(canonical);
-  if (existing) return existing;
-  if (!canonical?.renderRequest) return { status: 'unknown' };
-  try {
-    const { bindings: _draftBindings, ...webFiles } = canonical.webFiles || {};
-    const projection = projectCanonicalSessionRequest({ ...canonical, webFiles,
-      storedConfig: null, deferResourceContent: true,
-      sessionResourceTable: adoptCurrentSessionResources(canonical.resources) });
-    const config = { ...projection.config,
-      form: { ...createDefaultForm(), ...projection.config.form },
-      adv: { ...createDefaultAdv(projection.mode), ...projection.config.adv } };
-    const appliedState = buildCanonicalRequestState({ session: canonical, projection, config });
-    const appliedFiles = { ...projection.files };
-    // These resources are opaque when restored without bytes. Retain their
-    // existing identity; the comparator will report unknown against new text.
-    appliedState.canonicalPublicationFiles = appliedFiles;
-    const baseline = projectCanonicalRenderInput({ state: appliedState, filesData: appliedFiles,
-      comparisonPlanSnapshot: generationComparisonPlan(appliedState, appliedFiles),
-      resources: createResourceBuilder({ encode: false }) });
-    // Preserve every request field (including unmanaged/full config) that a
-    // current writer does not expose; defaults only fill normalized omissions.
-    const meaning = generationMeaning({ ...canonical, renderRequest: {
-      ...baseline.renderRequest, ...canonical.renderRequest,
-      diagramOptions: { ...baseline.renderRequest.diagramOptions, ...canonical.renderRequest.diagramOptions,
-        configOverrides: { ...baseline.renderRequest.diagramOptions.configOverrides,
-          ...canonical.renderRequest.diagramOptions.configOverrides } }
-    } });
-    const unknownPaths = [];
-    // A saved explicit global width is comparable to the editor's captured
-    // artifact width. The draft alone cannot prove that a live edit was applied.
-    // Automatic width remains request-owned; a measured width is not its intent.
-    const requestedWidth = optionalNumber(storedConfig?.adv?.block_stroke_width);
-    if (requestedWidth !== null) {
-      const path = SHARED_LENGTH_CONFIG_OVERRIDE_PATHS.blockStrokeWidth;
-      const width = editorState?.originalSvgStroke?.width;
-      for (const key of [`${path}.short`, `${path}.long`]) {
-        if (typeof width === 'number' && Number.isFinite(width) && width >= 0) {
-          meaning.diagramOptions.configOverrides[key] = width;
-        } else if (meaning.diagramOptions.configOverrides[key] !== requestedWidth) {
-          unknownPaths.push(`$.diagramOptions.configOverrides.${key}`);
-        }
-      }
-    }
-    return { status: unknownPaths.length ? 'unknown' : 'valid', meaning, unknownPaths };
-  } catch (error) {
-    return { status: 'unknown', error: String(error.message || error) };
-  }
-};
-
-// A live owner supplies only the fields for which it actually mutated targets.
-// Normalize them through the existing request inventory, not the current draft
-// as a whole. The resulting small value stays with the artifact's owner handle.
-export const projectAppliedGenerationFields = (applied, state, fields) => {
-  if (!applied?.meaning || applied.meaning.mode !== state.mode.value) return applied;
-  const normalized = buildConfigOverrides(state);
-  const overrides = { ...applied.meaning.diagramOptions.configOverrides };
-  const provenPaths = new Set();
-  for (const field of fields) {
-    const path = CONFIG_OVERRIDE_PATHS[field] || SHARED_LENGTH_CONFIG_OVERRIDE_PATHS[field];
-    if (!path) throw new Error(`Unknown applied generation field: ${field}.`);
-    for (const key of [path, `${path}.short`, `${path}.long`]) {
-      if (Object.hasOwn(normalized, key)) {
-        overrides[key] = normalized[key];
-        provenPaths.add(`$.diagramOptions.configOverrides.${key}`);
-      }
-    }
-  }
-  const unknownPaths = (applied.unknownPaths || []).filter(path => !provenPaths.has(path));
-  return { ...applied, unknownPaths,
-    status: applied.unknownPaths?.length && !unknownPaths.length ? 'valid' : applied.status,
-    meaning: { ...applied.meaning,
-      diagramOptions: { ...applied.meaning.diagramOptions, configOverrides: overrides } } };
-};
-
-const liveGenerationTables = (state) => {
-  const resources = createResourceBuilder({ encode: false });
-  const options = {};
-  addGeneratedTableResources({ ...state,
-    currentColors: state.appliedPaletteColors,
-    selectedPalette: state.appliedPaletteName
-  }, resources, options);
-  return generationMeaning({ renderRequest: { diagramOptions: options }, resources: resources.resources }).diagramOptions;
-};
-
-const compareGenerationValue = (left, right, path, differences, unknown, unknownPaths) => {
-  if (unknownPaths.has(path)) return;
-  if (left === right) {
-    if (left === null && isCanonicalResourceReferenceField(path.split('.').at(-1))) unknown.push(path);
-    return;
-  }
-  if (left?.bindings === null || right?.bindings === null) { unknown.push(path); return; }
-  if (left?.bindings || right?.bindings || left?.text !== undefined || right?.text !== undefined) {
-    if (left?.bindings && right?.bindings) {
-      if (left.bindings.length !== right.bindings.length
-        || left.bindings.some((binding, index) => binding !== right.bindings[index])) differences.push(path);
-    } else if (left?.text !== undefined && right?.text !== undefined) {
-      if (left.text !== right.text) differences.push(path);
-    } else unknown.push(path);
-    return;
-  }
-  if (left === null || right === null || typeof left !== 'object' || typeof right !== 'object') {
-    if (isCanonicalResourceReferenceField(path.split('.').at(-1)) && (left == null || right == null)) unknown.push(path);
-    else differences.push(path);
-    return;
-  }
-  if (Array.isArray(left) !== Array.isArray(right)) { differences.push(path); return; }
-  const keys = new Set([...Object.keys(left), ...Object.keys(right)]);
-  for (const key of keys) compareGenerationValue(left[key], right[key], `${path}.${key}`, differences, unknown, unknownPaths);
-};
-
-export const compareGenerationIntent = ({ draft, applied, liveState = null, hasResult = true }) => {
-  if (draft?.status === 'invalid') return { status: 'invalid', differences: [], unknown: [], error: draft.error };
-  if (!hasResult) return { status: 'ungenerated', differences: [], unknown: [] };
-  if (!draft?.meaning || !applied?.meaning) return { status: 'unknown', differences: [], unknown: ['$'] };
-  let baseline = applied.meaning;
-  if (liveState) {
-    const tables = liveGenerationTables(liveState);
-    const options = { ...baseline.diagramOptions, colors: tables.colors };
-    for (const field of ['featureVisibilityTableFile', 'labelOverrideFile']) {
-      delete options[field];
-      if (tables[field]) options[field] = tables[field];
-    }
-    baseline = { ...baseline, diagramOptions: options };
-  }
-  const unknownPaths = new Set([...(draft.unknownPaths || []), ...(applied.unknownPaths || [])]);
-  const differences = [], unknown = [...unknownPaths];
-  let draftMeaning = draft.meaning;
-  if (!baseline.analysis && draftMeaning.analysis) {
-    // A restored rendered table proves the Result, not the unsaved search
-    // inputs that produced it. Keep that domain unknown without adopting draft.
-    const omitUnprovenAnalysis = (meaning) => {
-      const { analysis: _analysis, comparisons: _comparisons, ...rest } = meaning;
-      const { conservationBlastFiles: _blasts, conservationFastaFiles: _fastas, ...options } = rest.diagramOptions;
-      return { ...rest, diagramOptions: options };
-    };
-    baseline = omitUnprovenAnalysis(baseline);
-    draftMeaning = omitUnprovenAnalysis(draftMeaning);
-    unknown.push('$.analysis');
-  }
-  compareGenerationValue(baseline, draftMeaning, '$', differences, unknown, unknownPaths);
-  if ((draft.status === 'unknown' && !draft.unknownPaths?.length)
-    || (applied.status === 'unknown' && !applied.unknownPaths?.length)) unknown.push('$');
-  if (liveState?.labelReflowProcessing?.value || liveState?.labelReflowLastError?.value) unknown.push('$live-render');
-  return { status: differences.length ? 'pending' : unknown.length ? 'unknown' : 'clean', differences, unknown };
-};
+export const buildCanonicalRenderRequest = (args) => projectCanonicalRenderInput(args);
 
 const recordSourceResourceId = (record, field) => {
   const source = record?.source || {};
@@ -4689,7 +4408,10 @@ export const projectCanonicalSessionRequest = ({
     ),
     plot_title: options.plotTitle || '',
     legend: options.output?.legend || 'right',
-    multi_record_canvas: renderRequest.mode === 'circular' && grouping === 'grid',
+    // A Linear request has no Circular grouping; keep the fresh default.
+    multi_record_canvas: renderRequest.mode === 'circular'
+      ? grouping === 'grid'
+      : WEB_UX_PROFILE.circular.gridByDefault,
     circular_record_selector: circularPresentationRecord
       ? (canonicalRecordSelector(circularPresentationRecord) || '')
       : '',
@@ -4810,12 +4532,11 @@ export const projectCanonicalSessionRequest = ({
     track_axis_gap: overrides.linear_track_axis_gap ?? null,
     linear_definition_line_styles: overrides.linear_definition_line_styles || {},
     linear_show_replicon: Boolean(overrides.linear_definition_show_replicon),
-    linear_accession_visibility: overrides.linear_definition_show_accession !== false
-      ? 'show'
-      : 'hide',
-    linear_length_visibility: overrides.linear_definition_show_length !== false
-      ? 'show'
-      : 'hide',
+    // A Circular request has no Linear display values; keep the fresh Auto.
+    linear_accession_visibility: renderRequest.mode !== 'linear' ? 'auto'
+      : overrides.linear_definition_show_accession !== false ? 'show' : 'hide',
+    linear_length_visibility: renderRequest.mode !== 'linear' ? 'auto'
+      : overrides.linear_definition_show_length !== false ? 'show' : 'hide',
     keep_full_definition_with_plot_title: Boolean(options.keepFullDefinitionWithPlotTitle),
     gc_content_mode: overrides.gc_content_mode || 'deviation',
     gc_content_min_percent: overrides.gc_content_min_percent ?? 0,

@@ -1,9 +1,26 @@
 # Web Gallery operation screenshot register
 
-Last updated: 2026-09-28
+Last updated: 2026-09-29
 
 This register records task-specific decisions for Gallery operation media.
 Capture metadata remains the executable source of truth in each tutorial JSON.
+
+## Comparison pressed state and Align help-tip (GUI remediation S07)
+
+The removed **Current: …** status line and the always-on Align paragraph were
+visible in these images. Each recapture was compared with the committed image
+at the same display size.
+
+| Tutorial | Operation media | Decision | Required capture state | Status |
+| --- | --- | --- | --- | --- |
+| `BGC0000708-BGC0000713` | `manual-08-01-align-og1.webp` | Recapture; recipe corrected | Exact BGC Session; the recipe pans with `app.canvasPan` (the old container transform no longer moves the canvas); clicked livE beside the popup; **Align…**, **Review alignment options…** and the help-tip in one row | DSF 3; livE, its highlight and label are no longer covered; accepted |
+| `BGC0000708-BGC0000713`, `majanivirus_orthogroup` | `manual-03-01-open-pairwise.webp` | Recapture; taller viewport | **Run LOSAT** pressed; open **Settings** with the asserted filters; viewport 1600 × 1600 so the whole card fits without the sticky header | Taller because Settings now also shows Runtime and reproducibility and Comparison appearance; no status line; accepted |
+| `hepatoplasmataceae_collinear`, `hepatoplasmataceae_orthogroup`, `vibrio-harveyi-group-collinear` | `manual-03-01-open-pairwise.webp`, `manual-03-01-browser-losat.webp`, `manual-04-00-run-adjacent-losat.webp` | Recapture; recipe corrected | **Run LOSAT** pressed; the recipe closes the Settings disclosure that the app opens for LOSAT, as the alt text states | Compact card; the old Vibrio image was cut off under the header; accepted |
+| `lambda_basic_linear` | `manual-02-03-no-comparison.webp` | Recapture | **No comparison** pressed; closed **Settings** and **Selected pairs (0)** | No status line; accepted |
+
+The other Gallery media are unchanged. The Vibrio linear-layout image never
+showed the Lock explanation paragraph, and other popup images do not show the
+Align area.
 
 ## Circular record discovery and loaded-preview inspection (#597 S07)
 

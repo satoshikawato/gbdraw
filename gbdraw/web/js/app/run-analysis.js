@@ -2329,13 +2329,19 @@ export const createRunAnalysis = ({
         stageTextFile('/priority.tsv', pContent);
       }
 
-      const labelOverride = buildLabelOverrideTsv(labelTextFeatureOverrides, labelTextBulkOverrides, {
-        editableLabels: editableLabelsSnapshot,
-        extractedFeatures: workingExtractedFeatures,
-        featureOverrideSources: featureOverrideSourcesSnapshot,
-        visibilityOverrides: visibilityOverridesSnapshot
-      });
-      const effectiveLabelOverrideTsv = serializeLabelOverrideRows(canonicalLabelOverrideRows.value) || labelOverride.tsv;
+      // One label table per Generate: the staged copy and the canonical
+      // request both use this value (CW-02); imported rows need no build.
+      const canonicalLabelOverrideTsv = serializeLabelOverrideRows(canonicalLabelOverrideRows.value);
+      const labelOverride = canonicalLabelOverrideTsv
+        ? { tsv: canonicalLabelOverrideTsv, skippedMissingSourceCount: 0 }
+        : buildLabelOverrideTsv(labelTextFeatureOverrides, labelTextBulkOverrides, {
+          editableLabels: editableLabelsSnapshot,
+          extractedFeatures: workingExtractedFeatures,
+          featureOverrideSources: featureOverrideSourcesSnapshot,
+          visibilityOverrides: visibilityOverridesSnapshot
+        });
+      const effectiveLabelOverrideTsv = labelOverride.tsv;
+      runState.generatedLabelOverrideTsv = effectiveLabelOverrideTsv;
       if (labelOverride.skippedMissingSourceCount > 0) {
         labelOverrideBuildWarning.value = `${labelOverride.skippedMissingSourceCount} feature override row(s) were skipped due to missing source label context.`;
       }
@@ -5080,14 +5086,20 @@ export const createRunAnalysis = ({
       await waitForAfterPaint();
       if (!isCurrentOperation()) return { status: 'stale' };
       recordSessionLifecycleEvent('generate.paint-opportunity-completed');
-      if (generationCancelRequested.value) {
+      // Cancel is honored before rendering, including during preparation.
+      const cancelBeforeRender = () => {
+        if (!generationCancelRequested.value) return null;
         processingStatus.value = 'Canceled.';
         outcome = { status: 'canceled' };
         failedGeneratePreservedResult.value = results.value.length > 0;
         return outcome;
-      }
+      };
+      if (cancelBeforeRender()) return outcome;
       if (prepareGenerate) {
         const prepared = await prepareGenerate();
+        // A preparation that finishes after supersession or Cancel is discarded.
+        if (!isCurrentOperation()) return { status: 'stale' };
+        if (cancelBeforeRender()) return outcome;
         if (prepared.status !== 'ready') return prepared;
         comparisonPlanSnapshot = prepared.comparisonPlanSnapshot;
         comparisonExecution = prepared.comparisonExecution;

@@ -4,8 +4,13 @@ const { join } = require('node:path');
 const { openApp } = require('./helpers/app-lifecycle.cjs');
 
 const source = readFileSync(join(__dirname, '../test_inputs/HmmtDNA.gbk'), 'utf8');
-const applicationStatus = page => page.evaluate(async () =>
-  (await import('./js/services/config.js')).getGenerationApplicationStatus());
+// Applied authority is the committed canonical request; drafts never replace it.
+const keepCommitted = (page, key) => page.evaluate(async key => {
+  window[key] = (await import('./js/services/config.js')).getCommittedCanonicalRenderRequest();
+  return Boolean(window[key]);
+}, key);
+const committedIs = (page, key) => page.evaluate(async key =>
+  (await import('./js/services/config.js')).getCommittedCanonicalRenderRequest() === window[key], key);
 const status = page => page.locator('[data-generation-progress]');
 const generate = page => page.getByRole('button', { name: 'Generate Diagram', exact: true });
 const prepare = async (page, baseURL) => {
@@ -103,7 +108,7 @@ test('Generate reports real cold/warm stages and preserves the successful Result
   const cold = await record(page, testInfo, 'cold');
   expectRenderStages(cold);
   expect(cold.workers.constructions).toBe(1);
-  expect((await applicationStatus(page)).status).toBe('clean');
+  expect(await keepCommitted(page, 'coldCommitted')).toBe(true);
 
   await resetObservations(page);
   await generate(page).click();
@@ -119,7 +124,7 @@ test('Generate reports real cold/warm stages and preserves the successful Result
     app.adv.scale_interval = 12345;
     window.feedbackHistory = [window.__GBDRAW_HISTORY__.getUndoCount(), window.__GBDRAW_HISTORY__.getRedoCount()];
     const config = await import('./js/services/config.js');
-    window.appliedBeforeCancel = config.canonicalRenderArtifactOwner.capture().appliedGenerationIntent;
+    window.appliedBeforeCancel = config.getCommittedCanonicalRenderRequest();
     window.__GBDRAW_TEST_HOOKS__.beforeDiagramGenerationResponse = () => new Promise(resolve => {
       window.releaseFeedbackResponse = resolve;
     });
@@ -142,11 +147,9 @@ test('Generate reports real cold/warm stages and preserves the successful Result
     preserved: window.__GBDRAW_APP__.failedGeneratePreservedResult
   }))).toEqual({ status: 'Canceled.', sameResult: true, preserved: true });
   await record(page, testInfo, 'canceled');
-  expect((await applicationStatus(page)).status).toBe('pending');
-  await expect(page.locator('[data-generation-application-feedback] strong')).toHaveText('Pending');
+  await expect(page.locator('[data-generation-application-feedback]')).toHaveCount(0);
   expect(await page.evaluate(() => [window.__GBDRAW_HISTORY__.getUndoCount(), window.__GBDRAW_HISTORY__.getRedoCount()])).toEqual(await page.evaluate(() => window.feedbackHistory));
-  expect(await page.evaluate(async () => window.appliedBeforeCancel ===
-    (await import('./js/services/config.js')).canonicalRenderArtifactOwner.capture().appliedGenerationIntent)).toBe(true);
+  expect(await committedIs(page, 'appliedBeforeCancel')).toBe(true);
 
   await setInput('invalid GenBank');
   await generate(page).click();
@@ -155,11 +158,9 @@ test('Generate reports real cold/warm stages and preserves the successful Result
   await expect(generate(page)).toBeEnabled();
   expect(await page.evaluate(() => window.__GBDRAW_APP__.results === window.successfulResults)).toBe(true);
   await record(page, testInfo, 'error');
-  expect((await applicationStatus(page)).status).toBe('pending');
-  await expect(page.locator('[data-generation-application-feedback] strong')).toHaveText('Pending');
+  await expect(page.locator('[data-generation-application-feedback]')).toHaveCount(0);
   expect(await page.evaluate(() => [window.__GBDRAW_HISTORY__.getUndoCount(), window.__GBDRAW_HISTORY__.getRedoCount()])).toEqual(await page.evaluate(() => window.feedbackHistory));
-  expect(await page.evaluate(async () => window.appliedBeforeCancel ===
-    (await import('./js/services/config.js')).canonicalRenderArtifactOwner.capture().appliedGenerationIntent)).toBe(true);
+  expect(await committedIs(page, 'appliedBeforeCancel')).toBe(true);
 
   await setInput(source);
   await page.setViewportSize({ width: 390, height: 844 });
@@ -167,7 +168,7 @@ test('Generate reports real cold/warm stages and preserves the successful Result
   await generate(page).click();
   await awaitSuccess(page);
   expectRenderStages(await record(page, testInfo, 'retry-mobile'));
-  expect((await applicationStatus(page)).status).toBe('clean');
+  expect(await committedIs(page, 'appliedBeforeCancel')).toBe(false);
   await screenshot(page, testInfo, 'ready-mobile');
   expect(external).toEqual([]);
 });
@@ -216,7 +217,7 @@ test('Linear comparison preparation, real search counts, cache reuse, and no-com
 });
 
 
-test('S03 Linear LOSAT intent follows successful Result and task reversal', async ({ page, baseURL }) => {
+test('S03 Linear LOSAT draft edits never replace the committed request before Generate', async ({ page, baseURL }) => {
   test.setTimeout(180000);
   await prepare(page,baseURL);
   await page.evaluate(async content => {
@@ -231,66 +232,19 @@ test('S03 Linear LOSAT intent follows successful Result and task reversal', asyn
   await expect.poll(()=>page.evaluate(()=>window.feedbackEvents.some(event=>event.name==='generate.completed')),
     {timeout:180000}).toBe(true);
   expect(await page.evaluate(()=>window.__GBDRAW_APP__.errorLog?.summary||'')).toBe('');
-  expect((await applicationStatus(page)).status).toBe('clean');
+  expect(await keepCommitted(page,'losatCommitted')).toBe(true);
   await page.evaluate(async()=>{
     const {state}=await import('./js/state.js');state.losat.blastn.task='blastn';await window.Vue.nextTick();
   });
-  expect((await applicationStatus(page)).status).toBe('pending');
+  expect(await committedIs(page,'losatCommitted')).toBe(true);
   await page.evaluate(async()=>{
     const {state}=await import('./js/state.js');state.losat.blastn.task='megablast';await window.Vue.nextTick();
   });
-  expect((await applicationStatus(page)).status).toBe('clean');
+  expect(await committedIs(page,'losatCommitted')).toBe(true);
 });
 
 
-test('S04 settings-only and uncertain/invalid inputs never claim Applied; effective settings are observed without extra work', async ({ browser }, info) => {
-  const { load, generate, seeds } = require('./helpers/mode-transition.cjs');
-  const page = await browser.newPage();
-  let linear;
-  try {
-    await openApp(page);
-    const label=page.locator('[data-generation-application-feedback] strong');
-    await expect(label).toHaveText('Invalid settings');
-    await page.evaluate(async content => {
-      window.__GBDRAW_APP__.files.c_gb=new File([content],'HmmtDNA.gbk',{type:'text/plain'});
-      await window.Vue.nextTick();
-    },source);
-    await expect(label).toHaveText('Not generated');
-    await expect(page.locator('[data-generation-application-feedback]')).toContainText('There is no Result yet');
-    linear=await load(browser,seeds.linear);
-    await expect(linear.locator('[data-generation-application-feedback] strong')).toHaveText('Pending');
-    await generate(linear);
-    const region=linear.locator('[data-generation-application-feedback]');
-    await expect(region.locator('strong')).toHaveText('Applied');
-    await linear.evaluate(async () => {
-      const { state } = await import('./js/state.js');
-      state.adv.linear_accession_visibility='show';state.adv.linear_length_visibility='show';
-      // Changing a disabled slot and the inactive Circular profile is not a generation difference.
-      const {createDefaultAdv}=await import('./js/services/session-active-config-contract.js');
-      state.adv.circular_track_slots.push({...createDefaultAdv('linear').circular_track_slots[0],id:'inactive',enabled:false,height:'90px'});
-      await window.Vue.nextTick();
-    });
-    await expect(region.locator('strong')).toHaveText('Applied');
-    await linear.evaluate(async () => {
-      const { state } = await import('./js/state.js');
-      state.form.keep_definition_left_aligned='invalid';await window.Vue.nextTick();
-    });
-    await expect(region.locator('strong')).toHaveText('Invalid settings');
-    await expect(region).toContainText('Check the generation inputs');
-    await linear.evaluate(async () => {
-      const { state } = await import('./js/state.js');state.form.keep_definition_left_aligned=true;
-      const file=state.linearSeqs[0].gb;
-      const {readFileBytes}=await import('./js/services/file-content-cache.js');
-      state.linearSeqs[0].gb=new File([await readFileBytes(file)],file.name,{type:file.type});
-      await window.Vue.nextTick();
-    });
-    await expect(region.locator('strong')).toHaveText('Pending');
-    await expect.poll(() => applicationStatus(linear)).toMatchObject({status:'pending'});
-    await linear.screenshot({path:info.outputPath('same-name-source-pending.png')});
-  } finally { await page.close();if(linear) await linear.context().close(); }
-});
-
-test('S04 Linear Generate cancel, stale completion, failure and retry retain the Pending Result and History', async ({ browser }, info) => {
+test('S04 Linear Generate cancel, stale completion, failure and retry retain the committed Result and History', async ({ browser }, info) => {
   test.setTimeout(240000);
   const { load, generate, seeds } = require('./helpers/mode-transition.cjs');
   const page=await load(browser,seeds.linear);
@@ -300,14 +254,14 @@ test('S04 Linear Generate cancel, stale completion, failure and retry retain the
       const app=window.__GBDRAW_APP__;
       app.adv.scale_font_size=19;
       window.s04PreviousResults=app.results;
-      window.s04PreviousBasis=(await import('./js/services/config.js')).canonicalRenderArtifactOwner.capture().appliedGenerationIntent;
+      window.s04PreviousBasis=(await import('./js/services/config.js')).getCommittedCanonicalRenderRequest();
       return [window.__GBDRAW_HISTORY__.getUndoCount(),window.__GBDRAW_HISTORY__.getRedoCount()];
     });
     const preserved=async()=>{
-      await expect(page.locator('[data-generation-application-feedback] strong')).toHaveText('Pending');
+      await expect(page.locator('[data-generation-application-feedback]')).toHaveCount(0);
       expect(await page.evaluate(()=>window.__GBDRAW_APP__.results===window.s04PreviousResults)).toBe(true);
       expect(await page.evaluate(()=>[window.__GBDRAW_HISTORY__.getUndoCount(),window.__GBDRAW_HISTORY__.getRedoCount()])).toEqual(before);
-      expect(await page.evaluate(async()=>window.s04PreviousBasis===(await import('./js/services/config.js')).canonicalRenderArtifactOwner.capture().appliedGenerationIntent)).toBe(true);
+      expect(await committedIs(page,'s04PreviousBasis')).toBe(true);
     };
     await page.evaluate(()=>{
       window.__GBDRAW_TEST_HOOKS__.beforeDiagramGenerationResponse=()=>new Promise(resolve=>{window.s04ReleaseStale=resolve;});
@@ -330,10 +284,10 @@ test('S04 Linear Generate cancel, stale completion, failure and retry retain the
     });
     await expect(page.getByRole('alert',{name:'Generation Error'})).not.toContainText('S04 forced Generate failure');
     await preserved();
-    await page.screenshot({path:info.outputPath('linear-generate-failure-pending.png')});
+    await page.screenshot({path:info.outputPath('linear-generate-failure-preserved.png')});
     await page.evaluate(()=>{delete window.__GBDRAW_TEST_HOOKS__.beforeDiagramGenerationResponse;});
     await generate(page);
-    await expect(page.locator('[data-generation-application-feedback] strong')).toHaveText('Applied');
+    expect(await committedIs(page,'s04PreviousBasis')).toBe(false);
     expect(page.externalRequests).toEqual([]);
   } finally {await page.context().close();}
 });

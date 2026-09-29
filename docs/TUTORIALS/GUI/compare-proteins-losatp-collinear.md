@@ -52,7 +52,7 @@ The workflow creates these files:
 ## Step 1: Upload the five source records
 
 Select **Linear**. Under **Input Genomes**, keep **GenBank** selected and
-confirm the fresh **Current: No comparison** status below the record list.
+confirm that **No comparison** is pressed in the **Comparison** command group.
 
 1. In the first **GenBank / DDBJ File** control, choose `AP027078.gb`.
 2. Select **Add sequence** below the File list, then choose
@@ -72,8 +72,7 @@ under **Selected pairs**.*
 
 ## Step 2: Generate the five-record baseline
 
-Select **Generate Diagram** while the status remains **Current: No
-comparison**. The first Linear result contains 2,994 rendered feature elements. Select **Zoom
+Select **Generate Diagram** while **No comparison** is still pressed. The first Linear result contains 2,994 rendered feature elements. Select **Zoom
 out** six times to reach **40%**, then drag the preview horizontally until the
 complete diagram is centered. Use this overview to verify all five rows and the
 absence of ribbons.

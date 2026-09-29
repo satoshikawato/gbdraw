@@ -184,7 +184,7 @@
             "session": "./sessions/majanivirus_orthogroup.gbdraw-session.json.gz",
             "viewport": {
               "width": 1600,
-              "height": 1100
+              "height": 1600
             },
             "actions": [
               {
@@ -207,7 +207,7 @@
               "adv.identity": 20,
               "adv.alignment_length": 0
             },
-            "visibleText": ["Comparison", "Run LOSAT", "Current: Run LOSAT", "Settings", "Selected pairs (8)"],
+            "visibleText": ["Comparison", "Run LOSAT", "Settings", "Selected pairs (8)"],
             "visibleControls": [
               {"selector": "[data-linear-comparison-losat-mode-option='blastn']", "pressed": false},
               {"selector": "[data-linear-comparison-losat-mode-option='blastp']", "pressed": true},

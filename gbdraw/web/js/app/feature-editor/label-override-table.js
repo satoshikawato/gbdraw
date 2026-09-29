@@ -6,6 +6,7 @@ import {
   normalizeFeatureIdKey,
   selectFeatureSelector
 } from '../feature-selector.js';
+import { recordStructuralMetric } from '../../services/runtime-test-hooks.js';
 
 const LABEL_OVERRIDE_COLUMN_COUNT = 5;
 const PRIMARY_HEADER = ['record_id', 'feature_type', 'qualifier', 'value', 'label_text'];
@@ -120,6 +121,9 @@ export const buildLabelOverrideRows = (featureOverrides, bulkOverrides, options 
     && visibilityOverridesByFeatureId.size === 0) {
     return { rows, skippedFeatureCount, skippedFeatureSourceCount, skippedMissingSourceCount, fallbackHashCount };
   }
+  recordStructuralMetric('labelOverrideTableBuildCount', 1, {
+    featureCount: Array.isArray(options.extractedFeatures) ? options.extractedFeatures.length : 0
+  });
   const featureMetadataById = buildFeatureMetadataMap(options.extractedFeatures);
   const editableLabelByFeatureId = buildEditableLabelByFeatureId(options.editableLabels);
   const featureIdsBySourceText = buildFeatureIdsBySourceText(options.editableLabels);

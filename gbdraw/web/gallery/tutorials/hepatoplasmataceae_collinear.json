@@ -117,8 +117,8 @@
           "dataDependent": true,
           "media": {
             "src": "./media/hepatoplasmataceae_collinear/manual-03-01-open-pairwise.webp",
-            "alt": "Comparison card with Run LOSAT active, Current: Run LOSAT status, closed Settings, and Selected pairs 4.",
-            "caption": "Choose Run LOSAT for all four adjacent comparisons; the status confirms the active command."
+            "alt": "Comparison card with Run LOSAT pressed, closed Settings, and Selected pairs 4.",
+            "caption": "Choose Run LOSAT for all four adjacent comparisons; the pressed command confirms it."
           },
           "capture": {
             "source": "webapp",
@@ -129,7 +129,8 @@
                 "type": "evaluate",
                 "script": "async () => { const app = window.__GBDRAW_APP__; app.sidebarWidth = 480; await app.setLinearComparisonGlobalAction('losat'); app.setLinearComparisonLosatMode('blastp'); app.setLinearComparisonLosatpMode('collinear'); }"
               },
-              {"type": "wait", "ms": 300}
+              {"type": "wait", "ms": 300},
+              {"type": "evaluate", "script": "() => { const settings = document.querySelector(\"[data-linear-comparison-disclosure='settings']\"); if (settings) settings.open = false; }"}
             ],
             "selector": "[data-linear-comparison-card]",
             "cropPadding": 14,
@@ -141,7 +142,7 @@
               "losatProgram": "blastp",
               "losat.blastp.mode": "collinear"
             },
-            "visibleText": ["Comparison", "Run LOSAT", "Current: Run LOSAT", "Settings", "Selected pairs (4)"]
+            "visibleText": ["Comparison", "Run LOSAT", "Settings", "Selected pairs (4)"]
           }
         },
         {

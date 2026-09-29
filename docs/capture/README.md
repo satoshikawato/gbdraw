@@ -165,7 +165,7 @@ source hashes in the saved resources, verifies pending Export without Generate,
 and checks complete Generate → Undo → Redo restoration. Naming a new Session
 adds the existing document-title History change; all other intent fields are
 compared unchanged. Camera framing and capture-only search hiding change no
-artifact or History. The public crop contains Pending, the current comparison,
+artifact or History. The public crop contains the current comparison,
 metadata, gene labels, legend and ribbons; QA JSON/SVG/Session/log files remain
 outside the repository.
 

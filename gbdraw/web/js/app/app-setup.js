@@ -22,12 +22,10 @@ import {
   buildRunStateData,
   buildUiStateData,
   canonicalRenderArtifactOwner,
-  commitAppliedGenerationFields,
   exportSession,
   disposeSessionOperations,
   getCommittedCanonicalSession,
   getCommittedCanonicalRenderRequest,
-  getGenerationApplicationStatus,
   importSession as importSessionFromFile,
   SESSION_VERSION,
   serializeActiveRenderFiles,
@@ -87,7 +85,6 @@ import {
   compositionUserDeltas
 } from './legend-layout/composition-actions.js';
 import { createResultsManager } from './results.js';
-import { describeGenerationApplication } from './generation-status.js';
 import { setupWatchers } from './watchers.js';
 import { setupHistoryInputs } from './history-inputs.js';
 import { setupHistoryShortcuts } from './history-shortcuts.js';
@@ -1215,13 +1212,6 @@ export const createAppSetup = () => {
   const recordDisplayControls = createRecordDisplayControls({ state, computed, watch, linearRecordSelector, history, getCommittedRequest: getCommittedCanonicalRenderRequest, getCommittedSession: getCommittedCanonicalSession });
   state.recordDisplayRows = recordDisplayControls.allRows;
   window.__GBDRAW_HISTORY__ = history;
-  const generationApplicationFeedback = computed(() => {
-    // Observe existing artifact/edit owners when the applied basis changes.
-    void history.revision.value;
-    void svgContent.value;
-    void results.value;
-    return describeGenerationApplication(getGenerationApplicationStatus());
-  });
   const canUndoHistory = computed(() => {
     void history.revision.value;
     return history.canUndo();
@@ -1297,7 +1287,6 @@ export const createAppSetup = () => {
     previewRuntime
   });
   const svgActions = createSvgStyles({
-    commitAppliedGenerationFields,
     state,
     rulePreparation,
     ref, computed, watch,
@@ -1979,10 +1968,15 @@ export const createAppSetup = () => {
     },
     { immediate: true }
   );
+  // A mode switch restores that mode's title and fonts, which its Result
+  // already shows; the restore must not start a live definition edit.
+  let restoringModeProfile = false;
   watch(mode, (nextMode, previousMode) => {
     if (nextMode === previousMode) return;
     if (state.semanticFileWatchersSuppressed.value) return;
+    restoringModeProfile = true;
     state.modeProfileStateManager.transition(adv, previousMode, nextMode);
+    nextTick(() => { restoringModeProfile = false; });
     matchSequenceRegistry?.reset?.();
     clickedPairwiseMatch.value = null;
   });
@@ -2467,6 +2461,7 @@ export const createAppSetup = () => {
 
   const { waitForAuxiliaryFileImport, auxiliaryFileImportPending, canRetryAuxiliaryImportFailure, retryAuxiliaryImportFailure } = setupWatchers({
     state,
+    isRestoringModeProfile: () => restoringModeProfile,
     rulePreparation,
     ref, computed, watch,
     nextTick,
@@ -4233,7 +4228,6 @@ export const createAppSetup = () => {
 
   return {
     recordDisplayControls,
-    generationApplicationFeedback,
     featureRecordRotationDraft: featureRecordRotation.draft,
     recordActionsExpanded,
     toggleRecordActions,

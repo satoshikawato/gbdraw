@@ -23,6 +23,10 @@ const expectNoUnhandledRejections = async (page) => {
   expect(await page.evaluate(() => window.__GBDRAW_UNHANDLED_REJECTIONS__)).toEqual([]);
 };
 
+// Record keys are binding-only; the visible names come from biological metadata.
+const directionSelect = (dialog, recordKey) => dialog.locator(`select[aria-describedby="alignment-direction-${recordKey}"]`);
+const directionRow = (dialog, recordKey) => dialog.locator(
+  `[data-similarity-alignment-direction]:has(#alignment-direction-${recordKey})`);
 const artifactSnapshot = (page) => page.evaluate(async () => {
   const { state } = await import('./js/state.js');
   const history = window.__GBDRAW_HISTORY__;
@@ -93,12 +97,11 @@ test('alignment canvas guide and candidates stay transient and share palette cho
   await referenceSelect.selectOption(referenceKey);
   const align = drawer.getByRole('button', { name: 'Align…', exact: true });
   const before = await artifactSnapshot(page);
-  const initialApplicationText = await page.locator('[data-generation-application-feedback]').textContent();
   await align.click();
   const dialog = page.getByRole('dialog', { name: 'Select alignment anchors' });
   await expect(dialog).toBeVisible({ timeout: 180000 });
   await expect(dialog.locator('[data-alignment-application-help]')).toContainText('Apply required');
-  await expect(page.locator('[data-generation-application-feedback]')).toHaveText(initialApplicationText);
+  await expect(page.locator('[data-generation-application-feedback]')).toHaveCount(0);
   const overlay = page.locator('[data-similarity-alignment-canvas]');
   const guide = overlay.locator('.gbdraw-alignment-guide');
   const badges = overlay.locator('.gbdraw-alignment-badge');
@@ -787,13 +790,13 @@ test('exclusive direction modes and Custom follow keyboard choices without Worke
   await page.keyboard.press('ArrowRight');
   await expect(modes.getByRole('radio', { name: 'Custom', exact: true })).toBeChecked();
   await expect(modes.locator('input:checked')).toHaveCount(1);
-  const target = dialog.getByLabel('Direction for record_a', { exact: true });
+  const target = directionSelect(dialog, 'record_a');
   await expect(target).toBeDisabled();
   await expect(dialog.locator('#alignment-direction-record_a')).toContainText('Skipped by user');
   await first.focus(); await page.keyboard.press('Space');
   await expect(target).toBeEnabled();
   await expect(dialog.locator('#alignment-direction-scope')).toContainText('2 selected anchors');
-  const reference = dialog.getByLabel('Direction for record_b', { exact: true });
+  const reference = directionSelect(dialog, 'record_b');
   await reference.selectOption('left'); await target.selectOption('right');
   await expect(reference).toHaveAccessibleDescription(/exact reference.*Current right-facing; after Align left-facing/);
   await expect(dialog.locator('#alignment-direction-scope')).toHaveAttribute('aria-live', 'polite');
@@ -821,10 +824,9 @@ test('Apply error retains draft, focuses retry guidance, and accepts correction'
   await dialog.getByRole('radio',{name:/Select .*bp, strand/}).first().check();
   const before = await artifactSnapshot(page);
   await expect(dialog.locator('[data-alignment-application-help]')).toContainText('Apply required');
-  const application = page.locator('[data-generation-application-feedback] strong');
-  const initialApplication = await application.textContent();
+  const application = page.locator('[data-generation-application-feedback]');
   await dialog.getByRole('radio', { name: /Skip / }).check();
-  await expect(application).toHaveText(initialApplication);
+  await expect(application).toHaveCount(0);
   expect(await artifactSnapshot(page)).toEqual(before);
   await dialog.getByRole('radio', { name: /Select .*bp, strand/ }).first().check();
   const priorLayout = await page.evaluate(() => {
@@ -852,7 +854,7 @@ test('Apply error retains draft, focuses retry guidance, and accepts correction'
     (element) => element.scrollWidth <= element.clientWidth
   )).toBe(true);
   // Candidate sanitization failed; the independent settings draft was not changed.
-  await expect(application).toHaveText(initialApplication);
+  await expect(application).toHaveCount(0);
   const afterFailure = await artifactSnapshot(page);
   expect(afterFailure.results).toEqual(before.results);
   expect(afterFailure.history.slice(0, 2)).toEqual(before.history.slice(0, 2));
@@ -864,8 +866,7 @@ test('Apply error retains draft, focuses retry guidance, and accepts correction'
   await dialog.getByRole('button', { name: 'Apply', exact: true }).click();
   await expect(dialog).toBeHidden({ timeout: 180000 });
   await expect(page.locator('[data-similarity-alignment-summary]')).toContainText('explicitly skipped');
-  const applied = await page.evaluate(async () => (await import('./js/services/config.js')).getGenerationApplicationStatus());
-  await expect(application).toHaveText({clean:'Applied',unknown:'Unknown',pending:'Pending'}[applied.status]);
+  await expect(application).toHaveCount(0);
 });
 
 test('one usable member applies directly through one Worker resolve and one History action', async ({ page }, testInfo) => {
@@ -1340,7 +1341,7 @@ test('Gallery explicit directions own receipts, Reset scopes, fresh Load and rib
   await direction.focus();
   await page.keyboard.press('Space');
   await expect(direction).toBeChecked();
-  await expect(dialog.locator('[data-similarity-alignment-direction]').filter({hasText:'record-2:'})).toContainText('→ → ←');
+  await expect(directionRow(dialog, 'record-2')).toContainText('→ → ←');
   await dialog.screenshot({ path: testInfo.outputPath('direction-review-desktop.png') });
   await page.setViewportSize({ width: 390, height: 740 });
   await direction.scrollIntoViewIfNeeded();
@@ -1432,15 +1433,15 @@ test('Gallery explicit directions own receipts, Reset scopes, fresh Load and rib
     app.rightDrawerTab = 'orthogroups';
     await window.Vue.nextTick();
     const labels = [...document.querySelectorAll(
-      '[data-similarity-alignment-plan-inspector] [aria-label$=" reversed relative to source"]'
-    )].map((element) => element.getAttribute('aria-label'));
+      '[data-similarity-alignment-plan-inspector] [data-alignment-record-key]:has([aria-label$=" reversed relative to source"])'
+    )].map((element) => element.dataset.alignmentRecordKey);
     app.showRightDrawer = previous.open;
     app.rightDrawerTab = previous.tab;
     await window.Vue.nextTick();
     return labels;
   });
   expect(await revLabels()).toEqual(applied.orientations.filter(({ reverseComplement }) => reverseComplement)
-    .map(({ recordKey }) => `${recordKey} reversed relative to source`));
+    .map(({ recordKey }) => recordKey));
   const measured = await geometry();
   expect(measured.ribbons).toBeGreaterThan(0);
   expect(measured.targetRibbons).toBeGreaterThan(0);
@@ -1506,7 +1507,7 @@ test('Gallery explicit directions own receipts, Reset scopes, fresh Load and rib
   await resetReview.getByRole('button',{name:'Cancel',exact:true}).click();
   expect(await recordState()).toEqual(manual);
   expect(manual.orientations.find(({ recordKey }) => recordKey === 'record-2').reverseComplement).toBe(false);
-  expect(await revLabels()).not.toContain('record-2 reversed relative to source');
+  expect(await revLabels()).not.toContain('record-2');
   const manualGeometry = await geometry();
   expect(Math.max(...manualGeometry.offsets.map(({ offset }) => Math.abs(offset)))).toBeLessThanOrEqual(0.5);
   expect(manualGeometry.targetRibbons).toBeGreaterThan(0);
@@ -1644,7 +1645,7 @@ test('Gallery explicit directions own receipts, Reset scopes, fresh Load and rib
   });
   console.log('S02 Gallery: Custom reference review ready');
   await customReview.getByRole('radio',{name:'Custom',exact:true}).check();
-  await customReview.getByLabel(`Direction for ${saved.plan.reference.recordKey}`,{exact:true}).selectOption('right');
+  await directionSelect(customReview, saved.plan.reference.recordKey).selectOption('right');
   expect(await freshPage.evaluate(()=>window.__S02FinalBatches)).toBe(0);
   const referencePreview=await freshPage.evaluate(()=>window.__GBDRAW_APP__.similarityAlignmentDirectionPreview.reference);
   expect(Math.abs(referencePreview.beforeX-centerBeforeC)).toBeLessThanOrEqual(0.5);
@@ -1726,15 +1727,15 @@ test('exclusive directions include the minority reference and keep Custom Select
   await page.keyboard.press('Space');
   await expect(dialog.getByRole('combobox')).toHaveCount(5);
   expect(await changed()).toEqual([]);
-  await dialog.getByLabel('Direction for record-1', { exact: true }).selectOption('right');
-  await dialog.getByLabel('Direction for record-2', { exact: true }).selectOption('left');
+  await directionSelect(dialog, 'record-1').selectOption('right');
+  await directionSelect(dialog, 'record-2').selectOption('left');
   expect(await changed()).toEqual(['record-1', 'record-2']);
   const target = dialog.locator('[data-alignment-record-key="record-2"]');
   await target.getByRole('radio', { name: /Skip / }).focus();
   await page.keyboard.press('Space');
   expect(await changed()).toEqual(['record-1']);
-  await expect(dialog.getByLabel('Direction for record-2', { exact: true })).toBeDisabled();
-  await expect(dialog.locator('[data-similarity-alignment-direction]').filter({ hasText: 'record-2:' }))
+  await expect(directionSelect(dialog, 'record-2')).toBeDisabled();
+  await expect(directionRow(dialog, 'record-2'))
     .toContainText('unchanged: Skipped by user.');
   expect(await page.evaluate(() => window.__GBDRAW_APP__.similarityAlignmentDirectionPreview.records.find(record => record.recordKey === 'record-2').exclusion)).toBe('skipped_by_user');
   await target.getByRole('radio', { name: /Select .*bp, strand/ }).first().check();
@@ -1742,8 +1743,8 @@ test('exclusive directions include the minority reference and keep Custom Select
   await page.setViewportSize({ width: 390, height: 740 });
   await expect.poll(() => page.evaluate(() => window.__GBDRAW_APP__.similarityAlignmentCompact)).toBe(true);
   await expect(custom).toBeChecked();
-  await expect(dialog.getByLabel('Direction for record-1', { exact: true })).toHaveValue('right');
-  await expect(dialog.getByLabel('Direction for record-2', { exact: true })).toHaveValue('left');
+  await expect(directionSelect(dialog, 'record-1')).toHaveValue('right');
+  await expect(directionSelect(dialog, 'record-2')).toHaveValue('left');
   await page.setViewportSize({ width: 1600, height: 1000 });
   await expect.poll(() => page.evaluate(() => window.__GBDRAW_APP__.similarityAlignmentCompact)).toBe(false);
   expect(await artifactSnapshot(page)).toEqual(before);
@@ -1940,7 +1941,7 @@ test('changed final facts require a separate Apply and validation errors preserv
   await page.evaluate(() => { window.__s03FinalBatches = 0; });
   await dialog.getByRole('radio', { name: /Skip skip/ }).check();
   await dialog.getByRole('radio', { name: 'Custom', exact: true }).check();
-  await dialog.getByLabel('Direction for record-1', { exact: true }).selectOption('right');
+  await directionSelect(dialog, 'record-1').selectOption('right');
   const before = await artifactSnapshot(page);
   const oldDelta = await page.evaluate(() => window.__GBDRAW_APP__.similarityAlignmentDirectionPreview.reference.deltaX);
   await applyAndSettle(page, dialog);
@@ -1951,7 +1952,7 @@ test('changed final facts require a separate Apply and validation errors preserv
   await page.evaluate(() => { window.__s03ValidationFailure = true; });
   await applyAndSettle(page, dialog);
   await expect(dialog.locator('[data-similarity-alignment-error]')).toContainText('without recognized diagnostic information');
-  await expect(dialog.getByLabel('Direction for record-1', { exact: true })).toHaveValue('right');
+  await expect(directionSelect(dialog, 'record-1')).toHaveValue('right');
   expect(await artifactSnapshot(page)).toEqual(before);
   expect(await page.evaluate(() => window.__s03FinalBatches)).toBe(2);
   await applyAndSettle(page, dialog); await expect(dialog).toBeHidden();
@@ -2010,7 +2011,23 @@ for(const entry of ['resolved explicit','multiple target ambiguity','automatic r
     await page.setViewportSize({width:1600,height:1000});
     await page.goto('/gbdraw/web/index.html',{waitUntil:'domcontentloaded'});
     await page.waitForFunction(()=>window.__GBDRAW_APP__);
-    const seed=JSON.parse(readFileSync('gbdraw/web/gallery/sessions/BGC0000708-BGC0000713.gbdraw-session.json','utf8'));
+    let seedPath='gbdraw/web/gallery/sessions/BGC0000708-BGC0000713.gbdraw-session.json';
+    if(entry==='multiple target ambiguity') {
+      // Direct evidence comes from the committed resource; drop og_1's edges there.
+      const stripped=info.outputPath('bgc-og1-without-edges.json');
+      execFileSync('python',['-c',[
+        'import base64, json, sys', 'from dataclasses import replace',
+        'from gbdraw.analysis.protein_colinearity import OrthogroupGraphResult, OrthogroupResult',
+        'from gbdraw.session_request_codec import decode_canonical_typed_resource, encode_canonical_typed_resource',
+        'session = json.load(open(sys.argv[1]))', "entry = session['resources']['comparison-canonical-orthogroups-1']",
+        "result = decode_canonical_typed_resource(base64.b64decode(entry['data']), value_kind='orthogroupResult', expected=OrthogroupResult | OrthogroupGraphResult)",
+        "drop = lambda values: {key: value for key, value in values.items() if key != 'og_1'}",
+        "data = encode_canonical_typed_resource('orthogroupResult', replace(result, ortholog_edges_by_orthogroup_id=drop(result.ortholog_edges_by_orthogroup_id), path_indexes_by_orthogroup_id=drop(result.path_indexes_by_orthogroup_id)))",
+        "entry.update(data=base64.b64encode(data).decode(), size=len(data))", "json.dump(session, open(sys.argv[2], 'w'))"
+      ].join('\n'),seedPath,stripped],{cwd:process.cwd(),stdio:'pipe'});
+      seedPath=stripped;
+    }
+    const seed=JSON.parse(readFileSync(seedPath,'utf8'));
     if(entry==='multiple target ambiguity') {
       const catalog=seed.editorState.featureCatalog.items[0];
       const group=catalog.orthogroups.find(group=>group.id==='og_1');
@@ -2020,7 +2037,7 @@ for(const entry of ['resolved explicit','multiple target ambiguity','automatic r
         expect(feature).toBeTruthy();
         group.members.push({recordKey,biologicalFeatureId:feature.biologicalFeatureId,representative:false,role:'member',confidence:'low',assignmentReason:'disposable ambiguity fixture'});
       }
-      group.orthologEdges=[];group.member_count=group.members.length;
+      group.member_count=group.members.length;
     }
     await importSession(page,Buffer.from(JSON.stringify(seed)),'s06-gallery.gbdraw-session.json');
     await page.evaluate(async()=>{const app=window.__GBDRAW_APP__;app.openRightDrawerTab('orthogroups');app.selectedOrthogroupId='og_1';app.losat.executionMode='serial';await window.Vue.nextTick()});
@@ -2067,7 +2084,7 @@ for(const entry of ['resolved explicit','multiple target ambiguity','automatic r
     await exposeReviewControl(page,select);await select.focus();await page.keyboard.press('Space');
     const skip=target.getByRole('radio',{name:/Skip /});await exposeReviewControl(page,skip);await skip.focus();await page.keyboard.press('Space');await expect(skip).toBeChecked();
     await exposeReviewControl(page,select);await select.focus();await page.keyboard.press('Space');await expect(select).toBeChecked();
-    const custom=dialog.getByLabel('Direction for record-1',{exact:true});await custom.selectOption('right');
+    const custom=directionSelect(dialog, 'record-1');await custom.selectOption('right');
     const local=await page.evaluate(()=>JSON.stringify(window.__GBDRAW_APP__.similarityAlignmentDraft));
     const posts=await page.evaluate(()=>window.__S06_POSTS__.length);
     const geometry=[];

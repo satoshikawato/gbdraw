@@ -347,12 +347,30 @@ test('Web fresh/reset Lock ON preserves explicit drafts, Result on Load, and reg
   await page.getByRole('button', { name: 'Linear', exact: true }).click();
   const lock = page.getByRole('checkbox', { name: 'Lock Definition Column', exact: true });
   await expect(lock).toBeChecked();
-  const help = page.locator('#linear-definition-lock-help');
-  await expect(help).toBeVisible();
-  await expect(help).toContainText('ON aligns definitions in a common left column');
-  await expect(help).toContainText('OFF centers them in a common column width and follows row offsets');
-  await expect(help).toContainText('Changes apply on Generate');
+  // PD-OI-024 revision 3: one text source feeds the help-tip and the
+  // checkbox's accessible description instead of an always-on paragraph.
   await expect(lock).toHaveAttribute('aria-describedby', 'linear-definition-lock-help');
+  await expect(lock).toHaveAccessibleDescription(new RegExp(['ON aligns Linear definitions in a common left column',
+    'OFF centers them in a common column width and follows row offsets', 'Changes apply on Generate'].join('.*')));
+  const helpButton = page.locator('.help-tip:has(#linear-definition-lock-help) > button');
+  const tooltip = page.locator('[role="tooltip"]');
+  await expect(tooltip).toHaveCount(0);
+  await lock.focus();
+  await page.keyboard.press('Tab');
+  await expect(helpButton).toBeFocused();
+  await expect(tooltip).toContainText('Changes apply on Generate');
+  await page.keyboard.press('Escape');
+  await expect(tooltip).toHaveCount(0);
+  await helpButton.hover();
+  await expect(tooltip).toBeVisible();
+  await page.mouse.move(0, 0);
+  await expect(tooltip).toHaveCount(0);
+  await helpButton.click();
+  await page.mouse.move(0, 0);
+  await expect(tooltip).toBeVisible();
+  await expect(lock).toBeChecked();
+  await lock.focus();
+  await expect(tooltip).toHaveCount(0);
   await lock.uncheck();
   page.once('dialog', dialog => dialog.accept());
   await page.getByRole('button', { name: 'Reset Settings', exact: true }).click();
@@ -423,9 +441,10 @@ test('Web fresh/reset Lock ON preserves explicit drafts, Result on Load, and reg
   await expect(lock).toBeChecked();
   expect(await measureDefinitionColumns(page)).toEqual(beforeReset);
   await page.setViewportSize({ width: 390, height: 844 });
-  await help.scrollIntoViewIfNeeded();
-  await expect(help).toBeVisible();
-  await help.locator('..').screenshot({ path: testInfo.outputPath('definition-lock-help.png') });
+  await helpButton.scrollIntoViewIfNeeded();
+  await helpButton.click();
+  await expect(tooltip).toContainText('Changes apply on Generate');
+  await helpButton.locator('xpath=ancestor::label').screenshot({ path: testInfo.outputPath('definition-lock-help.png') });
 });
 
 test('Linear Lock Definition Column measures single, shared, and mixed rows after unequal translations', async ({ page }, testInfo) => {
@@ -2065,7 +2084,7 @@ test('Sparse upload and mixed selected renders keep snapshots and raw cache iden
         intent: app.linearComparisonUi.intentKey,
         losatMode: app.linearComparisonUi.activeLosatModeKey,
         losatpMode: app.linearComparisonUi.activeLosatpModeKey,
-        summary: app.linearComparisonUi.summaryText,
+        filterSummary: app.linearComparisonUi.filterSummary,
         settings: app.linearComparisonUi.sectionKeys.settings
       }
     };
@@ -2079,7 +2098,7 @@ test('Sparse upload and mixed selected renders keep snapshots and raw cache iden
       intent: 'custom',
       losatMode: 'blastn',
       losatpMode: 'collinear',
-      summary: expect.stringContaining('LOSATN · 2 selected pairs · 1 LOSAT, 1 upload'),
+      filterSummary: expect.stringContaining('E-value <= '),
       settings: [
         'losat-mode', 'losat-runtime', 'blastn-task', 'upload-readiness',
         'result-filters', 'comparison-appearance'
@@ -2091,10 +2110,11 @@ test('Sparse upload and mixed selected renders keep snapshots and raw cache iden
     name: 'Set all adjacent comparisons'
   });
   await expect(restoredCommands.getByRole('button')).toHaveCount(3);
-  await expect(restoredComparisonCard.getByRole('status')).toContainText(
-    'Current: Selected pairs (2; 1 LOSAT, 1 upload)'
-  );
-  await expect(restoredComparisonCard.getByText('Custom', { exact: true })).toBeVisible();
+  // A restored custom plan presses no bulk command and shows the Custom badge.
+  for (const button of await restoredCommands.getByRole('button').all()) {
+    await expect(button).toHaveAttribute('aria-pressed', 'false');
+  }
+  await expect(restoredComparisonCard.getByRole('status')).toContainText('Custom');
   await expect(linearSelectedPairs(page).locator(':scope > summary')).toContainText(
     'Selected pairs (2)'
   );

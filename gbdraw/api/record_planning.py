@@ -511,22 +511,7 @@ def resolve_cli_similarity_alignment_plan(
         for member, candidate in candidate_rows
         if member.orthogroup_id == group_id
     )
-    identity_by_protein = {
-        member.protein_id: candidate.anchor
-        for member, candidate in candidate_rows
-        if member.orthogroup_id == group_id
-    }
-    edges = tuple(
-        AlignmentEvidenceEdge(
-            group_id=group_id,
-            query=identity_by_protein[edge.query_protein_id],
-            subject=identity_by_protein[edge.subject_protein_id],
-            edge_kind=str(edge.edge_kind),
-        )
-        for edge in orthogroups.ortholog_edges_by_orthogroup_id.get(group_id, ())
-        if edge.query_protein_id in identity_by_protein
-        and edge.subject_protein_id in identity_by_protein
-    )
+    edges = similarity_alignment_evidence_edges(collection, orthogroups, group_id)
     resolution = resolve_similarity_alignment(
         record_keys=record_keys,
         group_id=group_id,
@@ -544,6 +529,44 @@ def resolve_cli_similarity_alignment_plan(
             f"select an exact candidate for each record: {details}."
         )
     return resolution.require_plan()
+
+
+def similarity_alignment_evidence_edges(
+    collection: ResolvedRecordCollection,
+    orthogroups: OrthogroupResult | OrthogroupGraphResult | None,
+    group_id: str,
+) -> tuple[AlignmentEvidenceEdge, ...]:
+    """Bind one group's direct ortholog edges to the current source anchors.
+
+    An endpoint is bound only when its record index names the member's source
+    record and its feature resolves uniquely there. Edges with an unbound
+    endpoint are omitted, so missing or stale graph evidence is never guessed.
+    """
+
+    if orthogroups is None:
+        return ()
+    identity_by_protein: dict[str, tuple[int, AlignmentAnchorIdentity]] = {}
+    for member in orthogroups.orthogroups.get(group_id, ()):
+        if not 0 <= member.record_index < len(collection.records):
+            continue
+        provenance = collection.provenance[member.record_index]
+        if member.record_id and member.record_id != provenance.source_record_id:
+            continue
+        candidate = _similarity_candidate_from_orthogroup_member(collection, member)
+        if candidate.identity_is_unique:
+            identity_by_protein[member.protein_id] = (member.record_index, candidate.anchor)
+    edges = []
+    for edge in orthogroups.ortholog_edges_by_orthogroup_id.get(group_id, ()):
+        query = identity_by_protein.get(edge.query_protein_id)
+        subject = identity_by_protein.get(edge.subject_protein_id)
+        if query is None or subject is None or (query[0], subject[0]) != (
+            edge.query_record_index, edge.subject_record_index,
+        ):
+            continue
+        edges.append(AlignmentEvidenceEdge(
+            group_id=group_id, query=query[1], subject=subject[1], edge_kind=str(edge.edge_kind),
+        ))
+    return tuple(edges)
 
 
 def _similarity_candidate_from_orthogroup_member(

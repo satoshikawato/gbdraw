@@ -101,10 +101,8 @@ row.
 
 The Linear **Comparison** command group has **No comparison**, **Run LOSAT**,
 and **Upload BLAST TSV** buttons. Each button applies one choice to all
-positional adjacent pairs. These are bulk commands rather than a complete list
-of possible current states. The separate **Current:** status reports the
-resolved state; a selected or mixed plan appears as **Current: Selected pairs
-(N; ...)** with a **Custom** badge.
+positional adjacent pairs. The button that matches the resolved plan is pressed;
+a selected or mixed plan presses none of them and shows a **Custom** badge.
 
 Open **Selected pairs (N)** to change the source or uploaded file for one pair,
 omit a pair, or select **Add** and define an explicit non-adjacent pair. The

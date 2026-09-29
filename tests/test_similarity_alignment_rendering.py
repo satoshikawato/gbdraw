@@ -24,7 +24,7 @@ from gbdraw.api import (
     RegionAnnotation,
     parse_record_selector,
 )
-from gbdraw.analysis.protein_colinearity import OrthogroupMember, OrthogroupResult
+from gbdraw.analysis.protein_colinearity import OrthogroupMember, OrthogroupResult, OrthologEdge
 from gbdraw.api.options import (
     LinearDiagramOptions,
     LinearMultiRecordOptions,
@@ -34,6 +34,7 @@ from gbdraw.api.options import (
 from gbdraw.api.record_planning import (
     ResolvedRecordCollection,
     resolve_cli_similarity_alignment_plan,
+    similarity_alignment_evidence_edges,
 )
 from gbdraw.api.diagram import LinearDiagramMetadata
 from gbdraw.api.request_render import build_request_diagram, plan_linear_request
@@ -820,6 +821,41 @@ def test_cli_adapter_is_exact_noninteractive_and_reports_record_candidates(
     assert missing.records[1].rationale is (
         AlignmentResolutionRationale.SKIPPED_NO_CANDIDATE
     )
+
+
+def test_evidence_edges_bind_only_members_of_their_current_source_record() -> None:
+    first = _record("first", 100, 10, 20, protein_id="ref-protein")
+    second = _record("second", 100, 30, 40, protein_id="target-a")
+    planned = plan_linear_request(LinearDiagramRequest(records=(
+        RecordInput(InMemoryRecordSource(first), record_key="first"),
+        RecordInput(InMemoryRecordSource(second), record_key="second"),
+    )))
+    collection = ResolvedRecordCollection(planned.records, planned.provenance)
+    edge = OrthologEdge(
+        orthogroup_id="og-1", source_rbh_orthogroup_id=None, target_rbh_orthogroup_id=None,
+        query_protein_id="ref-protein", subject_protein_id="target-a",
+        query_record_index=0, subject_record_index=1, edge_kind="rbh",
+        render_role="display_edge", path_id=None, identity=90.0, evalue=1e-20,
+        bitscore=100.0, alignment_length=10,
+    )
+    orthogroups = replace(
+        _orthogroups_for_collection(collection),
+        ortholog_edges_by_orthogroup_id={"og-1": (edge,)},
+    )
+    edges = similarity_alignment_evidence_edges(collection, orthogroups, "og-1")
+    assert [(e.query.record_key, e.subject.record_key, e.edge_kind) for e in edges] == [
+        ("first", "second", "rbh")
+    ]
+    assert similarity_alignment_evidence_edges(collection, orthogroups, "og-2") == ()
+    assert similarity_alignment_evidence_edges(collection, None, "og-1") == ()
+
+    # After a reorder the saved record indexes name the other record. A
+    # source-feature-index fallback would bind each endpoint to the other
+    # record's member, so the source record identity must reject both.
+    swapped = ResolvedRecordCollection(
+        tuple(reversed(planned.records)), tuple(reversed(planned.provenance))
+    )
+    assert similarity_alignment_evidence_edges(swapped, orthogroups, "og-1") == ()
 
 
 def test_supplied_plan_does_not_invoke_protein_analysis(

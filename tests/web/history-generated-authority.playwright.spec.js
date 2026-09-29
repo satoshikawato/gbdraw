@@ -6,37 +6,39 @@ const { semantics } = require('./helpers/visual-state.cjs');
 const { seeds, load, generate, snapshot, download, popup, closeEditor } = require('./helpers/mode-transition.cjs');
 const { evaluateWithRetainedPromise } = require('./helpers/app-lifecycle.cjs');
 
-const status = async (page, edit = null) => {
+// PD-OI-037 revision 2: there is no derived application status. Draft edits stay
+// free of Worker, byte, digest, and SVG-clone work, and never replace the
+// committed canonical request, which is the applied authority.
+const noDerivedStatus = async (page, edit = null) => {
   const current = await page.evaluate(async edit => {
-  const { getGenerationApplicationStatus } = await import('./js/services/config.js');
-  const calls = [], originals = [];
-  const spy = (owner, key) => {
-    const original = owner[key];
-    originals.push(() => { owner[key] = original; });
-    owner[key] = () => { calls.push(key); throw new Error(`Unexpected Status side effect: ${key}`); };
-  };
-  for (const key of ['Worker', 'atob', 'btoa']) spy(window, key);
-  for (const key of ['arrayBuffer', 'text']) spy(Blob.prototype, key);
-  spy(crypto.subtle, 'digest'); spy(SVGElement.prototype, 'cloneNode');
-  try {
-    if (edit) {
-      const { state } = await import('./js/state.js');
-      state.adv[edit.field] = edit.value;
-      await window.Vue.nextTick();
-    }
-    const current = getGenerationApplicationStatus();
-    const feedback = window.__GBDRAW_APP__.generationApplicationFeedback;
-    return { ...current, feedback, calls };
-  }
-  finally { originals.reverse().forEach(restore => restore()); }
+    const { getCommittedCanonicalRenderRequest } = await import('./js/services/config.js');
+    const calls = [], originals = [];
+    const spy = (owner, key) => {
+      const original = owner[key];
+      originals.push(() => { owner[key] = original; });
+      owner[key] = () => { calls.push(key); throw new Error(`Unexpected draft-edit side effect: ${key}`); };
+    };
+    for (const key of ['Worker', 'atob', 'btoa']) spy(window, key);
+    for (const key of ['arrayBuffer', 'text']) spy(Blob.prototype, key);
+    spy(crypto.subtle, 'digest'); spy(SVGElement.prototype, 'cloneNode');
+    try {
+      if (edit) {
+        const { state } = await import('./js/state.js');
+        state.adv[edit.field] = edit.value;
+        await window.Vue.nextTick();
+      }
+      return { committed: getCommittedCanonicalRenderRequest(), calls };
+    } finally { originals.reverse().forEach(restore => restore()); }
   }, edit);
-  const label = { clean:'Applied', pending:'Pending', unknown:'Unknown', invalid:'Invalid settings', ungenerated:'Not generated' }[current.status];
-  await expect(page.locator('[data-generation-application-feedback] strong')).toHaveText(label);
-  await expect(page.locator('[data-generation-application-summary] strong')).toHaveText(label);
-  expect(current.feedback.label).toBe(label);
+  await expect(page.locator('[data-generation-application-feedback]')).toHaveCount(0);
+  await expect(page.locator('[data-generation-application-summary]')).toHaveCount(0);
   expect(current.calls).toEqual([]);
   return current;
 };
+const committedScaleInterval = async page => (await noDerivedStatus(page))
+  .committed?.diagramOptions?.configOverrides?.['objects.scale.interval'] ?? null;
+const draftAdv = (page, field) => page.evaluate(async field =>
+  (await import('./js/services/config.js')).buildConfigData().adv[field], field);
 
 const hash = value => createHash('sha256').update(value).digest('hex');
 const inspect = async (page, testInfo, name) => {
@@ -70,23 +72,23 @@ test('Undo Generate restores request A and Result A while preserving draft B thr
   try {
     await generate(page);
     const a = await inspect(page, testInfo, 'a');
-    expect(await status(page)).toMatchObject({ status:'clean', calls:[] });
+    await noDerivedStatus(page);
     await page.locator('summary[aria-label="Labels"]').click();
     const labels = page.locator('#circular-label-mode');
     await labels.focus();
     await labels.selectOption('none');
     await labels.press('Tab');
     await expect.poll(() => page.evaluate(() => window.__GBDRAW_HISTORY__.undoLabel())).toBe('Change setting');
-    expect(await status(page)).toMatchObject({ status:'pending', calls:[] });
+    await noDerivedStatus(page);
     await generate(page);
     const b = await inspect(page, testInfo, 'b');
-    expect(await status(page)).toMatchObject({ status:'clean', calls:[] });
+    await noDerivedStatus(page);
     expect(b.request).not.toEqual(a.request);
     expect(b.selected).not.toBe(a.selected);
 
     await page.evaluate(() => window.__GBDRAW_HISTORY__.undo());
     const restored = await inspect(page, testInfo, 'undo');
-    expect(await status(page)).toMatchObject({ status:'pending', calls:[] });
+    await noDerivedStatus(page);
     expectArtifact(restored, a);
     expect(restored.editable).toEqual(b.editable);
     await expect(labels).toHaveValue('none');
@@ -101,16 +103,16 @@ test('Undo Generate restores request A and Result A while preserving draft B thr
       const loaded = await inspect(fresh, testInfo, 'fresh-load');
       expectArtifact(loaded, a);
       expect(loaded.editable).toEqual(b.editable);
-      expect(await status(fresh)).toMatchObject({ status:'pending', calls:[] });
+      await noDerivedStatus(fresh);
       await generate(fresh);
       expectArtifact(await inspect(fresh, testInfo, 'fresh-generate'), b);
-      expect(await status(fresh)).toMatchObject({ status:'clean', calls:[] });
+      await noDerivedStatus(fresh);
       expect(fresh.externalRequests).toEqual([]);
     } finally { await fresh.context().close(); }
 
     await page.evaluate(() => window.__GBDRAW_HISTORY__.redo());
     const redone = await inspect(page, testInfo, 'redo');
-    expect(await status(page)).toMatchObject({ status:'clean', calls:[] });
+    await noDerivedStatus(page);
     expectArtifact(redone, b);
     expect(redone.editable).toEqual(b.editable);
     await page.evaluate(() => window.__GBDRAW_HISTORY__.undo());
@@ -123,7 +125,7 @@ test('Undo Generate restores request A and Result A while preserving draft B thr
 });
 
 
-test('Live palette and its History retain a separate scale Pending', async ({ browser }) => {
+test('Live palette and its History keep the scale draft out of the committed request', async ({ browser }) => {
   test.setTimeout(180000);
   const page = await load(browser);
   try {
@@ -138,20 +140,18 @@ test('Live palette and its History retain a separate scale Pending', async ({ br
         await window.Vue.nextTick();
       });
     });
-    const current = await status(page);
-    expect(current).toMatchObject({status:'pending',calls:[]});
-    expect(current.differences.some(path=>path.includes('scale.interval'))).toBe(true);
+    expect(await committedScaleInterval(page)).not.toBe(12345);
     const after = await page.evaluate(() => window.__GBDRAW_APP__.results[0].content);
     expect(after).not.toBe(before);
     for (const action of ['undo','redo']) {
       await page.evaluate(action => window.__GBDRAW_HISTORY__[action](),action);
-      expect(await status(page)).toMatchObject({status:'pending',calls:[]});
+      await noDerivedStatus(page);
     }
     await page.evaluate(async () => {
       const { state } = await import('./js/state.js'); state.adv.scale_interval = null;
       await window.Vue.nextTick();
     });
-    expect(await status(page)).toMatchObject({status:'clean',calls:[]});
+    await noDerivedStatus(page);
     await page.locator('summary[aria-label="Colors"]').click();
     const paletteHelp=page.locator('[data-palette-application-help]');
     await expect(paletteHelp).toContainText('Live edit');
@@ -161,7 +161,7 @@ test('Live palette and its History retain a separate scale Pending', async ({ br
     const next=await page.evaluate(()=>window.__GBDRAW_APP__.paletteNames.find(name=>name!==window.__GBDRAW_APP__.selectedPalette));
     await page.getByRole('combobox',{name:'Palette',exact:true}).selectOption(next);
     await expect(page.locator('[data-default-color-application-help]')).toContainText('Applies on Generate');
-    expect((await status(page)).status).toBe('pending');
+    await noDerivedStatus(page);
     expect(await page.evaluate(()=>window.__GBDRAW_APP__.results[0].content)).toBe(applied);
     await page.evaluate(async()=>{
       const {state}=await import('./js/state.js');state.currentColors.value={...state.currentColors.value,CDS:'#345678'};
@@ -172,12 +172,12 @@ test('Live palette and its History retain a separate scale Pending', async ({ br
     await expect(paletteHelp).toContainText('Live edit');
     await expect(page.locator('[data-default-color-application-help]')).toContainText('Live edit');
     expect(await page.evaluate(()=>window.__GBDRAW_APP__.results[0].content)).not.toBe(applied);
-    expect((await status(page)).status).toBe('clean');
+    await noDerivedStatus(page);
   } finally { await page.context().close(); }
 });
 
 
-test('Live global stroke advances only its applied fields and preserves scale Pending', async ({ browser }) => {
+test('Live global stroke keeps the scale draft out of the committed request', async ({ browser }) => {
   test.setTimeout(180000);
   const page = await load(browser);
   try {
@@ -190,33 +190,31 @@ test('Live global stroke advances only its applied fields and preserves scale Pe
         await window.Vue.nextTick();
       });
     });
-    const current = await status(page);
-    expect(current).toMatchObject({status:'pending',calls:[]});
-    expect(current.differences.every(path=>path.includes('scale.interval'))).toBe(true);
+    expect(await committedScaleInterval(page)).not.toBe(12345);
     expect(await page.locator('.gbdraw-preview-surface svg path[data-gbdraw-feature-id][data-gbdraw-feature-part="block"]').first().getAttribute('stroke-width')).toBe('2');
     await page.evaluate(async () => {
       const { state } = await import('./js/state.js');state.adv.scale_interval = null;
       await window.Vue.nextTick();
     });
-    expect(await status(page)).toMatchObject({status:'clean',calls:[]});
+    await noDerivedStatus(page);
     await page.evaluate(() => window.__GBDRAW_HISTORY__.undo());
-    expect((await status(page)).status).not.toBe('clean');
+    await noDerivedStatus(page);
     await page.evaluate(() => window.__GBDRAW_HISTORY__.redo());
-    expect(await status(page)).toMatchObject({status:'pending',calls:[]});
+    await noDerivedStatus(page);
   } finally { await page.context().close(); }
 });
 
 
 for (const mode of ['circular', 'linear']) {
-  test(`S04 ${mode} Pending and live edits continue through Save/Load, Export, Generate and History`, async ({ browser }, info) => {
+  test(`S04 ${mode} draft and live edits continue through Save/Load, Export, Generate and History`, async ({ browser }, info) => {
     test.setTimeout(360000);
     const page = await load(browser, seeds[mode]);
     let fresh;
     try {
       // A saved Result is displayed without generation or assuming its opaque tables match.
-      await status(page);
+      await noDerivedStatus(page);
       await generate(page);
-      expect((await status(page)).status).toBe('clean');
+      await noDerivedStatus(page);
       const field = mode === 'circular' ? 'scale_interval' : 'scale_font_size';
       const draftValue = mode === 'circular' ? 12345 : 19;
       const prior = await page.evaluate(async ({field,draftValue}) => {
@@ -225,7 +223,7 @@ for (const mode of ['circular', 'linear']) {
         await window.__GBDRAW_HISTORY__.runUndoable('Scale draft', () => { state.adv[field] = draftValue; });
         return value;
       }, {field,draftValue});
-      expect((await status(page)).status).toBe('pending');
+      await noDerivedStatus(page);
       await page.evaluate(async () => {
         const { state } = await import('./js/state.js');
         state.autoLabelReflowEnabled.value = false;
@@ -243,33 +241,25 @@ for (const mode of ['circular', 'linear']) {
       expect(edited.editable.adv[field]).toBe(draftValue);
       expect((await snapshot(page)).mounted).toContain('S04 retained label');
       expect((await snapshot(page)).mounted).toContain('#123456');
-      expect((await status(page)).status).toBe('pending');
+      await noDerivedStatus(page);
       const history = await page.evaluate(() => [window.__GBDRAW_HISTORY__.getUndoCount(), window.__GBDRAW_HISTORY__.getRedoCount()]);
-      await page.evaluate(() => {
-        const region = document.querySelector('[data-generation-application-announcement]');
-        window.s04Announcements = [];
-        new MutationObserver(() => window.s04Announcements.push(region.textContent))
-          .observe(region, { childList:true, subtree:true, characterData:true });
-      });
-      // A changing Pending value refreshes the visible observation, not the live-region text.
+      await expect(page.locator('[data-generation-application-announcement]')).toHaveCount(0);
+      // Draft edits keep the Result, History, and committed request unchanged.
       for (const value of [draftValue+1, draftValue+2, draftValue]) {
         // Keep the byte/hash/Worker/clone spies installed through Vue's render,
         // so this exercises recomputation via the UI wiring, not a cached getter.
-        await status(page,{field,value});
+        await noDerivedStatus(page,{field,value});
       }
-      expect(await page.evaluate(() => window.s04Announcements)).toEqual([]);
       expect(await page.evaluate(() => [window.__GBDRAW_HISTORY__.getUndoCount(), window.__GBDRAW_HISTORY__.getRedoCount()])).toEqual(history);
       await page.evaluate(async ({field,prior}) => {
         const { state } = await import('./js/state.js');state.adv[field]=prior;await window.Vue.nextTick();
       }, {field,prior});
-      expect((await status(page)).status).toBe('clean');
+      await noDerivedStatus(page);
       await page.evaluate(async ({field,draftValue}) => {
         const { state } = await import('./js/state.js');state.adv[field]=draftValue;await window.Vue.nextTick();
       },{field,draftValue});
-      expect((await status(page)).status).toBe('pending');
-      expect(await page.evaluate(() => window.s04Announcements.length)).toBe(2);
-      await expect(page.locator('[data-generation-application-announcement]')).toHaveAttribute('aria-live','polite');
-      await expect(page.getByRole('button',{name:'Generate Diagram',exact:true})).toHaveAccessibleDescription(/recalculates placement and resets zoom.*Undo restores/);
+      await noDerivedStatus(page);
+      await expect(page.getByRole('button',{name:'Generate Diagram',exact:true})).not.toHaveAccessibleDescription(/recalculates placement/);
       await expect(page.getByRole('button',{name:'Save Session',exact:true})).toHaveAccessibleDescription(/current Result.*draft.*does not Generate/);
       await expect(page.getByRole('button',{name:'SVG',exact:true})).toHaveAccessibleDescription(/Export outputs the current Result.*Neither applies pending/);
       const file=info.outputPath(`${mode}-pending.gbdraw-session.json.gz`);
@@ -286,17 +276,17 @@ for (const mode of ['circular', 'linear']) {
       expectArtifact(loaded,{...edited,selected:hash(admittedSaved)});
       expect(await semantics(fresh,(await snapshot(fresh)).result))
         .toEqual(await semantics(fresh,saved.results[0].content));
-      expect((await status(fresh)).status).toBe('pending');
+      await noDerivedStatus(fresh);
       // Record final actual rendered screens for visual inspection.
       await fresh.screenshot({path:info.outputPath(`${mode}-pending.png`),fullPage:true});
       await generate(fresh);
-      expect((await status(fresh)).status).toBe('clean');
+      await noDerivedStatus(fresh);
       const generated=await inspect(fresh,info,`${mode}-generated`);
       expect((await snapshot(fresh)).mounted).toContain('S04 retained label');
       expect((await snapshot(fresh)).mounted).toContain('#123456');
       await fresh.evaluate(() => window.__GBDRAW_HISTORY__.undo());
       expectArtifact(await inspect(fresh,info,`${mode}-undo`),loaded);
-      expect((await status(fresh)).status).toBe('pending');
+      await noDerivedStatus(fresh);
       await fresh.evaluate(() => window.__GBDRAW_HISTORY__.redo());
       const redone=await inspect(fresh,info,`${mode}-redo`);
       expect(redone.selected).toBe(generated.selected);
@@ -306,7 +296,7 @@ for (const mode of ['circular', 'linear']) {
       // Compare the existing comprehensive visual oracle as well as Result bytes.
       expect(await semantics(fresh,readFileSync(info.outputPath(`${mode}-redo.svg`),'utf8')))
         .toEqual(await semantics(fresh,readFileSync(info.outputPath(`${mode}-generated.svg`),'utf8')));
-      expect((await status(fresh)).status).toBe('clean');
+      await noDerivedStatus(fresh);
       expect(page.externalRequests).toEqual([]);expect(fresh.externalRequests).toEqual([]);
     } finally { await page.context().close();if(fresh) await fresh.context().close(); }
   });
@@ -314,7 +304,7 @@ for (const mode of ['circular', 'linear']) {
 
 
 for (const mode of ['circular','linear']) {
-  test(`S04 ${mode} live rerender applying/error and retry preserve separate Pending`, async ({ browser }, info) => {
+  test(`S04 ${mode} live rerender applying/error and retry keep the draft separate`, async ({ browser }, info) => {
     test.setTimeout(240000);
     const page=await load(browser,seeds[mode]);
     try {
@@ -333,20 +323,19 @@ for (const mode of ['circular','linear']) {
       await page.getByRole('button',{name:'Apply Label',exact:true}).click();
       await expect.poll(()=>page.evaluate(()=>Boolean(window.failS04Reflow)),{timeout:180000}).toBe(true);
       await expect(page.locator('[data-live-application-feedback]')).toContainText('Live edit applying');
-      expect((await status(page)).status).toBe('pending');
+      await noDerivedStatus(page);
       const direct=await snapshot(page);
       expect(direct.mounted).toContain('S04 direct edit retained');
       const counts=await page.evaluate(()=>[window.__GBDRAW_HISTORY__.getUndoCount(),window.__GBDRAW_HISTORY__.getRedoCount()]);
       await page.evaluate(()=>window.failS04Reflow());
       await expect.poll(()=>page.evaluate(()=>window.__GBDRAW_APP__.labelReflowProcessing),{timeout:180000}).toBe(false);
       await expect(page.locator('[data-live-application-feedback]')).toContainText('Live edit failed');
-      const failed=await status(page);
-      expect(failed.status).toBe('pending');expect(failed.unknown).toContain('$live-render');
+      await noDerivedStatus(page);
       await page.evaluate(async mode=>{
         const {state}=await import('./js/state.js');state.adv[mode==='circular'?'scale_interval':'scale_font_size']=window.s04ScalePrior;
         await window.Vue.nextTick();
       },mode);
-      expect((await status(page)).status).toBe('unknown');
+      await noDerivedStatus(page);
       await expect(page.locator('[data-live-application-feedback]')).toContainText('Live edit failed');
       await page.evaluate(async mode=>{
         const {state}=await import('./js/state.js');state.adv[mode==='circular'?'scale_interval':'scale_font_size']=mode==='circular'?12345:19;
@@ -365,7 +354,7 @@ for (const mode of ['circular','linear']) {
       await page.getByRole('button',{name:'Apply Label',exact:true}).click();
       await expect.poll(()=>page.evaluate(()=>({processing:window.__GBDRAW_APP__.labelReflowProcessing,error:window.__GBDRAW_APP__.labelReflowLastError})),{timeout:180000}).toEqual({processing:false,error:null});
       await expect(page.locator('[data-live-application-feedback]')).toHaveCount(0);
-      expect((await status(page)).status).toBe('pending');
+      await noDerivedStatus(page);
       expect((await snapshot(page)).mounted).toContain('S04 retry succeeds');
       expect(page.externalRequests).toEqual([]);
     } finally {await page.context().close();}
@@ -374,13 +363,13 @@ for (const mode of ['circular','linear']) {
 
 
 for (const mode of ['linear', 'circular']) {
-  test(`${mode} saved live block width restores its applied basis and separate Pending`, async ({ browser }, info) => {
+  test(`${mode} saved live block width survives Save and Load with a separate draft`, async ({ browser }, info) => {
     test.setTimeout(240000);
     const page = await load(browser, seeds[mode]);
     let fresh;
     try {
       await generate(page);
-      expect((await status(page)).status).toBe('clean');
+      await noDerivedStatus(page);
       await page.locator('input[aria-label="Block Stroke Width"]').evaluate(
         element => { element.closest('details').open = true; });
       const field = page.getByLabel('Block Stroke Width', { exact: true });
@@ -388,7 +377,7 @@ for (const mode of ['linear', 'circular']) {
       await field.press('Tab');
       const blocks = '.gbdraw-preview-surface path[data-gbdraw-feature-id][data-gbdraw-feature-part="block"]';
       await expect(page.locator(blocks).first()).toHaveAttribute('stroke-width', '2');
-      expect((await status(page)).status).toBe('clean');
+      await noDerivedStatus(page);
       const before = await snapshot(page);
       const savedPath = info.outputPath(`${mode}-live-width.json.gz`);
       const saved = JSON.parse(gunzipSync(await download(page, 'Save Session', savedPath)));
@@ -396,9 +385,7 @@ for (const mode of ['linear', 'circular']) {
       expect(saved.renderRequest).toEqual(before.request);
       fresh = await load(browser, savedPath);
       await expect(fresh.locator(blocks).first()).toHaveAttribute('stroke-width', '2');
-      const restored = await status(fresh);
-      expect(restored.differences).toEqual([]);
-      expect(restored.status).toBe(mode === 'linear' ? 'clean' : 'unknown');
+      await noDerivedStatus(fresh);
       expect((await snapshot(fresh)).request).toEqual(before.request);
       // Admission sanitizes persisted SVG; compare the actual sanitized Result,
       // rather than mistaking mandatory normalization for a render operation.
@@ -407,18 +394,14 @@ for (const mode of ['linear', 'circular']) {
           .sanitizeSvgContent(content), before.result)).toBe((await snapshot(fresh)).result);
       const activity = await fresh.evaluate(() => window.__GBDRAW_DIAGRAM_WORKER_ACTIVITY__);
       expect(activity?.constructions || 0).toBe(0);
-      await status(fresh, { field: 'scale_interval', value: 12345 });
-      const pending = await status(fresh);
-      expect(pending.status).toBe('pending');
-      expect(pending.differences.every(path => path.includes('scale.interval'))).toBe(true);
-      if (mode === 'circular') expect(pending.unknown).toContain('$.records.0.selector');
+      await noDerivedStatus(fresh, { field: 'scale_interval', value: 12345 });
+      expect(await committedScaleInterval(fresh)).not.toBe(12345);
       const pendingPath = info.outputPath(`${mode}-pending-width.json.gz`);
       await download(fresh, 'Save Session', pendingPath);
       await fresh.context().close();
       fresh = await load(browser, pendingPath);
-      const roundTrip = await status(fresh);
-      expect(roundTrip.status).toBe('pending');
-      expect(roundTrip.differences.every(path => path.includes('scale.interval'))).toBe(true);
+      expect(await draftAdv(fresh, 'scale_interval')).toBe(12345);
+      expect(await committedScaleInterval(fresh)).not.toBe(12345);
       expect((await snapshot(fresh)).request).toEqual(before.request);
       const rollback = await evaluateWithRetainedPromise(fresh, async () => {
         const config = await import('./js/services/config.js');
@@ -435,7 +418,6 @@ for (const mode of ['linear', 'circular']) {
           status: result.status, error: { code: result.error?.code, stage: result.error?.stage },
           sameRequest: current.committedCanonicalSession === prior.committedCanonicalSession,
           sameResources: current.activeSessionResourceTable === prior.activeSessionResourceTable,
-          sameApplied: current.appliedGenerationIntent === prior.appliedGenerationIntent,
           sameDraft: JSON.stringify(config.buildConfigData()) === JSON.stringify(draft),
           sameHistory: JSON.stringify(counts) === JSON.stringify([
             window.__GBDRAW_HISTORY__.getUndoCount(), window.__GBDRAW_HISTORY__.getRedoCount()
@@ -443,14 +425,11 @@ for (const mode of ['linear', 'circular']) {
         };
       });
       expect(rollback).toEqual({ status: 'error', error: { code: 'UNKNOWN', stage: 'request-validation' },
-        sameRequest: true, sameResources: true, sameApplied: true, sameDraft: true,
+        sameRequest: true, sameResources: true, sameDraft: true,
         sameHistory: true, width: 2 });
-      expect(await status(fresh)).toMatchObject({ status: 'pending', differences: roundTrip.differences,
-        unknown: roundTrip.unknown });
+      expect(await draftAdv(fresh, 'scale_interval')).toBe(12345);
+      expect(await committedScaleInterval(fresh)).not.toBe(12345);
       await expect(fresh.locator(blocks).first()).toHaveAttribute('stroke-width', '2');
-      await info.attach(`${mode}-round-trip-status`, {
-        body: JSON.stringify({ restored, pending, roundTrip }), contentType: 'application/json'
-      });
       expect(page.externalRequests).toEqual([]);
       expect(fresh.externalRequests).toEqual([]);
     } finally {
@@ -460,24 +439,20 @@ for (const mode of ['linear', 'circular']) {
   });
 }
 
-test('Unedited Circular Save and fresh Load leaves unresolved selection Unknown', async ({ browser }, info) => {
+test('Unedited Circular Save and fresh Load keeps the committed request without Worker work', async ({ browser }, info) => {
   test.setTimeout(180000);
   const page = await load(browser);
   let fresh;
   try {
     await generate(page);
-    expect((await status(page)).status).toBe('clean');
+    await noDerivedStatus(page);
     const before = await snapshot(page);
     const path = info.outputPath('unedited-circular.json.gz');
     await download(page, 'Save Session', path);
     fresh = await load(browser, path);
     expect((await snapshot(fresh)).request).toEqual(before.request);
-    const restored = await status(fresh);
-    expect(restored.status).toBe('unknown');
-    expect(restored.differences).toEqual([]);
-    expect(restored.unknown).toContain('$.records.0.selector');
+    await noDerivedStatus(fresh);
     expect(await fresh.evaluate(() => window.__GBDRAW_DIAGRAM_WORKER_ACTIVITY__?.constructions || 0)).toBe(0);
-    await info.attach('unedited-circular-status', { body: JSON.stringify(restored), contentType: 'application/json' });
   } finally {
     await page.context().close();
     if (fresh) await fresh.context().close();

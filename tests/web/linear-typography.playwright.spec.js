@@ -152,7 +152,7 @@ test('Linear Accession and Length resolve independent Auto modes from rendered r
       .documentElement.textContent;
     return { overrides: request.diagramOptions.configOverrides, text };
   });
-  await expect(page.locator('[data-generation-application-feedback] strong')).toHaveText('Applied');
+  await expect(page.locator('[data-generation-application-feedback]')).toHaveCount(0);
   expect(shared.overrides['objects.definition.linear.show_accession']).toBe(true);
   expect(shared.overrides['objects.definition.linear.show_length']).toBe(false);
   expect(shared.text).toContain('NC_012920.1');
@@ -166,7 +166,7 @@ test('Linear Accession and Length resolve independent Auto modes from rendered r
   await secondRow.fill('2');
   await secondRow.press('Tab');
   await expect(accession.locator('option[value="auto"]')).toHaveText('Auto · Shown');
-  await expect(page.locator('[data-generation-application-feedback] strong')).toHaveText('Pending');
+  await expect(page.locator('[data-generation-application-feedback]')).toHaveCount(0);
   expect(await page.evaluate(() => ({
     accession: window.__GBDRAW_APP__.adv.linear_accession_visibility,
     length: window.__GBDRAW_APP__.adv.linear_length_visibility
@@ -196,14 +196,14 @@ test('Linear Accession and Length resolve independent Auto modes from rendered r
       .documentElement.textContent;
     return { overrides: request.diagramOptions.configOverrides, text };
   });
-  await expect(page.locator('[data-generation-application-feedback] strong')).toHaveText('Applied');
+  await expect(page.locator('[data-generation-application-feedback]')).toHaveCount(0);
   await focusAfterHistoryCapture(page, accession);
   await accession.selectOption('show');
-  await expect(page.locator('[data-generation-application-feedback] strong')).toHaveText('Applied');
+  await expect(page.locator('[data-generation-application-feedback]')).toHaveCount(0);
   await accession.selectOption('hide');
-  await expect(page.locator('[data-generation-application-feedback] strong')).toHaveText('Pending');
+  await expect(page.locator('[data-generation-application-feedback]')).toHaveCount(0);
   await accession.selectOption('auto');
-  await expect(page.locator('[data-generation-application-feedback] strong')).toHaveText('Applied');
+  await expect(page.locator('[data-generation-application-feedback]')).toHaveCount(0);
   expect(separate.overrides['objects.definition.linear.show_accession']).toBe(true);
   expect(separate.overrides['objects.definition.linear.show_length']).toBe(true);
   expect(separate.text).toContain('NC_012920.1');
@@ -228,7 +228,7 @@ test('Linear Accession and Length resolve independent Auto modes from rendered r
   const restoredDisclosure = page.locator('[data-linear-label-auto-layout]');
   await expect(restoredDisclosure).toContainText('Accession: Auto will hide');
   await expect(restoredDisclosure).toContainText('next successful Generate');
-  await expect(page.locator('[data-generation-application-feedback] strong')).toHaveText('Pending');
+  await expect(page.locator('[data-generation-application-feedback]')).toHaveCount(0);
   const savedResultText = await page.evaluate(() => new DOMParser()
     .parseFromString(window.__GBDRAW_APP__.results[0].content, 'image/svg+xml').documentElement.textContent);
   expect(savedResultText).toContain('NC_012920.1');
