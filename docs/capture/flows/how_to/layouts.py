@@ -42,6 +42,7 @@ from flows.web_capture import (
     assert_fixture_identity,
     assert_output_paths,
     capture_screenshot,
+    center_preview_diagram,
     fit_complete_linear_preview,
     generate_and_inspect,
     open_browser_capture,
@@ -135,7 +136,7 @@ def _write_complete_mitochondrial_container(path: Path) -> tuple[dict[str, Any],
 
 
 def _fit_complete_grid_preview(page: Page, target_zoom: str = "30%") -> None:
-    """Fit the complete 2 by 2 canvas in the public result viewport."""
+    """Center the complete 2 by 2 canvas in the visible Result Preview frame."""
 
     reset_zoom = page.get_by_role("button", name="Reset zoom", exact=True)
     zoom_out = page.get_by_role("button", name="Zoom out", exact=True)
@@ -147,22 +148,9 @@ def _fit_complete_grid_preview(page: Page, target_zoom: str = "30%") -> None:
         raise AssertionError(
             f"Could not reach the documented Circular preview zoom: {target_zoom}"
         )
+    page.wait_for_timeout(250)
 
-    result_region = page.get_by_role("region", name="Result Preview", exact=True)
-    box = result_region.bounding_box()
-    if box is None:
-        raise AssertionError("Could not resolve the Circular result preview bounds")
-    page.mouse.move(
-        box["x"] + (box["width"] * 0.82),
-        box["y"] + (box["height"] * 0.42),
-    )
-    page.mouse.down()
-    page.mouse.move(
-        box["x"] + (box["width"] * 0.225),
-        box["y"] + (box["height"] * 0.50),
-        steps=12,
-    )
-    page.mouse.up()
+    center_preview_diagram(page, label="Circular grid")
     page.evaluate("() => window.getSelection()?.removeAllRanges()")
     selection_range_count = page.evaluate(
         "() => window.getSelection()?.rangeCount ?? 0"
@@ -217,7 +205,11 @@ def capture_gui_circular_layout(
         prefix = page.get_by_label("Output Prefix", exact=True)
         prefix.fill("multi_record_circular")
         expect(prefix).to_have_value("multi_record_circular")
+        # Layout starts closed in Circular mode; open it before its controls.
+        layout = page.get_by_label("Layout", exact=True)
+        layout.click()
         multi_record = page.get_by_label("Multi-Record Canvas", exact=True)
+        expect(multi_record).to_be_visible()
         multi_record.check()
         expect(multi_record).to_be_checked()
 

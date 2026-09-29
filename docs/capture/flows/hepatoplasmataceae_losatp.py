@@ -238,6 +238,25 @@ def _configure_all_record_collinear(
     losatp_mode.select_option("collinear")
     expect(losatp_mode).to_have_value("collinear")
 
+    # Since 65f231af (#533), fresh Web Collinear leaves self-comparison
+    # orthogroup inference off and caps raw LOSATP hits at 5. The Gallery
+    # request and the CLI/Python recipes use inference with an unbounded raw
+    # search, so this Gallery reproduction selects those values explicitly.
+    infer_orthogroups = settings.get_by_role(
+        "checkbox", name="Infer orthogroups with self-comparisons", exact=True
+    )
+    expect(infer_orthogroups).not_to_be_checked()
+    infer_orthogroups.check()
+    expect(infer_orthogroups).to_be_checked()
+    max_target_seqs = settings.get_by_label("LOSATP Max target seqs", exact=True)
+    expect(max_target_seqs).to_have_value("5")
+    max_target_seqs.fill("")
+    max_target_seqs.press("Tab")
+    expect(max_target_seqs).to_have_value("")
+    expect(
+        settings.get_by_label("Member hits per protein", exact=True)
+    ).to_have_value("5")
+
     settings.get_by_label("Collinear max unit gap", exact=True).fill("0")
     settings.get_by_label(
         "Collinear minimum block genes", exact=True
@@ -282,6 +301,9 @@ def _configure_all_record_collinear(
         parallel_runs.select_option(index=0)
     advanced.get_by_label("Collinear diagonal drift", exact=True).fill("0")
     advanced.get_by_label("Collinear merge conflicts", exact=True).fill("1")
+    expect(
+        advanced.get_by_label("Collinear paralog links per group", exact=True)
+    ).to_have_value("2")
     page.get_by_label("Output Prefix", exact=True).fill(output_prefix)
     return settings, advanced
 
@@ -362,6 +384,9 @@ def _cache_state(page: Page) -> dict[str, Any]:
         () => ({
           mode: window.__GBDRAW_APP__?.losat?.blastp?.mode,
           scope: window.__GBDRAW_APP__?.losat?.blastp?.collinearSearchScope,
+          inferOrthogroups: window.__GBDRAW_APP__?.losat?.blastp?.collinearInferOrthogroups,
+          candidateLimit: window.__GBDRAW_APP__?.losat?.blastp?.candidateLimit ?? null,
+          memberMaxHits: window.__GBDRAW_APP__?.losat?.blastp?.orthogroupMemberMaxHits ?? null,
           telemetry: window.__GBDRAW_APP__?.lastRunInfo?.losatTelemetry ||
             globalThis.__GBDRAW_LAST_LOSAT_TELEMETRY__ || null,
           threading: window.__GBDRAW_APP__?.losatThreadingStatus || null,
@@ -392,6 +417,15 @@ def _assert_fresh_search(page: Page, *, evidence_scope: str) -> None:
     if state.get("mode") != "collinear" or state.get("scope") != evidence_scope:
         raise AssertionError(
             f"Collinear evidence scope is not {evidence_scope}: {state!r}"
+        )
+    if (
+        state.get("inferOrthogroups") is not True
+        or state.get("candidateLimit") is not None
+        or state.get("memberMaxHits") != 5
+    ):
+        raise AssertionError(
+            "The Collinear run does not use the Gallery inference and hit limits: "
+            f"{state!r}"
         )
     cache = state.get("cache", [])
     telemetry = state.get("telemetry") or {}
@@ -465,36 +499,137 @@ def _boxes_overlap(left: Mapping[str, float], right: Mapping[str, float]) -> boo
     )
 
 
-def _assert_input_capture_framing(page: Page) -> None:
-    depth_disclosures = page.get_by_role(
-        "button",
-        name=re.compile(r"^Depth tracks for file \d+$"),
-    )
-    for index in range(depth_disclosures.count()):
-        depth_disclosures.nth(index).click()
-    selected_files = page.get_by_role(
-        "group", name="GenBank / DDBJ File selection", exact=True
-    )
-    expect(selected_files).to_have_count(5)
-    selected_files.nth(4).evaluate(
-        "(element) => element.scrollIntoView({ block: 'center' })"
-    )
+def _center_span_in_scroll_pane(
+    first: Any, last: Any, *, include_first_heading: bool = False
+) -> dict[str, float]:
+    """Center first..last in their scrolling settings pane and return its bounds.
 
-    fourth_box = _require_bounding_box(selected_files.nth(3), "fourth input")
-    fifth_box = _require_bounding_box(selected_files.nth(4), "fifth input")
+    ``include_first_heading`` starts the span at the first control's wrapper so
+    the visible heading placed immediately above that control is included. A
+    span taller than the pane is aligned to keep the last control whole.
+    """
+
+    pane = first.evaluate(
+        """
+        (firstElement, options) => {
+          const lastElement = options.last;
+          let pane = firstElement.parentElement;
+          while (pane && !/(auto|scroll)/.test(getComputedStyle(pane).overflowY)) {
+            pane = pane.parentElement;
+          }
+          if (!pane || !pane.contains(lastElement)) return null;
+          const paneRect = pane.getBoundingClientRect();
+          const topElement = options.includeHeading
+            ? firstElement.parentElement
+            : firstElement;
+          const top = topElement.getBoundingClientRect().top;
+          const bottom = lastElement.getBoundingClientRect().bottom;
+          // Center a span that fits; otherwise keep the last control whole.
+          pane.scrollTop += bottom - top <= paneRect.height
+            ? ((top + bottom) - (paneRect.top + paneRect.bottom)) / 2
+            : bottom - paneRect.bottom + 1;
+          const bounds = pane.getBoundingClientRect();
+          return {
+            x: bounds.left,
+            y: bounds.top,
+            width: bounds.width,
+            height: bounds.height
+          };
+        }
+        """,
+        {"last": last.element_handle(), "includeHeading": include_first_heading},
+    )
+    if pane is None:
+        raise AssertionError("Could not resolve the settings scroll pane")
+    return pane
+
+
+def _assert_box_unclipped(
+    name: str, box: Mapping[str, float], settings_pane: Mapping[str, float]
+) -> None:
+    """Require one control box inside both the viewport and settings pane."""
+
     viewport = {
         "x": 0,
         "y": 0,
         "width": VIEWPORT_WIDTH,
         "height": VIEWPORT_HEIGHT,
     }
+    if not _box_is_inside(box, viewport, tolerance=0) or not _box_is_inside(
+        box, settings_pane, tolerance=0
+    ):
+        raise AssertionError(
+            f"The capture clips the {name}: {box!r}; settings pane={settings_pane!r}"
+        )
+
+
+def _assert_input_capture_framing(page: Page) -> None:
+    depth_disclosures = page.get_by_role(
+        "button",
+        name=re.compile(r"^Depth tracks for file \d+$"),
+    )
+    for index in range(depth_disclosures.count()):
+        disclosure = depth_disclosures.nth(index)
+        # Depth disclosures start closed; collapse only one left open.
+        if disclosure.evaluate(
+            "(summary) => Boolean(summary.closest('details')?.open)"
+        ):
+            disclosure.click()
+    selected_files = page.get_by_role(
+        "group", name="GenBank / DDBJ File selection", exact=True
+    )
+    expect(selected_files).to_have_count(5)
+    settings_pane = _center_span_in_scroll_pane(
+        selected_files.nth(3), selected_files.nth(4)
+    )
+    fourth_box = _require_bounding_box(selected_files.nth(3), "fourth input")
+    fifth_box = _require_bounding_box(selected_files.nth(4), "fifth input")
     for name, box in (("fourth input", fourth_box), ("fifth input", fifth_box)):
-        if not _box_is_inside(box, viewport, tolerance=0):
-            raise AssertionError(f"The input capture clips the {name}: {box!r}")
+        _assert_box_unclipped(name, box, settings_pane)
     if fourth_box["y"] + fourth_box["height"] > fifth_box["y"]:
         raise AssertionError(
             "The fourth and fifth input uploaders are not visibly ordered in "
             "the capture frame"
+        )
+
+
+def _frame_collinear_settings(settings: Any) -> None:
+    """Show LOSATP, Collinear blocks, inference, hit limits, and scope together."""
+
+    losat_mode = settings.get_by_role("group", name="LOSAT Mode", exact=True)
+    evidence_scope = settings.get_by_label("Collinear evidence scope", exact=True)
+    settings_pane = _center_span_in_scroll_pane(
+        losat_mode, evidence_scope, include_first_heading=True
+    )
+    for name, locator in (
+        (
+            "LOSATP button",
+            losat_mode.get_by_role("button", name="LOSATP", exact=True),
+        ),
+        (
+            "LOSATP mode",
+            settings.get_by_role("combobox", name="LOSATP mode", exact=True),
+        ),
+        (
+            "Max target seqs",
+            settings.get_by_label("LOSATP Max target seqs", exact=True),
+        ),
+        (
+            "Member hits per protein",
+            settings.get_by_label("Member hits per protein", exact=True),
+        ),
+        (
+            "orthogroup inference",
+            settings.get_by_role(
+                "checkbox",
+                name="Infer orthogroups with self-comparisons",
+                exact=True,
+            ),
+        ),
+        ("Evidence scope", evidence_scope),
+    ):
+        _assert_box_unclipped(
+            name, _require_bounding_box(locator, name), settings_pane
         )
 
 
@@ -986,9 +1121,7 @@ def capture_hepatoplasmataceae_collinear(
             output_prefix=output_prefix,
             evidence_scope=evidence_scope,
         )
-        settings.get_by_role(
-            "group", name="LOSAT Mode", exact=True
-        ).scroll_into_view_if_needed()
+        _frame_collinear_settings(settings)
         screenshots[screenshot_names["settings"]] = capture_screenshot(
             page, output_paths[screenshot_names["settings"]], "Linear"
         )

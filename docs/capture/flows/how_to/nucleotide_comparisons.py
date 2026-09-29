@@ -45,12 +45,14 @@ from flows.web_capture import (
     assert_fixture_identity,
     assert_output_paths,
     capture_screenshot,
+    center_preview_diagram,
     fit_complete_linear_preview,
     generate_and_inspect,
     linear_pair,
     open_browser_capture,
     open_linear_comparison_disclosure,
     select_linear_losat_mode,
+    set_feature_search_visible,
     wait_for_app_shell,
 )
 
@@ -817,36 +819,11 @@ def _fit_circular_ring_preview(page: Page) -> None:
         zoom_out.click()
     else:
         raise AssertionError("Could not reach the documented 50% Circular zoom")
-
-    search = page.get_by_role("searchbox", name="Search features", exact=True)
-    search_box = search.bounding_box()
-    if search_box is None:
-        raise AssertionError("Could not resolve the feature-search palette")
-    drag_x = search_box["x"] - 4
-    drag_y = search_box["y"] + search_box["height"] + 3
-    page.mouse.move(drag_x, drag_y)
-    page.mouse.down()
-    page.mouse.move(drag_x, 2, steps=10)
-    page.mouse.up()
-
-    result_region = page.get_by_role("region", name="Result Preview", exact=True)
-    preview_box = result_region.bounding_box()
-    if preview_box is None:
-        raise AssertionError("Could not resolve the Circular result preview")
-    y = preview_box["y"] + (preview_box["height"] * 0.72)
-    page.mouse.move(preview_box["x"] + (preview_box["width"] * 0.70), y)
-    page.mouse.down()
-    page.mouse.move(
-        preview_box["x"] + (preview_box["width"] * 0.26),
-        y,
-        steps=10,
-    )
-    page.mouse.up()
-    page.mouse.click(
-        preview_box["x"] + (preview_box["width"] * 0.82),
-        preview_box["y"] + (preview_box["height"] * 0.90),
-    )
     page.wait_for_timeout(250)
+
+    # The floating search palette would cover the ring legend and labels.
+    set_feature_search_visible(page, visible=False)
+    center_preview_diagram(page, label="Circular ring diagram")
 
 
 def capture_gui_circular_rings(
@@ -899,7 +876,10 @@ def capture_gui_circular_rings(
         species = page.get_by_label("Species", exact=True)
         species.fill("<i>Homo sapiens</i>")
         expect(species).to_have_value("<i>Homo sapiens</i>")
+        # Layout starts closed in Circular mode; open it before its controls.
+        page.get_by_label("Layout", exact=True).click()
         separate_strands = page.get_by_label("Separate Strands", exact=True)
+        expect(separate_strands).to_be_visible()
         separate_strands.uncheck()
         expect(separate_strands).not_to_be_checked()
         track_preset = page.get_by_label("Track Preset", exact=True)

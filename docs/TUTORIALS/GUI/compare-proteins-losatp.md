@@ -71,9 +71,8 @@ comparison ribbons.
 In **Comparison**, select **Run LOSAT** explicitly. Open **Settings** and choose
 the **LOSATP** button in **LOSAT Mode**, then choose **Similarity groups** from
 the **LOSATP mode** menu. Under **Comparison appearance**, set **Match style**
-to **Curve**, then enter the filter values. Continue past **Generate Diagram**,
-open **Advanced comparison and layout**, and set the deterministic runtime
-values.
+to **Curve**, then enter the filter values and the deterministic **Runtime and
+reproducibility** values.
 
 | Section | Control | Value |
 |---|---|---|
@@ -84,10 +83,10 @@ values.
 | Settings / Result filters | E-value | `0.01` |
 | Settings / Result filters | Minimum identity | `30` |
 | Settings / Result filters | Minimum length | `0` |
-| Advanced comparison and layout | Execution | Serial |
-| Advanced comparison and layout | Total threads | `1` |
-| Advanced comparison and layout | Parallel runs | `1 run` |
-| Advanced comparison and layout | Threads per run | `1` |
+| Settings / Runtime and reproducibility | Execution | Serial |
+| Settings / Runtime and reproducibility | Total threads | `1` |
+| Settings / Runtime and reproducibility | Parallel runs | `1 run` |
+| Settings / Runtime and reproducibility | Threads per run | `1` |
 | Layout | Separate Strands | Off |
 | Basic | Output Prefix | `bgc_losatp_groups` |
 

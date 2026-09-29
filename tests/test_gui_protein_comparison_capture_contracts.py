@@ -534,6 +534,13 @@ def test_hepatoplasmataceae_collinear_guards_pin_evidence_and_span_fasta() -> No
         'settings.get_by_label("Collinear evidence scope", exact=True).select_option(',
         '"Advanced comparison and layout"',
         'if evidence_scope not in {"all", "adjacent"}',
+        'name="Infer orthogroups with self-comparisons", exact=True',
+        "infer_orthogroups.check()",
+        'settings.get_by_label("LOSATP Max target seqs", exact=True)',
+        'max_target_seqs.fill("")',
+        'state.get("inferOrthogroups") is not True',
+        'state.get("candidateLimit") is not None',
+        "_frame_collinear_settings(settings)",
         'expected_jobs = 25 if evidence_scope == "all" else 13',
         'threads.select_option("8" if evidence_scope == "all" else "auto")',
         'parallel_runs.select_option("4")',
@@ -709,6 +716,9 @@ def test_protein_comparison_tutorials_and_evidence_record_the_complete_recipe() 
         "source_record_upload_count=5",
         PINNED_NCBI_REVISIONS_ASSERTION,
         "initial_cache_entries=0",
+        "infer_orthogroups=true",
+        "max_target_seqs=unbounded",
+        "member_hits_per_protein=5",
         "input_frame.final_two_uploaders_visible=true",
         "selected_pairs.boundary_4_to_5_verified=true",
         "baseline_definition_zoom=80%",
@@ -724,6 +734,9 @@ def test_protein_comparison_tutorials_and_evidence_record_the_complete_recipe() 
     } <= set(gallery_chapter["execution"]["assertions"])
     assert "does not load a Gallery session" in gallery_collinear
     assert "Evidence scope | Adjacent pairs" in gallery_collinear
+    assert "Infer orthogroups with self-comparisons | Selected" in gallery_collinear
+    assert "Max target seqs | Blank (**Unbounded**)" in gallery_collinear
+    assert "Advanced comparison and layout | Execution" not in gallery_collinear
     assert "Open **Selected pairs (4)**" in gallery_collinear
     assert "500 rendered Collinear match elements" in gallery_collinear
     normalized_gallery_collinear = " ".join(gallery_collinear.split())
@@ -807,6 +820,9 @@ def test_protein_comparison_tutorials_and_evidence_record_the_complete_recipe() 
         PINNED_NCBI_REVISIONS_ASSERTION,
         "initial_cache_entries=0",
         "evidence_scope=all",
+        "infer_orthogroups=true",
+        "max_target_seqs=unbounded",
+        "member_hits_per_protein=5",
         "total_threads=32",
         "parallel_runs=4",
         "threads_per_run=8",
