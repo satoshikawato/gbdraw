@@ -81,7 +81,8 @@ test('unsafe keys, malformed JSON/gzip, fatal UTF-8 and Worker crash preserve th
     const error = await page.evaluate(() => window.__GBDRAW_APP__.errorLog);
     expect(error).toMatchObject(index === 1
       ? { code: 'INPUT_INVALID', operation: 'unknown', stage: 'request-validation', context: { field: 'schema', reason: 'JSON_FORMAT' } }
-      : { code: 'UNKNOWN', operation: 'unknown', stage: 'request-validation' });
+      // Bytes that are not UTF-8 or not valid gzip fail while the Worker reads them.
+      : { code: 'UNKNOWN', operation: 'unknown', stage: index === 0 ? 'request-validation' : 'read' });
     expect(JSON.stringify(error)).not.toMatch(/private broken|__proto__|Traceback/);
     expect(dialogs).toEqual(['Session loaded successfully!']);
     await expectRetained(page);
@@ -91,8 +92,9 @@ test('unsafe keys, malformed JSON/gzip, fatal UTF-8 and Worker crash preserve th
   }));
   await load(page, baseline);
   await expect(page.getByRole('alert', { name: 'Operation error' })).toBeVisible();
+  // A crashed import Worker is a transport failure.
   expect(await page.evaluate(() => window.__GBDRAW_APP__.errorLog)).toMatchObject({
-    code: 'UNKNOWN', operation: 'unknown', stage: 'request-validation'
+    code: 'UNKNOWN', operation: 'unknown', stage: 'transport'
   });
   expect(dialogs).toEqual(['Session loaded successfully!']);
   await expectRetained(page);

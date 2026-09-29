@@ -7,6 +7,9 @@ import pytest
 
 
 @pytest.mark.browser
+# One pytest test runs the whole Playwright suite (3-5 minutes on CI); each
+# Playwright test keeps its own timeout.
+@pytest.mark.timeout(900)
 def test_linear_comparison_browser_contracts():
     result = subprocess.run(
         ["npm", "run", "test:web:comparison-contracts", "--", "--workers=2"],

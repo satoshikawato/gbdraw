@@ -4703,7 +4703,6 @@ const importSessionDocument = async (e, options = {}) => {
     state.semanticFileWatchersSuppressed.value =
       semanticFileWatchersSuppressedBeforeImport;
     await nextTick();
-    state.sessionResourceDiscoveryDeferred.value = false;
     if (!currentSchemaSession) {
       committedCanonicalSession = cloneCanonicalSession(data);
       activeSessionResourceTable = null;
@@ -4752,7 +4751,6 @@ const importSessionDocument = async (e, options = {}) => {
     });
     return { status: 'error', error };
   } finally {
-    state.sessionResourceDiscoveryDeferred.value = false;
     state.semanticFileWatchersSuppressed.value =
       semanticFileWatchersSuppressedBeforeImport;
     e.target.value = '';
@@ -4874,5 +4872,9 @@ export const importSession = async (event, options = {}) => {
     }
     input.value = '';
     recordSessionLifecycleEvent('session-import-pending-cleared');
+    // Discovery watchers see the cleared pending flag while an adopted
+    // current-schema Session still defers resource reads; clear it afterwards.
+    await nextTick();
+    if (!activeSessionImport) state.sessionResourceDiscoveryDeferred.value = false;
   }
 };

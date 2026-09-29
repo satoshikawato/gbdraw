@@ -145,6 +145,8 @@ export const createHistoryManager = ({
   const undoStack = [];
   const redoStack = [];
   const revision = makeRef(0);
+  // Transaction open/close notifies mutationPending() without a document revision.
+  const transactionRevision = makeRef(0);
   const restoring = makeRef(false);
   const capturing = makeRef(false);
   const historyLimitMessage = makeRef('');
@@ -176,6 +178,9 @@ export const createHistoryManager = ({
 
   const touch = () => {
     revision.value += 1;
+  };
+  const touchTransaction = () => {
+    transactionRevision.value += 1;
   };
 
   const computeSignature = (value, scope) => {
@@ -374,14 +379,14 @@ export const createHistoryManager = ({
       source: options.source || ''
     };
     activeTransaction = tx;
-    touch();
+    touchTransaction();
     return tx;
   };
 
   const cancel = (transaction) => {
     if (!transaction) return;
     transaction.closed = true;
-    if (activeTransaction === transaction) { activeTransaction = null; touch(); }
+    if (activeTransaction === transaction) { activeTransaction = null; touchTransaction(); }
   };
 
   const initializeIntentBaseline = async (_label = 'Intent baseline', { isCurrent = () => true } = {}) => {
@@ -423,7 +428,7 @@ export const createHistoryManager = ({
     const busy = mutationAvailability();
     if (busy) { cancel(transaction); return busy; }
     transaction.closed = true;
-    if (activeTransaction === transaction) { activeTransaction = null; touch(); }
+    if (activeTransaction === transaction) { activeTransaction = null; touchTransaction(); }
     setCurrentIntent(afterRecord);
 
     const entry = buildPatchEntry(transaction, afterRecord, options);
@@ -1051,7 +1056,7 @@ export const createHistoryManager = ({
 
   return {
     mutationPending: () => {
-      void revision.value;
+      void transactionRevision.value;
       return Boolean(restoring.value || capturing.value || activeTransaction && !activeTransaction.closed && activeTransaction.deferAdapterCommit);
     },
     begin,

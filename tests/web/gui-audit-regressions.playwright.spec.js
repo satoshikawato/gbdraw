@@ -10,13 +10,19 @@ const session = async (page, name = 'HmmtDNA_basic_circular.gbdraw-session.json'
   await page.locator('input[accept^=".json,"]').setInputFiles(join(process.cwd(), 'gbdraw/web/gallery/sessions', name));
   await page.waitForFunction(() => !window.__GBDRAW_APP__.sessionImportPending && window.__GBDRAW_APP__.extractedFeatures.length > 0);
 };
+// Inspection may already open the presentation panel; open it only when closed.
+const openPresentation = async (page) => {
+  const details = page.locator('[data-circular-record-presentation]');
+  if (!await details.evaluate((element) => element.open)) await details.locator('summary').click();
+};
 const annotations = (page) => page.locator('details').filter({ has: page.locator('summary[aria-label="Region Annotations"]') });
 
 test('opening saved Circular record controls enables editing before another Generate', async ({ page }) => {
   test.setTimeout(180000);
   await session(page);
   await (await reveal(page.getByLabel('Multi-Record Canvas', { exact: true }))).uncheck();
-  await page.locator('summary[aria-label="Circular record presentation"]').click();
+  await page.locator('[data-circular-inspect]').click();
+  await openPresentation(page);
   await expect(page.getByLabel('Circular record label', { exact: true })).toBeEnabled({ timeout: 180000 });
   await expect(page.getByLabel('Circular record', { exact: true })).toContainText('NC_012920.1');
   await page.getByLabel('Circular record label', { exact: true }).fill('Edited before Generate');

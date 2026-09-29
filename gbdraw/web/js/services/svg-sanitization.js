@@ -17,7 +17,6 @@ export const SVG_SANITIZE_OPTIONS = Object.freeze({
     'tspan'
   ],
   ADD_ATTR: [
-    'baseProfile',
     'xlink:href',
     'href',
     'id',

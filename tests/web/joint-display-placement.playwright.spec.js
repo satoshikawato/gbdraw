@@ -255,8 +255,12 @@ for (const mode of ['circular', 'linear']) {
     await saved.saveAs(savedPath);
     await page.locator('input[accept^=".json,"]').setInputFiles(savedPath);
     await expect.poll(() => page.evaluate(() => window.__GBDRAW_APP__.sessionImportPending), { timeout: 180000 }).toBe(false);
-    if (mode === 'linear') await expandLinearRecordControls(page);
-    await page.getByRole('button', { name: 'Load record rotation controls', exact: true }).first().click();
+    if (mode === 'linear') {
+      await expandLinearRecordControls(page);
+      await page.getByRole('button', { name: 'Load record rotation controls', exact: true }).first().click();
+    } else {
+      await page.locator('[data-circular-inspect]').click();
+    }
     await expect(page.getByRole('spinbutton', { name: 'Display start shared #1', exact: true }).first()).toHaveValue('71');
     await expect(page.getByRole('spinbutton', { name: 'Display start shared #2', exact: true }).last()).toHaveValue('91');
     await generateFromControl(page);
@@ -408,7 +412,7 @@ test('loaded replacement draft cannot place or take shortcuts from the prior Res
   await download.saveAs(savedPath);
   await page.locator('input[accept^=".json,"]').setInputFiles(savedPath);
   await expect.poll(() => page.evaluate(() => window.__GBDRAW_APP__.sessionImportPending), { timeout: 180000 }).toBe(false);
-  await page.getByRole('button', { name: 'Load record rotation controls', exact: true }).click();
+  await page.locator('[data-circular-inspect]').click();
   await expect(page.getByRole('spinbutton', { name: 'Display start shared #1', exact: true })).toBeEnabled();
   await page.locator('.drawer-toggle').click();
   await page.locator('.right-drawer').getByRole('button', { name: 'Edit', exact: true }).first().click();
