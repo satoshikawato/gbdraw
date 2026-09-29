@@ -175,7 +175,8 @@
                 "type": "evaluate",
                 "script": "async () => { const app = window.__GBDRAW_APP__; app.sidebarWidth = 480; await app.setLinearComparisonGlobalAction('losat'); app.setLinearComparisonLosatMode('blastp'); app.setLinearComparisonLosatpMode('collinear'); }"
               },
-              {"type": "wait", "ms": 300}
+              {"type": "wait", "ms": 300},
+              {"type": "evaluate", "script": "() => { const settings = document.querySelector(\"[data-linear-comparison-disclosure='settings']\"); if (settings) settings.open = false; }"}
             ],
             "selector": "[data-linear-comparison-card]",
             "cropPadding": 14,
