@@ -255,3 +255,27 @@ test('transport cancellation keeps the field draft without publishing a failure 
   assert.equal(s.state.errorLog.value, null);
   assert.deepEqual(s.stable(), before);
 });
+
+for (const operation of ['save', 'load']) {
+  test(`Session ${operation} leaves corrective pattern drafts and accepted owners unchanged`, async () => {
+    const s = setup();
+    s.actions.editSpecificRulePattern(s.row, '[');
+    const draft = s.actions.specificRulePatternDraft(s.row);
+    const before = s.stable();
+    const busy = { status: 'busy', operation };
+    s.state.sessionOperationAvailability = () => busy;
+    assert.deepEqual(s.actions.editSpecificRulePattern(s.row, 'changed'), busy);
+    assert.deepEqual(s.actions.revertSpecificRulePattern(s.row), busy);
+    assert.deepEqual(await s.actions.retrySpecificRulePattern(s.row), busy);
+    assert.deepEqual(await s.actions.setSpecificRuleField(0, 'val', 'changed'), busy);
+    assert.deepEqual(s.actions.retrySpecificRuleFailure(), busy);
+    assert.equal(s.actions.specificRulePatternDraft(s.row), draft);
+    assert.equal(draft.text, '[');
+    assert.equal(draft.pending, false);
+    assert.equal(s.calls.length, 0);
+    assert.deepEqual(s.stable(), before);
+    s.state.sessionOperationAvailability = () => null;
+    s.actions.revertSpecificRulePattern(s.row);
+    assert.equal(s.actions.specificRulePatternDraft(s.row), null);
+  });
+}

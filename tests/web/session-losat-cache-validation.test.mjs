@@ -1,3 +1,4 @@
+import { installSessionImportWorker } from './helpers/session-import-node.mjs';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import test from 'node:test';
@@ -58,6 +59,8 @@ globalThis.File = class File extends Blob {
 };
 const alerts = [];
 globalThis.alert = (message) => alerts.push(String(message));
+
+installSessionImportWorker();
 
 const {
   adoptCanonicalRenderArtifacts,

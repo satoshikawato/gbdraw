@@ -189,6 +189,7 @@ export const setupWatchers = ({
       cancelDefinitionUpdate();
       return;
     }
+    if (state.sessionOperationAvailability?.()) return;
     scheduleDefinitionUpdate();
   };
 
@@ -212,6 +213,7 @@ export const setupWatchers = ({
   watch(
     canvasPadding,
     () => {
+      if (semanticFileWatchersSuppressed.value || state.sessionOperationAvailability?.()) return;
       applyCanvasPadding();
     },
     { deep: true }
@@ -230,6 +232,7 @@ export const setupWatchers = ({
   watch(
     () => form.legend,
     (newPos, oldPos) => {
+      if (semanticFileWatchersSuppressed.value || state.sessionOperationAvailability?.()) return;
       if (generatedMode.value !== mode.value) return;
       if (mode.value === 'circular' && shouldDeferCircularPreviewUpdates.value) return;
       if (
@@ -239,6 +242,7 @@ export const setupWatchers = ({
         newPos !== generatedLegendPosition.value
       ) {
         nextTick(() => {
+          if (semanticFileWatchersSuppressed.value || state.sessionOperationAvailability?.()) return;
           if (mode.value === 'circular' && shouldDeferCircularPreviewUpdates.value) return;
           repositionForLegendChange(newPos, generatedLegendPosition.value);
         });
@@ -426,8 +430,11 @@ export const setupWatchers = ({
     && errorLog.value === auxiliaryImportFailure.value.error
     && files[auxiliaryImportFailure.value.key] === auxiliaryImportFailure.value.selection
     && (!auxiliaryImportFailure.value.snapshot || rulePreparation.isCurrent(auxiliaryImportFailure.value.snapshot))));
-  const retryAuxiliaryImportFailure = () => canRetryAuxiliaryImportFailure.value ? auxiliaryImportFailure.value.retry() : false;
-  const pendingFileImports = new WeakMap();
+  const retryAuxiliaryImportFailure = () => {
+    const busy = state.sessionOperationAvailability?.();
+    return busy || (canRetryAuxiliaryImportFailure.value ? auxiliaryImportFailure.value.retry() : false);
+  };
+  const pendingFileImports = window.Vue.reactive(new Map());
   let fileImportApplications = Promise.resolve();
   const restoredFileSelections = new Map();
   const applyFileImport = (key, apply, file, previousFile) => {
@@ -437,6 +444,7 @@ export const setupWatchers = ({
     if (semanticFileWatchersSuppressed.value || !file) return;
     const ruleContext = key === 't_color' ? rulePreparation.snapshot() : null;
     const isCurrent = () => files[key] === file && !semanticFileWatchersSuppressed.value
+      && !state.sessionOperationAvailability?.()
       && (!ruleContext || rulePreparation.isCurrent(ruleContext));
     const previousError = errorLog.value;
     const retainFailure = () => {
@@ -475,6 +483,9 @@ export const setupWatchers = ({
       return false;
     });
     pendingFileImports.set(file, pending);
+    void pending.finally(() => {
+      if (pendingFileImports.get(file) === pending) pendingFileImports.delete(file);
+    });
     return pending;
   };
   const watchFileImport = (key, apply) => watch(() => files[key], (file, previousFile) => applyFileImport(key, apply, file, previousFile));
@@ -573,6 +584,8 @@ export const setupWatchers = ({
   watch(
     () => [
       semanticFileWatchersSuppressed.value,
+      state.sessionSavePending?.value,
+      state.sessionImportPending?.value,
       mode.value,
       cInputType.value,
       files.c_gb,
@@ -585,13 +598,15 @@ export const setupWatchers = ({
         rollbackInProgress: sessionImportRollbackInProgress,
         semanticWatchersSuppressed: semanticFileWatchersSuppressed,
         sessionResourceDiscoveryDeferred,
-        refresh: ({ suppress }) => refreshCircularRecordOrder({ suppress })
+        refresh: ({ suppress }) => refreshCircularRecordOrder({ suppress, automatic: true })
       });
     }
   );
   watch(
     () => [
       semanticFileWatchersSuppressed.value,
+      state.sessionSavePending?.value,
+      state.sessionImportPending?.value,
       mode.value,
       lInputType.value,
       ...linearSeqs.flatMap((seq) => [
@@ -621,5 +636,5 @@ export const setupWatchers = ({
       console.warn('Could not load browser palette definitions.', normalizeUserFacingError(error, { stage: 'initialization' }));
     }
   });
-  return { waitForAuxiliaryFileImport, canRetryAuxiliaryImportFailure, retryAuxiliaryImportFailure };
+  return { waitForAuxiliaryFileImport, auxiliaryFileImportPending: () => pendingFileImports.size > 0, canRetryAuxiliaryImportFailure, retryAuxiliaryImportFailure };
 };

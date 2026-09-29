@@ -40,6 +40,8 @@ const processingStatus = ref('');
 const generationCancelRequested = ref(false);
 const errorLog = ref(null);
 const sessionTitle = ref('');
+const sessionSavePending = ref(false);
+const sessionImportPending = ref(false);
 const semanticFileWatchersSuppressed = ref(false);
 const sessionResourceDiscoveryDeferred = ref(false);
 const sessionImportRollbackInProgress = ref(false);
@@ -787,9 +789,25 @@ const filteredEditableLabels = computed(() => {
   });
 });
 
+// Pending is owned by the existing Session lifecycle; availability stores no lock.
+export const sessionOperationAvailability = (operation = 'mutation') => {
+  let reason = '';
+  if (sessionImportPending.value) reason = 'Loading session. Retry after loading finishes.';
+  else if (sessionSavePending.value) reason = 'Saving session. Retry after saving finishes.';
+  else if (operation === 'save' || operation === 'load') {
+    if (processing.value) reason = 'Generating diagram. Retry after generation finishes.';
+    else if (labelReflowProcessing.value) reason = 'Updating diagram. Retry after the update finishes.';
+    else reason = state.sessionPreparationBusyReason?.() || '';
+  }
+  return reason ? { status: 'busy', reason } : null;
+};
+
 export const state = {
   processing,
   processingStatus,
+  sessionSavePending,
+  sessionImportPending,
+  sessionOperationAvailability,
   generationCancelRequested,
   errorLog,
   sessionTitle,

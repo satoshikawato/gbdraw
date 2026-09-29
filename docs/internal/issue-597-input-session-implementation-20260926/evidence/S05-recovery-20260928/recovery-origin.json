@@ -1,0 +1,9 @@
+{
+  "scope": "This S05 root session only; recovered transcript is not raw measurement files or proof that old uncommitted runtime remains available.",
+  "journalPath": "/home/kawato/.codex/sessions/2026/09/27/rollout-2026-09-27T20-34-31-01a0e2a5-2d20-7741-850a-b750d3a7d74a.jsonl",
+  "journalSha256": "1734847a558c33c97751e1d4550f258670d001445e2f2338429a9a330a2f49f0",
+  "toolCallCount": 380,
+  "toolOutputCount": 379,
+  "originalCheckoutMissing": true,
+  "originalRawMissing": true
+}

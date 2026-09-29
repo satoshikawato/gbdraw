@@ -77,7 +77,7 @@ export const restoreRightDrawerState = (
 
 export const createRightDrawerController = ({ state, watch, getOpenDisabledReason = () => '', onClose = () => {} }) => {
   const currentOrthogroupCount = () => orthogroupTabContentCountFromState(state);
-  const isTabAvailable = (tab) => isRightDrawerTabAvailable(
+  const isTabAvailable = (tab) => ALWAYS_AVAILABLE_TABS.has(tab) || isRightDrawerTabAvailable(
     tab,
     currentOrthogroupCount()
   );

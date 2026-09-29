@@ -1,0 +1,11 @@
+Auto-merging gbdraw/web/index.html
+CONFLICT (content): Merge conflict in gbdraw/web/index.html
+Auto-merging gbdraw/web/js/app/app-setup.js
+Auto-merging gbdraw/web/js/app/feature-editor/color-actions.js
+Auto-merging gbdraw/web/js/app/feature-editor/rule-actions.js
+Auto-merging gbdraw/web/js/app/legend/entry-actions.js
+Auto-merging gbdraw/web/js/app/rule-matching.js
+Auto-merging gbdraw/web/js/app/run-analysis.js
+Auto-merging gbdraw/web/js/app/svg-styles.js
+Auto-merging gbdraw/web/js/services/config.js
+Automatic merge failed; fix conflicts and then commit the result.

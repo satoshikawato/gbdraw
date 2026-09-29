@@ -1,0 +1,23 @@
+{
+  "finalIntegrationCommit": "b91ff25d9f197f76b01b0bb0e31d5ff3173d9ca0",
+  "parents": [
+    "e6f3227aba4ee3f7c911cfe08fbc3528c5d6dca8",
+    "98c21116f6439d5721e7ea62ae1a21a7cf2d4319"
+  ],
+  "lateDevTransition": {
+    "from": "494091aa68ca59ffa27ecaa6c3df19da4fbf5090",
+    "to": "98c21116f6439d5721e7ea62ae1a21a7cf2d4319",
+    "paths": [
+      "docs/internal/issue-601-pr-smoke-inventory-20260927.md",
+      "tests/ci/playwright-inventory.test.mjs"
+    ],
+    "secondIntegrationCommit": "b91ff25d9f197f76b01b0bb0e31d5ff3173d9ca0",
+    "exactUpstreamDiffImported": true,
+    "runtimeCheckerGuardMappedSourceUnchanged": true,
+    "testOnlyInventoryUpperBound": "PR #625 changes the CI-only PR-smoke case ceiling from 13 to 19. Imported unchanged from trusted dev, independently authored before this session; no S05 timeout or performance budget changes.",
+    "verificationReuse": "139 architecture PASS (including all four named contracts), 790 Node PASS, five Chromium PASS and three negative inventory mutations retain identical source/tests/checker/input/environment/acceptance after this two-path transition. Latest-base policy rerun and affected CI contracts rerun."
+  },
+  "protectedFilesIdentical": 65,
+  "sourceManifestSha256": "19082ab6dcc65a98dc67e11ec426df09c2d281341e5b93fb154b86a9ea8e33a6",
+  "pinnedEvidenceUnchanged": 60
+}

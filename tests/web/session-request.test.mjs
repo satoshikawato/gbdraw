@@ -14,6 +14,7 @@ await writeFile(join(tempRoot, 'package.json'), '{"type":"module"}', 'utf8');
 
 const {
   buildCanonicalRenderRequest: buildCanonicalRenderRequestRaw,
+  bindCanonicalTypedResource,
   managedConfigOverridePathsForMode,
   projectGenerationIntent,
   projectAppliedGenerationIntent,
@@ -29,7 +30,7 @@ const {
 const { migrateLegacyOrthogroupMembers } = await import(
   pathToFileURL(join(tempRoot, 'js', 'services', 'legacy-similarity-alignment.js'))
 );
-const { linearRecordLayoutHasSharedRow } = await import(
+const { linearRecordLayoutHasSharedRow, reconcileLinearRecordLayout } = await import(
   pathToFileURL(join(tempRoot, 'js', 'app', 'linear-record-layout.js'))
 );
 const {
@@ -2405,6 +2406,23 @@ assert.deepEqual(
   numericColumnProjection.files.linearSeqs.map((sequence) => sequence.uid),
   ['second', 'first', 'third']
 );
+const cliColumnProjection = projectCanonicalSessionRequest({
+  ...numericColumnCanonical,
+  initializeCliInputs: true
+});
+assert.deepEqual(cliColumnProjection.config.linearRecordLayout.rows, [
+  { uid: 'second', row: 1, canonicalCardinality: 'exactly_one', canonicalRow: 1, canonicalColumn: 1 },
+  { uid: 'first', row: 1, canonicalCardinality: 'exactly_one', canonicalRow: 1, canonicalColumn: 2 },
+  { uid: 'third', row: 2, canonicalCardinality: 'exactly_one', canonicalRow: 2, canonicalColumn: 1 }
+]);
+assert.deepEqual(
+  reconcileLinearRecordLayout(cliColumnProjection.files.linearSeqs, [
+    { ...cliColumnProjection.config.linearRecordLayout.rows[0], row: 2 },
+    ...cliColumnProjection.config.linearRecordLayout.rows.slice(1)
+  ])[0],
+  { uid: 'second', row: 2, canonicalCardinality: 'exactly_one' }
+);
+
 assert.deepEqual(
   numericColumnProjection.files.linearComparisons.map((comparison) => [
     comparison.queryUid,
@@ -2792,14 +2810,29 @@ const typedCollinearityResource = {
   kind: 'result',
   value: { type: 'CollinearityResult', fields: {} }
 };
-const resolvedCollinearCanonical = buildCanonicalRenderRequest({
-  state,
-  filesData: linearFilesData,
-  resolvedComparisons: [{
-    kind: 'collinearityResult',
-    typedResource: typedCollinearityResource
-  }]
-});
+const originalTextEncoder = globalThis.TextEncoder;
+const typedResourceText = JSON.stringify(typedCollinearityResource);
+let typedResourceEncodes = 0;
+globalThis.TextEncoder = class extends originalTextEncoder {
+  encode(value) {
+    if (value === typedResourceText) typedResourceEncodes += 1;
+    return super.encode(value);
+  }
+};
+let resolvedCollinearCanonical;
+try {
+  resolvedCollinearCanonical = buildCanonicalRenderRequest({
+    state,
+    filesData: linearFilesData,
+    resolvedComparisons: [{
+      kind: 'collinearityResult',
+      typedResource: typedCollinearityResource
+    }]
+  });
+} finally {
+  globalThis.TextEncoder = originalTextEncoder;
+}
+assert.equal(typedResourceEncodes, 1, 'The full typed result is encoded once, with identical resource bytes');
 assert.deepEqual(
   resolvedCollinearCanonical.renderRequest.comparisons.map(
     (comparison) => comparison.kind
@@ -5437,4 +5470,81 @@ for (const invalid of ['10', '10px', true, [], {}, Infinity, NaN]) {
   const invalidSession = structuredClone(pixelGapSession);
   invalidSession.renderRequest.diagramOptions.tracks.circularTrackSlots[0].innerGapPx = invalid;
   assert.throws(() => projectCanonicalSessionRequest(invalidSession), /innerGapPx must be a nonnegative finite number/);
+}
+
+// CLI sidecars without a saved Web draft initialize from complete typed inputs.
+// The same empty slots in a Web draft remain empty, even with a committed Result.
+{
+  const emptyCliSlots = { schema: 2, c_gb: null, c_gff: null, c_fasta: null,
+    c_depth: null, d_color: null, t_color: null, linearSeqs: [], linearComparisons: [] };
+  const cliProjection = projectCanonicalSessionRequest({ ...numericColumnCanonical,
+    webFiles: { ...numericColumnCanonical.webFiles, bindings: emptyCliSlots }, initializeCliInputs: true });
+  const typedProjection = projectCanonicalSessionRequest(numericColumnCanonical);
+  assert.deepEqual(cliProjection.files.linearSeqs, typedProjection.files.linearSeqs);
+  assert.deepEqual(cliProjection.files.linearComparisons, typedProjection.files.linearComparisons);
+  assert.deepEqual(cliProjection.files.linearCanonicalComparisons, typedProjection.files.linearCanonicalComparisons);
+  assert.deepEqual(emptyCliSlots.linearSeqs, [], 'Restore must not change the imported document');
+  for (const args of [
+    { initializeCliInputs: false },
+    { initializeCliInputs: true, storedConfig: {} }
+  ]) {
+    const emptyWeb = projectCanonicalSessionRequest({ ...numericColumnCanonical,
+      webFiles: { ...numericColumnCanonical.webFiles, bindings: emptyCliSlots }, ...args });
+    assert.deepEqual(emptyWeb.files.linearSeqs, []);
+    assert.deepEqual(emptyWeb.files.linearComparisons, []);
+  }
+  const circularCli = projectCanonicalSessionRequest({ ...canonical,
+    webFiles: { bindings: emptyCliSlots }, initializeCliInputs: true });
+  assert.deepEqual(circularCli.files.c_gb, projectCanonicalSessionRequest(canonical).files.c_gb);
+
+  const gffCli = structuredClone(numericColumnCanonical);
+  const descriptor = (kind, name, text) => ({ kind, name, type: 'text/plain',
+    lastModified: 0, size: Buffer.byteLength(text), encoding: 'base64', data: btoa(text) });
+  for (const [index, record] of gffCli.renderRequest.records.entries()) {
+    gffCli.resources[`annotation-${index}`] = descriptor('gff3', `annotation-${index}.gff`, '##gff-version 3\n');
+    gffCli.resources[`sequence-${index}`] = descriptor('fasta', `sequence-${index}.fa`, '>record\nACGT\n');
+    record.source = { kind: 'gffFasta', gffResourceId: `annotation-${index}`, fastaResourceId: `sequence-${index}` };
+  }
+  const gffProjection = projectCanonicalSessionRequest({ ...gffCli,
+    webFiles: { ...gffCli.webFiles, bindings: emptyCliSlots }, initializeCliInputs: true });
+  assert.deepEqual(gffProjection.files.linearSeqs, projectCanonicalSessionRequest(gffCli).files.linearSeqs);
+  assert.deepEqual(gffProjection.files.linearComparisons, projectCanonicalSessionRequest(gffCli).files.linearComparisons);
+  assert.equal(gffProjection.inputType, 'gff');
+  assert(gffProjection.files.linearSeqs.every(row => row.gff && row.fasta && row.depth));
+  assert.equal(gffProjection.files.linearComparisons.length, 1, 'Embedded comparison TSV survives');
+  const originalGffBindings = { ...emptyCliSlots,
+    c_gff: { resourceId: 'annotation-0', name: 'original.gff', type: '', lastModified: 7 },
+    c_fasta: { resourceId: 'sequence-0', name: 'original.fa', type: '', lastModified: 8 } };
+  const originalGff = projectCanonicalSessionRequest({ ...canonical,
+    resources: { ...canonical.resources, ...gffCli.resources },
+    webFiles: { bindings: originalGffBindings }, initializeCliInputs: true });
+  assert.equal(originalGff.inputType, 'gff');
+  assert.equal(originalGff.files.c_gb, null);
+  assert.equal(originalGff.files.c_gff.name, 'original.gff');
+  assert.equal(originalGff.files.c_gff.data, gffCli.resources['annotation-0'].data);
+  assert.equal(originalGff.files.c_fasta.data, gffCli.resources['sequence-0'].data);
+}
+
+// A helper-produced typed resource uses the Python codec bytes without serializing its graph again.
+{
+  state.adv.linear_track_slots_enabled = false;
+  state.mode.value = 'linear';
+  state.losat.blastp.mode = 'collinear';
+  state.linearComparisonPlan = { ...createDefaultLinearComparisonPlan(), mode: 'adjacent' };
+  const typed = { schema: 3, kind: 'result', value: { type: 'CollinearityResult', fields: {} } };
+  const text = JSON.stringify(typed);
+  const backing = { kind: 'collinearity-result', type: 'application/json', size: Buffer.byteLength(text),
+    lastModified: 0, encoding: 'base64', data: Buffer.from(text).toString('base64') };
+  bindCanonicalTypedResource(typed, backing);
+  Object.defineProperty(typed, 'toJSON', { value() { throw new Error('Unexpected full graph serialization'); } });
+  const built = buildCanonicalRenderRequest({ state, filesData: linearFilesData,
+    resolvedComparisons: [{ kind: 'collinearityResult', typedResource: typed }] });
+  const resource = built.resources['comparison-canonical-collinearity-1'];
+  assert.equal(resource.data, backing.data);
+  assert.equal(resource.size, backing.size);
+  assert.equal(built.resources['comparison-canonical-collinearity-1'], resource);
+  assert.deepEqual(JSON.parse(Buffer.from(resource.data, 'base64').toString('utf8')),
+    { schema: 3, kind: 'result', value: { type: 'CollinearityResult', fields: {} } });
+  assert.throws(() => bindCanonicalTypedResource(typed, { ...backing, kind: 'orthogroup-result' }), /backing is invalid/);
+  assert.throws(() => bindCanonicalTypedResource(typed, { ...backing, size: -1 }), /backing is invalid/);
 }

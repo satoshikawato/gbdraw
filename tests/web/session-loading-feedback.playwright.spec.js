@@ -3,6 +3,7 @@ const { readFileSync } = require('node:fs');
 const { join, resolve } = require('node:path');
 const { gzipSync } = require('node:zlib');
 const { openApp } = require('./helpers/app-lifecycle.cjs');
+const { installImportReadGate } = require('./helpers/session-import-gate.cjs');
 
 const repoRoot = resolve(process.env.GBDRAW_REPO || process.cwd());
 const sessionInputSelector =
@@ -44,44 +45,6 @@ const loadBaselineSession = async (page) => {
   await page.waitForFunction(() => (
     window.__GBDRAW_APP__?.sessionImportPending === false
   ));
-};
-
-const installImportReadGate = async (page, filename) => {
-  await page.evaluate((gatedFilename) => {
-    const nativeStream = Blob.prototype.stream;
-    let releaseGate;
-    const gate = new Promise((resolveGate) => {
-      releaseGate = resolveGate;
-    });
-    window.__GBDRAW_SESSION_IMPORT_GATE__ = {
-      filename: gatedFilename,
-      streamInvocations: 0,
-      release: () => releaseGate()
-    };
-    File.prototype.stream = function gatedSessionStream() {
-      if (this.name !== gatedFilename) return nativeStream.call(this);
-      window.__GBDRAW_SESSION_IMPORT_GATE__.streamInvocations += 1;
-      const source = nativeStream.call(this);
-      return new ReadableStream({
-        async start(controller) {
-          await gate;
-          const reader = source.getReader();
-          try {
-            while (true) {
-              const { done, value } = await reader.read();
-              if (done) break;
-              controller.enqueue(value);
-            }
-            controller.close();
-          } catch (error) {
-            controller.error(error);
-          } finally {
-            reader.releaseLock();
-          }
-        }
-      });
-    };
-  }, filename);
 };
 
 const installLifecycleProbe = async (page) => {
@@ -156,7 +119,7 @@ test('session loading is painted before import work and prevents duplicate adopt
     'session-import-pending-published',
     'session-import-paint-opportunity-completed',
     'sessionSelection',
-    'gzip-to-text-start'
+    'session-import-worker-start'
   ]);
 
   await sessionInput.setInputFiles({

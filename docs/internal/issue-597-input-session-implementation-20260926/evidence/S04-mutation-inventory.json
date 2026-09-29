@@ -1,0 +1,3966 @@
+{
+  "acceptance": "S-02",
+  "owners": [
+    {
+      "owner": "gbdraw/web/js/app/annotations.js",
+      "actions": [
+        "addAnnotationSet",
+        "renameAnnotationSet",
+        "duplicateAnnotationSet",
+        "removeAnnotationSet",
+        "addCoordinateAnnotation",
+        "addSelectedFeatures",
+        "removeAnnotation",
+        "renameAnnotation",
+        "setAnnotationStyle",
+        "setAnnotationTargetKind",
+        "importAnnotationTableFile",
+        "importAnnotationTable",
+        "setRecordValue"
+      ],
+      "domEntry": "Annotation table / style / coordinate and selected-feature controls",
+      "programmaticEntry": "existing factory return / app facade",
+      "owningState": "annotationSets",
+      "availability": "state.sessionOperationAvailability() (state export shared with template); History injected same function",
+      "checkpoint": "after file.text; importAnnotationTable / setRecordValue share admission"
+    },
+    {
+      "owner": "gbdraw/web/js/app/app-setup.js",
+      "actions": [
+        "setLinearRecordRow",
+        "setLinearRecordLayoutEnabled",
+        "moveLinearRecordWithinRow",
+        "setLinearComparisonGlobalAction",
+        "setLinearComparisonLosatMode",
+        "setLinearComparisonLosatpMode",
+        "addLinearComparison",
+        "omitLinearComparison",
+        "clearSelectedLinearComparisons",
+        "setLinearComparisonEndpoint",
+        "setLinearComparisonSource",
+        "setLinearComparisonFile",
+        "reuseLinearComparisonFile",
+        "deactivateLinearComparisonFile",
+        "setLinearComparisonLosatFilename",
+        "reuseLinearComparisonLosatFilename",
+        "deactivateLinearComparisonLosatFilename",
+        "updateResolvedLosatFilenameDraft",
+        "setLinearComparisonGapAction",
+        "setLinearComparisonCardFile",
+        "setOptionalNumberInputValue",
+        "setDefinitionLineStyleSize",
+        "setDefinitionLineStyleWeight",
+        "setDefinitionLineStyleColor",
+        "setDepthTrackColor",
+        "setDepthTrackLabel",
+        "setDepthTrackLegendLabelForSlot",
+        "setCircularDepthFile",
+        "setLinearDepthFiles",
+        "addCircularDepthTrack",
+        "addLinearDepthTrack",
+        "removeCircularDepthTrack",
+        "removeLinearDepthTrack",
+        "setCircularConservationSourceFiles",
+        "setCircularConservationUploadFiles",
+        "moveCircularConservationSeries",
+        "addCircularConservationComparisonFile",
+        "setCircularConservationCompanionFile",
+        "removeCircularConservationSource",
+        "applySimilarityAlignmentDialog",
+        "resetSettings",
+        "resetLayout",
+        "editSessionTitle",
+        "setCircularRecordPresentationSelector",
+        "setCircularRecordRow",
+        "moveCircularRecordOrderUp",
+        "moveCircularRecordOrderDown",
+        "resetCircularRecordOrder",
+        "applyLinearSourceRemoval",
+        "requestLinearSourceRemoval",
+        "removeLastLinearSeq",
+        "setLinearSeqPrimaryFile",
+        "moveLinearSource",
+        "setLinearRecordSelector",
+        "setMode",
+        "setCircularInputType",
+        "setLinearInputType",
+        "setLinearRecordCrop",
+        "resetLinearRecordDefinition",
+        "resetLinearRecordSubtitle",
+        "applyLinearSeqMutation",
+        "addLinearSeq",
+        "inspectCircularSourceRecords",
+        "clearLosatCache",
+        "cancelGeneration"
+      ],
+      "domEntry": "Mode, source rows, definition/depth/comparison/conservation panels, Reset/title",
+      "programmaticEntry": "existing factory return / app facade",
+      "owningState": "mode/form/adv/files/linearSeqs/comparisons/depth/conservation/sessionTitle",
+      "availability": "state.sessionOperationAvailability() (state export shared with template); History injected same function",
+      "checkpoint": "applyLinearSeqMutation and History wrappers; candidate catalog preparation stays private"
+    },
+    {
+      "owner": "gbdraw/web/js/app/circular-track-slots.js",
+      "actions": [
+        "setCircularAnnotationMarkSelected",
+        "setCircularAnnotationNumber",
+        "setCircularAnnotationCoverAnchor",
+        "resetCircularTrackSlotsToPreset",
+        "setCircularTrackSlotsEnabled",
+        "addCircularTrackSlot",
+        "duplicateCircularTrackSlot",
+        "removeCircularTrackSlot",
+        "moveCircularTrackSlot",
+        "moveCircularTrackSlotToPlacement",
+        "updateCircularTrackSlotRenderer",
+        "setCircularSuppressControl",
+        "setCircularTrackSlotEnabled",
+        "updateCircularTrackSlotPlacement",
+        "updateCircularTrackFeatureLane",
+        "setCircularTrackSlotSkewColor",
+        "clearCircularTrackSlotSkewColor"
+      ],
+      "domEntry": "Circular track slot rows and presets",
+      "programmaticEntry": "existing factory return / app facade",
+      "owningState": "adv.circular_track_slots / enabled / axis / suppression",
+      "availability": "state.sessionOperationAvailability() (state export shared with template); History injected same function",
+      "checkpoint": "synchronous setter; private adoption normalizers remain internal"
+    },
+    {
+      "owner": "gbdraw/web/js/app/linear-track-slots.js",
+      "actions": [
+        "setLinearAnnotationMarkSelected",
+        "setLinearAnnotationNumber",
+        "setLinearAnnotationCoverAnchor",
+        "resetLinearTrackSlotsFromSimpleControls",
+        "setLinearTrackSlotsEnabled",
+        "addLinearTrackSlot",
+        "duplicateLinearTrackSlot",
+        "removeLinearTrackSlot",
+        "moveLinearTrackSlot",
+        "moveLinearTrackSlotToPlacement",
+        "updateLinearTrackSlotRenderer",
+        "updateLinearTrackSlotPlacement",
+        "setLinearTrackSlotHeight",
+        "setLinearTrackSlotSkewColor",
+        "clearLinearTrackSlotSkewColor"
+      ],
+      "domEntry": "Linear track slot rows and presets",
+      "programmaticEntry": "existing factory return / app facade",
+      "owningState": "adv.linear_track_slots / enabled / axis",
+      "availability": "state.sessionOperationAvailability() (state export shared with template); History injected same function",
+      "checkpoint": "synchronous setter; private adoption normalizers remain internal"
+    },
+    {
+      "owner": "gbdraw/web/js/app/feature-editor/color-actions.js",
+      "actions": [
+        "requestFeatureColorChange",
+        "updateClickedFeatureColor",
+        "handleLegendNameCommit",
+        "handleLegendRenameChoice",
+        "handleColorScopeChoice",
+        "updateClickedFeatureStroke",
+        "requestClickedFeatureStrokeChange",
+        "resetClickedFeatureStroke",
+        "setClickedFeatureStrokeColorValue",
+        "setClickedFeatureStrokeWidthValue",
+        "resetClickedFeatureFillColor",
+        "handleResetColorChoice",
+        "applyColorToSelectedFeatures",
+        "applyStrokeToSelectedFeatures",
+        "handleStrokeScopeChoice",
+        "setFeatureColor",
+        "setFeatureColorValue"
+      ],
+      "domEntry": "Feature popup and bulk color dialogs",
+      "programmaticEntry": "existing factory return / app facade",
+      "owningState": "color/stroke overrides, selected feature SVG",
+      "availability": "state.sessionOperationAvailability() (state export shared with template); History injected same function",
+      "checkpoint": "History command/action completion"
+    },
+    {
+      "owner": "gbdraw/web/js/app/feature-editor/label-actions.js",
+      "actions": [
+        "handleGlobalLabelModeChoice",
+        "requestLabelTextChangeByKey",
+        "requestLabelTextChangeByFeatureId",
+        "updateClickedFeatureLabelText",
+        "handleLabelTextScopeChoice",
+        "resetAllLabelTextOverrides",
+        "loadLabelOverrideTable",
+        "loadLabelOverrideTable (read/helper completions)"
+      ],
+      "domEntry": "Label popup, text scope dialog and Load Label TSV",
+      "programmaticEntry": "existing factory return / app facade",
+      "owningState": "label overrides/rows/visibility/config and selected SVG",
+      "availability": "state.sessionOperationAvailability() (state export shared with template); History injected same function",
+      "checkpoint": "after text read and helper reply; History completion"
+    },
+    {
+      "owner": "gbdraw/web/js/app/feature-editor/placement-actions.js",
+      "actions": [
+        "setPlacement"
+      ],
+      "domEntry": "Feature placement and selected placement dropdowns",
+      "programmaticEntry": "existing factory return / app facade",
+      "owningState": "featurePlacementOverrides",
+      "availability": "state.sessionOperationAvailability() (state export shared with template); History injected same function",
+      "checkpoint": "entry before choice validation; History action"
+    },
+    {
+      "owner": "gbdraw/web/js/app/feature-editor/rule-actions.js",
+      "actions": [
+        "commitPrepared",
+        "setSpecificRuleField",
+        "moveSpecificRule",
+        "removeSpecificRule",
+        "addCustomColor",
+        "setLabelFilterMode",
+        "addWhitelistRule",
+        "removeWhitelistRule",
+        "removePriorityRule",
+        "addPriorityRule",
+        "addSpecificRule",
+        "applySpecificRulePreset",
+        "addFeature",
+        "removeFeature",
+        "setFeatureShape",
+        "moveSpecificRuleUp",
+        "moveSpecificRuleDown",
+        "clearAllSpecificRules"
+      ],
+      "domEntry": "Color and label-filter rules/presets/feature controls",
+      "programmaticEntry": "existing factory return / app facade",
+      "owningState": "manual rules/filterMode/whitelist/priority/colors/features",
+      "availability": "state.sessionOperationAvailability() (state export shared with template); History injected same function",
+      "checkpoint": "commitPrepared checks before preparation; History commit rechecks"
+    },
+    {
+      "owner": "gbdraw/web/js/app/feature-editor/visibility-actions.js",
+      "actions": [
+        "setFeatureVisibility",
+        "setSelectedFeaturesVisibility",
+        "updateClickedFeatureVisibility",
+        "handleFeatureVisibilityScopeChoice",
+        "setFeatureVisibilityRuleField",
+        "addFeatureVisibilityRule",
+        "removeFeatureVisibilityRule"
+      ],
+      "domEntry": "Visibility popup/bulk actions/rule editor",
+      "programmaticEntry": "existing factory return / app facade",
+      "owningState": "visibility rules/overrides and active SVG",
+      "availability": "state.sessionOperationAvailability() (state export shared with template); History injected same function",
+      "checkpoint": "History command target resolution before publication"
+    },
+    {
+      "owner": "gbdraw/web/js/app/legend-layout.js",
+      "actions": [
+        "resetAllPositions",
+        "reconcileCompositionUserDeltas"
+      ],
+      "domEntry": "Reset Layout",
+      "programmaticEntry": "existing factory return / app facade",
+      "owningState": "composition user deltas/layout preferences",
+      "availability": "state.sessionOperationAvailability() (state export shared with template); History injected same function",
+      "checkpoint": "delegated existing layout setters"
+    },
+    {
+      "owner": "gbdraw/web/js/app/legend-layout/canvas-actions.js",
+      "actions": [
+        "applyCanvasPadding",
+        "resetCanvasPadding"
+      ],
+      "domEntry": "Canvas padding inputs/reset",
+      "programmaticEntry": "existing factory return / app facade",
+      "owningState": "canvasPadding / persisted SVG geometry",
+      "availability": "state.sessionOperationAvailability() (state export shared with template); History injected same function",
+      "checkpoint": "setter plus padding watcher"
+    },
+    {
+      "owner": "gbdraw/web/js/app/legend-layout/diagram-drag.js",
+      "actions": [
+        "startLengthBarDrag",
+        "startPlotTitleDrag",
+        "startDiagramDrag",
+        "applyDiagramDragPosition"
+      ],
+      "domEntry": "Persisted layout drag handles",
+      "programmaticEntry": "existing factory return / app facade",
+      "owningState": "diagram/length-bar/title offsets and active SVG",
+      "availability": "state.sessionOperationAvailability() (state export shared with template); History injected same function",
+      "checkpoint": "start and each drag-position application"
+    },
+    {
+      "owner": "gbdraw/web/js/app/legend-layout/reposition-actions.js",
+      "actions": [
+        "repositionForLegendChange"
+      ],
+      "domEntry": "Legend position control",
+      "programmaticEntry": "existing factory return / app facade",
+      "owningState": "legend placement/composition",
+      "availability": "state.sessionOperationAvailability() (state export shared with template); History injected same function",
+      "checkpoint": "owner and delayed nextTick callback"
+    },
+    {
+      "owner": "gbdraw/web/js/app/legend/drag-actions.js",
+      "actions": [
+        "applyLegendDragPosition",
+        "startLegendDrag",
+        "resetLegendPositionOnly"
+      ],
+      "domEntry": "Legend drag/reset",
+      "programmaticEntry": "existing factory return / app facade",
+      "owningState": "legend offset and active SVG",
+      "availability": "state.sessionOperationAvailability() (state export shared with template); History injected same function",
+      "checkpoint": "start and each drag-position application"
+    },
+    {
+      "owner": "gbdraw/web/js/app/legend/entry-actions.js",
+      "actions": [
+        "addLegendEntry",
+        "updateLegendEntryColorByCaption",
+        "removeLegendEntry",
+        "updateLegendEntryColor",
+        "updateLegendEntryCaption",
+        "addNewLegendEntry",
+        "deleteLegendEntry",
+        "restoreDeletedLegendEntries"
+      ],
+      "domEntry": "Legend editor rows/add/remove/rename dialogs",
+      "programmaticEntry": "existing factory return / app facade",
+      "owningState": "legend entries/captions/active SVG",
+      "availability": "state.sessionOperationAvailability() (state export shared with template); History injected same function",
+      "checkpoint": "entry plus add-entry timer verifies current Result"
+    },
+    {
+      "owner": "gbdraw/web/js/app/legend/sort-actions.js",
+      "actions": [
+        "applyLegendEntryOrder",
+        "moveLegendEntryUp",
+        "moveLegendEntryDown",
+        "sortLegendEntries",
+        "sortLegendEntriesByDefault",
+        "swapLegendEntries"
+      ],
+      "domEntry": "Sort and reorder controls",
+      "programmaticEntry": "existing factory return / app facade",
+      "owningState": "legend order/active SVG",
+      "availability": "state.sessionOperationAvailability() (state export shared with template); History injected same function",
+      "checkpoint": "synchronous owner"
+    },
+    {
+      "owner": "gbdraw/web/js/app/legend/stroke-actions.js",
+      "actions": [
+        "updateLegendEntryStrokeColor",
+        "updateLegendEntryStrokeWidth",
+        "setLegendEntryStrokeColorValue",
+        "resetLegendEntryStroke",
+        "resetAllStrokes"
+      ],
+      "domEntry": "Legend stroke controls/reset",
+      "programmaticEntry": "existing factory return / app facade",
+      "owningState": "legend stroke overrides/active SVG",
+      "availability": "state.sessionOperationAvailability() (state export shared with template); History injected same function",
+      "checkpoint": "synchronous owner"
+    },
+    {
+      "owner": "gbdraw/web/js/app/linear-record-selector.js",
+      "actions": [
+        "refresh"
+      ],
+      "domEntry": "Native Linear upload/replace and record selectors",
+      "programmaticEntry": "existing factory return / app facade",
+      "owningState": "discovery status / source selectors and auto expansion",
+      "availability": "state.sessionOperationAvailability() (state export shared with template); History injected same function",
+      "checkpoint": "entry and successful/error completion; defer then retry when Session settles"
+    },
+    {
+      "owner": "gbdraw/web/js/app/orthogroups.js",
+      "actions": [
+        "setOrthogroupNameOverride",
+        "setOrthogroupDescriptionOverride",
+        "resetOrthogroupRename"
+      ],
+      "domEntry": "Similarity group editor",
+      "programmaticEntry": "existing factory return / app facade",
+      "owningState": "orthogroup name/description overrides",
+      "availability": "state.sessionOperationAvailability() (state export shared with template); History injected same function",
+      "checkpoint": "synchronous owner"
+    },
+    {
+      "owner": "gbdraw/web/js/app/preview-runtime.js",
+      "actions": [
+        "selectResult"
+      ],
+      "domEntry": "Result selector",
+      "programmaticEntry": "existing factory return / app facade",
+      "owningState": "selectedResultIndex / flushed Result and runtime binding",
+      "availability": "state.sessionOperationAvailability() (state export shared with template); History injected same function",
+      "checkpoint": "selectResult before flushing; this changes the persisted Result owner, unlike viewport navigation"
+    },
+    {
+      "owner": "gbdraw/web/js/app/record-display-options.js",
+      "actions": [
+        "writeResolvedTransform",
+        "setTopology",
+        "setStart",
+        "setReverseComplement",
+        "resetStart",
+        "applyShortcut"
+      ],
+      "domEntry": "Topology/start/reverse/selected-feature shortcuts",
+      "programmaticEntry": "existing factory return / app facade",
+      "owningState": "recordDisplayDrafts / form source transforms",
+      "availability": "state.sessionOperationAvailability() (state export shared with template); History injected same function",
+      "checkpoint": "writeResolvedTransform, History edit and shortcut admission"
+    },
+    {
+      "owner": "gbdraw/web/js/app/results.js",
+      "actions": [
+        "updatePalette",
+        "resetColors"
+      ],
+      "domEntry": "Palette apply/reset and definitions",
+      "programmaticEntry": "existing factory return / app facade",
+      "owningState": "palette state / definition SVG and Result",
+      "availability": "state.sessionOperationAvailability() (state export shared with template); History injected same function",
+      "checkpoint": "actual timer/promise handles block Session start; reply verifies revision/source/availability"
+    },
+    {
+      "owner": "gbdraw/web/js/app/run-analysis.js",
+      "actions": [
+        "setLosatPairFilename",
+        "refreshCircularRecordOrder",
+        "cancelRunAnalysis",
+        "runLabelReflow",
+        "clearLosatCache",
+        "runAnalysis",
+        "runCommittedCanonicalCandidate"
+      ],
+      "domEntry": "Generate/Cancel/Inspect/reflow/cache/LOSAT filename",
+      "programmaticEntry": "existing factory return / app facade",
+      "owningState": "canonical request/Result/cache/generation/reflow/discovery",
+      "availability": "state.sessionOperationAvailability() (state export shared with template); History injected same function",
+      "checkpoint": "processing spans preflight through afterGenerate; reflow spans all iterations; discovery late reply deferred"
+    },
+    {
+      "owner": "gbdraw/web/js/app/svg-styles.js",
+      "actions": [
+        "applySpecificRulesToSvg",
+        "applyStylesToSvg",
+        "applyTrackVisibility",
+        "applyPaletteToSvg"
+      ],
+      "domEntry": "Style/color/visibility native controls",
+      "programmaticEntry": "existing factory return / app facade",
+      "owningState": "palette/rule/style/track visibility SVG and Result",
+      "availability": "state.sessionOperationAvailability() (state export shared with template); History injected same function",
+      "checkpoint": "owner checks after preparation and delayed watchers; adoption watchers suppressed"
+    },
+    {
+      "owner": "gbdraw/web/js/components.js",
+      "actions": [
+        "updateMode",
+        "updateColor",
+        "handleFile",
+        "clearFile",
+        "setStart"
+      ],
+      "domEntry": "FileUploader, ColorValueControl, RecordDisplayControl",
+      "programmaticEntry": "existing factory return / app facade",
+      "owningState": "uploaded File / color value / display draft",
+      "availability": "state.sessionOperationAvailability() (state export shared with template); History injected same function",
+      "checkpoint": "native disabled plus handleFile/clearFile/update/setStart owner admission"
+    },
+    {
+      "owner": "gbdraw/web/js/services/config.js",
+      "actions": [
+        "exportSession",
+        "importSession",
+        "disposeSessionOperations"
+      ],
+      "domEntry": "Save Session / Load Session and hidden Session input",
+      "programmaticEntry": "same named service exports; app adapters delegate",
+      "owningState": "existing singleflight handle and Save/import pending flags; adopted document",
+      "availability": "sessionOperationAvailability('save'/'load'); duplicate Save join precedes busy",
+      "checkpoint": "title -> pending -> small config/UI capture -> paint -> private prep -> admission/compression -> handoff -> finally; isCurrent at awaited boundaries"
+    },
+    {
+      "owner": "gbdraw/web/js/services/history.js",
+      "actions": [
+        "begin",
+        "commit",
+        "runUndoable",
+        "runUndoableCheckpoint",
+        "runUndoableArtifactReplacement",
+        "runUndoableCommand",
+        "undo",
+        "redo",
+        "initializeIntentBaseline"
+      ],
+      "domEntry": "native History input adapter; Undo/Redo and owner actions",
+      "programmaticEntry": "History manager methods",
+      "owningState": "intent/checkpoints/commands/stacks; existing restoring/capturing/transaction handles",
+      "availability": "injected same Session predicate; derived mutationPending from real asynchronous ownership",
+      "checkpoint": "entry; after capture/buildCommand; before mutation/commit; Load baseline lifetime before clearing stacks"
+    },
+    {
+      "owner": "gbdraw/web/js/app/linear-typography.js",
+      "actions": [
+        "setLinked",
+        "setRulerLabelFontSize",
+        "setScaleFontSize"
+      ],
+      "domEntry": "Linked typography, ruler and scale inputs",
+      "programmaticEntry": "existing returned setters",
+      "owningState": "adv typography + linked state",
+      "availability": "injected shared predicate",
+      "checkpoint": "synchronous entry"
+    },
+    {
+      "owner": "gbdraw/web/js/app/watchers.js",
+      "actions": [
+        "watchFileImport",
+        "waitForAuxiliaryFileImport",
+        "scheduleCircularDefinitionUpdate",
+        "discovery watches",
+        "canvasPadding / legend position watches"
+      ],
+      "domEntry": "FileUploader after-change and reactive native values",
+      "programmaticEntry": "existing watchers and returned wait helper",
+      "owningState": "files + parsed styles/rules/whitelist/priority/blacklist + deferred discovery",
+      "availability": "shared predicate; actual pending import promise Map supplies Session preparation reason",
+      "checkpoint": "before live application and after async read/prepare/nextTick; source identity and suppression rechecked"
+    }
+  ],
+  "nativeControls": [
+    {
+      "line": 1306,
+      "tag": "button",
+      "entries": [
+        "resetSettings"
+      ],
+      "disabled": "!semanticMutationAvailable"
+    },
+    {
+      "line": 1309,
+      "tag": "button",
+      "entries": [
+        "saveSessionWithTitle"
+      ],
+      "disabled": "!sessionSaveAvailable"
+    },
+    {
+      "line": 1312,
+      "tag": "button",
+      "entries": [
+        "$refs.sessionInput.click()"
+      ],
+      "disabled": "!sessionLoadAvailable"
+    },
+    {
+      "line": 1322,
+      "tag": "button",
+      "entries": [
+        "editSessionTitle"
+      ],
+      "disabled": "!semanticMutationAvailable"
+    },
+    {
+      "line": 1329,
+      "tag": "button",
+      "entries": [
+        "setMode('circular')"
+      ],
+      "disabled": "!semanticMutationAvailable"
+    },
+    {
+      "line": 1330,
+      "tag": "button",
+      "entries": [
+        "setMode('linear')"
+      ],
+      "disabled": "!semanticMutationAvailable"
+    },
+    {
+      "line": 1352,
+      "tag": "input",
+      "entries": [
+        "cInputType"
+      ],
+      "disabled": "!semanticMutationAvailable"
+    },
+    {
+      "line": 1353,
+      "tag": "input",
+      "entries": [
+        "cInputType"
+      ],
+      "disabled": "!semanticMutationAvailable"
+    },
+    {
+      "line": 1373,
+      "tag": "select",
+      "entries": [
+        "form.circular_record_selector",
+        "setCircularRecordPresentationSelector($event.target.value)"
+      ],
+      "disabled": "!semanticMutationAvailable || (!circularRecordSelectionEnabled)"
+    },
+    {
+      "line": 1404,
+      "tag": "input",
+      "entries": [
+        "form.circular_record_label"
+      ],
+      "disabled": "!semanticMutationAvailable || !circularSingleRecordPresentationEnabled"
+    },
+    {
+      "line": 1415,
+      "tag": "input",
+      "entries": [
+        "form.circular_record_subtitle"
+      ],
+      "disabled": "!semanticMutationAvailable || !circularSingleRecordPresentationEnabled"
+    },
+    {
+      "line": 1432,
+      "tag": "input",
+      "entries": [
+        "form.circular_region_start"
+      ],
+      "disabled": "!semanticMutationAvailable || !circularSingleRecordPresentationEnabled"
+    },
+    {
+      "line": 1436,
+      "tag": "input",
+      "entries": [
+        "form.circular_region_end"
+      ],
+      "disabled": "!semanticMutationAvailable || !circularSingleRecordPresentationEnabled"
+    },
+    {
+      "line": 1441,
+      "tag": "input",
+      "entries": [
+        "form.circular_reverse"
+      ],
+      "disabled": "!semanticMutationAvailable || !circularSingleRecordPresentationEnabled"
+    },
+    {
+      "line": 1466,
+      "tag": "input",
+      "entries": [
+        "adv.depth_normalize"
+      ],
+      "disabled": "!semanticMutationAvailable"
+    },
+    {
+      "line": 1470,
+      "tag": "input",
+      "entries": [
+        "adv.depth_show_axis"
+      ],
+      "disabled": "!semanticMutationAvailable"
+    },
+    {
+      "line": 1474,
+      "tag": "input",
+      "entries": [
+        "adv.depth_show_ticks"
+      ],
+      "disabled": "!semanticMutationAvailable"
+    },
+    {
+      "line": 1478,
+      "tag": "input",
+      "entries": [
+        "adv.depth_share_axis"
+      ],
+      "disabled": "!semanticMutationAvailable"
+    },
+    {
+      "line": 1486,
+      "tag": "input",
+      "entries": [
+        "adv.depth_window_size"
+      ],
+      "disabled": "!semanticMutationAvailable"
+    },
+    {
+      "line": 1492,
+      "tag": "input",
+      "entries": [
+        "adv.depth_step_size"
+      ],
+      "disabled": "!semanticMutationAvailable"
+    },
+    {
+      "line": 1500,
+      "tag": "input",
+      "entries": [
+        "adv.depth_min"
+      ],
+      "disabled": "!semanticMutationAvailable"
+    },
+    {
+      "line": 1506,
+      "tag": "input",
+      "entries": [
+        "adv.depth_max"
+      ],
+      "disabled": "!semanticMutationAvailable"
+    },
+    {
+      "line": 1513,
+      "tag": "input",
+      "entries": [
+        "adv.depth_width_circular"
+      ],
+      "disabled": "!semanticMutationAvailable || (adv.circular_track_slots_enabled)"
+    },
+    {
+      "line": 1520,
+      "tag": "button",
+      "entries": [
+        "removeCircularDepthTrack(track.index)"
+      ],
+      "disabled": "!semanticMutationAvailable"
+    },
+    {
+      "line": 1538,
+      "tag": "input",
+      "entries": [
+        "getDepthTrackColor(track.index)",
+        "setDepthTrackColor(track.index, $event.target.value)",
+        "setDepthTrackColor(track.index, $event.target.value)"
+      ],
+      "disabled": "!semanticMutationAvailable"
+    },
+    {
+      "line": 1553,
+      "tag": "input",
+      "entries": [
+        "track.config.large_tick_interval"
+      ],
+      "disabled": "!semanticMutationAvailable"
+    },
+    {
+      "line": 1558,
+      "tag": "input",
+      "entries": [
+        "track.config.small_tick_interval"
+      ],
+      "disabled": "!semanticMutationAvailable"
+    },
+    {
+      "line": 1563,
+      "tag": "input",
+      "entries": [
+        "track.config.tick_font_size"
+      ],
+      "disabled": "!semanticMutationAvailable"
+    },
+    {
+      "line": 1576,
+      "tag": "button",
+      "entries": [
+        "addCircularDepthTrack"
+      ],
+      "disabled": "!semanticMutationAvailable"
+    },
+    {
+      "line": 1585,
+      "tag": "input",
+      "entries": [
+        "setLinearInputType('gb')"
+      ],
+      "disabled": "!semanticMutationAvailable"
+    },
+    {
+      "line": 1586,
+      "tag": "input",
+      "entries": [
+        "setLinearInputType('gff')"
+      ],
+      "disabled": "!semanticMutationAvailable"
+    },
+    {
+      "line": 1607,
+      "tag": "button",
+      "entries": [
+        "moveLinearSource(sourceIndex, -1)"
+      ],
+      "disabled": "!semanticMutationAvailable || (!canMoveLinearSource(sourceIndex, -1))"
+    },
+    {
+      "line": 1618,
+      "tag": "button",
+      "entries": [
+        "moveLinearSource(sourceIndex, 1)"
+      ],
+      "disabled": "!semanticMutationAvailable || (!canMoveLinearSource(sourceIndex, 1))"
+    },
+    {
+      "line": 1728,
+      "tag": "button",
+      "entries": [
+        "clearLinearSourceDepthFile(source, track.index)"
+      ],
+      "disabled": "!semanticMutationAvailable"
+    },
+    {
+      "line": 1738,
+      "tag": "button",
+      "entries": [
+        "addLinearDepthTrack()"
+      ],
+      "disabled": "!semanticMutationAvailable"
+    },
+    {
+      "line": 1806,
+      "tag": "button",
+      "entries": [
+        "resetLinearRecordDefinition(seq)"
+      ],
+      "disabled": "!semanticMutationAvailable"
+    },
+    {
+      "line": 1808,
+      "tag": "input",
+      "entries": [
+        "seq.definition"
+      ],
+      "disabled": "!semanticMutationAvailable"
+    },
+    {
+      "line": 1814,
+      "tag": "button",
+      "entries": [
+        "resetLinearRecordSubtitle(seq)"
+      ],
+      "disabled": "!semanticMutationAvailable"
+    },
+    {
+      "line": 1816,
+      "tag": "input",
+      "entries": [
+        "seq.record_subtitle"
+      ],
+      "disabled": "!semanticMutationAvailable"
+    },
+    {
+      "line": 1827,
+      "tag": "select",
+      "entries": [
+        "seq.region_record_id",
+        "setLinearRecordSelector(seq, $event.target.value)"
+      ],
+      "disabled": "!semanticMutationAvailable || (linearRecordSelectorDisabled(seq))"
+    },
+    {
+      "line": 1849,
+      "tag": "input",
+      "entries": [
+        "seq.region_reverse"
+      ],
+      "disabled": "!semanticMutationAvailable"
+    },
+    {
+      "line": 1858,
+      "tag": "input",
+      "entries": [
+        "seq.region_start ?? ''",
+        "setLinearRecordCrop(seq, 'region_start', $event.target.value)"
+      ],
+      "disabled": "!semanticMutationAvailable"
+    },
+    {
+      "line": 1862,
+      "tag": "input",
+      "entries": [
+        "seq.region_end ?? ''",
+        "setLinearRecordCrop(seq, 'region_end', $event.target.value)"
+      ],
+      "disabled": "!semanticMutationAvailable"
+    },
+    {
+      "line": 1869,
+      "tag": "input",
+      "entries": [
+        "seq.losat_gencode"
+      ],
+      "disabled": "!semanticMutationAvailable"
+    },
+    {
+      "line": 1878,
+      "tag": "button",
+      "entries": [
+        "addLinearSeq()"
+      ],
+      "disabled": "!semanticMutationAvailable"
+    },
+    {
+      "line": 1879,
+      "tag": "button",
+      "entries": [
+        "removeLastLinearSeq($event)"
+      ],
+      "disabled": "!semanticMutationAvailable"
+    },
+    {
+      "line": 1891,
+      "tag": "input",
+      "entries": [
+        "adv.depth_normalize"
+      ],
+      "disabled": "!semanticMutationAvailable"
+    },
+    {
+      "line": 1895,
+      "tag": "input",
+      "entries": [
+        "adv.depth_show_axis"
+      ],
+      "disabled": "!semanticMutationAvailable"
+    },
+    {
+      "line": 1899,
+      "tag": "input",
+      "entries": [
+        "adv.depth_show_ticks"
+      ],
+      "disabled": "!semanticMutationAvailable"
+    },
+    {
+      "line": 1903,
+      "tag": "input",
+      "entries": [
+        "adv.depth_share_axis"
+      ],
+      "disabled": "!semanticMutationAvailable"
+    },
+    {
+      "line": 1911,
+      "tag": "input",
+      "entries": [
+        "adv.depth_window_size"
+      ],
+      "disabled": "!semanticMutationAvailable"
+    },
+    {
+      "line": 1917,
+      "tag": "input",
+      "entries": [
+        "adv.depth_step_size"
+      ],
+      "disabled": "!semanticMutationAvailable"
+    },
+    {
+      "line": 1925,
+      "tag": "input",
+      "entries": [
+        "adv.depth_min"
+      ],
+      "disabled": "!semanticMutationAvailable"
+    },
+    {
+      "line": 1931,
+      "tag": "input",
+      "entries": [
+        "adv.depth_max"
+      ],
+      "disabled": "!semanticMutationAvailable"
+    },
+    {
+      "line": 1938,
+      "tag": "input",
+      "entries": [
+        "adv.depth_height"
+      ],
+      "disabled": "!semanticMutationAvailable"
+    },
+    {
+      "line": 1948,
+      "tag": "button",
+      "entries": [
+        "removeLinearDepthTrack(track.index)"
+      ],
+      "disabled": "!semanticMutationAvailable"
+    },
+    {
+      "line": 1966,
+      "tag": "input",
+      "entries": [
+        "track.config.height",
+        "syncLinearDepthSlotHeightsFromDepthTracks(track.index)"
+      ],
+      "disabled": "!semanticMutationAvailable"
+    },
+    {
+      "line": 1978,
+      "tag": "input",
+      "entries": [
+        "getDepthTrackColor(track.index)",
+        "setDepthTrackColor(track.index, $event.target.value)",
+        "setDepthTrackColor(track.index, $event.target.value)"
+      ],
+      "disabled": "!semanticMutationAvailable"
+    },
+    {
+      "line": 1993,
+      "tag": "input",
+      "entries": [
+        "track.config.large_tick_interval"
+      ],
+      "disabled": "!semanticMutationAvailable"
+    },
+    {
+      "line": 1998,
+      "tag": "input",
+      "entries": [
+        "track.config.small_tick_interval"
+      ],
+      "disabled": "!semanticMutationAvailable"
+    },
+    {
+      "line": 2003,
+      "tag": "input",
+      "entries": [
+        "track.config.tick_font_size"
+      ],
+      "disabled": "!semanticMutationAvailable"
+    },
+    {
+      "line": 2033,
+      "tag": "button",
+      "entries": [
+        "inheritImportedComparison"
+      ],
+      "disabled": "!semanticMutationAvailable"
+    },
+    {
+      "line": 2040,
+      "tag": "button",
+      "entries": [
+        "replaceImportedComparison"
+      ],
+      "disabled": "!semanticMutationAvailable || (!importedComparisonCanReplace)"
+    },
+    {
+      "line": 2047,
+      "tag": "button",
+      "entries": [
+        "clearImportedComparison"
+      ],
+      "disabled": "!semanticMutationAvailable"
+    },
+    {
+      "line": 2056,
+      "tag": "button",
+      "entries": [
+        "setLinearComparisonGlobalAction('losat')"
+      ],
+      "disabled": "!semanticMutationAvailable || (!canRunLinearLosat)"
+    },
+    {
+      "line": 2057,
+      "tag": "button",
+      "entries": [
+        "setLinearComparisonGlobalAction('none')"
+      ],
+      "disabled": "!semanticMutationAvailable"
+    },
+    {
+      "line": 2058,
+      "tag": "button",
+      "entries": [
+        "setLinearComparisonGlobalAction('upload')"
+      ],
+      "disabled": "!semanticMutationAvailable"
+    },
+    {
+      "line": 2091,
+      "tag": "button",
+      "entries": [
+        "setLinearComparisonLosatMode(modeOption.key)"
+      ],
+      "disabled": "!semanticMutationAvailable || (!modeOption.selectable)"
+    },
+    {
+      "line": 2107,
+      "tag": "select",
+      "entries": [
+        "linearComparisonUi.activeLosatpModeKey",
+        "setLinearComparisonLosatpMode($event.target.value)"
+      ],
+      "disabled": "!semanticMutationAvailable"
+    },
+    {
+      "line": 2120,
+      "tag": "button",
+      "entries": [
+        "setLinearComparisonGlobalAction('losat')"
+      ],
+      "disabled": "!semanticMutationAvailable"
+    },
+    {
+      "line": 2128,
+      "tag": "select",
+      "entries": [
+        "losat.blastn.task"
+      ],
+      "disabled": "!semanticMutationAvailable"
+    },
+    {
+      "line": 2140,
+      "tag": "select",
+      "entries": [
+        "losat.executionMode"
+      ],
+      "disabled": "!semanticMutationAvailable"
+    },
+    {
+      "line": 2148,
+      "tag": "select",
+      "entries": [
+        "losat.totalThreadBudget"
+      ],
+      "disabled": "!semanticMutationAvailable"
+    },
+    {
+      "line": 2156,
+      "tag": "select",
+      "entries": [
+        "losat.parallelWorkers"
+      ],
+      "disabled": "!semanticMutationAvailable"
+    },
+    {
+      "line": 2163,
+      "tag": "select",
+      "entries": [
+        "losat.threadsPerJob"
+      ],
+      "disabled": "!semanticMutationAvailable || (losatThreadsPerJobFixed)"
+    },
+    {
+      "line": 2178,
+      "tag": "input",
+      "entries": [
+        "losat.blastp.maxHits"
+      ],
+      "disabled": "!semanticMutationAvailable"
+    },
+    {
+      "line": 2183,
+      "tag": "input",
+      "entries": [
+        "losat.blastp.candidateLimit"
+      ],
+      "disabled": "!semanticMutationAvailable"
+    },
+    {
+      "line": 2188,
+      "tag": "input",
+      "entries": [
+        "losat.blastp.orthogroupMemberMaxHits"
+      ],
+      "disabled": "!semanticMutationAvailable"
+    },
+    {
+      "line": 2192,
+      "tag": "input",
+      "entries": [
+        "losat.blastp.collinearInferOrthogroups"
+      ],
+      "disabled": "!semanticMutationAvailable"
+    },
+    {
+      "line": 2199,
+      "tag": "input",
+      "entries": [
+        "losat.blastp.collinearMaxUnitGap"
+      ],
+      "disabled": "!semanticMutationAvailable"
+    },
+    {
+      "line": 2203,
+      "tag": "input",
+      "entries": [
+        "losat.blastp.collinearMinAnchors"
+      ],
+      "disabled": "!semanticMutationAvailable"
+    },
+    {
+      "line": 2214,
+      "tag": "select",
+      "entries": [
+        "losat.blastp.collinearColorMode"
+      ],
+      "disabled": "!semanticMutationAvailable"
+    },
+    {
+      "line": 2231,
+      "tag": "input",
+      "entries": [
+        "adv.min_bitscore",
+        "adv.min_bitscore = $event.target.value === '' ? comparisonProfileDefault('linear', 'min_bitscore') : Number($event.target.value)"
+      ],
+      "disabled": "!semanticMutationAvailable"
+    },
+    {
+      "line": 2235,
+      "tag": "input",
+      "entries": [
+        "adv.evalue",
+        "adv.evalue = String($event.target.value || '').trim() === '' ? comparisonProfileDefault('linear', 'evalue') : String($event.target.value).trim()"
+      ],
+      "disabled": "!semanticMutationAvailable"
+    },
+    {
+      "line": 2239,
+      "tag": "input",
+      "entries": [
+        "adv.identity",
+        "adv.identity = $event.target.value === '' ? comparisonProfileDefault('linear', 'identity') : Number($event.target.value)"
+      ],
+      "disabled": "!semanticMutationAvailable"
+    },
+    {
+      "line": 2243,
+      "tag": "input",
+      "entries": [
+        "adv.alignment_length",
+        "adv.alignment_length = $event.target.value === '' ? comparisonProfileDefault('linear', 'alignment_length') : Number($event.target.value)"
+      ],
+      "disabled": "!semanticMutationAvailable"
+    },
+    {
+      "line": 2253,
+      "tag": "select",
+      "entries": [
+        "adv.pairwise_match_style"
+      ],
+      "disabled": "!semanticMutationAvailable"
+    },
+    {
+      "line": 2261,
+      "tag": "input",
+      "entries": [
+        "adv.comparison_height"
+      ],
+      "disabled": "!semanticMutationAvailable"
+    },
+    {
+      "line": 2304,
+      "tag": "input",
+      "entries": [
+        "setLinearComparisonGapAction(pair.edgeKey, 'none')"
+      ],
+      "disabled": "!semanticMutationAvailable"
+    },
+    {
+      "line": 2305,
+      "tag": "input",
+      "entries": [
+        "setLinearComparisonGapAction(pair.edgeKey, 'losat')"
+      ],
+      "disabled": "!semanticMutationAvailable"
+    },
+    {
+      "line": 2306,
+      "tag": "input",
+      "entries": [
+        "setLinearComparisonGapAction(pair.edgeKey, 'upload')"
+      ],
+      "disabled": "!semanticMutationAvailable"
+    },
+    {
+      "line": 2334,
+      "tag": "button",
+      "entries": [
+        "addLinearComparison()"
+      ],
+      "disabled": "!semanticMutationAvailable"
+    },
+    {
+      "line": 2336,
+      "tag": "button",
+      "entries": [
+        "addLinearComparisonBatch(false)"
+      ],
+      "disabled": "!semanticMutationAvailable"
+    },
+    {
+      "line": 2337,
+      "tag": "button",
+      "entries": [
+        "addLinearComparisonBatch(true)"
+      ],
+      "disabled": "!semanticMutationAvailable"
+    },
+    {
+      "line": 2338,
+      "tag": "button",
+      "entries": [
+        "clearSelectedLinearComparisons()"
+      ],
+      "disabled": "!semanticMutationAvailable"
+    },
+    {
+      "line": 2349,
+      "tag": "select",
+      "entries": [
+        "unplaced.draft.queryUid",
+        "setLinearComparisonEndpoint(unplaced.draft.id, 'queryUid', $event.target.value)"
+      ],
+      "disabled": "!semanticMutationAvailable"
+    },
+    {
+      "line": 2350,
+      "tag": "select",
+      "entries": [
+        "unplaced.draft.subjectUid",
+        "setLinearComparisonEndpoint(unplaced.draft.id, 'subjectUid', $event.target.value)"
+      ],
+      "disabled": "!semanticMutationAvailable"
+    },
+    {
+      "line": 2367,
+      "tag": "input",
+      "entries": [
+        "form.prefix"
+      ],
+      "disabled": "!semanticMutationAvailable"
+    },
+    {
+      "line": 2374,
+      "tag": "input",
+      "entries": [
+        "form.species"
+      ],
+      "disabled": "!semanticMutationAvailable"
+    },
+    {
+      "line": 2378,
+      "tag": "input",
+      "entries": [
+        "form.strain"
+      ],
+      "disabled": "!semanticMutationAvailable"
+    },
+    {
+      "line": 2384,
+      "tag": "input",
+      "entries": [
+        "adv.rich_feature_popup"
+      ],
+      "disabled": "!semanticMutationAvailable"
+    },
+    {
+      "line": 2399,
+      "tag": "button",
+      "entries": [
+        "runAnalysis"
+      ],
+      "disabled": "!semanticMutationAvailable || (processing)"
+    },
+    {
+      "line": 2413,
+      "tag": "input",
+      "entries": [
+        "setLinearRecordLayoutEnabled($event.target.checked)"
+      ],
+      "disabled": "!semanticMutationAvailable"
+    },
+    {
+      "line": 2421,
+      "tag": "button",
+      "entries": [
+        "moveLinearRecordWithinRow(seq.uid, -1)"
+      ],
+      "disabled": "!semanticMutationAvailable"
+    },
+    {
+      "line": 2422,
+      "tag": "button",
+      "entries": [
+        "moveLinearRecordWithinRow(seq.uid, 1)"
+      ],
+      "disabled": "!semanticMutationAvailable"
+    },
+    {
+      "line": 2426,
+      "tag": "input",
+      "entries": [
+        "linearRecordGap"
+      ],
+      "disabled": "!semanticMutationAvailable"
+    },
+    {
+      "line": 2434,
+      "tag": "button",
+      "entries": [
+        "clearLosatCache"
+      ],
+      "disabled": "!semanticMutationAvailable || (losatCacheInfo.length === 0)"
+    },
+    {
+      "line": 2452,
+      "tag": "input",
+      "entries": [
+        "pair.draft?.losatFilename || pair.resolved?.losatFilename || ''",
+        "setResolvedLinearComparisonLosatFilename(pair.edgeKey, $event.target.value)"
+      ],
+      "disabled": "!semanticMutationAvailable"
+    },
+    {
+      "line": 2489,
+      "tag": "input",
+      "entries": [
+        "unplaced.draft.losatFilename",
+        "setLinearComparisonLosatFilename(unplaced.draft.id, $event.target.value)"
+      ],
+      "disabled": "!semanticMutationAvailable"
+    },
+    {
+      "line": 2503,
+      "tag": "select",
+      "entries": [
+        "losat.blastp.collinearUnitMode"
+      ],
+      "disabled": "!semanticMutationAvailable"
+    },
+    {
+      "line": 2511,
+      "tag": "select",
+      "entries": [
+        "losat.blastp.collinearAnchorMode"
+      ],
+      "disabled": "!semanticMutationAvailable"
+    },
+    {
+      "line": 2519,
+      "tag": "select",
+      "entries": [
+        "losat.blastp.collinearMergeOrientation"
+      ],
+      "disabled": "!semanticMutationAvailable"
+    },
+    {
+      "line": 2527,
+      "tag": "input",
+      "entries": [
+        "losat.blastp.collinearMaxDiagonalDrift"
+      ],
+      "disabled": "!semanticMutationAvailable"
+    },
+    {
+      "line": 2531,
+      "tag": "input",
+      "entries": [
+        "losat.blastp.collinearMaxConflictsInMergeGap"
+      ],
+      "disabled": "!semanticMutationAvailable"
+    },
+    {
+      "line": 2535,
+      "tag": "input",
+      "entries": [
+        "losat.blastp.collinearMaxParalogLinksPerOrthogroup"
+      ],
+      "disabled": "!semanticMutationAvailable"
+    },
+    {
+      "line": 2548,
+      "tag": "button",
+      "entries": [
+        "addAnnotationSet()"
+      ],
+      "disabled": "!semanticMutationAvailable"
+    },
+    {
+      "line": 2556,
+      "tag": "input",
+      "entries": [
+        "set.id",
+        "renameAnnotationSet(set, $event.target.value)"
+      ],
+      "disabled": "!semanticMutationAvailable"
+    },
+    {
+      "line": 2558,
+      "tag": "button",
+      "entries": [
+        "removeAnnotationSet(set)"
+      ],
+      "disabled": "!semanticMutationAvailable"
+    },
+    {
+      "line": 2560,
+      "tag": "input",
+      "entries": [
+        "set.legendLabel"
+      ],
+      "disabled": "!semanticMutationAvailable"
+    },
+    {
+      "line": 2563,
+      "tag": "input",
+      "entries": [
+        "item.id",
+        "renameAnnotation(set, item, $event.target.value)"
+      ],
+      "disabled": "!semanticMutationAvailable"
+    },
+    {
+      "line": 2564,
+      "tag": "select",
+      "entries": [
+        "item.target.kind",
+        "setAnnotationTargetKind(item, $event.target.value)"
+      ],
+      "disabled": "!semanticMutationAvailable"
+    },
+    {
+      "line": 2567,
+      "tag": "button",
+      "entries": [
+        "removeAnnotation(set, item)"
+      ],
+      "disabled": "!semanticMutationAvailable"
+    },
+    {
+      "line": 2574,
+      "tag": "select",
+      "entries": [
+        "annotationRecordValue(item)",
+        "setAnnotationRecord(item, $event.target.value)"
+      ],
+      "disabled": "!semanticMutationAvailable || (annotationRecordDisabled(item))"
+    },
+    {
+      "line": 2591,
+      "tag": "input",
+      "entries": [
+        "item.target.start"
+      ],
+      "disabled": "!semanticMutationAvailable"
+    },
+    {
+      "line": 2592,
+      "tag": "input",
+      "entries": [
+        "item.target.end"
+      ],
+      "disabled": "!semanticMutationAvailable"
+    },
+    {
+      "line": 2595,
+      "tag": "input",
+      "entries": [
+        "item.target.selectors[0].key"
+      ],
+      "disabled": "!semanticMutationAvailable"
+    },
+    {
+      "line": 2596,
+      "tag": "input",
+      "entries": [
+        "item.target.selectors[0].value"
+      ],
+      "disabled": "!semanticMutationAvailable"
+    },
+    {
+      "line": 2599,
+      "tag": "input",
+      "entries": [
+        "item.label"
+      ],
+      "disabled": "!semanticMutationAvailable"
+    },
+    {
+      "line": 2600,
+      "tag": "select",
+      "entries": [
+        "item.mark"
+      ],
+      "disabled": "!semanticMutationAvailable"
+    },
+    {
+      "line": 2602,
+      "tag": "input",
+      "entries": [
+        "item.lane"
+      ],
+      "disabled": "!semanticMutationAvailable || (item.mark === 'highlight')"
+    },
+    {
+      "line": 2609,
+      "tag": "input",
+      "entries": [
+        "setAnnotationStyle(set, item, 'hatch', $event.target.checked ? { angle: 45, spacing: 5, color: (item.style || set.defaultStyle).stroke, width: 1, cross: false } : null)"
+      ],
+      "disabled": "!semanticMutationAvailable"
+    },
+    {
+      "line": 2613,
+      "tag": "button",
+      "entries": [
+        "addCoordinateAnnotation(set)"
+      ],
+      "disabled": "!semanticMutationAvailable"
+    },
+    {
+      "line": 2614,
+      "tag": "button",
+      "entries": [
+        "addSelectedFeatureAnnotations(set)"
+      ],
+      "disabled": "!semanticMutationAvailable || (selectedFeatureCount === 0)"
+    },
+    {
+      "line": 2626,
+      "tag": "input",
+      "entries": [
+        "circularConservation.source"
+      ],
+      "disabled": "!semanticMutationAvailable"
+    },
+    {
+      "line": 2627,
+      "tag": "input",
+      "entries": [
+        "circularConservation.source"
+      ],
+      "disabled": "!semanticMutationAvailable"
+    },
+    {
+      "line": 2639,
+      "tag": "select",
+      "entries": [
+        "circularConservation.reference"
+      ],
+      "disabled": "!semanticMutationAvailable"
+    },
+    {
+      "line": 2650,
+      "tag": "input",
+      "entries": [
+        "circularConservation.losat_program"
+      ],
+      "disabled": "!semanticMutationAvailable"
+    },
+    {
+      "line": 2651,
+      "tag": "input",
+      "entries": [
+        "circularConservation.losat_program"
+      ],
+      "disabled": "!semanticMutationAvailable"
+    },
+    {
+      "line": 2657,
+      "tag": "select",
+      "entries": [
+        "losat.blastn.task"
+      ],
+      "disabled": "!semanticMutationAvailable"
+    },
+    {
+      "line": 2666,
+      "tag": "input",
+      "entries": [
+        "circularConservation.subject_gencode"
+      ],
+      "disabled": "!semanticMutationAvailable"
+    },
+    {
+      "line": 2674,
+      "tag": "button",
+      "entries": [
+        "clearLosatCache"
+      ],
+      "disabled": "!semanticMutationAvailable || (losatCacheInfo.length === 0)"
+    },
+    {
+      "line": 2681,
+      "tag": "textarea",
+      "entries": [
+        "circularConservation.labels"
+      ],
+      "disabled": "!semanticMutationAvailable"
+    },
+    {
+      "line": 2691,
+      "tag": "input",
+      "entries": [
+        "adv.min_bitscore",
+        "adv.min_bitscore = $event.target.value === '' ? comparisonProfileDefault('circular', 'min_bitscore') : Number($event.target.value)"
+      ],
+      "disabled": "!semanticMutationAvailable"
+    },
+    {
+      "line": 2695,
+      "tag": "input",
+      "entries": [
+        "adv.evalue",
+        "adv.evalue = String($event.target.value || '').trim() === '' ? comparisonProfileDefault('circular', 'evalue') : String($event.target.value).trim()"
+      ],
+      "disabled": "!semanticMutationAvailable"
+    },
+    {
+      "line": 2699,
+      "tag": "input",
+      "entries": [
+        "adv.identity",
+        "adv.identity = $event.target.value === '' ? comparisonProfileDefault('circular', 'identity') : Number($event.target.value)"
+      ],
+      "disabled": "!semanticMutationAvailable"
+    },
+    {
+      "line": 2703,
+      "tag": "input",
+      "entries": [
+        "adv.alignment_length",
+        "adv.alignment_length = $event.target.value === '' ? comparisonProfileDefault('circular', 'alignment_length') : Number($event.target.value)"
+      ],
+      "disabled": "!semanticMutationAvailable"
+    },
+    {
+      "line": 2713,
+      "tag": "input",
+      "entries": [
+        "circularConservation.ring_width"
+      ],
+      "disabled": "!semanticMutationAvailable"
+    },
+    {
+      "line": 2719,
+      "tag": "input",
+      "entries": [
+        "circularConservation.ring_gap"
+      ],
+      "disabled": "!semanticMutationAvailable"
+    },
+    {
+      "line": 2732,
+      "tag": "input",
+      "entries": [
+        "circularConservation.series[row.index].color"
+      ],
+      "disabled": "!semanticMutationAvailable"
+    },
+    {
+      "line": 2734,
+      "tag": "input",
+      "entries": [
+        "circularConservation.series[row.index].label"
+      ],
+      "disabled": "!semanticMutationAvailable"
+    },
+    {
+      "line": 2740,
+      "tag": "input",
+      "entries": [
+        "setCircularConservationCompanionFile(row.sourceIndex, $event)"
+      ],
+      "disabled": "!semanticMutationAvailable"
+    },
+    {
+      "line": 2747,
+      "tag": "input",
+      "entries": [
+        "circularConservation.series[row.index].losat_gencode"
+      ],
+      "disabled": "!semanticMutationAvailable"
+    },
+    {
+      "line": 2751,
+      "tag": "button",
+      "entries": [
+        "moveCircularConservationSeries(row.index, -1)"
+      ],
+      "disabled": "!semanticMutationAvailable || (!canMoveCircularConservationSeries(row.index, -1))"
+    },
+    {
+      "line": 2752,
+      "tag": "button",
+      "entries": [
+        "moveCircularConservationSeries(row.index, 1)"
+      ],
+      "disabled": "!semanticMutationAvailable || (!canMoveCircularConservationSeries(row.index, 1))"
+    },
+    {
+      "line": 2753,
+      "tag": "button",
+      "entries": [
+        "removeCircularConservationSource(row.index)"
+      ],
+      "disabled": "!semanticMutationAvailable"
+    },
+    {
+      "line": 2756,
+      "tag": "input",
+      "entries": [
+        "addCircularConservationComparisonFile"
+      ],
+      "disabled": "!semanticMutationAvailable"
+    },
+    {
+      "line": 2798,
+      "tag": "button",
+      "entries": [
+        "resetUnmanagedConfigOverride(entry.path)"
+      ],
+      "disabled": "!semanticMutationAvailable"
+    },
+    {
+      "line": 2820,
+      "tag": "select",
+      "entries": [
+        "form.linear_track_layout"
+      ],
+      "disabled": "!semanticMutationAvailable || (adv.linear_track_slots_enabled)"
+    },
+    {
+      "line": 2828,
+      "tag": "input",
+      "entries": [
+        "form.separate_strands"
+      ],
+      "disabled": "!semanticMutationAvailable"
+    },
+    {
+      "line": 2832,
+      "tag": "input",
+      "entries": [
+        "adv.resolve_overlaps"
+      ],
+      "disabled": "!semanticMutationAvailable"
+    },
+    {
+      "line": 2836,
+      "tag": "input",
+      "entries": [
+        "adv.feature_overlap_tolerance_bp"
+      ],
+      "disabled": "!semanticMutationAvailable"
+    },
+    {
+      "line": 2840,
+      "tag": "input",
+      "entries": [
+        "form.align_center"
+      ],
+      "disabled": "!semanticMutationAvailable"
+    },
+    {
+      "line": 2844,
+      "tag": "input",
+      "entries": [
+        "form.keep_definition_left_aligned"
+      ],
+      "disabled": "!semanticMutationAvailable"
+    },
+    {
+      "line": 2848,
+      "tag": "input",
+      "entries": [
+        "form.normalize_length"
+      ],
+      "disabled": "!semanticMutationAvailable"
+    },
+    {
+      "line": 2852,
+      "tag": "input",
+      "entries": [
+        "form.show_gc"
+      ],
+      "disabled": "!semanticMutationAvailable || (adv.linear_track_slots_enabled)"
+    },
+    {
+      "line": 2856,
+      "tag": "input",
+      "entries": [
+        "form.show_skew"
+      ],
+      "disabled": "!semanticMutationAvailable || (adv.linear_track_slots_enabled)"
+    },
+    {
+      "line": 2864,
+      "tag": "input",
+      "entries": [
+        "form.show_depth"
+      ],
+      "disabled": "!semanticMutationAvailable || (adv.linear_track_slots_enabled || !canShowDepthTrack)"
+    },
+    {
+      "line": 2887,
+      "tag": "input",
+      "entries": [
+        "setLinearTrackSlotsEnabled($event.target.checked)"
+      ],
+      "disabled": "!semanticMutationAvailable"
+    },
+    {
+      "line": 2890,
+      "tag": "button",
+      "entries": [
+        "resetLinearTrackSlotsFromSimpleControls"
+      ],
+      "disabled": "!semanticMutationAvailable"
+    },
+    {
+      "line": 2944,
+      "tag": "input",
+      "entries": [
+        "entry.slot.enabled"
+      ],
+      "disabled": "!semanticMutationAvailable"
+    },
+    {
+      "line": 2945,
+      "tag": "input",
+      "entries": [
+        "entry.slot.id"
+      ],
+      "disabled": "!semanticMutationAvailable"
+    },
+    {
+      "line": 2946,
+      "tag": "select",
+      "entries": [
+        "entry.slot.renderer",
+        "updateLinearTrackSlotRenderer(entry.slot)"
+      ],
+      "disabled": "!semanticMutationAvailable"
+    },
+    {
+      "line": 2950,
+      "tag": "button",
+      "entries": [
+        "moveLinearTrackSlot(entry.index, entry.index - 1)"
+      ],
+      "disabled": "!semanticMutationAvailable || (!canMoveLinearTrackSlot(entry.index, -1))"
+    },
+    {
+      "line": 2951,
+      "tag": "button",
+      "entries": [
+        "moveLinearTrackSlot(entry.index, entry.index + 1)"
+      ],
+      "disabled": "!semanticMutationAvailable || (!canMoveLinearTrackSlot(entry.index, 1))"
+    },
+    {
+      "line": 2952,
+      "tag": "button",
+      "entries": [
+        "moveLinearTrackSlotAbove(entry.index)"
+      ],
+      "disabled": "!semanticMutationAvailable || (!canMoveLinearTrackSlotAbove(entry.index))"
+    },
+    {
+      "line": 2953,
+      "tag": "button",
+      "entries": [
+        "moveLinearTrackSlotBelow(entry.index)"
+      ],
+      "disabled": "!semanticMutationAvailable || (!canMoveLinearTrackSlotBelow(entry.index))"
+    },
+    {
+      "line": 2954,
+      "tag": "button",
+      "entries": [
+        "moveLinearTrackSlotToAxis(entry.index)"
+      ],
+      "disabled": "!semanticMutationAvailable || (!canMoveLinearTrackSlotToAxis(entry.index))"
+    },
+    {
+      "line": 2956,
+      "tag": "button",
+      "entries": [
+        "removeLinearTrackSlot(entry.index)"
+      ],
+      "disabled": "!semanticMutationAvailable"
+    },
+    {
+      "line": 2977,
+      "tag": "input",
+      "entries": [
+        "entry.slot.spacing"
+      ],
+      "disabled": "!semanticMutationAvailable"
+    },
+    {
+      "line": 2983,
+      "tag": "select",
+      "entries": [
+        "entry.slot.side",
+        "updateLinearTrackSlotPlacement(entry.slot, $event.target.value)"
+      ],
+      "disabled": "!semanticMutationAvailable"
+    },
+    {
+      "line": 2998,
+      "tag": "select",
+      "entries": [
+        "entry.slot.params.set_id"
+      ],
+      "disabled": "!semanticMutationAvailable"
+    },
+    {
+      "line": 3002,
+      "tag": "select",
+      "entries": [
+        "entry.slot.params.overflow"
+      ],
+      "disabled": "!semanticMutationAvailable"
+    },
+    {
+      "line": 3003,
+      "tag": "select",
+      "entries": [
+        "entry.slot.params.anchor_slot"
+      ],
+      "disabled": "!semanticMutationAvailable"
+    },
+    {
+      "line": 3008,
+      "tag": "select",
+      "entries": [
+        "entry.slot.params.layer"
+      ],
+      "disabled": "!semanticMutationAvailable"
+    },
+    {
+      "line": 3009,
+      "tag": "input",
+      "entries": [
+        "entry.slot.params.show_labels"
+      ],
+      "disabled": "!semanticMutationAvailable"
+    },
+    {
+      "line": 3011,
+      "tag": "input",
+      "entries": [
+        "setLinearAnnotationCoverAnchor(entry.slot, $event.target.checked)"
+      ],
+      "disabled": "!semanticMutationAvailable"
+    },
+    {
+      "line": 3025,
+      "tag": "input",
+      "entries": [
+        "setLinearAnnotationMarkSelected(entry.slot, mark, $event.target.checked)"
+      ],
+      "disabled": "!semanticMutationAvailable"
+    },
+    {
+      "line": 3033,
+      "tag": "select",
+      "entries": [
+        "entry.slot.params.track_index",
+        "syncDepthTrackSlotLabel(entry.slot); syncLinearDepthSlotHeightsFromDepthTracks()"
+      ],
+      "disabled": "!semanticMutationAvailable"
+    },
+    {
+      "line": 3066,
+      "tag": "input",
+      "entries": [
+        "entry.slot.params.nt"
+      ],
+      "disabled": "!semanticMutationAvailable"
+    },
+    {
+      "line": 3075,
+      "tag": "input",
+      "entries": [
+        "entry.slot.params.legend_label"
+      ],
+      "disabled": "!semanticMutationAvailable"
+    },
+    {
+      "line": 3088,
+      "tag": "button",
+      "entries": [
+        "clearLinearTrackSlotSkewColor(entry.slot, 'positive_color')"
+      ],
+      "disabled": "!semanticMutationAvailable || (!linearTrackSlotHasSkewColorOverride(entry.slot, 'positive_color'))"
+    },
+    {
+      "line": 3105,
+      "tag": "button",
+      "entries": [
+        "clearLinearTrackSlotSkewColor(entry.slot, 'negative_color')"
+      ],
+      "disabled": "!semanticMutationAvailable || (!linearTrackSlotHasSkewColorOverride(entry.slot, 'negative_color'))"
+    },
+    {
+      "line": 3118,
+      "tag": "select",
+      "entries": [
+        "linearTrackNewRenderer"
+      ],
+      "disabled": "!semanticMutationAvailable"
+    },
+    {
+      "line": 3121,
+      "tag": "button",
+      "entries": [
+        "addLinearTrackSlot(linearTrackNewRenderer)"
+      ],
+      "disabled": "!semanticMutationAvailable || (!canAddLinearTrackRenderer(linearTrackNewRenderer))"
+    },
+    {
+      "line": 3136,
+      "tag": "select",
+      "entries": [
+        "form.track_type"
+      ],
+      "disabled": "!semanticMutationAvailable"
+    },
+    {
+      "line": 3148,
+      "tag": "input",
+      "entries": [
+        "form.separate_strands"
+      ],
+      "disabled": "!semanticMutationAvailable"
+    },
+    {
+      "line": 3156,
+      "tag": "input",
+      "entries": [
+        "adv.resolve_overlaps"
+      ],
+      "disabled": "!semanticMutationAvailable"
+    },
+    {
+      "line": 3160,
+      "tag": "input",
+      "entries": [
+        "adv.feature_overlap_tolerance_bp"
+      ],
+      "disabled": "!semanticMutationAvailable"
+    },
+    {
+      "line": 3164,
+      "tag": "input",
+      "entries": [
+        "form.multi_record_canvas"
+      ],
+      "disabled": "!semanticMutationAvailable"
+    },
+    {
+      "line": 3168,
+      "tag": "input",
+      "entries": [
+        "setCircularGcSuppressed($event.target.checked, $event)"
+      ],
+      "disabled": "!semanticMutationAvailable"
+    },
+    {
+      "line": 3172,
+      "tag": "input",
+      "entries": [
+        "setCircularSkewSuppressed($event.target.checked, $event)"
+      ],
+      "disabled": "!semanticMutationAvailable"
+    },
+    {
+      "line": 3180,
+      "tag": "input",
+      "entries": [
+        "form.show_depth"
+      ],
+      "disabled": "!semanticMutationAvailable || (adv.circular_track_slots_enabled || !canShowDepthTrack)"
+    },
+    {
+      "line": 3204,
+      "tag": "input",
+      "entries": [
+        "setCircularTrackSlotsEnabled($event.target.checked)"
+      ],
+      "disabled": "!semanticMutationAvailable"
+    },
+    {
+      "line": 3207,
+      "tag": "button",
+      "entries": [
+        "resetCircularTrackSlotsFromSimpleControls"
+      ],
+      "disabled": "!semanticMutationAvailable"
+    },
+    {
+      "line": 3223,
+      "tag": "button",
+      "entries": [
+        "resetCircularTrackSlotsToPreset('tuckin')"
+      ],
+      "disabled": "!semanticMutationAvailable"
+    },
+    {
+      "line": 3224,
+      "tag": "button",
+      "entries": [
+        "resetCircularTrackSlotsToPreset('middle')"
+      ],
+      "disabled": "!semanticMutationAvailable"
+    },
+    {
+      "line": 3225,
+      "tag": "button",
+      "entries": [
+        "resetCircularTrackSlotsToPreset('spreadout')"
+      ],
+      "disabled": "!semanticMutationAvailable"
+    },
+    {
+      "line": 3237,
+      "tag": "input",
+      "entries": [
+        "adv.center_reserved_radius"
+      ],
+      "disabled": "!semanticMutationAvailable"
+    },
+    {
+      "line": 3281,
+      "tag": "input",
+      "entries": [
+        "setCircularTrackSlotEnabled(entry.slot, $event.target.checked)"
+      ],
+      "disabled": "!semanticMutationAvailable || (circularTrackSlotHiddenBySuppress(entry.slot))"
+    },
+    {
+      "line": 3290,
+      "tag": "input",
+      "entries": [
+        "entry.slot.id"
+      ],
+      "disabled": "!semanticMutationAvailable"
+    },
+    {
+      "line": 3291,
+      "tag": "select",
+      "entries": [
+        "entry.slot.renderer",
+        "updateCircularTrackSlotRenderer(entry.slot, $event.target.value)"
+      ],
+      "disabled": "!semanticMutationAvailable"
+    },
+    {
+      "line": 3302,
+      "tag": "button",
+      "entries": [
+        "moveCircularTrackSlot(entry.index, entry.index - 1)"
+      ],
+      "disabled": "!semanticMutationAvailable || (!canMoveCircularTrackSlot(entry.index, -1))"
+    },
+    {
+      "line": 3303,
+      "tag": "button",
+      "entries": [
+        "moveCircularTrackSlot(entry.index, entry.index + 1)"
+      ],
+      "disabled": "!semanticMutationAvailable || (!canMoveCircularTrackSlot(entry.index, 1))"
+    },
+    {
+      "line": 3304,
+      "tag": "button",
+      "entries": [
+        "moveCircularTrackSlotOutside(entry.index)"
+      ],
+      "disabled": "!semanticMutationAvailable || (!canMoveCircularTrackSlotOutside(entry.index))"
+    },
+    {
+      "line": 3305,
+      "tag": "button",
+      "entries": [
+        "moveCircularTrackSlotInside(entry.index)"
+      ],
+      "disabled": "!semanticMutationAvailable || (!canMoveCircularTrackSlotInside(entry.index))"
+    },
+    {
+      "line": 3306,
+      "tag": "button",
+      "entries": [
+        "moveCircularTrackSlotToAxis(entry.index)"
+      ],
+      "disabled": "!semanticMutationAvailable || (!canMoveCircularTrackSlotToAxis(entry.index))"
+    },
+    {
+      "line": 3308,
+      "tag": "button",
+      "entries": [
+        "removeCircularTrackSlot(entry.index)"
+      ],
+      "disabled": "!semanticMutationAvailable || (isManagedCircularConservationSlot(entry.slot))"
+    },
+    {
+      "line": 3330,
+      "tag": "input",
+      "entries": [
+        "entry.slot.width"
+      ],
+      "disabled": "!semanticMutationAvailable"
+    },
+    {
+      "line": 3338,
+      "tag": "input",
+      "entries": [
+        "entry.slot.radius"
+      ],
+      "disabled": "!semanticMutationAvailable"
+    },
+    {
+      "line": 3346,
+      "tag": "input",
+      "entries": [
+        "entry.slot.inner_gap_px"
+      ],
+      "disabled": "!semanticMutationAvailable"
+    },
+    {
+      "line": 3354,
+      "tag": "input",
+      "entries": [
+        "entry.slot.outer_gap_px"
+      ],
+      "disabled": "!semanticMutationAvailable"
+    },
+    {
+      "line": 3360,
+      "tag": "select",
+      "entries": [
+        "entry.slot.params.lane_direction",
+        "updateCircularTrackFeatureLane(entry.slot, $event.target.value)"
+      ],
+      "disabled": "!semanticMutationAvailable"
+    },
+    {
+      "line": 3372,
+      "tag": "select",
+      "entries": [
+        "entry.slot.params.tick_label_layout"
+      ],
+      "disabled": "!semanticMutationAvailable"
+    },
+    {
+      "line": 3380,
+      "tag": "select",
+      "entries": [
+        "entry.slot.params.set_id"
+      ],
+      "disabled": "!semanticMutationAvailable"
+    },
+    {
+      "line": 3384,
+      "tag": "select",
+      "entries": [
+        "entry.slot.side",
+        "updateCircularTrackSlotPlacement(entry.slot, $event.target.value)"
+      ],
+      "disabled": "!semanticMutationAvailable"
+    },
+    {
+      "line": 3385,
+      "tag": "select",
+      "entries": [
+        "entry.slot.params.anchor_slot"
+      ],
+      "disabled": "!semanticMutationAvailable"
+    },
+    {
+      "line": 3390,
+      "tag": "select",
+      "entries": [
+        "entry.slot.params.layer"
+      ],
+      "disabled": "!semanticMutationAvailable"
+    },
+    {
+      "line": 3391,
+      "tag": "select",
+      "entries": [
+        "entry.slot.params.overflow"
+      ],
+      "disabled": "!semanticMutationAvailable"
+    },
+    {
+      "line": 3392,
+      "tag": "input",
+      "entries": [
+        "entry.slot.params.show_labels"
+      ],
+      "disabled": "!semanticMutationAvailable"
+    },
+    {
+      "line": 3394,
+      "tag": "input",
+      "entries": [
+        "setCircularAnnotationCoverAnchor(entry.slot, $event.target.checked)"
+      ],
+      "disabled": "!semanticMutationAvailable"
+    },
+    {
+      "line": 3408,
+      "tag": "input",
+      "entries": [
+        "setCircularAnnotationMarkSelected(entry.slot, mark, $event.target.checked)"
+      ],
+      "disabled": "!semanticMutationAvailable"
+    },
+    {
+      "line": 3416,
+      "tag": "input",
+      "entries": [
+        "entry.slot.params.track_index",
+        "syncDepthTrackSlotLabel(entry.slot)"
+      ],
+      "disabled": "!semanticMutationAvailable"
+    },
+    {
+      "line": 3431,
+      "tag": "input",
+      "entries": [
+        "entry.slot.params.nt"
+      ],
+      "disabled": "!semanticMutationAvailable"
+    },
+    {
+      "line": 3435,
+      "tag": "input",
+      "entries": [
+        "entry.slot.params.legend_label"
+      ],
+      "disabled": "!semanticMutationAvailable"
+    },
+    {
+      "line": 3448,
+      "tag": "button",
+      "entries": [
+        "clearCircularTrackSlotSkewColor(entry.slot, 'positive_color')"
+      ],
+      "disabled": "!semanticMutationAvailable || (!circularTrackSlotHasSkewColorOverride(entry.slot, 'positive_color'))"
+    },
+    {
+      "line": 3465,
+      "tag": "button",
+      "entries": [
+        "clearCircularTrackSlotSkewColor(entry.slot, 'negative_color')"
+      ],
+      "disabled": "!semanticMutationAvailable || (!circularTrackSlotHasSkewColorOverride(entry.slot, 'negative_color'))"
+    },
+    {
+      "line": 3477,
+      "tag": "select",
+      "entries": [
+        "circularTrackNewRenderer"
+      ],
+      "disabled": "!semanticMutationAvailable"
+    },
+    {
+      "line": 3482,
+      "tag": "button",
+      "entries": [
+        "addCircularTrackSlot(circularTrackNewRenderer)"
+      ],
+      "disabled": "!semanticMutationAvailable || (!canAddCircularTrackRenderer(circularTrackNewRenderer))"
+    },
+    {
+      "line": 3503,
+      "tag": "select",
+      "entries": [
+        "adv.multi_record_size_mode"
+      ],
+      "disabled": "!semanticMutationAvailable"
+    },
+    {
+      "line": 3511,
+      "tag": "input",
+      "entries": [
+        "adv.multi_record_min_radius_ratio"
+      ],
+      "disabled": "!semanticMutationAvailable"
+    },
+    {
+      "line": 3515,
+      "tag": "input",
+      "entries": [
+        "adv.multi_record_column_gap_ratio"
+      ],
+      "disabled": "!semanticMutationAvailable"
+    },
+    {
+      "line": 3519,
+      "tag": "input",
+      "entries": [
+        "adv.multi_record_row_gap_ratio"
+      ],
+      "disabled": "!semanticMutationAvailable"
+    },
+    {
+      "line": 3543,
+      "tag": "select",
+      "entries": [
+        "getCircularRecordRow(position)",
+        "setCircularRecordRow(idx, $event.target.value)"
+      ],
+      "disabled": "!semanticMutationAvailable"
+    },
+    {
+      "line": 3554,
+      "tag": "button",
+      "entries": [
+        "moveCircularRecordOrderUp(idx)"
+      ],
+      "disabled": "!semanticMutationAvailable || (!canMoveCircularRecordOrderUp(idx))"
+    },
+    {
+      "line": 3555,
+      "tag": "button",
+      "entries": [
+        "moveCircularRecordOrderDown(idx)"
+      ],
+      "disabled": "!semanticMutationAvailable || (!canMoveCircularRecordOrderDown(idx))"
+    },
+    {
+      "line": 3559,
+      "tag": "button",
+      "entries": [
+        "resetCircularRecordOrder"
+      ],
+      "disabled": "!semanticMutationAvailable"
+    },
+    {
+      "line": 3585,
+      "tag": "input",
+      "entries": [
+        "form.plot_title"
+      ],
+      "disabled": "!semanticMutationAvailable"
+    },
+    {
+      "line": 3591,
+      "tag": "select",
+      "entries": [
+        "adv.plot_title_position"
+      ],
+      "disabled": "!semanticMutationAvailable"
+    },
+    {
+      "line": 3604,
+      "tag": "input",
+      "entries": [
+        "adv.keep_full_definition_with_plot_title"
+      ],
+      "disabled": "!semanticMutationAvailable"
+    },
+    {
+      "line": 3623,
+      "tag": "input",
+      "entries": [
+        "adv[row.visibilityKey]"
+      ],
+      "disabled": "!semanticMutationAvailable"
+    },
+    {
+      "line": 3626,
+      "tag": "select",
+      "entries": [
+        "adv[row.visibilityKey]"
+      ],
+      "disabled": "!semanticMutationAvailable"
+    },
+    {
+      "line": 3641,
+      "tag": "button",
+      "entries": [
+        "setDefinitionLineStyleWeight(row.key, '')"
+      ],
+      "disabled": "!semanticMutationAvailable"
+    },
+    {
+      "line": 3642,
+      "tag": "button",
+      "entries": [
+        "setDefinitionLineStyleWeight(row.key, 'bold')"
+      ],
+      "disabled": "!semanticMutationAvailable"
+    },
+    {
+      "line": 3668,
+      "tag": "select",
+      "entries": [
+        "form.legend"
+      ],
+      "disabled": "!semanticMutationAvailable"
+    },
+    {
+      "line": 3684,
+      "tag": "input",
+      "entries": [
+        "adv.legend_box_size"
+      ],
+      "disabled": "!semanticMutationAvailable"
+    },
+    {
+      "line": 3690,
+      "tag": "input",
+      "entries": [
+        "adv.legend_font_size"
+      ],
+      "disabled": "!semanticMutationAvailable"
+    },
+    {
+      "line": 3712,
+      "tag": "button",
+      "entries": [
+        "applySpecificRulePreset"
+      ],
+      "disabled": "!semanticMutationAvailable || (!selectedSpecificPreset || specificRulePresetLoading)"
+    },
+    {
+      "line": 3724,
+      "tag": "button",
+      "entries": [
+        "resetColors"
+      ],
+      "disabled": "!semanticMutationAvailable"
+    },
+    {
+      "line": 3728,
+      "tag": "input",
+      "entries": [
+        "paletteInstantPreviewEnabled"
+      ],
+      "disabled": "!semanticMutationAvailable"
+    },
+    {
+      "line": 3736,
+      "tag": "select",
+      "entries": [
+        "selectedPalette",
+        "updatePalette"
+      ],
+      "disabled": "!semanticMutationAvailable"
+    },
+    {
+      "line": 3761,
+      "tag": "button",
+      "entries": [],
+      "disabled": "!semanticMutationAvailable"
+    },
+    {
+      "line": 3781,
+      "tag": "button",
+      "entries": [
+        "clearAllSpecificRules"
+      ],
+      "disabled": "!semanticMutationAvailable"
+    },
+    {
+      "line": 3792,
+      "tag": "select",
+      "entries": [
+        "rule.feat",
+        "setSpecificRuleField(i, 'feat', $event.target.value, $event.target)"
+      ],
+      "disabled": "!semanticMutationAvailable"
+    },
+    {
+      "line": 3795,
+      "tag": "input",
+      "entries": [
+        "rule.qual",
+        "setSpecificRuleField(i, 'qual', $event.target.value, $event.target)"
+      ],
+      "disabled": "!semanticMutationAvailable"
+    },
+    {
+      "line": 3796,
+      "tag": "input",
+      "entries": [
+        "rule.color",
+        "setSpecificRuleField(i, 'color', $event.target.value, $event.target)"
+      ],
+      "disabled": "!semanticMutationAvailable"
+    },
+    {
+      "line": 3798,
+      "tag": "button",
+      "entries": [
+        "moveSpecificRuleUp(i)"
+      ],
+      "disabled": "!semanticMutationAvailable || (i === 0)"
+    },
+    {
+      "line": 3799,
+      "tag": "button",
+      "entries": [
+        "moveSpecificRuleDown(i)"
+      ],
+      "disabled": "!semanticMutationAvailable || (i === manualSpecificRules.length - 1)"
+    },
+    {
+      "line": 3800,
+      "tag": "button",
+      "entries": [
+        "removeSpecificRule(i)"
+      ],
+      "disabled": "!semanticMutationAvailable"
+    },
+    {
+      "line": 3804,
+      "tag": "input",
+      "entries": [
+        "rule.val",
+        "setSpecificRuleField(i, 'val', $event.target.value, $event.target)"
+      ],
+      "disabled": "!semanticMutationAvailable"
+    },
+    {
+      "line": 3805,
+      "tag": "input",
+      "entries": [
+        "rule.cap",
+        "setSpecificRuleField(i, 'cap', $event.target.value, $event.target)"
+      ],
+      "disabled": "!semanticMutationAvailable"
+    },
+    {
+      "line": 3824,
+      "tag": "button",
+      "entries": [
+        "addSpecificRule"
+      ],
+      "disabled": "!semanticMutationAvailable"
+    },
+    {
+      "line": 3850,
+      "tag": "select",
+      "entries": [
+        "getFeatureShape(f)",
+        "setFeatureShape(f, $event.target.value)"
+      ],
+      "disabled": "!semanticMutationAvailable"
+    },
+    {
+      "line": 3861,
+      "tag": "button",
+      "entries": [
+        "removeFeature(f)"
+      ],
+      "disabled": "!semanticMutationAvailable"
+    },
+    {
+      "line": 3871,
+      "tag": "button",
+      "entries": [],
+      "disabled": "!semanticMutationAvailable"
+    },
+    {
+      "line": 3882,
+      "tag": "input",
+      "entries": [
+        "adv.arrow_head_length_ratio"
+      ],
+      "disabled": "!semanticMutationAvailable"
+    },
+    {
+      "line": 3894,
+      "tag": "input",
+      "entries": [
+        "adv.arrow_shaft_width_ratio"
+      ],
+      "disabled": "!semanticMutationAvailable"
+    },
+    {
+      "line": 3920,
+      "tag": "button",
+      "entries": [
+        "addFeatureVisibilityRule"
+      ],
+      "disabled": "!semanticMutationAvailable"
+    },
+    {
+      "line": 3942,
+      "tag": "button",
+      "entries": [
+        "moveFeatureVisibilityRuleUp(i)"
+      ],
+      "disabled": "!semanticMutationAvailable || (i === 0)"
+    },
+    {
+      "line": 3943,
+      "tag": "button",
+      "entries": [
+        "moveFeatureVisibilityRuleDown(i)"
+      ],
+      "disabled": "!semanticMutationAvailable || (i === featureVisibilityManualRules.length - 1)"
+    },
+    {
+      "line": 3944,
+      "tag": "button",
+      "entries": [
+        "removeFeatureVisibilityRule(i)"
+      ],
+      "disabled": "!semanticMutationAvailable"
+    },
+    {
+      "line": 3954,
+      "tag": "input",
+      "entries": [
+        "rule.recordId",
+        "setFeatureVisibilityRuleField(i, 'recordId', $event.target.value)"
+      ],
+      "disabled": "!semanticMutationAvailable"
+    },
+    {
+      "line": 3955,
+      "tag": "select",
+      "entries": [
+        "rule.featureType",
+        "setFeatureVisibilityRuleField(i, 'featureType', $event.target.value)"
+      ],
+      "disabled": "!semanticMutationAvailable"
+    },
+    {
+      "line": 3959,
+      "tag": "input",
+      "entries": [
+        "rule.qualifier",
+        "setFeatureVisibilityRuleField(i, 'qualifier', $event.target.value)"
+      ],
+      "disabled": "!semanticMutationAvailable"
+    },
+    {
+      "line": 3960,
+      "tag": "select",
+      "entries": [
+        "rule.action",
+        "setFeatureVisibilityRuleField(i, 'action', $event.target.value)"
+      ],
+      "disabled": "!semanticMutationAvailable"
+    },
+    {
+      "line": 3968,
+      "tag": "input",
+      "entries": [
+        "rule.value",
+        "setFeatureVisibilityRuleField(i, 'value', $event.target.value)"
+      ],
+      "disabled": "!semanticMutationAvailable"
+    },
+    {
+      "line": 3982,
+      "tag": "input",
+      "entries": [
+        "adv.feature_height"
+      ],
+      "disabled": "!semanticMutationAvailable"
+    },
+    {
+      "line": 3988,
+      "tag": "input",
+      "entries": [
+        "adv.track_axis_gap ?? ''",
+        "setOptionalNumberInputValue(adv, 'track_axis_gap', $event.target.value, true)"
+      ],
+      "disabled": "!semanticMutationAvailable"
+    },
+    {
+      "line": 4001,
+      "tag": "input",
+      "entries": [
+        "adv.feature_width_circular"
+      ],
+      "disabled": "!semanticMutationAvailable || (adv.circular_track_slots_enabled)"
+    },
+    {
+      "line": 4016,
+      "tag": "input",
+      "entries": [
+        "adv.block_stroke_width"
+      ],
+      "disabled": "!semanticMutationAvailable"
+    },
+    {
+      "line": 4032,
+      "tag": "input",
+      "entries": [
+        "adv.line_stroke_width"
+      ],
+      "disabled": "!semanticMutationAvailable"
+    },
+    {
+      "line": 4048,
+      "tag": "select",
+      "entries": [
+        "form.show_labels_linear"
+      ],
+      "disabled": "!semanticMutationAvailable"
+    },
+    {
+      "line": 4057,
+      "tag": "select",
+      "entries": [
+        "form.labels_mode"
+      ],
+      "disabled": "!semanticMutationAvailable"
+    },
+    {
+      "line": 4071,
+      "tag": "button",
+      "entries": [
+        "setLabelFilterMode(m)"
+      ],
+      "disabled": "!semanticMutationAvailable"
+    },
+    {
+      "line": 4076,
+      "tag": "textarea",
+      "entries": [
+        "manualBlacklist"
+      ],
+      "disabled": "!semanticMutationAvailable"
+    },
+    {
+      "line": 4084,
+      "tag": "input",
+      "entries": [
+        "row.feat"
+      ],
+      "disabled": "!semanticMutationAvailable"
+    },
+    {
+      "line": 4085,
+      "tag": "input",
+      "entries": [
+        "row.qual"
+      ],
+      "disabled": "!semanticMutationAvailable"
+    },
+    {
+      "line": 4086,
+      "tag": "input",
+      "entries": [
+        "row.key"
+      ],
+      "disabled": "!semanticMutationAvailable"
+    },
+    {
+      "line": 4087,
+      "tag": "button",
+      "entries": [
+        "removeWhitelistRule(i)"
+      ],
+      "disabled": "!semanticMutationAvailable"
+    },
+    {
+      "line": 4089,
+      "tag": "button",
+      "entries": [
+        "addWhitelistRule"
+      ],
+      "disabled": "!semanticMutationAvailable"
+    },
+    {
+      "line": 4102,
+      "tag": "button",
+      "entries": [
+        "removePriorityRule(i)"
+      ],
+      "disabled": "!semanticMutationAvailable"
+    },
+    {
+      "line": 4113,
+      "tag": "button",
+      "entries": [
+        "addPriorityRule"
+      ],
+      "disabled": "!semanticMutationAvailable"
+    },
+    {
+      "line": 4126,
+      "tag": "input",
+      "entries": [
+        "adv.label_font_size"
+      ],
+      "disabled": "!semanticMutationAvailable"
+    },
+    {
+      "line": 4134,
+      "tag": "select",
+      "entries": [
+        "adv.label_rendering"
+      ],
+      "disabled": "!semanticMutationAvailable"
+    },
+    {
+      "line": 4146,
+      "tag": "select",
+      "entries": [
+        "adv.circular_label_placement"
+      ],
+      "disabled": "!semanticMutationAvailable"
+    },
+    {
+      "line": 4157,
+      "tag": "input",
+      "entries": [
+        "adv.circular_label_spacing ?? ''",
+        "setOptionalNumberInputValue(adv, 'circular_label_spacing', $event.target.value, true)",
+        "setOptionalNumberInputValue(adv, 'circular_label_spacing', Number($event.target.value) > 0 ? $event.target.value : '', true)"
+      ],
+      "disabled": "!semanticMutationAvailable"
+    },
+    {
+      "line": 4175,
+      "tag": "select",
+      "entries": [
+        "adv.label_placement",
+        "adv.label_placement === 'above_feature' && (adv.label_rendering = 'auto')"
+      ],
+      "disabled": "!semanticMutationAvailable"
+    },
+    {
+      "line": 4190,
+      "tag": "input",
+      "entries": [
+        "adv.label_rotation ?? ''",
+        "setOptionalNumberInputValue(adv, 'label_rotation', $event.target.value, true)"
+      ],
+      "disabled": "!semanticMutationAvailable"
+    },
+    {
+      "line": 4205,
+      "tag": "input",
+      "entries": [
+        "adv.linear_label_spacing ?? ''",
+        "setOptionalNumberInputValue(adv, 'linear_label_spacing', $event.target.value, true)",
+        "setOptionalNumberInputValue(adv, 'linear_label_spacing', Number($event.target.value) > 0 ? $event.target.value : '', true)"
+      ],
+      "disabled": "!semanticMutationAvailable"
+    },
+    {
+      "line": 4226,
+      "tag": "input",
+      "entries": [
+        "adv.outer_label_x_offset"
+      ],
+      "disabled": "!semanticMutationAvailable"
+    },
+    {
+      "line": 4232,
+      "tag": "input",
+      "entries": [
+        "adv.outer_label_y_offset"
+      ],
+      "disabled": "!semanticMutationAvailable"
+    },
+    {
+      "line": 4239,
+      "tag": "input",
+      "entries": [
+        "adv.inner_label_x_offset"
+      ],
+      "disabled": "!semanticMutationAvailable"
+    },
+    {
+      "line": 4245,
+      "tag": "input",
+      "entries": [
+        "adv.inner_label_y_offset"
+      ],
+      "disabled": "!semanticMutationAvailable"
+    },
+    {
+      "line": 4265,
+      "tag": "input",
+      "entries": [
+        "form.show_scale"
+      ],
+      "disabled": "!semanticMutationAvailable"
+    },
+    {
+      "line": 4285,
+      "tag": "input",
+      "entries": [
+        "adv.axis_stroke_width"
+      ],
+      "disabled": "!semanticMutationAvailable"
+    },
+    {
+      "line": 4296,
+      "tag": "select",
+      "entries": [
+        "form.scale_style"
+      ],
+      "disabled": "!semanticMutationAvailable"
+    },
+    {
+      "line": 4305,
+      "tag": "input",
+      "entries": [
+        "adv.scale_stroke_width"
+      ],
+      "disabled": "!semanticMutationAvailable"
+    },
+    {
+      "line": 4322,
+      "tag": "input",
+      "entries": [
+        "form.linear_ruler_on_axis"
+      ],
+      "disabled": "!semanticMutationAvailable || (!canUseLinearRulerOnAxis)"
+    },
+    {
+      "line": 4332,
+      "tag": "input",
+      "entries": [
+        "setLinearTypographyLinked($event.target.checked)"
+      ],
+      "disabled": "!semanticMutationAvailable"
+    },
+    {
+      "line": 4371,
+      "tag": "input",
+      "entries": [
+        "adv.scale_interval"
+      ],
+      "disabled": "!semanticMutationAvailable"
+    },
+    {
+      "line": 4397,
+      "tag": "input",
+      "entries": [
+        "form.show_scale"
+      ],
+      "disabled": "!semanticMutationAvailable || (adv.circular_track_slots_enabled)"
+    },
+    {
+      "line": 4425,
+      "tag": "input",
+      "entries": [
+        "adv.axis_stroke_width"
+      ],
+      "disabled": "!semanticMutationAvailable"
+    },
+    {
+      "line": 4436,
+      "tag": "input",
+      "entries": [
+        "adv.scale_interval"
+      ],
+      "disabled": "!semanticMutationAvailable"
+    },
+    {
+      "line": 4442,
+      "tag": "input",
+      "entries": [
+        "adv.tick_label_font_size"
+      ],
+      "disabled": "!semanticMutationAvailable"
+    },
+    {
+      "line": 4458,
+      "tag": "input",
+      "entries": [
+        "adv.window_size"
+      ],
+      "disabled": "!semanticMutationAvailable"
+    },
+    {
+      "line": 4464,
+      "tag": "input",
+      "entries": [
+        "adv.step_size"
+      ],
+      "disabled": "!semanticMutationAvailable"
+    },
+    {
+      "line": 4467,
+      "tag": "input",
+      "entries": [
+        "adv.nt"
+      ],
+      "disabled": "!semanticMutationAvailable"
+    },
+    {
+      "line": 4472,
+      "tag": "select",
+      "entries": [
+        "adv.gc_content_mode"
+      ],
+      "disabled": "!semanticMutationAvailable"
+    },
+    {
+      "line": 4482,
+      "tag": "input",
+      "entries": [
+        "adv.gc_content_min_percent"
+      ],
+      "disabled": "!semanticMutationAvailable"
+    },
+    {
+      "line": 4486,
+      "tag": "input",
+      "entries": [
+        "adv.gc_content_max_percent"
+      ],
+      "disabled": "!semanticMutationAvailable"
+    },
+    {
+      "line": 4491,
+      "tag": "input",
+      "entries": [
+        "adv.gc_content_show_axis"
+      ],
+      "disabled": "!semanticMutationAvailable"
+    },
+    {
+      "line": 4495,
+      "tag": "input",
+      "entries": [
+        "adv.gc_content_show_ticks"
+      ],
+      "disabled": "!semanticMutationAvailable"
+    },
+    {
+      "line": 4502,
+      "tag": "input",
+      "entries": [
+        "adv.gc_content_tick_interval"
+      ],
+      "disabled": "!semanticMutationAvailable"
+    },
+    {
+      "line": 4506,
+      "tag": "input",
+      "entries": [
+        "adv.gc_content_small_tick_interval"
+      ],
+      "disabled": "!semanticMutationAvailable"
+    },
+    {
+      "line": 4511,
+      "tag": "input",
+      "entries": [
+        "adv.gc_content_tick_font_size"
+      ],
+      "disabled": "!semanticMutationAvailable"
+    },
+    {
+      "line": 4521,
+      "tag": "input",
+      "entries": [
+        "adv.gc_height"
+      ],
+      "disabled": "!semanticMutationAvailable"
+    },
+    {
+      "line": 4532,
+      "tag": "input",
+      "entries": [
+        "adv.gc_content_width_circular"
+      ],
+      "disabled": "!semanticMutationAvailable || (adv.circular_track_slots_enabled)"
+    },
+    {
+      "line": 4538,
+      "tag": "input",
+      "entries": [
+        "adv.gc_content_radius_circular"
+      ],
+      "disabled": "!semanticMutationAvailable || (adv.circular_track_slots_enabled)"
+    },
+    {
+      "line": 4546,
+      "tag": "input",
+      "entries": [
+        "adv.gc_skew_width_circular"
+      ],
+      "disabled": "!semanticMutationAvailable || (adv.circular_track_slots_enabled)"
+    },
+    {
+      "line": 4552,
+      "tag": "input",
+      "entries": [
+        "adv.gc_skew_radius_circular"
+      ],
+      "disabled": "!semanticMutationAvailable || (adv.circular_track_slots_enabled)"
+    },
+    {
+      "line": 4653,
+      "tag": "select",
+      "entries": [
+        "selectedResultIndex",
+        "selectResult($event.target.value)"
+      ],
+      "disabled": "!semanticMutationAvailable"
+    },
+    {
+      "line": 4859,
+      "tag": "select",
+      "entries": [
+        "featurePlacementActions.setPlacement(selectedFeatures, $event.target.value); $event.target.value = ''"
+      ],
+      "disabled": "!semanticMutationAvailable"
+    },
+    {
+      "line": 4864,
+      "tag": "button",
+      "entries": [
+        "clearFeatureSelection({ clearStatus: true })"
+      ],
+      "disabled": "!semanticMutationAvailable"
+    },
+    {
+      "line": 4892,
+      "tag": "button",
+      "entries": [
+        "applySelectedFeatureColor"
+      ],
+      "disabled": "!semanticMutationAvailable"
+    },
+    {
+      "line": 4912,
+      "tag": "button",
+      "entries": [
+        "applySelectedFeatureVisibility"
+      ],
+      "disabled": "!semanticMutationAvailable"
+    },
+    {
+      "line": 4935,
+      "tag": "button",
+      "entries": [
+        "applySelectedFeatureStroke"
+      ],
+      "disabled": "!semanticMutationAvailable"
+    },
+    {
+      "line": 4956,
+      "tag": "button",
+      "entries": [
+        "resetLayout"
+      ],
+      "disabled": "!semanticMutationAvailable"
+    },
+    {
+      "line": 5002,
+      "tag": "button",
+      "entries": [
+        "resetCanvasPadding"
+      ],
+      "disabled": "!semanticMutationAvailable"
+    },
+    {
+      "line": 5008,
+      "tag": "input",
+      "entries": [
+        "canvasPadding.top"
+      ],
+      "disabled": "!semanticMutationAvailable"
+    },
+    {
+      "line": 5013,
+      "tag": "input",
+      "entries": [
+        "canvasPadding.left"
+      ],
+      "disabled": "!semanticMutationAvailable"
+    },
+    {
+      "line": 5020,
+      "tag": "input",
+      "entries": [
+        "canvasPadding.right"
+      ],
+      "disabled": "!semanticMutationAvailable"
+    },
+    {
+      "line": 5025,
+      "tag": "input",
+      "entries": [
+        "canvasPadding.bottom"
+      ],
+      "disabled": "!semanticMutationAvailable"
+    },
+    {
+      "line": 5074,
+      "tag": "input",
+      "entries": [
+        "clickedFeature.color || '#cccccc'",
+        "updateClickedFeatureColor($event.target.value)"
+      ],
+      "disabled": "!semanticMutationAvailable || (!canEditFeatureColor(clickedFeature.feat))"
+    },
+    {
+      "line": 5087,
+      "tag": "select",
+      "entries": [
+        "featurePlacementActions.valueFor(clickedFeature.feat)",
+        "featurePlacementActions.setPlacement([clickedFeature.feat], $event.target.value)"
+      ],
+      "disabled": "!semanticMutationAvailable"
+    },
+    {
+      "line": 5160,
+      "tag": "select",
+      "entries": [
+        "featureRecordRotationDraft.anchor",
+        "setFeatureRecordRotationAnchor($event.target.value)"
+      ],
+      "disabled": "!semanticMutationAvailable || (featureRecordRotationDraft.placement === 'feature-end')"
+    },
+    {
+      "line": 5192,
+      "tag": "input",
+      "entries": [
+        "setFeatureRecordRotationOrientForward($event.target.checked)"
+      ],
+      "disabled": "!semanticMutationAvailable || (!featureRecordRotationDraft.orientCapability.enabled)"
+    },
+    {
+      "line": 5240,
+      "tag": "button",
+      "entries": [
+        "applyFeatureRecordRotation"
+      ],
+      "disabled": "!semanticMutationAvailable || (!featureRecordRotationDraft.canApply || featureRecordRotationDraft.pending)"
+    },
+    {
+      "line": 5461,
+      "tag": "input",
+      "entries": [
+        "clickedFeature.legendName",
+        "handleLegendNameCommit"
+      ],
+      "disabled": "!semanticMutationAvailable"
+    },
+    {
+      "line": 5479,
+      "tag": "select",
+      "entries": [
+        "selectLegendNameOption($event.target.value); $event.target.value = ''"
+      ],
+      "disabled": "!semanticMutationAvailable"
+    },
+    {
+      "line": 5495,
+      "tag": "select",
+      "entries": [
+        "clickedFeature.featureVisibility",
+        "updateClickedFeatureVisibility(clickedFeature.featureVisibility)"
+      ],
+      "disabled": "!semanticMutationAvailable"
+    },
+    {
+      "line": 5520,
+      "tag": "select",
+      "entries": [
+        "clickedFeature.labelVisibility"
+      ],
+      "disabled": "!semanticMutationAvailable"
+    },
+    {
+      "line": 5527,
+      "tag": "input",
+      "entries": [
+        "clickedFeature.labelText"
+      ],
+      "disabled": "!semanticMutationAvailable || (!clickedFeature.hasEditableLabel)"
+    },
+    {
+      "line": 5546,
+      "tag": "button",
+      "entries": [
+        "updateClickedFeatureLabelText"
+      ],
+      "disabled": "!semanticMutationAvailable || (!clickedFeature.hasEditableLabel)"
+    },
+    {
+      "line": 5562,
+      "tag": "input",
+      "entries": [
+        "clickedFeature.color || '#cccccc'",
+        "updateClickedFeatureColor($event.target.value)"
+      ],
+      "disabled": "!semanticMutationAvailable || (!canEditFeatureColor(clickedFeature.feat))"
+    },
+    {
+      "line": 5571,
+      "tag": "button",
+      "entries": [
+        "resetClickedFeatureFillColor"
+      ],
+      "disabled": "!semanticMutationAvailable"
+    },
+    {
+      "line": 5601,
+      "tag": "button",
+      "entries": [
+        "resetClickedFeatureStroke"
+      ],
+      "disabled": "!semanticMutationAvailable"
+    },
+    {
+      "line": 6030,
+      "tag": "button",
+      "entries": [
+        "handleFeatureVisibilityScopeChoice(scope.id)"
+      ],
+      "disabled": "!semanticMutationAvailable"
+    },
+    {
+      "line": 6042,
+      "tag": "button",
+      "entries": [
+        "handleFeatureVisibilityScopeChoice('cancel')"
+      ],
+      "disabled": "!semanticMutationAvailable"
+    },
+    {
+      "line": 6060,
+      "tag": "button",
+      "entries": [
+        "handleLabelTextScopeChoice('single')"
+      ],
+      "disabled": "!semanticMutationAvailable"
+    },
+    {
+      "line": 6066,
+      "tag": "button",
+      "entries": [
+        "handleLabelTextScopeChoice('all')"
+      ],
+      "disabled": "!semanticMutationAvailable"
+    },
+    {
+      "line": 6078,
+      "tag": "button",
+      "entries": [
+        "handleLabelTextScopeChoice('cancel')"
+      ],
+      "disabled": "!semanticMutationAvailable"
+    },
+    {
+      "line": 6095,
+      "tag": "button",
+      "entries": [
+        "handleGlobalLabelModeChoice('whitelist_only')"
+      ],
+      "disabled": "!semanticMutationAvailable"
+    },
+    {
+      "line": 6101,
+      "tag": "button",
+      "entries": [
+        "handleGlobalLabelModeChoice('show_all')"
+      ],
+      "disabled": "!semanticMutationAvailable"
+    },
+    {
+      "line": 6135,
+      "tag": "button",
+      "entries": [
+        "handleFeatureStyleScopeChoice('rule')"
+      ],
+      "disabled": "!semanticMutationAvailable"
+    },
+    {
+      "line": 6144,
+      "tag": "button",
+      "entries": [
+        "handleFeatureStyleScopeChoice('caption')"
+      ],
+      "disabled": "!semanticMutationAvailable"
+    },
+    {
+      "line": 6153,
+      "tag": "button",
+      "entries": [
+        "handleFeatureStyleScopeChoice('single')"
+      ],
+      "disabled": "!semanticMutationAvailable"
+    },
+    {
+      "line": 6161,
+      "tag": "button",
+      "entries": [
+        "handleFeatureStyleScopeChoice('displayLabel')"
+      ],
+      "disabled": "!semanticMutationAvailable"
+    },
+    {
+      "line": 6174,
+      "tag": "button",
+      "entries": [
+        "handleFeatureStyleScopeChoice('annotationLabel')"
+      ],
+      "disabled": "!semanticMutationAvailable"
+    },
+    {
+      "line": 6188,
+      "tag": "button",
+      "entries": [
+        "handleFeatureStyleScopeChoice('useExisting')"
+      ],
+      "disabled": "!semanticMutationAvailable"
+    },
+    {
+      "line": 6198,
+      "tag": "button",
+      "entries": [
+        "handleFeatureStyleScopeChoice('cancel')"
+      ],
+      "disabled": "!semanticMutationAvailable"
+    },
+    {
+      "line": 6235,
+      "tag": "button",
+      "entries": [
+        "handleLegendRenameChoice('single')"
+      ],
+      "disabled": "!semanticMutationAvailable"
+    },
+    {
+      "line": 6241,
+      "tag": "button",
+      "entries": [
+        "handleLegendRenameChoice('group')"
+      ],
+      "disabled": "!semanticMutationAvailable"
+    },
+    {
+      "line": 6250,
+      "tag": "button",
+      "entries": [
+        "handleLegendRenameChoice('merge')"
+      ],
+      "disabled": "!semanticMutationAvailable"
+    },
+    {
+      "line": 6256,
+      "tag": "button",
+      "entries": [
+        "handleLegendRenameChoice('suffix')"
+      ],
+      "disabled": "!semanticMutationAvailable"
+    },
+    {
+      "line": 6264,
+      "tag": "button",
+      "entries": [
+        "handleLegendRenameChoice('cancel')"
+      ],
+      "disabled": "!semanticMutationAvailable"
+    },
+    {
+      "line": 6284,
+      "tag": "button",
+      "entries": [
+        "handleResetColorChoice('all')"
+      ],
+      "disabled": "!semanticMutationAvailable"
+    },
+    {
+      "line": 6292,
+      "tag": "button",
+      "entries": [
+        "handleResetColorChoice('this_with_legend')"
+      ],
+      "disabled": "!semanticMutationAvailable"
+    },
+    {
+      "line": 6300,
+      "tag": "button",
+      "entries": [
+        "handleResetColorChoice('this')"
+      ],
+      "disabled": "!semanticMutationAvailable"
+    },
+    {
+      "line": 6308,
+      "tag": "button",
+      "entries": [
+        "resetColorDialog.show = false"
+      ],
+      "disabled": "!semanticMutationAvailable"
+    },
+    {
+      "line": 6461,
+      "tag": "button",
+      "entries": [
+        "sortLegendEntries('asc')"
+      ],
+      "disabled": "!semanticMutationAvailable"
+    },
+    {
+      "line": 6464,
+      "tag": "button",
+      "entries": [
+        "sortLegendEntries('desc')"
+      ],
+      "disabled": "!semanticMutationAvailable"
+    },
+    {
+      "line": 6467,
+      "tag": "button",
+      "entries": [
+        "sortLegendEntriesByDefault"
+      ],
+      "disabled": "!semanticMutationAvailable"
+    },
+    {
+      "line": 6470,
+      "tag": "button",
+      "entries": [
+        "resetLegendPosition"
+      ],
+      "disabled": "!semanticMutationAvailable"
+    },
+    {
+      "line": 6481,
+      "tag": "button",
+      "entries": [
+        "moveLegendEntryUp(idx)"
+      ],
+      "disabled": "!semanticMutationAvailable || (idx === 0)"
+    },
+    {
+      "line": 6484,
+      "tag": "button",
+      "entries": [
+        "moveLegendEntryDown(idx)"
+      ],
+      "disabled": "!semanticMutationAvailable || (idx === legendEntries.length - 1)"
+    },
+    {
+      "line": 6489,
+      "tag": "input",
+      "entries": [
+        "entry.caption",
+        "renameLegendEntry(idx, $event.target.value)"
+      ],
+      "disabled": "!semanticMutationAvailable"
+    },
+    {
+      "line": 6493,
+      "tag": "button",
+      "entries": [
+        "deleteLegendEntry(idx)"
+      ],
+      "disabled": "!semanticMutationAvailable"
+    },
+    {
+      "line": 6506,
+      "tag": "input",
+      "entries": [
+        "getLegendEntryStrokeWidth(idx)",
+        "updateLegendEntryStrokeWidth(idx, $event.target.value)"
+      ],
+      "disabled": "!semanticMutationAvailable"
+    },
+    {
+      "line": 6507,
+      "tag": "button",
+      "entries": [
+        "resetLegendEntryStroke(idx)"
+      ],
+      "disabled": "!semanticMutationAvailable"
+    },
+    {
+      "line": 6516,
+      "tag": "button",
+      "entries": [
+        "resetAllStrokes"
+      ],
+      "disabled": "!semanticMutationAvailable"
+    },
+    {
+      "line": 6551,
+      "tag": "input",
+      "entries": [
+        "getFeatureColor(feat)",
+        "requestFeatureColorChange(feat, $event.target.value)"
+      ],
+      "disabled": "!semanticMutationAvailable || (!canEditFeatureColor(feat))"
+    },
+    {
+      "line": 6573,
+      "tag": "button",
+      "entries": [
+        "$refs.labelTableInput.click()"
+      ],
+      "disabled": "!semanticMutationAvailable"
+    },
+    {
+      "line": 6574,
+      "tag": "input",
+      "entries": [
+        "loadLabelOverrideTable"
+      ],
+      "disabled": "!semanticMutationAvailable"
+    },
+    {
+      "line": 6575,
+      "tag": "button",
+      "entries": [
+        "resetAllLabelTextOverrides"
+      ],
+      "disabled": "!semanticMutationAvailable"
+    },
+    {
+      "line": 6580,
+      "tag": "input",
+      "entries": [
+        "autoLabelReflowEnabled"
+      ],
+      "disabled": "!semanticMutationAvailable"
+    },
+    {
+      "line": 6741,
+      "tag": "select",
+      "entries": [
+        "similarityAlignmentDrawerReferenceKey",
+        "setSimilarityAlignmentDrawerReference(selectedOrthogroup.id, $event.target.value)"
+      ],
+      "disabled": "!semanticMutationAvailable || (similarityAlignmentDrawerReferenceOptions(selectedOrthogroup.id).length === 0)"
+    },
+    {
+      "line": 6943,
+      "tag": "button",
+      "entries": [
+        "resetOrthogroupRename(selectedOrthogroup.id)"
+      ],
+      "disabled": "!semanticMutationAvailable"
+    },
+    {
+      "line": 7021,
+      "tag": "input",
+      "entries": [
+        "option.value",
+        "setSimilarityAlignmentDirectionMode(option.value)"
+      ],
+      "disabled": "!semanticMutationAvailable || (similarityAlignmentBusy)"
+    },
+    {
+      "line": 7041,
+      "tag": "select",
+      "entries": [
+        "similarityAlignmentDraft.intent.byRecordKey[record.recordKey] || 'keep'",
+        "setSimilarityAlignmentCustomDirection(record.recordKey, $event.target.value)"
+      ],
+      "disabled": "!semanticMutationAvailable || (similarityAlignmentBusy || Boolean(record.exclusion))"
+    },
+    {
+      "line": 7150,
+      "tag": "button",
+      "entries": [
+        "applySimilarityAlignmentDraft"
+      ],
+      "disabled": "!semanticMutationAvailable || (!canApplySimilarityAlignment)"
+    },
+    {
+      "line": 7195,
+      "tag": "button",
+      "entries": [
+        "applySimilarityAlignmentReset"
+      ],
+      "disabled": "!semanticMutationAvailable || (similarityAlignmentBusy)"
+    },
+    {
+      "line": 7231,
+      "tag": "button",
+      "entries": [
+        "applyLinearSourceRemoval('clear')"
+      ],
+      "disabled": "!semanticMutationAvailable || (!linearSourceRemovalTarget)"
+    },
+    {
+      "line": 7239,
+      "tag": "button",
+      "entries": [
+        "applyLinearSourceRemoval('delete')"
+      ],
+      "disabled": "!semanticMutationAvailable || (!linearSourceRemovalTarget || !linearSourceRemovalCanDelete)"
+    },
+    {
+      "line": 7275,
+      "tag": "input",
+      "entries": [
+        "controller.setTopology(row, $event.target.checked)"
+      ],
+      "disabled": "!controlAvailable"
+    },
+    {
+      "line": 7276,
+      "tag": "button",
+      "entries": [
+        "controller.setTopology(row, null)"
+      ],
+      "disabled": "!controlAvailable"
+    },
+    {
+      "line": 7277,
+      "tag": "input",
+      "entries": [
+        "draft.startCoordinate",
+        "setStart($event)"
+      ],
+      "disabled": "!controlAvailable || !surface.startEnabled"
+    },
+    {
+      "line": 7282,
+      "tag": "button",
+      "entries": [
+        "controller.applyShortcut(row, 'five-prime')"
+      ],
+      "disabled": "!controlAvailable || !controller.shortcutState(row, 'five-prime').enabled"
+    },
+    {
+      "line": 7283,
+      "tag": "button",
+      "entries": [
+        "controller.applyShortcut(row, 'midpoint')"
+      ],
+      "disabled": "!controlAvailable || !controller.shortcutState(row, 'midpoint').enabled"
+    },
+    {
+      "line": 7285,
+      "tag": "button",
+      "entries": [
+        "controller.resetStart(row)"
+      ],
+      "disabled": "!controlAvailable"
+    },
+    {
+      "line": 7305,
+      "tag": "button",
+      "entries": [],
+      "disabled": "!uploadAvailable"
+    },
+    {
+      "line": 7318,
+      "tag": "input",
+      "entries": [
+        "handleFile"
+      ],
+      "disabled": "!uploadAvailable"
+    }
+  ],
+  "readOnly": [
+    "preview scroll",
+    "viewport pan/zoom",
+    "feature search and keyboard navigation",
+    "popup/drawer tabs and close",
+    "text/sequence downloads without saved filename mutation"
+  ]
+}

@@ -1,0 +1,15 @@
+5782d74f991d5d7efa971981a00b6952e975ce4e
+100644 166300312e87303ac1d600c324578e26850e5929 1	gbdraw/web/index.html
+100644 9094670260f73562f055ae342dd15891c28d7afd 2	gbdraw/web/index.html
+100644 634af94a2e2d24963893a8856879bfdc6a479de8 3	gbdraw/web/index.html
+
+Auto-merging gbdraw/web/index.html
+CONFLICT (content): Merge conflict in gbdraw/web/index.html
+Auto-merging gbdraw/web/js/app/app-setup.js
+Auto-merging gbdraw/web/js/app/feature-editor/color-actions.js
+Auto-merging gbdraw/web/js/app/feature-editor/rule-actions.js
+Auto-merging gbdraw/web/js/app/legend/entry-actions.js
+Auto-merging gbdraw/web/js/app/rule-matching.js
+Auto-merging gbdraw/web/js/app/run-analysis.js
+Auto-merging gbdraw/web/js/app/svg-styles.js
+Auto-merging gbdraw/web/js/services/config.js

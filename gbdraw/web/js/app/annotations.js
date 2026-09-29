@@ -26,11 +26,15 @@ export const createAnnotationEditor = ({ state, getRecordCatalog, onImportNotice
     state.annotationSets.splice(0, state.annotationSets.length, ...candidate);
   };
   const addAnnotationSet = (base = 'annotations') => {
+    const sessionBusy = state.sessionOperationAvailability?.();
+    if (sessionBusy) return sessionBusy;
     const set = createAnnotationSet({ id: uniqueAnnotationSetId(state.annotationSets, base) });
     state.annotationSets.push(set);
     return set;
   };
   const renameAnnotationSet = (set, id) => {
+    const sessionBusy = state.sessionOperationAvailability?.();
+    if (sessionBusy) return sessionBusy;
     const oldId = String(set?.id || '');
     const nextId = uniqueAnnotationSetId(state.annotationSets.filter((item) => item !== set), id);
     set.id = nextId;
@@ -42,16 +46,22 @@ export const createAnnotationEditor = ({ state, getRecordCatalog, onImportNotice
     return nextId;
   };
   const duplicateAnnotationSet = (set) => {
+    const sessionBusy = state.sessionOperationAvailability?.();
+    if (sessionBusy) return sessionBusy;
     const copy = createAnnotationSet(JSON.parse(JSON.stringify(set)));
     copy.id = uniqueAnnotationSetId(state.annotationSets, `${set.id}_copy`);
     state.annotationSets.push(copy);
     return copy;
   };
   const removeAnnotationSet = (set) => {
+    const sessionBusy = state.sessionOperationAvailability?.();
+    if (sessionBusy) return sessionBusy;
     const index = state.annotationSets.indexOf(set);
     if (index >= 0) state.annotationSets.splice(index, 1);
   };
   const addCoordinateAnnotation = (set, options = {}) => {
+    const sessionBusy = state.sessionOperationAvailability?.();
+    if (sessionBusy) return sessionBusy;
     if (!set) return null;
     const id = nextAnnotationId(set.annotations, 'region');
     const item = { id, target: coordinateTarget({ start: 1, end: 1, ...options }), label: '', mark: 'highlight', lane: null, style: null, legendLabel: null, metadata: {} };
@@ -59,6 +69,8 @@ export const createAnnotationEditor = ({ state, getRecordCatalog, onImportNotice
     return item;
   };
   const addSelectedFeatures = (set) => {
+    const sessionBusy = state.sessionOperationAvailability?.();
+    if (sessionBusy) return sessionBusy;
     if (!set) return [];
     const targets = featureTargetsFromSelection(state.selectedFeatures?.value ?? state.selectedFeatures ?? []);
     const items = targets.map((target) => {
@@ -70,10 +82,14 @@ export const createAnnotationEditor = ({ state, getRecordCatalog, onImportNotice
     return items;
   };
   const removeAnnotation = (set, item) => {
+    const sessionBusy = state.sessionOperationAvailability?.();
+    if (sessionBusy) return sessionBusy;
     const index = set?.annotations?.indexOf(item) ?? -1;
     if (index >= 0) set.annotations.splice(index, 1);
   };
   const renameAnnotation = (set, item, value) => {
+    const sessionBusy = state.sessionOperationAvailability?.();
+    if (sessionBusy) return sessionBusy;
     const base = String(value || '').trim() || 'region';
     const used = new Set(set.annotations.filter((entry) => entry !== item).map((entry) => entry.id));
     let id = base;
@@ -81,10 +97,14 @@ export const createAnnotationEditor = ({ state, getRecordCatalog, onImportNotice
     item.id = id;
   };
   const setAnnotationStyle = (set, item, field, value) => {
+    const sessionBusy = state.sessionOperationAvailability?.();
+    if (sessionBusy) return sessionBusy;
     item.style ??= createDefaultAnnotationStyle(set.defaultStyle);
     item.style[field] = value;
   };
   const setAnnotationTargetKind = (item, kind) => {
+    const sessionBusy = state.sessionOperationAvailability?.();
+    if (sessionBusy) return sessionBusy;
     if (!item) return;
     const record = item.target?.record ?? null;
     item.target = kind === 'featureSpan'
@@ -93,6 +113,8 @@ export const createAnnotationEditor = ({ state, getRecordCatalog, onImportNotice
     item.target.record = record;
   };
   const importAnnotationTable = (text) => {
+    const sessionBusy = state.sessionOperationAvailability?.();
+    if (sessionBusy) return sessionBusy;
     onImportNotice?.('');
     const { sets, notice } = parseAnnotationTableWithNotice(text);
     replaceSets(sets);
@@ -105,6 +127,8 @@ export const createAnnotationEditor = ({ state, getRecordCatalog, onImportNotice
     downloadTextFile('annotations.tsv', encodeAnnotationTable(state.annotationSets));
   };
   const importAnnotationTableFile = async (event) => {
+    const sessionBusy = state.sessionOperationAvailability?.();
+    if (sessionBusy) return sessionBusy;
     const input = event?.target;
     const file = input?.files?.[0];
     if (!file) return;
@@ -125,7 +149,7 @@ export const createAnnotationEditor = ({ state, getRecordCatalog, onImportNotice
     try {
       const text = await readFileText(file);
       if (!isCurrent()) return;
-      importAnnotationTable(text);
+      return importAnnotationTable(text);
     } catch (error) {
       if (isCurrent()) alert(`Could not import annotations: ${error.message}`);
     } finally {
@@ -139,7 +163,8 @@ export const createAnnotationEditor = ({ state, getRecordCatalog, onImportNotice
     canDownloadAnnotationTable, downloadAnnotationTable,
     recordOptionsFor: recordSelector.optionsFor,
     recordValueFor: recordSelector.valueFor,
-    setRecordValue: recordSelector.setValue,
+    setRecordValue: (annotation, value) => state.sessionOperationAvailability?.()
+      || recordSelector.setValue(annotation, value),
     recordIsRequired: recordSelector.isRequired,
     recordIsMissing: recordSelector.isMissing,
     recordIsDisabled: recordSelector.isDisabled,

@@ -21,7 +21,9 @@ from config import (
 )
 from flows.web_capture import (
     assert_fixture_identity,
+    expect_circular_source_status,
     generate_and_inspect,
+    open_ancestor_details,
 )
 
 
@@ -81,6 +83,7 @@ def load_raw_human_circular(page: Page, *, output_prefix: str) -> None:
             "group", name="GenBank/DDBJ File selection", exact=True
         )
     ).to_contain_text(FIRST_CIRCULAR_FIXTURE_PATH.name)
+    expect_circular_source_status(page, "1 source record(s) inspected")
     apply_finished_human_settings(page, output_prefix=output_prefix)
 
 
@@ -95,7 +98,7 @@ def apply_finished_human_settings(page: Page, *, output_prefix: str) -> None:
     species.fill(HUMAN_SPECIES_MARKUP)
     expect(species).to_have_value(HUMAN_SPECIES_MARKUP)
 
-    track_preset = page.get_by_label("Track Preset", exact=True)
+    track_preset = open_ancestor_details(page.get_by_label("Track Preset", exact=True))
     track_preset.select_option("middle")
     expect(track_preset).to_have_value("middle")
     separate_strands = page.get_by_label("Separate Strands", exact=True)

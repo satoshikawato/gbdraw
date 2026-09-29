@@ -1,0 +1,62 @@
+{
+  "sourceTree": "4e6cfb6960cbb02e74b4d861b2140f473c698177",
+  "overlay": "/tmp/issue597-integrated-guard-negative-sfmlga_g",
+  "clientOriginalSha256": "98e2bec632e85276fed854b91e5492d05f54850283446f8bf78e26979608657a",
+  "acceptanceUnchanged": true,
+  "invocations": [
+    {
+      "mutation": "extra-constructor",
+      "command": [
+        "node",
+        "--test",
+        "--test-name-pattern=Worker construction and the diagram-generation client have explicit owners|shared privileged detectors preserve the characterized current-source facts",
+        "tests/web/architecture-contracts.test.mjs"
+      ],
+      "cwd": "/tmp/issue597-integrated-guard-negative-sfmlga_g",
+      "exit": 1,
+      "expectedExit": 1,
+      "summary": {
+        "pass": 0,
+        "fail": 2
+      },
+      "log": "/tmp/issue597-S05-trusted-guard-integration-20260927-evidence/negative-corrected-extra-constructor.log",
+      "sha256": "b41279ecea086e9f3e9aad5f5e75abfb7df1e383a104e1f8769704dc74d21ff9"
+    },
+    {
+      "mutation": "missing-constructor",
+      "command": [
+        "node",
+        "--test",
+        "--test-name-pattern=Worker construction and the diagram-generation client have explicit owners|shared privileged detectors preserve the characterized current-source facts",
+        "tests/web/architecture-contracts.test.mjs"
+      ],
+      "cwd": "/tmp/issue597-integrated-guard-negative-sfmlga_g",
+      "exit": 1,
+      "expectedExit": 1,
+      "summary": {
+        "pass": 0,
+        "fail": 2
+      },
+      "log": "/tmp/issue597-S05-trusted-guard-integration-20260927-evidence/negative-corrected-missing-constructor.log",
+      "sha256": "9c71a4130335f1a5cbffbb02f3e95213164bd1fb6822c4e747b60caef7f40255"
+    },
+    {
+      "mutation": "extra-owner",
+      "command": [
+        "node",
+        "--test",
+        "--test-name-pattern=Worker construction and the diagram-generation client have explicit owners|shared privileged detectors preserve the characterized current-source facts",
+        "tests/web/architecture-contracts.test.mjs"
+      ],
+      "cwd": "/tmp/issue597-integrated-guard-negative-sfmlga_g",
+      "exit": 1,
+      "expectedExit": 1,
+      "summary": {
+        "pass": 0,
+        "fail": 2
+      },
+      "log": "/tmp/issue597-S05-trusted-guard-integration-20260927-evidence/negative-corrected-extra-owner.log",
+      "sha256": "0f75359c1e9bc74d189d946f03e8bf549a4c756fdc0c5fd8ca0155dbfa0b3211"
+    }
+  ]
+}

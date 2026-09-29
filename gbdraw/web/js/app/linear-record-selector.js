@@ -166,12 +166,22 @@ export const createLinearRecordSelector = ({
           temporaryPathPrefix: `/record-selector-${sanitizePathSegment(uid)}-${generation}`
         });
         if (!isCurrentRequest({ generation, uid, primaryFile, pairedFile, inputType })) return;
+        const busy = state.sessionOperationAvailability?.();
+        if (busy) {
+          replaceState(uid, { status: 'deferred', records: [], error: '', inputType, primaryFile, pairedFile });
+          return busy;
+        }
         replaceState(uid, {
           status: 'ready', records, error: '', inputType, primaryFile, pairedFile
         });
         if (onRecordsDiscovered?.({ uid, records }) === true) return true;
       } catch (error) {
         if (!isCurrentRequest({ generation, uid, primaryFile, pairedFile, inputType })) return;
+        const busy = state.sessionOperationAvailability?.();
+        if (busy) {
+          replaceState(uid, { status: 'deferred', records: [], error: '', inputType, primaryFile, pairedFile });
+          return busy;
+        }
         logger.warn?.('Input record discovery failed.', normalizeUserFacingError(error));
         replaceState(uid, {
           status: 'error',
@@ -186,6 +196,8 @@ export const createLinearRecordSelector = ({
   };
 
   const refresh = (options = {}) => {
+    const sessionBusy = state.sessionOperationAvailability?.();
+    if (sessionBusy) return sessionBusy;
     const fingerprint = refreshFingerprint(options);
     if (activeRefresh && sameFingerprint(activeRefresh.fingerprint, fingerprint)) {
       return activeRefresh.promise;

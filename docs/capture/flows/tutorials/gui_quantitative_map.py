@@ -26,8 +26,8 @@ from flows.web_capture import (
     assert_output_paths,
     capture_screenshot,
     generate_and_inspect,
+    open_ancestor_details,
     open_browser_capture,
-    set_feature_search_visible,
     wait_for_app_shell,
 )
 
@@ -102,7 +102,7 @@ def _assert_quantitative_map(report: Mapping[str, Any]) -> None:
     }
     missing = required - set(report.get("texts", []))
     if missing:
-        raise AssertionError(f"Missing quantitative-map text: {sorted(missing)}")
+        raise AssertionError(f"Missing quantitative-map text: {sorted(missing)}; actual: {sorted(report.get('texts', []))}")
 
 
 def _number_control(section: Any, label: str) -> Any:
@@ -118,9 +118,7 @@ def _ensure_side(slot: Any, title: str) -> None:
 
 
 def _configure_slots(page: Page) -> tuple[dict[str, Any], ...]:
-    page.get_by_role(
-        "button", name=re.compile(r"Custom Track Slots$"), exact=False
-    ).click()
+    open_ancestor_details(page.get_by_title("Open Custom Track Slots", exact=True)).click()
     page.get_by_role("checkbox", name="Use custom stack", exact=True).check()
 
     ticks = page.get_by_role(
@@ -148,11 +146,12 @@ def _configure_slots(page: Page) -> tuple[dict[str, Any], ...]:
     depth = page.get_by_role(
         "group", name="Circular track slot depth", exact=True
     )
-    depth.get_by_label("Circular track slot id depth", exact=True).fill("depth_1")
+    depth_id = depth.get_by_label("Circular track slot id depth", exact=True)
+    depth_id.fill("depth_1")
     depth = page.get_by_role(
         "group", name="Circular track slot depth_1", exact=True
     )
-    depth.get_by_title("Width", exact=True).fill("52px")
+    depth.get_by_role("textbox", name="Circular track slot depth_1 Width value", exact=True).fill("52px")
 
     gc_content = page.get_by_role(
         "group", name="Circular track slot gc_content", exact=True
@@ -161,7 +160,7 @@ def _configure_slots(page: Page) -> tuple[dict[str, Any], ...]:
     gc_content = page.get_by_role(
         "group", name="Circular track slot gc_content", exact=True
     )
-    gc_content.get_by_title("Width", exact=True).fill("42px")
+    gc_content.get_by_role("textbox", name="Circular track slot gc_content Width value", exact=True).fill("42px")
     gc_content.get_by_label("Track dinucleotide", exact=True).fill("GC")
     gc_content.get_by_label("Track legend label", exact=True).fill(
         "GC content (%)"
@@ -174,7 +173,7 @@ def _configure_slots(page: Page) -> tuple[dict[str, Any], ...]:
     gc_skew = page.get_by_role(
         "group", name="Circular track slot gc_skew", exact=True
     )
-    gc_skew.get_by_title("Width", exact=True).fill("34px")
+    gc_skew.get_by_role("textbox", name="Circular track slot gc_skew Width value", exact=True).fill("34px")
     gc_skew.get_by_label("Track dinucleotide", exact=True).fill("GC")
     gc_skew.get_by_label("Track legend label", exact=True).fill("GC skew")
 
@@ -187,7 +186,7 @@ def _configure_slots(page: Page) -> tuple[dict[str, Any], ...]:
     if actual != EXPECTED_SLOTS:
         raise AssertionError(f"Unexpected quantitative-map slot state: {actual!r}")
     widths = {
-        slot["id"]: str(slot.get("width") or "")
+        slot["id"]: slot.get("width")
         for slot in page.evaluate(
             """
             () => (window.__GBDRAW_APP__?.adv?.circular_track_slots || [])
@@ -196,9 +195,9 @@ def _configure_slots(page: Page) -> tuple[dict[str, Any], ...]:
         )
     }
     if (
-        widths.get("depth_1") != "52px"
-        or widths.get("gc_content") != "42px"
-        or widths.get("gc_skew") != "34px"
+        widths.get("depth_1") != {"value": "52", "unit": "px"}
+        or widths.get("gc_content") != {"value": "42", "unit": "px"}
+        or widths.get("gc_skew") != {"value": "34", "unit": "px"}
     ):
         raise AssertionError(f"Unexpected quantitative-map widths: {widths!r}")
     return slots
@@ -215,6 +214,7 @@ def _capture_state(page: Page) -> dict[str, Any]:
             labels: String(app?.form?.labels_mode || ''),
             legend: String(app?.form?.legend || ''),
             separateStrands: Boolean(app?.form?.separate_strands),
+            multiRecordCanvas: Boolean(app?.form?.multi_record_canvas),
             depthWindow: Number(app?.adv?.depth_window_size),
             depthStep: Number(app?.adv?.depth_step_size),
             depthMin: Number(app?.adv?.depth_min),
@@ -247,6 +247,7 @@ def _assert_state(state: Mapping[str, Any]) -> None:
         "labels": "none",
         "legend": "right",
         "separateStrands": True,
+        "multiRecordCanvas": False,
         "depthWindow": 1,
         "depthStep": 1000,
         "depthMin": 0,
@@ -299,6 +300,9 @@ def capture_gui_quantitative_map(
         wait_for_app_shell(page)
         _resize_sidebar(page)
         page.get_by_role("button", name="Circular", exact=True).click()
+        open_ancestor_details(page.get_by_role(
+            "checkbox", name="Multi-Record Canvas", exact=True, include_hidden=True
+        )).uncheck()
         page.get_by_role("radio", name="GenBank", exact=True).check()
         page.get_by_label("GenBank/DDBJ File", exact=True).set_input_files(
             GUI_QUANTITATIVE_GENBANK_PATH
@@ -367,8 +371,7 @@ def capture_gui_quantitative_map(
             page, _inspect_tracks_svg, _assert_quantitative_map
         )
         final_report["state"] = state
-        _fit_circular_preview(page, target_zoom="70%", pan_left_ratio=0.16)
-        set_feature_search_visible(page, visible=False)
+        _fit_circular_preview(page, target_zoom="40%", pan_left_ratio=0.0)
         screenshot_bytes[SCREENSHOT_NAMES[1]] = capture_screenshot(
             page, output_paths[SCREENSHOT_NAMES[1]], "Circular"
         )

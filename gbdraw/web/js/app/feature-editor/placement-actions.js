@@ -44,6 +44,8 @@ export const createFeaturePlacementActions = ({ state, history, getCommittedRequ
     });
   };
   const setPlacement = (features, value) => {
+    const busy = state.sessionOperationAvailability?.();
+    if (busy) return busy;
     const choice = choices(features).find((entry) => entry.value === value);
     if (!choice?.enabled) throw new Error(choice?.reason || 'Unknown feature placement.');
     return history.runUndoable(features.length === 1 ? 'Change feature placement' : 'Change selected feature placements', () => {

@@ -158,8 +158,8 @@ def _validate_interactive_svg(
         if element.attrib.get("id") == "gbdraw-interactive-feature-metadata"
     )
     payload = json.loads(metadata.text or "{}")
-    if payload.get("schema") != 3 or len(payload.get("items", [])) != 1:
-        raise AssertionError("Interactive SVG does not embed one schema-3 catalog item")
+    if payload.get("schema") != 4 or len(payload.get("items", [])) != 1:
+        raise AssertionError("Interactive SVG does not embed one schema-4 catalog item")
     catalog_item = payload["items"][0]
     if len(catalog_item.get("features", [])) != 37:
         raise AssertionError("Interactive metadata does not contain all 37 features")
