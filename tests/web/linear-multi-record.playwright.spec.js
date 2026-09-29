@@ -3998,12 +3998,14 @@ test('@comparison-contract Total threads reallocates Auto runs and threads in re
   await expect(threads).toHaveValue('8');
   await expect(runs.locator('option:checked')).toContainText('1 effective');
   await expect(threads.locator('option:checked')).toContainText('4 effective');
-  const pendingSave = page.waitForEvent('download');
-  await page.evaluate(async () => {
-    window.__GBDRAW_APP__.sessionTitle = 'thread-budget';
-    await window.__GBDRAW_APP__.saveSessionWithTitle();
-  });
-  const savedPath = await (await pendingSave).path();
+  await page.evaluate(() => { window.__GBDRAW_APP__.sessionTitle = 'thread-budget'; });
+  // Awaiting Save inside evaluate intermittently fails with the DevTools error
+  // "Promise was collected"; click Save and wait for its download instead.
+  const [saved] = await Promise.all([
+    page.waitForEvent('download'),
+    page.getByRole('banner').getByRole('button', { name: 'Save Session', exact: true }).click()
+  ]);
+  const savedPath = await saved.path();
   await page.reload({ waitUntil: 'domcontentloaded' });
   await waitForAppShell(page);
   page.once('dialog', dialog => dialog.accept());

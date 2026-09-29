@@ -32,6 +32,8 @@ dev と main を `git archive` で `$S00_BASELINE_DIR=/home/kawato/gbdraw-baseli
 
 2026-09-29: S07 の追加作業（Owner 指示）。比較切替の settlement 予算の未達を調べ、原因が大きな Result の後の V8 major GC であることをharness の診断（b39b083f）で確かめた。catalog の nested 値の共有（308c5402）で live heap を 37% 減らしたが、固定定義の 1 行は未達のままで、Owner が受容した。PR #641 の失敗を #641 の branch で修正して push し（a9333e79..d5347f69）、CI の pass の後に Owner が merge した（b1744142）。`origin/dev` を本 branch へ merge した（d1bd76f6）。結果は results/S07.md 第 12 節。
 
+2026-09-29: dev の threaded LOSATP test の間欠失敗を調べた。原因は navigation ではなく、`evaluate` で await した Save の promise を V8 inspector が回収した「Promise was collected」だった。blob URL の revoke を遅らせる案は効果がなく採らなかった。test の Save を button の click と download の待機に変え、局所 36 回が passed。結果は results/S07.md 第 12.4 節。commit title: "Save through the Save Session button in the threaded LOSATP test"。
+
 | Session | 状態 | 証拠・次の条件 |
 | --- | --- | --- |
 | S00 | 完了（証拠採取のみ） | commit d7fbe23b（証拠）、9b671081（Owner 判断）。[results/S00.md](results/S00.md)。開始 a351c01d、dev 57cef3ba・main 4556e04e の snapshot/wheel、性能 baseline、G03/G06/G07 再現、R01/R02 範囲。旧 Session 方針と receipt 文言は第 11.4 節で取得済み。commit SHA は次セッションで追記 |
