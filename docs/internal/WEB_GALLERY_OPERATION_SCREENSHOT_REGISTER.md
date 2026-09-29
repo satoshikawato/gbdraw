@@ -22,6 +22,27 @@ The other Gallery media are unchanged. The Vibrio linear-layout image never
 showed the Lock explanation paragraph, and other popup images do not show the
 Align area.
 
+## Popup framing with `app.canvasPan` (GUI remediation follow-up)
+
+These recipes panned with the preview container's `style.transform`. The
+preview binds that transform to `canvasPan` and `zoom`, so the next zoom change
+overwrote it and the step had no effect. Each recipe now sets `app.canvasPan`
+and waits 500 ms, so the clicked target is inside the visible canvas before the
+click. Each recapture was compared with the committed image at the same scale.
+
+| Tutorial | Operation media | Decision | Required capture state | Status |
+| --- | --- | --- | --- | --- |
+| `BGC0000708-BGC0000713` | `manual-09-01-orthogroup-popup.webp` | Recapture; recipe corrected | Zoom 1.4; the og_18 ribbon is highlighted and the popup opens beside it; the crop runs to the first member row | The ribbon is no longer hidden behind the popup and the footer is gone; legend fragments remain at the lower left, as before; accepted |
+| `BGC0000708-BGC0000713` | `manual-10-01-feature-popup.webp` | Recapture; recipe corrected | livE, its highlight and label left of the **Qualifiers** popup; drawer toggle hidden | No app-header fragments; accepted |
+| `Vnig_TUMSAT-TG-2018` | `manual-08-01-feature-popup.webp` | Recapture; recipe corrected | The clicked dnaA CDS is highlighted beside the 720 px popup; the whole 4.0 Mbp tick label is visible | dnaA was not visible before; accepted |
+| `hepatoplasmataceae_collinear` | `manual-07-01-collinear-block-popup.webp` | Recapture; recipe corrected | The whole highlighted block_0024 is to the right of the popup | Fragments of the AP027133.1 record label remain between popup and block because that label ends 4 px left of the block; accepted |
+| `hepatoplasmataceae_collinear`, `hepatoplasmataceae_orthogroup` | `post-01-01-feature-popup.webp`, `post-02-01-feature-popup.webp` | Recapture; recipe corrected | The highlighted DnaA at the start of AP027078.1 is to the right of the popup; the popup is below the toolbar | Taller because the popup now shows the **Feature placement** row; no Run info or toolbar fragments; accepted |
+| `majanivirus_orthogroup` | `manual-08-01-orthogroup-popup.webp` | Recapture; recipe corrected | The whole og_31 ribbon and its highlight are visible; the other og_31 members show the group outline | The ribbon was cut off at the left edge before; accepted |
+
+The Vibrio feature-popup caption says the popup reports qualifiers and the
+sequence, but the image shows the **Details** tab, where those appear only as
+tab names. This predates the recapture and is left for a caption review.
+
 ## Circular record discovery and loaded-preview inspection (#597 S07)
 
 | Tutorial | Operation media | Decision | Required capture state | Status |

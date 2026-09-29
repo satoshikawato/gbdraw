@@ -802,7 +802,11 @@
             "actions": [
               {
                 "type": "evaluate",
-                "script": "document.querySelector('.preview-feature-search')?.style.setProperty('display', 'none', 'important'); const app = window.__GBDRAW_APP__; if (app) { app.resultPanelTab = 'preview'; app.zoom = 1.4; if (app.svgContainer) app.svgContainer.style.transform = 'translate(-180px, -40px) scale(1.4)'; }"
+                "script": "document.querySelector('.preview-feature-search')?.style.setProperty('display', 'none', 'important'); document.querySelector('.preview-controls')?.style.setProperty('display', 'none', 'important'); const app = window.__GBDRAW_APP__; if (app) { app.resultPanelTab = 'preview'; app.zoom = 1.4; if (app.canvasPan) { app.canvasPan.x = -1984; app.canvasPan.y = -410; } }"
+              },
+              {
+                "type": "wait",
+                "ms": 500
               },
               {
                 "type": "click",
@@ -814,17 +818,35 @@
               },
               {
                 "type": "evaluate",
-                "script": "const app = window.__GBDRAW_APP__; if (app?.clickedPairwiseMatchPos) { app.clickedPairwiseMatchPos.x = 520; app.clickedPairwiseMatchPos.y = 280; }"
+                "script": "const popup = document.querySelector('.pairwise-match-popup'); const target = document.querySelector(\"path[data-gbdraw-pairwise-match-id='comparison3_match1']\"); const text = popup?.textContent || ''; const rect = target?.getBoundingClientRect(); if (!text.includes('og_18') || !text.includes('livA') || !rect) throw new Error('Expected og_18 popup content was not restored.'); const app = window.__GBDRAW_APP__; if (app?.clickedPairwiseMatchPos) { app.clickedPairwiseMatchPos.x = Math.round(rect.right + 24); app.clickedPairwiseMatchPos.y = 206; }"
+              },
+              {
+                "type": "wait",
+                "ms": 250
+              },
+              {
+                "type": "waitForFunction",
+                "script": "() => { const target = document.querySelector(\"path[data-gbdraw-pairwise-match-id='comparison3_match1']\")?.getBoundingClientRect(); const popup = document.querySelector('.pairwise-match-popup')?.getBoundingClientRect(); return Boolean(target && popup && (popup.right <= target.left || popup.left >= target.right || popup.bottom <= target.top || popup.top >= target.bottom)); }"
+              },
+              {
+                "type": "evaluate",
+                "script": "const popup = document.querySelector('.pairwise-match-popup'); const header = popup?.children[0]; const firstMember = popup?.querySelector('tbody tr td'); if (!popup || !header || !String(firstMember?.textContent || '').includes('BGC0000708')) throw new Error('Compact og_18 member table not found.'); header.setAttribute('data-capture', 'og18-popup-header'); firstMember.setAttribute('data-capture', 'og18-first-member');"
               }
             ],
-            "clipSelectors": [".pairwise-match-popup"],
+            "clipSelectors": ["path[data-gbdraw-pairwise-match-id='comparison3_match1']", "[data-capture='og18-popup-header']", "[data-capture='og18-first-member']"],
             "cropPadding": {
-              "top": 170,
-              "right": 28,
-              "bottom": 60,
-              "left": 170
+              "top": 24,
+              "right": 24,
+              "bottom": 24,
+              "left": 24
             },
-            "waitForSelector": ".pairwise-match-popup"
+            "waitForSelector": ".pairwise-match-popup",
+            "visibleText": [
+              "og_18:livA",
+              "Similarity-group members",
+              "BGC0000708"
+            ],
+            "highlightSelector": "path[data-gbdraw-pairwise-match-id='comparison3_match1']"
           }
         }
       ]
@@ -849,7 +871,11 @@
             "actions": [
               {
                 "type": "evaluate",
-                "script": "document.querySelector('.preview-feature-search')?.style.setProperty('display', 'none', 'important'); const app = window.__GBDRAW_APP__; if (app) { app.resultPanelTab = 'preview'; app.zoom = 1.35; if (app.svgContainer) app.svgContainer.style.transform = 'translate(-130px, -40px) scale(1.35)'; }"
+                "script": "document.querySelector('.preview-feature-search')?.style.setProperty('display', 'none', 'important'); document.querySelector('.drawer-toggle')?.style.setProperty('display', 'none', 'important'); const app = window.__GBDRAW_APP__; if (app) { app.resultPanelTab = 'preview'; app.zoom = 1.35; if (app.canvasPan) { app.canvasPan.x = -980; app.canvasPan.y = -40; } }"
+              },
+              {
+                "type": "wait",
+                "ms": 500
               },
               {
                 "type": "click",
