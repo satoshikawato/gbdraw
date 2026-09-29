@@ -182,6 +182,9 @@ One maintainer may act as both developer and Product Decision Owner, but the
 roles and sequence remain separate: prepare the Decision Pack as developer,
 issue the explicit human receipt as Product Decision Owner, serialize only
 that receipt, and implement only after required durable authority has merged.
+The static Product Contract is the one exception. Its serialized receipt may
+merge together with its implementation through the reviewed co-change route
+in [`WEB_CHANGE_POLICY.md`](./WEB_CHANGE_POLICY.md#static-product-contract-co-change).
 
 Version 1 uses a GitHub Actions Summary and a Codex-mediated response. It adds
 no dedicated decision UI, external service, general end-user vote, or comment
@@ -409,14 +412,15 @@ receives a new `BD-###`; the former record is removed from the active file and
 remains in Git history.
 
 A material product change, public-contract change, affordance or compatibility
-retirement requires durable base authority before runtime implementation.
-Codex cannot author an accepted product choice without an explicit Product
-Decision Owner disposition.
+retirement requires durable base authority before runtime implementation,
+except through the static Product Contract co-change route below. Codex cannot
+author an accepted product choice without an explicit Product Decision Owner
+disposition.
 
-### Future static Product Contract authority
+### Static Product Contract authority
 
-The exact preauthorized future static Product authority path for broad or
-currently unmapped durable Option Integrity outcomes is:
+The static Product authority path for broad or currently unmapped durable
+Option Integrity outcomes is:
 
 ```text
 docs/internal/OPTION_INTEGRITY_PRODUCT_CONTRACT.md
@@ -428,10 +432,25 @@ parallel evaluator or machine-readable decision store. Mapped concerns continue
 to use the existing authority model, and documentation or tests may restate or
 protect an outcome but may not become a competing authority.
 
-The path declaration selects no Option Integrity outcome. The file is absent
-at this policy revision and therefore supplies no authority. The declaration
-also provides no executable protection until a later checker-only pull request
-adds exact-path enforcement and that checker change has merged.
+The file exists, and the checker enforces its exact path as guard and
+authority. Its records select outcomes only through explicit Product Decision
+Owner receipts.
+
+A Contract record may change together with the runtime, tests, and
+documentation that implement it. The conditions are those of
+[Static Product Contract co-change](./WEB_CHANGE_POLICY.md#static-product-contract-co-change):
+- the Contract is the only changed guard or authority file;
+- each changed record carries the complete explicit receipt;
+- trusted base authority alone evaluates mapped concerns; and
+- `Review: REQUIRED` gives a human the job of confirming that the receipt
+  matches the choice and that the implementation realizes it.
+
+This route is a manual review path. It does not claim that the checker verifies
+Product meaning, and it does not apply to the map, durable decisions, rules,
+or checker code. The route takes effect only when the base checker implements
+it. Once effective, it replaces only the Contract's procedural requirement to
+merge authority before dependent runtime. It does not change any Product
+outcome, preservation condition, or compatibility commitment.
 
 ## Current decisions
 
@@ -510,9 +529,11 @@ Product Decision Owner receipt.
 
 Correct implementation or evidence against existing authority without creating
 a new Product Decision merely because current code or a test is wrong. To
-replace a wrong durable Product outcome, prepare evidence or a Decision Pack,
-obtain a new explicit receipt, and merge an authority-only supersession before
-dependent runtime changes.
+replace a wrong durable Product outcome, prepare evidence or a Decision Pack
+and obtain a new explicit receipt. For a mapped `BD-###` decision, merge an
+authority-only supersession before dependent runtime changes. For a static
+Product Contract record, the supersession may instead use the reviewed
+co-change route with its implementation.
 
 Exactly one authority remains active for the concern. A Product Contract
 replacement increments its scenario revision, identifies the prior decision
@@ -540,7 +561,10 @@ bounded inert PR-body decision
 Candidate maps, rules, durable decisions, checker code, workflows, or
 replacement evidence may be validated as inert data. They cannot authorize the
 same candidate runtime. Trusted workflows must not import or execute candidate
-checker or detector code.
+checker or detector code. A candidate static Product Contract is not in this
+admission set. In a co-change, human Review of its explicit receipt is the
+authorization, and the machine Gate still uses base authority for every
+mapped concern.
 
 ## Rule-level rollout
 
@@ -571,7 +595,7 @@ observations do not change the executable exit status.
 Under hard enforcement, `ORDINARY_REGRESSION`, `UNRESOLVED_DECISION`,
 `AUTHORITY_CONFLICT`, and `INSUFFICIENT_EVIDENCE` fail the Gate. `CONFORMING`
 passes. Review remains independent and is required for architecture-bearing or
-product-decision work.
+product-decision work, including every static Product Contract change.
 
 ## Low-friction applicability
 

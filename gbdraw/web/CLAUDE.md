@@ -154,6 +154,24 @@ keep any direct edit already applied and report the failure. Metadata-only edits
 with no static SVG target, such as Similarity group names and descriptions,
 update canonical state only.
 
+## Computation ownership
+
+Follow [Computation ownership](../../docs/internal/ARCHITECTURE_FITNESS_FUNCTION_RATCHET.md#computation-ownership)
+(CW-01 to CW-06). Status, selection, and help rendering do not call the
+canonical request builder, generated-table serialization, or full feature
+metadata construction.
+
+Current owners in the initial automated scope:
+- The generated label-override table is owned by
+  `app/feature-editor/label-override-table.js` (`buildLabelOverrideRows`).
+  `services/session-request.js` (`addGeneratedTableResources`) serializes it
+  into the canonical request.
+- Feature-selector metadata and the uniqueness index are owned by
+  `app/feature-selector.js`.
+- Observation uses `services/runtime-test-hooks.js` (`recordStructuralMetric`),
+  History `getDiagnostics()`, and the Worker tracking in
+  `tests/web/helpers/app-lifecycle.cjs`.
+
 ## Request and session boundary
 
 `services/session-request.js` is the projection boundary between reactive UI

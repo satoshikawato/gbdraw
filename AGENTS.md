@@ -114,7 +114,12 @@ For changes affecting Web runtime or normative Web behavior contracts:
 - After an explicit human choice, serialize only that outcome and show the
   generated machine representation for review. Do not infer missing rationale,
   retirement intent, or accepted residual risk, and do not broaden the choice.
-- Candidate authority never authorizes the same candidate runtime.
+- Candidate machine authority (Product Impact map, durable decisions,
+  architecture rules, checker) never authorizes the same candidate runtime.
+  A static Product Contract change may merge with its implementation only
+  through the reviewed co-change route in
+  [`docs/internal/WEB_CHANGE_POLICY.md`](docs/internal/WEB_CHANGE_POLICY.md#static-product-contract-co-change).
+  The explicit human receipt authorizes it, not the candidate text.
 
 ## Showcase Figure Quality
 

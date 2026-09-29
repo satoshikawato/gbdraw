@@ -1,0 +1,2711 @@
+{
+ "budget": {
+  "visibleP95Ms": 100,
+  "visibleMaxMs": 250,
+  "compareSettleP95Ms": 200,
+  "taskMs": 100
+ },
+ "rows": [
+  {
+   "target": "dev",
+   "state": "post-generate-override",
+   "op": "compare",
+   "direction": "to-losat",
+   "temperature": "n/a",
+   "pages": 3,
+   "visibleMs": {
+    "n": 21,
+    "p50": 1343.2,
+    "p95": 1451.3,
+    "max": 1482.5
+   },
+   "settleMs": {
+    "n": 21,
+    "p50": 1343.2,
+    "p95": 1482.5,
+    "max": 1720.6
+   },
+   "maxLoafMs": 1479.6,
+   "samplesWithTaskAtLeast100Ms": 21,
+   "unsettled": 0,
+   "diagramWorkerRuns": 0,
+   "diagramWorkerHelpers": 0,
+   "diagramWorkerConstructions": 0,
+   "proposedBudget": {
+    "verdict": "FAIL",
+    "failures": [
+     "visible p95 1451.3 > 100",
+     "visible max 1482.5 > 250",
+     "settle p95 1482.5 > 200",
+     "21 samples with a >=100 ms frame"
+    ]
+   },
+   "sampleCountMeetsPlan": true
+  },
+  {
+   "target": "dev",
+   "state": "post-generate-override",
+   "op": "compare",
+   "direction": "to-none",
+   "temperature": "n/a",
+   "pages": 3,
+   "visibleMs": {
+    "n": 21,
+    "p50": 1337.5,
+    "p95": 1558.7,
+    "max": 1560.8
+   },
+   "settleMs": {
+    "n": 21,
+    "p50": 1337.5,
+    "p95": 1558.7,
+    "max": 1560.8
+   },
+   "maxLoafMs": 1557.8,
+   "samplesWithTaskAtLeast100Ms": 21,
+   "unsettled": 0,
+   "diagramWorkerRuns": 0,
+   "diagramWorkerHelpers": 0,
+   "diagramWorkerConstructions": 0,
+   "proposedBudget": {
+    "verdict": "FAIL",
+    "failures": [
+     "visible p95 1558.7 > 100",
+     "visible max 1560.8 > 250",
+     "settle p95 1558.7 > 200",
+     "21 samples with a >=100 ms frame"
+    ]
+   },
+   "sampleCountMeetsPlan": true
+  },
+  {
+   "target": "dev",
+   "state": "post-generate-override",
+   "op": "generate",
+   "direction": "repeat",
+   "temperature": "warm",
+   "pages": 3,
+   "visibleMs": {
+    "n": 3,
+    "p50": 2987.3,
+    "p95": 3080.1,
+    "max": 3090.4
+   },
+   "settleMs": {
+    "n": 3,
+    "p50": 13018.6,
+    "p95": 14744.7,
+    "max": 14936.5
+   },
+   "generateTotalMs": {
+    "n": 3,
+    "p50": 13018.6,
+    "p95": 14744.7,
+    "max": 14936.5
+   },
+   "maxLoafMs": 3087.8,
+   "samplesWithTaskAtLeast100Ms": 3,
+   "unsettled": 0,
+   "diagramWorkerRuns": 3,
+   "diagramWorkerHelpers": 3,
+   "diagramWorkerConstructions": 0
+  },
+  {
+   "target": "dev",
+   "state": "post-generate-override",
+   "op": "input-blur",
+   "direction": "any",
+   "temperature": "n/a",
+   "pages": 3,
+   "visibleMs": {
+    "n": 21,
+    "p50": 726.9,
+    "p95": 801,
+    "max": 822.1
+   },
+   "settleMs": {
+    "n": 21,
+    "p50": 726.9,
+    "p95": 801,
+    "max": 822.1
+   },
+   "maxLoafMs": 823.1,
+   "samplesWithTaskAtLeast100Ms": 21,
+   "unsettled": 0,
+   "diagramWorkerRuns": 0,
+   "diagramWorkerHelpers": 0,
+   "diagramWorkerConstructions": 0,
+   "proposedBudget": {
+    "verdict": "FAIL",
+    "failures": [
+     "visible p95 801 > 100",
+     "visible max 822.1 > 250",
+     "21 samples with a >=100 ms frame"
+    ]
+   },
+   "sampleCountMeetsPlan": true
+  },
+  {
+   "target": "dev",
+   "state": "post-generate-override",
+   "op": "input-key",
+   "direction": "any",
+   "temperature": "n/a",
+   "pages": 3,
+   "visibleMs": {
+    "n": 21,
+    "p50": 761.1,
+    "p95": 802.3,
+    "max": 819.9
+   },
+   "settleMs": {
+    "n": 21,
+    "p50": 761.1,
+    "p95": 802.3,
+    "max": 819.9
+   },
+   "maxLoafMs": 820.9,
+   "samplesWithTaskAtLeast100Ms": 21,
+   "unsettled": 0,
+   "diagramWorkerRuns": 0,
+   "diagramWorkerHelpers": 0,
+   "diagramWorkerConstructions": 0,
+   "proposedBudget": {
+    "verdict": "FAIL",
+    "failures": [
+     "visible p95 802.3 > 100",
+     "visible max 819.9 > 250",
+     "21 samples with a >=100 ms frame"
+    ]
+   },
+   "sampleCountMeetsPlan": true
+  },
+  {
+   "target": "dev",
+   "state": "post-generate-override",
+   "op": "program",
+   "direction": "to-LOSATN",
+   "temperature": "n/a",
+   "pages": 3,
+   "visibleMs": {
+    "n": 21,
+    "p50": 1343.4,
+    "p95": 1677.7,
+    "max": 1700.7
+   },
+   "settleMs": {
+    "n": 21,
+    "p50": 1343.4,
+    "p95": 1677.7,
+    "max": 1700.7
+   },
+   "maxLoafMs": 893.2,
+   "samplesWithTaskAtLeast100Ms": 21,
+   "unsettled": 0,
+   "diagramWorkerRuns": 0,
+   "diagramWorkerHelpers": 0,
+   "diagramWorkerConstructions": 0,
+   "proposedBudget": {
+    "verdict": "FAIL",
+    "failures": [
+     "visible p95 1677.7 > 100",
+     "visible max 1700.7 > 250",
+     "21 samples with a >=100 ms frame"
+    ]
+   },
+   "sampleCountMeetsPlan": true
+  },
+  {
+   "target": "dev",
+   "state": "post-generate-override",
+   "op": "program",
+   "direction": "to-LOSATP",
+   "temperature": "n/a",
+   "pages": 3,
+   "visibleMs": {
+    "n": 21,
+    "p50": 1334.2,
+    "p95": 1623.7,
+    "max": 1664
+   },
+   "settleMs": {
+    "n": 21,
+    "p50": 1334.2,
+    "p95": 1623.7,
+    "max": 2092.4
+   },
+   "maxLoafMs": 868.7,
+   "samplesWithTaskAtLeast100Ms": 21,
+   "unsettled": 0,
+   "diagramWorkerRuns": 0,
+   "diagramWorkerHelpers": 0,
+   "diagramWorkerConstructions": 0,
+   "proposedBudget": {
+    "verdict": "FAIL",
+    "failures": [
+     "visible p95 1623.7 > 100",
+     "visible max 1664 > 250",
+     "21 samples with a >=100 ms frame"
+    ]
+   },
+   "sampleCountMeetsPlan": true
+  },
+  {
+   "target": "dev",
+   "state": "post-generate",
+   "op": "compare",
+   "direction": "to-losat",
+   "temperature": "n/a",
+   "pages": 3,
+   "visibleMs": {
+    "n": 21,
+    "p50": 1279.6,
+    "p95": 1623.6,
+    "max": 1652.4
+   },
+   "settleMs": {
+    "n": 21,
+    "p50": 1279.6,
+    "p95": 1623.6,
+    "max": 1652.4
+   },
+   "maxLoafMs": 1649.7,
+   "samplesWithTaskAtLeast100Ms": 21,
+   "unsettled": 0,
+   "diagramWorkerRuns": 0,
+   "diagramWorkerHelpers": 0,
+   "diagramWorkerConstructions": 0,
+   "proposedBudget": {
+    "verdict": "FAIL",
+    "failures": [
+     "visible p95 1623.6 > 100",
+     "visible max 1652.4 > 250",
+     "settle p95 1623.6 > 200",
+     "21 samples with a >=100 ms frame"
+    ]
+   },
+   "sampleCountMeetsPlan": true
+  },
+  {
+   "target": "dev",
+   "state": "post-generate",
+   "op": "compare",
+   "direction": "to-none",
+   "temperature": "n/a",
+   "pages": 3,
+   "visibleMs": {
+    "n": 21,
+    "p50": 1275.7,
+    "p95": 1542.1,
+    "max": 1588.2
+   },
+   "settleMs": {
+    "n": 21,
+    "p50": 1275.7,
+    "p95": 1542.1,
+    "max": 1588.2
+   },
+   "maxLoafMs": 1585.3,
+   "samplesWithTaskAtLeast100Ms": 21,
+   "unsettled": 0,
+   "diagramWorkerRuns": 0,
+   "diagramWorkerHelpers": 0,
+   "diagramWorkerConstructions": 0,
+   "proposedBudget": {
+    "verdict": "FAIL",
+    "failures": [
+     "visible p95 1542.1 > 100",
+     "visible max 1588.2 > 250",
+     "settle p95 1542.1 > 200",
+     "21 samples with a >=100 ms frame"
+    ]
+   },
+   "sampleCountMeetsPlan": true
+  },
+  {
+   "target": "dev",
+   "state": "post-generate",
+   "op": "generate",
+   "direction": "repeat",
+   "temperature": "warm",
+   "pages": 3,
+   "visibleMs": {
+    "n": 21,
+    "p50": 2758.8,
+    "p95": 3165.2,
+    "max": 3401.4
+   },
+   "settleMs": {
+    "n": 21,
+    "p50": 12176.2,
+    "p95": 12911.3,
+    "max": 13081.9
+   },
+   "generateTotalMs": {
+    "n": 21,
+    "p50": 12176.2,
+    "p95": 12911.3,
+    "max": 13081.9
+   },
+   "maxLoafMs": 3397.6,
+   "samplesWithTaskAtLeast100Ms": 21,
+   "unsettled": 0,
+   "diagramWorkerRuns": 21,
+   "diagramWorkerHelpers": 21,
+   "diagramWorkerConstructions": 0
+  },
+  {
+   "target": "dev",
+   "state": "post-generate",
+   "op": "input-blur",
+   "direction": "any",
+   "temperature": "n/a",
+   "pages": 3,
+   "visibleMs": {
+    "n": 21,
+    "p50": 631.6,
+    "p95": 680,
+    "max": 697.5
+   },
+   "settleMs": {
+    "n": 21,
+    "p50": 631.6,
+    "p95": 680,
+    "max": 697.5
+   },
+   "maxLoafMs": 695.6,
+   "samplesWithTaskAtLeast100Ms": 21,
+   "unsettled": 0,
+   "diagramWorkerRuns": 0,
+   "diagramWorkerHelpers": 0,
+   "diagramWorkerConstructions": 0,
+   "proposedBudget": {
+    "verdict": "FAIL",
+    "failures": [
+     "visible p95 680 > 100",
+     "visible max 697.5 > 250",
+     "21 samples with a >=100 ms frame"
+    ]
+   },
+   "sampleCountMeetsPlan": true
+  },
+  {
+   "target": "dev",
+   "state": "post-generate",
+   "op": "input-key",
+   "direction": "any",
+   "temperature": "n/a",
+   "pages": 3,
+   "visibleMs": {
+    "n": 21,
+    "p50": 633.6,
+    "p95": 699.5,
+    "max": 713.3
+   },
+   "settleMs": {
+    "n": 21,
+    "p50": 633.6,
+    "p95": 699.5,
+    "max": 713.3
+   },
+   "maxLoafMs": 714.2,
+   "samplesWithTaskAtLeast100Ms": 21,
+   "unsettled": 0,
+   "diagramWorkerRuns": 0,
+   "diagramWorkerHelpers": 0,
+   "diagramWorkerConstructions": 0,
+   "proposedBudget": {
+    "verdict": "FAIL",
+    "failures": [
+     "visible p95 699.5 > 100",
+     "visible max 713.3 > 250",
+     "21 samples with a >=100 ms frame"
+    ]
+   },
+   "sampleCountMeetsPlan": true
+  },
+  {
+   "target": "dev",
+   "state": "post-generate",
+   "op": "program",
+   "direction": "to-LOSATN",
+   "temperature": "n/a",
+   "pages": 3,
+   "visibleMs": {
+    "n": 21,
+    "p50": 1244.8,
+    "p95": 1321.5,
+    "max": 1370.9
+   },
+   "settleMs": {
+    "n": 21,
+    "p50": 1244.8,
+    "p95": 1321.5,
+    "max": 1370.9
+   },
+   "maxLoafMs": 701.2,
+   "samplesWithTaskAtLeast100Ms": 21,
+   "unsettled": 0,
+   "diagramWorkerRuns": 0,
+   "diagramWorkerHelpers": 0,
+   "diagramWorkerConstructions": 0,
+   "proposedBudget": {
+    "verdict": "FAIL",
+    "failures": [
+     "visible p95 1321.5 > 100",
+     "visible max 1370.9 > 250",
+     "21 samples with a >=100 ms frame"
+    ]
+   },
+   "sampleCountMeetsPlan": true
+  },
+  {
+   "target": "dev",
+   "state": "post-generate",
+   "op": "program",
+   "direction": "to-LOSATP",
+   "temperature": "n/a",
+   "pages": 3,
+   "visibleMs": {
+    "n": 21,
+    "p50": 1254.4,
+    "p95": 1336.6,
+    "max": 1353.5
+   },
+   "settleMs": {
+    "n": 21,
+    "p50": 1254.4,
+    "p95": 1336.6,
+    "max": 1353.5
+   },
+   "maxLoafMs": 702.2,
+   "samplesWithTaskAtLeast100Ms": 21,
+   "unsettled": 0,
+   "diagramWorkerRuns": 0,
+   "diagramWorkerHelpers": 0,
+   "diagramWorkerConstructions": 0,
+   "proposedBudget": {
+    "verdict": "FAIL",
+    "failures": [
+     "visible p95 1336.6 > 100",
+     "visible max 1353.5 > 250",
+     "21 samples with a >=100 ms frame"
+    ]
+   },
+   "sampleCountMeetsPlan": true
+  },
+  {
+   "target": "dev",
+   "state": "pre-generate",
+   "op": "compare",
+   "direction": "to-losat",
+   "temperature": "n/a",
+   "pages": 3,
+   "visibleMs": {
+    "n": 21,
+    "p50": 15.6,
+    "p95": 16.4,
+    "max": 16.8
+   },
+   "settleMs": {
+    "n": 21,
+    "p50": 15.6,
+    "p95": 16.4,
+    "max": 16.8
+   },
+   "maxLoafMs": 0,
+   "samplesWithTaskAtLeast100Ms": 0,
+   "unsettled": 0,
+   "diagramWorkerRuns": 0,
+   "diagramWorkerHelpers": 0,
+   "diagramWorkerConstructions": 0,
+   "proposedBudget": {
+    "verdict": "PASS"
+   },
+   "sampleCountMeetsPlan": true
+  },
+  {
+   "target": "dev",
+   "state": "pre-generate",
+   "op": "compare",
+   "direction": "to-none",
+   "temperature": "n/a",
+   "pages": 3,
+   "visibleMs": {
+    "n": 21,
+    "p50": 15.5,
+    "p95": 15.9,
+    "max": 15.9
+   },
+   "settleMs": {
+    "n": 21,
+    "p50": 15.5,
+    "p95": 15.9,
+    "max": 15.9
+   },
+   "maxLoafMs": 0,
+   "samplesWithTaskAtLeast100Ms": 0,
+   "unsettled": 0,
+   "diagramWorkerRuns": 0,
+   "diagramWorkerHelpers": 0,
+   "diagramWorkerConstructions": 0,
+   "proposedBudget": {
+    "verdict": "PASS"
+   },
+   "sampleCountMeetsPlan": true
+  },
+  {
+   "target": "dev",
+   "state": "pre-generate",
+   "op": "generate",
+   "direction": "first",
+   "temperature": "cold",
+   "pages": 3,
+   "visibleMs": {
+    "n": 3,
+    "p50": 76.7,
+    "p95": 80.6,
+    "max": 81
+   },
+   "settleMs": {
+    "n": 3,
+    "p50": 17902.3,
+    "p95": 21637.6,
+    "max": 22052.6
+   },
+   "generateTotalMs": {
+    "n": 3,
+    "p50": 17902.4,
+    "p95": 21637.6,
+    "max": 22052.6
+   },
+   "maxLoafMs": 2773.2,
+   "samplesWithTaskAtLeast100Ms": 3,
+   "unsettled": 0,
+   "diagramWorkerRuns": 3,
+   "diagramWorkerHelpers": 3,
+   "diagramWorkerConstructions": 3
+  },
+  {
+   "target": "dev",
+   "state": "pre-generate",
+   "op": "input-blur",
+   "direction": "any",
+   "temperature": "n/a",
+   "pages": 3,
+   "visibleMs": {
+    "n": 21,
+    "p50": 14.8,
+    "p95": 20.3,
+    "max": 20.5
+   },
+   "settleMs": {
+    "n": 21,
+    "p50": 14.8,
+    "p95": 20.3,
+    "max": 20.5
+   },
+   "maxLoafMs": 0,
+   "samplesWithTaskAtLeast100Ms": 0,
+   "unsettled": 0,
+   "diagramWorkerRuns": 0,
+   "diagramWorkerHelpers": 0,
+   "diagramWorkerConstructions": 0,
+   "proposedBudget": {
+    "verdict": "PASS"
+   },
+   "sampleCountMeetsPlan": true
+  },
+  {
+   "target": "dev",
+   "state": "pre-generate",
+   "op": "input-key",
+   "direction": "any",
+   "temperature": "n/a",
+   "pages": 3,
+   "visibleMs": {
+    "n": 21,
+    "p50": 18.3,
+    "p95": 21,
+    "max": 21.1
+   },
+   "settleMs": {
+    "n": 21,
+    "p50": 18.3,
+    "p95": 21,
+    "max": 21.1
+   },
+   "maxLoafMs": 0,
+   "samplesWithTaskAtLeast100Ms": 0,
+   "unsettled": 0,
+   "diagramWorkerRuns": 0,
+   "diagramWorkerHelpers": 0,
+   "diagramWorkerConstructions": 0,
+   "proposedBudget": {
+    "verdict": "PASS"
+   },
+   "sampleCountMeetsPlan": true
+  },
+  {
+   "target": "dev",
+   "state": "pre-generate",
+   "op": "program",
+   "direction": "to-LOSATN",
+   "temperature": "n/a",
+   "pages": 3,
+   "visibleMs": {
+    "n": 21,
+    "p50": 18.9,
+    "p95": 20.1,
+    "max": 21
+   },
+   "settleMs": {
+    "n": 21,
+    "p50": 30.4,
+    "p95": 31.1,
+    "max": 31.4
+   },
+   "maxLoafMs": 0,
+   "samplesWithTaskAtLeast100Ms": 0,
+   "unsettled": 0,
+   "diagramWorkerRuns": 0,
+   "diagramWorkerHelpers": 0,
+   "diagramWorkerConstructions": 0,
+   "proposedBudget": {
+    "verdict": "PASS"
+   },
+   "sampleCountMeetsPlan": true
+  },
+  {
+   "target": "dev",
+   "state": "pre-generate",
+   "op": "program",
+   "direction": "to-LOSATP",
+   "temperature": "n/a",
+   "pages": 3,
+   "visibleMs": {
+    "n": 21,
+    "p50": 19.3,
+    "p95": 20.1,
+    "max": 21.4
+   },
+   "settleMs": {
+    "n": 21,
+    "p50": 30.4,
+    "p95": 31,
+    "max": 31.1
+   },
+   "maxLoafMs": 0,
+   "samplesWithTaskAtLeast100Ms": 0,
+   "unsettled": 0,
+   "diagramWorkerRuns": 0,
+   "diagramWorkerHelpers": 0,
+   "diagramWorkerConstructions": 0,
+   "proposedBudget": {
+    "verdict": "PASS"
+   },
+   "sampleCountMeetsPlan": true
+  },
+  {
+   "target": "dev",
+   "state": "vnig-generated",
+   "op": "generate",
+   "direction": "repeat",
+   "temperature": "warm",
+   "pages": 3,
+   "visibleMs": {
+    "n": 3,
+    "p50": 573.9,
+    "p95": 701.6,
+    "max": 715.8
+   },
+   "settleMs": {
+    "n": 3,
+    "p50": 9784.1,
+    "p95": 11346.8,
+    "max": 11520.4
+   },
+   "generateTotalMs": {
+    "n": 3,
+    "p50": 9784.1,
+    "p95": 11346.8,
+    "max": 11520.4
+   },
+   "maxLoafMs": 1478.5,
+   "samplesWithTaskAtLeast100Ms": 3,
+   "unsettled": 0,
+   "diagramWorkerRuns": 3,
+   "diagramWorkerHelpers": 3,
+   "diagramWorkerConstructions": 0
+  },
+  {
+   "target": "dev",
+   "state": "vnig-saved-preview",
+   "op": "generate",
+   "direction": "first",
+   "temperature": "cold",
+   "pages": 3,
+   "visibleMs": {
+    "n": 3,
+    "p50": 1368.7,
+    "p95": 1524.3,
+    "max": 1541.6
+   },
+   "settleMs": {
+    "n": 3,
+    "p50": 21332.6,
+    "p95": 22742.9,
+    "max": 22899.6
+   },
+   "generateTotalMs": {
+    "n": 3,
+    "p50": 21332.7,
+    "p95": 22743,
+    "max": 22899.7
+   },
+   "maxLoafMs": 1541.4,
+   "samplesWithTaskAtLeast100Ms": 3,
+   "unsettled": 0,
+   "diagramWorkerRuns": 3,
+   "diagramWorkerHelpers": 3,
+   "diagramWorkerConstructions": 3
+  },
+  {
+   "target": "dev",
+   "state": "vnig-saved-preview",
+   "op": "input-blur",
+   "direction": "any",
+   "temperature": "n/a",
+   "pages": 3,
+   "visibleMs": {
+    "n": 21,
+    "p50": 530.9,
+    "p95": 676.8,
+    "max": 773.4
+   },
+   "settleMs": {
+    "n": 21,
+    "p50": 530.9,
+    "p95": 676.8,
+    "max": 773.4
+   },
+   "maxLoafMs": 773,
+   "samplesWithTaskAtLeast100Ms": 21,
+   "unsettled": 0,
+   "diagramWorkerRuns": 0,
+   "diagramWorkerHelpers": 0,
+   "diagramWorkerConstructions": 0,
+   "proposedBudget": {
+    "verdict": "FAIL",
+    "failures": [
+     "visible p95 676.8 > 100",
+     "visible max 773.4 > 250",
+     "21 samples with a >=100 ms frame"
+    ]
+   },
+   "sampleCountMeetsPlan": true
+  },
+  {
+   "target": "dev",
+   "state": "vnig-saved-preview",
+   "op": "input-key",
+   "direction": "any",
+   "temperature": "n/a",
+   "pages": 3,
+   "visibleMs": {
+    "n": 21,
+    "p50": 569.5,
+    "p95": 669.4,
+    "max": 736.8
+   },
+   "settleMs": {
+    "n": 21,
+    "p50": 569.5,
+    "p95": 669.4,
+    "max": 736.8
+   },
+   "maxLoafMs": 737.3,
+   "samplesWithTaskAtLeast100Ms": 21,
+   "unsettled": 0,
+   "diagramWorkerRuns": 0,
+   "diagramWorkerHelpers": 0,
+   "diagramWorkerConstructions": 0,
+   "proposedBudget": {
+    "verdict": "FAIL",
+    "failures": [
+     "visible p95 669.4 > 100",
+     "visible max 736.8 > 250",
+     "21 samples with a >=100 ms frame"
+    ]
+   },
+   "sampleCountMeetsPlan": true
+  },
+  {
+   "target": "main",
+   "state": "post-generate-override",
+   "op": "compare",
+   "direction": "to-losat",
+   "temperature": "n/a",
+   "pages": 3,
+   "visibleMs": {
+    "n": 21,
+    "p50": 17,
+    "p95": 18.5,
+    "max": 18.6
+   },
+   "settleMs": {
+    "n": 21,
+    "p50": 17.1,
+    "p95": 18.6,
+    "max": 297.8
+   },
+   "maxLoafMs": 165.6,
+   "samplesWithTaskAtLeast100Ms": 1,
+   "unsettled": 0,
+   "diagramWorkerRuns": 0,
+   "diagramWorkerHelpers": 0,
+   "diagramWorkerConstructions": 0,
+   "proposedBudget": {
+    "verdict": "FAIL",
+    "failures": [
+     "1 samples with a >=100 ms frame"
+    ]
+   },
+   "sampleCountMeetsPlan": true
+  },
+  {
+   "target": "main",
+   "state": "post-generate-override",
+   "op": "compare",
+   "direction": "to-none",
+   "temperature": "n/a",
+   "pages": 3,
+   "visibleMs": {
+    "n": 21,
+    "p50": 16.8,
+    "p95": 17.6,
+    "max": 17.9
+   },
+   "settleMs": {
+    "n": 21,
+    "p50": 16.9,
+    "p95": 276.7,
+    "max": 747.7
+   },
+   "maxLoafMs": 200.2,
+   "samplesWithTaskAtLeast100Ms": 3,
+   "unsettled": 0,
+   "diagramWorkerRuns": 0,
+   "diagramWorkerHelpers": 0,
+   "diagramWorkerConstructions": 0,
+   "proposedBudget": {
+    "verdict": "FAIL",
+    "failures": [
+     "settle p95 276.7 > 200",
+     "3 samples with a >=100 ms frame"
+    ]
+   },
+   "sampleCountMeetsPlan": true
+  },
+  {
+   "target": "main",
+   "state": "post-generate-override",
+   "op": "generate",
+   "direction": "repeat",
+   "temperature": "warm",
+   "pages": 3,
+   "visibleMs": {
+    "n": 3,
+    "p50": 190,
+    "p95": 197.2,
+    "max": 198
+   },
+   "settleMs": {
+    "n": 3,
+    "p50": 6527.2,
+    "p95": 6592.4,
+    "max": 6599.7
+   },
+   "generateTotalMs": {
+    "n": 3,
+    "p50": 6371.9,
+    "p95": 6376.8,
+    "max": 6377.4
+   },
+   "maxLoafMs": 1806.2,
+   "samplesWithTaskAtLeast100Ms": 3,
+   "unsettled": 0,
+   "diagramWorkerRuns": 3,
+   "diagramWorkerHelpers": 0,
+   "diagramWorkerConstructions": 0
+  },
+  {
+   "target": "main",
+   "state": "post-generate-override",
+   "op": "input-blur",
+   "direction": "any",
+   "temperature": "n/a",
+   "pages": 3,
+   "visibleMs": {
+    "n": 21,
+    "p50": 12.7,
+    "p95": 20.1,
+    "max": 20.7
+   },
+   "settleMs": {
+    "n": 21,
+    "p50": 12.7,
+    "p95": 20.1,
+    "max": 20.7
+   },
+   "maxLoafMs": 0,
+   "samplesWithTaskAtLeast100Ms": 0,
+   "unsettled": 0,
+   "diagramWorkerRuns": 0,
+   "diagramWorkerHelpers": 0,
+   "diagramWorkerConstructions": 0,
+   "proposedBudget": {
+    "verdict": "PASS"
+   },
+   "sampleCountMeetsPlan": true
+  },
+  {
+   "target": "main",
+   "state": "post-generate-override",
+   "op": "input-key",
+   "direction": "any",
+   "temperature": "n/a",
+   "pages": 3,
+   "visibleMs": {
+    "n": 21,
+    "p50": 11.9,
+    "p95": 19.4,
+    "max": 20
+   },
+   "settleMs": {
+    "n": 21,
+    "p50": 11.9,
+    "p95": 19.4,
+    "max": 20
+   },
+   "maxLoafMs": 0,
+   "samplesWithTaskAtLeast100Ms": 0,
+   "unsettled": 0,
+   "diagramWorkerRuns": 0,
+   "diagramWorkerHelpers": 0,
+   "diagramWorkerConstructions": 0,
+   "proposedBudget": {
+    "verdict": "PASS"
+   },
+   "sampleCountMeetsPlan": true
+  },
+  {
+   "target": "main",
+   "state": "post-generate-override",
+   "op": "program",
+   "direction": "to-LOSATN",
+   "temperature": "n/a",
+   "pages": 3,
+   "visibleMs": {
+    "n": 21,
+    "p50": 18,
+    "p95": 19,
+    "max": 19.9
+   },
+   "settleMs": {
+    "n": 21,
+    "p50": 30.3,
+    "p95": 30.9,
+    "max": 30.9
+   },
+   "maxLoafMs": 0,
+   "samplesWithTaskAtLeast100Ms": 0,
+   "unsettled": 0,
+   "diagramWorkerRuns": 0,
+   "diagramWorkerHelpers": 0,
+   "diagramWorkerConstructions": 0,
+   "proposedBudget": {
+    "verdict": "PASS"
+   },
+   "sampleCountMeetsPlan": true
+  },
+  {
+   "target": "main",
+   "state": "post-generate-override",
+   "op": "program",
+   "direction": "to-LOSATP",
+   "temperature": "n/a",
+   "pages": 3,
+   "visibleMs": {
+    "n": 21,
+    "p50": 18.2,
+    "p95": 19.3,
+    "max": 21.3
+   },
+   "settleMs": {
+    "n": 21,
+    "p50": 30.3,
+    "p95": 30.9,
+    "max": 31
+   },
+   "maxLoafMs": 0,
+   "samplesWithTaskAtLeast100Ms": 0,
+   "unsettled": 0,
+   "diagramWorkerRuns": 0,
+   "diagramWorkerHelpers": 0,
+   "diagramWorkerConstructions": 0,
+   "proposedBudget": {
+    "verdict": "PASS"
+   },
+   "sampleCountMeetsPlan": true
+  },
+  {
+   "target": "main",
+   "state": "post-generate",
+   "op": "compare",
+   "direction": "to-losat",
+   "temperature": "n/a",
+   "pages": 3,
+   "visibleMs": {
+    "n": 21,
+    "p50": 16.9,
+    "p95": 17.5,
+    "max": 17.9
+   },
+   "settleMs": {
+    "n": 21,
+    "p50": 17,
+    "p95": 397.8,
+    "max": 401.8
+   },
+   "maxLoafMs": 54.1,
+   "samplesWithTaskAtLeast100Ms": 0,
+   "unsettled": 0,
+   "diagramWorkerRuns": 0,
+   "diagramWorkerHelpers": 0,
+   "diagramWorkerConstructions": 0,
+   "proposedBudget": {
+    "verdict": "FAIL",
+    "failures": [
+     "settle p95 397.8 > 200"
+    ]
+   },
+   "sampleCountMeetsPlan": true
+  },
+  {
+   "target": "main",
+   "state": "post-generate",
+   "op": "compare",
+   "direction": "to-none",
+   "temperature": "n/a",
+   "pages": 3,
+   "visibleMs": {
+    "n": 21,
+    "p50": 16.6,
+    "p95": 17,
+    "max": 17.3
+   },
+   "settleMs": {
+    "n": 21,
+    "p50": 16.6,
+    "p95": 17,
+    "max": 17.3
+   },
+   "maxLoafMs": 0,
+   "samplesWithTaskAtLeast100Ms": 0,
+   "unsettled": 0,
+   "diagramWorkerRuns": 0,
+   "diagramWorkerHelpers": 0,
+   "diagramWorkerConstructions": 0,
+   "proposedBudget": {
+    "verdict": "PASS"
+   },
+   "sampleCountMeetsPlan": true
+  },
+  {
+   "target": "main",
+   "state": "post-generate",
+   "op": "generate",
+   "direction": "repeat",
+   "temperature": "warm",
+   "pages": 3,
+   "visibleMs": {
+    "n": 21,
+    "p50": 156.7,
+    "p95": 320.3,
+    "max": 463.2
+   },
+   "settleMs": {
+    "n": 21,
+    "p50": 5847.5,
+    "p95": 6715.7,
+    "max": 6749.4
+   },
+   "generateTotalMs": {
+    "n": 21,
+    "p50": 5847.5,
+    "p95": 6715.8,
+    "max": 6749.4
+   },
+   "maxLoafMs": 1909.9,
+   "samplesWithTaskAtLeast100Ms": 21,
+   "unsettled": 0,
+   "diagramWorkerRuns": 21,
+   "diagramWorkerHelpers": 0,
+   "diagramWorkerConstructions": 0
+  },
+  {
+   "target": "main",
+   "state": "post-generate",
+   "op": "input-blur",
+   "direction": "any",
+   "temperature": "n/a",
+   "pages": 3,
+   "visibleMs": {
+    "n": 21,
+    "p50": 11.7,
+    "p95": 19.1,
+    "max": 20.8
+   },
+   "settleMs": {
+    "n": 21,
+    "p50": 11.7,
+    "p95": 19.1,
+    "max": 20.8
+   },
+   "maxLoafMs": 0,
+   "samplesWithTaskAtLeast100Ms": 0,
+   "unsettled": 0,
+   "diagramWorkerRuns": 0,
+   "diagramWorkerHelpers": 0,
+   "diagramWorkerConstructions": 0,
+   "proposedBudget": {
+    "verdict": "PASS"
+   },
+   "sampleCountMeetsPlan": true
+  },
+  {
+   "target": "main",
+   "state": "post-generate",
+   "op": "input-key",
+   "direction": "any",
+   "temperature": "n/a",
+   "pages": 3,
+   "visibleMs": {
+    "n": 21,
+    "p50": 17,
+    "p95": 18.6,
+    "max": 19.1
+   },
+   "settleMs": {
+    "n": 21,
+    "p50": 17,
+    "p95": 19.1,
+    "max": 506.8
+   },
+   "maxLoafMs": 52.3,
+   "samplesWithTaskAtLeast100Ms": 0,
+   "unsettled": 0,
+   "diagramWorkerRuns": 0,
+   "diagramWorkerHelpers": 0,
+   "diagramWorkerConstructions": 0,
+   "proposedBudget": {
+    "verdict": "PASS"
+   },
+   "sampleCountMeetsPlan": true
+  },
+  {
+   "target": "main",
+   "state": "post-generate",
+   "op": "program",
+   "direction": "to-LOSATN",
+   "temperature": "n/a",
+   "pages": 3,
+   "visibleMs": {
+    "n": 21,
+    "p50": 18.1,
+    "p95": 19.1,
+    "max": 19.2
+   },
+   "settleMs": {
+    "n": 21,
+    "p50": 30.3,
+    "p95": 31,
+    "max": 31
+   },
+   "maxLoafMs": 0,
+   "samplesWithTaskAtLeast100Ms": 0,
+   "unsettled": 0,
+   "diagramWorkerRuns": 0,
+   "diagramWorkerHelpers": 0,
+   "diagramWorkerConstructions": 0,
+   "proposedBudget": {
+    "verdict": "PASS"
+   },
+   "sampleCountMeetsPlan": true
+  },
+  {
+   "target": "main",
+   "state": "post-generate",
+   "op": "program",
+   "direction": "to-LOSATP",
+   "temperature": "n/a",
+   "pages": 3,
+   "visibleMs": {
+    "n": 21,
+    "p50": 18.2,
+    "p95": 18.9,
+    "max": 18.9
+   },
+   "settleMs": {
+    "n": 21,
+    "p50": 30.2,
+    "p95": 30.8,
+    "max": 31
+   },
+   "maxLoafMs": 0,
+   "samplesWithTaskAtLeast100Ms": 0,
+   "unsettled": 0,
+   "diagramWorkerRuns": 0,
+   "diagramWorkerHelpers": 0,
+   "diagramWorkerConstructions": 0,
+   "proposedBudget": {
+    "verdict": "PASS"
+   },
+   "sampleCountMeetsPlan": true
+  },
+  {
+   "target": "main",
+   "state": "pre-generate",
+   "op": "compare",
+   "direction": "to-losat",
+   "temperature": "n/a",
+   "pages": 3,
+   "visibleMs": {
+    "n": 21,
+    "p50": 15.4,
+    "p95": 16,
+    "max": 17.3
+   },
+   "settleMs": {
+    "n": 21,
+    "p50": 15.4,
+    "p95": 16,
+    "max": 17.3
+   },
+   "maxLoafMs": 0,
+   "samplesWithTaskAtLeast100Ms": 0,
+   "unsettled": 0,
+   "diagramWorkerRuns": 0,
+   "diagramWorkerHelpers": 0,
+   "diagramWorkerConstructions": 0,
+   "proposedBudget": {
+    "verdict": "PASS"
+   },
+   "sampleCountMeetsPlan": true
+  },
+  {
+   "target": "main",
+   "state": "pre-generate",
+   "op": "compare",
+   "direction": "to-none",
+   "temperature": "n/a",
+   "pages": 3,
+   "visibleMs": {
+    "n": 21,
+    "p50": 15.4,
+    "p95": 15.6,
+    "max": 15.7
+   },
+   "settleMs": {
+    "n": 21,
+    "p50": 15.4,
+    "p95": 15.6,
+    "max": 15.7
+   },
+   "maxLoafMs": 0,
+   "samplesWithTaskAtLeast100Ms": 0,
+   "unsettled": 0,
+   "diagramWorkerRuns": 0,
+   "diagramWorkerHelpers": 0,
+   "diagramWorkerConstructions": 0,
+   "proposedBudget": {
+    "verdict": "PASS"
+   },
+   "sampleCountMeetsPlan": true
+  },
+  {
+   "target": "main",
+   "state": "pre-generate",
+   "op": "generate",
+   "direction": "first",
+   "temperature": "cold",
+   "pages": 3,
+   "visibleMs": {
+    "n": 3,
+    "p50": 71.5,
+    "p95": 79,
+    "max": 79.8
+   },
+   "settleMs": {
+    "n": 3,
+    "p50": 16013.6,
+    "p95": 16105.5,
+    "max": 16115.7
+   },
+   "generateTotalMs": {
+    "n": 3,
+    "p50": 16013.6,
+    "p95": 16105.5,
+    "max": 16115.7
+   },
+   "maxLoafMs": 1584.6,
+   "samplesWithTaskAtLeast100Ms": 3,
+   "unsettled": 0,
+   "diagramWorkerRuns": 3,
+   "diagramWorkerHelpers": 0,
+   "diagramWorkerConstructions": 3
+  },
+  {
+   "target": "main",
+   "state": "pre-generate",
+   "op": "input-blur",
+   "direction": "any",
+   "temperature": "n/a",
+   "pages": 3,
+   "visibleMs": {
+    "n": 21,
+    "p50": 12.4,
+    "p95": 17.3,
+    "max": 18.1
+   },
+   "settleMs": {
+    "n": 21,
+    "p50": 12.4,
+    "p95": 17.3,
+    "max": 18.1
+   },
+   "maxLoafMs": 0,
+   "samplesWithTaskAtLeast100Ms": 0,
+   "unsettled": 0,
+   "diagramWorkerRuns": 0,
+   "diagramWorkerHelpers": 0,
+   "diagramWorkerConstructions": 0,
+   "proposedBudget": {
+    "verdict": "PASS"
+   },
+   "sampleCountMeetsPlan": true
+  },
+  {
+   "target": "main",
+   "state": "pre-generate",
+   "op": "input-key",
+   "direction": "any",
+   "temperature": "n/a",
+   "pages": 3,
+   "visibleMs": {
+    "n": 21,
+    "p50": 15.7,
+    "p95": 20.8,
+    "max": 20.9
+   },
+   "settleMs": {
+    "n": 21,
+    "p50": 15.7,
+    "p95": 20.8,
+    "max": 20.9
+   },
+   "maxLoafMs": 0,
+   "samplesWithTaskAtLeast100Ms": 0,
+   "unsettled": 0,
+   "diagramWorkerRuns": 0,
+   "diagramWorkerHelpers": 0,
+   "diagramWorkerConstructions": 0,
+   "proposedBudget": {
+    "verdict": "PASS"
+   },
+   "sampleCountMeetsPlan": true
+  },
+  {
+   "target": "main",
+   "state": "pre-generate",
+   "op": "program",
+   "direction": "to-LOSATN",
+   "temperature": "n/a",
+   "pages": 3,
+   "visibleMs": {
+    "n": 21,
+    "p50": 16.2,
+    "p95": 17.1,
+    "max": 17.6
+   },
+   "settleMs": {
+    "n": 21,
+    "p50": 30.8,
+    "p95": 31,
+    "max": 31.2
+   },
+   "maxLoafMs": 0,
+   "samplesWithTaskAtLeast100Ms": 0,
+   "unsettled": 0,
+   "diagramWorkerRuns": 0,
+   "diagramWorkerHelpers": 0,
+   "diagramWorkerConstructions": 0,
+   "proposedBudget": {
+    "verdict": "PASS"
+   },
+   "sampleCountMeetsPlan": true
+  },
+  {
+   "target": "main",
+   "state": "pre-generate",
+   "op": "program",
+   "direction": "to-LOSATP",
+   "temperature": "n/a",
+   "pages": 3,
+   "visibleMs": {
+    "n": 21,
+    "p50": 16.1,
+    "p95": 16.6,
+    "max": 16.9
+   },
+   "settleMs": {
+    "n": 21,
+    "p50": 30.7,
+    "p95": 31.1,
+    "max": 31.5
+   },
+   "maxLoafMs": 0,
+   "samplesWithTaskAtLeast100Ms": 0,
+   "unsettled": 0,
+   "diagramWorkerRuns": 0,
+   "diagramWorkerHelpers": 0,
+   "diagramWorkerConstructions": 0,
+   "proposedBudget": {
+    "verdict": "PASS"
+   },
+   "sampleCountMeetsPlan": true
+  },
+  {
+   "target": "main",
+   "state": "vnig-generated",
+   "op": "generate",
+   "direction": "repeat",
+   "temperature": "warm",
+   "pages": 3,
+   "visibleMs": {
+    "n": 3,
+    "p50": 15.3,
+    "p95": 15.7,
+    "max": 15.8
+   },
+   "settleMs": {
+    "n": 3,
+    "p50": 6371.7,
+    "p95": 7104.1,
+    "max": 7185.5
+   },
+   "generateTotalMs": {
+    "n": 3,
+    "p50": 6371.7,
+    "p95": 7104.1,
+    "max": 7185.5
+   },
+   "maxLoafMs": 1112.7,
+   "samplesWithTaskAtLeast100Ms": 3,
+   "unsettled": 0,
+   "diagramWorkerRuns": 3,
+   "diagramWorkerHelpers": 0,
+   "diagramWorkerConstructions": 0
+  },
+  {
+   "target": "main",
+   "state": "vnig-saved-preview",
+   "op": "generate",
+   "direction": "first",
+   "temperature": "cold",
+   "pages": 3,
+   "visibleMs": {
+    "n": 3,
+    "p50": 991.4,
+    "p95": 1016.1,
+    "max": 1018.9
+   },
+   "settleMs": {
+    "n": 3,
+    "p50": 15887,
+    "p95": 16783.9,
+    "max": 16883.5
+   },
+   "generateTotalMs": {
+    "n": 3,
+    "p50": 15887,
+    "p95": 16783.9,
+    "max": 16883.6
+   },
+   "maxLoafMs": 1077.9,
+   "samplesWithTaskAtLeast100Ms": 3,
+   "unsettled": 0,
+   "diagramWorkerRuns": 3,
+   "diagramWorkerHelpers": 0,
+   "diagramWorkerConstructions": 3
+  },
+  {
+   "target": "main",
+   "state": "vnig-saved-preview",
+   "op": "input-blur",
+   "direction": "any",
+   "temperature": "n/a",
+   "pages": 3,
+   "visibleMs": {
+    "n": 21,
+    "p50": 13.8,
+    "p95": 17.3,
+    "max": 17.6
+   },
+   "settleMs": {
+    "n": 21,
+    "p50": 13.8,
+    "p95": 17.3,
+    "max": 17.6
+   },
+   "maxLoafMs": 0,
+   "samplesWithTaskAtLeast100Ms": 0,
+   "unsettled": 0,
+   "diagramWorkerRuns": 0,
+   "diagramWorkerHelpers": 0,
+   "diagramWorkerConstructions": 0,
+   "proposedBudget": {
+    "verdict": "PASS"
+   },
+   "sampleCountMeetsPlan": true
+  },
+  {
+   "target": "main",
+   "state": "vnig-saved-preview",
+   "op": "input-key",
+   "direction": "any",
+   "temperature": "n/a",
+   "pages": 3,
+   "visibleMs": {
+    "n": 21,
+    "p50": 18.1,
+    "p95": 19.5,
+    "max": 19.5
+   },
+   "settleMs": {
+    "n": 21,
+    "p50": 18.1,
+    "p95": 19.5,
+    "max": 19.5
+   },
+   "maxLoafMs": 0,
+   "samplesWithTaskAtLeast100Ms": 0,
+   "unsettled": 0,
+   "diagramWorkerRuns": 0,
+   "diagramWorkerHelpers": 0,
+   "diagramWorkerConstructions": 0,
+   "proposedBudget": {
+    "verdict": "PASS"
+   },
+   "sampleCountMeetsPlan": true
+  }
+ ],
+ "coverage": {
+  "dev|pre-generate|compare|to-losat": {
+   "samples": 3,
+   "perSample": {
+    "app/color-utils.js#buildDefaultColorOverrideTsv": 2,
+    "services/session-active-config-contract.js#validateCurrentWriterActiveConfig": 2,
+    "services/config.js#getGenerationApplicationStatus": 2,
+    "services/history-snapshot.js#buildHistoryIntent": 2,
+    "services/history-snapshot.js#snapshotSignature": 2,
+    "app/generation-status.js#describeGenerationApplication": 2,
+    "app/linear-comparisons.js#buildLinearComparisonTimeline": 1,
+    "app/comparison-ui.js#projectLinearComparisonUi": 1,
+    "app/feature-selector.js#buildFeatureMetadataMap": 2,
+    "app/feature-selector.js#buildFeatureSelectorUniquenessIndexFromMetadata": 2,
+    "app/feature-visibility.js#serializeFeatureVisibilityRules": 2,
+    "services/session-request.js#addGeneratedTableResources": 2,
+    "services/session-request.js#projectCanonicalRenderInput": 2,
+    "services/session-request.js#generationComparisonPlan": 2,
+    "services/session-request.js#generationMeaning": 2,
+    "services/session-request.js#projectGenerationIntent": 2,
+    "services/session-request.js#compareGenerationIntent": 2,
+    "app/feature-editor/label-override-table.js#buildEditableLabelByFeatureId": 2,
+    "app/feature-editor/label-override-table.js#buildFeatureIdsBySourceText": 2,
+    "app/feature-editor/label-override-table.js#buildLabelOverrideRows": 2,
+    "app/feature-editor/label-override-table.js#buildLabelOverrideTsv": 2
+   }
+  },
+  "dev|pre-generate|compare|to-none": {
+   "samples": 3,
+   "perSample": {
+    "app/color-utils.js#buildDefaultColorOverrideTsv": 2,
+    "services/session-active-config-contract.js#validateCurrentWriterActiveConfig": 2,
+    "services/config.js#getGenerationApplicationStatus": 2,
+    "services/history-snapshot.js#buildHistoryIntent": 2,
+    "services/history-snapshot.js#snapshotSignature": 2,
+    "app/generation-status.js#describeGenerationApplication": 2,
+    "app/linear-comparisons.js#buildLinearComparisonTimeline": 1,
+    "app/comparison-ui.js#projectLinearComparisonUi": 1,
+    "app/feature-selector.js#buildFeatureMetadataMap": 2,
+    "app/feature-selector.js#buildFeatureSelectorUniquenessIndexFromMetadata": 2,
+    "app/feature-visibility.js#serializeFeatureVisibilityRules": 2,
+    "services/session-request.js#addGeneratedTableResources": 2,
+    "services/session-request.js#projectCanonicalRenderInput": 2,
+    "services/session-request.js#generationComparisonPlan": 2,
+    "services/session-request.js#generationMeaning": 2,
+    "services/session-request.js#projectGenerationIntent": 2,
+    "services/session-request.js#compareGenerationIntent": 2,
+    "app/feature-editor/label-override-table.js#buildEditableLabelByFeatureId": 2,
+    "app/feature-editor/label-override-table.js#buildFeatureIdsBySourceText": 2,
+    "app/feature-editor/label-override-table.js#buildLabelOverrideRows": 2,
+    "app/feature-editor/label-override-table.js#buildLabelOverrideTsv": 2
+   }
+  },
+  "dev|pre-generate|program|to-LOSATP": {
+   "samples": 3,
+   "perSample": {
+    "app/color-utils.js#buildDefaultColorOverrideTsv": 2,
+    "services/session-active-config-contract.js#validateCurrentWriterActiveConfig": 2,
+    "services/config.js#getGenerationApplicationStatus": 2,
+    "services/history-snapshot.js#buildHistoryIntent": 2,
+    "services/history-snapshot.js#snapshotSignature": 2,
+    "app/generation-status.js#describeGenerationApplication": 2,
+    "app/linear-comparisons.js#buildLinearComparisonTimeline": 1,
+    "app/comparison-ui.js#projectLinearComparisonUi": 1,
+    "app/feature-selector.js#buildFeatureMetadataMap": 2,
+    "app/feature-selector.js#buildFeatureSelectorUniquenessIndexFromMetadata": 2,
+    "app/feature-visibility.js#serializeFeatureVisibilityRules": 2,
+    "services/session-request.js#addGeneratedTableResources": 2,
+    "services/session-request.js#projectCanonicalRenderInput": 2,
+    "services/session-request.js#generationComparisonPlan": 2,
+    "services/session-request.js#generationMeaning": 2,
+    "services/session-request.js#projectGenerationIntent": 2,
+    "services/session-request.js#compareGenerationIntent": 2,
+    "app/feature-editor/label-override-table.js#buildEditableLabelByFeatureId": 2,
+    "app/feature-editor/label-override-table.js#buildFeatureIdsBySourceText": 2,
+    "app/feature-editor/label-override-table.js#buildLabelOverrideRows": 2,
+    "app/feature-editor/label-override-table.js#buildLabelOverrideTsv": 2
+   }
+  },
+  "dev|pre-generate|program|to-LOSATN": {
+   "samples": 3,
+   "perSample": {
+    "app/color-utils.js#buildDefaultColorOverrideTsv": 2,
+    "services/session-active-config-contract.js#validateCurrentWriterActiveConfig": 2,
+    "services/config.js#getGenerationApplicationStatus": 2,
+    "services/history-snapshot.js#buildHistoryIntent": 2,
+    "services/history-snapshot.js#snapshotSignature": 2,
+    "app/generation-status.js#describeGenerationApplication": 2,
+    "app/linear-comparisons.js#buildLinearComparisonTimeline": 1,
+    "app/comparison-ui.js#projectLinearComparisonUi": 1,
+    "app/feature-selector.js#buildFeatureMetadataMap": 2,
+    "app/feature-selector.js#buildFeatureSelectorUniquenessIndexFromMetadata": 2,
+    "app/feature-visibility.js#serializeFeatureVisibilityRules": 2,
+    "services/session-request.js#addGeneratedTableResources": 2,
+    "services/session-request.js#projectCanonicalRenderInput": 2,
+    "services/session-request.js#generationComparisonPlan": 2,
+    "services/session-request.js#generationMeaning": 2,
+    "services/session-request.js#projectGenerationIntent": 2,
+    "services/session-request.js#compareGenerationIntent": 2,
+    "app/feature-editor/label-override-table.js#buildEditableLabelByFeatureId": 2,
+    "app/feature-editor/label-override-table.js#buildFeatureIdsBySourceText": 2,
+    "app/feature-editor/label-override-table.js#buildLabelOverrideRows": 2,
+    "app/feature-editor/label-override-table.js#buildLabelOverrideTsv": 2
+   }
+  },
+  "dev|pre-generate|input-key|insert": {
+   "samples": 2,
+   "perSample": {
+    "app/color-utils.js#buildDefaultColorOverrideTsv": 1,
+    "services/session-active-config-contract.js#validateCurrentWriterActiveConfig": 1,
+    "services/config.js#getGenerationApplicationStatus": 1,
+    "app/generation-status.js#describeGenerationApplication": 1,
+    "app/feature-selector.js#buildFeatureMetadataMap": 1,
+    "app/feature-selector.js#buildFeatureSelectorUniquenessIndexFromMetadata": 1,
+    "app/feature-visibility.js#serializeFeatureVisibilityRules": 1,
+    "services/session-request.js#addGeneratedTableResources": 1,
+    "services/session-request.js#projectCanonicalRenderInput": 1,
+    "services/session-request.js#generationComparisonPlan": 1,
+    "services/session-request.js#generationMeaning": 1,
+    "services/session-request.js#projectGenerationIntent": 1,
+    "services/session-request.js#compareGenerationIntent": 1,
+    "app/feature-editor/label-override-table.js#buildEditableLabelByFeatureId": 1,
+    "app/feature-editor/label-override-table.js#buildFeatureIdsBySourceText": 1,
+    "app/feature-editor/label-override-table.js#buildLabelOverrideRows": 1,
+    "app/feature-editor/label-override-table.js#buildLabelOverrideTsv": 1
+   }
+  },
+  "dev|pre-generate|input-blur|insert": {
+   "samples": 2,
+   "perSample": {
+    "app/color-utils.js#buildDefaultColorOverrideTsv": 1,
+    "services/session-active-config-contract.js#validateCurrentWriterActiveConfig": 1,
+    "services/config.js#getGenerationApplicationStatus": 1,
+    "services/history-snapshot.js#buildHistoryIntent": 1,
+    "services/history-snapshot.js#snapshotSignature": 1,
+    "app/generation-status.js#describeGenerationApplication": 1,
+    "app/feature-selector.js#buildFeatureMetadataMap": 1,
+    "app/feature-selector.js#buildFeatureSelectorUniquenessIndexFromMetadata": 1,
+    "app/feature-visibility.js#serializeFeatureVisibilityRules": 1,
+    "services/session-request.js#addGeneratedTableResources": 1,
+    "services/session-request.js#projectCanonicalRenderInput": 1,
+    "services/session-request.js#generationComparisonPlan": 1,
+    "services/session-request.js#generationMeaning": 1,
+    "services/session-request.js#projectGenerationIntent": 1,
+    "services/session-request.js#compareGenerationIntent": 1,
+    "app/feature-editor/label-override-table.js#buildEditableLabelByFeatureId": 1,
+    "app/feature-editor/label-override-table.js#buildFeatureIdsBySourceText": 1,
+    "app/feature-editor/label-override-table.js#buildLabelOverrideRows": 1,
+    "app/feature-editor/label-override-table.js#buildLabelOverrideTsv": 1
+   }
+  },
+  "dev|pre-generate|input-key|delete": {
+   "samples": 1,
+   "perSample": {
+    "app/color-utils.js#buildDefaultColorOverrideTsv": 1,
+    "services/session-active-config-contract.js#validateCurrentWriterActiveConfig": 1,
+    "services/config.js#getGenerationApplicationStatus": 1,
+    "app/generation-status.js#describeGenerationApplication": 1,
+    "app/feature-selector.js#buildFeatureMetadataMap": 1,
+    "app/feature-selector.js#buildFeatureSelectorUniquenessIndexFromMetadata": 1,
+    "app/feature-visibility.js#serializeFeatureVisibilityRules": 1,
+    "services/session-request.js#addGeneratedTableResources": 1,
+    "services/session-request.js#projectCanonicalRenderInput": 1,
+    "services/session-request.js#generationComparisonPlan": 1,
+    "services/session-request.js#generationMeaning": 1,
+    "services/session-request.js#projectGenerationIntent": 1,
+    "services/session-request.js#compareGenerationIntent": 1,
+    "app/feature-editor/label-override-table.js#buildEditableLabelByFeatureId": 1,
+    "app/feature-editor/label-override-table.js#buildFeatureIdsBySourceText": 1,
+    "app/feature-editor/label-override-table.js#buildLabelOverrideRows": 1,
+    "app/feature-editor/label-override-table.js#buildLabelOverrideTsv": 1
+   }
+  },
+  "dev|pre-generate|input-blur|delete": {
+   "samples": 1,
+   "perSample": {
+    "app/color-utils.js#buildDefaultColorOverrideTsv": 1,
+    "services/session-active-config-contract.js#validateCurrentWriterActiveConfig": 1,
+    "services/config.js#getGenerationApplicationStatus": 1,
+    "services/history-snapshot.js#buildHistoryIntent": 1,
+    "services/history-snapshot.js#snapshotSignature": 1,
+    "app/generation-status.js#describeGenerationApplication": 1,
+    "app/feature-selector.js#buildFeatureMetadataMap": 1,
+    "app/feature-selector.js#buildFeatureSelectorUniquenessIndexFromMetadata": 1,
+    "app/feature-visibility.js#serializeFeatureVisibilityRules": 1,
+    "services/session-request.js#addGeneratedTableResources": 1,
+    "services/session-request.js#projectCanonicalRenderInput": 1,
+    "services/session-request.js#generationComparisonPlan": 1,
+    "services/session-request.js#generationMeaning": 1,
+    "services/session-request.js#projectGenerationIntent": 1,
+    "services/session-request.js#compareGenerationIntent": 1,
+    "app/feature-editor/label-override-table.js#buildEditableLabelByFeatureId": 1,
+    "app/feature-editor/label-override-table.js#buildFeatureIdsBySourceText": 1,
+    "app/feature-editor/label-override-table.js#buildLabelOverrideRows": 1,
+    "app/feature-editor/label-override-table.js#buildLabelOverrideTsv": 1
+   }
+  },
+  "dev|pre-generate|generate|first": {
+   "samples": 1,
+   "perSample": {
+    "app/color-utils.js#buildDefaultColorOverrideTsv": 14,
+    "services/session-active-config-contract.js#validateCurrentWriterActiveConfig": 9,
+    "services/config.js#getGenerationApplicationStatus": 9,
+    "app/generation-status.js#describeGenerationApplication": 9,
+    "app/feature-selector.js#buildFeatureMetadataMap": 14,
+    "app/feature-selector.js#buildFeatureSelectorUniquenessIndexFromMetadata": 14,
+    "app/feature-visibility.js#serializeFeatureVisibilityRules": 14,
+    "services/session-request.js#addGeneratedTableResources": 13,
+    "services/session-request.js#projectCanonicalRenderInput": 10,
+    "services/session-request.js#generationComparisonPlan": 9,
+    "services/session-request.js#generationMeaning": 13,
+    "services/session-request.js#buildCanonicalRenderRequest": 1,
+    "services/session-request.js#projectGenerationIntent": 9,
+    "services/session-request.js#liveGenerationTables": 3,
+    "services/session-request.js#compareGenerationIntent": 9,
+    "app/feature-editor/label-override-table.js#buildEditableLabelByFeatureId": 14,
+    "app/feature-editor/label-override-table.js#buildFeatureIdsBySourceText": 14,
+    "app/feature-editor/label-override-table.js#buildLabelOverrideRows": 14,
+    "app/feature-editor/label-override-table.js#buildLabelOverrideTsv": 14
+   }
+  },
+  "dev|post-generate|compare|to-losat": {
+   "samples": 3,
+   "perSample": {
+    "app/color-utils.js#buildDefaultColorOverrideTsv": 4,
+    "services/session-active-config-contract.js#validateCurrentWriterActiveConfig": 2,
+    "services/config.js#getGenerationApplicationStatus": 2,
+    "services/history-snapshot.js#buildHistoryIntent": 2,
+    "services/history-snapshot.js#snapshotSignature": 2,
+    "app/generation-status.js#describeGenerationApplication": 2,
+    "app/linear-comparisons.js#buildLinearComparisonTimeline": 1,
+    "app/comparison-ui.js#projectLinearComparisonUi": 1,
+    "app/feature-selector.js#buildFeatureMetadataMap": 4,
+    "app/feature-selector.js#buildFeatureSelectorUniquenessIndexFromMetadata": 4,
+    "app/feature-visibility.js#serializeFeatureVisibilityRules": 4,
+    "services/session-request.js#addGeneratedTableResources": 4,
+    "services/session-request.js#projectCanonicalRenderInput": 2,
+    "services/session-request.js#generationComparisonPlan": 2,
+    "services/session-request.js#generationMeaning": 4,
+    "services/session-request.js#projectGenerationIntent": 2,
+    "services/session-request.js#liveGenerationTables": 2,
+    "services/session-request.js#compareGenerationIntent": 2,
+    "app/feature-editor/label-override-table.js#buildEditableLabelByFeatureId": 4,
+    "app/feature-editor/label-override-table.js#buildFeatureIdsBySourceText": 4,
+    "app/feature-editor/label-override-table.js#buildLabelOverrideRows": 4,
+    "app/feature-editor/label-override-table.js#buildLabelOverrideTsv": 4
+   }
+  },
+  "dev|post-generate|compare|to-none": {
+   "samples": 3,
+   "perSample": {
+    "app/color-utils.js#buildDefaultColorOverrideTsv": 4,
+    "services/session-active-config-contract.js#validateCurrentWriterActiveConfig": 2,
+    "services/config.js#getGenerationApplicationStatus": 2,
+    "services/history-snapshot.js#buildHistoryIntent": 2,
+    "services/history-snapshot.js#snapshotSignature": 2,
+    "app/generation-status.js#describeGenerationApplication": 2,
+    "app/linear-comparisons.js#buildLinearComparisonTimeline": 1,
+    "app/comparison-ui.js#projectLinearComparisonUi": 1,
+    "app/feature-selector.js#buildFeatureMetadataMap": 4,
+    "app/feature-selector.js#buildFeatureSelectorUniquenessIndexFromMetadata": 4,
+    "app/feature-visibility.js#serializeFeatureVisibilityRules": 4,
+    "services/session-request.js#addGeneratedTableResources": 4,
+    "services/session-request.js#projectCanonicalRenderInput": 2,
+    "services/session-request.js#generationComparisonPlan": 2,
+    "services/session-request.js#generationMeaning": 4,
+    "services/session-request.js#projectGenerationIntent": 2,
+    "services/session-request.js#liveGenerationTables": 2,
+    "services/session-request.js#compareGenerationIntent": 2,
+    "app/feature-editor/label-override-table.js#buildEditableLabelByFeatureId": 4,
+    "app/feature-editor/label-override-table.js#buildFeatureIdsBySourceText": 4,
+    "app/feature-editor/label-override-table.js#buildLabelOverrideRows": 4,
+    "app/feature-editor/label-override-table.js#buildLabelOverrideTsv": 4
+   }
+  },
+  "dev|post-generate|program|to-LOSATP": {
+   "samples": 3,
+   "perSample": {
+    "app/color-utils.js#buildDefaultColorOverrideTsv": 4,
+    "services/session-active-config-contract.js#validateCurrentWriterActiveConfig": 2,
+    "services/config.js#getGenerationApplicationStatus": 2,
+    "services/history-snapshot.js#buildHistoryIntent": 2,
+    "services/history-snapshot.js#snapshotSignature": 2,
+    "app/generation-status.js#describeGenerationApplication": 2,
+    "app/linear-comparisons.js#buildLinearComparisonTimeline": 1,
+    "app/comparison-ui.js#projectLinearComparisonUi": 1,
+    "app/feature-selector.js#buildFeatureMetadataMap": 4,
+    "app/feature-selector.js#buildFeatureSelectorUniquenessIndexFromMetadata": 4,
+    "app/feature-visibility.js#serializeFeatureVisibilityRules": 4,
+    "services/session-request.js#addGeneratedTableResources": 4,
+    "services/session-request.js#projectCanonicalRenderInput": 2,
+    "services/session-request.js#generationComparisonPlan": 2,
+    "services/session-request.js#generationMeaning": 4,
+    "services/session-request.js#projectGenerationIntent": 2,
+    "services/session-request.js#liveGenerationTables": 2,
+    "services/session-request.js#compareGenerationIntent": 2,
+    "app/feature-editor/label-override-table.js#buildEditableLabelByFeatureId": 4,
+    "app/feature-editor/label-override-table.js#buildFeatureIdsBySourceText": 4,
+    "app/feature-editor/label-override-table.js#buildLabelOverrideRows": 4,
+    "app/feature-editor/label-override-table.js#buildLabelOverrideTsv": 4
+   }
+  },
+  "dev|post-generate|program|to-LOSATN": {
+   "samples": 3,
+   "perSample": {
+    "app/color-utils.js#buildDefaultColorOverrideTsv": 4,
+    "services/session-active-config-contract.js#validateCurrentWriterActiveConfig": 2,
+    "services/config.js#getGenerationApplicationStatus": 2,
+    "services/history-snapshot.js#buildHistoryIntent": 2,
+    "services/history-snapshot.js#snapshotSignature": 2,
+    "app/generation-status.js#describeGenerationApplication": 2,
+    "app/linear-comparisons.js#buildLinearComparisonTimeline": 1,
+    "app/comparison-ui.js#projectLinearComparisonUi": 1,
+    "app/feature-selector.js#buildFeatureMetadataMap": 4,
+    "app/feature-selector.js#buildFeatureSelectorUniquenessIndexFromMetadata": 4,
+    "app/feature-visibility.js#serializeFeatureVisibilityRules": 4,
+    "services/session-request.js#addGeneratedTableResources": 4,
+    "services/session-request.js#projectCanonicalRenderInput": 2,
+    "services/session-request.js#generationComparisonPlan": 2,
+    "services/session-request.js#generationMeaning": 4,
+    "services/session-request.js#projectGenerationIntent": 2,
+    "services/session-request.js#liveGenerationTables": 2,
+    "services/session-request.js#compareGenerationIntent": 2,
+    "app/feature-editor/label-override-table.js#buildEditableLabelByFeatureId": 4,
+    "app/feature-editor/label-override-table.js#buildFeatureIdsBySourceText": 4,
+    "app/feature-editor/label-override-table.js#buildLabelOverrideRows": 4,
+    "app/feature-editor/label-override-table.js#buildLabelOverrideTsv": 4
+   }
+  },
+  "dev|post-generate|input-key|insert": {
+   "samples": 2,
+   "perSample": {
+    "app/color-utils.js#buildDefaultColorOverrideTsv": 2,
+    "services/session-active-config-contract.js#validateCurrentWriterActiveConfig": 1,
+    "services/config.js#getGenerationApplicationStatus": 1,
+    "app/generation-status.js#describeGenerationApplication": 1,
+    "app/feature-selector.js#buildFeatureMetadataMap": 2,
+    "app/feature-selector.js#buildFeatureSelectorUniquenessIndexFromMetadata": 2,
+    "app/feature-visibility.js#serializeFeatureVisibilityRules": 2,
+    "services/session-request.js#addGeneratedTableResources": 2,
+    "services/session-request.js#projectCanonicalRenderInput": 1,
+    "services/session-request.js#generationComparisonPlan": 1,
+    "services/session-request.js#generationMeaning": 2,
+    "services/session-request.js#projectGenerationIntent": 1,
+    "services/session-request.js#liveGenerationTables": 1,
+    "services/session-request.js#compareGenerationIntent": 1,
+    "app/feature-editor/label-override-table.js#buildEditableLabelByFeatureId": 2,
+    "app/feature-editor/label-override-table.js#buildFeatureIdsBySourceText": 2,
+    "app/feature-editor/label-override-table.js#buildLabelOverrideRows": 2,
+    "app/feature-editor/label-override-table.js#buildLabelOverrideTsv": 2
+   }
+  },
+  "dev|post-generate|input-blur|insert": {
+   "samples": 2,
+   "perSample": {
+    "app/color-utils.js#buildDefaultColorOverrideTsv": 2,
+    "services/session-active-config-contract.js#validateCurrentWriterActiveConfig": 1,
+    "services/config.js#getGenerationApplicationStatus": 1,
+    "services/history-snapshot.js#buildHistoryIntent": 1,
+    "services/history-snapshot.js#snapshotSignature": 1,
+    "app/generation-status.js#describeGenerationApplication": 1,
+    "app/feature-selector.js#buildFeatureMetadataMap": 2,
+    "app/feature-selector.js#buildFeatureSelectorUniquenessIndexFromMetadata": 2,
+    "app/feature-visibility.js#serializeFeatureVisibilityRules": 2,
+    "services/session-request.js#addGeneratedTableResources": 2,
+    "services/session-request.js#projectCanonicalRenderInput": 1,
+    "services/session-request.js#generationComparisonPlan": 1,
+    "services/session-request.js#generationMeaning": 2,
+    "services/session-request.js#projectGenerationIntent": 1,
+    "services/session-request.js#liveGenerationTables": 1,
+    "services/session-request.js#compareGenerationIntent": 1,
+    "app/feature-editor/label-override-table.js#buildEditableLabelByFeatureId": 2,
+    "app/feature-editor/label-override-table.js#buildFeatureIdsBySourceText": 2,
+    "app/feature-editor/label-override-table.js#buildLabelOverrideRows": 2,
+    "app/feature-editor/label-override-table.js#buildLabelOverrideTsv": 2
+   }
+  },
+  "dev|post-generate|input-key|delete": {
+   "samples": 1,
+   "perSample": {
+    "app/color-utils.js#buildDefaultColorOverrideTsv": 2,
+    "services/session-active-config-contract.js#validateCurrentWriterActiveConfig": 1,
+    "services/config.js#getGenerationApplicationStatus": 1,
+    "app/generation-status.js#describeGenerationApplication": 1,
+    "app/feature-selector.js#buildFeatureMetadataMap": 2,
+    "app/feature-selector.js#buildFeatureSelectorUniquenessIndexFromMetadata": 2,
+    "app/feature-visibility.js#serializeFeatureVisibilityRules": 2,
+    "services/session-request.js#addGeneratedTableResources": 2,
+    "services/session-request.js#projectCanonicalRenderInput": 1,
+    "services/session-request.js#generationComparisonPlan": 1,
+    "services/session-request.js#generationMeaning": 2,
+    "services/session-request.js#projectGenerationIntent": 1,
+    "services/session-request.js#liveGenerationTables": 1,
+    "services/session-request.js#compareGenerationIntent": 1,
+    "app/feature-editor/label-override-table.js#buildEditableLabelByFeatureId": 2,
+    "app/feature-editor/label-override-table.js#buildFeatureIdsBySourceText": 2,
+    "app/feature-editor/label-override-table.js#buildLabelOverrideRows": 2,
+    "app/feature-editor/label-override-table.js#buildLabelOverrideTsv": 2
+   }
+  },
+  "dev|post-generate|input-blur|delete": {
+   "samples": 1,
+   "perSample": {
+    "app/color-utils.js#buildDefaultColorOverrideTsv": 2,
+    "services/session-active-config-contract.js#validateCurrentWriterActiveConfig": 1,
+    "services/config.js#getGenerationApplicationStatus": 1,
+    "services/history-snapshot.js#buildHistoryIntent": 1,
+    "services/history-snapshot.js#snapshotSignature": 1,
+    "app/generation-status.js#describeGenerationApplication": 1,
+    "app/feature-selector.js#buildFeatureMetadataMap": 2,
+    "app/feature-selector.js#buildFeatureSelectorUniquenessIndexFromMetadata": 2,
+    "app/feature-visibility.js#serializeFeatureVisibilityRules": 2,
+    "services/session-request.js#addGeneratedTableResources": 2,
+    "services/session-request.js#projectCanonicalRenderInput": 1,
+    "services/session-request.js#generationComparisonPlan": 1,
+    "services/session-request.js#generationMeaning": 2,
+    "services/session-request.js#projectGenerationIntent": 1,
+    "services/session-request.js#liveGenerationTables": 1,
+    "services/session-request.js#compareGenerationIntent": 1,
+    "app/feature-editor/label-override-table.js#buildEditableLabelByFeatureId": 2,
+    "app/feature-editor/label-override-table.js#buildFeatureIdsBySourceText": 2,
+    "app/feature-editor/label-override-table.js#buildLabelOverrideRows": 2,
+    "app/feature-editor/label-override-table.js#buildLabelOverrideTsv": 2
+   }
+  },
+  "dev|post-generate|generate|repeat": {
+   "samples": 2,
+   "perSample": {
+    "app/color-utils.js#buildDefaultColorOverrideTsv": 20,
+    "services/session-active-config-contract.js#validateCurrentWriterActiveConfig": 9,
+    "services/config.js#getGenerationApplicationStatus": 9,
+    "app/generation-status.js#describeGenerationApplication": 9,
+    "app/feature-selector.js#buildFeatureMetadataMap": 20,
+    "app/feature-selector.js#buildFeatureSelectorUniquenessIndexFromMetadata": 20,
+    "app/feature-visibility.js#serializeFeatureVisibilityRules": 20,
+    "services/session-request.js#addGeneratedTableResources": 19,
+    "services/session-request.js#projectCanonicalRenderInput": 10,
+    "services/session-request.js#generationComparisonPlan": 9,
+    "services/session-request.js#generationMeaning": 19,
+    "services/session-request.js#buildCanonicalRenderRequest": 1,
+    "services/session-request.js#projectGenerationIntent": 9,
+    "services/session-request.js#liveGenerationTables": 9,
+    "services/session-request.js#compareGenerationIntent": 9,
+    "app/feature-editor/label-override-table.js#buildEditableLabelByFeatureId": 20,
+    "app/feature-editor/label-override-table.js#buildFeatureIdsBySourceText": 20,
+    "app/feature-editor/label-override-table.js#buildLabelOverrideRows": 20,
+    "app/feature-editor/label-override-table.js#buildLabelOverrideTsv": 20
+   }
+  },
+  "dev|post-generate-override|compare|to-losat": {
+   "samples": 3,
+   "perSample": {
+    "app/color-utils.js#buildDefaultColorOverrideTsv": 4,
+    "services/session-active-config-contract.js#validateCurrentWriterActiveConfig": 2,
+    "services/config.js#getGenerationApplicationStatus": 2,
+    "services/history-snapshot.js#buildHistoryIntent": 2,
+    "services/history-snapshot.js#snapshotSignature": 2,
+    "app/generation-status.js#describeGenerationApplication": 2,
+    "app/linear-comparisons.js#buildLinearComparisonTimeline": 1,
+    "app/comparison-ui.js#projectLinearComparisonUi": 1,
+    "app/feature-selector.js#buildFeatureMetadataMap": 4,
+    "app/feature-selector.js#buildFeatureSelectorUniquenessIndexFromMetadata": 4,
+    "app/feature-visibility.js#serializeFeatureVisibilityRules": 4,
+    "services/session-request.js#addGeneratedTableResources": 4,
+    "services/session-request.js#projectCanonicalRenderInput": 2,
+    "services/session-request.js#generationComparisonPlan": 2,
+    "services/session-request.js#generationMeaning": 4,
+    "services/session-request.js#projectGenerationIntent": 2,
+    "services/session-request.js#liveGenerationTables": 2,
+    "services/session-request.js#compareGenerationIntent": 2,
+    "app/feature-editor/label-override-table.js#buildEditableLabelByFeatureId": 4,
+    "app/feature-editor/label-override-table.js#buildFeatureIdsBySourceText": 4,
+    "app/feature-editor/label-override-table.js#buildLabelOverrideRows": 4,
+    "app/feature-editor/label-override-table.js#buildLabelOverrideTsv": 4
+   }
+  },
+  "dev|post-generate-override|compare|to-none": {
+   "samples": 3,
+   "perSample": {
+    "app/color-utils.js#buildDefaultColorOverrideTsv": 4,
+    "services/session-active-config-contract.js#validateCurrentWriterActiveConfig": 2,
+    "services/config.js#getGenerationApplicationStatus": 2,
+    "services/history-snapshot.js#buildHistoryIntent": 2,
+    "services/history-snapshot.js#snapshotSignature": 2,
+    "app/generation-status.js#describeGenerationApplication": 2,
+    "app/linear-comparisons.js#buildLinearComparisonTimeline": 1,
+    "app/comparison-ui.js#projectLinearComparisonUi": 1,
+    "app/feature-selector.js#buildFeatureMetadataMap": 4,
+    "app/feature-selector.js#buildFeatureSelectorUniquenessIndexFromMetadata": 4,
+    "app/feature-visibility.js#serializeFeatureVisibilityRules": 4,
+    "services/session-request.js#addGeneratedTableResources": 4,
+    "services/session-request.js#projectCanonicalRenderInput": 2,
+    "services/session-request.js#generationComparisonPlan": 2,
+    "services/session-request.js#generationMeaning": 4,
+    "services/session-request.js#projectGenerationIntent": 2,
+    "services/session-request.js#liveGenerationTables": 2,
+    "services/session-request.js#compareGenerationIntent": 2,
+    "app/feature-editor/label-override-table.js#buildEditableLabelByFeatureId": 4,
+    "app/feature-editor/label-override-table.js#buildFeatureIdsBySourceText": 4,
+    "app/feature-editor/label-override-table.js#buildLabelOverrideRows": 4,
+    "app/feature-editor/label-override-table.js#buildLabelOverrideTsv": 4
+   }
+  },
+  "dev|post-generate-override|program|to-LOSATP": {
+   "samples": 3,
+   "perSample": {
+    "app/color-utils.js#buildDefaultColorOverrideTsv": 4,
+    "services/session-active-config-contract.js#validateCurrentWriterActiveConfig": 2,
+    "services/config.js#getGenerationApplicationStatus": 2,
+    "services/history-snapshot.js#buildHistoryIntent": 2,
+    "services/history-snapshot.js#snapshotSignature": 2,
+    "app/generation-status.js#describeGenerationApplication": 2,
+    "app/linear-comparisons.js#buildLinearComparisonTimeline": 1,
+    "app/comparison-ui.js#projectLinearComparisonUi": 1,
+    "app/feature-selector.js#buildFeatureMetadataMap": 4,
+    "app/feature-selector.js#buildFeatureSelectorUniquenessIndexFromMetadata": 4,
+    "app/feature-visibility.js#serializeFeatureVisibilityRules": 4,
+    "services/session-request.js#addGeneratedTableResources": 4,
+    "services/session-request.js#projectCanonicalRenderInput": 2,
+    "services/session-request.js#generationComparisonPlan": 2,
+    "services/session-request.js#generationMeaning": 4,
+    "services/session-request.js#projectGenerationIntent": 2,
+    "services/session-request.js#liveGenerationTables": 2,
+    "services/session-request.js#compareGenerationIntent": 2,
+    "app/feature-editor/label-override-table.js#buildEditableLabelByFeatureId": 4,
+    "app/feature-editor/label-override-table.js#buildFeatureIdsBySourceText": 4,
+    "app/feature-editor/label-override-table.js#buildLabelOverrideRows": 4,
+    "app/feature-editor/label-override-table.js#buildLabelOverrideTsv": 4
+   }
+  },
+  "dev|post-generate-override|program|to-LOSATN": {
+   "samples": 3,
+   "perSample": {
+    "app/color-utils.js#buildDefaultColorOverrideTsv": 4,
+    "services/session-active-config-contract.js#validateCurrentWriterActiveConfig": 2,
+    "services/config.js#getGenerationApplicationStatus": 2,
+    "services/history-snapshot.js#buildHistoryIntent": 2,
+    "services/history-snapshot.js#snapshotSignature": 2,
+    "app/generation-status.js#describeGenerationApplication": 2,
+    "app/linear-comparisons.js#buildLinearComparisonTimeline": 1,
+    "app/comparison-ui.js#projectLinearComparisonUi": 1,
+    "app/feature-selector.js#buildFeatureMetadataMap": 4,
+    "app/feature-selector.js#buildFeatureSelectorUniquenessIndexFromMetadata": 4,
+    "app/feature-visibility.js#serializeFeatureVisibilityRules": 4,
+    "services/session-request.js#addGeneratedTableResources": 4,
+    "services/session-request.js#projectCanonicalRenderInput": 2,
+    "services/session-request.js#generationComparisonPlan": 2,
+    "services/session-request.js#generationMeaning": 4,
+    "services/session-request.js#projectGenerationIntent": 2,
+    "services/session-request.js#liveGenerationTables": 2,
+    "services/session-request.js#compareGenerationIntent": 2,
+    "app/feature-editor/label-override-table.js#buildEditableLabelByFeatureId": 4,
+    "app/feature-editor/label-override-table.js#buildFeatureIdsBySourceText": 4,
+    "app/feature-editor/label-override-table.js#buildLabelOverrideRows": 4,
+    "app/feature-editor/label-override-table.js#buildLabelOverrideTsv": 4
+   }
+  },
+  "dev|post-generate-override|input-key|insert": {
+   "samples": 2,
+   "perSample": {
+    "app/color-utils.js#buildDefaultColorOverrideTsv": 2,
+    "services/session-active-config-contract.js#validateCurrentWriterActiveConfig": 1,
+    "services/config.js#getGenerationApplicationStatus": 1,
+    "app/generation-status.js#describeGenerationApplication": 1,
+    "app/feature-selector.js#buildFeatureMetadataMap": 2,
+    "app/feature-selector.js#buildFeatureSelectorUniquenessIndexFromMetadata": 2,
+    "app/feature-visibility.js#serializeFeatureVisibilityRules": 2,
+    "services/session-request.js#addGeneratedTableResources": 2,
+    "services/session-request.js#projectCanonicalRenderInput": 1,
+    "services/session-request.js#generationComparisonPlan": 1,
+    "services/session-request.js#generationMeaning": 2,
+    "services/session-request.js#projectGenerationIntent": 1,
+    "services/session-request.js#liveGenerationTables": 1,
+    "services/session-request.js#compareGenerationIntent": 1,
+    "app/feature-editor/label-override-table.js#buildEditableLabelByFeatureId": 2,
+    "app/feature-editor/label-override-table.js#buildFeatureIdsBySourceText": 2,
+    "app/feature-editor/label-override-table.js#buildLabelOverrideRows": 2,
+    "app/feature-editor/label-override-table.js#buildLabelOverrideTsv": 2
+   }
+  },
+  "dev|post-generate-override|input-blur|insert": {
+   "samples": 2,
+   "perSample": {
+    "app/color-utils.js#buildDefaultColorOverrideTsv": 2,
+    "services/session-active-config-contract.js#validateCurrentWriterActiveConfig": 1,
+    "services/config.js#getGenerationApplicationStatus": 1,
+    "services/history-snapshot.js#buildHistoryIntent": 1,
+    "services/history-snapshot.js#snapshotSignature": 1,
+    "app/generation-status.js#describeGenerationApplication": 1,
+    "app/feature-selector.js#buildFeatureMetadataMap": 2,
+    "app/feature-selector.js#buildFeatureSelectorUniquenessIndexFromMetadata": 2,
+    "app/feature-visibility.js#serializeFeatureVisibilityRules": 2,
+    "services/session-request.js#addGeneratedTableResources": 2,
+    "services/session-request.js#projectCanonicalRenderInput": 1,
+    "services/session-request.js#generationComparisonPlan": 1,
+    "services/session-request.js#generationMeaning": 2,
+    "services/session-request.js#projectGenerationIntent": 1,
+    "services/session-request.js#liveGenerationTables": 1,
+    "services/session-request.js#compareGenerationIntent": 1,
+    "app/feature-editor/label-override-table.js#buildEditableLabelByFeatureId": 2,
+    "app/feature-editor/label-override-table.js#buildFeatureIdsBySourceText": 2,
+    "app/feature-editor/label-override-table.js#buildLabelOverrideRows": 2,
+    "app/feature-editor/label-override-table.js#buildLabelOverrideTsv": 2
+   }
+  },
+  "dev|post-generate-override|input-key|delete": {
+   "samples": 1,
+   "perSample": {
+    "app/color-utils.js#buildDefaultColorOverrideTsv": 2,
+    "services/session-active-config-contract.js#validateCurrentWriterActiveConfig": 1,
+    "services/config.js#getGenerationApplicationStatus": 1,
+    "app/generation-status.js#describeGenerationApplication": 1,
+    "app/feature-selector.js#buildFeatureMetadataMap": 2,
+    "app/feature-selector.js#buildFeatureSelectorUniquenessIndexFromMetadata": 2,
+    "app/feature-visibility.js#serializeFeatureVisibilityRules": 2,
+    "services/session-request.js#addGeneratedTableResources": 2,
+    "services/session-request.js#projectCanonicalRenderInput": 1,
+    "services/session-request.js#generationComparisonPlan": 1,
+    "services/session-request.js#generationMeaning": 2,
+    "services/session-request.js#projectGenerationIntent": 1,
+    "services/session-request.js#liveGenerationTables": 1,
+    "services/session-request.js#compareGenerationIntent": 1,
+    "app/feature-editor/label-override-table.js#buildEditableLabelByFeatureId": 2,
+    "app/feature-editor/label-override-table.js#buildFeatureIdsBySourceText": 2,
+    "app/feature-editor/label-override-table.js#buildLabelOverrideRows": 2,
+    "app/feature-editor/label-override-table.js#buildLabelOverrideTsv": 2
+   }
+  },
+  "dev|post-generate-override|input-blur|delete": {
+   "samples": 1,
+   "perSample": {
+    "app/color-utils.js#buildDefaultColorOverrideTsv": 2,
+    "services/session-active-config-contract.js#validateCurrentWriterActiveConfig": 1,
+    "services/config.js#getGenerationApplicationStatus": 1,
+    "services/history-snapshot.js#buildHistoryIntent": 1,
+    "services/history-snapshot.js#snapshotSignature": 1,
+    "app/generation-status.js#describeGenerationApplication": 1,
+    "app/feature-selector.js#buildFeatureMetadataMap": 2,
+    "app/feature-selector.js#buildFeatureSelectorUniquenessIndexFromMetadata": 2,
+    "app/feature-visibility.js#serializeFeatureVisibilityRules": 2,
+    "services/session-request.js#addGeneratedTableResources": 2,
+    "services/session-request.js#projectCanonicalRenderInput": 1,
+    "services/session-request.js#generationComparisonPlan": 1,
+    "services/session-request.js#generationMeaning": 2,
+    "services/session-request.js#projectGenerationIntent": 1,
+    "services/session-request.js#liveGenerationTables": 1,
+    "services/session-request.js#compareGenerationIntent": 1,
+    "app/feature-editor/label-override-table.js#buildEditableLabelByFeatureId": 2,
+    "app/feature-editor/label-override-table.js#buildFeatureIdsBySourceText": 2,
+    "app/feature-editor/label-override-table.js#buildLabelOverrideRows": 2,
+    "app/feature-editor/label-override-table.js#buildLabelOverrideTsv": 2
+   }
+  },
+  "dev|post-generate-override|generate|repeat": {
+   "samples": 1,
+   "perSample": {
+    "app/color-utils.js#buildDefaultColorOverrideTsv": 22,
+    "services/session-active-config-contract.js#validateCurrentWriterActiveConfig": 10,
+    "services/config.js#getGenerationApplicationStatus": 10,
+    "app/generation-status.js#describeGenerationApplication": 10,
+    "app/feature-selector.js#buildFeatureMetadataMap": 22,
+    "app/feature-selector.js#buildFeatureSelectorUniquenessIndexFromMetadata": 22,
+    "app/feature-visibility.js#serializeFeatureVisibilityRules": 22,
+    "services/session-request.js#addGeneratedTableResources": 21,
+    "services/session-request.js#projectCanonicalRenderInput": 11,
+    "services/session-request.js#generationComparisonPlan": 10,
+    "services/session-request.js#generationMeaning": 21,
+    "services/session-request.js#buildCanonicalRenderRequest": 1,
+    "services/session-request.js#projectGenerationIntent": 10,
+    "services/session-request.js#liveGenerationTables": 10,
+    "services/session-request.js#compareGenerationIntent": 10,
+    "app/feature-editor/label-override-table.js#buildEditableLabelByFeatureId": 22,
+    "app/feature-editor/label-override-table.js#buildFeatureIdsBySourceText": 22,
+    "app/feature-editor/label-override-table.js#buildLabelOverrideRows": 22,
+    "app/feature-editor/label-override-table.js#buildLabelOverrideTsv": 22
+   }
+  },
+  "dev|vnig-saved-preview|input-key|insert": {
+   "samples": 2,
+   "perSample": {
+    "app/color-utils.js#buildDefaultColorOverrideTsv": 2,
+    "services/session-active-config-contract.js#validateCurrentWriterActiveConfig": 1,
+    "services/config.js#getGenerationApplicationStatus": 1,
+    "app/generation-status.js#describeGenerationApplication": 1,
+    "app/feature-selector.js#buildFeatureMetadataMap": 2,
+    "app/feature-selector.js#buildFeatureSelectorUniquenessIndexFromMetadata": 2,
+    "app/feature-visibility.js#serializeFeatureVisibilityRules": 2,
+    "services/session-request.js#addGeneratedTableResources": 2,
+    "services/session-request.js#projectCanonicalRenderInput": 1,
+    "services/session-request.js#generationComparisonPlan": 1,
+    "services/session-request.js#generationMeaning": 2,
+    "services/session-request.js#projectGenerationIntent": 1,
+    "services/session-request.js#liveGenerationTables": 1,
+    "services/session-request.js#compareGenerationIntent": 1,
+    "app/feature-editor/label-override-table.js#buildEditableLabelByFeatureId": 2,
+    "app/feature-editor/label-override-table.js#buildFeatureIdsBySourceText": 2,
+    "app/feature-editor/label-override-table.js#buildLabelOverrideRows": 2,
+    "app/feature-editor/label-override-table.js#buildLabelOverrideTsv": 2
+   }
+  },
+  "dev|vnig-saved-preview|input-blur|insert": {
+   "samples": 2,
+   "perSample": {
+    "app/color-utils.js#buildDefaultColorOverrideTsv": 2,
+    "services/session-active-config-contract.js#validateCurrentWriterActiveConfig": 1,
+    "services/history-snapshot.js#buildHistoryIntent": 2,
+    "services/history-snapshot.js#snapshotSignature": 2,
+    "services/config.js#getGenerationApplicationStatus": 1,
+    "app/generation-status.js#describeGenerationApplication": 1,
+    "app/feature-selector.js#buildFeatureMetadataMap": 2,
+    "app/feature-selector.js#buildFeatureSelectorUniquenessIndexFromMetadata": 2,
+    "app/feature-visibility.js#serializeFeatureVisibilityRules": 2,
+    "services/session-request.js#addGeneratedTableResources": 2,
+    "services/session-request.js#projectCanonicalRenderInput": 1,
+    "services/session-request.js#generationComparisonPlan": 1,
+    "services/session-request.js#generationMeaning": 2,
+    "services/session-request.js#projectGenerationIntent": 1,
+    "services/session-request.js#liveGenerationTables": 1,
+    "services/session-request.js#compareGenerationIntent": 1,
+    "app/feature-editor/label-override-table.js#buildEditableLabelByFeatureId": 2,
+    "app/feature-editor/label-override-table.js#buildFeatureIdsBySourceText": 2,
+    "app/feature-editor/label-override-table.js#buildLabelOverrideRows": 2,
+    "app/feature-editor/label-override-table.js#buildLabelOverrideTsv": 2
+   }
+  },
+  "dev|vnig-saved-preview|input-key|delete": {
+   "samples": 1,
+   "perSample": {
+    "app/color-utils.js#buildDefaultColorOverrideTsv": 2,
+    "services/session-active-config-contract.js#validateCurrentWriterActiveConfig": 1,
+    "services/config.js#getGenerationApplicationStatus": 1,
+    "app/generation-status.js#describeGenerationApplication": 1,
+    "app/feature-selector.js#buildFeatureMetadataMap": 2,
+    "app/feature-selector.js#buildFeatureSelectorUniquenessIndexFromMetadata": 2,
+    "app/feature-visibility.js#serializeFeatureVisibilityRules": 2,
+    "services/session-request.js#addGeneratedTableResources": 2,
+    "services/session-request.js#projectCanonicalRenderInput": 1,
+    "services/session-request.js#generationComparisonPlan": 1,
+    "services/session-request.js#generationMeaning": 2,
+    "services/session-request.js#projectGenerationIntent": 1,
+    "services/session-request.js#liveGenerationTables": 1,
+    "services/session-request.js#compareGenerationIntent": 1,
+    "app/feature-editor/label-override-table.js#buildEditableLabelByFeatureId": 2,
+    "app/feature-editor/label-override-table.js#buildFeatureIdsBySourceText": 2,
+    "app/feature-editor/label-override-table.js#buildLabelOverrideRows": 2,
+    "app/feature-editor/label-override-table.js#buildLabelOverrideTsv": 2
+   }
+  },
+  "dev|vnig-saved-preview|input-blur|delete": {
+   "samples": 1,
+   "perSample": {
+    "app/color-utils.js#buildDefaultColorOverrideTsv": 2,
+    "services/session-active-config-contract.js#validateCurrentWriterActiveConfig": 1,
+    "services/history-snapshot.js#buildHistoryIntent": 2,
+    "services/history-snapshot.js#snapshotSignature": 2,
+    "services/config.js#getGenerationApplicationStatus": 1,
+    "app/generation-status.js#describeGenerationApplication": 1,
+    "app/feature-selector.js#buildFeatureMetadataMap": 2,
+    "app/feature-selector.js#buildFeatureSelectorUniquenessIndexFromMetadata": 2,
+    "app/feature-visibility.js#serializeFeatureVisibilityRules": 2,
+    "services/session-request.js#addGeneratedTableResources": 2,
+    "services/session-request.js#projectCanonicalRenderInput": 1,
+    "services/session-request.js#generationComparisonPlan": 1,
+    "services/session-request.js#generationMeaning": 2,
+    "services/session-request.js#projectGenerationIntent": 1,
+    "services/session-request.js#liveGenerationTables": 1,
+    "services/session-request.js#compareGenerationIntent": 1,
+    "app/feature-editor/label-override-table.js#buildEditableLabelByFeatureId": 2,
+    "app/feature-editor/label-override-table.js#buildFeatureIdsBySourceText": 2,
+    "app/feature-editor/label-override-table.js#buildLabelOverrideRows": 2,
+    "app/feature-editor/label-override-table.js#buildLabelOverrideTsv": 2
+   }
+  },
+  "dev|vnig-saved-preview|generate|first": {
+   "samples": 1,
+   "perSample": {
+    "app/color-utils.js#buildDefaultColorOverrideTsv": 16,
+    "services/session-active-config-contract.js#validateCurrentWriterActiveConfig": 7,
+    "services/history-snapshot.js#buildHistoryIntent": 1,
+    "services/history-snapshot.js#snapshotSignature": 1,
+    "services/config.js#getGenerationApplicationStatus": 7,
+    "app/generation-status.js#describeGenerationApplication": 7,
+    "app/feature-selector.js#buildFeatureMetadataMap": 16,
+    "app/feature-selector.js#buildFeatureSelectorUniquenessIndexFromMetadata": 16,
+    "app/feature-visibility.js#serializeFeatureVisibilityRules": 16,
+    "services/session-request.js#addGeneratedTableResources": 15,
+    "services/session-request.js#projectCanonicalRenderInput": 8,
+    "services/session-request.js#generationComparisonPlan": 7,
+    "services/session-request.js#generationMeaning": 15,
+    "services/session-request.js#buildCanonicalRenderRequest": 1,
+    "services/session-request.js#projectGenerationIntent": 7,
+    "services/session-request.js#liveGenerationTables": 7,
+    "services/session-request.js#compareGenerationIntent": 7,
+    "app/feature-editor/label-override-table.js#buildEditableLabelByFeatureId": 16,
+    "app/feature-editor/label-override-table.js#buildFeatureIdsBySourceText": 16,
+    "app/feature-editor/label-override-table.js#buildLabelOverrideRows": 16,
+    "app/feature-editor/label-override-table.js#buildLabelOverrideTsv": 16
+   }
+  },
+  "dev|vnig-generated|generate|repeat": {
+   "samples": 1,
+   "perSample": {
+    "app/color-utils.js#buildDefaultColorOverrideTsv": 12,
+    "services/session-active-config-contract.js#validateCurrentWriterActiveConfig": 5,
+    "services/config.js#getGenerationApplicationStatus": 5,
+    "app/generation-status.js#describeGenerationApplication": 5,
+    "app/feature-selector.js#buildFeatureMetadataMap": 12,
+    "app/feature-selector.js#buildFeatureSelectorUniquenessIndexFromMetadata": 12,
+    "app/feature-visibility.js#serializeFeatureVisibilityRules": 12,
+    "services/session-request.js#addGeneratedTableResources": 11,
+    "services/session-request.js#projectCanonicalRenderInput": 6,
+    "services/session-request.js#generationComparisonPlan": 5,
+    "services/session-request.js#generationMeaning": 11,
+    "services/session-request.js#buildCanonicalRenderRequest": 1,
+    "services/session-request.js#projectGenerationIntent": 5,
+    "services/session-request.js#liveGenerationTables": 5,
+    "services/session-request.js#compareGenerationIntent": 5,
+    "app/feature-editor/label-override-table.js#buildEditableLabelByFeatureId": 12,
+    "app/feature-editor/label-override-table.js#buildFeatureIdsBySourceText": 12,
+    "app/feature-editor/label-override-table.js#buildLabelOverrideRows": 12,
+    "app/feature-editor/label-override-table.js#buildLabelOverrideTsv": 12
+   }
+  },
+  "main|pre-generate|compare|to-losat": {
+   "samples": 3,
+   "perSample": {
+    "services/history-snapshot.js#buildHistoryIntent": 2,
+    "services/history-snapshot.js#snapshotSignature": 2,
+    "app/linear-comparisons.js#buildLinearComparisonTimeline": 1,
+    "app/comparison-ui.js#projectLinearComparisonUi": 1
+   }
+  },
+  "main|pre-generate|compare|to-none": {
+   "samples": 3,
+   "perSample": {
+    "services/history-snapshot.js#buildHistoryIntent": 2,
+    "services/history-snapshot.js#snapshotSignature": 2,
+    "app/linear-comparisons.js#buildLinearComparisonTimeline": 1,
+    "app/comparison-ui.js#projectLinearComparisonUi": 1
+   }
+  },
+  "main|pre-generate|program|to-LOSATP": {
+   "samples": 3,
+   "perSample": {
+    "services/history-snapshot.js#buildHistoryIntent": 2,
+    "services/history-snapshot.js#snapshotSignature": 2,
+    "app/linear-comparisons.js#buildLinearComparisonTimeline": 1,
+    "app/comparison-ui.js#projectLinearComparisonUi": 1
+   }
+  },
+  "main|pre-generate|program|to-LOSATN": {
+   "samples": 3,
+   "perSample": {
+    "services/history-snapshot.js#buildHistoryIntent": 2,
+    "services/history-snapshot.js#snapshotSignature": 2,
+    "app/linear-comparisons.js#buildLinearComparisonTimeline": 1,
+    "app/comparison-ui.js#projectLinearComparisonUi": 1
+   }
+  },
+  "main|pre-generate|input-key|insert": {
+   "samples": 2,
+   "perSample": {}
+  },
+  "main|pre-generate|input-blur|insert": {
+   "samples": 2,
+   "perSample": {
+    "services/history-snapshot.js#buildHistoryIntent": 1,
+    "services/history-snapshot.js#snapshotSignature": 1
+   }
+  },
+  "main|pre-generate|input-key|delete": {
+   "samples": 1,
+   "perSample": {}
+  },
+  "main|pre-generate|input-blur|delete": {
+   "samples": 1,
+   "perSample": {
+    "services/history-snapshot.js#buildHistoryIntent": 1,
+    "services/history-snapshot.js#snapshotSignature": 1
+   }
+  },
+  "main|pre-generate|generate|first": {
+   "samples": 1,
+   "perSample": {
+    "app/color-utils.js#buildDefaultColorOverrideTsv": 2,
+    "app/feature-selector.js#buildFeatureMetadataMap": 2,
+    "app/feature-selector.js#buildFeatureSelectorUniquenessIndexFromMetadata": 2,
+    "app/feature-visibility.js#serializeFeatureVisibilityRules": 2,
+    "services/session-request.js#addGeneratedTableResources": 1,
+    "services/session-request.js#buildCanonicalRenderRequest": 1,
+    "app/feature-editor/label-override-table.js#buildEditableLabelByFeatureId": 2,
+    "app/feature-editor/label-override-table.js#buildFeatureIdsBySourceText": 2,
+    "app/feature-editor/label-override-table.js#buildLabelOverrideRows": 2,
+    "app/feature-editor/label-override-table.js#buildLabelOverrideTsv": 2
+   }
+  },
+  "main|post-generate|compare|to-losat": {
+   "samples": 3,
+   "perSample": {
+    "services/history-snapshot.js#buildHistoryIntent": 2,
+    "services/history-snapshot.js#snapshotSignature": 2,
+    "app/linear-comparisons.js#buildLinearComparisonTimeline": 1,
+    "app/comparison-ui.js#projectLinearComparisonUi": 1
+   }
+  },
+  "main|post-generate|compare|to-none": {
+   "samples": 3,
+   "perSample": {
+    "services/history-snapshot.js#buildHistoryIntent": 2,
+    "services/history-snapshot.js#snapshotSignature": 2,
+    "app/linear-comparisons.js#buildLinearComparisonTimeline": 1,
+    "app/comparison-ui.js#projectLinearComparisonUi": 1
+   }
+  },
+  "main|post-generate|program|to-LOSATP": {
+   "samples": 3,
+   "perSample": {
+    "services/history-snapshot.js#buildHistoryIntent": 2,
+    "services/history-snapshot.js#snapshotSignature": 2,
+    "app/linear-comparisons.js#buildLinearComparisonTimeline": 1,
+    "app/comparison-ui.js#projectLinearComparisonUi": 1
+   }
+  },
+  "main|post-generate|program|to-LOSATN": {
+   "samples": 3,
+   "perSample": {
+    "services/history-snapshot.js#buildHistoryIntent": 2,
+    "services/history-snapshot.js#snapshotSignature": 2,
+    "app/linear-comparisons.js#buildLinearComparisonTimeline": 1,
+    "app/comparison-ui.js#projectLinearComparisonUi": 1
+   }
+  },
+  "main|post-generate|input-key|insert": {
+   "samples": 2,
+   "perSample": {}
+  },
+  "main|post-generate|input-blur|insert": {
+   "samples": 2,
+   "perSample": {
+    "services/history-snapshot.js#buildHistoryIntent": 1,
+    "services/history-snapshot.js#snapshotSignature": 1
+   }
+  },
+  "main|post-generate|input-key|delete": {
+   "samples": 1,
+   "perSample": {}
+  },
+  "main|post-generate|input-blur|delete": {
+   "samples": 1,
+   "perSample": {
+    "services/history-snapshot.js#buildHistoryIntent": 1,
+    "services/history-snapshot.js#snapshotSignature": 1
+   }
+  },
+  "main|post-generate|generate|repeat": {
+   "samples": 2,
+   "perSample": {
+    "app/color-utils.js#buildDefaultColorOverrideTsv": 2,
+    "app/feature-selector.js#buildFeatureMetadataMap": 2,
+    "app/feature-selector.js#buildFeatureSelectorUniquenessIndexFromMetadata": 2,
+    "app/feature-visibility.js#serializeFeatureVisibilityRules": 2,
+    "services/session-request.js#addGeneratedTableResources": 1,
+    "services/session-request.js#buildCanonicalRenderRequest": 1,
+    "app/feature-editor/label-override-table.js#buildEditableLabelByFeatureId": 2,
+    "app/feature-editor/label-override-table.js#buildFeatureIdsBySourceText": 2,
+    "app/feature-editor/label-override-table.js#buildLabelOverrideRows": 2,
+    "app/feature-editor/label-override-table.js#buildLabelOverrideTsv": 2
+   }
+  },
+  "main|post-generate-override|compare|to-losat": {
+   "samples": 3,
+   "perSample": {
+    "services/history-snapshot.js#buildHistoryIntent": 2,
+    "services/history-snapshot.js#snapshotSignature": 2,
+    "app/linear-comparisons.js#buildLinearComparisonTimeline": 1,
+    "app/comparison-ui.js#projectLinearComparisonUi": 1
+   }
+  },
+  "main|post-generate-override|compare|to-none": {
+   "samples": 3,
+   "perSample": {
+    "services/history-snapshot.js#buildHistoryIntent": 2,
+    "services/history-snapshot.js#snapshotSignature": 2,
+    "app/linear-comparisons.js#buildLinearComparisonTimeline": 1,
+    "app/comparison-ui.js#projectLinearComparisonUi": 1
+   }
+  },
+  "main|post-generate-override|program|to-LOSATP": {
+   "samples": 3,
+   "perSample": {
+    "services/history-snapshot.js#buildHistoryIntent": 2,
+    "services/history-snapshot.js#snapshotSignature": 2,
+    "app/linear-comparisons.js#buildLinearComparisonTimeline": 1,
+    "app/comparison-ui.js#projectLinearComparisonUi": 1
+   }
+  },
+  "main|post-generate-override|program|to-LOSATN": {
+   "samples": 3,
+   "perSample": {
+    "services/history-snapshot.js#buildHistoryIntent": 2,
+    "services/history-snapshot.js#snapshotSignature": 2,
+    "app/linear-comparisons.js#buildLinearComparisonTimeline": 1,
+    "app/comparison-ui.js#projectLinearComparisonUi": 1
+   }
+  },
+  "main|post-generate-override|input-key|insert": {
+   "samples": 2,
+   "perSample": {}
+  },
+  "main|post-generate-override|input-blur|insert": {
+   "samples": 2,
+   "perSample": {
+    "services/history-snapshot.js#buildHistoryIntent": 1,
+    "services/history-snapshot.js#snapshotSignature": 1
+   }
+  },
+  "main|post-generate-override|input-key|delete": {
+   "samples": 1,
+   "perSample": {}
+  },
+  "main|post-generate-override|input-blur|delete": {
+   "samples": 1,
+   "perSample": {
+    "services/history-snapshot.js#buildHistoryIntent": 1,
+    "services/history-snapshot.js#snapshotSignature": 1
+   }
+  },
+  "main|post-generate-override|generate|repeat": {
+   "samples": 1,
+   "perSample": {
+    "app/color-utils.js#buildDefaultColorOverrideTsv": 2,
+    "app/feature-selector.js#buildFeatureMetadataMap": 2,
+    "app/feature-selector.js#buildFeatureSelectorUniquenessIndexFromMetadata": 2,
+    "app/feature-visibility.js#serializeFeatureVisibilityRules": 2,
+    "services/session-request.js#addGeneratedTableResources": 1,
+    "services/session-request.js#buildCanonicalRenderRequest": 1,
+    "app/feature-editor/label-override-table.js#buildEditableLabelByFeatureId": 2,
+    "app/feature-editor/label-override-table.js#buildFeatureIdsBySourceText": 2,
+    "app/feature-editor/label-override-table.js#buildLabelOverrideRows": 2,
+    "app/feature-editor/label-override-table.js#buildLabelOverrideTsv": 2
+   }
+  },
+  "main|vnig-saved-preview|input-key|insert": {
+   "samples": 2,
+   "perSample": {}
+  },
+  "main|vnig-saved-preview|input-blur|insert": {
+   "samples": 2,
+   "perSample": {
+    "services/history-snapshot.js#buildHistoryIntent": 2,
+    "services/history-snapshot.js#snapshotSignature": 2
+   }
+  },
+  "main|vnig-saved-preview|input-key|delete": {
+   "samples": 1,
+   "perSample": {}
+  },
+  "main|vnig-saved-preview|input-blur|delete": {
+   "samples": 1,
+   "perSample": {
+    "services/history-snapshot.js#buildHistoryIntent": 2,
+    "services/history-snapshot.js#snapshotSignature": 2
+   }
+  },
+  "main|vnig-saved-preview|generate|first": {
+   "samples": 1,
+   "perSample": {
+    "app/color-utils.js#buildDefaultColorOverrideTsv": 2,
+    "services/history-snapshot.js#buildHistoryIntent": 1,
+    "services/history-snapshot.js#snapshotSignature": 1,
+    "app/feature-selector.js#buildFeatureMetadataMap": 2,
+    "app/feature-selector.js#buildFeatureSelectorUniquenessIndexFromMetadata": 2,
+    "app/feature-visibility.js#serializeFeatureVisibilityRules": 2,
+    "services/session-request.js#addGeneratedTableResources": 1,
+    "services/session-request.js#buildCanonicalRenderRequest": 1,
+    "app/feature-editor/label-override-table.js#buildEditableLabelByFeatureId": 2,
+    "app/feature-editor/label-override-table.js#buildFeatureIdsBySourceText": 2,
+    "app/feature-editor/label-override-table.js#buildLabelOverrideRows": 2,
+    "app/feature-editor/label-override-table.js#buildLabelOverrideTsv": 2
+   }
+  },
+  "main|vnig-generated|generate|repeat": {
+   "samples": 1,
+   "perSample": {
+    "app/color-utils.js#buildDefaultColorOverrideTsv": 2,
+    "app/feature-selector.js#buildFeatureMetadataMap": 2,
+    "app/feature-selector.js#buildFeatureSelectorUniquenessIndexFromMetadata": 2,
+    "app/feature-visibility.js#serializeFeatureVisibilityRules": 2,
+    "services/session-request.js#addGeneratedTableResources": 1,
+    "services/session-request.js#buildCanonicalRenderRequest": 1,
+    "app/feature-editor/label-override-table.js#buildEditableLabelByFeatureId": 2,
+    "app/feature-editor/label-override-table.js#buildFeatureIdsBySourceText": 2,
+    "app/feature-editor/label-override-table.js#buildLabelOverrideRows": 2,
+    "app/feature-editor/label-override-table.js#buildLabelOverrideTsv": 2
+   }
+  }
+ }
+}

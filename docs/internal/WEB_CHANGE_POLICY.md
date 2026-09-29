@@ -117,7 +117,8 @@ The following are hard failures when applicable:
 - unauthorized privileged owners or importers;
 - malformed authority or rules;
 - active deterministic architecture violations;
-- prohibited runtime and guard changes in one pull request;
+- prohibited runtime and guard changes in one pull request, outside the
+  static Product Contract co-change route;
 - checker implementation combined with authority or an evidence producer in
   one ordinary pull request;
 - candidate execution in a trusted workflow;
@@ -137,6 +138,7 @@ Human review is required for at least these cases:
 
 - a selected size threshold is exceeded;
 - a governance- or authority-only change;
+- a static Product Contract change, including a co-change with its runtime;
 - an architecture-bearing owner, path, or responsibility move;
 - a new module, public export, reactive owner, watcher, or resource signal;
 - a material performance-baseline change;
@@ -218,6 +220,8 @@ tools/web-architecture-violations.json
 .github/workflows/deploy_web.yml
 ```
 
+`docs/internal/OPTION_INTEGRITY_PRODUCT_CONTRACT.md` is also authority; see
+[Static Product Contract co-change](#static-product-contract-co-change).
 The accepted-violation file is absent when no frozen rule has accepted debt.
 Its absence does not remove it from the authority class.
 
@@ -226,7 +230,8 @@ The following rules apply:
 - checker implementation does not change with authority or an evidence
   producer in the same ordinary pull request;
 - production runtime does not change with guard or CI authority, except the
-  already-defined narrow safe contraction below;
+  already-defined narrow safe contraction below and the static Product
+  Contract co-change route;
 - normative authority is declared before executable wiring;
 - promotion aggregation is admitted only through trusted exact-SHA evidence,
   not by same-pull-request self-approval; and
@@ -244,6 +249,7 @@ The ordinary Web guard additionally treats these files as a separated group:
 ```text
 docs/internal/ARCHITECTURE_FITNESS_FUNCTION_RATCHET.md
 docs/internal/PRODUCT_IMPACT_RATCHET.md
+docs/internal/OPTION_INTEGRITY_PRODUCT_CONTRACT.md
 .github/pull_request_template.md
 tools/check-web-change-budget.mjs
 tools/web-architecture-detectors.mjs
@@ -296,20 +302,19 @@ tools/web-product-decisions.json
 mapped behavior contract files
 ```
 
-The exact preauthorized future static Product authority path for broad or
-currently unmapped durable Option Integrity outcomes is:
+The static Product authority path for broad or currently unmapped durable
+Option Integrity outcomes is:
 
 ```text
 docs/internal/OPTION_INTEGRITY_PRODUCT_CONTRACT.md
 ```
 
-That path is normative preauthorization only at this stage. The file is absent,
-supplies no Product outcome, and is not yet part of executable guard or
-authority path recognition. A later checker-only pull request must add
-exact-path enforcement from a base that contains this policy before any
-authority-only pull request creates the file.
+The file exists. It was created through the bootstrap order below, and the
+checker recognizes its exact path as both guard and authority. It is an inert
+static Product authority surface. It adds no workflow, required status,
+evaluator, or machine-readable decision store, and no parser reads its prose.
 
-The required bootstrap order is:
+The bootstrap order that created it was:
 
 ```text
 normative process/path preauthorization
@@ -319,12 +324,46 @@ normative process/path preauthorization
               -> dependent runtime implementation
 ```
 
-The Product Contract, once correctly created through that sequence, is an inert
-static Product authority surface. It does not add a workflow, required status,
-evaluator, or machine-readable decision store. Candidate Product Contract
-content cannot authorize candidate runtime, and the authority-only creation
-pull request cannot include checker, workflow, evidence-producer, runtime, or
-expected-output changes.
+#### Static Product Contract co-change
+
+A pull request may change the static Product Contract together with the
+runtime, tests, and documentation that implement the changed outcome. All of
+these conditions must hold:
+
+- the Contract is modified in place at its exact path. It is not added,
+  deleted, renamed, or copied, and a similarly named path is not the Contract;
+- the Contract is the only changed guard or authority file. Checker
+  implementation, detectors, evaluators, workflows, the Product Impact map,
+  durable decisions, architecture rules, accepted violations,
+  `tools/web-change-policy.json`, policy documents, the pull request template,
+  and guard tests remain unchanged;
+- no mapped behavior contract of an affected concern is replaced as the sole
+  hard proof (see mapped evidence below); and
+- each changed Contract record serializes the Product Decision Owner's
+  explicit receipt: choice, rationale, preservation, retirement scope,
+  accepted residual risk, owner, and decision date. Missing receipt fields
+  leave the change unresolved, and nobody fills them by inference.
+
+The co-change is `Review: REQUIRED`. The machine Gate classifies paths and
+evaluates mapped concerns with trusted base authority only. Candidate Contract
+text never becomes machine authority. The human reviewer confirms that the
+serialized receipt matches the explicit human choice and that the runtime and
+tests realize exactly that outcome. The Gate does not claim to verify Product
+meaning that no parser reads. Headings that trusted authority references,
+such as `OIPC-C07` and `PD-OI-016`, keep their anchors.
+
+Contract-only, runtime-only, and mapped-decision pull requests keep their
+existing routes. The route does not extend to any other guard or authority
+file.
+
+The route takes effect for a pull request only when that pull request's base
+checker implements it. Until then, a Contract change must be isolated from
+every other changed path. Once the route is effective, it replaces only one
+procedural rule: that Contract authority must merge before dependent runtime.
+That rule appears in the Contract lifecycle and in individual records. It does
+not change any Product outcome, preservation condition, or compatibility
+commitment. The first permitted co-change aligns those procedural Contract
+sentences.
 
 The JSON files are inert authority. The checker loads trusted base authority,
 validates candidate authority as data, and evaluates affected concerns without
@@ -332,9 +371,11 @@ executing candidate modules.
 
 Runtime admission uses the trusted base checker, detectors, architecture rules,
 Product Impact map, durable decisions, maintainer allowlist, and base/head
-source facts. Candidate authority is validation-only inert data and cannot
-authorize the same candidate runtime. A runtime pull request therefore cannot
-change Product Impact authority or durable decisions to approve itself.
+source facts. Candidate machine authority is validation-only inert data and
+cannot authorize the same candidate runtime. A runtime pull request therefore
+cannot change the Product Impact map or durable decisions to approve itself.
+A static Product Contract co-change does not approve itself either. Its
+authorization is the reviewed explicit human receipt, not the candidate text.
 
 Future preauthorization may use only this narrow inert authority bundle:
 
@@ -355,8 +396,9 @@ the sole proof of hard safety. Update or add the contract in a prior
 evidence-only pull request, then update its authority reference separately.
 Unrelated test changes are unaffected.
 
-The runtime/guard exception applies only when `tools/web-change-policy.json` is
-the sole changed guard file and the change is a pure policy contraction. The
+Apart from the static Product Contract co-change, the runtime/guard exception
+applies only when `tools/web-change-policy.json` is the sole changed guard file
+and the change is a pure policy contraction. The
 checker implementation and source parser cannot change with that policy or its
 policy workflows.
 
