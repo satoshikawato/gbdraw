@@ -1,0 +1,71 @@
+[
+  {
+    "command": [
+      "git",
+      "rev-parse",
+      "--show-toplevel"
+    ],
+    "output": "/tmp/gbdraw-issue597-S05.ujOWyl\n"
+  },
+  {
+    "command": [
+      "git",
+      "remote",
+      "-v"
+    ],
+    "output": "origin\thttps://github.com/satoshikawato/gbdraw.git (fetch)\norigin\thttps://github.com/satoshikawato/gbdraw.git (push)\n"
+  },
+  {
+    "command": [
+      "git",
+      "branch",
+      "--show-current"
+    ],
+    "output": "fix/issue-597-input-session-20260926\n"
+  },
+  {
+    "command": [
+      "git",
+      "rev-parse",
+      "--abbrev-ref",
+      "HEAD@{upstream}"
+    ],
+    "output": "origin/fix/issue-597-input-session-20260926\n"
+  },
+  {
+    "command": [
+      "git",
+      "rev-parse",
+      "HEAD"
+    ],
+    "output": "c3ae518b914024d1299c1f3f6487640c8a2fbaaf\n"
+  },
+  {
+    "command": [
+      "git",
+      "status",
+      "--porcelain=v1",
+      "--untracked-files=all"
+    ],
+    "output": ""
+  },
+  {
+    "command": [
+      "git",
+      "rev-parse",
+      "origin/dev"
+    ],
+    "output": "252986d096011fcf1a0f5564e940480d3b92844d\n"
+  },
+  {
+    "command": [
+      "git",
+      "ls-remote",
+      "origin",
+      "refs/heads/dev",
+      "refs/heads/fix/issue-597-input-session-20260926",
+      "refs/heads/fix/issue-597-session-import-guard-20260927"
+    ],
+    "output": "494091aa68ca59ffa27ecaa6c3df19da4fbf5090\trefs/heads/dev\nc3ae518b914024d1299c1f3f6487640c8a2fbaaf\trefs/heads/fix/issue-597-input-session-20260926\n8474feafaab6140b561ad4c74aa7520f392477e3\trefs/heads/fix/issue-597-session-import-guard-20260927\n"
+  }
+]

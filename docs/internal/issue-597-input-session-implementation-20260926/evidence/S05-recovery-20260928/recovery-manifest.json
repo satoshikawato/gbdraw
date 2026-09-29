@@ -1,0 +1,85 @@
+{
+  "status": "INCOMPLETE",
+  "checkout": "/mnt/c/users/genom/github/gbdraw/.worktrees/issue597-S05-recovered-20260928",
+  "persistentRawEvidence": "/mnt/c/users/genom/github/gbdraw/.worktrees/issue597-S05-recovery-evidence-20260928",
+  "branch": "fix/issue-597-input-session-20260926",
+  "refs": {
+    "HEAD": "ee6b6207845cc861ae428b4890a091509e1736b6",
+    "origin/dev": "007388567222638b707fbb16fe82dbeba61551c9",
+    "MERGE_HEAD": "007388567222638b707fbb16fe82dbeba61551c9",
+    "@{upstream}": "ee6b6207845cc861ae428b4890a091509e1736b6"
+  },
+  "upstream": "origin/fix/issue-597-input-session-20260926",
+  "mergeCommitted": false,
+  "trustedIdentities": {
+    "tools/check-web-change-budget.mjs": {
+      "sha256": "c7888ffb9c6d136284b567712f6e11a474e6b08f54d4daaee7d78e1a402d7f1c",
+      "trustedDevBytesEqual": true
+    },
+    "tools/web-change-policy.json": {
+      "sha256": "185f1edde7c5d790a250e15326c01ec2bf13a00f2bcabc117b91ad5d21299fed",
+      "trustedDevBytesEqual": true
+    },
+    "tools/web-product-impact-map.json": {
+      "sha256": "dfd88850f67162f6046542e53d3136f51818e127a1320ecbf589b6cf97e14885",
+      "trustedDevBytesEqual": true
+    },
+    "docs/internal/OPTION_INTEGRITY_PRODUCT_CONTRACT.md": {
+      "sha256": "c92ef7048f3bf601959cde97fcd223ac320d9730491dbba9cb74b41028e1eb38",
+      "trustedDevBytesEqual": true
+    },
+    "tests/web/contracts/session-regenerate-intent.playwright.spec.js": {
+      "sha256": "732892b8d9c780cc4713fc41f4d28032e171860f5a176cb1b0bc49a1bf5693c7",
+      "trustedDevBytesEqual": true
+    },
+    "tests/utils/svg_compare.py": {
+      "sha256": "042380d4a27598c6f8f8e7c026e88eb853826ac502185181b833743ea79bbba5",
+      "trustedDevBytesEqual": true
+    }
+  },
+  "wheel": {
+    "sha256": "fd6ff84920a6e808e6237a843ee75268b6659dfcae20efee95ea9d565bd88282",
+    "pythonSources": 215,
+    "different": [],
+    "generatedIgnored": true
+  },
+  "environment": {
+    "python": "3.13.3",
+    "platform": "Linux-5.15.167.4-microsoft-standard-WSL2-x86_64-with-glibc2.39",
+    "node": "v26.8.2",
+    "playwright": "Version 1.61.0"
+  },
+  "loss": {
+    "originalCheckoutPresent": false,
+    "originalRawPresent": false,
+    "userBackupAvailable": false,
+    "originalFixtureSha256": "d3cafef9664bff958aec4932eea6e264ae872cce89762a7cbe617447af975388",
+    "originalFixtureAvailable": false,
+    "transcriptRecoveredResultsAreCurrentEvidence": false
+  },
+  "externalOperations": {
+    "commit": false,
+    "push": false,
+    "pr": false,
+    "merge": false,
+    "deployment": false,
+    "pr629ApprovalInherited": false
+  },
+  "finalRuntimeFingerprint": "source-fingerprints-final.json",
+  "finalValidation": "validation-final.json",
+  "reconstructedFixture": {
+    "sha256": "1a89693457e8bbe56a99eb2565e3f7a45e597d8aa6eaa47b802415aa98d05808",
+    "compressedBytes": 134471286,
+    "expandedBytes": 466767925,
+    "dnaRecords": 12,
+    "biologicalFeatures": 62089,
+    "fullPairwiseRawEntries": 144,
+    "originalLostGzipEquivalent": false,
+    "cliSvgSha256": "12ba12af0dc139c8f1a0cf786778c2eac84d00418541bac408bc69e98c8afe8d"
+  },
+  "finalRemoteReceipt": "remote-handoff-observed.txt",
+  "mappedAssertionBodiesEqual": true,
+  "mandatoryNativeByteMeasurementsComplete": false,
+  "requiredHumanReviewComplete": false,
+  "rawChecksumManifest": "raw-checksums-final.json"
+}

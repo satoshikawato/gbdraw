@@ -1,0 +1,413 @@
+{
+  "session": "S03",
+  "scope": [
+    "BUG-02 discovery states",
+    "BUG-20 Circular transform disclosure"
+  ],
+  "checkout": "/tmp/gbdraw-issue597-S03.Nmsmci",
+  "branch": "fix/issue-597-input-session-20260926",
+  "upstream": "origin/fix/issue-597-input-session-20260926",
+  "source": {
+    "initialHead": "15bcbca89392cbd63a88fe80dc44b71ad4868061",
+    "measurementHead": "ff02abbae948aaa870f18123805d7297a6c3495d",
+    "dev": "9d967f1c72f730b205420d62d383b73127c2a9b1",
+    "main": "4556e04e929a4a85ad28d1833ce7304bd764881c",
+    "uncommittedImplementation": true,
+    "manifestSha256": "fa0fb817cd7f3cec8d54e2d9130c7b6a17020f7075a5844a2818047a6b68c537",
+    "files": {
+      "gbdraw/web/index.html": {
+        "bytes": 617882,
+        "sha256": "1510afdeabffbf88bedc03a05c941f8659a1c64bcb5a0b944a87f342aca99e1b"
+      },
+      "gbdraw/web/js/app/annotations/record-catalog.js": {
+        "bytes": 6195,
+        "sha256": "a3fea2ae5e52699ebbc0e191dc81aaaa7b14e8b720b813ac6e5d060581869624"
+      },
+      "gbdraw/web/js/app/app-setup.js": {
+        "bytes": 193153,
+        "sha256": "660c1ca5c0f985736c647079d44b956fbde1c8484a5154600149a4fd3692dd53"
+      },
+      "gbdraw/web/js/app/record-discovery.js": {
+        "bytes": 8953,
+        "sha256": "9d62b5df649f5ac97032f43d93fdda6a48b6c8b33f54c37dc2d634b1b331455e"
+      },
+      "gbdraw/web/js/app/run-analysis.js": {
+        "bytes": 230839,
+        "sha256": "0143f151dd8d2be93ec7787ea66203a647bfb95107609350189c71eac717ffd1"
+      },
+      "gbdraw/web/js/app/watchers.js": {
+        "bytes": 21682,
+        "sha256": "53b275c8fe8c6fb0aa0efe9abd0bd7308a652e487a45afc113d31e2ce0f12e53"
+      },
+      "gbdraw/web/js/services/config.js": {
+        "bytes": 187188,
+        "sha256": "9497e2a06aee2d7e26c8c8af27d4fce5e7a311701ad1da6186c96e014f25b099"
+      },
+      "gbdraw/web/js/services/diagram-generation.js": {
+        "bytes": 19424,
+        "sha256": "0f88e507bc22058b2cbfb5a32c31dd3b4e2d9feb0d0727bcc1c879aed64092dc"
+      },
+      "gbdraw/web/js/services/file-content-cache.js": {
+        "bytes": 2598,
+        "sha256": "f2933c505c60ece95c5e2832cc83be9e024ddf6e93634290bd39deeecdd9992d"
+      },
+      "gbdraw/web/js/services/history-snapshot.js": {
+        "bytes": 68458,
+        "sha256": "997169a7d9353cdd0d733d274de4c70105099c5921aa10f8681891a72cc80f01"
+      },
+      "gbdraw/web/js/services/session-file.js": {
+        "bytes": 9495,
+        "sha256": "864ccb104f6fb900af95b209a38bda8d7a35226379261028d60651c789ab461e"
+      },
+      "gbdraw/web/js/services/session-request.js": {
+        "bytes": 206465,
+        "sha256": "814938b39fb15640e4f20ab1fcd14a24ef2cee76811d7a0a47fa819d041badc6"
+      },
+      "gbdraw/web/js/state.js": {
+        "bytes": 34803,
+        "sha256": "cff284514953c26b7acf3e46de0ed1f5e159e900bffc172db6ab0fecece40018"
+      },
+      "gbdraw/web/js/workers/diagram-generation-worker.js": {
+        "bytes": 39849,
+        "sha256": "a44034012b0c76dd3be3aa4811de53fb5a9f276301177f2e33a5284ccc126950"
+      },
+      "playwright.config.js": {
+        "bytes": 826,
+        "sha256": "15bd5138d7fe48f6f7ef4ebce61c12d2cc67f291aae943ee764f3985a0242000"
+      },
+      "playwright.functional.config.js": {
+        "bytes": 288,
+        "sha256": "6dde379836ed909fea1d0a7983b2d7978f0d0d2f199b0ab4a2a30346f8b49b77"
+      },
+      "tests/web/circular-record-presentation.playwright.spec.js": {
+        "bytes": 14729,
+        "sha256": "4bc11ae4d6959b30cb9518be7088617d87363e725dddac3bc566f7bbb9fd0977"
+      },
+      "tests/web/composite-session-resources.playwright.spec.js": {
+        "bytes": 21116,
+        "sha256": "baedf308d3e039cf984bfe390f62f9af78298f41f9cc8f603d34713bc5bf9bad"
+      },
+      "tests/web/helpers/app-lifecycle.cjs": {
+        "bytes": 13573,
+        "sha256": "bb36d5a7a28f22f8ddfafb88b5e502462652c6f4719b991e563b08173458d618"
+      },
+      "tests/web/record-display-discovery.playwright.spec.js": {
+        "bytes": 13898,
+        "sha256": "e1d7567f2c36520e1c92d7d58b80cb16c3bea92e6d80259705391bd9f10f23c8"
+      },
+      "tests/web/record-display-options.test.mjs": {
+        "bytes": 18101,
+        "sha256": "30c128b16d8afb40104fde41d2cd130d6bfecb05a2aac3a7cf5555308d2025b1"
+      },
+      "tools/prepare_browser_wheel.py": {
+        "bytes": 4256,
+        "sha256": "abb96e905c9ffc2789325c8d522750be05332a0acc95745ba5b16aa1d1bc966f"
+      }
+    }
+  },
+  "inputs": {
+    "manifestSha256": "2ef8ce2af2aafd574bb67fb128469c024eb4170287d36cc34efede5f7babbadf",
+    "filesAndRecipes": {
+      "tests/fixtures/sessions/cli-web-mito.gb": {
+        "bytes": 64562,
+        "sha256": "f2e922c26561d37a8d3b410ba972526c709cad5635f598bbdcfc234f02642c92"
+      },
+      "tests/test_inputs/BGC0000708.gbk": {
+        "bytes": 105185,
+        "sha256": "9a5f971c5ed8c406b20574fb50aac567609deb787eb1e8d4635050aa264a04b0"
+      },
+      "tests/test_inputs/BGC0000709.gbk": {
+        "bytes": 121511,
+        "sha256": "4b66b7e4b78d429d12176e1e36d0e48178c562a9d128d4308b38753af9995255"
+      },
+      "tests/test_inputs/MjeNMV.gbk": {
+        "bytes": 520806,
+        "sha256": "7b46d2cc4baa301a76ac1917bd5f2d41553c1271930e20e2904024986219ddd0"
+      },
+      "tests/test_inputs/NC_013668.gff3": {
+        "bytes": 100327,
+        "sha256": "1b114942994b5bb9c152cf58cc9d21e56a1a7dfba3c70e9e9cea060d72a13494"
+      },
+      "tests/test_inputs/NC_013668.fasta": {
+        "bytes": 252132,
+        "sha256": "22c9c71db3878d005fc7355f3a903372f9b873303fa8622d48367f442a163973"
+      },
+      "gbdraw/web/gallery/sessions/HmmtDNA_basic_circular.gbdraw-session.json": {
+        "bytes": 270096,
+        "sha256": "d53cf930db19cbe2f8c201909d06c69ba02140ffd06498021e7582ddebed83db"
+      },
+      "gbdraw/web/gallery/sessions/Vnig_TUMSAT-TG-2018.gbdraw-session.json.gz": {
+        "bytes": 11534775,
+        "sha256": "4ac925ae659907774c7aaf6e4cb70c9b0aa05f95f83a89db9c912165d5d26ca4"
+      },
+      "synthetic-from-record-display-discovery-spec": {
+        "one": {
+          "bytes": 498,
+          "sha256": "6ff1a5ff583207a6b060f7d8c64818b8ea09219b4de4622dd457db7d1b8b1970"
+        },
+        "two": {
+          "bytes": 1002,
+          "sha256": "91c447f17eced55ef311fdbbec31343dae599420c37040755e6196ff0c780c54"
+        },
+        "duplicate": {
+          "bytes": 996,
+          "sha256": "ae61bddbc6e0191a39421c91b88dd9ecbe05bf656beb2b8431d6915e5f661079"
+        },
+        "replacement": {
+          "bytes": 519,
+          "sha256": "e50bca059f30eb2325564b0d2c590f9a910383cb7b18490078d1c5a110a12736"
+        },
+        "rapidReplacement": {
+          "bytes": 495,
+          "sha256": "a9cad03932cee153ad16811b6021dd2ab9747419cdeea0eda4d5e0079df87079"
+        },
+        "invalid": {
+          "bytes": 14,
+          "sha256": "a25af2a7b44af159360737771d82102721af99a7e77e37879498aeab7e5b4260"
+        }
+      },
+      "two-records-presentation-upload": {
+        "bytes": 226697,
+        "sha256": "b3247aeaed6a7e3d8b464d842d8db5d984d15649fd71fddc5e5c1366ad461079",
+        "recipe": "BGC0000708 text + newline + BGC0000709 text"
+      }
+    }
+  },
+  "environment": {
+    "sha256": "c0e6e8f842fe276f5115db5a98b4ebdc634fac80c1ce050bd68271b3099b6e02",
+    "python": "3.13.3 | packaged by conda-forge | (main, Apr 14 2025, 20:44:03) [GCC 13.3.0]",
+    "pythonExecutable": "/home/kawato/micromamba/bin/python",
+    "platform": "Linux-5.15.167.4-microsoft-standard-WSL2-x86_64-with-glibc2.39",
+    "node": "v26.8.2",
+    "nodePlaywright": "1.61.0",
+    "pythonPackages": {
+      "playwright": "1.61.0",
+      "pytest": "9.0.2",
+      "ruff": "0.15.12",
+      "biopython": "1.85",
+      "svgwrite": "1.4.3"
+    },
+    "chromium": "149.0.7827.55",
+    "chromiumExecutable": "/home/kawato/.cache/ms-playwright/chromium-1228/chrome-linux64/chrome",
+    "chromiumExecutableSha256": "2d18db9d8608b052b6a552ee00ec1e830f93692e928b65ecc67d693bd33fe801",
+    "ports": {
+      "focused": 42974,
+      "comparisonRerun": 42975,
+      "cliComposite": 42976
+    },
+    "sandbox": "ordinary commands fail at bubblewrap /mnt/wslg/distro; same isolated commands ran with escalation",
+    "dependencies": "@playwright/test 1.61.0 installed only in dedicated checkout, no tracked manifest/lock changes"
+  },
+  "authority": {
+    "head": "ff02abbae948aaa870f18123805d7297a6c3495d",
+    "dev": "9d967f1c72f730b205420d62d383b73127c2a9b1",
+    "mergeSha": "af5d942af60353dda199aa487da9152a3576b3fe",
+    "revision": 21,
+    "receipts": [
+      {
+        "id": "PD-OI-044",
+        "fieldsEqual": [
+          "concern",
+          "scenarioRevision",
+          "choice",
+          "rationale",
+          "mustPreserve",
+          "mayRetire",
+          "acceptedResidualRisk",
+          "owner",
+          "decisionDate"
+        ],
+        "sha256": "9f3589dec70a8f86b4718b68cb4dd4b3ef9ad83b6ab93935a437879d64eb539a",
+        "approvedOutcomeDigest": "57debd7625f007c99849b8de5f992508b369b7a2277c01ed1ff51e7c95354d93"
+      },
+      {
+        "id": "PD-OI-045",
+        "fieldsEqual": [
+          "concern",
+          "scenarioRevision",
+          "choice",
+          "rationale",
+          "mustPreserve",
+          "mayRetire",
+          "acceptedResidualRisk",
+          "owner",
+          "decisionDate"
+        ],
+        "sha256": "8b9c8d7f185b2c1e65113d1a97062bf96661e2265b8e20e01c39e8583057e859",
+        "approvedOutcomeDigest": "7cef6306aefc5ff935d949efef7f76964eae2d24df8281c6ca371df5c2e87633"
+      }
+    ]
+  },
+  "trustedBaseUnchangedFiles": {
+    "tools/check-web-change-budget.mjs": "c7888ffb9c6d136284b567712f6e11a474e6b08f54d4daaee7d78e1a402d7f1c",
+    "tools/web-architecture-detectors.mjs": "e05a4d4ffa394db8af69f27d82e4673e0e0c2533ba6b0cd7b43dd16e4e227274",
+    "tools/web-architecture-evaluation.mjs": "6f1dda5eeb5fb88500baf1de79e730cb4aeff9861562802af8491eaea4bb1a4e",
+    "tools/web-product-impact-evaluation.mjs": "8031bc2a68ab1315387dbcf5485971054cf91e1669659edebec46f9cb87d62da",
+    "tools/web-product-impact-decision-source.mjs": "11f7332880ff4ec256cfbca6d15286c809dcebef80465987fa22759a8ed17f07",
+    "tools/web-change-source.mjs": "b23bd352475c14cc044fa7c14c70e69f0da04631f67bc7f2207eb79549c73756",
+    "tools/web-promotion-context.mjs": "44e88fd3f24ca1d98571a12daf29e996cefc3b8552093e6105c69b626ebc56dd",
+    "tools/check-promotion-readiness.mjs": "f716221070cd9cae9876ee1a9831a23085d3a907a7c7deffea2cb3d99db9fd61",
+    "tools/web-change-policy.json": "fee8541705ea8bce25939c8aef2f727f64b2cfb1ff2bea12114471452df9b47f",
+    "tools/web-architecture-rules.json": "5ed342ad89f394a8621d0faa7910c3c6d15deaf19ef4ebefd96ec65172326282",
+    "tools/web-product-impact-map.json": "dfd88850f67162f6046542e53d3136f51818e127a1320ecbf589b6cf97e14885",
+    "tools/web-product-decisions.json": "23b1843c9cc1d5d1e974f75c647b2dc299c53d5c117cfdf45830003eda5ef3b6",
+    "docs/internal/OPTION_INTEGRITY_PRODUCT_CONTRACT.md": "62e3a9c08ceb64acc349ace81a97a9c87dc45db4d18187a3b78e6e131b2dc595"
+  },
+  "wheel": {
+    "gbdraw/web/gbdraw-0.14.0-py3-none-any.whl": {
+      "bytes": 3238664,
+      "sha256": "0ef64bf6bfbe3f52be3fa31de57e9bf431e4fb22c88979d297e0e9eff25197f8"
+    }
+  },
+  "artifactRoot": "/tmp/issue597-S03-evidence-Nmsmci",
+  "artifacts": {
+    "browser-acceptance.log": {
+      "bytes": 2816,
+      "sha256": "4e14124a301267d640f2aeef8d78c3ec88cca808fd7aee3c2e7da9ba5bfc155b"
+    },
+    "browser-availability.log": {
+      "bytes": 598,
+      "sha256": "13baa1590b87f96bc415928e7b5178493f5a830d5e6bfcf0df4582321d72f3aa"
+    },
+    "browser-cli-composite.log": {
+      "bytes": 405,
+      "sha256": "9e6466ed80151fac88fe55771148f318f56d656a3f51374f86d46d7da45a6bb7"
+    },
+    "node-final.log": {
+      "bytes": 11213,
+      "sha256": "3e152b73e6a1d7dd0643df4112470f5c435a8d48d91a5e54c687145e3ade4b4b"
+    },
+    "pytest-fast.log": {
+      "bytes": 772882,
+      "sha256": "9eb2d7c38f3ac74c48433279d4c6b8f8fcf35425c252a54b74136fdb3ca4bdb1"
+    },
+    "pytest-comparison-diagnostic.log": {
+      "bytes": 737,
+      "sha256": "1220d9a91e0cb5b7deea5fd2958a933affbc41c7461b635e0e1049529ad24411"
+    },
+    "ruff-final.log": {
+      "bytes": 19,
+      "sha256": "82b3e6a6c090a57601d22943bd23fca9218d1031dbe5a7b754092f9a156b4f18"
+    },
+    "policy-final.log": {
+      "bytes": 7376,
+      "sha256": "dd1cefbcb7ec51143a4a1f36ff88bc63eaa1aa3b1f1dfbc53d956513127342bf"
+    },
+    "authority.json": {
+      "bytes": 1116,
+      "sha256": "92dff5afa90c4a1096daff503f0cfe7291de2b77356f0e3af1f645c3a2490519"
+    },
+    "wheel.log": {
+      "bytes": 703,
+      "sha256": "21791c3ef36534b50e598abafbd7c17aa922546e95692f209b1d7bcb91dd9cc7"
+    },
+    "browser-acceptance/circular-record-presentati-c0167-roll-and-keyboard-at-1280px-chromium/disclosure-1280.png": {
+      "bytes": 48836,
+      "sha256": "913794750ac405c4217956f219e8771b6ab20ef3071edabbbea5a376ad73c305"
+    },
+    "browser-acceptance/circular-record-presentati-62c67-croll-and-keyboard-at-390px-chromium/disclosure-390.png": {
+      "bytes": 93969,
+      "sha256": "5d32e4e38a1ca0b99bb6053505474893d932c5993f0c6bf7510141d3aafab53c"
+    },
+    "browser-acceptance/circular-record-presentati-6d597--and-round-trips-one-record-chromium/circular-record-presentation.svg": {
+      "bytes": 16150,
+      "sha256": "b4cfd7734705204fefca611555ba9a68511a870298f0b548b79322125f38c661"
+    },
+    "browser-acceptance/circular-record-presentati-6d597--and-round-trips-one-record-chromium/circular-record-presentation.browser.png": {
+      "bytes": 119766,
+      "sha256": "e54a735bbd06b3481b0d86fa3df0094a2c9eb1587d6089884191739ae1ed3703"
+    },
+    "browser-cli-composite/composite-session-resource-56c18-ave-fresh-Load-and-Generate-chromium/three-plasmids.gbdraw-session.json.gz": {
+      "bytes": 1196237,
+      "sha256": "2c68c093692ed4a0837c3bcb1fd172267fc22098fdafc153bb4b982c0edf39a2"
+    },
+    "browser-cli-composite/composite-session-resource-56c18-ave-fresh-Load-and-Generate-chromium/three-plasmids-input.json": {
+      "bytes": 1877878,
+      "sha256": "71f315c93ff65c3b198dac6c0478fa11299d98060b00ab9a3a1d2491cc4c7c86"
+    }
+  },
+  "checks": [
+    {
+      "id": "focusedBrowser",
+      "exit": 0,
+      "passed": 14,
+      "log": "browser-acceptance.log",
+      "note": "Final production. Before final History/availability assertion additions in discovery spec; the two affected tests were rerun below."
+    },
+    {
+      "id": "availabilityHistorySupplement",
+      "exit": 0,
+      "passed": 2,
+      "log": "browser-availability.log",
+      "note": "Final test bytes; no production/input/environment change."
+    },
+    {
+      "id": "existingCliComposite",
+      "exit": 0,
+      "passed": 1,
+      "log": "browser-cli-composite.log"
+    },
+    {
+      "id": "node",
+      "exit": 0,
+      "passed": 49,
+      "skipped": 0,
+      "log": "node-final.log",
+      "note": "Subsequent unit-file whitespace cleanup only."
+    },
+    {
+      "id": "pytestFastOriginal",
+      "exit": 1,
+      "passed": 6266,
+      "failed": 2,
+      "skipped": 17,
+      "deselected": 11,
+      "log": "pytest-fast.log",
+      "failure": "Both comparison-wrapper webServer startup failed on default configuration."
+    },
+    {
+      "id": "pytestComparisonIsolated",
+      "exit": 0,
+      "passed": 2,
+      "log": "pytest-comparison-diagnostic.log",
+      "note": "Same assertions, dedicated port42975."
+    },
+    {
+      "id": "ruff",
+      "exit": 0,
+      "log": "ruff-final.log"
+    },
+    {
+      "id": "localTrustedBasePolicy",
+      "exit": 0,
+      "gate": "PASS",
+      "review": "REQUIRED",
+      "log": "policy-final.log"
+    },
+    {
+      "id": "authority",
+      "exit": 0,
+      "revision": 21,
+      "equalReceiptFields": 18
+    }
+  ],
+  "acceptance": {
+    "D-01": "PASS for native one/two/duplicate/DDBJ/GFF and forced existing helper settlement",
+    "D-02": "PASS for incomplete/invalid/retry/replace/remove/mode/input type/History source restoration",
+    "D-03": "PASS for measured saved Circular JSON and existing three-plasmid CLI gzip previews; S01 real large Linear Worker-free failure remains unresolved and unmeasured here",
+    "D-04": "PASS for applicability/manual close/grid/batch/selector/1280px/390px/focus/anchor/keyboard/History"
+  },
+  "notMeasured": [
+    "S01 full Save/Load latency and memory targets",
+    "S01 real large Linear preview helper Worker constructor",
+    "complete historical Session browser matrix",
+    "six-replicon grid-batch-grid and full CLI sidecar browser journeys",
+    "offline runtime/privacy audit"
+  ],
+  "remainingDependencies": [
+    "S04 semantic-operation exclusivity",
+    "S05 separate merged import Worker permission and whole-object transport",
+    "S06 full-pipeline performance",
+    "S07 public docs/screenshots"
+  ]
+}

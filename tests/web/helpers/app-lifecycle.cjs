@@ -122,6 +122,11 @@ const installDiagramWorkerTracking = async (page) => {
         worker.addEventListener('message', (event) => {
           const message = event.data || {};
           if (!['init', 'helper', 'run'].includes(message.type)) return;
+          // A bounded reply streams parts before its one final settlement.
+          if (message.status === 'part') {
+            instance.events.push(`${message.type}:part`);
+            return;
+          }
           const identifier = message.type === 'init' ? message.id : message.requestId;
           instance.settlements.push({
             type: message.type,

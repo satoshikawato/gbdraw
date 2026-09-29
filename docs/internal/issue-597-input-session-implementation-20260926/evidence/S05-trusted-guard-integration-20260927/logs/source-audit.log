@@ -1,0 +1,19 @@
+fatal: ambiguous argument 'dist': unknown revision or path not in the working tree.
+Use '--' to separate paths from revisions, like this:
+'git <command> [<revision>...] -- [<file>...]'
+Traceback (most recent call last):
+  File "/tmp/issue597-S05-trusted-guard-integration-20260927-evidence/audit-integration.py", line 71, in <module>
+    diff_reviews={category:git('diff','--name-status',START,tree,*paths).decode().splitlines() for category,paths in {
+                           ~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/issue597-S05-trusted-guard-integration-20260927-evidence/audit-integration.py", line 7, in <lambda>
+    git=lambda *args:subprocess.check_output(['git',*args])
+                     ~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^
+  File "/home/kawato/micromamba/lib/python3.13/subprocess.py", line 472, in check_output
+    return run(*popenargs, stdout=PIPE, timeout=timeout, check=True,
+           ~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+               **kwargs).stdout
+               ^^^^^^^^^
+  File "/home/kawato/micromamba/lib/python3.13/subprocess.py", line 577, in run
+    raise CalledProcessError(retcode, process.args,
+                             output=stdout, stderr=stderr)
+subprocess.CalledProcessError: Command '['git', 'diff', '--name-status', 'c3ae518b914024d1299c1f3f6487640c8a2fbaaf', '4e6cfb6960cbb02e74b4d861b2140f473c698177', 'dist', 'gbdraw.egg-info', 'tests/reference_outputs', 'gbdraw/web/gallery', 'examples/gbdraw_social_preview.png']' returned non-zero exit status 128.

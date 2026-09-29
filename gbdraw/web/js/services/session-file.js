@@ -2,7 +2,7 @@ const GZIP_MAGIC = Object.freeze([0x1f, 0x8b]);
 const MAX_SESSION_FILE_BYTES = 200 * 1024 * 1024;
 const MAX_EXPANDED_SESSION_BYTES = 512 * 1024 * 1024;
 const JSON_CHUNK_TARGET_BYTES = 256 * 1024;
-const JSON_CHUNKS_PER_TASK_YIELD = 8;
+const JSON_TASK_BUDGET_MS = 16;
 export const SESSION_DOWNLOAD_CONFIRM_THRESHOLD_BYTES = 50 * 1024 * 1024;
 
 export const confirmLargeSessionBlob = (
@@ -244,13 +244,13 @@ const jsonByteStream = (data) => {
   let fragment = '';
   let fragmentOffset = 0;
   let complete = false;
-  let chunksSinceTaskYield = 0;
+  let taskDeadline = performance.now() + JSON_TASK_BUDGET_MS;
 
   return new ReadableStream({
     async pull(controller) {
-      if (chunksSinceTaskYield >= JSON_CHUNKS_PER_TASK_YIELD) {
-        chunksSinceTaskYield = 0;
+      if (performance.now() >= taskDeadline) {
         await new Promise((resolve) => setTimeout(resolve, 0));
+        taskDeadline = performance.now() + JSON_TASK_BUDGET_MS;
       }
       const chunk = new Uint8Array(JSON_CHUNK_TARGET_BYTES);
       let byteLength = 0;
@@ -276,7 +276,7 @@ const jsonByteStream = (data) => {
       }
       if (byteLength > 0) {
         controller.enqueue(chunk.subarray(0, byteLength));
-        chunksSinceTaskYield += 1;
+
       }
       if (complete) controller.close();
     },

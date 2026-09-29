@@ -1,0 +1,96 @@
+{
+  "vibrio-0": {
+    "command": [
+      "/home/kawato/micromamba/bin/python",
+      "tools/verify_issue597_s01_outputs.py",
+      "--source",
+      "/tmp/gbdraw-issue597-S01.j3R30y/gbdraw/web/gallery/sessions/vibrio-harveyi-group-collinear.gbdraw-session.json.gz",
+      "--saved",
+      "/tmp/issue597-s01-final-pipeline-j3R30y/vibrio-0-saved.gbdraw-session.json.gz",
+      "--output",
+      "/tmp/issue597-s01-final-vibrio-semantic-0-j3R30y",
+      "--replay",
+      "--fresh-load"
+    ],
+    "exit": 0,
+    "log": "/tmp/issue597-s01-final-vibrio-semantic-0-j3R30y.log",
+    "result": "/tmp/issue597-s01-final-vibrio-semantic-0-j3R30y/semantic-checks.json"
+  },
+  "vibrio-1": {
+    "command": [
+      "/home/kawato/micromamba/bin/python",
+      "tools/verify_issue597_s01_outputs.py",
+      "--source",
+      "/tmp/gbdraw-issue597-S01.j3R30y/gbdraw/web/gallery/sessions/vibrio-harveyi-group-collinear.gbdraw-session.json.gz",
+      "--saved",
+      "/tmp/issue597-s01-final-pipeline-j3R30y/vibrio-1-saved.gbdraw-session.json.gz",
+      "--output",
+      "/tmp/issue597-s01-final-vibrio-semantic-1-j3R30y"
+    ],
+    "exit": 0,
+    "log": "/tmp/issue597-s01-final-vibrio-semantic-1-j3R30y.log",
+    "result": "/tmp/issue597-s01-final-vibrio-semantic-1-j3R30y/semantic-checks.json"
+  },
+  "vibrio-2": {
+    "command": [
+      "/home/kawato/micromamba/bin/python",
+      "tools/verify_issue597_s01_outputs.py",
+      "--source",
+      "/tmp/gbdraw-issue597-S01.j3R30y/gbdraw/web/gallery/sessions/vibrio-harveyi-group-collinear.gbdraw-session.json.gz",
+      "--saved",
+      "/tmp/issue597-s01-final-pipeline-j3R30y/vibrio-2-saved.gbdraw-session.json.gz",
+      "--output",
+      "/tmp/issue597-s01-final-vibrio-semantic-2-j3R30y"
+    ],
+    "exit": 0,
+    "log": "/tmp/issue597-s01-final-vibrio-semantic-2-j3R30y.log",
+    "result": "/tmp/issue597-s01-final-vibrio-semantic-2-j3R30y/semantic-checks.json"
+  },
+  "real-0": {
+    "command": [
+      "/home/kawato/micromamba/bin/python",
+      "tools/verify_issue597_s01_outputs.py",
+      "--source",
+      "/tmp/issue597-s01-data-j3R30y/real-full-pairwise.gbdraw-session.json.gz",
+      "--saved",
+      "/tmp/issue597-s01-final-pipeline-j3R30y/real-0-saved.gbdraw-session.json.gz",
+      "--output",
+      "/tmp/issue597-s01-final-real-semantic-0-j3R30y",
+      "--replay",
+      "--fresh-load"
+    ],
+    "exit": 1,
+    "log": "/tmp/issue597-s01-final-real-semantic-0-j3R30y.log",
+    "result": "/tmp/issue597-s01-final-real-semantic-0-j3R30y/semantic-checks.json"
+  },
+  "real-1": {
+    "command": [
+      "/home/kawato/micromamba/bin/python",
+      "tools/verify_issue597_s01_outputs.py",
+      "--source",
+      "/tmp/issue597-s01-data-j3R30y/real-full-pairwise.gbdraw-session.json.gz",
+      "--saved",
+      "/tmp/issue597-s01-final-pipeline-j3R30y/real-1-saved.gbdraw-session.json.gz",
+      "--output",
+      "/tmp/issue597-s01-final-real-semantic-1-j3R30y"
+    ],
+    "exit": 0,
+    "log": "/tmp/issue597-s01-final-real-semantic-1-j3R30y.log",
+    "result": "/tmp/issue597-s01-final-real-semantic-1-j3R30y/semantic-checks.json"
+  },
+  "real-2": {
+    "command": [
+      "/home/kawato/micromamba/bin/python",
+      "tools/verify_issue597_s01_outputs.py",
+      "--source",
+      "/tmp/issue597-s01-data-j3R30y/real-full-pairwise.gbdraw-session.json.gz",
+      "--saved",
+      "/tmp/issue597-s01-final-pipeline-j3R30y/real-2-saved.gbdraw-session.json.gz",
+      "--output",
+      "/tmp/issue597-s01-final-real-semantic-2-j3R30y"
+    ],
+    "exit": 0,
+    "log": "/tmp/issue597-s01-final-real-semantic-2-j3R30y.log",
+    "result": "/tmp/issue597-s01-final-real-semantic-2-j3R30y/semantic-checks.json"
+  }
+}

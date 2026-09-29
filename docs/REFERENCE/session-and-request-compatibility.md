@@ -189,7 +189,8 @@ Sessions with saved feature-catalog and orthogroup identity metadata materialize
 that state to the current schema-2 plan before saving. Malformed or unmappable
 legacy values produce an actionable error without replacing the last successful
 Result. Current requests reject group-only input. Loading a saved preview does
-not initialize the diagram Worker or start LOSATP.
+not start LOSATP; [Save and Load Sessions](web-app.md#save-and-load-sessions)
+describes when Load starts the diagram engine.
 
 A current Session round trip retains exact feature and record identities,
 Select/Skip rationale, record orientation, base translations, and the

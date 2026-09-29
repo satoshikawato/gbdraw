@@ -71,19 +71,34 @@ def _web_losatp_cache_set(name, key, value):
         old_name, old_key = _WEB_LOSATP_CACHE_ORDER.pop(0)
         _web_losatp_cache_by_name(old_name).pop(old_key, None)
 
-def _web_losatp_json_with_cache_stats(payload_json, **stats):
-    try:
-        payload = json.loads(str(payload_json))
-    except Exception:
-        return payload_json
-    if not isinstance(payload, dict):
-        return payload_json
+_WEB_LOSATP_CANONICAL_KEYS = {
+    "collinearity-result": "collinearityResult",
+    "orthogroup-result": "orthogroupResult",
+}
+
+def _web_losatp_payload_json(summary_json, canonical, canonical_resource_path):
+    # The canonical result stays as its encoded bytes; parsing it back into
+    # Python objects only to serialize it again dominated Worker memory.
+    if canonical is None:
+        return summary_json
+    kind, content = canonical
+    if canonical_resource_path:
+        with open(str(canonical_resource_path), "wb") as handle:
+            handle.write(content)
+        member = json.dumps({"kind": kind, "size": len(content)})
+        return "".join((summary_json[:-1], ', "canonicalResource": ', member, "}"))
+    return "".join((summary_json[:-1], ", ", json.dumps(_WEB_LOSATP_CANONICAL_KEYS[kind]),
+                    ": ", content.decode("utf-8"), "}"))
+
+def _web_losatp_json_with_cache_stats(cached_payload, *, canonical_resource_path=None, **stats):
+    summary_json, canonical = cached_payload
+    payload = json.loads(summary_json)
     cache_payload = payload.get("cache")
     if not isinstance(cache_payload, dict):
         cache_payload = {}
     cache_payload.update(stats)
     payload["cache"] = cache_payload
-    return json.dumps(payload)
+    return _web_losatp_payload_json(json.dumps(payload), canonical, canonical_resource_path)
 
 def _is_blank_or_js_nullish(value):
     if value is None:
@@ -988,6 +1003,8 @@ def convert_losatp_blastp_pairs_to_genomic_payload(
     orthogroup_member_max_hits=None,
     collinear_merge_orientation="either",
     collinear_infer_orthogroups=True,
+    canonical_resource_path=None,
+    explicit_display_pairs=False,
 ):
     """Convert LOSATP blastp outputs for pairwise display or orthogroups."""
     try:
@@ -1275,6 +1292,7 @@ def convert_losatp_blastp_pairs_to_genomic_payload(
         if cached_payload is not None:
             return _web_losatp_json_with_cache_stats(
                 cached_payload,
+                canonical_resource_path=canonical_resource_path,
                 convertedPayloadHit=True,
                 filteredHitCacheHits=0,
                 filteredHitCacheMisses=0,
@@ -1350,7 +1368,7 @@ def convert_losatp_blastp_pairs_to_genomic_payload(
             **raw_tsv_stats,
         }
 
-        def _finalize_losatp_payload(payload, *, collinearity_result=None):
+        def _finalize_losatp_payload(payload, *, collinearity_result=None, canonical_content=None, canonical_kind=None):
             if collinearity_result is not None:
                 anchors = [
                     anchor
@@ -1368,9 +1386,12 @@ def convert_losatp_blastp_pairs_to_genomic_payload(
                 })
             payload["provenance"] = derived_provenance
             payload["cache"] = cache_stats
-            result_json = json.dumps(payload)
-            _web_losatp_cache_set("converted", conversion_cache_key, result_json)
-            return result_json
+            cached_payload = (
+                json.dumps(payload),
+                None if canonical_content is None else (canonical_kind, canonical_content),
+            )
+            _web_losatp_cache_set("converted", conversion_cache_key, cached_payload)
+            return _web_losatp_payload_json(*cached_payload, canonical_resource_path)
 
         if normalized_mode == "collinear":
             record_ids = []
@@ -1396,6 +1417,9 @@ def convert_losatp_blastp_pairs_to_genomic_payload(
                 if item["display_pair"]
                 and int(item["query_index"]) != int(item["subject_index"])
             }))
+            use_display_pairs = bool(display_pairs) and (
+                search_scope == "adjacent" or explicit_display_pairs
+            )
             collinearity_result = build_orthogroup_collinearity_blocks_from_hits(
                 directional_tables,
                 extraction,
@@ -1409,12 +1433,12 @@ def convert_losatp_blastp_pairs_to_genomic_payload(
                 max_paralog_links_per_orthogroup=max_paralog_links,
                 comparison_pairs=(
                     display_pairs
-                    if search_scope == "adjacent" and display_pairs
+                    if use_display_pairs
                     else None
                 ),
             )
             color_mode = normalized_collinear_color_mode
-            if search_scope == "adjacent" and display_pairs:
+            if use_display_pairs:
                 display_pair_indices = {
                     tuple(sorted((
                         int(item["query_index"]),
@@ -1459,15 +1483,10 @@ def convert_losatp_blastp_pairs_to_genomic_payload(
                         "hit_count": int(converted.shape[0]),
                     }
                 )
-            return _finalize_losatp_payload({
-                "pairs": converted_pairs,
-                "collinearityResult": json.loads(
-                    encode_canonical_typed_resource(
-                        "result",
-                        collinearity_result,
-                    ).decode("utf-8")
-                ),
-            }, collinearity_result=collinearity_result)
+            canonical_content = encode_canonical_typed_resource("result", collinearity_result)
+            return _finalize_losatp_payload({"pairs": converted_pairs},
+               collinearity_result=collinearity_result,
+               canonical_content=canonical_content, canonical_kind="collinearity-result")
 
         if normalized_mode == "pairwise":
             converted_pairs = []
@@ -1550,15 +1569,9 @@ def convert_losatp_blastp_pairs_to_genomic_payload(
                     "hit_count": int(converted.shape[0]),
                 }
             )
-        return _finalize_losatp_payload({
-            "pairs": converted_pairs,
-            "orthogroupResult": json.loads(
-                encode_canonical_typed_resource(
-                    "orthogroupResult",
-                    orthogroups,
-                ).decode("utf-8")
-            ),
-        })
+        canonical_content = encode_canonical_typed_resource("orthogroupResult", orthogroups)
+        return _finalize_losatp_payload({"pairs": converted_pairs},
+            canonical_content=canonical_content, canonical_kind="orthogroup-result")
     except Exception as error:
         return json.dumps({'error': serialize_web_error(error, operation='convertLosatpPairsToGenomicPayload', stage="helper")})
 

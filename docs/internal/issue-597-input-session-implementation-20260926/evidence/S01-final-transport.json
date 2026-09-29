@@ -1,0 +1,1205 @@
+{
+  "head": "9584ed904c7d1ee93f5a07ea4f3a2a465b061724",
+  "platform": "Linux-5.15.167.4-microsoft-standard-WSL2-x86_64-with-glibc2.39",
+  "python": "3.13.3",
+  "cpuCount": 32,
+  "cpuModel": "Intel(R) Core(TM) i9-14900HX",
+  "versions": {
+    "playwright": "1.61.0",
+    "psutil": "7.0.0",
+    "websocket-client": "1.8.0",
+    "biopython": "1.85"
+  },
+  "workerProbeSha256": "62888060ed33bd9fb69d75642204e7de6ab040d66684ef19a0a9ced57928163d",
+  "ramBytes": 33518579712,
+  "url": "http://127.0.0.1:42913",
+  "debugPort": 48655,
+  "launchArgs": [
+    "--enable-precise-memory-info",
+    "--remote-debugging-port=48655"
+  ],
+  "observerSha256": "19b0d2468f1efd36b2d8bb59aa9af6a4758e5c8b90939aeeea8840846b863c4c",
+  "fixtures": {
+    "vibrio": [
+      {
+        "whole": {
+          "wallMs": 695.8000000119209,
+          "heapBefore": 1892586,
+          "heapAfter": 107660838,
+          "events": [
+            {
+              "name": "worker-parsed",
+              "timestamp": 341.40000000596046
+            }
+          ],
+          "metrics": {},
+          "workers": [
+            "/tests/web/fixtures/issue597-session-transport.worker.js"
+          ],
+          "transport": {
+            "id": 1,
+            "kind": "done",
+            "stages": {
+              "readDecodeDecompressMs": 180.2999999821186,
+              "parseMs": 105.2000000178814,
+              "wholeReplyRoundTripMs": 156.09999999403954,
+              "transferAndAssemblyMs": 156.09999999403954
+            },
+            "codec": {
+              "streams": [
+                {
+                  "kind": "file-read",
+                  "start": 6.5999999940395355,
+                  "bytes": 23739973,
+                  "chunks": 15,
+                  "wallMs": 179.40000000596046
+                },
+                {
+                  "kind": "decompress",
+                  "start": 6.800000011920929,
+                  "bytes": 95989532,
+                  "chunks": 1470,
+                  "wallMs": 179.19999998807907
+                }
+              ],
+              "decodeCpuMs": 39.99999985098839,
+              "decodedBytes": 95989532
+            },
+            "messages": 1,
+            "transferredBytes": 0,
+            "clonedUpperBytes": null,
+            "maximumMessageUpperBytes": null,
+            "postMessageCpuMs": 70.90000000596046
+          },
+          "memory": {
+            "sampleCount": 6,
+            "rssPeakBytes": 856068096,
+            "rssErrors": [],
+            "rssStartBytes": 432676864,
+            "v8UsedHeapPeaksBytes": {
+              "page": 107658056,
+              "worker": 188643736
+            },
+            "errors": [],
+            "v8IsolateFieldPeaksBytes": {
+              "page": {
+                "usedSize": 107658056,
+                "totalSize": 119975936,
+                "embedderHeapUsedSize": 1256880,
+                "backingStorageSize": 466
+              },
+              "worker": {
+                "usedSize": 188643736,
+                "totalSize": 192929792,
+                "embedderHeapUsedSize": 1532656,
+                "backingStorageSize": 127833938
+              }
+            }
+          },
+          "heartbeat": {
+            "intervalMs": 100,
+            "count": 7,
+            "p95Ms": 107.19999998807907,
+            "maxMs": 107.19999998807907
+          },
+          "longTasks": {
+            "count": 1,
+            "totalMs": 84,
+            "maxMs": 84,
+            "entries": [
+              {
+                "start": 532.5,
+                "duration": 84
+              }
+            ]
+          },
+          "mainSampledHeapPeakBytes": 107660838,
+          "receiverTaskMaxMs": 0.09999999403953552,
+          "stagesMs": {},
+          "wholeDocumentEqual": true,
+          "pageErrors": [],
+          "externalRequests": [],
+          "heartbeatTargetMet": true
+        },
+        "bounded": {
+          "wallMs": 2804,
+          "heapBefore": 1892586,
+          "heapAfter": 130427121,
+          "events": [
+            {
+              "name": "worker-parsed",
+              "timestamp": 321.30000001192093
+            }
+          ],
+          "metrics": {},
+          "workers": [
+            "/tests/web/fixtures/issue597-session-transport.worker.js"
+          ],
+          "transport": {
+            "id": 1,
+            "kind": "done",
+            "stages": {
+              "readDecodeDecompressMs": 184,
+              "parseMs": 100.19999998807907,
+              "transferAndAssemblyMs": 2267.300000011921
+            },
+            "codec": {
+              "streams": [
+                {
+                  "kind": "file-read",
+                  "start": 7,
+                  "bytes": 23739973,
+                  "chunks": 15,
+                  "wallMs": 182.90000000596046
+                },
+                {
+                  "kind": "decompress",
+                  "start": 7.300000011920929,
+                  "bytes": 95989532,
+                  "chunks": 1470,
+                  "wallMs": 182.69999998807907
+                }
+              ],
+              "decodeCpuMs": 39.00000002980232,
+              "decodedBytes": 95989532
+            },
+            "messages": 20032,
+            "transferredBytes": 128254176,
+            "clonedUpperBytes": 146044173,
+            "maximumMessageUpperBytes": 262144,
+            "postMessageCpuMs": 280.4999997615814
+          },
+          "memory": {
+            "sampleCount": 28,
+            "rssPeakBytes": 935673856,
+            "rssErrors": [],
+            "rssStartBytes": 443555840,
+            "v8UsedHeapPeaksBytes": {
+              "page": 127255468,
+              "worker": 209362132
+            },
+            "errors": [],
+            "v8IsolateFieldPeaksBytes": {
+              "page": {
+                "usedSize": 127255468,
+                "totalSize": 184467456,
+                "embedderHeapUsedSize": 9497744,
+                "backingStorageSize": 63167229
+              },
+              "worker": {
+                "usedSize": 209362132,
+                "totalSize": 238018560,
+                "embedderHeapUsedSize": 10245312,
+                "backingStorageSize": 124622674
+              }
+            }
+          },
+          "heartbeat": {
+            "intervalMs": 100,
+            "count": 28,
+            "p95Ms": 101.60000002384186,
+            "maxMs": 102.40000000596046
+          },
+          "longTasks": {
+            "count": 0,
+            "totalMs": 0,
+            "maxMs": 0,
+            "entries": []
+          },
+          "mainSampledHeapPeakBytes": 220720195,
+          "receiverTaskMaxMs": 3.5999999940395355,
+          "stagesMs": {},
+          "wholeDocumentEqual": true,
+          "pageErrors": [],
+          "externalRequests": [],
+          "heartbeatTargetMet": true
+        }
+      },
+      {
+        "whole": {
+          "wallMs": 714.4000000059605,
+          "heapBefore": 1892586,
+          "heapAfter": 107660814,
+          "events": [
+            {
+              "name": "worker-parsed",
+              "timestamp": 328.7000000178814
+            }
+          ],
+          "metrics": {},
+          "workers": [
+            "/tests/web/fixtures/issue597-session-transport.worker.js"
+          ],
+          "transport": {
+            "id": 1,
+            "kind": "done",
+            "stages": {
+              "readDecodeDecompressMs": 184.09999999403954,
+              "parseMs": 106,
+              "wholeReplyRoundTripMs": 171.59999999403954,
+              "transferAndAssemblyMs": 171.59999999403954
+            },
+            "codec": {
+              "streams": [
+                {
+                  "kind": "file-read",
+                  "start": 6.5,
+                  "bytes": 23739973,
+                  "chunks": 15,
+                  "wallMs": 183.30000001192093
+                },
+                {
+                  "kind": "decompress",
+                  "start": 6.700000017881393,
+                  "bytes": 95989532,
+                  "chunks": 1470,
+                  "wallMs": 183.19999998807907
+                }
+              ],
+              "decodeCpuMs": 40.10000005364418,
+              "decodedBytes": 95989532
+            },
+            "messages": 1,
+            "transferredBytes": 0,
+            "clonedUpperBytes": null,
+            "maximumMessageUpperBytes": null,
+            "postMessageCpuMs": 79.2000000178814
+          },
+          "memory": {
+            "sampleCount": 6,
+            "rssPeakBytes": 862855168,
+            "rssErrors": [],
+            "rssStartBytes": 441454592,
+            "v8UsedHeapPeaksBytes": {
+              "page": 107658020,
+              "worker": 188643756
+            },
+            "errors": [],
+            "v8IsolateFieldPeaksBytes": {
+              "page": {
+                "usedSize": 107658020,
+                "totalSize": 119975936,
+                "embedderHeapUsedSize": 1256880,
+                "backingStorageSize": 466
+              },
+              "worker": {
+                "usedSize": 188643756,
+                "totalSize": 192929792,
+                "embedderHeapUsedSize": 1532696,
+                "backingStorageSize": 124622674
+              }
+            }
+          },
+          "heartbeat": {
+            "intervalMs": 100,
+            "count": 7,
+            "p95Ms": 115.7000000178814,
+            "maxMs": 115.7000000178814
+          },
+          "longTasks": {
+            "count": 1,
+            "totalMs": 92,
+            "maxMs": 92,
+            "entries": [
+              {
+                "start": 529.8000000119209,
+                "duration": 92
+              }
+            ]
+          },
+          "mainSampledHeapPeakBytes": 107660814,
+          "receiverTaskMaxMs": 0,
+          "stagesMs": {},
+          "wholeDocumentEqual": true,
+          "pageErrors": [],
+          "externalRequests": [],
+          "heartbeatTargetMet": true
+        },
+        "bounded": {
+          "wallMs": 2806,
+          "heapBefore": 1892586,
+          "heapAfter": 130426781,
+          "events": [
+            {
+              "name": "worker-parsed",
+              "timestamp": 325.69999998807907
+            }
+          ],
+          "metrics": {},
+          "workers": [
+            "/tests/web/fixtures/issue597-session-transport.worker.js"
+          ],
+          "transport": {
+            "id": 1,
+            "kind": "done",
+            "stages": {
+              "readDecodeDecompressMs": 183.40000000596046,
+              "parseMs": 102.5,
+              "transferAndAssemblyMs": 2267.699999988079
+            },
+            "codec": {
+              "streams": [
+                {
+                  "kind": "file-read",
+                  "start": 6.5999999940395355,
+                  "bytes": 23739973,
+                  "chunks": 15,
+                  "wallMs": 182.5
+                },
+                {
+                  "kind": "decompress",
+                  "start": 6.699999988079071,
+                  "bytes": 95989532,
+                  "chunks": 1470,
+                  "wallMs": 182.5
+                }
+              ],
+              "decodeCpuMs": 40.10000017285347,
+              "decodedBytes": 95989532
+            },
+            "messages": 20032,
+            "transferredBytes": 128254176,
+            "clonedUpperBytes": 146044173,
+            "maximumMessageUpperBytes": 262144,
+            "postMessageCpuMs": 273.100000500679
+          },
+          "memory": {
+            "sampleCount": 27,
+            "rssPeakBytes": 933666816,
+            "rssErrors": [],
+            "rssStartBytes": 440958976,
+            "v8UsedHeapPeaksBytes": {
+              "page": 148225596,
+              "worker": 209118148
+            },
+            "errors": [],
+            "v8IsolateFieldPeaksBytes": {
+              "page": {
+                "usedSize": 148225596,
+                "totalSize": 184467456,
+                "embedderHeapUsedSize": 9498672,
+                "backingStorageSize": 64215805
+              },
+              "worker": {
+                "usedSize": 209118148,
+                "totalSize": 237232128,
+                "embedderHeapUsedSize": 10245464,
+                "backingStorageSize": 124622674
+              }
+            }
+          },
+          "heartbeat": {
+            "intervalMs": 100,
+            "count": 28,
+            "p95Ms": 101.19999998807907,
+            "maxMs": 101.59999999403954
+          },
+          "longTasks": {
+            "count": 0,
+            "totalMs": 0,
+            "maxMs": 0,
+            "entries": []
+          },
+          "mainSampledHeapPeakBytes": 198701279,
+          "receiverTaskMaxMs": 3.4000000059604645,
+          "stagesMs": {},
+          "wholeDocumentEqual": true,
+          "pageErrors": [],
+          "externalRequests": [],
+          "heartbeatTargetMet": true
+        }
+      },
+      {
+        "whole": {
+          "wallMs": 717.7999999821186,
+          "heapBefore": 1892586,
+          "heapAfter": 107661090,
+          "events": [
+            {
+              "name": "worker-parsed",
+              "timestamp": 323.90000000596046
+            }
+          ],
+          "metrics": {},
+          "workers": [
+            "/tests/web/fixtures/issue597-session-transport.worker.js"
+          ],
+          "transport": {
+            "id": 1,
+            "kind": "done",
+            "stages": {
+              "readDecodeDecompressMs": 181.80000001192093,
+              "parseMs": 102,
+              "wholeReplyRoundTripMs": 180.5,
+              "transferAndAssemblyMs": 180.5
+            },
+            "codec": {
+              "streams": [
+                {
+                  "kind": "file-read",
+                  "start": 7,
+                  "bytes": 23739973,
+                  "chunks": 15,
+                  "wallMs": 180.90000000596046
+                },
+                {
+                  "kind": "decompress",
+                  "start": 7.100000023841858,
+                  "bytes": 95989532,
+                  "chunks": 1471,
+                  "wallMs": 180.89999997615814
+                }
+              ],
+              "decodeCpuMs": 37.49999991059303,
+              "decodedBytes": 95989532
+            },
+            "messages": 1,
+            "transferredBytes": 0,
+            "clonedUpperBytes": null,
+            "maximumMessageUpperBytes": null,
+            "postMessageCpuMs": 97.60000002384186
+          },
+          "memory": {
+            "sampleCount": 7,
+            "rssPeakBytes": 862806016,
+            "rssErrors": [],
+            "rssStartBytes": 440614912,
+            "v8UsedHeapPeaksBytes": {
+              "page": 107658296,
+              "worker": 188644080
+            },
+            "errors": [
+              "WebSocketConnectionClosedException: Connection to remote host was lost."
+            ],
+            "v8IsolateFieldPeaksBytes": {
+              "page": {
+                "usedSize": 107658296,
+                "totalSize": 119451648,
+                "embedderHeapUsedSize": 1256880,
+                "backingStorageSize": 466
+              },
+              "worker": {
+                "usedSize": 188644080,
+                "totalSize": 193191936,
+                "embedderHeapUsedSize": 1533440,
+                "backingStorageSize": 124557138
+              }
+            }
+          },
+          "heartbeat": {
+            "intervalMs": 100,
+            "count": 7,
+            "p95Ms": 119.30000001192093,
+            "maxMs": 119.30000001192093
+          },
+          "longTasks": {
+            "count": 1,
+            "totalMs": 82,
+            "maxMs": 82,
+            "entries": [
+              {
+                "start": 543.2000000178814,
+                "duration": 82
+              }
+            ]
+          },
+          "mainSampledHeapPeakBytes": 107661090,
+          "receiverTaskMaxMs": 0.09999999403953552,
+          "stagesMs": {},
+          "wholeDocumentEqual": true,
+          "pageErrors": [],
+          "externalRequests": [],
+          "heartbeatTargetMet": true
+        },
+        "bounded": {
+          "wallMs": 2748.699999988079,
+          "heapBefore": 1892586,
+          "heapAfter": 130164765,
+          "events": [
+            {
+              "name": "worker-parsed",
+              "timestamp": 321.89999997615814
+            }
+          ],
+          "metrics": {},
+          "workers": [
+            "/tests/web/fixtures/issue597-session-transport.worker.js"
+          ],
+          "transport": {
+            "id": 1,
+            "kind": "done",
+            "stages": {
+              "readDecodeDecompressMs": 180.2000000178814,
+              "parseMs": 101.40000000596046,
+              "transferAndAssemblyMs": 2214.199999988079
+            },
+            "codec": {
+              "streams": [
+                {
+                  "kind": "file-read",
+                  "start": 6.700000017881393,
+                  "bytes": 23739973,
+                  "chunks": 15,
+                  "wallMs": 179.5
+                },
+                {
+                  "kind": "decompress",
+                  "start": 6.9000000059604645,
+                  "bytes": 95989532,
+                  "chunks": 1471,
+                  "wallMs": 179.40000000596046
+                }
+              ],
+              "decodeCpuMs": 41.00000008940697,
+              "decodedBytes": 95989532
+            },
+            "messages": 20032,
+            "transferredBytes": 128254176,
+            "clonedUpperBytes": 146044173,
+            "maximumMessageUpperBytes": 262144,
+            "postMessageCpuMs": 262.9000001549721
+          },
+          "memory": {
+            "sampleCount": 27,
+            "rssPeakBytes": 934268928,
+            "rssErrors": [],
+            "rssStartBytes": 442814464,
+            "v8UsedHeapPeaksBytes": {
+              "page": 121390916,
+              "worker": 209252560
+            },
+            "errors": [
+              "WebSocketConnectionClosedException: Connection to remote host was lost."
+            ],
+            "v8IsolateFieldPeaksBytes": {
+              "page": {
+                "usedSize": 121390916,
+                "totalSize": 183943168,
+                "embedderHeapUsedSize": 9500640,
+                "backingStorageSize": 62905085
+              },
+              "worker": {
+                "usedSize": 209252560,
+                "totalSize": 237494272,
+                "embedderHeapUsedSize": 10246128,
+                "backingStorageSize": 126785362
+              }
+            }
+          },
+          "heartbeat": {
+            "intervalMs": 100,
+            "count": 27,
+            "p95Ms": 101.30000001192093,
+            "maxMs": 101.69999998807907
+          },
+          "longTasks": {
+            "count": 0,
+            "totalMs": 0,
+            "maxMs": 0,
+            "entries": []
+          },
+          "mainSampledHeapPeakBytes": 214593799,
+          "receiverTaskMaxMs": 3.5999999940395355,
+          "stagesMs": {},
+          "wholeDocumentEqual": true,
+          "pageErrors": [],
+          "externalRequests": [],
+          "heartbeatTargetMet": true
+        }
+      }
+    ],
+    "real": [
+      {
+        "whole": {
+          "wallMs": 2603.5,
+          "heapBefore": 1892586,
+          "heapAfter": 463990099,
+          "events": [
+            {
+              "name": "worker-parsed",
+              "timestamp": 1677
+            }
+          ],
+          "metrics": {},
+          "workers": [
+            "/tests/web/fixtures/issue597-session-transport.worker.js"
+          ],
+          "transport": {
+            "id": 1,
+            "kind": "done",
+            "stages": {
+              "readDecodeDecompressMs": 998.5,
+              "parseMs": 639.8000000119209,
+              "wholeReplyRoundTripMs": 713.2999999821186,
+              "transferAndAssemblyMs": 713.3999999761581
+            },
+            "codec": {
+              "streams": [
+                {
+                  "kind": "file-read",
+                  "start": 6.9000000059604645,
+                  "bytes": 134471293,
+                  "chunks": 68,
+                  "wallMs": 997.6999999880791
+                },
+                {
+                  "kind": "decompress",
+                  "start": 7.0999999940395355,
+                  "bytes": 466767621,
+                  "chunks": 7157,
+                  "wallMs": 997.5999999940395
+                }
+              ],
+              "decodeCpuMs": 204.20000025629997,
+              "decodedBytes": 466767621
+            },
+            "messages": 1,
+            "transferredBytes": 0,
+            "clonedUpperBytes": null,
+            "maximumMessageUpperBytes": null,
+            "postMessageCpuMs": 377.90000000596046
+          },
+          "memory": {
+            "sampleCount": 15,
+            "rssPeakBytes": 2358841344,
+            "rssErrors": [],
+            "rssStartBytes": 443420672,
+            "v8UsedHeapPeaksBytes": {
+              "page": 468505848,
+              "worker": 906754408
+            },
+            "errors": [],
+            "v8IsolateFieldPeaksBytes": {
+              "page": {
+                "usedSize": 468505848,
+                "totalSize": 535592960,
+                "embedderHeapUsedSize": 1256880,
+                "backingStorageSize": 466
+              },
+              "worker": {
+                "usedSize": 906754408,
+                "totalSize": 909545472,
+                "embedderHeapUsedSize": 2700216,
+                "backingStorageSize": 500707962
+              }
+            }
+          },
+          "heartbeat": {
+            "intervalMs": 100,
+            "count": 23,
+            "p95Ms": 100.30000001192093,
+            "maxMs": 404.7999999821186
+          },
+          "longTasks": {
+            "count": 1,
+            "totalMs": 335,
+            "maxMs": 335,
+            "entries": [
+              {
+                "start": 2175.4000000059605,
+                "duration": 335
+              }
+            ]
+          },
+          "mainSampledHeapPeakBytes": 468515831,
+          "receiverTaskMaxMs": 0,
+          "stagesMs": {},
+          "wholeDocumentEqual": true,
+          "pageErrors": [],
+          "externalRequests": [],
+          "heartbeatTargetMet": true
+        },
+        "bounded": {
+          "wallMs": 13138.800000011921,
+          "heapBefore": 1892586,
+          "heapAfter": 688463948,
+          "events": [
+            {
+              "name": "worker-parsed",
+              "timestamp": 1725.3999999761581
+            }
+          ],
+          "metrics": {},
+          "workers": [
+            "/tests/web/fixtures/issue597-session-transport.worker.js"
+          ],
+          "transport": {
+            "id": 1,
+            "kind": "done",
+            "stages": {
+              "readDecodeDecompressMs": 1069.4000000059605,
+              "parseMs": 602.9000000059605,
+              "transferAndAssemblyMs": 11192.09999999404
+            },
+            "codec": {
+              "streams": [
+                {
+                  "kind": "file-read",
+                  "start": 8.300000011920929,
+                  "bytes": 134471293,
+                  "chunks": 68,
+                  "wallMs": 1068.4000000059605
+                },
+                {
+                  "kind": "decompress",
+                  "start": 8.5,
+                  "bytes": 466767621,
+                  "chunks": 7157,
+                  "wallMs": 1068.300000011921
+                }
+              ],
+              "decodeCpuMs": 206.2000000178814,
+              "decodedBytes": 466767621
+            },
+            "messages": 69520,
+            "transferredBytes": 695553402,
+            "clonedUpperBytes": 468463253,
+            "maximumMessageUpperBytes": 262144,
+            "postMessageCpuMs": 1114.699999898672
+          },
+          "memory": {
+            "sampleCount": 124,
+            "rssPeakBytes": 2394468352,
+            "rssErrors": [],
+            "rssStartBytes": 444063744,
+            "v8UsedHeapPeaksBytes": {
+              "page": 532842428,
+              "worker": 938113512
+            },
+            "errors": [
+              "WebSocketConnectionClosedException: Connection to remote host was lost."
+            ],
+            "v8IsolateFieldPeaksBytes": {
+              "page": {
+                "usedSize": 532842428,
+                "totalSize": 585633792,
+                "embedderHeapUsedSize": 31102752,
+                "backingStorageSize": 297864038
+              },
+              "worker": {
+                "usedSize": 938113512,
+                "totalSize": 976130048,
+                "embedderHeapUsedSize": 34862928,
+                "backingStorageSize": 575418413
+              }
+            }
+          },
+          "heartbeat": {
+            "intervalMs": 100,
+            "count": 131,
+            "p95Ms": 101.59999999403954,
+            "maxMs": 104
+          },
+          "longTasks": {
+            "count": 0,
+            "totalMs": 0,
+            "maxMs": 0,
+            "entries": []
+          },
+          "mainSampledHeapPeakBytes": 799318702,
+          "receiverTaskMaxMs": 5.5,
+          "stagesMs": {},
+          "wholeDocumentEqual": true,
+          "pageErrors": [],
+          "externalRequests": [],
+          "heartbeatTargetMet": true
+        }
+      },
+      {
+        "whole": {
+          "wallMs": 3087.600000023842,
+          "heapBefore": 1892538,
+          "heapAfter": 464254659,
+          "events": [
+            {
+              "name": "worker-parsed",
+              "timestamp": 2072.9000000059605
+            }
+          ],
+          "metrics": {},
+          "workers": [
+            "/tests/web/fixtures/issue597-session-transport.worker.js"
+          ],
+          "transport": {
+            "id": 1,
+            "kind": "done",
+            "stages": {
+              "readDecodeDecompressMs": 1293,
+              "parseMs": 728.2999999821186,
+              "wholeReplyRoundTripMs": 811.9000000059605,
+              "transferAndAssemblyMs": 811.9000000059605
+            },
+            "codec": {
+              "streams": [
+                {
+                  "kind": "file-read",
+                  "start": 8.700000017881393,
+                  "bytes": 134471293,
+                  "chunks": 68,
+                  "wallMs": 1291.699999988079
+                },
+                {
+                  "kind": "decompress",
+                  "start": 9,
+                  "bytes": 466767621,
+                  "chunks": 7157,
+                  "wallMs": 1291.6000000238419
+                }
+              ],
+              "decodeCpuMs": 274.09999990463257,
+              "decodedBytes": 466767621
+            },
+            "messages": 1,
+            "transferredBytes": 0,
+            "clonedUpperBytes": null,
+            "maximumMessageUpperBytes": null,
+            "postMessageCpuMs": 417.2000000178814
+          },
+          "memory": {
+            "sampleCount": 18,
+            "rssPeakBytes": 2367266816,
+            "rssErrors": [],
+            "rssStartBytes": 444665856,
+            "v8UsedHeapPeaksBytes": {
+              "page": 468505984,
+              "worker": 906754408
+            },
+            "errors": [],
+            "v8IsolateFieldPeaksBytes": {
+              "page": {
+                "usedSize": 468505984,
+                "totalSize": 535592960,
+                "embedderHeapUsedSize": 1256880,
+                "backingStorageSize": 466
+              },
+              "worker": {
+                "usedSize": 906754408,
+                "totalSize": 909545472,
+                "embedderHeapUsedSize": 2858184,
+                "backingStorageSize": 508610120
+              }
+            }
+          },
+          "heartbeat": {
+            "intervalMs": 100,
+            "count": 28,
+            "p95Ms": 103.09999999403954,
+            "maxMs": 396.7999999821186
+          },
+          "longTasks": {
+            "count": 1,
+            "totalMs": 394,
+            "maxMs": 394,
+            "entries": [
+              {
+                "start": 2610.2000000178814,
+                "duration": 394
+              }
+            ]
+          },
+          "mainSampledHeapPeakBytes": 468515919,
+          "receiverTaskMaxMs": 0.09999999403953552,
+          "stagesMs": {},
+          "wholeDocumentEqual": true,
+          "pageErrors": [],
+          "externalRequests": [],
+          "heartbeatTargetMet": true
+        },
+        "bounded": {
+          "wallMs": 12158,
+          "heapBefore": 1892586,
+          "heapAfter": 680892086,
+          "events": [
+            {
+              "name": "worker-parsed",
+              "timestamp": 1747.699999988079
+            }
+          ],
+          "metrics": {},
+          "workers": [
+            "/tests/web/fixtures/issue597-session-transport.worker.js"
+          ],
+          "transport": {
+            "id": 1,
+            "kind": "done",
+            "stages": {
+              "readDecodeDecompressMs": 1079.3999999761581,
+              "parseMs": 625.1000000238419,
+              "transferAndAssemblyMs": 10201.5
+            },
+            "codec": {
+              "streams": [
+                {
+                  "kind": "file-read",
+                  "start": 7.5999999940395355,
+                  "bytes": 134471293,
+                  "chunks": 68,
+                  "wallMs": 1078
+                },
+                {
+                  "kind": "decompress",
+                  "start": 7.799999982118607,
+                  "bytes": 466767621,
+                  "chunks": 7157,
+                  "wallMs": 1077.9000000059605
+                }
+              ],
+              "decodeCpuMs": 212.09999975562096,
+              "decodedBytes": 466767621
+            },
+            "messages": 69520,
+            "transferredBytes": 695553402,
+            "clonedUpperBytes": 468463253,
+            "maximumMessageUpperBytes": 262144,
+            "postMessageCpuMs": 988.0999993681908
+          },
+          "memory": {
+            "sampleCount": 115,
+            "rssPeakBytes": 2400878592,
+            "rssErrors": [],
+            "rssStartBytes": 445640704,
+            "v8UsedHeapPeaksBytes": {
+              "page": 529701628,
+              "worker": 937920092
+            },
+            "errors": [],
+            "v8IsolateFieldPeaksBytes": {
+              "page": {
+                "usedSize": 529701628,
+                "totalSize": 581279744,
+                "embedderHeapUsedSize": 31101264,
+                "backingStorageSize": 306217944
+              },
+              "worker": {
+                "usedSize": 937920092,
+                "totalSize": 968265728,
+                "embedderHeapUsedSize": 23573544,
+                "backingStorageSize": 503054042
+              }
+            }
+          },
+          "heartbeat": {
+            "intervalMs": 100,
+            "count": 121,
+            "p95Ms": 101.40000000596046,
+            "maxMs": 102
+          },
+          "longTasks": {
+            "count": 0,
+            "totalMs": 0,
+            "maxMs": 0,
+            "entries": []
+          },
+          "mainSampledHeapPeakBytes": 769226960,
+          "receiverTaskMaxMs": 6.5,
+          "stagesMs": {},
+          "wholeDocumentEqual": true,
+          "pageErrors": [],
+          "externalRequests": [],
+          "heartbeatTargetMet": true
+        }
+      },
+      {
+        "whole": {
+          "wallMs": 2905.5999999940395,
+          "heapBefore": 1892586,
+          "heapAfter": 464098663,
+          "events": [
+            {
+              "name": "worker-parsed",
+              "timestamp": 1910.2000000178814
+            }
+          ],
+          "metrics": {},
+          "workers": [
+            "/tests/web/fixtures/issue597-session-transport.worker.js"
+          ],
+          "transport": {
+            "id": 1,
+            "kind": "done",
+            "stages": {
+              "readDecodeDecompressMs": 1165.0999999940395,
+              "parseMs": 699.5,
+              "wholeReplyRoundTripMs": 787.1000000238419,
+              "transferAndAssemblyMs": 787.1000000238419
+            },
+            "codec": {
+              "streams": [
+                {
+                  "kind": "file-read",
+                  "start": 7.699999988079071,
+                  "bytes": 134471293,
+                  "chunks": 69,
+                  "wallMs": 1164
+                },
+                {
+                  "kind": "decompress",
+                  "start": 8,
+                  "bytes": 466767621,
+                  "chunks": 7157,
+                  "wallMs": 1163.9000000059605
+                }
+              ],
+              "decodeCpuMs": 234.69999998807907,
+              "decodedBytes": 466767621
+            },
+            "messages": 1,
+            "transferredBytes": 0,
+            "clonedUpperBytes": null,
+            "maximumMessageUpperBytes": null,
+            "postMessageCpuMs": 429.90000000596046
+          },
+          "memory": {
+            "sampleCount": 17,
+            "rssPeakBytes": 2363252736,
+            "rssErrors": [],
+            "rssStartBytes": 446808064,
+            "v8UsedHeapPeaksBytes": {
+              "page": 468243828,
+              "worker": 906758020
+            },
+            "errors": [],
+            "v8IsolateFieldPeaksBytes": {
+              "page": {
+                "usedSize": 468243828,
+                "totalSize": 534806528,
+                "embedderHeapUsedSize": 1256880,
+                "backingStorageSize": 466
+              },
+              "worker": {
+                "usedSize": 906758020,
+                "totalSize": 909545472,
+                "embedderHeapUsedSize": 2298936,
+                "backingStorageSize": 570916963
+              }
+            }
+          },
+          "heartbeat": {
+            "intervalMs": 100,
+            "count": 26,
+            "p95Ms": 100.2000000178814,
+            "maxMs": 410.30000001192093
+          },
+          "longTasks": {
+            "count": 1,
+            "totalMs": 357,
+            "maxMs": 357,
+            "entries": [
+              {
+                "start": 2460.600000023842,
+                "duration": 357
+              }
+            ]
+          },
+          "mainSampledHeapPeakBytes": 468253895,
+          "receiverTaskMaxMs": 0,
+          "stagesMs": {},
+          "wholeDocumentEqual": true,
+          "pageErrors": [],
+          "externalRequests": [],
+          "heartbeatTargetMet": true
+        },
+        "bounded": {
+          "wallMs": 14105.09999999404,
+          "heapBefore": 1892538,
+          "heapAfter": 633798092,
+          "events": [
+            {
+              "name": "worker-parsed",
+              "timestamp": 1952.5
+            }
+          ],
+          "metrics": {},
+          "workers": [
+            "/tests/web/fixtures/issue597-session-transport.worker.js"
+          ],
+          "transport": {
+            "id": 1,
+            "kind": "done",
+            "stages": {
+              "readDecodeDecompressMs": 1102.2999999821186,
+              "parseMs": 803.5,
+              "transferAndAssemblyMs": 11946.300000011921
+            },
+            "codec": {
+              "streams": [
+                {
+                  "kind": "file-read",
+                  "start": 8.099999994039536,
+                  "bytes": 134471293,
+                  "chunks": 68,
+                  "wallMs": 1101.2000000178814
+                },
+                {
+                  "kind": "decompress",
+                  "start": 8.300000011920929,
+                  "bytes": 466767621,
+                  "chunks": 7157,
+                  "wallMs": 1101.199999988079
+                }
+              ],
+              "decodeCpuMs": 221.60000002384186,
+              "decodedBytes": 466767621
+            },
+            "messages": 69520,
+            "transferredBytes": 695553402,
+            "clonedUpperBytes": 468463253,
+            "maximumMessageUpperBytes": 262144,
+            "postMessageCpuMs": 1189.3000019192696
+          },
+          "memory": {
+            "sampleCount": 132,
+            "rssPeakBytes": 2342932480,
+            "rssErrors": [],
+            "rssStartBytes": 446623744,
+            "v8UsedHeapPeaksBytes": {
+              "page": 517986716,
+              "worker": 937900628
+            },
+            "errors": [],
+            "v8IsolateFieldPeaksBytes": {
+              "page": {
+                "usedSize": 517986716,
+                "totalSize": 567705600,
+                "embedderHeapUsedSize": 30972408,
+                "backingStorageSize": 319222404
+              },
+              "worker": {
+                "usedSize": 937900628,
+                "totalSize": 968527872,
+                "embedderHeapUsedSize": 23573440,
+                "backingStorageSize": 543942184
+              }
+            }
+          },
+          "heartbeat": {
+            "intervalMs": 100,
+            "count": 141,
+            "p95Ms": 102.30000001192093,
+            "maxMs": 145.89999997615814
+          },
+          "longTasks": {
+            "count": 0,
+            "totalMs": 0,
+            "maxMs": 0,
+            "entries": []
+          },
+          "mainSampledHeapPeakBytes": 827467406,
+          "receiverTaskMaxMs": 7,
+          "stagesMs": {},
+          "wholeDocumentEqual": true,
+          "pageErrors": [],
+          "externalRequests": [],
+          "heartbeatTargetMet": true
+        }
+      }
+    ]
+  },
+  "browser": "149.0.7827.55",
+  "environmentSha256": "9a91009d0934c5cdccd30d7bfae08c159ff7adf3b47c28d862414f874b5ca124",
+  "rawEvidence": {
+    "path": "/tmp/issue597-s01-final-transport-j3R30y/transport-metrics.json",
+    "sha256": "743ad8a75c0b9cd9f988bc9ecd007ac5f101b3bc3fa7884883a683aa1797f3f7",
+    "memoryCaveat": "100ms sampled peaks are lower bounds. RSS is summed dedicated Chromium descendants, includes shared pages; CDP timeout samples are missing, not zero. Isolate field peaks occur at different times and must not be summed as a simultaneous peak."
+  }
+}

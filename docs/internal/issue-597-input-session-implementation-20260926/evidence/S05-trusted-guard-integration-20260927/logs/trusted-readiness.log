@@ -1,0 +1,56 @@
+{
+  "base": "494091aa68ca59ffa27ecaa6c3df19da4fbf5090",
+  "actualMergeShaAncestor": true,
+  "mergeTreeEqualsVerifiedGuardHead": true,
+  "requiredCI": {
+    "Web base policy (trusted base)": "SUCCESS",
+    "PR / gate": "SUCCESS"
+  },
+  "candidateCI": {
+    "Web change budget": "SUCCESS",
+    "Core PR (Python 3.11)": "SUCCESS",
+    "Recipes standard (Python 3.11)": "SUCCESS",
+    "Gallery (Python 3.11)": "SUCCESS",
+    "Web contracts (Python 3.11)": "SUCCESS",
+    "Web PR smoke": "SUCCESS",
+    "Lint": "SUCCESS"
+  },
+  "requiredApprovingReviewCount": 0,
+  "observedReviews": [],
+  "humanReviewQualification": "No formal GitHub review observed. Required approval count is zero. Prior owner-authorized merge is recorded in the preserved handoff; CI and this local audit are not human review.",
+  "checkerIdenticalToTrustedBase": {
+    "tools/check-web-change-budget.mjs": {
+      "local": "c7888ffb9c6d136284b567712f6e11a474e6b08f54d4daaee7d78e1a402d7f1c",
+      "trusted": "c7888ffb9c6d136284b567712f6e11a474e6b08f54d4daaee7d78e1a402d7f1c"
+    },
+    "tools/web-architecture-detectors.mjs": {
+      "local": "e05a4d4ffa394db8af69f27d82e4673e0e0c2533ba6b0cd7b43dd16e4e227274",
+      "trusted": "e05a4d4ffa394db8af69f27d82e4673e0e0c2533ba6b0cd7b43dd16e4e227274"
+    },
+    "tools/web-architecture-evaluation.mjs": {
+      "local": "6f1dda5eeb5fb88500baf1de79e730cb4aeff9861562802af8491eaea4bb1a4e",
+      "trusted": "6f1dda5eeb5fb88500baf1de79e730cb4aeff9861562802af8491eaea4bb1a4e"
+    },
+    "tools/web-change-source.mjs": {
+      "local": "b23bd352475c14cc044fa7c14c70e69f0da04631f67bc7f2207eb79549c73756",
+      "trusted": "b23bd352475c14cc044fa7c14c70e69f0da04631f67bc7f2207eb79549c73756"
+    },
+    "tools/web-product-impact-evaluation.mjs": {
+      "local": "8031bc2a68ab1315387dbcf5485971054cf91e1669659edebec46f9cb87d62da",
+      "trusted": "8031bc2a68ab1315387dbcf5485971054cf91e1669659edebec46f9cb87d62da"
+    },
+    "tools/web-product-impact-decision-source.mjs": {
+      "local": "11f7332880ff4ec256cfbca6d15286c809dcebef80465987fa22759a8ed17f07",
+      "trusted": "11f7332880ff4ec256cfbca6d15286c809dcebef80465987fa22759a8ed17f07"
+    },
+    "tools/web-promotion-context.mjs": {
+      "local": "44e88fd3f24ca1d98571a12daf29e996cefc3b8552093e6105c69b626ebc56dd",
+      "trusted": "44e88fd3f24ca1d98571a12daf29e996cefc3b8552093e6105c69b626ebc56dd"
+    },
+    "tools/check-promotion-readiness.mjs": {
+      "local": "f716221070cd9cae9876ee1a9831a23085d3a907a7c7deffea2cb3d99db9fd61",
+      "trusted": "f716221070cd9cae9876ee1a9831a23085d3a907a7c7deffea2cb3d99db9fd61"
+    }
+  },
+  "permissionsPresent": true
+}

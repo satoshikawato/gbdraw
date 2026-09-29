@@ -618,6 +618,19 @@ const normalizeOriginalResourceName = (name) => {
 };
 
 const generatedResourceValues = new WeakMap();
+const canonicalTypedResourceBackings = new WeakMap();
+
+// The analysis helper supplies the bytes already emitted by the Python typed codec.
+export const bindCanonicalTypedResource = (value, descriptor) => {
+  const expectedKind = value?.kind === "result" ? "collinearity-result" : "orthogroup-result";
+  if (!value || value.schema !== 3 || !["result", "orthogroupResult"].includes(value.kind)
+    || descriptor?.kind !== expectedKind || descriptor.encoding !== "base64"
+    || descriptor.type !== "application/json" || typeof descriptor.data !== "string"
+    || !Number.isSafeInteger(descriptor.size) || descriptor.size < 0) {
+    throw new Error("Analysis canonical resource backing is invalid.");
+  }
+  canonicalTypedResourceBackings.set(value, descriptor);
+};
 const generationIntents = new WeakMap();
 
 const createResourceBuilder = ({ encode = true } = {}) => {
@@ -677,7 +690,7 @@ const createResourceBuilder = ({ encode = true } = {}) => {
       size: bytes.byteLength,
       lastModified: 0,
       encoding: 'base64',
-      data: textToBase64(normalized)
+      data: bytesToBase64(bytes)
     };
     generatedResourceValues.set(resources[resourceId], normalized);
     return resourceId;
@@ -690,6 +703,13 @@ const createResourceBuilder = ({ encode = true } = {}) => {
       generatedResourceValues.set(resources[resourceId], { bindings: [value] });
       return resourceId;
     }
+    const backing = canonicalTypedResourceBackings.get(value);
+    if (backing) {
+      if (backing.kind !== kind) throw new Error("Analysis canonical resource kind does not match.");
+      resources[resourceId] = { ...backing, name: normalizeResourceName(resourceId, name) };
+      generatedResourceValues.set(resources[resourceId], { bindings: [value] });
+      return resourceId;
+    }
     const normalized = JSON.stringify(value);
     const bytes = textToBytes(normalized);
     resources[resourceId] = {
@@ -699,7 +719,7 @@ const createResourceBuilder = ({ encode = true } = {}) => {
       size: bytes.byteLength,
       lastModified: 0,
       encoding: 'base64',
-      data: textToBase64(normalized)
+      data: bytesToBase64(bytes)
     };
     generatedResourceValues.set(resources[resourceId], { bindings: [value] });
     return resourceId;
@@ -795,13 +815,14 @@ const presentationPayload = ({
   label = null,
   subtitle = null,
   reverseComplement = false,
-  gridRow = null
+  gridRow = null,
+  gridColumn = null
 } = {}) => ({
   label: String(label || '').trim() || null,
   subtitle: String(subtitle || '').trim() || null,
   reverseComplement: Boolean(reverseComplement),
   gridRow,
-  gridColumn: null
+  gridColumn
 });
 
 const circularPresentationPayload = (form, { hasRegion = false } = {}) => (
@@ -871,6 +892,9 @@ const buildRecords = ({ state, filesData, resources }) => {
       state.linearRecordRows,
       { enabled: Boolean(state.linearRecordLayoutEnabled?.value) }
     );
+    const canonicalCardinalityByUid = new Map(
+      (state.linearRecordRows || []).map((entry) => [entry.uid, entry.canonicalCardinality])
+    );
     const records = (filesData.linearSeqs || []).map((seq, index) => {
       const source = state.lInputType.value === 'gff'
         ? {
@@ -886,7 +910,8 @@ const buildRecords = ({ state, filesData, resources }) => {
       const selector = region ? null : selectorPayload(seq.region_record_id);
       return {
         recordKey: String(seq.uid || `record-${index + 1}`),
-        cardinality: seq.cardinality || (selector || region ? 'exactly_one' : 'all'),
+        cardinality: canonicalCardinalityByUid.get(seq.uid)
+          || seq.cardinality || (selector || region ? 'exactly_one' : 'all'),
         source,
         selector,
         region,
@@ -896,6 +921,9 @@ const buildRecords = ({ state, filesData, resources }) => {
             subtitle: resolveLinearRecordEffectiveSubtitle(seq),
             gridRow: state.linearRecordLayoutEnabled?.value
               ? (resolvedRows[index]?.row ?? null)
+              : null,
+            gridColumn: state.linearRecordLayoutEnabled?.value
+              ? (resolvedRows[index]?.canonicalColumn ?? null)
               : null
           }),
           reverseComplement: region ? false : Boolean(seq.region_reverse)
@@ -3942,6 +3970,7 @@ export const projectCanonicalSessionRequest = ({
   webFiles = {},
   legacyFiles = null,
   storedConfig = null,
+  initializeCliInputs = false,
   fileBindings = [],
   linearTrackSlotSchemaVersion = LINEAR_TRACK_SLOT_SCHEMA_VERSION,
   repairInvalidComparisonHeight = false,
@@ -4026,10 +4055,29 @@ export const projectCanonicalSessionRequest = ({
   const outputPrefixes = grouping === 'batch'
     ? reorderRecordIndexedValues(sourceOutputPrefixes)
     : sourceOutputPrefixes;
-  const webMetadata = webFiles && typeof webFiles === 'object' && !Array.isArray(webFiles)
+  let webMetadata = webFiles && typeof webFiles === 'object' && !Array.isArray(webFiles)
     ? webFiles
     : {};
-  const explicitBindings = validateWebFileBindings(webMetadata, canonicalResources);
+  let explicitBindings = validateWebFileBindings(webMetadata, canonicalResources);
+  // A CLI sidecar has no saved Web draft. Its empty writer slots are initial
+  // values, not a user's cleared inputs. Keep real original CLI bindings (in
+  // particular GFF + FASTA), and initialize absent slots from the typed request.
+  // A saved Web draft, including explicit null/[] inputs, always wins unchanged.
+  if (initializeCliInputs && storedConfig == null && explicitBindings) {
+    const originalInputFields = renderRequest.mode === 'circular'
+      ? ['c_gb', 'c_gff', 'c_fasta']
+      : ['linearSeqs'];
+    const hasOriginalInputs = originalInputFields.some((field) => (
+      Array.isArray(explicitBindings[field])
+        ? explicitBindings[field].length > 0
+        : explicitBindings[field] != null
+    ));
+    explicitBindings = Object.fromEntries(Object.entries(explicitBindings).filter(
+      ([field, value]) => (hasOriginalInputs && originalInputFields.includes(field))
+        || (value != null && (!Array.isArray(value) || value.length > 0))
+    ));
+    webMetadata = { ...webMetadata, bindings: explicitBindings };
+  }
   const storedResourceOriginalNames = webMetadata.resourceOriginalNames;
   const originalNameHints = {
     ...legacyResourceOriginalNames({ renderRequest, legacyFiles, fileBindings }),
@@ -4837,10 +4885,22 @@ export const projectCanonicalSessionRequest = ({
     (record) => record.presentation?.gridRow != null
   );
   const linearLayoutRows = presentationOwnsLinearRows
-    ? records.map((record, index) => ({
-        uid: files.linearSeqs[index]?.uid || '',
-        row: Number(record.presentation?.gridRow) || index + 1
-      }))
+    ? records.map((record, index) => {
+        const row = Number(record.presentation?.gridRow) || index + 1;
+        const sourceColumn = sourceRecords[
+          normalizedRecordOrdering.sourceIndexByProjectedIndex[index]
+        ]?.presentation?.gridColumn;
+        return {
+          uid: files.linearSeqs[index]?.uid || '', row,
+          ...(initializeCliInputs && storedConfig == null
+            && sourceRecords[normalizedRecordOrdering.sourceIndexByProjectedIndex[index]]?.cardinality === 'exactly_one'
+            ? { canonicalCardinality: 'exactly_one' } : {}),
+          ...(initializeCliInputs && storedConfig == null
+            && Number.isInteger(sourceColumn) && sourceColumn > 0
+            ? { canonicalRow: row, canonicalColumn: sourceColumn }
+            : {})
+        };
+      })
     : (renderRequest.layout?.multiRecordPositions || []).map((token, index) => {
         const split = String(token).lastIndexOf('@');
         return {

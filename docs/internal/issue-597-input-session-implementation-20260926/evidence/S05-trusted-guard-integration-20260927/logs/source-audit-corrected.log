@@ -1,0 +1,88 @@
+{
+  "startHead": "c3ae518b914024d1299c1f3f6487640c8a2fbaaf",
+  "trustedDev": "494091aa68ca59ffa27ecaa6c3df19da4fbf5090",
+  "integratedTree": "4e6cfb6960cbb02e74b4d861b2140f473c698177",
+  "automaticMergeTree": "5782d74f991d5d7efa971981a00b6952e975ce4e",
+  "manualResolutionPaths": [
+    "gbdraw/web/index.html"
+  ],
+  "noIndependentRuntimeDesign": true,
+  "mappedBodies": {
+    "production rendering crosses the canonical request and Worker boundary": {
+      "start": "0713c0657ab379982450e583626799d2f4bde4171a6636bdbfe20faa1e22cab2",
+      "trustedDev": "0713c0657ab379982450e583626799d2f4bde4171a6636bdbfe20faa1e22cab2",
+      "integrated": "0713c0657ab379982450e583626799d2f4bde4171a6636bdbfe20faa1e22cab2"
+    },
+    "History intent and SVG admission have one production ownership path": {
+      "start": "5393aac212db385091b36147313d001245bd10c12bae556fcb3931d8cfcb49d3",
+      "trustedDev": "5393aac212db385091b36147313d001245bd10c12bae556fcb3931d8cfcb49d3",
+      "integrated": "5393aac212db385091b36147313d001245bd10c12bae556fcb3931d8cfcb49d3"
+    }
+  },
+  "mappedAuthorityReferences": [
+    {
+      "concern": "product.canonical-render-request-boundary",
+      "ref": "tests/web/architecture-contracts.test.mjs::production rendering crosses the canonical request and Worker boundary",
+      "checkpointRefs": [
+        "JRN-RENDER-001:generate-submit"
+      ],
+      "sensitivity": "DIRECT_ASSERTION",
+      "execution": "PR_GATE",
+      "residualRisk": "This contract fixes the Generate-to-request and Worker wiring but does not compare every projected UI field or a Session round trip."
+    },
+    {
+      "concern": "product.saved-session-regeneration-continuity",
+      "ref": "tests/web/architecture-contracts.test.mjs::History intent and SVG admission have one production ownership path",
+      "checkpointRefs": [
+        "JRN-REGEN-001:current-result-admission"
+      ],
+      "sensitivity": "DIRECT_ASSERTION",
+      "execution": "PR_GATE",
+      "residualRisk": "The structural contract fixes current source ownership and import paths but does not by itself exercise a browser regeneration transaction."
+    }
+  ],
+  "completeProductMapIdentical": true,
+  "unchangedImportTransport": {
+    "gbdraw/web/js/services/session-import-client.js": {
+      "start": "98e2bec632e85276fed854b91e5492d05f54850283446f8bf78e26979608657a",
+      "integrated": "98e2bec632e85276fed854b91e5492d05f54850283446f8bf78e26979608657a"
+    },
+    "gbdraw/web/js/workers/session-import-worker.js": {
+      "start": "0f692bf4f929bc3cc375f8176c14383c3ec609a60c57cc6cac513a019db65a65",
+      "integrated": "0f692bf4f929bc3cc375f8176c14383c3ec609a60c57cc6cac513a019db65a65"
+    }
+  },
+  "workerConstructorInventory": {
+    "services/diagram-generation.js": 1,
+    "services/losat.js": 2,
+    "services/session-import-client.js": 1,
+    "workers/losat-threaded-worker.js": 2
+  },
+  "issue597DecisionSections": {
+    "PD-OI-044": {
+      "start": "a06a20dffc609bae6ff0a68bb90e68560c9c26d411a3904fedcc55c7d1396de6",
+      "trustedDev": "a06a20dffc609bae6ff0a68bb90e68560c9c26d411a3904fedcc55c7d1396de6",
+      "integrated": "a06a20dffc609bae6ff0a68bb90e68560c9c26d411a3904fedcc55c7d1396de6"
+    },
+    "PD-OI-045": {
+      "start": "ab830a932b6d8dfd84597c7202b9276c24e544ad0fc552723c14b2169ecb02f4",
+      "trustedDev": "ab830a932b6d8dfd84597c7202b9276c24e544ad0fc552723c14b2169ecb02f4",
+      "integrated": "ab830a932b6d8dfd84597c7202b9276c24e544ad0fc552723c14b2169ecb02f4"
+    }
+  },
+  "contractRevision": 24,
+  "unchangedPythonSourceAndData": {
+    "count": 213,
+    "identical": true
+  },
+  "unchangedRealFixtureInputs": {
+    "tests/test_inputs/GCF_000196095.1_ASM19609v1_genomic.gbff": "c785f2feed7dbef0a7ad881aef4a43860f65318e1a44db66b032fc65c9cc34dc",
+    "tests/test_inputs/GCF_000354175.2_ASM35417v2_genomic.gbff": "4357443d248ab3d5c08b1854dcbcca1f59adbf064640fd99d5504f6ee4d59096",
+    "tests/test_inputs/GCF_000801275.2_ASM80127v1_genomic.gbff": "a11f12277c34c46e2161f354e50ef39bdca4c5b618dd1905c1829ba20b35d5d1",
+    "tests/test_inputs/GCF_002021755.1_ASM202175v1_genomic.gbff": "483ecea116a7399b87a37040b49095a26f5e8c02b4931c607364a0a46e07321f",
+    "tests/test_inputs/GCF_002906475.1_ASM290647v1_genomic.gbff": "6238c42c332f9e0ef65ea6d9f6e5da41d7a5a13d1eb135aeb2b14b700d643908",
+    "tests/test_inputs/GCF_015097735.1_ASM1509773v1_genomic.gbff": "a2f696d584451866032339eb17de4eadad55372a36bc87b9eb85583a482ad027"
+  },
+  "priorRuntimeMeasurements": "Historical only: integration changes 14 Web runtime files and the aggregate runtime fingerprint. No old browser/performance PASS is claimed for the new integrated runtime. Old FAIL/null invocations remain unchanged."
+}
+Protected identity count: 65 Pinned evidence count: 60 Source count: 668 Reused fixture count: 78

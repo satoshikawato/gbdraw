@@ -93,7 +93,7 @@ export const createRulePreparation = ({ state, evaluate, pending = { value: fals
     pending.value = ++pendingCount > 0;
     return evaluate({ features: targets.map((feature) => ruleFeaturePayload(feature)), rules: draft, kind: 'color' }, options)
       .then((result) => {
-        if (!isCurrent(before)) return false;
+        if (!isCurrent(before) || state.sessionOperationAvailability?.()) return false;
         validated = new Set(draft.map(ruleKey));
         targets.forEach((feature, index) => {
           const cache = new Map();
@@ -105,9 +105,11 @@ export const createRulePreparation = ({ state, evaluate, pending = { value: fals
       }).finally(() => { pending.value = --pendingCount > 0; });
   };
   const run = (rules, commit) => {
+    if (state.sessionOperationAvailability?.()) return state.sessionOperationAvailability();
     const prepared = prepare(rules);
     if (prepared === true) return commit();
-    return Promise.resolve(prepared).then((current) => current ? commit() : undefined);
+    return Promise.resolve(prepared).then((current) =>
+      state.sessionOperationAvailability?.() || (current ? commit() : undefined));
   };
   const prepareCandidate = async (rules = state.manualSpecificRules, options = {}) => {
     const before = snapshot();

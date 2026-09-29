@@ -766,6 +766,8 @@ export const createPreviewRuntime = ({ state, serializeSvg }) => {
   };
 
   const selectResult = (index) => {
+    const busy = state.sessionOperationAvailability?.();
+    if (busy) return busy;
     const count = Array.isArray(state.results.value) ? state.results.value.length : 0;
     const numeric = Number(index);
     const nextIndex = Number.isInteger(numeric) ? Math.max(0, Math.min(numeric, Math.max(0, count - 1))) : 0;

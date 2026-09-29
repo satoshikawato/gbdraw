@@ -15,6 +15,7 @@ import {
 import { downloadTextFile } from '../services/text-download.js';
 import { copyTextToClipboard } from '../utils/clipboard.js';
 import {
+  ORTHOGROUP_ID_KEYS,
   RECORD_INDEX_KEYS,
   STABLE_FEATURE_ID_KEYS,
   featureIdentity,
@@ -28,7 +29,7 @@ import {
 
 export { resolveUniqueOrthogroupMemberForFeature } from '../services/feature-identity.js';
 
-const { computed, reactive, watch } = window.Vue;
+const { computed, reactive, watch, toDisplayString } = window.Vue;
 
 const COPY_FEEDBACK_DURATION_MS = 1500;
 const COPY_FEEDBACK_LABELS = Object.freeze({
@@ -38,6 +39,35 @@ const COPY_FEEDBACK_LABELS = Object.freeze({
 
 const normalizeText = (value) => String(value ?? '').trim();
 const normalizeLower = (value) => normalizeText(value).toLowerCase();
+
+// Narrow the search by supplied fields; identityMatches still owns all matching semantics.
+const indexFeatureIdentities = (entries, identityOf) => {
+  const fields = ['recordIndex', 'sourceIndex', 'recordKey', 'biologicalId', 'stableId', 'renderedId'];
+  const indexes = new Map(fields.map((field) => [field, new Map()]));
+  for (const entry of entries) {
+    const identity = identityOf(entry);
+    if (!identity.usable) continue;
+    for (const field of fields) {
+      const status = identity[field];
+      if (!status.supplied) continue;
+      const index = indexes.get(field);
+      if (!index.has(status.value)) index.set(status.value, []);
+      index.get(status.value).push(entry);
+    }
+  }
+  return (reference) => {
+    if (!reference.usable) return [];
+    let candidates = entries;
+    for (const field of fields) {
+      const status = reference[field];
+      if (!status.supplied) continue;
+      const matches = indexes.get(field).get(status.value) || [];
+      if (matches.length < candidates.length) candidates = matches;
+    }
+    return candidates.filter((entry) => identityMatches(reference, identityOf(entry), { includeRendered: true }));
+  };
+};
+
 
 const memberStableFeatureId = (member) => {
   const status = textAliasStatus(member, STABLE_FEATURE_ID_KEYS);
@@ -369,14 +399,22 @@ export const createOrthogroupEditor = ({ state }) => {
     );
   }
 
-  const resolvableOrthogroupEntries = () => uniqueOrthogroupEntries(orthogroups.value);
+  const resolvableOrthogroupEntries = computed(() => {
+    const groups = Array.isArray(orthogroups.value) ? orthogroups.value : [];
+    // Track absent aliases too; adding a conflicting ID must invalidate the list.
+    for (const group of groups) {
+      if (group && typeof group === 'object') {
+        for (const key of ORTHOGROUP_ID_KEYS) void (key in group);
+      }
+    }
+    return uniqueOrthogroupEntries(groups);
+  });
 
   const getOrthogroupById = (orthogroupId) => {
     const id = normalizeText(orthogroupId);
     if (!id) return null;
-    const matches = resolvableOrthogroupEntries()
-      .filter((entry) => entry.id === id);
-    return matches.length === 1 ? matches[0].group : null;
+    return resolvableOrthogroupEntries.value
+      .find((entry) => entry.id === id)?.group || null;
   };
 
   const resolveOrthogroupName = (groupOrId) => {
@@ -413,11 +451,11 @@ export const createOrthogroupEditor = ({ state }) => {
     );
   };
 
-  const orthogroupCount = computed(() => resolvableOrthogroupEntries().length);
+  const orthogroupCount = computed(() => resolvableOrthogroupEntries.value.length);
 
   const filteredOrthogroups = computed(() => {
     const query = normalizeLower(orthogroupSearch.value);
-    const groups = resolvableOrthogroupEntries().map(({ group }) => group);
+    const groups = resolvableOrthogroupEntries.value.map(({ group }) => group);
     const filtered = query
       ? groups.filter((group) => {
           const candidates = Array.isArray(group?.nameCandidates) ? group.nameCandidates : [];
@@ -462,6 +500,19 @@ export const createOrthogroupEditor = ({ state }) => {
     return filteredOrthogroups.value[0] || null;
   });
 
+  const orthogroupRows = computed(() => {
+    // Renamed markers depend on description override keys, not their text.
+    Reflect.ownKeys(orthogroupDescriptionOverrides);
+    return filteredOrthogroups.value.map((group) => ({
+      group, id: group.id,
+      name: resolveOrthogroupName(group),
+      scopeLabel: orthogroupScopeLabel(group),
+      memberCount: toDisplayString(group.member_count || (group.members ? group.members.length : 0)),
+      recordCount: toDisplayString(group.record_coverage_count || 0),
+      renamed: isOrthogroupRenamed(group)
+    }));
+  });
+
   const featureSequenceLookup = computed(() => {
     const hasBiologicalFeatures = Array.isArray(biologicalFeatures?.value) && biologicalFeatures.value.length > 0;
     const features = hasBiologicalFeatures
@@ -470,15 +521,12 @@ export const createOrthogroupEditor = ({ state }) => {
     const renderedIdentities = (Array.isArray(extractedFeatures?.value) ? extractedFeatures.value : [])
       .map(renderedFeatureIdentity)
       .filter((identity) => identity.usable);
-    return features.map((feature) => {
+    const findRendered = indexFeatureIdentities(renderedIdentities, (identity) => identity);
+    const entries = features.map((feature) => {
       const identity = hasBiologicalFeatures
         ? featureIdentity(feature, { allowLegacySvgStable: true })
         : renderedFeatureIdentity(feature);
-      const renderedMatches = identity.usable
-        ? renderedIdentities.filter((rendered) => (
-          identityMatches(identity, rendered, { includeRendered: true })
-        ))
-        : [];
+      const renderedMatches = findRendered(identity);
       const renderedIdentityInvalid = renderedMatches.length > 1 || (
         identity.renderedId.supplied && renderedMatches.length !== 1
       );
@@ -491,27 +539,25 @@ export const createOrthogroupEditor = ({ state }) => {
           );
       return {
         identity: resolvedIdentity,
-        entry: {
-          nucleotideSequence: firstSequenceText(feature?.nucleotideSequence, feature?.nucleotide_sequence),
-          aminoAcidSequence: firstSequenceText(feature?.aminoAcidSequence, feature?.amino_acid_sequence),
-          sequenceFeature: feature,
-          sequenceWarnings: Array.isArray(feature?.sequence_warnings)
-            ? feature.sequence_warnings
-            : (Array.isArray(feature?.sequenceWarnings) ? feature.sequenceWarnings : [])
+        get entry() {
+          return {
+            nucleotideSequence: firstSequenceText(feature?.nucleotideSequence, feature?.nucleotide_sequence),
+            aminoAcidSequence: firstSequenceText(feature?.aminoAcidSequence, feature?.amino_acid_sequence),
+            sequenceFeature: feature,
+            sequenceWarnings: Array.isArray(feature?.sequence_warnings)
+              ? feature.sequence_warnings
+              : (Array.isArray(feature?.sequenceWarnings) ? feature.sequenceWarnings : [])
+          };
         }
       };
     });
+    return indexFeatureIdentities(entries, (entry) => entry.identity);
   });
 
   const enrichOrthogroupMember = (member) => {
     const memberSequenceFeature = member?.sequenceFeature || null;
     const memberIdentity = featureIdentity(member);
-    const matches = memberIdentity.usable
-      ? (Array.isArray(featureSequenceLookup.value) ? featureSequenceLookup.value : [])
-        .filter((candidate) => (
-          identityMatches(memberIdentity, candidate.identity, { includeRendered: true })
-        ))
-      : [];
+    const matches = featureSequenceLookup.value(memberIdentity);
     const sequenceEntry = matches.length === 1 ? matches[0].entry : null;
     const sequenceFeature = sequenceEntry?.sequenceFeature || memberSequenceFeature;
     const resolvedDisplayProteinId = resolveDisplayProteinId(
@@ -663,6 +709,8 @@ export const createOrthogroupEditor = ({ state }) => {
   };
 
   const setOrthogroupNameOverride = (orthogroupId, value) => {
+    const sessionBusy = state.sessionOperationAvailability?.();
+    if (sessionBusy) return sessionBusy;
     const id = normalizeText(orthogroupId);
     if (!id) return;
     const group = getOrthogroupById(id);
@@ -677,6 +725,8 @@ export const createOrthogroupEditor = ({ state }) => {
   };
 
   const setOrthogroupDescriptionOverride = (orthogroupId, value) => {
+    const sessionBusy = state.sessionOperationAvailability?.();
+    if (sessionBusy) return sessionBusy;
     const id = normalizeText(orthogroupId);
     if (!id) return;
     const group = getOrthogroupById(id);
@@ -691,6 +741,8 @@ export const createOrthogroupEditor = ({ state }) => {
   };
 
   const resetOrthogroupRename = (orthogroupId = selectedOrthogroupId.value) => {
+    const sessionBusy = state.sessionOperationAvailability?.();
+    if (sessionBusy) return sessionBusy;
     const id = normalizeText(orthogroupId);
     if (!id) return;
     delete orthogroupNameOverrides[id];
@@ -746,6 +798,7 @@ export const createOrthogroupEditor = ({ state }) => {
     resolveOrthogroupDescription,
     orthogroupScope,
     orthogroupScopeLabel,
+    orthogroupRows,
     isOrthogroupRenamed,
     getOrthogroupSequenceCount,
     hasOrthogroupSequence,

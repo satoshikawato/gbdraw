@@ -18,8 +18,10 @@ export const reconcileImportedLinearTypographyLink = ({ adv, linked, ui = {} }) 
   return linked.value;
 };
 
-export const createLinearTypographyController = ({ adv, linked }) => {
+export const createLinearTypographyController = ({ adv, linked, mutationAvailability = () => null }) => {
   const setScaleFontSize = (value) => {
+    const sessionBusy = mutationAvailability();
+    if (sessionBusy) return sessionBusy;
     const nextValue = optionalNumberInputValue(value);
     adv.scale_font_size = nextValue;
     if (linked.value) adv.ruler_label_font_size = nextValue;
@@ -27,12 +29,16 @@ export const createLinearTypographyController = ({ adv, linked }) => {
   };
 
   const setRulerLabelFontSize = (value) => {
+    const sessionBusy = mutationAvailability();
+    if (sessionBusy) return sessionBusy;
     if (linked.value) return false;
     adv.ruler_label_font_size = optionalNumberInputValue(value);
     return true;
   };
 
   const setLinked = (nextLinked) => {
+    const sessionBusy = mutationAvailability();
+    if (sessionBusy) return sessionBusy;
     const nextValue = Boolean(nextLinked);
     if (linked.value === nextValue) return false;
     linked.value = nextValue;

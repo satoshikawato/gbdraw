@@ -106,6 +106,8 @@ export const createLegendRepositionActions = ({
   };
 
   const repositionForLegendChange = (newPosition, _oldPosition, _options = {}) => {
+    const sessionBusy = state.sessionOperationAvailability?.();
+    if (sessionBusy) return sessionBusy;
     if (!svgContainer.value || !svgContent.value) return false;
     const svg = svgContainer.value.querySelector('svg');
     if (!svg) return false;

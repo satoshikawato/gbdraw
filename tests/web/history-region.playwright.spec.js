@@ -6,6 +6,11 @@ const region = page => page.evaluate(() => {
   const form = window.__GBDRAW_APP__.form;
   return [form.circular_region_start, form.circular_region_end];
 });
+// Generate may already open the presentation panel; open it only when closed.
+const openPresentation = async (page) => {
+  const details = page.locator('[data-circular-record-presentation]');
+  if (!await details.evaluate((element) => element.open)) await details.locator('summary').click();
+};
 const edit = async (page, label, value) => {
   const before = await page.evaluate(() => window.__GBDRAW_HISTORY__.getUndoCount());
   const input = page.getByLabel(label, { exact: true });
@@ -19,7 +24,7 @@ test('Circular region restores number to Auto', async ({ browser }) => {
   const page = await load(browser);
   try {
     await generate(page);
-    await page.locator('[data-circular-record-presentation] summary').click();
+    await openPresentation(page);
     expect(await region(page)).toEqual([null, null]);
     await edit(page, 'Circular region start', '1000');
     await page.evaluate(() => window.__GBDRAW_HISTORY__.undo());
@@ -39,7 +44,7 @@ test('rejected Circular region can Undo both edits back to valid Auto', async ({
     const before = await page.evaluate(() => ({
       undo: window.__GBDRAW_HISTORY__.getUndoCount(), result: window.__GBDRAW_APP__.results[0].content
     }));
-    await page.locator('[data-circular-record-presentation] summary').click();
+    await openPresentation(page);
     await edit(page, 'Circular region start', '1000');
     await edit(page, 'Circular region end', '500');
     await generateAndWaitForResult(page, { expectedStatus: 'error' });

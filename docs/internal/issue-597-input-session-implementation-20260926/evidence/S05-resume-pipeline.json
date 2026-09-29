@@ -1,0 +1,4025 @@
+{
+  "mode": "pipeline",
+  "head": "c11d4854a899349cd66863c859f6f871724ba3ab",
+  "platform": "Linux-5.15.167.4-microsoft-standard-WSL2-x86_64-with-glibc2.39",
+  "python": "3.13.3",
+  "cpuCount": 32,
+  "ramBytes": 33518579712,
+  "cpuModel": "Intel(R) Core(TM) i9-14900HX",
+  "versions": {
+    "playwright": "1.61.0",
+    "psutil": "7.0.0",
+    "websocket-client": "1.8.0",
+    "biopython": "1.85"
+  },
+  "codecProbeSha256": "aa8511a22b8d833aa4496c5f6c37eb23890d48e729b2c11b5f2572151a45e3e5",
+  "traceSha256": "3716977b65fca8d99f06e2a8971b6b15c87bdcd38b3c8c019b9324568bc58b91",
+  "observerSha256": "19b0d2468f1efd36b2d8bb59aa9af6a4758e5c8b90939aeeea8840846b863c4c",
+  "recipeSha256": "d020db6de7995d39617adb6ed0898de55de87d9fe55499303d512dfbe5e2e68e",
+  "s01RecipeSha256": "c2ea0bbfc389fa0da1f4440a7d164961729814020097096daa4e0fe9cd48a6e7",
+  "url": "http://127.0.0.1:35559",
+  "debugPort": 38575,
+  "launchArgs": [
+    "--enable-precise-memory-info",
+    "--remote-debugging-port=38575"
+  ],
+  "startedUtc": "2026-09-27T05:31:52Z",
+  "browser": "149.0.7827.55",
+  "rawArtifact": "/tmp/issue597-S05-resume-evidence/pipeline/metrics.json",
+  "fixtures": {
+    "vibrio": {
+      "sha256": "a3cfba6c8d883a0050529c89b1fd0849348254cdfa46dbf938a69cebef5379aa",
+      "results": [
+        {
+          "source": {
+            "sha256": "a3cfba6c8d883a0050529c89b1fd0849348254cdfa46dbf938a69cebef5379aa",
+            "bytes": 23739973,
+            "version": 44,
+            "requestSchema": 8,
+            "records": 4,
+            "features": 18782,
+            "cacheEntries": 12,
+            "hashes": {
+              "format": "a565d6c86d89f5062657493c80eed1b314a7d52b81c7504622b0ee9084307f4f",
+              "version": "71ee45a3c0db9a9865f7313dd3372cf60dca6479d46261f3542eb9346e4a04d6",
+              "createdAt": "6858d08977dc6786f29612b38948216f5b53bcffed49376230ab9f88aee928a1",
+              "title": "63b97e56589c5dddca834bbb236f8c1c3d6248f7aa103168dd058354ea026694",
+              "ui": "e8c5aea1f0ebcbaa58a50e79b261e2d7940b78b685fe0d57b9c33e6cc13f312d",
+              "results": "2fb2b6de292f58fec96ed320e358a45df78ed05f5df7fe448fd93370d0251d27",
+              "editorState": "8e51664e18040185ea1f7123a11fbae33866eba4d7ac259bf6b66b32681035a9",
+              "features": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a",
+              "orthogroupState": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a",
+              "cliInvocation": "cd961c45b149a9a4ff76f25deb96c9369e88bc0322d668535c9c6df69500f54b",
+              "renderRequest": "cc326c351cd302304ad8ba922fb18fe933af136d816cc704169f8a7e38317dd5",
+              "resources": "dc83883c064512b2ff3fc48fff51b84b3d82e7e0eb3e5e4ae2999d2ea5c43c5e",
+              "webFiles": "d6c2bcf75638ba0d97f39e4e41a0b9308fe72fb28e92376aa7233744bfcc4653",
+              "losatCache": "df2eb320d47d86749998dfebabf92f2eea8b74a096b76b22f69c863c7e07c4d5",
+              "losatDerivedCache": "d801aa1fb7ddcc330a5e3173372ea6af4a3d08ec58074478e85aa5603e926658",
+              "proteinIdentityManifest": "7971621217011a486d90f526ddf0e75f09ca4e67a4e60107f69c203ea71a18e0",
+              "config": "3a6163809d2c4aa8e82d3c7960b9e676f96f34b7e38c92c75870e3cbec74565e",
+              "runMetadata": "adc6b075522aae7d63150a56fe94d9b0f766ad68ee987b45a2afaaba6acefaba"
+            },
+            "wholeHash": "50bd821d25dc81912d9d5beaa52ecf541a511d53a740b91739d6043147f5650b"
+          },
+          "saved": {
+            "sha256": "8be73b7293f7049248be6066d52df6c7bbd72327dbd34e1cf316c2eb08cea0f1",
+            "bytes": 23738966,
+            "version": 44,
+            "requestSchema": 8,
+            "records": 4,
+            "features": 18782,
+            "cacheEntries": 12,
+            "hashes": {
+              "format": "a565d6c86d89f5062657493c80eed1b314a7d52b81c7504622b0ee9084307f4f",
+              "version": "71ee45a3c0db9a9865f7313dd3372cf60dca6479d46261f3542eb9346e4a04d6",
+              "createdAt": "5469c85b1fcc556c8faecc6d646ef268e4a399a7796fbba3dfc206f03544c11d",
+              "title": "7ebd154623dc1eac803167beddb7bae56174627d1c61f085a8d15040524c8190",
+              "config": "87e14e6c88d78064af0bcb6cbf5bd81d89c15f47e039307019803502cb727892",
+              "ui": "8bdd3575c36df8ee41a6d1e682cf509c15219ad30b068b734b4ccf608746faab",
+              "renderRequest": "cc326c351cd302304ad8ba922fb18fe933af136d816cc704169f8a7e38317dd5",
+              "resources": "dc83883c064512b2ff3fc48fff51b84b3d82e7e0eb3e5e4ae2999d2ea5c43c5e",
+              "webFiles": "8b7b6af2ed79d317af9b6a1fbcd6fca8aac7d8cbcaf34b21d057258f2d7c619d",
+              "results": "2931f0e13a7b44c7076ad10fcff01b3499718ac2673a70b344a0ae7e237aaea3",
+              "runMetadata": "45f5dfe4be26e8f0aaece5b1fb03ccd7309545891ecec8e4db1a4addf904aaac",
+              "features": "6b4e3687049ef90433ac03d66c81efa02f47cc29e96dde51bd834cac7d6419e0",
+              "editorState": "b4f1919ef1f6ba706bf535a642218c48c9b73c17c96f1b706424d35abed4b38f",
+              "orthogroupState": "2ef835f9b003a3b9c0300376225b8799ca37512ee954c8e425e3e067e893fc68",
+              "losatCache": "8c4baf3ebd1658085174b3726535add360a871d806094c26cb63e8e9373b4f62",
+              "losatDerivedCache": "d801aa1fb7ddcc330a5e3173372ea6af4a3d08ec58074478e85aa5603e926658",
+              "proteinIdentityManifest": "7971621217011a486d90f526ddf0e75f09ca4e67a4e60107f69c203ea71a18e0"
+            },
+            "wholeHash": "b8a192bcc332f6300203e85d6ad88b83c87fd475622b2cd7b3b1bc3e52f174a7"
+          },
+          "sectionEquality": {
+            "renderRequest": true,
+            "resources": true,
+            "webFiles": false,
+            "editorState": false,
+            "losatCache": false,
+            "losatDerivedCache": true,
+            "proteinIdentityManifest": true
+          },
+          "pageErrors": [],
+          "dialogs": [
+            {
+              "type": "alert",
+              "message": "Session loaded successfully!"
+            }
+          ],
+          "externalRequests": [],
+          "load": {
+            "wallMs": 18196.90000000596,
+            "heapBefore": 22223401,
+            "heapAfter": 853803972,
+            "events": [
+              {
+                "name": "session-import-pending-published",
+                "timestamp": 968.5
+              },
+              {
+                "name": "session-import-paint-opportunity-completed",
+                "timestamp": 996.4000000059605
+              },
+              {
+                "name": "sessionSelection",
+                "timestamp": 996.9000000059605
+              },
+              {
+                "name": "session-import-worker-start",
+                "timestamp": 998.4000000059605,
+                "operationId": 1,
+                "fileBytes": 23739973
+              },
+              {
+                "name": "session-import-worker-terminated",
+                "timestamp": 1592.5,
+                "operationId": 1
+              },
+              {
+                "name": "session-import-worker-settled",
+                "timestamp": 1592.5,
+                "operationId": 1,
+                "status": "ok"
+              },
+              {
+                "name": "session-import-codec-completed",
+                "timestamp": 1592.5,
+                "readMs": 212.19999998807907,
+                "parseMs": 128.80000001192093,
+                "codecProbe": {
+                  "decodeCpuMs": 46.59999990463257,
+                  "decodedBytes": 95989532,
+                  "streams": [
+                    {
+                      "kind": "file-read",
+                      "start": 8.199999988079071,
+                      "bytes": 23739973,
+                      "chunks": 15,
+                      "wallMs": 210.7000000178814
+                    },
+                    {
+                      "kind": "decompress",
+                      "start": 8.400000005960464,
+                      "bytes": 95989532,
+                      "chunks": 1471,
+                      "wallMs": 210.59999999403954
+                    }
+                  ]
+                }
+              },
+              {
+                "name": "current-session-preflight-start",
+                "timestamp": 1655.4000000059605
+              },
+              {
+                "name": "session-authority-validation-start",
+                "timestamp": 1655.7999999821186
+              },
+              {
+                "name": "session-authority-validation-end",
+                "timestamp": 1722.5
+              },
+              {
+                "name": "feature-catalog-validation-start",
+                "timestamp": 1722.5
+              },
+              {
+                "name": "catalog.admission-started",
+                "timestamp": 1722.7999999821186,
+                "resultCount": 1
+              },
+              {
+                "name": "catalog.admission-completed",
+                "timestamp": 3602,
+                "resultCount": 1,
+                "itemCount": 1,
+                "recordCount": 4,
+                "renderedFeatureCount": 9375,
+                "biologicalFeatureCount": 18782
+              },
+              {
+                "name": "feature-catalog-validation-end",
+                "timestamp": 3602
+              },
+              {
+                "name": "editor-state-normalization-start",
+                "timestamp": 3602
+              },
+              {
+                "name": "editor-state-normalization-end",
+                "timestamp": 3602.199999988079
+              },
+              {
+                "name": "resource-table-adoption-start",
+                "timestamp": 3602.199999988079
+              },
+              {
+                "name": "resource-table-adoption-end",
+                "timestamp": 3602.2999999821186
+              },
+              {
+                "name": "losat-artifact-validation-start",
+                "timestamp": 3602.2999999821186
+              },
+              {
+                "name": "losat-artifact-validation-end",
+                "timestamp": 3846.699999988079
+              },
+              {
+                "name": "canonical-request-projection-start",
+                "timestamp": 3847.2999999821186
+              },
+              {
+                "name": "canonical-request-projection-end",
+                "timestamp": 3850.699999988079
+              },
+              {
+                "name": "current-draft-validation-start",
+                "timestamp": 3850.7999999821186
+              },
+              {
+                "name": "current-draft-validation-end",
+                "timestamp": 3851.699999988079
+              },
+              {
+                "name": "artifact-projection-start",
+                "timestamp": 3851.699999988079
+              },
+              {
+                "name": "artifact-projection-end",
+                "timestamp": 3851.7999999821186
+              },
+              {
+                "name": "current-session-preflight-end",
+                "timestamp": 3851.7999999821186
+              },
+              {
+                "name": "svg-admission-start",
+                "timestamp": 3870.5
+              },
+              {
+                "name": "svg.admission-started",
+                "timestamp": 3871.0999999940395,
+                "phase": "current-session",
+                "resultCount": 1,
+                "mutationKind": "EMPTY"
+              },
+              {
+                "name": "result-svg-characters",
+                "timestamp": 3871.4000000059605,
+                "phase": "current-session",
+                "resultIndex": 0,
+                "value": 5128555
+              },
+              {
+                "name": "sanitize-call",
+                "timestamp": 3871.5,
+                "durationMs": 332
+              },
+              {
+                "name": "svg.admission-completed",
+                "timestamp": 4203.699999988079,
+                "phase": "current-session",
+                "resultCount": 1,
+                "mutationKind": "EMPTY"
+              },
+              {
+                "name": "artifact.candidate-completed",
+                "timestamp": 4203.699999988079,
+                "phase": "current-session",
+                "resultCount": 1,
+                "catalogFootprint": {
+                  "resultCount": 1,
+                  "itemCount": 1,
+                  "recordCount": 4,
+                  "renderedFeatureCount": 9375,
+                  "biologicalFeatureCount": 18782,
+                  "orthogroupRecordCount": 3369,
+                  "comparisonMatchCount": 116,
+                  "annotationCount": 0,
+                  "sequenceSourceCount": 4,
+                  "sequenceCharacters": 10312407
+                }
+              },
+              {
+                "name": "svg-admission-end",
+                "timestamp": 4203.799999982119
+              },
+              {
+                "name": "session-candidate-prepared",
+                "timestamp": 4203.799999982119
+              },
+              {
+                "name": "session-candidate-adopted",
+                "timestamp": 4963.9000000059605
+              },
+              {
+                "name": "preview-mount-start",
+                "timestamp": 4963.9000000059605
+              },
+              {
+                "name": "preview.readiness-expectation-registered",
+                "timestamp": 4964.699999988079,
+                "phase": "session-load",
+                "resultIndex": 0,
+                "bindSequence": 1
+              },
+              {
+                "name": "firstCommittedPreview",
+                "timestamp": 4964.699999988079,
+                "resultCount": 1
+              },
+              {
+                "name": "preview-mount-end",
+                "timestamp": 16384.69999998808
+              },
+              {
+                "name": "preview.mount-observed",
+                "timestamp": 16385.09999999404,
+                "phase": "session-load",
+                "resultIndex": 0,
+                "rootGeneration": 1,
+                "bindSequence": 1
+              },
+              {
+                "name": "preview.bind-started",
+                "timestamp": 16385.29999998212,
+                "phase": "session-load",
+                "resultIndex": 0,
+                "rootGeneration": 1,
+                "bindSequence": 1
+              },
+              {
+                "name": "preview.bind-completed",
+                "timestamp": 16622.29999998212,
+                "phase": "session-load",
+                "resultIndex": 0,
+                "rootGeneration": 1,
+                "bindSequence": 1
+              },
+              {
+                "name": "preview.ready-receipt-emitted",
+                "timestamp": 16622.29999998212,
+                "phase": "session-load",
+                "resultIndex": 0,
+                "rootGeneration": 1,
+                "bindSequence": 1
+              },
+              {
+                "name": "preview.ready-receipt-accepted",
+                "timestamp": 16622.40000000596,
+                "phase": "session-load",
+                "resultIndex": 0,
+                "rootGeneration": 1,
+                "bindSequence": 1
+              },
+              {
+                "name": "interactiveReady",
+                "timestamp": 16623.90000000596,
+                "status": "success",
+                "degradedRecovery": false
+              },
+              {
+                "name": "history-baseline-start",
+                "timestamp": 16623.90000000596
+              },
+              {
+                "name": "history-baseline-end",
+                "timestamp": 16626
+              },
+              {
+                "name": "session-import-pending-cleared",
+                "timestamp": 16722.40000000596
+              }
+            ],
+            "metrics": {
+              "featureCatalogAdmissionCount": 1,
+              "featureCatalogSecondaryTraversalCount": 0,
+              "currentSessionPreflightProteinManifestValidationCount": 1,
+              "currentSessionPreflightProteinRawTextValidationCount": 12,
+              "currentWriterActiveConfigRestoreCount": 1,
+              "activeConfigCanonicalOverwriteCount": 0,
+              "currentLegacyNormalizationCount": 0,
+              "legacyOverrideMigrationCount": 0,
+              "manualRuleFeatureMatchCount": 0,
+              "svgSanitizationCount": 1,
+              "generatedArtifactReadinessExpectationCount": 1,
+              "previewMaterializationObservedCount": 1,
+              "previewMountAdoptionCount": 1,
+              "previewBinderInvocationCount": 1,
+              "previewPollingIterationCount": 0,
+              "legendDomFullScanCount": 1,
+              "perFeatureListenerRegistrationCount": 0,
+              "comparisonDomFullScanCount": 1,
+              "previewReadyReceiptEmittedCount": 1,
+              "previewReadyReceiptAcceptedCount": 1,
+              "resourceTextReadCount": 4,
+              "resourceByteReadCount": 4,
+              "base64DecodeCount": 4,
+              "decodedByteCount": 26506447
+            },
+            "workers": [
+              "http://127.0.0.1:35559/gbdraw/web/js/workers/session-import-worker.js"
+            ],
+            "workerTrace": [
+              {
+                "url": "http://127.0.0.1:35559/gbdraw/web/js/workers/session-import-worker.js",
+                "stack": "Error\n    at new window.Worker (eval at evaluate (:303:30), <anonymous>:5:79)\n    at http://127.0.0.1:35559/gbdraw/web/js/services/session-import-client.js:67:14\n    at new Promise (<anonymous>)\n    at importSessionFile (http://127.0.0.1:35559/gbdraw/web/js/services/session-import-client.js:10:61)\n    at importSessionDocument (http://127.0.0.1:35559/gbdraw/web/js/services/config.js:4174:29)\n    at importSession (http://127.0.0.1:35559/gbdraw/web/js/services/config.js:4767:26)",
+                "messages": [
+                  {
+                    "type": null,
+                    "operation": null,
+                    "operationId": 1,
+                    "fileBytes": 23739973,
+                    "stack": "Error\n    at window.Worker.postMessage (eval at evaluate (:303:30), <anonymous>:9:49)\n    at http://127.0.0.1:35559/gbdraw/web/js/services/session-import-client.js:73:12\n    at new Promise (<anonymous>)\n    at importSessionFile (http://127.0.0.1:35559/gbdraw/web/js/services/session-import-client.js:10:61)\n    at importSessionDocument (http://127.0.0.1:35559/gbdraw/web/js/services/config.js:4174:29)\n    at importSession (http://127.0.0.1:35559/gbdraw/web/js/services/config.js:4767:26)"
+                  }
+                ],
+                "listeners": 0,
+                "terminations": 1
+              }
+            ],
+            "heartbeat": {
+              "intervalMs": 100,
+              "count": 8,
+              "p95Ms": 17534.100000023842,
+              "maxMs": 17534.100000023842
+            },
+            "longTasks": {
+              "count": 1,
+              "totalMs": 17464,
+              "maxMs": 17464,
+              "entries": [
+                {
+                  "start": 1463.699999988079,
+                  "duration": 17464
+                }
+              ]
+            },
+            "mainSampledHeapPeakBytes": 881619172,
+            "receiverTaskMaxMs": null,
+            "stagesMs": {
+              "session-authority-validation": 66.7000000178814,
+              "feature-catalog-validation": 1879.5,
+              "editor-state-normalization": 0.19999998807907104,
+              "resource-table-adoption": 0.09999999403953552,
+              "losat-artifact-validation": 244.40000000596046,
+              "canonical-request-projection": 3.4000000059604645,
+              "current-draft-validation": 0.9000000059604645,
+              "artifact-projection": 0.09999999403953552,
+              "current-session-preflight": 2196.399999976158,
+              "svg-admission": 333.2999999821186,
+              "preview-mount": 11420.799999982119,
+              "history-baseline": 2.0999999940395355,
+              "restoreBeforeSvgAdmission": 18.700000017881393
+            },
+            "codec": {
+              "decodeCpuMs": 20.200000017881393,
+              "encodeCpuMs": 0,
+              "encodedBytes": 0,
+              "decodedBytes": 26506447,
+              "streams": []
+            },
+            "ready": {
+              "resultCount": 1,
+              "records": 4,
+              "catalog": 1,
+              "requestRecords": 4,
+              "cacheEntries": 12,
+              "mounted": true
+            },
+            "transferredBufferBytes": 0,
+            "nativeStructuredCloneWireBytes": null,
+            "nativeStructuredCloneCopyBytes": null,
+            "memory": {
+              "sampleCount": 15,
+              "rssPeakBytes": 1774452736,
+              "rssErrors": [],
+              "rssStartBytes": 621113344,
+              "v8UsedHeapPeaksBytes": {
+                "page": 777844716,
+                "worker": 188638456
+              },
+              "errors": [
+                "WebSocketTimeoutException: Connection timed out"
+              ],
+              "targets": {
+                "E792E08089FCCE57E4EC5F404CDCF8F4": {
+                  "type": "page",
+                  "url": "http://127.0.0.1:35559/gbdraw/web/index.html"
+                },
+                "1A6A139BB34844CA131C90704D69475B": {
+                  "type": "worker",
+                  "url": "http://127.0.0.1:35559/gbdraw/web/js/workers/session-import-worker.js"
+                }
+              },
+              "workerPeaksByUrl": {
+                "session-import-worker.js": {
+                  "usedSize": 188638456,
+                  "backingStorageSize": 159577669
+                }
+              }
+            },
+            "responsivenessAcceptance": false,
+            "mainObservedHeapDeltaBytes": 859395771
+          },
+          "save": {
+            "wallMs": 5542.4000000059605,
+            "heapBefore": 854080587,
+            "heapAfter": 1063289627,
+            "events": [
+              {
+                "name": "session-save-pending-published",
+                "timestamp": 19321.19999998808
+              },
+              {
+                "name": "session-save-paint-opportunity-completed",
+                "timestamp": 19540.90000000596
+              },
+              {
+                "name": "session-save-catalog-preparation-start",
+                "timestamp": 19540.90000000596
+              },
+              {
+                "name": "session-save-catalog-preparation-end",
+                "timestamp": 19540.90000000596,
+                "reusedCommittedSession": true
+              },
+              {
+                "name": "session-save-projection-start",
+                "timestamp": 19541.19999998808
+              },
+              {
+                "name": "session-save-projection-end",
+                "timestamp": 19616.09999999404
+              },
+              {
+                "name": "session-save-compression-start",
+                "timestamp": 19616.09999999404
+              },
+              {
+                "name": "session-save-compression-end",
+                "timestamp": 23449.69999998808,
+                "compressedSize": 23738966
+              },
+              {
+                "name": "session-save-download-handoff-completed",
+                "timestamp": 23450.79999998212,
+                "compressedSize": 23738966
+              },
+              {
+                "name": "session-save-pending-cleared",
+                "timestamp": 23471.90000000596
+              }
+            ],
+            "metrics": {
+              "sessionSaveProteinRawTextValidationReuseCount": 12
+            },
+            "workers": [
+              "http://127.0.0.1:35559/gbdraw/web/js/workers/session-import-worker.js"
+            ],
+            "workerTrace": [
+              {
+                "url": "http://127.0.0.1:35559/gbdraw/web/js/workers/session-import-worker.js",
+                "stack": "Error\n    at new window.Worker (eval at evaluate (:303:30), <anonymous>:5:79)\n    at http://127.0.0.1:35559/gbdraw/web/js/services/session-import-client.js:67:14\n    at new Promise (<anonymous>)\n    at importSessionFile (http://127.0.0.1:35559/gbdraw/web/js/services/session-import-client.js:10:61)\n    at importSessionDocument (http://127.0.0.1:35559/gbdraw/web/js/services/config.js:4174:29)\n    at importSession (http://127.0.0.1:35559/gbdraw/web/js/services/config.js:4767:26)",
+                "messages": [
+                  {
+                    "type": null,
+                    "operation": null,
+                    "operationId": 1,
+                    "fileBytes": 23739973,
+                    "stack": "Error\n    at window.Worker.postMessage (eval at evaluate (:303:30), <anonymous>:9:49)\n    at http://127.0.0.1:35559/gbdraw/web/js/services/session-import-client.js:73:12\n    at new Promise (<anonymous>)\n    at importSessionFile (http://127.0.0.1:35559/gbdraw/web/js/services/session-import-client.js:10:61)\n    at importSessionDocument (http://127.0.0.1:35559/gbdraw/web/js/services/config.js:4174:29)\n    at importSession (http://127.0.0.1:35559/gbdraw/web/js/services/config.js:4767:26)"
+                  }
+                ],
+                "listeners": 0,
+                "terminations": 1
+              }
+            ],
+            "heartbeat": {
+              "intervalMs": 100,
+              "count": 37,
+              "p95Ms": 209.5,
+              "maxMs": 223.7999999821186
+            },
+            "longTasks": {
+              "count": 2,
+              "totalMs": 291,
+              "maxMs": 214,
+              "entries": [
+                {
+                  "start": 19320.5,
+                  "duration": 214
+                },
+                {
+                  "start": 19540.79999998212,
+                  "duration": 77
+                }
+              ]
+            },
+            "mainSampledHeapPeakBytes": 1063289627,
+            "receiverTaskMaxMs": null,
+            "stagesMs": {
+              "session-save-catalog-preparation": 0.0,
+              "session-save-projection": 74.90000000596046,
+              "session-save-compression": 3833.5999999940395
+            },
+            "codec": {
+              "decodeCpuMs": 0,
+              "encodeCpuMs": 181.99999991059303,
+              "encodedBytes": 96042006,
+              "decodedBytes": 0,
+              "streams": []
+            },
+            "outcome": {
+              "status": "saved",
+              "compressedBytes": 23738966
+            },
+            "memory": {
+              "sampleCount": 33,
+              "rssPeakBytes": 1989529600,
+              "rssErrors": [],
+              "rssStartBytes": 1781776384,
+              "v8UsedHeapPeaksBytes": {
+                "page": 839566072
+              },
+              "errors": [],
+              "targets": {
+                "E792E08089FCCE57E4EC5F404CDCF8F4": {
+                  "type": "page",
+                  "url": "http://127.0.0.1:35559/gbdraw/web/index.html"
+                }
+              },
+              "workerPeaksByUrl": null
+            },
+            "responsivenessAcceptance": true,
+            "mainObservedHeapDeltaBytes": 209209040
+          },
+          "previewPythonWorkerCount": 0,
+          "previewWorkerFreeAcceptance": true
+        },
+        {
+          "source": {
+            "sha256": "a3cfba6c8d883a0050529c89b1fd0849348254cdfa46dbf938a69cebef5379aa",
+            "bytes": 23739973,
+            "version": 44,
+            "requestSchema": 8,
+            "records": 4,
+            "features": 18782,
+            "cacheEntries": 12,
+            "hashes": {
+              "format": "a565d6c86d89f5062657493c80eed1b314a7d52b81c7504622b0ee9084307f4f",
+              "version": "71ee45a3c0db9a9865f7313dd3372cf60dca6479d46261f3542eb9346e4a04d6",
+              "createdAt": "6858d08977dc6786f29612b38948216f5b53bcffed49376230ab9f88aee928a1",
+              "title": "63b97e56589c5dddca834bbb236f8c1c3d6248f7aa103168dd058354ea026694",
+              "ui": "e8c5aea1f0ebcbaa58a50e79b261e2d7940b78b685fe0d57b9c33e6cc13f312d",
+              "results": "2fb2b6de292f58fec96ed320e358a45df78ed05f5df7fe448fd93370d0251d27",
+              "editorState": "8e51664e18040185ea1f7123a11fbae33866eba4d7ac259bf6b66b32681035a9",
+              "features": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a",
+              "orthogroupState": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a",
+              "cliInvocation": "cd961c45b149a9a4ff76f25deb96c9369e88bc0322d668535c9c6df69500f54b",
+              "renderRequest": "cc326c351cd302304ad8ba922fb18fe933af136d816cc704169f8a7e38317dd5",
+              "resources": "dc83883c064512b2ff3fc48fff51b84b3d82e7e0eb3e5e4ae2999d2ea5c43c5e",
+              "webFiles": "d6c2bcf75638ba0d97f39e4e41a0b9308fe72fb28e92376aa7233744bfcc4653",
+              "losatCache": "df2eb320d47d86749998dfebabf92f2eea8b74a096b76b22f69c863c7e07c4d5",
+              "losatDerivedCache": "d801aa1fb7ddcc330a5e3173372ea6af4a3d08ec58074478e85aa5603e926658",
+              "proteinIdentityManifest": "7971621217011a486d90f526ddf0e75f09ca4e67a4e60107f69c203ea71a18e0",
+              "config": "3a6163809d2c4aa8e82d3c7960b9e676f96f34b7e38c92c75870e3cbec74565e",
+              "runMetadata": "adc6b075522aae7d63150a56fe94d9b0f766ad68ee987b45a2afaaba6acefaba"
+            },
+            "wholeHash": "50bd821d25dc81912d9d5beaa52ecf541a511d53a740b91739d6043147f5650b"
+          },
+          "saved": {
+            "sha256": "f94194cb09a3cb0d3464955d77418e1e6f3bcc2b499e7d062dc23d8c9937ea55",
+            "bytes": 23738966,
+            "version": 44,
+            "requestSchema": 8,
+            "records": 4,
+            "features": 18782,
+            "cacheEntries": 12,
+            "hashes": {
+              "format": "a565d6c86d89f5062657493c80eed1b314a7d52b81c7504622b0ee9084307f4f",
+              "version": "71ee45a3c0db9a9865f7313dd3372cf60dca6479d46261f3542eb9346e4a04d6",
+              "createdAt": "ec5f76698e95dafbffc0af4c749ee798c4e4ee111be1bc6fb421c442e7b6c963",
+              "title": "7ebd154623dc1eac803167beddb7bae56174627d1c61f085a8d15040524c8190",
+              "config": "87e14e6c88d78064af0bcb6cbf5bd81d89c15f47e039307019803502cb727892",
+              "ui": "8bdd3575c36df8ee41a6d1e682cf509c15219ad30b068b734b4ccf608746faab",
+              "renderRequest": "cc326c351cd302304ad8ba922fb18fe933af136d816cc704169f8a7e38317dd5",
+              "resources": "dc83883c064512b2ff3fc48fff51b84b3d82e7e0eb3e5e4ae2999d2ea5c43c5e",
+              "webFiles": "8b7b6af2ed79d317af9b6a1fbcd6fca8aac7d8cbcaf34b21d057258f2d7c619d",
+              "results": "2931f0e13a7b44c7076ad10fcff01b3499718ac2673a70b344a0ae7e237aaea3",
+              "runMetadata": "45f5dfe4be26e8f0aaece5b1fb03ccd7309545891ecec8e4db1a4addf904aaac",
+              "features": "6b4e3687049ef90433ac03d66c81efa02f47cc29e96dde51bd834cac7d6419e0",
+              "editorState": "b4f1919ef1f6ba706bf535a642218c48c9b73c17c96f1b706424d35abed4b38f",
+              "orthogroupState": "2ef835f9b003a3b9c0300376225b8799ca37512ee954c8e425e3e067e893fc68",
+              "losatCache": "8c4baf3ebd1658085174b3726535add360a871d806094c26cb63e8e9373b4f62",
+              "losatDerivedCache": "d801aa1fb7ddcc330a5e3173372ea6af4a3d08ec58074478e85aa5603e926658",
+              "proteinIdentityManifest": "7971621217011a486d90f526ddf0e75f09ca4e67a4e60107f69c203ea71a18e0"
+            },
+            "wholeHash": "c979f8e2f04a6b2d2736efae6e208300a078da0e4412179b16229cfaddabb832"
+          },
+          "sectionEquality": {
+            "renderRequest": true,
+            "resources": true,
+            "webFiles": false,
+            "editorState": false,
+            "losatCache": false,
+            "losatDerivedCache": true,
+            "proteinIdentityManifest": true
+          },
+          "pageErrors": [],
+          "dialogs": [
+            {
+              "type": "alert",
+              "message": "Session loaded successfully!"
+            }
+          ],
+          "externalRequests": [],
+          "load": {
+            "wallMs": 17197.5,
+            "heapBefore": 22201161,
+            "heapAfter": 836927976,
+            "events": [
+              {
+                "name": "session-import-pending-published",
+                "timestamp": 899.7999999821186
+              },
+              {
+                "name": "session-import-paint-opportunity-completed",
+                "timestamp": 926.5999999940395
+              },
+              {
+                "name": "sessionSelection",
+                "timestamp": 927.1999999880791
+              },
+              {
+                "name": "session-import-worker-start",
+                "timestamp": 928.5999999940395,
+                "operationId": 1,
+                "fileBytes": 23739973
+              },
+              {
+                "name": "session-import-worker-terminated",
+                "timestamp": 1482.0999999940395,
+                "operationId": 1
+              },
+              {
+                "name": "session-import-worker-settled",
+                "timestamp": 1482.0999999940395,
+                "operationId": 1,
+                "status": "ok"
+              },
+              {
+                "name": "session-import-codec-completed",
+                "timestamp": 1482.0999999940395,
+                "readMs": 207.80000001192093,
+                "parseMs": 111,
+                "codecProbe": {
+                  "decodeCpuMs": 45.49999988079071,
+                  "decodedBytes": 95989532,
+                  "streams": [
+                    {
+                      "kind": "file-read",
+                      "start": 8.599999994039536,
+                      "bytes": 23739973,
+                      "chunks": 16,
+                      "wallMs": 206.69999998807907
+                    },
+                    {
+                      "kind": "decompress",
+                      "start": 8.799999982118607,
+                      "bytes": 95989532,
+                      "chunks": 1471,
+                      "wallMs": 206.60000002384186
+                    }
+                  ]
+                }
+              },
+              {
+                "name": "current-session-preflight-start",
+                "timestamp": 1544.199999988079
+              },
+              {
+                "name": "session-authority-validation-start",
+                "timestamp": 1544.5
+              },
+              {
+                "name": "session-authority-validation-end",
+                "timestamp": 1601.5999999940395
+              },
+              {
+                "name": "feature-catalog-validation-start",
+                "timestamp": 1601.5999999940395
+              },
+              {
+                "name": "catalog.admission-started",
+                "timestamp": 1602,
+                "resultCount": 1
+              },
+              {
+                "name": "catalog.admission-completed",
+                "timestamp": 3403.0999999940395,
+                "resultCount": 1,
+                "itemCount": 1,
+                "recordCount": 4,
+                "renderedFeatureCount": 9375,
+                "biologicalFeatureCount": 18782
+              },
+              {
+                "name": "feature-catalog-validation-end",
+                "timestamp": 3403.0999999940395
+              },
+              {
+                "name": "editor-state-normalization-start",
+                "timestamp": 3403.0999999940395
+              },
+              {
+                "name": "editor-state-normalization-end",
+                "timestamp": 3403.199999988079
+              },
+              {
+                "name": "resource-table-adoption-start",
+                "timestamp": 3403.199999988079
+              },
+              {
+                "name": "resource-table-adoption-end",
+                "timestamp": 3403.4000000059605
+              },
+              {
+                "name": "losat-artifact-validation-start",
+                "timestamp": 3403.4000000059605
+              },
+              {
+                "name": "losat-artifact-validation-end",
+                "timestamp": 3634.2999999821186
+              },
+              {
+                "name": "canonical-request-projection-start",
+                "timestamp": 3634.9000000059605
+              },
+              {
+                "name": "canonical-request-projection-end",
+                "timestamp": 3638.4000000059605
+              },
+              {
+                "name": "current-draft-validation-start",
+                "timestamp": 3638.5
+              },
+              {
+                "name": "current-draft-validation-end",
+                "timestamp": 3639.2999999821186
+              },
+              {
+                "name": "artifact-projection-start",
+                "timestamp": 3639.2999999821186
+              },
+              {
+                "name": "artifact-projection-end",
+                "timestamp": 3639.4000000059605
+              },
+              {
+                "name": "current-session-preflight-end",
+                "timestamp": 3639.4000000059605
+              },
+              {
+                "name": "svg-admission-start",
+                "timestamp": 3655.199999988079
+              },
+              {
+                "name": "svg.admission-started",
+                "timestamp": 3655.5,
+                "phase": "current-session",
+                "resultCount": 1,
+                "mutationKind": "EMPTY"
+              },
+              {
+                "name": "result-svg-characters",
+                "timestamp": 3655.5,
+                "phase": "current-session",
+                "resultIndex": 0,
+                "value": 5128555
+              },
+              {
+                "name": "sanitize-call",
+                "timestamp": 3655.5,
+                "durationMs": 316.19999998807907
+              },
+              {
+                "name": "svg.admission-completed",
+                "timestamp": 3972,
+                "phase": "current-session",
+                "resultCount": 1,
+                "mutationKind": "EMPTY"
+              },
+              {
+                "name": "artifact.candidate-completed",
+                "timestamp": 3972,
+                "phase": "current-session",
+                "resultCount": 1,
+                "catalogFootprint": {
+                  "resultCount": 1,
+                  "itemCount": 1,
+                  "recordCount": 4,
+                  "renderedFeatureCount": 9375,
+                  "biologicalFeatureCount": 18782,
+                  "orthogroupRecordCount": 3369,
+                  "comparisonMatchCount": 116,
+                  "annotationCount": 0,
+                  "sequenceSourceCount": 4,
+                  "sequenceCharacters": 10312407
+                }
+              },
+              {
+                "name": "svg-admission-end",
+                "timestamp": 3972
+              },
+              {
+                "name": "session-candidate-prepared",
+                "timestamp": 3972
+              },
+              {
+                "name": "session-candidate-adopted",
+                "timestamp": 4571.5999999940395
+              },
+              {
+                "name": "preview-mount-start",
+                "timestamp": 4571.5999999940395
+              },
+              {
+                "name": "preview.readiness-expectation-registered",
+                "timestamp": 4572,
+                "phase": "session-load",
+                "resultIndex": 0,
+                "bindSequence": 1
+              },
+              {
+                "name": "firstCommittedPreview",
+                "timestamp": 4572,
+                "resultCount": 1
+              },
+              {
+                "name": "preview-mount-end",
+                "timestamp": 15526.299999982119
+              },
+              {
+                "name": "preview.mount-observed",
+                "timestamp": 15526.59999999404,
+                "phase": "session-load",
+                "resultIndex": 0,
+                "rootGeneration": 1,
+                "bindSequence": 1
+              },
+              {
+                "name": "preview.bind-started",
+                "timestamp": 15526.799999982119,
+                "phase": "session-load",
+                "resultIndex": 0,
+                "rootGeneration": 1,
+                "bindSequence": 1
+              },
+              {
+                "name": "preview.bind-completed",
+                "timestamp": 15749,
+                "phase": "session-load",
+                "resultIndex": 0,
+                "rootGeneration": 1,
+                "bindSequence": 1
+              },
+              {
+                "name": "preview.ready-receipt-emitted",
+                "timestamp": 15749,
+                "phase": "session-load",
+                "resultIndex": 0,
+                "rootGeneration": 1,
+                "bindSequence": 1
+              },
+              {
+                "name": "preview.ready-receipt-accepted",
+                "timestamp": 15749.199999988079,
+                "phase": "session-load",
+                "resultIndex": 0,
+                "rootGeneration": 1,
+                "bindSequence": 1
+              },
+              {
+                "name": "interactiveReady",
+                "timestamp": 15750.299999982119,
+                "status": "success",
+                "degradedRecovery": false
+              },
+              {
+                "name": "history-baseline-start",
+                "timestamp": 15750.40000000596
+              },
+              {
+                "name": "history-baseline-end",
+                "timestamp": 15752.09999999404
+              },
+              {
+                "name": "session-import-pending-cleared",
+                "timestamp": 15833.40000000596
+              }
+            ],
+            "metrics": {
+              "featureCatalogAdmissionCount": 1,
+              "featureCatalogSecondaryTraversalCount": 0,
+              "currentSessionPreflightProteinManifestValidationCount": 1,
+              "currentSessionPreflightProteinRawTextValidationCount": 12,
+              "currentWriterActiveConfigRestoreCount": 1,
+              "activeConfigCanonicalOverwriteCount": 0,
+              "currentLegacyNormalizationCount": 0,
+              "legacyOverrideMigrationCount": 0,
+              "manualRuleFeatureMatchCount": 0,
+              "svgSanitizationCount": 1,
+              "generatedArtifactReadinessExpectationCount": 1,
+              "previewMaterializationObservedCount": 1,
+              "previewMountAdoptionCount": 1,
+              "previewBinderInvocationCount": 1,
+              "previewPollingIterationCount": 0,
+              "legendDomFullScanCount": 1,
+              "perFeatureListenerRegistrationCount": 0,
+              "comparisonDomFullScanCount": 1,
+              "previewReadyReceiptEmittedCount": 1,
+              "previewReadyReceiptAcceptedCount": 1,
+              "resourceTextReadCount": 4,
+              "resourceByteReadCount": 4,
+              "base64DecodeCount": 4,
+              "decodedByteCount": 26506447
+            },
+            "workers": [
+              "http://127.0.0.1:35559/gbdraw/web/js/workers/session-import-worker.js"
+            ],
+            "workerTrace": [
+              {
+                "url": "http://127.0.0.1:35559/gbdraw/web/js/workers/session-import-worker.js",
+                "stack": "Error\n    at new window.Worker (eval at evaluate (:303:30), <anonymous>:5:79)\n    at http://127.0.0.1:35559/gbdraw/web/js/services/session-import-client.js:67:14\n    at new Promise (<anonymous>)\n    at importSessionFile (http://127.0.0.1:35559/gbdraw/web/js/services/session-import-client.js:10:61)\n    at importSessionDocument (http://127.0.0.1:35559/gbdraw/web/js/services/config.js:4174:29)\n    at importSession (http://127.0.0.1:35559/gbdraw/web/js/services/config.js:4767:26)",
+                "messages": [
+                  {
+                    "type": null,
+                    "operation": null,
+                    "operationId": 1,
+                    "fileBytes": 23739973,
+                    "stack": "Error\n    at window.Worker.postMessage (eval at evaluate (:303:30), <anonymous>:9:49)\n    at http://127.0.0.1:35559/gbdraw/web/js/services/session-import-client.js:73:12\n    at new Promise (<anonymous>)\n    at importSessionFile (http://127.0.0.1:35559/gbdraw/web/js/services/session-import-client.js:10:61)\n    at importSessionDocument (http://127.0.0.1:35559/gbdraw/web/js/services/config.js:4174:29)\n    at importSession (http://127.0.0.1:35559/gbdraw/web/js/services/config.js:4767:26)"
+                  }
+                ],
+                "listeners": 0,
+                "terminations": 1
+              }
+            ],
+            "heartbeat": {
+              "intervalMs": 100,
+              "count": 8,
+              "p95Ms": 16577.70000001788,
+              "maxMs": 16577.70000001788
+            },
+            "longTasks": {
+              "count": 1,
+              "totalMs": 16513,
+              "maxMs": 16513,
+              "entries": [
+                {
+                  "start": 1352.5999999940395,
+                  "duration": 16513
+                }
+              ]
+            },
+            "mainSampledHeapPeakBytes": 864695732,
+            "receiverTaskMaxMs": null,
+            "stagesMs": {
+              "session-authority-validation": 57.099999994039536,
+              "feature-catalog-validation": 1801.5,
+              "editor-state-normalization": 0.09999999403953552,
+              "resource-table-adoption": 0.20000001788139343,
+              "losat-artifact-validation": 230.89999997615814,
+              "canonical-request-projection": 3.5,
+              "current-draft-validation": 0.7999999821186066,
+              "artifact-projection": 0.10000002384185791,
+              "current-session-preflight": 2095.2000000178814,
+              "svg-admission": 316.80000001192093,
+              "preview-mount": 10954.699999988079,
+              "history-baseline": 1.699999988079071,
+              "restoreBeforeSvgAdmission": 15.799999982118607
+            },
+            "codec": {
+              "decodeCpuMs": 17.80000001192093,
+              "encodeCpuMs": 0,
+              "encodedBytes": 0,
+              "decodedBytes": 26506447,
+              "streams": []
+            },
+            "ready": {
+              "resultCount": 1,
+              "records": 4,
+              "catalog": 1,
+              "requestRecords": 4,
+              "cacheEntries": 12,
+              "mounted": true
+            },
+            "transferredBufferBytes": 0,
+            "nativeStructuredCloneWireBytes": null,
+            "nativeStructuredCloneCopyBytes": null,
+            "memory": {
+              "sampleCount": 13,
+              "rssPeakBytes": 1764040704,
+              "rssErrors": [],
+              "rssStartBytes": 631685120,
+              "v8UsedHeapPeaksBytes": {
+                "page": 760921200,
+                "worker": 188488048
+              },
+              "errors": [
+                "WebSocketTimeoutException: Connection timed out"
+              ],
+              "targets": {
+                "DC641D462D4280951BE76A6521E068C7": {
+                  "type": "page",
+                  "url": "http://127.0.0.1:35559/gbdraw/web/index.html"
+                },
+                "24F9DABE29DD51FF2AFFBBA459221DDD": {
+                  "type": "worker",
+                  "url": "http://127.0.0.1:35559/gbdraw/web/js/workers/session-import-worker.js"
+                }
+              },
+              "workerPeaksByUrl": {
+                "session-import-worker.js": {
+                  "usedSize": 188488048,
+                  "backingStorageSize": 175301729
+                }
+              }
+            },
+            "responsivenessAcceptance": false,
+            "mainObservedHeapDeltaBytes": 842494571
+          },
+          "save": {
+            "wallMs": 5182.0999999940395,
+            "heapBefore": 837204627,
+            "heapAfter": 1047252847,
+            "events": [
+              {
+                "name": "session-save-pending-published",
+                "timestamp": 18283.29999998212
+              },
+              {
+                "name": "session-save-paint-opportunity-completed",
+                "timestamp": 18475.29999998212
+              },
+              {
+                "name": "session-save-catalog-preparation-start",
+                "timestamp": 18475.29999998212
+              },
+              {
+                "name": "session-save-catalog-preparation-end",
+                "timestamp": 18475.29999998212,
+                "reusedCommittedSession": true
+              },
+              {
+                "name": "session-save-projection-start",
+                "timestamp": 18475.79999998212
+              },
+              {
+                "name": "session-save-projection-end",
+                "timestamp": 18542.19999998808
+              },
+              {
+                "name": "session-save-compression-start",
+                "timestamp": 18542.19999998808
+              },
+              {
+                "name": "session-save-compression-end",
+                "timestamp": 22191.59999999404,
+                "compressedSize": 23738966
+              },
+              {
+                "name": "session-save-download-handoff-completed",
+                "timestamp": 22192.5,
+                "compressedSize": 23738966
+              },
+              {
+                "name": "session-save-pending-cleared",
+                "timestamp": 22208.19999998808
+              }
+            ],
+            "metrics": {
+              "sessionSaveProteinRawTextValidationReuseCount": 12
+            },
+            "workers": [
+              "http://127.0.0.1:35559/gbdraw/web/js/workers/session-import-worker.js"
+            ],
+            "workerTrace": [
+              {
+                "url": "http://127.0.0.1:35559/gbdraw/web/js/workers/session-import-worker.js",
+                "stack": "Error\n    at new window.Worker (eval at evaluate (:303:30), <anonymous>:5:79)\n    at http://127.0.0.1:35559/gbdraw/web/js/services/session-import-client.js:67:14\n    at new Promise (<anonymous>)\n    at importSessionFile (http://127.0.0.1:35559/gbdraw/web/js/services/session-import-client.js:10:61)\n    at importSessionDocument (http://127.0.0.1:35559/gbdraw/web/js/services/config.js:4174:29)\n    at importSession (http://127.0.0.1:35559/gbdraw/web/js/services/config.js:4767:26)",
+                "messages": [
+                  {
+                    "type": null,
+                    "operation": null,
+                    "operationId": 1,
+                    "fileBytes": 23739973,
+                    "stack": "Error\n    at window.Worker.postMessage (eval at evaluate (:303:30), <anonymous>:9:49)\n    at http://127.0.0.1:35559/gbdraw/web/js/services/session-import-client.js:73:12\n    at new Promise (<anonymous>)\n    at importSessionFile (http://127.0.0.1:35559/gbdraw/web/js/services/session-import-client.js:10:61)\n    at importSessionDocument (http://127.0.0.1:35559/gbdraw/web/js/services/config.js:4174:29)\n    at importSession (http://127.0.0.1:35559/gbdraw/web/js/services/config.js:4767:26)"
+                  }
+                ],
+                "listeners": 0,
+                "terminations": 1
+              }
+            ],
+            "heartbeat": {
+              "intervalMs": 100,
+              "count": 36,
+              "p95Ms": 195.5,
+              "maxMs": 195.59999999403954
+            },
+            "longTasks": {
+              "count": 2,
+              "totalMs": 255,
+              "maxMs": 186,
+              "entries": [
+                {
+                  "start": 18282.69999998808,
+                  "duration": 186
+                },
+                {
+                  "start": 18475.29999998212,
+                  "duration": 69
+                }
+              ]
+            },
+            "mainSampledHeapPeakBytes": 1047252847,
+            "receiverTaskMaxMs": null,
+            "stagesMs": {
+              "session-save-catalog-preparation": 0.0,
+              "session-save-projection": 66.40000000596046,
+              "session-save-compression": 3649.4000000059605
+            },
+            "codec": {
+              "decodeCpuMs": 0,
+              "encodeCpuMs": 152.59999957680702,
+              "encodedBytes": 96042006,
+              "decodedBytes": 0,
+              "streams": []
+            },
+            "outcome": {
+              "status": "saved",
+              "compressedBytes": 23738966
+            },
+            "memory": {
+              "sampleCount": 32,
+              "rssPeakBytes": 1995026432,
+              "rssErrors": [],
+              "rssStartBytes": 1770577920,
+              "v8UsedHeapPeaksBytes": {
+                "page": 823529272
+              },
+              "errors": [],
+              "targets": {
+                "DC641D462D4280951BE76A6521E068C7": {
+                  "type": "page",
+                  "url": "http://127.0.0.1:35559/gbdraw/web/index.html"
+                }
+              },
+              "workerPeaksByUrl": null
+            },
+            "responsivenessAcceptance": true,
+            "mainObservedHeapDeltaBytes": 210048220
+          },
+          "previewPythonWorkerCount": 0,
+          "previewWorkerFreeAcceptance": true
+        },
+        {
+          "source": {
+            "sha256": "a3cfba6c8d883a0050529c89b1fd0849348254cdfa46dbf938a69cebef5379aa",
+            "bytes": 23739973,
+            "version": 44,
+            "requestSchema": 8,
+            "records": 4,
+            "features": 18782,
+            "cacheEntries": 12,
+            "hashes": {
+              "format": "a565d6c86d89f5062657493c80eed1b314a7d52b81c7504622b0ee9084307f4f",
+              "version": "71ee45a3c0db9a9865f7313dd3372cf60dca6479d46261f3542eb9346e4a04d6",
+              "createdAt": "6858d08977dc6786f29612b38948216f5b53bcffed49376230ab9f88aee928a1",
+              "title": "63b97e56589c5dddca834bbb236f8c1c3d6248f7aa103168dd058354ea026694",
+              "ui": "e8c5aea1f0ebcbaa58a50e79b261e2d7940b78b685fe0d57b9c33e6cc13f312d",
+              "results": "2fb2b6de292f58fec96ed320e358a45df78ed05f5df7fe448fd93370d0251d27",
+              "editorState": "8e51664e18040185ea1f7123a11fbae33866eba4d7ac259bf6b66b32681035a9",
+              "features": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a",
+              "orthogroupState": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a",
+              "cliInvocation": "cd961c45b149a9a4ff76f25deb96c9369e88bc0322d668535c9c6df69500f54b",
+              "renderRequest": "cc326c351cd302304ad8ba922fb18fe933af136d816cc704169f8a7e38317dd5",
+              "resources": "dc83883c064512b2ff3fc48fff51b84b3d82e7e0eb3e5e4ae2999d2ea5c43c5e",
+              "webFiles": "d6c2bcf75638ba0d97f39e4e41a0b9308fe72fb28e92376aa7233744bfcc4653",
+              "losatCache": "df2eb320d47d86749998dfebabf92f2eea8b74a096b76b22f69c863c7e07c4d5",
+              "losatDerivedCache": "d801aa1fb7ddcc330a5e3173372ea6af4a3d08ec58074478e85aa5603e926658",
+              "proteinIdentityManifest": "7971621217011a486d90f526ddf0e75f09ca4e67a4e60107f69c203ea71a18e0",
+              "config": "3a6163809d2c4aa8e82d3c7960b9e676f96f34b7e38c92c75870e3cbec74565e",
+              "runMetadata": "adc6b075522aae7d63150a56fe94d9b0f766ad68ee987b45a2afaaba6acefaba"
+            },
+            "wholeHash": "50bd821d25dc81912d9d5beaa52ecf541a511d53a740b91739d6043147f5650b"
+          },
+          "saved": {
+            "sha256": "fd46ca095dd34fffabe65251b53c700691755096f4206b03541574e4961736a8",
+            "bytes": 23738966,
+            "version": 44,
+            "requestSchema": 8,
+            "records": 4,
+            "features": 18782,
+            "cacheEntries": 12,
+            "hashes": {
+              "format": "a565d6c86d89f5062657493c80eed1b314a7d52b81c7504622b0ee9084307f4f",
+              "version": "71ee45a3c0db9a9865f7313dd3372cf60dca6479d46261f3542eb9346e4a04d6",
+              "createdAt": "f196c6ed638401002994278350fc0ee9ea09498d9bc83c68b3a228b82694d7b3",
+              "title": "7ebd154623dc1eac803167beddb7bae56174627d1c61f085a8d15040524c8190",
+              "config": "87e14e6c88d78064af0bcb6cbf5bd81d89c15f47e039307019803502cb727892",
+              "ui": "8bdd3575c36df8ee41a6d1e682cf509c15219ad30b068b734b4ccf608746faab",
+              "renderRequest": "cc326c351cd302304ad8ba922fb18fe933af136d816cc704169f8a7e38317dd5",
+              "resources": "dc83883c064512b2ff3fc48fff51b84b3d82e7e0eb3e5e4ae2999d2ea5c43c5e",
+              "webFiles": "8b7b6af2ed79d317af9b6a1fbcd6fca8aac7d8cbcaf34b21d057258f2d7c619d",
+              "results": "2931f0e13a7b44c7076ad10fcff01b3499718ac2673a70b344a0ae7e237aaea3",
+              "runMetadata": "45f5dfe4be26e8f0aaece5b1fb03ccd7309545891ecec8e4db1a4addf904aaac",
+              "features": "6b4e3687049ef90433ac03d66c81efa02f47cc29e96dde51bd834cac7d6419e0",
+              "editorState": "b4f1919ef1f6ba706bf535a642218c48c9b73c17c96f1b706424d35abed4b38f",
+              "orthogroupState": "2ef835f9b003a3b9c0300376225b8799ca37512ee954c8e425e3e067e893fc68",
+              "losatCache": "8c4baf3ebd1658085174b3726535add360a871d806094c26cb63e8e9373b4f62",
+              "losatDerivedCache": "d801aa1fb7ddcc330a5e3173372ea6af4a3d08ec58074478e85aa5603e926658",
+              "proteinIdentityManifest": "7971621217011a486d90f526ddf0e75f09ca4e67a4e60107f69c203ea71a18e0"
+            },
+            "wholeHash": "703e8a41b0218c2e3d000f476c397c024a8101153fae96e61af0bd4155c660c1"
+          },
+          "sectionEquality": {
+            "renderRequest": true,
+            "resources": true,
+            "webFiles": false,
+            "editorState": false,
+            "losatCache": false,
+            "losatDerivedCache": true,
+            "proteinIdentityManifest": true
+          },
+          "pageErrors": [],
+          "dialogs": [
+            {
+              "type": "alert",
+              "message": "Session loaded successfully!"
+            }
+          ],
+          "externalRequests": [],
+          "load": {
+            "wallMs": 17660.5,
+            "heapBefore": 22234677,
+            "heapAfter": 858369809,
+            "events": [
+              {
+                "name": "session-import-pending-published",
+                "timestamp": 851.7000000178814
+              },
+              {
+                "name": "session-import-paint-opportunity-completed",
+                "timestamp": 857.5
+              },
+              {
+                "name": "sessionSelection",
+                "timestamp": 858.0999999940395
+              },
+              {
+                "name": "session-import-worker-start",
+                "timestamp": 859.2000000178814,
+                "operationId": 1,
+                "fileBytes": 23739973
+              },
+              {
+                "name": "session-import-worker-terminated",
+                "timestamp": 1450.9000000059605,
+                "operationId": 1
+              },
+              {
+                "name": "session-import-worker-settled",
+                "timestamp": 1450.9000000059605,
+                "operationId": 1,
+                "status": "ok"
+              },
+              {
+                "name": "session-import-codec-completed",
+                "timestamp": 1450.9000000059605,
+                "readMs": 192.19999998807907,
+                "parseMs": 115.90000000596046,
+                "codecProbe": {
+                  "decodeCpuMs": 41.90000006556511,
+                  "decodedBytes": 95989532,
+                  "streams": [
+                    {
+                      "kind": "file-read",
+                      "start": 7.0999999940395355,
+                      "bytes": 23739973,
+                      "chunks": 15,
+                      "wallMs": 191.09999999403954
+                    },
+                    {
+                      "kind": "decompress",
+                      "start": 7.299999982118607,
+                      "bytes": 95989532,
+                      "chunks": 1471,
+                      "wallMs": 190.90000000596046
+                    }
+                  ]
+                }
+              },
+              {
+                "name": "current-session-preflight-start",
+                "timestamp": 1508.5
+              },
+              {
+                "name": "session-authority-validation-start",
+                "timestamp": 1508.9000000059605
+              },
+              {
+                "name": "session-authority-validation-end",
+                "timestamp": 1563.7000000178814
+              },
+              {
+                "name": "feature-catalog-validation-start",
+                "timestamp": 1563.7000000178814
+              },
+              {
+                "name": "catalog.admission-started",
+                "timestamp": 1564,
+                "resultCount": 1
+              },
+              {
+                "name": "catalog.admission-completed",
+                "timestamp": 3258.5999999940395,
+                "resultCount": 1,
+                "itemCount": 1,
+                "recordCount": 4,
+                "renderedFeatureCount": 9375,
+                "biologicalFeatureCount": 18782
+              },
+              {
+                "name": "feature-catalog-validation-end",
+                "timestamp": 3258.5999999940395
+              },
+              {
+                "name": "editor-state-normalization-start",
+                "timestamp": 3258.5999999940395
+              },
+              {
+                "name": "editor-state-normalization-end",
+                "timestamp": 3258.800000011921
+              },
+              {
+                "name": "resource-table-adoption-start",
+                "timestamp": 3258.800000011921
+              },
+              {
+                "name": "resource-table-adoption-end",
+                "timestamp": 3258.9000000059605
+              },
+              {
+                "name": "losat-artifact-validation-start",
+                "timestamp": 3258.9000000059605
+              },
+              {
+                "name": "losat-artifact-validation-end",
+                "timestamp": 3521.5
+              },
+              {
+                "name": "canonical-request-projection-start",
+                "timestamp": 3522.2000000178814
+              },
+              {
+                "name": "canonical-request-projection-end",
+                "timestamp": 3525.9000000059605
+              },
+              {
+                "name": "current-draft-validation-start",
+                "timestamp": 3526.0999999940395
+              },
+              {
+                "name": "current-draft-validation-end",
+                "timestamp": 3527.0999999940395
+              },
+              {
+                "name": "artifact-projection-start",
+                "timestamp": 3527.0999999940395
+              },
+              {
+                "name": "artifact-projection-end",
+                "timestamp": 3527.2000000178814
+              },
+              {
+                "name": "current-session-preflight-end",
+                "timestamp": 3527.300000011921
+              },
+              {
+                "name": "svg-admission-start",
+                "timestamp": 3550.5999999940395
+              },
+              {
+                "name": "svg.admission-started",
+                "timestamp": 3551.0999999940395,
+                "phase": "current-session",
+                "resultCount": 1,
+                "mutationKind": "EMPTY"
+              },
+              {
+                "name": "result-svg-characters",
+                "timestamp": 3551.2000000178814,
+                "phase": "current-session",
+                "resultIndex": 0,
+                "value": 5128555
+              },
+              {
+                "name": "sanitize-call",
+                "timestamp": 3551.300000011921,
+                "durationMs": 471.7999999821186
+              },
+              {
+                "name": "svg.admission-completed",
+                "timestamp": 4023.4000000059605,
+                "phase": "current-session",
+                "resultCount": 1,
+                "mutationKind": "EMPTY"
+              },
+              {
+                "name": "artifact.candidate-completed",
+                "timestamp": 4023.4000000059605,
+                "phase": "current-session",
+                "resultCount": 1,
+                "catalogFootprint": {
+                  "resultCount": 1,
+                  "itemCount": 1,
+                  "recordCount": 4,
+                  "renderedFeatureCount": 9375,
+                  "biologicalFeatureCount": 18782,
+                  "orthogroupRecordCount": 3369,
+                  "comparisonMatchCount": 116,
+                  "annotationCount": 0,
+                  "sequenceSourceCount": 4,
+                  "sequenceCharacters": 10312407
+                }
+              },
+              {
+                "name": "svg-admission-end",
+                "timestamp": 4023.4000000059605
+              },
+              {
+                "name": "session-candidate-prepared",
+                "timestamp": 4023.4000000059605
+              },
+              {
+                "name": "session-candidate-adopted",
+                "timestamp": 4730.700000017881
+              },
+              {
+                "name": "preview-mount-start",
+                "timestamp": 4730.700000017881
+              },
+              {
+                "name": "preview.readiness-expectation-registered",
+                "timestamp": 4731.200000017881,
+                "phase": "session-load",
+                "resultIndex": 0,
+                "bindSequence": 1
+              },
+              {
+                "name": "firstCommittedPreview",
+                "timestamp": 4731.200000017881,
+                "resultCount": 1
+              },
+              {
+                "name": "preview-mount-end",
+                "timestamp": 16029.90000000596
+              },
+              {
+                "name": "preview.mount-observed",
+                "timestamp": 16030.200000017881,
+                "phase": "session-load",
+                "resultIndex": 0,
+                "rootGeneration": 1,
+                "bindSequence": 1
+              },
+              {
+                "name": "preview.bind-started",
+                "timestamp": 16030.5,
+                "phase": "session-load",
+                "resultIndex": 0,
+                "rootGeneration": 1,
+                "bindSequence": 1
+              },
+              {
+                "name": "preview.bind-completed",
+                "timestamp": 16231.90000000596,
+                "phase": "session-load",
+                "resultIndex": 0,
+                "rootGeneration": 1,
+                "bindSequence": 1
+              },
+              {
+                "name": "preview.ready-receipt-emitted",
+                "timestamp": 16231.90000000596,
+                "phase": "session-load",
+                "resultIndex": 0,
+                "rootGeneration": 1,
+                "bindSequence": 1
+              },
+              {
+                "name": "preview.ready-receipt-accepted",
+                "timestamp": 16232,
+                "phase": "session-load",
+                "resultIndex": 0,
+                "rootGeneration": 1,
+                "bindSequence": 1
+              },
+              {
+                "name": "interactiveReady",
+                "timestamp": 16233,
+                "status": "success",
+                "degradedRecovery": false
+              },
+              {
+                "name": "history-baseline-start",
+                "timestamp": 16233.09999999404
+              },
+              {
+                "name": "history-baseline-end",
+                "timestamp": 16235.200000017881
+              },
+              {
+                "name": "session-import-pending-cleared",
+                "timestamp": 16317.300000011921
+              }
+            ],
+            "metrics": {
+              "featureCatalogAdmissionCount": 1,
+              "featureCatalogSecondaryTraversalCount": 0,
+              "currentSessionPreflightProteinManifestValidationCount": 1,
+              "currentSessionPreflightProteinRawTextValidationCount": 12,
+              "currentWriterActiveConfigRestoreCount": 1,
+              "activeConfigCanonicalOverwriteCount": 0,
+              "currentLegacyNormalizationCount": 0,
+              "legacyOverrideMigrationCount": 0,
+              "manualRuleFeatureMatchCount": 0,
+              "svgSanitizationCount": 1,
+              "generatedArtifactReadinessExpectationCount": 1,
+              "previewMaterializationObservedCount": 1,
+              "previewMountAdoptionCount": 1,
+              "previewBinderInvocationCount": 1,
+              "previewPollingIterationCount": 0,
+              "legendDomFullScanCount": 1,
+              "perFeatureListenerRegistrationCount": 0,
+              "comparisonDomFullScanCount": 1,
+              "previewReadyReceiptEmittedCount": 1,
+              "previewReadyReceiptAcceptedCount": 1,
+              "resourceTextReadCount": 4,
+              "resourceByteReadCount": 4,
+              "base64DecodeCount": 4,
+              "decodedByteCount": 26506447
+            },
+            "workers": [
+              "http://127.0.0.1:35559/gbdraw/web/js/workers/session-import-worker.js"
+            ],
+            "workerTrace": [
+              {
+                "url": "http://127.0.0.1:35559/gbdraw/web/js/workers/session-import-worker.js",
+                "stack": "Error\n    at new window.Worker (eval at evaluate (:303:30), <anonymous>:5:79)\n    at http://127.0.0.1:35559/gbdraw/web/js/services/session-import-client.js:67:14\n    at new Promise (<anonymous>)\n    at importSessionFile (http://127.0.0.1:35559/gbdraw/web/js/services/session-import-client.js:10:61)\n    at importSessionDocument (http://127.0.0.1:35559/gbdraw/web/js/services/config.js:4174:29)\n    at importSession (http://127.0.0.1:35559/gbdraw/web/js/services/config.js:4767:26)",
+                "messages": [
+                  {
+                    "type": null,
+                    "operation": null,
+                    "operationId": 1,
+                    "fileBytes": 23739973,
+                    "stack": "Error\n    at window.Worker.postMessage (eval at evaluate (:303:30), <anonymous>:9:49)\n    at http://127.0.0.1:35559/gbdraw/web/js/services/session-import-client.js:73:12\n    at new Promise (<anonymous>)\n    at importSessionFile (http://127.0.0.1:35559/gbdraw/web/js/services/session-import-client.js:10:61)\n    at importSessionDocument (http://127.0.0.1:35559/gbdraw/web/js/services/config.js:4174:29)\n    at importSession (http://127.0.0.1:35559/gbdraw/web/js/services/config.js:4767:26)"
+                  }
+                ],
+                "listeners": 0,
+                "terminations": 1
+              }
+            ],
+            "heartbeat": {
+              "intervalMs": 100,
+              "count": 7,
+              "p95Ms": 17093,
+              "maxMs": 17093
+            },
+            "longTasks": {
+              "count": 1,
+              "totalMs": 16975,
+              "maxMs": 16975,
+              "entries": [
+                {
+                  "start": 1309.9000000059605,
+                  "duration": 16975
+                }
+              ]
+            },
+            "mainSampledHeapPeakBytes": 886134817,
+            "receiverTaskMaxMs": null,
+            "stagesMs": {
+              "session-authority-validation": 54.80000001192093,
+              "feature-catalog-validation": 1694.8999999761581,
+              "editor-state-normalization": 0.20000001788139343,
+              "resource-table-adoption": 0.09999999403953552,
+              "losat-artifact-validation": 262.59999999403954,
+              "canonical-request-projection": 3.699999988079071,
+              "current-draft-validation": 1.0,
+              "artifact-projection": 0.10000002384185791,
+              "current-session-preflight": 2018.800000011921,
+              "svg-admission": 472.80000001192093,
+              "preview-mount": 11299.199999988079,
+              "history-baseline": 2.100000023841858,
+              "restoreBeforeSvgAdmission": 23.299999982118607
+            },
+            "codec": {
+              "decodeCpuMs": 20.19999998807907,
+              "encodeCpuMs": 0,
+              "encodedBytes": 0,
+              "decodedBytes": 26506447,
+              "streams": []
+            },
+            "ready": {
+              "resultCount": 1,
+              "records": 4,
+              "catalog": 1,
+              "requestRecords": 4,
+              "cacheEntries": 12,
+              "mounted": true
+            },
+            "transferredBufferBytes": 0,
+            "nativeStructuredCloneWireBytes": null,
+            "nativeStructuredCloneCopyBytes": null,
+            "memory": {
+              "sampleCount": 15,
+              "rssPeakBytes": 1797201920,
+              "rssErrors": [],
+              "rssStartBytes": 647827456,
+              "v8UsedHeapPeaksBytes": {
+                "page": 782360388,
+                "worker": 188638520
+              },
+              "errors": [
+                "WebSocketTimeoutException: Connection timed out"
+              ],
+              "targets": {
+                "700CFAE463A6D6B4A82E68BEA849B3F8": {
+                  "type": "page",
+                  "url": "http://127.0.0.1:35559/gbdraw/web/index.html"
+                },
+                "EF566812EA7A8C2CE57004CC0EAC6AF9": {
+                  "type": "worker",
+                  "url": "http://127.0.0.1:35559/gbdraw/web/js/workers/session-import-worker.js"
+                }
+              },
+              "workerPeaksByUrl": {
+                "session-import-worker.js": {
+                  "usedSize": 188638520,
+                  "backingStorageSize": 202975817
+                }
+              }
+            },
+            "responsivenessAcceptance": false,
+            "mainObservedHeapDeltaBytes": 863900140
+          },
+          "save": {
+            "wallMs": 5038.100000023842,
+            "heapBefore": 858643596,
+            "heapAfter": 1064499952,
+            "events": [
+              {
+                "name": "session-save-pending-published",
+                "timestamp": 18672
+              },
+              {
+                "name": "session-save-paint-opportunity-completed",
+                "timestamp": 18839.90000000596
+              },
+              {
+                "name": "session-save-catalog-preparation-start",
+                "timestamp": 18839.90000000596
+              },
+              {
+                "name": "session-save-catalog-preparation-end",
+                "timestamp": 18839.90000000596,
+                "reusedCommittedSession": true
+              },
+              {
+                "name": "session-save-projection-start",
+                "timestamp": 18840.30000001192
+              },
+              {
+                "name": "session-save-projection-end",
+                "timestamp": 18905.30000001192
+              },
+              {
+                "name": "session-save-compression-start",
+                "timestamp": 18905.30000001192
+              },
+              {
+                "name": "session-save-compression-end",
+                "timestamp": 22574.80000001192,
+                "compressedSize": 23738966
+              },
+              {
+                "name": "session-save-download-handoff-completed",
+                "timestamp": 22575.70000001788,
+                "compressedSize": 23738966
+              },
+              {
+                "name": "session-save-pending-cleared",
+                "timestamp": 22592.40000000596
+              }
+            ],
+            "metrics": {
+              "sessionSaveProteinRawTextValidationReuseCount": 12
+            },
+            "workers": [
+              "http://127.0.0.1:35559/gbdraw/web/js/workers/session-import-worker.js"
+            ],
+            "workerTrace": [
+              {
+                "url": "http://127.0.0.1:35559/gbdraw/web/js/workers/session-import-worker.js",
+                "stack": "Error\n    at new window.Worker (eval at evaluate (:303:30), <anonymous>:5:79)\n    at http://127.0.0.1:35559/gbdraw/web/js/services/session-import-client.js:67:14\n    at new Promise (<anonymous>)\n    at importSessionFile (http://127.0.0.1:35559/gbdraw/web/js/services/session-import-client.js:10:61)\n    at importSessionDocument (http://127.0.0.1:35559/gbdraw/web/js/services/config.js:4174:29)\n    at importSession (http://127.0.0.1:35559/gbdraw/web/js/services/config.js:4767:26)",
+                "messages": [
+                  {
+                    "type": null,
+                    "operation": null,
+                    "operationId": 1,
+                    "fileBytes": 23739973,
+                    "stack": "Error\n    at window.Worker.postMessage (eval at evaluate (:303:30), <anonymous>:9:49)\n    at http://127.0.0.1:35559/gbdraw/web/js/services/session-import-client.js:73:12\n    at new Promise (<anonymous>)\n    at importSessionFile (http://127.0.0.1:35559/gbdraw/web/js/services/session-import-client.js:10:61)\n    at importSessionDocument (http://127.0.0.1:35559/gbdraw/web/js/services/config.js:4174:29)\n    at importSession (http://127.0.0.1:35559/gbdraw/web/js/services/config.js:4767:26)"
+                  }
+                ],
+                "listeners": 0,
+                "terminations": 1
+              }
+            ],
+            "heartbeat": {
+              "intervalMs": 100,
+              "count": 34,
+              "p95Ms": 213.59999999403954,
+              "maxMs": 215.7999999821186
+            },
+            "longTasks": {
+              "count": 2,
+              "totalMs": 230,
+              "maxMs": 162,
+              "entries": [
+                {
+                  "start": 18671.59999999404,
+                  "duration": 162
+                },
+                {
+                  "start": 18839.90000000596,
+                  "duration": 68
+                }
+              ]
+            },
+            "mainSampledHeapPeakBytes": 1064499952,
+            "receiverTaskMaxMs": null,
+            "stagesMs": {
+              "session-save-catalog-preparation": 0.0,
+              "session-save-projection": 65.0,
+              "session-save-compression": 3669.5
+            },
+            "codec": {
+              "decodeCpuMs": 0,
+              "encodeCpuMs": 151.09999987483025,
+              "encodedBytes": 96042006,
+              "decodedBytes": 0,
+              "streams": []
+            },
+            "outcome": {
+              "status": "saved",
+              "compressedBytes": 23738966
+            },
+            "memory": {
+              "sampleCount": 32,
+              "rssPeakBytes": 2025926656,
+              "rssErrors": [],
+              "rssStartBytes": 1804013568,
+              "v8UsedHeapPeaksBytes": {
+                "page": 840776492
+              },
+              "errors": [],
+              "targets": {
+                "700CFAE463A6D6B4A82E68BEA849B3F8": {
+                  "type": "page",
+                  "url": "http://127.0.0.1:35559/gbdraw/web/index.html"
+                }
+              },
+              "workerPeaksByUrl": null
+            },
+            "responsivenessAcceptance": true,
+            "mainObservedHeapDeltaBytes": 205856356
+          },
+          "previewPythonWorkerCount": 0,
+          "previewWorkerFreeAcceptance": true
+        }
+      ]
+    },
+    "real": {
+      "sha256": "d3cafef9664bff958aec4932eea6e264ae872cce89762a7cbe617447af975388",
+      "results": [
+        {
+          "source": {
+            "sha256": "d3cafef9664bff958aec4932eea6e264ae872cce89762a7cbe617447af975388",
+            "bytes": 134471323,
+            "version": 44,
+            "requestSchema": 8,
+            "records": 12,
+            "features": 62089,
+            "cacheEntries": 144,
+            "hashes": {
+              "format": "a565d6c86d89f5062657493c80eed1b314a7d52b81c7504622b0ee9084307f4f",
+              "version": "71ee45a3c0db9a9865f7313dd3372cf60dca6479d46261f3542eb9346e4a04d6",
+              "createdAt": "d5c6127bab299c94eed55d31430169045de4083da95c0302752185455f671c5e",
+              "title": "41fa90b2b3984145805f4505c76707d3d75551814b5c9510fa868a912eed18de",
+              "ui": "e8c5aea1f0ebcbaa58a50e79b261e2d7940b78b685fe0d57b9c33e6cc13f312d",
+              "results": "3fc1e5206c155d14a4c33650310bc6ad73b9accd3c7356af9e9c738714f9b018",
+              "editorState": "5a9921e3c4c007a3870c3e7ee910af6df5dc0ec177c9df85cbb1d5dadd9327df",
+              "features": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a",
+              "orthogroupState": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a",
+              "cliInvocation": "6bcd9d92822c296df3466cf407d7aabbf003f4b8c764e8a03c30af4ca1c38d59",
+              "renderRequest": "4a24e726f9b038fdf0b999bfdd808cb34963ce4054e6df5ecdd963b39cac489b",
+              "resources": "600846eea4986e6d4fa92002870566c5ede14d6f3abd7c9ab2c98d7e1cec7688",
+              "webFiles": "b0be9635048d1dddaa08db919832436f5522a16b3feba07bee85d2e34d110088",
+              "losatCache": "21a45656d0a4c352003e7c1a49a2ad63ac49ce3fefff0c63e62cf4f73403e677",
+              "losatDerivedCache": "d801aa1fb7ddcc330a5e3173372ea6af4a3d08ec58074478e85aa5603e926658",
+              "proteinIdentityManifest": "b0e1ac56011c6f04e76a1b9af7c3431df72911762986163b37f63f7802b51cce"
+            },
+            "wholeHash": "1482237e2b867d2603226b4e4ae30584ecccc64c5689d6964c04490d2242255f"
+          },
+          "saved": {
+            "sha256": "19eec3c024d4240739ea4d9d6a9946e97e34283f2ca639b6ba2e0df584a94a0b",
+            "bytes": 133518068,
+            "version": 44,
+            "requestSchema": 8,
+            "records": 12,
+            "features": 62089,
+            "cacheEntries": 144,
+            "hashes": {
+              "format": "a565d6c86d89f5062657493c80eed1b314a7d52b81c7504622b0ee9084307f4f",
+              "version": "71ee45a3c0db9a9865f7313dd3372cf60dca6479d46261f3542eb9346e4a04d6",
+              "createdAt": "3cdda322cdf24be14b5c0aecb6def0138ede6f3086c54eb63eb59154f7541c29",
+              "title": "7ebd154623dc1eac803167beddb7bae56174627d1c61f085a8d15040524c8190",
+              "config": "649e11097333bc97ad20586e84e25defe13f5efad47e5840853d8f41ca3ff623",
+              "ui": "8bdd3575c36df8ee41a6d1e682cf509c15219ad30b068b734b4ccf608746faab",
+              "renderRequest": "4a24e726f9b038fdf0b999bfdd808cb34963ce4054e6df5ecdd963b39cac489b",
+              "resources": "600846eea4986e6d4fa92002870566c5ede14d6f3abd7c9ab2c98d7e1cec7688",
+              "webFiles": "9cd94f7d34e0a7c9eb685273bfcd349bb1cf8f8a1fc48ad3e718e3a3992118df",
+              "results": "8eadde508b13b0d3c273bc147cef8c162e7b8c344741fe4fb1aad7031582d687",
+              "runMetadata": "9839a2f476149cacc6f3fcb8e89b4542f417c336db7c7e68e5b19a8181d67a08",
+              "features": "6b4e3687049ef90433ac03d66c81efa02f47cc29e96dde51bd834cac7d6419e0",
+              "editorState": "855570853dec9e05f5bbac125fedc16a3eace9d54d8f0795c8f9c76b2c80b563",
+              "orthogroupState": "2ef835f9b003a3b9c0300376225b8799ca37512ee954c8e425e3e067e893fc68",
+              "losatCache": "21a45656d0a4c352003e7c1a49a2ad63ac49ce3fefff0c63e62cf4f73403e677",
+              "losatDerivedCache": "d801aa1fb7ddcc330a5e3173372ea6af4a3d08ec58074478e85aa5603e926658",
+              "proteinIdentityManifest": "b0e1ac56011c6f04e76a1b9af7c3431df72911762986163b37f63f7802b51cce"
+            },
+            "wholeHash": "c1abbeba9b25a1f6b0b64a7fbe08b9f26d79efa9448a341ce6424942c7f342ce"
+          },
+          "sectionEquality": {
+            "renderRequest": true,
+            "resources": true,
+            "webFiles": false,
+            "editorState": false,
+            "losatCache": true,
+            "losatDerivedCache": true,
+            "proteinIdentityManifest": true
+          },
+          "pageErrors": [],
+          "dialogs": [
+            {
+              "type": "alert",
+              "message": "Session loaded successfully!"
+            },
+            {
+              "type": "confirm",
+              "message": "Compressed session size is 127.3 MB. Continue?"
+            }
+          ],
+          "externalRequests": [],
+          "load": {
+            "wallMs": 146263,
+            "heapBefore": 22236711,
+            "heapAfter": 1628449594,
+            "events": [
+              {
+                "name": "session-import-pending-published",
+                "timestamp": 976.5
+              },
+              {
+                "name": "session-import-paint-opportunity-completed",
+                "timestamp": 997
+              },
+              {
+                "name": "sessionSelection",
+                "timestamp": 997.5
+              },
+              {
+                "name": "session-import-worker-start",
+                "timestamp": 998.6999999880791,
+                "operationId": 1,
+                "fileBytes": 134471323
+              },
+              {
+                "name": "session-import-worker-terminated",
+                "timestamp": 3930.9000000059605,
+                "operationId": 1
+              },
+              {
+                "name": "session-import-worker-settled",
+                "timestamp": 3930.9000000059605,
+                "operationId": 1,
+                "status": "ok"
+              },
+              {
+                "name": "session-import-codec-completed",
+                "timestamp": 3930.9000000059605,
+                "readMs": 1162.2999999821186,
+                "parseMs": 834.9000000059605,
+                "codecProbe": {
+                  "decodeCpuMs": 224.69999983906746,
+                  "decodedBytes": 466767669,
+                  "streams": [
+                    {
+                      "kind": "file-read",
+                      "start": 9.599999994039536,
+                      "bytes": 134471323,
+                      "chunks": 69,
+                      "wallMs": 1160.5
+                    },
+                    {
+                      "kind": "decompress",
+                      "start": 10,
+                      "bytes": 466767669,
+                      "chunks": 7158,
+                      "wallMs": 1160.199999988079
+                    }
+                  ]
+                }
+              },
+              {
+                "name": "current-session-preflight-start",
+                "timestamp": 4223.199999988079
+              },
+              {
+                "name": "session-authority-validation-start",
+                "timestamp": 4223.699999988079
+              },
+              {
+                "name": "session-authority-validation-end",
+                "timestamp": 4469.0999999940395
+              },
+              {
+                "name": "feature-catalog-validation-start",
+                "timestamp": 4469.199999988079
+              },
+              {
+                "name": "catalog.admission-started",
+                "timestamp": 4469.5999999940395,
+                "resultCount": 1
+              },
+              {
+                "name": "catalog.admission-completed",
+                "timestamp": 11516.799999982119,
+                "resultCount": 1,
+                "itemCount": 1,
+                "recordCount": 12,
+                "renderedFeatureCount": 30993,
+                "biologicalFeatureCount": 62089
+              },
+              {
+                "name": "feature-catalog-validation-end",
+                "timestamp": 11516.799999982119
+              },
+              {
+                "name": "editor-state-normalization-start",
+                "timestamp": 11516.799999982119
+              },
+              {
+                "name": "editor-state-normalization-end",
+                "timestamp": 11517.09999999404
+              },
+              {
+                "name": "resource-table-adoption-start",
+                "timestamp": 11517.09999999404
+              },
+              {
+                "name": "resource-table-adoption-end",
+                "timestamp": 11517.299999982119
+              },
+              {
+                "name": "losat-artifact-validation-start",
+                "timestamp": 11517.299999982119
+              },
+              {
+                "name": "losat-artifact-validation-end",
+                "timestamp": 14092.799999982119
+              },
+              {
+                "name": "canonical-request-projection-start",
+                "timestamp": 14093.199999988079
+              },
+              {
+                "name": "canonical-request-projection-end",
+                "timestamp": 14098.09999999404
+              },
+              {
+                "name": "artifact-projection-start",
+                "timestamp": 14098.40000000596
+              },
+              {
+                "name": "artifact-projection-end",
+                "timestamp": 14098.40000000596
+              },
+              {
+                "name": "current-session-preflight-end",
+                "timestamp": 14098.5
+              },
+              {
+                "name": "svg-admission-start",
+                "timestamp": 22251
+              },
+              {
+                "name": "svg.admission-started",
+                "timestamp": 22251.29999998212,
+                "phase": "current-session",
+                "resultCount": 1,
+                "mutationKind": "EMPTY"
+              },
+              {
+                "name": "result-svg-characters",
+                "timestamp": 22251.5,
+                "phase": "current-session",
+                "resultIndex": 0,
+                "value": 19621657
+              },
+              {
+                "name": "sanitize-call",
+                "timestamp": 22251.5,
+                "durationMs": 1172.0999999940395
+              },
+              {
+                "name": "svg.admission-completed",
+                "timestamp": 23423.90000000596,
+                "phase": "current-session",
+                "resultCount": 1,
+                "mutationKind": "EMPTY"
+              },
+              {
+                "name": "artifact.candidate-completed",
+                "timestamp": 23423.90000000596,
+                "phase": "current-session",
+                "resultCount": 1,
+                "catalogFootprint": {
+                  "resultCount": 1,
+                  "itemCount": 1,
+                  "recordCount": 12,
+                  "renderedFeatureCount": 30993,
+                  "biologicalFeatureCount": 62089,
+                  "orthogroupRecordCount": 4927,
+                  "comparisonMatchCount": 1009,
+                  "annotationCount": 0,
+                  "sequenceSourceCount": 12,
+                  "sequenceCharacters": 34183265
+                }
+              },
+              {
+                "name": "svg-admission-end",
+                "timestamp": 23423.90000000596
+              },
+              {
+                "name": "session-candidate-prepared",
+                "timestamp": 23423.90000000596
+              },
+              {
+                "name": "session-candidate-adopted",
+                "timestamp": 26287.09999999404
+              },
+              {
+                "name": "preview-mount-start",
+                "timestamp": 26287.09999999404
+              },
+              {
+                "name": "preview.readiness-expectation-registered",
+                "timestamp": 26287.90000000596,
+                "phase": "session-load",
+                "resultIndex": 0,
+                "bindSequence": 1
+              },
+              {
+                "name": "firstCommittedPreview",
+                "timestamp": 26288,
+                "resultCount": 1
+              },
+              {
+                "name": "preview-mount-end",
+                "timestamp": 143437.29999998212
+              },
+              {
+                "name": "preview.mount-observed",
+                "timestamp": 143437.59999999404,
+                "phase": "session-load",
+                "resultIndex": 0,
+                "rootGeneration": 1,
+                "bindSequence": 1
+              },
+              {
+                "name": "preview.bind-started",
+                "timestamp": 143437.90000000596,
+                "phase": "session-load",
+                "resultIndex": 0,
+                "rootGeneration": 1,
+                "bindSequence": 1
+              },
+              {
+                "name": "preview.bind-completed",
+                "timestamp": 145037.29999998212,
+                "phase": "session-load",
+                "resultIndex": 0,
+                "rootGeneration": 1,
+                "bindSequence": 1
+              },
+              {
+                "name": "preview.ready-receipt-emitted",
+                "timestamp": 145037.40000000596,
+                "phase": "session-load",
+                "resultIndex": 0,
+                "rootGeneration": 1,
+                "bindSequence": 1
+              },
+              {
+                "name": "preview.ready-receipt-accepted",
+                "timestamp": 145037.40000000596,
+                "phase": "session-load",
+                "resultIndex": 0,
+                "rootGeneration": 1,
+                "bindSequence": 1
+              },
+              {
+                "name": "interactiveReady",
+                "timestamp": 145038.79999998212,
+                "status": "success",
+                "degradedRecovery": false
+              },
+              {
+                "name": "history-baseline-start",
+                "timestamp": 145038.79999998212
+              },
+              {
+                "name": "history-baseline-end",
+                "timestamp": 145041.5
+              },
+              {
+                "name": "session-import-pending-cleared",
+                "timestamp": 145297.19999998808
+              }
+            ],
+            "metrics": {
+              "featureCatalogAdmissionCount": 1,
+              "featureCatalogSecondaryTraversalCount": 0,
+              "currentSessionPreflightProteinManifestValidationCount": 1,
+              "currentSessionPreflightProteinRawTextValidationCount": 144,
+              "workerConstructionCount": 1,
+              "workerInitializationCount": 1,
+              "currentLegacyNormalizationCount": 0,
+              "legacyOverrideMigrationCount": 0,
+              "manualRuleFeatureMatchCount": 0,
+              "svgSanitizationCount": 1,
+              "generatedArtifactReadinessExpectationCount": 1,
+              "previewMaterializationObservedCount": 1,
+              "previewMountAdoptionCount": 1,
+              "previewBinderInvocationCount": 1,
+              "previewPollingIterationCount": 0,
+              "legendDomFullScanCount": 1,
+              "perFeatureListenerRegistrationCount": 0,
+              "comparisonDomFullScanCount": 1,
+              "previewReadyReceiptEmittedCount": 1,
+              "previewReadyReceiptAcceptedCount": 1
+            },
+            "workers": [
+              "http://127.0.0.1:35559/gbdraw/web/js/workers/session-import-worker.js",
+              "http://127.0.0.1:35559/gbdraw/web/js/workers/diagram-generation-worker.js"
+            ],
+            "workerTrace": [
+              {
+                "url": "http://127.0.0.1:35559/gbdraw/web/js/workers/session-import-worker.js",
+                "stack": "Error\n    at new window.Worker (eval at evaluate (:303:30), <anonymous>:5:79)\n    at http://127.0.0.1:35559/gbdraw/web/js/services/session-import-client.js:67:14\n    at new Promise (<anonymous>)\n    at importSessionFile (http://127.0.0.1:35559/gbdraw/web/js/services/session-import-client.js:10:61)\n    at importSessionDocument (http://127.0.0.1:35559/gbdraw/web/js/services/config.js:4174:29)\n    at importSession (http://127.0.0.1:35559/gbdraw/web/js/services/config.js:4767:26)",
+                "messages": [
+                  {
+                    "type": null,
+                    "operation": null,
+                    "operationId": 1,
+                    "fileBytes": 134471323,
+                    "stack": "Error\n    at window.Worker.postMessage (eval at evaluate (:303:30), <anonymous>:9:49)\n    at http://127.0.0.1:35559/gbdraw/web/js/services/session-import-client.js:73:12\n    at new Promise (<anonymous>)\n    at importSessionFile (http://127.0.0.1:35559/gbdraw/web/js/services/session-import-client.js:10:61)\n    at importSessionDocument (http://127.0.0.1:35559/gbdraw/web/js/services/config.js:4174:29)\n    at importSession (http://127.0.0.1:35559/gbdraw/web/js/services/config.js:4767:26)"
+                  }
+                ],
+                "listeners": 0,
+                "terminations": 1
+              },
+              {
+                "url": "http://127.0.0.1:35559/gbdraw/web/js/workers/diagram-generation-worker.js",
+                "stack": "Error\n    at new window.Worker (eval at evaluate (:303:30), <anonymous>:5:79)\n    at getWorker (http://127.0.0.1:35559/gbdraw/web/js/services/diagram-generation.js:192:14)\n    at ensureWorkerInitialized (http://127.0.0.1:35559/gbdraw/web/js/services/diagram-generation.js:234:25)\n    at http://127.0.0.1:35559/gbdraw/web/js/services/diagram-generation.js:492:35\n    at runAuxiliaryWorkerRequest (http://127.0.0.1:35559/gbdraw/web/js/services/diagram-generation.js:557:5)\n    at runDiagramHelperOperation (http://127.0.0.1:35559/gbdraw/web/js/services/diagram-generation.js:575:10)\n    at http://127.0.0.1:35559/gbdraw/web/js/app/app-setup.js:235:52\n    at validateUnmanagedConfigOverrides (http://127.0.0.1:35559/gbdraw/web/js/services/config.js:1118:24)\n    at importSessionDocument (http://127.0.0.1:35559/gbdraw/web/js/services/config.js:4204:55)\n    at async importSession (http://127.0.0.1:35559/gbdraw/web/js/services/config.js:4767:20)",
+                "messages": [
+                  {
+                    "type": "init",
+                    "operation": null,
+                    "operationId": null,
+                    "fileBytes": null,
+                    "stack": "Error\n    at window.Worker.postMessage (eval at evaluate (:303:30), <anonymous>:9:49)\n    at ensureWorkerInitialized (http://127.0.0.1:35559/gbdraw/web/js/services/diagram-generation.js:291:17)\n    at http://127.0.0.1:35559/gbdraw/web/js/services/diagram-generation.js:492:35\n    at runAuxiliaryWorkerRequest (http://127.0.0.1:35559/gbdraw/web/js/services/diagram-generation.js:557:5)\n    at runDiagramHelperOperation (http://127.0.0.1:35559/gbdraw/web/js/services/diagram-generation.js:575:10)\n    at http://127.0.0.1:35559/gbdraw/web/js/app/app-setup.js:235:52\n    at validateUnmanagedConfigOverrides (http://127.0.0.1:35559/gbdraw/web/js/services/config.js:1118:24)\n    at importSessionDocument (http://127.0.0.1:35559/gbdraw/web/js/services/config.js:4204:55)\n    at async importSession (http://127.0.0.1:35559/gbdraw/web/js/services/config.js:4767:20)"
+                  },
+                  {
+                    "type": "helper",
+                    "operation": "validateConfigOverrides",
+                    "operationId": null,
+                    "fileBytes": null,
+                    "stack": "Error\n    at window.Worker.postMessage (eval at evaluate (:303:30), <anonymous>:9:49)\n    at http://127.0.0.1:35559/gbdraw/web/js/services/diagram-generation.js:544:21"
+                  }
+                ],
+                "listeners": 0,
+                "terminations": 0
+              }
+            ],
+            "heartbeat": {
+              "intervalMs": 100,
+              "count": 110,
+              "p95Ms": 100.10000002384186,
+              "maxMs": 124875.5
+            },
+            "longTasks": {
+              "count": 2,
+              "totalMs": 135351,
+              "maxMs": 124750,
+              "entries": [
+                {
+                  "start": 3498.5,
+                  "duration": 10601
+                },
+                {
+                  "start": 22201.79999998212,
+                  "duration": 124750
+                }
+              ]
+            },
+            "mainSampledHeapPeakBytes": 1628449594,
+            "receiverTaskMaxMs": null,
+            "stagesMs": {
+              "session-authority-validation": 245.40000000596046,
+              "feature-catalog-validation": 7047.5999999940395,
+              "editor-state-normalization": 0.30000001192092896,
+              "resource-table-adoption": 0.19999998807907104,
+              "losat-artifact-validation": 2575.5,
+              "canonical-request-projection": 4.9000000059604645,
+              "artifact-projection": 0.0,
+              "current-session-preflight": 9875.300000011921,
+              "svg-admission": 1172.9000000059605,
+              "preview-mount": 117150.19999998808,
+              "history-baseline": 2.7000000178813934,
+              "restoreBeforeSvgAdmission": 8152.5
+            },
+            "codec": {
+              "decodeCpuMs": 0,
+              "encodeCpuMs": 0,
+              "encodedBytes": 0,
+              "decodedBytes": 0,
+              "streams": []
+            },
+            "ready": {
+              "resultCount": 1,
+              "records": 1,
+              "catalog": 1,
+              "requestRecords": 12,
+              "cacheEntries": 144,
+              "mounted": true
+            },
+            "transferredBufferBytes": 0,
+            "nativeStructuredCloneWireBytes": null,
+            "nativeStructuredCloneCopyBytes": null,
+            "memory": {
+              "sampleCount": 161,
+              "rssPeakBytes": 3506905088,
+              "rssErrors": [],
+              "rssStartBytes": 649211904,
+              "v8UsedHeapPeaksBytes": {
+                "page": 1555934316,
+                "worker": 906749244
+              },
+              "errors": [
+                "WebSocketTimeoutException: Connection timed out"
+              ],
+              "targets": {
+                "F3E5D83BB178C2EE14F93787E50B6312": {
+                  "type": "page",
+                  "url": "http://127.0.0.1:35559/gbdraw/web/index.html"
+                },
+                "DB0D15234212DAAF4F728008DA4017A6": {
+                  "type": "worker",
+                  "url": "http://127.0.0.1:35559/gbdraw/web/js/workers/session-import-worker.js"
+                },
+                "13C4DB69B6922B7654FCFA43071001CD": {
+                  "type": "worker",
+                  "url": "http://127.0.0.1:35559/gbdraw/web/js/workers/diagram-generation-worker.js"
+                }
+              },
+              "workerPeaksByUrl": {
+                "session-import-worker.js": {
+                  "usedSize": 906749244,
+                  "backingStorageSize": 585706734
+                },
+                "diagram-generation-worker.js": {
+                  "usedSize": 23993632,
+                  "backingStorageSize": 106361250
+                }
+              }
+            },
+            "responsivenessAcceptance": false,
+            "mainObservedHeapDeltaBytes": 1606212883
+          },
+          "save": {
+            "wallMs": 25249.600000023842,
+            "heapBefore": 1368313351,
+            "heapAfter": 1455124937,
+            "events": [
+              {
+                "name": "session-save-pending-published",
+                "timestamp": 149492.59999999404
+              },
+              {
+                "name": "session-save-paint-opportunity-completed",
+                "timestamp": 151395.19999998808
+              },
+              {
+                "name": "session-save-catalog-preparation-start",
+                "timestamp": 151395.19999998808
+              },
+              {
+                "name": "session-save-catalog-preparation-end",
+                "timestamp": 151395.29999998212,
+                "reusedCommittedSession": true
+              },
+              {
+                "name": "session-save-projection-start",
+                "timestamp": 151395.79999998212
+              },
+              {
+                "name": "session-save-projection-end",
+                "timestamp": 151878.29999998212
+              },
+              {
+                "name": "session-save-compression-start",
+                "timestamp": 151878.29999998212
+              },
+              {
+                "name": "session-save-compression-end",
+                "timestamp": 169195.19999998808,
+                "compressedSize": 133518068
+              },
+              {
+                "name": "session-save-download-handoff-completed",
+                "timestamp": 169198.40000000596,
+                "compressedSize": 133518068
+              },
+              {
+                "name": "session-save-pending-cleared",
+                "timestamp": 169223.09999999404
+              }
+            ],
+            "metrics": {
+              "sessionSaveProteinRawTextValidationReuseCount": 144
+            },
+            "workers": [
+              "http://127.0.0.1:35559/gbdraw/web/js/workers/session-import-worker.js",
+              "http://127.0.0.1:35559/gbdraw/web/js/workers/diagram-generation-worker.js"
+            ],
+            "workerTrace": [
+              {
+                "url": "http://127.0.0.1:35559/gbdraw/web/js/workers/session-import-worker.js",
+                "stack": "Error\n    at new window.Worker (eval at evaluate (:303:30), <anonymous>:5:79)\n    at http://127.0.0.1:35559/gbdraw/web/js/services/session-import-client.js:67:14\n    at new Promise (<anonymous>)\n    at importSessionFile (http://127.0.0.1:35559/gbdraw/web/js/services/session-import-client.js:10:61)\n    at importSessionDocument (http://127.0.0.1:35559/gbdraw/web/js/services/config.js:4174:29)\n    at importSession (http://127.0.0.1:35559/gbdraw/web/js/services/config.js:4767:26)",
+                "messages": [
+                  {
+                    "type": null,
+                    "operation": null,
+                    "operationId": 1,
+                    "fileBytes": 134471323,
+                    "stack": "Error\n    at window.Worker.postMessage (eval at evaluate (:303:30), <anonymous>:9:49)\n    at http://127.0.0.1:35559/gbdraw/web/js/services/session-import-client.js:73:12\n    at new Promise (<anonymous>)\n    at importSessionFile (http://127.0.0.1:35559/gbdraw/web/js/services/session-import-client.js:10:61)\n    at importSessionDocument (http://127.0.0.1:35559/gbdraw/web/js/services/config.js:4174:29)\n    at importSession (http://127.0.0.1:35559/gbdraw/web/js/services/config.js:4767:26)"
+                  }
+                ],
+                "listeners": 0,
+                "terminations": 1
+              },
+              {
+                "url": "http://127.0.0.1:35559/gbdraw/web/js/workers/diagram-generation-worker.js",
+                "stack": "Error\n    at new window.Worker (eval at evaluate (:303:30), <anonymous>:5:79)\n    at getWorker (http://127.0.0.1:35559/gbdraw/web/js/services/diagram-generation.js:192:14)\n    at ensureWorkerInitialized (http://127.0.0.1:35559/gbdraw/web/js/services/diagram-generation.js:234:25)\n    at http://127.0.0.1:35559/gbdraw/web/js/services/diagram-generation.js:492:35\n    at runAuxiliaryWorkerRequest (http://127.0.0.1:35559/gbdraw/web/js/services/diagram-generation.js:557:5)\n    at runDiagramHelperOperation (http://127.0.0.1:35559/gbdraw/web/js/services/diagram-generation.js:575:10)\n    at http://127.0.0.1:35559/gbdraw/web/js/app/app-setup.js:235:52\n    at validateUnmanagedConfigOverrides (http://127.0.0.1:35559/gbdraw/web/js/services/config.js:1118:24)\n    at importSessionDocument (http://127.0.0.1:35559/gbdraw/web/js/services/config.js:4204:55)\n    at async importSession (http://127.0.0.1:35559/gbdraw/web/js/services/config.js:4767:20)",
+                "messages": [
+                  {
+                    "type": "init",
+                    "operation": null,
+                    "operationId": null,
+                    "fileBytes": null,
+                    "stack": "Error\n    at window.Worker.postMessage (eval at evaluate (:303:30), <anonymous>:9:49)\n    at ensureWorkerInitialized (http://127.0.0.1:35559/gbdraw/web/js/services/diagram-generation.js:291:17)\n    at http://127.0.0.1:35559/gbdraw/web/js/services/diagram-generation.js:492:35\n    at runAuxiliaryWorkerRequest (http://127.0.0.1:35559/gbdraw/web/js/services/diagram-generation.js:557:5)\n    at runDiagramHelperOperation (http://127.0.0.1:35559/gbdraw/web/js/services/diagram-generation.js:575:10)\n    at http://127.0.0.1:35559/gbdraw/web/js/app/app-setup.js:235:52\n    at validateUnmanagedConfigOverrides (http://127.0.0.1:35559/gbdraw/web/js/services/config.js:1118:24)\n    at importSessionDocument (http://127.0.0.1:35559/gbdraw/web/js/services/config.js:4204:55)\n    at async importSession (http://127.0.0.1:35559/gbdraw/web/js/services/config.js:4767:20)"
+                  },
+                  {
+                    "type": "helper",
+                    "operation": "validateConfigOverrides",
+                    "operationId": null,
+                    "fileBytes": null,
+                    "stack": "Error\n    at window.Worker.postMessage (eval at evaluate (:303:30), <anonymous>:9:49)\n    at http://127.0.0.1:35559/gbdraw/web/js/services/diagram-generation.js:544:21"
+                  },
+                  {
+                    "type": "helper",
+                    "operation": "validateConfigOverrides",
+                    "operationId": null,
+                    "fileBytes": null,
+                    "stack": "Error\n    at window.Worker.postMessage (eval at evaluate (:303:30), <anonymous>:9:49)\n    at http://127.0.0.1:35559/gbdraw/web/js/services/diagram-generation.js:544:21"
+                  }
+                ],
+                "listeners": 0,
+                "terminations": 0
+              }
+            ],
+            "heartbeat": {
+              "intervalMs": 100,
+              "count": 175,
+              "p95Ms": 211.09999999403954,
+              "maxMs": 2146.300000011921
+            },
+            "longTasks": {
+              "count": 6,
+              "totalMs": 4496,
+              "maxMs": 1897,
+              "entries": [
+                {
+                  "start": 149492,
+                  "duration": 1884
+                },
+                {
+                  "start": 151409.29999998212,
+                  "duration": 473
+                },
+                {
+                  "start": 156422,
+                  "duration": 54
+                },
+                {
+                  "start": 157388.5,
+                  "duration": 51
+                },
+                {
+                  "start": 168265.59999999404,
+                  "duration": 137
+                },
+                {
+                  "start": 169195,
+                  "duration": 1897
+                }
+              ]
+            },
+            "mainSampledHeapPeakBytes": 2065617082,
+            "receiverTaskMaxMs": null,
+            "stagesMs": {
+              "session-save-catalog-preparation": 0.09999999403953552,
+              "session-save-projection": 482.5,
+              "session-save-compression": 17316.90000000596
+            },
+            "codec": {
+              "decodeCpuMs": 0,
+              "encodeCpuMs": 663.2000006437302,
+              "encodedBytes": 466918820,
+              "decodedBytes": 0,
+              "streams": []
+            },
+            "outcome": {
+              "status": "saved",
+              "compressedBytes": 133518068
+            },
+            "memory": {
+              "sampleCount": 163,
+              "rssPeakBytes": 3596677120,
+              "rssErrors": [],
+              "rssStartBytes": 3306872832,
+              "v8UsedHeapPeaksBytes": {
+                "page": 1462391428,
+                "worker": 13226556
+              },
+              "errors": [],
+              "targets": {
+                "F3E5D83BB178C2EE14F93787E50B6312": {
+                  "type": "page",
+                  "url": "http://127.0.0.1:35559/gbdraw/web/index.html"
+                },
+                "13C4DB69B6922B7654FCFA43071001CD": {
+                  "type": "worker",
+                  "url": "http://127.0.0.1:35559/gbdraw/web/js/workers/diagram-generation-worker.js"
+                }
+              },
+              "workerPeaksByUrl": {
+                "diagram-generation-worker.js": {
+                  "usedSize": 13226556,
+                  "backingStorageSize": 80232387
+                }
+              }
+            },
+            "responsivenessAcceptance": false,
+            "mainObservedHeapDeltaBytes": 697303731
+          },
+          "previewPythonWorkerCount": 1,
+          "previewWorkerFreeAcceptance": false
+        },
+        {
+          "source": {
+            "sha256": "d3cafef9664bff958aec4932eea6e264ae872cce89762a7cbe617447af975388",
+            "bytes": 134471323,
+            "version": 44,
+            "requestSchema": 8,
+            "records": 12,
+            "features": 62089,
+            "cacheEntries": 144,
+            "hashes": {
+              "format": "a565d6c86d89f5062657493c80eed1b314a7d52b81c7504622b0ee9084307f4f",
+              "version": "71ee45a3c0db9a9865f7313dd3372cf60dca6479d46261f3542eb9346e4a04d6",
+              "createdAt": "d5c6127bab299c94eed55d31430169045de4083da95c0302752185455f671c5e",
+              "title": "41fa90b2b3984145805f4505c76707d3d75551814b5c9510fa868a912eed18de",
+              "ui": "e8c5aea1f0ebcbaa58a50e79b261e2d7940b78b685fe0d57b9c33e6cc13f312d",
+              "results": "3fc1e5206c155d14a4c33650310bc6ad73b9accd3c7356af9e9c738714f9b018",
+              "editorState": "5a9921e3c4c007a3870c3e7ee910af6df5dc0ec177c9df85cbb1d5dadd9327df",
+              "features": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a",
+              "orthogroupState": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a",
+              "cliInvocation": "6bcd9d92822c296df3466cf407d7aabbf003f4b8c764e8a03c30af4ca1c38d59",
+              "renderRequest": "4a24e726f9b038fdf0b999bfdd808cb34963ce4054e6df5ecdd963b39cac489b",
+              "resources": "600846eea4986e6d4fa92002870566c5ede14d6f3abd7c9ab2c98d7e1cec7688",
+              "webFiles": "b0be9635048d1dddaa08db919832436f5522a16b3feba07bee85d2e34d110088",
+              "losatCache": "21a45656d0a4c352003e7c1a49a2ad63ac49ce3fefff0c63e62cf4f73403e677",
+              "losatDerivedCache": "d801aa1fb7ddcc330a5e3173372ea6af4a3d08ec58074478e85aa5603e926658",
+              "proteinIdentityManifest": "b0e1ac56011c6f04e76a1b9af7c3431df72911762986163b37f63f7802b51cce"
+            },
+            "wholeHash": "1482237e2b867d2603226b4e4ae30584ecccc64c5689d6964c04490d2242255f"
+          },
+          "saved": {
+            "sha256": "6abf72ebe043c775a1cfb2bfa594af12c8a93ce6265aeb4a4443bb39fef4ad8c",
+            "bytes": 133518077,
+            "version": 44,
+            "requestSchema": 8,
+            "records": 12,
+            "features": 62089,
+            "cacheEntries": 144,
+            "hashes": {
+              "format": "a565d6c86d89f5062657493c80eed1b314a7d52b81c7504622b0ee9084307f4f",
+              "version": "71ee45a3c0db9a9865f7313dd3372cf60dca6479d46261f3542eb9346e4a04d6",
+              "createdAt": "2827be415b63fd0014357b22eb4a17388e757217c49a615faa0978ec9b6efffa",
+              "title": "7ebd154623dc1eac803167beddb7bae56174627d1c61f085a8d15040524c8190",
+              "config": "c5b36c10a8f1fec98679985fd2b0f09e92b216edeb54e83c17192b1c053aecfc",
+              "ui": "8bdd3575c36df8ee41a6d1e682cf509c15219ad30b068b734b4ccf608746faab",
+              "renderRequest": "4a24e726f9b038fdf0b999bfdd808cb34963ce4054e6df5ecdd963b39cac489b",
+              "resources": "600846eea4986e6d4fa92002870566c5ede14d6f3abd7c9ab2c98d7e1cec7688",
+              "webFiles": "9921b1f2ea29412256cc5f92f5f0e4278d31ca2a872a808a0dbbc19d55c77edc",
+              "results": "8eadde508b13b0d3c273bc147cef8c162e7b8c344741fe4fb1aad7031582d687",
+              "runMetadata": "9839a2f476149cacc6f3fcb8e89b4542f417c336db7c7e68e5b19a8181d67a08",
+              "features": "6b4e3687049ef90433ac03d66c81efa02f47cc29e96dde51bd834cac7d6419e0",
+              "editorState": "855570853dec9e05f5bbac125fedc16a3eace9d54d8f0795c8f9c76b2c80b563",
+              "orthogroupState": "2ef835f9b003a3b9c0300376225b8799ca37512ee954c8e425e3e067e893fc68",
+              "losatCache": "21a45656d0a4c352003e7c1a49a2ad63ac49ce3fefff0c63e62cf4f73403e677",
+              "losatDerivedCache": "d801aa1fb7ddcc330a5e3173372ea6af4a3d08ec58074478e85aa5603e926658",
+              "proteinIdentityManifest": "b0e1ac56011c6f04e76a1b9af7c3431df72911762986163b37f63f7802b51cce"
+            },
+            "wholeHash": "09e2401bb2904c73e468150f99833d7f872bb7f781f9843c55d0651028a5ae95"
+          },
+          "sectionEquality": {
+            "renderRequest": true,
+            "resources": true,
+            "webFiles": false,
+            "editorState": false,
+            "losatCache": true,
+            "losatDerivedCache": true,
+            "proteinIdentityManifest": true
+          },
+          "pageErrors": [],
+          "dialogs": [
+            {
+              "type": "alert",
+              "message": "Session loaded successfully!"
+            },
+            {
+              "type": "confirm",
+              "message": "Compressed session size is 127.3 MB. Continue?"
+            }
+          ],
+          "externalRequests": [],
+          "load": {
+            "wallMs": 131224.19999998808,
+            "heapBefore": 22228974,
+            "heapAfter": 1510335695,
+            "events": [
+              {
+                "name": "session-import-pending-published",
+                "timestamp": 864.0999999940395
+              },
+              {
+                "name": "session-import-paint-opportunity-completed",
+                "timestamp": 877.0999999940395
+              },
+              {
+                "name": "sessionSelection",
+                "timestamp": 877.6999999880791
+              },
+              {
+                "name": "session-import-worker-start",
+                "timestamp": 878.6999999880791,
+                "operationId": 1,
+                "fileBytes": 134471323
+              },
+              {
+                "name": "session-import-worker-terminated",
+                "timestamp": 3545.4000000059605,
+                "operationId": 1
+              },
+              {
+                "name": "session-import-worker-settled",
+                "timestamp": 3545.4000000059605,
+                "operationId": 1,
+                "status": "ok"
+              },
+              {
+                "name": "session-import-codec-completed",
+                "timestamp": 3545.4000000059605,
+                "readMs": 1150.699999988079,
+                "parseMs": 774.3000000119209,
+                "codecProbe": {
+                  "decodeCpuMs": 227.20000013709068,
+                  "decodedBytes": 466767669,
+                  "streams": [
+                    {
+                      "kind": "file-read",
+                      "start": 7.800000011920929,
+                      "bytes": 134471323,
+                      "chunks": 68,
+                      "wallMs": 1149.4000000059605
+                    },
+                    {
+                      "kind": "decompress",
+                      "start": 8,
+                      "bytes": 466767669,
+                      "chunks": 7157,
+                      "wallMs": 1149.2000000178814
+                    }
+                  ]
+                }
+              },
+              {
+                "name": "current-session-preflight-start",
+                "timestamp": 3847.7999999821186
+              },
+              {
+                "name": "session-authority-validation-start",
+                "timestamp": 3848.199999988079
+              },
+              {
+                "name": "session-authority-validation-end",
+                "timestamp": 4095.199999988079
+              },
+              {
+                "name": "feature-catalog-validation-start",
+                "timestamp": 4095.199999988079
+              },
+              {
+                "name": "catalog.admission-started",
+                "timestamp": 4095.5999999940395,
+                "resultCount": 1
+              },
+              {
+                "name": "catalog.admission-completed",
+                "timestamp": 10952.299999982119,
+                "resultCount": 1,
+                "itemCount": 1,
+                "recordCount": 12,
+                "renderedFeatureCount": 30993,
+                "biologicalFeatureCount": 62089
+              },
+              {
+                "name": "feature-catalog-validation-end",
+                "timestamp": 10952.40000000596
+              },
+              {
+                "name": "editor-state-normalization-start",
+                "timestamp": 10952.40000000596
+              },
+              {
+                "name": "editor-state-normalization-end",
+                "timestamp": 10952.5
+              },
+              {
+                "name": "resource-table-adoption-start",
+                "timestamp": 10952.5
+              },
+              {
+                "name": "resource-table-adoption-end",
+                "timestamp": 10952.699999988079
+              },
+              {
+                "name": "losat-artifact-validation-start",
+                "timestamp": 10952.699999988079
+              },
+              {
+                "name": "losat-artifact-validation-end",
+                "timestamp": 13436.59999999404
+              },
+              {
+                "name": "canonical-request-projection-start",
+                "timestamp": 13437.09999999404
+              },
+              {
+                "name": "canonical-request-projection-end",
+                "timestamp": 13441.90000000596
+              },
+              {
+                "name": "artifact-projection-start",
+                "timestamp": 13442.09999999404
+              },
+              {
+                "name": "artifact-projection-end",
+                "timestamp": 13442.199999988079
+              },
+              {
+                "name": "current-session-preflight-end",
+                "timestamp": 13442.299999982119
+              },
+              {
+                "name": "svg-admission-start",
+                "timestamp": 21128.09999999404
+              },
+              {
+                "name": "svg.admission-started",
+                "timestamp": 21128.40000000596,
+                "phase": "current-session",
+                "resultCount": 1,
+                "mutationKind": "EMPTY"
+              },
+              {
+                "name": "result-svg-characters",
+                "timestamp": 21128.59999999404,
+                "phase": "current-session",
+                "resultIndex": 0,
+                "value": 19621657
+              },
+              {
+                "name": "sanitize-call",
+                "timestamp": 21128.69999998808,
+                "durationMs": 1164.5999999940395
+              },
+              {
+                "name": "svg.admission-completed",
+                "timestamp": 22293.59999999404,
+                "phase": "current-session",
+                "resultCount": 1,
+                "mutationKind": "EMPTY"
+              },
+              {
+                "name": "artifact.candidate-completed",
+                "timestamp": 22293.59999999404,
+                "phase": "current-session",
+                "resultCount": 1,
+                "catalogFootprint": {
+                  "resultCount": 1,
+                  "itemCount": 1,
+                  "recordCount": 12,
+                  "renderedFeatureCount": 30993,
+                  "biologicalFeatureCount": 62089,
+                  "orthogroupRecordCount": 4927,
+                  "comparisonMatchCount": 1009,
+                  "annotationCount": 0,
+                  "sequenceSourceCount": 12,
+                  "sequenceCharacters": 34183265
+                }
+              },
+              {
+                "name": "svg-admission-end",
+                "timestamp": 22293.59999999404
+              },
+              {
+                "name": "session-candidate-prepared",
+                "timestamp": 22293.59999999404
+              },
+              {
+                "name": "session-candidate-adopted",
+                "timestamp": 24628.40000000596
+              },
+              {
+                "name": "preview-mount-start",
+                "timestamp": 24628.40000000596
+              },
+              {
+                "name": "preview.readiness-expectation-registered",
+                "timestamp": 24629,
+                "phase": "session-load",
+                "resultIndex": 0,
+                "bindSequence": 1
+              },
+              {
+                "name": "firstCommittedPreview",
+                "timestamp": 24629,
+                "resultCount": 1
+              },
+              {
+                "name": "preview-mount-end",
+                "timestamp": 128138.59999999404
+              },
+              {
+                "name": "preview.mount-observed",
+                "timestamp": 128138.90000000596,
+                "phase": "session-load",
+                "resultIndex": 0,
+                "rootGeneration": 1,
+                "bindSequence": 1
+              },
+              {
+                "name": "preview.bind-started",
+                "timestamp": 128139.09999999404,
+                "phase": "session-load",
+                "resultIndex": 0,
+                "rootGeneration": 1,
+                "bindSequence": 1
+              },
+              {
+                "name": "preview.bind-completed",
+                "timestamp": 129832.29999998212,
+                "phase": "session-load",
+                "resultIndex": 0,
+                "rootGeneration": 1,
+                "bindSequence": 1
+              },
+              {
+                "name": "preview.ready-receipt-emitted",
+                "timestamp": 129832.40000000596,
+                "phase": "session-load",
+                "resultIndex": 0,
+                "rootGeneration": 1,
+                "bindSequence": 1
+              },
+              {
+                "name": "preview.ready-receipt-accepted",
+                "timestamp": 129832.40000000596,
+                "phase": "session-load",
+                "resultIndex": 0,
+                "rootGeneration": 1,
+                "bindSequence": 1
+              },
+              {
+                "name": "interactiveReady",
+                "timestamp": 129833.5,
+                "status": "success",
+                "degradedRecovery": false
+              },
+              {
+                "name": "history-baseline-start",
+                "timestamp": 129833.5
+              },
+              {
+                "name": "history-baseline-end",
+                "timestamp": 129836.29999998212
+              },
+              {
+                "name": "session-import-pending-cleared",
+                "timestamp": 130082.90000000596
+              }
+            ],
+            "metrics": {
+              "featureCatalogAdmissionCount": 1,
+              "featureCatalogSecondaryTraversalCount": 0,
+              "currentSessionPreflightProteinManifestValidationCount": 1,
+              "currentSessionPreflightProteinRawTextValidationCount": 144,
+              "workerConstructionCount": 1,
+              "workerInitializationCount": 1,
+              "currentLegacyNormalizationCount": 0,
+              "legacyOverrideMigrationCount": 0,
+              "manualRuleFeatureMatchCount": 0,
+              "svgSanitizationCount": 1,
+              "generatedArtifactReadinessExpectationCount": 1,
+              "previewMaterializationObservedCount": 1,
+              "previewMountAdoptionCount": 1,
+              "previewBinderInvocationCount": 1,
+              "previewPollingIterationCount": 0,
+              "legendDomFullScanCount": 1,
+              "perFeatureListenerRegistrationCount": 0,
+              "comparisonDomFullScanCount": 1,
+              "previewReadyReceiptEmittedCount": 1,
+              "previewReadyReceiptAcceptedCount": 1
+            },
+            "workers": [
+              "http://127.0.0.1:35559/gbdraw/web/js/workers/session-import-worker.js",
+              "http://127.0.0.1:35559/gbdraw/web/js/workers/diagram-generation-worker.js"
+            ],
+            "workerTrace": [
+              {
+                "url": "http://127.0.0.1:35559/gbdraw/web/js/workers/session-import-worker.js",
+                "stack": "Error\n    at new window.Worker (eval at evaluate (:303:30), <anonymous>:5:79)\n    at http://127.0.0.1:35559/gbdraw/web/js/services/session-import-client.js:67:14\n    at new Promise (<anonymous>)\n    at importSessionFile (http://127.0.0.1:35559/gbdraw/web/js/services/session-import-client.js:10:61)\n    at importSessionDocument (http://127.0.0.1:35559/gbdraw/web/js/services/config.js:4174:29)\n    at importSession (http://127.0.0.1:35559/gbdraw/web/js/services/config.js:4767:26)",
+                "messages": [
+                  {
+                    "type": null,
+                    "operation": null,
+                    "operationId": 1,
+                    "fileBytes": 134471323,
+                    "stack": "Error\n    at window.Worker.postMessage (eval at evaluate (:303:30), <anonymous>:9:49)\n    at http://127.0.0.1:35559/gbdraw/web/js/services/session-import-client.js:73:12\n    at new Promise (<anonymous>)\n    at importSessionFile (http://127.0.0.1:35559/gbdraw/web/js/services/session-import-client.js:10:61)\n    at importSessionDocument (http://127.0.0.1:35559/gbdraw/web/js/services/config.js:4174:29)\n    at importSession (http://127.0.0.1:35559/gbdraw/web/js/services/config.js:4767:26)"
+                  }
+                ],
+                "listeners": 0,
+                "terminations": 1
+              },
+              {
+                "url": "http://127.0.0.1:35559/gbdraw/web/js/workers/diagram-generation-worker.js",
+                "stack": "Error\n    at new window.Worker (eval at evaluate (:303:30), <anonymous>:5:79)\n    at getWorker (http://127.0.0.1:35559/gbdraw/web/js/services/diagram-generation.js:192:14)\n    at ensureWorkerInitialized (http://127.0.0.1:35559/gbdraw/web/js/services/diagram-generation.js:234:25)\n    at http://127.0.0.1:35559/gbdraw/web/js/services/diagram-generation.js:492:35\n    at runAuxiliaryWorkerRequest (http://127.0.0.1:35559/gbdraw/web/js/services/diagram-generation.js:557:5)\n    at runDiagramHelperOperation (http://127.0.0.1:35559/gbdraw/web/js/services/diagram-generation.js:575:10)\n    at http://127.0.0.1:35559/gbdraw/web/js/app/app-setup.js:235:52\n    at validateUnmanagedConfigOverrides (http://127.0.0.1:35559/gbdraw/web/js/services/config.js:1118:24)\n    at importSessionDocument (http://127.0.0.1:35559/gbdraw/web/js/services/config.js:4204:55)\n    at async importSession (http://127.0.0.1:35559/gbdraw/web/js/services/config.js:4767:20)",
+                "messages": [
+                  {
+                    "type": "init",
+                    "operation": null,
+                    "operationId": null,
+                    "fileBytes": null,
+                    "stack": "Error\n    at window.Worker.postMessage (eval at evaluate (:303:30), <anonymous>:9:49)\n    at ensureWorkerInitialized (http://127.0.0.1:35559/gbdraw/web/js/services/diagram-generation.js:291:17)\n    at http://127.0.0.1:35559/gbdraw/web/js/services/diagram-generation.js:492:35\n    at runAuxiliaryWorkerRequest (http://127.0.0.1:35559/gbdraw/web/js/services/diagram-generation.js:557:5)\n    at runDiagramHelperOperation (http://127.0.0.1:35559/gbdraw/web/js/services/diagram-generation.js:575:10)\n    at http://127.0.0.1:35559/gbdraw/web/js/app/app-setup.js:235:52\n    at validateUnmanagedConfigOverrides (http://127.0.0.1:35559/gbdraw/web/js/services/config.js:1118:24)\n    at importSessionDocument (http://127.0.0.1:35559/gbdraw/web/js/services/config.js:4204:55)\n    at async importSession (http://127.0.0.1:35559/gbdraw/web/js/services/config.js:4767:20)"
+                  },
+                  {
+                    "type": "helper",
+                    "operation": "validateConfigOverrides",
+                    "operationId": null,
+                    "fileBytes": null,
+                    "stack": "Error\n    at window.Worker.postMessage (eval at evaluate (:303:30), <anonymous>:9:49)\n    at http://127.0.0.1:35559/gbdraw/web/js/services/diagram-generation.js:544:21"
+                  }
+                ],
+                "listeners": 0,
+                "terminations": 0
+              }
+            ],
+            "heartbeat": {
+              "intervalMs": 100,
+              "count": 103,
+              "p95Ms": 100.19999998807907,
+              "maxMs": 110887.5
+            },
+            "longTasks": {
+              "count": 2,
+              "totalMs": 121072,
+              "maxMs": 110787,
+              "entries": [
+                {
+                  "start": 3157.9000000059605,
+                  "duration": 10285
+                },
+                {
+                  "start": 21074.5,
+                  "duration": 110787
+                }
+              ]
+            },
+            "mainSampledHeapPeakBytes": 1510335695,
+            "receiverTaskMaxMs": null,
+            "stagesMs": {
+              "session-authority-validation": 247.0,
+              "feature-catalog-validation": 6857.200000017881,
+              "editor-state-normalization": 0.09999999403953552,
+              "resource-table-adoption": 0.19999998807907104,
+              "losat-artifact-validation": 2483.9000000059605,
+              "canonical-request-projection": 4.800000011920929,
+              "artifact-projection": 0.09999999403953552,
+              "current-session-preflight": 9594.5,
+              "svg-admission": 1165.5,
+              "preview-mount": 103510.19999998808,
+              "history-baseline": 2.7999999821186066,
+              "restoreBeforeSvgAdmission": 7685.800000011921
+            },
+            "codec": {
+              "decodeCpuMs": 0,
+              "encodeCpuMs": 0,
+              "encodedBytes": 0,
+              "decodedBytes": 0,
+              "streams": []
+            },
+            "ready": {
+              "resultCount": 1,
+              "records": 1,
+              "catalog": 1,
+              "requestRecords": 12,
+              "cacheEntries": 144,
+              "mounted": true
+            },
+            "transferredBufferBytes": 0,
+            "nativeStructuredCloneWireBytes": null,
+            "nativeStructuredCloneCopyBytes": null,
+            "memory": {
+              "sampleCount": 147,
+              "rssPeakBytes": 3264495616,
+              "rssErrors": [],
+              "rssStartBytes": 639381504,
+              "v8UsedHeapPeaksBytes": {
+                "page": 1465191576,
+                "worker": 906752456
+              },
+              "errors": [
+                "WebSocketTimeoutException: Connection timed out"
+              ],
+              "targets": {
+                "DD4C02159C913F6C9AF6B8908F9453EB": {
+                  "type": "page",
+                  "url": "http://127.0.0.1:35559/gbdraw/web/index.html"
+                },
+                "C4A19F0B6E6F48B375CFE7381E29FBF6": {
+                  "type": "worker",
+                  "url": "http://127.0.0.1:35559/gbdraw/web/js/workers/session-import-worker.js"
+                },
+                "3A0CED0F4F1C171436FE5416B9AF0C0A": {
+                  "type": "worker",
+                  "url": "http://127.0.0.1:35559/gbdraw/web/js/workers/diagram-generation-worker.js"
+                }
+              },
+              "workerPeaksByUrl": {
+                "session-import-worker.js": {
+                  "usedSize": 906752456,
+                  "backingStorageSize": 570913371
+                },
+                "diagram-generation-worker.js": {
+                  "usedSize": 22375952,
+                  "backingStorageSize": 107949839
+                }
+              }
+            },
+            "responsivenessAcceptance": false,
+            "mainObservedHeapDeltaBytes": 1488106721
+          },
+          "save": {
+            "wallMs": 25258.19999998808,
+            "heapBefore": 1510917426,
+            "heapAfter": 1447853097,
+            "events": [
+              {
+                "name": "session-save-pending-published",
+                "timestamp": 133899
+              },
+              {
+                "name": "session-save-paint-opportunity-completed",
+                "timestamp": 135619.59999999404
+              },
+              {
+                "name": "session-save-catalog-preparation-start",
+                "timestamp": 135619.59999999404
+              },
+              {
+                "name": "session-save-catalog-preparation-end",
+                "timestamp": 135619.59999999404,
+                "reusedCommittedSession": true
+              },
+              {
+                "name": "session-save-projection-start",
+                "timestamp": 135620.19999998808
+              },
+              {
+                "name": "session-save-projection-end",
+                "timestamp": 136074.90000000596
+              },
+              {
+                "name": "session-save-compression-start",
+                "timestamp": 136074.90000000596
+              },
+              {
+                "name": "session-save-compression-end",
+                "timestamp": 154107.90000000596,
+                "compressedSize": 133518077
+              },
+              {
+                "name": "session-save-download-handoff-completed",
+                "timestamp": 154111,
+                "compressedSize": 133518077
+              },
+              {
+                "name": "session-save-pending-cleared",
+                "timestamp": 154135.09999999404
+              }
+            ],
+            "metrics": {
+              "sessionSaveProteinRawTextValidationReuseCount": 144
+            },
+            "workers": [
+              "http://127.0.0.1:35559/gbdraw/web/js/workers/session-import-worker.js",
+              "http://127.0.0.1:35559/gbdraw/web/js/workers/diagram-generation-worker.js"
+            ],
+            "workerTrace": [
+              {
+                "url": "http://127.0.0.1:35559/gbdraw/web/js/workers/session-import-worker.js",
+                "stack": "Error\n    at new window.Worker (eval at evaluate (:303:30), <anonymous>:5:79)\n    at http://127.0.0.1:35559/gbdraw/web/js/services/session-import-client.js:67:14\n    at new Promise (<anonymous>)\n    at importSessionFile (http://127.0.0.1:35559/gbdraw/web/js/services/session-import-client.js:10:61)\n    at importSessionDocument (http://127.0.0.1:35559/gbdraw/web/js/services/config.js:4174:29)\n    at importSession (http://127.0.0.1:35559/gbdraw/web/js/services/config.js:4767:26)",
+                "messages": [
+                  {
+                    "type": null,
+                    "operation": null,
+                    "operationId": 1,
+                    "fileBytes": 134471323,
+                    "stack": "Error\n    at window.Worker.postMessage (eval at evaluate (:303:30), <anonymous>:9:49)\n    at http://127.0.0.1:35559/gbdraw/web/js/services/session-import-client.js:73:12\n    at new Promise (<anonymous>)\n    at importSessionFile (http://127.0.0.1:35559/gbdraw/web/js/services/session-import-client.js:10:61)\n    at importSessionDocument (http://127.0.0.1:35559/gbdraw/web/js/services/config.js:4174:29)\n    at importSession (http://127.0.0.1:35559/gbdraw/web/js/services/config.js:4767:26)"
+                  }
+                ],
+                "listeners": 0,
+                "terminations": 1
+              },
+              {
+                "url": "http://127.0.0.1:35559/gbdraw/web/js/workers/diagram-generation-worker.js",
+                "stack": "Error\n    at new window.Worker (eval at evaluate (:303:30), <anonymous>:5:79)\n    at getWorker (http://127.0.0.1:35559/gbdraw/web/js/services/diagram-generation.js:192:14)\n    at ensureWorkerInitialized (http://127.0.0.1:35559/gbdraw/web/js/services/diagram-generation.js:234:25)\n    at http://127.0.0.1:35559/gbdraw/web/js/services/diagram-generation.js:492:35\n    at runAuxiliaryWorkerRequest (http://127.0.0.1:35559/gbdraw/web/js/services/diagram-generation.js:557:5)\n    at runDiagramHelperOperation (http://127.0.0.1:35559/gbdraw/web/js/services/diagram-generation.js:575:10)\n    at http://127.0.0.1:35559/gbdraw/web/js/app/app-setup.js:235:52\n    at validateUnmanagedConfigOverrides (http://127.0.0.1:35559/gbdraw/web/js/services/config.js:1118:24)\n    at importSessionDocument (http://127.0.0.1:35559/gbdraw/web/js/services/config.js:4204:55)\n    at async importSession (http://127.0.0.1:35559/gbdraw/web/js/services/config.js:4767:20)",
+                "messages": [
+                  {
+                    "type": "init",
+                    "operation": null,
+                    "operationId": null,
+                    "fileBytes": null,
+                    "stack": "Error\n    at window.Worker.postMessage (eval at evaluate (:303:30), <anonymous>:9:49)\n    at ensureWorkerInitialized (http://127.0.0.1:35559/gbdraw/web/js/services/diagram-generation.js:291:17)\n    at http://127.0.0.1:35559/gbdraw/web/js/services/diagram-generation.js:492:35\n    at runAuxiliaryWorkerRequest (http://127.0.0.1:35559/gbdraw/web/js/services/diagram-generation.js:557:5)\n    at runDiagramHelperOperation (http://127.0.0.1:35559/gbdraw/web/js/services/diagram-generation.js:575:10)\n    at http://127.0.0.1:35559/gbdraw/web/js/app/app-setup.js:235:52\n    at validateUnmanagedConfigOverrides (http://127.0.0.1:35559/gbdraw/web/js/services/config.js:1118:24)\n    at importSessionDocument (http://127.0.0.1:35559/gbdraw/web/js/services/config.js:4204:55)\n    at async importSession (http://127.0.0.1:35559/gbdraw/web/js/services/config.js:4767:20)"
+                  },
+                  {
+                    "type": "helper",
+                    "operation": "validateConfigOverrides",
+                    "operationId": null,
+                    "fileBytes": null,
+                    "stack": "Error\n    at window.Worker.postMessage (eval at evaluate (:303:30), <anonymous>:9:49)\n    at http://127.0.0.1:35559/gbdraw/web/js/services/diagram-generation.js:544:21"
+                  },
+                  {
+                    "type": "helper",
+                    "operation": "validateConfigOverrides",
+                    "operationId": null,
+                    "fileBytes": null,
+                    "stack": "Error\n    at window.Worker.postMessage (eval at evaluate (:303:30), <anonymous>:9:49)\n    at http://127.0.0.1:35559/gbdraw/web/js/services/diagram-generation.js:544:21"
+                  }
+                ],
+                "listeners": 0,
+                "terminations": 0
+              }
+            ],
+            "heartbeat": {
+              "intervalMs": 100,
+              "count": 179,
+              "p95Ms": 217.80000001192093,
+              "maxMs": 1909.7000000178814
+            },
+            "longTasks": {
+              "count": 5,
+              "totalMs": 4286,
+              "maxMs": 1832,
+              "entries": [
+                {
+                  "start": 133898.5,
+                  "duration": 1710
+                },
+                {
+                  "start": 135630.59999999404,
+                  "duration": 447
+                },
+                {
+                  "start": 140657.59999999404,
+                  "duration": 240
+                },
+                {
+                  "start": 141911.59999999404,
+                  "duration": 57
+                },
+                {
+                  "start": 154107.69999998808,
+                  "duration": 1832
+                }
+              ]
+            },
+            "mainSampledHeapPeakBytes": 1830619138,
+            "receiverTaskMaxMs": null,
+            "stagesMs": {
+              "session-save-catalog-preparation": 0.0,
+              "session-save-projection": 454.7000000178814,
+              "session-save-compression": 18033.0
+            },
+            "codec": {
+              "decodeCpuMs": 0,
+              "encodeCpuMs": 673.6999986767769,
+              "encodedBytes": 466918820,
+              "decodedBytes": 0,
+              "streams": []
+            },
+            "outcome": {
+              "status": "saved",
+              "compressedBytes": 133518077
+            },
+            "memory": {
+              "sampleCount": 164,
+              "rssPeakBytes": 3394752512,
+              "rssErrors": [],
+              "rssStartBytes": 2886037504,
+              "v8UsedHeapPeaksBytes": {
+                "page": 1524038892,
+                "worker": 13226516
+              },
+              "errors": [],
+              "targets": {
+                "DD4C02159C913F6C9AF6B8908F9453EB": {
+                  "type": "page",
+                  "url": "http://127.0.0.1:35559/gbdraw/web/index.html"
+                },
+                "3A0CED0F4F1C171436FE5416B9AF0C0A": {
+                  "type": "worker",
+                  "url": "http://127.0.0.1:35559/gbdraw/web/js/workers/diagram-generation-worker.js"
+                }
+              },
+              "workerPeaksByUrl": {
+                "diagram-generation-worker.js": {
+                  "usedSize": 13226516,
+                  "backingStorageSize": 80232387
+                }
+              }
+            },
+            "responsivenessAcceptance": false,
+            "mainObservedHeapDeltaBytes": 319701712
+          },
+          "previewPythonWorkerCount": 1,
+          "previewWorkerFreeAcceptance": false
+        },
+        {
+          "source": {
+            "sha256": "d3cafef9664bff958aec4932eea6e264ae872cce89762a7cbe617447af975388",
+            "bytes": 134471323,
+            "version": 44,
+            "requestSchema": 8,
+            "records": 12,
+            "features": 62089,
+            "cacheEntries": 144,
+            "hashes": {
+              "format": "a565d6c86d89f5062657493c80eed1b314a7d52b81c7504622b0ee9084307f4f",
+              "version": "71ee45a3c0db9a9865f7313dd3372cf60dca6479d46261f3542eb9346e4a04d6",
+              "createdAt": "d5c6127bab299c94eed55d31430169045de4083da95c0302752185455f671c5e",
+              "title": "41fa90b2b3984145805f4505c76707d3d75551814b5c9510fa868a912eed18de",
+              "ui": "e8c5aea1f0ebcbaa58a50e79b261e2d7940b78b685fe0d57b9c33e6cc13f312d",
+              "results": "3fc1e5206c155d14a4c33650310bc6ad73b9accd3c7356af9e9c738714f9b018",
+              "editorState": "5a9921e3c4c007a3870c3e7ee910af6df5dc0ec177c9df85cbb1d5dadd9327df",
+              "features": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a",
+              "orthogroupState": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a",
+              "cliInvocation": "6bcd9d92822c296df3466cf407d7aabbf003f4b8c764e8a03c30af4ca1c38d59",
+              "renderRequest": "4a24e726f9b038fdf0b999bfdd808cb34963ce4054e6df5ecdd963b39cac489b",
+              "resources": "600846eea4986e6d4fa92002870566c5ede14d6f3abd7c9ab2c98d7e1cec7688",
+              "webFiles": "b0be9635048d1dddaa08db919832436f5522a16b3feba07bee85d2e34d110088",
+              "losatCache": "21a45656d0a4c352003e7c1a49a2ad63ac49ce3fefff0c63e62cf4f73403e677",
+              "losatDerivedCache": "d801aa1fb7ddcc330a5e3173372ea6af4a3d08ec58074478e85aa5603e926658",
+              "proteinIdentityManifest": "b0e1ac56011c6f04e76a1b9af7c3431df72911762986163b37f63f7802b51cce"
+            },
+            "wholeHash": "1482237e2b867d2603226b4e4ae30584ecccc64c5689d6964c04490d2242255f"
+          },
+          "saved": {
+            "sha256": "20dd57a9b01a6b4ee70526bd06790b6a6dbb66594eb3536e6a22d41de50e5a3d",
+            "bytes": 133518081,
+            "version": 44,
+            "requestSchema": 8,
+            "records": 12,
+            "features": 62089,
+            "cacheEntries": 144,
+            "hashes": {
+              "format": "a565d6c86d89f5062657493c80eed1b314a7d52b81c7504622b0ee9084307f4f",
+              "version": "71ee45a3c0db9a9865f7313dd3372cf60dca6479d46261f3542eb9346e4a04d6",
+              "createdAt": "d54571e10f0d2908c0625f2bb7c195beeb3ad7b36267e5c0b8cc1f33cb69d727",
+              "title": "7ebd154623dc1eac803167beddb7bae56174627d1c61f085a8d15040524c8190",
+              "config": "2e59dd36474a8c60acc1c42eb5949621b317ffab6a3aa122bc1d0b7121f9a2d2",
+              "ui": "8bdd3575c36df8ee41a6d1e682cf509c15219ad30b068b734b4ccf608746faab",
+              "renderRequest": "4a24e726f9b038fdf0b999bfdd808cb34963ce4054e6df5ecdd963b39cac489b",
+              "resources": "600846eea4986e6d4fa92002870566c5ede14d6f3abd7c9ab2c98d7e1cec7688",
+              "webFiles": "ac6e288222aa50e42048a1affd4774e1b2c069e8b5ea6a5ed4e6120fb0520a2b",
+              "results": "8eadde508b13b0d3c273bc147cef8c162e7b8c344741fe4fb1aad7031582d687",
+              "runMetadata": "9839a2f476149cacc6f3fcb8e89b4542f417c336db7c7e68e5b19a8181d67a08",
+              "features": "6b4e3687049ef90433ac03d66c81efa02f47cc29e96dde51bd834cac7d6419e0",
+              "editorState": "855570853dec9e05f5bbac125fedc16a3eace9d54d8f0795c8f9c76b2c80b563",
+              "orthogroupState": "2ef835f9b003a3b9c0300376225b8799ca37512ee954c8e425e3e067e893fc68",
+              "losatCache": "21a45656d0a4c352003e7c1a49a2ad63ac49ce3fefff0c63e62cf4f73403e677",
+              "losatDerivedCache": "d801aa1fb7ddcc330a5e3173372ea6af4a3d08ec58074478e85aa5603e926658",
+              "proteinIdentityManifest": "b0e1ac56011c6f04e76a1b9af7c3431df72911762986163b37f63f7802b51cce"
+            },
+            "wholeHash": "00ea0522dd1b1f401dcfd875bc36123a93955259d9b953adc9890a5854029e45"
+          },
+          "sectionEquality": {
+            "renderRequest": true,
+            "resources": true,
+            "webFiles": false,
+            "editorState": false,
+            "losatCache": true,
+            "losatDerivedCache": true,
+            "proteinIdentityManifest": true
+          },
+          "pageErrors": [],
+          "dialogs": [
+            {
+              "type": "alert",
+              "message": "Session loaded successfully!"
+            },
+            {
+              "type": "confirm",
+              "message": "Compressed session size is 127.3 MB. Continue?"
+            }
+          ],
+          "externalRequests": [],
+          "load": {
+            "wallMs": 118212.10000002384,
+            "heapBefore": 22234518,
+            "heapAfter": 1368058431,
+            "events": [
+              {
+                "name": "session-import-pending-published",
+                "timestamp": 889.6999999880791
+              },
+              {
+                "name": "session-import-paint-opportunity-completed",
+                "timestamp": 922.5
+              },
+              {
+                "name": "sessionSelection",
+                "timestamp": 923.0999999940395
+              },
+              {
+                "name": "session-import-worker-start",
+                "timestamp": 924.4000000059605,
+                "operationId": 1,
+                "fileBytes": 134471323
+              },
+              {
+                "name": "session-import-worker-terminated",
+                "timestamp": 3818.4000000059605,
+                "operationId": 1
+              },
+              {
+                "name": "session-import-worker-settled",
+                "timestamp": 3818.4000000059605,
+                "operationId": 1,
+                "status": "ok"
+              },
+              {
+                "name": "session-import-codec-completed",
+                "timestamp": 3818.4000000059605,
+                "readMs": 1177.800000011921,
+                "parseMs": 738.5999999940395,
+                "codecProbe": {
+                  "decodeCpuMs": 227.19999977946281,
+                  "decodedBytes": 466767669,
+                  "streams": [
+                    {
+                      "kind": "file-read",
+                      "start": 8.400000005960464,
+                      "bytes": 134471323,
+                      "chunks": 68,
+                      "wallMs": 1176.5999999940395
+                    },
+                    {
+                      "kind": "decompress",
+                      "start": 8.600000023841858,
+                      "bytes": 466767669,
+                      "chunks": 7157,
+                      "wallMs": 1176.5
+                    }
+                  ]
+                }
+              },
+              {
+                "name": "current-session-preflight-start",
+                "timestamp": 4130.799999982119
+              },
+              {
+                "name": "session-authority-validation-start",
+                "timestamp": 4131.199999988079
+              },
+              {
+                "name": "session-authority-validation-end",
+                "timestamp": 4418.9000000059605
+              },
+              {
+                "name": "feature-catalog-validation-start",
+                "timestamp": 4418.9000000059605
+              },
+              {
+                "name": "catalog.admission-started",
+                "timestamp": 4419.5,
+                "resultCount": 1
+              },
+              {
+                "name": "catalog.admission-completed",
+                "timestamp": 10612.199999988079,
+                "resultCount": 1,
+                "itemCount": 1,
+                "recordCount": 12,
+                "renderedFeatureCount": 30993,
+                "biologicalFeatureCount": 62089
+              },
+              {
+                "name": "feature-catalog-validation-end",
+                "timestamp": 10612.199999988079
+              },
+              {
+                "name": "editor-state-normalization-start",
+                "timestamp": 10612.199999988079
+              },
+              {
+                "name": "editor-state-normalization-end",
+                "timestamp": 10612.5
+              },
+              {
+                "name": "resource-table-adoption-start",
+                "timestamp": 10612.5
+              },
+              {
+                "name": "resource-table-adoption-end",
+                "timestamp": 10612.699999988079
+              },
+              {
+                "name": "losat-artifact-validation-start",
+                "timestamp": 10612.699999988079
+              },
+              {
+                "name": "losat-artifact-validation-end",
+                "timestamp": 12536
+              },
+              {
+                "name": "canonical-request-projection-start",
+                "timestamp": 12536.5
+              },
+              {
+                "name": "canonical-request-projection-end",
+                "timestamp": 12540.199999988079
+              },
+              {
+                "name": "artifact-projection-start",
+                "timestamp": 12540.40000000596
+              },
+              {
+                "name": "artifact-projection-end",
+                "timestamp": 12540.5
+              },
+              {
+                "name": "current-session-preflight-end",
+                "timestamp": 12540.5
+              },
+              {
+                "name": "svg-admission-start",
+                "timestamp": 19207.40000000596
+              },
+              {
+                "name": "svg.admission-started",
+                "timestamp": 19207.69999998808,
+                "phase": "current-session",
+                "resultCount": 1,
+                "mutationKind": "EMPTY"
+              },
+              {
+                "name": "result-svg-characters",
+                "timestamp": 19207.79999998212,
+                "phase": "current-session",
+                "resultIndex": 0,
+                "value": 19621657
+              },
+              {
+                "name": "sanitize-call",
+                "timestamp": 19207.79999998212,
+                "durationMs": 1061.800000011921
+              },
+              {
+                "name": "svg.admission-completed",
+                "timestamp": 20269.79999998212,
+                "phase": "current-session",
+                "resultCount": 1,
+                "mutationKind": "EMPTY"
+              },
+              {
+                "name": "artifact.candidate-completed",
+                "timestamp": 20269.79999998212,
+                "phase": "current-session",
+                "resultCount": 1,
+                "catalogFootprint": {
+                  "resultCount": 1,
+                  "itemCount": 1,
+                  "recordCount": 12,
+                  "renderedFeatureCount": 30993,
+                  "biologicalFeatureCount": 62089,
+                  "orthogroupRecordCount": 4927,
+                  "comparisonMatchCount": 1009,
+                  "annotationCount": 0,
+                  "sequenceSourceCount": 12,
+                  "sequenceCharacters": 34183265
+                }
+              },
+              {
+                "name": "svg-admission-end",
+                "timestamp": 20269.79999998212
+              },
+              {
+                "name": "session-candidate-prepared",
+                "timestamp": 20269.79999998212
+              },
+              {
+                "name": "session-candidate-adopted",
+                "timestamp": 22610.5
+              },
+              {
+                "name": "preview-mount-start",
+                "timestamp": 22610.5
+              },
+              {
+                "name": "preview.readiness-expectation-registered",
+                "timestamp": 22610.90000000596,
+                "phase": "session-load",
+                "resultIndex": 0,
+                "bindSequence": 1
+              },
+              {
+                "name": "firstCommittedPreview",
+                "timestamp": 22611,
+                "resultCount": 1
+              },
+              {
+                "name": "preview-mount-end",
+                "timestamp": 115525
+              },
+              {
+                "name": "preview.mount-observed",
+                "timestamp": 115525.19999998808,
+                "phase": "session-load",
+                "resultIndex": 0,
+                "rootGeneration": 1,
+                "bindSequence": 1
+              },
+              {
+                "name": "preview.bind-started",
+                "timestamp": 115525.40000000596,
+                "phase": "session-load",
+                "resultIndex": 0,
+                "rootGeneration": 1,
+                "bindSequence": 1
+              },
+              {
+                "name": "preview.bind-completed",
+                "timestamp": 117053.5,
+                "phase": "session-load",
+                "resultIndex": 0,
+                "rootGeneration": 1,
+                "bindSequence": 1
+              },
+              {
+                "name": "preview.ready-receipt-emitted",
+                "timestamp": 117053.59999999404,
+                "phase": "session-load",
+                "resultIndex": 0,
+                "rootGeneration": 1,
+                "bindSequence": 1
+              },
+              {
+                "name": "preview.ready-receipt-accepted",
+                "timestamp": 117053.69999998808,
+                "phase": "session-load",
+                "resultIndex": 0,
+                "rootGeneration": 1,
+                "bindSequence": 1
+              },
+              {
+                "name": "interactiveReady",
+                "timestamp": 117054.79999998212,
+                "status": "success",
+                "degradedRecovery": false
+              },
+              {
+                "name": "history-baseline-start",
+                "timestamp": 117054.90000000596
+              },
+              {
+                "name": "history-baseline-end",
+                "timestamp": 117057.40000000596
+              },
+              {
+                "name": "session-import-pending-cleared",
+                "timestamp": 117273.09999999404
+              }
+            ],
+            "metrics": {
+              "featureCatalogAdmissionCount": 1,
+              "featureCatalogSecondaryTraversalCount": 0,
+              "currentSessionPreflightProteinManifestValidationCount": 1,
+              "currentSessionPreflightProteinRawTextValidationCount": 144,
+              "workerConstructionCount": 1,
+              "workerInitializationCount": 1,
+              "currentLegacyNormalizationCount": 0,
+              "legacyOverrideMigrationCount": 0,
+              "manualRuleFeatureMatchCount": 0,
+              "svgSanitizationCount": 1,
+              "generatedArtifactReadinessExpectationCount": 1,
+              "previewMaterializationObservedCount": 1,
+              "previewMountAdoptionCount": 1,
+              "previewBinderInvocationCount": 1,
+              "previewPollingIterationCount": 0,
+              "legendDomFullScanCount": 1,
+              "perFeatureListenerRegistrationCount": 0,
+              "comparisonDomFullScanCount": 1,
+              "previewReadyReceiptEmittedCount": 1,
+              "previewReadyReceiptAcceptedCount": 1
+            },
+            "workers": [
+              "http://127.0.0.1:35559/gbdraw/web/js/workers/session-import-worker.js",
+              "http://127.0.0.1:35559/gbdraw/web/js/workers/diagram-generation-worker.js"
+            ],
+            "workerTrace": [
+              {
+                "url": "http://127.0.0.1:35559/gbdraw/web/js/workers/session-import-worker.js",
+                "stack": "Error\n    at new window.Worker (eval at evaluate (:303:30), <anonymous>:5:79)\n    at http://127.0.0.1:35559/gbdraw/web/js/services/session-import-client.js:67:14\n    at new Promise (<anonymous>)\n    at importSessionFile (http://127.0.0.1:35559/gbdraw/web/js/services/session-import-client.js:10:61)\n    at importSessionDocument (http://127.0.0.1:35559/gbdraw/web/js/services/config.js:4174:29)\n    at importSession (http://127.0.0.1:35559/gbdraw/web/js/services/config.js:4767:26)",
+                "messages": [
+                  {
+                    "type": null,
+                    "operation": null,
+                    "operationId": 1,
+                    "fileBytes": 134471323,
+                    "stack": "Error\n    at window.Worker.postMessage (eval at evaluate (:303:30), <anonymous>:9:49)\n    at http://127.0.0.1:35559/gbdraw/web/js/services/session-import-client.js:73:12\n    at new Promise (<anonymous>)\n    at importSessionFile (http://127.0.0.1:35559/gbdraw/web/js/services/session-import-client.js:10:61)\n    at importSessionDocument (http://127.0.0.1:35559/gbdraw/web/js/services/config.js:4174:29)\n    at importSession (http://127.0.0.1:35559/gbdraw/web/js/services/config.js:4767:26)"
+                  }
+                ],
+                "listeners": 0,
+                "terminations": 1
+              },
+              {
+                "url": "http://127.0.0.1:35559/gbdraw/web/js/workers/diagram-generation-worker.js",
+                "stack": "Error\n    at new window.Worker (eval at evaluate (:303:30), <anonymous>:5:79)\n    at getWorker (http://127.0.0.1:35559/gbdraw/web/js/services/diagram-generation.js:192:14)\n    at ensureWorkerInitialized (http://127.0.0.1:35559/gbdraw/web/js/services/diagram-generation.js:234:25)\n    at http://127.0.0.1:35559/gbdraw/web/js/services/diagram-generation.js:492:35\n    at runAuxiliaryWorkerRequest (http://127.0.0.1:35559/gbdraw/web/js/services/diagram-generation.js:557:5)\n    at runDiagramHelperOperation (http://127.0.0.1:35559/gbdraw/web/js/services/diagram-generation.js:575:10)\n    at http://127.0.0.1:35559/gbdraw/web/js/app/app-setup.js:235:52\n    at validateUnmanagedConfigOverrides (http://127.0.0.1:35559/gbdraw/web/js/services/config.js:1118:24)\n    at importSessionDocument (http://127.0.0.1:35559/gbdraw/web/js/services/config.js:4204:55)\n    at async importSession (http://127.0.0.1:35559/gbdraw/web/js/services/config.js:4767:20)",
+                "messages": [
+                  {
+                    "type": "init",
+                    "operation": null,
+                    "operationId": null,
+                    "fileBytes": null,
+                    "stack": "Error\n    at window.Worker.postMessage (eval at evaluate (:303:30), <anonymous>:9:49)\n    at ensureWorkerInitialized (http://127.0.0.1:35559/gbdraw/web/js/services/diagram-generation.js:291:17)\n    at http://127.0.0.1:35559/gbdraw/web/js/services/diagram-generation.js:492:35\n    at runAuxiliaryWorkerRequest (http://127.0.0.1:35559/gbdraw/web/js/services/diagram-generation.js:557:5)\n    at runDiagramHelperOperation (http://127.0.0.1:35559/gbdraw/web/js/services/diagram-generation.js:575:10)\n    at http://127.0.0.1:35559/gbdraw/web/js/app/app-setup.js:235:52\n    at validateUnmanagedConfigOverrides (http://127.0.0.1:35559/gbdraw/web/js/services/config.js:1118:24)\n    at importSessionDocument (http://127.0.0.1:35559/gbdraw/web/js/services/config.js:4204:55)\n    at async importSession (http://127.0.0.1:35559/gbdraw/web/js/services/config.js:4767:20)"
+                  },
+                  {
+                    "type": "helper",
+                    "operation": "validateConfigOverrides",
+                    "operationId": null,
+                    "fileBytes": null,
+                    "stack": "Error\n    at window.Worker.postMessage (eval at evaluate (:303:30), <anonymous>:9:49)\n    at http://127.0.0.1:35559/gbdraw/web/js/services/diagram-generation.js:544:21"
+                  }
+                ],
+                "listeners": 0,
+                "terminations": 0
+              }
+            ],
+            "heartbeat": {
+              "intervalMs": 100,
+              "count": 94,
+              "p95Ms": 100.10000002384186,
+              "maxMs": 99702.59999999404
+            },
+            "longTasks": {
+              "count": 2,
+              "totalMs": 108830,
+              "maxMs": 99625,
+              "entries": [
+                {
+                  "start": 3335.699999988079,
+                  "duration": 9205
+                },
+                {
+                  "start": 19158.79999998212,
+                  "duration": 99625
+                }
+              ]
+            },
+            "mainSampledHeapPeakBytes": 1571184273,
+            "receiverTaskMaxMs": null,
+            "stagesMs": {
+              "session-authority-validation": 287.7000000178814,
+              "feature-catalog-validation": 6193.299999982119,
+              "editor-state-normalization": 0.30000001192092896,
+              "resource-table-adoption": 0.19999998807907104,
+              "losat-artifact-validation": 1923.300000011921,
+              "canonical-request-projection": 3.699999988079071,
+              "artifact-projection": 0.09999999403953552,
+              "current-session-preflight": 8409.700000017881,
+              "svg-admission": 1062.3999999761581,
+              "preview-mount": 92914.5,
+              "history-baseline": 2.5,
+              "restoreBeforeSvgAdmission": 6666.9000000059605
+            },
+            "codec": {
+              "decodeCpuMs": 0,
+              "encodeCpuMs": 0,
+              "encodedBytes": 0,
+              "decodedBytes": 0,
+              "streams": []
+            },
+            "ready": {
+              "resultCount": 1,
+              "records": 1,
+              "catalog": 1,
+              "requestRecords": 12,
+              "cacheEntries": 144,
+              "mounted": true
+            },
+            "transferredBufferBytes": 0,
+            "nativeStructuredCloneWireBytes": null,
+            "nativeStructuredCloneCopyBytes": null,
+            "memory": {
+              "sampleCount": 133,
+              "rssPeakBytes": 3356917760,
+              "rssErrors": [],
+              "rssStartBytes": 637861888,
+              "v8UsedHeapPeaksBytes": {
+                "page": 1498092164,
+                "worker": 906749600
+              },
+              "errors": [
+                "WebSocketTimeoutException: Connection timed out"
+              ],
+              "targets": {
+                "A4269D0785EA2EF676AC21C0B912F138": {
+                  "type": "page",
+                  "url": "http://127.0.0.1:35559/gbdraw/web/index.html"
+                },
+                "699D46C2557066D09E6FD3D626C819BF": {
+                  "type": "worker",
+                  "url": "http://127.0.0.1:35559/gbdraw/web/js/workers/session-import-worker.js"
+                },
+                "9F05AC1E26FAC7C8BF65CF0E4CDF7577": {
+                  "type": "worker",
+                  "url": "http://127.0.0.1:35559/gbdraw/web/js/workers/diagram-generation-worker.js"
+                }
+              },
+              "workerPeaksByUrl": {
+                "session-import-worker.js": {
+                  "usedSize": 906749600,
+                  "backingStorageSize": 554186585
+                },
+                "diagram-generation-worker.js": {
+                  "usedSize": 21927048,
+                  "backingStorageSize": 106361250
+                }
+              }
+            },
+            "responsivenessAcceptance": false,
+            "mainObservedHeapDeltaBytes": 1548949755
+          },
+          "save": {
+            "wallMs": 21413.70000001788,
+            "heapBefore": 1368615694,
+            "heapAfter": 1441414064,
+            "events": [
+              {
+                "name": "session-save-pending-published",
+                "timestamp": 120881.5
+              },
+              {
+                "name": "session-save-paint-opportunity-completed",
+                "timestamp": 122558.09999999404
+              },
+              {
+                "name": "session-save-catalog-preparation-start",
+                "timestamp": 122558.09999999404
+              },
+              {
+                "name": "session-save-catalog-preparation-end",
+                "timestamp": 122558.19999998808,
+                "reusedCommittedSession": true
+              },
+              {
+                "name": "session-save-projection-start",
+                "timestamp": 122558.59999999404
+              },
+              {
+                "name": "session-save-projection-end",
+                "timestamp": 122945.40000000596
+              },
+              {
+                "name": "session-save-compression-start",
+                "timestamp": 122945.40000000596
+              },
+              {
+                "name": "session-save-compression-end",
+                "timestamp": 137741.69999998808,
+                "compressedSize": 133518081
+              },
+              {
+                "name": "session-save-download-handoff-completed",
+                "timestamp": 137744.90000000596,
+                "compressedSize": 133518081
+              },
+              {
+                "name": "session-save-pending-cleared",
+                "timestamp": 137764.59999999404
+              }
+            ],
+            "metrics": {
+              "sessionSaveProteinRawTextValidationReuseCount": 144
+            },
+            "workers": [
+              "http://127.0.0.1:35559/gbdraw/web/js/workers/session-import-worker.js",
+              "http://127.0.0.1:35559/gbdraw/web/js/workers/diagram-generation-worker.js"
+            ],
+            "workerTrace": [
+              {
+                "url": "http://127.0.0.1:35559/gbdraw/web/js/workers/session-import-worker.js",
+                "stack": "Error\n    at new window.Worker (eval at evaluate (:303:30), <anonymous>:5:79)\n    at http://127.0.0.1:35559/gbdraw/web/js/services/session-import-client.js:67:14\n    at new Promise (<anonymous>)\n    at importSessionFile (http://127.0.0.1:35559/gbdraw/web/js/services/session-import-client.js:10:61)\n    at importSessionDocument (http://127.0.0.1:35559/gbdraw/web/js/services/config.js:4174:29)\n    at importSession (http://127.0.0.1:35559/gbdraw/web/js/services/config.js:4767:26)",
+                "messages": [
+                  {
+                    "type": null,
+                    "operation": null,
+                    "operationId": 1,
+                    "fileBytes": 134471323,
+                    "stack": "Error\n    at window.Worker.postMessage (eval at evaluate (:303:30), <anonymous>:9:49)\n    at http://127.0.0.1:35559/gbdraw/web/js/services/session-import-client.js:73:12\n    at new Promise (<anonymous>)\n    at importSessionFile (http://127.0.0.1:35559/gbdraw/web/js/services/session-import-client.js:10:61)\n    at importSessionDocument (http://127.0.0.1:35559/gbdraw/web/js/services/config.js:4174:29)\n    at importSession (http://127.0.0.1:35559/gbdraw/web/js/services/config.js:4767:26)"
+                  }
+                ],
+                "listeners": 0,
+                "terminations": 1
+              },
+              {
+                "url": "http://127.0.0.1:35559/gbdraw/web/js/workers/diagram-generation-worker.js",
+                "stack": "Error\n    at new window.Worker (eval at evaluate (:303:30), <anonymous>:5:79)\n    at getWorker (http://127.0.0.1:35559/gbdraw/web/js/services/diagram-generation.js:192:14)\n    at ensureWorkerInitialized (http://127.0.0.1:35559/gbdraw/web/js/services/diagram-generation.js:234:25)\n    at http://127.0.0.1:35559/gbdraw/web/js/services/diagram-generation.js:492:35\n    at runAuxiliaryWorkerRequest (http://127.0.0.1:35559/gbdraw/web/js/services/diagram-generation.js:557:5)\n    at runDiagramHelperOperation (http://127.0.0.1:35559/gbdraw/web/js/services/diagram-generation.js:575:10)\n    at http://127.0.0.1:35559/gbdraw/web/js/app/app-setup.js:235:52\n    at validateUnmanagedConfigOverrides (http://127.0.0.1:35559/gbdraw/web/js/services/config.js:1118:24)\n    at importSessionDocument (http://127.0.0.1:35559/gbdraw/web/js/services/config.js:4204:55)\n    at async importSession (http://127.0.0.1:35559/gbdraw/web/js/services/config.js:4767:20)",
+                "messages": [
+                  {
+                    "type": "init",
+                    "operation": null,
+                    "operationId": null,
+                    "fileBytes": null,
+                    "stack": "Error\n    at window.Worker.postMessage (eval at evaluate (:303:30), <anonymous>:9:49)\n    at ensureWorkerInitialized (http://127.0.0.1:35559/gbdraw/web/js/services/diagram-generation.js:291:17)\n    at http://127.0.0.1:35559/gbdraw/web/js/services/diagram-generation.js:492:35\n    at runAuxiliaryWorkerRequest (http://127.0.0.1:35559/gbdraw/web/js/services/diagram-generation.js:557:5)\n    at runDiagramHelperOperation (http://127.0.0.1:35559/gbdraw/web/js/services/diagram-generation.js:575:10)\n    at http://127.0.0.1:35559/gbdraw/web/js/app/app-setup.js:235:52\n    at validateUnmanagedConfigOverrides (http://127.0.0.1:35559/gbdraw/web/js/services/config.js:1118:24)\n    at importSessionDocument (http://127.0.0.1:35559/gbdraw/web/js/services/config.js:4204:55)\n    at async importSession (http://127.0.0.1:35559/gbdraw/web/js/services/config.js:4767:20)"
+                  },
+                  {
+                    "type": "helper",
+                    "operation": "validateConfigOverrides",
+                    "operationId": null,
+                    "fileBytes": null,
+                    "stack": "Error\n    at window.Worker.postMessage (eval at evaluate (:303:30), <anonymous>:9:49)\n    at http://127.0.0.1:35559/gbdraw/web/js/services/diagram-generation.js:544:21"
+                  },
+                  {
+                    "type": "helper",
+                    "operation": "validateConfigOverrides",
+                    "operationId": null,
+                    "fileBytes": null,
+                    "stack": "Error\n    at window.Worker.postMessage (eval at evaluate (:303:30), <anonymous>:9:49)\n    at http://127.0.0.1:35559/gbdraw/web/js/services/diagram-generation.js:544:21"
+                  }
+                ],
+                "listeners": 0,
+                "terminations": 0
+              }
+            ],
+            "heartbeat": {
+              "intervalMs": 100,
+              "count": 153,
+              "p95Ms": 189,
+              "maxMs": 1779.4000000059605
+            },
+            "longTasks": {
+              "count": 4,
+              "totalMs": 3623,
+              "maxMs": 1662,
+              "entries": [
+                {
+                  "start": 120881,
+                  "duration": 1662
+                },
+                {
+                  "start": 122575.69999998808,
+                  "duration": 372
+                },
+                {
+                  "start": 126818.29999998212,
+                  "duration": 51
+                },
+                {
+                  "start": 137741.69999998808,
+                  "duration": 1538
+                }
+              ]
+            },
+            "mainSampledHeapPeakBytes": 1999379793,
+            "receiverTaskMaxMs": null,
+            "stagesMs": {
+              "session-save-catalog-preparation": 0.09999999403953552,
+              "session-save-projection": 386.80000001192093,
+              "session-save-compression": 14796.299999982119
+            },
+            "codec": {
+              "decodeCpuMs": 0,
+              "encodeCpuMs": 566.6000002622604,
+              "encodedBytes": 466918820,
+              "decodedBytes": 0,
+              "streams": []
+            },
+            "outcome": {
+              "status": "saved",
+              "compressedBytes": 133518081
+            },
+            "memory": {
+              "sampleCount": 144,
+              "rssPeakBytes": 3469389824,
+              "rssErrors": [],
+              "rssStartBytes": 2753343488,
+              "v8UsedHeapPeaksBytes": {
+                "page": 1459266252,
+                "worker": 13229888
+              },
+              "errors": [],
+              "targets": {
+                "A4269D0785EA2EF676AC21C0B912F138": {
+                  "type": "page",
+                  "url": "http://127.0.0.1:35559/gbdraw/web/index.html"
+                },
+                "9F05AC1E26FAC7C8BF65CF0E4CDF7577": {
+                  "type": "worker",
+                  "url": "http://127.0.0.1:35559/gbdraw/web/js/workers/diagram-generation-worker.js"
+                }
+              },
+              "workerPeaksByUrl": {
+                "diagram-generation-worker.js": {
+                  "usedSize": 13229888,
+                  "backingStorageSize": 80232387
+                }
+              }
+            },
+            "responsivenessAcceptance": false,
+            "mainObservedHeapDeltaBytes": 630764099
+          },
+          "previewPythonWorkerCount": 1,
+          "previewWorkerFreeAcceptance": false
+        }
+      ]
+    }
+  }
+}

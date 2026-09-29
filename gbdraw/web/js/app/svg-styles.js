@@ -98,6 +98,8 @@ export const createSvgStyles = ({ state, watch, nextTick, legendActions, rulePre
     recolorPairwise = false,
     recolorCollinear = false
   } = {}) => {
+    const busy = state.sessionOperationAvailability?.();
+    if (busy) return busy;
     if (!svgContent.value || !extractedFeatures.value.length) return;
     if (!svgContainer.value) return;
     if (!ruleMatchesReady(extractedFeatures.value, manualSpecificRules)) return;
@@ -366,6 +368,8 @@ export const createSvgStyles = ({ state, watch, nextTick, legendActions, rulePre
   };
 
   const applySpecificRulesToSvg = () => {
+    const sessionBusy = state.sessionOperationAvailability?.();
+    if (sessionBusy) return sessionBusy;
     if (!svgContent.value || !extractedFeatures.value.length) return;
     if (!manualSpecificRules.length) return;
     if (!svgContainer.value) return;
@@ -403,6 +407,8 @@ export const createSvgStyles = ({ state, watch, nextTick, legendActions, rulePre
   };
 
   const applyStylesToSvg = () => {
+    const sessionBusy = state.sessionOperationAvailability?.();
+    if (sessionBusy) return sessionBusy;
     if (!svgContent.value) return;
     if (!svgContainer.value) return;
 
@@ -556,6 +562,8 @@ export const createSvgStyles = ({ state, watch, nextTick, legendActions, rulePre
   };
 
   const applyTrackVisibility = () => {
+    const sessionBusy = state.sessionOperationAvailability?.();
+    if (sessionBusy) return sessionBusy;
     if (!svgContent.value) return;
     if (!svgContainer.value) return;
 
@@ -667,7 +675,7 @@ export const createSvgStyles = ({ state, watch, nextTick, legendActions, rulePre
     ],
     (values, previousValues) => {
       // Mode profiles and artifact restores retain the saved Result unchanged.
-      if (values[0] !== previousValues[0] || state.semanticFileWatchersSuppressed?.value) return;
+      if (values[0] !== previousValues[0] || state.semanticFileWatchersSuppressed?.value || state.sessionOperationAvailability?.()) return;
       applyStylesToSvg();
     },
     { flush: 'post' }
@@ -676,6 +684,7 @@ export const createSvgStyles = ({ state, watch, nextTick, legendActions, rulePre
   watch(
     () => [form.suppress_gc, form.suppress_skew, form.show_gc, form.show_skew, form.show_depth],
     () => {
+      if (state.semanticFileWatchersSuppressed?.value || state.sessionOperationAvailability?.()) return;
       applyTrackVisibility();
     }
   );
