@@ -101,10 +101,11 @@ test('a WASI thread that traps reports the trap on its job fault channel', async
   assert.equal(report.type, 'thread-fault');
   assert.equal(report.tid, 3);
   assert.match(report.error, /unreachable/);
+  assert.equal(report.trap, true);
   assert.equal(Atomics.load(new Int32Array(control), 0), -1);
 });
 
-const setupPage = async (t) => {
+const setupPage = async (t, { trappedAttempts = Infinity, trap = true } = {}) => {
   assert.ok(WebAssembly.validate(threadedJobModule));
   restoreGlobalsAfter(t, ['window', 'crossOriginIsolated', 'fetch', 'Worker']);
   for (const level of ['info', 'warn']) {
@@ -116,9 +117,11 @@ const setupPage = async (t) => {
   globalThis.window = { location: { href: 'https://example.test/gbdraw/web/' } };
   globalThis.crossOriginIsolated = true;
   globalThis.fetch = async () => ({ ok: true, arrayBuffer: async () => threadedJobModule.slice().buffer });
-  // Real orchestration; the Worker transport imitates a threaded job whose
-  // thread trapped: the job worker never answers, and the thread reports on
-  // the fault channel named in the run message.
+  // Real orchestration; the Worker transport imitates threaded jobs. The first
+  // trappedAttempts jobs have a thread that trapped: the job worker never
+  // answers, and the thread reports on the fault channel named in the run
+  // message. Later threaded jobs answer normally.
+  let threadedAttempts = 0;
   globalThis.Worker = class {
     listeners = new Map();
     messages = [];
@@ -131,9 +134,9 @@ const setupPage = async (t) => {
     terminate() { this.terminated = true; }
     postMessage(message) {
       this.messages.push(message);
-      if (this.threaded) {
+      if (this.threaded && (threadedAttempts += 1) <= trappedAttempts) {
         const channel = new BroadcastChannel(message.faultChannel);
-        channel.postMessage({ type: 'thread-fault', tid: 2, error: 'memory access out of bounds', stderr: '' });
+        channel.postMessage({ type: 'thread-fault', tid: 2, error: 'memory access out of bounds', trap, stderr: '' });
         channel.close();
         return;
       }
@@ -154,19 +157,42 @@ const options = {
   sequences: { q: '>q\n' + 'M'.repeat(300000), s: '>s\n' + 'M'.repeat(300000) }
 };
 
-test('explicit threaded LOSAT fails the job when one of its threads traps', async (t) => {
+test('explicit threaded LOSAT runs a trapped job again and keeps its result', async (t) => {
+  const { owner, workers } = await setupPage(t, { trappedAttempts: 1 });
+  const result = await settleWithin(
+    owner.runLosatPairsParallel([job], { ...options, executionMode: 'threaded' }),
+    5000,
+    'threaded LOSAT run'
+  );
+  assert.deepEqual(result, [{ ...job, text: 'q\ts\t100\n' }]);
+  assert.deepEqual(workers.map((worker) => worker.threaded), [true, true]);
+  assert.ok(workers.every((worker) => worker.terminated));
+});
+
+test('explicit threaded LOSAT fails the job after its bounded trap retries', async (t) => {
   const { owner, workers } = await setupPage(t);
   const run = owner.runLosatPairsParallel([job], { ...options, executionMode: 'threaded' });
   await assert.rejects(
     settleWithin(run, 5000, 'threaded LOSAT run'),
     { message: 'LOSAT pair #1: LOSAT thread 2 failed: memory access out of bounds' }
   );
-  assert.deepEqual(workers.map((worker) => worker.threaded), [true]);
-  assert.ok(workers[0].terminated);
+  // One attempt and two retries.
+  assert.deepEqual(workers.map((worker) => worker.threaded), [true, true, true]);
+  assert.ok(workers.every((worker) => worker.terminated));
   assert.match(workers[0].messages[0].faultChannel, /^gbdraw-losat-thread-fault:/);
 });
 
-test('automatic threaded LOSAT falls back to serial execution after a thread trap', async (t) => {
+test('explicit threaded LOSAT does not retry a thread failure that is not a trap', async (t) => {
+  const { owner, workers } = await setupPage(t, { trap: false });
+  const run = owner.runLosatPairsParallel([job], { ...options, executionMode: 'threaded' });
+  await assert.rejects(
+    settleWithin(run, 5000, 'threaded LOSAT run'),
+    { message: 'LOSAT pair #1: LOSAT thread 2 failed: memory access out of bounds' }
+  );
+  assert.deepEqual(workers.map((worker) => worker.threaded), [true]);
+});
+
+test('automatic threaded LOSAT falls back to serial execution after its trap retries', async (t) => {
   const { owner, workers } = await setupPage(t);
   const statuses = [];
   const result = await settleWithin(
@@ -176,6 +202,6 @@ test('automatic threaded LOSAT falls back to serial execution after a thread tra
   );
   assert.deepEqual(result, [{ ...job, text: 'q\ts\t100\n' }]);
   assert.deepEqual(statuses.map((status) => status.state), ['running', 'fallback']);
-  assert.deepEqual(workers.map((worker) => worker.threaded), [true, false]);
+  assert.deepEqual(workers.map((worker) => worker.threaded), [true, true, true, false]);
   assert.ok(workers.every((worker) => worker.terminated));
 });

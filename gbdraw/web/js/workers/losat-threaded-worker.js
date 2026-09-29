@@ -433,7 +433,8 @@ self.onmessage = async (event) => {
       id,
       type: 'run',
       ok: false,
-      error: error?.message ? String(error.message) : String(error || 'Threaded LOSAT worker failed')
+      error: error?.message ? String(error.message) : String(error || 'Threaded LOSAT worker failed'),
+      trap: error instanceof WebAssembly.RuntimeError
     });
   }
 };
