@@ -292,7 +292,7 @@ def _search_and_open_feature(
     if qualifier_key:
         expect(qualifier).to_be_enabled()
         qualifier.fill(qualifier_key)
-    regex = page.get_by_role("checkbox", name="Regex", exact=True)
+    regex = page.get_by_role("checkbox", name="Regex (JavaScript, i)", exact=True)
     if use_regex:
         regex.check()
         expect(regex).to_be_checked()
@@ -816,7 +816,10 @@ def _capture_bgc_popups(
             inspect_gui_bgc_losatp_svg,
             assert_gui_bgc_similarity_groups_svg,
         )
+        # As in the BGC tutorial flow, the search row must not move the drag start.
+        set_feature_search_visible(page, visible=False)
         fit_complete_linear_preview(page, target_zoom="40%")
+        set_feature_search_visible(page, visible=True)
         page.wait_for_timeout(350)
 
         match = page.get_by_role(
@@ -1210,6 +1213,10 @@ def capture_gui_session_reproduction(
         expect(redo).to_be_enabled()
         redo.click()
         expect(title).to_have_value(marker)
+        # Capture after the live update, when the Session actions are available again.
+        expect(page.get_by_role("button", name="Save Session", exact=True)).to_be_enabled(
+            timeout=ACTION_TIMEOUT_MS
+        )
         screenshot_bytes["history-actions.png"] = capture_screenshot(
             page, output_paths["history-actions.png"], "Circular"
         )

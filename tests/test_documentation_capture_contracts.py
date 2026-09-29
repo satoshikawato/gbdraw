@@ -501,8 +501,8 @@ def test_gui_inputs_flow_uses_whole_files_real_actions_and_actual_error() -> Non
         assert required in source
 
     for message_part in (
-        "No matching FASTA record found for GFF record NC_001416.1.",
-        "Please ensure that all GFF records have corresponding FASTA entries.",
+        "Supply a matching FASTA input for each GFF3 input.",
+        "Ensure every GFF3 record has a matching FASTA entry.",
     ):
         assert message_part in source
 

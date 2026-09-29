@@ -43,9 +43,10 @@ from flows.web_capture import (
 )
 
 
+# The Generation Error shows the normalized FASTA_REQUIRED guidance.
 EXPECTED_ID_MISMATCH = (
-    "No matching FASTA record found for GFF record NC_001416.1. "
-    "Please ensure that all GFF records have corresponding FASTA entries."
+    "Supply a matching FASTA input for each GFF3 input. "
+    "Ensure every GFF3 record has a matching FASTA entry."
 )
 
 
