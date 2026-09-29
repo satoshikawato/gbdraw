@@ -6,6 +6,7 @@ const {
   assertDiagramWorkerIdle,
   assertSingleWorkerRun,
   assertWorkerReuseAcrossHelperAndRender,
+  evaluateWithRetainedPromise,
   generateAndWaitForResult,
   getDiagramWorkerActivity,
   openApp,
@@ -701,7 +702,7 @@ test('Linear File-level Depth assignment preserves history, sessions, and regene
 
   const saveAndReload = async (title) => {
     const downloadPromise = page.waitForEvent('download', { timeout: 60000 });
-    await page.evaluate(async (sessionTitle) => {
+    await evaluateWithRetainedPromise(page, async (sessionTitle) => {
       const app = window.__GBDRAW_APP__;
       app.sessionTitle = sessionTitle;
       await app.saveSessionWithTitle();
@@ -1815,7 +1816,7 @@ ORIGIN
     app.adv.linear_track_slots_axis_index = 1;
   });
   const downloadPromise = page.waitForEvent('download', { timeout: 60000 });
-  await page.evaluate(async () => window.__GBDRAW_APP__.saveSessionWithTitle());
+  await evaluateWithRetainedPromise(page, async () => window.__GBDRAW_APP__.saveSessionWithTitle());
   const download = await downloadPromise;
   const savedSessionPath = await download.path();
   expect(savedSessionPath).toBeTruthy();
@@ -2282,7 +2283,7 @@ test('P3 Custom Track drafts survive fresh-page session re-save and Reset histor
   });
 
   const initialDownloadPromise = page.waitForEvent('download', { timeout: 60000 });
-  await page.evaluate(async () => window.__GBDRAW_APP__.saveSessionWithTitle());
+  await evaluateWithRetainedPromise(page, async () => window.__GBDRAW_APP__.saveSessionWithTitle());
   const initialDownload = await initialDownloadPromise;
   const initialPath = await initialDownload.path();
   expect(initialPath).toBeTruthy();
@@ -2374,7 +2375,7 @@ test('P3 Custom Track drafts survive fresh-page session re-save and Reset histor
     window.__GBDRAW_APP__.sessionTitle = 'p3-drafts-resaved';
   });
   const secondDownloadPromise = page.waitForEvent('download', { timeout: 60000 });
-  await page.evaluate(async () => window.__GBDRAW_APP__.saveSessionWithTitle());
+  await evaluateWithRetainedPromise(page, async () => window.__GBDRAW_APP__.saveSessionWithTitle());
   const secondDownload = await secondDownloadPromise;
   const secondPath = await secondDownload.path();
   expect(secondPath).toBeTruthy();
@@ -2391,7 +2392,7 @@ test('P3 Custom Track drafts survive fresh-page session re-save and Reset histor
     window.__GBDRAW_APP__.sessionTitle = 'p3-drafts-fresh-resave';
   });
   const thirdDownloadPromise = page.waitForEvent('download', { timeout: 60000 });
-  await page.evaluate(async () => window.__GBDRAW_APP__.saveSessionWithTitle());
+  await evaluateWithRetainedPromise(page, async () => window.__GBDRAW_APP__.saveSessionWithTitle());
   const thirdSession = await readSessionDownload(await thirdDownloadPromise);
   expect(p3Draft(thirdSession)).toEqual(expectedDraft);
 
@@ -2820,7 +2821,7 @@ test('Linear sparse diagonal depth generates and survives a session round trip',
   expect(firstRecipe.exactReplay).toContain('--session');
 
   const downloadPromise = page.waitForEvent('download', { timeout: 60000 });
-  await page.evaluate(async () => window.__GBDRAW_APP__.saveSessionWithTitle());
+  await evaluateWithRetainedPromise(page, async () => window.__GBDRAW_APP__.saveSessionWithTitle());
   const download = await downloadPromise;
   const savedSessionPath = await download.path();
   expect(savedSessionPath).toBeTruthy();
@@ -2977,7 +2978,7 @@ test('Circular sparse diagonal depth survives a session round trip and track rem
   ]);
 
   const downloadPromise = page.waitForEvent('download', { timeout: 60000 });
-  await page.evaluate(async () => window.__GBDRAW_APP__.saveSessionWithTitle());
+  await evaluateWithRetainedPromise(page, async () => window.__GBDRAW_APP__.saveSessionWithTitle());
   const download = await downloadPromise;
   const savedSessionPath = await download.path();
   expect(savedSessionPath).toBeTruthy();

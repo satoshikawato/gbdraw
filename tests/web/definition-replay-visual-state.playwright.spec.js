@@ -4,7 +4,7 @@ const fs = require('node:fs/promises');
 const { execFile } = require('node:child_process');
 const { promisify } = require('node:util');
 const { generate } = require('./helpers/mode-transition.cjs');
-const { openApp } = require('./helpers/app-lifecycle.cjs');
+const { evaluateWithRetainedPromise, openApp } = require('./helpers/app-lifecycle.cjs');
 const { capture, assertCoherent } = require('./helpers/visual-state.cjs');
 
 for (const composite of [false, true]) {
@@ -45,7 +45,7 @@ for (const composite of [false, true]) {
         await assertCoherent(await capture(page, info, `${phase}-definition-completed`), phase, true);
         if (phase === 'cli') {
           const pending = page.waitForEvent('download');
-          expect(await page.evaluate(() => window.__GBDRAW_APP__.saveSessionWithTitle())).toMatchObject({ status: 'saved' });
+          expect(await evaluateWithRetainedPromise(page, () => window.__GBDRAW_APP__.saveSessionWithTitle())).toMatchObject({ status: 'saved' });
           file = info.outputPath('web.gbdraw-session.json.gz');
           await (await pending).saveAs(file);
         }

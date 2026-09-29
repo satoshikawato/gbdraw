@@ -5,6 +5,7 @@ const { existsSync, mkdirSync, readFileSync } = require('node:fs');
 const os = require('node:os');
 const { join, resolve } = require('node:path');
 const {
+  evaluateWithRetainedPromise,
   getDiagramWorkerActivity,
   openApp
 } = require('./helpers/app-lifecycle.cjs');
@@ -378,7 +379,7 @@ test('Vibrio Session saves once within memory, responsiveness, and compatibility
   await expect(saveButton).toHaveAttribute('aria-busy', 'true');
   await expect(page.locator('[data-session-save-status]')).toHaveText('Saving session…');
 
-  const outcome = await page.evaluate(() => window.__GBDRAW_VIBRIO_SAVE__);
+  const outcome = await evaluateWithRetainedPromise(page, () => window.__GBDRAW_VIBRIO_SAVE__);
   const saveWallMs = Date.now() - startedAt;
   expect(outcome.status).toBe('saved');
   const download = await downloadPromise;

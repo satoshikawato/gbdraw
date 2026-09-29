@@ -6,6 +6,7 @@ const { tmpdir } = require('node:os');
 const { join, resolve } = require('node:path');
 const { gunzipSync } = require('node:zlib');
 const {
+  evaluateWithRetainedPromise,
   getDiagramWorkerActivity,
   openApp
 } = require('../helpers/app-lifecycle.cjs');
@@ -198,7 +199,7 @@ const saveCurrentSession = async (page, title) => {
   }, title);
   const saveDeadline = Date.now() + 180_000;
   const downloadPromise = page.waitForEvent('download', { timeout: 180_000 });
-  const attemptSave = () => page.evaluate(async () => {
+  const attemptSave = () => evaluateWithRetainedPromise(page, async () => {
     const { state } = await import('/gbdraw/web/js/state.js');
     const { getCommittedCanonicalRenderRequest } = await import(
       '/gbdraw/web/js/services/config.js'

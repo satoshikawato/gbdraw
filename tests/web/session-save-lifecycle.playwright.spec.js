@@ -168,7 +168,7 @@ test('Save Session is single-flight, paints pending state, and releases every se
   await expect(saveStatus).toHaveText('Saving session…');
 
   await page.evaluate(() => window.__GBDRAW_SAVE_GATE__.release());
-  const settled = await page.evaluate(async () => {
+  const settled = await evaluateWithRetainedPromise(page, async () => {
     const [first, second] = await Promise.all(window.__GBDRAW_SAVE_PROMISES__);
     window.__GBDRAW_SAVE_GATE__.restore();
     return {
@@ -227,7 +227,7 @@ test('Save Session is single-flight, paints pending state, and releases every se
   });
 
   await resetSaveProbe(page);
-  const canceledTitle = await page.evaluate(async () => {
+  const canceledTitle = await evaluateWithRetainedPromise(page, async () => {
     window.__GBDRAW_APP__.sessionTitle = '';
     window.prompt = () => {
       window.__GBDRAW_SAVE_PROBE__.promptCalls += 1;
@@ -272,7 +272,7 @@ test('Save Session is single-flight, paints pending state, and releases every se
   await expect(saveButton).toBeEnabled();
 
   await resetSaveProbe(page);
-  const repeatCanceled = await page.evaluate(async () => {
+  const repeatCanceled = await evaluateWithRetainedPromise(page, async () => {
     const probe = window.__GBDRAW_SAVE_PROBE__;
     window.__GBDRAW_APP__.sessionTitle = 'single-flight-save';
     window.confirm = () => {

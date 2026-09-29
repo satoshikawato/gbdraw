@@ -3,8 +3,9 @@ const { execFileSync } = require('node:child_process');
 const { mkdirSync, readFileSync } = require('node:fs');
 const { join } = require('node:path');
 const { gunzipSync } = require('node:zlib');
+const { evaluateWithRetainedPromise } = require('./helpers/app-lifecycle.cjs');
 
-const importSession = async (page, bytes, name) => page.evaluate(async ({ bytes, name }) => {
+const importSession = async (page, bytes, name) => evaluateWithRetainedPromise(page, async ({ bytes, name }) => {
   const file = new File([new Uint8Array(bytes)], name);
   const result = await window.__GBDRAW_APP__.importSession({
     target: { files: [file], value: 'selected' }
@@ -251,7 +252,7 @@ test('alignment canvas guide and candidates stay transient and share palette cho
   await svgDownload.saveAs(svgPath);
   expect(readFileSync(svgPath, 'utf8')).not.toContain('gbdraw-alignment-');
   const sessionDownloadPromise = page.waitForEvent('download');
-  await page.evaluate(() => window.__GBDRAW_APP__.saveSessionWithTitle());
+  await evaluateWithRetainedPromise(page, () => window.__GBDRAW_APP__.saveSessionWithTitle());
   const sessionDownload = await sessionDownloadPromise;
   const sessionPath = testInfo.outputPath('canvas-overlay-session.json.gz');
   await sessionDownload.saveAs(sessionPath);
@@ -627,7 +628,7 @@ test('Similarity alignment UI completes exact-reference, ambiguity, focus, summa
     .toEqual(['anchor', 'rationale', 'recordKey', 'status']);
   await page.evaluate(() => { window.__GBDRAW_APP__.sessionTitle = 's06-active-alignment'; });
   const downloadPromise = page.waitForEvent('download', { timeout: 180000 });
-  await page.evaluate(() => window.__GBDRAW_APP__.saveSessionWithTitle());
+  await evaluateWithRetainedPromise(page, () => window.__GBDRAW_APP__.saveSessionWithTitle());
   const download = await downloadPromise;
   const savedPath = testInfo.outputPath('s06-active-alignment.gbdraw-session.json.gz');
   await download.saveAs(savedPath);
@@ -1462,7 +1463,7 @@ test('Gallery explicit directions own receipts, Reset scopes, fresh Load and rib
   await expect.poll(recordState).toEqual(applied);
 
   console.log('S02 Gallery: positions Reset');
-  const reset = await page.evaluate(() => window.__GBDRAW_APP__.resetSimilarityAlignment());
+  const reset = await evaluateWithRetainedPromise(page, () => window.__GBDRAW_APP__.resetSimilarityAlignment());
   expect(reset.status).toBe('ok');
   const resetState = await recordState();
   expect(resetState.plan).toBeNull();
@@ -1485,7 +1486,7 @@ test('Gallery explicit directions own receipts, Reset scopes, fresh Load and rib
   expect(await page.evaluate(() => window.__GBDRAW_APP__.similarityAlignmentNotice))
     .not.toContain('Alignment cleared');
   console.log('S02 Gallery: manual Reverse generation');
-  const generated = await page.evaluate(() => window.__GBDRAW_APP__.runAnalysis());
+  const generated = await evaluateWithRetainedPromise(page, () => window.__GBDRAW_APP__.runAnalysis());
   expect(generated.status).toBe('ok');
   const manual = await recordState();
   expect(manual.plan).toEqual(applied.plan);
@@ -1524,7 +1525,7 @@ test('Gallery explicit directions own receipts, Reset scopes, fresh Load and rib
   console.log('S02 Gallery: saving receipt');
   await page.evaluate(() => { window.__GBDRAW_APP__.sessionTitle = 'record-owned-direction'; });
   const downloadPromise = page.waitForEvent('download', { timeout: 180000 });
-  await page.evaluate(() => window.__GBDRAW_APP__.saveSessionWithTitle());
+  await evaluateWithRetainedPromise(page, () => window.__GBDRAW_APP__.saveSessionWithTitle());
   const download = await downloadPromise;
   const savedPath = testInfo.outputPath('record-owned-direction.gbdraw-session.json.gz');
   await download.saveAs(savedPath);
@@ -1541,7 +1542,7 @@ test('Gallery explicit directions own receipts, Reset scopes, fresh Load and rib
   expect(saved.receipt.directions).toHaveLength(1);
   // Both fresh Load Reset scopes consume the original evidence and start no LOSAT.
   for(const scope of ['positions','positions-and-directions']) {
-    const observed=await freshPage.evaluate(async scope=>{
+    const observed=await evaluateWithRetainedPromise(freshPage,async scope=>{
       const {state}=await import('./js/state.js');
       let jobs=0;
       globalThis.__GBDRAW_LOSAT_EXECUTOR__=async batch=>{jobs+=batch.length;throw new Error('Reset must reuse comparisons without a LOSAT job.');};
@@ -1556,15 +1557,15 @@ test('Gallery explicit directions own receipts, Reset scopes, fresh Load and rib
     const expected=structuredClone(saved.orientations);
     if(scope==='positions-and-directions') for(const delta of saved.receipt.directions)expected.find(r=>r.recordKey===delta.recordKey).reverseComplement=delta.before;
     expect(reset.orientations).toEqual(expected);
-    await freshPage.evaluate(()=>window.__GBDRAW_HISTORY__.undo());
+    await evaluateWithRetainedPromise(freshPage,()=>window.__GBDRAW_HISTORY__.undo());
     expect((await recordState(freshPage)).receipt).toEqual(saved.receipt);
   }
   const corrupt=JSON.parse(gunzipSync(readFileSync(savedPath)).toString('utf8'));
   corrupt.editorState.alignmentResetReceipt.binding='0'.repeat(64);
-  const rejected=await freshPage.evaluate(async raw=>window.__GBDRAW_APP__.importSession({target:{files:[new File([raw],'corrupted.json')],value:'selected'}}),JSON.stringify(corrupt));
+  const rejected=await evaluateWithRetainedPromise(freshPage,async raw=>window.__GBDRAW_APP__.importSession({target:{files:[new File([raw],'corrupted.json')],value:'selected'}}),JSON.stringify(corrupt));
   expect(rejected.status).toBe('error');expect((await recordState(freshPage)).receipt).toEqual(saved.receipt);
   // Re-render the restored Session and compare the complete SVG tree.
-  const regenerated = await freshPage.evaluate(() => window.__GBDRAW_APP__.runAnalysis());
+  const regenerated = await evaluateWithRetainedPromise(freshPage, () => window.__GBDRAW_APP__.runAnalysis());
   expect(regenerated.status).toBe('ok');
   const replayed = await recordState(freshPage);
   expect(replayed).toMatchObject({ plan: saved.plan, translations: saved.translations,
@@ -1587,7 +1588,7 @@ test('Gallery explicit directions own receipts, Reset scopes, fresh Load and rib
   // An open review must never leak guides, badges, or controls into the SVG download.
   await review();
   const exportPromise = page.waitForEvent('download');
-  await page.evaluate(() => window.__GBDRAW_APP__.downloadSVG());
+  await evaluateWithRetainedPromise(page, () => window.__GBDRAW_APP__.downloadSVG());
   const exported = await exportPromise;
   const exportPath = testInfo.outputPath('record-owned-direction-export.svg');
   await exported.saveAs(exportPath);
@@ -1595,7 +1596,7 @@ test('Gallery explicit directions own receipts, Reset scopes, fresh Load and rib
     .not.toMatch(/gbdraw-alignment-|Select alignment anchors|Match reference direction/);
   const downloadFormat = async (format, suffix) => {
     const pending = page.waitForEvent('download');
-    await page.evaluate((method) => window.__GBDRAW_APP__[method](), `download${format}`);
+    await evaluateWithRetainedPromise(page, (method) => window.__GBDRAW_APP__[method](), `download${format}`);
     const file = await pending;
     const path = testInfo.outputPath(`record-owned-direction-${suffix}.${format.toLowerCase()}`);
     await file.saveAs(path);
@@ -1669,12 +1670,12 @@ test('Gallery explicit directions own receipts, Reset scopes, fresh Load and rib
   expect(await freshPage.evaluate(()=>window.__GBDRAW_APP__.form.prefix)).toBe('pending-unapplied-prefix');
   expect((await freshPage.evaluate(async()=>{const {getCommittedCanonicalSession}=await import('./js/services/config.js');return getCommittedCanonicalSession().renderRequest.output.prefix;})))
     .not.toBe('pending-unapplied-prefix');
-  expect((await freshPage.evaluate(()=>window.__GBDRAW_APP__.resetSimilarityAlignment('positions-and-directions'))).status).toBe('ok');
+  expect((await evaluateWithRetainedPromise(freshPage,()=>window.__GBDRAW_APP__.resetSimilarityAlignment('positions-and-directions'))).status).toBe('ok');
   expect((await recordState(freshPage)).orientations).toEqual(beforeC.orientations);
   expect(await freshPage.evaluate(()=>window.__GBDRAW_APP__.form.prefix)).toBe('pending-unapplied-prefix');
-  await freshPage.evaluate(()=>window.__GBDRAW_HISTORY__.undo());
+  await evaluateWithRetainedPromise(freshPage,()=>window.__GBDRAW_HISTORY__.undo());
   expect((await recordState(freshPage)).receipt).toEqual(afterC.receipt);
-  await freshPage.evaluate(()=>window.__GBDRAW_HISTORY__.redo());
+  await evaluateWithRetainedPromise(freshPage,()=>window.__GBDRAW_HISTORY__.redo());
   expect((await recordState(freshPage)).receipt).toBeNull();
   await expectNoUnhandledRejections(page);
   await expectNoUnhandledRejections(freshPage);

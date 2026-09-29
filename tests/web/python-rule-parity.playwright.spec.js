@@ -1,6 +1,6 @@
 const { test, expect } = require('@playwright/test');
 const { join } = require('node:path');
-const { openApp, generateAndWaitForResult, getDiagramWorkerActivity } = require('./helpers/app-lifecycle.cjs');
+const { evaluateWithRetainedPromise, openApp, generateAndWaitForResult, getDiagramWorkerActivity } = require('./helpers/app-lifecycle.cjs');
 
 const loadSession = async (page) => {
   await openApp(page);
@@ -119,7 +119,7 @@ test('Session preview stays lazy and saved Python rules remain editable and rege
   await page.evaluate(async () => { const a = window.__GBDRAW_APP__; await a.waitForAuxiliaryFileImport(a.files.t_color); });
   expect(await fills(page)).toHaveLength(7);
   const download = page.waitForEvent('download');
-  await page.evaluate(() => window.__GBDRAW_APP__.saveSessionWithTitle());
+  await evaluateWithRetainedPromise(page, () => window.__GBDRAW_APP__.saveSessionWithTitle());
   const file = await (await download).path();
   const context = await browser.newContext();
   const fresh = await context.newPage();

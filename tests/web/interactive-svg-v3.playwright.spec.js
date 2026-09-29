@@ -4,6 +4,7 @@ const { pathToFileURL } = require('node:url');
 const { gunzipSync } = require('node:zlib');
 const { test, expect } = require('@playwright/test');
 const {
+  evaluateWithRetainedPromise,
   generateAndWaitForResult,
   openApp,
   waitForAppShell
@@ -300,7 +301,7 @@ test('feature popup record rotation works by pointer and keyboard in rich and si
   await page.setViewportSize({ width: 1280, height: 900 });
 
   const pendingSave = page.waitForEvent('download');
-  await page.evaluate(async () => {
+  await evaluateWithRetainedPromise(page, async () => {
     window.__GBDRAW_APP__.sessionTitle = 'feature-popup-record-rotation';
     await window.__GBDRAW_APP__.saveSessionWithTitle();
   });

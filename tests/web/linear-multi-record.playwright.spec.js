@@ -169,7 +169,7 @@ test('Linear automatic replicon names follow Generate and preserve saved subtitl
   // Save a draft with Replicon off while the committed preview still has it on.
   await show.uncheck();
   const download = page.waitForEvent('download');
-  await page.evaluate(async () => {
+  await evaluateWithRetainedPromise(page, async () => {
     window.__GBDRAW_APP__.sessionTitle = 'replicon-display';
     await window.__GBDRAW_APP__.saveSessionWithTitle();
   });
@@ -193,7 +193,7 @@ test('Linear automatic replicon names follow Generate and preserve saved subtitl
   expect(await page.evaluate(() => window.__GBDRAW_APP__.linearSeqs.map(s => s.file_subtitle)))
     .toEqual(['File default', 'File default', 'File default', 'File default']);
   const clearedDownload = page.waitForEvent('download');
-  await page.evaluate(() => window.__GBDRAW_APP__.saveSessionWithTitle());
+  await evaluateWithRetainedPromise(page, () => window.__GBDRAW_APP__.saveSessionWithTitle());
   const cleared = await (await clearedDownload).path();
   await page.reload();
   await waitForAppShell(page);
@@ -396,7 +396,7 @@ test('Web fresh/reset Lock ON preserves explicit drafts, Result on Load, and reg
     expect(await measureDefinitionColumns(page)).toEqual(before);
     await page.evaluate(() => { window.__GBDRAW_APP__.sessionTitle = 'definition-draft'; });
     const download = page.waitForEvent('download');
-    expect(await page.evaluate(() => window.__GBDRAW_APP__.saveSessionWithTitle())).toMatchObject({ status: 'saved' });
+    expect(await evaluateWithRetainedPromise(page, () => window.__GBDRAW_APP__.saveSessionWithTitle())).toMatchObject({ status: 'saved' });
     const savedPath = await (await download).path();
     const saved = JSON.parse(gunzipSync(readFileSync(savedPath)));
     expect(saved.config.form.keep_definition_left_aligned).toBe(locked);
@@ -499,7 +499,7 @@ test('Linear Lock Definition Column measures single, shared, and mixed rows afte
   writeFileSync(testInfo.outputPath('locked-definition.svg'), await page.evaluate(() => window.__GBDRAW_APP__.results[0].content));
   await page.evaluate(() => { window.__GBDRAW_APP__.sessionTitle = 'translated-definition-columns'; });
   const download = page.waitForEvent('download');
-  expect(await page.evaluate(() => window.__GBDRAW_APP__.saveSessionWithTitle())).toMatchObject({ status: 'saved' });
+  expect(await evaluateWithRetainedPromise(page, () => window.__GBDRAW_APP__.saveSessionWithTitle())).toMatchObject({ status: 'saved' });
   const saved = await (await download).path();
   await page.reload();
   await waitForAppShell(page);
@@ -1504,7 +1504,7 @@ test('Automatic Linear renders every record from one GenBank source and survives
   await expect(page.locator('[data-linear-source-card]')).toHaveCount(1);
   await expect(page.getByRole('button', { name: 'Choose GenBank / DDBJ File' })).toHaveCount(1);
   const sessionDownloadPromise = page.waitForEvent('download', { timeout: 120000 });
-  expect((await page.evaluate(() => window.__GBDRAW_APP__.saveSessionWithTitle())).status)
+  expect((await evaluateWithRetainedPromise(page, () => window.__GBDRAW_APP__.saveSessionWithTitle())).status)
     .toBe('saved');
   const sessionPath = await (await sessionDownloadPromise).path();
   const session = JSON.parse(gunzipSync(readFileSync(sessionPath)).toString('utf8'));
@@ -2057,7 +2057,7 @@ test('Sparse upload and mixed selected renders keep snapshots and raw cache iden
 
   await page.evaluate(() => { window.__GBDRAW_APP__.sessionTitle = 'linear-comparison-browser-matrix'; });
   const sessionDownloadPromise = page.waitForEvent('download', { timeout: 120000 });
-  expect((await page.evaluate(() => window.__GBDRAW_APP__.saveSessionWithTitle())).status).toBe('saved');
+  expect((await evaluateWithRetainedPromise(page, () => window.__GBDRAW_APP__.saveSessionWithTitle())).status).toBe('saved');
   const sessionPath = await (await sessionDownloadPromise).path();
   await page.reload({ waitUntil: 'domcontentloaded' });
   await waitForAppShell(page, { waitForPalette: false });
@@ -3335,7 +3335,7 @@ test('@comparison-contract File source order moves multi-record blocks through p
   expect(generated.sourceIds[0]).not.toBe(generated.sourceIds[3]);
 
   const saved = page.waitForEvent('download');
-  await page.evaluate(async () => {
+  await evaluateWithRetainedPromise(page, async () => {
     window.__GBDRAW_APP__.sessionTitle = 'linear-source-order';
     await window.__GBDRAW_APP__.saveSessionWithTitle();
   });
@@ -3566,7 +3566,7 @@ test('@comparison-contract OIC-015: multi-record Adjacent searches all six pairs
   // A single placement edit must target a biological record, not its whole file.
   await controls.nth(4).fill('3');
   const saved = page.waitForEvent('download');
-  await page.evaluate(async () => {
+  await evaluateWithRetainedPromise(page, async () => {
     window.__GBDRAW_APP__.sessionTitle = 'complete-record-comparison';
     await window.__GBDRAW_APP__.saveSessionWithTitle();
   });
@@ -3672,7 +3672,7 @@ test('@comparison-contract multi-record defaults render a shared Circular canvas
     app.sessionTitle = 'explicit-layout-opt-outs';
   });
   const saved = page.waitForEvent('download');
-  await page.evaluate(() => window.__GBDRAW_APP__.saveSessionWithTitle());
+  await evaluateWithRetainedPromise(page, () => window.__GBDRAW_APP__.saveSessionWithTitle());
   const savedPath = await (await saved).path();
   await page.reload({ waitUntil: 'domcontentloaded' });
   await waitForAppShell(page);
@@ -3788,7 +3788,7 @@ test('@comparison-contract LOSAT Settings preserve execution controls and unboun
   for (const execution of ['auto', 'serial', 'threaded']) {
     await settings.getByRole('combobox', { name: 'LOSAT execution', exact: true }).selectOption(execution);
     const saved = page.waitForEvent('download');
-    await page.evaluate(async () => {
+    await evaluateWithRetainedPromise(page, async () => {
       window.__GBDRAW_APP__.sessionTitle = 'losat-settings';
       await window.__GBDRAW_APP__.saveSessionWithTitle();
     });
@@ -3910,7 +3910,7 @@ test('@comparison-contract record rotation adds zero LOSATP source jobs and surv
   expect(reversed.jobCount).toBe(4);
   expect(reversed.geometry).not.toBe(shifted.geometry);
   const saved = page.waitForEvent('download');
-  await page.evaluate(async () => {
+  await evaluateWithRetainedPromise(page, async () => {
     window.__GBDRAW_APP__.sessionTitle = 'losat-display-cache';
     await window.__GBDRAW_APP__.saveSessionWithTitle();
   });
