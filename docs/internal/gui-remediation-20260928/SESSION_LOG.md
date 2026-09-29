@@ -30,6 +30,8 @@ dev と main を `git archive` で `$S00_BASELINE_DIR=/home/kawato/gbdraw-baseli
 
 2026-09-29: S07 を実施。検索非表示時に Preview の canvas が 200 px に縮む grid 配置を固定行で直した（dev からの既存不具合で、docs・Gallery capture の中心合わせ失敗の原因）。#641 の bounded helper reply を test の Worker tracker が失敗として数えていた問題を直した。Gallery を owner tool で再生成し、S06 の影響を受けた tutorial media 7 枚と docs capture 11 scenario を再生成・目視した。最終候補で S00 harness、統合 journey、CW 変異 2 件、最終チェックを実施。比較切替の settlement 予算が 1 行不合格（間欠的な render frame、S03 と同頻度）で、Owner 判断を残す。commit title: "Keep the Preview canvas in the flexible row when the search is hidden"、"Count one Worker settlement per bounded helper reply in browser tests"、"Refresh Gallery artifacts and recapture comparison and Align tutorial media"、"Regenerate documentation captures for the pressed comparison state"、"Align tests with the pressed comparison state and the refreshed Vnig Session"、"Record S07 integration acceptance and handoff"。
 
+2026-09-29: S07 の追加作業（Owner 指示）。比較切替の settlement 予算の未達を調べ、原因が大きな Result の後の V8 major GC であることをharness の診断（b39b083f）で確かめた。catalog の nested 値の共有（308c5402）で live heap を 37% 減らしたが、固定定義の 1 行は未達のままで、Owner が受容した。PR #641 の失敗を #641 の branch で修正して push し（a9333e79..d5347f69）、CI の pass の後に Owner が merge した（b1744142）。`origin/dev` を本 branch へ merge した（d1bd76f6）。結果は results/S07.md 第 12 節。
+
 | Session | 状態 | 証拠・次の条件 |
 | --- | --- | --- |
 | S00 | 完了（証拠採取のみ） | commit d7fbe23b（証拠）、9b671081（Owner 判断）。[results/S00.md](results/S00.md)。開始 a351c01d、dev 57cef3ba・main 4556e04e の snapshot/wheel、性能 baseline、G03/G06/G07 再現、R01/R02 範囲。旧 Session 方針と receipt 文言は第 11.4 節で取得済み。commit SHA は次セッションで追記 |
@@ -39,7 +41,7 @@ dev と main を `git archive` で `$S00_BASELINE_DIR=/home/kawato/gbdraw-baseli
 | S04 | commit 済み・dev 未反映 | commit 2e0fdfba（follow-up 636d09f2）。[results/S04.md](results/S04.md)。S03（3bd092af）の上。判断 1〜3 を既存 mode-profiles・config・projection・publication の owner で実装。v41/v44 Vnig の受入と Save→fresh Load・拒否 Load を確認。#641 由来の既存 browser 失敗 4 件を特定（S07 へ）。Gallery 再生成は S07 |
 | S05 | commit 済み・dev 未反映 | commit f04c599a。[results/S05.md](results/S05.md)。S04 の上。直接 edge を committed orthogroup resource から Worker adapter へ渡し、CLI と束縛 helper を共有。#641 の recipe-only 確定を撤回して新規 LOSATP 後の Align と record rotation を回復。Review・inspector の名前を共有 helper へ。実 Gallery と新規 LOSATP で livA→racM、parA→racL を確認 |
 | S06 | commit 済み・dev 未反映 | commit f4a59295。[results/S06.md](results/S06.md)。S05 と S04 follow-up（636d09f2）の上。Contract revision 28（PD-OI-024 rev 3、PD-OI-054 rev 2）を co-change。Editor を Preview 上端から開き検索は残り幅（最大 39.5rem）。Align/Review を同じ行へ。2 つの常時説明を help-tip へ、Current 状態と要約を削除して `aria-pressed`。docs・capture の screenshot 再生成は S07 |
-| S07 | commit 済み・dev 未反映（予算 1 行は Owner 判断待ち） | [results/S07.md](results/S07.md)。commit d728fc3f・690c610f・8051e545・ac55a72a・e8c0d7e1 と結果記録。統合 journey、S00 harness（1 行を除き予算内）、CW 変異 2 件検出、Gallery・docs の再生成。PR は S01 → S02 → #641 → S03〜S07 の順（第 9 節） |
+| S07 | commit 済み・dev 未反映（settlement 予算 1 行の未達は Owner が受容） | [results/S07.md](results/S07.md)。commit d728fc3f・690c610f・8051e545・ac55a72a・e8c0d7e1 と結果記録。統合 journey、S00 harness（1 行を除き予算内）、CW 変異 2 件検出、Gallery・docs の再生成。PR は S01 → S02 → #641 → S03〜S07 の順（第 9 節） |
 
 各セッション終了時に、結果文書へのリンク、実際のSHA、検証結果、次の条件をこの表へ反映する。
 完了したcommitのSHAは次のセッションで追記してよい。自分自身のcommit SHAを文書へ埋め込むためのamendを繰り返さない。
