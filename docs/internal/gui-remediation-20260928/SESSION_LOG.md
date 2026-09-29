@@ -18,11 +18,13 @@ dev と main を `git archive` で `$S00_BASELINE_DIR=/home/kawato/gbdraw-baseli
 
 2026-09-29: S01 を実施（docs-only）。Static Product Contract co-change 経路（base checker が実装した時点で有効）と CW-01〜06 を規範化した。検証は results/S01.md 第 5 節。commit title: "Allow reviewed Product Contract co-changes and define computation ownership"。
 
+2026-09-29: S02 を実施（checker と fixture test のみ）。co-change 条件を companion 拒否と runtime＋guard 拒否の 2 か所へ同一条件で適用し、Review 理由を必須にした。governance test 221 passed、変異 4 件すべて検出。commit title: "Admit reviewed Product Contract co-changes in the Web checker"。
+
 | Session | 状態 | 証拠・次の条件 |
 | --- | --- | --- |
 | S00 | 完了（証拠採取のみ） | [results/S00.md](results/S00.md)。開始 a351c01d、dev 57cef3ba・main 4556e04e の snapshot/wheel、性能 baseline、G03/G06/G07 再現、R01/R02 範囲。旧 Session 方針と receipt 文言は第 11.4 節で取得済み。commit SHA は次セッションで追記 |
 | S01 | commit 済み・dev 未反映 | [results/S01.md](results/S01.md)。docs-only。base checker で Gate PASS・Review REQUIRED。dev 取り込みは push/merge 承認待ち |
-| S02 | 未着手 | S01がdevへ反映後。checkerのみの取り込み |
+| S02 | commit 済み・dev 未反映 | [results/S02.md](results/S02.md)。checker＋fixture のみ。S01 未 merge のため S01 commit を base に局所検証。PR は S01 の dev 取り込み後 |
 | S03 | 未着手 | S02反映後。応答・CW検証 |
 | S04 | 未着手 | S00の旧Session方針とS02反映後 |
 | S05 | 未着手 | canonical edge/provenanceの実装とbrowser確認 |
