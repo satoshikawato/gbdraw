@@ -17,6 +17,8 @@ module.exports = defineConfig({
     ...devices['Desktop Chrome'],
     viewport: { width: 1440, height: 900 },
     baseURL: process.env.S00_BASE_URL,
-    trace: 'off'
+    trace: 'off',
+    // S00_DIAG=1 (diagnosis only, never a budget pass): precise heap sizes per frame.
+    launchOptions: process.env.S00_DIAG === '1' ? { args: ['--enable-precise-memory-info'] } : {}
   }
 });

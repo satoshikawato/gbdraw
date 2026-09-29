@@ -20,6 +20,8 @@ const REPS = Number(env.S00_REPS || 8);
 const GENERATE_WARM = Number(env.S00_GENERATE_WARM || 7);
 const VNIG_PAGES = Number(env.S00_VNIG_PAGES || 3);
 const COVERAGE = env.S00_COVERAGE === '1';
+// Diagnosis only: frame attribution, heap per frame, mutation targets. Not used for budgets.
+const DIAG = env.S00_DIAG === '1';
 const QUIET_MS = 750;
 const ACCEPT_TIMEOUT_MS = 120_000;
 const SETTLE_TIMEOUT_MS = 60_000;
@@ -45,11 +47,13 @@ mkdirSync(OUT, { recursive: true });
 const write = (record) => appendFileSync(join(OUT, 'samples.jsonl'), `${JSON.stringify({ target: TARGET, ...record })}\n`);
 
 // Page probe. Installed before app-lifecycle's Worker tracking, which wraps it.
-const installProbe = (page) => page.addInitScript(() => {
+const installProbe = (page) => page.addInitScript((diag) => {
   const s = window.__S00__ = {
     lastMutationAt: 0, mutationCount: 0, loaf: [], longtasks: [], events: [], inputs: [],
-    workers: {}, historyRevisionAt: 0, lastRevision: undefined, processing: [], arm: null
+    workers: {}, historyRevisionAt: 0, lastRevision: undefined, processing: [], arm: null,
+    diag, heap: [], mutationBatches: []
   };
+  const capped = (list, entry) => { list.push(entry); if (list.length > 4000) list.splice(0, 2000); };
   const now = () => performance.now();
   const observe = (type, map, extra = {}) => {
     try {
@@ -58,7 +62,11 @@ const installProbe = (page) => page.addInitScript(() => {
     } catch { /* unsupported entry type is reported as missing data */ }
   };
   observe('long-animation-frame', (e) => s.loaf.push({ start: e.startTime, duration: e.duration,
-    blocking: e.blockingDuration, end: e.startTime + e.duration }));
+    blocking: e.blockingDuration, end: e.startTime + e.duration,
+    ...(diag ? { renderStart: e.renderStart, styleAndLayoutStart: e.styleAndLayoutStart,
+      scripts: (e.scripts || []).map((x) => ({ invoker: x.invoker, invokerType: x.invokerType,
+        fn: x.sourceFunctionName, url: String(x.sourceURL || '').split('/').slice(-2).join('/'),
+        start: x.startTime, duration: x.duration, forced: x.forcedStyleAndLayoutDuration })) } : {}) }));
   observe('longtask', (e) => s.longtasks.push({ start: e.startTime, duration: e.duration, end: e.startTime + e.duration }));
   observe('event', (e) => s.events.push({ name: e.name, start: e.startTime, duration: e.duration,
     processingStart: e.processingStart, processingEnd: e.processingEnd, interactionId: e.interactionId || 0 }),
@@ -68,9 +76,14 @@ const installProbe = (page) => page.addInitScript(() => {
       if (event.isTrusted) s.inputs.push({ type, ts: event.timeStamp, key: event.key || '' });
     }, { capture: true });
   }
+  const describe = (node) => (node?.nodeType === 1
+    ? `${node.tagName.toLowerCase()}.${String(node.className?.baseVal ?? node.className ?? '').split(' ').slice(0, 2).join('.')}`
+    : String(node?.nodeName));
   const startMutations = () => new MutationObserver((records) => {
     s.mutationCount += records.length;
     s.lastMutationAt = now();
+    if (diag) capped(s.mutationBatches, { t: s.lastMutationAt, n: records.length,
+      targets: records.slice(0, 3).map((r) => `${r.type}:${describe(r.target)}${r.attributeName ? `@${r.attributeName}` : ''}`) });
   }).observe(document.documentElement, { subtree: true, childList: true, attributes: true, characterData: true });
   if (document.documentElement) startMutations();
   else document.addEventListener('readystatechange', startMutations, { once: true });
@@ -126,6 +139,7 @@ const installProbe = (page) => page.addInitScript(() => {
     const app = window.__GBDRAW_APP__;
     const revision = window.__GBDRAW_HISTORY__?.revision?.value;
     if (revision !== s.lastRevision) { s.lastRevision = revision; s.historyRevisionAt = now(); }
+    if (diag) capped(s.heap, [now(), performance.memory?.usedJSHeapSize ?? null]);
     const processing = Boolean(app?.processing);
     if (processing !== (s.processing.at(-1)?.value ?? false)) s.processing.push({ value: processing, at: now() });
     requestAnimationFrame(frameLoop);
@@ -150,7 +164,7 @@ const installProbe = (page) => page.addInitScript(() => {
       pendingWorkerRequests, visiblePending, lastActivity, now: now()
     };
   };
-});
+}, DIAG);
 
 const waitSettled = async (page, timeoutMs = SETTLE_TIMEOUT_MS) => {
   const started = Date.now();
@@ -265,6 +279,23 @@ const measure = async (page, cdp, meta, { predicate, arg, trigger, expectState, 
       workers: s.workers
     };
   }, { inputIndex: marks.inputs, settleAt: settle.lastActivity });
+  if (DIAG) {
+    observed.lateFrames = await page.evaluate(({ inputIndex, settleAt }) => {
+      const s = window.__S00__;
+      const start = s.inputs.slice(inputIndex).find(({ type }) => type === 'pointerdown' || type === 'keydown')?.ts;
+      const painted = s.arm?.paintedAt ?? start;
+      if (start == null) return [];
+      return s.loaf.filter((entry) => entry.start > painted && entry.start <= settleAt).map((entry) => ({
+        afterInputMs: entry.start - start, duration: entry.duration, blocking: entry.blocking,
+        renderStart: entry.renderStart ? entry.renderStart - entry.start : null,
+        styleAndLayoutStart: entry.styleAndLayoutStart ? entry.styleAndLayoutStart - entry.start : null,
+        scripts: entry.scripts,
+        heap: s.heap.filter(([t]) => t >= entry.start - 120 && t <= entry.end + 60)
+          .map(([t, bytes]) => [Math.round(t - entry.start), bytes]),
+        mutations: s.mutationBatches.filter(({ t }) => t >= entry.start - 150 && t <= entry.end)
+      }));
+    }, { inputIndex: marks.inputs, settleAt: settle.lastActivity });
+  }
   const sample = {
     ...meta, settled: settle.settled, terminal, ...observed, before, after, counts,
     diagramWorker: {
