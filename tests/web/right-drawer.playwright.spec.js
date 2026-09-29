@@ -975,15 +975,23 @@ test('adjacent Collinear mixed groups remain selectable after current-session sa
     const { state } = await import('./js/state.js');
     const { importSession } = await import('./js/services/config.js');
     const previous = state.collinearGroups.value;
+    let beforePreviewMountCalled = false;
     const result = await importSession({ target: {
       files: [new File([new Uint8Array(bytes)], 'failed.gbdraw-session.json.gz')], value: 'selected'
-    } }, { beforePreviewMount: () => { throw new Error('Issue 460 rollback probe'); } });
+    } }, { beforePreviewMount: () => {
+      beforePreviewMountCalled = true;
+      throw new Error('Issue 460 rollback probe');
+    } });
     return {
-      status: result.status, error: { code: result.error?.code, stage: result.error?.stage },
+      status: result.status, code: result.error?.code, stage: result.error?.stage,
+      beforePreviewMountCalled,
       samePresentation: state.collinearGroups.value === previous
     };
   }, [...saved]);
-  expect(rollback).toEqual({ status: 'error', error: { code: 'UNKNOWN', stage: 'request-validation' }, samePresentation: true });
+  expect(rollback).toEqual({
+    status: 'error', code: 'UNKNOWN', stage: 'request-validation',
+    beforePreviewMountCalled: true, samePresentation: true
+  });
   expect(await verifyGroups()).toEqual(before);
 });
 
@@ -1241,4 +1249,90 @@ test('compact Editor reconciles availability and restores its tab after failed S
   await centerPreview(page);
   assertMobileGeometry(await readOverlayGeometry(page), true);
   assertNoOverlayErrors(page);
+});
+
+
+test('similarity-group rows update every displayed field and retain current click bindings', async ({ page }) => {
+  expect((await loadGallerySession(page, 'majanivirus_orthogroup.gbdraw-session.json.gz')).status).toBe('ok');
+  await page.evaluate(async () => {
+    const { state } = await import('./js/state.js');
+    state.orthogroups.value = [
+      { id: 's05_row_1', name: 'First group', scope: 'global', members: [], member_count: 2, record_coverage_count: 1 },
+      { id: 's05_row_2', name: 'Second group', scope: 'global', members: [], member_count: 1, record_coverage_count: 1 }
+    ];
+    state.selectedOrthogroupId.value = 's05_row_1';
+    window.__GBDRAW_APP__.openRightDrawerTab('orthogroups');
+  });
+  const row = (id) => page.locator('.right-drawer button').filter({
+    has: page.locator('div.font-mono').filter({ hasText: new RegExp(`^${id}$`) })
+  });
+  await expect(row('s05_row_1')).toContainText('First group');
+  await expect(row('s05_row_1')).toContainText('2 members');
+  await expect(row('s05_row_1')).toHaveClass(/bg-emerald-50/);
+  await page.evaluate(async () => {
+    const { state } = await import('./js/state.js');
+    state.sessionSavePending.value = true;
+    await window.Vue.nextTick();
+    state.sessionSavePending.value = false;
+    await window.Vue.nextTick();
+    Object.assign(state.orthogroups.value[0], {
+      name: 'Updated group', scope: 'record_local', member_count: 3, record_coverage_count: 2
+    });
+  });
+  await expect(row('s05_row_1')).toContainText('Updated group');
+  await expect(row('s05_row_1')).toContainText('Record-specific similarity group');
+  await expect(row('s05_row_1')).toContainText('3 members');
+  await expect(row('s05_row_1')).toContainText('2 records');
+  await page.evaluate(async () => {
+    const { state } = await import('./js/state.js');
+    state.orthogroupNameOverrides.s05_row_1 = 'Renamed group';
+  });
+  await expect(row('s05_row_1')).toContainText('Renamed group');
+  await expect(row('s05_row_1')).toContainText('Edited');
+  await page.evaluate(async () => {
+    const { state } = await import('./js/state.js');
+    delete state.orthogroupNameOverrides.s05_row_1;
+    state.orthogroups.value[0].member_count = 0;
+    state.orthogroups.value[0].members.push({});
+  });
+  await expect(row('s05_row_1')).toContainText('Updated group');
+  await expect(row('s05_row_1')).not.toContainText('Edited');
+  await expect(row('s05_row_1')).toContainText('1 members');
+  await page.evaluate(async () => {
+    const { state } = await import('./js/state.js');
+    state.orthogroups.value[0].member_count = { legacyCount: 7 };
+    state.orthogroups.value[0].record_coverage_count = { legacyCount: 4 };
+  });
+  await expect(row('s05_row_1')).toContainText('"legacyCount": 7');
+  await page.evaluate(async () => {
+    const { state } = await import('./js/state.js');
+    state.orthogroups.value[0].member_count.legacyCount = 8;
+    state.orthogroups.value[0].record_coverage_count.legacyCount = 5;
+  });
+  await expect(row('s05_row_1')).toContainText('"legacyCount": 8');
+  await expect(row('s05_row_1')).toContainText('"legacyCount": 5');
+  await row('s05_row_2').click();
+  await expect(row('s05_row_2')).toHaveClass(/bg-emerald-50/);
+  await expect(row('s05_row_1')).toHaveClass(/bg-white/);
+  await page.evaluate(async () => {
+    const { state } = await import('./js/state.js');
+    const oldGroup = state.orthogroups.value[0];
+    state.orthogroups.value[0] = { ...oldGroup };
+    await window.Vue.nextTick();
+    oldGroup.id = 'detached_old_group';
+  });
+  await row('s05_row_1').click();
+  await expect.poll(() => page.evaluate(() => window.__GBDRAW_APP__.selectedOrthogroupId)).toBe('s05_row_1');
+  await page.evaluate(async () => {
+    const { state } = await import('./js/state.js');
+    state.orthogroups.value[0].id = 's05_row_changed';
+    // The existing click binding reads current source identity even before Vue paints.
+    const previousRow = [...document.querySelectorAll('.right-drawer button')].find(
+      (button) => button.querySelector('div.font-mono')?.textContent === 's05_row_1'
+    );
+    previousRow.click();
+    return window.__GBDRAW_APP__.selectedOrthogroupId;
+  }).then((selected) => expect(selected).toBe('s05_row_changed'));
+  await expect(row('s05_row_1')).toHaveCount(0);
+  await expect(row('s05_row_changed')).toContainText('Updated group');
 });

@@ -1,3 +1,4 @@
+import { createBoundedJsonReceiver } from './bounded-json-transport.js';
 import { buildPyodideAssetManifest } from './pyodide-assets.js';
 import { normalizeUserFacingError } from './error-normalization.js';
 import { validateWebRuntimeCapabilities, DiagramRuntimeCompatibilityError } from './runtime-capabilities.js';
@@ -508,13 +509,27 @@ const runAuxiliaryWorkerRequest = ({
         rejectRequest(error);
       };
 
+      const assembly = createBoundedJsonReceiver();
       function handleMessage(event) {
         const data = event.data || {};
         if (data.type !== type || data.requestId !== requestId) return;
+        if (data.status === 'part') {
+          try {
+            assembly.receivePart(data);
+            currentWorker.postMessage({ type: 'auxiliary-ack', requestId });
+          } catch { handleMessageError(); }
+          return;
+        }
         cleanup();
         if (data.ok) {
-          preparedResources?.commit();
-          resolveRequest({ requestId, result: data.result });
+          try {
+            if (Object.hasOwn(data, 'result')) {
+              assembly.receivePart({ kind: 'value', path: [], value: data.result });
+            }
+            const result = assembly.getValue();
+            preparedResources?.commit();
+            resolveRequest({ requestId, result });
+          } catch { handleMessageError(); }
           return;
         }
         rejectRequest(deserializeWorkerError(data.error, { operation }));
@@ -525,7 +540,13 @@ const runAuxiliaryWorkerRequest = ({
       }
 
       function handleMessageError() {
-        fail(deserializeWorkerError({ code: 'RESULT_INVALID', operation, stage: 'result-admission' }));
+        const error = deserializeWorkerError({ code: 'RESULT_INVALID', operation, stage: 'result-admission' });
+        fail(error);
+        if (activeRequest) {
+          const pending = activeRequest;
+          settleActiveRequest(pending, () => pending.reject(error));
+        }
+        if (worker === currentWorker) terminateWorker(error);
       }
 
       if (prepareResources) {

@@ -1,0 +1,360 @@
+# Web change policy
+
+- Context: ORDINARY
+- Base: `origin/dev`
+- Head: `HEAD`
+- Gate: **PASS**
+- Review: **REQUIRED**
+- Privileged allowlist revision: `origin/dev`
+- Architecture rule base: `origin/dev`
+- Architecture rule candidate: `HEAD`
+- Policy guide: `docs/internal/WEB_CHANGE_POLICY.md`
+- Selected profile: ordinary
+- Size-review threshold for production files: 8
+- Size-review threshold for gross churn: 800
+- Size-review threshold for net additions: 100
+- `architecture-change` label: absent
+
+## Blocking violations
+
+- None
+
+## Review reasons
+
+- Architecture-bearing signals: deterministic inventories changed (production modules, public exports, reactive declarations, watcher calls, canonical-entry import edges, session schema fields)
+- Material behavior/output risk: registered session or compatibility paths changed (gbdraw/web/js/services/config.js)
+- Size and scope: production files changed exceed ordinary size-review threshold (37 > 8)
+- Size and scope: production gross churn exceeds ordinary size-review threshold (2939 > 800)
+- Size and scope: production net additions exceed ordinary size-review threshold (811 > 100)
+
+## Key architecture differential summary
+
+| Inventory | Before | Added | Removed | After | Delta | Classification |
+| --- | ---: | ---: | ---: | ---: | ---: | --- |
+| Registered Authority Location Count | 2 | 0 | 0 | 2 | 0 | registered rule |
+| Registered canonical-contract results | 2 | 0 | 0 | 2 | 0 | registered rule |
+| Privileged operator permission entries | 49 | 0 | 0 | 49 | 0 | hard authority |
+| Privileged importer permission entries | 55 | 0 | 0 | 55 | 0 | hard authority |
+| Production files | 204 | 2 | 0 | 206 | +2 | size-review |
+| Production modules | 157 | 2 | 0 | 159 | +2 | report-only |
+| Exports | 926 | 4 | 0 | 930 | +4 | report-only |
+| create* declarations | 98 | 0 | 0 | 98 | 0 | report-only |
+| Reactive declarations | 375 | 11 | 2 | 384 | +9 | report-only |
+| Watcher calls | 57 | 1 | 0 | 58 | +1 | report-only |
+| Compatibility-like names | 165 | 0 | 0 | 165 | 0 | report-only |
+| Resource-like names | 400 | 0 | 0 | 400 | 0 | report-only |
+| Session object keys | 1010 | 9 | 3 | 1016 | +6 | report-only |
+| Privileged import-target fan-out | 54 | 1 | 0 | 55 | +1 | report-only |
+| First-party static import cycles | 0 | 0 | 0 | 0 | 0 | hard |
+
+Production line change:
+
+- Additions: 1875
+- Deletions: 1064
+- Gross churn: 2939
+- Net additions: 811
+
+## Differential inventory changes
+
+### Production files
+
+Added (2):
+
+- gbdraw/web/js/services/session-import-client.js
+- gbdraw/web/js/workers/session-import-worker.js
+
+Removed (0):
+
+- None
+
+### Production modules
+
+Added (2):
+
+- gbdraw/web/js/services/session-import-client.js
+- gbdraw/web/js/workers/session-import-worker.js
+
+Removed (0):
+
+- None
+
+### Exports
+
+Added (4):
+
+- gbdraw/web/js/app/record-discovery.js: circularDiscoveryForInput
+- gbdraw/web/js/services/config.js: disposeSessionOperations
+- gbdraw/web/js/services/session-import-client.js: importSessionFile
+- gbdraw/web/js/state.js: sessionOperationAvailability
+
+Removed (0):
+
+- None
+
+### Reactive declarations
+
+Added (11):
+
+- gbdraw/web/js/app/app-setup.js: circularRecordDiscoveryState (computed)
+- gbdraw/web/js/app/app-setup.js: circularRecordInspectionEnabled (computed)
+- gbdraw/web/js/app/app-setup.js: circularRecordSelectionEnabled (computed)
+- gbdraw/web/js/app/app-setup.js: semanticMutationAvailable (computed)
+- gbdraw/web/js/app/app-setup.js: sessionBusyReason (computed)
+- gbdraw/web/js/app/app-setup.js: sessionLoadAvailable (computed)
+- gbdraw/web/js/app/app-setup.js: sessionSaveAvailable (computed)
+- gbdraw/web/js/components.js: controlAvailable (computed)
+- gbdraw/web/js/components.js: uploadAvailable (computed)
+- gbdraw/web/js/state.js: sessionImportPending (ref)
+- gbdraw/web/js/state.js: sessionSavePending (ref)
+
+Removed (2):
+
+- gbdraw/web/js/app/app-setup.js: sessionImportPending (ref)
+- gbdraw/web/js/app/app-setup.js: sessionSavePending (ref)
+
+### Watcher calls
+
+Added (1):
+
+- gbdraw/web/js/app/app-setup.js: watcher call 21
+
+Removed (0):
+
+- None
+
+### Session object keys
+
+Added (9):
+
+- gbdraw/web/js/services/config.js: canceled
+- gbdraw/web/js/services/config.js: controller
+- gbdraw/web/js/services/config.js: featureVisibilityTsv
+- gbdraw/web/js/services/config.js: isCurrent
+- gbdraw/web/js/services/config.js: promise
+- gbdraw/web/js/services/config.js: signal
+- gbdraw/web/js/services/config.js: target
+- gbdraw/web/js/services/config.js: targetState
+- gbdraw/web/js/services/config.js: value
+
+Removed (3):
+
+- gbdraw/web/js/services/config.js: characters
+- gbdraw/web/js/services/config.js: errors
+- gbdraw/web/js/services/config.js: orthogroupIndex
+
+### Privileged import-target fan-out
+
+Added (1):
+
+- workers/session-import-worker.js -> services/session-file.js
+
+Removed (0):
+
+- None
+
+## First-party static import graph
+
+- Before: 157 modules, 513 edges, 0 cycles
+- After: 159 modules, 517 edges, 0 cycles
+- Delta: 0 cycles
+- Cycle definition: SCC size > 1, or a one-node SCC with a self-edge.
+- Head cycles (sorted nodes and internal edges):
+- None
+- Base graph resolution errors:
+- None
+- Head graph resolution errors:
+- None
+
+## Report-only privileged import-target fan-out
+
+| Production module | Before | After | Delta |
+| --- | ---: | ---: | ---: |
+| app/app-setup.js | 9 | 9 | 0 |
+| app/candidate-render.js | 1 | 1 | 0 |
+| app/feature-editor/label-actions.js | 1 | 1 | 0 |
+| app/feature-editor/svg-actions.js | 1 | 1 | 0 |
+| app/feature-metadata-extraction.js | 1 | 1 | 0 |
+| app/feature-search/preview-svg.js | 1 | 1 | 0 |
+| app/feature-selection.js | 1 | 1 | 0 |
+| app/legend-layout/canvas-actions.js | 1 | 1 | 0 |
+| app/legend-layout/diagram-drag.js | 1 | 1 | 0 |
+| app/legend-layout/reposition-actions.js | 1 | 1 | 0 |
+| app/legend/drag-actions.js | 1 | 1 | 0 |
+| app/legend/entry-actions.js | 2 | 2 | 0 |
+| app/legend/sort-actions.js | 1 | 1 | 0 |
+| app/legend/stroke-actions.js | 1 | 1 | 0 |
+| app/preview-runtime.js | 1 | 1 | 0 |
+| app/record-discovery.js | 1 | 1 | 0 |
+| app/results.js | 2 | 2 | 0 |
+| app/run-analysis.js | 2 | 2 | 0 |
+| app/session-feature-metadata.js | 1 | 1 | 0 |
+| app/svg-styles.js | 1 | 1 | 0 |
+| app/watchers.js | 1 | 1 | 0 |
+| services/config.js | 8 | 8 | 0 |
+| services/diagram-generation.js | 2 | 2 | 0 |
+| services/diagram-resource-staging.js | 1 | 1 | 0 |
+| services/export.js | 1 | 1 | 0 |
+| services/gallery-session-migration.js | 1 | 1 | 0 |
+| services/history-snapshot.js | 1 | 1 | 0 |
+| services/session-request.js | 1 | 1 | 0 |
+| services/session-resources.js | 1 | 1 | 0 |
+| services/standalone-interactivity.js | 1 | 1 | 0 |
+| services/svg-result-ingestion.js | 2 | 2 | 0 |
+| state.js | 1 | 1 | 0 |
+| workers/diagram-generation-worker.js | 2 | 2 | 0 |
+| workers/session-import-worker.js | 0 | 1 | +1 |
+
+## Production files touched
+
+- M gbdraw/web/index.html
+- M gbdraw/web/js/app/annotations.js
+- M gbdraw/web/js/app/annotations/record-catalog.js
+- M gbdraw/web/js/app/app-setup.js
+- M gbdraw/web/js/app/circular-track-slots.js
+- M gbdraw/web/js/app/feature-editor.js
+- M gbdraw/web/js/app/feature-editor/color-actions.js
+- M gbdraw/web/js/app/feature-editor/label-actions.js
+- M gbdraw/web/js/app/feature-editor/placement-actions.js
+- M gbdraw/web/js/app/feature-editor/rule-actions.js
+- M gbdraw/web/js/app/feature-editor/visibility-actions.js
+- M gbdraw/web/js/app/legend-layout.js
+- M gbdraw/web/js/app/legend-layout/canvas-actions.js
+- M gbdraw/web/js/app/legend-layout/diagram-drag.js
+- M gbdraw/web/js/app/legend-layout/reposition-actions.js
+- M gbdraw/web/js/app/legend/drag-actions.js
+- M gbdraw/web/js/app/legend/entry-actions.js
+- M gbdraw/web/js/app/legend/sort-actions.js
+- M gbdraw/web/js/app/legend/stroke-actions.js
+- M gbdraw/web/js/app/linear-record-selector.js
+- M gbdraw/web/js/app/linear-track-slots.js
+- M gbdraw/web/js/app/linear-typography.js
+- M gbdraw/web/js/app/orthogroups.js
+- M gbdraw/web/js/app/preview-runtime.js
+- M gbdraw/web/js/app/record-discovery.js
+- M gbdraw/web/js/app/record-display-options.js
+- M gbdraw/web/js/app/results.js
+- M gbdraw/web/js/app/rule-matching.js
+- M gbdraw/web/js/app/run-analysis.js
+- M gbdraw/web/js/app/svg-styles.js
+- M gbdraw/web/js/app/watchers.js
+- M gbdraw/web/js/components.js
+- M gbdraw/web/js/services/config.js
+- M gbdraw/web/js/services/history.js
+- A gbdraw/web/js/services/session-import-client.js
+- M gbdraw/web/js/state.js
+- A gbdraw/web/js/workers/session-import-worker.js
+
+## Production additions/deletions
+
+- Additions: 1875
+- Deletions: 1064
+- Gross churn: 2939
+- Net additions: 811
+- Binary production files: 0
+
+## Report-only new production modules
+
+- gbdraw/web/js/services/session-import-client.js
+- gbdraw/web/js/workers/session-import-worker.js
+
+## Report-only new exports and create* owners
+
+- gbdraw/web/js/app/record-discovery.js: circularDiscoveryForInput
+- gbdraw/web/js/services/config.js: disposeSessionOperations
+- gbdraw/web/js/services/session-import-client.js: importSessionFile
+- gbdraw/web/js/state.js: sessionOperationAvailability
+
+## Report-only new reactive state/watchers
+
+- gbdraw/web/js/app/app-setup.js: circularRecordDiscoveryState (computed)
+- gbdraw/web/js/app/app-setup.js: circularRecordInspectionEnabled (computed)
+- gbdraw/web/js/app/app-setup.js: circularRecordSelectionEnabled (computed)
+- gbdraw/web/js/app/app-setup.js: semanticMutationAvailable (computed)
+- gbdraw/web/js/app/app-setup.js: sessionBusyReason (computed)
+- gbdraw/web/js/app/app-setup.js: sessionLoadAvailable (computed)
+- gbdraw/web/js/app/app-setup.js: sessionSaveAvailable (computed)
+- gbdraw/web/js/components.js: controlAvailable (computed)
+- gbdraw/web/js/components.js: uploadAvailable (computed)
+- gbdraw/web/js/state.js: sessionImportPending (ref)
+- gbdraw/web/js/state.js: sessionSavePending (ref)
+- gbdraw/web/js/app/app-setup.js: +1 watcher call(s)
+
+## Unapproved privileged capability owners/importers
+
+- None
+
+## Removed privileged allowlist entries
+
+- None
+
+## Added privileged allowlist entries
+
+- None
+
+## Active privileged owners/importers excluded by proposed policy
+
+- None
+
+## Missing base privileged allowlist keys
+
+- None
+
+## Added privileged allowlist keys
+
+- None
+
+## Candidate architecture authority delta
+
+- Classification: UNCHANGED
+- None
+
+## Candidate architecture admission observations
+
+- None
+
+## Candidate architecture rule errors
+
+- None
+
+## Active architecture rule results
+
+- canonical-path.current-result-admission | subject=app/candidate-render.js -> services/svg-result-ingestion.js | observation=CONFORMING | mode=HARD | baselineRelation=NOT_APPLICABLE | authorityResolution=NOT_APPLICABLE | decision=PASS | observedCanonicalEntryEdges=1/1
+- canonical-path.render-request | subject=app/run-analysis.js -> services/session-request.js | observation=CONFORMING | mode=HARD | baselineRelation=NOT_APPLICABLE | authorityResolution=NOT_APPLICABLE | decision=PASS | observedCanonicalEntryEdges=1/1
+- semantic-owner.current-result-admission | subject=services/svg-result-ingestion.js | observation=CONFORMING | mode=HARD | baselineRelation=NOT_APPLICABLE | authorityResolution=NOT_APPLICABLE | decision=PASS | registeredDefinitionLocations=1; observedDefinitions=1/1
+- semantic-owner.render-request | subject=services/session-request.js | observation=CONFORMING | mode=HARD | baselineRelation=NOT_APPLICABLE | authorityResolution=NOT_APPLICABLE | decision=PASS | registeredDefinitionLocations=1; observedDefinitions=1/1
+
+## Active architecture rule errors
+
+- None
+
+## Report-only cache/token/handle/journal/protocol/manager names
+
+- None
+
+## Report-only session object keys and compatibility names
+
+- gbdraw/web/js/services/config.js: canceled
+- gbdraw/web/js/services/config.js: controller
+- gbdraw/web/js/services/config.js: featureVisibilityTsv
+- gbdraw/web/js/services/config.js: isCurrent
+- gbdraw/web/js/services/config.js: promise
+- gbdraw/web/js/services/config.js: signal
+- gbdraw/web/js/services/config.js: target
+- gbdraw/web/js/services/config.js: targetState
+- gbdraw/web/js/services/config.js: value
+
+## Added binary runtime files
+
+- None
+
+## Changed vendored runtime files
+
+- None
+
+## Dependency changes
+
+- None
+
+## Guard files touched
+
+- None

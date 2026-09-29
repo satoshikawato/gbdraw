@@ -137,7 +137,9 @@ const buildCircularCatalog = (source, multiRecordCanvas) => {
   } else if (source?.status !== 'ready') {
     issues.push(source?.status === 'error'
       ? cleanText(source?.error) || 'Circular record discovery failed.'
-      : 'Wait for the circular record list to finish loading.');
+      : source?.status === 'deferred'
+        ? 'Inspect source records before choosing circular annotation records.'
+        : 'Wait for the circular record list to finish loading.');
   }
   const records = issues.length === 0 ? finalizeRecords(sourceRecords(source, 'circular-source')) : [];
   const allowExplicitSelectors = Boolean(multiRecordCanvas) || records.length <= 1;

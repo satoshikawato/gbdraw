@@ -57,15 +57,20 @@ export const createFeatureRuleActions = ({ state, nextTick, legendActions, ruleP
     && (!ruleFailure.value.presetId || selectedSpecificPreset.value === ruleFailure.value.presetId)));
   const canEditSpecificRuleFailure = computed(() => canRetrySpecificRuleFailure.value
     && Boolean(ruleFailure.value.input?.isConnected));
-  const retrySpecificRuleFailure = () => canRetrySpecificRuleFailure.value ? ruleFailure.value.retry() : false;
+  const retrySpecificRuleFailure = () => {
+    const busy = state.sessionOperationAvailability?.();
+    return busy || (canRetrySpecificRuleFailure.value ? ruleFailure.value.retry() : false);
+  };
   const editSpecificRuleFailure = () => {
     if (canEditSpecificRuleFailure.value) ruleFailure.value.input.focus();
   };
   const commitSpecificRules = async (rules, label = 'Change specific color rules', { isCurrent = () => true, afterCommit = () => {}, previousLegendIntents = [], sourceRows = rules.map(rule => manualSpecificRules.includes(rule) ? rule : null) } = {}) => {
+    const busy = state.sessionOperationAvailability?.();
+    if (busy) return busy;
     const revision = ++preparationRevision;
     const candidate = await rulePreparation.prepareCandidate(rules);
     if (!candidate) return false;
-    const current = () => revision === preparationRevision && isCurrent()
+    const current = () => revision === preparationRevision && !state.sessionOperationAvailability?.() && isCurrent()
       && rulePreparation.isCurrent(candidate.snapshot);
     if (!current()) return false;
     const previousIntents = [...manualSpecificRules.filter(rule => rule.cap)
@@ -123,8 +128,13 @@ export const createFeatureRuleActions = ({ state, nextTick, legendActions, ruleP
     svgActions.applySpecificRulesToSvg();
   };
 
-  const editSpecificRulePattern = (row, value) => patternDrafts.edit(row, value);
+  const editSpecificRulePattern = (row, value) => {
+    const busy = state.sessionOperationAvailability?.();
+    return busy || patternDrafts.edit(row, value);
+  };
   const revertSpecificRulePattern = (row, input = null) => {
+    const busy = state.sessionOperationAvailability?.();
+    if (busy) return busy;
     patternDrafts.revert(row);
     if (input?.isConnected) {
       input.value = row.val;
@@ -132,6 +142,8 @@ export const createFeatureRuleActions = ({ state, nextTick, legendActions, ruleP
     }
   };
   const applySpecificRulePattern = async (row, value) => {
+    const busy = state.sessionOperationAvailability?.();
+    if (busy) return busy;
     if (!manualSpecificRules.includes(row) || !isPatternEditAvailable()
       || (state.generatedMode?.value && state.mode?.value !== state.generatedMode.value)) return false;
     const token = patternDrafts.begin(row, value);
@@ -163,6 +175,8 @@ export const createFeatureRuleActions = ({ state, nextTick, legendActions, ruleP
     return draft && !draft.pending ? applySpecificRulePattern(row, draft.text) : false;
   };
   const setSpecificRuleField = (index, field, value, input = null) => {
+    const sessionBusy = state.sessionOperationAvailability?.();
+    if (sessionBusy) return sessionBusy;
     if (!specificRuleFields.has(field)) return;
     const current = manualSpecificRules[index];
     if (!current) return;
@@ -178,6 +192,8 @@ export const createFeatureRuleActions = ({ state, nextTick, legendActions, ruleP
   };
 
   const moveSpecificRule = (index, offset) => {
+    const sessionBusy = state.sessionOperationAvailability?.();
+    if (sessionBusy) return sessionBusy;
     const sourceRows = [...manualSpecificRules];
     const target = index + offset;
     if (target < 0 || target >= sourceRows.length) return;
@@ -250,6 +266,8 @@ export const createFeatureRuleActions = ({ state, nextTick, legendActions, ruleP
   };
 
   const addCustomColor = () => {
+    const sessionBusy = state.sessionOperationAvailability?.();
+    if (sessionBusy) return sessionBusy;
     if (!newColorFeat.value) return;
     currentColors.value = {
       ...currentColors.value,
@@ -257,7 +275,30 @@ export const createFeatureRuleActions = ({ state, nextTick, legendActions, ruleP
     };
   };
 
+  const setLabelFilterMode = (value) => {
+    const busy = state.sessionOperationAvailability?.();
+    if (busy) return busy;
+    state.filterMode.value = value;
+  };
+  const addWhitelistRule = () => {
+    const busy = state.sessionOperationAvailability?.();
+    if (busy) return busy;
+    state.manualWhitelist.push({ feat: 'CDS', qual: 'product', key: '' });
+  };
+  const removeWhitelistRule = (index) => {
+    const busy = state.sessionOperationAvailability?.();
+    if (busy) return busy;
+    state.manualWhitelist.splice(index, 1);
+  };
+  const removePriorityRule = (index) => {
+    const busy = state.sessionOperationAvailability?.();
+    if (busy) return busy;
+    manualPriorityRules.splice(index, 1);
+  };
+
   const addPriorityRule = () => {
+    const sessionBusy = state.sessionOperationAvailability?.();
+    if (sessionBusy) return sessionBusy;
     if (!newPriorityRule.order) return;
     const idx = manualPriorityRules.findIndex((r) => r.feat === newPriorityRule.feat);
     if (idx >= 0) {
@@ -268,6 +309,8 @@ export const createFeatureRuleActions = ({ state, nextTick, legendActions, ruleP
   };
 
   const addSpecificRule = async () => {
+    const sessionBusy = state.sessionOperationAvailability?.();
+    if (sessionBusy) return sessionBusy;
     if (!newSpecRule.val) return;
 
     if (newSpecRule.val.length > 50) {
@@ -299,6 +342,8 @@ export const createFeatureRuleActions = ({ state, nextTick, legendActions, ruleP
   };
 
   const applySpecificRulePreset = async () => {
+    const sessionBusy = state.sessionOperationAvailability?.();
+    if (sessionBusy) return sessionBusy;
     if (specificRulePresetLoading.value) return;
     const presetId = selectedSpecificPreset.value;
     if (!presetId) return;
@@ -341,6 +386,8 @@ export const createFeatureRuleActions = ({ state, nextTick, legendActions, ruleP
   };
 
   const addFeature = () => {
+    const sessionBusy = state.sessionOperationAvailability?.();
+    if (sessionBusy) return sessionBusy;
     if (newFeatureToAdd.value && !adv.features.includes(newFeatureToAdd.value)) {
       adv.features.push(newFeatureToAdd.value);
       if (!adv.feature_shapes || typeof adv.feature_shapes !== 'object') {
@@ -353,6 +400,8 @@ export const createFeatureRuleActions = ({ state, nextTick, legendActions, ruleP
   };
 
   const removeFeature = (featureType) => {
+    const sessionBusy = state.sessionOperationAvailability?.();
+    if (sessionBusy) return sessionBusy;
     const idx = adv.features.indexOf(featureType);
     if (idx >= 0) {
       adv.features.splice(idx, 1);
@@ -369,6 +418,8 @@ export const createFeatureRuleActions = ({ state, nextTick, legendActions, ruleP
   };
 
   const setFeatureShape = (featureType, shape) => {
+    const sessionBusy = state.sessionOperationAvailability?.();
+    if (sessionBusy) return sessionBusy;
     if (!adv.feature_shapes || typeof adv.feature_shapes !== 'object') {
       adv.feature_shapes = {};
     }
@@ -393,12 +444,25 @@ export const createFeatureRuleActions = ({ state, nextTick, legendActions, ruleP
 
   const canEditFeatureColor = () => true;
 
+  // One reactive count index replaces a full feature scan for every prepared
+  // color-rule target. Counts still follow edits and feature-array replacement.
+  const generationHashCounts = computed(() => {
+    const byType = new Map();
+    for (const feature of extractedFeatures.value) {
+      const hash = getFeatureGenerationHash(feature);
+      if (!hash) continue;
+      const type = feature?.type;
+      let counts = byType.get(type);
+      if (!counts) { counts = new Map(); byType.set(type, counts); }
+      counts.set(hash, (counts.get(hash) || 0) + 1);
+    }
+    return byType;
+  });
+
   const getFeatureQualifier = (feat) => {
     const generationHash = getFeatureGenerationHash(feat);
     if (!generationHash) return null;
-    const collisionCount = extractedFeatures.value.filter(
-      (candidate) => candidate?.type === feat?.type && getFeatureGenerationHash(candidate) === generationHash
-    ).length;
+    const collisionCount = generationHashCounts.value.get(feat?.type)?.get(generationHash) || 0;
     const renderedId = String(feat?.svg_id || '').trim();
     // Preserve the rendered instance when duplicate records share one generation hash.
     const value = collisionCount > 1 && renderedId ? renderedId : generationHash;
@@ -515,6 +579,10 @@ export const createFeatureRuleActions = ({ state, nextTick, legendActions, ruleP
     getFeatureShape,
     setFeatureShape,
     addPriorityRule,
+    setLabelFilterMode,
+    addWhitelistRule,
+    removeWhitelistRule,
+    removePriorityRule,
     addSpecificRule,
     applySpecificRulePreset,
     canEditFeatureColor,

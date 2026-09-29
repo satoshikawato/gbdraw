@@ -38,11 +38,13 @@ the meaning of each file type.
 
 Select **Circular** at the top of the app and keep **GenBank** selected under **Input Genomes**. In **GenBank/DDBJ File**, choose `HmmtDNA.gbk`.
 
-The uploader should show `HmmtDNA.gbk` in green.
+The uploader should show `HmmtDNA.gbk` in green. The app inspects the file at
+once: **Source records** reports **1 source record(s) inspected**, and the
+`NC_012920.1` rotation row appears below it.
 
 ![Circular GenBank input showing HmmtDNA.gbk selected](../../images/t-gui-01/01-input-ready.png)
 
-*Confirm that Circular and GenBank are selected and that the uploader names `HmmtDNA.gbk`.*
+*Confirm that Circular and GenBank are selected, the uploader names `HmmtDNA.gbk`, and **Source records** reports one inspected record.*
 
 ## Step 2: Generate the first diagram
 

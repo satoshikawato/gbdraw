@@ -28,8 +28,8 @@ from flows.web_capture import (
     assert_output_paths,
     capture_screenshot,
     generate_and_inspect,
+    open_ancestor_details,
     open_browser_capture,
-    set_feature_search_visible,
     wait_for_app_shell,
 )
 
@@ -188,10 +188,7 @@ def _configure_feature_types(page: Page) -> None:
 def _configure_gallery_presentation(page: Page) -> None:
     page.get_by_label("Output Prefix", exact=True).fill("annotated_chloroplast_map")
     page.get_by_label("Species", exact=True).fill("<i>Nicotiana tabacum</i>")
-    preset = page.get_by_label("Track Preset", exact=True)
-    for details in preset.locator("xpath=ancestor::details").all():
-        if details.get_attribute("open") is None:
-            details.locator(":scope > summary").click()
+    preset = open_ancestor_details(page.get_by_label("Track Preset", exact=True))
     preset.select_option("tuckin")
     page.get_by_label("Separate Strands", exact=True).check()
     page.get_by_label("Hide GC Content", exact=True).uncheck()
@@ -379,10 +376,9 @@ def capture_gui_annotated_chloroplast(
         generate_and_inspect(page, _inspect_tracks_svg, _assert_plain_plastome)
         _fit_circular_preview(
             page,
-            target_zoom="70%",
+            target_zoom="40%",
             pan_left_ratio=0.0,
         )
-        set_feature_search_visible(page, visible=False)
         screenshot_bytes[SCREENSHOT_NAMES[1]] = capture_screenshot(
             page, output_paths[SCREENSHOT_NAMES[1]], "Circular"
         )
@@ -390,7 +386,7 @@ def capture_gui_annotated_chloroplast(
         _configure_gallery_presentation(page)
         _fit_circular_preview(
             page,
-            target_zoom="70%",
+            target_zoom="40%",
             pan_left_ratio=0.0,
         )
         annotations = page.get_by_label("Region Annotations", exact=True)
@@ -421,7 +417,7 @@ def capture_gui_annotated_chloroplast(
             page, _inspect_tracks_svg, _assert_gallery_chloroplast
         )
         _fit_circular_preview(
-            page, target_zoom="50%", pan_left_ratio=0.32
+            page, target_zoom="40%", pan_left_ratio=0.45
         )
         popup = page.get_by_role("dialog", name=re.compile(r"^Feature details:"))
         if popup.is_visible():

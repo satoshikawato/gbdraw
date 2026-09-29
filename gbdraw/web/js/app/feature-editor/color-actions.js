@@ -874,6 +874,8 @@ export const createFeatureColorActions = ({
   };
 
   const requestFeatureColorChange = async (feat, color, requestedLegendName = null, options = {}) => {
+    const sessionBusy = state.sessionOperationAvailability?.();
+    if (sessionBusy) return sessionBusy;
     if (!feat) return;
     const scope = getFeatureStyleScope(feat, requestedLegendName);
     if (!scope) return;
@@ -900,6 +902,8 @@ export const createFeatureColorActions = ({
   };
 
   const updateClickedFeatureColor = async (color) => {
+    const sessionBusy = state.sessionOperationAvailability?.();
+    if (sessionBusy) return sessionBusy;
     if (!clickedFeature.value) return;
     const feat = clickedFeature.value.feat;
     if (!feat) return;
@@ -908,6 +912,8 @@ export const createFeatureColorActions = ({
   };
 
   const handleLegendNameCommit = async () => {
+    const sessionBusy = state.sessionOperationAvailability?.();
+    if (sessionBusy) return sessionBusy;
     if (!clickedFeature.value) return;
 
     const feat = clickedFeature.value.feat;
@@ -946,6 +952,8 @@ export const createFeatureColorActions = ({
   };
 
   const handleLegendRenameChoice = async (choice) => {
+    const sessionBusy = state.sessionOperationAvailability?.();
+    if (sessionBusy) return sessionBusy;
     const pendingRequest = legendRenameDialog.pendingRequest;
     if (!pendingRequest || choice === 'cancel') {
       clearLegendRenameDialog({ restoreInput: true });
@@ -1014,6 +1022,8 @@ export const createFeatureColorActions = ({
   };
 
   const handleColorScopeChoice = async (choice) => {
+    const sessionBusy = state.sessionOperationAvailability?.();
+    if (sessionBusy) return sessionBusy;
     const { feat, color, matchingRule, legendName, existingCaptionColor } = featureStyleScopeDialog;
     if (choice === 'cancel' || !feat || !color) {
       clearFeatureStyleScopeDialog();
@@ -1074,6 +1084,8 @@ export const createFeatureColorActions = ({
   };
 
   const updateClickedFeatureStroke = (strokeColor, strokeWidth) => {
+    const sessionBusy = state.sessionOperationAvailability?.();
+    if (sessionBusy) return sessionBusy;
     if (!clickedFeature.value) return false;
     if (!svgContainer.value) return false;
 
@@ -1118,6 +1130,8 @@ export const createFeatureColorActions = ({
   };
 
   const requestClickedFeatureStrokeChange = (strokeColor, strokeWidth) => {
+    const sessionBusy = state.sessionOperationAvailability?.();
+    if (sessionBusy) return sessionBusy;
     if (!clickedFeature.value) return false;
     const feat = clickedFeature.value.feat;
     if (!feat) return false;
@@ -1144,6 +1158,8 @@ export const createFeatureColorActions = ({
   };
 
   const resetClickedFeatureStroke = () => {
+    const sessionBusy = state.sessionOperationAvailability?.();
+    if (sessionBusy) return sessionBusy;
     if (!clickedFeature.value) return false;
     if (!svgContainer.value) return false;
 
@@ -1191,6 +1207,8 @@ export const createFeatureColorActions = ({
   };
 
   const setClickedFeatureStrokeColorValue = (value) => {
+    const sessionBusy = state.sessionOperationAvailability?.();
+    if (sessionBusy) return sessionBusy;
     if (value !== null) {
       if (!clickedFeature.value) return false;
       const feature = clickedFeature.value.feat || clickedFeature.value;
@@ -1245,6 +1263,8 @@ export const createFeatureColorActions = ({
   };
 
   const setClickedFeatureStrokeWidthValue = (value) => {
+    const sessionBusy = state.sessionOperationAvailability?.();
+    if (sessionBusy) return sessionBusy;
     if (!clickedFeature.value) return false;
     const normalizedStrokeWidth = normalizeStrokeWidthValue(value);
     const currentStrokeWidth = normalizeStrokeWidthValue(clickedFeature.value.strokeWidth);
@@ -1253,6 +1273,8 @@ export const createFeatureColorActions = ({
   };
 
   const resetClickedFeatureFillColor = () => {
+    const sessionBusy = state.sessionOperationAvailability?.();
+    if (sessionBusy) return sessionBusy;
     if (!clickedFeature.value) return;
     if (!svgContainer.value) return;
 
@@ -1282,6 +1304,8 @@ export const createFeatureColorActions = ({
   };
 
   const handleResetColorChoice = async (choice) => {
+    const sessionBusy = state.sessionOperationAvailability?.();
+    if (sessionBusy) return sessionBusy;
     resetColorDialog.show = false;
     await doResetFillColor(choice);
   };
@@ -1315,6 +1339,8 @@ export const createFeatureColorActions = ({
   };
 
   const applyColorToSelectedFeatures = async (features, color, caption) => {
+    const sessionBusy = state.sessionOperationAvailability?.();
+    if (sessionBusy) return sessionBusy;
     const targetFeatures = uniqueFeaturesBySvgId(features);
     const targetColor = resolveColorToHex(color) || String(color || '').trim();
     const targetCaption = normalizeCaption(caption);
@@ -1324,6 +1350,8 @@ export const createFeatureColorActions = ({
   };
 
   const applyStrokeToSelectedFeatures = (features, strokeColor, strokeWidth) => {
+    const sessionBusy = state.sessionOperationAvailability?.();
+    if (sessionBusy) return sessionBusy;
     const targetFeatures = uniqueFeaturesBySvgId(features);
     if (targetFeatures.length === 0 || !svgContainer.value) return false;
     const svg = svgContainer.value.querySelector('svg');
@@ -1435,6 +1463,8 @@ export const createFeatureColorActions = ({
   };
 
   const handleStrokeScopeChoice = (choice) => {
+    const sessionBusy = state.sessionOperationAvailability?.();
+    if (sessionBusy) return sessionBusy;
     const {
       feat,
       strokeColor,
@@ -1482,6 +1512,8 @@ export const createFeatureColorActions = ({
   );
 
   const setFeatureColor = async (feature, color, customCaption = null) => {
+    const sessionBusy = state.sessionOperationAvailability?.();
+    if (sessionBusy) return sessionBusy;
     if (!feature || !getFeatureQualifier(feature)) return false;
     const caption = normalizeCaption(customCaption || getIndividualFeatureLabel(feature));
     if (!caption || featureColorAssignmentMatches(feature, color, caption)) return false;
@@ -1489,6 +1521,8 @@ export const createFeatureColorActions = ({
   };
 
   const setFeatureColorValue = async (feature, value, customCaption = null) => {
+    const sessionBusy = state.sessionOperationAvailability?.();
+    if (sessionBusy) return sessionBusy;
     if (!feature) return false;
     if (value === null) {
       return ruleActions.commitSpecificRules(manualSpecificRules.filter(rule => !hashRuleTargetsFeatureExactly(rule, feature)), 'Reset feature color');

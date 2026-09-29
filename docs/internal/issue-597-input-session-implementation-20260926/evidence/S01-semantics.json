@@ -1,0 +1,1023 @@
+{
+  "/tmp/issue597-s01-final-vibrio-semantic-1-j3R30y/semantic-checks.json": {
+    "sha256": "ca2d680ceb4ce737f067c964a0df5e5b9f1cb0e5dbf98492218eaf6f8b030235",
+    "result": {
+      "source": {
+        "sha256": "a3cfba6c8d883a0050529c89b1fd0849348254cdfa46dbf938a69cebef5379aa",
+        "bytes": 23739973,
+        "version": 44,
+        "requestSchema": 8,
+        "records": 4,
+        "features": 18782,
+        "cacheEntries": 12,
+        "hashes": {
+          "format": "a565d6c86d89f5062657493c80eed1b314a7d52b81c7504622b0ee9084307f4f",
+          "version": "71ee45a3c0db9a9865f7313dd3372cf60dca6479d46261f3542eb9346e4a04d6",
+          "createdAt": "6858d08977dc6786f29612b38948216f5b53bcffed49376230ab9f88aee928a1",
+          "title": "63b97e56589c5dddca834bbb236f8c1c3d6248f7aa103168dd058354ea026694",
+          "ui": "e8c5aea1f0ebcbaa58a50e79b261e2d7940b78b685fe0d57b9c33e6cc13f312d",
+          "results": "2fb2b6de292f58fec96ed320e358a45df78ed05f5df7fe448fd93370d0251d27",
+          "editorState": "8e51664e18040185ea1f7123a11fbae33866eba4d7ac259bf6b66b32681035a9",
+          "features": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a",
+          "orthogroupState": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a",
+          "cliInvocation": "cd961c45b149a9a4ff76f25deb96c9369e88bc0322d668535c9c6df69500f54b",
+          "renderRequest": "cc326c351cd302304ad8ba922fb18fe933af136d816cc704169f8a7e38317dd5",
+          "resources": "dc83883c064512b2ff3fc48fff51b84b3d82e7e0eb3e5e4ae2999d2ea5c43c5e",
+          "webFiles": "d6c2bcf75638ba0d97f39e4e41a0b9308fe72fb28e92376aa7233744bfcc4653",
+          "losatCache": "df2eb320d47d86749998dfebabf92f2eea8b74a096b76b22f69c863c7e07c4d5",
+          "losatDerivedCache": "d801aa1fb7ddcc330a5e3173372ea6af4a3d08ec58074478e85aa5603e926658",
+          "proteinIdentityManifest": "7971621217011a486d90f526ddf0e75f09ca4e67a4e60107f69c203ea71a18e0",
+          "config": "3a6163809d2c4aa8e82d3c7960b9e676f96f34b7e38c92c75870e3cbec74565e",
+          "runMetadata": "adc6b075522aae7d63150a56fe94d9b0f766ad68ee987b45a2afaaba6acefaba"
+        },
+        "wholeHash": "50bd821d25dc81912d9d5beaa52ecf541a511d53a740b91739d6043147f5650b"
+      },
+      "saved": {
+        "sha256": "6efc5ebc10513b2893a74dae528891bcbe2984631b15f437f39cf6b83d0aab57",
+        "bytes": 23738936,
+        "version": 44,
+        "requestSchema": 8,
+        "records": 4,
+        "features": 18782,
+        "cacheEntries": 12,
+        "hashes": {
+          "format": "a565d6c86d89f5062657493c80eed1b314a7d52b81c7504622b0ee9084307f4f",
+          "version": "71ee45a3c0db9a9865f7313dd3372cf60dca6479d46261f3542eb9346e4a04d6",
+          "createdAt": "6e8b7182b72a098879e83d371d4185091bf9e62ebb48b628516a47a9bb3b07b9",
+          "title": "7ebd154623dc1eac803167beddb7bae56174627d1c61f085a8d15040524c8190",
+          "config": "87e14e6c88d78064af0bcb6cbf5bd81d89c15f47e039307019803502cb727892",
+          "ui": "8bdd3575c36df8ee41a6d1e682cf509c15219ad30b068b734b4ccf608746faab",
+          "renderRequest": "cc326c351cd302304ad8ba922fb18fe933af136d816cc704169f8a7e38317dd5",
+          "resources": "dc83883c064512b2ff3fc48fff51b84b3d82e7e0eb3e5e4ae2999d2ea5c43c5e",
+          "webFiles": "8b7b6af2ed79d317af9b6a1fbcd6fca8aac7d8cbcaf34b21d057258f2d7c619d",
+          "results": "2931f0e13a7b44c7076ad10fcff01b3499718ac2673a70b344a0ae7e237aaea3",
+          "runMetadata": "adc6b075522aae7d63150a56fe94d9b0f766ad68ee987b45a2afaaba6acefaba",
+          "features": "6b4e3687049ef90433ac03d66c81efa02f47cc29e96dde51bd834cac7d6419e0",
+          "editorState": "24446b486f96c1fbf11e25f27193b664181a6cd1bf854d4da90f883e100741df",
+          "orthogroupState": "2ef835f9b003a3b9c0300376225b8799ca37512ee954c8e425e3e067e893fc68",
+          "losatCache": "8c4baf3ebd1658085174b3726535add360a871d806094c26cb63e8e9373b4f62",
+          "losatDerivedCache": "d801aa1fb7ddcc330a5e3173372ea6af4a3d08ec58074478e85aa5603e926658",
+          "proteinIdentityManifest": "7971621217011a486d90f526ddf0e75f09ca4e67a4e60107f69c203ea71a18e0"
+        },
+        "wholeHash": "11b85252296987ac1c10f9a7ad5677169800e99d843a8d44ddbbd1cd6035281c"
+      },
+      "checks": {
+        "renderRequest": true,
+        "resources": true,
+        "proteinIdentityManifest": true,
+        "losatDerivedCache": true,
+        "sourceEditorStateFields": true,
+        "featureCatalog": true,
+        "rawCacheSourceFields": true,
+        "cacheOnlyExistingRestoreMetadataAdded": true,
+        "savedSvgSemanticEqual": true
+      },
+      "svg": {
+        "equal": true,
+        "message": "SVGs are semantically equivalent",
+        "differences": []
+      },
+      "addedCacheFields": [
+        "edgeKey",
+        "ordinal",
+        "queryIndex",
+        "queryUid",
+        "subjectIndex",
+        "subjectUid"
+      ],
+      "addedEditorFields": {
+        "legend": {
+          "entries": [
+            {
+              "caption": "CDS",
+              "originalCaption": "CDS",
+              "color": "#54bcf8",
+              "xPos": 31.428571428571427,
+              "yPos": 10,
+              "showStroke": false,
+              "featureIds": []
+            },
+            {
+              "caption": "rRNA",
+              "originalCaption": "rRNA",
+              "color": "#71ee7d",
+              "xPos": 153.79613095238096,
+              "yPos": 10,
+              "showStroke": false,
+              "featureIds": []
+            },
+            {
+              "caption": "tRNA",
+              "originalCaption": "tRNA",
+              "color": "#e8b441",
+              "xPos": 282.1324404761905,
+              "yPos": 10,
+              "showStroke": false,
+              "featureIds": []
+            },
+            {
+              "caption": "ncRNA",
+              "originalCaption": "ncRNA",
+              "color": "#c4fac3",
+              "xPos": 409.48958333333337,
+              "yPos": 10,
+              "showStroke": false,
+              "featureIds": []
+            },
+            {
+              "caption": "tmRNA",
+              "originalCaption": "tmRNA",
+              "color": "#ded44e",
+              "xPos": 550.7529761904763,
+              "yPos": 10,
+              "showStroke": false,
+              "featureIds": []
+            }
+          ],
+          "deletedEntries": [],
+          "originalOrder": [
+            "CDS",
+            "rRNA",
+            "tRNA",
+            "ncRNA",
+            "tmRNA"
+          ],
+          "originalColors": {
+            "CDS": "#54bcf8",
+            "rRNA": "#71ee7d",
+            "tRNA": "#e8b441",
+            "ncRNA": "#c4fac3",
+            "tmRNA": "#ded44e"
+          },
+          "colorOverrides": {},
+          "strokeOverrides": {},
+          "addedCaptions": []
+        },
+        "featureStrokes": {
+          "overrides": {}
+        },
+        "originalSvgStroke": {
+          "color": null,
+          "width": null
+        }
+      },
+      "webBindingsSchema": 2
+    }
+  },
+  "/tmp/issue597-s01-final-vibrio-semantic-2-j3R30y/semantic-checks.json": {
+    "sha256": "3c5277a7e5ffe8555e297edb57396a51bd992c778252871addd314ef177c83cc",
+    "result": {
+      "source": {
+        "sha256": "a3cfba6c8d883a0050529c89b1fd0849348254cdfa46dbf938a69cebef5379aa",
+        "bytes": 23739973,
+        "version": 44,
+        "requestSchema": 8,
+        "records": 4,
+        "features": 18782,
+        "cacheEntries": 12,
+        "hashes": {
+          "format": "a565d6c86d89f5062657493c80eed1b314a7d52b81c7504622b0ee9084307f4f",
+          "version": "71ee45a3c0db9a9865f7313dd3372cf60dca6479d46261f3542eb9346e4a04d6",
+          "createdAt": "6858d08977dc6786f29612b38948216f5b53bcffed49376230ab9f88aee928a1",
+          "title": "63b97e56589c5dddca834bbb236f8c1c3d6248f7aa103168dd058354ea026694",
+          "ui": "e8c5aea1f0ebcbaa58a50e79b261e2d7940b78b685fe0d57b9c33e6cc13f312d",
+          "results": "2fb2b6de292f58fec96ed320e358a45df78ed05f5df7fe448fd93370d0251d27",
+          "editorState": "8e51664e18040185ea1f7123a11fbae33866eba4d7ac259bf6b66b32681035a9",
+          "features": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a",
+          "orthogroupState": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a",
+          "cliInvocation": "cd961c45b149a9a4ff76f25deb96c9369e88bc0322d668535c9c6df69500f54b",
+          "renderRequest": "cc326c351cd302304ad8ba922fb18fe933af136d816cc704169f8a7e38317dd5",
+          "resources": "dc83883c064512b2ff3fc48fff51b84b3d82e7e0eb3e5e4ae2999d2ea5c43c5e",
+          "webFiles": "d6c2bcf75638ba0d97f39e4e41a0b9308fe72fb28e92376aa7233744bfcc4653",
+          "losatCache": "df2eb320d47d86749998dfebabf92f2eea8b74a096b76b22f69c863c7e07c4d5",
+          "losatDerivedCache": "d801aa1fb7ddcc330a5e3173372ea6af4a3d08ec58074478e85aa5603e926658",
+          "proteinIdentityManifest": "7971621217011a486d90f526ddf0e75f09ca4e67a4e60107f69c203ea71a18e0",
+          "config": "3a6163809d2c4aa8e82d3c7960b9e676f96f34b7e38c92c75870e3cbec74565e",
+          "runMetadata": "adc6b075522aae7d63150a56fe94d9b0f766ad68ee987b45a2afaaba6acefaba"
+        },
+        "wholeHash": "50bd821d25dc81912d9d5beaa52ecf541a511d53a740b91739d6043147f5650b"
+      },
+      "saved": {
+        "sha256": "96858fa477430d06735e4a42ba277b0d743483f263945debff393ff01022662b",
+        "bytes": 23738936,
+        "version": 44,
+        "requestSchema": 8,
+        "records": 4,
+        "features": 18782,
+        "cacheEntries": 12,
+        "hashes": {
+          "format": "a565d6c86d89f5062657493c80eed1b314a7d52b81c7504622b0ee9084307f4f",
+          "version": "71ee45a3c0db9a9865f7313dd3372cf60dca6479d46261f3542eb9346e4a04d6",
+          "createdAt": "0fe8eaa65a4265487343c147f48ac1bd7c39a60eb00a60e70685cb36cafff954",
+          "title": "7ebd154623dc1eac803167beddb7bae56174627d1c61f085a8d15040524c8190",
+          "config": "87e14e6c88d78064af0bcb6cbf5bd81d89c15f47e039307019803502cb727892",
+          "ui": "8bdd3575c36df8ee41a6d1e682cf509c15219ad30b068b734b4ccf608746faab",
+          "renderRequest": "cc326c351cd302304ad8ba922fb18fe933af136d816cc704169f8a7e38317dd5",
+          "resources": "dc83883c064512b2ff3fc48fff51b84b3d82e7e0eb3e5e4ae2999d2ea5c43c5e",
+          "webFiles": "8b7b6af2ed79d317af9b6a1fbcd6fca8aac7d8cbcaf34b21d057258f2d7c619d",
+          "results": "2931f0e13a7b44c7076ad10fcff01b3499718ac2673a70b344a0ae7e237aaea3",
+          "runMetadata": "adc6b075522aae7d63150a56fe94d9b0f766ad68ee987b45a2afaaba6acefaba",
+          "features": "6b4e3687049ef90433ac03d66c81efa02f47cc29e96dde51bd834cac7d6419e0",
+          "editorState": "24446b486f96c1fbf11e25f27193b664181a6cd1bf854d4da90f883e100741df",
+          "orthogroupState": "2ef835f9b003a3b9c0300376225b8799ca37512ee954c8e425e3e067e893fc68",
+          "losatCache": "8c4baf3ebd1658085174b3726535add360a871d806094c26cb63e8e9373b4f62",
+          "losatDerivedCache": "d801aa1fb7ddcc330a5e3173372ea6af4a3d08ec58074478e85aa5603e926658",
+          "proteinIdentityManifest": "7971621217011a486d90f526ddf0e75f09ca4e67a4e60107f69c203ea71a18e0"
+        },
+        "wholeHash": "fcb806b1d4186ef2ac0b539ce67cd56974b2dfdd8841f89930f5d87e3e9e51d7"
+      },
+      "checks": {
+        "renderRequest": true,
+        "resources": true,
+        "proteinIdentityManifest": true,
+        "losatDerivedCache": true,
+        "sourceEditorStateFields": true,
+        "featureCatalog": true,
+        "rawCacheSourceFields": true,
+        "cacheOnlyExistingRestoreMetadataAdded": true,
+        "savedSvgSemanticEqual": true
+      },
+      "svg": {
+        "equal": true,
+        "message": "SVGs are semantically equivalent",
+        "differences": []
+      },
+      "addedCacheFields": [
+        "edgeKey",
+        "ordinal",
+        "queryIndex",
+        "queryUid",
+        "subjectIndex",
+        "subjectUid"
+      ],
+      "addedEditorFields": {
+        "legend": {
+          "entries": [
+            {
+              "caption": "CDS",
+              "originalCaption": "CDS",
+              "color": "#54bcf8",
+              "xPos": 31.428571428571427,
+              "yPos": 10,
+              "showStroke": false,
+              "featureIds": []
+            },
+            {
+              "caption": "rRNA",
+              "originalCaption": "rRNA",
+              "color": "#71ee7d",
+              "xPos": 153.79613095238096,
+              "yPos": 10,
+              "showStroke": false,
+              "featureIds": []
+            },
+            {
+              "caption": "tRNA",
+              "originalCaption": "tRNA",
+              "color": "#e8b441",
+              "xPos": 282.1324404761905,
+              "yPos": 10,
+              "showStroke": false,
+              "featureIds": []
+            },
+            {
+              "caption": "ncRNA",
+              "originalCaption": "ncRNA",
+              "color": "#c4fac3",
+              "xPos": 409.48958333333337,
+              "yPos": 10,
+              "showStroke": false,
+              "featureIds": []
+            },
+            {
+              "caption": "tmRNA",
+              "originalCaption": "tmRNA",
+              "color": "#ded44e",
+              "xPos": 550.7529761904763,
+              "yPos": 10,
+              "showStroke": false,
+              "featureIds": []
+            }
+          ],
+          "deletedEntries": [],
+          "originalOrder": [
+            "CDS",
+            "rRNA",
+            "tRNA",
+            "ncRNA",
+            "tmRNA"
+          ],
+          "originalColors": {
+            "CDS": "#54bcf8",
+            "rRNA": "#71ee7d",
+            "tRNA": "#e8b441",
+            "ncRNA": "#c4fac3",
+            "tmRNA": "#ded44e"
+          },
+          "colorOverrides": {},
+          "strokeOverrides": {},
+          "addedCaptions": []
+        },
+        "featureStrokes": {
+          "overrides": {}
+        },
+        "originalSvgStroke": {
+          "color": null,
+          "width": null
+        }
+      },
+      "webBindingsSchema": 2
+    }
+  },
+  "/tmp/issue597-s01-final-vibrio-semantic-0-j3R30y/semantic-checks.json": {
+    "sha256": "87ef8aecb5f0c8e7c462b1de9b2a168ef7d5171ad232bd5a9a61fdb771d22823",
+    "result": {
+      "source": {
+        "sha256": "a3cfba6c8d883a0050529c89b1fd0849348254cdfa46dbf938a69cebef5379aa",
+        "bytes": 23739973,
+        "version": 44,
+        "requestSchema": 8,
+        "records": 4,
+        "features": 18782,
+        "cacheEntries": 12,
+        "hashes": {
+          "format": "a565d6c86d89f5062657493c80eed1b314a7d52b81c7504622b0ee9084307f4f",
+          "version": "71ee45a3c0db9a9865f7313dd3372cf60dca6479d46261f3542eb9346e4a04d6",
+          "createdAt": "6858d08977dc6786f29612b38948216f5b53bcffed49376230ab9f88aee928a1",
+          "title": "63b97e56589c5dddca834bbb236f8c1c3d6248f7aa103168dd058354ea026694",
+          "ui": "e8c5aea1f0ebcbaa58a50e79b261e2d7940b78b685fe0d57b9c33e6cc13f312d",
+          "results": "2fb2b6de292f58fec96ed320e358a45df78ed05f5df7fe448fd93370d0251d27",
+          "editorState": "8e51664e18040185ea1f7123a11fbae33866eba4d7ac259bf6b66b32681035a9",
+          "features": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a",
+          "orthogroupState": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a",
+          "cliInvocation": "cd961c45b149a9a4ff76f25deb96c9369e88bc0322d668535c9c6df69500f54b",
+          "renderRequest": "cc326c351cd302304ad8ba922fb18fe933af136d816cc704169f8a7e38317dd5",
+          "resources": "dc83883c064512b2ff3fc48fff51b84b3d82e7e0eb3e5e4ae2999d2ea5c43c5e",
+          "webFiles": "d6c2bcf75638ba0d97f39e4e41a0b9308fe72fb28e92376aa7233744bfcc4653",
+          "losatCache": "df2eb320d47d86749998dfebabf92f2eea8b74a096b76b22f69c863c7e07c4d5",
+          "losatDerivedCache": "d801aa1fb7ddcc330a5e3173372ea6af4a3d08ec58074478e85aa5603e926658",
+          "proteinIdentityManifest": "7971621217011a486d90f526ddf0e75f09ca4e67a4e60107f69c203ea71a18e0",
+          "config": "3a6163809d2c4aa8e82d3c7960b9e676f96f34b7e38c92c75870e3cbec74565e",
+          "runMetadata": "adc6b075522aae7d63150a56fe94d9b0f766ad68ee987b45a2afaaba6acefaba"
+        },
+        "wholeHash": "50bd821d25dc81912d9d5beaa52ecf541a511d53a740b91739d6043147f5650b"
+      },
+      "saved": {
+        "sha256": "549e865e02bbc1859941adc6d8ba926ec83acc0daee4a6e5fefbdc8e306baaf2",
+        "bytes": 23738936,
+        "version": 44,
+        "requestSchema": 8,
+        "records": 4,
+        "features": 18782,
+        "cacheEntries": 12,
+        "hashes": {
+          "format": "a565d6c86d89f5062657493c80eed1b314a7d52b81c7504622b0ee9084307f4f",
+          "version": "71ee45a3c0db9a9865f7313dd3372cf60dca6479d46261f3542eb9346e4a04d6",
+          "createdAt": "d95fa9d773a83342a71fa5f7a6b98335c31eb1464ddce777aa69b8ce5e194bb0",
+          "title": "7ebd154623dc1eac803167beddb7bae56174627d1c61f085a8d15040524c8190",
+          "config": "87e14e6c88d78064af0bcb6cbf5bd81d89c15f47e039307019803502cb727892",
+          "ui": "8bdd3575c36df8ee41a6d1e682cf509c15219ad30b068b734b4ccf608746faab",
+          "renderRequest": "cc326c351cd302304ad8ba922fb18fe933af136d816cc704169f8a7e38317dd5",
+          "resources": "dc83883c064512b2ff3fc48fff51b84b3d82e7e0eb3e5e4ae2999d2ea5c43c5e",
+          "webFiles": "8b7b6af2ed79d317af9b6a1fbcd6fca8aac7d8cbcaf34b21d057258f2d7c619d",
+          "results": "2931f0e13a7b44c7076ad10fcff01b3499718ac2673a70b344a0ae7e237aaea3",
+          "runMetadata": "adc6b075522aae7d63150a56fe94d9b0f766ad68ee987b45a2afaaba6acefaba",
+          "features": "6b4e3687049ef90433ac03d66c81efa02f47cc29e96dde51bd834cac7d6419e0",
+          "editorState": "24446b486f96c1fbf11e25f27193b664181a6cd1bf854d4da90f883e100741df",
+          "orthogroupState": "2ef835f9b003a3b9c0300376225b8799ca37512ee954c8e425e3e067e893fc68",
+          "losatCache": "8c4baf3ebd1658085174b3726535add360a871d806094c26cb63e8e9373b4f62",
+          "losatDerivedCache": "d801aa1fb7ddcc330a5e3173372ea6af4a3d08ec58074478e85aa5603e926658",
+          "proteinIdentityManifest": "7971621217011a486d90f526ddf0e75f09ca4e67a4e60107f69c203ea71a18e0"
+        },
+        "wholeHash": "49ad871f35149ee9ed0d7ac0f16513630b7ea206ea3123bbfe63f37e77c34ac5"
+      },
+      "checks": {
+        "renderRequest": true,
+        "resources": true,
+        "proteinIdentityManifest": true,
+        "losatDerivedCache": true,
+        "sourceEditorStateFields": true,
+        "featureCatalog": true,
+        "rawCacheSourceFields": true,
+        "cacheOnlyExistingRestoreMetadataAdded": true,
+        "savedSvgSemanticEqual": true,
+        "pythonReaderRecords": true,
+        "cliReplay": true,
+        "freshLoadCanonicalRequest": true,
+        "freshLoadReady": true,
+        "freshLoadCatalogAndCache": true,
+        "freshLoadNoWorkerOrExternalError": true
+      },
+      "svg": {
+        "equal": true,
+        "message": "SVGs are semantically equivalent",
+        "differences": []
+      },
+      "addedCacheFields": [
+        "edgeKey",
+        "ordinal",
+        "queryIndex",
+        "queryUid",
+        "subjectIndex",
+        "subjectUid"
+      ],
+      "addedEditorFields": {
+        "legend": {
+          "entries": [
+            {
+              "caption": "CDS",
+              "originalCaption": "CDS",
+              "color": "#54bcf8",
+              "xPos": 31.428571428571427,
+              "yPos": 10,
+              "showStroke": false,
+              "featureIds": []
+            },
+            {
+              "caption": "rRNA",
+              "originalCaption": "rRNA",
+              "color": "#71ee7d",
+              "xPos": 153.79613095238096,
+              "yPos": 10,
+              "showStroke": false,
+              "featureIds": []
+            },
+            {
+              "caption": "tRNA",
+              "originalCaption": "tRNA",
+              "color": "#e8b441",
+              "xPos": 282.1324404761905,
+              "yPos": 10,
+              "showStroke": false,
+              "featureIds": []
+            },
+            {
+              "caption": "ncRNA",
+              "originalCaption": "ncRNA",
+              "color": "#c4fac3",
+              "xPos": 409.48958333333337,
+              "yPos": 10,
+              "showStroke": false,
+              "featureIds": []
+            },
+            {
+              "caption": "tmRNA",
+              "originalCaption": "tmRNA",
+              "color": "#ded44e",
+              "xPos": 550.7529761904763,
+              "yPos": 10,
+              "showStroke": false,
+              "featureIds": []
+            }
+          ],
+          "deletedEntries": [],
+          "originalOrder": [
+            "CDS",
+            "rRNA",
+            "tRNA",
+            "ncRNA",
+            "tmRNA"
+          ],
+          "originalColors": {
+            "CDS": "#54bcf8",
+            "rRNA": "#71ee7d",
+            "tRNA": "#e8b441",
+            "ncRNA": "#c4fac3",
+            "tmRNA": "#ded44e"
+          },
+          "colorOverrides": {},
+          "strokeOverrides": {},
+          "addedCaptions": []
+        },
+        "featureStrokes": {
+          "overrides": {}
+        },
+        "originalSvgStroke": {
+          "color": null,
+          "width": null
+        }
+      },
+      "webBindingsSchema": 2,
+      "pythonReader": {
+        "version": 44,
+        "mode": "linear",
+        "records": 4
+      },
+      "cliReplayExit": 0,
+      "cliSvgBytes": 5128555,
+      "freshLoad": {
+        "results": 1,
+        "cacheEntries": 12,
+        "features": 18782,
+        "mounted": true,
+        "workers": [],
+        "pageErrors": [],
+        "externalRequests": [],
+        "dialogs": [
+          {
+            "type": "alert",
+            "message": "Session loaded successfully!"
+          }
+        ]
+      }
+    }
+  },
+  "/tmp/issue597-s01-final-real-semantic-1-j3R30y/semantic-checks.json": {
+    "sha256": "31c8a3616efbb2b24ff15ee7aa3720c9c96483c1e4101bd6e7eea7d8009a290f",
+    "result": {
+      "source": {
+        "sha256": "a60cce6ecb8a0c499f2d801feabc65b122c78793dafcc15644b46c6ef1ecc98f",
+        "bytes": 134471293,
+        "version": 44,
+        "requestSchema": 8,
+        "records": 12,
+        "features": 62089,
+        "cacheEntries": 144,
+        "hashes": {
+          "format": "a565d6c86d89f5062657493c80eed1b314a7d52b81c7504622b0ee9084307f4f",
+          "version": "71ee45a3c0db9a9865f7313dd3372cf60dca6479d46261f3542eb9346e4a04d6",
+          "createdAt": "4451c8df62bf09d9e0c9fe949cc17ce6ead48acddc37dc1895a3ab2b8d2879fd",
+          "title": "41fa90b2b3984145805f4505c76707d3d75551814b5c9510fa868a912eed18de",
+          "ui": "e8c5aea1f0ebcbaa58a50e79b261e2d7940b78b685fe0d57b9c33e6cc13f312d",
+          "results": "3fc1e5206c155d14a4c33650310bc6ad73b9accd3c7356af9e9c738714f9b018",
+          "editorState": "5a9921e3c4c007a3870c3e7ee910af6df5dc0ec177c9df85cbb1d5dadd9327df",
+          "features": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a",
+          "orthogroupState": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a",
+          "cliInvocation": "d80771e6164097a48d50db16d8c99a74e47ad39877896aa6462296b870bb4331",
+          "renderRequest": "4150ceb467aabf3b26e06facce1ae1a9db604c4289c661589b94bbd9a6ca82ff",
+          "resources": "600846eea4986e6d4fa92002870566c5ede14d6f3abd7c9ab2c98d7e1cec7688",
+          "webFiles": "b0be9635048d1dddaa08db919832436f5522a16b3feba07bee85d2e34d110088",
+          "losatCache": "21a45656d0a4c352003e7c1a49a2ad63ac49ce3fefff0c63e62cf4f73403e677",
+          "losatDerivedCache": "d801aa1fb7ddcc330a5e3173372ea6af4a3d08ec58074478e85aa5603e926658",
+          "proteinIdentityManifest": "b0e1ac56011c6f04e76a1b9af7c3431df72911762986163b37f63f7802b51cce"
+        },
+        "wholeHash": "97221322e7d5b55b4cf56cb0aacc019764becb1dfab480592241ba3812aff9f9"
+      },
+      "saved": {
+        "sha256": "0962c9934c501c300e6ac0beabf2ade8ac8cd53ce713bbdd3d0ce0b2ac320f5a",
+        "bytes": 133518005,
+        "version": 44,
+        "requestSchema": 8,
+        "records": 12,
+        "features": 62089,
+        "cacheEntries": 144,
+        "hashes": {
+          "format": "a565d6c86d89f5062657493c80eed1b314a7d52b81c7504622b0ee9084307f4f",
+          "version": "71ee45a3c0db9a9865f7313dd3372cf60dca6479d46261f3542eb9346e4a04d6",
+          "createdAt": "142abb9c60f696111a0f45fcc1d84f7c2f9b02c78b49566624666b3eb8ad05d9",
+          "title": "7ebd154623dc1eac803167beddb7bae56174627d1c61f085a8d15040524c8190",
+          "config": "34bbf9e681fda275a45dd8206c3e97edb1417eebfb88745b59ae4b83365ddbc6",
+          "ui": "8bdd3575c36df8ee41a6d1e682cf509c15219ad30b068b734b4ccf608746faab",
+          "renderRequest": "4150ceb467aabf3b26e06facce1ae1a9db604c4289c661589b94bbd9a6ca82ff",
+          "resources": "600846eea4986e6d4fa92002870566c5ede14d6f3abd7c9ab2c98d7e1cec7688",
+          "webFiles": "f48e771883a2b13c98fcb93be41f8dee4b46027c1b425c680156ee379ecb6d06",
+          "results": "8eadde508b13b0d3c273bc147cef8c162e7b8c344741fe4fb1aad7031582d687",
+          "runMetadata": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a",
+          "features": "6b4e3687049ef90433ac03d66c81efa02f47cc29e96dde51bd834cac7d6419e0",
+          "editorState": "96f33d030b7a9566799889b94180e5081992f03b7246332db595ecd3a285c9b2",
+          "orthogroupState": "2ef835f9b003a3b9c0300376225b8799ca37512ee954c8e425e3e067e893fc68",
+          "losatCache": "21a45656d0a4c352003e7c1a49a2ad63ac49ce3fefff0c63e62cf4f73403e677",
+          "losatDerivedCache": "d801aa1fb7ddcc330a5e3173372ea6af4a3d08ec58074478e85aa5603e926658",
+          "proteinIdentityManifest": "b0e1ac56011c6f04e76a1b9af7c3431df72911762986163b37f63f7802b51cce"
+        },
+        "wholeHash": "15c9f2347143e11bd5e4789c5e05b865f388cd615c3f79ce2a2a609c509e81a5"
+      },
+      "checks": {
+        "renderRequest": true,
+        "resources": true,
+        "proteinIdentityManifest": true,
+        "losatDerivedCache": true,
+        "sourceEditorStateFields": true,
+        "featureCatalog": true,
+        "rawCacheSourceFields": true,
+        "cacheOnlyExistingRestoreMetadataAdded": true,
+        "savedSvgSemanticEqual": true
+      },
+      "svg": {
+        "equal": true,
+        "message": "SVGs are semantically equivalent",
+        "differences": []
+      },
+      "addedCacheFields": [],
+      "addedEditorFields": {
+        "legend": {
+          "entries": [
+            {
+              "caption": "CDS",
+              "originalCaption": "CDS",
+              "color": "#54bcf8",
+              "xPos": 31.428571428571427,
+              "yPos": 10,
+              "showStroke": false,
+              "featureIds": []
+            },
+            {
+              "caption": "rRNA",
+              "originalCaption": "rRNA",
+              "color": "#71ee7d",
+              "xPos": 153.79613095238096,
+              "yPos": 10,
+              "showStroke": false,
+              "featureIds": []
+            },
+            {
+              "caption": "tRNA",
+              "originalCaption": "tRNA",
+              "color": "#e8b441",
+              "xPos": 282.1324404761905,
+              "yPos": 10,
+              "showStroke": false,
+              "featureIds": []
+            },
+            {
+              "caption": "ncRNA",
+              "originalCaption": "ncRNA",
+              "color": "#c4fac3",
+              "xPos": 409.48958333333337,
+              "yPos": 10,
+              "showStroke": false,
+              "featureIds": []
+            },
+            {
+              "caption": "tmRNA",
+              "originalCaption": "tmRNA",
+              "color": "#ded44e",
+              "xPos": 550.7529761904763,
+              "yPos": 10,
+              "showStroke": false,
+              "featureIds": []
+            }
+          ],
+          "deletedEntries": [],
+          "originalOrder": [
+            "CDS",
+            "rRNA",
+            "tRNA",
+            "ncRNA",
+            "tmRNA"
+          ],
+          "originalColors": {
+            "CDS": "#54bcf8",
+            "rRNA": "#71ee7d",
+            "tRNA": "#e8b441",
+            "ncRNA": "#c4fac3",
+            "tmRNA": "#ded44e"
+          },
+          "colorOverrides": {},
+          "strokeOverrides": {},
+          "addedCaptions": []
+        },
+        "featureStrokes": {
+          "overrides": {}
+        },
+        "originalSvgStroke": {
+          "color": null,
+          "width": null
+        }
+      },
+      "webBindingsSchema": 2
+    }
+  },
+  "/tmp/issue597-s01-final-real-semantic-0-j3R30y/semantic-checks.json": {
+    "sha256": "53b8f4e6c2328cd1ffac30f8edb81fefeea81340ab28553002a0007dcd465823",
+    "result": {
+      "source": {
+        "sha256": "a60cce6ecb8a0c499f2d801feabc65b122c78793dafcc15644b46c6ef1ecc98f",
+        "bytes": 134471293,
+        "version": 44,
+        "requestSchema": 8,
+        "records": 12,
+        "features": 62089,
+        "cacheEntries": 144,
+        "hashes": {
+          "format": "a565d6c86d89f5062657493c80eed1b314a7d52b81c7504622b0ee9084307f4f",
+          "version": "71ee45a3c0db9a9865f7313dd3372cf60dca6479d46261f3542eb9346e4a04d6",
+          "createdAt": "4451c8df62bf09d9e0c9fe949cc17ce6ead48acddc37dc1895a3ab2b8d2879fd",
+          "title": "41fa90b2b3984145805f4505c76707d3d75551814b5c9510fa868a912eed18de",
+          "ui": "e8c5aea1f0ebcbaa58a50e79b261e2d7940b78b685fe0d57b9c33e6cc13f312d",
+          "results": "3fc1e5206c155d14a4c33650310bc6ad73b9accd3c7356af9e9c738714f9b018",
+          "editorState": "5a9921e3c4c007a3870c3e7ee910af6df5dc0ec177c9df85cbb1d5dadd9327df",
+          "features": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a",
+          "orthogroupState": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a",
+          "cliInvocation": "d80771e6164097a48d50db16d8c99a74e47ad39877896aa6462296b870bb4331",
+          "renderRequest": "4150ceb467aabf3b26e06facce1ae1a9db604c4289c661589b94bbd9a6ca82ff",
+          "resources": "600846eea4986e6d4fa92002870566c5ede14d6f3abd7c9ab2c98d7e1cec7688",
+          "webFiles": "b0be9635048d1dddaa08db919832436f5522a16b3feba07bee85d2e34d110088",
+          "losatCache": "21a45656d0a4c352003e7c1a49a2ad63ac49ce3fefff0c63e62cf4f73403e677",
+          "losatDerivedCache": "d801aa1fb7ddcc330a5e3173372ea6af4a3d08ec58074478e85aa5603e926658",
+          "proteinIdentityManifest": "b0e1ac56011c6f04e76a1b9af7c3431df72911762986163b37f63f7802b51cce"
+        },
+        "wholeHash": "97221322e7d5b55b4cf56cb0aacc019764becb1dfab480592241ba3812aff9f9"
+      },
+      "saved": {
+        "sha256": "9c47a95eb00f0d1e0f00ecfb7be78ea84b04fdc1c82d8af4948431a8c761069d",
+        "bytes": 133518007,
+        "version": 44,
+        "requestSchema": 8,
+        "records": 12,
+        "features": 62089,
+        "cacheEntries": 144,
+        "hashes": {
+          "format": "a565d6c86d89f5062657493c80eed1b314a7d52b81c7504622b0ee9084307f4f",
+          "version": "71ee45a3c0db9a9865f7313dd3372cf60dca6479d46261f3542eb9346e4a04d6",
+          "createdAt": "c12aa4c4d7dba79828df3b5df01bf266c266cefe3722c7fa66c0095935cde170",
+          "title": "7ebd154623dc1eac803167beddb7bae56174627d1c61f085a8d15040524c8190",
+          "config": "5fdda83be1b3dcb42053d49792693610999430564e74fb63883324251dfaea7e",
+          "ui": "8bdd3575c36df8ee41a6d1e682cf509c15219ad30b068b734b4ccf608746faab",
+          "renderRequest": "4150ceb467aabf3b26e06facce1ae1a9db604c4289c661589b94bbd9a6ca82ff",
+          "resources": "600846eea4986e6d4fa92002870566c5ede14d6f3abd7c9ab2c98d7e1cec7688",
+          "webFiles": "157adbc958af5db35a01d9c1e20a947246e99fc6740f9cada432f679978a6326",
+          "results": "8eadde508b13b0d3c273bc147cef8c162e7b8c344741fe4fb1aad7031582d687",
+          "runMetadata": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a",
+          "features": "6b4e3687049ef90433ac03d66c81efa02f47cc29e96dde51bd834cac7d6419e0",
+          "editorState": "96f33d030b7a9566799889b94180e5081992f03b7246332db595ecd3a285c9b2",
+          "orthogroupState": "2ef835f9b003a3b9c0300376225b8799ca37512ee954c8e425e3e067e893fc68",
+          "losatCache": "21a45656d0a4c352003e7c1a49a2ad63ac49ce3fefff0c63e62cf4f73403e677",
+          "losatDerivedCache": "d801aa1fb7ddcc330a5e3173372ea6af4a3d08ec58074478e85aa5603e926658",
+          "proteinIdentityManifest": "b0e1ac56011c6f04e76a1b9af7c3431df72911762986163b37f63f7802b51cce"
+        },
+        "wholeHash": "0db624304332a370e4b1a27027dd9812d8c5219839415d71e784723d8ffc5d53"
+      },
+      "checks": {
+        "renderRequest": true,
+        "resources": true,
+        "proteinIdentityManifest": true,
+        "losatDerivedCache": true,
+        "sourceEditorStateFields": true,
+        "featureCatalog": true,
+        "rawCacheSourceFields": true,
+        "cacheOnlyExistingRestoreMetadataAdded": true,
+        "savedSvgSemanticEqual": true,
+        "pythonReaderRecords": true,
+        "cliReplay": true,
+        "freshLoadCanonicalRequest": true,
+        "freshLoadReady": true,
+        "freshLoadCatalogAndCache": true,
+        "freshLoadNoWorkerOrExternalError": false
+      },
+      "svg": {
+        "equal": true,
+        "message": "SVGs are semantically equivalent",
+        "differences": []
+      },
+      "addedCacheFields": [],
+      "addedEditorFields": {
+        "legend": {
+          "entries": [
+            {
+              "caption": "CDS",
+              "originalCaption": "CDS",
+              "color": "#54bcf8",
+              "xPos": 31.428571428571427,
+              "yPos": 10,
+              "showStroke": false,
+              "featureIds": []
+            },
+            {
+              "caption": "rRNA",
+              "originalCaption": "rRNA",
+              "color": "#71ee7d",
+              "xPos": 153.79613095238096,
+              "yPos": 10,
+              "showStroke": false,
+              "featureIds": []
+            },
+            {
+              "caption": "tRNA",
+              "originalCaption": "tRNA",
+              "color": "#e8b441",
+              "xPos": 282.1324404761905,
+              "yPos": 10,
+              "showStroke": false,
+              "featureIds": []
+            },
+            {
+              "caption": "ncRNA",
+              "originalCaption": "ncRNA",
+              "color": "#c4fac3",
+              "xPos": 409.48958333333337,
+              "yPos": 10,
+              "showStroke": false,
+              "featureIds": []
+            },
+            {
+              "caption": "tmRNA",
+              "originalCaption": "tmRNA",
+              "color": "#ded44e",
+              "xPos": 550.7529761904763,
+              "yPos": 10,
+              "showStroke": false,
+              "featureIds": []
+            }
+          ],
+          "deletedEntries": [],
+          "originalOrder": [
+            "CDS",
+            "rRNA",
+            "tRNA",
+            "ncRNA",
+            "tmRNA"
+          ],
+          "originalColors": {
+            "CDS": "#54bcf8",
+            "rRNA": "#71ee7d",
+            "tRNA": "#e8b441",
+            "ncRNA": "#c4fac3",
+            "tmRNA": "#ded44e"
+          },
+          "colorOverrides": {},
+          "strokeOverrides": {},
+          "addedCaptions": []
+        },
+        "featureStrokes": {
+          "overrides": {}
+        },
+        "originalSvgStroke": {
+          "color": null,
+          "width": null
+        }
+      },
+      "webBindingsSchema": 2,
+      "pythonReader": {
+        "version": 44,
+        "mode": "linear",
+        "records": 12
+      },
+      "cliReplayExit": 0,
+      "cliSvgBytes": 19621657,
+      "freshLoad": {
+        "results": 1,
+        "cacheEntries": 144,
+        "features": 62089,
+        "mounted": true,
+        "workers": [
+          "http://127.0.0.1:44617/gbdraw/web/js/workers/diagram-generation-worker.js"
+        ],
+        "pageErrors": [],
+        "externalRequests": [],
+        "dialogs": [
+          {
+            "type": "alert",
+            "message": "Session loaded successfully!"
+          }
+        ]
+      }
+    }
+  },
+  "/tmp/issue597-s01-final-real-semantic-2-j3R30y/semantic-checks.json": {
+    "sha256": "8e735ee8a711c71339d8f0a2f640fc0e968313464e83b62efc985257b5675d92",
+    "result": {
+      "source": {
+        "sha256": "a60cce6ecb8a0c499f2d801feabc65b122c78793dafcc15644b46c6ef1ecc98f",
+        "bytes": 134471293,
+        "version": 44,
+        "requestSchema": 8,
+        "records": 12,
+        "features": 62089,
+        "cacheEntries": 144,
+        "hashes": {
+          "format": "a565d6c86d89f5062657493c80eed1b314a7d52b81c7504622b0ee9084307f4f",
+          "version": "71ee45a3c0db9a9865f7313dd3372cf60dca6479d46261f3542eb9346e4a04d6",
+          "createdAt": "4451c8df62bf09d9e0c9fe949cc17ce6ead48acddc37dc1895a3ab2b8d2879fd",
+          "title": "41fa90b2b3984145805f4505c76707d3d75551814b5c9510fa868a912eed18de",
+          "ui": "e8c5aea1f0ebcbaa58a50e79b261e2d7940b78b685fe0d57b9c33e6cc13f312d",
+          "results": "3fc1e5206c155d14a4c33650310bc6ad73b9accd3c7356af9e9c738714f9b018",
+          "editorState": "5a9921e3c4c007a3870c3e7ee910af6df5dc0ec177c9df85cbb1d5dadd9327df",
+          "features": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a",
+          "orthogroupState": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a",
+          "cliInvocation": "d80771e6164097a48d50db16d8c99a74e47ad39877896aa6462296b870bb4331",
+          "renderRequest": "4150ceb467aabf3b26e06facce1ae1a9db604c4289c661589b94bbd9a6ca82ff",
+          "resources": "600846eea4986e6d4fa92002870566c5ede14d6f3abd7c9ab2c98d7e1cec7688",
+          "webFiles": "b0be9635048d1dddaa08db919832436f5522a16b3feba07bee85d2e34d110088",
+          "losatCache": "21a45656d0a4c352003e7c1a49a2ad63ac49ce3fefff0c63e62cf4f73403e677",
+          "losatDerivedCache": "d801aa1fb7ddcc330a5e3173372ea6af4a3d08ec58074478e85aa5603e926658",
+          "proteinIdentityManifest": "b0e1ac56011c6f04e76a1b9af7c3431df72911762986163b37f63f7802b51cce"
+        },
+        "wholeHash": "97221322e7d5b55b4cf56cb0aacc019764becb1dfab480592241ba3812aff9f9"
+      },
+      "saved": {
+        "sha256": "f3ed3ffae95f37e03b0611b37b2682da3a3c3d9e7ad3f2809929d4681b2a71e8",
+        "bytes": 133517992,
+        "version": 44,
+        "requestSchema": 8,
+        "records": 12,
+        "features": 62089,
+        "cacheEntries": 144,
+        "hashes": {
+          "format": "a565d6c86d89f5062657493c80eed1b314a7d52b81c7504622b0ee9084307f4f",
+          "version": "71ee45a3c0db9a9865f7313dd3372cf60dca6479d46261f3542eb9346e4a04d6",
+          "createdAt": "c7d198b1718b64e7919a3f329b1d266404ee815a19404230a45bf7a11ae900d0",
+          "title": "7ebd154623dc1eac803167beddb7bae56174627d1c61f085a8d15040524c8190",
+          "config": "a102bc38f85f5682dc3ccac8ec9f2c88ad2dd52931d1b0a18991628cd49bc610",
+          "ui": "8bdd3575c36df8ee41a6d1e682cf509c15219ad30b068b734b4ccf608746faab",
+          "renderRequest": "4150ceb467aabf3b26e06facce1ae1a9db604c4289c661589b94bbd9a6ca82ff",
+          "resources": "600846eea4986e6d4fa92002870566c5ede14d6f3abd7c9ab2c98d7e1cec7688",
+          "webFiles": "25065abfb03d4c2d773f3d3880ca4519424cbcaba8cda8d4ae9bd84c1f78aca9",
+          "results": "8eadde508b13b0d3c273bc147cef8c162e7b8c344741fe4fb1aad7031582d687",
+          "runMetadata": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a",
+          "features": "6b4e3687049ef90433ac03d66c81efa02f47cc29e96dde51bd834cac7d6419e0",
+          "editorState": "96f33d030b7a9566799889b94180e5081992f03b7246332db595ecd3a285c9b2",
+          "orthogroupState": "2ef835f9b003a3b9c0300376225b8799ca37512ee954c8e425e3e067e893fc68",
+          "losatCache": "21a45656d0a4c352003e7c1a49a2ad63ac49ce3fefff0c63e62cf4f73403e677",
+          "losatDerivedCache": "d801aa1fb7ddcc330a5e3173372ea6af4a3d08ec58074478e85aa5603e926658",
+          "proteinIdentityManifest": "b0e1ac56011c6f04e76a1b9af7c3431df72911762986163b37f63f7802b51cce"
+        },
+        "wholeHash": "42560616977772495b2ceccd41d2ecc9a418d7756965e7e12ca82fbe1a991818"
+      },
+      "checks": {
+        "renderRequest": true,
+        "resources": true,
+        "proteinIdentityManifest": true,
+        "losatDerivedCache": true,
+        "sourceEditorStateFields": true,
+        "featureCatalog": true,
+        "rawCacheSourceFields": true,
+        "cacheOnlyExistingRestoreMetadataAdded": true,
+        "savedSvgSemanticEqual": true
+      },
+      "svg": {
+        "equal": true,
+        "message": "SVGs are semantically equivalent",
+        "differences": []
+      },
+      "addedCacheFields": [],
+      "addedEditorFields": {
+        "legend": {
+          "entries": [
+            {
+              "caption": "CDS",
+              "originalCaption": "CDS",
+              "color": "#54bcf8",
+              "xPos": 31.428571428571427,
+              "yPos": 10,
+              "showStroke": false,
+              "featureIds": []
+            },
+            {
+              "caption": "rRNA",
+              "originalCaption": "rRNA",
+              "color": "#71ee7d",
+              "xPos": 153.79613095238096,
+              "yPos": 10,
+              "showStroke": false,
+              "featureIds": []
+            },
+            {
+              "caption": "tRNA",
+              "originalCaption": "tRNA",
+              "color": "#e8b441",
+              "xPos": 282.1324404761905,
+              "yPos": 10,
+              "showStroke": false,
+              "featureIds": []
+            },
+            {
+              "caption": "ncRNA",
+              "originalCaption": "ncRNA",
+              "color": "#c4fac3",
+              "xPos": 409.48958333333337,
+              "yPos": 10,
+              "showStroke": false,
+              "featureIds": []
+            },
+            {
+              "caption": "tmRNA",
+              "originalCaption": "tmRNA",
+              "color": "#ded44e",
+              "xPos": 550.7529761904763,
+              "yPos": 10,
+              "showStroke": false,
+              "featureIds": []
+            }
+          ],
+          "deletedEntries": [],
+          "originalOrder": [
+            "CDS",
+            "rRNA",
+            "tRNA",
+            "ncRNA",
+            "tmRNA"
+          ],
+          "originalColors": {
+            "CDS": "#54bcf8",
+            "rRNA": "#71ee7d",
+            "tRNA": "#e8b441",
+            "ncRNA": "#c4fac3",
+            "tmRNA": "#ded44e"
+          },
+          "colorOverrides": {},
+          "strokeOverrides": {},
+          "addedCaptions": []
+        },
+        "featureStrokes": {
+          "overrides": {}
+        },
+        "originalSvgStroke": {
+          "color": null,
+          "width": null
+        }
+      },
+      "webBindingsSchema": 2
+    }
+  }
+}

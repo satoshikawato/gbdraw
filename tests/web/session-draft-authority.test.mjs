@@ -1,3 +1,4 @@
+import { installSessionImportWorker } from './helpers/session-import-node.mjs';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { installFakeSvgDom } from './fake-svg-dom.mjs';
@@ -22,6 +23,8 @@ globalThis.File = class File extends Blob {
 };
 const alerts = [];
 globalThis.alert = (message) => alerts.push(String(message));
+
+installSessionImportWorker();
 
 const {
   buildConfigData,
@@ -1291,14 +1294,37 @@ const { normalizeUserFacingError } = await import('../../gbdraw/web/js/services/
 const beforeLateRead = rollbackState();
 const lateFile = new File(['{}'], 'PRIVATE_LATE_SESSION.json');
 let failLateRead;
-lateFile.stream = () => new ReadableStream({ start(controller) {
-  failLateRead = () => controller.error(new Error('PRIVATE_LATE_READ_SENTINEL'));
-} });
+// File methods do not cross structured clone. Hold the actual Worker reply
+// boundary so this fixture exercises a late transport failure, not an ignored
+// main-thread stream override.
+const SessionWorker = globalThis.Worker;
+globalThis.Worker = class extends SessionWorker {
+  postMessage(message) {
+    if (message.file === lateFile) {
+      failLateRead = () => this.emit('error', { message: 'PRIVATE_LATE_READ_SENTINEL' });
+    } else super.postMessage(message);
+  }
+};
 const lateRead = importSession({target:{files:[lateFile],value:'selected'}});
 while (!failLateRead) await new Promise(resolve=>setTimeout(resolve,0));
+globalThis.Worker = SessionWorker;
 const laterAlert = normalizeUserFacingError({code:'PDF_LIBRARY',operation:'export-pdf',stage:'initialization'});
 state.errorLog.value = laterAlert;
 failLateRead();
 assert.deepEqual(await lateRead,{status:'stale'});
 assert.equal(state.errorLog.value,laterAlert);
 assert.deepEqual(rollbackState(),beforeLateRead);
+
+// The same sole Session owner keeps a late Save error from replacing a newer alert.
+const { exportSession } = await import('../../gbdraw/web/js/services/config.js');
+let failLateSave;
+const lateSave = exportSession('late save', { beforeExport: () => new Promise((_, reject) => {
+  failLateSave = reject;
+}), onError: () => assert.fail('A stale Save must not publish its error') });
+while (!failLateSave) await new Promise(resolve => setTimeout(resolve, 0));
+const saveLaterAlert = normalizeUserFacingError({ code: 'PDF_LIBRARY', operation: 'export-pdf', stage: 'initialization' });
+state.errorLog.value = saveLaterAlert;
+failLateSave(new Error('PRIVATE_LATE_SAVE_SENTINEL'));
+assert.deepEqual(await lateSave, { status: 'stale' });
+assert.equal(state.errorLog.value, saveLaterAlert);
+assert.equal(state.sessionSavePending.value, false);

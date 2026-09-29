@@ -1,3 +1,4 @@
+import { sendBoundedJson } from '../services/bounded-json-transport.js';
 import { PYTHON_HELPERS } from '../app/python-helpers.js';
 import { DIAGRAM_HELPER_OPERATIONS } from '../services/diagram-worker-protocol.js';
 import { normalizeUserFacingError } from '../services/error-normalization.js';
@@ -5,6 +6,26 @@ import { normalizeUserFacingError } from '../services/error-normalization.js';
 let runtimePromise = null;
 let runtime = null;
 let operationQueue = Promise.resolve();
+let auxiliaryAcknowledgement = null;
+const sendAuxiliaryResult = async (type, requestId, result) => {
+  let wholeReply = false;
+  try {
+    await sendBoundedJson(result, (part, transfers = []) => {
+      if (part.whole) {
+        wholeReply = true;
+        self.postMessage({ type, requestId, ok: true, result: part.value });
+        return Promise.resolve();
+      }
+      return new Promise((resolve) => {
+        auxiliaryAcknowledgement = { requestId, resolve };
+        self.postMessage({ type, requestId, status: 'part', ...part }, transfers);
+      });
+    }, [], { consume: true });
+    if (!wholeReply) self.postMessage({ type, requestId, ok: true });
+  } finally {
+    auxiliaryAcknowledgement = null;
+  }
+};
 const RENDER_RESOURCE_CACHE = '/gbdraw-web-render-resource-cache';
 const RENDER_WORKSPACE_MARKER = '.gbdraw-worker-render-workspace';
 const RENDER_RESOURCE_ID_RE = /^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/;
@@ -654,10 +675,13 @@ const HELPER_OPERATION_SPECS = Object.freeze({
       'collinearInferOrthogroups',
       'orthogroupMembershipMode',
       'orthogroupMemberMaxHits',
-      'collinearMergeOrientation'
+      'collinearMergeOrientation',
+      'explicitDisplayPairs'
     ],
     fileRoles: ['pairs', 'rawTsv'],
-    run: (pyodide, payload, paths, operation) => callJsonHelper(
+    run: (pyodide, payload, paths, operation, workspace) => {
+      const canonicalPath = `${workspace}/canonical-comparison.json`;
+      const result = callJsonHelper(
       pyodide,
       'convert_losatp_blastp_pairs_to_genomic_payload',
       [
@@ -681,9 +705,20 @@ const HELPER_OPERATION_SPECS = Object.freeze({
         payload.orthogroupMembershipMode ?? 'anchor_core_v1',
         payload.orthogroupMemberMaxHits ?? null,
         payload.collinearMergeOrientation ?? 'either',
-        payload.collinearInferOrthogroups ?? true
+        payload.collinearInferOrthogroups ?? true,
+        canonicalPath,
+        payload.explicitDisplayPairs === true
       ]
-    )
+      );
+      if (result?.canonicalResource) {
+        const bytes = pyodide.FS.readFile(canonicalPath);
+        if (bytes.byteLength !== result.canonicalResource.size) {
+          throw new Error("Analysis canonical resource byte size does not match.");
+        }
+        result.canonicalResource.bytes = bytes;
+      }
+      return result;
+    }
   },
   [DIAGRAM_HELPER_OPERATIONS.CONVERT_LOSAT_NUCLEOTIDE_TO_DISPLAY_TSV]: {
     keys: ['blastText', 'queryViewTransform', 'subjectViewTransform'],
@@ -1141,7 +1176,7 @@ const handleWorkerMessage = async (data) => {
         ...(data.payload || {}),
         requestId
       });
-      self.postMessage({ requestId, type: 'feature-extraction', ok: true, result });
+      await sendAuxiliaryResult('feature-extraction', requestId, result);
       return;
     }
     if (type === 'helper') {
@@ -1150,7 +1185,7 @@ const handleWorkerMessage = async (data) => {
         payload: data.payload || {},
         requestId
       });
-      self.postMessage({ requestId, type: 'helper', ok: true, result });
+      await sendAuxiliaryResult('helper', requestId, result);
       return;
     }
     if (type !== 'run') {
@@ -1188,6 +1223,14 @@ const handleWorkerMessage = async (data) => {
 
 self.onmessage = (event) => {
   const data = event.data || {};
+  if (data.type === 'auxiliary-ack') {
+    if (auxiliaryAcknowledgement?.requestId === data.requestId) {
+      const pending = auxiliaryAcknowledgement;
+      auxiliaryAcknowledgement = null;
+      pending.resolve();
+    }
+    return;
+  }
   const scheduled = operationQueue.then(
     () => handleWorkerMessage(data),
     () => handleWorkerMessage(data)

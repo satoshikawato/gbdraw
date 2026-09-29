@@ -1,9 +1,21 @@
 # Web Gallery operation screenshot register
 
-Last updated: 2026-09-27
+Last updated: 2026-09-28
 
 This register records task-specific decisions for Gallery operation media.
 Capture metadata remains the executable source of truth in each tutorial JSON.
+
+## Circular record discovery and loaded-preview inspection (#597 S07)
+
+| Tutorial | Operation media | Decision | Required capture state | Status |
+| --- | --- | --- | --- | --- |
+| `tobacco-chloroplast` | `manual-06-01-region-annotations.webp` | Keep; recipe corrected | Exact tobacco Session; **Inspect source records** replaces the removed Circular **Load record rotation controls** click before the four region rows are asserted | Corrected recipe captured and passed every declared assertion; the new crop truncates the label cells, so the existing bitmap is kept |
+| `vibrio-harveyi-group-collinear` | `manual-02-01-record-row.webp` | Keep; recipe corrected | Exact Vibrio Session; the removed click is dropped because the loaded Linear record rows already exist | Corrected recipe captured the same row and values; only the region label gained its later **Applies on Generate** note, so the existing bitmap is kept |
+
+Tutorial text and captions are unchanged. Public documentation images for the
+changed Circular upload and Session steps come from `T-GUI-01` and `T-GUI-09`;
+see `results/S07_RESULT.md` in the Issue #597 plan for the remaining stale
+Circular Tutorial captures that this change did not regenerate.
 
 ## Circular Width/Radius numeric and unit controls (#619 S03)
 
@@ -226,12 +238,14 @@ capture validation proves the visible control or selected value is stale.
 - Use 70% whenever the complete title, plot, labels, and legend remain visible.
   This applies to `T-GUI-10`, `T-GUI-12`, `H-GUI-09`, and `H-GUI-10`, plus
   the intermediate `T-GUI-05` states.
-- Use 60% only where 70% clips required content. This applies to `T-GUI-01`,
-  `T-GUI-09`, `H-GUI-11`, `H-GUI-12`, `H-GUI-13`, `H-GUI-14`, and
-  `H-GUI-15`.
+- Use 60% only where 70% clips required content. This applies to `H-GUI-11`,
+  `H-GUI-12`, `H-GUI-13`, `H-GUI-14`, and `H-GUI-15`.
 - Use 50% only for the dense final tobacco chloroplast figure (`T-GUI-05`) and
   the three-comparison-ring figures (`T-GUI-06` and `H-GUI-06`), where 60%
-  clips the title, labels, legend, or outer comparison ring.
+  clips the title, labels, legend, or outer comparison ring. `T-GUI-01` and
+  `T-GUI-09` also use 50% since #597 S07: the Generation status row above the
+  Preview leaves too little canvas height at 60%, and bottom labels such as
+  `tRNA-Asp` fall behind the preview toolbar.
 - The HmmtDNA feature-highlight result uses `Middle`, strand separation off,
   70%, and gene labels for all 13 mitochondrial CDS features, including
   `COX1`.

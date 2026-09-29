@@ -1,0 +1,19 @@
+[
+  {
+    "path": "/mnt/c/users/genom/github/gbdraw/.worktrees/issue597-S05-recovered-20260928/docs/internal/issue-597-input-session-implementation-20260926/sessions/S05_RESUME_AFTER_PR629_20260927.md",
+    "sourceCall": 1,
+    "sha256": "2bcc5087b3a1d1fc0187c83704442cbc4723b0c3468c3fd235b7f623f197cce3",
+    "kind": "Exact previously read instruction"
+  },
+  {
+    "path": "/mnt/c/users/genom/github/gbdraw/.worktrees/issue597-S05-recovery-evidence-20260928/historical-validation-final-ecb-from-transcript.json",
+    "sourceCall": 353,
+    "sha256": "a393ea62d26864eb970b811d01d5cd50e5def934f3bf36ff00e59fbf9e0c5abd",
+    "kind": "Historical reported numeric observation; lost raw measurements and source files cannot currently be reverified"
+  },
+  {
+    "path": "/mnt/c/users/genom/github/gbdraw/.worktrees/issue597-S05-recovery-evidence-20260928/historical-review-ecb-from-transcript.json",
+    "sourceCall": 353,
+    "kind": "Historical local review; no current human approval"
+  }
+]

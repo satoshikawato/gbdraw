@@ -1,0 +1,49 @@
+{
+  "path": "gbdraw/web/index.html",
+  "conflictSourceSha256": "03fb1bd9bf19254d39887bafa389a1c5bd95a6f669593e2ef73a2be2d50ed57b",
+  "resolvedSha256": "4f9bf2f8b6b80bc3249ed1a76d88403da7cbe14cec8c2a921ebad024aad2846d",
+  "resolutions": [
+    {
+      "block": 1,
+      "ours": "                    <button data-history-ignore @click=\"saveSessionWithTitle\" :disabled=\"!sessionSaveAvailable\" :aria-busy=\"sessionSavePending\" class=\"app-config-button text-[11px] font-bold text-slate-600 hover:text-blue-700 px-1 py-0.5 rounded border border-blue-200 bg-blue-50 flex items-center gap-0.5 disabled:opacity-40 disabled:cursor-wait\" title=\"Save Session\" aria-label=\"Save Session\">\n",
+      "theirs": "                    <button @click=\"saveSessionWithTitle\" :disabled=\"sessionSavePending\" :aria-busy=\"sessionSavePending\" class=\"app-config-button text-[11px] font-bold text-slate-600 hover:text-blue-700 px-1 py-0.5 rounded border border-blue-200 bg-blue-50 flex items-center gap-0.5 disabled:opacity-40 disabled:cursor-wait\" title=\"Save the current Result and settings draft without generating\" aria-label=\"Save Session\" aria-describedby=\"session-save-help\">\n",
+      "resolved": "                    <button data-history-ignore @click=\"saveSessionWithTitle\" :disabled=\"!sessionSaveAvailable\" :aria-busy=\"sessionSavePending\" class=\"app-config-button text-[11px] font-bold text-slate-600 hover:text-blue-700 px-1 py-0.5 rounded border border-blue-200 bg-blue-50 flex items-center gap-0.5 disabled:opacity-40 disabled:cursor-wait\" title=\"Save the current Result and settings draft without generating\" aria-label=\"Save Session\" aria-describedby=\"session-save-help\">\n",
+      "reason": "Preserve S05 History exclusion and canonical Save availability; import dev Save explanation and help reference."
+    },
+    {
+      "block": 2,
+      "ours": "",
+      "theirs": "                            <p class=\"text-[10px] text-slate-500\">Applies on Generate: record rotation.</p>\n                            <button v-if=\"(cInputType === 'gff' ? files.c_gff && files.c_fasta : files.c_gb) && !recordDisplayControls.rowsFor('circular').length\" type=\"button\" @click=\"refreshCircularRecordOrder\" class=\"text-xs text-blue-600\">Load record rotation controls</button>\n",
+      "resolved": "                            <p class=\"text-[10px] text-slate-500\">Applies on Generate: record rotation.</p>\n",
+      "reason": "Import dev rotation timing explanation; preserve S03 explicit inspection by keeping removed lazy rotation-load button absent."
+    },
+    {
+      "block": 3,
+      "ours": "            <button data-history-managed type=\"button\" aria-label=\"Generate Diagram\" @click=\"runAnalysis\" :disabled=\"!semanticMutationAvailable || (processing)\"\n",
+      "theirs": "            <p class=\"mb-2 text-xs text-slate-700\" data-generation-application-summary><strong>{{ generationApplicationFeedback.label }}</strong> \u00b7 Generation settings</p>\n            <p id=\"generate-help\" class=\"mb-2 text-[10px] text-slate-600\">Generate recalculates placement and resets zoom. Undo restores the previous Result.</p>\n            <p class=\"sr-only\" data-generation-application-announcement role=\"status\" aria-live=\"polite\" aria-atomic=\"true\" v-text=\"generationApplicationFeedback.announcement\"></p>\n            <button data-history-managed type=\"button\" aria-label=\"Generate Diagram\" @click=\"runAnalysis\" :disabled=\"processing\" aria-describedby=\"generate-help\"\n",
+      "resolved": "            <p class=\"mb-2 text-xs text-slate-700\" data-generation-application-summary><strong>{{ generationApplicationFeedback.label }}</strong> \u00b7 Generation settings</p>\n            <p id=\"generate-help\" class=\"mb-2 text-[10px] text-slate-600\">Generate recalculates placement and resets zoom. Undo restores the previous Result.</p>\n            <p class=\"sr-only\" data-generation-application-announcement role=\"status\" aria-live=\"polite\" aria-atomic=\"true\" v-text=\"generationApplicationFeedback.announcement\"></p>\n            <button data-history-managed type=\"button\" aria-label=\"Generate Diagram\" @click=\"runAnalysis\" :disabled=\"!semanticMutationAvailable || (processing)\" aria-describedby=\"generate-help\"\n",
+      "reason": "Preserve S04 canonical operation availability; import dev generation feedback, live announcement and help."
+    },
+    {
+      "block": 4,
+      "ours": "                                    <label class=\"option-label flex items-center gap-2 text-xs text-slate-700 cursor-pointer select-none\">\n                                        <input type=\"checkbox\" v-model=\"form.keep_definition_left_aligned\" class=\"form-checkbox\" :disabled=\"!semanticMutationAvailable\">\n",
+      "theirs": "                                    <label class=\"option-label flex flex-wrap items-center gap-2 text-xs text-slate-700 cursor-pointer select-none\">\n                                        <input type=\"checkbox\" v-model=\"form.keep_definition_left_aligned\" class=\"form-checkbox\" aria-label=\"Lock Definition Column\" aria-describedby=\"linear-definition-lock-help\">\n",
+      "resolved": "                                    <label class=\"option-label flex flex-wrap items-center gap-2 text-xs text-slate-700 cursor-pointer select-none\">\n                                        <input type=\"checkbox\" v-model=\"form.keep_definition_left_aligned\" class=\"form-checkbox\" aria-label=\"Lock Definition Column\" aria-describedby=\"linear-definition-lock-help\" :disabled=\"!semanticMutationAvailable\">\n",
+      "reason": "Preserve S04 mutation availability; import dev responsive label, accessible name and help."
+    },
+    {
+      "block": 5,
+      "ours": "                                            <select v-else-if=\"row.visibilityType === 'mode'\" v-model=\"adv[row.visibilityKey]\" class=\"form-input form-input-compact w-28 text-[10px]\" :aria-label=\"row.label + ' visibility'\" :disabled=\"!semanticMutationAvailable\">\n",
+      "theirs": "                                            <select v-else-if=\"row.visibilityType === 'mode'\" :id=\"'linear-label-visibility-' + row.key\" v-model=\"adv[row.visibilityKey]\" class=\"form-input form-input-compact w-28 text-[10px]\" :aria-label=\"row.label + ' visibility'\">\n",
+      "resolved": "                                            <select v-else-if=\"row.visibilityType === 'mode'\" :id=\"'linear-label-visibility-' + row.key\" v-model=\"adv[row.visibilityKey]\" class=\"form-input form-input-compact w-28 text-[10px]\" :aria-label=\"row.label + ' visibility'\" :disabled=\"!semanticMutationAvailable\">\n",
+      "reason": "Preserve S04 mutation availability; import dev label/control association."
+    },
+    {
+      "block": 6,
+      "ours": "                                <select v-model=\"selectedPalette\" @change=\"updatePalette\" aria-label=\"Palette\" class=\"form-input form-input-compact mb-2\" :disabled=\"!semanticMutationAvailable\">\n",
+      "theirs": "                                <p data-palette-application-help class=\"mb-1 text-[10px] text-slate-600\">{{ paletteInstantPreviewEnabled ? 'Live edit: palette selection updates the current Result.' : 'Applies on Generate: palette selection updates swatches only; the current Result keeps its applied palette.' }}</p>\n                                <select v-model=\"selectedPalette\" @change=\"updatePalette\" aria-label=\"Palette\" class=\"form-input form-input-compact mb-2\">\n",
+      "resolved": "                                <p data-palette-application-help class=\"mb-1 text-[10px] text-slate-600\">{{ paletteInstantPreviewEnabled ? 'Live edit: palette selection updates the current Result.' : 'Applies on Generate: palette selection updates swatches only; the current Result keeps its applied palette.' }}</p>\n                                <select v-model=\"selectedPalette\" @change=\"updatePalette\" aria-label=\"Palette\" class=\"form-input form-input-compact mb-2\" :disabled=\"!semanticMutationAvailable\">\n",
+      "reason": "Preserve S04 mutation availability; import dev palette application explanation."
+    }
+  ]
+}

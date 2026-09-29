@@ -257,6 +257,8 @@ export const createDiagramDragActions = ({
   };
 
   const startLengthBarDrag = (e, group) => {
+    const sessionBusy = state.sessionOperationAvailability?.();
+    if (sessionBusy) return sessionBusy;
     if (!isLayoutRepositionModeEnabled()) return;
     if (!group) return;
 
@@ -282,6 +284,8 @@ export const createDiagramDragActions = ({
   };
 
   const startPlotTitleDrag = (e, group) => {
+    const sessionBusy = state.sessionOperationAvailability?.();
+    if (sessionBusy) return sessionBusy;
     if (!isLayoutRepositionModeEnabled()) return;
     if (!group) return;
 
@@ -307,6 +311,8 @@ export const createDiagramDragActions = ({
   };
 
   const startDiagramDrag = (e) => {
+    const sessionBusy = state.sessionOperationAvailability?.();
+    if (sessionBusy) return sessionBusy;
     if (!isLayoutRepositionModeEnabled()) return;
     if (e.shiftKey) return;
     if (
@@ -385,6 +391,8 @@ export const createDiagramDragActions = ({
   };
 
   const applyDiagramDragPosition = (clientX, clientY) => {
+    const sessionBusy = state.sessionOperationAvailability?.();
+    if (sessionBusy) return sessionBusy;
     if (!diagramDragging.value || activeDragElements.length === 0) return;
 
     const dragStart = getActiveDragStart();

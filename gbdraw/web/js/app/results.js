@@ -56,7 +56,8 @@ const preserveDefinitionGroupDomIdentity = (existingGroup, importedGroup) => {
 export const createResultsManager = ({
   state,
   legendLayout,
-  rerenderLinearDefinitions = null
+  rerenderLinearDefinitions = null,
+  makeRef = (value) => ({ value })
 }) => {
   const {
     svgContent,
@@ -84,8 +85,9 @@ export const createResultsManager = ({
   } = state;
   const { refreshCompositionGeometry } = legendLayout;
 
-  let definitionUpdateTimeout = null;
+  const definitionUpdateTimeout = makeRef(null);
   let definitionUpdateRevision = 0;
+  const definitionUpdateInFlight = makeRef(null);
   const cloneColors = (colors) => ({ ...(colors || {}) });
   const getPaletteMap = () => {
     if (paletteDefinitions.value && Object.keys(paletteDefinitions.value).length > 0) {
@@ -129,13 +131,15 @@ export const createResultsManager = ({
 
   const cancelDefinitionUpdate = () => {
     definitionUpdateRevision += 1;
-    if (definitionUpdateTimeout) {
-      clearTimeout(definitionUpdateTimeout);
-      definitionUpdateTimeout = null;
+    if (definitionUpdateTimeout.value) {
+      clearTimeout(definitionUpdateTimeout.value);
+      definitionUpdateTimeout.value = null;
     }
   };
 
   const updatePalette = () => {
+    const sessionBusy = state.sessionOperationAvailability?.();
+    if (sessionBusy) return sessionBusy;
     const selectedName = String(selectedPalette.value || '').trim() || 'default';
 
     if (!paletteInstantPreviewEnabled.value && selectedName === appliedPaletteName.value) {
@@ -154,6 +158,8 @@ export const createResultsManager = ({
   };
 
   const resetColors = () => {
+    const sessionBusy = state.sessionOperationAvailability?.();
+    if (sessionBusy) return sessionBusy;
     const selectedName = String(selectedPalette.value || '').trim() || 'default';
     currentColors.value = getPaletteBaseColors(selectedName);
     if (paletteInstantPreviewEnabled.value) {
@@ -235,7 +241,8 @@ export const createResultsManager = ({
     const revision = definitionUpdateRevision;
     const resultIndex = selectedResultIndex.value;
     const resultIdentity = svgResultIdentity.value;
-    const isCurrent = () => revision === definitionUpdateRevision
+    const isCurrent = () => !state.sessionOperationAvailability?.()
+      && revision === definitionUpdateRevision
       && selectedResultIndex.value === resultIndex
       && svgResultIdentity.value === resultIdentity
       && svgContainer.value?.querySelector('svg') === svg;
@@ -472,14 +479,20 @@ export const createResultsManager = ({
 
   const scheduleDefinitionUpdate = () => {
     cancelDefinitionUpdate();
+    if (state.semanticFileWatchersSuppressed?.value || state.sessionOperationAvailability?.()) return;
     if (mode.value === 'circular' && shouldDeferCircularPreviewUpdates.value) return;
-    definitionUpdateTimeout = setTimeout(() => {
-      definitionUpdateTimeout = null;
-      void updateDefinitionText();
+    definitionUpdateTimeout.value = setTimeout(() => {
+      definitionUpdateTimeout.value = null;
+      const operation = updateDefinitionText();
+      definitionUpdateInFlight.value = operation;
+      void operation.finally(() => {
+        if (definitionUpdateInFlight.value === operation) definitionUpdateInFlight.value = null;
+      });
     }, 500);
   };
 
   return {
+    definitionUpdatePending: () => Boolean(definitionUpdateTimeout.value || definitionUpdateInFlight.value),
     updatePalette,
     resetColors,
     applyPaletteDraftToPreview,

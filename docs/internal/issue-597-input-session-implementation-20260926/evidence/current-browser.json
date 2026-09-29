@@ -1,0 +1,44 @@
+{
+  "baseSha": "d457b7189b137185a8dec800819a312c30b969fa",
+  "fixtureSha256": "f2e922c26561d37a8d3b410ba972526c709cad5635f598bbdcfc234f02642c92",
+  "fixture": "tests/fixtures/sessions/cli-web-mito.gb",
+  "platform": "Linux-5.15.167.4-microsoft-standard-WSL2-x86_64-with-glibc2.39",
+  "browser": "149.0.7827.55",
+  "multipleUploadEnabled": false,
+  "nativeBeforeGenerate": {
+    "discoveryStatus": "ready",
+    "records": [
+      {
+        "selector": "#1",
+        "record_id": "NC_012920.1",
+        "record_length": 16569,
+        "detectedTopology": "circular"
+      },
+      {
+        "selector": "#2",
+        "record_id": "NC_012920.1",
+        "record_length": 16569,
+        "detectedTopology": "circular"
+      }
+    ],
+    "workers": [],
+    "resultCount": 0,
+    "sharedCanvas": true,
+    "cropPanelOpen": false,
+    "rotationSpinbuttons": 2,
+    "manualLoadLinks": 0
+  },
+  "savedPreviewAfterLoad": {
+    "discoveryStatus": "loading",
+    "recordCount": 0,
+    "workers": [],
+    "resultCount": 1
+  },
+  "replacementAfterLoad": {
+    "discoveryStatus": "ready",
+    "recordCount": 1,
+    "workers": [],
+    "resultCount": 1
+  },
+  "pageErrors": []
+}

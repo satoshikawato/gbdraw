@@ -1,0 +1,93 @@
+{
+  "mode": "limits",
+  "head": "c11d4854a899349cd66863c859f6f871724ba3ab",
+  "platform": "Linux-5.15.167.4-microsoft-standard-WSL2-x86_64-with-glibc2.39",
+  "python": "3.13.3",
+  "cpuCount": 32,
+  "ramBytes": 33518579712,
+  "cpuModel": "Intel(R) Core(TM) i9-14900HX",
+  "versions": {
+    "playwright": "1.61.0",
+    "psutil": "7.0.0",
+    "websocket-client": "1.8.0",
+    "biopython": "1.85"
+  },
+  "fixtures": {
+    "real": {
+      "sha256": "d3cafef9664bff958aec4932eea6e264ae872cce89762a7cbe617447af975388",
+      "results": [
+        {
+          "rejections": [
+            {
+              "path": "/tmp/issue597-S05-resume-evidence/limits/real-expanded-rejection.json",
+              "fileBytes": 466767669,
+              "reply": {
+                "status": "error",
+                "message": "Session file is too large.",
+                "stage": "read",
+                "code": "SESSION_IMPORT_READ_FAILED"
+              }
+            },
+            {
+              "path": "/tmp/issue597-S05-resume-evidence/limits/expanded-limit-rejection.json.gz",
+              "fileBytes": 522893,
+              "reply": {
+                "status": "error",
+                "message": "Expanded session file is too large.",
+                "stage": "read",
+                "code": "SESSION_IMPORT_READ_FAILED"
+              }
+            }
+          ],
+          "workerTrace": [
+            {
+              "url": "http://127.0.0.1:34079/gbdraw/web/js/workers/session-import-worker.js",
+              "stack": "Error\n    at new window.Worker (eval at evaluate (:303:30), <anonymous>:5:79)\n    at http://127.0.0.1:34079/gbdraw/web/js/services/session-import-client.js:67:14\n    at new Promise (<anonymous>)\n    at importSessionFile (http://127.0.0.1:34079/gbdraw/web/js/services/session-import-client.js:10:61)\n    at eval (eval at evaluate (:303:30), <anonymous>:3:23)\n    at async <anonymous>:329:30",
+              "messages": [
+                {
+                  "type": null,
+                  "operation": null,
+                  "operationId": 1,
+                  "fileBytes": 466767669,
+                  "stack": "Error\n    at window.Worker.postMessage (eval at evaluate (:303:30), <anonymous>:9:49)\n    at http://127.0.0.1:34079/gbdraw/web/js/services/session-import-client.js:73:12\n    at new Promise (<anonymous>)\n    at importSessionFile (http://127.0.0.1:34079/gbdraw/web/js/services/session-import-client.js:10:61)\n    at eval (eval at evaluate (:303:30), <anonymous>:3:23)\n    at async <anonymous>:329:30"
+                }
+              ],
+              "listeners": 0,
+              "terminations": 1
+            },
+            {
+              "url": "http://127.0.0.1:34079/gbdraw/web/js/workers/session-import-worker.js",
+              "stack": "Error\n    at new window.Worker (eval at evaluate (:303:30), <anonymous>:5:79)\n    at http://127.0.0.1:34079/gbdraw/web/js/services/session-import-client.js:67:14\n    at new Promise (<anonymous>)\n    at importSessionFile (http://127.0.0.1:34079/gbdraw/web/js/services/session-import-client.js:10:61)\n    at eval (eval at evaluate (:303:30), <anonymous>:3:23)\n    at async <anonymous>:329:30",
+              "messages": [
+                {
+                  "type": null,
+                  "operation": null,
+                  "operationId": 2,
+                  "fileBytes": 522893,
+                  "stack": "Error\n    at window.Worker.postMessage (eval at evaluate (:303:30), <anonymous>:9:49)\n    at http://127.0.0.1:34079/gbdraw/web/js/services/session-import-client.js:73:12\n    at new Promise (<anonymous>)\n    at importSessionFile (http://127.0.0.1:34079/gbdraw/web/js/services/session-import-client.js:10:61)\n    at eval (eval at evaluate (:303:30), <anonymous>:3:23)\n    at async <anonymous>:329:30"
+                }
+              ],
+              "listeners": 0,
+              "terminations": 1
+            }
+          ],
+          "pageErrors": [],
+          "externalRequests": []
+        }
+      ]
+    }
+  },
+  "codecProbeSha256": "aa8511a22b8d833aa4496c5f6c37eb23890d48e729b2c11b5f2572151a45e3e5",
+  "traceSha256": "3716977b65fca8d99f06e2a8971b6b15c87bdcd38b3c8c019b9324568bc58b91",
+  "observerSha256": "19b0d2468f1efd36b2d8bb59aa9af6a4758e5c8b90939aeeea8840846b863c4c",
+  "recipeSha256": "d020db6de7995d39617adb6ed0898de55de87d9fe55499303d512dfbe5e2e68e",
+  "s01RecipeSha256": "c2ea0bbfc389fa0da1f4440a7d164961729814020097096daa4e0fe9cd48a6e7",
+  "url": "http://127.0.0.1:34079",
+  "debugPort": 50317,
+  "launchArgs": [
+    "--enable-precise-memory-info",
+    "--remote-debugging-port=50317"
+  ],
+  "startedUtc": "2026-09-27T05:46:06Z",
+  "browser": "149.0.7827.55"
+}

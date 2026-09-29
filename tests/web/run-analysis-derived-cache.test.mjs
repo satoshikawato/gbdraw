@@ -27,11 +27,12 @@ const identityProbeSource = (await readFile(runAnalysisPath, 'utf8'))
     'const buildLosatCachePayload = ({',
     'export const buildLosatCachePayload = ({'
   )
+  .replace('const stripRuntimeCacheStats =', 'export const stripRuntimeCacheStats =')
   .replace(/from '(\.\.?\/[^']+)'/g, (_match, specifier) => (
     `from '${new URL(specifier, runAnalysisUrl).href}'`
   ));
 await writeFile(identityProbePath, identityProbeSource, 'utf8');
-const { buildLosatCachePayload } = await import(pathToFileURL(identityProbePath));
+const { buildLosatCachePayload, stripRuntimeCacheStats } = await import(pathToFileURL(identityProbePath));
 
 const rawIdentityInput = {
   identityKind: 'protein',
@@ -241,3 +242,18 @@ assert.equal(baselineIdentity.pathRepresentation, 'lossless-graph-v1');
 const oldIdentity = {...baselineIdentity};
 delete oldIdentity.pathRepresentation;
 assert.notEqual(cacheKey(oldIdentity), cacheKey(baselineIdentity));
+
+// Current comparison data has one owner; stats can differ without duplicating it.
+const immutablePairs = Object.freeze([Object.freeze({ tsv: 'α\tβ\n', rows: Object.freeze([]) })]);
+const immutableResource = Object.freeze({ schema: 3, kind: 'result', value: Object.freeze({
+  type: 'CollinearityResult', fields: Object.freeze({ blocks: Object.freeze([]) })
+}) });
+const conversionPayload = Object.freeze({ pairs: immutablePairs, collinearityResult: immutableResource,
+  provenance: Object.freeze({ identity: 'original' }), cache: Object.freeze({ convertedPayloadHit: false }) });
+const cachedPayload = stripRuntimeCacheStats(conversionPayload);
+assert.deepEqual(cachedPayload, { pairs: immutablePairs, collinearityResult: immutableResource,
+  provenance: conversionPayload.provenance });
+assert.equal(cachedPayload.pairs, immutablePairs);
+assert.equal(cachedPayload.collinearityResult, immutableResource);
+assert.equal(conversionPayload.cache.convertedPayloadHit, false);
+assert.equal(Object.hasOwn(cachedPayload, 'cache'), false);

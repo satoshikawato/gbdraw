@@ -198,7 +198,7 @@ const displayRecordId = (context, recordKey) => {
   return context.mode === 'linear' ? `File ${recordIndex + 1}: ${recordId}` : recordId;
 };
 
-const validateAndProjectCatalogItem = (item, result, resultIndex, context) => {
+function* validateAndProjectCatalogItem(item, result, resultIndex, context) {
   if (
     !isObject(item)
     || item.resultIndex !== resultIndex
@@ -235,7 +235,7 @@ const validateAndProjectCatalogItem = (item, result, resultIndex, context) => {
   const sourceIndexesByStableIdentity = new Map();
   const biologicalByKey = new Map();
   const expandedBiological = [];
-  biologicalFeatures.forEach((feature) => {
+  for (const feature of biologicalFeatures) {
     if (!isObject(feature)) throw catalogError();
     if (!validAnchorProfile(feature.anchorProfile)) throw catalogError();
     const sourceFeatureIndex = nonnegativeIntegerAliasStatus(
@@ -323,7 +323,8 @@ const validateAndProjectCatalogItem = (item, result, resultIndex, context) => {
     context.orthogroupProjection.registerFeature(expanded);
     biologicalByKey.set(key, expanded);
     expandedBiological.push(expanded);
-  });
+    yield;
+  }
   sourceIndexesByStableIdentity.forEach((sourceIndexes) => {
     if (
       sourceIndexes.length > 1
@@ -345,7 +346,7 @@ const validateAndProjectCatalogItem = (item, result, resultIndex, context) => {
   const features = requireArray(item.features);
   const renderedByKey = new Map();
   const renderedIdentities = createCatalogRenderedIdentityCollection();
-  features.forEach((feature) => {
+  for (const feature of features) {
     if (!isObject(feature)) throw catalogError();
     const svgId = text(feature.svgId);
     const key = biologicalFeatureKey(
@@ -387,14 +388,15 @@ const validateAndProjectCatalogItem = (item, result, resultIndex, context) => {
       renderedId: svgId
     });
     rememberRenderedResultIndex(context.resultIndexesByRenderedId, svgId, resultIndex);
-  });
+    yield;
+  }
   context.renderedIdentitiesByResult[resultIndex] = renderedIdentities;
   context.scalarMetrics.renderedFeatureCount += features.length;
 
   const orthogroups = requireArray(item.orthogroups);
   const knownGroupIds = new Set();
   const groupsById = new Map();
-  orthogroups.forEach((group) => {
+  for (const group of orthogroups) {
     if (!isObject(group)) throw catalogError();
     const groupId = text(group.id);
     if (!groupId || knownGroupIds.has(groupId)) throw catalogError();
@@ -442,11 +444,12 @@ const validateAndProjectCatalogItem = (item, result, resultIndex, context) => {
     if (text(expanded.scope) === 'cross_record' && text(expanded.presentationScope)) {
       context.collinearGroups.push(expanded);
     }
-  });
+    yield;
+  }
   context.scalarMetrics.orthogroupRecordCount += orthogroups.length;
   const comparisonMatches = requireArray(item.comparisonMatches);
   const knownMatchIds = new Set();
-  comparisonMatches.forEach((match) => {
+  for (const match of comparisonMatches) {
     if (!isObject(match)) throw catalogError();
     const matchIds = new Set(
       ['id', 'matchId', 'match_id']
@@ -536,7 +539,8 @@ const validateAndProjectCatalogItem = (item, result, resultIndex, context) => {
         throw catalogError();
       }
     });
-  });
+    yield;
+  }
   validateReferences(comparisonMatches, knownFeatures, [
     ['queryRecordKey', 'queryBiologicalFeatureId'],
     ['subjectRecordKey', 'subjectBiologicalFeatureId']
@@ -563,11 +567,9 @@ const cachedAdmissionMatches = (admission, results, mode) => {
  * The returned runtime object is never persisted. Its catalog-derived indexes
  * bind current Results to editor projections without rescanning catalog rows.
  */
-export const admitFeatureCatalog = (
-  catalog,
-  results,
-  { adopt = false, mode = '' } = {}
-) => {
+function* catalogAdmissionSteps(
+  catalog, results, { adopt = false, mode = '' } = {}
+) {
   const logicalResults = requireArray(results);
   if (!isObject(catalog)
     || ![LEGACY_FEATURE_CATALOG_SCHEMA, FEATURE_CATALOG_SCHEMA].includes(catalog.schema)) {
@@ -620,9 +622,9 @@ export const admitFeatureCatalog = (
     resultCount: logicalResults.length
   });
   recordStructuralMetric('featureCatalogAdmissionCount', 1);
-  items.forEach((item, resultIndex) => {
-    validateAndProjectCatalogItem(item, logicalResults[resultIndex], resultIndex, context);
-  });
+  for (const [resultIndex, item] of items.entries()) {
+    yield* validateAndProjectCatalogItem(item, logicalResults[resultIndex], resultIndex, context);
+  }
 
   context.scalarMetrics.recordCount = context.recordKeys.length;
   const featureRecordIds = context.recordKeys.map((recordKey) => (
@@ -666,6 +668,27 @@ export const admitFeatureCatalog = (
     biologicalFeatureCount: scalarMetrics.biologicalFeatureCount
   });
   return admission;
+};
+
+// Both callers exhaust the same admission traversal; scheduling changes no validation.
+export const admitFeatureCatalog = (catalog, results, options = {}) => {
+  const steps = catalogAdmissionSteps(catalog, results, options);
+  let step;
+  do { step = steps.next(); } while (!step.done);
+  return step.value;
+};
+
+export const validateFeatureCatalogForImport = async (catalog, results, options = {}) => {
+  const steps = catalogAdmissionSteps(catalog, results, options);
+  let deadline = performance.now() + 16;
+  while (true) {
+    const step = steps.next();
+    if (step.done) return step.value.catalog;
+    if (performance.now() >= deadline) {
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      deadline = performance.now() + 16;
+    }
+  }
 };
 
 export const validateFeatureCatalog = (catalog, results, options = {}) => (

@@ -60,11 +60,22 @@ const stripEditorOnlyCursorStyles = (svg) => {
 
 export const stripTransientPreviewState = (svg, { stripCursor = true } = {}) => {
   if (!svg) return;
-  TRANSIENT_PREVIEW_CLASSES.forEach((className) => {
-    removeClassToken(svg, className);
-    svg.querySelectorAll(`.${className}`).forEach((element) => removeClassToken(element, className));
-  });
-  if (stripCursor) stripEditorOnlyCursorStyles(svg);
+  const stripClasses = (element) => {
+    TRANSIENT_PREVIEW_CLASSES.forEach((className) => removeClassToken(element, className));
+  };
+  stripClasses(svg);
+  svg.querySelectorAll(TRANSIENT_PREVIEW_CLASSES.map((className) => `.${className}`).join(','))
+    .forEach(stripClasses);
+  if (stripCursor) {
+    stripEditorOnlyCursorStyles(svg);
+    svg.querySelectorAll('[data-gbdraw-pairwise-match-id][role="button"][tabindex="0"]')
+      .forEach((element) => {
+        if (!/^Pairwise match \d+$/.test(element.getAttribute('aria-label') || '')) return;
+        element.removeAttribute('role');
+        element.removeAttribute('tabindex');
+        element.removeAttribute('aria-label');
+      });
+  }
 };
 
 export const serializeCleanSvg = (svg, options = {}) => {

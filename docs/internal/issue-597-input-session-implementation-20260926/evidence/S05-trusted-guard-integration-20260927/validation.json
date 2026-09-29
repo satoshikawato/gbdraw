@@ -1,0 +1,923 @@
+{
+  "recordedAt": "2026-09-27T08:07:37.846441+00:00",
+  "checkout": "/tmp/gbdraw-issue597-S05.ujOWyl",
+  "branch": "fix/issue-597-input-session-20260926",
+  "upstream": "origin/fix/issue-597-input-session-20260926",
+  "startHead": "c3ae518b914024d1299c1f3f6487640c8a2fbaaf",
+  "actualRemoteAtStart": "c3ae518b914024d1299c1f3f6487640c8a2fbaaf",
+  "initialTrustedDev": "494091aa68ca59ffa27ecaa6c3df19da4fbf5090",
+  "actualGuardMergeSha": "494091aa68ca59ffa27ecaa6c3df19da4fbf5090",
+  "trustedDev": "98c21116f6439d5721e7ea62ae1a21a7cf2d4319",
+  "integrationCommits": [
+    "e6f3227aba4ee3f7c911cfe08fbc3528c5d6dca8",
+    "b91ff25d9f197f76b01b0bb0e31d5ff3173d9ca0"
+  ],
+  "evidenceCommit": {
+    "title": "Record S05 integration of the trusted Session import Worker guard",
+    "shaRecord": "Written after commit in /tmp/issue597-S05-trusted-guard-integration-20260927-evidence/handoff-final.json; no self-referential SHA in this commit."
+  },
+  "environment": {
+    "python": "3.13.3",
+    "platform": "Linux-5.15.167.4-microsoft-standard-WSL2-x86_64-with-glibc2.39",
+    "node": "v26.8.2",
+    "nodePlaywright": "1.61.0",
+    "pythonPlaywright": "1.61.0"
+  },
+  "invocations": [
+    {
+      "name": "advanced-dev-diff",
+      "command": [
+        "git",
+        "diff",
+        "494091aa68ca59ffa27ecaa6c3df19da4fbf5090",
+        "origin/dev",
+        "--",
+        "tests/ci/playwright-inventory.test.mjs",
+        "docs/internal/issue-601-pr-smoke-inventory-20260927.md"
+      ],
+      "cwd": "/tmp/gbdraw-issue597-S05.ujOWyl",
+      "startedAt": "2026-09-27T08:03:01.012252+00:00",
+      "completedAt": "2026-09-27T08:03:01.013973+00:00",
+      "durationSeconds": 0.0017305600049439818,
+      "exit": 0,
+      "log": "docs/internal/issue-597-input-session-implementation-20260926/evidence/S05-trusted-guard-integration-20260927/logs/advanced-dev-diff.log",
+      "sha256": "849ba0470fd32323988dc43c7516b923d1d16bf3ea108f678bd5147bf2bdab25",
+      "rawLog": "/tmp/issue597-S05-trusted-guard-integration-20260927-evidence/advanced-dev-diff.log",
+      "rawSha256": "2f33a00fd000342f99fb5548b6724e732ee94e8a7e24482bc72523b54fe683e3",
+      "storedLogTransformation": "Remove trailing whitespace in repository text copies only; retain original raw logs and checksums."
+    },
+    {
+      "name": "architecture-integrated",
+      "command": [
+        "node",
+        "--test",
+        "tests/web/architecture-contracts.test.mjs"
+      ],
+      "cwd": "/tmp/gbdraw-issue597-S05.ujOWyl",
+      "startedAt": "2026-09-27T07:55:46.063453+00:00",
+      "completedAt": "2026-09-27T07:57:18.492635+00:00",
+      "durationSeconds": 86.15132880100282,
+      "exit": 0,
+      "log": "docs/internal/issue-597-input-session-implementation-20260926/evidence/S05-trusted-guard-integration-20260927/logs/architecture-integrated.log",
+      "sha256": "140528c694b47ebf0a58b1f7a747894bd80e8e3f4239bb14195e63d7fac1fe92",
+      "rawLog": "/tmp/issue597-S05-trusted-guard-integration-20260927-evidence/architecture-integrated.log",
+      "rawSha256": "140528c694b47ebf0a58b1f7a747894bd80e8e3f4239bb14195e63d7fac1fe92",
+      "storedLogTransformation": "Remove trailing whitespace in repository text copies only; retain original raw logs and checksums."
+    },
+    {
+      "name": "browser-integration",
+      "command": [
+        "python",
+        "/tmp/issue597-S05-trusted-guard-integration-20260927-evidence/browser-selection.py"
+      ],
+      "cwd": "/tmp/gbdraw-issue597-S05.ujOWyl",
+      "startedAt": "2026-09-27T07:59:18.734480+00:00",
+      "completedAt": "2026-09-27T07:59:25.556323+00:00",
+      "durationSeconds": 6.821843854995677,
+      "exit": 0,
+      "log": "docs/internal/issue-597-input-session-implementation-20260926/evidence/S05-trusted-guard-integration-20260927/logs/browser-integration.log",
+      "sha256": "2ef763d129619dab58decc595ada870e657df6b69ed902dd5470b3eb638696c3",
+      "rawLog": "/tmp/issue597-S05-trusted-guard-integration-20260927-evidence/browser-integration.log",
+      "rawSha256": "2ef763d129619dab58decc595ada870e657df6b69ed902dd5470b3eb638696c3",
+      "storedLogTransformation": "Remove trailing whitespace in repository text copies only; retain original raw logs and checksums."
+    },
+    {
+      "name": "checkout-before",
+      "command": [
+        "python",
+        "-c",
+        "import json,subprocess; commands=[[\"git\",\"rev-parse\",\"--show-toplevel\"],[\"git\",\"remote\",\"-v\"],[\"git\",\"branch\",\"--show-current\"],[\"git\",\"rev-parse\",\"--abbrev-ref\",\"HEAD@{upstream}\"],[\"git\",\"rev-parse\",\"HEAD\"],[\"git\",\"status\",\"--porcelain=v1\",\"--untracked-files=all\"],[\"git\",\"rev-parse\",\"origin/dev\"],[\"git\",\"ls-remote\",\"origin\",\"refs/heads/dev\",\"refs/heads/fix/issue-597-input-session-20260926\",\"refs/heads/fix/issue-597-session-import-guard-20260927\"]]; print(json.dumps([{ \"command\": c, \"output\":subprocess.check_output(c,text=True)} for c in commands],indent=2))"
+      ],
+      "cwd": "/tmp/gbdraw-issue597-S05.ujOWyl",
+      "startedAt": "2026-09-27T07:51:59.296622+00:00",
+      "completedAt": "2026-09-27T07:51:59.732475+00:00",
+      "durationSeconds": 0.4358542879926972,
+      "exit": 0,
+      "log": "docs/internal/issue-597-input-session-implementation-20260926/evidence/S05-trusted-guard-integration-20260927/logs/checkout-before.log",
+      "sha256": "6c1568613d37125f262ccb76d51f94337e0ee8b53e076a7da05658ceb8d7e8d0",
+      "rawLog": "/tmp/issue597-S05-trusted-guard-integration-20260927-evidence/checkout-before.log",
+      "rawSha256": "6c1568613d37125f262ccb76d51f94337e0ee8b53e076a7da05658ceb8d7e8d0",
+      "storedLogTransformation": "Remove trailing whitespace in repository text copies only; retain original raw logs and checksums."
+    },
+    {
+      "name": "ci-contracts-latest",
+      "command": [
+        "node",
+        "--test",
+        "tests/ci/ci-impact-cli.test.mjs",
+        "tests/ci/ci-impact-gate.test.mjs",
+        "tests/ci/ci-impact-policy.test.mjs",
+        "tests/ci/playwright-inventory.test.mjs",
+        "tests/ci/release-workflow.test.mjs"
+      ],
+      "cwd": "/tmp/gbdraw-issue597-S05.ujOWyl",
+      "startedAt": "2026-09-27T08:03:25.090570+00:00",
+      "completedAt": "2026-09-27T08:03:28.820996+00:00",
+      "durationSeconds": 3.7304336790111847,
+      "exit": 0,
+      "log": "docs/internal/issue-597-input-session-implementation-20260926/evidence/S05-trusted-guard-integration-20260927/logs/ci-contracts-latest.log",
+      "sha256": "c9f385bf3185a2e7a085aabb0995c622895cf89cda2f9095c81df4fc9a7f0be5",
+      "rawLog": "/tmp/issue597-S05-trusted-guard-integration-20260927-evidence/ci-contracts-latest.log",
+      "rawSha256": "c9f385bf3185a2e7a085aabb0995c622895cf89cda2f9095c81df4fc9a7f0be5",
+      "storedLogTransformation": "Remove trailing whitespace in repository text copies only; retain original raw logs and checksums."
+    },
+    {
+      "name": "dev-protection",
+      "command": [
+        "gh",
+        "api",
+        "repos/satoshikawato/gbdraw/branches/dev/protection"
+      ],
+      "cwd": "/tmp/gbdraw-issue597-S05.ujOWyl",
+      "startedAt": "2026-09-27T07:53:11.132822+00:00",
+      "completedAt": "2026-09-27T07:53:11.594921+00:00",
+      "durationSeconds": 0.46210713899927214,
+      "exit": 0,
+      "log": "docs/internal/issue-597-input-session-implementation-20260926/evidence/S05-trusted-guard-integration-20260927/logs/dev-protection.log",
+      "sha256": "00a8bd6bbf2461ec3df54f43a283badb9cdb1ce977d3d22e64a5b1ddaf290d56",
+      "rawLog": "/tmp/issue597-S05-trusted-guard-integration-20260927-evidence/dev-protection.log",
+      "rawSha256": "068e67c1b29c0b8f2ad90ea64c779dc69a641c7368720ecd17dd368cb9ec8873",
+      "storedLogTransformation": "Remove trailing whitespace in repository text copies only; retain original raw logs and checksums."
+    },
+    {
+      "name": "environment",
+      "command": [
+        "python",
+        "-c",
+        "import importlib.metadata,json,platform,subprocess; print(json.dumps({\"python\":platform.python_version(),\"platform\":platform.platform(),\"node\":subprocess.check_output([\"node\",\"--version\"],text=True).strip(),\"nodePlaywright\":subprocess.check_output([\"node\",\"-p\",\"require(\\\"@playwright/test/package.json\\\").version\"],text=True).strip(),\"pythonPlaywright\":importlib.metadata.version(\"playwright\")},indent=2))"
+      ],
+      "cwd": "/tmp/gbdraw-issue597-S05.ujOWyl",
+      "startedAt": "2026-09-27T07:58:34.468542+00:00",
+      "completedAt": "2026-09-27T07:58:34.533352+00:00",
+      "durationSeconds": 0.06481598000391386,
+      "exit": 0,
+      "log": "docs/internal/issue-597-input-session-implementation-20260926/evidence/S05-trusted-guard-integration-20260927/logs/environment.log",
+      "sha256": "46c30a688f4f560c67bd42f09d33cb7b565784bf6532eadb7d06d14a2c10c5c6",
+      "rawLog": "/tmp/issue597-S05-trusted-guard-integration-20260927-evidence/environment.log",
+      "rawSha256": "46c30a688f4f560c67bd42f09d33cb7b565784bf6532eadb7d06d14a2c10c5c6",
+      "storedLogTransformation": "Remove trailing whitespace in repository text copies only; retain original raw logs and checksums."
+    },
+    {
+      "name": "fetch-dev-advanced",
+      "command": [
+        "git",
+        "fetch",
+        "--no-tags",
+        "origin",
+        "refs/heads/dev:refs/remotes/origin/dev"
+      ],
+      "cwd": "/tmp/gbdraw-issue597-S05.ujOWyl",
+      "startedAt": "2026-09-27T08:02:27.664965+00:00",
+      "completedAt": "2026-09-27T08:02:28.283196+00:00",
+      "durationSeconds": 0.6182315970072523,
+      "exit": 0,
+      "log": "docs/internal/issue-597-input-session-implementation-20260926/evidence/S05-trusted-guard-integration-20260927/logs/fetch-dev-advanced.log",
+      "sha256": "a508f853d702bbc4f767a6da9e7973710df6e6961399ae9549309ae5c2ff0c8f",
+      "rawLog": "/tmp/issue597-S05-trusted-guard-integration-20260927-evidence/fetch-dev-advanced.log",
+      "rawSha256": "a508f853d702bbc4f767a6da9e7973710df6e6961399ae9549309ae5c2ff0c8f",
+      "storedLogTransformation": "Remove trailing whitespace in repository text copies only; retain original raw logs and checksums."
+    },
+    {
+      "name": "fetch-dev",
+      "command": [
+        "git",
+        "fetch",
+        "--no-tags",
+        "origin",
+        "refs/heads/dev:refs/remotes/origin/dev"
+      ],
+      "cwd": "/tmp/gbdraw-issue597-S05.ujOWyl",
+      "startedAt": "2026-09-27T07:52:03.687275+00:00",
+      "completedAt": "2026-09-27T07:52:04.425095+00:00",
+      "durationSeconds": 0.7378260300029069,
+      "exit": 0,
+      "log": "docs/internal/issue-597-input-session-implementation-20260926/evidence/S05-trusted-guard-integration-20260927/logs/fetch-dev.log",
+      "sha256": "c104140b312d881d42779f4cb97e7e78472b418bfbb3da18f0887edb75c15b33",
+      "rawLog": "/tmp/issue597-S05-trusted-guard-integration-20260927-evidence/fetch-dev.log",
+      "rawSha256": "c104140b312d881d42779f4cb97e7e78472b418bfbb3da18f0887edb75c15b33",
+      "storedLogTransformation": "Remove trailing whitespace in repository text copies only; retain original raw logs and checksums."
+    },
+    {
+      "name": "final-local-checkpoint",
+      "command": [
+        "git",
+        "show",
+        "-s",
+        "--format=%H%n%P%n%T%n%s",
+        "HEAD"
+      ],
+      "cwd": "/tmp/gbdraw-issue597-S05.ujOWyl",
+      "startedAt": "2026-09-27T08:04:50.566244+00:00",
+      "completedAt": "2026-09-27T08:04:50.568298+00:00",
+      "durationSeconds": 0.0020549760083667934,
+      "exit": 0,
+      "log": "docs/internal/issue-597-input-session-implementation-20260926/evidence/S05-trusted-guard-integration-20260927/logs/final-local-checkpoint.log",
+      "sha256": "b3cb0a5e52f963cb486e87c06166b68731459557213c6a648a9f91e017ec6729",
+      "rawLog": "/tmp/issue597-S05-trusted-guard-integration-20260927-evidence/final-local-checkpoint.log",
+      "rawSha256": "b3cb0a5e52f963cb486e87c06166b68731459557213c6a648a9f91e017ec6729",
+      "storedLogTransformation": "Remove trailing whitespace in repository text copies only; retain original raw logs and checksums."
+    },
+    {
+      "name": "integration-advanced-merge",
+      "command": [
+        "git",
+        "merge",
+        "--no-ff",
+        "--no-edit",
+        "origin/dev"
+      ],
+      "cwd": "/tmp/gbdraw-issue597-S05.ujOWyl",
+      "startedAt": "2026-09-27T08:03:08.677023+00:00",
+      "completedAt": "2026-09-27T08:03:08.696455+00:00",
+      "durationSeconds": 0.019437901995843276,
+      "exit": 0,
+      "log": "docs/internal/issue-597-input-session-implementation-20260926/evidence/S05-trusted-guard-integration-20260927/logs/integration-advanced-merge.log",
+      "sha256": "bfdb1e1df6aa36274cc6b099e896802dd3788e01d9cc639842a12c17c9c59c60",
+      "rawLog": "/tmp/issue597-S05-trusted-guard-integration-20260927-evidence/integration-advanced-merge.log",
+      "rawSha256": "bfdb1e1df6aa36274cc6b099e896802dd3788e01d9cc639842a12c17c9c59c60",
+      "storedLogTransformation": "Remove trailing whitespace in repository text copies only; retain original raw logs and checksums."
+    },
+    {
+      "name": "integration-commit",
+      "command": [
+        "git",
+        "commit",
+        "-m",
+        "Merge trusted dev Session import Worker characterization into S05"
+      ],
+      "cwd": "/tmp/gbdraw-issue597-S05.ujOWyl",
+      "startedAt": "2026-09-27T08:02:02.361965+00:00",
+      "completedAt": "2026-09-27T08:02:02.369060+00:00",
+      "durationSeconds": 0.007097532012267038,
+      "exit": 0,
+      "log": "docs/internal/issue-597-input-session-implementation-20260926/evidence/S05-trusted-guard-integration-20260927/logs/integration-commit.log",
+      "sha256": "b9dc790501c58a418f533f8e3a30ac84cfb30e79c205808ab7423516f5f42d65",
+      "rawLog": "/tmp/issue597-S05-trusted-guard-integration-20260927-evidence/integration-commit.log",
+      "rawSha256": "b9dc790501c58a418f533f8e3a30ac84cfb30e79c205808ab7423516f5f42d65",
+      "storedLogTransformation": "Remove trailing whitespace in repository text copies only; retain original raw logs and checksums."
+    },
+    {
+      "name": "integration-diff-check",
+      "command": [
+        "git",
+        "diff",
+        "--cached",
+        "--check"
+      ],
+      "cwd": "/tmp/gbdraw-issue597-S05.ujOWyl",
+      "startedAt": "2026-09-27T07:58:34.558375+00:00",
+      "completedAt": "2026-09-27T07:58:34.586626+00:00",
+      "durationSeconds": 0.028260783990845084,
+      "exit": 0,
+      "log": "docs/internal/issue-597-input-session-implementation-20260926/evidence/S05-trusted-guard-integration-20260927/logs/integration-diff-check.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "rawLog": "/tmp/issue597-S05-trusted-guard-integration-20260927-evidence/integration-diff-check.log",
+      "rawSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "storedLogTransformation": "Remove trailing whitespace in repository text copies only; retain original raw logs and checksums."
+    },
+    {
+      "name": "integration-merge-start",
+      "command": [
+        "git",
+        "merge",
+        "--no-ff",
+        "--no-commit",
+        "origin/dev"
+      ],
+      "cwd": "/tmp/gbdraw-issue597-S05.ujOWyl",
+      "startedAt": "2026-09-27T07:54:33.558751+00:00",
+      "completedAt": "2026-09-27T07:54:33.622556+00:00",
+      "durationSeconds": 0.06380965700373054,
+      "exit": 1,
+      "log": "docs/internal/issue-597-input-session-implementation-20260926/evidence/S05-trusted-guard-integration-20260927/logs/integration-merge-start.log",
+      "sha256": "10332147681b0859b81a4ba6e3b663724cd36e1a9128e5e2a5a647c1eb1c80b5",
+      "rawLog": "/tmp/issue597-S05-trusted-guard-integration-20260927-evidence/integration-merge-start.log",
+      "rawSha256": "10332147681b0859b81a4ba6e3b663724cd36e1a9128e5e2a5a647c1eb1c80b5",
+      "storedLogTransformation": "Remove trailing whitespace in repository text copies only; retain original raw logs and checksums."
+    },
+    {
+      "name": "merge-advanced-preview",
+      "command": [
+        "git",
+        "merge-tree",
+        "--write-tree",
+        "HEAD",
+        "origin/dev"
+      ],
+      "cwd": "/tmp/gbdraw-issue597-S05.ujOWyl",
+      "startedAt": "2026-09-27T08:03:01.036915+00:00",
+      "completedAt": "2026-09-27T08:03:01.040280+00:00",
+      "durationSeconds": 0.0033666850067675114,
+      "exit": 0,
+      "log": "docs/internal/issue-597-input-session-implementation-20260926/evidence/S05-trusted-guard-integration-20260927/logs/merge-advanced-preview.log",
+      "sha256": "36025fe1686ea8733f4df7333584df29220a804405a05747dd98c05cfce02780",
+      "rawLog": "/tmp/issue597-S05-trusted-guard-integration-20260927-evidence/merge-advanced-preview.log",
+      "rawSha256": "36025fe1686ea8733f4df7333584df29220a804405a05747dd98c05cfce02780",
+      "storedLogTransformation": "Remove trailing whitespace in repository text copies only; retain original raw logs and checksums."
+    },
+    {
+      "name": "merge-preview",
+      "command": [
+        "git",
+        "merge-tree",
+        "--write-tree",
+        "HEAD",
+        "origin/dev"
+      ],
+      "cwd": "/tmp/gbdraw-issue597-S05.ujOWyl",
+      "startedAt": "2026-09-27T07:53:12.363673+00:00",
+      "completedAt": "2026-09-27T07:53:12.407705+00:00",
+      "durationSeconds": 0.044036428997060284,
+      "exit": 1,
+      "log": "docs/internal/issue-597-input-session-implementation-20260926/evidence/S05-trusted-guard-integration-20260927/logs/merge-preview.log",
+      "sha256": "5db8a7c4df25c49df5fd9394a8532020afa3cd8cb96efc65b86fdc09ef43eb5b",
+      "rawLog": "/tmp/issue597-S05-trusted-guard-integration-20260927-evidence/merge-preview.log",
+      "rawSha256": "5db8a7c4df25c49df5fd9394a8532020afa3cd8cb96efc65b86fdc09ef43eb5b",
+      "storedLogTransformation": "Remove trailing whitespace in repository text copies only; retain original raw logs and checksums."
+    },
+    {
+      "name": "negative-inventories-corrected",
+      "command": [
+        "python",
+        "/tmp/issue597-S05-trusted-guard-integration-20260927-evidence/negative-inventories-corrected.py"
+      ],
+      "cwd": "/tmp/gbdraw-issue597-S05.ujOWyl",
+      "startedAt": "2026-09-27T07:58:27.747037+00:00",
+      "completedAt": "2026-09-27T07:58:32.587661+00:00",
+      "durationSeconds": 2.021183013013797,
+      "exit": 0,
+      "log": "docs/internal/issue-597-input-session-implementation-20260926/evidence/S05-trusted-guard-integration-20260927/logs/negative-inventories-corrected.log",
+      "sha256": "d41ca99ad97885b97ba8042f41a3f7be4ec3386a512def1b421662d155258152",
+      "rawLog": "/tmp/issue597-S05-trusted-guard-integration-20260927-evidence/negative-inventories-corrected.log",
+      "rawSha256": "d41ca99ad97885b97ba8042f41a3f7be4ec3386a512def1b421662d155258152",
+      "storedLogTransformation": "Remove trailing whitespace in repository text copies only; retain original raw logs and checksums."
+    },
+    {
+      "name": "negative-inventories",
+      "command": [
+        "python",
+        "/tmp/issue597-S05-trusted-guard-integration-20260927-evidence/negative-inventories.py"
+      ],
+      "cwd": "/tmp/gbdraw-issue597-S05.ujOWyl",
+      "startedAt": "2026-09-27T07:58:00.656606+00:00",
+      "completedAt": "2026-09-27T07:58:01.531215+00:00",
+      "durationSeconds": 0.8746133130043745,
+      "exit": 1,
+      "log": "docs/internal/issue-597-input-session-implementation-20260926/evidence/S05-trusted-guard-integration-20260927/logs/negative-inventories.log",
+      "sha256": "cc607d8ee19c393060e95c504e0c4e452722cd5bae867930fcd2705567dae399",
+      "rawLog": "/tmp/issue597-S05-trusted-guard-integration-20260927-evidence/negative-inventories.log",
+      "rawSha256": "cc607d8ee19c393060e95c504e0c4e452722cd5bae867930fcd2705567dae399",
+      "storedLogTransformation": "Remove trailing whitespace in repository text copies only; retain original raw logs and checksums."
+    },
+    {
+      "name": "policy-advanced-before",
+      "command": [
+        "node",
+        "tools/check-web-change-budget.mjs",
+        "--base",
+        "origin/dev"
+      ],
+      "cwd": "/tmp/gbdraw-issue597-S05.ujOWyl",
+      "startedAt": "2026-09-27T08:03:01.065885+00:00",
+      "completedAt": "2026-09-27T08:03:08.651589+00:00",
+      "durationSeconds": 7.5857171489915345,
+      "exit": 0,
+      "log": "docs/internal/issue-597-input-session-implementation-20260926/evidence/S05-trusted-guard-integration-20260927/logs/policy-advanced-before.log",
+      "sha256": "0e244d347869cedb16de999d0c143f29c258ab9274bf2d0b760ba63100909387",
+      "rawLog": "/tmp/issue597-S05-trusted-guard-integration-20260927-evidence/policy-advanced-before.log",
+      "rawSha256": "0e244d347869cedb16de999d0c143f29c258ab9274bf2d0b760ba63100909387",
+      "storedLogTransformation": "Remove trailing whitespace in repository text copies only; retain original raw logs and checksums."
+    },
+    {
+      "name": "policy-before",
+      "command": [
+        "node",
+        "tools/check-web-change-budget.mjs",
+        "--base",
+        "origin/dev"
+      ],
+      "cwd": "/tmp/gbdraw-issue597-S05.ujOWyl",
+      "startedAt": "2026-09-27T07:53:08.769390+00:00",
+      "completedAt": "2026-09-27T07:53:17.059189+00:00",
+      "durationSeconds": 8.289807157998439,
+      "exit": 1,
+      "log": "docs/internal/issue-597-input-session-implementation-20260926/evidence/S05-trusted-guard-integration-20260927/logs/policy-before.log",
+      "sha256": "7d6eb8ae0e969f057bcb5531cbec3c537600a78b0b6cbd8815de0176a51b639a",
+      "rawLog": "/tmp/issue597-S05-trusted-guard-integration-20260927-evidence/policy-before.log",
+      "rawSha256": "7d6eb8ae0e969f057bcb5531cbec3c537600a78b0b6cbd8815de0176a51b639a",
+      "storedLogTransformation": "Remove trailing whitespace in repository text copies only; retain original raw logs and checksums."
+    },
+    {
+      "name": "policy-integrated-before-commit",
+      "command": [
+        "node",
+        "tools/check-web-change-budget.mjs",
+        "--base",
+        "origin/dev"
+      ],
+      "cwd": "/tmp/gbdraw-issue597-S05.ujOWyl",
+      "startedAt": "2026-09-27T07:55:24.541672+00:00",
+      "completedAt": "2026-09-27T07:55:32.441457+00:00",
+      "durationSeconds": 7.899791281000944,
+      "exit": 0,
+      "log": "docs/internal/issue-597-input-session-implementation-20260926/evidence/S05-trusted-guard-integration-20260927/logs/policy-integrated-before-commit.log",
+      "sha256": "0e244d347869cedb16de999d0c143f29c258ab9274bf2d0b760ba63100909387",
+      "rawLog": "/tmp/issue597-S05-trusted-guard-integration-20260927-evidence/policy-integrated-before-commit.log",
+      "rawSha256": "0e244d347869cedb16de999d0c143f29c258ab9274bf2d0b760ba63100909387",
+      "storedLogTransformation": "Remove trailing whitespace in repository text copies only; retain original raw logs and checksums."
+    },
+    {
+      "name": "policy-integration-postcommit",
+      "command": [
+        "node",
+        "tools/check-web-change-budget.mjs",
+        "--base",
+        "origin/dev",
+        "--head",
+        "HEAD"
+      ],
+      "cwd": "/tmp/gbdraw-issue597-S05.ujOWyl",
+      "startedAt": "2026-09-27T08:03:28.892704+00:00",
+      "completedAt": "2026-09-27T08:03:37.059750+00:00",
+      "durationSeconds": 8.167055182013428,
+      "exit": 0,
+      "log": "docs/internal/issue-597-input-session-implementation-20260926/evidence/S05-trusted-guard-integration-20260927/logs/policy-integration-postcommit.log",
+      "sha256": "564482fbabeafdf06237c9d897d128f748cc542fb49bd6b075831cc12c5ade12",
+      "rawLog": "/tmp/issue597-S05-trusted-guard-integration-20260927-evidence/policy-integration-postcommit.log",
+      "rawSha256": "564482fbabeafdf06237c9d897d128f748cc542fb49bd6b075831cc12c5ade12",
+      "storedLogTransformation": "Remove trailing whitespace in repository text copies only; retain original raw logs and checksums."
+    },
+    {
+      "name": "pr-624",
+      "command": [
+        "gh",
+        "pr",
+        "view",
+        "624",
+        "--repo",
+        "satoshikawato/gbdraw",
+        "--json",
+        "number,url,state,mergedAt,mergeCommit,headRefName,headRefOid,baseRefName,reviewDecision,reviews,statusCheckRollup"
+      ],
+      "cwd": "/tmp/gbdraw-issue597-S05.ujOWyl",
+      "startedAt": "2026-09-27T07:53:10.082700+00:00",
+      "completedAt": "2026-09-27T07:53:11.106866+00:00",
+      "durationSeconds": 1.0241737530159298,
+      "exit": 0,
+      "log": "docs/internal/issue-597-input-session-implementation-20260926/evidence/S05-trusted-guard-integration-20260927/logs/pr-624.log",
+      "sha256": "428ed2ad00d598f2f62bb1fe9ea6a3efd2518188d8d9554147ec1dc92648cc6a",
+      "rawLog": "/tmp/issue597-S05-trusted-guard-integration-20260927-evidence/pr-624.log",
+      "rawSha256": "428ed2ad00d598f2f62bb1fe9ea6a3efd2518188d8d9554147ec1dc92648cc6a",
+      "storedLogTransformation": "Remove trailing whitespace in repository text copies only; retain original raw logs and checksums."
+    },
+    {
+      "name": "remote-before-integration-commit",
+      "command": [
+        "git",
+        "ls-remote",
+        "origin",
+        "refs/heads/dev",
+        "refs/heads/fix/issue-597-input-session-20260926"
+      ],
+      "cwd": "/tmp/gbdraw-issue597-S05.ujOWyl",
+      "startedAt": "2026-09-27T08:02:01.703541+00:00",
+      "completedAt": "2026-09-27T08:02:02.306853+00:00",
+      "durationSeconds": 0.6033174799813423,
+      "exit": 0,
+      "log": "docs/internal/issue-597-input-session-implementation-20260926/evidence/S05-trusted-guard-integration-20260927/logs/remote-before-integration-commit.log",
+      "sha256": "65a4241d41e79e993907718c273359b2c2293d453ffdd2a31a430e69640dffe9",
+      "rawLog": "/tmp/issue597-S05-trusted-guard-integration-20260927-evidence/remote-before-integration-commit.log",
+      "rawSha256": "65a4241d41e79e993907718c273359b2c2293d453ffdd2a31a430e69640dffe9",
+      "storedLogTransformation": "Remove trailing whitespace in repository text copies only; retain original raw logs and checksums."
+    },
+    {
+      "name": "resolve-html",
+      "command": [
+        "python",
+        "/tmp/issue597-S05-trusted-guard-integration-20260927-evidence/resolve-html.py"
+      ],
+      "cwd": "/tmp/gbdraw-issue597-S05.ujOWyl",
+      "startedAt": "2026-09-27T07:55:19.386340+00:00",
+      "completedAt": "2026-09-27T07:55:19.438932+00:00",
+      "durationSeconds": 0.052595110988477245,
+      "exit": 0,
+      "log": "docs/internal/issue-597-input-session-implementation-20260926/evidence/S05-trusted-guard-integration-20260927/logs/resolve-html.log",
+      "sha256": "f9a1b5176c5ee44a365fd2ee0b38d6b60d226451c3bc2362d89d1fe546f24df8",
+      "rawLog": "/tmp/issue597-S05-trusted-guard-integration-20260927-evidence/resolve-html.log",
+      "rawSha256": "f9a1b5176c5ee44a365fd2ee0b38d6b60d226451c3bc2362d89d1fe546f24df8",
+      "storedLogTransformation": "Remove trailing whitespace in repository text copies only; retain original raw logs and checksums."
+    },
+    {
+      "name": "s05-pr-metadata",
+      "command": [
+        "gh",
+        "pr",
+        "list",
+        "--repo",
+        "satoshikawato/gbdraw",
+        "--head",
+        "fix/issue-597-input-session-20260926",
+        "--state",
+        "all",
+        "--json",
+        "number,url,state,headRefName,headRefOid,baseRefName"
+      ],
+      "cwd": "/tmp/gbdraw-issue597-S05.ujOWyl",
+      "startedAt": "2026-09-27T08:04:50.054718+00:00",
+      "completedAt": "2026-09-27T08:04:50.543331+00:00",
+      "durationSeconds": 0.4886192599951755,
+      "exit": 0,
+      "log": "docs/internal/issue-597-input-session-implementation-20260926/evidence/S05-trusted-guard-integration-20260927/logs/s05-pr-metadata.log",
+      "sha256": "37517e5f3dc66819f61f5a7bb8ace1921282415f10551d2defa5c3eb0985b570",
+      "rawLog": "/tmp/issue597-S05-trusted-guard-integration-20260927-evidence/s05-pr-metadata.log",
+      "rawSha256": "37517e5f3dc66819f61f5a7bb8ace1921282415f10551d2defa5c3eb0985b570",
+      "storedLogTransformation": "Remove trailing whitespace in repository text copies only; retain original raw logs and checksums."
+    },
+    {
+      "name": "source-audit-corrected",
+      "command": [
+        "python",
+        "/tmp/issue597-S05-trusted-guard-integration-20260927-evidence/audit-integration-corrected.py"
+      ],
+      "cwd": "/tmp/gbdraw-issue597-S05.ujOWyl",
+      "startedAt": "2026-09-27T08:01:29.791481+00:00",
+      "completedAt": "2026-09-27T08:01:32.517982+00:00",
+      "durationSeconds": 2.726504999998724,
+      "exit": 0,
+      "log": "docs/internal/issue-597-input-session-implementation-20260926/evidence/S05-trusted-guard-integration-20260927/logs/source-audit-corrected.log",
+      "sha256": "e46b9f47623cd582039c0e1a052c89200fb7d258d053e4b2b973261f072028ae",
+      "rawLog": "/tmp/issue597-S05-trusted-guard-integration-20260927-evidence/source-audit-corrected.log",
+      "rawSha256": "e46b9f47623cd582039c0e1a052c89200fb7d258d053e4b2b973261f072028ae",
+      "storedLogTransformation": "Remove trailing whitespace in repository text copies only; retain original raw logs and checksums."
+    },
+    {
+      "name": "source-audit-final",
+      "command": [
+        "python",
+        "/tmp/issue597-S05-trusted-guard-integration-20260927-evidence/audit-final.py"
+      ],
+      "cwd": "/tmp/gbdraw-issue597-S05.ujOWyl",
+      "startedAt": "2026-09-27T08:04:23.139001+00:00",
+      "completedAt": "2026-09-27T08:04:25.403622+00:00",
+      "durationSeconds": 2.264623542985646,
+      "exit": 0,
+      "log": "docs/internal/issue-597-input-session-implementation-20260926/evidence/S05-trusted-guard-integration-20260927/logs/source-audit-final.log",
+      "sha256": "f95a876bd5bea01f9b934d39c58bb79c1588010491382256b51aca446e7c39f4",
+      "rawLog": "/tmp/issue597-S05-trusted-guard-integration-20260927-evidence/source-audit-final.log",
+      "rawSha256": "f95a876bd5bea01f9b934d39c58bb79c1588010491382256b51aca446e7c39f4",
+      "storedLogTransformation": "Remove trailing whitespace in repository text copies only; retain original raw logs and checksums."
+    },
+    {
+      "name": "source-audit",
+      "command": [
+        "python",
+        "/tmp/issue597-S05-trusted-guard-integration-20260927-evidence/audit-integration.py"
+      ],
+      "cwd": "/tmp/gbdraw-issue597-S05.ujOWyl",
+      "startedAt": "2026-09-27T08:00:50.729968+00:00",
+      "completedAt": "2026-09-27T08:00:53.991402+00:00",
+      "durationSeconds": 3.261438444023952,
+      "exit": 1,
+      "log": "docs/internal/issue-597-input-session-implementation-20260926/evidence/S05-trusted-guard-integration-20260927/logs/source-audit.log",
+      "sha256": "5a924daeee9cbca16cb65a2146c610a8aa45ebeab7003af194b6ec5a862c97af",
+      "rawLog": "/tmp/issue597-S05-trusted-guard-integration-20260927-evidence/source-audit.log",
+      "rawSha256": "5a924daeee9cbca16cb65a2146c610a8aa45ebeab7003af194b6ec5a862c97af",
+      "storedLogTransformation": "Remove trailing whitespace in repository text copies only; retain original raw logs and checksums."
+    },
+    {
+      "name": "trusted-readiness",
+      "command": [
+        "python",
+        "-"
+      ],
+      "cwd": "/tmp/gbdraw-issue597-S05.ujOWyl",
+      "startedAt": "2026-09-27T07:54:33.491439+00:00",
+      "completedAt": "2026-09-27T07:54:33.534154+00:00",
+      "durationSeconds": 0.04271875601261854,
+      "exit": 0,
+      "log": "docs/internal/issue-597-input-session-implementation-20260926/evidence/S05-trusted-guard-integration-20260927/logs/trusted-readiness.log",
+      "sha256": "04eeec42f1356547d8862f7fa84119fc8fed06f90ff1656e6a593cd5ec5ab1b9",
+      "rawLog": "/tmp/issue597-S05-trusted-guard-integration-20260927-evidence/trusted-readiness.log",
+      "rawSha256": "04eeec42f1356547d8862f7fa84119fc8fed06f90ff1656e6a593cd5ec5ab1b9",
+      "storedLogTransformation": "Remove trailing whitespace in repository text copies only; retain original raw logs and checksums."
+    },
+    {
+      "name": "web-node-integration",
+      "command": [
+        "python",
+        "-c",
+        "import glob,json,subprocess; skip={\"tests/web/architecture-contracts.test.mjs\",\"tests/web/architecture-ratchet-fixtures.test.mjs\",\"tests/web/product-impact-ratchet-fixtures.test.mjs\",\"tests/web/promotion-readiness.test.mjs\",\"tests/web/web-promotion-context.test.mjs\"}; command=[\"node\",\"--test\",*[p for p in sorted(glob.glob(\"tests/web/*.test.mjs\")) if p not in skip]]; print(json.dumps(command),flush=True); raise SystemExit(subprocess.call(command))"
+      ],
+      "cwd": "/tmp/gbdraw-issue597-S05.ujOWyl",
+      "startedAt": "2026-09-27T07:56:44.168813+00:00",
+      "completedAt": "2026-09-27T07:57:22.556554+00:00",
+      "durationSeconds": 36.51045164599782,
+      "exit": 0,
+      "log": "docs/internal/issue-597-input-session-implementation-20260926/evidence/S05-trusted-guard-integration-20260927/logs/web-node-integration.log",
+      "sha256": "87d7971064df28b4e8d6eb019f75797424ba3e2ec969bc116d44a64ef71159ce",
+      "rawLog": "/tmp/issue597-S05-trusted-guard-integration-20260927-evidence/web-node-integration.log",
+      "rawSha256": "87d7971064df28b4e8d6eb019f75797424ba3e2ec969bc116d44a64ef71159ce",
+      "storedLogTransformation": "Remove trailing whitespace in repository text copies only; retain original raw logs and checksums."
+    }
+  ],
+  "negativeInventories": {
+    "sourceTree": "4e6cfb6960cbb02e74b4d861b2140f473c698177",
+    "overlay": "/tmp/issue597-integrated-guard-negative-sfmlga_g",
+    "clientOriginalSha256": "98e2bec632e85276fed854b91e5492d05f54850283446f8bf78e26979608657a",
+    "acceptanceUnchanged": true,
+    "invocations": [
+      {
+        "mutation": "extra-constructor",
+        "command": [
+          "node",
+          "--test",
+          "--test-name-pattern=Worker construction and the diagram-generation client have explicit owners|shared privileged detectors preserve the characterized current-source facts",
+          "tests/web/architecture-contracts.test.mjs"
+        ],
+        "cwd": "/tmp/issue597-integrated-guard-negative-sfmlga_g",
+        "exit": 1,
+        "expectedExit": 1,
+        "summary": {
+          "pass": 0,
+          "fail": 2
+        },
+        "log": "docs/internal/issue-597-input-session-implementation-20260926/evidence/S05-trusted-guard-integration-20260927/logs/negative-corrected-extra-constructor.log",
+        "sha256": "a09f7930dac9317d72d656ae59795fbbbb9f9d65ca526a4da25e8280ef61337a",
+        "rawLog": "/tmp/issue597-S05-trusted-guard-integration-20260927-evidence/negative-corrected-extra-constructor.log",
+        "rawSha256": "b41279ecea086e9f3e9aad5f5e75abfb7df1e383a104e1f8769704dc74d21ff9"
+      },
+      {
+        "mutation": "missing-constructor",
+        "command": [
+          "node",
+          "--test",
+          "--test-name-pattern=Worker construction and the diagram-generation client have explicit owners|shared privileged detectors preserve the characterized current-source facts",
+          "tests/web/architecture-contracts.test.mjs"
+        ],
+        "cwd": "/tmp/issue597-integrated-guard-negative-sfmlga_g",
+        "exit": 1,
+        "expectedExit": 1,
+        "summary": {
+          "pass": 0,
+          "fail": 2
+        },
+        "log": "docs/internal/issue-597-input-session-implementation-20260926/evidence/S05-trusted-guard-integration-20260927/logs/negative-corrected-missing-constructor.log",
+        "sha256": "2489dde0d5c5a0934b5a20830ad126e00570d6eb1c1e2bd5c8760414155b5dd1",
+        "rawLog": "/tmp/issue597-S05-trusted-guard-integration-20260927-evidence/negative-corrected-missing-constructor.log",
+        "rawSha256": "9c71a4130335f1a5cbffbb02f3e95213164bd1fb6822c4e747b60caef7f40255"
+      },
+      {
+        "mutation": "extra-owner",
+        "command": [
+          "node",
+          "--test",
+          "--test-name-pattern=Worker construction and the diagram-generation client have explicit owners|shared privileged detectors preserve the characterized current-source facts",
+          "tests/web/architecture-contracts.test.mjs"
+        ],
+        "cwd": "/tmp/issue597-integrated-guard-negative-sfmlga_g",
+        "exit": 1,
+        "expectedExit": 1,
+        "summary": {
+          "pass": 0,
+          "fail": 2
+        },
+        "log": "docs/internal/issue-597-input-session-implementation-20260926/evidence/S05-trusted-guard-integration-20260927/logs/negative-corrected-extra-owner.log",
+        "sha256": "b4614cc6c9c1e81f303d4ab94d1a6905a938734781393b01a772d6f582f5e7ec",
+        "rawLog": "/tmp/issue597-S05-trusted-guard-integration-20260927-evidence/negative-corrected-extra-owner.log",
+        "rawSha256": "0f75359c1e9bc74d189d946f03e8bf549a4c756fdc0c5fd8ca0155dbfa0b3211"
+      }
+    ]
+  },
+  "recipes": {
+    "docs/internal/issue-597-input-session-implementation-20260926/evidence/S05-trusted-guard-integration-20260927/recipes/resolve-html.py": {
+      "sha256": "301582222e5fed907562b97430efef132a16d5b3e93eacfdc2564c05ba151b18",
+      "rawPath": "/tmp/issue597-S05-trusted-guard-integration-20260927-evidence/resolve-html.py",
+      "qualification": "Session-owned evidence recipe, disconnected from runtime and policy. Uses pinned refs/paths from this invocation; replay only in a disposable matching checkout."
+    },
+    "docs/internal/issue-597-input-session-implementation-20260926/evidence/S05-trusted-guard-integration-20260927/recipes/negative-inventories-corrected.py": {
+      "sha256": "9e504f705873fed74679db226f843082d46145991f776c8048a58dd621009b27",
+      "rawPath": "/tmp/issue597-S05-trusted-guard-integration-20260927-evidence/negative-inventories-corrected.py",
+      "qualification": "Session-owned evidence recipe, disconnected from runtime and policy. Uses pinned refs/paths from this invocation; replay only in a disposable matching checkout."
+    },
+    "docs/internal/issue-597-input-session-implementation-20260926/evidence/S05-trusted-guard-integration-20260927/recipes/audit-integration-corrected.py": {
+      "sha256": "ab5430a204a8a8ccaee693153a4cbb9cff3d13950e2e861200087104697b0e99",
+      "rawPath": "/tmp/issue597-S05-trusted-guard-integration-20260927-evidence/audit-integration-corrected.py",
+      "qualification": "Session-owned evidence recipe, disconnected from runtime and policy. Uses pinned refs/paths from this invocation; replay only in a disposable matching checkout."
+    },
+    "docs/internal/issue-597-input-session-implementation-20260926/evidence/S05-trusted-guard-integration-20260927/recipes/audit-final.py": {
+      "sha256": "345c38b249906440fb726ac6cdf51b96a7d935c2bc1c2e41a40406af6496cb3a",
+      "rawPath": "/tmp/issue597-S05-trusted-guard-integration-20260927-evidence/audit-final.py",
+      "qualification": "Session-owned evidence recipe, disconnected from runtime and policy. Uses pinned refs/paths from this invocation; replay only in a disposable matching checkout."
+    },
+    "docs/internal/issue-597-input-session-implementation-20260926/evidence/S05-trusted-guard-integration-20260927/recipes/browser-selection.py": {
+      "sha256": "678657448c28678e8fc30abf7727b95f28a4040c37bad1c0e7460bc61e94b6db",
+      "rawPath": "/tmp/issue597-S05-trusted-guard-integration-20260927-evidence/browser-selection.py",
+      "qualification": "Session-owned evidence recipe, disconnected from runtime and policy. Uses pinned refs/paths from this invocation; replay only in a disposable matching checkout."
+    },
+    "docs/internal/issue-597-input-session-implementation-20260926/evidence/S05-trusted-guard-integration-20260927/recipes/record-command.py": {
+      "sha256": "79e48d3a0282f453fc18ad8e15da4eea8f4d40721d67aa0d7597ae1e05a0e84b",
+      "rawPath": "/tmp/issue597-integration-run.py"
+    }
+  },
+  "recordingFailures": [
+    {
+      "name": "pre-integration-policy",
+      "qualification": "Exit 1 / Gate FAIL / Review REQUIRED. The old branch appears to revert advanced dev authority and the delivered guard while carrying runtime. Preserved original invocation; resolved by trusted dev merge, not a guard/checker override."
+    },
+    {
+      "name": "negative-evidence-parser",
+      "qualification": "First disposable extra-constructor test correctly exits 1 with both assertions failing. Wrapper exits 1 because it expected TAP (# fail/pass) instead of Node spec (\u2139 fail/pass). Only wrapper summary syntax corrected; original raw log and recipe retained."
+    },
+    {
+      "name": "source-audit-paths",
+      "qualification": "All identity assertions completed; diff categorization exits 128 because nonexistent dist path lacked Git -- separator. Only path disambiguation corrected, original invocation retained."
+    },
+    {
+      "name": "advanced-dev-precommit-wrapper",
+      "qualification": "Actual remote dev advanced to 98c21116. An inline assertion failed, but its shell lacked set -e, so the first verified integration e6f3227a was still committed against 494091aa. No runtime or guard was rewritten. Preserve that independent merge; fetch only advanced dev, inspect two paths, use fail-fast sequential wrapper, and merge latest dev separately as b91ff25d. Do not claim the first commit integrated the advanced dev."
+    }
+  ],
+  "trustedGuardPR": {
+    "base": "494091aa68ca59ffa27ecaa6c3df19da4fbf5090",
+    "actualMergeShaAncestor": true,
+    "mergeTreeEqualsVerifiedGuardHead": true,
+    "requiredCI": {
+      "Web base policy (trusted base)": "SUCCESS",
+      "PR / gate": "SUCCESS"
+    },
+    "candidateCI": {
+      "Web change budget": "SUCCESS",
+      "Core PR (Python 3.11)": "SUCCESS",
+      "Recipes standard (Python 3.11)": "SUCCESS",
+      "Gallery (Python 3.11)": "SUCCESS",
+      "Web contracts (Python 3.11)": "SUCCESS",
+      "Web PR smoke": "SUCCESS",
+      "Lint": "SUCCESS"
+    },
+    "requiredApprovingReviewCount": 0,
+    "observedReviews": [],
+    "humanReviewQualification": "No formal GitHub review observed. Required approval count is zero. Prior owner-authorized merge is recorded in the preserved handoff; CI and this local audit are not human review.",
+    "checkerIdenticalToTrustedBase": {
+      "tools/check-web-change-budget.mjs": {
+        "local": "c7888ffb9c6d136284b567712f6e11a474e6b08f54d4daaee7d78e1a402d7f1c",
+        "trusted": "c7888ffb9c6d136284b567712f6e11a474e6b08f54d4daaee7d78e1a402d7f1c"
+      },
+      "tools/web-architecture-detectors.mjs": {
+        "local": "e05a4d4ffa394db8af69f27d82e4673e0e0c2533ba6b0cd7b43dd16e4e227274",
+        "trusted": "e05a4d4ffa394db8af69f27d82e4673e0e0c2533ba6b0cd7b43dd16e4e227274"
+      },
+      "tools/web-architecture-evaluation.mjs": {
+        "local": "6f1dda5eeb5fb88500baf1de79e730cb4aeff9861562802af8491eaea4bb1a4e",
+        "trusted": "6f1dda5eeb5fb88500baf1de79e730cb4aeff9861562802af8491eaea4bb1a4e"
+      },
+      "tools/web-change-source.mjs": {
+        "local": "b23bd352475c14cc044fa7c14c70e69f0da04631f67bc7f2207eb79549c73756",
+        "trusted": "b23bd352475c14cc044fa7c14c70e69f0da04631f67bc7f2207eb79549c73756"
+      },
+      "tools/web-product-impact-evaluation.mjs": {
+        "local": "8031bc2a68ab1315387dbcf5485971054cf91e1669659edebec46f9cb87d62da",
+        "trusted": "8031bc2a68ab1315387dbcf5485971054cf91e1669659edebec46f9cb87d62da"
+      },
+      "tools/web-product-impact-decision-source.mjs": {
+        "local": "11f7332880ff4ec256cfbca6d15286c809dcebef80465987fa22759a8ed17f07",
+        "trusted": "11f7332880ff4ec256cfbca6d15286c809dcebef80465987fa22759a8ed17f07"
+      },
+      "tools/web-promotion-context.mjs": {
+        "local": "44e88fd3f24ca1d98571a12daf29e996cefc3b8552093e6105c69b626ebc56dd",
+        "trusted": "44e88fd3f24ca1d98571a12daf29e996cefc3b8552093e6105c69b626ebc56dd"
+      },
+      "tools/check-promotion-readiness.mjs": {
+        "local": "f716221070cd9cae9876ee1a9831a23085d3a907a7c7deffea2cb3d99db9fd61",
+        "trusted": "f716221070cd9cae9876ee1a9831a23085d3a907a7c7deffea2cb3d99db9fd61"
+      }
+    },
+    "permissionsPresent": true
+  },
+  "localChecks": {
+    "architecture": {
+      "pass": 139,
+      "fail": 0,
+      "allFourRequestedNamesPassed": true
+    },
+    "webNode": {
+      "pass": 790,
+      "fail": 0,
+      "scope": "Top-level .test.mjs excluding architecture suite and the four unchanged fixture suites"
+    },
+    "browser": {
+      "pass": 5,
+      "fail": 0,
+      "scope": "Three import Worker lifecycle cases plus Save/Load semantic-owner availability; small Gallery fixture, not real-large acceptance"
+    },
+    "ciContracts": {
+      "pass": 65,
+      "fail": 0
+    },
+    "latestPostcommitPolicy": {
+      "gate": "PASS",
+      "review": "REQUIRED",
+      "exit": 0
+    }
+  },
+  "reusedEvidence": [
+    {
+      "invocation": {
+        "name": "guard-fixtures",
+        "command": [
+          "node",
+          "--test",
+          "tests/web/architecture-ratchet-fixtures.test.mjs",
+          "tests/web/product-impact-ratchet-fixtures.test.mjs",
+          "tests/web/promotion-readiness.test.mjs",
+          "tests/web/web-promotion-context.test.mjs"
+        ],
+        "cwd": "/tmp/gbdraw-issue597-session-import-guard-20260927",
+        "exit": 0,
+        "log": "docs/internal/issue-597-session-import-guard-20260927/logs/guard-fixtures.log",
+        "sha256": "b2dadbab97ce153ec29b782fd6f3b205f7cb95d4578a7c553488e9d1aa599957",
+        "rawLog": "/tmp/issue597-session-import-guard-20260927-evidence/guard-fixtures.log",
+        "summary": {
+          "tests": 78,
+          "pass": 78,
+          "fail": 0
+        }
+      },
+      "sourceFingerprints": {
+        "tests/web/architecture-ratchet-fixtures.test.mjs": "671dc8d73453d06614c911beeea0730bf16d99b67349e66e909a88af29d21720",
+        "tests/web/product-impact-ratchet-fixtures.test.mjs": "93db49b7cb53bc93a19d7159801cc8c106845d5cfb16bc1ae2d3fef0e94f9263",
+        "tests/web/promotion-readiness.test.mjs": "178f7e23b2356ca25b9e38f6d36156f47fb14e9ea0d68efcf88a04037531be77",
+        "tests/web/web-promotion-context.test.mjs": "d2191d182062a6250ffdefa22d7ea71039d40769dc9c08ed0e8fd11fbb5ecede",
+        "tools/audit_svg_composition.py": "f1ec690730bdffb8bd17ec0acc6e9fb9e2013239a73adaa30330053228d1a46e",
+        "tools/benchmark_diagram_layout.py": "749d3775e6ada1bf7355427d064887dfdcb986c9cb335821dc6a7a120e818e1f",
+        "tools/benchmark_protein_comparison.py": "ecd26c0a10b6b6a53c82229afe561fa8402afbd3817ec2b02974db94ca1af891",
+        "tools/build_depth_1kb_fixture.py": "7b6ff3df5e351de3f23521c534826a28406f51d8c238942da154ea1d53ed62f8",
+        "tools/build_lambda_gff3_fixture.py": "e15e1f5c85ec8ae58a9caf6df0b9a7f4413187aaefde556c9a8cd6f737d6f562",
+        "tools/build_metazoan_mitochondria_comparison_fixture.py": "e3254a17c84dc3a4448950e0fadd98f34e96d37f2a4192ee27f7469cc632b938",
+        "tools/capture_circular_preset_oracle.py": "9a03718105f0c8fa4c8f97469db8dbff9f5e081a207e49f913a4c66488d286d0",
+        "tools/capture_gallery_tutorial_screenshots.py": "f7ba0ea22538e8dc1e5175492e66d890fe42ece931044bb088ed9b5627902b68",
+        "tools/check-pr-language.mjs": "3cb2ae42e6c1777fe5049ba95d87c6c6f0098a07ca85a9ec93e0e70ed8a17772",
+        "tools/check-promotion-readiness.mjs": "f716221070cd9cae9876ee1a9831a23085d3a907a7c7deffea2cb3d99db9fd61",
+        "tools/check-web-change-budget.mjs": "c7888ffb9c6d136284b567712f6e11a474e6b08f54d4daaee7d78e1a402d7f1c",
+        "tools/check_release_source.py": "9554691761924781341ebe1b425b18935c02462d295f661cef94e2386fd78cd3",
+        "tools/ci-impact-policy.mjs": "5614aceb103565b9b64c2febbcd975162f0afe17cbf6ea21775dae4555a4166e",
+        "tools/ci-impact.mjs": "673e77594b409d3b22f8f11433cfaac239d4ba2f9bfc8815d9b9b904b38087c6",
+        "tools/gallery_artifact_manifest.py": "8046cd44d40778c29494815ec22ee6b9aa48f49bb009b261b2ca8870d6f82a6c",
+        "tools/generate_mode_profiles.py": "878cf1a8daaf43dee149f73d966e9b59ef9971f884e1fbf968c24942e97e2fcf",
+        "tools/generate_open_source_notices.py": "4ad0eca02604e5336bf1b45c1198ca4bc6405ce450d95102cf3b493820199628",
+        "tools/generate_palette_explorer_assets.py": "4d2f405af2ec9fd3c65c7d2d89485e6837381000f89e8720e62678b013dd2256",
+        "tools/generate_palette_page.py": "c1b0a2a29728690a2dd5f364571dea7f907a33a486fa74ffb6ebae60a04f92b2",
+        "tools/lock_losat_release.py": "522a09d34174a8d238573043a302ed7f47927a5a596598a5d720179748b7188c",
+        "tools/measure_gallery_publication_performance.py": "1ab46b7059ecc07b23556ef5aab997574fde0815c1667543aa3fb3d01c32b119",
+        "tools/prepare_browser_wheel.py": "abb96e905c9ffc2789325c8d522750be05332a0acc95745ba5b16aa1d1bc966f",
+        "tools/prepare_cloudflare_pages.py": "766e5ff47a6d9cc8a2b58349ee3a9775be53ae65b43c4b301c76e1290952c3b2",
+        "tools/prepare_interactive_gallery_assets.py": "b728357f32070af32064593b90f8463e0915bcf25346285dbccf624fab6a204c",
+        "tools/promote_gallery_session.mjs": "11b0f3c5a6b832d99202d510cdfa266b835a0d4e5fc9841ad1321038f1a19395",
+        "tools/protein_comparison_browser.py": "d6c6f6f289470a8bcd3f613bd80e5eaeeab2b8041567c5a927ff7deb92e76049",
+        "tools/publish_gallery_session.mjs": "48c50e34f3c0bb371b7da046d32b4813aebbdd34ee15a17c47e3a3600f590a9c",
+        "tools/qualify_lambda_de3_comparison_fixture.py": "4c80a0817a219d81c3989aa2aad577a0c7531a75fb8bc3a4d4d84c60fc4f55f9",
+        "tools/refresh_gallery_sessions.py": "5b94dc5deaef27a6c0909cb82c2c207a83c4b1144dba6253b341fea87ccfd448",
+        "tools/reproduce_examples.py": "f8ce2312f9b86f96dd913fbaeb86f97b734eee654f2c0396f7ec85b0dbbc8c01",
+        "tools/reproduce_examples_manifest.py": "3ac2657cdd8515a9a2a6e4ac12671958cad227b22612d1b5e6fe3523ebe8a590",
+        "tools/stamp_web_build.py": "ddb3f7c15854d94fef7f9ae7286d533e2aad602f3e16752708e96e1831a94009",
+        "tools/update_cli_reference_help.py": "adb184601ad91cfab616dcde17fd7c551128fdaf083a68b33507269157e4a007",
+        "tools/verify_gui_offline.py": "31c8579e2eca77b2f7c20d51305d4b5ba3a7fdacce18a4898a9292764293501b",
+        "tools/verify_losat_installation.py": "73a636920adea085e680746416215e777a1f0ef13c4f7ccaab3908eec360360e",
+        "tools/web-architecture-detectors.mjs": "e05a4d4ffa394db8af69f27d82e4673e0e0c2533ba6b0cd7b43dd16e4e227274",
+        "tools/web-architecture-evaluation.mjs": "6f1dda5eeb5fb88500baf1de79e730cb4aeff9861562802af8491eaea4bb1a4e",
+        "tools/web-architecture-rules.json": "5ed342ad89f394a8621d0faa7910c3c6d15deaf19ef4ebefd96ec65172326282",
+        "tools/web-change-policy.json": "185f1edde7c5d790a250e15326c01ec2bf13a00f2bcabc117b91ad5d21299fed",
+        "tools/web-change-source.mjs": "b23bd352475c14cc044fa7c14c70e69f0da04631f67bc7f2207eb79549c73756",
+        "tools/web-product-decisions.json": "23b1843c9cc1d5d1e974f75c647b2dc299c53d5c117cfdf45830003eda5ef3b6",
+        "tools/web-product-impact-decision-source.mjs": "11f7332880ff4ec256cfbca6d15286c809dcebef80465987fa22759a8ed17f07",
+        "tools/web-product-impact-evaluation.mjs": "8031bc2a68ab1315387dbcf5485971054cf91e1669659edebec46f9cb87d62da",
+        "tools/web-product-impact-map.json": "dfd88850f67162f6046542e53d3136f51818e127a1320ecbf589b6cf97e14885",
+        "tools/web-promotion-context.mjs": "44e88fd3f24ca1d98571a12daf29e996cefc3b8552093e6105c69b626ebc56dd"
+      },
+      "conditions": "Same exact four fixture test bodies, unchanged checker/detector/evaluator/parsers/policy/rules/map/decisions, same Node v26.8.2 and OS; fixture-owned input and acceptance unchanged. No production source execution in these pure/mechanical fixtures. 78 PASS remains scoped to these mechanics."
+    },
+    "139 architecture PASS (including all four named contracts), 790 Node PASS, five Chromium PASS and three negative inventory mutations retain identical source/tests/checker/input/environment/acceptance after this two-path transition. Latest-base policy rerun and affected CI contracts rerun."
+  ],
+  "notReusedAsCurrentPass": "Historical only: integration changes 14 Web runtime files and the aggregate runtime fingerprint. No old browser/performance PASS is claimed for the new integrated runtime. Old FAIL/null invocations remain unchanged.",
+  "remainingS05Acceptance": [
+    "Historical mapped Feature fill/direct edit FAIL: tRNA legend conflict; not rerun in this delivery.",
+    "Historical divergent draft Save FAIL: reflow busy/retry; not rerun or weakened.",
+    "Historical real gzip transport max heartbeat 512.2\u2013526.0 ms FAIL against unchanged 500 ms bound; not remeasured.",
+    "Historical real full Load/Save performance FAIL; not remeasured.",
+    "Historical real preview Python Worker count 1 FAIL against required 0; not rerun.",
+    "Historical real Generate Missing GenBank file FAIL; not rerun.",
+    "Historical strict CLI SVG comparison FAIL for root baseProfile difference; not rerun.",
+    "Native clone wire/copy bytes and receiver task duration remain null; not measured."
+  ],
+  "nextBoundedDelivery": {
+    "scope": "Evidence-only current-base reproduction and diagnosis of the mapped Feature fill/direct edit tRNA legend conflict. No implementation in this session.",
+    "prerequisites": "Use the clean dedicated S05 branch and actual current dev; preserve this integration and original invocation. Pin source/guard/map/receipt hashes and run the unchanged named Feature fill/direct edit contracts on representative Gallery fixtures against dev and S05.",
+    "stopConditions": "If observed behavior leaves materially different Product-valid outcomes, stop for the Product Decision Owner. If a mapped test/helper/body/reference must change, stop dependent runtime and use prior evidence-only then authority-reference-only delivery as required. Do not weaken busy/retry, assertions, timeouts, budgets, Worker-free count or claim S05/S06 completion."
+  },
+  "authorityQualification": "Local Gate/Review, trusted PR #624 CI and human review are separate. Required PR statuses and candidate jobs succeeded for 8474feaf; merge tree equals that head. Required formal approval count 0 and observed reviews []; previous owner-authorized merge recorded, no formal review inferred. No S05 PR exists; work-branch push does not claim required CI or integrated dev staging PASS.",
+  "scopeQualification": "Only trusted dev integration plus session-owned evidence. Six HTML conflict resolutions retain S03/S04 coordination and dev UI semantics. No independent runtime/checker/policy/permission/authority/mapped-body design change. PR #625 CI-only inventory ceiling imported intact from trusted dev; S05 timeouts/performance bounds/Worker-free assertion unchanged.",
+  "completion": "Integration verification complete locally; evidence commit and nonforce same-named push recorded separately at handoff. S05 acceptance remains INCOMPLETE / historical FAIL and null measurements retained; S06+ untouched.",
+  "fingerprints": {
+    "path": "docs/internal/issue-597-input-session-implementation-20260926/evidence/S05-trusted-guard-integration-20260927/fingerprints.json",
+    "sha256": "06e6f01e939412a7c2c314fd38f54d1819d948ad4edf9aabe938341ddd897ebb"
+  }
+}

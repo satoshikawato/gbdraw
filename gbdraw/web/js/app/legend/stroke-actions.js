@@ -188,6 +188,8 @@ export const createLegendStrokeActions = ({ state, previewRuntime = null }) => {
   };
 
   const updateLegendEntryStrokeColor = (idx, color) => {
+    const sessionBusy = state.sessionOperationAvailability?.();
+    if (sessionBusy) return sessionBusy;
     const entry = legendEntries.value[idx];
     if (!entry) return false;
     const normalized = String(color || '').trim();
@@ -209,6 +211,8 @@ export const createLegendStrokeActions = ({ state, previewRuntime = null }) => {
   };
 
   const updateLegendEntryStrokeWidth = (idx, width) => {
+    const sessionBusy = state.sessionOperationAvailability?.();
+    if (sessionBusy) return sessionBusy;
     const entry = legendEntries.value[idx];
     if (!entry) return false;
 
@@ -230,6 +234,8 @@ export const createLegendStrokeActions = ({ state, previewRuntime = null }) => {
   };
 
   const setLegendEntryStrokeColorValue = (idx, value) => {
+    const sessionBusy = state.sessionOperationAvailability?.();
+    if (sessionBusy) return sessionBusy;
     const entry = legendEntries.value[idx];
     if (!entry) return;
     if (value !== null) {
@@ -251,6 +257,8 @@ export const createLegendStrokeActions = ({ state, previewRuntime = null }) => {
   };
 
   const resetLegendEntryStroke = (idx) => {
+    const sessionBusy = state.sessionOperationAvailability?.();
+    if (sessionBusy) return sessionBusy;
     const entry = legendEntries.value[idx];
     if (!entry) return false;
     if (!svgContainer.value) return false;
@@ -309,6 +317,8 @@ export const createLegendStrokeActions = ({ state, previewRuntime = null }) => {
   };
 
   const resetAllStrokes = () => {
+    const sessionBusy = state.sessionOperationAvailability?.();
+    if (sessionBusy) return sessionBusy;
     if (!svgContainer.value) return false;
     const svg = svgContainer.value.querySelector('svg');
     if (!svg) return false;

@@ -8,6 +8,23 @@ import {
   readFileText
 } from '../services/file-content-cache.js';
 
+// A catalog is current only for the exact active source instance and input type.
+export const circularDiscoveryForInput = (state) => {
+  const inputType = state.cInputType.value;
+  const primaryFile = inputType === 'gff' ? state.files.c_gff : state.files.c_gb;
+  const pairedFile = inputType === 'gff' ? state.files.c_fasta : null;
+  const hasInput = Boolean(primaryFile && (inputType !== 'gff' || pairedFile));
+  const discovery = state.circularRecordDiscovery;
+  const current = discovery.inputType === inputType
+    && discovery.primaryFile === primaryFile && discovery.pairedFile === pairedFile;
+  return {
+    hasInput, current, primaryFile, pairedFile, inputType,
+    status: hasInput ? (current ? discovery.status : 'deferred') : 'idle',
+    error: current ? discovery.error : '',
+    records: current && discovery.status === 'ready' ? state.circularRecordList.value : []
+  };
+};
+
 const normalizeRecordLength = (value) => {
   const numeric = Number(value);
   return Number.isInteger(numeric) && numeric > 0 ? numeric : null;
