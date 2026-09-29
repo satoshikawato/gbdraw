@@ -37,7 +37,7 @@ const threadTrapJobModule = Buffer.from([
   ])
 ]);
 
-test('a trapping WASI thread fails its threaded LOSAT job instead of stalling it', async ({ page }) => {
+test('a trapping WASI thread fails its threaded LOSAT job after bounded retries instead of stalling it', async ({ page }) => {
   test.setTimeout(60000);
   const isolation = {
     'Cross-Origin-Opener-Policy': 'same-origin',
@@ -88,7 +88,8 @@ test('a trapping WASI thread fails its threaded LOSAT job instead of stalling it
 
   expect(outcome.status).toBe('rejected');
   expect(outcome.message).toMatch(/^LOSAT pair #1: LOSAT thread 1 failed: .*unreachable/);
-  expect(threadWorkers.length).toBe(1);
-  // Ending the job also ends its WASI thread worker.
+  // The synthetic thread always traps: one attempt and two retries.
+  expect(threadWorkers.length).toBe(3);
+  // Ending each job also ends its WASI thread worker.
   await expect.poll(() => threadWorkers.every((entry) => entry.closed)).toBe(true);
 });

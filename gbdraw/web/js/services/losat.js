@@ -10,6 +10,10 @@ import {
 const DEFAULT_WASM_PATH = './wasm/losat/losat.wasm';
 const DEFAULT_THREADED_WASM_PATH = LOSAT_THREADED_WASM_URL || './wasm/losat/losat-threaded.wasm';
 const DEFAULT_THREADED_MIN_FASTA_CHARS = 500000;
+// Chromium can trap a thread's memory.copy or memory.fill right after another
+// thread grows the shared memory. A job is deterministic, so a trapped job runs
+// again, up to this many times, before the run fails.
+const THREADED_TRAP_RETRY_LIMIT = 2;
 const SUPPORTED_PROGRAMS = new Set(['blastn', 'tblastx', 'blastp']);
 
 let wasiShimPromise = null;
@@ -550,6 +554,7 @@ const runLosatPairsThreaded = async (
   const results = new Array(jobs.length);
   const activeWorkers = new Set();
   const faultChannels = new Set();
+  const trapRetries = new Map();
   let nextJobIndex = 0;
   let completed = 0;
   let requestId = 0;
@@ -592,6 +597,19 @@ const runLosatPairsThreaded = async (
 
       const index = nextJobIndex;
       nextJobIndex += 1;
+      launchJob(index);
+    };
+    const failOrRetryTrap = (index, error, trapped) => {
+      const attempt = (trapRetries.get(index) || 0) + 1;
+      if (!trapped || attempt > THREADED_TRAP_RETRY_LIMIT || settled || signal?.aborted) {
+        fail(error);
+        return;
+      }
+      trapRetries.set(index, attempt);
+      console.warn(`${error.message}; running the pair again (retry ${attempt} of ${THREADED_TRAP_RETRY_LIMIT}).`);
+      launchJob(index);
+    };
+    const launchJob = (index) => {
       const job = jobs[index];
       const id = `threaded-${Date.now()}-${requestId}`;
       requestId += 1;
@@ -638,7 +656,11 @@ const runLosatPairsThreaded = async (
         cleanupWorker();
 
         if (!data.ok) {
-          fail(new Error(`${formatPairErrorPrefix(job)}: ${data.error || 'Threaded LOSAT worker failed'}`));
+          failOrRetryTrap(
+            index,
+            new Error(`${formatPairErrorPrefix(job)}: ${data.error || 'Threaded LOSAT worker failed'}`),
+            data.trap === true
+          );
           return;
         }
         if (signal?.aborted) {
@@ -670,7 +692,11 @@ const runLosatPairsThreaded = async (
         if (data.type !== 'thread-fault') return;
         cleanupWorker();
         const detail = [data.error || 'LOSAT WASI thread trapped', data.stderr].filter(Boolean).join('\n');
-        fail(new Error(`${formatPairErrorPrefix(job)}: LOSAT thread ${data.tid} failed: ${detail}`));
+        failOrRetryTrap(
+          index,
+          new Error(`${formatPairErrorPrefix(job)}: LOSAT thread ${data.tid} failed: ${detail}`),
+          data.trap === true
+        );
       };
 
       worker.addEventListener('message', handleMessage);

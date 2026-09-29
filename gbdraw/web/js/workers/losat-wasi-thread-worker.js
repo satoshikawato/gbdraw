@@ -29,6 +29,7 @@ const reportThreadFault = (tid, error, context) => {
     type: 'thread-fault',
     tid,
     error: error?.message ? String(error.message) : String(error || 'LOSAT WASI thread trapped'),
+    trap: error instanceof WebAssembly.RuntimeError,
     stderr
   });
   channel.close();

@@ -36,6 +36,8 @@ dev と main を `git archive` で `$S00_BASELINE_DIR=/home/kawato/gbdraw-baseli
 
 2026-09-30: 残余項目を 3 つの sub-agent で対応した。browser test の Save を保持型の await にした（5308ae08）。Gallery の popup recipe 7 件を `app.canvasPan` にして再取得した（198443d0）。docs capture の H-GUI-02・H-GUI-06・T-GUI-08 を直して再生成し、462 と 500 の差が 65f231af の意図した既定値変更だと確かめた（d6d2aa87）。threaded LOSATP の 25 job が停止する app の不具合を見つけ、H-GUI-08 は未再生成。結果は results/S07.md 第 12.5 節。
 
+2026-09-30: threaded LOSATP の停止を直した。Chromium 149 の shared memory の grow 直後の `memory.copy` trap が引き金で、trap した thread の報告を誰も読めないことが停止の原因だった。trap を page へ報告して job を終え（184d06a1、#647）、trap で終わった job を最大 2 回やり直すようにした（23ddd757、Owner-delegated）。H-GUI-08 は 2 回とも完了し、画像を再生成した（e4e84141）。結果は results/S07.md 第 12.6 節。
+
 | Session | 状態 | 証拠・次の条件 |
 | --- | --- | --- |
 | S00 | 完了（証拠採取のみ） | commit d7fbe23b（証拠）、9b671081（Owner 判断）。[results/S00.md](results/S00.md)。開始 a351c01d、dev 57cef3ba・main 4556e04e の snapshot/wheel、性能 baseline、G03/G06/G07 再現、R01/R02 範囲。旧 Session 方針と receipt 文言は第 11.4 節で取得済み。commit SHA は次セッションで追記 |
