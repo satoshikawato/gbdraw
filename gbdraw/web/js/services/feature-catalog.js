@@ -361,9 +361,11 @@ function* validateAndProjectCatalogItem(item, result, resultIndex, context) {
     renderedByKey.get(key).push(feature);
     const biological = biologicalByKey.get(key);
     if (!biological) throw catalogError();
+    // Catalog rows are not mutated after admission, so projections share
+    // their nested values instead of holding another copy of each feature.
     const projectedFeature = {
-      ...cloneJson(biological),
-      ...cloneJson(feature),
+      ...biological,
+      ...feature,
       id: key,
       record_key: text(feature.recordKey),
       biological_feature_id: text(feature.biologicalFeatureId),
@@ -706,7 +708,7 @@ const selectorForFeature = (feature, stableId) => {
     start: feature.start ?? null,
     end: feature.end ?? null,
     strand: feature.strand ?? null,
-    qualifiers: isObject(feature.qualifiers) ? cloneJson(feature.qualifiers) : {},
+    qualifiers: isObject(feature.qualifiers) ? feature.qualifiers : {},
     hash: stableId
   };
   return selector;
@@ -795,7 +797,8 @@ const firstQualifierValue = (value) => {
 
 const restoreCompactBiologicalDefaults = (feature) => {
   const restored = feature;
-  const qualifiers = isObject(restored.qualifiers)
+  // The nested qualifiers belong to the admitted catalog; replace, never mutate.
+  let qualifiers = isObject(restored.qualifiers)
     ? restored.qualifiers
     : {};
   const hasSnakeAminoAcidSequence = Object.prototype.hasOwnProperty.call(
@@ -813,7 +816,7 @@ const restoreCompactBiologicalDefaults = (feature) => {
     ) {
       throw catalogError();
     }
-    qualifiers.translation = [aminoAcidSequence];
+    qualifiers = { ...qualifiers, translation: [aminoAcidSequence] };
     restored.qualifiers = qualifiers;
     delete restored.translationFromAminoAcidSequence;
   }
@@ -870,7 +873,7 @@ const expandBiologicalFeature = (
   if (!sourceFeatureIndex.valid) throw catalogError();
   const overrideKey = biologicalFeatureKey(recordKey, biologicalFeatureId);
   const expanded = restoreCompactBiologicalDefaults({
-    ...cloneJson(feature),
+    ...feature,
     id: overrideKey,
     record_key: recordKey,
     recordKey,
