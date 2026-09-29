@@ -111,7 +111,7 @@ const applyVisibilityOverride = (page) => page.evaluate(async () => {
   return Object.keys(app.labelVisibilityOverrides).length;
 });
 
-test('@pr-smoke status, selection, and input build no tables; each Generate builds its label table once', async ({ page }) => {
+test('status, selection, and input build no tables; each Generate builds its label table once', async ({ page }) => {
   test.setTimeout(300_000);
   await install(page);
   const cdp = await page.context().newCDPSession(page);
