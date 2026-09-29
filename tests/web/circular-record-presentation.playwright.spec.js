@@ -2,6 +2,7 @@ const { test, expect } = require('@playwright/test');
 const { readFileSync, writeFileSync } = require('node:fs');
 const { join, resolve } = require('node:path');
 const {
+  evaluateWithRetainedPromise,
   generateAndWaitForResult,
   openApp,
   waitForAppShell
@@ -114,7 +115,7 @@ test('Circular single-record presentation selects, transforms, titles, and round
   });
 
   const downloadPromise = page.waitForEvent('download', { timeout: 180000 });
-  await page.evaluate(() => window.__GBDRAW_APP__.saveSessionWithTitle());
+  await evaluateWithRetainedPromise(page, () => window.__GBDRAW_APP__.saveSessionWithTitle());
   const savedSessionPath = await (await downloadPromise).path();
   expect(savedSessionPath).toBeTruthy();
 

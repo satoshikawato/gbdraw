@@ -2,7 +2,7 @@ const { test, expect } = require('@playwright/test');
 const { join } = require('node:path');
 const { readFileSync, writeFileSync } = require('node:fs');
 const { gunzipSync } = require('node:zlib');
-const { openApp, reveal, generateAndWaitForResult, getDiagramWorkerActivity } = require('./helpers/app-lifecycle.cjs');
+const { evaluateWithRetainedPromise, openApp, reveal, generateAndWaitForResult, getDiagramWorkerActivity } = require('./helpers/app-lifecycle.cjs');
 const { inspectSafeDetails } = require('./helpers/operation-error.cjs');
 
 const fixture = mode => join(process.cwd(), 'gbdraw/web/gallery/sessions', mode === 'linear'
@@ -162,7 +162,7 @@ test('real History, failed Session rollback, fresh Save/Load, Export and Generat
   await expect(field).toHaveValue('[PRIVATE_DRAFT_SENTINEL');
   // Save and fresh Load must carry only the accepted rule and current Result.
   const downloaded = page.waitForEvent('download');
-  await page.evaluate(() => window.__GBDRAW_APP__.saveSessionWithTitle());
+  await evaluateWithRetainedPromise(page, () => window.__GBDRAW_APP__.saveSessionWithTitle());
   const sessionPath = await (await downloaded).path();
   const bytes = readFileSync(sessionPath);
   const document = JSON.parse((bytes[0] === 0x1f ? gunzipSync(bytes) : bytes).toString());

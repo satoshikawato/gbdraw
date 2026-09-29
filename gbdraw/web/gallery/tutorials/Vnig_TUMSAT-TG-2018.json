@@ -348,7 +348,11 @@
             "actions": [
               {
                 "type": "evaluate",
-                "script": "document.querySelector('.preview-feature-search')?.style.setProperty('display', 'none', 'important'); const app = window.__GBDRAW_APP__; if (app) { app.resultPanelTab = 'preview'; app.zoom = 1.25; if (app.svgContainer) app.svgContainer.style.transform = 'translate(-80px, -40px) scale(1.25)'; }"
+                "script": "document.querySelector('.preview-feature-search')?.style.setProperty('display', 'none', 'important'); document.querySelector('.drawer-toggle')?.style.setProperty('display', 'none', 'important'); const app = window.__GBDRAW_APP__; if (app) { app.resultPanelTab = 'preview'; app.zoom = 1.25; if (app.canvasPan) { app.canvasPan.x = -613; app.canvasPan.y = 130; } }"
+              },
+              {
+                "type": "wait",
+                "ms": 500
               },
               {
                 "type": "waitForFunction",
@@ -364,7 +368,7 @@
               },
               {
                 "type": "evaluate",
-                "script": "const app = window.__GBDRAW_APP__; if (app?.clickedFeature) app.clickedFeature.activeTab = 'details'; if (app?.clickedFeaturePos) { app.clickedFeaturePos.x = 620; app.clickedFeaturePos.y = 260; }"
+                "script": "const app = window.__GBDRAW_APP__; const target = document.querySelector(\"[data-gbdraw-feature-id='f61c7abf7']\"); const rect = target?.getBoundingClientRect(); if (app?.clickedFeature) app.clickedFeature.activeTab = 'details'; if (app?.clickedFeaturePos && rect) { app.clickedFeaturePos.x = Math.min(window.innerWidth - 732, Math.round(rect.right + 32)); app.clickedFeaturePos.y = 260; }"
               }
             ],
             "clipSelectors": ["[data-gbdraw-feature-id='f61c7abf7']", ".feature-popup"],
@@ -372,9 +376,10 @@
               "top": 24,
               "right": 24,
               "bottom": 24,
-              "left": 24
+              "left": 100
             },
-            "waitForSelector": ".feature-popup"
+            "waitForSelector": ".feature-popup",
+            "highlightSelector": "[data-gbdraw-feature-id='f61c7abf7']"
           }
         }
       ]

@@ -478,11 +478,12 @@ that value. Evidence scope controls the search expansion, not which record
 pairs receive displayed links.
 
 **Advanced comparison and layout** is closed by default and appears after
-**Generate Diagram** in the DOM. It owns **Record Layout**, LOSAT
-**Execution**, thread allocation, cache controls, and advanced Collinear
-search details. Its **Raw LOSAT results** section groups each pair's filename,
-retained-artifact status, and **Save Raw LOSAT TSV** action. Closing any of
-these disclosures does not disable comparison work or discard its values.
+**Generate Diagram** in the DOM. It owns **Record Layout**, cache controls,
+and advanced Collinear search details. Its **Raw LOSAT results** section
+groups each pair's filename, retained-artifact status, and **Save Raw LOSAT
+TSV** action. LOSAT **Execution** and thread allocation are in **Settings**
+under **Runtime and reproducibility**. Closing any of these disclosures does
+not disable comparison work or discard its values.
 
 TLOSATX translates each sequence with its selected genetic code. In Linear
 mode, each card's **Gencode (this entry)** control, with accessible name

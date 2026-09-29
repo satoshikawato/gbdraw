@@ -1,7 +1,7 @@
 const { test, expect } = require('@playwright/test');
 const { readFileSync } = require('node:fs');
 const { gunzipSync } = require('node:zlib');
-const { openApp } = require('./helpers/app-lifecycle.cjs');
+const { evaluateWithRetainedPromise, openApp } = require('./helpers/app-lifecycle.cjs');
 
 const fixture = (name = 'HmmtDNA_basic_circular') => ({
   name: `${name}.gbdraw-session.json`, mimeType: 'application/json',
@@ -250,7 +250,7 @@ test('Generate rejects Save and Load from processing publication through settlem
 
 test('teardown releases pending and canceled Save cannot download or clear a newer operation', async ({ page }) => {
   await setup(page);
-  const outcome = await page.evaluate(async () => {
+  const outcome = await evaluateWithRetainedPromise(page, async () => {
     const service = await import('/gbdraw/web/js/services/config.js');
     const { state } = await import('/gbdraw/web/js/state.js');
     let release;
@@ -327,7 +327,7 @@ test('uncataloged multi-record draft Save prepares records privately without exp
     } };
     window.draftSave = app.saveSessionWithTitle();
   }, text);
-  expect((await page.evaluate(async () => await window.draftSave)).status).toBe('saved');
+  expect((await evaluateWithRetainedPromise(page, async () => await window.draftSave)).status).toBe('saved');
   const file = info.outputPath('private-draft.json.gz');
   await (await download).saveAs(file);
   const saved = JSON.parse(gunzipSync(readFileSync(file)));

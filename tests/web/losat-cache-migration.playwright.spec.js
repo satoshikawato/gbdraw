@@ -9,6 +9,7 @@ const {
 const { tmpdir } = require('node:os');
 const { join, resolve } = require('node:path');
 const { gunzipSync } = require('node:zlib');
+const { evaluateWithRetainedPromise } = require('./helpers/app-lifecycle.cjs');
 
 const repoRoot = resolve(process.env.GBDRAW_REPO || process.cwd());
 const fixtureDir = join(repoRoot, 'tests', 'fixtures', 'sessions');
@@ -50,7 +51,7 @@ const importSession = async (page, path) => {
 
 const saveSession = async (page) => {
   const downloadPromise = page.waitForEvent('download', { timeout: 120000 });
-  const outcome = await page.evaluate(async () => ({
+  const outcome = await evaluateWithRetainedPromise(page, async () => ({
     result: await window.__GBDRAW_APP__.saveSessionWithTitle(),
     errorLog: window.__GBDRAW_APP__.errorLog
   }));

@@ -34,16 +34,18 @@ dev と main を `git archive` で `$S00_BASELINE_DIR=/home/kawato/gbdraw-baseli
 
 2026-09-29: dev の threaded LOSATP test の間欠失敗を調べた。原因は navigation ではなく、`evaluate` で await した Save の promise を V8 inspector が回収した「Promise was collected」だった。blob URL の revoke を遅らせる案は効果がなく採らなかった。test の Save を button の click と download の待機に変え、局所 36 回が passed。結果は results/S07.md 第 12.4 節。commit title: "Save through the Save Session button in the threaded LOSATP test"。
 
+2026-09-30: 残余項目を 3 つの sub-agent で対応した。browser test の Save を保持型の await にした（5308ae08）。Gallery の popup recipe 7 件を `app.canvasPan` にして再取得した（198443d0）。docs capture の H-GUI-02・H-GUI-06・T-GUI-08 を直して再生成し、462 と 500 の差が 65f231af の意図した既定値変更だと確かめた（d6d2aa87）。threaded LOSATP の 25 job が停止する app の不具合を見つけ、H-GUI-08 は未再生成。結果は results/S07.md 第 12.5 節。
+
 | Session | 状態 | 証拠・次の条件 |
 | --- | --- | --- |
 | S00 | 完了（証拠採取のみ） | commit d7fbe23b（証拠）、9b671081（Owner 判断）。[results/S00.md](results/S00.md)。開始 a351c01d、dev 57cef3ba・main 4556e04e の snapshot/wheel、性能 baseline、G03/G06/G07 再現、R01/R02 範囲。旧 Session 方針と receipt 文言は第 11.4 節で取得済み。commit SHA は次セッションで追記 |
-| S01 | commit 済み・dev 未反映 | commit 19c9c939。[results/S01.md](results/S01.md)。docs-only。base checker で Gate PASS・Review REQUIRED。dev 取り込みは push/merge 承認待ち |
-| S02 | commit 済み・dev 未反映 | commit 9e7a056f。[results/S02.md](results/S02.md)。checker＋fixture のみ。S01 未 merge のため S01 commit を base に局所検証。PR は S01 の dev 取り込み後 |
-| S03 | commit 済み・dev 未反映 | commit 3bd092af。[results/S03.md](results/S03.md)。PR #641 を merge（70bca139）後に実装。Pending と表示専用 intent を除去し、PD-OI-037/049 を co-change で revision 2 にした。CW-01〜04 の自動検証と変異 3 件を検出。性能は全操作が提案予算内 |
-| S04 | commit 済み・dev 未反映 | commit 2e0fdfba（follow-up 636d09f2）。[results/S04.md](results/S04.md)。S03（3bd092af）の上。判断 1〜3 を既存 mode-profiles・config・projection・publication の owner で実装。v41/v44 Vnig の受入と Save→fresh Load・拒否 Load を確認。#641 由来の既存 browser 失敗 4 件を特定（S07 へ）。Gallery 再生成は S07 |
-| S05 | commit 済み・dev 未反映 | commit f04c599a。[results/S05.md](results/S05.md)。S04 の上。直接 edge を committed orthogroup resource から Worker adapter へ渡し、CLI と束縛 helper を共有。#641 の recipe-only 確定を撤回して新規 LOSATP 後の Align と record rotation を回復。Review・inspector の名前を共有 helper へ。実 Gallery と新規 LOSATP で livA→racM、parA→racL を確認 |
-| S06 | commit 済み・dev 未反映 | commit f4a59295。[results/S06.md](results/S06.md)。S05 と S04 follow-up（636d09f2）の上。Contract revision 28（PD-OI-024 rev 3、PD-OI-054 rev 2）を co-change。Editor を Preview 上端から開き検索は残り幅（最大 39.5rem）。Align/Review を同じ行へ。2 つの常時説明を help-tip へ、Current 状態と要約を削除して `aria-pressed`。docs・capture の screenshot 再生成は S07 |
-| S07 | commit 済み・dev 未反映（settlement 予算 1 行の未達は Owner が受容） | [results/S07.md](results/S07.md)。commit d728fc3f・690c610f・8051e545・ac55a72a・e8c0d7e1 と結果記録。統合 journey、S00 harness（1 行を除き予算内）、CW 変異 2 件検出、Gallery・docs の再生成。PR は S01 → S02 → #641 → S03〜S07 の順（第 9 節） |
+| S01 | 完了・dev 反映済み（#642、aeec0efb） | commit 19c9c939。[results/S01.md](results/S01.md)。docs-only。base checker で Gate PASS・Review REQUIRED |
+| S02 | 完了・dev 反映済み（#643、b4268221） | commit 9e7a056f。[results/S02.md](results/S02.md)。checker＋fixture のみ。S01 未 merge のため S01 commit を base に局所検証 |
+| S03 | 完了・dev 反映済み（#644、0db698a9） | commit 3bd092af。[results/S03.md](results/S03.md)。PR #641 を merge（70bca139）後に実装。Pending と表示専用 intent を除去し、PD-OI-037/049 を co-change で revision 2 にした。CW-01〜04 の自動検証と変異 3 件を検出。性能は全操作が提案予算内 |
+| S04 | 完了・dev 反映済み（#644、0db698a9） | commit 2e0fdfba（follow-up 636d09f2）。[results/S04.md](results/S04.md)。S03（3bd092af）の上。判断 1〜3 を既存 mode-profiles・config・projection・publication の owner で実装。v41/v44 Vnig の受入と Save→fresh Load・拒否 Load を確認。#641 由来の既存 browser 失敗 4 件を特定（S07 へ）。Gallery 再生成は S07 |
+| S05 | 完了・dev 反映済み（#644、0db698a9） | commit f04c599a。[results/S05.md](results/S05.md)。S04 の上。直接 edge を committed orthogroup resource から Worker adapter へ渡し、CLI と束縛 helper を共有。#641 の recipe-only 確定を撤回して新規 LOSATP 後の Align と record rotation を回復。Review・inspector の名前を共有 helper へ。実 Gallery と新規 LOSATP で livA→racM、parA→racL を確認 |
+| S06 | 完了・dev 反映済み（#644、0db698a9） | commit f4a59295。[results/S06.md](results/S06.md)。S05 と S04 follow-up（636d09f2）の上。Contract revision 28（PD-OI-024 rev 3、PD-OI-054 rev 2）を co-change。Editor を Preview 上端から開き検索は残り幅（最大 39.5rem）。Align/Review を同じ行へ。2 つの常時説明を help-tip へ、Current 状態と要約を削除して `aria-pressed`。docs・capture の screenshot 再生成は S07 |
+| S07 | 完了・dev 反映済み（#644、0db698a9。追加修正 #645、e2482f93。settlement 予算 1 行の未達は Owner が受容） | [results/S07.md](results/S07.md)。commit d728fc3f・690c610f・8051e545・ac55a72a・e8c0d7e1 と結果記録。統合 journey、S00 harness（1 行を除き予算内）、CW 変異 2 件検出、Gallery・docs の再生成。PR は S01 → S02 → #641 → S03〜S07 の順で merge（第 9 節・第 12.3 節）。dev の間欠失敗の修正は第 12.4 節 |
 
 各セッション終了時に、結果文書へのリンク、実際のSHA、検証結果、次の条件をこの表へ反映する。
 完了したcommitのSHAは次のセッションで追記してよい。自分自身のcommit SHAを文書へ埋め込むためのamendを繰り返さない。

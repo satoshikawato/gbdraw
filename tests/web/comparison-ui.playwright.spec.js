@@ -1,6 +1,7 @@
 const { test, expect } = require('@playwright/test');
 const { readFileSync } = require('node:fs');
 const { gunzipSync } = require('node:zlib');
+const { evaluateWithRetainedPromise } = require('./helpers/app-lifecycle.cjs');
 
 const bgcSessionPath = 'tests/test_inputs/BGC0000708-BGC0000713.gbdraw-session.json';
 
@@ -618,7 +619,7 @@ test('preserved imported comparison generates only after explicit inheritance', 
   expect(generated.undoCount).toBe(imported.undoCount + 2);
 
   const downloadPromise = page.waitForEvent('download');
-  expect(await page.evaluate(() => window.__GBDRAW_APP__.saveSessionWithTitle()))
+  expect(await evaluateWithRetainedPromise(page, () => window.__GBDRAW_APP__.saveSessionWithTitle()))
     .toMatchObject({ status: 'saved' });
   const download = await downloadPromise;
   const savedSession = JSON.parse(
@@ -1042,7 +1043,7 @@ test('comparison controls drive appearance and current Session round trips', { t
     app.sessionTitle = 'ui04-comparison-controls';
   });
   const sessionDownloadPromise = page.waitForEvent('download', { timeout: 180000 });
-  const saveResult = await page.evaluate(() => (
+  const saveResult = await evaluateWithRetainedPromise(page, () => (
     window.__GBDRAW_APP__.saveSessionWithTitle()
   ));
   expect(saveResult).toMatchObject({ status: 'saved' });

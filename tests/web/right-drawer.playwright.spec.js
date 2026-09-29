@@ -984,7 +984,7 @@ test('adjacent Collinear mixed groups remain selectable after current-session sa
   };
   const before = await verifyGroups();
   const downloadPromise = page.waitForEvent('download');
-  await page.evaluate(async () => {
+  await evaluateWithRetainedPromise(page, async () => {
     window.__GBDRAW_APP__.sessionTitle = 'issue460-round-trip';
     await window.__GBDRAW_APP__.saveSessionWithTitle();
   });

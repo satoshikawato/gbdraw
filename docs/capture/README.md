@@ -13,7 +13,12 @@ Each scenario uses a fresh browser context and blocks every request that does
 not target its temporary loopback server. The flows do not seed browser
 storage, change biological record boundaries, or contact a remote service.
 T-GUI-08 and H-GUI-08 upload all five Hepatoplasmataceae records and execute
-their LOSATP Collinear searches from an empty cache. H-GUI-14 reloads only the
+their LOSATP Collinear searches from an empty cache. They select **Infer
+orthogroups with self-comparisons** and clear **Max target seqs**, matching the
+Gallery request and the CLI/Python recipes. Fresh Web Collinear settings cap raw
+hits at `5` and leave inference off; without inference the runs execute 8 or 20
+searches instead of 13 or 25 and draw 462 instead of 500 Collinear match
+elements. H-GUI-14 reloads only the
 current-format session downloaded earlier in the same raw-input journey, and
 it does so in a fresh context. Multi-record Circular examples contain
 unchanged complete natural records. Lambda comparisons use complete Lambda and

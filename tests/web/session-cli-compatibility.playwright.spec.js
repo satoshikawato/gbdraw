@@ -5,7 +5,7 @@ const { createHash } = require('node:crypto');
 const { gunzipSync } = require('node:zlib');
 const { execFile } = require('node:child_process');
 const { promisify } = require('node:util');
-const { openApp, generateAndWaitForResult } = require('./helpers/app-lifecycle.cjs');
+const { evaluateWithRetainedPromise, openApp, generateAndWaitForResult } = require('./helpers/app-lifecycle.cjs');
 
 const root = process.cwd();
 const mito = path.join(root, 'tests/fixtures/sessions/cli-web-mito.gb');
@@ -150,7 +150,7 @@ for (const entry of cases) {
         expect(await run.page.evaluate(svgSemantics, await fs.readFile(exported, 'utf8'))).toEqual(generatedSvg);
         if (phase === 'cli-replay') {
           const saved = run.page.waitForEvent('download');
-          const outcome = await run.page.evaluate(async () => await window.__GBDRAW_APP__.saveSessionWithTitle());
+          const outcome = await evaluateWithRetainedPromise(run.page, async () => await window.__GBDRAW_APP__.saveSessionWithTitle());
           expect(outcome.status).toBe('saved');
           webFile = testInfo.outputPath('web-current.gbdraw-session.json.gz');
           await (await saved).saveAs(webFile);

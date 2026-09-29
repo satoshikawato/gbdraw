@@ -2,7 +2,7 @@ const { test, expect } = require('@playwright/test');
 const { readFileSync } = require('node:fs');
 const { join, resolve } = require('node:path');
 const { gunzipSync } = require('node:zlib');
-const { openApp } = require('./helpers/app-lifecycle.cjs');
+const { evaluateWithRetainedPromise, openApp } = require('./helpers/app-lifecycle.cjs');
 
 const repoRoot = resolve(process.env.GBDRAW_REPO || process.cwd());
 const genbankPath = join(repoRoot, 'tests', 'test_inputs', 'HmmtDNA.gbk');
@@ -436,7 +436,7 @@ const dragCompositionRole = async (page, role, dx, dy) => {
 
 const saveSession = async (page) => {
   const downloadPromise = page.waitForEvent('download', { timeout: 120000 });
-  const outcome = await page.evaluate(async () => ({
+  const outcome = await evaluateWithRetainedPromise(page, async () => ({
     result: await window.__GBDRAW_APP__.saveSessionWithTitle(),
     errorLog: window.__GBDRAW_APP__.errorLog
   }));

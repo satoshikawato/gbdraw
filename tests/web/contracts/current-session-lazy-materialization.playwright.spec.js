@@ -4,6 +4,7 @@ const { readFileSync, writeFileSync } = require('node:fs');
 const { join, resolve } = require('node:path');
 const { gunzipSync } = require('node:zlib');
 const {
+  evaluateWithRetainedPromise,
   getDiagramWorkerActivity,
   openApp
 } = require('../helpers/app-lifecycle.cjs');
@@ -307,7 +308,7 @@ test('synthetic current session restores and exports without materializing resou
     window.__GBDRAW_APP__.sessionTitle = 'lazy-unchanged-export';
   });
   const downloadPromise = page.waitForEvent('download', { timeout: 120_000 });
-  const saved = await page.evaluate(() => window.__GBDRAW_APP__.saveSessionWithTitle());
+  const saved = await evaluateWithRetainedPromise(page, () => window.__GBDRAW_APP__.saveSessionWithTitle());
   expect(saved.status).toBe('saved');
   const download = await downloadPromise;
   const exported = JSON.parse(gunzipSync(readFileSync(await download.path())).toString('utf8'));
@@ -1144,7 +1145,7 @@ test('a frozen v39 session round-trips through the legacy migration path', async
   }));
   expect(regenerated.result, JSON.stringify(regenerated.errorLog)).toEqual({ status: 'ok' });
   const downloadPromise = page.waitForEvent('download', { timeout: 120_000 });
-  const saveOutcome = await page.evaluate(async () => {
+  const saveOutcome = await evaluateWithRetainedPromise(page, async () => {
     const result = await window.__GBDRAW_APP__.saveSessionWithTitle();
     return {
       result,

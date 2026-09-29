@@ -1,7 +1,7 @@
 const { test, expect } = require('@playwright/test');
 const { readFileSync } = require('node:fs');
 const { join, resolve } = require('node:path');
-const { openApp } = require('./helpers/app-lifecycle.cjs');
+const { evaluateWithRetainedPromise, openApp } = require('./helpers/app-lifecycle.cjs');
 
 const repoRoot = resolve(process.env.GBDRAW_REPO || process.cwd());
 const genbankPath = join(repoRoot, 'tests/test_inputs/HmmtDNA.gbk');
@@ -295,7 +295,7 @@ test('Arrow controls render in both modes and survive a session round trip', asy
     window.__GBDRAW_APP__.sessionTitle = 'arrow-browser-round-trip';
   });
   const sessionDownloadPromise = page.waitForEvent('download', { timeout: 120000 });
-  expect((await page.evaluate(() => window.__GBDRAW_APP__.saveSessionWithTitle())).status)
+  expect((await evaluateWithRetainedPromise(page, () => window.__GBDRAW_APP__.saveSessionWithTitle())).status)
     .toBe('saved');
   const sessionPath = await (await sessionDownloadPromise).path();
 
