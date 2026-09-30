@@ -3717,20 +3717,20 @@
                             <section aria-labelledby="plot-title-settings-heading" class="space-y-2">
                                 <h4 id="plot-title-settings-heading" class="text-[11px] font-bold text-slate-600">Plot Title</h4>
                                 <div>
-                                    <label class="input-label text-[10px] mb-1">
+                                    <span class="input-label text-[10px] mb-1">
                                         Text
-                                        <help-tip :text="mode === 'circular'
+                                        <help-tip id="help-title-text" :text="mode === 'circular'
                                             ? 'Optional circular plot title used when the title position is Top or Bottom. Leave blank to use the default species + strain title.'
                                             : 'Global title shown once for the whole linear plot.'"></help-tip>
-                                    </label>
+                                    </span>
                                     <auto-value-field :visible="autoValueVisible(form.plot_title, 'plotTitle')" :text="autoValueText('plotTitle')">
-                                        <input type="text" v-model="form.plot_title" class="form-input form-input-compact auto-value-input" aria-label="Plot Title" :placeholder="mode === 'circular' ? '' : 'Optional plot title'" :disabled="!semanticMutationAvailable">
+                                        <input type="text" v-model="form.plot_title" class="form-input form-input-compact auto-value-input" aria-label="Plot Title" aria-describedby="help-title-text" :placeholder="mode === 'circular' ? '' : 'Optional plot title'" :disabled="!semanticMutationAvailable">
                                     </auto-value-field>
                                 </div>
                                 <div class="grid grid-cols-2 gap-1.5">
                                     <div>
-                                        <label class="input-label text-[10px] mb-1">Position <help-tip :text="mode === 'circular' ? 'Placement of the shared circular plot title. Per-record center labels stay in place.' : 'Placement of the linear plot title.'"></help-tip></label>
-                                        <select v-model="adv.plot_title_position" class="form-input text-xs py-1" aria-label="Plot Title Position" :disabled="!semanticMutationAvailable">
+                                        <span class="input-label text-[10px] mb-1">Position <help-tip id="help-title-position" :text="mode === 'circular' ? 'Placement of the shared circular plot title. Per-record center labels stay in place.' : 'Placement of the linear plot title.'"></help-tip></span>
+                                        <select v-model="adv.plot_title_position" class="form-input text-xs py-1" aria-label="Plot Title Position" aria-describedby="help-title-position" :disabled="!semanticMutationAvailable">
                                             <option v-if="mode === 'circular'" value="none">None (Default)</option>
                                             <option v-if="mode === 'linear'" value="center">Center</option>
                                             <option value="top">Top</option>
@@ -3738,22 +3738,25 @@
                                         </select>
                                     </div>
                                     <div>
-                                        <label class="input-label text-[10px] mb-0">Font size <help-tip :text="mode === 'circular' ? 'Font size for the circular shared plot title. Only used when the title position is Top or Bottom.' : 'Font size for the linear plot title.'"></help-tip></label>
-                                        <input type="number" :value="optionalNumberInputValue(adv.plot_title_font_size)" @input="setOptionalNumberInputValue(adv, 'plot_title_font_size', $event.target.value)" class="form-input form-input-compact" placeholder="Auto (32)" aria-label="Plot Title Font Size">
+                                        <span class="input-label text-[10px] mb-0">Font size <help-tip id="help-title-font-size" :text="mode === 'circular' ? 'Font size for the circular shared plot title. Only used when the title position is Top or Bottom.' : 'Font size for the linear plot title.'"></help-tip></span>
+                                        <input type="number" :value="optionalNumberInputValue(adv.plot_title_font_size)" @input="setOptionalNumberInputValue(adv, 'plot_title_font_size', $event.target.value)" class="form-input form-input-compact" placeholder="Auto (32)" aria-label="Plot Title Font Size" aria-describedby="help-title-font-size">
                                     </div>
                                 </div>
-                                <label v-if="mode === 'circular' && adv.plot_title_position !== 'none'" class="option-label flex items-center gap-2 text-xs text-slate-700 cursor-pointer select-none">
-                                    <input type="checkbox" v-model="adv.keep_full_definition_with_plot_title" class="form-checkbox" :disabled="!semanticMutationAvailable">
-                                    <span class="inline-flex items-center gap-1">Keep Full Definition with Plot Title <help-tip text="Circular only. Keeps species and strain in the center label when a plot title is shown, including shared multi-record canvases."></help-tip></span>
-                                </label>
+                                <div v-if="mode === 'circular' && adv.plot_title_position !== 'none'" class="flex items-center text-xs">
+                                    <label class="option-label flex items-center gap-2 text-xs text-slate-700 cursor-pointer select-none">
+                                        <input type="checkbox" v-model="adv.keep_full_definition_with_plot_title" aria-describedby="help-title-keep-full-definition-with-plot-title" class="form-checkbox" :disabled="!semanticMutationAvailable">
+                                        <span>Keep Full Definition with Plot Title</span>
+                                    </label>
+                                    <help-tip id="help-title-keep-full-definition-with-plot-title" text="Circular only. Keeps species and strain in the center label when a plot title is shown, including shared multi-record canvases."></help-tip>
+                                </div>
                             </section>
 
                             <section aria-labelledby="record-label-settings-heading" class="space-y-2 border-t border-slate-200 pt-3">
                                 <h4 id="record-label-settings-heading" class="text-[11px] font-bold text-slate-600">Record Labels</h4>
                                 <div>
-                                    <label class="input-label text-[10px] mb-0">Default font size <help-tip text="Font size for record-label text (species/strain in circular; organism/replicon/accession/length stack in linear)."></help-tip></label>
+                                    <span class="input-label text-[10px] mb-0">Default font size <help-tip id="help-title-default-font-size" text="Font size for record-label text (species/strain in circular; organism/replicon/accession/length stack in linear)."></help-tip></span>
                                     <auto-value-field :visible="autoValueVisible(adv.def_font_size, 'definitionFontSize')" :text="autoValueText('definitionFontSize')">
-                                        <input type="number" :value="optionalNumberInputValue(adv.def_font_size)" @input="setOptionalNumberInputValue(adv, 'def_font_size', $event.target.value)" class="form-input form-input-compact auto-value-input" aria-label="Default font size">
+                                        <input type="number" :value="optionalNumberInputValue(adv.def_font_size)" @input="setOptionalNumberInputValue(adv, 'def_font_size', $event.target.value)" class="form-input form-input-compact auto-value-input" aria-label="Default font size" aria-describedby="help-title-default-font-size">
                                     </auto-value-field>
                                 </div>
 
@@ -3807,8 +3810,8 @@
                         <summary aria-label="Legend settings"><i class="ph ph-list-bullets"></i> Legend · {{ legendPositionLabel(form.legend) }} <help-tip text="Adjust legend position and typography."></help-tip></summary>
                         <div class="mt-2 space-y-3 pt-2 border-t border-slate-200">
                             <div>
-                                <label for="legend-position" class="input-label text-[10px] mb-1">Position <help-tip text="Position of the legend. 'None' hides the legend."></help-tip></label>
-                                <select id="legend-position" v-model="form.legend" class="form-input text-xs py-1" aria-label="Legend position" :disabled="!semanticMutationAvailable">
+                                <span class="input-label text-[10px] mb-1"><label for="legend-position">Position</label> <help-tip id="help-legend-position" text="Position of the legend. 'None' hides the legend."></help-tip></span>
+                                <select id="legend-position" v-model="form.legend" class="form-input text-xs py-1" aria-label="Legend position" aria-describedby="help-legend-position" :disabled="!semanticMutationAvailable">
                                     <option value="right">Right</option>
                                     <option value="left">Left</option>
                                     <option value="top">Top</option>
@@ -3822,15 +3825,15 @@
                             </div>
                             <div class="grid grid-cols-2 gap-1.5">
                                 <div>
-                                    <label class="input-label text-[10px]">Swatch size <help-tip text="Size of the color boxes in the legend."></help-tip></label>
+                                    <span class="input-label text-[10px]">Swatch size <help-tip id="help-legend-swatch-size" text="Size of the color boxes in the legend."></help-tip></span>
                                     <auto-value-field :visible="autoValueVisible(adv.legend_box_size, 'legendBoxSize')" :text="autoValueText('legendBoxSize')">
-                                        <input type="number" v-model.number="adv.legend_box_size" class="form-input form-input-compact auto-value-input" aria-label="Legend swatch size" :disabled="!semanticMutationAvailable">
+                                        <input type="number" v-model.number="adv.legend_box_size" class="form-input form-input-compact auto-value-input" aria-label="Legend swatch size" aria-describedby="help-legend-swatch-size" :disabled="!semanticMutationAvailable">
                                     </auto-value-field>
                                 </div>
                                 <div>
-                                    <label class="input-label text-[10px]">Font size <help-tip text="Font size for the legend text."></help-tip></label>
+                                    <span class="input-label text-[10px]">Font size <help-tip id="help-legend-font-size" text="Font size for the legend text."></help-tip></span>
                                     <auto-value-field :visible="autoValueVisible(adv.legend_font_size, 'legendFontSize')" :text="autoValueText('legendFontSize')">
-                                        <input type="number" v-model.number="adv.legend_font_size" class="form-input form-input-compact auto-value-input" aria-label="Legend font size" :disabled="!semanticMutationAvailable">
+                                        <input type="number" v-model.number="adv.legend_font_size" class="form-input form-input-compact auto-value-input" aria-label="Legend font size" aria-describedby="help-legend-font-size" :disabled="!semanticMutationAvailable">
                                     </auto-value-field>
                                 </div>
                             </div>
@@ -3844,11 +3847,11 @@
                         <div class="mt-2 space-y-3 pt-2 border-t border-slate-200">
                             <div class="bg-blue-50/60 border border-blue-200 rounded-lg p-3">
                                 <div class="flex items-center justify-between mb-2">
-                                    <h4 class="text-[11px] font-bold text-slate-600">PRESET SCHEMES <help-tip text="Applies both default colors (-d) and specific rules (-t)."></help-tip></h4>
+                                    <h4 class="text-[11px] font-bold text-slate-600" aria-label="PRESET SCHEMES">PRESET SCHEMES <help-tip id="help-colors-preset-schemes" text="Applies both default colors (-d) and specific rules (-t)."></help-tip></h4>
                                     <span class="text-[9px] font-semibold text-blue-600">Affects -d &amp; -t</span>
                                 </div>
                                 <div class="flex items-center gap-2">
-                                    <select v-model="selectedSpecificPreset" class="form-input text-xs h-7 flex-grow bg-white">
+                                    <select v-model="selectedSpecificPreset" aria-label="Preset scheme" aria-describedby="help-colors-preset-schemes" class="form-input text-xs h-7 flex-grow bg-white">
                                         <option disabled value="">Select preset...</option>
                                         <option v-for="p in specificRulePresets" :value="p.id">{{ p.label }}</option>
                                     </select>
@@ -3863,15 +3866,17 @@
 
                             <div>
                                 <div class="flex justify-between items-center mb-2">
-                                    <h4 class="text-[11px] font-bold text-slate-500">DEFAULT COLORS <help-tip text="Base colors for features, comparison tracks, and collinear blocks. The selected palette supplies unchanged colors; colors you edit override it."></help-tip></h4>
+                                    <h4 class="text-[11px] font-bold text-slate-500" aria-label="DEFAULT COLORS">DEFAULT COLORS <help-tip text="Base colors for features, comparison tracks, and collinear blocks. The selected palette supplies unchanged colors; colors you edit override it."></help-tip></h4>
                                     <button @click="resetColors" class="text-[10px] text-blue-600 hover:underline" :disabled="!semanticMutationAvailable">Reset</button>
                                 </div>
                                 <div class="mb-2 p-2 bg-slate-50 rounded border border-slate-200 space-y-1.5">
-                                    <label class="flex items-center gap-2 text-[10px] font-medium text-slate-600 cursor-pointer">
-                                        <input v-model="paletteInstantPreviewEnabled" type="checkbox" class="rounded border-slate-300 text-blue-600 focus:ring-blue-500" :disabled="!semanticMutationAvailable">
-                                        <span>Palette instant preview</span>
-                                        <help-tip text="When off, changing the palette only updates the swatches. The preview keeps the current palette until you click Generate Diagram."></help-tip>
-                                    </label>
+                                    <div class="flex items-center gap-2 text-[10px]">
+                                        <label class="flex items-center gap-2 text-[10px] font-medium text-slate-600 cursor-pointer">
+                                            <input v-model="paletteInstantPreviewEnabled" type="checkbox" aria-describedby="help-colors-palette-instant-preview" class="rounded border-slate-300 text-blue-600 focus:ring-blue-500" :disabled="!semanticMutationAvailable">
+                                            <span>Palette instant preview</span>
+                                        </label>
+                                        <help-tip id="help-colors-palette-instant-preview" text="When off, changing the palette only updates the swatches. The preview keeps the current palette until you click Generate Diagram."></help-tip>
+                                    </div>
                                     <div v-if="hasPendingPaletteDraft" class="text-[9px] text-amber-700 bg-amber-50 border border-amber-200 rounded px-2 py-1">
                                         Palette <span class="font-semibold">{{ pendingPaletteName }}</span> is queued for the next Generate. This notice covers palette selection only.
                                     </div>
@@ -3895,13 +3900,13 @@
                                 <div class="mt-2 p-2 bg-slate-50 rounded border border-slate-200 flex gap-2 items-end">
                                     <div class="flex-grow">
                                         <label class="text-[9px] font-bold text-slate-500 block mb-1">ADD KEY</label>
-                                        <select v-model="newColorFeat" class="form-input text-xs py-1 px-2 h-8">
+                                        <select v-model="newColorFeat" aria-label="Add key" class="form-input text-xs py-1 px-2 h-8">
                                             <option v-for="k in defaultColorKeys" :value="k">{{ k }}</option>
                                         </select>
                                     </div>
                                     <div>
                                         <label class="text-[9px] font-bold text-slate-500 block mb-1">COLOR</label>
-                                        <input type="color" v-model="newColorVal" class="h-8 w-10 p-0 border border-slate-300 rounded cursor-pointer">
+                                        <input type="color" v-model="newColorVal" aria-label="Add key color" class="h-8 w-10 p-0 border border-slate-300 rounded cursor-pointer">
                                     </div>
                                     <button @click.prevent="addCustomColor" class="btn btn-secondary text-xs h-8" :disabled="!semanticMutationAvailable">
                                         <i class="ph ph-plus"></i> Add
@@ -3920,7 +3925,7 @@
                             <div data-history-managed>
                                 <p v-if="ruleMatchingPending" role="status" class="text-xs text-slate-500">Checking color rules…</p>
                                 <div class="flex items-center justify-between mb-2">
-                                    <h4 class="text-[11px] font-bold text-slate-500">SPECIFIC RULES (-t) <help-tip text="Color features matching qualifier values with case-insensitive Python regex. Examples: (?i)NADH and (?P&lt;name&gt;NADH). Choose a suggested qualifier or type any qualifier name."></help-tip></h4>
+                                    <h4 class="text-[11px] font-bold text-slate-500" aria-label="SPECIFIC RULES (-t)">SPECIFIC RULES (-t) <help-tip text="Color features matching qualifier values with case-insensitive Python regex. Examples: (?i)NADH and (?P&lt;name&gt;NADH). Choose a suggested qualifier or type any qualifier name."></help-tip></h4>
                                     <div v-if="manualSpecificRules.length > 0" class="flex items-center gap-2">
                                         <button @click="downloadSpecificRulesTsv" class="text-[10px] text-blue-600 hover:text-blue-700 hover:underline"><i class="ph ph-download-simple"></i> TSV</button>
                                         <button @click="clearAllSpecificRules" class="text-[10px] text-red-500 hover:text-red-700 hover:underline" :disabled="!semanticMutationAvailable"><i class="ph ph-trash"></i> Clear All</button>
@@ -3935,11 +3940,11 @@
                                 <div class="space-y-1 mb-3">
                                     <div v-for="(rule, i) in manualSpecificRules" :key="specificRulePatternFieldId(rule)" data-color-rule-row class="bg-white p-1.5 rounded border border-slate-200 text-[10px] space-y-1">
                                         <div class="grid grid-cols-12 gap-1 items-center">
-                                            <select :value="rule.feat" @change="setSpecificRuleField(i, 'feat', $event.target.value, $event.target)" class="form-input form-input-compact col-span-4" :disabled="!semanticMutationAvailable">
+                                            <select :value="rule.feat" @change="setSpecificRuleField(i, 'feat', $event.target.value, $event.target)" :aria-label="`Color rule ${i + 1} feature type`" class="form-input form-input-compact col-span-4" :disabled="!semanticMutationAvailable">
                                                 <option v-for="k in featureKeys" :value="k">{{ k }}</option>
                                             </select>
                                             <input :value="rule.qual" @change="setSpecificRuleField(i, 'qual', $event.target.value, $event.target)" list="specific-rule-qualifier-options" placeholder="Qualifier (choose or type)" aria-label="Qualifier name" class="form-input form-input-compact col-span-4" :disabled="!semanticMutationAvailable">
-                                            <input type="color" :value="rule.color" @change="setSpecificRuleField(i, 'color', $event.target.value, $event.target)" class="h-6 w-full p-0 border rounded cursor-pointer col-span-1" :disabled="!semanticMutationAvailable">
+                                            <input type="color" :value="rule.color" @change="setSpecificRuleField(i, 'color', $event.target.value, $event.target)" :aria-label="`Color rule ${i + 1} color`" class="h-6 w-full p-0 border rounded cursor-pointer col-span-1" :disabled="!semanticMutationAvailable">
                                             <div class="col-span-3 flex items-center justify-end gap-0.5">
                                                 <button @click="moveSpecificRuleUp(i)" :disabled="!semanticMutationAvailable || (i === 0)" class="h-6 w-6 text-slate-500 hover:text-blue-600 disabled:opacity-30" title="Move rule up"><i class="ph ph-arrow-up"></i></button>
                                                 <button @click="moveSpecificRuleDown(i)" :disabled="!semanticMutationAvailable || (i === manualSpecificRules.length - 1)" class="h-6 w-6 text-slate-500 hover:text-blue-600 disabled:opacity-30" title="Move rule down"><i class="ph ph-arrow-down"></i></button>
@@ -3948,7 +3953,7 @@
                                         </div>
                                         <div class="grid grid-cols-12 gap-1">
                                             <input :id="specificRulePatternFieldId(rule)" :disabled="!semanticMutationAvailable" :value="specificRulePattern(rule)" @input="editSpecificRulePattern(rule, $event.target.value)" @change="retrySpecificRulePattern(rule)" :aria-label="`Color rule ${i + 1} pattern`" :aria-describedby="specificRulePatternDraft(rule) ? `${specificRulePatternFieldId(rule)}-status` : undefined" :aria-invalid="specificRulePatternDraft(rule)?.error?.code === 'REGEX_SYNTAX' ? 'true' : undefined" :aria-busy="specificRulePatternDraft(rule)?.pending ? 'true' : undefined" placeholder="Python regex" data-history-ignore class="form-input form-input-compact col-span-7 font-mono">
-                                            <input :value="rule.cap" @change="setSpecificRuleField(i, 'cap', $event.target.value, $event.target)" placeholder="Legend Caption" class="form-input form-input-compact col-span-5" :disabled="!semanticMutationAvailable">
+                                            <input :value="rule.cap" @change="setSpecificRuleField(i, 'cap', $event.target.value, $event.target)" :aria-label="`Color rule ${i + 1} legend caption`" placeholder="Legend Caption" class="form-input form-input-compact col-span-5" :disabled="!semanticMutationAvailable">
                                         </div>
                                         <div v-if="specificRulePatternDraft(rule)" :id="`${specificRulePatternFieldId(rule)}-status`" class="rounded border border-amber-200 bg-amber-50 p-2 text-xs break-words" data-color-rule-pattern-status data-history-ignore>
                                             <p role="status" aria-live="polite" class="font-semibold">Not applied<span v-if="specificRulePatternDraft(rule).pending"> — Checking color rule…</span></p>
@@ -3965,17 +3970,17 @@
 
                                 <div class="bg-slate-50 p-2 rounded border border-slate-200">
                                     <div class="grid grid-cols-2 gap-1 mb-1">
-                                        <select v-model="newSpecRule.feat" class="form-input form-input-compact">
+                                        <select v-model="newSpecRule.feat" aria-label="New color rule feature type" class="form-input form-input-compact">
                                             <option v-for="k in featureKeys" :value="k">{{ k }}</option>
                                         </select>
                                         <input v-model="newSpecRule.qual" list="specific-rule-qualifier-options" placeholder="Qualifier (choose or type)" aria-label="Qualifier name" class="form-input form-input-compact">
                                     </div>
                                     <div class="flex gap-1 mb-1">
                                         <input v-model="newSpecRule.val" data-new-specific-rule-pattern aria-label="New color rule pattern" placeholder="Python regex (e.g. (?i)NADH)" class="form-input form-input-compact flex-grow">
-                                        <input type="color" v-model="newSpecRule.color" class="h-6 w-7 p-0 border rounded cursor-pointer shrink-0">
+                                        <input type="color" v-model="newSpecRule.color" aria-label="New color rule color" class="h-6 w-7 p-0 border rounded cursor-pointer shrink-0">
                                     </div>
                                     <div class="flex gap-1">
-                                        <input v-model="newSpecRule.cap" placeholder="Legend Caption (Optional)" class="form-input form-input-compact flex-grow">
+                                        <input v-model="newSpecRule.cap" aria-label="New color rule legend caption" placeholder="Legend Caption (Optional)" class="form-input form-input-compact flex-grow">
                                         <button @click="addSpecificRule" class="btn btn-secondary text-xs h-7 px-3" :disabled="!semanticMutationAvailable"><i class="ph ph-plus"></i></button>
                                     </div>
                                 </div>
