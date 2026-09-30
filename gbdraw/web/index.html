@@ -2641,11 +2641,11 @@
                                     <button type="button" class="btn btn-secondary h-6 w-6 p-0 text-[10px]" @click="duplicateAnnotationSet(set)" title="Duplicate set"><i class="ph ph-copy"></i></button>
                                     <button type="button" class="btn btn-danger h-6 w-6 p-0 text-[10px]" @click="removeAnnotationSet(set)" title="Delete set" :disabled="!semanticMutationAvailable"><i class="ph ph-trash"></i></button>
                                 </div>
-                                <input v-model.trim="set.legendLabel" class="form-input px-1 py-0.5 text-[10px]" placeholder="Set legend label (optional)" :disabled="!semanticMutationAvailable">
+                                <input v-model.trim="set.legendLabel" aria-label="Set legend label" class="form-input px-1 py-0.5 text-[10px]" placeholder="Set legend label (optional)" :disabled="!semanticMutationAvailable">
                                 <div v-for="item in set.annotations" :key="item.id" class="rounded border p-1.5 space-y-1" :class="selectedAnnotation?.setId === set.id && selectedAnnotation?.id === item.id ? 'border-blue-400 bg-blue-50 ring-1 ring-blue-200' : 'border-slate-200 bg-slate-50'">
                                     <div class="grid grid-cols-[minmax(0,1fr)_auto_auto] gap-1">
-                                        <input :value="item.id" @change="renameAnnotation(set, item, $event.target.value)" class="form-input px-1 py-0.5 text-[10px]" placeholder="annotation_id" :disabled="!semanticMutationAvailable">
-                                        <select :value="item.target.kind" @change="setAnnotationTargetKind(item, $event.target.value)" class="form-input px-1 py-0.5 text-[10px]" :disabled="!semanticMutationAvailable">
+                                        <input :value="item.id" @change="renameAnnotation(set, item, $event.target.value)" aria-label="Annotation id" class="form-input px-1 py-0.5 text-[10px]" placeholder="annotation_id" :disabled="!semanticMutationAvailable">
+                                        <select :value="item.target.kind" @change="setAnnotationTargetKind(item, $event.target.value)" aria-label="Annotation target kind" class="form-input px-1 py-0.5 text-[10px]" :disabled="!semanticMutationAvailable">
                                             <option value="coordinateSpan">Coordinates</option><option value="featureSpan">Feature</option>
                                         </select>
                                         <button type="button" class="btn btn-danger h-6 w-6 p-0 text-[10px]" @click="removeAnnotation(set, item)" title="Delete annotation" :disabled="!semanticMutationAvailable"><i class="ph ph-trash"></i></button>
@@ -2672,24 +2672,24 @@
                                         <p v-if="annotationRecordMissing(item)" class="mt-0.5 text-[9px] text-red-600">{{ annotationRecordMissingMessage(item) }}</p>
                                     </div>
                                     <div v-if="item.target.kind === 'coordinateSpan'" class="grid grid-cols-2 gap-1">
-                                        <input type="number" min="1" v-model.number="item.target.start" class="form-input px-1 py-0.5 text-[10px]" placeholder="Start (1-based)" :disabled="!semanticMutationAvailable">
-                                        <input type="number" min="1" v-model.number="item.target.end" class="form-input px-1 py-0.5 text-[10px]" placeholder="End (inclusive)" :disabled="!semanticMutationAvailable">
+                                        <input type="number" min="1" v-model.number="item.target.start" aria-label="Annotation start (1-based)" class="form-input px-1 py-0.5 text-[10px]" placeholder="Start (1-based)" :disabled="!semanticMutationAvailable">
+                                        <input type="number" min="1" v-model.number="item.target.end" aria-label="Annotation end (inclusive)" class="form-input px-1 py-0.5 text-[10px]" placeholder="End (inclusive)" :disabled="!semanticMutationAvailable">
                                     </div>
                                     <div v-else class="grid grid-cols-2 gap-1">
-                                        <input v-model.trim="item.target.selectors[0].key" class="form-input px-1 py-0.5 text-[10px]" placeholder="Qualifier (e.g. locus_tag)" :disabled="!semanticMutationAvailable">
-                                        <input v-model.trim="item.target.selectors[0].value" class="form-input px-1 py-0.5 text-[10px]" placeholder="Feature value" :disabled="!semanticMutationAvailable">
+                                        <input v-model.trim="item.target.selectors[0].key" aria-label="Annotation qualifier" class="form-input px-1 py-0.5 text-[10px]" placeholder="Qualifier (e.g. locus_tag)" :disabled="!semanticMutationAvailable">
+                                        <input v-model.trim="item.target.selectors[0].value" aria-label="Annotation feature value" class="form-input px-1 py-0.5 text-[10px]" placeholder="Feature value" :disabled="!semanticMutationAvailable">
                                     </div>
                                     <div class="grid grid-cols-[minmax(0,1fr)_auto_auto] gap-1">
-                                        <input v-model="item.label" class="form-input px-1 py-0.5 text-[10px]" placeholder="Label" :disabled="!semanticMutationAvailable">
-                                        <select v-model="item.mark" class="form-input px-1 py-0.5 text-[10px]" :disabled="!semanticMutationAvailable"><option value="highlight">Highlight (behind features)</option><option value="band">Band (annotation lane)</option><option value="line">Line</option><option value="bracket">Bracket</option></select>
+                                        <input v-model="item.label" aria-label="Annotation label" class="form-input px-1 py-0.5 text-[10px]" placeholder="Label" :disabled="!semanticMutationAvailable">
+                                        <select v-model="item.mark" aria-label="Annotation mark" class="form-input px-1 py-0.5 text-[10px]" :disabled="!semanticMutationAvailable"><option value="highlight">Highlight (behind features)</option><option value="band">Band (annotation lane)</option><option value="line">Line</option><option value="bracket">Bracket</option></select>
                                         <div class="flex items-center gap-0.5">
-                                            <input type="number" min="0" v-model.number="item.lane" :disabled="!semanticMutationAvailable || (item.mark === 'highlight')" class="form-input w-14 px-1 py-0.5 text-[10px] disabled:bg-slate-100 disabled:text-slate-400" placeholder="Auto" aria-label="Annotation lane">
-                                            <help-tip text="Collision-avoidance row for Line, Bracket, and Band. Leave blank for Auto; use 0 for the first row, 1 for the second, and so on. Highlight always covers the full feature band."></help-tip>
+                                            <input type="number" min="0" v-model.number="item.lane" :disabled="!semanticMutationAvailable || (item.mark === 'highlight')" class="form-input w-14 px-1 py-0.5 text-[10px] disabled:bg-slate-100 disabled:text-slate-400" placeholder="Auto" aria-label="Annotation lane" :aria-describedby="`help-annotation-lane-${item.id}`">
+                                            <help-tip :id="`help-annotation-lane-${item.id}`" text="Collision-avoidance row for Line, Bracket, and Band. Leave blank for Auto; use 0 for the first row, 1 for the second, and so on. Highlight always covers the full feature band."></help-tip>
                                         </div>
                                     </div>
                                     <div class="grid grid-cols-3 gap-1 items-center">
-                                        <input type="color" :value="(item.style || set.defaultStyle).stroke" @input="setAnnotationStyle(set, item, 'stroke', $event.target.value)" class="form-input h-7 p-0" title="Stroke color">
-                                        <input type="color" :value="(item.style || set.defaultStyle).fill || '#94a3b8'" @input="setAnnotationStyle(set, item, 'fill', $event.target.value)" class="form-input h-7 p-0" title="Fill color">
+                                        <input type="color" :value="(item.style || set.defaultStyle).stroke" @input="setAnnotationStyle(set, item, 'stroke', $event.target.value)" class="form-input h-7 p-0" title="Stroke color" aria-label="Annotation stroke color">
+                                        <input type="color" :value="(item.style || set.defaultStyle).fill || '#94a3b8'" @input="setAnnotationStyle(set, item, 'fill', $event.target.value)" class="form-input h-7 p-0" title="Fill color" aria-label="Annotation fill color">
                                         <label class="flex items-center gap-1 text-[10px]"><input type="checkbox" :checked="Boolean((item.style || set.defaultStyle).hatch)" @change="setAnnotationStyle(set, item, 'hatch', $event.target.checked ? { angle: 45, spacing: 5, color: (item.style || set.defaultStyle).stroke, width: 1, cross: false } : null)" :disabled="!semanticMutationAvailable"> Hatch</label>
                                     </div>
                                 </div>
@@ -2719,8 +2719,8 @@
                                     accept=".tsv,.tab,.txt,.out,.blast,text/tab-separated-values,text/plain,text/*"
                                 ></file-uploader>
                                 <div>
-                                    <label class="text-[9px] flex items-center">Reference side <help-tip text="Use Auto when exactly one BLAST side matches the displayed reference record IDs; choose Query or Subject for ambiguous files."></help-tip></label>
-                                    <select v-model="circularConservation.reference" aria-label="Circular comparison reference side" class="form-input px-1 py-0.5 text-xs" :disabled="!semanticMutationAvailable">
+                                    <span class="text-[9px] flex items-center">Reference side <help-tip id="help-circular-comparison-reference-side" text="Use Auto when exactly one BLAST side matches the displayed reference record IDs; choose Query or Subject for ambiguous files."></help-tip></span>
+                                    <select v-model="circularConservation.reference" aria-label="Circular comparison reference side" aria-describedby="help-circular-comparison-reference-side" class="form-input px-1 py-0.5 text-xs" :disabled="!semanticMutationAvailable">
                                         <option value="auto">Auto ({{ autoValueText('conservationReference') }})</option>
                                         <option value="query">Query</option>
                                         <option value="subject">Subject</option>
@@ -2737,8 +2737,8 @@
                                 </div>
                                 <div class="grid grid-cols-1 gap-1">
                                     <div v-if="circularConservation.losat_program === 'blastn'">
-                                        <label class="text-[9px] flex items-center">Task <help-tip text="Browser LOSATN pairwise comparisons use the displayed circular sequence as the BLAST subject."></help-tip></label>
-                                        <select v-model="losat.blastn.task" aria-label="Circular LOSATN task" class="form-input px-1 py-0.5 text-xs" :disabled="!semanticMutationAvailable">
+                                        <span class="text-[9px] flex items-center">Task <help-tip id="help-circular-comparison-task" text="Browser LOSATN pairwise comparisons use the displayed circular sequence as the BLAST subject."></help-tip></span>
+                                        <select v-model="losat.blastn.task" aria-label="Circular LOSATN task" aria-describedby="help-circular-comparison-task" class="form-input px-1 py-0.5 text-xs" :disabled="!semanticMutationAvailable">
                                             <option value="megablast">megablast</option>
                                             <option value="blastn">blastn</option>
                                             <option value="dc-megablast">dc-megablast</option>
@@ -2746,8 +2746,8 @@
                                     </div>
                                     <div v-else class="grid grid-cols-1 gap-1.5">
                                         <div>
-                                            <label class="text-[9px] flex items-center">Reference gencode <help-tip text="Translation table for the displayed circular sequence used by TLOSATX."></help-tip></label>
-                                            <input type="number" min="1" step="1" v-model.number="circularConservation.subject_gencode" aria-label="Circular reference gencode" class="form-input px-1 py-0.5 text-xs" :disabled="!semanticMutationAvailable">
+                                            <span class="text-[9px] flex items-center">Reference gencode <help-tip id="help-circular-comparison-reference-gencode" text="Translation table for the displayed circular sequence used by TLOSATX."></help-tip></span>
+                                            <input type="number" min="1" step="1" v-model.number="circularConservation.subject_gencode" aria-label="Circular reference gencode" aria-describedby="help-circular-comparison-reference-gencode" class="form-input px-1 py-0.5 text-xs" :disabled="!semanticMutationAvailable">
                                         </div>
                                     </div>
                                 </div>
@@ -2761,8 +2761,8 @@
                                 </div>
                             </div>
                             <div v-if="circularConservation.source === 'upload' && circularConservationSeriesRows.length === 0">
-                                <label class="text-[9px] flex items-center">Series names <help-tip text="Optional fallback names for rings, one per source. Use new lines or commas."></help-tip></label>
-                                <textarea v-model="circularConservation.labels" rows="2" class="form-input px-1 py-0.5 text-xs" placeholder="Ring A&#10;Ring B" :disabled="!semanticMutationAvailable"></textarea>
+                                <span class="text-[9px] flex items-center">Series names <help-tip id="help-circular-comparison-series-names" text="Optional fallback names for rings, one per source. Use new lines or commas."></help-tip></span>
+                                <textarea v-model="circularConservation.labels" rows="2" aria-label="Series names" aria-describedby="help-circular-comparison-series-names" class="form-input px-1 py-0.5 text-xs" placeholder="Ring A&#10;Ring B" :disabled="!semanticMutationAvailable"></textarea>
                             </div>
                             <div class="space-y-2">
                                 <div class="text-[10px] text-slate-500 font-bold uppercase tracking-wider">
@@ -2810,8 +2810,8 @@
                                 </div>
                             </div>
                             <div v-if="circularConservation.source === 'losat' || circularConservationSeriesRows.length > 0" class="space-y-1">
-                                <label v-if="circularConservation.source === 'losat'" class="input-label mb-0 flex items-center">Comparison FASTA files <help-tip text="Add one comparison FASTA per pairwise comparison ring, then set the ring name, color, and default order. Custom Track Slots can override the radial track order."></help-tip></label>
-                                <label v-else class="text-[9px] flex items-center">Series <help-tip text="Set the ring name, color, and default order for each pairwise comparison source. Custom Track Slots can override the radial track order."></help-tip></label>
+                                <span v-if="circularConservation.source === 'losat'" class="input-label mb-0 flex items-center">Comparison FASTA files <help-tip text="Add one comparison FASTA per pairwise comparison ring, then set the ring name, color, and default order. Custom Track Slots can override the radial track order."></help-tip></span>
+                                <span v-else class="text-[9px] flex items-center">Series <help-tip text="Set the ring name, color, and default order for each pairwise comparison source. Custom Track Slots can override the radial track order."></help-tip></span>
                                 <div v-for="row in circularConservationSeriesRows" :key="`conservation-series-${row.index}-${row.filename}`" class="grid grid-cols-[1.8rem_minmax(0,1fr)_auto] gap-1.5 items-center">
                                     <input type="color" v-model="circularConservation.series[row.index].color" class="h-7 w-7 p-0.5 rounded border border-slate-300 bg-white" :aria-label="`Color for ${row.filename}`" :disabled="!semanticMutationAvailable">
                                     <div class="min-w-0 space-y-0.5">
