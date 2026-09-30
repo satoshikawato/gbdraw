@@ -33,7 +33,8 @@ from gbdraw.session_request_codec import (
 
 
 def _comparison(query: int, subject: int) -> LinearComparison:
-    row = ["q", "s", 90.0, 100, 0, 0, 10, 100, 20, 110, 1e-20, 200]
+    # Table IDs name the endpoint records (_records() uses r1..r4), as CO-06 requires.
+    row = [f"r{query + 1}", f"r{subject + 1}", 90.0, 100, 0, 0, 10, 100, 20, 110, 1e-20, 200]
     return LinearComparison(query, subject, pd.DataFrame([row], columns=COMPARISON_COLUMNS))
 
 
@@ -326,7 +327,8 @@ def test_selected_generated_protein_pairs_keep_explicit_endpoints(monkeypatch) -
 
     def fake_pairwise(records, **_kwargs):
         calls.append((records[0].id, records[1].id))
-        return SimpleNamespace(comparisons=[_comparison(0, 1).matches])
+        query, subject = (int(record.id[1:]) - 1 for record in records)
+        return SimpleNamespace(comparisons=[_comparison(query, subject).matches])
 
     monkeypatch.setattr(
         "gbdraw.api.diagram.build_pairwise_protein_blastp_comparisons",
@@ -454,7 +456,7 @@ def test_resolved_collinearity_result_keeps_multi_row_endpoints(monkeypatch) -> 
 
 def test_comparisons_table_resolves_relative_blast_path(tmp_path) -> None:
     blast = tmp_path / "pair.tsv"
-    blast.write_text("q\ts\t90\t100\t0\t0\t1\t100\t1\t100\t1e-20\t200\n", encoding="utf-8")
+    blast.write_text("r1\tr3\t90\t100\t0\t0\t1\t100\t1\t100\t1e-20\t200\n", encoding="utf-8")
     table_path = tmp_path / "comparisons.tsv"
     table_path.write_text("blast\tquery\tsubject\npair.tsv\t#1\t#3\n", encoding="utf-8")
     table = read_comparisons_table(str(table_path))
