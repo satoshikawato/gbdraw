@@ -4003,7 +4003,7 @@
                         <summary aria-label="Features"><i class="ph ph-shapes"></i> Features <help-tip text="Choose each feature type's rendering. Underlay removes it from feature lanes and labels, then highlights the full feature track behind foreground features."></help-tip></summary>
                         <div class="mt-2 space-y-3 pt-2 border-t border-slate-200">
                             <div>
-                                <label class="input-label adv-section-title">Feature Types <help-tip text="Select which feature types to draw."></help-tip></label>
+                                <span class="input-label adv-section-title">Feature Types <help-tip id="help-feature-feature-types" text="Select which feature types to draw."></help-tip></span>
                                 <div class="flex flex-wrap gap-1.5 mb-1.5 p-1.5 bg-slate-50 rounded border border-slate-200 min-h-[30px]">
                                     <span v-for="f in adv.features" :key="f" class="inline-flex items-center gap-1 text-[10px] bg-white text-blue-700 px-2 py-1 rounded border border-blue-200 shadow-sm">
                                         <span class="font-medium">{{ f }}</span>
@@ -4025,7 +4025,7 @@
                                     <span v-if="adv.features.length === 0" class="text-[10px] text-slate-400 italic py-1">No features selected</span>
                                 </div>
                                 <div class="flex gap-2">
-                                    <select v-model="newFeatureToAdd" class="form-input text-xs py-0.5 px-2 h-7">
+                                    <select v-model="newFeatureToAdd" aria-label="Feature type to add" aria-describedby="help-feature-feature-types" class="form-input text-xs py-0.5 px-2 h-7">
                                         <option v-for="k in featureKeys" :value="k">{{ k }}</option>
                                     </select>
                                     <button @click.prevent="addFeature" class="btn btn-secondary text-xs h-7 shrink-0" :disabled="!semanticMutationAvailable">
@@ -4035,10 +4035,10 @@
                             </div>
 
                             <div class="bg-slate-50 p-2 rounded border border-slate-200">
-                                <label class="input-label adv-section-title">Arrow Geometry <help-tip text="Head length and shaft width apply to Arrow features and remain available even when no feature currently uses that rendering."></help-tip></label>
+                                <span class="input-label adv-section-title">Arrow Geometry <help-tip id="help-feature-arrow-geometry" text="Head length and shaft width apply to Arrow features and remain available even when no feature currently uses that rendering."></help-tip></span>
                                 <div class="grid grid-cols-2 gap-2">
                                     <div>
-                                        <label class="input-label text-[10px]">Head Length Ratio <help-tip text="Head length divided by the full rendered feature thickness. Leave blank for Auto. Auto starts from the mode-specific default and lengthens the head as the shaft narrows."></help-tip></label>
+                                        <span class="input-label text-[10px]">Head Length Ratio <help-tip id="help-feature-head-length-ratio" text="Head length divided by the full rendered feature thickness. Leave blank for Auto. Auto starts from the mode-specific default and lengthens the head as the shaft narrows."></help-tip></span>
                                         <input
                                             type="number"
                                             min="0.05"
@@ -4046,11 +4046,12 @@
                                             v-model.number="adv.arrow_head_length_ratio"
                                             placeholder="Auto"
                                             aria-label="Arrow head length ratio"
+                                            aria-describedby="help-feature-head-length-ratio"
                                             class="form-input form-input-compact auto-value-input"
                                          :disabled="!semanticMutationAvailable">
                                     </div>
                                     <div>
-                                        <label class="input-label text-[10px]">Shaft Width Ratio <help-tip text="Shaft thickness divided by the full rendered feature thickness. Enter a value greater than 0 and at most 1: 1 keeps a full-width body, while smaller values narrow the shaft. Short arrows may render as triangles."></help-tip></label>
+                                        <span class="input-label text-[10px]">Shaft Width Ratio <help-tip id="help-feature-shaft-width-ratio" text="Shaft thickness divided by the full rendered feature thickness. Enter a value greater than 0 and at most 1: 1 keeps a full-width body, while smaller values narrow the shaft. Short arrows may render as triangles."></help-tip></span>
                                         <input
                                             type="number"
                                             min="0.05"
@@ -4058,6 +4059,7 @@
                                             step="0.05"
                                             v-model.number="adv.arrow_shaft_width_ratio"
                                             aria-label="Arrow shaft width ratio"
+                                            aria-describedby="help-feature-shaft-width-ratio"
                                             class="form-input form-input-compact"
                                          :disabled="!semanticMutationAvailable">
                                     </div>
@@ -4066,7 +4068,7 @@
 
                             <div>
                                 <div class="flex items-center justify-between gap-2 mb-1.5">
-                                    <label class="input-label adv-section-title mb-0">Feature Visibility <help-tip text="Rules are evaluated from top to bottom. Off hides the feature and excludes it from protein comparisons; Exclude from matching keeps it visible but omits it from protein comparisons."></help-tip></label>
+                                    <span class="input-label adv-section-title mb-0">Feature Visibility <help-tip id="help-feature-feature-visibility" text="Rules are evaluated from top to bottom. Off hides the feature and excludes it from protein comparisons; Exclude from matching keeps it visible but omits it from protein comparisons."></help-tip></span>
                                     <div class="flex items-center gap-2">
                                         <button
                                             v-if="featureVisibilityRules.length > 0"
@@ -4133,19 +4135,21 @@
                             </div>
 
                             <div>
-                                <label class="input-label adv-section-title">Feature Appearance <help-tip text="Adjust feature dimensions and the stroke color and width for feature blocks and intron lines."></help-tip></label>
+                                <span class="input-label adv-section-title">Feature Appearance <help-tip id="help-feature-feature-appearance" text="Adjust feature dimensions and the stroke color and width for feature blocks and intron lines."></help-tip></span>
                                 <div class="bg-slate-50 p-2 rounded border border-slate-200 space-y-2">
                                     <div v-if="mode === 'linear'" class="grid grid-cols-2 gap-1.5">
                                         <div>
-                                            <label class="input-label text-[10px]">Feature Height <help-tip text="Height of the feature blocks."></help-tip></label>
+                                            <span class="input-label text-[10px]">Feature Height <help-tip id="help-feature-feature-height" text="Height of the feature blocks."></help-tip></span>
                                             <auto-value-field :visible="autoValueVisible(adv.feature_height, 'linearFeatureHeight')" :text="autoValueText('linearFeatureHeight')">
-                                                <input type="number" v-model.number="adv.feature_height" aria-label="Feature Height" class="form-input form-input-compact auto-value-input" :disabled="!semanticMutationAvailable">
+                                                <input type="number" v-model.number="adv.feature_height" aria-label="Feature Height" aria-describedby="help-feature-feature-height" class="form-input form-input-compact auto-value-input" :disabled="!semanticMutationAvailable">
                                             </auto-value-field>
                                         </div>
                                         <div>
-                                            <label class="input-label text-[10px]">Axis Gap <help-tip text="Gap between axis and nearest feature edge for Above/Below track layouts. Auto derives from feature height."></help-tip></label>
+                                            <span class="input-label text-[10px]">Axis Gap <help-tip id="help-feature-axis-gap" text="Gap between axis and nearest feature edge for Above/Below track layouts. Auto derives from feature height."></help-tip></span>
                                             <auto-value-field :visible="autoValueVisible(adv.track_axis_gap, 'linearAxisGap')" :text="autoValueText('linearAxisGap')">
                                                 <input
+                                                    aria-label="Axis Gap"
+                                                    aria-describedby="help-feature-axis-gap"
                                                     type="number"
                                                     min="0"
                                                     :value="adv.track_axis_gap ?? ''"
@@ -4156,40 +4160,42 @@
                                         </div>
                                     </div>
                                     <div v-if="mode === 'circular'">
-                                        <label class="input-label text-[10px]">Feature Track Width <help-tip text="Feature band width in px. When set, circular tracks and label arena auto-relayout around the new feature thickness."></help-tip></label>
+                                        <span class="input-label text-[10px]">Feature Track Width <help-tip id="help-feature-feature-track-width" text="Feature band width in px. When set, circular tracks and label arena auto-relayout around the new feature thickness."></help-tip></span>
                                         <auto-value-field :visible="autoValueVisible(adv.feature_width_circular, 'circularFeatureWidth')" :text="autoValueText('circularFeatureWidth')">
-                                            <input type="number" min="0.01" step="0.5" v-model.number="adv.feature_width_circular" :disabled="!semanticMutationAvailable || (adv.circular_track_slots_enabled)" :title="adv.circular_track_slots_enabled ? 'Custom stack geometry is active. Use the Features row width, or Reset to copy this value into the stack.' : ''" class="form-input form-input-compact auto-value-input">
+                                            <input type="number" min="0.01" step="0.5" v-model.number="adv.feature_width_circular" :disabled="!semanticMutationAvailable || (adv.circular_track_slots_enabled)" :title="adv.circular_track_slots_enabled ? 'Custom stack geometry is active. Use the Features row width, or Reset to copy this value into the stack.' : ''" aria-label="Feature Track Width" aria-describedby="help-feature-feature-track-width" class="form-input form-input-compact auto-value-input">
                                         </auto-value-field>
                                     </div>
                                     <div class="grid grid-cols-2 gap-1.5">
                                         <div>
-                                            <label class="input-label text-[10px]">Block Stroke Color <help-tip text="Use Auto for the configured default, None for no outline, or Color for an explicit value."></help-tip></label>
+                                            <span class="input-label text-[10px]">Block Stroke Color <help-tip id="help-feature-block-stroke-color" text="Use Auto for the configured default, None for no outline, or Color for an explicit value."></help-tip></span>
                                             <color-value-control
                                                 v-model="adv.block_stroke_color"
                                                 fallback="#000000"
-                                                aria-label="Block stroke color">
+                                                aria-label="Block stroke color"
+                                                aria-describedby="help-feature-block-stroke-color">
                                             </color-value-control>
                                         </div>
                                         <div>
-                                            <label class="input-label text-[10px]">Block Stroke Width <help-tip text="Width of the outline for feature blocks."></help-tip></label>
+                                            <span class="input-label text-[10px]">Block Stroke Width <help-tip id="help-feature-block-stroke-width" text="Width of the outline for feature blocks."></help-tip></span>
                                             <auto-value-field :visible="autoValueVisible(adv.block_stroke_width, 'blockStrokeWidth')" :text="autoValueText('blockStrokeWidth')">
-                                                <input type="number" v-model.number="adv.block_stroke_width" aria-label="Block Stroke Width" class="form-input form-input-compact auto-value-input" :disabled="!semanticMutationAvailable">
+                                                <input type="number" v-model.number="adv.block_stroke_width" aria-label="Block Stroke Width" aria-describedby="help-feature-block-stroke-width" class="form-input form-input-compact auto-value-input" :disabled="!semanticMutationAvailable">
                                             </auto-value-field>
                                         </div>
                                     </div>
                                     <div class="grid grid-cols-2 gap-1.5">
                                         <div>
-                                            <label class="input-label text-[10px]">Line Stroke Color <help-tip text="Use Auto for the configured default, None to hide the line, or Color for an explicit value."></help-tip></label>
+                                            <span class="input-label text-[10px]">Line Stroke Color <help-tip id="help-feature-line-stroke-color" text="Use Auto for the configured default, None to hide the line, or Color for an explicit value."></help-tip></span>
                                             <color-value-control
                                                 v-model="adv.line_stroke_color"
                                                 fallback="#000000"
-                                                aria-label="Line stroke color">
+                                                aria-label="Line stroke color"
+                                                aria-describedby="help-feature-line-stroke-color">
                                             </color-value-control>
                                         </div>
                                         <div>
-                                            <label class="input-label text-[10px]">Line Stroke Width <help-tip text="Width of the lines representing introns."></help-tip></label>
+                                            <span class="input-label text-[10px]">Line Stroke Width <help-tip id="help-feature-line-stroke-width" text="Width of the lines representing introns."></help-tip></span>
                                             <auto-value-field :visible="autoValueVisible(adv.line_stroke_width, 'lineStrokeWidth')" :text="autoValueText('lineStrokeWidth')">
-                                                <input type="number" v-model.number="adv.line_stroke_width" aria-label="Line Stroke Width" class="form-input form-input-compact auto-value-input" :disabled="!semanticMutationAvailable">
+                                                <input type="number" v-model.number="adv.line_stroke_width" aria-label="Line Stroke Width" aria-describedby="help-feature-line-stroke-width" class="form-input form-input-compact auto-value-input" :disabled="!semanticMutationAvailable">
                                             </auto-value-field>
                                         </div>
                                     </div>
@@ -4204,8 +4210,8 @@
                         <summary aria-label="Labels"><i class="ph ph-text-t"></i> Labels <help-tip text="Control label visibility, filtering, text settings, and circular label geometry."></help-tip></summary>
                         <div class="mt-2 space-y-3 pt-2 border-t border-slate-200">
                             <div v-if="mode === 'linear'">
-                                <label for="linear-show-labels" class="input-label text-[10px] mb-1">Show Labels <help-tip text="Display feature labels on the map. 'First' shows labels only for the top track. 'Top Similarity Group Record' requires LOSATP similarity-group or collinear mode."></help-tip></label>
-                                <select id="linear-show-labels" v-model="form.show_labels_linear" class="form-input text-xs py-1" :disabled="!semanticMutationAvailable">
+                                <span class="input-label text-[10px] mb-1"><label for="linear-show-labels">Show Labels</label> <help-tip id="help-label-show-labels" text="Display feature labels on the map. 'First' shows labels only for the top track. 'Top Similarity Group Record' requires LOSATP similarity-group or collinear mode."></help-tip></span>
+                                <select id="linear-show-labels" v-model="form.show_labels_linear" aria-describedby="help-label-show-labels" class="form-input text-xs py-1" :disabled="!semanticMutationAvailable">
                                     <option value="none">None</option>
                                     <option value="all">All Records</option>
                                     <option value="first">First Record Only</option>
@@ -4213,8 +4219,8 @@
                                 </select>
                             </div>
                             <div v-else>
-                                <label for="circular-label-mode" class="input-label text-[10px] mb-1">Label Mode <help-tip text="Set circular label placement. 'Out' places labels outside; 'Both' places labels outside and inside. With horizontal inner labels, implicit GC content and GC skew tracks are hidden to avoid overlap."></help-tip></label>
-                                <select id="circular-label-mode" v-model="form.labels_mode" class="form-input text-xs py-1" :disabled="!semanticMutationAvailable">
+                                <span class="input-label text-[10px] mb-1"><label for="circular-label-mode">Label Mode</label> <help-tip id="help-label-label-mode" text="Set circular label placement. 'Out' places labels outside; 'Both' places labels outside and inside. With horizontal inner labels, implicit GC content and GC skew tracks are hidden to avoid overlap."></help-tip></span>
+                                <select id="circular-label-mode" v-model="form.labels_mode" aria-describedby="help-label-label-mode" class="form-input text-xs py-1" :disabled="!semanticMutationAvailable">
                                     <option value="none">None</option>
                                     <option value="out">Out</option>
                                     <option value="both">Both (Out + Inner)</option>
@@ -4226,7 +4232,7 @@
                                 class="space-y-3"
                             >
                                 <div>
-                                    <h4 class="text-[11px] font-bold text-slate-500 mb-2">LABEL FILTERING <help-tip text="Control which feature labels are displayed using Blacklist or Whitelist. Whitelist patterns use case-insensitive Python regex search, matching the -t color table semantics."></help-tip></h4>
+                                    <h4 class="text-[11px] font-bold text-slate-500 mb-2" aria-label="LABEL FILTERING">LABEL FILTERING <help-tip text="Control which feature labels are displayed using Blacklist or Whitelist. Whitelist patterns use case-insensitive Python regex search, matching the -t color table semantics."></help-tip></h4>
                                     <div class="flex gap-2 mb-2">
                                         <button v-for="m in ['None', 'Blacklist', 'Whitelist']" @click="setLabelFilterMode(m)" :disabled="!semanticMutationAvailable" :class="filterMode===m ? 'bg-blue-600 text-white' : 'bg-white text-slate-600 border'" class="flex-1 py-1 rounded text-xs font-bold transition-colors">{{m}}</button>
                                     </div>
@@ -4253,7 +4259,7 @@
                                 </div>
 
                                 <div class="pt-3 border-t border-slate-100">
-                                    <h4 class="text-[11px] font-bold text-slate-500 mb-2">QUALIFIER PRIORITY <help-tip text="Define label priority order (e.g. CDS -> product,gene,locus_tag)."></help-tip></h4>
+                                    <h4 class="text-[11px] font-bold text-slate-500 mb-2" aria-label="QUALIFIER PRIORITY">QUALIFIER PRIORITY <help-tip text="Define label priority order (e.g. CDS -> product,gene,locus_tag)."></help-tip></h4>
 
                                     <div class="space-y-1 mb-3">
                                         <div v-for="(rule, i) in manualPriorityRules" :key="i" class="flex items-center gap-1 bg-white p-1 rounded border border-slate-200 text-[10px]">
@@ -4281,17 +4287,17 @@
                                 <div class="pt-3 border-t border-slate-100">
                                     <div class="grid grid-cols-2 gap-1.5">
                                         <div>
-                                            <label class="input-label text-[10px] mb-0">Label Font Size <help-tip text="Font size for feature labels."></help-tip></label>
+                                            <span class="input-label text-[10px] mb-0">Label Font Size <help-tip id="help-label-label-font-size" text="Font size for feature labels."></help-tip></span>
                                             <auto-value-field :visible="autoValueVisible(adv.label_font_size, 'labelFontSize')" :text="autoValueText('labelFontSize')">
-                                                <input type="number" v-model.number="adv.label_font_size" aria-label="Label Font Size" class="form-input form-input-compact auto-value-input" :disabled="!semanticMutationAvailable">
+                                                <input type="number" v-model.number="adv.label_font_size" aria-label="Label Font Size" aria-describedby="help-label-label-font-size" class="form-input form-input-compact auto-value-input" :disabled="!semanticMutationAvailable">
                                             </auto-value-field>
                                         </div>
                                         <div v-if="!(mode === 'linear' && adv.label_placement === 'above_feature')">
-                                            <label class="input-label text-[10px] mb-0">
+                                            <span class="input-label text-[10px] mb-0">
                                                 Label Rendering
-                                                <help-tip text="Auto embeds labels that fit and routes the rest externally. Embedded Only drops labels that need external placement. External Only keeps labels outside feature bodies."></help-tip>
-                                            </label>
-                                            <select v-model="adv.label_rendering" class="form-input form-input-compact" :disabled="!semanticMutationAvailable">
+                                                <help-tip id="help-label-label-rendering" text="Auto embeds labels that fit and routes the rest externally. Embedded Only drops labels that need external placement. External Only keeps labels outside feature bodies."></help-tip>
+                                            </span>
+                                            <select v-model="adv.label_rendering" aria-label="Label Rendering" aria-describedby="help-label-label-rendering" class="form-input form-input-compact" :disabled="!semanticMutationAvailable">
                                                 <option value="auto">Auto ({{ autoValueText('labelRendering') }})</option>
                                                 <option value="embedded_only">Embedded Only</option>
                                                 <option value="external_only">External Only</option>
@@ -4299,22 +4305,24 @@
                                         </div>
                                         <template v-if="mode === 'circular'">
                                             <div>
-                                                <label class="input-label text-[10px] mb-0">
+                                                <span class="input-label text-[10px] mb-0">
                                                     Circular Label Placement
-                                                    <help-tip text="Horizontal keeps external labels level; Radial aligns them with the circle radius."></help-tip>
-                                                </label>
-                                                <select v-model="adv.circular_label_placement" class="form-input form-input-compact" :disabled="!semanticMutationAvailable">
+                                                    <help-tip id="help-label-circular-label-placement" text="Horizontal keeps external labels level; Radial aligns them with the circle radius."></help-tip>
+                                                </span>
+                                                <select v-model="adv.circular_label_placement" aria-label="Circular Label Placement" aria-describedby="help-label-circular-label-placement" class="form-input form-input-compact" :disabled="!semanticMutationAvailable">
                                                     <option value="horizontal">Horizontal</option>
                                                     <option value="radial">Radial</option>
                                                 </select>
                                             </div>
                                             <div>
-                                                <label class="input-label text-[10px] mb-0">
+                                                <span class="input-label text-[10px] mb-0">
                                                     Circular Label Spacing
-                                                    <help-tip text="Minimum label-to-label vertical spacing for circular layouts in px."></help-tip>
-                                                </label>
+                                                    <help-tip id="help-label-circular-label-spacing" text="Minimum label-to-label vertical spacing for circular layouts in px."></help-tip>
+                                                </span>
                                                 <auto-value-field :visible="autoValueVisible(adv.circular_label_spacing, 'circularLabelSpacing')" :text="autoValueText('circularLabelSpacing')">
                                                     <input
+                                                        aria-label="Circular Label Spacing"
+                                                        aria-describedby="help-label-circular-label-spacing"
                                                         type="number"
                                                         min="0.01"
                                                         step="0.5"
@@ -4328,14 +4336,15 @@
                                         </template>
                                         <template v-if="mode === 'linear'">
                                             <div>
-                                                <label class="input-label text-[10px] mb-0">
+                                                <span class="input-label text-[10px] mb-0">
                                                     Label Placement
-                                                    <help-tip text="Auto follows track direction (Above/Middle: labels above; Below: labels below). Above Feature draws labels above features (and below negative-strand features when Separate Strands is on)."></help-tip>
-                                                </label>
+                                                    <help-tip id="help-label-label-placement" text="Auto follows track direction (Above/Middle: labels above; Below: labels below). Above Feature draws labels above features (and below negative-strand features when Separate Strands is on)."></help-tip>
+                                                </span>
                                                 <select
                                                     v-model="adv.label_placement"
                                                     @change="adv.label_placement === 'above_feature' && (adv.label_rendering = 'auto')"
                                                     aria-label="Label Placement"
+                                                    aria-describedby="help-label-label-placement"
                                                     class="form-input form-input-compact"
                                                  :disabled="!semanticMutationAvailable">
                                                     <option value="auto">Auto ({{ autoValueText('linearLabelPlacement') }})</option>
@@ -4343,26 +4352,29 @@
                                                 </select>
                                             </div>
                                             <div>
-                                                <label class="input-label text-[10px] mb-0">
+                                                <span class="input-label text-[10px] mb-0">
                                                     Label Rotation
-                                                    <help-tip text="Rotate linear labels in degrees (e.g., 45). In Above Feature mode, rotated labels start from each feature midpoint."></help-tip>
-                                                </label>
+                                                    <help-tip id="help-label-label-rotation" text="Rotate linear labels in degrees (e.g., 45). In Above Feature mode, rotated labels start from each feature midpoint."></help-tip>
+                                                </span>
                                                 <input
                                                     type="number"
                                                     :value="adv.label_rotation ?? ''"
                                                     @input="setOptionalNumberInputValue(adv, 'label_rotation', $event.target.value, true)" :disabled="!semanticMutationAvailable"
                                                     aria-label="Label Rotation"
+                                                    aria-describedby="help-label-label-rotation"
                                                     class="form-input form-input-compact"
                                                     placeholder="0"
                                                 >
                                             </div>
                                             <div>
-                                                <label class="input-label text-[10px] mb-0">
+                                                <span class="input-label text-[10px] mb-0">
                                                     Linear Label Spacing
-                                                    <help-tip text="Extra vertical spacing between stacked external labels in linear layouts, in px."></help-tip>
-                                                </label>
+                                                    <help-tip id="help-label-linear-label-spacing" text="Extra vertical spacing between stacked external labels in linear layouts, in px."></help-tip>
+                                                </span>
                                                 <auto-value-field :visible="autoValueVisible(adv.linear_label_spacing, 'linearLabelSpacing')" :text="autoValueText('linearLabelSpacing')">
                                                     <input
+                                                        aria-label="Linear Label Spacing"
+                                                        aria-describedby="help-label-linear-label-spacing"
                                                         type="number"
                                                         min="0.01"
                                                         step="0.5"
@@ -4378,7 +4390,7 @@
                                 </div>
 
                                 <div v-if="mode === 'circular' && adv.circular_label_placement !== 'radial'" class="pt-3 border-t border-slate-100">
-                                    <h4 class="text-[11px] font-bold text-slate-500 mb-2">LABEL GEOMETRY <help-tip text="Adjust radius offset factors for circular labels."></help-tip></h4>
+                                    <h4 class="text-[11px] font-bold text-slate-500 mb-2" aria-label="LABEL GEOMETRY">LABEL GEOMETRY <help-tip text="Adjust radius offset factors for circular labels."></help-tip></h4>
                                     <div class="grid grid-cols-2 gap-1.5">
                                         <div>
                                             <label class="input-label text-[10px]">Outer X Offset</label>
