@@ -1,8 +1,28 @@
 """Custom exceptions for gbdraw."""
 
+from __future__ import annotations
+
+from typing import Mapping
+
 
 class GbdrawError(Exception):
-    """Base class for gbdraw exceptions."""
+    """Base class for gbdraw exceptions.
+
+    ``diagnostic`` is the producer-owned failure meaning: a bounded mapping with
+    ``code`` plus optional ``reason``, ``field``, and integer locators. It never
+    carries user wording; the Web adapter validates it against its vocabulary.
+    """
+
+    diagnostic: Mapping[str, object] | None = None
+
+    def __init__(
+        self,
+        *args: object,
+        diagnostic: Mapping[str, object] | None = None,
+    ) -> None:
+        super().__init__(*args)
+        if diagnostic is not None:
+            self.diagnostic = dict(diagnostic)
 
 
 class ConfigError(GbdrawError):

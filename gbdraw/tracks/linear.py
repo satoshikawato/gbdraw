@@ -4,6 +4,7 @@ from dataclasses import dataclass, field, replace
 from typing import Any, Literal, Mapping, Sequence
 
 from .parsing import (
+    normalize_dinucleotide_params,
     normalize_dinucleotide_skew_color_params as _normalize_dinucleotide_skew_color_params,
     parse_bool,
     parse_nonnegative_integer,
@@ -371,10 +372,7 @@ def _normalize_linear_track_slots(
                 raise ValueError("linear custom track slots support only one features slot")
 
         if renderer in {"dinucleotide_content", "dinucleotide_skew"}:
-            if "dinucleotide" in params and "nt" not in params:
-                params["nt"] = str(params.pop("dinucleotide")).upper()
-            elif "nt" in params:
-                params["nt"] = str(params["nt"]).upper()
+            params = normalize_dinucleotide_params(params)
             if renderer == "dinucleotide_skew":
                 params = _normalize_dinucleotide_skew_color_params(params)
         elif renderer == "depth":

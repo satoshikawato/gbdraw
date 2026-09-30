@@ -7,6 +7,32 @@ const deepFreeze = (value) => {
 };
 
 export const MODE_PROFILE_DATA = deepFreeze({
+  "comparisonDomains": {
+    "alignmentLength": {
+      "integer": true,
+      "maximum": null,
+      "minimum": 0,
+      "reason": "NONNEGATIVE_INTEGER"
+    },
+    "bitscore": {
+      "integer": false,
+      "maximum": null,
+      "minimum": 0,
+      "reason": "NONNEGATIVE"
+    },
+    "evalue": {
+      "integer": false,
+      "maximum": null,
+      "minimum": 0,
+      "reason": "NONNEGATIVE"
+    },
+    "identity": {
+      "integer": false,
+      "maximum": 100,
+      "minimum": 0,
+      "reason": "PERCENT"
+    }
+  },
   "featureTypes": [
     "CDS",
     "rRNA",

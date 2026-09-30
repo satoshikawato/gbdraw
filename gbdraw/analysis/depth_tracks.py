@@ -14,7 +14,7 @@ from pandas import DataFrame  # type: ignore[reportMissingImports]
 
 from gbdraw.analysis.depth import depth_df, read_depth_tsv  # type: ignore[reportMissingImports]
 from gbdraw.configurators import DepthConfigurator  # type: ignore[reportMissingImports]
-from gbdraw.exceptions import ValidationError  # type: ignore[reportMissingImports]
+from gbdraw.exceptions import GbdrawError, ValidationError  # type: ignore[reportMissingImports]
 from gbdraw.tracks.parsing import parse_nonnegative_integer
 
 if TYPE_CHECKING:
@@ -149,6 +149,17 @@ def _record_major_sources(
     return rows, False
 
 
+def _read_depth_series(path: str, series_index: int) -> DataFrame:
+    """Read one logical series source; failures name the series, not the file."""
+
+    try:
+        return read_depth_tsv(path)
+    except GbdrawError as exc:
+        if exc.diagnostic is not None:
+            exc.diagnostic = {**exc.diagnostic, "seriesIndex": series_index}
+        raise
+
+
 def _tracks_from_record_major_values(
     values: Sequence[Sequence[object | None]],
     *,
@@ -228,7 +239,7 @@ def _tracks_from_record_major_values(
             if values_are_files:
                 source_path = str(source_value)
                 if source_path not in loaded_files:
-                    loaded_files[source_path] = read_depth_tsv(source_path)
+                    loaded_files[source_path] = _read_depth_series(source_path, track_index)
                 table = loaded_files[source_path]
             else:
                 table = source_value
@@ -297,7 +308,7 @@ def _tracks_from_logical_inputs(
             elif isinstance(source_value, (str, Path)):
                 source_path = str(source_value)
                 if source_path not in loaded_files:
-                    loaded_files[source_path] = read_depth_tsv(source_path)
+                    loaded_files[source_path] = _read_depth_series(source_path, track_index)
                 table = loaded_files[source_path]
             else:
                 raise ValidationError(

@@ -209,7 +209,8 @@ options:
   -t, --table TABLE     color table (optional)
   -d, --default_colors DEFAULT_COLORS
                         TSV file that overrides the color palette (optional)
-  -n, --nt NT           dinucleotide (default: GC).
+  -n, --nt NT           dinucleotide: two letters from A, C, G, T, and U;
+                        case-insensitive, U counts as T (default: GC).
   -w, --window WINDOW   window size (optional; default: 1kb for genomes < 1Mb,
                         10kb for genomes <10Mb, 100kb for genomes >=10Mb)
   -s, --step STEP       step size (optional; default: 100 bp for genomes <
@@ -1007,7 +1008,8 @@ options:
   -o, --output OUTPUT   output file prefix (default: out)
   --overwrite           Replace existing output files (default: refuse to
                         overwrite).
-  -n, --nt NT           dinucleotide skew (default: GC).
+  -n, --nt NT           dinucleotide skew: two letters from A, C, G, T, and U;
+                        case-insensitive, U counts as T (default: GC).
   -w, --window WINDOW   window size (optional; default: 1kb for genomes < 1Mb,
                         10kb for genomes <10Mb, 100kb for genomes >=10Mb)
   -s, --step STEP       step size (optional; default: 100 bp for genomes <

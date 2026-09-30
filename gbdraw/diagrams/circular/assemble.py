@@ -101,6 +101,7 @@ from ...render.composition import apply_composition_plan
 from ...svg.ids import stable_svg_id, track_slot_svg_id
 from .positioning import _parse_svg_number as _svg_number, center_group_on_canvas
 from ...tracks.circular import tick_sides_for_tick_label_layout  # type: ignore[reportMissingImports]
+from ...tracks.parsing import slot_dinucleotide
 
 from .builders import (
     add_axis_group_on_canvas,
@@ -1119,15 +1120,6 @@ def _slot_width_ratio_factor(
 
 
 
-def _slot_dinucleotide(slot_or_resolved: CircularTrackSlot | CircularResolvedSlot, default: str) -> str:
-    params = getattr(slot_or_resolved, "params", {}) or {}
-    raw = params.get("nt", params.get("dinucleotide", default))
-    nt = str(raw or default).upper()
-    return nt if len(nt) >= 2 else str(default or "GC").upper()
-
-
-
-
 def _text_element_plain_text(element: Any) -> str:
     parts: list[str] = []
     text = getattr(element, "text", None)
@@ -1340,7 +1332,7 @@ def _sync_legend_table_for_circular_slots(
                 "width": depth_config.stroke_width,
             }
         elif renderer == "dinucleotide_content":
-            nt = _slot_dinucleotide(slot, default_nt)
+            nt = slot_dinucleotide(slot.params, default_nt)
             label = _slot_legend_label(slot, f"{nt} content")
             if gc_config.high_fill_color == gc_config.low_fill_color:
                 out[_unique_legend_key(out, label)] = {
@@ -1363,7 +1355,7 @@ def _sync_legend_table_for_circular_slots(
                     "width": gc_config.stroke_width,
                 }
         elif renderer == "dinucleotide_skew":
-            nt = _slot_dinucleotide(slot, default_nt)
+            nt = slot_dinucleotide(slot.params, default_nt)
             label = _slot_legend_label(slot, f"{nt} skew")
             slot_skew_config = _slot_skew_config(skew_config, slot, nt)
             if slot_skew_config.high_fill_color == slot_skew_config.low_fill_color:
@@ -1681,7 +1673,7 @@ def _draw_resolved_circular_slot(
         )
 
     default_nt = str(getattr(gc_config, "dinucleotide", "GC")).upper()
-    nt = _slot_dinucleotide(resolved_slot, default_nt)
+    nt = slot_dinucleotide(resolved_slot.params, default_nt)
     if renderer == "dinucleotide_content":
         slot_df = _slot_dataframe_for_nt(
             nt=nt,

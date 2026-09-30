@@ -2917,11 +2917,15 @@ def test_circular_cli_parses_tick_label_font_size_option() -> None:
 
 @pytest.mark.circular
 @pytest.mark.parametrize("value", ["0", "-1"])
-def test_circular_cli_rejects_invalid_tick_label_font_size(value: str) -> None:
-    with pytest.raises(SystemExit):
-        circular_cli_module._get_args(
-            ["--gbk", "dummy.gb", "--tick_label_font_size", value]
+def test_circular_cli_rejects_invalid_tick_label_font_size(value: str, tmp_path: Path) -> None:
+    # D-27: the typed configuration owns the font-size domain for every surface.
+    record = Path(__file__).resolve().parent / "fixtures" / "regex_rules.gb"
+    with pytest.raises(ValidationError, match="objects.ticks.tick_labels.font_size"):
+        circular_cli_module.circular_main(
+            ["--gbk", str(record), "-o", str(tmp_path / "out"), "-f", "svg",
+             "--tick_label_font_size", value]
         )
+    assert not (tmp_path / "out.svg").exists()
 
 
 @pytest.mark.circular
