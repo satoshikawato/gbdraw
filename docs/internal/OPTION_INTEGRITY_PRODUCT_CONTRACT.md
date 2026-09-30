@@ -5,7 +5,7 @@ Status: active Product authority
 ## Authority metadata
 
 - Contract ID: `OIPC`
-- Contract revision: `28`
+- Contract revision: `29`
 - Product Decision Owner: `satoshikawato`
 - Decision date: `2026-08-28`
 - Decision source: explicit Product Decision Owner selection of one (`1`) after
@@ -30,7 +30,13 @@ Status: active Product authority
   `PD-OI-036`, `PD-OI-037`, `PD-OI-038`, `PD-OI-039`, `PD-OI-040`,
   `PD-OI-041`, `PD-OI-042`, `PD-OI-043`, `PD-OI-044`, `PD-OI-045`,
   `PD-OI-046`, `PD-OI-047`, `PD-OI-048`, `PD-OI-049`, `PD-OI-050`,
-  `PD-OI-051`, `PD-OI-052`, `PD-OI-053`, `PD-OI-054`, and `PD-OI-055`
+  `PD-OI-051`, `PD-OI-052`, `PD-OI-053`, `PD-OI-054`, `PD-OI-055`,
+  `PD-OI-056`, `PD-OI-057`, `PD-OI-058`, `PD-OI-059`, `PD-OI-060`,
+  `PD-OI-061`, `PD-OI-062`, `PD-OI-063`, `PD-OI-064`, `PD-OI-065`,
+  `PD-OI-066`, `PD-OI-067`, `PD-OI-068`, `PD-OI-069`, `PD-OI-070`,
+  `PD-OI-071`, `PD-OI-072`, `PD-OI-073`, `PD-OI-074`, `PD-OI-075`,
+  `PD-OI-076`, `PD-OI-077`, `PD-OI-078`, `PD-OI-079`, `PD-OI-080`,
+  `PD-OI-081`, `PD-OI-082`, `PD-OI-083`, and `PD-OI-084`
 - Revision 3 addition: `PD-OI-018`, accepted by `satoshikawato` on
   `2026-09-13` after confirming the complete record/search outcome, no feature
   retirement, and the runtime/memory cost of complete comparisons. The initial
@@ -238,6 +244,30 @@ Status: active Product authority
   - `PD-OI-054`: the approved additional scope places search and toolbar in
     the width left by the Editor, which opens from the Preview top edge and
     covers neither.
+- Revision 29 changes: `PD-OI-056` through `PD-OI-084` are added and
+  `PD-OI-018` is replaced for scenario revision `4`, from the 30 receipts of the
+  2026-09-30 Web GUI audit Decision Pack
+  ([`02_DECISION_PACK.md`](./web-gui-audit-20260930/02_DECISION_PACK.md)).
+  `OIC-027` is added for `PD-OI-066`.
+  - The Product Decision Owner `satoshikawato` answered on `2026-09-30`, first
+    to `D-01`–`D-39` and `W-1`–`W-8`: 「だいたいそのままで承認。けど、D-12: 1ファイルに複数生物あるときは、Definitionはそれぞれにつけてくれるとうれしいかも。Circularでしょ？ D-19: 今まではBだったんじゃないの？たとえばmultiple repliconのゲノムだったら、染色体ごとじゃなくてゲノム=ファイル単位のE-valueが欲しいんじゃないかな？ D-26: UはOKにして。」
+    and then to the rewritten `D-12`, `D-19`, and `D-26` receipts and the `D-40`
+    CLI scope: 「OK,これで承認します。」
+  - Receipt mapping: `D-01` → `PD-OI-056`; `D-02` → `PD-OI-057`; `D-03` →
+    `PD-OI-058`; `D-04` → `PD-OI-059`; `D-05` → `PD-OI-060`; `D-06` →
+    `PD-OI-061`; `D-07` → `PD-OI-062`; `D-08` → `PD-OI-063`; `D-09` →
+    `PD-OI-064`; `D-10` → `PD-OI-065`; `D-11` → `PD-OI-066`; `D-12` →
+    `PD-OI-067`; `D-13` → `PD-OI-068`; `D-14` → `PD-OI-069`; `D-15` →
+    `PD-OI-070`; `D-16` → `PD-OI-071`; `D-17` → `PD-OI-072`; `D-18` →
+    `PD-OI-073`; `D-20` → `PD-OI-074`; `D-21` → `PD-OI-075`; `D-22` →
+    `PD-OI-076`; `D-23` → `PD-OI-077`; `D-24` → `PD-OI-078`; `D-25` →
+    `PD-OI-079`; `D-26` → `PD-OI-080`; `D-27` → `PD-OI-081`; `D-28` →
+    `PD-OI-082`; `D-29` → `PD-OI-083`; `D-30` → `PD-OI-084`; `D-19` →
+    `PD-OI-018` scenario revision `4`.
+  - Each record reproduces its receipt without translation or additional terms.
+    `D-31`–`D-40` keep current behavior and receive no record. Earlier
+    decisions retain their scope. This authority-only amendment contains no
+    runtime; dependent implementation requires it merged into its base.
 - Records remaining `EVIDENCE_REQUIRED`: none
 - Excluded records: none
 
@@ -704,11 +734,61 @@ corrected. Passing evidence does not make incorrect behavior normative.
 ### PD-OI-018: Complete Linear records, placement, and comparison scope
 
 - Concern key: `diagram-generation.linear-record-universe-and-search-scope`
-- Scenario revision: `3`
-- Supersedes: `PD-OI-018`, scenario revision `2`.
+- Scenario revision: `4`
+- Supersedes: `PD-OI-018`, scenario revision `3` (`LINEAR-FILE-ROW-BLOCK`).
 - Status: `ACCEPTED`
-- Selected option: `LINEAR-FILE-ROW-BLOCK`
-- Normative outcome:
+- Selected outcome: `B / FILE-DATABASE-WITHOUT-UNREQUESTED-SELF`
+- Normative outcome: exactly the complete approved scenario revision `4`
+  `PRODUCT_DECISION` receipt and its JSON representation below, together with
+  the scenario revision `3` outcome retained below. The revision `4` receipt's
+  Must preserve retains items 1–7 of revision `3`; its May retire removes only
+  the limitation of self-search exclusion to Collinear inference OFF and the
+  loss of links when unrequested self-hits fill Max target seqs. The other
+  revision `3` terms remain in force.
+- Decision source: the complete `D-19` receipt in [`02_DECISION_PACK.md`](./web-gui-audit-20260930/02_DECISION_PACK.md) at P00 merge
+  commit `e97d90fecfb327135eb50e85cfa9a87be3145823`, approved by `satoshikawato` on `2026-09-30` through
+  the two Owner replies quoted verbatim in the Revision 29 entry above. The
+  receipt and JSON reproduce all supplied fields without translation or
+  additional terms. The CLI LOSAT database scope is unchanged (`D-40` in the
+  same Decision Pack). Dependent runtime requires this authority merged into
+  its base; this amendment supplies no runtime acceptance evidence.
+- Receipt SHA-256 (UTF-8, excluding the final newline):
+  `39df7d14e08db9cf2872da02436c49a11bb7e2d2105cf256dfe0a86fd0786dbb`.
+- Acceptance contracts: `OIC-005`, `OIC-006`, `OIC-007`, `OIC-013`, `OIC-015`,
+  `OIC-018`.
+
+```text
+PRODUCT_DECISION
+Concern: diagram-generation.linear-record-universe-and-search-scope
+Scenario revision: 4
+Supersedes: PD-OI-018, scenario revision 3
+Choice: B / FILE-DATABASE-WITHOUT-UNREQUESTED-SELF
+Rationale: 1 つのファイルを 1 つのゲノムとして扱い、複数 replicon のゲノムでもゲノム単位の E-value で比較する。そのうえで、要求していない自己一致が Max target seqs を埋めてリンクが消えることを防ぐ。
+Must preserve: revision 3 の item 1〜7（source ファイル単位の batch、database の範囲を raw cache の identity に含めることを含む）。表示に使わない自己検索（record 自身への検索）は、どのモードでも実行しない。同じ source の中の record どうしの比較は、query の record を除いた database で検索する。E-value の database は subject 側の source ファイル（query と同じ source なら query の record を除いたもの）であることを、docs と Run Info に明記する。job 数の見積もりは、実行の計画と同じ関数から出す。
+May retire: 自己検索を除くのが Collinear の inference が OFF のときだけという限定と、要求していない自己一致で Max target seqs が埋まりリンクが消える動作。
+Accepted residual risk: 同じ record でも、ファイルの分け方を変えると E-value が変わる（1 ファイル = 1 ゲノムという前提）。record の対ごとに検索する CLI とは、複数 record のファイルで E-value が一致しない。同じ source の中の比較は別の job になり、job 数が増える。
+Owner: satoshikawato
+Decision date: 2026-09-30
+```
+
+```json
+{
+  "concern": "diagram-generation.linear-record-universe-and-search-scope",
+  "scenarioRevision": 4,
+  "supersedes": "PD-OI-018, scenario revision 3",
+  "choice": "B / FILE-DATABASE-WITHOUT-UNREQUESTED-SELF",
+  "rationale": "1 つのファイルを 1 つのゲノムとして扱い、複数 replicon のゲノムでもゲノム単位の E-value で比較する。そのうえで、要求していない自己一致が Max target seqs を埋めてリンクが消えることを防ぐ。",
+  "mustPreserve": "revision 3 の item 1〜7（source ファイル単位の batch、database の範囲を raw cache の identity に含めることを含む）。表示に使わない自己検索（record 自身への検索）は、どのモードでも実行しない。同じ source の中の record どうしの比較は、query の record を除いた database で検索する。E-value の database は subject 側の source ファイル（query と同じ source なら query の record を除いたもの）であることを、docs と Run Info に明記する。job 数の見積もりは、実行の計画と同じ関数から出す。",
+  "mayRetire": "自己検索を除くのが Collinear の inference が OFF のときだけという限定と、要求していない自己一致で Max target seqs が埋まりリンクが消える動作。",
+  "acceptedResidualRisk": "同じ record でも、ファイルの分け方を変えると E-value が変わる（1 ファイル = 1 ゲノムという前提）。record の対ごとに検索する CLI とは、複数 record のファイルで E-value が一致しない。同じ source の中の比較は別の job になり、job 数が増える。",
+  "owner": "satoshikawato",
+  "decisionDate": "2026-09-30"
+}
+```
+
+#### Retained scenario revision `3` outcome
+
+- Scenario revision `3` normative outcome, retained:
   1. Without an explicit record selector or crop, Linear includes every record
      from each GenBank or paired GFF3/FASTA source. Enabling comparisons does
      not shrink that set or select only the first record.
@@ -2316,6 +2396,1368 @@ Decision date: 2026-09-28
 }
 ```
 
+### PD-OI-056: Feature search All-field scope
+
+- Concern key: `web.feature-search.all-field-scope`
+- Scenario revision: `1`
+- Status: `ACCEPTED`
+- Selected outcome: `A / ALL-EXCLUDES-SEQUENCE-CONTENT`
+- Normative outcome: exactly the complete approved `PRODUCT_DECISION` receipt
+  and its nine-field JSON representation below.
+- Decision source: the complete `D-01` receipt in [`02_DECISION_PACK.md`](./web-gui-audit-20260930/02_DECISION_PACK.md) at P00 merge commit
+  `e97d90fecfb327135eb50e85cfa9a87be3145823`, approved by `satoshikawato` on `2026-09-30` through the two
+  Owner replies quoted verbatim in the Revision 29 entry above. The receipt and
+  JSON below reproduce all nine supplied fields without translation or
+  additional terms. This record does not supersede another decision.
+  Dependent runtime requires this authority merged into its base; this
+  amendment supplies no runtime acceptance evidence.
+- Receipt SHA-256 (UTF-8, excluding the final newline):
+  `6d866b12aea2e0e5de149f1fdad7802d42e6ac68e91983c1e7bb98b530094ec4`.
+- Acceptance contracts: `OIC-006`. These obligations and the complete
+  selected outcome are jointly required; their citation does not claim
+  completed dependent-runtime checks.
+
+```text
+PRODUCT_DECISION
+Concern: web.feature-search.all-field-scope
+Scenario revision: 1
+Choice: A / ALL-EXCLUDES-SEQUENCE-CONTENT
+Rationale: 既定の All で遺伝子名を検索したとき、名前の一致だけが返るようにする。配列への偶然の一致で結果が埋まらないようにする。
+Must preserve: 専用の Nucleotide sequence と Amino acid sequence の field による配列検索（IUPAC の展開を含む）、Label・qualifier・Location など他の field、編集後のラベルの検索、Preview と Interactive SVG の検索結果の一致、件数の表示。
+May retire: All が配列の内容と /translation の値に一致する動作。
+Accepted residual risk: 配列の断片を All で検索していた利用者は、専用の field を選ぶ必要がある。作り直す前の Interactive SVG は旧挙動のまま。
+Owner: satoshikawato
+Decision date: 2026-09-30
+```
+
+```json
+{
+  "concern": "web.feature-search.all-field-scope",
+  "scenarioRevision": 1,
+  "choice": "A / ALL-EXCLUDES-SEQUENCE-CONTENT",
+  "rationale": "既定の All で遺伝子名を検索したとき、名前の一致だけが返るようにする。配列への偶然の一致で結果が埋まらないようにする。",
+  "mustPreserve": "専用の Nucleotide sequence と Amino acid sequence の field による配列検索（IUPAC の展開を含む）、Label・qualifier・Location など他の field、編集後のラベルの検索、Preview と Interactive SVG の検索結果の一致、件数の表示。",
+  "mayRetire": "All が配列の内容と /translation の値に一致する動作。",
+  "acceptedResidualRisk": "配列の断片を All で検索していた利用者は、専用の field を選ぶ必要がある。作り直す前の Interactive SVG は旧挙動のまま。",
+  "owner": "satoshikawato",
+  "decisionDate": "2026-09-30"
+}
+```
+
+### PD-OI-057: Keyboard- and touch-reachable help tips
+
+- Concern key: `web.help-tip.reachability`
+- Scenario revision: `1`
+- Status: `ACCEPTED`
+- Selected outcome: `A / FOCUSABLE-DISCLOSURE-TIPS`
+- Normative outcome: exactly the complete approved `PRODUCT_DECISION` receipt
+  and its nine-field JSON representation below.
+- Decision source: the complete `D-02` receipt in [`02_DECISION_PACK.md`](./web-gui-audit-20260930/02_DECISION_PACK.md) at P00 merge commit
+  `e97d90fecfb327135eb50e85cfa9a87be3145823`, approved by `satoshikawato` on `2026-09-30` through the two
+  Owner replies quoted verbatim in the Revision 29 entry above. The receipt and
+  JSON below reproduce all nine supplied fields without translation or
+  additional terms. This record does not supersede another decision.
+  Dependent runtime requires this authority merged into its base; this
+  amendment supplies no runtime acceptance evidence.
+- Receipt SHA-256 (UTF-8, excluding the final newline):
+  `d61be689354b873b898680fae92e59e64672d02fbe9d1540cb70c5d8faa7b5c9`.
+- Acceptance contracts: `OIC-006`. These obligations and the complete
+  selected outcome are jointly required; their citation does not claim
+  completed dependent-runtime checks.
+
+```text
+PRODUCT_DECISION
+Concern: web.help-tip.reachability
+Scenario revision: 1
+Choice: A / FOCUSABLE-DISCLOSURE-TIPS
+Rationale: キーボードとタッチの利用者が、hover と同じ説明に届くようにする。常時表示の説明を help tip に移した（PD-OI-054）ので、tip に届くことが必要になった。
+Must preserve: 各 tip の文言、hover での表示、周囲の label と control の accessible name、Escape で閉じられること、390 px での操作、既存の id 付き tip の挙動。
+May retire: id のない tip を hover 専用の aria-hidden の icon にする設計（js/components.js の意図のコメント）。
+Accepted residual risk: tab stop が最大 175 個増え、キーボードでの移動が長くなる。Gallery と docs の capture を撮り直すことがある。
+Owner: satoshikawato
+Decision date: 2026-09-30
+```
+
+```json
+{
+  "concern": "web.help-tip.reachability",
+  "scenarioRevision": 1,
+  "choice": "A / FOCUSABLE-DISCLOSURE-TIPS",
+  "rationale": "キーボードとタッチの利用者が、hover と同じ説明に届くようにする。常時表示の説明を help tip に移した（PD-OI-054）ので、tip に届くことが必要になった。",
+  "mustPreserve": "各 tip の文言、hover での表示、周囲の label と control の accessible name、Escape で閉じられること、390 px での操作、既存の id 付き tip の挙動。",
+  "mayRetire": "id のない tip を hover 専用の aria-hidden の icon にする設計（js/components.js の意図のコメント）。",
+  "acceptedResidualRisk": "tab stop が最大 175 個増え、キーボードでの移動が長くなる。Gallery と docs の capture を撮り直すことがある。",
+  "owner": "satoshikawato",
+  "decisionDate": "2026-09-30"
+}
+```
+
+### PD-OI-058: Managed Depth track-row lifecycle
+
+- Concern key: `web.depth.managed-slot-lifecycle`
+- Scenario revision: `1`
+- Status: `ACCEPTED`
+- Selected outcome: `A / ADD-ON-FIRST-SOURCE-BOTH-MODES`
+- Normative outcome: exactly the complete approved `PRODUCT_DECISION` receipt
+  and its nine-field JSON representation below.
+- Decision source: the complete `D-03` receipt in [`02_DECISION_PACK.md`](./web-gui-audit-20260930/02_DECISION_PACK.md) at P00 merge commit
+  `e97d90fecfb327135eb50e85cfa9a87be3145823`, approved by `satoshikawato` on `2026-09-30` through the two
+  Owner replies quoted verbatim in the Revision 29 entry above. The receipt and
+  JSON below reproduce all nine supplied fields without translation or
+  additional terms. This record does not supersede another decision.
+  Dependent runtime requires this authority merged into its base; this
+  amendment supplies no runtime acceptance evidence.
+- Receipt SHA-256 (UTF-8, excluding the final newline):
+  `3dbd45fd6b6f047f6c5cdda98f1723330bf22be0802f49d8051726260f03609b`.
+- Acceptance contracts: `OIC-006`, `OIC-020`. These obligations and the complete
+  selected outcome are jointly required; their citation does not claim
+  completed dependent-runtime checks.
+
+```text
+PRODUCT_DECISION
+Concern: web.depth.managed-slot-lifecycle
+Scenario revision: 1
+Choice: A / ADD-ON-FIRST-SOURCE-BOTH-MODES
+Rationale: Circular と Linear で、Depth ファイルを設定したときの track 行の振る舞いを揃える。利用者が消した行や無効にした行を勝手に戻さない。
+Must preserve: 明示の track slot が有効なときの authority、利用者が削除・無効化・移動した行、行の params と legend_label、Reset による再生成、Undo/Redo、Session の往復、PD-OI-025 の論理 series の範囲。論理 series が最初の source を得たとき、その index を参照する行（有効・無効を問わない）がなければ managed 行を 1 つ足し、series が source を失ったら managed 行を除く。
+May retire: 無関係な切り替えのたびに Circular の watcher が depth 行を作り直す・再び有効にする・付け替える動作。Linear の "Add Depth TSV series" が無効な行を再び有効にする動作。
+Accepted residual risk: 無効な stack に depth 行を持たない旧 Session は、読み込んで stack を有効にしても行が自動では足されない（Reset で作れる）。
+Owner: satoshikawato
+Decision date: 2026-09-30
+```
+
+```json
+{
+  "concern": "web.depth.managed-slot-lifecycle",
+  "scenarioRevision": 1,
+  "choice": "A / ADD-ON-FIRST-SOURCE-BOTH-MODES",
+  "rationale": "Circular と Linear で、Depth ファイルを設定したときの track 行の振る舞いを揃える。利用者が消した行や無効にした行を勝手に戻さない。",
+  "mustPreserve": "明示の track slot が有効なときの authority、利用者が削除・無効化・移動した行、行の params と legend_label、Reset による再生成、Undo/Redo、Session の往復、PD-OI-025 の論理 series の範囲。論理 series が最初の source を得たとき、その index を参照する行（有効・無効を問わない）がなければ managed 行を 1 つ足し、series が source を失ったら managed 行を除く。",
+  "mayRetire": "無関係な切り替えのたびに Circular の watcher が depth 行を作り直す・再び有効にする・付け替える動作。Linear の \"Add Depth TSV series\" が無効な行を再び有効にする動作。",
+  "acceptedResidualRisk": "無効な stack に depth 行を持たない旧 Session は、読み込んで stack を有効にしても行が自動では足されない（Reset で作れる）。",
+  "owner": "satoshikawato",
+  "decisionDate": "2026-09-30"
+}
+```
+
+### PD-OI-059: Circular definition settings apply on Generate
+
+- Concern key: `web.circular.definition-application`
+- Scenario revision: `1`
+- Status: `ACCEPTED`
+- Selected outcome: `A / CIRCULAR-DEFINITION-APPLIES-ON-GENERATE`
+- Normative outcome: exactly the complete approved `PRODUCT_DECISION` receipt
+  and its nine-field JSON representation below.
+- Decision source: the complete `D-04` receipt in [`02_DECISION_PACK.md`](./web-gui-audit-20260930/02_DECISION_PACK.md) at P00 merge commit
+  `e97d90fecfb327135eb50e85cfa9a87be3145823`, approved by `satoshikawato` on `2026-09-30` through the two
+  Owner replies quoted verbatim in the Revision 29 entry above. The receipt and
+  JSON below reproduce all nine supplied fields without translation or
+  additional terms. This record does not supersede another decision.
+  Dependent runtime requires this authority merged into its base; this
+  amendment supplies no runtime acceptance evidence.
+- Receipt SHA-256 (UTF-8, excluding the final newline):
+  `6380086684b70c8be665093da9549d884082413cbec22de6c26bd1238dc0ce8c`.
+- Acceptance contracts: `OIC-009`, `OIC-010`, `OIC-024`, `OIC-027`. These obligations and the complete
+  selected outcome are jointly required; their citation does not claim
+  completed dependent-runtime checks.
+
+```text
+PRODUCT_DECISION
+Concern: web.circular.definition-application
+Scenario revision: 1
+Choice: A / CIRCULAR-DEFINITION-APPLIES-ON-GENERATE
+Rationale: Result の定義行に、crop の長さ・GC%・record label と食い違う値が書き込まれないようにする。Linear と同じ「Applies on Generate」に揃える。
+Must preserve: Species、Strain、Plot title、Title position、Title font、Default font size、Keep Full Definition の編集・保存・History、Generate 後の正しい定義（region の長さと GC%、record label と subtitle、逆相補、grid の順序）、Linear の現在の挙動、他の即時編集（色、ラベル、凡例など）。各設定には Applies on Generate の表示を付ける。
+May retire: 上の Circular の設定の即時反映と、そのための helper（regenerate_definition_svgs）。
+Accepted residual risk: これらを変えたとき、Generate するまで preview が変わらない。
+Owner: satoshikawato
+Decision date: 2026-09-30
+```
+
+```json
+{
+  "concern": "web.circular.definition-application",
+  "scenarioRevision": 1,
+  "choice": "A / CIRCULAR-DEFINITION-APPLIES-ON-GENERATE",
+  "rationale": "Result の定義行に、crop の長さ・GC%・record label と食い違う値が書き込まれないようにする。Linear と同じ「Applies on Generate」に揃える。",
+  "mustPreserve": "Species、Strain、Plot title、Title position、Title font、Default font size、Keep Full Definition の編集・保存・History、Generate 後の正しい定義（region の長さと GC%、record label と subtitle、逆相補、grid の順序）、Linear の現在の挙動、他の即時編集（色、ラベル、凡例など）。各設定には Applies on Generate の表示を付ける。",
+  "mayRetire": "上の Circular の設定の即時反映と、そのための helper（regenerate_definition_svgs）。",
+  "acceptedResidualRisk": "これらを変えたとき、Generate するまで preview が変わらない。",
+  "owner": "satoshikawato",
+  "decisionDate": "2026-09-30"
+}
+```
+
+### PD-OI-060: Diagram-wide stroke settings apply on Generate
+
+- Concern key: `web.stroke.application`
+- Scenario revision: `1`
+- Status: `ACCEPTED`
+- Selected outcome: `C / STROKE-APPLIES-ON-GENERATE`
+- Normative outcome: exactly the complete approved `PRODUCT_DECISION` receipt
+  and its nine-field JSON representation below.
+- Decision source: the complete `D-05` receipt in [`02_DECISION_PACK.md`](./web-gui-audit-20260930/02_DECISION_PACK.md) at P00 merge commit
+  `e97d90fecfb327135eb50e85cfa9a87be3145823`, approved by `satoshikawato` on `2026-09-30` through the two
+  Owner replies quoted verbatim in the Revision 29 entry above. The receipt and
+  JSON below reproduce all nine supplied fields without translation or
+  additional terms. This record does not supersede another decision.
+  Dependent runtime requires this authority merged into its base; this
+  amendment supplies no runtime acceptance evidence.
+- Receipt SHA-256 (UTF-8, excluding the final newline):
+  `f95d7c6e1b7354f805d186d2709637b246ef2f15d416bc1143e1c46816ef14af`.
+- Acceptance contracts: `OIC-024`, `OIC-027`. These obligations and the complete
+  selected outcome are jointly required; their citation does not claim
+  completed dependent-runtime checks.
+
+```text
+PRODUCT_DECISION
+Concern: web.stroke.application
+Scenario revision: 1
+Choice: C / STROKE-APPLIES-ON-GENERATE
+Rationale: 空欄・不正な値・Auto への戻しが、Generate と違う stroke として Result に残らないようにする。個々の feature の stroke 指定を全体の設定で上書きしないようにする。
+Must preserve: 全体の stroke 設定（block、line、axis、scale の幅と色）の編集・保存・Generate での適用、個々の feature の stroke 編集の即時反映と Auto への復元、不正な値の検証。各設定には Applies on Generate の表示を付ける。
+May retire: 全体の stroke 設定の即時反映。
+Accepted residual risk: 全体の stroke を変えたとき、Generate するまで preview が変わらない。
+Owner: satoshikawato
+Decision date: 2026-09-30
+```
+
+```json
+{
+  "concern": "web.stroke.application",
+  "scenarioRevision": 1,
+  "choice": "C / STROKE-APPLIES-ON-GENERATE",
+  "rationale": "空欄・不正な値・Auto への戻しが、Generate と違う stroke として Result に残らないようにする。個々の feature の stroke 指定を全体の設定で上書きしないようにする。",
+  "mustPreserve": "全体の stroke 設定（block、line、axis、scale の幅と色）の編集・保存・Generate での適用、個々の feature の stroke 編集の即時反映と Auto への復元、不正な値の検証。各設定には Applies on Generate の表示を付ける。",
+  "mayRetire": "全体の stroke 設定の即時反映。",
+  "acceptedResidualRisk": "全体の stroke を変えたとき、Generate するまで preview が変わらない。",
+  "owner": "satoshikawato",
+  "decisionDate": "2026-09-30"
+}
+```
+
+### PD-OI-061: Legend rename collisions for every entry
+
+- Concern key: `web.legend.rename-collision`
+- Scenario revision: `1`
+- Status: `ACCEPTED`
+- Selected outcome: `A / DIALOG-FOR-ALL-ENTRIES`
+- Normative outcome: exactly the complete approved `PRODUCT_DECISION` receipt
+  and its nine-field JSON representation below.
+- Decision source: the complete `D-06` receipt in [`02_DECISION_PACK.md`](./web-gui-audit-20260930/02_DECISION_PACK.md) at P00 merge commit
+  `e97d90fecfb327135eb50e85cfa9a87be3145823`, approved by `satoshikawato` on `2026-09-30` through the two
+  Owner replies quoted verbatim in the Revision 29 entry above. The receipt and
+  JSON below reproduce all nine supplied fields without translation or
+  additional terms. This record does not supersede another decision.
+  Dependent runtime requires this authority merged into its base; this
+  amendment supplies no runtime acceptance evidence.
+- Receipt SHA-256 (UTF-8, excluding the final newline):
+  `286c9b269cf98ccbb7c385bf41fd24ecc1f991b636782fe507a03effbad209b9`.
+- Acceptance contracts: `OIC-006`. These obligations and the complete
+  selected outcome are jointly required; their citation does not claim
+  completed dependent-runtime checks.
+
+```text
+PRODUCT_DECISION
+Concern: web.legend.rename-collision
+Scenario revision: 1
+Choice: A / DIALOG-FOR-ALL-ENTRIES
+Rationale: 凡例の名前を既存の名前に変えたとき、feature の有無にかかわらず同じ Merge / Suffix / Cancel の選択を示す。原因の分からないエラーで止めない。
+Must preserve: 衝突しない rename の即時反映、feature のない項目の既存ダイアログ、衝突先が色ルールの caption のときの PD-OI-042 の区別、Undo/Redo、Generate と Session での保持。
+May retire: feature のある項目の衝突で、UNKNOWN のエラーを出して何もしない動作。
+Accepted residual risk: Merge を選ぶと 2 つの凡例項目が 1 つの色と名前にまとまる。
+Owner: satoshikawato
+Decision date: 2026-09-30
+```
+
+```json
+{
+  "concern": "web.legend.rename-collision",
+  "scenarioRevision": 1,
+  "choice": "A / DIALOG-FOR-ALL-ENTRIES",
+  "rationale": "凡例の名前を既存の名前に変えたとき、feature の有無にかかわらず同じ Merge / Suffix / Cancel の選択を示す。原因の分からないエラーで止めない。",
+  "mustPreserve": "衝突しない rename の即時反映、feature のない項目の既存ダイアログ、衝突先が色ルールの caption のときの PD-OI-042 の区別、Undo/Redo、Generate と Session での保持。",
+  "mayRetire": "feature のある項目の衝突で、UNKNOWN のエラーを出して何もしない動作。",
+  "acceptedResidualRisk": "Merge を選ぶと 2 つの凡例項目が 1 つの色と名前にまとまる。",
+  "owner": "satoshikawato",
+  "decisionDate": "2026-09-30"
+}
+```
+
+### PD-OI-062: Batch live edits projected on Result mount
+
+- Concern key: `web.batch.live-edit-projection`
+- Scenario revision: `1`
+- Status: `ACCEPTED`
+- Selected outcome: `B / PROJECT-ON-MOUNT`
+- Normative outcome: exactly the complete approved `PRODUCT_DECISION` receipt
+  and its nine-field JSON representation below.
+- Decision source: the complete `D-07` receipt in [`02_DECISION_PACK.md`](./web-gui-audit-20260930/02_DECISION_PACK.md) at P00 merge commit
+  `e97d90fecfb327135eb50e85cfa9a87be3145823`, approved by `satoshikawato` on `2026-09-30` through the two
+  Owner replies quoted verbatim in the Revision 29 entry above. The receipt and
+  JSON below reproduce all nine supplied fields without translation or
+  additional terms. This record does not supersede another decision.
+  Dependent runtime requires this authority merged into its base; this
+  amendment supplies no runtime acceptance evidence.
+- Receipt SHA-256 (UTF-8, excluding the final newline):
+  `2125389ed12b1b9fd2a874b726ebfc4f03d0a6e518342bec2b953fe4d41bd5b1`.
+- Acceptance contracts: `OIC-013`, `OIC-027`. These obligations and the complete
+  selected outcome are jointly required; their citation does not claim
+  completed dependent-runtime checks.
+
+```text
+PRODUCT_DECISION
+Concern: web.batch.live-edit-projection
+Scenario revision: 1
+Choice: B / PROJECT-ON-MOUNT
+Rationale: batch の各 Result を選んだとき、その Result の preview と出力に、すでに行った色・非表示・凡例・ラベルの編集が反映されているようにする。編集のたびに全 Result を処理し直すことは避ける。
+Must preserve: 表示中の Result への即時反映、Undo/Redo で全 Result の見え方が戻ること、Save → Load → Result 選択、各 Result の export、編集がないときの zero fast path、stale・cancel のときの旧 Result の保持、label の DOM identity。
+May retire: 表示していない Result に、Generate まで古い色・非表示・凡例が残る動作。
+Accepted residual risk: 一度も表示していない Result は、Session に保存される SVG の bytes が、次に表示するか Generate するまで古い（Load 後に選べば投影される）。大きな batch では表示のたびに投影のコストがかかる。
+Owner: satoshikawato
+Decision date: 2026-09-30
+```
+
+```json
+{
+  "concern": "web.batch.live-edit-projection",
+  "scenarioRevision": 1,
+  "choice": "B / PROJECT-ON-MOUNT",
+  "rationale": "batch の各 Result を選んだとき、その Result の preview と出力に、すでに行った色・非表示・凡例・ラベルの編集が反映されているようにする。編集のたびに全 Result を処理し直すことは避ける。",
+  "mustPreserve": "表示中の Result への即時反映、Undo/Redo で全 Result の見え方が戻ること、Save → Load → Result 選択、各 Result の export、編集がないときの zero fast path、stale・cancel のときの旧 Result の保持、label の DOM identity。",
+  "mayRetire": "表示していない Result に、Generate まで古い色・非表示・凡例が残る動作。",
+  "acceptedResidualRisk": "一度も表示していない Result は、Session に保存される SVG の bytes が、次に表示するか Generate するまで古い（Load 後に選べば投影される）。大きな batch では表示のたびに投影のコストがかかる。",
+  "owner": "satoshikawato",
+  "decisionDate": "2026-09-30"
+}
+```
+
+### PD-OI-063: Legend order continuity across Generate
+
+- Concern key: `web.legend.order-continuity`
+- Scenario revision: `1`
+- Status: `ACCEPTED`
+- Selected outcome: `B / CARRY-LEGEND-ORDER`
+- Normative outcome: exactly the complete approved `PRODUCT_DECISION` receipt
+  and its nine-field JSON representation below.
+- Decision source: the complete `D-08` receipt in [`02_DECISION_PACK.md`](./web-gui-audit-20260930/02_DECISION_PACK.md) at P00 merge commit
+  `e97d90fecfb327135eb50e85cfa9a87be3145823`, approved by `satoshikawato` on `2026-09-30` through the two
+  Owner replies quoted verbatim in the Revision 29 entry above. The receipt and
+  JSON below reproduce all nine supplied fields without translation or
+  additional terms. This record does not supersede another decision.
+  Dependent runtime requires this authority merged into its base; this
+  amendment supplies no runtime acceptance evidence.
+- Receipt SHA-256 (UTF-8, excluding the final newline):
+  `8c1695739454244618f079ea84586600d5e2f165d7a0d0aa2cfb8de4b167691f`.
+- Acceptance contracts: `OIC-027`. These obligations and the complete
+  selected outcome are jointly required; their citation does not claim
+  completed dependent-runtime checks.
+
+```text
+PRODUCT_DECISION
+Concern: web.legend.order-continuity
+Scenario revision: 1
+Choice: B / CARRY-LEGEND-ORDER
+Rationale: Sort や Move で整えた凡例の順序を、色や font を直して Generate するたびにやり直さなくてよいようにする（PD-OI-052 と同じ負担をなくす）。
+Must preserve: 編集がないときの既定の順序、Sort と Move の即時反映、Undo/Redo、Session の往復、batch の全出力への適用、新しく現れた項目の表示、PD-OI-052 の装飾 delta。
+May retire: Generate が凡例の順序を既定に戻す動作。
+Accepted residual risk: 並べ替えの後に新しく現れた項目は末尾に置かれる。消えた項目の順序の情報は捨てる。
+Owner: satoshikawato
+Decision date: 2026-09-30
+```
+
+```json
+{
+  "concern": "web.legend.order-continuity",
+  "scenarioRevision": 1,
+  "choice": "B / CARRY-LEGEND-ORDER",
+  "rationale": "Sort や Move で整えた凡例の順序を、色や font を直して Generate するたびにやり直さなくてよいようにする（PD-OI-052 と同じ負担をなくす）。",
+  "mustPreserve": "編集がないときの既定の順序、Sort と Move の即時反映、Undo/Redo、Session の往復、batch の全出力への適用、新しく現れた項目の表示、PD-OI-052 の装飾 delta。",
+  "mayRetire": "Generate が凡例の順序を既定に戻す動作。",
+  "acceptedResidualRisk": "並べ替えの後に新しく現れた項目は末尾に置かれる。消えた項目の順序の情報は捨てる。",
+  "owner": "satoshikawato",
+  "decisionDate": "2026-09-30"
+}
+```
+
+### PD-OI-064: Canvas padding continuity across Generate
+
+- Concern key: `web.canvas.padding-continuity`
+- Scenario revision: `1`
+- Status: `ACCEPTED`
+- Selected outcome: `B / CARRY-CANVAS-PADDING`
+- Normative outcome: exactly the complete approved `PRODUCT_DECISION` receipt
+  and its nine-field JSON representation below.
+- Decision source: the complete `D-09` receipt in [`02_DECISION_PACK.md`](./web-gui-audit-20260930/02_DECISION_PACK.md) at P00 merge commit
+  `e97d90fecfb327135eb50e85cfa9a87be3145823`, approved by `satoshikawato` on `2026-09-30` through the two
+  Owner replies quoted verbatim in the Revision 29 entry above. The receipt and
+  JSON below reproduce all nine supplied fields without translation or
+  additional terms. This record does not supersede another decision.
+  Dependent runtime requires this authority merged into its base; this
+  amendment supplies no runtime acceptance evidence.
+- Receipt SHA-256 (UTF-8, excluding the final newline):
+  `680081a403e4faca4b75c6824345322645103e3b8e5f44b2d24993040136843d`.
+- Acceptance contracts: `OIC-027`. These obligations and the complete
+  selected outcome are jointly required; their citation does not claim
+  completed dependent-runtime checks.
+
+```text
+PRODUCT_DECISION
+Concern: web.canvas.padding-continuity
+Scenario revision: 1
+Choice: B / CARRY-CANVAS-PADDING
+Rationale: PD-OI-052 が clipping の緩和策として示す padding を、Generate のたびに入れ直さなくてよいようにする。
+Must preserve: padding の編集と即時反映、Reset、Undo/Redo、Session の往復、batch の全出力、export。padding を二重に適用しないこと。
+May retire: Generate が canvas padding を 0 に戻す動作。
+Accepted residual risk: 図の大きさが大きく変わる設定変更の後も同じ padding が残るので、余白が合わないことがある。
+Owner: satoshikawato
+Decision date: 2026-09-30
+```
+
+```json
+{
+  "concern": "web.canvas.padding-continuity",
+  "scenarioRevision": 1,
+  "choice": "B / CARRY-CANVAS-PADDING",
+  "rationale": "PD-OI-052 が clipping の緩和策として示す padding を、Generate のたびに入れ直さなくてよいようにする。",
+  "mustPreserve": "padding の編集と即時反映、Reset、Undo/Redo、Session の往復、batch の全出力、export。padding を二重に適用しないこと。",
+  "mayRetire": "Generate が canvas padding を 0 に戻す動作。",
+  "acceptedResidualRisk": "図の大きさが大きく変わる設定変更の後も同じ padding が残るので、余白が合わないことがある。",
+  "owner": "satoshikawato",
+  "decisionDate": "2026-09-30"
+}
+```
+
+### PD-OI-065: Label edits after source replacement
+
+- Concern key: `web.labels.source-replacement-reconciliation`
+- Scenario revision: `1`
+- Status: `ACCEPTED`
+- Selected outcome: `A / PRUNE-UNMATCHED-TARGETS`
+- Normative outcome: exactly the complete approved `PRODUCT_DECISION` receipt
+  and its nine-field JSON representation below.
+- Decision source: the complete `D-10` receipt in [`02_DECISION_PACK.md`](./web-gui-audit-20260930/02_DECISION_PACK.md) at P00 merge commit
+  `e97d90fecfb327135eb50e85cfa9a87be3145823`, approved by `satoshikawato` on `2026-09-30` through the two
+  Owner replies quoted verbatim in the Revision 29 entry above. The receipt and
+  JSON below reproduce all nine supplied fields without translation or
+  additional terms. This record does not supersede another decision.
+  Dependent runtime requires this authority merged into its base; this
+  amendment supplies no runtime acceptance evidence.
+- Receipt SHA-256 (UTF-8, excluding the final newline):
+  `81d6b93f60092310c78f8bcfe0e196329f9b6426c1824783ba761723e6e6cfbe`.
+
+```text
+PRODUCT_DECISION
+Concern: web.labels.source-replacement-reconciliation
+Scenario revision: 1
+Choice: A / PRUNE-UNMATCHED-TARGETS
+Rationale: 別のゲノムに置き換えて Generate したとき、もう存在しない feature への label の編集だけを外し、残る feature への編集は保つ。
+Must preserve: 表示の変化（Result 選択、mount、record 選択、mode、非表示、reflow）では label の override を作成・削除しないこと、bulk の label override（matcher として残す）、Undo による復元、Session の往復。
+May retire: source の置き換えのとき、target が 1 つでも消えると label の override をすべて消す動作。
+Accepted residual risk: 置き換えた後のゲノムに同じ identity の feature があれば、その override はそのまま適用される。
+Owner: satoshikawato
+Decision date: 2026-09-30
+```
+
+```json
+{
+  "concern": "web.labels.source-replacement-reconciliation",
+  "scenarioRevision": 1,
+  "choice": "A / PRUNE-UNMATCHED-TARGETS",
+  "rationale": "別のゲノムに置き換えて Generate したとき、もう存在しない feature への label の編集だけを外し、残る feature への編集は保つ。",
+  "mustPreserve": "表示の変化（Result 選択、mount、record 選択、mode、非表示、reflow）では label の override を作成・削除しないこと、bulk の label override（matcher として残す）、Undo による復元、Session の往復。",
+  "mayRetire": "source の置き換えのとき、target が 1 つでも消えると label の override をすべて消す動作。",
+  "acceptedResidualRisk": "置き換えた後のゲノムに同じ identity の feature があれば、その override はそのまま適用される。",
+  "owner": "satoshikawato",
+  "decisionDate": "2026-09-30"
+}
+```
+
+### PD-OI-066: Live-edit and regeneration parity
+
+- Concern key: `web.live-edit.regeneration-parity`
+- Scenario revision: `1`
+- Status: `ACCEPTED`
+- Selected outcome: `A / LIVE-EDIT-EQUALS-REGENERATION`
+- Normative outcome: exactly the complete approved `PRODUCT_DECISION` receipt
+  and its nine-field JSON representation below.
+- Decision source: the complete `D-11` receipt in [`02_DECISION_PACK.md`](./web-gui-audit-20260930/02_DECISION_PACK.md) at P00 merge commit
+  `e97d90fecfb327135eb50e85cfa9a87be3145823`, approved by `satoshikawato` on `2026-09-30` through the two
+  Owner replies quoted verbatim in the Revision 29 entry above. The receipt and
+  JSON below reproduce all nine supplied fields without translation or
+  additional terms. This record does not supersede another decision.
+  Dependent runtime requires this authority merged into its base; this
+  amendment supplies no runtime acceptance evidence.
+- Receipt SHA-256 (UTF-8, excluding the final newline):
+  `9298e2bb07d617f9f2562e8168d412a867082f4130b60ec709ef2d7ff005e9e8`.
+- Acceptance contracts: `OIC-024`, `OIC-027`. These obligations and the complete
+  selected outcome are jointly required; their citation does not claim
+  completed dependent-runtime checks.
+
+```text
+PRODUCT_DECISION
+Concern: web.live-edit.regeneration-parity
+Scenario revision: 1
+Choice: A / LIVE-EDIT-EQUALS-REGENERATION
+Rationale: 即時の編集で見えている図が、次の Generate、Session の読み込み、export でも同じになることを保証する。
+Must preserve: 各即時編集の応答の速さ、Live edit と Applies on Generate の表示の正確さ（OIC-024）、PD-OI-052 の装飾 delta。即時に編集した Result は、同じ draft から新しく Generate した Result と、対象要素の意味（位置、色、文字、表示）で一致する。Applies on Generate の設定は、Generate の前に Result を変えない。
+May retire: 即時の編集と Generate で結果が違ってよいという暗黙の扱い。Generate の compiler で再現できない即時編集は、Applies on Generate に切り替える。
+Accepted residual risk: 即時に反映される設定が減ることがある（D-04 と D-05 と同じ方向）。parity を取れない即時編集は退役しうる（D-30）。
+Owner: satoshikawato
+Decision date: 2026-09-30
+```
+
+```json
+{
+  "concern": "web.live-edit.regeneration-parity",
+  "scenarioRevision": 1,
+  "choice": "A / LIVE-EDIT-EQUALS-REGENERATION",
+  "rationale": "即時の編集で見えている図が、次の Generate、Session の読み込み、export でも同じになることを保証する。",
+  "mustPreserve": "各即時編集の応答の速さ、Live edit と Applies on Generate の表示の正確さ（OIC-024）、PD-OI-052 の装飾 delta。即時に編集した Result は、同じ draft から新しく Generate した Result と、対象要素の意味（位置、色、文字、表示）で一致する。Applies on Generate の設定は、Generate の前に Result を変えない。",
+  "mayRetire": "即時の編集と Generate で結果が違ってよいという暗黙の扱い。Generate の compiler で再現できない即時編集は、Applies on Generate に切り替える。",
+  "acceptedResidualRisk": "即時に反映される設定が減ることがある（D-04 と D-05 と同じ方向）。parity を取れない即時編集は退役しうる（D-30）。",
+  "owner": "satoshikawato",
+  "decisionDate": "2026-09-30"
+}
+```
+
+### PD-OI-067: Per-record inferred Linear definitions
+
+- Concern key: `web.linear.file-default-definition`
+- Scenario revision: `1`
+- Status: `ACCEPTED`
+- Selected outcome: `B / PER-RECORD-INFERRED-DEFINITION`
+- Normative outcome: exactly the complete approved `PRODUCT_DECISION` receipt
+  and its nine-field JSON representation below.
+- Decision source: the complete `D-12` receipt in [`02_DECISION_PACK.md`](./web-gui-audit-20260930/02_DECISION_PACK.md) at P00 merge commit
+  `e97d90fecfb327135eb50e85cfa9a87be3145823`, approved by `satoshikawato` on `2026-09-30` through the two
+  Owner replies quoted verbatim in the Revision 29 entry above. The receipt and
+  JSON below reproduce all nine supplied fields without translation or
+  additional terms. This record does not supersede another decision.
+  Dependent runtime requires this authority merged into its base; this
+  amendment supplies no runtime acceptance evidence.
+- Receipt SHA-256 (UTF-8, excluding the final newline):
+  `daf932cb4892019717ea3ae082d1c799b58a436f909738fbc6239df5d43d265b`.
+- Acceptance contracts: `OIC-015`. These obligations and the complete
+  selected outcome are jointly required; their citation does not claim
+  completed dependent-runtime checks.
+
+```text
+PRODUCT_DECISION
+Concern: web.linear.file-default-definition
+Scenario revision: 1
+Choice: B / PER-RECORD-INFERRED-DEFINITION
+Rationale: 1 つのファイルに別の生物の record が入っていても、各 record に自分の生物名の定義を付ける。
+Must preserve: record ごとの Definition の編集、利用者が file に入力した Definition を全 record に適用すること、全 record が同じ生物のときの現在の表示、Reset で推定値に戻ること、Session の往復、Circular の現在の挙動。定義の優先順位は、record に入力した値 → file に入力した値 → その record 自身の推定値。
+May retire: 1 番目の record の推定値を file の既定値として全 record に使う動作。
+Accepted residual risk: file 欄の「Using file default」は、利用者が file に入力した値だけを指すようになる。推定値を保存するために Session の形式が変わる場合がある（旧 Session は読み込み時に推定し直す）。
+Owner: satoshikawato
+Decision date: 2026-09-30
+```
+
+```json
+{
+  "concern": "web.linear.file-default-definition",
+  "scenarioRevision": 1,
+  "choice": "B / PER-RECORD-INFERRED-DEFINITION",
+  "rationale": "1 つのファイルに別の生物の record が入っていても、各 record に自分の生物名の定義を付ける。",
+  "mustPreserve": "record ごとの Definition の編集、利用者が file に入力した Definition を全 record に適用すること、全 record が同じ生物のときの現在の表示、Reset で推定値に戻ること、Session の往復、Circular の現在の挙動。定義の優先順位は、record に入力した値 → file に入力した値 → その record 自身の推定値。",
+  "mayRetire": "1 番目の record の推定値を file の既定値として全 record に使う動作。",
+  "acceptedResidualRisk": "file 欄の「Using file default」は、利用者が file に入力した値だけを指すようになる。推定値を保存するために Session の形式が変わる場合がある（旧 Session は読み込み時に推定し直す）。",
+  "owner": "satoshikawato",
+  "decisionDate": "2026-09-30"
+}
+```
+
+### PD-OI-068: GFF3+FASTA record universe
+
+- Concern key: `diagram-generation.gff-fasta-record-universe`
+- Scenario revision: `1`
+- Status: `ACCEPTED`
+- Selected outcome: `A / GFF-ANNOTATED-RECORDS-ONLY`
+- Normative outcome: exactly the complete approved `PRODUCT_DECISION` receipt
+  and its nine-field JSON representation below.
+- Decision source: the complete `D-13` receipt in [`02_DECISION_PACK.md`](./web-gui-audit-20260930/02_DECISION_PACK.md) at P00 merge commit
+  `e97d90fecfb327135eb50e85cfa9a87be3145823`, approved by `satoshikawato` on `2026-09-30` through the two
+  Owner replies quoted verbatim in the Revision 29 entry above. The receipt and
+  JSON below reproduce all nine supplied fields without translation or
+  additional terms. This record does not supersede another decision.
+  Dependent runtime requires this authority merged into its base; this
+  amendment supplies no runtime acceptance evidence.
+- Receipt SHA-256 (UTF-8, excluding the final newline):
+  `a4a04f680c03b1e1a13ccf82fd35d62b10c01700546c147ab567d28c47ebd14c`.
+- Acceptance contracts: `OIC-015`. These obligations and the complete
+  selected outcome are jointly required; their citation does not claim
+  completed dependent-runtime checks.
+
+```text
+PRODUCT_DECISION
+Concern: diagram-generation.gff-fasta-record-universe
+Scenario revision: 1
+Choice: A / GFF-ANNOTATED-RECORDS-ONLY
+Rationale: GFF3+FASTA の record の集合を CLI と同じにし、科学的な出力を変えない。
+Must preserve: GFF の行を持つ record の表示（feature が 0 でも region 行や埋め込み ##FASTA を持つものを含む）、FASTA の順序、CLI の出力、PD-OI-018 の他の項目。
+May retire: GFF の行を 1 つも持たない FASTA の配列を、record の候補として一覧に出す動作（Generate できない候補）。
+Accepted residual risk: FASTA だけにある配列は描けない。描くには GFF に region 行を足す必要がある。
+Owner: satoshikawato
+Decision date: 2026-09-30
+```
+
+```json
+{
+  "concern": "diagram-generation.gff-fasta-record-universe",
+  "scenarioRevision": 1,
+  "choice": "A / GFF-ANNOTATED-RECORDS-ONLY",
+  "rationale": "GFF3+FASTA の record の集合を CLI と同じにし、科学的な出力を変えない。",
+  "mustPreserve": "GFF の行を持つ record の表示（feature が 0 でも region 行や埋め込み ##FASTA を持つものを含む）、FASTA の順序、CLI の出力、PD-OI-018 の他の項目。",
+  "mayRetire": "GFF の行を 1 つも持たない FASTA の配列を、record の候補として一覧に出す動作（Generate できない候補）。",
+  "acceptedResidualRisk": "FASTA だけにある配列は描けない。描くには GFF に region 行を足す必要がある。",
+  "owner": "satoshikawato",
+  "decisionDate": "2026-09-30"
+}
+```
+
+### PD-OI-069: Stable-hash single-feature colors with duplicate record IDs
+
+- Concern key: `web.feature-color.duplicate-record-instance`
+- Scenario revision: `1`
+- Status: `ACCEPTED`
+- Selected outcome: `A / STABLE-HASH-ONLY`
+- Normative outcome: exactly the complete approved `PRODUCT_DECISION` receipt
+  and its nine-field JSON representation below.
+- Decision source: the complete `D-14` receipt in [`02_DECISION_PACK.md`](./web-gui-audit-20260930/02_DECISION_PACK.md) at P00 merge commit
+  `e97d90fecfb327135eb50e85cfa9a87be3145823`, approved by `satoshikawato` on `2026-09-30` through the two
+  Owner replies quoted verbatim in the Revision 29 entry above. The receipt and
+  JSON below reproduce all nine supplied fields without translation or
+  additional terms. This record does not supersede another decision.
+  Dependent runtime requires this authority merged into its base; this
+  amendment supplies no runtime acceptance evidence.
+- Receipt SHA-256 (UTF-8, excluding the final newline):
+  `8d0e04078648f77ebe017d95a929eb66616e78aea8d736d42575b418977e6f9d`.
+- Acceptance contracts: `OIC-005`. These obligations and the complete
+  selected outcome are jointly required; their citation does not claim
+  completed dependent-runtime checks.
+
+```text
+PRODUCT_DECISION
+Concern: web.feature-color.duplicate-record-instance
+Scenario revision: 1
+Choice: A / STABLE-HASH-ONLY
+Rationale: Web が作る色ルールを、Python が必ず照合できる値にする（OIPC-C03）。
+Must preserve: 重複しない feature の「This feature only」、label の instance 単位の編集、Undo/Redo、Session。
+May retire: record ID が重複するとき、rendered instance id を色ルールに書く動作。
+Accepted residual risk: 同じ record ID を持つ同一の複製がある場合、「This feature only」の色は両方の複製に適用される。
+Owner: satoshikawato
+Decision date: 2026-09-30
+```
+
+```json
+{
+  "concern": "web.feature-color.duplicate-record-instance",
+  "scenarioRevision": 1,
+  "choice": "A / STABLE-HASH-ONLY",
+  "rationale": "Web が作る色ルールを、Python が必ず照合できる値にする（OIPC-C03）。",
+  "mustPreserve": "重複しない feature の「This feature only」、label の instance 単位の編集、Undo/Redo、Session。",
+  "mayRetire": "record ID が重複するとき、rendered instance id を色ルールに書く動作。",
+  "acceptedResidualRisk": "同じ record ID を持つ同一の複製がある場合、「This feature only」の色は両方の複製に適用される。",
+  "owner": "satoshikawato",
+  "decisionDate": "2026-09-30"
+}
+```
+
+### PD-OI-070: Reset Settings scope for Linear record display
+
+- Concern key: `web.reset.linear-record-display`
+- Scenario revision: `1`
+- Status: `ACCEPTED`
+- Selected outcome: `A / RESET-LINEAR-RECORD-DISPLAY`
+- Normative outcome: exactly the complete approved `PRODUCT_DECISION` receipt
+  and its nine-field JSON representation below.
+- Decision source: the complete `D-15` receipt in [`02_DECISION_PACK.md`](./web-gui-audit-20260930/02_DECISION_PACK.md) at P00 merge commit
+  `e97d90fecfb327135eb50e85cfa9a87be3145823`, approved by `satoshikawato` on `2026-09-30` through the two
+  Owner replies quoted verbatim in the Revision 29 entry above. The receipt and
+  JSON below reproduce all nine supplied fields without translation or
+  additional terms. This record does not supersede another decision.
+  Dependent runtime requires this authority merged into its base; this
+  amendment supplies no runtime acceptance evidence.
+- Receipt SHA-256 (UTF-8, excluding the final newline):
+  `1000473579a0d63c4d1321bac369987dfc8124e15568ed0ce3215560020942ce`.
+
+```text
+PRODUCT_DECISION
+Concern: web.reset.linear-record-display
+Scenario revision: 1
+Choice: A / RESET-LINEAR-RECORD-DISPLAY
+Rationale: Reset Settings の範囲を Circular と Linear で揃える。
+Must preserve: ファイル、展開された行の record 選択（region_record_id）、file の既定値、depth の割り当て、Undo による復元。
+May retire: Reset Settings の後も、Linear の record ごとの Definition・Subtitle・region・逆相補と alignment plan が残る動作。
+Accepted residual risk: Reset で Linear の record ごとの表示設定が消える（Undo で戻せる）。
+Owner: satoshikawato
+Decision date: 2026-09-30
+```
+
+```json
+{
+  "concern": "web.reset.linear-record-display",
+  "scenarioRevision": 1,
+  "choice": "A / RESET-LINEAR-RECORD-DISPLAY",
+  "rationale": "Reset Settings の範囲を Circular と Linear で揃える。",
+  "mustPreserve": "ファイル、展開された行の record 選択（region_record_id）、file の既定値、depth の割り当て、Undo による復元。",
+  "mayRetire": "Reset Settings の後も、Linear の record ごとの Definition・Subtitle・region・逆相補と alignment plan が残る動作。",
+  "acceptedResidualRisk": "Reset で Linear の record ごとの表示設定が消える（Undo で戻せる）。",
+  "owner": "satoshikawato",
+  "decisionDate": "2026-09-30"
+}
+```
+
+### PD-OI-071: Location-only feature-search positions
+
+- Concern key: `web.feature-search.location-fields`
+- Scenario revision: `1`
+- Status: `ACCEPTED`
+- Selected outcome: `A / LOCATION-FIELD-ONLY`
+- Normative outcome: exactly the complete approved `PRODUCT_DECISION` receipt
+  and its nine-field JSON representation below.
+- Decision source: the complete `D-16` receipt in [`02_DECISION_PACK.md`](./web-gui-audit-20260930/02_DECISION_PACK.md) at P00 merge commit
+  `e97d90fecfb327135eb50e85cfa9a87be3145823`, approved by `satoshikawato` on `2026-09-30` through the two
+  Owner replies quoted verbatim in the Revision 29 entry above. The receipt and
+  JSON below reproduce all nine supplied fields without translation or
+  additional terms. This record does not supersede another decision.
+  Dependent runtime requires this authority merged into its base; this
+  amendment supplies no runtime acceptance evidence.
+- Receipt SHA-256 (UTF-8, excluding the final newline):
+  `7fd68a5b264ba1a9b941d592dcfd75a8bf371df9687a431d6983ecc617bcc78b`.
+
+```text
+PRODUCT_DECISION
+Concern: web.feature-search.location-fields
+Scenario revision: 1
+Choice: A / LOCATION-FIELD-ONLY
+Rationale: 位置の検索と表示を 1 始まりの INSDC 形式に揃え、誤った一致をなくす。
+Must preserve: Location での検索（原点をまたぐ feature と分割された feature を含む）、drawer と popup の位置と長さの表示。
+May retire: 検索の Start と End の項目（0 始まりの生の値）。
+Accepted residual risk: 開始位置の数値だけで検索していた場合は、Location の値で検索し直す必要がある。
+Owner: satoshikawato
+Decision date: 2026-09-30
+```
+
+```json
+{
+  "concern": "web.feature-search.location-fields",
+  "scenarioRevision": 1,
+  "choice": "A / LOCATION-FIELD-ONLY",
+  "rationale": "位置の検索と表示を 1 始まりの INSDC 形式に揃え、誤った一致をなくす。",
+  "mustPreserve": "Location での検索（原点をまたぐ feature と分割された feature を含む）、drawer と popup の位置と長さの表示。",
+  "mayRetire": "検索の Start と End の項目（0 始まりの生の値）。",
+  "acceptedResidualRisk": "開始位置の数値だけで検索していた場合は、Location の値で検索し直す必要がある。",
+  "owner": "satoshikawato",
+  "decisionDate": "2026-09-30"
+}
+```
+
+### PD-OI-072: Web PDF physical size
+
+- Concern key: `web.export.pdf-physical-size`
+- Scenario revision: `1`
+- Status: `ACCEPTED`
+- Selected outcome: `A / CSS-PX-TO-PT`
+- Normative outcome: exactly the complete approved `PRODUCT_DECISION` receipt
+  and its nine-field JSON representation below.
+- Decision source: the complete `D-17` receipt in [`02_DECISION_PACK.md`](./web-gui-audit-20260930/02_DECISION_PACK.md) at P00 merge commit
+  `e97d90fecfb327135eb50e85cfa9a87be3145823`, approved by `satoshikawato` on `2026-09-30` through the two
+  Owner replies quoted verbatim in the Revision 29 entry above. The receipt and
+  JSON below reproduce all nine supplied fields without translation or
+  additional terms. This record does not supersede another decision.
+  Dependent runtime requires this authority merged into its base; this
+  amendment supplies no runtime acceptance evidence.
+- Receipt SHA-256 (UTF-8, excluding the final newline):
+  `bb555cc2d77b10dffe8ade436876858b54612dcbb17b6ae41df6aac7172bd6ad`.
+
+```text
+PRODUCT_DECISION
+Concern: web.export.pdf-physical-size
+Scenario revision: 1
+Choice: A / CSS-PX-TO-PT
+Rationale: Web の PDF の物理的な大きさを、CLI（CairoSVG）の PDF と、PNG の DPI に揃える。
+Must preserve: PDF の見た目、文字の抽出、ページが 1 枚であること、Web の PNG と SVG の大きさ。
+May retire: Web の PDF を 1 px = 1 pt で作る動作。
+Accepted residual risk: Web で作る PDF の物理サイズは、これまでの 75% になる。
+Owner: satoshikawato
+Decision date: 2026-09-30
+```
+
+```json
+{
+  "concern": "web.export.pdf-physical-size",
+  "scenarioRevision": 1,
+  "choice": "A / CSS-PX-TO-PT",
+  "rationale": "Web の PDF の物理的な大きさを、CLI（CairoSVG）の PDF と、PNG の DPI に揃える。",
+  "mustPreserve": "PDF の見た目、文字の抽出、ページが 1 枚であること、Web の PNG と SVG の大きさ。",
+  "mayRetire": "Web の PDF を 1 px = 1 pt で作る動作。",
+  "acceptedResidualRisk": "Web で作る PDF の物理サイズは、これまでの 75% になる。",
+  "owner": "satoshikawato",
+  "decisionDate": "2026-09-30"
+}
+```
+
+### PD-OI-073: Comparison table coordinate frame
+
+- Concern key: `comparison.table-coordinate-frame`
+- Scenario revision: `1`
+- Status: `ACCEPTED`
+- Selected outcome: `C / SEARCH-FRAME-EVERYWHERE`
+- Normative outcome: exactly the complete approved `PRODUCT_DECISION` receipt
+  and its nine-field JSON representation below.
+- Decision source: the complete `D-18` receipt in [`02_DECISION_PACK.md`](./web-gui-audit-20260930/02_DECISION_PACK.md) at P00 merge commit
+  `e97d90fecfb327135eb50e85cfa9a87be3145823`, approved by `satoshikawato` on `2026-09-30` through the two
+  Owner replies quoted verbatim in the Revision 29 entry above. The receipt and
+  JSON below reproduce all nine supplied fields without translation or
+  additional terms. This record does not supersede another decision.
+  Dependent runtime requires this authority merged into its base; this
+  amendment supplies no runtime acceptance evidence.
+- Receipt SHA-256 (UTF-8, excluding the final newline):
+  `586edec020dd3da7e9084881ec83a6f42b254b3c353abb70a076a638d83bc730`.
+- Acceptance contracts: `OIC-005`, `OIC-021`. These obligations and the complete
+  selected outcome are jointly required; their citation does not claim
+  completed dependent-runtime checks.
+
+```text
+PRODUCT_DECISION
+Concern: comparison.table-coordinate-frame
+Scenario revision: 1
+Choice: C / SEARCH-FRAME-EVERYWHERE
+Rationale: 比較表の座標を表示の向きに関係なく同じ意味にし、逆相補・回転・再アップロード・CLI で、同じ表が同じ相同領域を指すようにする。
+Must preserve: LOSAT の raw cache と Save Raw の内容、crop の意味（表は crop 後の record 内の座標）、feature binding を持つ protein 比較の投影、向きを変えない場合の既存の BLAST 表の結果、main で保存された Session の読み込み（読み込み時に一度だけ変換する）。表の座標が record の範囲外なら、検証で止めるか警告する。
+May retire: アップロードした表と CLI の -b を表示座標（逆相補の後）として読む動作、JS 側の探索座標から表示座標への変換、範囲外の行を record の外に描く動作。
+Accepted residual risk: 逆相補と -b を組み合わせていた CLI の利用者にとって、表の座標の意味が変わる（release note に書く）。crop より前の全長の座標で作った表は、crop すると範囲外として止まる。
+Owner: satoshikawato
+Decision date: 2026-09-30
+```
+
+```json
+{
+  "concern": "comparison.table-coordinate-frame",
+  "scenarioRevision": 1,
+  "choice": "C / SEARCH-FRAME-EVERYWHERE",
+  "rationale": "比較表の座標を表示の向きに関係なく同じ意味にし、逆相補・回転・再アップロード・CLI で、同じ表が同じ相同領域を指すようにする。",
+  "mustPreserve": "LOSAT の raw cache と Save Raw の内容、crop の意味（表は crop 後の record 内の座標）、feature binding を持つ protein 比較の投影、向きを変えない場合の既存の BLAST 表の結果、main で保存された Session の読み込み（読み込み時に一度だけ変換する）。表の座標が record の範囲外なら、検証で止めるか警告する。",
+  "mayRetire": "アップロードした表と CLI の -b を表示座標（逆相補の後）として読む動作、JS 側の探索座標から表示座標への変換、範囲外の行を record の外に描く動作。",
+  "acceptedResidualRisk": "逆相補と -b を組み合わせていた CLI の利用者にとって、表の座標の意味が変わる（release note に書く）。crop より前の全長の座標で作った表は、crop すると範囲外として止まる。",
+  "owner": "satoshikawato",
+  "decisionDate": "2026-09-30"
+}
+```
+
+### PD-OI-074: Uploaded comparison table record binding
+
+- Concern key: `comparison.uploaded-table-record-binding`
+- Scenario revision: `1`
+- Status: `ACCEPTED`
+- Selected outcome: `B / CONTRADICTION-ERROR-UNKNOWN-WARN`
+- Normative outcome: exactly the complete approved `PRODUCT_DECISION` receipt
+  and its nine-field JSON representation below.
+- Decision source: the complete `D-20` receipt in [`02_DECISION_PACK.md`](./web-gui-audit-20260930/02_DECISION_PACK.md) at P00 merge commit
+  `e97d90fecfb327135eb50e85cfa9a87be3145823`, approved by `satoshikawato` on `2026-09-30` through the two
+  Owner replies quoted verbatim in the Revision 29 entry above. The receipt and
+  JSON below reproduce all nine supplied fields without translation or
+  additional terms. This record does not supersede another decision.
+  Dependent runtime requires this authority merged into its base; this
+  amendment supplies no runtime acceptance evidence.
+- Receipt SHA-256 (UTF-8, excluding the final newline):
+  `a9fbfd8905669bfe9e9d2c511f517e5190a62c42b742074b52893b380333a825`.
+- Acceptance contracts: `OIC-005`. These obligations and the complete
+  selected outcome are jointly required; their citation does not claim
+  completed dependent-runtime checks.
+
+```text
+PRODUCT_DECISION
+Concern: comparison.uploaded-table-record-binding
+Scenario revision: 1
+Choice: B / CONTRADICTION-ERROR-UNKNOWN-WARN
+Rationale: query と subject を取り違えた表で、誤った相同領域を黙って描かないようにする。
+Must preserve: record ID と一致する表の結果、version 接尾辞の違い（.1 など）を許すこと、ID が record と無関係な表の位置による割り当て（警告付き）、CLI と Web で同じ結果。
+May retire: 端点と逆の record を指す行や、ほかの record を指す行を、位置のまま描く動作と、metadata の ID と index の矛盾。
+Accepted residual risk: ID が record と無関係な表は、今と同じく位置で割り当てられる（警告は出る）。
+Owner: satoshikawato
+Decision date: 2026-09-30
+```
+
+```json
+{
+  "concern": "comparison.uploaded-table-record-binding",
+  "scenarioRevision": 1,
+  "choice": "B / CONTRADICTION-ERROR-UNKNOWN-WARN",
+  "rationale": "query と subject を取り違えた表で、誤った相同領域を黙って描かないようにする。",
+  "mustPreserve": "record ID と一致する表の結果、version 接尾辞の違い（.1 など）を許すこと、ID が record と無関係な表の位置による割り当て（警告付き）、CLI と Web で同じ結果。",
+  "mayRetire": "端点と逆の record を指す行や、ほかの record を指す行を、位置のまま描く動作と、metadata の ID と index の矛盾。",
+  "acceptedResidualRisk": "ID が record と無関係な表は、今と同じく位置で割り当てられる（警告は出る）。",
+  "owner": "satoshikawato",
+  "decisionDate": "2026-09-30"
+}
+```
+
+### PD-OI-075: Similarity group name and description identity
+
+- Concern key: `web.similarity-group.override-identity`
+- Scenario revision: `1`
+- Status: `ACCEPTED`
+- Selected outcome: `A / REKEY-BY-MEMBERSET-KEEP-DORMANT`
+- Normative outcome: exactly the complete approved `PRODUCT_DECISION` receipt
+  and its nine-field JSON representation below.
+- Decision source: the complete `D-21` receipt in [`02_DECISION_PACK.md`](./web-gui-audit-20260930/02_DECISION_PACK.md) at P00 merge commit
+  `e97d90fecfb327135eb50e85cfa9a87be3145823`, approved by `satoshikawato` on `2026-09-30` through the two
+  Owner replies quoted verbatim in the Revision 29 entry above. The receipt and
+  JSON below reproduce all nine supplied fields without translation or
+  additional terms. This record does not supersede another decision.
+  Dependent runtime requires this authority merged into its base; this
+  amendment supplies no runtime acceptance evidence.
+- Receipt SHA-256 (UTF-8, excluding the final newline):
+  `a4d825e0c630f8a4b147e5a3ae3f179a466a973d7b1b1030c75a022c2e05c62d`.
+
+```text
+PRODUCT_DECISION
+Concern: web.similarity-group.override-identity
+Scenario revision: 1
+Choice: A / REKEY-BY-MEMBERSET-KEEP-DORMANT
+Rationale: 利用者が付けた group の名前と説明を同じ member の group に付け続け、別の group へ移したり黙って消したりしない。
+Must preserve: group の名前と説明の編集、Session の往復、Undo/Redo、Interactive SVG への出力、og_* の ID の表示。
+May retire: ID の文字列だけを頼りに名前を残す動作と、残らない名前を黙って消す動作。
+Accepted residual risk: member が 1 つでも変わった group には名前が付かない（dormant として保存し、一覧と Clear から扱える）。Session に項目が 1 つ増える。
+Owner: satoshikawato
+Decision date: 2026-09-30
+```
+
+```json
+{
+  "concern": "web.similarity-group.override-identity",
+  "scenarioRevision": 1,
+  "choice": "A / REKEY-BY-MEMBERSET-KEEP-DORMANT",
+  "rationale": "利用者が付けた group の名前と説明を同じ member の group に付け続け、別の group へ移したり黙って消したりしない。",
+  "mustPreserve": "group の名前と説明の編集、Session の往復、Undo/Redo、Interactive SVG への出力、og_* の ID の表示。",
+  "mayRetire": "ID の文字列だけを頼りに名前を残す動作と、残らない名前を黙って消す動作。",
+  "acceptedResidualRisk": "member が 1 つでも変わった group には名前が付かない（dormant として保存し、一覧と Clear から扱える）。Session に項目が 1 つ増える。",
+  "owner": "satoshikawato",
+  "decisionDate": "2026-09-30"
+}
+```
+
+### PD-OI-076: Match popup coordinates
+
+- Concern key: `web.match-popup.coordinates`
+- Scenario revision: `1`
+- Status: `ACCEPTED`
+- Selected outcome: `B / SOURCE-PRIMARY-WITH-TABLE`
+- Normative outcome: exactly the complete approved `PRODUCT_DECISION` receipt
+  and its nine-field JSON representation below.
+- Decision source: the complete `D-22` receipt in [`02_DECISION_PACK.md`](./web-gui-audit-20260930/02_DECISION_PACK.md) at P00 merge commit
+  `e97d90fecfb327135eb50e85cfa9a87be3145823`, approved by `satoshikawato` on `2026-09-30` through the two
+  Owner replies quoted verbatim in the Revision 29 entry above. The receipt and
+  JSON below reproduce all nine supplied fields without translation or
+  additional terms. This record does not supersede another decision.
+  Dependent runtime requires this authority merged into its base; this
+  amendment supplies no runtime acceptance evidence.
+- Receipt SHA-256 (UTF-8, excluding the final newline):
+  `8986c071c749e19bbd68cd51d6a913f7fb902e4cbaf967d4229334027c113bc9`.
+
+```text
+PRODUCT_DECISION
+Concern: web.match-popup.coordinates
+Scenario revision: 1
+Choice: B / SOURCE-PRIMARY-WITH-TABLE
+Rationale: match popup と FASTA ヘッダの座標を、feature popup と同じ入力ファイルの座標にする。
+Must preserve: 取り出す配列そのもの、逆鎖の扱い、表の座標の参照（違うときだけ併記）、Interactive SVG の popup。
+May retire: match popup と FASTA ヘッダが crop 後の表示座標だけを出す動作。
+Accepted residual risk: popup の行が 1 行増えることがある。
+Owner: satoshikawato
+Decision date: 2026-09-30
+```
+
+```json
+{
+  "concern": "web.match-popup.coordinates",
+  "scenarioRevision": 1,
+  "choice": "B / SOURCE-PRIMARY-WITH-TABLE",
+  "rationale": "match popup と FASTA ヘッダの座標を、feature popup と同じ入力ファイルの座標にする。",
+  "mustPreserve": "取り出す配列そのもの、逆鎖の扱い、表の座標の参照（違うときだけ併記）、Interactive SVG の popup。",
+  "mayRetire": "match popup と FASTA ヘッダが crop 後の表示座標だけを出す動作。",
+  "acceptedResidualRisk": "popup の行が 1 行増えることがある。",
+  "owner": "satoshikawato",
+  "decisionDate": "2026-09-30"
+}
+```
+
+### PD-OI-077: outfmt 6 tables with extra columns
+
+- Concern key: `comparison.outfmt6-extra-columns`
+- Scenario revision: `1`
+- Status: `ACCEPTED`
+- Selected outcome: `B / FIRST-12-COLUMNS`
+- Normative outcome: exactly the complete approved `PRODUCT_DECISION` receipt
+  and its nine-field JSON representation below.
+- Decision source: the complete `D-23` receipt in [`02_DECISION_PACK.md`](./web-gui-audit-20260930/02_DECISION_PACK.md) at P00 merge commit
+  `e97d90fecfb327135eb50e85cfa9a87be3145823`, approved by `satoshikawato` on `2026-09-30` through the two
+  Owner replies quoted verbatim in the Revision 29 entry above. The receipt and
+  JSON below reproduce all nine supplied fields without translation or
+  additional terms. This record does not supersede another decision.
+  Dependent runtime requires this authority merged into its base; this
+  amendment supplies no runtime acceptance evidence.
+- Receipt SHA-256 (UTF-8, excluding the final newline):
+  `6c49ba56b74a05b6e19ae38422befad218884821281c48e71eed26b6d49217e6`.
+- Acceptance contracts: `OIC-005`. These obligations and the complete
+  selected outcome are jointly required; their citation does not claim
+  completed dependent-runtime checks.
+
+```text
+PRODUCT_DECISION
+Concern: comparison.outfmt6-extra-columns
+Scenario revision: 1
+Choice: B / FIRST-12-COLUMNS
+Rationale: -outfmt "6 std qlen slen" のように列を足した表を、CLI と Web でそのまま使えるようにする。
+Must preserve: 12 列の表の結果、outfmt 7 のコメント行、空のファイル、先頭 12 列の型の検証、CLI・Web・conservation で同じ規則。
+May retire: 列を足した表を黙って誤読する動作。存在しないファイルや読めないファイルを飛ばして、後ろの比較をずらす動作。
+Accepted residual risk: 13 列目以降は使わずに捨てる（INFO ログを出す）。存在しないファイルを渡していた CLI の実行は失敗に変わる。
+Owner: satoshikawato
+Decision date: 2026-09-30
+```
+
+```json
+{
+  "concern": "comparison.outfmt6-extra-columns",
+  "scenarioRevision": 1,
+  "choice": "B / FIRST-12-COLUMNS",
+  "rationale": "-outfmt \"6 std qlen slen\" のように列を足した表を、CLI と Web でそのまま使えるようにする。",
+  "mustPreserve": "12 列の表の結果、outfmt 7 のコメント行、空のファイル、先頭 12 列の型の検証、CLI・Web・conservation で同じ規則。",
+  "mayRetire": "列を足した表を黙って誤読する動作。存在しないファイルや読めないファイルを飛ばして、後ろの比較をずらす動作。",
+  "acceptedResidualRisk": "13 列目以降は使わずに捨てる（INFO ログを出す）。存在しないファイルを渡していた CLI の実行は失敗に変わる。",
+  "owner": "satoshikawato",
+  "decisionDate": "2026-09-30"
+}
+```
+
+### PD-OI-078: Circular definition wrap on fit failure
+
+- Concern key: `diagram-generation.circular-definition-fit`
+- Scenario revision: `1`
+- Status: `ACCEPTED`
+- Selected outcome: `B / WRAP-DEFINITION-ON-FIT-FAILURE`
+- Normative outcome: exactly the complete approved `PRODUCT_DECISION` receipt
+  and its nine-field JSON representation below.
+- Decision source: the complete `D-24` receipt in [`02_DECISION_PACK.md`](./web-gui-audit-20260930/02_DECISION_PACK.md) at P00 merge commit
+  `e97d90fecfb327135eb50e85cfa9a87be3145823`, approved by `satoshikawato` on `2026-09-30` through the two
+  Owner replies quoted verbatim in the Revision 29 entry above. The receipt and
+  JSON below reproduce all nine supplied fields without translation or
+  additional terms. This record does not supersede another decision.
+  Dependent runtime requires this authority merged into its base; this
+  amendment supplies no runtime acceptance evidence.
+- Receipt SHA-256 (UTF-8, excluding the final newline):
+  `700a70feb21766e8d634b765ff9c5519cebe7871110a2037f7ec3f41cdfe1e80`.
+
+```text
+PRODUCT_DECISION
+Concern: diagram-generation.circular-definition-fit
+Scenario revision: 1
+Choice: B / WRAP-DEFINITION-ON-FIT-FAILURE
+Rationale: よくある細菌の長い学名（subsp.、serovar、str. などを含むもの）でも、Web の既定の設定で図を作れるようにする。
+Must preserve: これまで成功していた出力（折り返さない）、定義の文字そのもの、center_reserved_radius と definition_font_size を明示した場合の扱い（折り返しを適用しない）、失敗したときの案内。
+May retire: 定義の円が入りきらないとき、配置し直さずに失敗する動作。
+Accepted residual risk: 折り返しても入らない場合は今までどおり失敗し、改善した案内を出す。
+Owner: satoshikawato
+Decision date: 2026-09-30
+```
+
+```json
+{
+  "concern": "diagram-generation.circular-definition-fit",
+  "scenarioRevision": 1,
+  "choice": "B / WRAP-DEFINITION-ON-FIT-FAILURE",
+  "rationale": "よくある細菌の長い学名（subsp.、serovar、str. などを含むもの）でも、Web の既定の設定で図を作れるようにする。",
+  "mustPreserve": "これまで成功していた出力（折り返さない）、定義の文字そのもの、center_reserved_radius と definition_font_size を明示した場合の扱い（折り返しを適用しない）、失敗したときの案内。",
+  "mayRetire": "定義の円が入りきらないとき、配置し直さずに失敗する動作。",
+  "acceptedResidualRisk": "折り返しても入らない場合は今までどおり失敗し、改善した案内を出す。",
+  "owner": "satoshikawato",
+  "decisionDate": "2026-09-30"
+}
+```
+
+### PD-OI-079: Generate before saving a legacy Session
+
+- Concern key: `web.session.legacy-save`
+- Scenario revision: `1`
+- Status: `ACCEPTED`
+- Selected outcome: `A / REQUIRE-GENERATE-BEFORE-SAVE`
+- Normative outcome: exactly the complete approved `PRODUCT_DECISION` receipt
+  and its nine-field JSON representation below.
+- Decision source: the complete `D-25` receipt in [`02_DECISION_PACK.md`](./web-gui-audit-20260930/02_DECISION_PACK.md) at P00 merge commit
+  `e97d90fecfb327135eb50e85cfa9a87be3145823`, approved by `satoshikawato` on `2026-09-30` through the two
+  Owner replies quoted verbatim in the Revision 29 entry above. The receipt and
+  JSON below reproduce all nine supplied fields without translation or
+  additional terms. This record does not supersede another decision.
+  Dependent runtime requires this authority merged into its base; this
+  amendment supplies no runtime acceptance evidence.
+- Receipt SHA-256 (UTF-8, excluding the final newline):
+  `46e30d472ee232ae1228fb2fc17f85f2e9509fc19348236f4e53b9307e7d9150`.
+
+```text
+PRODUCT_DECISION
+Concern: web.session.legacy-save
+Scenario revision: 1
+Choice: A / REQUIRE-GENERATE-BEFORE-SAVE
+Rationale: 旧形式の Session から、feature の identity が確かでない状態のまま現行の形式を書き出さない。
+Must preserve: 旧形式の Session の読み込みと preview、Generate 後の Save、v40 以降の Session の Save、PD-OI-045 の Session 操作。Save が必要とする Generate を案内し、エラーパネルから Generate を実行できるようにする。
+May retire: 0.13.0 で可能だった「旧形式の Session を読み込んで、そのまま Save する」操作。
+Accepted residual risk: 旧形式の Session を保存し直すには 1 回 Generate が必要。
+Owner: satoshikawato
+Decision date: 2026-09-30
+```
+
+```json
+{
+  "concern": "web.session.legacy-save",
+  "scenarioRevision": 1,
+  "choice": "A / REQUIRE-GENERATE-BEFORE-SAVE",
+  "rationale": "旧形式の Session から、feature の identity が確かでない状態のまま現行の形式を書き出さない。",
+  "mustPreserve": "旧形式の Session の読み込みと preview、Generate 後の Save、v40 以降の Session の Save、PD-OI-045 の Session 操作。Save が必要とする Generate を案内し、エラーパネルから Generate を実行できるようにする。",
+  "mayRetire": "0.13.0 で可能だった「旧形式の Session を読み込んで、そのまま Save する」操作。",
+  "acceptedResidualRisk": "旧形式の Session を保存し直すには 1 回 Generate が必要。",
+  "owner": "satoshikawato",
+  "decisionDate": "2026-09-30"
+}
+```
+
+### PD-OI-080: Dinucleotide alphabet
+
+- Concern key: `options.dinucleotide-alphabet`
+- Scenario revision: `1`
+- Status: `ACCEPTED`
+- Selected outcome: `B / ACGTU-PAIRS`
+- Normative outcome: exactly the complete approved `PRODUCT_DECISION` receipt
+  and its nine-field JSON representation below.
+- Decision source: the complete `D-26` receipt in [`02_DECISION_PACK.md`](./web-gui-audit-20260930/02_DECISION_PACK.md) at P00 merge commit
+  `e97d90fecfb327135eb50e85cfa9a87be3145823`, approved by `satoshikawato` on `2026-09-30` through the two
+  Owner replies quoted verbatim in the Revision 29 entry above. The receipt and
+  JSON below reproduce all nine supplied fields without translation or
+  additional terms. This record does not supersede another decision.
+  Dependent runtime requires this authority merged into its base; this
+  amendment supplies no runtime acceptance evidence.
+- Receipt SHA-256 (UTF-8, excluding the final newline):
+  `0461b20190328105e23fb0557a22ae7f0643adb679eecb92e09e553bf78f6d50`.
+
+```text
+PRODUCT_DECISION
+Concern: options.dinucleotide-alphabet
+Scenario revision: 1
+Choice: B / ACGTU-PAIRS
+Rationale: 無効な指定で空や平坦な track を黙って描かないようにし、CLI の traceback もなくす。RNA の表記（U）でも指定できるようにする。
+Must preserve: ACGT の 2 文字の指定（大小を区別しない）、slot の nt、CLI と Web で同じ検証。U は T と同じ塩基として扱う（AU は AT と同じ結果になり、配列中の U も T として数える）。
+May retire: 2 文字でない指定を黙って既定値に戻す動作、XY のような塩基でない文字の受理、G での IndexError。
+Accepted residual risk: N などの曖昧な塩基の記号は指定できない。凡例などの表示名は入力した文字（AU）のまま出す。
+Owner: satoshikawato
+Decision date: 2026-09-30
+```
+
+```json
+{
+  "concern": "options.dinucleotide-alphabet",
+  "scenarioRevision": 1,
+  "choice": "B / ACGTU-PAIRS",
+  "rationale": "無効な指定で空や平坦な track を黙って描かないようにし、CLI の traceback もなくす。RNA の表記（U）でも指定できるようにする。",
+  "mustPreserve": "ACGT の 2 文字の指定（大小を区別しない）、slot の nt、CLI と Web で同じ検証。U は T と同じ塩基として扱う（AU は AT と同じ結果になり、配列中の U も T として数える）。",
+  "mayRetire": "2 文字でない指定を黙って既定値に戻す動作、XY のような塩基でない文字の受理、G での IndexError。",
+  "acceptedResidualRisk": "N などの曖昧な塩基の記号は指定できない。凡例などの表示名は入力した文字（AU）のまま出す。",
+  "owner": "satoshikawato",
+  "decisionDate": "2026-09-30"
+}
+```
+
+### PD-OI-081: Validated font sizes and stroke widths
+
+- Concern key: `options.nonnegative-style-values`
+- Scenario revision: `1`
+- Status: `ACCEPTED`
+- Selected outcome: `A / SPEC-DETERMINED-ONLY`
+- Normative outcome: exactly the complete approved `PRODUCT_DECISION` receipt
+  and its nine-field JSON representation below.
+- Decision source: the complete `D-27` receipt in [`02_DECISION_PACK.md`](./web-gui-audit-20260930/02_DECISION_PACK.md) at P00 merge commit
+  `e97d90fecfb327135eb50e85cfa9a87be3145823`, approved by `satoshikawato` on `2026-09-30` through the two
+  Owner replies quoted verbatim in the Revision 29 entry above. The receipt and
+  JSON below reproduce all nine supplied fields without translation or
+  additional terms. This record does not supersede another decision.
+  Dependent runtime requires this authority merged into its base; this
+  amendment supplies no runtime acceptance evidence.
+- Receipt SHA-256 (UTF-8, excluding the final newline):
+  `17c67282ae607cc5a4c36af8945337e6835ffb3758c3b5cd2350ac896100fb8b`.
+
+```text
+PRODUCT_DECISION
+Concern: options.nonnegative-style-values
+Scenario revision: 1
+Choice: A / SPEC-DETERMINED-ONLY
+Rationale: SVG と CSS の仕様で意味が決まる値だけを検証し、意味を確かめていない値は変えない。
+Must preserve: offset、spacing、track_axis_gap、label_rotation の現在の受理範囲。CLI、Python API、Web、Session で同じ検証とエラー。
+May retire: 0 以下のフォントサイズと負の stroke 幅の受理、描画の途中の ValueError による traceback。
+Accepted residual risk: 負の offset などの意味は、今回は確かめない。
+Owner: satoshikawato
+Decision date: 2026-09-30
+```
+
+```json
+{
+  "concern": "options.nonnegative-style-values",
+  "scenarioRevision": 1,
+  "choice": "A / SPEC-DETERMINED-ONLY",
+  "rationale": "SVG と CSS の仕様で意味が決まる値だけを検証し、意味を確かめていない値は変えない。",
+  "mustPreserve": "offset、spacing、track_axis_gap、label_rotation の現在の受理範囲。CLI、Python API、Web、Session で同じ検証とエラー。",
+  "mayRetire": "0 以下のフォントサイズと負の stroke 幅の受理、描画の途中の ValueError による traceback。",
+  "acceptedResidualRisk": "負の offset などの意味は、今回は確かめない。",
+  "owner": "satoshikawato",
+  "decisionDate": "2026-09-30"
+}
+```
+
+### PD-OI-082: Undo and Redo during Generate
+
+- Concern key: `web.generation.in-flight-history`
+- Scenario revision: `1`
+- Status: `ACCEPTED`
+- Selected outcome: `A / BUSY-UNDO-DURING-GENERATE`
+- Normative outcome: exactly the complete approved `PRODUCT_DECISION` receipt
+  and its nine-field JSON representation below.
+- Decision source: the complete `D-28` receipt in [`02_DECISION_PACK.md`](./web-gui-audit-20260930/02_DECISION_PACK.md) at P00 merge commit
+  `e97d90fecfb327135eb50e85cfa9a87be3145823`, approved by `satoshikawato` on `2026-09-30` through the two
+  Owner replies quoted verbatim in the Revision 29 entry above. The receipt and
+  JSON below reproduce all nine supplied fields without translation or
+  additional terms. This record does not supersede another decision.
+  Dependent runtime requires this authority merged into its base; this
+  amendment supplies no runtime acceptance evidence.
+- Receipt SHA-256 (UTF-8, excluding the final newline):
+  `e8605fbcc01935848811be174be8adc383ce46cd9abad58f3162ce5372749758`.
+- Acceptance contracts: `OIC-013`. These obligations and the complete
+  selected outcome are jointly required; their citation does not claim
+  completed dependent-runtime checks.
+
+```text
+PRODUCT_DECISION
+Concern: web.generation.in-flight-history
+Scenario revision: 1
+Choice: A / BUSY-UNDO-DURING-GENERATE
+Rationale: Generate 中に Undo や Redo を押しても、確定済みの request と Result が古いものに戻ったり、実行中の Generate が黙って捨てられたりしないようにする。
+Must preserve: Generate の Cancel、処理中の表示、Generate が終わった後の Undo/Redo、Save と Load の拒否（既存）、PD-OI-051 による Generate 中の draft の編集。Undo と Redo のボタンとショートカットは同じ判定を使い、拒否した理由を示す。
+May retire: Generate 中の Undo と Redo。
+Accepted residual risk: 長い LOSAT の実行中は、Cancel するか終わるまで Undo できない。
+Owner: satoshikawato
+Decision date: 2026-09-30
+```
+
+```json
+{
+  "concern": "web.generation.in-flight-history",
+  "scenarioRevision": 1,
+  "choice": "A / BUSY-UNDO-DURING-GENERATE",
+  "rationale": "Generate 中に Undo や Redo を押しても、確定済みの request と Result が古いものに戻ったり、実行中の Generate が黙って捨てられたりしないようにする。",
+  "mustPreserve": "Generate の Cancel、処理中の表示、Generate が終わった後の Undo/Redo、Save と Load の拒否（既存）、PD-OI-051 による Generate 中の draft の編集。Undo と Redo のボタンとショートカットは同じ判定を使い、拒否した理由を示す。",
+  "mayRetire": "Generate 中の Undo と Redo。",
+  "acceptedResidualRisk": "長い LOSAT の実行中は、Cancel するか終わるまで Undo できない。",
+  "owner": "satoshikawato",
+  "decisionDate": "2026-09-30"
+}
+```
+
+### PD-OI-083: Linear Depth series without a source
+
+- Concern key: `web.depth.linear-sourceless-series`
+- Scenario revision: `1`
+- Status: `ACCEPTED`
+- Selected outcome: `A / ROW-ISSUE-BEFORE-GENERATE`
+- Normative outcome: exactly the complete approved `PRODUCT_DECISION` receipt
+  and its nine-field JSON representation below.
+- Decision source: the complete `D-29` receipt in [`02_DECISION_PACK.md`](./web-gui-audit-20260930/02_DECISION_PACK.md) at P00 merge commit
+  `e97d90fecfb327135eb50e85cfa9a87be3145823`, approved by `satoshikawato` on `2026-09-30` through the two
+  Owner replies quoted verbatim in the Revision 29 entry above. The receipt and
+  JSON below reproduce all nine supplied fields without translation or
+  additional terms. This record does not supersede another decision.
+  Dependent runtime requires this authority merged into its base; this
+  amendment supplies no runtime acceptance evidence.
+- Receipt SHA-256 (UTF-8, excluding the final newline):
+  `a79ed36bc2c8edc21df4a5bc4e39e33f96a53adcf4a9b4b9018d1cd25c6f0da6`.
+- Acceptance contracts: `OIC-020`. These obligations and the complete
+  selected outcome are jointly required; their citation does not claim
+  completed dependent-runtime checks.
+
+```text
+PRODUCT_DECISION
+Concern: web.depth.linear-sourceless-series
+Scenario revision: 1
+Choice: A / ROW-ISSUE-BEFORE-GENERATE
+Rationale: Linear で File の Depth を消した後、source を持たない series を有効な手動の行が参照していても、原因の分からない失敗にしない。
+Must preserve: PD-OI-025（論理 series の保持、File 単位の apply と clear が 1 つの undoable 操作）、OIC-020、Circular の row issue と同じ文言。
+May retire: この状態の Generate が汎用のエラーで失敗する動作。
+Accepted residual risk: 利用者が行を無効にするか削除する必要がある。
+Owner: satoshikawato
+Decision date: 2026-09-30
+```
+
+```json
+{
+  "concern": "web.depth.linear-sourceless-series",
+  "scenarioRevision": 1,
+  "choice": "A / ROW-ISSUE-BEFORE-GENERATE",
+  "rationale": "Linear で File の Depth を消した後、source を持たない series を有効な手動の行が参照していても、原因の分からない失敗にしない。",
+  "mustPreserve": "PD-OI-025（論理 series の保持、File 単位の apply と clear が 1 つの undoable 操作）、OIC-020、Circular の row issue と同じ文言。",
+  "mayRetire": "この状態の Generate が汎用のエラーで失敗する動作。",
+  "acceptedResidualRisk": "利用者が行を無効にするか削除する必要がある。",
+  "owner": "satoshikawato",
+  "decisionDate": "2026-09-30"
+}
+```
+
+### PD-OI-084: Linear live legend side moves
+
+- Concern key: `web.legend.live-side-move`
+- Scenario revision: `1`
+- Status: `ACCEPTED`
+- Selected outcome: `A / PARITY-OR-APPLY-ON-GENERATE`
+- Normative outcome: exactly the complete approved `PRODUCT_DECISION` receipt
+  and its nine-field JSON representation below.
+- Decision source: the complete `D-30` receipt in [`02_DECISION_PACK.md`](./web-gui-audit-20260930/02_DECISION_PACK.md) at P00 merge commit
+  `e97d90fecfb327135eb50e85cfa9a87be3145823`, approved by `satoshikawato` on `2026-09-30` through the two
+  Owner replies quoted verbatim in the Revision 29 entry above. The receipt and
+  JSON below reproduce all nine supplied fields without translation or
+  additional terms. This record does not supersede another decision.
+  Dependent runtime requires this authority merged into its base; this
+  amendment supplies no runtime acceptance evidence.
+- Receipt SHA-256 (UTF-8, excluding the final newline):
+  `e534794a0cb4ae542c9f313f1e3dce666e7f121ddebe360b03a59420112fe6bb`.
+- Acceptance contracts: `OIC-024`, `OIC-027`. These obligations and the complete
+  selected outcome are jointly required; their citation does not claim
+  completed dependent-runtime checks.
+
+```text
+PRODUCT_DECISION
+Concern: web.legend.live-side-move
+Scenario revision: 1
+Choice: A / PARITY-OR-APPLY-ON-GENERATE
+Rationale: 即時に見えた凡例の配置と、Generate 後の配置が食い違わないようにする（D-11 の契約）。
+Must preserve: Circular の凡例の side の即時移動、凡例の drag、PD-OI-052 の装飾 delta、Undo/Redo。Linear で parity を取れる場合は、即時移動も残す。
+May retire: parity を取れない場合に限り、Linear の凡例の side の即時移動（凡例を持たない図での side 変更の例外を含む）。
+Accepted residual risk: 退役した場合、Linear では side を変えても Generate まで preview が変わらない。
+Owner: satoshikawato
+Decision date: 2026-09-30
+```
+
+```json
+{
+  "concern": "web.legend.live-side-move",
+  "scenarioRevision": 1,
+  "choice": "A / PARITY-OR-APPLY-ON-GENERATE",
+  "rationale": "即時に見えた凡例の配置と、Generate 後の配置が食い違わないようにする（D-11 の契約）。",
+  "mustPreserve": "Circular の凡例の side の即時移動、凡例の drag、PD-OI-052 の装飾 delta、Undo/Redo。Linear で parity を取れる場合は、即時移動も残す。",
+  "mayRetire": "parity を取れない場合に限り、Linear の凡例の side の即時移動（凡例を持たない図での side 変更の例外を含む）。",
+  "acceptedResidualRisk": "退役した場合、Linear では side を変えても Generate まで preview が変わらない。",
+  "owner": "satoshikawato",
+  "decisionDate": "2026-09-30"
+}
+```
+
 ## Acceptance contract catalog
 
 | Contract | Required meaning |
@@ -2346,6 +3788,7 @@ Decision date: 2026-09-28
 | `OIC-024` | `PD-OI-037` revision 2: operation-level Live edit, Applies on Generate, and Apply required remain truthful, including Palette Instant Preview and Alignment review. No always-on derived Pending/Applied status or its computation remains. Live applying/error, Processing/Canceling, real errors, and recovery are shown when they occur, with no status-only Worker, genome-byte read/hash, canonical request projection, generated-table build, or SVG/checkpoint clone. |
 | `OIC-025` | `PD-OI-038`: one SVG and Editor retain live commit/rerender, all tabs, availability, History/Session/Export, camera, keyboard, visibility-only Close/Escape, selected tab and Result recovery. At 390×844/740 the canvas uses the available full width and at least 200 px height; content scroll, reachable header/Close/toolbar, short-viewport/soft-keyboard access, and wide side drawer remain required. Pointer/keyboard/browser verification is required; duplicated Preview/SVG/editor is not accepted. |
 | `OIC-026` | `PD-OI-035` and `PD-OI-039`: identity, keyboard Select/Skip, non-rendered candidates, no position-only selection, desktop canvas, focus and transient overlay exclusion remain required with all PD-OI-031/034 outcomes. Compact review retains visible, operable canvas at full available width and at least 200 px height at 390×844/740, scrollable candidates and reachable Apply/Cancel, local no-Worker draft edits, atomic batch validation, failure/error/retry and artifact/orientation/History recovery. Narrow review closes Editor through its owner while retaining tab, disables reopening with a reason until review ends, then permits explicit reopen; wide drag remains. Browser verification must show presentation changes leave draft and Result unchanged. |
+| `OIC-027` | `PD-OI-066`: a live-edited Result agrees with a Result freshly generated from the same draft in the meaning (position, color, text, and visibility) of every edited element, including after Session load and export. Settings shown as Applies on Generate do not change the Result before Generate. A live edit that the Generate compiler cannot reproduce is shown as Applies on Generate instead. |
 
 These new acceptance entries are obligations for dependent runtime work, not
 claims of completed runtime or browser verification by this authority amendment.
