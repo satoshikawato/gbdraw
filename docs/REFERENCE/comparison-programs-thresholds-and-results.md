@@ -17,8 +17,10 @@
 
 LOSATN compares nucleotide sequence directly. TLOSATX translates both sides
 and is useful when coding similarity remains after nucleotide divergence.
-LOSATP searches annotated CDS translations. Unusable or missing CDS
-translations cannot contribute protein matches.
+LOSATP searches CDS protein sequences, taken from `/translation` or translated
+as described in [Input formats](input-formats-and-tsv-schemas.md#sequence-and-annotation-files).
+A CDS whose protein is unusable, such as one with an internal stop codon,
+cannot contribute protein matches.
 
 The command line can run LOSATP or a compatible BLASTP runtime. It does not run
 LOSATN or TLOSATX; use `--blast`, `--comparisons_table`, or
