@@ -73,13 +73,16 @@ The full PR job IDs are `web-change-budget`, `core-pr`, `recipes-standard`,
 
 `web-contracts-pr` groups the existing fast JS contracts and non-slow Python
 browser suite, which together took approximately 65–70 seconds historically.
-`web-pr-smoke` runs the thirteen selected Playwright cases and the common-nine Gallery
-first-Generate parity command. The `web-contracts-pr` and `web-pr-smoke` jobs
-execute in parallel instead of sharing one 15-minute serialized budget. Both
-jobs keep independent working directories, dependency installs, wheels, and
-browser state. The contracts job also runs when the trusted plan requires
-`web-pr-smoke`, so the pre-redesign base planner still requires all three
-original suites during rollout.
+`web-pr-smoke` runs `npm run test:web:pr-smoke`, the `@pr-smoke` Playwright cases
+counted under [Smoke inventory](#smoke-inventory-and-regression-retention). When a
+PR plan requires `web-pr-smoke`, the `gallery` job also runs the common-nine Gallery
+first-Generate parity command, `npm run test:web:gallery-publication`;
+`tests/ci/ci-impact-cli.test.mjs` keeps that command out of `web-pr-smoke`.
+The `web-contracts-pr` and `web-pr-smoke` jobs execute in parallel instead of
+sharing one 15-minute serialized budget. Both jobs keep independent working
+directories, dependency installs, wheels, and browser state. The contracts job
+also runs when the trusted plan requires `web-pr-smoke`, so the pre-redesign base
+planner still requires all three original suites during rollout.
 
 Web unit/browser tests and their helpers route to the Web, session, Gallery, or
 LOSAT capability they exercise. Adding a normal Web regression therefore does not
@@ -121,11 +124,14 @@ Circular and Linear mode transitions, invalid-annotation preservation, and inval
 composite-session rejection. Full functional discovery includes every smoke case.
 
 `tests/ci/playwright-inventory.test.mjs` uses Playwright's expanded `--list` output.
-It counts nested and parameterized cases and rejects fewer than 8 or more than 12;
+It counts nested and parameterized cases and rejects fewer than 8 or more than 19;
 counting tag strings in source missed the earlier growth to 27 cases. No assertions,
 case bodies, test timeouts, or full-functional exclusions changed in this redesign.
 The exact relocated cases and before/after counts are in the
-[measurement report](CI_TIER_REDESIGN_2026-09-11.md).
+[measurement report](CI_TIER_REDESIGN_2026-09-11.md). Issue #601 later raised the
+upper bound from 13 to 19 for six existing cases
+([inventory note](issue-601-pr-smoke-inventory-20260927.md)). The smoke config
+collects 19 cases, so a new `@pr-smoke` case requires raising that bound.
 
 The smoke config retains one worker and zero retries. Three local two-worker
 repetitions passed, but these are not repeated GitHub runner evidence. One worker

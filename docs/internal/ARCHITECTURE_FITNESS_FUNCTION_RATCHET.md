@@ -589,11 +589,16 @@ reinterpretation is reviewed separately from runtime observation.
 
 ## Initial rule schema
 
-The initial registry supports at most three rules and exactly two discriminated
-rule kinds:
+The schema version 1 registry supports at most four rules and exactly two
+discriminated rule kinds:
 
 - `single-semantic-owner`
 - `single-canonical-entry-edge`
+
+`MAXIMUM_RULE_COUNT` in `tools/web-architecture-evaluation.mjs` enforces the cap.
+PR #449 raised it from three to four; `tests/web/architecture-ratchet-fixtures.test.mjs`
+accepts four rules and rejects a fifth, and `tools/web-architecture-rules.json`
+uses all four slots.
 
 The cap and kinds belong to schema version 1. Raising the cap or adding a kind
 requires an evidence-backed schema plan. The registry is inert JSON. It must not
