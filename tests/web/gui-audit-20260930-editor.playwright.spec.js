@@ -251,7 +251,6 @@ test('Escape that closes the Editor returns focus to the Editor toggle', async (
 });
 
 test('an Undo of a checkpoint edit keeps the feature catalog across a mode round trip', async ({ browser }) => {
-  test.fail(true, 'SE-01');
   test.setTimeout(600_000);
   const page = await load(browser, HMMT_SESSION);
   const pageErrors = [];
