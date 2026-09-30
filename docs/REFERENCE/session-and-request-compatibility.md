@@ -25,6 +25,12 @@ committed render request, generated result, and supported editor and comparison
 state. Replay does not depend on the original file path remaining valid.
 Treat the session as sensitive when its embedded source data is sensitive.
 
+Replay reads embedded BLAST outfmt 6/7 resources with the current [comparison
+table rules](input-formats-and-tsv-schemas.md#comparison-and-numeric-tables).
+A saved table with more than 12 columns replays from its first 12 columns. A
+malformed saved table, or one whose IDs name the wrong Linear records, stops
+replay with an error.
+
 Both `.gbdraw-session.json` and lossless `.gbdraw-session.json.gz` are
 accepted. The web app writes compressed sessions by default. The command line
 writes `<output>.gbdraw-session.json` by default. `--session_output` selects an

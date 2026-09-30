@@ -36,10 +36,29 @@ splitting a sequence does not make it circular.
 
 ## Comparison and numeric tables
 
-BLAST-compatible input uses the 12 outfmt 6 columns, with optional outfmt 7
-comment lines: `qseqid`, `sseqid`, `pident`, `length`, `mismatch`, `gapopen`,
-`qstart`, `qend`, `sstart`, `send`, `evalue`, and `bitscore`. Query and subject
-direction must match the displayed endpoint mapping.
+BLAST-compatible input is tab-separated UTF-8 text. gbdraw reads the first 12
+outfmt 6 columns by position: `qseqid`, `sseqid`, `pident`, `length`,
+`mismatch`, `gapopen`, `qstart`, `qend`, `sstart`, `send`, `evalue`, and
+`bitscore`. Extra columns, such as those from `-outfmt "6 std qlen slen"`, are
+ignored and reported in an INFO log. A line whose first non-blank character is
+`#` is an outfmt 7 comment; a `#` or quote inside a field is part of the value.
+An empty table or a table with only comment lines has no rows. The IDs must be
+non-empty, `length`, `mismatch`, `gapopen`, and the four coordinates must be
+integers, and the other values must be finite numbers. The command line, Python
+API, web app, and Circular similarity rings apply the same rule. For a Linear
+comparison, a row with fewer than 12 columns, a value of the wrong type, or a
+missing or unreadable file stops the run; the error names the line of a
+malformed row. A Circular similarity ring whose table is rejected is skipped
+with a warning and keeps its ring position.
+
+Query and subject direction must match the displayed endpoint mapping. For a
+Linear comparison, a row whose `qseqid` or `sseqid` names the other endpoint or
+another displayed record stops the run; in the web app, Generate reports a
+comparison-endpoint error and keeps the previous Result. IDs are compared with
+the record ID and name. A version suffix difference, such as `NC_000913` and `NC_000913.3`, is
+accepted. IDs that match no displayed record keep the positional assignment;
+the command line logs a warning. The SVG record-ID metadata always names the
+endpoint records.
 
 Depth input has `reference_name`, a 1-based positive `position`, and a
 non-negative `depth`. Files are normally headerless. One header line is

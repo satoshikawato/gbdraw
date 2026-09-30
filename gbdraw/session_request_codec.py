@@ -42,7 +42,7 @@ from gbdraw.exceptions import ValidationError
 from gbdraw.features.placement import FeaturePlacementOverride
 from gbdraw.io.record_select import RecordSelector
 from gbdraw.io.regions import RegionSpec
-from gbdraw.io.comparisons import COMPARISON_COLUMNS
+from gbdraw.io.comparisons import read_comparison_table
 from gbdraw.linear_comparison import LinearComparison
 from gbdraw.tracks import CircularTrackSlot, LinearTrackSlot, ScalarSpec
 from gbdraw.tracks.circular import (
@@ -3327,15 +3327,12 @@ def _decode_comparisons(
             )
             if schema >= 2:
                 try:
-                    table = read_csv(
-                        resource_path,
-                        sep="\t",
-                        comment="#",
-                        names=COMPARISON_COLUMNS,
+                    table = read_comparison_table(
+                        resource_path, label=f"BLAST resource {item['resourceId']!r}"
                     )
-                except Exception as exc:
+                except ValidationError as exc:
                     raise CanonicalRequestDecodingError(
-                        f"Could not decode BLAST resource for {path}."
+                        f"Could not decode {path}: {exc}"
                     ) from exc
                 query_index = _non_negative_index(
                     item["queryRecordIndex"], f"{path}.queryRecordIndex"

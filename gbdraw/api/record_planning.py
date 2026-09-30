@@ -23,7 +23,7 @@ from gbdraw.io.cli_tables import (
     read_conservation_table,
     read_records_table,
 )
-from gbdraw.io.comparisons import COMPARISON_COLUMNS
+from gbdraw.io.comparisons import read_comparison_table
 from gbdraw.io.genome import load_gbks, load_gff_fasta
 from gbdraw.io.record_select import (
     RecordSelector,
@@ -1423,16 +1423,10 @@ def resolve_linear_options(
                 f"{subject_row + 1} must be in {topology}."
             )
         try:
-            matches = pd.read_csv(
-                row.blast,
-                sep="\t",
-                comment="#",
-                names=COMPARISON_COLUMNS,
-            )
-        except (OSError, UnicodeError, pd.errors.ParserError) as exc:
+            matches = read_comparison_table(row.blast)
+        except ValidationError as exc:
             raise ValidationError(
-                f"{table.table_path}: row {row.row_number}, column 'blast': "
-                f"could not parse {row.blast}."
+                f"{table.table_path}: row {row.row_number}, column 'blast': {exc}"
             ) from exc
         comparisons.append(
             LinearComparison(query_index, subject_index, matches)

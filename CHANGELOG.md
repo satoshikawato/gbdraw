@@ -16,7 +16,20 @@ Fixes from the 2026-09-30 Web GUI audit of `dev`. The plan and the approved
 decisions are in
 [`docs/internal/web-gui-audit-20260930/`](./docs/internal/web-gui-audit-20260930/03_IMPLEMENTATION_REFERENCE.md).
 
-<!-- web-gui-audit-20260930 P03 -->
+- Comparison tables: every BLAST outfmt 6/7 reader (CLI `-b` and
+  `--comparisons_table`, Web uploads, Circular similarity rings, and the LOSATP
+  parser) now reads the first 12 columns by position and validates their types.
+  Tables with extra columns, such as `-outfmt "6 std qlen slen"`, are no longer
+  misread. Only lines that start with `#` are comments, so a `#` inside an ID
+  no longer truncates the row (CO-05).
+- **CLI behavior change:** a missing, unreadable, or malformed `-b` file now
+  stops the run with a non-zero exit status instead of being skipped, which
+  shifted later tables onto the wrong record pair (N-03).
+- Linear comparisons now reject a table whose query or subject IDs name the other
+  endpoint or another displayed record: the CLI names the conflicting ID, and
+  the web app reports a comparison-endpoint error and keeps the previous
+  Result. Unknown IDs keep the positional pair (the CLI logs a warning), and
+  SVG record-ID metadata always names the endpoint records (CO-06).
 
 <!-- web-gui-audit-20260930 P04 -->
 
