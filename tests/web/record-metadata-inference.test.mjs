@@ -3,6 +3,8 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 
 import {
+  discoverGffFastaRecords,
+  discoverSequenceRecords,
   formatInferredOrganismStrain,
   extractGenBankMetadata,
   parseSequenceRecordText
@@ -92,5 +94,79 @@ FEATURES             Location/Qualifiers
   for (const record of records) {
     assert.equal(Object.hasOwn(record, 'inferredSubtitle'), false);
     assert.equal(Object.hasOwn(record, 'inferredSubtitleFromReplicon'), false);
+  }
+});
+
+// G-D (Web GUI audit 2026-09-30): the upload fast path must return the loader's
+// records exactly or decline to the Worker helper. The helper stub answers with
+// the loader oracle, so a decline always yields the expected records.
+const fixtureFile = ({ name, lines, bom = false }) => {
+  const text = `${lines.join('\n')}\n`;
+  const bytes = new TextEncoder().encode(text);
+  return new File([bom ? new Uint8Array([0xef, 0xbb, 0xbf, ...bytes]) : bytes], name);
+};
+
+const projectDiscoveredRecords = (records, format) => records.map((record) => ({
+  recordId: record.recordId,
+  recordLength: record.recordLength,
+  ...(format === 'genbank'
+    ? { organism: record.organism || '', inferredDefinition: record.inferredDefinition || '' }
+    : {})
+}));
+
+const loaderOracleHelper = (testCase, calls) => async (operation, payload) => {
+  calls.push({ operation, roles: payload.files.map(({ role }) => role) });
+  if (testCase.expected.error) {
+    return { result: { error: { code: 'INPUT_INVALID', operation: 'listSequenceRecords', stage: 'helper' } } };
+  }
+  return {
+    result: {
+      records: testCase.expected.records.map((record, index) => ({
+        selector: `#${index + 1}`,
+        record_id: record.recordId,
+        record_length: record.recordLength,
+        topology: 'unknown',
+        organism: record.organism || '',
+        inferredDefinition: record.inferredDefinition || ''
+      }))
+    }
+  };
+};
+
+const discoverCase = async (testCase) => {
+  const calls = [];
+  const runHelperOperation = loaderOracleHelper(testCase, calls);
+  try {
+    const records = testCase.format === 'genbank'
+      ? await discoverSequenceRecords({
+        file: fixtureFile(testCase.files.source), format: 'genbank', runHelperOperation
+      })
+      : await discoverGffFastaRecords({
+        gffFile: fixtureFile(testCase.files.gff),
+        fastaFile: fixtureFile(testCase.files.fasta),
+        runHelperOperation
+      });
+    return { records: projectDiscoveredRecords(records, testCase.format), calls };
+  } catch (error) {
+    return { error: String(error?.message || error?.code || error), calls };
+  }
+};
+
+test('record discovery returns the loader records or declines to the Worker', async () => {
+  assert.ok(CASES.discovery.length >= 10);
+  for (const testCase of CASES.discovery) {
+    const observed = await discoverCase(testCase);
+    const matches = testCase.expected.error
+      ? Object.hasOwn(observed, 'error')
+      : JSON.stringify(observed.records) === JSON.stringify(testCase.expected.records);
+    if (testCase.knownDefect) {
+      assert.equal(
+        matches,
+        false,
+        `${testCase.name}: known defect ${testCase.knownDefect} no longer reproduces; remove its knownDefect mark.`
+      );
+    } else {
+      assert.equal(matches, true, `${testCase.name}: ${JSON.stringify(observed)}`);
+    }
   }
 });
