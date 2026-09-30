@@ -527,3 +527,80 @@ test('Checkpoint Undo and Redo keep the admitted feature catalog through a mode 
     expect(colored).toMatchObject({ checkpoint: true, checkpointHasCatalog: false });
   } finally { await page.context().close(); }
 });
+
+// GE-06 (D-28, PD-OI-082): Undo and Redo are busy while Generate replaces the
+// artifact; draft edits stay allowed (PD-OI-051).
+test('Undo and Redo are busy during Generate and leave the committed request unchanged', async ({ browser }) => {
+  test.setTimeout(300000);
+  const page = await load(browser);
+  try {
+    await generate(page);
+    const labels = page.locator('#circular-label-mode');
+    await page.locator('summary[aria-label="Labels"]').click();
+    for (const value of ['none', 'both']) {
+      await labels.focus();
+      await labels.selectOption(value);
+      await labels.press('Tab');
+    }
+    await page.getByRole('button', { name: 'Undo', exact: true }).click();
+    await expect(labels).toHaveValue('none');
+    const observe = () => page.evaluate(async () => {
+      const { getCommittedCanonicalRenderRequest } = await import('./js/services/config.js');
+      const history = window.__GBDRAW_HISTORY__;
+      return {
+        counts: [history.getUndoCount(), history.getRedoCount()],
+        labels: window.__GBDRAW_APP__.form.labels_mode,
+        request: getCommittedCanonicalRenderRequest()
+      };
+    });
+    const before = await observe();
+    expect(before.counts[1]).toBe(1);
+
+    await page.evaluate(() => {
+      window.__GBDRAW_TEST_HOOKS__.beforeDiagramGenerationResponse = () => new Promise(resolve => {
+        window.__P09_RELEASE_GENERATE__ = resolve;
+      });
+    });
+    const key = await page.evaluate(async () => (await import('./js/state.js')).state.resultGenerationKey.value);
+    await page.getByRole('button', { name: 'Generate Diagram', exact: true }).click();
+    await expect.poll(() => page.evaluate(() => typeof window.__P09_RELEASE_GENERATE__), { timeout: 180000 })
+      .toBe('function');
+    const undo = page.getByRole('button', { name: 'Undo', exact: true });
+    const redo = page.getByRole('button', { name: 'Redo', exact: true });
+    await expect(undo).toBeDisabled();
+    await expect(redo).toBeDisabled();
+    const reason = 'Generating diagram. Retry after generation finishes.';
+    await expect(page.locator('[data-session-busy-reason]')).toHaveText(reason);
+    await page.keyboard.press('Control+z');
+    await page.keyboard.press('Control+y');
+    await page.keyboard.press('Control+Shift+z');
+    expect(await page.evaluate(async () => [
+      await window.__GBDRAW_HISTORY__.undo(),
+      await window.__GBDRAW_HISTORY__.redo()
+    ])).toEqual([{ status: 'busy', reason }, { status: 'busy', reason }]);
+    expect(await observe()).toEqual(before);
+
+    // PD-OI-051: a draft edit during Generate is still recorded.
+    await page.evaluate(() => window.__GBDRAW_HISTORY__.runUndoable('Draft during Generate', () => {
+      window.__GBDRAW_APP__.form.prefix = 'during-generate';
+    }));
+    expect(await page.evaluate(() => window.__GBDRAW_APP__.form.prefix)).toBe('during-generate');
+    expect((await observe()).counts).toEqual([before.counts[0] + 1, 0]);
+
+    await page.evaluate(() => {
+      delete window.__GBDRAW_TEST_HOOKS__.beforeDiagramGenerationResponse;
+      window.__P09_RELEASE_GENERATE__();
+    });
+    await expect.poll(() => page.evaluate(async () => {
+      const { state } = await import('./js/state.js');
+      return { key: state.resultGenerationKey.value, processing: state.processing.value, error: state.errorLog.value };
+    }), { timeout: 180000 }).toEqual({ key: key + 1, processing: false, error: null });
+    const after = await observe();
+    expect(after.counts).toEqual([before.counts[0] + 2, 0]);
+    expect(after.request).not.toEqual(before.request);
+    await expect(undo).toBeEnabled();
+    await undo.click();
+    await expect.poll(async () => (await observe()).request).toEqual(before.request);
+    expect(page.externalRequests).toEqual([]);
+  } finally { await page.context().close(); }
+});

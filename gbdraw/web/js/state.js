@@ -790,11 +790,12 @@ const filteredEditableLabels = computed(() => {
 });
 
 // Pending is owned by the existing Session lifecycle; availability stores no lock.
+// 'history' words why History rejects Undo/Redo; History decides when (D-28).
 export const sessionOperationAvailability = (operation = 'mutation') => {
   let reason = '';
   if (sessionImportPending.value) reason = 'Loading session. Retry after loading finishes.';
   else if (sessionSavePending.value) reason = 'Saving session. Retry after saving finishes.';
-  else if (operation === 'save' || operation === 'load') {
+  else if (operation === 'save' || operation === 'load' || operation === 'history') {
     if (processing.value) reason = 'Generating diagram. Retry after generation finishes.';
     else if (labelReflowProcessing.value) reason = 'Updating diagram. Retry after the update finishes.';
     else reason = state.sessionPreparationBusyReason?.() || '';
