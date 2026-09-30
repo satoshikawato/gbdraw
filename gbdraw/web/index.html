@@ -4434,28 +4434,33 @@
                         <summary aria-label="Axis &amp; Scale"><i class="ph ph-ruler"></i> Axis &amp; Scale <help-tip text="Adjust axis stroke settings plus the linear scale bar or ruler style."></help-tip></summary>
                         <p class="mt-2 text-[10px] text-slate-500">Applies on Generate: scale visibility, style, interval, and label sizes. Live edit: axis and scale line colors and widths on existing targets.</p>
                         <div class="mt-2 space-y-3 pt-2 border-t border-slate-200">
-                            <label class="option-label flex items-center gap-2 text-xs text-slate-700 cursor-pointer select-none">
-                                <input
-                                    type="checkbox"
-                                    v-model="form.show_scale"
-                                    class="form-checkbox"
-                                    aria-label="Show Coordinate Scale (Linear)" :disabled="!semanticMutationAvailable">
-                                <span class="inline-flex items-center gap-1">Show Coordinate Scale <help-tip text="Show the bottom scale bar or ruler and any coordinate ticks and labels drawn on record axes. Main record axes remain visible when this is off."></help-tip></span>
-                            </label>
+                            <div class="flex items-center text-xs">
+                                <label class="option-label flex items-center gap-2 text-xs text-slate-700 cursor-pointer select-none">
+                                    <input
+                                        type="checkbox"
+                                        aria-describedby="help-linear-axis-show-coordinate-scale"
+                                        v-model="form.show_scale"
+                                        class="form-checkbox"
+                                        aria-label="Show Coordinate Scale (Linear)" :disabled="!semanticMutationAvailable">
+                                    <span>Show Coordinate Scale</span>
+                                </label>
+                                <help-tip id="help-linear-axis-show-coordinate-scale" text="Show the bottom scale bar or ruler and any coordinate ticks and labels drawn on record axes. Main record axes remain visible when this is off."></help-tip>
+                            </div>
 
                             <div class="grid grid-cols-2 gap-1.5">
                                 <div>
-                                    <label class="input-label text-[10px]">Axis Stroke Color <help-tip text="Use Auto for the configured default, None to hide the axis, or Color for an explicit value."></help-tip></label>
+                                    <span class="input-label text-[10px]">Axis Stroke Color <help-tip id="help-linear-axis-axis-stroke-color" text="Use Auto for the configured default, None to hide the axis, or Color for an explicit value."></help-tip></span>
                                     <color-value-control
                                         v-model="adv.axis_stroke_color"
                                         fallback="#000000"
-                                        aria-label="Axis stroke color">
+                                        aria-label="Axis stroke color"
+                                        aria-describedby="help-linear-axis-axis-stroke-color">
                                     </color-value-control>
                                 </div>
                                 <div>
-                                    <label class="input-label text-[10px]">Axis Stroke Width <help-tip text="Width of the main axis line."></help-tip></label>
+                                    <span class="input-label text-[10px]">Axis Stroke Width <help-tip id="help-linear-axis-axis-stroke-width" text="Width of the main axis line."></help-tip></span>
                                     <auto-value-field :visible="autoValueVisible(adv.axis_stroke_width, 'axisStrokeWidth')" :text="autoValueText('axisStrokeWidth')">
-                                        <input type="number" v-model.number="adv.axis_stroke_width" aria-label="Axis Stroke Width" class="form-input form-input-compact auto-value-input" :disabled="!semanticMutationAvailable">
+                                        <input type="number" v-model.number="adv.axis_stroke_width" aria-label="Axis Stroke Width" aria-describedby="help-linear-axis-axis-stroke-width" class="form-input form-input-compact auto-value-input" :disabled="!semanticMutationAvailable">
                                     </auto-value-field>
                                 </div>
                             </div>
@@ -4465,41 +4470,46 @@
                                 :class="form.show_scale === false ? 'opacity-50' : ''"
                                 class="space-y-3 min-w-0">
                                 <div>
-                                    <label class="input-label text-[10px] mb-1">Scale Style <help-tip text="'Bar' draws a simple line, 'Ruler' draws a ruler with ticks and labels."></help-tip></label>
-                                    <select v-model="form.scale_style" class="form-input text-xs py-1" aria-label="Linear scale style" :disabled="!semanticMutationAvailable">
+                                    <span class="input-label text-[10px] mb-1">Scale Style <help-tip id="help-linear-axis-scale-style" text="'Bar' draws a simple line, 'Ruler' draws a ruler with ticks and labels."></help-tip></span>
+                                    <select v-model="form.scale_style" class="form-input text-xs py-1" aria-label="Linear scale style" aria-describedby="help-linear-axis-scale-style" :disabled="!semanticMutationAvailable">
                                         <option value="bar">Bar (Simple)</option>
                                         <option value="ruler">Ruler (Ticks)</option>
                                     </select>
                                 </div>
                                 <div class="grid grid-cols-2 gap-1.5">
                                     <div>
-                                        <label class="input-label text-[10px]">Line Width <help-tip text="Line width of the scale bar or ruler."></help-tip></label>
+                                        <span class="input-label text-[10px]">Line Width <help-tip id="help-linear-axis-line-width" text="Line width of the scale bar or ruler."></help-tip></span>
                                         <auto-value-field :visible="autoValueVisible(adv.scale_stroke_width, 'scaleStrokeWidth')" :text="autoValueText('scaleStrokeWidth')">
-                                            <input type="number" v-model.number="adv.scale_stroke_width" class="form-input form-input-compact auto-value-input" aria-label="Linear scale line width" :disabled="!semanticMutationAvailable">
+                                            <input type="number" v-model.number="adv.scale_stroke_width" class="form-input form-input-compact auto-value-input" aria-label="Linear scale line width" aria-describedby="help-linear-axis-line-width" :disabled="!semanticMutationAvailable">
                                         </auto-value-field>
                                     </div>
                                     <div>
-                                        <label class="input-label text-[10px]">Scale Line Color <help-tip text="Use Auto for the configured default, None to hide the line, or Color for an explicit value."></help-tip></label>
+                                        <span class="input-label text-[10px]">Scale Line Color <help-tip id="help-linear-axis-scale-line-color" text="Use Auto for the configured default, None to hide the line, or Color for an explicit value."></help-tip></span>
                                         <color-value-control
                                             v-model="adv.scale_stroke_color"
                                             fallback="#000000"
-                                            aria-label="Scale line color">
+                                            aria-label="Scale line color"
+                                            aria-describedby="help-linear-axis-scale-line-color">
                                         </color-value-control>
                                     </div>
                                 </div>
-                                <label
-                                    :class="[
-                                        'option-label flex items-center gap-2 text-xs select-none',
-                                        canUseLinearRulerOnAxis ? 'text-slate-700 cursor-pointer' : 'text-slate-400 cursor-not-allowed'
-                                    ]">
-                                    <input
-                                        type="checkbox"
-                                        v-model="form.linear_ruler_on_axis"
-                                        class="form-checkbox"
-                                        :disabled="!semanticMutationAvailable || (!canUseLinearRulerOnAxis)"
-                                        :class="canUseLinearRulerOnAxis ? '' : 'opacity-50'">
-                                    <span class="inline-flex items-center gap-1">Ruler on Axis <help-tip text="Use each record axis as the ruler and hide the bottom ruler. Effective when Track Layout is Above/Below and Scale Style is Ruler."></help-tip></span>
-                                </label>
+                                <div class="flex items-center text-xs">
+                                    <label
+                                        :class="[
+                                            'option-label flex items-center gap-2 text-xs select-none',
+                                            canUseLinearRulerOnAxis ? 'text-slate-700 cursor-pointer' : 'text-slate-400 cursor-not-allowed'
+                                        ]">
+                                        <input
+                                            type="checkbox"
+                                            aria-describedby="help-linear-axis-ruler-on-axis"
+                                            v-model="form.linear_ruler_on_axis"
+                                            class="form-checkbox"
+                                            :disabled="!semanticMutationAvailable || (!canUseLinearRulerOnAxis)"
+                                            :class="canUseLinearRulerOnAxis ? '' : 'opacity-50'">
+                                        <span>Ruler on Axis</span>
+                                    </label>
+                                    <help-tip id="help-linear-axis-ruler-on-axis" text="Use each record axis as the ruler and hide the bottom ruler. Effective when Track Layout is Above/Below and Scale Style is Ruler."></help-tip>
+                                </div>
                                 <div class="space-y-1">
                                     <label class="option-label flex items-center gap-2 text-xs text-slate-700 cursor-pointer select-none">
                                         <input
@@ -4516,18 +4526,18 @@
                                 </div>
                                 <div class="grid grid-cols-2 gap-1.5">
                                     <div>
-                                        <label class="input-label text-[10px]">Scale Font Size <help-tip text="Font size for the simple bar scale label."></help-tip></label>
+                                        <span class="input-label text-[10px]">Scale Font Size <help-tip id="help-linear-axis-scale-font-size" text="Font size for the simple bar scale label."></help-tip></span>
                                         <auto-value-field :visible="autoValueVisible(adv.scale_font_size, 'scaleFontSize')" :text="autoValueText('scaleFontSize')">
                                             <input
                                                 type="number"
                                                 :value="optionalNumberInputValue(adv.scale_font_size)"
                                                 @input="setLinearScaleFontSize($event.target.value)"
                                                 class="form-input form-input-compact auto-value-input"
-                                                aria-label="Linear scale font size">
+                                                aria-label="Linear scale font size" aria-describedby="help-linear-axis-scale-font-size">
                                         </auto-value-field>
                                     </div>
                                     <div>
-                                        <label class="input-label text-[10px]">Ruler Label Font Size <help-tip text="Font size for ruler tick labels, including rulers drawn on record axes."></help-tip></label>
+                                        <span class="input-label text-[10px]">Ruler Label Font Size <help-tip id="help-linear-axis-ruler-label-font-size" text="Font size for ruler tick labels, including rulers drawn on record axes."></help-tip></span>
                                         <auto-value-field :visible="autoValueVisible(adv.ruler_label_font_size, 'rulerLabelFontSize')" :text="autoValueText('rulerLabelFontSize')">
                                             <input
                                                 type="number"
@@ -4535,21 +4545,22 @@
                                                 @input="setLinearRulerLabelFontSize($event.target.value)"
                                                 :disabled="linearTypographyLinked"
                                                 class="form-input form-input-compact auto-value-input disabled:opacity-50 disabled:cursor-not-allowed"
-                                                aria-label="Linear ruler label font size">
+                                                aria-label="Linear ruler label font size" aria-describedby="help-linear-axis-ruler-label-font-size">
                                         </auto-value-field>
                                     </div>
                                     <div v-if="form.scale_style === 'ruler'">
-                                        <label class="input-label text-[10px]">Interval <help-tip text="Manual tick interval for Ruler scale style in bp. Leave blank to calculate automatically."></help-tip></label>
+                                        <span class="input-label text-[10px]">Interval <help-tip id="help-linear-axis-interval" text="Manual tick interval for Ruler scale style in bp. Leave blank to calculate automatically."></help-tip></span>
                                         <auto-value-field :visible="autoValueVisible(adv.scale_interval, 'scaleInterval')" :text="autoValueText('scaleInterval')">
-                                            <input type="number" v-model.number="adv.scale_interval" class="form-input form-input-compact auto-value-input" aria-label="Linear ruler interval" :disabled="!semanticMutationAvailable">
+                                            <input type="number" v-model.number="adv.scale_interval" class="form-input form-input-compact auto-value-input" aria-label="Linear ruler interval" aria-describedby="help-linear-axis-interval" :disabled="!semanticMutationAvailable">
                                         </auto-value-field>
                                     </div>
                                     <div v-if="form.scale_style === 'ruler'">
-                                        <label class="input-label text-[10px]">Ruler Label Color <help-tip text="Color of ruler tick labels."></help-tip></label>
+                                        <span class="input-label text-[10px]">Ruler Label Color <help-tip id="help-linear-axis-ruler-label-color" text="Color of ruler tick labels."></help-tip></span>
                                         <color-value-control
                                             v-model="adv.ruler_label_color"
                                             fallback="#000000"
-                                            aria-label="Ruler label color">
+                                            aria-label="Ruler label color"
+                                            aria-describedby="help-linear-axis-ruler-label-color">
                                         </color-value-control>
                                     </div>
                                 </div>
@@ -4560,23 +4571,27 @@
 
                 <div v-if="mode === 'circular'" class="card bg-slate-50/50">
                     <details>
-                        <summary><i class="ph ph-paint-brush"></i> Axis &amp; Scale <help-tip text="Adjust axis stroke settings and the circular scale interval."></help-tip></summary>
+                        <summary aria-label="Axis &amp; Scale"><i class="ph ph-paint-brush"></i> Axis &amp; Scale <help-tip text="Adjust axis stroke settings and the circular scale interval."></help-tip></summary>
                         <p class="mt-2 text-[10px] text-slate-500">Applies on Generate: scale visibility, style, interval, and label sizes. Live edit: axis and scale line colors and widths on existing targets.</p>
                         <div class="mt-2 space-y-3 pt-2 border-t border-slate-200">
-                            <label
-                                :class="[
-                                    'option-label flex items-center gap-2 text-xs select-none',
-                                    adv.circular_track_slots_enabled ? 'text-slate-400 cursor-not-allowed' : 'text-slate-700 cursor-pointer'
-                                ]">
-                                <input
-                                    type="checkbox"
-                                    v-model="form.show_scale"
-                                    :disabled="!semanticMutationAvailable || (adv.circular_track_slots_enabled)"
-                                    :class="adv.circular_track_slots_enabled ? 'opacity-50' : ''"
-                                    class="form-checkbox"
-                                    aria-label="Show Coordinate Scale (Circular)">
-                                <span class="inline-flex items-center gap-1">Show Coordinate Scale <help-tip text="Show primary coordinate ticks and labels in simple mode. The circular genome axis remains visible when this is off."></help-tip></span>
-                            </label>
+                            <div class="flex items-center text-xs">
+                                <label
+                                    :class="[
+                                        'option-label flex items-center gap-2 text-xs select-none',
+                                        adv.circular_track_slots_enabled ? 'text-slate-400 cursor-not-allowed' : 'text-slate-700 cursor-pointer'
+                                    ]">
+                                    <input
+                                        type="checkbox"
+                                        aria-describedby="help-circular-axis-show-coordinate-scale"
+                                        v-model="form.show_scale"
+                                        :disabled="!semanticMutationAvailable || (adv.circular_track_slots_enabled)"
+                                        :class="adv.circular_track_slots_enabled ? 'opacity-50' : ''"
+                                        class="form-checkbox"
+                                        aria-label="Show Coordinate Scale (Circular)">
+                                    <span>Show Coordinate Scale</span>
+                                </label>
+                                <help-tip id="help-circular-axis-show-coordinate-scale" text="Show primary coordinate ticks and labels in simple mode. The circular genome axis remains visible when this is off."></help-tip>
+                            </div>
                             <p
                                 v-if="adv.circular_track_slots_enabled"
                                 class="rounded border border-sky-200 bg-sky-50 px-2 py-1 text-[10px] text-sky-800"
@@ -4586,17 +4601,18 @@
                             <div class="bg-slate-50 p-2 rounded border border-slate-200 space-y-2">
                                 <div class="grid grid-cols-2 gap-1.5">
                                     <div>
-                                        <label class="input-label text-[10px]">Axis Stroke Color <help-tip text="Use Auto for the configured default, None to hide the axis, or Color for an explicit value."></help-tip></label>
+                                        <span class="input-label text-[10px]">Axis Stroke Color <help-tip id="help-circular-axis-axis-stroke-color" text="Use Auto for the configured default, None to hide the axis, or Color for an explicit value."></help-tip></span>
                                         <color-value-control
                                             v-model="adv.axis_stroke_color"
                                             fallback="#000000"
-                                            aria-label="Axis stroke color">
+                                            aria-label="Axis stroke color"
+                                            aria-describedby="help-circular-axis-axis-stroke-color">
                                         </color-value-control>
                                     </div>
                                     <div>
-                                        <label class="input-label text-[10px]">Axis Stroke Width <help-tip text="Width of the main axis line."></help-tip></label>
+                                        <span class="input-label text-[10px]">Axis Stroke Width <help-tip id="help-circular-axis-axis-stroke-width" text="Width of the main axis line."></help-tip></span>
                                         <auto-value-field :visible="autoValueVisible(adv.axis_stroke_width, 'axisStrokeWidth')" :text="autoValueText('axisStrokeWidth')">
-                                            <input type="number" v-model.number="adv.axis_stroke_width" aria-label="Axis Stroke Width" class="form-input form-input-compact auto-value-input" :disabled="!semanticMutationAvailable">
+                                            <input type="number" v-model.number="adv.axis_stroke_width" aria-label="Axis Stroke Width" aria-describedby="help-circular-axis-axis-stroke-width" class="form-input form-input-compact auto-value-input" :disabled="!semanticMutationAvailable">
                                         </auto-value-field>
                                     </div>
                                 </div>
@@ -4605,15 +4621,15 @@
                                     :class="canUseCircularScaleStyling ? '' : 'opacity-50'"
                                     class="grid grid-cols-2 gap-1.5 min-w-0">
                                     <div>
-                                        <label class="input-label text-[10px]">Scale Interval <help-tip text="Manual scale interval for circular mode (in bp). Overrides automatic calculation."></help-tip></label>
+                                        <span class="input-label text-[10px]">Scale Interval <help-tip id="help-circular-axis-scale-interval" text="Manual scale interval for circular mode (in bp). Overrides automatic calculation."></help-tip></span>
                                         <auto-value-field :visible="autoValueVisible(adv.scale_interval, 'scaleInterval')" :text="autoValueText('scaleInterval')">
-                                            <input type="number" v-model.number="adv.scale_interval" class="form-input form-input-compact auto-value-input" aria-label="Circular scale interval" :disabled="!semanticMutationAvailable">
+                                            <input type="number" v-model.number="adv.scale_interval" class="form-input form-input-compact auto-value-input" aria-label="Circular scale interval" aria-describedby="help-circular-axis-scale-interval" :disabled="!semanticMutationAvailable">
                                         </auto-value-field>
                                     </div>
                                     <div>
-                                        <label class="input-label text-[10px]">Tick Label Font Size <help-tip text="Font size for circular tick labels. Leave blank to use the default size."></help-tip></label>
+                                        <span class="input-label text-[10px]">Tick Label Font Size <help-tip id="help-circular-axis-tick-label-font-size" text="Font size for circular tick labels. Leave blank to use the default size."></help-tip></span>
                                         <auto-value-field :visible="autoValueVisible(adv.tick_label_font_size, 'tickLabelFontSize')" :text="autoValueText('tickLabelFontSize')">
-                                            <input type="number" v-model.number="adv.tick_label_font_size" class="form-input form-input-compact auto-value-input" aria-label="Circular tick label font size" :disabled="!semanticMutationAvailable">
+                                            <input type="number" v-model.number="adv.tick_label_font_size" class="form-input form-input-compact auto-value-input" aria-label="Circular tick label font size" aria-describedby="help-circular-axis-tick-label-font-size" :disabled="!semanticMutationAvailable">
                                         </auto-value-field>
                                     </div>
                             </div>
@@ -4627,23 +4643,26 @@
                         <div class="mt-2 space-y-3 pt-2 border-t border-slate-200">
                             <div class="grid grid-cols-3 gap-1.5">
                                 <div>
-                                    <label class="input-label text-[10px]">Window <help-tip text="Window size for GC content/skew. Default: 1kb (<1Mb), 10kb (<10Mb), 100kb (>=10Mb)."></help-tip></label>
+                                    <span class="input-label text-[10px]">Window <help-tip id="help-gc-window" text="Window size for GC content/skew. Default: 1kb (<1Mb), 10kb (<10Mb), 100kb (>=10Mb)."></help-tip></span>
                                     <auto-value-field :visible="autoValueVisible(adv.window_size, 'dinucleotideWindow')" :text="autoValueText('dinucleotideWindow')">
-                                        <input type="number" v-model.number="adv.window_size" class="form-input form-input-compact auto-value-input" :disabled="!semanticMutationAvailable">
+                                        <input type="number" v-model.number="adv.window_size" aria-label="Window" aria-describedby="help-gc-window" class="form-input form-input-compact auto-value-input" :disabled="!semanticMutationAvailable">
                                     </auto-value-field>
                                 </div>
                                 <div>
-                                    <label class="input-label text-[10px]">Step <help-tip text="Step size for GC content/skew. Default: 100bp (<1Mb), 1kb (<10Mb), 10kb (>=10Mb)."></help-tip></label>
+                                    <span class="input-label text-[10px]">Step <help-tip id="help-gc-step" text="Step size for GC content/skew. Default: 100bp (<1Mb), 1kb (<10Mb), 10kb (>=10Mb)."></help-tip></span>
                                     <auto-value-field :visible="autoValueVisible(adv.step_size, 'dinucleotideStep')" :text="autoValueText('dinucleotideStep')">
-                                        <input type="number" v-model.number="adv.step_size" class="form-input form-input-compact auto-value-input" :disabled="!semanticMutationAvailable">
+                                        <input type="number" v-model.number="adv.step_size" aria-label="Step" aria-describedby="help-gc-step" class="form-input form-input-compact auto-value-input" :disabled="!semanticMutationAvailable">
                                     </auto-value-field>
                                 </div>
-                                <div><label class="input-label text-[10px]">Dinucleotide <help-tip text="Dinucleotide to use (e.g., 'GC'). Default is 'GC'."></help-tip></label><input type="text" v-model="adv.nt" class="form-input form-input-compact" placeholder="GC" :disabled="!semanticMutationAvailable"></div>
+                                <div>
+                                    <span class="input-label text-[10px]">Dinucleotide <help-tip id="help-gc-dinucleotide" text="Dinucleotide to use (e.g., 'GC'). Default is 'GC'."></help-tip></span>
+                                    <input type="text" v-model="adv.nt" aria-label="Dinucleotide" aria-describedby="help-gc-dinucleotide" class="form-input form-input-compact w-full" placeholder="GC" :disabled="!semanticMutationAvailable">
+                                </div>
                             </div>
 
                             <div>
-                                <label class="input-label text-[10px]">GC Content Mode <help-tip text="Deviation centers the track around the window mean. Percent draws absolute GC percentage from a baseline."></help-tip></label>
-                                <select v-model="adv.gc_content_mode" class="form-select form-input-compact" :disabled="!semanticMutationAvailable">
+                                <span class="input-label text-[10px]">GC Content Mode <help-tip id="help-gc-gc-content-mode" text="Deviation centers the track around the window mean. Percent draws absolute GC percentage from a baseline."></help-tip></span>
+                                <select v-model="adv.gc_content_mode" aria-label="GC Content Mode" aria-describedby="help-gc-gc-content-mode" class="form-select form-input-compact" :disabled="!semanticMutationAvailable">
                                     <option value="deviation">Deviation</option>
                                     <option value="percent">Percent</option>
                                 </select>
@@ -4652,37 +4671,43 @@
                             <div v-if="adv.gc_content_mode === 'percent'" class="space-y-2">
                                 <div class="grid grid-cols-2 gap-1.5">
                                     <div>
-                                        <label class="input-label text-[10px]">GC Min % <help-tip text="Minimum GC percentage for percent-mode clipping and axis scaling."></help-tip></label>
-                                        <input type="number" step="0.1" v-model.number="adv.gc_content_min_percent" class="form-input form-input-compact" placeholder="0" :disabled="!semanticMutationAvailable">
+                                        <span class="input-label text-[10px]">GC Min % <help-tip id="help-gc-gc-min-percent" text="Minimum GC percentage for percent-mode clipping and axis scaling."></help-tip></span>
+                                        <input type="number" step="0.1" v-model.number="adv.gc_content_min_percent" aria-label="GC Min %" aria-describedby="help-gc-gc-min-percent" class="form-input form-input-compact" placeholder="0" :disabled="!semanticMutationAvailable">
                                     </div>
                                     <div>
-                                        <label class="input-label text-[10px]">GC Max % <help-tip text="Maximum GC percentage for percent-mode clipping and axis scaling."></help-tip></label>
-                                        <input type="number" step="0.1" v-model.number="adv.gc_content_max_percent" class="form-input form-input-compact" placeholder="100" :disabled="!semanticMutationAvailable">
+                                        <span class="input-label text-[10px]">GC Max % <help-tip id="help-gc-gc-max-percent" text="Maximum GC percentage for percent-mode clipping and axis scaling."></help-tip></span>
+                                        <input type="number" step="0.1" v-model.number="adv.gc_content_max_percent" aria-label="GC Max %" aria-describedby="help-gc-gc-max-percent" class="form-input form-input-compact" placeholder="100" :disabled="!semanticMutationAvailable">
                                     </div>
                                 </div>
                                 <div class="grid grid-cols-2 gap-1.5">
-                                    <label class="option-label flex items-center gap-2 text-xs text-slate-700 cursor-pointer select-none">
-                                        <input type="checkbox" v-model="adv.gc_content_show_axis" class="form-checkbox" :disabled="!semanticMutationAvailable">
-                                        <span class="inline-flex items-center gap-1">Percent Axis <help-tip text="Show the GC content percent axis line. Hiding the axis also hides percent tick marks and labels."></help-tip></span>
-                                    </label>
-                                    <label class="option-label flex items-center gap-2 text-xs text-slate-700 cursor-pointer select-none">
-                                        <input type="checkbox" v-model="adv.gc_content_show_ticks" class="form-checkbox" :disabled="!semanticMutationAvailable">
-                                        <span class="inline-flex items-center gap-1">Percent Ticks <help-tip text="Show GC content percent-axis tick marks and labels."></help-tip></span>
-                                    </label>
+                                    <div class="flex items-center text-xs">
+                                        <label class="option-label flex items-center gap-2 text-xs text-slate-700 cursor-pointer select-none">
+                                            <input type="checkbox" v-model="adv.gc_content_show_axis" aria-describedby="help-gc-percent-axis" class="form-checkbox" :disabled="!semanticMutationAvailable">
+                                            <span>Percent Axis</span>
+                                        </label>
+                                        <help-tip id="help-gc-percent-axis" text="Show the GC content percent axis line. Hiding the axis also hides percent tick marks and labels."></help-tip>
+                                    </div>
+                                    <div class="flex items-center text-xs">
+                                        <label class="option-label flex items-center gap-2 text-xs text-slate-700 cursor-pointer select-none">
+                                            <input type="checkbox" v-model="adv.gc_content_show_ticks" aria-describedby="help-gc-percent-ticks" class="form-checkbox" :disabled="!semanticMutationAvailable">
+                                            <span>Percent Ticks</span>
+                                        </label>
+                                        <help-tip id="help-gc-percent-ticks" text="Show GC content percent-axis tick marks and labels."></help-tip>
+                                    </div>
                                 </div>
                                 <div class="grid grid-cols-3 gap-1.5">
                                     <div>
-                                        <label class="input-label text-[10px]">Large Tick <help-tip text="GC content percent-mode large tick interval."></help-tip></label>
-                                        <input type="number" min="0.01" step="1" v-model.number="adv.gc_content_tick_interval" class="form-input form-input-compact" placeholder="20" :disabled="!semanticMutationAvailable">
+                                        <span class="input-label text-[10px]">Large Tick <help-tip id="help-gc-large-tick" text="GC content percent-mode large tick interval."></help-tip></span>
+                                        <input type="number" min="0.01" step="1" v-model.number="adv.gc_content_tick_interval" aria-label="Large Tick" aria-describedby="help-gc-large-tick" class="form-input form-input-compact" placeholder="20" :disabled="!semanticMutationAvailable">
                                     </div>
                                     <div>
-                                        <label class="input-label text-[10px]">Small Tick <help-tip text="GC content percent-mode small tick interval. Leave blank to hide small ticks."></help-tip></label>
-                                        <input type="number" min="0.01" step="1" v-model.number="adv.gc_content_small_tick_interval" class="form-input form-input-compact" placeholder="None" :disabled="!semanticMutationAvailable">
+                                        <span class="input-label text-[10px]">Small Tick <help-tip id="help-gc-small-tick" text="GC content percent-mode small tick interval. Leave blank to hide small ticks."></help-tip></span>
+                                        <input type="number" min="0.01" step="1" v-model.number="adv.gc_content_small_tick_interval" aria-label="Small Tick" aria-describedby="help-gc-small-tick" class="form-input form-input-compact" placeholder="None" :disabled="!semanticMutationAvailable">
                                     </div>
                                     <div>
-                                        <label class="input-label text-[10px]">Tick Font <help-tip text="Font size for GC content percent tick labels. Leave blank for auto."></help-tip></label>
+                                        <span class="input-label text-[10px]">Tick Font <help-tip id="help-gc-tick-font" text="Font size for GC content percent tick labels. Leave blank for auto."></help-tip></span>
                                         <auto-value-field :visible="autoValueVisible(adv.gc_content_tick_font_size, 'gcTickFont')" :text="autoValueText('gcTickFont')">
-                                            <input type="number" min="0.01" step="0.5" v-model.number="adv.gc_content_tick_font_size" class="form-input form-input-compact auto-value-input" :disabled="!semanticMutationAvailable">
+                                            <input type="number" min="0.01" step="0.5" v-model.number="adv.gc_content_tick_font_size" aria-label="Tick Font" aria-describedby="help-gc-tick-font" class="form-input form-input-compact auto-value-input" :disabled="!semanticMutationAvailable">
                                         </auto-value-field>
                                     </div>
                                 </div>
@@ -4690,9 +4715,9 @@
 
                             <template v-if="mode === 'linear'">
                                 <div>
-                                    <label class="input-label text-[10px]">GC Height <help-tip text="Height of the linear GC content and GC skew tracks. Applies to whichever of those tracks are enabled when the diagram is generated."></help-tip></label>
+                                    <span class="input-label text-[10px]">GC Height <help-tip id="help-gc-gc-height" text="Height of the linear GC content and GC skew tracks. Applies to whichever of those tracks are enabled when the diagram is generated."></help-tip></span>
                                     <auto-value-field :visible="autoValueVisible(adv.gc_height, 'linearGcHeight')" :text="autoValueText('linearGcHeight')">
-                                        <input type="number" v-model.number="adv.gc_height" class="form-input form-input-compact auto-value-input" :disabled="!semanticMutationAvailable">
+                                        <input type="number" v-model.number="adv.gc_height" aria-label="GC Height" aria-describedby="help-gc-gc-height" class="form-input form-input-compact auto-value-input" :disabled="!semanticMutationAvailable">
                                     </auto-value-field>
                                 </div>
                             </template>
@@ -4701,29 +4726,29 @@
                                 <div class="grid grid-cols-2 gap-1.5">
                                     <template v-if="!form.suppress_gc">
                                         <div>
-                                            <label class="input-label text-[10px]">GC Content Width <help-tip text="GC content track width in px."></help-tip></label>
+                                            <span class="input-label text-[10px]">GC Content Width <help-tip id="help-gc-gc-content-width" text="GC content track width in px."></help-tip></span>
                                             <auto-value-field :visible="autoValueVisible(adv.gc_content_width_circular, 'circularGcWidth')" :text="autoValueText('circularGcWidth')">
-                                                <input type="number" min="0.01" step="0.5" v-model.number="adv.gc_content_width_circular" :disabled="!semanticMutationAvailable || (adv.circular_track_slots_enabled)" :title="adv.circular_track_slots_enabled ? 'Custom stack geometry is active. Use the GC content row width, or Reset to copy this value into the stack.' : ''" class="form-input form-input-compact auto-value-input">
+                                                <input type="number" min="0.01" step="0.5" v-model.number="adv.gc_content_width_circular" :disabled="!semanticMutationAvailable || (adv.circular_track_slots_enabled)" :title="adv.circular_track_slots_enabled ? 'Custom stack geometry is active. Use the GC content row width, or Reset to copy this value into the stack.' : ''" aria-label="GC Content Width" aria-describedby="help-gc-gc-content-width" class="form-input form-input-compact auto-value-input">
                                             </auto-value-field>
                                         </div>
                                         <div>
-                                            <label class="input-label text-[10px]">GC Content Radius <help-tip text="GC content center radius as a ratio of the base circular radius (1.0 = base radius)."></help-tip></label>
+                                            <span class="input-label text-[10px]">GC Content Radius <help-tip id="help-gc-gc-content-radius" text="GC content center radius as a ratio of the base circular radius (1.0 = base radius)."></help-tip></span>
                                             <auto-value-field :visible="autoValueVisible(adv.gc_content_radius_circular, 'circularGcRadius')" :text="autoValueText('circularGcRadius')">
-                                                <input type="number" min="0.01" step="0.01" v-model.number="adv.gc_content_radius_circular" :disabled="!semanticMutationAvailable || (adv.circular_track_slots_enabled)" :title="adv.circular_track_slots_enabled ? 'Custom stack geometry is active. Use the GC content row radius, or Reset to copy this value into the stack.' : ''" class="form-input form-input-compact auto-value-input">
+                                                <input type="number" min="0.01" step="0.01" v-model.number="adv.gc_content_radius_circular" :disabled="!semanticMutationAvailable || (adv.circular_track_slots_enabled)" :title="adv.circular_track_slots_enabled ? 'Custom stack geometry is active. Use the GC content row radius, or Reset to copy this value into the stack.' : ''" aria-label="GC Content Radius" aria-describedby="help-gc-gc-content-radius" class="form-input form-input-compact auto-value-input">
                                             </auto-value-field>
                                         </div>
                                     </template>
                                     <template v-if="!form.suppress_skew">
                                         <div>
-                                            <label class="input-label text-[10px]">GC Skew Width <help-tip text="GC skew track width in px."></help-tip></label>
+                                            <span class="input-label text-[10px]">GC Skew Width <help-tip id="help-gc-gc-skew-width" text="GC skew track width in px."></help-tip></span>
                                             <auto-value-field :visible="autoValueVisible(adv.gc_skew_width_circular, 'circularSkewWidth')" :text="autoValueText('circularSkewWidth')">
-                                                <input type="number" min="0.01" step="0.5" v-model.number="adv.gc_skew_width_circular" :disabled="!semanticMutationAvailable || (adv.circular_track_slots_enabled)" :title="adv.circular_track_slots_enabled ? 'Custom stack geometry is active. Use the GC skew row width, or Reset to copy this value into the stack.' : ''" class="form-input form-input-compact auto-value-input">
+                                                <input type="number" min="0.01" step="0.5" v-model.number="adv.gc_skew_width_circular" :disabled="!semanticMutationAvailable || (adv.circular_track_slots_enabled)" :title="adv.circular_track_slots_enabled ? 'Custom stack geometry is active. Use the GC skew row width, or Reset to copy this value into the stack.' : ''" aria-label="GC Skew Width" aria-describedby="help-gc-gc-skew-width" class="form-input form-input-compact auto-value-input">
                                             </auto-value-field>
                                         </div>
                                         <div>
-                                            <label class="input-label text-[10px]">GC Skew Radius <help-tip text="GC skew center radius as a ratio of the base circular radius (1.0 = base radius)."></help-tip></label>
+                                            <span class="input-label text-[10px]">GC Skew Radius <help-tip id="help-gc-gc-skew-radius" text="GC skew center radius as a ratio of the base circular radius (1.0 = base radius)."></help-tip></span>
                                             <auto-value-field :visible="autoValueVisible(adv.gc_skew_radius_circular, 'circularSkewRadius')" :text="autoValueText('circularSkewRadius')">
-                                                <input type="number" min="0.01" step="0.01" v-model.number="adv.gc_skew_radius_circular" :disabled="!semanticMutationAvailable || (adv.circular_track_slots_enabled)" :title="adv.circular_track_slots_enabled ? 'Custom stack geometry is active. Use the GC skew row radius, or Reset to copy this value into the stack.' : ''" class="form-input form-input-compact auto-value-input">
+                                                <input type="number" min="0.01" step="0.01" v-model.number="adv.gc_skew_radius_circular" :disabled="!semanticMutationAvailable || (adv.circular_track_slots_enabled)" :title="adv.circular_track_slots_enabled ? 'Custom stack geometry is active. Use the GC skew row radius, or Reset to copy this value into the stack.' : ''" aria-label="GC Skew Radius" aria-describedby="help-gc-gc-skew-radius" class="form-input form-input-compact auto-value-input">
                                             </auto-value-field>
                                         </div>
                                     </template>
