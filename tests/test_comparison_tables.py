@@ -321,6 +321,26 @@ def test_unknown_table_ids_keep_positional_placement_with_a_warning(
     assert "1 row(s) use sequence IDs that match no displayed record ('contig_A', 'contig_B')" in caplog.text
 
 
+def test_uploaded_rows_merged_with_source_bound_rows_are_still_checked() -> None:
+    records = _pair_records("R2", "R3")
+    # Source-bound rows are checked by feature identity, so their table IDs are exempt.
+    bound = _hits("R3", "R2").assign(
+        query_feature_index=0,
+        subject_feature_index=0,
+        query_feature_svg_id="f_query",
+        subject_feature_svg_id="f_subject",
+    )
+    svg = _render_svg(records, [LinearComparison(0, 1, bound)])
+    assert 'data-query-record-id="R2"' in svg
+
+    # Sources for one pair are merged; the unbound uploaded rows keep the ID check.
+    with pytest.raises(ComparisonIdentityError, match=r"the query column names 'R3'"):
+        _render_svg(
+            records,
+            [LinearComparison(0, 1, bound), LinearComparison(0, 1, _hits("R3", "R2"))],
+        )
+
+
 def _write_genbank(path: Path, record: SeqRecord) -> Path:
     SeqIO.write([record], path, "genbank")
     return path

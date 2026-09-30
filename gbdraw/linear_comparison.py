@@ -189,6 +189,20 @@ def _resolve_table_id(
     return "unknown", None
 
 
+def _rows_without_feature_binding(frame: DataFrame) -> DataFrame:
+    """Return the rows that carry no source-feature binding.
+
+    Sources for one endpoint pair are merged before this check, so uploaded
+    rows can share a frame with bound LOSATP or saved protein rows.
+    """
+
+    if not _FEATURE_BINDING_COLUMNS <= set(frame.columns):
+        return frame
+    binding = frame.loc[:, sorted(_FEATURE_BINDING_COLUMNS)]
+    present = binding.notna() & binding.astype(str).apply(lambda column: column.str.strip() != "")
+    return frame.loc[~present.any(axis=1)]
+
+
 def validate_linear_comparison_record_ids(
     comparisons: Sequence[LinearComparison],
     records: Sequence[object],
@@ -197,16 +211,16 @@ def validate_linear_comparison_record_ids(
 
     A row that names the opposite endpoint or another displayed record raises
     ComparisonIdentityError. IDs that name no displayed record keep positional
-    placement with a warning. Version suffixes (``.1``) are tolerated. Tables
-    whose rows are bound to source features are checked by feature identity
-    instead. Every Linear comparison input (``-b`` files, comparison tables,
-    typed and Web requests) reaches this check beside the topology check.
+    placement with a warning. Version suffixes (``.1``) are tolerated. Rows
+    bound to source features are checked by feature identity instead. Every
+    Linear comparison input (``-b`` files, comparison tables, typed and Web
+    requests) reaches this check beside the topology check.
     """
 
     id_index = _record_id_index(records)
     for comparison in comparisons:
-        frame = comparison.matches
-        if frame.empty or _FEATURE_BINDING_COLUMNS <= set(frame.columns):
+        frame = _rows_without_feature_binding(comparison.matches)
+        if frame.empty:
             continue
         endpoints = {
             "query": comparison.query_record_index,
