@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import test from 'node:test';
 
 import {
@@ -6,6 +7,7 @@ import {
   createRightDrawerController,
   restoreRightDrawerState
 } from '../../gbdraw/web/js/app/right-drawer.js';
+import { assertKnownDefect } from './helpers/known-defect.mjs';
 
 const ref = (value) => ({ value });
 
@@ -127,4 +129,21 @@ test('an active alignment keeps its inspector and Reset tab reachable without gr
   harness.flush();
   assert.equal(drawer.isRightDrawerTabAvailable('orthogroups'), false);
   assert.equal(state.rightDrawerTab.value, 'features');
+});
+
+// PV-12 (OIC-024): the Legend tab help names only edits that the tab offers.
+// The entry swatch displays the fill color; no control in the tab changes it.
+test('the Legend tab help does not claim a fill color edit it lacks (PV-12 known defect)', async () => {
+  const html = readFileSync(new URL('../../gbdraw/web/index.html', import.meta.url), 'utf8');
+  const start = html.indexOf(`v-show="rightDrawerTab === 'legend'"`);
+  const end = html.indexOf('v-if="isFeatureDrawerMounted"', start);
+  assert.ok(start >= 0 && end > start, 'the Legend tab markup is found');
+  const legendTab = html.slice(start, end);
+  const help = legendTab.match(/<p\b[^>]*>\s*(Live edit:[^<]*)<\/p>/)?.[1] || '';
+  assert.match(help, /^Live edit:/);
+  assert.match(legendTab, /renameLegendEntry\(|deleteLegendEntry\(|setLegendEntryStrokeColorValue\(/);
+  await assertKnownDefect('PV-12', () => {
+    const claimsFillColor = /\bcolou?rs?\b/i.test(help.replace(/\bstroke colou?rs?\b/gi, ''));
+    assert.ok(!claimsFillColor || /updateLegendEntryColor\(/.test(legendTab), help);
+  });
 });

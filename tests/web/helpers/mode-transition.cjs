@@ -1,6 +1,6 @@
 const { expect } = require('@playwright/test');
 const fs = require('node:fs/promises');
-const { openApp } = require('./app-lifecycle.cjs');
+const { assertOperationHealth, openApp, readErrorSignature } = require('./app-lifecycle.cjs');
 
 const seeds = {
   circular: 'gbdraw/web/gallery/sessions/HmmtDNA_basic_circular.gbdraw-session.json',
@@ -31,13 +31,15 @@ const load = async (browser, file = seeds.circular, viewport = { width: 1600, he
   return page;
 };
 
-const generate = async page => {
+// G-G(3): options name the audit ID of a known defect that trips a health check.
+const generate = async (page, health = {}) => {
   const key = await page.evaluate(async () => (await import('./js/state.js')).state.resultGenerationKey.value);
   await page.getByRole('button', { name: 'Generate Diagram', exact: true }).click();
   await expect.poll(() => page.evaluate(async () => {
     const { state } = await import('./js/state.js');
     return { key: state.resultGenerationKey.value, processing: state.processing.value, error: state.errorLog.value };
   }), { timeout: 180000 }).toEqual({ key: key + 1, processing: false, error: null });
+  await assertOperationHealth(page, { operation: 'Generate', ...health });
 };
 
 const switchMode = async (page, mode) => {
@@ -66,13 +68,17 @@ const closeEditor = async page => {
   if (await page.locator('.right-drawer').isVisible()) await page.locator('.drawer-toggle').click();
 };
 
-const download = async (page, button, path) => {
+const download = async (page, button, path, health = {}) => {
   const control = button === 'Save Session' ? page.getByRole('banner') : page;
+  const errorSignatureBefore = await readErrorSignature(page);
   const [download] = await Promise.all([
     page.waitForEvent('download'),
     control.getByRole('button', { name: button, exact: true }).click()
   ]);
   await download.saveAs(path);
+  if (button === 'Save Session') {
+    await assertOperationHealth(page, { operation: 'Save Session', errorSignatureBefore, ...health });
+  }
   return fs.readFile(path);
 };
 

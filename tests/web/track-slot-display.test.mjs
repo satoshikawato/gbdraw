@@ -4,6 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import test from 'node:test';
+import { assertKnownDefect } from './helpers/known-defect.mjs';
 
 const repoRoot = process.cwd();
 const tempRoot = await mkdtemp(join(tmpdir(), 'gbdraw-track-slot-display-'));
@@ -293,4 +294,22 @@ test('Circular editor requests resolved geometry with each public slot ID', () =
       expected
     );
   }
+});
+
+test('a disabled row without geometry does not show another row geometry (TR-08 known defect)', async () => {
+  // Current geometry carries slot IDs. The disabled ticks row was not rendered,
+  // so its public index now belongs to gc_content.
+  const geometry = {
+    records: [{
+      resultIndex: 0,
+      recordIndex: 0,
+      slots: [
+        { slotIndex: 0, slotId: 'features', renderer: 'features', widthPx: 60 },
+        { slotIndex: 1, slotId: 'gc_content', renderer: 'gc_content', widthPx: 74.1 }
+      ]
+    }]
+  };
+  await assertKnownDefect('TR-08', () => {
+    assert.equal(findTrackSlotGeometry({ geometry, slotIndex: 1, slotId: 'ticks' }), null);
+  });
 });
