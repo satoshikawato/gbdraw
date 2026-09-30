@@ -33,26 +33,26 @@ decisions are in
   it from the first base. Saved LOSATP rows for a record whose proteins changed
   are not reused; the next search recomputes them.
 
-- **Changed:** The CLI, the Python API, and typed Web or Session requests
-  reject the same invalid values with a named option or setting. `--window`, `--step`,
-  `--depth_window`, and `--depth_step` must be positive integers; `-n XY`,
-  `-n G`, and other values that are not two of `A`, `C`, `G`, `T`, `U` are
-  rejected instead of drawing flat tracks or raising `IndexError`. `U` is
-  counted as `T`, so `AU` matches `AT`. Font sizes must be greater than zero
-  and stroke widths zero or greater; `--block_stroke_width -1` no longer ends
-  in a traceback. Offsets, spacing, `track_axis_gap`, and label rotation are
-  unchanged.
-- **Fixed:** A Circular definition font set in a Web or Session request
-  without an interval again uses the font size plus 2 as the line interval,
-  as in 0.13.0 and the CLI. Python API `config_overrides` follow the same
-  rule.
-- **Fixed:** Qualifier Priority and label whitelist edits apply to Sessions
-  written by the CLI or saved from `main`. Label maps compiled by an earlier
-  render are no longer kept as preserved settings or reused when a table is
-  attached.
-- **Changed:** Python validation failures report field, reason, Track row,
-  Depth series, and canonical setting identifiers to the Web instead of an
-  unclassified error. A test keeps unclassified validation sites from growing.
+- The CLI, the Python API, and typed Web or Session requests reject the same
+  invalid values and name the option or setting. `--window`, `--step`,
+  `--depth_window`, and `--depth_step` take positive integers; before, `0` drew
+  empty GC content and skew tracks (X-02).
+- A dinucleotide (`-n/--nt`, a track slot's `nt`) is two letters from `A`, `C`,
+  `G`, `T`, and `U` in any case. `U` is counted as `T`, so `AU` matches `AT`.
+  `-n XY` no longer draws flat tracks and `-n G` no longer raises `IndexError`
+  (D-26, N-13).
+- Font sizes must be greater than zero and stroke widths zero or greater;
+  `--block_stroke_width -1` no longer ends in a traceback. Offsets, spacing,
+  `track_axis_gap`, and label rotation keep their current ranges (D-27).
+- A Circular definition font set without an interval in a Web or Session
+  request, or in Python API `config_overrides`, uses the font size plus 2 as the
+  line interval, as the CLI and 0.13.0 do (GE-03).
+- Qualifier Priority and whitelist edits apply to Sessions written by the CLI
+  or saved from `main`. Label maps compiled by an earlier render are no longer
+  kept as preserved settings or reused when a table is attached (SE-08).
+- Python validation errors reach the Web with a code, field, reason, and
+  Track row, Depth series, table line, or setting path instead of an
+  unclassified error (X-01).
 
 <!-- web-gui-audit-20260930 P07 -->
 

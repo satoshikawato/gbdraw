@@ -240,3 +240,19 @@ def test_legend_stroke_width_failure_is_typed_not_value_error():
     with pytest.raises(ValidationError) as caught:
         _legend_half_stroke_width({"entry": {"stroke": "black", "width": -1}})
     assert _web(caught.value)["context"] == {"reason": "NONNEGATIVE"}
+
+
+def test_specific_color_table_failure_reports_row_without_value(tmp_path: Path):
+    from gbdraw.io.colors import read_color_table
+
+    table = tmp_path / "PRIVATE_colors.tsv"
+    table.write_text(
+        "CDS\tproduct\tNADH\t#ff0000\tRed\nCDS\tproduct\tPRIVATE\tnotacolor\tBad\n",
+        encoding="utf-8",
+    )
+    with pytest.raises(ValidationError) as caught:
+        read_color_table(str(table))
+    payload = _web(caught.value)
+    assert payload["code"] == "TABLE_INVALID"
+    assert payload["context"] == {"field": "color", "reason": "COLOR", "row": 2}
+    assert "PRIVATE" not in json.dumps(payload)
