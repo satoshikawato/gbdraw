@@ -189,7 +189,7 @@ test('status, selection, and input build no tables; each Generate builds its lab
     expect(op.undo).toBe(0);
     expectNoStatusWork(op, `Editor aria-expanded=${expanded}`);
   }
-  const help = page.locator('.help-tip:has(#linear-definition-lock-help) > button');
+  const help = page.locator('.help-tip > button[aria-describedby="linear-definition-lock-help"]');
   const tip = await observe(page, cdp, () => help.click());
   await expect(page.locator('[role="tooltip"]')).toContainText('Changes apply on Generate');
   expect(tip.undo).toBe(0);

@@ -102,7 +102,6 @@
         .form-checkbox { @apply w-5 h-5 text-blue-600 bg-gray-100 border-gray-300 rounded focus:ring-blue-500 focus:ring-2; }
         input, select, textarea, button { font-family: inherit; }
         .help-tip { margin-left: 0.25rem; }
-        .option-label .help-tip { margin-left: 0; }
         .input-label-sm { font-size: 10px; letter-spacing: 0.04em; }
         [v-cloak] { display: none !important; }
         #app-boot-splash {
@@ -7419,17 +7418,15 @@
 
 <script type="text/x-template" id="help-tip-template">
     <span class="help-tip inline-block align-text-bottom">
-        <button v-if="id" type="button" ref="trigger" data-history-ignore
+        <button type="button" ref="trigger" data-history-ignore
                 class="help-tip-trigger inline-flex text-slate-400 hover:text-blue-500 focus-visible:text-blue-600 cursor-help rounded focus-visible:outline focus-visible:outline-2 focus-visible:outline-blue-600"
-                :aria-label="label || 'Help'" :aria-describedby="id" :aria-expanded="visible"
-                @mouseenter="onEnter" @mouseleave="onLeave" @focus="onFocus" @blur="close"
+                :aria-label="label || 'Help'" :aria-describedby="descriptionId" :aria-expanded="visible"
+                @pointerenter="onEnter" @pointerleave="onLeave" @focus="onFocus" @blur="close"
                 @click.stop.prevent="toggle" @keydown.esc.stop="close">
             <i class="ph ph-question" aria-hidden="true"></i>
         </button>
-        <i v-else ref="trigger" class="ph ph-question text-slate-400 hover:text-blue-500 cursor-help" aria-hidden="true"
-           @mouseenter="onEnter" @mouseleave="onLeave"></i>
-        <span v-if="id" :id="id" class="sr-only">{{ text }}</span>
         <Teleport to="body">
+            <span :id="descriptionId" hidden>{{ text }}</span>
             <div v-if="visible" :style="style" role="tooltip" aria-hidden="true" class="fixed z-[9999] px-3 py-2 bg-slate-800 text-white text-xs rounded-md shadow-lg max-w-[250px] pointer-events-none transition-opacity text-left leading-relaxed">
                  {{ text }}
             </div>
