@@ -1,5 +1,9 @@
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
+import { readFileSync } from 'node:fs';
+import test from 'node:test';
+import { normalizeCircularGeometryShortcuts } from '../../gbdraw/web/js/app/circular-track-slots.js';
+import { assertKnownDefect } from './helpers/known-defect.mjs';
 import { normalizeUserFacingError } from '../../gbdraw/web/js/services/error-normalization.js';
 import { deserializeWorkerError, normalizeGenerationResponse } from '../../gbdraw/web/js/services/diagram-generation.js';
 globalThis.self = {};
@@ -261,3 +265,31 @@ for (const [message, code] of [
 }
 assert.equal(roundtrip(Object.assign(new Error('This browser does not support Session import Workers.'),
   { code: 'SESSION_IMPORT_UNAVAILABLE', stage: 'transport' })).code, 'SESSION_IMPORT_UNAVAILABLE');
+
+// X-01 (PD-OI-046, R6): a user-facing validation producer yields a recognized
+// diagnostic, not the UNKNOWN or unclassified fallback.
+test('Circular geometry shortcut rejection is a recognized diagnostic (X-01 known defect)', async () => {
+  let rejection = null;
+  try {
+    normalizeCircularGeometryShortcuts({ featureWidth: 0 });
+  } catch (error) {
+    rejection = error;
+  }
+  assert.ok(rejection, 'Feature Width 0 is rejected');
+  const model = normalizeUserFacingError(rejection, { operation: 'generate', stage: 'request-validation' });
+  await assertKnownDefect('X-01', () => {
+    assert.ok(!['UNKNOWN', 'VALIDATION_UNCLASSIFIED'].includes(model.code), model.code);
+  });
+});
+
+// N-12: an error whose guidance is to Generate again offers that action in the
+// operation error panel, as Retry and Save Session are offered.
+test('the operation error panel offers the Generate action (N-12 known defect)', async () => {
+  const exportInput = normalizeUserFacingError({ code: 'EXPORT_INPUT' }, { operation: 'export-png' });
+  assert.ok(exportInput.actions.includes('generate'));
+  const indexHtml = readFileSync(new URL('../../gbdraw/web/index.html', import.meta.url), 'utf8');
+  assert.match(indexHtml, /errorDisplay\.actions\.includes\('save-session'\)/);
+  await assertKnownDefect('N-12', () => {
+    assert.match(indexHtml, /errorDisplay\.actions\.includes\('generate'\)/);
+  });
+});

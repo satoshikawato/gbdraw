@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
+import test from 'node:test';
 import {
   groupLinearSourceRecords,
   isPristineLinearSource,
@@ -10,6 +11,7 @@ import {
   prepareLosatSourceBatches,
   splitLosatSourceResult
 } from '../../gbdraw/web/js/app/linear-sources.js';
+import { assertKnownDefect } from './helpers/known-defect.mjs';
 import {
   adoptCurrentSessionResources,
   createSessionResourceFileView
@@ -241,3 +243,25 @@ for (const batch of noSelf.batches) {
 }
 assert.equal(noSelf.batches.length, 34);
 assert.equal(noSelf.batches.reduce((sum, batch) => sum + batch.specs.length, 0), 56);
+
+// CO-04 (D-19, PD-OI-018 revision 4): two records packaged in one source file
+// keep one source batch, but no mode searches a record against itself unless
+// that comparison was requested.
+test('one-file records never search themselves without a request (CO-04 known defect)', async () => {
+  const sourceFile = { name: 'two-records.gbk' };
+  const records = [0, 1].map((index) => ({ uid: `record-${index}`, gb: sourceFile, gff: null, fasta: null }));
+  const planned = await prepareLosatSourceBatches({
+    sequences: records,
+    specs: [{ queryIndex: 0, subjectIndex: 1 }],
+    getEntry: async (index) => ({ fasta: `>protein-${index}\nMKK\n` }),
+    buildArgs: () => ['--max-target-seqs', '1'],
+    hashText,
+    protein: true
+  });
+  await assertKnownDefect('CO-04', () => {
+    for (const batch of planned.batches) {
+      assert.deepEqual(batch.query.indexes.filter((index) => batch.subject.indexes.includes(index)), [],
+        'an unrequested within-record search fills max-target-seqs with self hits');
+    }
+  });
+});
