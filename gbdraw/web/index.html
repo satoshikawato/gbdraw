@@ -165,6 +165,19 @@
             grid-template-columns: repeat(2, minmax(0, 1fr));
             gap: 0.25rem;
         }
+        .track-slot-row-head {
+            display: grid;
+            grid-template-columns: auto minmax(0, 1fr) minmax(0, 1fr);
+            align-items: center;
+            gap: 0.25rem;
+        }
+        .track-slot-row-actions {
+            grid-column: 1 / -1;
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: flex-end;
+            gap: 0.125rem;
+        }
         .circular-measure-controls {
             display: grid;
             grid-template-columns: minmax(0, 1fr) 3.5rem;
@@ -2906,54 +2919,78 @@
                                     </div>
                                 </div>
                                 <div>
-                                    <label for="linear-track-layout" class="input-label text-[10px] mb-1">Track Layout <help-tip text="Simple mode only. Above places features above the axis, Features on axis centers them on it, and Below places them below it. Use Reset to copy this choice into the custom stack."></help-tip></label>
-                                    <select id="linear-track-layout" v-model="form.linear_track_layout" class="form-input text-xs py-1" :disabled="!semanticMutationAvailable || (adv.linear_track_slots_enabled)" :title="adv.linear_track_slots_enabled ? 'Simple mode only. Use Reset to rebuild the custom stack from this setting.' : ''">
+                                    <span class="input-label text-[10px] mb-1"><label for="linear-track-layout">Track Layout</label> <help-tip id="help-linear-track-layout" text="Simple mode only. Above places features above the axis, Features on axis centers them on it, and Below places them below it. Use Reset to copy this choice into the custom stack."></help-tip></span>
+                                    <select id="linear-track-layout" v-model="form.linear_track_layout" aria-describedby="help-linear-track-layout" class="form-input text-xs py-1" :disabled="!semanticMutationAvailable || (adv.linear_track_slots_enabled)" :title="adv.linear_track_slots_enabled ? 'Simple mode only. Use Reset to rebuild the custom stack from this setting.' : ''">
                                         <option value="above">Above</option>
                                         <option value="middle">Features on axis</option>
                                         <option value="below">Below</option>
                                     </select>
                                 </div>
                                 <div class="grid grid-cols-2 gap-y-1 gap-x-1 p-1 bg-slate-50 rounded-lg">
-                                    <label class="option-label flex items-center gap-2 text-xs text-slate-700 cursor-pointer select-none">
-                                        <input type="checkbox" v-model="form.separate_strands" class="form-checkbox" aria-label="Separate Strands" :disabled="!semanticMutationAvailable">
-                                        <span class="inline-flex items-center gap-1">Separate Strands <help-tip text="Display features on separate strands for better distinction."></help-tip></span>
-                                    </label>
-                                    <label class="option-label flex items-center gap-2 text-xs text-slate-700 cursor-pointer select-none">
-                                        <input type="checkbox" v-model="adv.resolve_overlaps" class="form-checkbox" :disabled="!semanticMutationAvailable">
-                                        <span class="inline-flex items-center gap-1">Resolve Feature Overlaps <help-tip text="Overlapping genomic features are assigned to additional lanes; other tracks are repacked automatically."></help-tip></span>
-                                    </label>
+                                    <div class="flex items-center text-xs">
+                                        <label class="option-label flex items-center gap-2 text-xs text-slate-700 cursor-pointer select-none">
+                                            <input type="checkbox" v-model="form.separate_strands" class="form-checkbox" aria-label="Separate Strands" aria-describedby="help-linear-separate-strands" :disabled="!semanticMutationAvailable">
+                                            <span>Separate Strands</span>
+                                        </label>
+                                        <help-tip id="help-linear-separate-strands" text="Display features on separate strands for better distinction."></help-tip>
+                                    </div>
+                                    <div class="flex items-center text-xs">
+                                        <label class="option-label flex items-center gap-2 text-xs text-slate-700 cursor-pointer select-none">
+                                            <input type="checkbox" v-model="adv.resolve_overlaps" aria-describedby="help-linear-resolve-feature-overlaps" class="form-checkbox" :disabled="!semanticMutationAvailable">
+                                            <span>Resolve Feature Overlaps</span>
+                                        </label>
+                                        <help-tip id="help-linear-resolve-feature-overlaps" text="Overlapping genomic features are assigned to additional lanes; other tracks are repacked automatically."></help-tip>
+                                    </div>
                                     <label class="text-xs">Feature overlap tolerance (bp)
                                         <input type="number" min="0" step="1" v-model.number="adv.feature_overlap_tolerance_bp" aria-label="Feature overlap tolerance (bp)" class="w-20 rounded border p-1" :disabled="!semanticMutationAvailable">
                                     </label>
 
-                                    <label class="option-label flex items-center gap-2 text-xs text-slate-700 cursor-pointer select-none">
-                                        <input type="checkbox" v-model="form.align_center" class="form-checkbox" :disabled="!semanticMutationAvailable">
-                                        <span class="inline-flex items-center gap-1">Align to Center <help-tip text="Align the linear map to the center of the page."></help-tip></span>
-                                    </label>
-                                    <label class="option-label flex flex-wrap items-center gap-2 text-xs text-slate-700 cursor-pointer select-none">
-                                        <input type="checkbox" v-model="form.keep_definition_left_aligned" class="form-checkbox" aria-label="Lock Definition Column" aria-describedby="linear-definition-lock-help" :disabled="!semanticMutationAvailable">
-                                        <span class="inline-flex items-center gap-1">Lock Definition Column <help-tip id="linear-definition-lock-help" text="ON aligns Linear definitions in a common left column. OFF centers them in a common column width and follows row offsets, including center or similarity alignment. Changes apply on Generate."></help-tip></span>
-                                    </label>
-                                    <label class="option-label flex items-center gap-2 text-xs text-slate-700 cursor-pointer select-none">
-                                        <input type="checkbox" v-model="form.normalize_length" class="form-checkbox" :disabled="!semanticMutationAvailable">
-                                        <span class="inline-flex items-center gap-1">Normalize Record Lengths <help-tip text="Normalize sequence lengths to be equal. Suppresses the length bar."></help-tip></span>
-                                    </label>
-                                    <label class="option-label flex items-center gap-2 text-xs text-slate-700 cursor-pointer select-none" :class="adv.linear_track_slots_enabled ? 'opacity-50' : ''" :title="adv.linear_track_slots_enabled ? 'Simple mode only. Use Reset to rebuild the custom stack from this setting.' : ''">
-                                        <input type="checkbox" v-model="form.show_gc" :disabled="!semanticMutationAvailable || (adv.linear_track_slots_enabled)" class="form-checkbox">
-                                        <span class="inline-flex items-center gap-1">Show GC Content <help-tip text="Simple mode only. Display a GC content track; use Reset to copy it into the custom stack."></help-tip></span>
-                                    </label>
-                                    <label class="option-label flex items-center gap-2 text-xs text-slate-700 cursor-pointer select-none" :class="adv.linear_track_slots_enabled ? 'opacity-50' : ''" :title="adv.linear_track_slots_enabled ? 'Simple mode only. Use Reset to rebuild the custom stack from this setting.' : ''">
-                                        <input type="checkbox" v-model="form.show_skew" :disabled="!semanticMutationAvailable || (adv.linear_track_slots_enabled)" class="form-checkbox">
-                                        <span class="inline-flex items-center gap-1">Show GC Skew <help-tip text="Simple mode only. Display a GC skew track; use Reset to copy it into the custom stack."></help-tip></span>
-                                    </label>
-                                    <label
-                                        class="option-label flex items-center gap-2 text-xs select-none"
-                                        :class="depthToggleOptionClass"
-                                        :title="adv.linear_track_slots_enabled ? 'Simple mode only. Use Reset to rebuild the custom stack from this setting.' : (canShowDepthTrack ? '' : 'Upload a Depth TSV file to enable Show Depth.')"
-                                    >
-                                        <input type="checkbox" v-model="form.show_depth" :disabled="!semanticMutationAvailable || (adv.linear_track_slots_enabled || !canShowDepthTrack)" class="form-checkbox">
-                                        <span class="inline-flex items-center gap-1">Show Depth <help-tip text="Simple mode only. Display depth coverage tracks from uploaded TSV files; use Reset to copy them into the custom stack."></help-tip></span>
-                                    </label>
+                                    <div class="flex items-center text-xs">
+                                        <label class="option-label flex items-center gap-2 text-xs text-slate-700 cursor-pointer select-none">
+                                            <input type="checkbox" v-model="form.align_center" aria-describedby="help-linear-align-to-center" class="form-checkbox" :disabled="!semanticMutationAvailable">
+                                            <span>Align to Center</span>
+                                        </label>
+                                        <help-tip id="help-linear-align-to-center" text="Align the linear map to the center of the page."></help-tip>
+                                    </div>
+                                    <div class="flex items-center text-xs">
+                                        <label class="option-label flex flex-wrap items-center gap-2 text-xs text-slate-700 cursor-pointer select-none">
+                                            <input type="checkbox" v-model="form.keep_definition_left_aligned" class="form-checkbox" aria-label="Lock Definition Column" aria-describedby="linear-definition-lock-help" :disabled="!semanticMutationAvailable">
+                                            <span>Lock Definition Column</span>
+                                        </label>
+                                        <help-tip id="linear-definition-lock-help" text="ON aligns Linear definitions in a common left column. OFF centers them in a common column width and follows row offsets, including center or similarity alignment. Changes apply on Generate."></help-tip>
+                                    </div>
+                                    <div class="flex items-center text-xs">
+                                        <label class="option-label flex items-center gap-2 text-xs text-slate-700 cursor-pointer select-none">
+                                            <input type="checkbox" v-model="form.normalize_length" aria-describedby="help-linear-normalize-record-lengths" class="form-checkbox" :disabled="!semanticMutationAvailable">
+                                            <span>Normalize Record Lengths</span>
+                                        </label>
+                                        <help-tip id="help-linear-normalize-record-lengths" text="Normalize sequence lengths to be equal. Suppresses the length bar."></help-tip>
+                                    </div>
+                                    <div class="flex items-center text-xs">
+                                        <label class="option-label flex items-center gap-2 text-xs text-slate-700 cursor-pointer select-none" :class="adv.linear_track_slots_enabled ? 'opacity-50' : ''" :title="adv.linear_track_slots_enabled ? 'Simple mode only. Use Reset to rebuild the custom stack from this setting.' : ''">
+                                            <input type="checkbox" v-model="form.show_gc" :disabled="!semanticMutationAvailable || (adv.linear_track_slots_enabled)" aria-describedby="help-linear-show-gc-content" class="form-checkbox">
+                                            <span>Show GC Content</span>
+                                        </label>
+                                        <help-tip id="help-linear-show-gc-content" text="Simple mode only. Display a GC content track; use Reset to copy it into the custom stack."></help-tip>
+                                    </div>
+                                    <div class="flex items-center text-xs">
+                                        <label class="option-label flex items-center gap-2 text-xs text-slate-700 cursor-pointer select-none" :class="adv.linear_track_slots_enabled ? 'opacity-50' : ''" :title="adv.linear_track_slots_enabled ? 'Simple mode only. Use Reset to rebuild the custom stack from this setting.' : ''">
+                                            <input type="checkbox" v-model="form.show_skew" :disabled="!semanticMutationAvailable || (adv.linear_track_slots_enabled)" aria-describedby="help-linear-show-gc-skew" class="form-checkbox">
+                                            <span>Show GC Skew</span>
+                                        </label>
+                                        <help-tip id="help-linear-show-gc-skew" text="Simple mode only. Display a GC skew track; use Reset to copy it into the custom stack."></help-tip>
+                                    </div>
+                                    <div class="flex items-center text-xs">
+                                        <label
+                                            class="option-label flex items-center gap-2 text-xs select-none"
+                                            :class="depthToggleOptionClass"
+                                            :title="adv.linear_track_slots_enabled ? 'Simple mode only. Use Reset to rebuild the custom stack from this setting.' : (canShowDepthTrack ? '' : 'Upload a Depth TSV file to enable Show Depth.')"
+                                        >
+                                            <input type="checkbox" v-model="form.show_depth" :disabled="!semanticMutationAvailable || (adv.linear_track_slots_enabled || !canShowDepthTrack)" aria-describedby="help-linear-show-depth" class="form-checkbox">
+                                            <span>Show Depth</span>
+                                        </label>
+                                        <help-tip id="help-linear-show-depth" text="Simple mode only. Display depth coverage tracks from uploaded TSV files; use Reset to copy them into the custom stack."></help-tip>
+                                    </div>
                                 </div>
                                 <div class="bg-slate-50 p-2 rounded border border-slate-200 space-y-2">
                                     <div class="flex items-center justify-between gap-2">
@@ -2964,6 +3001,7 @@
                                                 :class="linearTrackSlotsPanelOpen ? 'text-blue-600' : 'text-slate-700 hover:text-blue-600'"
                                                 :aria-expanded="linearTrackSlotsPanelOpen ? 'true' : 'false'"
                                                 aria-controls="linear-custom-track-slots-panel"
+                                                aria-describedby="help-linear-custom-track-slots"
                                                 :title="linearTrackSlotsPanelOpen ? 'Close Custom Track Slots' : 'Open Custom Track Slots'"
                                                 @click="toggleLinearTrackSlotsPanel"
                                             >
@@ -2971,7 +3009,7 @@
                                                 <span class="truncate">Custom Track Slots</span>
                                                 <span class="text-[9px] font-normal">Applies on Generate</span>
                                             </button>
-                                            <help-tip text="Edit the explicit linear track stack. Opening or closing this panel does not enable or alter the stack. Arrows reorder within the current side; Axis buttons move rows across the boundary."></help-tip>
+                                            <help-tip id="help-linear-custom-track-slots" text="Edit the explicit linear track stack. Opening or closing this panel does not enable or alter the stack. Arrows reorder within the current side; Axis buttons move rows across the boundary."></help-tip>
                                         </div>
                                         <div class="flex items-center gap-2">
                                             <label class="inline-flex items-center gap-1 text-[10px] font-medium text-slate-600 cursor-pointer select-none" title="Use the saved custom stack for rendering. Disabling it preserves the stack for later use.">
@@ -3031,13 +3069,13 @@
                                                         <span class="inline-flex items-center gap-1"><i class="ph ph-record"></i> Axis</span>
                                                         <span class="h-px flex-1 bg-slate-300"></span>
                                                     </div>
-                                                    <div class="grid grid-cols-[auto_minmax(0,1fr)_minmax(0,1fr)_auto] items-center gap-1">
-                                                        <input type="checkbox" v-model="entry.slot.enabled" class="form-checkbox" :title="entry.slot.enabled ? 'Enabled' : 'Disabled'" :disabled="!semanticMutationAvailable">
-                                                        <input v-model.trim="entry.slot.id" class="form-input px-1 py-0.5 text-[10px]" placeholder="slot_id" title="Slot id" :disabled="!semanticMutationAvailable">
-                                                        <select v-model="entry.slot.renderer" @change="updateLinearTrackSlotRenderer(entry.slot)" class="form-input px-1 py-0.5 text-[10px] min-w-0" title="Renderer" :disabled="!semanticMutationAvailable">
+                                                    <div class="track-slot-row-head">
+                                                        <input type="checkbox" v-model="entry.slot.enabled" class="form-checkbox" :title="entry.slot.enabled ? 'Enabled' : 'Disabled'" :aria-label="`Enable linear track slot ${entry.slot.id}`" :disabled="!semanticMutationAvailable">
+                                                        <input v-model.trim="entry.slot.id" :aria-label="`Linear track slot id ${entry.slot.id}`" class="form-input px-1 py-0.5 text-[10px]" placeholder="slot_id" title="Slot id" :disabled="!semanticMutationAvailable">
+                                                        <select v-model="entry.slot.renderer" @change="updateLinearTrackSlotRenderer(entry.slot)" :aria-label="`Linear track renderer ${entry.slot.id}`" class="form-input px-1 py-0.5 text-[10px] min-w-0" title="Renderer" :disabled="!semanticMutationAvailable">
                                                             <option v-for="renderer in linearTrackRenderers" :key="renderer" :value="renderer">{{ linearTrackRendererLabel(renderer) }}</option>
                                                         </select>
-                                                        <div class="flex items-center gap-0.5">
+                                                        <div class="track-slot-row-actions">
                                                             <button type="button" class="btn btn-secondary text-[10px] h-6 w-6 p-0" @click="moveLinearTrackSlot(entry.index, entry.index - 1)" :disabled="!semanticMutationAvailable || (!canMoveLinearTrackSlot(entry.index, -1))" title="Move up within side"><i class="ph ph-arrow-up"></i></button>
                                                             <button type="button" class="btn btn-secondary text-[10px] h-6 w-6 p-0" @click="moveLinearTrackSlot(entry.index, entry.index + 1)" :disabled="!semanticMutationAvailable || (!canMoveLinearTrackSlot(entry.index, 1))" title="Move down within side"><i class="ph ph-arrow-down"></i></button>
                                                             <button type="button" class="btn btn-secondary text-[10px] h-6 w-6 p-0" @click="moveLinearTrackSlotAbove(entry.index)" :disabled="!semanticMutationAvailable || (!canMoveLinearTrackSlotAbove(entry.index))" title="Move above Axis"><i class="ph ph-arrow-line-up"></i></button>
@@ -3049,10 +3087,12 @@
                                                     </div>
                                                     <div class="track-slot-geometry-grid">
                                                         <div class="track-slot-field">
-                                                            <label class="track-slot-field-label">h <help-tip :text="entry.slot.renderer === 'features' ? 'Minimum reserved height for the measured feature band, in pixels (px optional; positive). The actual reservation is max(measured, configured); this does not change feature glyph thickness, which is controlled by Feature Height (--feature_height). Auto values vary by record.' : 'Linear track height in pixels (px optional; positive). Leave blank for the automatic height.'"></help-tip></label>
+                                                            <span class="track-slot-field-label">h <help-tip :id="`help-linear-slot-height-${entry.index}`" :text="entry.slot.renderer === 'features' ? 'Minimum reserved height for the measured feature band, in pixels (px optional; positive). The actual reservation is max(measured, configured); this does not change feature glyph thickness, which is controlled by Feature Height (--feature_height). Auto values vary by record.' : 'Linear track height in pixels (px optional; positive). Leave blank for the automatic height.'"></help-tip></span>
                                                             <div class="track-slot-value-field track-slot-pixel-field">
                                                                 <span v-if="!linearTrackSlotGeometryHasManual(entry.slot, 'height')" class="track-slot-auto-placeholder">{{ linearTrackSlotGeometryAutoText(entry.slot, entry.index, 'height') }}</span>
                                                                 <input
+                                                                    aria-label="Height"
+                                                                    :aria-describedby="`help-linear-slot-height-${entry.index}`"
                                                                     :value="linearTrackSlotHeightValue(entry.slot)"
                                                                     @input="setLinearTrackSlotHeight(entry.slot, $event.target.value)"
                                                                     class="form-input track-slot-geometry-input px-1 py-0.5 text-[10px]"
@@ -3062,10 +3102,10 @@
                                                             </div>
                                                         </div>
                                                         <div class="track-slot-field">
-                                                            <label class="track-slot-field-label">spacing <help-tip :text="entry.slot.renderer === 'features' ? 'Clearance between the reserved feature band and its adjacent outer track, in pixels (px optional; nonnegative). Leave blank for the automatic record-specific value.' : 'Linear vertical spacing after the track, in pixels (px optional; nonnegative). Leave blank for the automatic spacing.'"></help-tip></label>
+                                                            <span class="track-slot-field-label">spacing <help-tip :id="`help-linear-slot-spacing-${entry.index}`" :text="entry.slot.renderer === 'features' ? 'Clearance between the reserved feature band and its adjacent outer track, in pixels (px optional; nonnegative). Leave blank for the automatic record-specific value.' : 'Linear vertical spacing after the track, in pixels (px optional; nonnegative). Leave blank for the automatic spacing.'"></help-tip></span>
                                                             <div class="track-slot-value-field track-slot-pixel-field">
                                                                 <span v-if="!linearTrackSlotGeometryHasManual(entry.slot, 'spacing')" class="track-slot-auto-placeholder">{{ linearTrackSlotGeometryAutoText(entry.slot, entry.index, 'spacing') }}</span>
-                                                                <input v-model.trim="entry.slot.spacing" class="form-input track-slot-geometry-input px-1 py-0.5 text-[10px]" title="Spacing" placeholder="px optional" :disabled="!semanticMutationAvailable">
+                                                                <input v-model.trim="entry.slot.spacing" aria-label="Spacing" :aria-describedby="`help-linear-slot-spacing-${entry.index}`" class="form-input track-slot-geometry-input px-1 py-0.5 text-[10px]" title="Spacing" placeholder="px optional" :disabled="!semanticMutationAvailable">
                                                                 <span v-if="linearTrackSlotGeometryUnitSuffix(entry.slot, 'spacing')" class="track-slot-unit-suffix">{{ linearTrackSlotGeometryUnitSuffix(entry.slot, 'spacing') }}</span>
                                                             </div>
                                                         </div>
@@ -3075,7 +3115,7 @@
                                                             :value="entry.slot.side"
                                                             @change="updateLinearTrackSlotPlacement(entry.slot, $event.target.value)"
                                                             class="form-input px-1 py-0.5 text-[10px]"
-                                                            title="Track placement"
+                                                            title="Track placement" aria-label="Track placement"
                                                          :disabled="!semanticMutationAvailable">
                                                             <option value="above">Above axis</option>
                                                             <option value="overlay">On axis</option>
@@ -3086,29 +3126,29 @@
                                                         {{ linearTrackSlotPlacementLabel(entry.slot) }}
                                                     </div>
                                                     <div v-if="entry.slot.renderer === 'annotations'" class="grid grid-cols-2 gap-1">
-                                                        <select v-model="entry.slot.params.set_id" class="form-input px-1 py-0.5 text-[10px]" title="Annotation set" :disabled="!semanticMutationAvailable">
+                                                        <select v-model="entry.slot.params.set_id" class="form-input px-1 py-0.5 text-[10px]" title="Annotation set" aria-label="Annotation set" :disabled="!semanticMutationAvailable">
                                                             <option value="">Select annotation set</option>
                                                             <option v-for="set in annotationSets" :key="`linear-annotation-set-${set.id}`" :value="set.id">{{ set.id }}</option>
                                                         </select>
-                                                        <select v-model="entry.slot.params.overflow" class="form-input px-1 py-0.5 text-[10px]" title="Overflow behavior" :disabled="!semanticMutationAvailable"><option value="error">Error on overflow</option><option value="compress">Compress</option><option value="clip">Clip</option></select>
-                                                        <select v-if="entry.slot.side === 'overlay'" v-model="entry.slot.params.anchor_slot" class="form-input px-1 py-0.5 text-[10px]" title="Enabled drawable anchor" :disabled="!semanticMutationAvailable">
+                                                        <select v-model="entry.slot.params.overflow" class="form-input px-1 py-0.5 text-[10px]" title="Overflow behavior" aria-label="Overflow behavior" :disabled="!semanticMutationAvailable"><option value="error">Error on overflow</option><option value="compress">Compress</option><option value="clip">Clip</option></select>
+                                                        <select v-if="entry.slot.side === 'overlay'" v-model="entry.slot.params.anchor_slot" class="form-input px-1 py-0.5 text-[10px]" title="Enabled drawable anchor" aria-label="Enabled drawable anchor" :disabled="!semanticMutationAvailable">
                                                             <option value="">Select anchor</option>
                                                             <option v-if="!linearAnnotationAnchorIsKnown(entry.slot) && entry.slot.params.anchor_slot" :value="entry.slot.params.anchor_slot">Invalid: {{ entry.slot.params.anchor_slot }}</option>
                                                             <option v-for="option in linearAnnotationAnchorOptions(entry.slot)" :key="`linear-anchor-${linearTrackSlotEditorKey(entry.slot)}-${option.id}`" :value="option.id">{{ option.label }}</option>
                                                         </select>
-                                                        <select v-if="entry.slot.side === 'overlay'" v-model="entry.slot.params.layer" class="form-input px-1 py-0.5 text-[10px]" :disabled="!semanticMutationAvailable"><option value="underlay">Underlay</option><option value="foreground">Foreground</option></select>
+                                                        <select v-if="entry.slot.side === 'overlay'" v-model="entry.slot.params.layer" aria-label="Annotation layer" class="form-input px-1 py-0.5 text-[10px]" :disabled="!semanticMutationAvailable"><option value="underlay">Underlay</option><option value="foreground">Foreground</option></select>
                                                         <label class="flex items-center gap-1 text-[10px]"><input type="checkbox" v-model="entry.slot.params.show_labels" :disabled="!semanticMutationAvailable"> Labels</label>
                                                         <label v-if="entry.slot.side === 'overlay'" class="flex items-center gap-1 text-[10px]">
                                                             <input type="checkbox" :checked="linearAnnotationCoverAnchor(entry.slot)" @change="setLinearAnnotationCoverAnchor(entry.slot, $event.target.checked)" :disabled="!semanticMutationAvailable">
                                                             Cover anchor
                                                         </label>
                                                         <div class="track-slot-field">
-                                                            <label class="track-slot-field-label">lane gap <help-tip text="Gap between annotation lanes in pixels. Default: 3."></help-tip></label>
-                                                            <input type="number" min="0" step="0.5" :value="linearAnnotationLaneGapValue(entry.slot)" @input="setLinearAnnotationLaneGap(entry.slot, $event.target.value)" class="form-input px-1 py-0.5 text-[10px]">
+                                                            <span class="track-slot-field-label">lane gap <help-tip :id="`help-linear-slot-lane-gap-${entry.index}`" text="Gap between annotation lanes in pixels. Default: 3."></help-tip></span>
+                                                            <input type="number" min="0" step="0.5" :value="linearAnnotationLaneGapValue(entry.slot)" @input="setLinearAnnotationLaneGap(entry.slot, $event.target.value)" aria-label="Lane gap" :aria-describedby="`help-linear-slot-lane-gap-${entry.index}`" class="form-input px-1 py-0.5 text-[10px]">
                                                         </div>
                                                         <div class="track-slot-field">
-                                                            <label class="track-slot-field-label">padding <help-tip text="Padding around annotation marks in pixels. Default: 2."></help-tip></label>
-                                                            <input type="number" min="0" step="0.5" :value="linearAnnotationPaddingValue(entry.slot)" @input="setLinearAnnotationPadding(entry.slot, $event.target.value)" class="form-input px-1 py-0.5 text-[10px]">
+                                                            <span class="track-slot-field-label">padding <help-tip :id="`help-linear-slot-padding-${entry.index}`" text="Padding around annotation marks in pixels. Default: 2."></help-tip></span>
+                                                            <input type="number" min="0" step="0.5" :value="linearAnnotationPaddingValue(entry.slot)" @input="setLinearAnnotationPadding(entry.slot, $event.target.value)" aria-label="Padding" :aria-describedby="`help-linear-slot-padding-${entry.index}`" class="form-input px-1 py-0.5 text-[10px]">
                                                         </div>
                                                         <div class="col-span-2 flex flex-wrap items-center gap-x-2 gap-y-1 rounded border border-slate-200 bg-slate-50 px-1.5 py-1">
                                                             <span class="text-[9px] font-medium text-slate-500">Marks</span>
@@ -3120,8 +3160,10 @@
                                                     </div>
                                                     <div v-if="entry.slot.renderer === 'depth'" class="grid grid-cols-2 gap-1">
                                                         <div class="track-slot-field">
-                                                            <label class="track-slot-field-label">track index <help-tip text="Zero-based non-negative integer for the logical Depth series used by this slot. Reordering slots does not change source binding."></help-tip></label>
+                                                            <span class="track-slot-field-label">track index <help-tip :id="`help-linear-slot-track-index-${entry.index}`" text="Zero-based non-negative integer for the logical Depth series used by this slot. Reordering slots does not change source binding."></help-tip></span>
                                                             <select
+                                                                :aria-label="`Depth track index ${entry.slot.id}`"
+                                                                :aria-describedby="`help-linear-slot-track-index-${entry.index}`"
                                                                 v-model.number="entry.slot.params.track_index"
                                                                 @change="syncDepthTrackSlotLabel(entry.slot); syncLinearDepthSlotHeightsFromDepthTracks()"
                                                                 class="form-input px-1 py-0.5 text-[10px]"
@@ -3136,8 +3178,10 @@
                                                             </select>
                                                         </div>
                                                         <div class="track-slot-field">
-                                                            <label class="track-slot-field-label">legend label <help-tip text="Text shown for this enabled Depth slot in custom-stack order. Leave blank to use the selected logical series title; unselected series are omitted."></help-tip></label>
+                                                            <span class="track-slot-field-label">legend label <help-tip :id="`help-linear-slot-depth-legend-label-${entry.index}`" text="Text shown for this enabled Depth slot in custom-stack order. Leave blank to use the selected logical series title; unselected series are omitted."></help-tip></span>
                                                             <input
+                                                                aria-label="Depth legend label"
+                                                                :aria-describedby="`help-linear-slot-depth-legend-label-${entry.index}`"
                                                                 :value="getDepthTrackLegendLabelForSlot(entry.slot)"
                                                                 @input="setDepthTrackLegendLabelForSlot(entry.slot, $event.target.value)"
                                                                 class="form-input px-1 py-0.5 text-[10px]"
@@ -3153,8 +3197,10 @@
                                                     </div>
                                                     <div v-if="entry.slot.renderer === 'dinucleotide_content' || entry.slot.renderer === 'dinucleotide_skew'" class="grid grid-cols-2 gap-1">
                                                         <div class="track-slot-field">
-                                                            <label class="track-slot-field-label">dinucleotide <help-tip text="Two-base code used for this content/skew track, such as GC or AT."></help-tip></label>
+                                                            <span class="track-slot-field-label">dinucleotide <help-tip :id="`help-linear-slot-dinucleotide-${entry.index}`" text="Two-base code used for this content/skew track, such as GC or AT."></help-tip></span>
                                                             <input
+                                                                aria-label="Track dinucleotide"
+                                                                :aria-describedby="`help-linear-slot-dinucleotide-${entry.index}`"
                                                                 v-model.trim="entry.slot.params.nt"
                                                                 class="form-input px-1 py-0.5 text-[10px]"
                                                                 placeholder="GC"
@@ -3162,8 +3208,8 @@
                                                              :disabled="!semanticMutationAvailable">
                                                         </div>
                                                         <div class="track-slot-field">
-                                                            <label class="track-slot-field-label">legend label <help-tip text="Base text shown in the diagram legend. Leave blank to use the auto label shown here; two-color tracks add (+) and (-)."></help-tip></label>
-                                                            <input v-model.trim="entry.slot.params.legend_label" class="form-input px-1 py-0.5 text-[10px]" :placeholder="linearTrackSlotLegendLabelPlaceholder(entry.slot)" :disabled="!semanticMutationAvailable">
+                                                            <span class="track-slot-field-label">legend label <help-tip :id="`help-linear-slot-legend-label-${entry.index}`" text="Base text shown in the diagram legend. Leave blank to use the auto label shown here; two-color tracks add (+) and (-)."></help-tip></span>
+                                                            <input v-model.trim="entry.slot.params.legend_label" aria-label="Track legend label" :aria-describedby="`help-linear-slot-legend-label-${entry.index}`" class="form-input px-1 py-0.5 text-[10px]" :placeholder="linearTrackSlotLegendLabelPlaceholder(entry.slot)" :disabled="!semanticMutationAvailable">
                                                         </div>
                                                     </div>
                                                     <div v-if="entry.slot.renderer === 'dinucleotide_skew'" class="grid grid-cols-2 gap-1">
@@ -3173,7 +3219,7 @@
                                                                 class="h-6 w-7 shrink-0 rounded border border-slate-200 bg-white p-0"
                                                                 :value="linearTrackSlotSkewColorValue(entry.slot, 'positive_color')"
                                                                 @input="setLinearTrackSlotSkewColor(entry.slot, 'positive_color', $event.target.value)"
-                                                                title="Positive skew color"
+                                                                title="Positive skew color" aria-label="Positive skew color"
                                                             >
                                                             <span class="min-w-0 flex-1 truncate text-[9px] text-slate-500">{{ linearTrackSlotHasSkewColorOverride(entry.slot, 'positive_color') ? 'Custom +' : 'Inherited +' }}</span>
                                                             <button
@@ -3190,7 +3236,7 @@
                                                                 class="h-6 w-7 shrink-0 rounded border border-slate-200 bg-white p-0"
                                                                 :value="linearTrackSlotSkewColorValue(entry.slot, 'negative_color')"
                                                                 @input="setLinearTrackSlotSkewColor(entry.slot, 'negative_color', $event.target.value)"
-                                                                title="Negative skew color"
+                                                                title="Negative skew color" aria-label="Negative skew color"
                                                             >
                                                             <span class="min-w-0 flex-1 truncate text-[9px] text-slate-500">{{ linearTrackSlotHasSkewColorOverride(entry.slot, 'negative_color') ? 'Custom -' : 'Inherited -' }}</span>
                                                             <button
@@ -3206,7 +3252,7 @@
                                             </div>
                                         </div>
                                         <div class="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-1">
-                                            <select v-model="linearTrackNewRenderer" class="form-input py-1 text-[10px] min-w-0" :disabled="!semanticMutationAvailable">
+                                            <select v-model="linearTrackNewRenderer" aria-label="New linear track renderer" class="form-input py-1 text-[10px] min-w-0" :disabled="!semanticMutationAvailable">
                                                 <option v-for="renderer in linearTrackRenderers" :key="renderer" :value="renderer">{{ linearTrackRendererLabel(renderer) }}</option>
                                             </select>
                                             <button type="button" class="btn btn-secondary text-[10px] py-1 px-2 shrink-0" @click="addLinearTrackSlot(linearTrackNewRenderer)" :disabled="!semanticMutationAvailable || (!canAddLinearTrackRenderer(linearTrackNewRenderer))" :title="canAddLinearTrackRenderer(linearTrackNewRenderer) ? 'Add track' : 'Add a required source first or remove the conflicting Features row'">
@@ -3223,8 +3269,8 @@
 
                             <template v-else>
                                 <div v-if="!adv.circular_track_slots_enabled">
-                                    <label for="circular-track-preset" class="input-label text-[10px] mb-1">Track Preset <help-tip text="Applies the live circular track arrangement used while Custom Track Slots is off. Custom Track Slots inherit this preset when enabled."></help-tip></label>
-                                    <select id="circular-track-preset" v-model="form.track_type" class="form-input text-xs py-1" :disabled="!semanticMutationAvailable">
+                                    <span class="input-label text-[10px] mb-1"><label for="circular-track-preset">Track Preset</label> <help-tip id="help-circular-track-preset" text="Applies the live circular track arrangement used while Custom Track Slots is off. Custom Track Slots inherit this preset when enabled."></help-tip></span>
+                                    <select id="circular-track-preset" v-model="form.track_type" aria-describedby="help-circular-track-preset" class="form-input text-xs py-1" :disabled="!semanticMutationAvailable">
                                         <option value="tuckin">Tuckin</option>
                                         <option value="middle">Middle</option>
                                         <option value="spreadout">Spreadout</option>
@@ -3282,6 +3328,7 @@
                                                 :class="circularTrackSlotsPanelOpen ? 'text-blue-600' : 'text-slate-700 hover:text-blue-600'"
                                                 :aria-expanded="circularTrackSlotsPanelOpen ? 'true' : 'false'"
                                                 aria-controls="circular-custom-track-slots-panel"
+                                                aria-describedby="help-circular-custom-track-slots"
                                                 :title="circularTrackSlotsPanelOpen ? 'Close Custom Track Slots' : 'Open Custom Track Slots'"
                                                 @click="toggleCircularTrackSlotsPanel"
                                             >
@@ -3289,7 +3336,7 @@
                                                 <span class="truncate">Custom Track Slots</span>
                                                 <span class="text-[9px] font-normal">Applies on Generate</span>
                                             </button>
-                                            <help-tip text="Edit the explicit circular stack. Opening or closing this panel does not enable or alter the stack. Rows above Axis render outside and rows below Axis render inside."></help-tip>
+                                            <help-tip id="help-circular-custom-track-slots" text="Edit the explicit circular stack. Opening or closing this panel does not enable or alter the stack. Rows above Axis render outside and rows below Axis render inside."></help-tip>
                                         </div>
                                         <div class="flex items-center gap-2">
                                             <label class="inline-flex items-center gap-1 text-[10px] font-medium text-slate-600 cursor-pointer select-none" title="Use the saved custom stack for rendering. Disabling it preserves the stack for later use.">
@@ -3330,8 +3377,8 @@
                                         </div>
                                         <div class="grid grid-cols-2 gap-1.5 rounded border border-slate-200 bg-white/70 p-1.5">
                                             <div>
-                                                <label class="input-label text-[10px]">Center Reserved Radius <help-tip text="Override the center-label reserved radius in px. Lower values let inside tracks move closer to the center and may overlap the label."></help-tip></label>
-                                                <input type="number" min="0" step="1" v-model.number="adv.center_reserved_radius" class="form-input form-input-compact" placeholder="Auto" :disabled="!semanticMutationAvailable">
+                                                <span class="input-label text-[10px]">Center Reserved Radius <help-tip id="help-circular-center-reserved-radius" text="Override the center-label reserved radius in px. Lower values let inside tracks move closer to the center and may overlap the label."></help-tip></span>
+                                                <input type="number" min="0" step="1" v-model.number="adv.center_reserved_radius" aria-label="Center Reserved Radius" aria-describedby="help-circular-center-reserved-radius" class="form-input form-input-compact" placeholder="Auto" :disabled="!semanticMutationAvailable">
                                             </div>
                                         </div>
                                         <div class="rounded border border-slate-200 bg-white/70 p-1.5 space-y-1">
@@ -3374,7 +3421,7 @@
                                                         <span class="inline-flex items-center gap-1"><i class="ph ph-record"></i> Axis</span>
                                                         <span class="h-px flex-1 bg-slate-300"></span>
                                                     </div>
-                                                    <div class="grid grid-cols-[auto_minmax(0,1fr)_minmax(0,1fr)_auto] items-center gap-1">
+                                                    <div class="track-slot-row-head">
                                                         <input
                                                             type="checkbox"
                                                             :checked="circularTrackSlotEffectiveEnabled(entry.slot)"
@@ -3395,7 +3442,7 @@
                                                                 {{ circularTrackRendererLabel(renderer) }}
                                                             </option>
                                                         </select>
-                                                        <div class="flex items-center gap-0.5">
+                                                        <div class="track-slot-row-actions">
                                                             <button type="button" class="btn btn-secondary text-[10px] h-6 w-6 p-0" @click="moveCircularTrackSlot(entry.index, entry.index - 1)" :disabled="!semanticMutationAvailable || (!canMoveCircularTrackSlot(entry.index, -1))" title="Move outward"><i class="ph ph-arrow-up"></i></button>
                                                             <button type="button" class="btn btn-secondary text-[10px] h-6 w-6 p-0" @click="moveCircularTrackSlot(entry.index, entry.index + 1)" :disabled="!semanticMutationAvailable || (!canMoveCircularTrackSlot(entry.index, 1))" title="Move inward"><i class="ph ph-arrow-down"></i></button>
                                                             <button type="button" class="btn btn-secondary text-[10px] h-6 w-6 p-0" @click="moveCircularTrackSlotOutside(entry.index)" :disabled="!semanticMutationAvailable || (!canMoveCircularTrackSlotOutside(entry.index))" title="Move outside Axis"><i class="ph ph-arrow-line-up"></i></button>
@@ -3432,18 +3479,18 @@
                                                             @update:model-value="updateCircularTrackSlotMeasure(entry.slot, field, $event)"
                                                         ></circular-measure-input>
                                                         <div class="track-slot-field">
-                                                            <label class="track-slot-field-label">inner gap <help-tip text="Physical radial gap on the side closer to the center, in pixels (px optional; nonnegative). Leave blank for auto."></help-tip></label>
+                                                            <span class="track-slot-field-label">inner gap <help-tip :id="`help-circular-slot-inner-gap-${entry.index}`" text="Physical radial gap on the side closer to the center, in pixels (px optional; nonnegative). Leave blank for auto."></help-tip></span>
                                                             <div class="track-slot-value-field track-slot-pixel-field">
                                                                 <span v-if="!circularTrackSlotGeometryHasManual(entry.slot, 'inner_gap_px')" class="track-slot-auto-placeholder">{{ circularTrackSlotGeometryAutoText(entry.slot, entry.index, 'inner_gap_px') }}</span>
-                                                                <input v-model.trim="entry.slot.inner_gap_px" class="form-input track-slot-geometry-input px-1 py-0.5 text-[10px]" title="Inner gap" placeholder="px optional" :disabled="!semanticMutationAvailable">
+                                                                <input v-model.trim="entry.slot.inner_gap_px" class="form-input track-slot-geometry-input px-1 py-0.5 text-[10px]" title="Inner gap" aria-label="Inner gap" :aria-describedby="`help-circular-slot-inner-gap-${entry.index}`" placeholder="px optional" :disabled="!semanticMutationAvailable">
                                                                 <span v-if="circularTrackSlotGeometryUnitSuffix(entry.slot, 'inner_gap_px')" class="track-slot-unit-suffix">{{ circularTrackSlotGeometryUnitSuffix(entry.slot, 'inner_gap_px') }}</span>
                                                             </div>
                                                         </div>
                                                         <div class="track-slot-field">
-                                                            <label class="track-slot-field-label">outer gap <help-tip text="Physical radial gap on the side farther from the center, in pixels (px optional; nonnegative). Leave blank for auto."></help-tip></label>
+                                                            <span class="track-slot-field-label">outer gap <help-tip :id="`help-circular-slot-outer-gap-${entry.index}`" text="Physical radial gap on the side farther from the center, in pixels (px optional; nonnegative). Leave blank for auto."></help-tip></span>
                                                             <div class="track-slot-value-field track-slot-pixel-field">
                                                                 <span v-if="!circularTrackSlotGeometryHasManual(entry.slot, 'outer_gap_px')" class="track-slot-auto-placeholder">{{ circularTrackSlotGeometryAutoText(entry.slot, entry.index, 'outer_gap_px') }}</span>
-                                                                <input v-model.trim="entry.slot.outer_gap_px" class="form-input track-slot-geometry-input px-1 py-0.5 text-[10px]" title="Outer gap" placeholder="px optional" :disabled="!semanticMutationAvailable">
+                                                                <input v-model.trim="entry.slot.outer_gap_px" class="form-input track-slot-geometry-input px-1 py-0.5 text-[10px]" title="Outer gap" aria-label="Outer gap" :aria-describedby="`help-circular-slot-outer-gap-${entry.index}`" placeholder="px optional" :disabled="!semanticMutationAvailable">
                                                                 <span v-if="circularTrackSlotGeometryUnitSuffix(entry.slot, 'outer_gap_px')" class="track-slot-unit-suffix">{{ circularTrackSlotGeometryUnitSuffix(entry.slot, 'outer_gap_px') }}</span>
                                                             </div>
                                                         </div>
@@ -3452,6 +3499,7 @@
                                                         <select
                                                             :value="entry.slot.params.lane_direction"
                                                             @change="updateCircularTrackFeatureLane(entry.slot, $event.target.value)"
+                                                            :aria-label="`Feature lane ${entry.slot.id}`"
                                                             class="form-input px-1 py-0.5 text-[10px]"
                                                          :disabled="!semanticMutationAvailable">
                                                             <option value="">Preset feature position</option>
@@ -3461,7 +3509,7 @@
                                                         </select>
                                                     </div>
                                                     <div v-if="entry.slot.renderer === 'ticks'" class="grid grid-cols-1 gap-1 items-center">
-                                                        <select v-model="entry.slot.params.tick_label_layout" class="form-input px-1 py-0.5 text-[10px]" :disabled="!semanticMutationAvailable">
+                                                        <select v-model="entry.slot.params.tick_label_layout" :aria-label="`Tick label layout ${entry.slot.id}`" class="form-input px-1 py-0.5 text-[10px]" :disabled="!semanticMutationAvailable">
                                                             <option value="label_out_tick_in">Labels outside / ticks inside</option>
                                                             <option value="label_in_tick_out">Labels inside / ticks outside</option>
                                                             <option value="tick_only">Ticks only</option>
@@ -3474,25 +3522,25 @@
                                                             <option v-for="set in annotationSets" :key="`circular-annotation-set-${set.id}`" :value="set.id">{{ set.id }}</option>
                                                         </select>
                                                         <select :value="entry.slot.side" @change="updateCircularTrackSlotPlacement(entry.slot, $event.target.value)" aria-label="Annotation placement" class="form-input px-1 py-0.5 text-[10px]" title="Placement" :disabled="!semanticMutationAvailable"><option value="outside">Outside axis</option><option value="inside">Inside axis</option><option value="overlay">Overlay anchor</option></select>
-                                                        <select v-if="entry.slot.side === 'overlay'" v-model="entry.slot.params.anchor_slot" class="form-input px-1 py-0.5 text-[10px]" title="Enabled drawable anchor" :disabled="!semanticMutationAvailable">
+                                                        <select v-if="entry.slot.side === 'overlay'" v-model="entry.slot.params.anchor_slot" class="form-input px-1 py-0.5 text-[10px]" title="Enabled drawable anchor" aria-label="Enabled drawable anchor" :disabled="!semanticMutationAvailable">
                                                             <option value="">Select anchor</option>
                                                             <option v-if="!circularAnnotationAnchorIsKnown(entry.slot) && entry.slot.params.anchor_slot" :value="entry.slot.params.anchor_slot">Invalid: {{ entry.slot.params.anchor_slot }}</option>
                                                             <option v-for="option in circularAnnotationAnchorOptions(entry.slot)" :key="`circular-anchor-${circularTrackSlotEditorKey(entry.slot)}-${option.id}`" :value="option.id">{{ option.label }}</option>
                                                         </select>
-                                                        <select v-if="entry.slot.side === 'overlay'" v-model="entry.slot.params.layer" class="form-input px-1 py-0.5 text-[10px]" :disabled="!semanticMutationAvailable"><option value="underlay">Underlay</option><option value="foreground">Foreground</option></select>
-                                                        <select v-model="entry.slot.params.overflow" class="form-input px-1 py-0.5 text-[10px]" :disabled="!semanticMutationAvailable"><option value="error">Error on overflow</option><option value="compress">Compress</option><option value="clip">Clip</option></select>
+                                                        <select v-if="entry.slot.side === 'overlay'" v-model="entry.slot.params.layer" aria-label="Annotation layer" class="form-input px-1 py-0.5 text-[10px]" :disabled="!semanticMutationAvailable"><option value="underlay">Underlay</option><option value="foreground">Foreground</option></select>
+                                                        <select v-model="entry.slot.params.overflow" aria-label="Overflow behavior" class="form-input px-1 py-0.5 text-[10px]" :disabled="!semanticMutationAvailable"><option value="error">Error on overflow</option><option value="compress">Compress</option><option value="clip">Clip</option></select>
                                                         <label class="flex items-center gap-1 text-[10px]"><input type="checkbox" v-model="entry.slot.params.show_labels" aria-label="Show annotation labels" :disabled="!semanticMutationAvailable"> Labels</label>
                                                         <label v-if="entry.slot.side === 'overlay'" class="flex items-center gap-1 text-[10px]">
                                                             <input type="checkbox" :checked="circularAnnotationCoverAnchor(entry.slot)" @change="setCircularAnnotationCoverAnchor(entry.slot, $event.target.checked)" :disabled="!semanticMutationAvailable">
                                                             Cover anchor
                                                         </label>
                                                         <div class="track-slot-field">
-                                                            <label class="track-slot-field-label">lane gap <help-tip text="Gap between annotation lanes in pixels. Default: 3."></help-tip></label>
-                                                            <input type="number" min="0" step="0.5" :value="circularAnnotationLaneGapValue(entry.slot)" @input="setCircularAnnotationLaneGap(entry.slot, $event.target.value)" class="form-input px-1 py-0.5 text-[10px]">
+                                                            <span class="track-slot-field-label">lane gap <help-tip :id="`help-circular-slot-lane-gap-${entry.index}`" text="Gap between annotation lanes in pixels. Default: 3."></help-tip></span>
+                                                            <input type="number" min="0" step="0.5" :value="circularAnnotationLaneGapValue(entry.slot)" @input="setCircularAnnotationLaneGap(entry.slot, $event.target.value)" aria-label="Lane gap" :aria-describedby="`help-circular-slot-lane-gap-${entry.index}`" class="form-input px-1 py-0.5 text-[10px]">
                                                         </div>
                                                         <div class="track-slot-field">
-                                                            <label class="track-slot-field-label">padding <help-tip text="Padding around annotation marks in pixels. Default: 2."></help-tip></label>
-                                                            <input type="number" min="0" step="0.5" :value="circularAnnotationPaddingValue(entry.slot)" @input="setCircularAnnotationPadding(entry.slot, $event.target.value)" class="form-input px-1 py-0.5 text-[10px]">
+                                                            <span class="track-slot-field-label">padding <help-tip :id="`help-circular-slot-padding-${entry.index}`" text="Padding around annotation marks in pixels. Default: 2."></help-tip></span>
+                                                            <input type="number" min="0" step="0.5" :value="circularAnnotationPaddingValue(entry.slot)" @input="setCircularAnnotationPadding(entry.slot, $event.target.value)" aria-label="Padding" :aria-describedby="`help-circular-slot-padding-${entry.index}`" class="form-input px-1 py-0.5 text-[10px]">
                                                         </div>
                                                         <div class="col-span-2 flex flex-wrap items-center gap-x-2 gap-y-1 rounded border border-slate-200 bg-slate-50 px-1.5 py-1">
                                                             <span class="text-[9px] font-medium text-slate-500">Marks</span>
@@ -3504,12 +3552,14 @@
                                                     </div>
                                                     <div v-if="entry.slot.renderer === 'depth'" class="grid grid-cols-2 gap-1">
                                                         <div class="track-slot-field">
-                                                            <label class="track-slot-field-label">track index <help-tip text="Zero-based non-negative integer for the logical Depth series used by this slot. Reordering slots does not change source binding."></help-tip></label>
-                                                            <input type="number" min="0" step="1" v-model.number="entry.slot.params.track_index" @change="syncDepthTrackSlotLabel(entry.slot)" class="form-input px-1 py-0.5 text-[10px]" placeholder="0" :disabled="!semanticMutationAvailable">
+                                                            <span class="track-slot-field-label">track index <help-tip :id="`help-circular-slot-track-index-${entry.index}`" text="Zero-based non-negative integer for the logical Depth series used by this slot. Reordering slots does not change source binding."></help-tip></span>
+                                                            <input type="number" min="0" step="1" v-model.number="entry.slot.params.track_index" @change="syncDepthTrackSlotLabel(entry.slot)" :aria-label="`Depth track index ${entry.slot.id}`" :aria-describedby="`help-circular-slot-track-index-${entry.index}`" class="form-input px-1 py-0.5 text-[10px]" placeholder="0" :disabled="!semanticMutationAvailable">
                                                         </div>
                                                         <div class="track-slot-field">
-                                                            <label class="track-slot-field-label">legend label <help-tip text="Text shown for this enabled Depth slot. Leave blank to use the selected logical series title."></help-tip></label>
+                                                            <span class="track-slot-field-label">legend label <help-tip :id="`help-circular-slot-depth-legend-label-${entry.index}`" text="Text shown for this enabled Depth slot. Leave blank to use the selected logical series title."></help-tip></span>
                                                             <input
+                                                                aria-label="Depth legend label"
+                                                                :aria-describedby="`help-circular-slot-depth-legend-label-${entry.index}`"
                                                                 :value="getDepthTrackLegendLabelForSlot(entry.slot)"
                                                                 @input="setDepthTrackLegendLabelForSlot(entry.slot, $event.target.value)"
                                                                 class="form-input px-1 py-0.5 text-[10px]"
@@ -3519,12 +3569,12 @@
                                                     </div>
                                                     <div v-if="entry.slot.renderer === 'dinucleotide_content' || entry.slot.renderer === 'dinucleotide_skew'" class="grid grid-cols-2 gap-1">
                                                         <div class="track-slot-field">
-                                                            <label class="track-slot-field-label">dinucleotide <help-tip text="Two-base code used for this content/skew track, such as GC or AT."></help-tip></label>
-                                                            <input v-model.trim="entry.slot.params.nt" aria-label="Track dinucleotide" class="form-input px-1 py-0.5 text-[10px]" placeholder="GC" :disabled="!semanticMutationAvailable">
+                                                            <span class="track-slot-field-label">dinucleotide <help-tip :id="`help-circular-slot-dinucleotide-${entry.index}`" text="Two-base code used for this content/skew track, such as GC or AT."></help-tip></span>
+                                                            <input v-model.trim="entry.slot.params.nt" aria-label="Track dinucleotide" :aria-describedby="`help-circular-slot-dinucleotide-${entry.index}`" class="form-input px-1 py-0.5 text-[10px]" placeholder="GC" :disabled="!semanticMutationAvailable">
                                                         </div>
                                                         <div class="track-slot-field">
-                                                            <label class="track-slot-field-label">legend label <help-tip text="Base text shown in the diagram legend. Leave blank to use the auto label shown here; two-color tracks add (+) and (-)."></help-tip></label>
-                                                            <input v-model.trim="entry.slot.params.legend_label" aria-label="Track legend label" class="form-input px-1 py-0.5 text-[10px]" :placeholder="circularTrackSlotLegendLabelPlaceholder(entry.slot)" :disabled="!semanticMutationAvailable">
+                                                            <span class="track-slot-field-label">legend label <help-tip :id="`help-circular-slot-legend-label-${entry.index}`" text="Base text shown in the diagram legend. Leave blank to use the auto label shown here; two-color tracks add (+) and (-)."></help-tip></span>
+                                                            <input v-model.trim="entry.slot.params.legend_label" aria-label="Track legend label" :aria-describedby="`help-circular-slot-legend-label-${entry.index}`" class="form-input px-1 py-0.5 text-[10px]" :placeholder="circularTrackSlotLegendLabelPlaceholder(entry.slot)" :disabled="!semanticMutationAvailable">
                                                         </div>
                                                     </div>
                                                     <div v-if="entry.slot.renderer === 'dinucleotide_skew'" class="grid grid-cols-2 gap-1">
@@ -3534,7 +3584,7 @@
                                                                 class="h-6 w-7 shrink-0 rounded border border-slate-200 bg-white p-0"
                                                                 :value="circularTrackSlotSkewColorValue(entry.slot, 'positive_color')"
                                                                 @input="setCircularTrackSlotSkewColor(entry.slot, 'positive_color', $event.target.value)"
-                                                                title="Positive skew color"
+                                                                title="Positive skew color" aria-label="Positive skew color"
                                                             >
                                                             <span class="min-w-0 flex-1 truncate text-[9px] text-slate-500">{{ circularTrackSlotHasSkewColorOverride(entry.slot, 'positive_color') ? 'Custom +' : 'Inherited +' }}</span>
                                                             <button
@@ -3551,7 +3601,7 @@
                                                                 class="h-6 w-7 shrink-0 rounded border border-slate-200 bg-white p-0"
                                                                 :value="circularTrackSlotSkewColorValue(entry.slot, 'negative_color')"
                                                                 @input="setCircularTrackSlotSkewColor(entry.slot, 'negative_color', $event.target.value)"
-                                                                title="Negative skew color"
+                                                                title="Negative skew color" aria-label="Negative skew color"
                                                             >
                                                             <span class="min-w-0 flex-1 truncate text-[9px] text-slate-500">{{ circularTrackSlotHasSkewColorOverride(entry.slot, 'negative_color') ? 'Custom -' : 'Inherited -' }}</span>
                                                             <button
@@ -3591,28 +3641,28 @@
 
                                 <div v-if="form.multi_record_canvas" data-capture="multi-record-canvas-controls" class="grid grid-cols-2 gap-1.5 text-[10px] bg-slate-50 p-2 rounded border border-slate-200">
                                     <div>
-                                        <label class="input-label text-[10px] mb-1">Record Size Mode <help-tip text="Scale circles by record length on multi-record canvas."></help-tip></label>
-                                        <select v-model="adv.multi_record_size_mode" class="form-input py-1 text-xs" aria-label="Record Size Mode" :disabled="!semanticMutationAvailable">
+                                        <span class="input-label text-[10px] mb-1">Record Size Mode <help-tip id="help-circular-record-size-mode" text="Scale circles by record length on multi-record canvas."></help-tip></span>
+                                        <select v-model="adv.multi_record_size_mode" class="form-input py-1 text-xs" aria-label="Record Size Mode" aria-describedby="help-circular-record-size-mode" :disabled="!semanticMutationAvailable">
                                             <option value="auto">Auto (Default)</option>
                                             <option value="linear">Linear</option>
                                             <option value="equal">Equal</option>
                                         </select>
                                     </div>
                                     <div>
-                                        <label class="input-label text-[10px] mb-1">Min Radius Ratio <help-tip text="Lower bound for short records (0-1)."></help-tip></label>
-                                        <input type="number" min="0.01" max="1" step="0.01" v-model.number="adv.multi_record_min_radius_ratio" class="form-input py-1 text-xs" aria-label="Min Radius Ratio" :disabled="!semanticMutationAvailable">
+                                        <span class="input-label text-[10px] mb-1">Min Radius Ratio <help-tip id="help-multi-record-min-radius-ratio" text="Lower bound for short records (0-1)."></help-tip></span>
+                                        <input type="number" min="0.01" max="1" step="0.01" v-model.number="adv.multi_record_min_radius_ratio" class="form-input py-1 text-xs" aria-label="Min Radius Ratio" aria-describedby="help-multi-record-min-radius-ratio" :disabled="!semanticMutationAvailable">
                                     </div>
                                     <div>
-                                        <label class="input-label text-[10px] mb-1">Column Gap Ratio <help-tip text="Additional horizontal gap ratio between visible content bounds in each row on multi-record canvas. 0 makes row content touch. Default: 0.10 (horizontal only)."></help-tip></label>
-                                        <input type="number" min="0" step="0.01" v-model.number="adv.multi_record_column_gap_ratio" class="form-input py-1 text-xs" aria-label="Column Gap Ratio" :disabled="!semanticMutationAvailable">
+                                        <span class="input-label text-[10px] mb-1">Column Gap Ratio <help-tip id="help-multi-record-column-gap-ratio" text="Additional horizontal gap ratio between visible content bounds in each row on multi-record canvas. 0 makes row content touch. Default: 0.10 (horizontal only)."></help-tip></span>
+                                        <input type="number" min="0" step="0.01" v-model.number="adv.multi_record_column_gap_ratio" class="form-input py-1 text-xs" aria-label="Column Gap Ratio" aria-describedby="help-multi-record-column-gap-ratio" :disabled="!semanticMutationAvailable">
                                     </div>
                                     <div>
-                                        <label class="input-label text-[10px] mb-1">Row Gap Ratio <help-tip text="Additional visible gap ratio between row content bounds in multi-record canvas. 0 makes rows touch by content bounds. Default: 0.05 (vertical only)."></help-tip></label>
-                                        <input type="number" min="0" step="0.01" v-model.number="adv.multi_record_row_gap_ratio" class="form-input py-1 text-xs" aria-label="Row Gap Ratio" :disabled="!semanticMutationAvailable">
+                                        <span class="input-label text-[10px] mb-1">Row Gap Ratio <help-tip id="help-multi-record-row-gap-ratio" text="Additional visible gap ratio between row content bounds in multi-record canvas. 0 makes rows touch by content bounds. Default: 0.05 (vertical only)."></help-tip></span>
+                                        <input type="number" min="0" step="0.01" v-model.number="adv.multi_record_row_gap_ratio" class="form-input py-1 text-xs" aria-label="Row Gap Ratio" aria-describedby="help-multi-record-row-gap-ratio" :disabled="!semanticMutationAvailable">
                                     </div>
                                     <div class="col-span-2" data-capture="multi-record-order">
                                         <div class="flex items-center justify-between mb-1">
-                                            <label class="input-label text-[10px] mb-0">Record Order <help-tip text="Manual order and row assignment for multi-record canvas. Use Up/Down for left-to-right order within each row."></help-tip></label>
+                                            <span class="input-label text-[10px] mb-0">Record Order <help-tip id="help-multi-record-record-order" text="Manual order and row assignment for multi-record canvas. Use Up/Down for left-to-right order within each row."></help-tip></span>
                                             <button
                                                 type="button"
                                                 class="btn btn-secondary text-[10px] py-1 px-2"
