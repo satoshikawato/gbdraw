@@ -220,6 +220,30 @@ const phaseDiagnostics = (snapshot, wallDurationMs) => ({
   lastLifecycleEvent: snapshot.lifecycle.at(-1)?.name || ''
 });
 
+// These counters are recorded only when their work happens. The probe sink is
+// installed before the app loads and must record this phase, so an absent
+// counter is reported here as an observed zero; the contract evaluator itself
+// fails any metric that is missing (N-14).
+const OCCURRENCE_COUNTERS = Object.freeze([
+  'applicationSvgParseCount',
+  'svgMutationIndexBuildCount',
+  'svgIdentityScanCount',
+  'svgSerializationCount',
+  'generatedArtifactRollbackCount',
+  'historyReplacementCount',
+  'previewDuplicateBindRejectedCount',
+  'previewReadyReceiptRejectedCount'
+]);
+
+const observedOccurrenceCounters = (snapshot) => {
+  expect(snapshot.details.length, 'the structural metric sink must record this phase')
+    .toBeGreaterThan(0);
+  return Object.fromEntries(OCCURRENCE_COUNTERS.map((name) => [
+    name,
+    sumMetricDetails(snapshot.details, name)
+  ]));
+};
+
 const deriveContractMetrics = (snapshot, beforeWorker, afterWorker) => {
   const before = workerTotals(beforeWorker);
   const after = workerTotals(afterWorker);
@@ -228,6 +252,7 @@ const deriveContractMetrics = (snapshot, beforeWorker, afterWorker) => {
     readyTimestamp === null || Number(detail.timestamp || 0) < readyTimestamp
   );
   return {
+    ...observedOccurrenceCounters(snapshot),
     ...snapshot.metrics,
     rendererExecutionCount: lifecycleCount(snapshot.lifecycle, 'python-wrapper-start'),
     admissionFeatureDomFullScanCount: sumMetricDetails(

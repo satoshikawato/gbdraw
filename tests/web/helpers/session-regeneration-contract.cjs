@@ -7,7 +7,15 @@ const FAILURE_PROFILES = new Set([
   'stale-completion'
 ]);
 
-const number = (value) => Number.isFinite(Number(value)) ? Number(value) : 0;
+const count = (value) => Number.isFinite(Number(value)) ? Number(value) : 0;
+
+// A missing metric fails (docs/internal/ARCHITECTURE_FITNESS_FUNCTION_RATCHET.md,
+// Computation ownership): an absent or non-finite value is never read as zero.
+const observedMetric = (metrics, key) => {
+  if (!metrics || typeof metrics !== 'object' || !Object.hasOwn(metrics, key)) return undefined;
+  const value = metrics[key];
+  return typeof value === 'number' && Number.isFinite(value) ? value : undefined;
+};
 
 const eventName = (event) => typeof event === 'string' ? event : String(event?.name || '');
 
@@ -36,13 +44,18 @@ const evaluateSessionRegenerationContract = ({
   const add = (code, contract, message) => {
     failures.push(`${code} [${contract}] ${message}`);
   };
+  const missing = (key, code, contract) => {
+    add(code, contract, `${key} was not observed; a missing metric is not read as zero.`);
+  };
   const exact = (key, expected, code, contract) => {
-    const actual = number(metrics[key]);
-    if (actual !== expected) add(code, contract, `${key} must be ${expected}; received ${actual}.`);
+    const actual = observedMetric(metrics, key);
+    if (actual === undefined) missing(key, code, contract);
+    else if (actual !== expected) add(code, contract, `${key} must be ${expected}; received ${actual}.`);
   };
   const atMost = (key, limit, code, contract) => {
-    const actual = number(metrics[key]);
-    if (actual > limit) add(code, contract, `${key} must be <= ${limit}; received ${actual}.`);
+    const actual = observedMetric(metrics, key);
+    if (actual === undefined) missing(key, code, contract);
+    else if (actual > limit) add(code, contract, `${key} must be <= ${limit}; received ${actual}.`);
   };
   const before = (earlier, later, code) => {
     const earlierIndex = indexes.get(earlier);
@@ -58,7 +71,7 @@ const evaluateSessionRegenerationContract = ({
     exact('previewMountAdoptionCount', 1, 'SAVED_PREVIEW_ADOPTION', 'SWC-WEB-PREVIEW-001');
     exact('previewBinderInvocationCount', 1, 'SAVED_PREVIEW_BINDER', 'SWC-WEB-PREVIEW-001');
     exact('previewReadyReceiptAcceptedCount', 1, 'SAVED_PREVIEW_READY', 'SWC-WEB-PREVIEW-001');
-    if (number(state.selectedResultCount) !== 1) {
+    if (count(state.selectedResultCount) !== 1) {
       add('SAVED_SELECTED_RESULT', 'SWC-WEB-PREVIEW-001', 'Saved Session must select exactly one Result.');
     }
     if (state.currentCatalog !== true) {
@@ -80,7 +93,7 @@ const evaluateSessionRegenerationContract = ({
     exact('rendererExecutionCount', 1, 'REGEN_RENDERER_EXECUTION', 'SWC-WEB-REGEN-001');
     exact('featureCatalogAdmissionCount', 1, 'REGEN_CATALOG_ADMISSION', 'SWC-WEB-REGEN-001');
     exact('featureCatalogSecondaryTraversalCount', 0, 'REGEN_CATALOG_SECONDARY_TRAVERSAL', 'SWC-WEB-REGEN-001');
-    exact('svgSanitizationCount', number(resultCount), 'REGEN_SVG_SANITIZATION', 'SWC-WEB-REGEN-001');
+    exact('svgSanitizationCount', count(resultCount), 'REGEN_SVG_SANITIZATION', 'SWC-WEB-REGEN-001');
 
     [
       ['applicationSvgParseCount', 'REGEN_EMPTY_APPLICATION_PARSE'],
