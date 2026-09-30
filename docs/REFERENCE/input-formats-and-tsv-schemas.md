@@ -129,6 +129,12 @@ also accept their documented header row.
 | Label overrides | `record_id`, `feature_type`, `qualifier`, `value`, `label_text` |
 | Feature visibility | `record_id`, `feature_type`, `qualifier`, `value`, `action` |
 
+A Specific-colors `color` is `none` (no fill, any case), an SVG color name,
+`#RGB`, or `#RRGGBB`. Other values, including hex colors with alpha, are
+rejected with their line number. The Web app converts a color name to hex when
+it reads the table. In this table, cells such as `None`, `NA`, and `null` are
+values, not blanks.
+
 `priorities` is a comma-separated qualifier list. Pattern `value` and `keyword`
 fields use case-insensitive Python regular expressions. Specific-color and
 Label-override patterns accept Python-only syntax such as `(?i)NADH`,

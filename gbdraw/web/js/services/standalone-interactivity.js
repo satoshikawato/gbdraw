@@ -104,16 +104,6 @@ const normalizeLocationParts = (parts) => {
     .filter((part) => part.display && part.display !== '..');
 };
 
-const buildStandaloneFeatureLocation = (feature) => {
-  const start = Number(feature?.start);
-  const end = Number(feature?.end);
-  const startText = Number.isFinite(start) ? String(start + 1) : String(feature?.start ?? '');
-  const endText = Number.isFinite(end) ? String(end) : String(feature?.end ?? '');
-  const strand = String(feature?.strand || '').trim();
-  const range = `${startText}..${endText}`;
-  return strand ? `${range} (${strand})` : range;
-};
-
 const firstQualifierValue = (feature, key) => {
   const qualifiers = feature?.qualifiers && typeof feature.qualifiers === 'object'
     ? feature.qualifiers
@@ -1068,7 +1058,6 @@ const buildFallbackStandaloneFeaturePayload = (svgId, entry, captionsByColor) =>
     start: null,
     end: null,
     strand: '',
-    location: '',
     locus_tag: '',
     gene_id: '',
     old_locus_tag: '',
@@ -1130,7 +1119,6 @@ const normalizeStandaloneBiologicalFeature = (feature, context) => {
     start: Number.isFinite(Number(feature.start)) ? Number(feature.start) : null,
     end: Number.isFinite(Number(feature.end)) ? Number(feature.end) : null,
     strand: String(feature.strand || ''),
-    location: buildStandaloneFeatureLocation(feature),
     locus_tag: String(feature.locus_tag || feature.locusTag || ''),
     gene_id: String(feature.gene_id || feature.geneId || ''),
     old_locus_tag: String(feature.old_locus_tag || feature.oldLocusTag || ''),
@@ -1250,7 +1238,6 @@ const buildStandaloneFeaturePayloads = (svg, options = {}) => {
       start: Number.isFinite(Number(feature?.start)) ? Number(feature.start) : null,
       end: Number.isFinite(Number(feature?.end)) ? Number(feature.end) : null,
       strand: String(feature?.strand || ''),
-      location: buildStandaloneFeatureLocation(feature),
       locus_tag: String(feature?.locus_tag || feature?.locusTag || ''),
       gene_id: String(feature?.gene_id || feature?.geneId || ''),
       old_locus_tag: String(feature?.old_locus_tag || feature?.oldLocusTag || ''),

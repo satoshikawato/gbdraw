@@ -764,16 +764,6 @@ def _int_or_none(value: object) -> int | None:
     return _strict_nonnegative_integer(value)
 
 
-def _build_feature_location(feature: Mapping[str, object]) -> str:
-    start = _number_or_none(feature.get("start"))
-    end = _number_or_none(feature.get("end"))
-    start_text = str(int(start) + 1) if isinstance(start, (int, float)) else _first_text(feature.get("start"))
-    end_text = str(int(end)) if isinstance(end, (int, float)) else _first_text(feature.get("end"))
-    strand = _first_text(feature.get("strand"))
-    range_text = f"{start_text}..{end_text}"
-    return f"{range_text} ({strand})" if strand else range_text
-
-
 def _get_feature_label(feature: Mapping[str, object]) -> str:
     for candidate in (
         feature.get("label"),
@@ -940,7 +930,6 @@ def _fallback_feature_payload(
         "start": None,
         "end": None,
         "strand": "",
-        "location": "",
         "locus_tag": "",
         "gene_id": "",
         "old_locus_tag": "",
@@ -1131,7 +1120,6 @@ def _feature_payloads_from_rendered(
             "start": _int_or_none(feature.get("start")),
             "end": _int_or_none(feature.get("end")),
             "strand": _first_text(feature.get("strand")),
-            "location": _build_feature_location(feature),
             "locus_tag": _first_text(feature.get("locus_tag"), feature.get("locusTag")),
             "gene_id": _first_text(feature.get("gene_id"), feature.get("geneId")),
             "old_locus_tag": _first_text(feature.get("old_locus_tag"), feature.get("oldLocusTag")),

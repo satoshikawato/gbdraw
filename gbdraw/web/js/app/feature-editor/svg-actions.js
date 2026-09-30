@@ -1,6 +1,12 @@
 import { normalizeUserFacingError } from '../../services/error-normalization.js';
 import { resolveColorToHex } from '../color-utils.js';
-import { getFeatureCaption, normalizeStringArray, resolveDisplayProteinId } from '../feature-utils.js';
+import {
+  formatFeatureLength,
+  formatFeatureLocation,
+  getFeatureCaption,
+  normalizeStringArray,
+  resolveDisplayProteinId
+} from '../feature-utils.js';
 import {
   PAIRWISE_MATCH_SELECTOR,
   buildPairwiseMatchHoverSummary,
@@ -127,14 +133,6 @@ export const createFeatureSvgActions = ({
     };
   };
 
-  const buildFeatureLocation = (feat) => {
-    const startNumeric = Number(feat.start);
-    const endNumeric = Number(feat.end);
-    const startPos = Number.isFinite(startNumeric) ? startNumeric + 1 : feat.start;
-    const endPos = Number.isFinite(endNumeric) ? endNumeric : feat.end;
-    return `${startPos}..${endPos}${feat.strand ? ` (${feat.strand})` : ''}`;
-  };
-
   const normalizeQualifierRows = (qualifiers) => {
     if (!qualifiers || typeof qualifiers !== 'object' || Array.isArray(qualifiers)) return [];
     return Object.entries(qualifiers)
@@ -172,14 +170,6 @@ export const createFeatureSvgActions = ({
     ''
   );
 
-  const formatFeatureLength = (feat) => {
-    const startNumeric = Number(feat?.start);
-    const endNumeric = Number(feat?.end);
-    if (!Number.isFinite(startNumeric) || !Number.isFinite(endNumeric)) return '';
-    const length = Math.max(0, Math.round(endNumeric - startNumeric));
-    return `${length.toLocaleString()} bp`;
-  };
-
   const createHoverSummaryElement = (tagName, className = '', text = '') => {
     const element = document.createElement(tagName);
     if (className) element.className = className;
@@ -205,7 +195,7 @@ export const createFeatureSvgActions = ({
     const gene = getQualifierFirstValue(feat, 'gene');
     const locusTag = getQualifierFirstValue(feat, 'locus_tag');
     const note = getQualifierFirstValue(feat, 'note');
-    const locationText = buildFeatureLocation(feat);
+    const locationText = formatFeatureLocation(feat);
     const effectiveCaption = String(getEffectiveLegendCaption?.(feat) || '').trim();
     const rows = [];
 
@@ -333,7 +323,7 @@ export const createFeatureSvgActions = ({
     const defaultLabel = getFeatureCaption(feat);
     const existingOverride = getFeatureOverride(featureColorOverrides, feat);
     const effectiveCaption = String(getEffectiveLegendCaption?.(feat) || existingOverride?.caption || defaultLabel || '').trim();
-    const locationText = buildFeatureLocation(feat);
+    const locationText = formatFeatureLocation(feat);
     const locationParts = Array.isArray(feat.location_parts) ? feat.location_parts : [];
     const qualifierRows = normalizeQualifierRows(feat.qualifiers);
     const sequenceWarnings = normalizeStringArray(feat.sequence_warnings);
@@ -497,7 +487,7 @@ export const createFeatureSvgActions = ({
     const primaryLabel = getHoverSummaryPrimaryLabel(feat);
     const featureType = String(feat?.type || 'Feature').trim() || 'Feature';
     const titleText = primaryLabel ? `${featureType}: ${primaryLabel}` : featureType;
-    const locationText = buildFeatureLocation(feat);
+    const locationText = formatFeatureLocation(feat);
     const color = resolveColorToHex(
       featureElement?.getAttribute?.('fill') || getFeatureColor(feat) || '#94a3b8'
     ) || '#94a3b8';

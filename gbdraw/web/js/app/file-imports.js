@@ -1,4 +1,4 @@
-import { resolveColorToHex } from './color-utils.js';
+import { normalizeSpecificRuleColor, resolveColorToHex } from './color-utils.js';
 
 export const parseColorTable = (text) => {
   const colors = {};
@@ -50,9 +50,8 @@ export const parseSpecificRules = (text) => {
         `Invalid specific-color TSV at line ${lineNo}: column ${missingIndex + 1} is required.`
       );
     }
-    const color = String(resolveColorToHex(colorRaw) || '').toLowerCase();
-    const domFreeNamedColor = !globalThis.document?.createElement && /^[a-z]+$/i.test(color);
-    if (!domFreeNamedColor && !/^#(?:[0-9a-f]{3}|[0-9a-f]{4}|[0-9a-f]{6}|[0-9a-f]{8})$/.test(color)) {
+    const color = normalizeSpecificRuleColor(colorRaw);
+    if (!color) {
       throw new Error(`Invalid specific-color value at line ${lineNo}: ${colorRaw}`);
     }
 
