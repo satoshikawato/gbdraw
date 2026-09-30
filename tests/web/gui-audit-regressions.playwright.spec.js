@@ -212,6 +212,68 @@ test('PDF preserves Greek and mathematical text from the existing bundled fonts'
   expect(bytes.toString('latin1')).toContain('/FontFile2');
 });
 
+test('PDF pages convert CSS px to pt and keep spaces in curved and tick labels', async ({ page }) => {
+  test.setTimeout(180000);
+  await session(page);
+  const [width, height] = await page.evaluate(() => {
+    const svg = window.__GBDRAW_APP__.svgContainer.querySelector('svg');
+    return [parseFloat(svg.getAttribute('width')), parseFloat(svg.getAttribute('height'))];
+  });
+  const pending = page.waitForEvent('download');
+  await page.evaluate(() => window.__GBDRAW_APP__.downloadPDF());
+  const bytes = readFileSync(await (await pending).path());
+  const mediaBoxes = [...bytes.toString('latin1').matchAll(/MediaBox\s*\[([^\]]*)\]/g)];
+  expect(mediaBoxes).toHaveLength(1);
+  const [, , boxWidth, boxHeight] = mediaBoxes[0][1].trim().split(/\s+/).map(Number);
+  expect(boxWidth).toBeCloseTo(width * 0.75, 1);
+  expect(boxHeight).toBeCloseTo(height * 0.75, 1);
+  const text = readPdfText(bytes);
+  expect(text).toContain('cytochrome c oxidase subunit I');
+  expect(text).toContain('1 kbp');
+});
+
+test('PDF text flattening places each curved-label character by its UTF-16 index', async ({ page }) => {
+  await page.goto('/');
+  const outcome = await page.evaluate(async () => {
+    const markup = '<svg xmlns="http://www.w3.org/2000/svg" width="400px" height="200px" viewBox="0 0 400 200">'
+      + '<defs><path id="arc" d="M 10 150 A 190 190 0 0 1 390 150"/></defs>'
+      + '<text font-size="20"><textPath href="#arc">a\u{1F600} b</textPath></text></svg>';
+    const live = new DOMParser().parseFromString(markup, 'image/svg+xml').documentElement;
+    document.body.appendChild(live);
+    const text = live.querySelector('text');
+    const expected = [[0, 'a'], [1, '\u{1F600}'], [3, ' '], [4, 'b']].map(([index, character]) => {
+      const point = text.getStartPositionOfChar(index);
+      return [character, Math.round(point.x * 100) / 100, Math.round(point.y * 100) / 100, !character.trim()];
+    });
+    const flattened = [];
+    const observer = new MutationObserver((records) => records.forEach((record) => {
+      record.addedNodes.forEach((node) => {
+        if (node.localName !== 'g') return;
+        node.querySelectorAll('text').forEach((charText) => flattened.push([
+          charText.textContent,
+          Math.round(Number(charText.getAttribute('x')) * 100) / 100,
+          Math.round(Number(charText.getAttribute('y')) * 100) / 100,
+          charText.getAttributeNS('http://www.w3.org/XML/1998/namespace', 'space') === 'preserve'
+        ]));
+      });
+    }));
+    observer.observe(document.body, { childList: true, subtree: true });
+    const { downloadPDF } = await import('/gbdraw/web/js/services/export.js');
+    try {
+      await downloadPDF(
+        { svg: live.cloneNode(true), name: 'flatten.svg' },
+        { loadPdfFont: () => Promise.reject(new Error('font not needed')) }
+      );
+    } catch {
+      // The flattened text is captured before fonts are loaded.
+    }
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    observer.disconnect();
+    return { expected, flattened };
+  });
+  expect(outcome.flattened).toEqual(outcome.expected);
+});
+
 test('a failed PDF font request can be retried without reloading the diagram', async ({ page }) => {
   test.setTimeout(180000);
   await session(page);

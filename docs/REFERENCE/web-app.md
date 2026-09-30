@@ -655,7 +655,12 @@ comparisons, definitions, ticks, legends, and annotations as semantic SVG
 objects. Feature search can target **All**, **Label**, **Feature type**,
 **Record ID**, **Location**, **Strand**, or **Similarity group**. When rich
 feature popups are enabled, the **Field** menu also includes **Qualifier key**,
-**Qualifier value**, **Nucleotide**, and **Amino acid**. Search may use a
+**Qualifier value**, **Nucleotide**, and **Amino acid**. **All** searches
+labels, record IDs, types, locations, strands, Similarity-group values, and
+qualifiers, but not nucleotide or amino-acid sequences or `/translation`
+values; select **Nucleotide** or **Amino acid** to search sequences, including
+IUPAC codes. **Location** matches the displayed 1-based INSDC location, such as
+`3901..4000, 1..200 (+)` for an origin-spanning feature. Search may use a
 literal value or **Regex (JavaScript, i)**, and the previous and next controls
 move through rendered matches. Regex search is case-insensitive JavaScript in
 both the app and downloaded Interactive SVG. Python-only syntax such as
@@ -663,7 +668,10 @@ both the app and downloaded Interactive SVG. Python-only syntax such as
 explains returning to word search by turning Regex off.
 
 A normal feature click opens its identity, location, strand, qualifiers, and
-available sequence actions. Match popups report mapped endpoints and evidence;
+available sequence actions. The feature list, feature popup, hover summary,
+and the feature sections of match popups show each part of a split or
+origin-spanning location, and the length is the sum of the parts. Match popups
+report mapped endpoints and evidence;
 Similarity-group and Collinear popups add member or anchor context. Sequence
 downloads are available only when the required source sequence and metadata
 are present.
@@ -676,7 +684,9 @@ type, qualifier, and value and that rule matches exactly the intended loaded
 features. Otherwise the editor keeps one exact `hash` rule per biological
 feature. Identical duplicate records can share the same hash, so a regenerated
 diagram cannot preserve a one-instance-only rule for indistinguishable
-duplicates.
+duplicates. A one-feature rule uses a qualifier value only when no other
+feature of that record and type has the same value ignoring case, because the
+Python matcher ignores case; `orfA` and `ORFA` are one value.
 
 On a narrow preview, the same **Editor** sits below the canvas.
 Its content scrolls independently, while its header, Close action, and tabs stay

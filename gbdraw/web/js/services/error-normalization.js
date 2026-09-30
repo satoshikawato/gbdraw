@@ -65,7 +65,7 @@ const REASONS = Object.freeze({
   TARGET_RECORD: 'Choose an available target record.', TARGET_MODE: 'Clear the target record or enable Multi-record canvas.',
   DEPTH_SERIES: 'Select an existing Depth TSV or remove the slot.',
   BOTH_ENDPOINTS: 'Supply both region endpoints or leave both empty.', SPECIFIC_COLUMNS: 'Supply four or five tab-separated columns.',
-  COLOR: 'Use a supported named color or a hex color with 3, 4, 6, or 8 digits.',
+  COLOR: 'Use none, a supported named color, or a hex color with 3 or 6 digits.',
   BOOLEAN: 'Use true or false.', INTEGER: 'Use an integer.', NONNEGATIVE: 'Use a finite value of zero or greater.',
   FINITE: 'Use a finite number.', POSITIVE_INTEGER: 'Use an integer greater than zero.',
   POSITIVE: 'Use a finite value greater than zero.', POSITIVE_OR_AUTO: 'Use Auto or a finite value greater than zero.',

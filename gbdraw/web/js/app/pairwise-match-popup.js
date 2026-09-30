@@ -1,4 +1,5 @@
 import {
+  formatFeatureLocation,
   isInternalProteinDisplayId,
   resolveDisplayProteinId
 } from './feature-utils.js';
@@ -126,19 +127,6 @@ const intervalText = (start, end) => {
   if (!startText && !endText) return '';
   if (startText && endText) return `${startText}..${endText}`;
   return startText || endText;
-};
-
-const featureLocationText = (feature) => {
-  if (!feature) return '';
-  const direct = normalizeText(feature.location);
-  if (direct) return direct;
-  const start = Number(feature.start);
-  const end = Number(feature.end);
-  const startText = Number.isFinite(start) ? String(start + 1) : normalizeText(feature.start);
-  const endText = Number.isFinite(end) ? String(end) : normalizeText(feature.end);
-  const strand = normalizeText(feature.strand);
-  const range = startText && endText ? `${startText}..${endText}` : startText || endText;
-  return range && strand ? `${range} (${strand})` : range;
 };
 
 const qualifierFirstValue = (feature, key) => {
@@ -1032,7 +1020,7 @@ const buildFeatureListRows = ({
     );
     const rowRecord = firstText(feature?.record_id, feature?.recordId, member?.recordId, member?.record_id, recordId);
     const rowLocation = firstText(
-      featureLocationText(feature),
+      formatFeatureLocation(feature),
       memberLocationText(member),
       count === 1 ? interval : ''
     );
@@ -1256,7 +1244,7 @@ const buildFeatureRows = ({
     displayName
   });
   addRow(rows, 'Record', firstText(feature?.record_id, recordId));
-  addRow(rows, 'Location', firstText(featureLocationText(feature), interval));
+  addRow(rows, 'Location', firstText(formatFeatureLocation(feature), interval));
   addRow(rows, displayProteinIds.includes(';') ? 'Protein IDs' : 'Protein ID', displayProteinIds);
   addRow(rows, 'Gene', firstText(feature?.gene, qualifierFirstValue(feature, 'gene')));
   addRow(rows, 'Locus tag', firstText(feature?.locus_tag, feature?.locusTag, qualifierFirstValue(feature, 'locus_tag')));

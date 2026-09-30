@@ -2411,23 +2411,6 @@ export const STANDALONE_INTERACTIVE_SCRIPT = `
     return items;
   }
 
-  function buildFeatureLocation(feature) {
-    var direct = String(feature && feature.location || '').trim();
-    if (direct) return direct;
-    var parts = Array.isArray(feature && feature.location_parts) ? feature.location_parts : [];
-    var partText = parts.map(function (part) {
-      return String(part && part.display || '').trim();
-    }).filter(Boolean).join(', ');
-    if (partText) return partText;
-    var start = Number(feature && feature.start);
-    var end = Number(feature && feature.end);
-    var startText = Number.isFinite(start) ? String(start + 1) : String(feature && feature.start != null ? feature.start : '');
-    var endText = Number.isFinite(end) ? String(end) : String(feature && feature.end != null ? feature.end : '');
-    var range = startText + '..' + endText;
-    var strand = String(feature && feature.strand || '').trim();
-    return strand ? range + ' (' + strand + ')' : range;
-  }
-
   function getOrthogroupById(orthogroupId) {
     var id = String(orthogroupId || '').trim();
     if (!id) return null;
@@ -2619,9 +2602,7 @@ export const STANDALONE_INTERACTIVE_SCRIPT = `
       return items;
     }
     if (selectedField === 'location') {
-      appendSearchItems(items, 'Location', buildFeatureLocation(feature));
-      appendSearchItems(items, 'Start', feature && feature.start);
-      appendSearchItems(items, 'End', feature && feature.end);
+      appendSearchItems(items, 'Location', locationText(feature));
       return items;
     }
     if (selectedField === 'strand') {
@@ -2652,16 +2633,14 @@ export const STANDALONE_INTERACTIVE_SCRIPT = `
     appendSearchItems(items, 'Record ID', feature && feature.recordId);
     appendSearchItems(items, 'Record ID', feature && feature.displayRecordId);
     appendSearchItems(items, 'Feature type', feature && feature.type);
-    appendSearchItems(items, 'Location', buildFeatureLocation(feature));
+    appendSearchItems(items, 'Location', locationText(feature));
     appendSearchItems(items, 'Strand', feature && feature.strand);
     Array.prototype.push.apply(items, getOrthogroupSearchItems(feature));
     if (popupMode !== 'simple') {
       appendSearchItems(items, 'Qualifier key', Object.keys(qualifiers));
       Object.keys(qualifiers).sort().forEach(function (key) {
-        appendSearchItems(items, 'Qualifier ' + key, qualifiers[key]);
+        if (key.toLowerCase() !== 'translation') appendSearchItems(items, 'Qualifier ' + key, qualifiers[key]);
       });
-      appendSearchItems(items, 'Nucleotide sequence', feature && (feature.nucleotide_sequence || feature.nucleotideSequence), { alphabet: 'nucleotide' });
-      appendSearchItems(items, 'Amino acid sequence', featureAminoAcidSequence(feature), { alphabet: 'amino-acid' });
     }
     return items;
   }
@@ -4472,13 +4451,23 @@ export const STANDALONE_INTERACTIVE_SCRIPT = `
     }, 0);
   }
 
+  // Mirrors app/feature-utils.js formatFeatureLocation/formatFeatureLength.
+  function featureLocationParts(feature) {
+    return feature && Array.isArray(feature.location_parts) && feature.location_parts.length
+      ? feature.location_parts
+      : [feature];
+  }
+
   function locationText(feature) {
-    if (feature.location) return String(feature.location);
-    var start = Number(feature.start);
-    var end = Number(feature.end);
-    var text = (Number.isFinite(start) ? start + 1 : '') + '..' + (Number.isFinite(end) ? end : '');
-    if (feature.strand) text += ' (' + feature.strand + ')';
-    return text;
+    var range = featureLocationParts(feature).map(function (part) {
+      var display = String(part && part.display || '').trim();
+      if (display) return display;
+      var start = Number(part && part.start);
+      var end = Number(part && part.end);
+      return Number.isFinite(start) && Number.isFinite(end) ? String(start + 1) + '..' + String(end) : '';
+    }).filter(Boolean).join(', ');
+    var strand = String(feature && feature.strand || '').trim();
+    return range && strand ? range + ' (' + strand + ')' : range;
   }
 
   function strandText(strand) {
@@ -5063,7 +5052,7 @@ export const STANDALONE_INTERACTIVE_SCRIPT = `
         'Feature'
       ),
       record: firstDisplayText(feature.record_id, fallback && fallback.recordId),
-      location: firstDisplayText(feature.location, feature && locationText(feature), fallback && fallback.interval),
+      location: firstDisplayText(feature && locationText(feature), fallback && fallback.interval),
       proteinId: proteinId,
       locusId: locusId,
       displayName: displayName,
@@ -5763,10 +5752,15 @@ export const STANDALONE_INTERACTIVE_SCRIPT = `
   }
 
   function featureLengthText(feature) {
-    var start = Number(feature && feature.start);
-    var end = Number(feature && feature.end);
-    if (!Number.isFinite(start) || !Number.isFinite(end) || end < start) return '';
-    return String(Math.round(end - start).toLocaleString()) + ' bp';
+    var parts = featureLocationParts(feature);
+    var length = 0;
+    for (var index = 0; index < parts.length; index += 1) {
+      var start = Number(parts[index] && parts[index].start);
+      var end = Number(parts[index] && parts[index].end);
+      if (!Number.isFinite(start) || !Number.isFinite(end) || end < start) return '';
+      length += end - start;
+    }
+    return String(Math.round(length).toLocaleString()) + ' bp';
   }
 
   function getFeatureDisplayColor(feature, svgId) {

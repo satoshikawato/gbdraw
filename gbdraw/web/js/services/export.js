@@ -5,6 +5,10 @@ import { downloadBlob } from './text-download.js';
 import { preparePdfFonts } from './pdf-fonts.js';
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
+const XML_NS = 'http://www.w3.org/XML/1998/namespace';
+// SVG lengths are CSS px: 96 px = 72 pt = 1 in (PNG DPI and PDF points share it).
+const CSS_PX_PER_INCH = 96;
+const PT_PER_CSS_PX = 72 / CSS_PX_PER_INCH;
 const JSPDF_SCRIPT_URL = new URL('../../vendor/jspdf/jspdf.umd.min.js', import.meta.url);
 const SVG2PDF_SCRIPT_URL = new URL(
   '../../vendor/svg2pdf.js/svg2pdf.umd.min.js',
@@ -174,24 +178,29 @@ const flattenTextPathsForPdf = (svg) => {
       typeof textEl.getNumberOfChars === 'function' ? textEl.getNumberOfChars() : 0;
     if (!textContent || !charCount) return;
 
-    const chars = Array.from(textContent);
     const group = document.createElementNS(SVG_NS, 'g');
     copyAttributes(group, textEl, ['transform', 'opacity', 'display', 'visibility']);
     applyFontAndPaintStyles(group, textPath);
 
-    for (let i = 0; i < charCount && i < chars.length; i += 1) {
-      const char = chars[i];
+    // SVG character positions are UTF-16 indexes; keep surrogate pairs together.
+    for (let i = 0; i < charCount && i < textContent.length; i += 1) {
+      const code = textContent.charCodeAt(i);
+      const char = code >= 0xd800 && code <= 0xdbff ? textContent.slice(i, i + 2) : textContent[i];
+      const index = i;
+      i += char.length - 1;
       if (char === '\n' || char === '\r') continue;
       let pos;
       try {
-        pos = textEl.getStartPositionOfChar(i);
+        pos = textEl.getStartPositionOfChar(index);
       } catch (error) {
         pos = null;
       }
       if (!pos) continue;
-      const rotation = textEl.getRotationOfChar(i) || 0;
+      const rotation = textEl.getRotationOfChar(index) || 0;
       const charText = document.createElementNS(SVG_NS, 'text');
       charText.textContent = char;
+      // Without preserve, svg2pdf drops a whitespace-only text run from the text layer.
+      if (!char.trim()) charText.setAttributeNS(XML_NS, 'xml:space', 'preserve');
       charText.setAttribute('x', pos.x);
       charText.setAttribute('y', pos.y);
       charText.setAttribute('text-anchor', 'start');
@@ -322,7 +331,7 @@ export const downloadPNG = async (snapshot) => {
   if (!Number.isFinite(dpi) || dpi <= 0) {
     throw new Error('The selected PNG DPI is invalid.');
   }
-  const scale = dpi / 96;
+  const scale = dpi / CSS_PX_PER_INCH;
   canvas.width = dims.width * scale;
   canvas.height = dims.height * scale;
   const ctx = canvas.getContext('2d');
@@ -376,13 +385,18 @@ export const downloadPDF = async (snapshot, { loadPdfFont } = {}) => {
       throw new Error('The current SVG has no usable dimensions for PDF export.');
     }
 
+    if (!pdfSvg.getAttribute('viewBox')) {
+      pdfSvg.setAttribute('viewBox', `0 0 ${dims.width} ${dims.height}`);
+    }
+    const page = { width: dims.width * PT_PER_CSS_PX, height: dims.height * PT_PER_CSS_PX };
+
     // 3. Load and initialize jsPDF/svg2pdf only for this export format.
     await loadPdfLibraries();
     const { jsPDF } = window.jspdf;
     const doc = new jsPDF({
-      orientation: dims.width > dims.height ? 'l' : 'p',
+      orientation: page.width > page.height ? 'l' : 'p',
       unit: 'pt',
-      format: [dims.width, dims.height]
+      format: [page.width, page.height]
     });
 
     await preparePdfFonts(doc, pdfSvg, loadPdfFont);
@@ -391,8 +405,8 @@ export const downloadPDF = async (snapshot, { loadPdfFont } = {}) => {
     await doc.svg(pdfSvg, {
       x: 0,
       y: 0,
-      width: dims.width,
-      height: dims.height
+      width: page.width,
+      height: page.height
     });
     // 5. Save File
     doc.save(filename);

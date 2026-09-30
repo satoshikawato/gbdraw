@@ -62,6 +62,12 @@ the canvas pixel dimensions and **300 (Print)** produces a larger raster.
 Check the downloaded dimensions and file signature instead of trusting the
 extension.
 
+SVG lengths are CSS pixels (96 px per inch). A web PDF page is the SVG canvas
+at 0.75 pt per px, the same physical size as the CLI (CairoSVG) PDF; a
+1491 × 984 px canvas becomes a 1118 × 738 pt page. The PDF text layer keeps
+the spaces in curved and tick labels, so text such as `1 kbp` can be searched
+and copied.
+
 Mixed inline text formatting, such as italic markup inside a species label,
 does not reliably survive conversion to PNG, PDF, EPS, or PS. Keep SVG when
 that formatting must remain exact.

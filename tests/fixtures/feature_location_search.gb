@@ -1,0 +1,51 @@
+LOCUS       LOCTEST                 1200 bp    DNA     circular SYN 30-SEP-2026
+DEFINITION  feature location and search fixture.
+ACCESSION   LOCTEST
+VERSION     LOCTEST
+KEYWORDS    .
+SOURCE      synthetic construct
+  ORGANISM  synthetic construct
+            .
+FEATURES             Location/Qualifiers
+     source          1..1200
+                     /organism="synthetic construct"
+                     /mol_type="genomic DNA"
+     CDS             301..600
+                     /gene="dupA"
+                     /locus_tag="LOC_0001"
+                     /product="duplicate protein"
+                     /transl_table=11
+     CDS             join(1101..1200,1..200)
+                     /gene="oriX"
+                     /locus_tag="LOC_0002"
+                     /product="origin spanning protein"
+                     /transl_table=11
+     CDS             complement(join(701..800,901..1000))
+                     /gene="CYTB"
+                     /locus_tag="LOC_0003"
+                     /product="cytochrome b"
+                     /transl_table=11
+     tRNA            1011..1034
+                     /product="tRNA-Phe"
+ORIGIN
+        1 ttcgtaagtt aatacgatga tacagtaccg gtgccatatg gagcgggcac ggttggtagg
+       61 aagcgttaag aggaacaatt ttcggaggga agatcgctaa agattcgata tacgaagaca
+      121 cagcttgctt ccatattcca atatggcttc atttagtccc atattcgacc gtgccacgtg
+      181 cgattagctc gcttcagaat taggtgaccc caatacttca caaggtgtcg tcagctccct
+      241 ttgatcaacc gcaggacggc gacttgatac tcaagaagtt aacatactaa acctgaataa
+      301 tctgcacagg tgtgaaatac gacatatttc gccgattaca taagggccag ggttcctcct
+      361 agagtttgtt tcttacgagc ccttccggct tgctgctaac caagggcttg atcggcactt
+      421 tgatcgaacc tgggcctctg acgcgtacgt gctgtcataa gaactctgcc atcactctgt
+      481 taacaaatct gtgaaccggg agatttcccg gtttataaga cttcgttatc ggtaaggtct
+      541 gatataggag ccacaaagaa ttcccctctg gtgggggcga gataagtctg attaaacgcg
+      601 cttctaaata cactgcgatt ggtaacagtt acctgacgtg tgacttaaat attgcccgtt
+      661 gccactggct gtggggtcat tcaattggat cggagggttt ctggcgatag gtcaagtgcg
+      721 accgatccac gctctaacga atccatggcc cacgatgact tatgtgtcat cgataatagg
+      781 atgctaaccc atgcctggcg aagattattc tagctgcaca acctagaaca ataacggcat
+      841 cgaagggttt ctccgcagat tatggcagca aaacaggcaa tgaatcgtgc ttgttactca
+      901 aacgggtatt agactggcac aaagtgagta gcagggttga aatcccatat tttccccaga
+      961 cccaatcacg atacattgcc acacggggac gcttttgggc gcccaatgat gtttatgtag
+     1021 cttacctcca aagctcgatt atcacttcga tacgaagtta gcccacagac atttgccgta
+     1081 tgataccgaa ctcttcggtt gttatacatg ggtttccatt tacagatata tttaggtcca
+     1141 ccatggacga gacacaatac gctctagaca ggttgggcgg agcttacccg tatatgtcag
+//

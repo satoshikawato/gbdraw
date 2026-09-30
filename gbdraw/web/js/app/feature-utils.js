@@ -21,6 +21,37 @@ export const getFeatureCaption = (feature) => {
   return caption || `${feature?.type} at ${feature?.start}..${feature?.end}`;
 };
 
+// Python owns `location_parts[].display` (1-based INSDC). A feature without
+// parts is one part spanning its own interval.
+const featureLocationParts = (feature) => (
+  Array.isArray(feature?.location_parts) && feature.location_parts.length
+    ? feature.location_parts
+    : [feature]
+);
+
+export const formatFeatureLocation = (feature) => {
+  const range = featureLocationParts(feature).map((part) => {
+    const display = String(part?.display || '').trim();
+    if (display) return display;
+    const start = Number(part?.start);
+    const end = Number(part?.end);
+    return Number.isFinite(start) && Number.isFinite(end) ? `${start + 1}..${end}` : '';
+  }).filter(Boolean).join(', ');
+  const strand = String(feature?.strand || '').trim();
+  return range && strand ? `${range} (${strand})` : range;
+};
+
+export const formatFeatureLength = (feature) => {
+  let length = 0;
+  for (const part of featureLocationParts(feature)) {
+    const start = Number(part?.start);
+    const end = Number(part?.end);
+    if (!Number.isFinite(start) || !Number.isFinite(end) || end < start) return '';
+    length += end - start;
+  }
+  return `${Math.round(length).toLocaleString()} bp`;
+};
+
 const firstFeatureText = (...values) => {
   for (const value of values) {
     if (Array.isArray(value)) {

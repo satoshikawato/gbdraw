@@ -40,6 +40,7 @@
 }
 .gbdraw-interactive-pairwise-match {
   cursor: pointer;
+  outline: none;
   transition: opacity 120ms ease, filter 120ms ease, stroke 120ms ease, stroke-width 120ms ease, stroke-opacity 120ms ease;
 }
 .gbdraw-interactive-pairwise-match.gbdraw-interactive-pairwise-match--hover {
@@ -58,7 +59,6 @@
   stroke-opacity: 1;
   stroke-width: 2.5;
   paint-order: stroke fill markers;
-  outline: none;
 }
 .gbdraw-interactive-pairwise-match:focus-visible {
   outline: 2px solid #2563eb;
@@ -2405,23 +2405,6 @@
     return items;
   }
 
-  function buildFeatureLocation(feature) {
-    var direct = String(feature &amp;&amp; feature.location || '').trim();
-    if (direct) return direct;
-    var parts = Array.isArray(feature &amp;&amp; feature.location_parts) ? feature.location_parts : [];
-    var partText = parts.map(function (part) {
-      return String(part &amp;&amp; part.display || '').trim();
-    }).filter(Boolean).join(', ');
-    if (partText) return partText;
-    var start = Number(feature &amp;&amp; feature.start);
-    var end = Number(feature &amp;&amp; feature.end);
-    var startText = Number.isFinite(start) ? String(start + 1) : String(feature &amp;&amp; feature.start != null ? feature.start : '');
-    var endText = Number.isFinite(end) ? String(end) : String(feature &amp;&amp; feature.end != null ? feature.end : '');
-    var range = startText + '..' + endText;
-    var strand = String(feature &amp;&amp; feature.strand || '').trim();
-    return strand ? range + ' (' + strand + ')' : range;
-  }
-
   function getOrthogroupById(orthogroupId) {
     var id = String(orthogroupId || '').trim();
     if (!id) return null;
@@ -2613,9 +2596,7 @@
       return items;
     }
     if (selectedField === 'location') {
-      appendSearchItems(items, 'Location', buildFeatureLocation(feature));
-      appendSearchItems(items, 'Start', feature &amp;&amp; feature.start);
-      appendSearchItems(items, 'End', feature &amp;&amp; feature.end);
+      appendSearchItems(items, 'Location', locationText(feature));
       return items;
     }
     if (selectedField === 'strand') {
@@ -2646,16 +2627,14 @@
     appendSearchItems(items, 'Record ID', feature &amp;&amp; feature.recordId);
     appendSearchItems(items, 'Record ID', feature &amp;&amp; feature.displayRecordId);
     appendSearchItems(items, 'Feature type', feature &amp;&amp; feature.type);
-    appendSearchItems(items, 'Location', buildFeatureLocation(feature));
+    appendSearchItems(items, 'Location', locationText(feature));
     appendSearchItems(items, 'Strand', feature &amp;&amp; feature.strand);
     Array.prototype.push.apply(items, getOrthogroupSearchItems(feature));
     if (popupMode !== 'simple') {
       appendSearchItems(items, 'Qualifier key', Object.keys(qualifiers));
       Object.keys(qualifiers).sort().forEach(function (key) {
-        appendSearchItems(items, 'Qualifier ' + key, qualifiers[key]);
+        if (key.toLowerCase() !== 'translation') appendSearchItems(items, 'Qualifier ' + key, qualifiers[key]);
       });
-      appendSearchItems(items, 'Nucleotide sequence', feature &amp;&amp; (feature.nucleotide_sequence || feature.nucleotideSequence), { alphabet: 'nucleotide' });
-      appendSearchItems(items, 'Amino acid sequence', featureAminoAcidSequence(feature), { alphabet: 'amino-acid' });
     }
     return items;
   }
@@ -2689,7 +2668,7 @@
           }
         };
       } catch (error) {
-        return { active: true, error: 'Invalid regex', test: function () { return false; } };
+        return { active: true, error: 'Invalid JavaScript regular expression. Turn off Regex to return to word search.', test: function () { return false; } };
       }
     }
     var needle = normalizeSearchText(trimmedQuery);
@@ -3326,13 +3305,13 @@
       'aria-label': 'Qualifier key for qualifier value search',
       'data-search-qualifier': 'true'
     });
-    var regexLabel = createXhtmlNode('label', { className: 'gfs-toggle' });
+    var regexLabel = createXhtmlNode('label', { className: 'gfs-toggle', title: 'JavaScript regular expression, case-insensitive. Turn off Regex to return to word search.' });
     var regexInput = createXhtmlNode('input', {
       type: 'checkbox',
       'data-search-regex': 'true'
     });
     regexLabel.appendChild(regexInput);
-    regexLabel.appendChild(document.createTextNode('Regex'));
+    regexLabel.appendChild(document.createTextNode('Regex (JavaScript, i)'));
     var prevButton = createXhtmlNode('button', {
       type: 'button',
       className: 'gfs-button',
@@ -4466,13 +4445,23 @@
     }, 0);
   }
 
+  // Mirrors app/feature-utils.js formatFeatureLocation/formatFeatureLength.
+  function featureLocationParts(feature) {
+    return feature &amp;&amp; Array.isArray(feature.location_parts) &amp;&amp; feature.location_parts.length
+      ? feature.location_parts
+      : [feature];
+  }
+
   function locationText(feature) {
-    if (feature.location) return String(feature.location);
-    var start = Number(feature.start);
-    var end = Number(feature.end);
-    var text = (Number.isFinite(start) ? start + 1 : '') + '..' + (Number.isFinite(end) ? end : '');
-    if (feature.strand) text += ' (' + feature.strand + ')';
-    return text;
+    var range = featureLocationParts(feature).map(function (part) {
+      var display = String(part &amp;&amp; part.display || '').trim();
+      if (display) return display;
+      var start = Number(part &amp;&amp; part.start);
+      var end = Number(part &amp;&amp; part.end);
+      return Number.isFinite(start) &amp;&amp; Number.isFinite(end) ? String(start + 1) + '..' + String(end) : '';
+    }).filter(Boolean).join(', ');
+    var strand = String(feature &amp;&amp; feature.strand || '').trim();
+    return range &amp;&amp; strand ? range + ' (' + strand + ')' : range;
   }
 
   function strandText(strand) {
@@ -5057,7 +5046,7 @@
         'Feature'
       ),
       record: firstDisplayText(feature.record_id, fallback &amp;&amp; fallback.recordId),
-      location: firstDisplayText(feature.location, feature &amp;&amp; locationText(feature), fallback &amp;&amp; fallback.interval),
+      location: firstDisplayText(feature &amp;&amp; locationText(feature), fallback &amp;&amp; fallback.interval),
       proteinId: proteinId,
       locusId: locusId,
       displayName: displayName,
@@ -5757,10 +5746,15 @@
   }
 
   function featureLengthText(feature) {
-    var start = Number(feature &amp;&amp; feature.start);
-    var end = Number(feature &amp;&amp; feature.end);
-    if (!Number.isFinite(start) || !Number.isFinite(end) || end &lt; start) return '';
-    return String(Math.round(end - start).toLocaleString()) + ' bp';
+    var parts = featureLocationParts(feature);
+    var length = 0;
+    for (var index = 0; index &lt; parts.length; index += 1) {
+      var start = Number(parts[index] &amp;&amp; parts[index].start);
+      var end = Number(parts[index] &amp;&amp; parts[index].end);
+      if (!Number.isFinite(start) || !Number.isFinite(end) || end &lt; start) return '';
+      length += end - start;
+    }
+    return String(Math.round(length).toLocaleString()) + ' bp';
   }
 
   function getFeatureDisplayColor(feature, svgId) {

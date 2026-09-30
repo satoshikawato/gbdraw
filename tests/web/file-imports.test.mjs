@@ -146,3 +146,51 @@ assert.equal(applySpecificRuleProvenance(canonicalRules, [
 assert.deepEqual(buildLegendIntents(canonicalRules).intents, [
   { caption: 'Alpha', color: '#112233' }
 ]);
+
+{
+  // G-D: the Specific-color domain is shared with Python's table reader (FE-12, D-39).
+  const domain = JSON.parse(await readFile(
+    join(repoRoot, 'tests', 'fixtures', 'specific_color_domain.json'),
+    'utf8'
+  ));
+  const parseColor = (value) => parseSpecificRules(`CDS\tproduct\tx\t${value}\tcap\n`).rules[0].color;
+  const rejects = (value) => assert.throws(
+    () => parseColor(value),
+    /Invalid specific-color value at line 1/,
+    value
+  );
+  // DOM-free JavaScript cannot resolve a color name; Python validates it.
+  [...domain.valid, ...domain.invalid].forEach((entry) => {
+    if (entry.word) assert.equal(parseColor(entry.value), entry.value.toLowerCase(), entry.value);
+    else if (entry.normalized) assert.equal(parseColor(entry.value), entry.normalized, entry.value);
+    else rejects(entry.value);
+  });
+  const noneRule = { feat: 'CDS', qual: 'hash', val: 'fx', color: 'none', cap: 'hollow' };
+  assert.deepEqual(
+    parseSpecificRules(serializeSpecificRules([noneRule])).rules
+      .map(({ feat, qual, val, color, cap }) => ({ feat, qual, val, color, cap })),
+    [noneRule]
+  );
+
+  const browserColors = new Map(domain.valid
+    .filter((entry) => entry.browser)
+    .map((entry) => [entry.value.toLowerCase(), entry.browser]));
+  let fillStyle = '#000000';
+  const context = {
+    get fillStyle() { return fillStyle; },
+    set fillStyle(value) {
+      const text = String(value).toLowerCase();
+      if (browserColors.has(text)) fillStyle = browserColors.get(text);
+      else if (/^#[0-9a-f]{6}$/.test(text)) fillStyle = text;
+    }
+  };
+  globalThis.document = { createElement: () => ({ getContext: () => context }) };
+  try {
+    domain.valid.forEach((entry) => {
+      assert.equal(parseColor(entry.value), entry.browser || entry.normalized, entry.value);
+    });
+    domain.invalid.forEach((entry) => rejects(entry.value));
+  } finally {
+    delete globalThis.document;
+  }
+}

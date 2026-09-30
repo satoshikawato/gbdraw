@@ -55,7 +55,22 @@ decisions are in
 
 <!-- web-gui-audit-20260930 P16 -->
 
-<!-- web-gui-audit-20260930 P17 -->
+- Feature Search and Interactive SVG search: **All** no longer matches
+  nucleotide or amino-acid sequences or `/translation` values; use the
+  **Nucleotide** and **Amino acid** fields for sequence search. The raw 0-based
+  **Start**/**End** search values are removed; **Location** matches the 1-based
+  INSDC location (FE-06, FE-11).
+- The feature list, feature popup, hover summary, match popup feature
+  sections, and Interactive SVG popups show every part of split and
+  origin-spanning locations, 1-based, with the summed length (FE-11, N-11).
+- A one-feature label, color, or visibility rule no longer spreads to a
+  feature whose qualifier value differs only in case (FE-08).
+- Specific-color tables accept `none` in any case in the Web app and the CLI.
+  Both reject hex colors with alpha and unknown names; the CLI reports the line
+  and no longer reads `None`, `NA`, or `null` cells as blank (FE-12).
+- Web PDF pages convert CSS px to pt, so they are 75% of their former size and
+  match the CLI PDF. Curved and tick labels keep their spaces in the PDF text
+  layer (PV-05, PV-06).
 
 <!-- web-gui-audit-20260930 P18 -->
 

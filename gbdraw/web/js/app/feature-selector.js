@@ -216,9 +216,12 @@ export const buildFeatureMetadataMap = (features, options = {}) => {
   return metadataByFeatureId;
 };
 
+// Python matches selector values with re.IGNORECASE, so values that differ only
+// in case are one selector. Folding both ways is at least as broad as Python.
 export const makeSelectorUniquenessKey = (recordId, featureType, qualifier, value) =>
   `${normalizeSelectorText(recordId)}\u0000${normalizeSelectorText(featureType)}\u0000` +
-  `${normalizeSelectorText(qualifier).toLowerCase()}\u0000${normalizeSelectorText(value)}`;
+  `${normalizeSelectorText(qualifier).toLowerCase()}\u0000` +
+  normalizeSelectorText(value).toUpperCase().toLowerCase();
 
 const markSelectorSafetyScopeAvailability = (counts, available) => {
   Object.defineProperty(counts, 'selectorSafetyScopeAvailable', {

@@ -6603,7 +6603,7 @@
                             <div v-for="feat in visibleFeatureRows" :key="feat.id" @click="openFeatureEditorFromList(feat, $event)" class="px-3 py-2 min-h-[64px] border-b border-slate-100 text-xs hover:bg-blue-50 cursor-pointer transition-colors space-y-1">
                                 <div class="flex items-center gap-2">
                                     <span class="w-10 font-mono text-slate-400 shrink-0 text-[10px]">{{ feat.type }}</span>
-                                    <span class="w-16 font-mono text-slate-500 shrink-0 truncate text-[10px]" :title="`${feat.start}..${feat.end}`">{{ feat.start }}..{{ feat.end }}</span>
+                                    <span class="w-16 font-mono text-slate-500 shrink-0 truncate text-[10px]" :title="formatFeatureLocation(feat)">{{ formatFeatureLocation(feat) }}</span>
                                     <span class="flex-grow truncate text-slate-700" :title="feat.product || feat.gene || feat.locus_tag || feat.note || '(unnamed)'">
                                         {{ feat.product || feat.gene || feat.locus_tag || feat.note || '(unnamed)' }}
                                     </span>

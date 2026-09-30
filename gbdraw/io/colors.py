@@ -16,6 +16,7 @@ from typing import Optional
 import pandas as pd
 from pandas import DataFrame
 
+from ..core.color import normalize_hex_color
 from ..exceptions import InputFileError, ParseError, ValidationError
 
 logger = logging.getLogger(__name__)
@@ -267,6 +268,18 @@ def load_default_colors(
     return default_colors.reset_index()
 
 
+def _is_specific_table_color(color: str) -> bool:
+    """Specific-color table domain: none, an SVG color name, #RGB, or #RRGGBB."""
+    text = color.strip()
+    if text.lower() == "none" or text.lower() in _COLOR_NAME_MAP:
+        return True
+    try:
+        normalize_hex_color(text)
+    except ValueError:
+        return False
+    return True
+
+
 def read_color_table(color_table_file: str) -> Optional[DataFrame]:
     required_cols = ["feature_type", "qualifier_key", "value", "color", "caption"]
     mandatory_cols = ["feature_type", "qualifier_key", "value", "color"]
@@ -282,6 +295,8 @@ def read_color_table(color_table_file: str) -> Optional[DataFrame]:
             header=None,
             names=required_cols,
             dtype=str,
+            keep_default_na=False,  # "None", "NA" and "null" are values, not blanks
+            na_values=[""],
             on_bad_lines="error",  # raise on any row with wrong number of fields
             engine="python",  # required for on_bad_lines
         )
@@ -309,6 +324,13 @@ def read_color_table(color_table_file: str) -> Optional[DataFrame]:
         raise ValidationError(
             f"Missing values in '{color_table_file}'. See log for details."
         )
+
+    for idx, color in df["color"].items():
+        if not _is_specific_table_color(color):
+            raise ValidationError(
+                f"Invalid color {color!r} in '{color_table_file}' at line {idx + 1}. "
+                "Use none, an SVG color name, #RGB, or #RRGGBB."
+            )
 
     return df
 
