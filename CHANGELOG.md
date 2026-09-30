@@ -10,6 +10,48 @@ and full feature descriptions) live under `docs/RELEASE_NOTES_*.md`. This
 file is the short, chronological index; follow the links below for the full
 write-up of a release.
 
+## [Unreleased]
+
+Fixes from the 2026-09-30 Web GUI audit of `dev`. The plan and the approved
+decisions are in
+[`docs/internal/web-gui-audit-20260930/`](./docs/internal/web-gui-audit-20260930/03_IMPLEMENTATION_REFERENCE.md).
+
+<!-- web-gui-audit-20260930 P03 -->
+
+<!-- web-gui-audit-20260930 P04 -->
+
+<!-- web-gui-audit-20260930 P05 -->
+
+<!-- web-gui-audit-20260930 P06 -->
+
+<!-- web-gui-audit-20260930 P07 -->
+
+<!-- web-gui-audit-20260930 P08 -->
+
+<!-- web-gui-audit-20260930 P09 -->
+
+<!-- web-gui-audit-20260930 P10 -->
+
+<!-- web-gui-audit-20260930 P11 -->
+
+<!-- web-gui-audit-20260930 P12 -->
+
+<!-- web-gui-audit-20260930 P13 -->
+
+<!-- web-gui-audit-20260930 P14 -->
+
+<!-- web-gui-audit-20260930 P15 -->
+
+<!-- web-gui-audit-20260930 P16 -->
+
+<!-- web-gui-audit-20260930 P17 -->
+
+<!-- web-gui-audit-20260930 P18 -->
+
+<!-- web-gui-audit-20260930 P19 -->
+
+<!-- web-gui-audit-20260930 P20 -->
+
 ## [0.14.0](./docs/RELEASE_NOTES_0.14.0.md)
 
 - Added circular-record display-start rotation and manual feature lane placement.
