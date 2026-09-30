@@ -189,9 +189,8 @@ def _trees() -> tuple[tuple[str, ast.Module], ...]:
 
 
 def _validation_raise_sites():
+    # The Worker's embedded Python helpers are producers too.
     for path, tree in _trees():
-        if path.endswith(".js"):
-            continue
         for node in ast.walk(tree):
             if (
                 isinstance(node, ast.Raise)
@@ -209,7 +208,12 @@ def _classifies(message: str) -> bool:
 
 
 def _site_status(call: ast.Call) -> str:
-    if any(keyword.arg == "diagnostic" for keyword in call.keywords):
+    # ``diagnostic=None`` states no meaning, so it cannot satisfy the ratchet.
+    if any(
+        keyword.arg == "diagnostic"
+        and not (isinstance(keyword.value, ast.Constant) and keyword.value.value is None)
+        for keyword in call.keywords
+    ):
         return "diagnostic"
     if call.args:
         if any(_classifies(message) for message in _renderings(call.args[0])):
