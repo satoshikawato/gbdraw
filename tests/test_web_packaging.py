@@ -656,6 +656,75 @@ def test_runnable_gallery_support_downloads_exist() -> None:
             assert (GALLERY_ROOT / href.removeprefix("./")).is_file()
 
 
+GITHUB_MAIN_BLOB = "https://github.com/satoshikawato/gbdraw/blob/main/"
+
+
+def _collect_tutorial_links(value: object) -> list[str]:
+    if isinstance(value, dict):
+        links = []
+        for key, item in value.items():
+            if key in {"href", "src", "poster"} and isinstance(item, str):
+                links.append(item)
+            else:
+                links.extend(_collect_tutorial_links(item))
+        return links
+    if isinstance(value, list):
+        return [link for item in value for link in _collect_tutorial_links(item)]
+    return []
+
+
+def _markdown_heading_slugs(path: Path) -> set[str]:
+    slugs: set[str] = set()
+    seen: dict[str, int] = {}
+    in_fence = False
+    for line in path.read_text(encoding="utf-8").splitlines():
+        if line.lstrip().startswith(("```", "~~~")):
+            in_fence = not in_fence
+            continue
+        match = None if in_fence else re.match(r"^#{1,6}\s+(.*?)\s*#*\s*$", line)
+        if not match:
+            continue
+        text = re.sub(r"\[([^\]]*)\]\([^)]*\)", r"\1", match.group(1))
+        slug = re.sub(r"[^\w\- ]", "", text.replace("`", "").lower()).replace(" ", "-")
+        count = seen.get(slug, 0)
+        seen[slug] = count + 1
+        slugs.add(slug if count == 0 else f"{slug}-{count}")
+    return slugs
+
+
+def test_gallery_tutorial_links_resolve() -> None:
+    example_ids = {
+        entry["id"]
+        for entry in json.loads((GALLERY_ROOT / "examples.json").read_text(encoding="utf-8"))
+    }
+    broken = []
+    for tutorial_path in sorted((GALLERY_ROOT / "tutorials").glob("*.json")):
+        tutorial = json.loads(tutorial_path.read_text(encoding="utf-8"))
+        for link in _collect_tutorial_links(tutorial):
+            if link.startswith(GITHUB_MAIN_BLOB):
+                path_text, _, anchor = link.removeprefix(GITHUB_MAIN_BLOB).partition("#")
+                target = REPO_ROOT / path_text
+                if not target.is_file():
+                    broken.append((tutorial_path.name, link, "missing repository file"))
+                elif anchor and anchor not in _markdown_heading_slugs(target):
+                    broken.append((tutorial_path.name, link, "missing heading anchor"))
+            elif link.startswith(("https://", "http://")):
+                continue
+            elif link.startswith("./#"):
+                if link.removeprefix("./#") not in example_ids:
+                    broken.append((tutorial_path.name, link, "unknown Gallery example"))
+            elif link.startswith(("./", "../")):
+                # Tutorials render at /gallery/; the host root is gbdraw/web/.
+                target = (GALLERY_ROOT / link.partition("#")[0]).resolve()
+                if not target.is_relative_to(WEB_ROOT.resolve()):
+                    broken.append((tutorial_path.name, link, "outside the web host root"))
+                elif not (target.is_file() or (target / "index.html").is_file()):
+                    broken.append((tutorial_path.name, link, "missing hosted file"))
+            else:
+                broken.append((tutorial_path.name, link, "unsupported link form"))
+    assert broken == []
+
+
 def test_index_includes_preprint_citation() -> None:
     index_html = (WEB_ROOT / "index.html").read_text(encoding="utf-8")
     assert "How to cite" in index_html
