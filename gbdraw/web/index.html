@@ -1413,12 +1413,13 @@
                             </p>
                             <button v-if="circularRecordDiscoveryState.hasInput" data-circular-inspect type="button" data-history-ignore @click="inspectCircularSourceRecords" :aria-disabled="!circularRecordInspectionEnabled" :aria-busy="circularRecordDiscoveryState.status === 'loading'" :class="circularRecordInspectionEnabled ? 'text-blue-600' : 'text-slate-400'" class="text-xs">{{ circularRecordDiscoveryState.status === 'error' ? 'Retry source inspection' : circularRecordDiscoveryState.status === 'ready' ? 'Inspect source records again' : 'Inspect source records' }}</button>
                             <div>
-                                <label class="input-label text-[10px]">Record <help-tip text="Select one stable record identity for a single Circular diagram. Leave this on All records to keep separate-diagram batch output."></help-tip></label>
+                                <span class="input-label text-[10px]">Record <help-tip id="help-circular-record" text="Select one stable record identity for a single Circular diagram. Leave this on All records to keep separate-diagram batch output."></help-tip></span>
                                 <select
                                     :value="form.circular_record_selector"
                                     @change="setCircularRecordPresentationSelector($event.target.value)"
                                     :disabled="!semanticMutationAvailable || (!circularRecordSelectionEnabled)"
                                     aria-label="Circular record"
+                                    aria-describedby="help-circular-record"
                                     class="form-select w-full px-1 py-1 text-xs disabled:bg-slate-100 disabled:text-slate-500"
                                 >
                                     <option
@@ -1445,23 +1446,25 @@
                             <div class="pt-2 space-y-2">
                                 <div class="grid grid-cols-1 gap-2" :class="circularSingleRecordPresentationEnabled ? '' : 'opacity-60'">
                                     <div>
-                                        <label class="input-label text-[10px]">Record label <help-tip text="Overrides the inferred organism line for this Circular record. Leave empty to keep inference."></help-tip></label>
+                                        <span class="input-label text-[10px]">Record label <help-tip id="help-circular-record-label" text="Overrides the inferred organism line for this Circular record. Leave empty to keep inference."></help-tip></span>
                                         <input
                                             type="text"
                                             v-model="form.circular_record_label"
                                             :disabled="!semanticMutationAvailable || !circularSingleRecordPresentationEnabled"
                                             aria-label="Circular record label"
+                                            aria-describedby="help-circular-record-label"
                                             placeholder="e.g. Streptomyces fradiae"
                                             class="form-input px-1 py-1 text-xs"
                                         >
                                     </div>
                                     <div>
-                                        <label class="input-label text-[10px]">Subtitle <help-tip text="Overrides the inferred strain line for this Circular record. Leave empty to keep inference."></help-tip></label>
+                                        <span class="input-label text-[10px]">Subtitle <help-tip id="help-circular-subtitle" text="Overrides the inferred strain line for this Circular record. Leave empty to keep inference."></help-tip></span>
                                         <input
                                             type="text"
                                             v-model="form.circular_record_subtitle"
                                             :disabled="!semanticMutationAvailable || !circularSingleRecordPresentationEnabled"
                                             aria-label="Circular record subtitle"
+                                            aria-describedby="help-circular-subtitle"
                                             placeholder="e.g. Neomycin biosynthetic gene cluster"
                                             class="form-input px-1 py-1 text-xs"
                                         >
@@ -1469,16 +1472,16 @@
                                     <div class="pt-1 border-t border-slate-200 border-dashed">
                                         <div class="text-[10px] text-slate-500 font-bold mb-1 flex items-center gap-1">
                                             <i class="ph ph-crop"></i> Region (optional) <span class="text-[9px] font-normal">Applies on Generate</span>
-                                            <help-tip text="Use 1-based inclusive coordinates within the selected record. Both values are required and must be within record bounds."></help-tip>
+                                            <help-tip id="help-circular-region" text="Use 1-based inclusive coordinates within the selected record. Both values are required and must be within record bounds."></help-tip>
                                         </div>
                                         <div class="grid grid-cols-2 gap-2">
                                             <div>
                                                 <label class="text-[9px] block">Start</label>
-                                                <input type="number" min="1" step="1" v-model.number="form.circular_region_start" :disabled="!semanticMutationAvailable || !circularSingleRecordPresentationEnabled" aria-label="Circular region start" placeholder="1000" class="form-input px-1 py-0.5 text-xs">
+                                                <input type="number" min="1" step="1" v-model.number="form.circular_region_start" :disabled="!semanticMutationAvailable || !circularSingleRecordPresentationEnabled" aria-label="Circular region start" aria-describedby="help-circular-region" placeholder="1000" class="form-input px-1 py-0.5 text-xs">
                                             </div>
                                             <div>
                                                 <label class="text-[9px] block">End</label>
-                                                <input type="number" min="1" step="1" v-model.number="form.circular_region_end" :disabled="!semanticMutationAvailable || !circularSingleRecordPresentationEnabled" aria-label="Circular region end" placeholder="9000" class="form-input px-1 py-0.5 text-xs">
+                                                <input type="number" min="1" step="1" v-model.number="form.circular_region_end" :disabled="!semanticMutationAvailable || !circularSingleRecordPresentationEnabled" aria-label="Circular region end" aria-describedby="help-circular-region" placeholder="9000" class="form-input px-1 py-0.5 text-xs">
                                             </div>
                                         </div>
                                     </div>
@@ -1507,55 +1510,67 @@
                             <div v-else class="space-y-2 pt-1">
                                 <div class="rounded border border-slate-200 bg-white/80 p-2 space-y-2">
                                     <div class="grid grid-cols-2 gap-y-1 gap-x-1">
-                                        <label class="option-label flex items-center gap-2 text-xs text-slate-700 cursor-pointer select-none">
-                                            <input type="checkbox" v-model="adv.depth_normalize" class="form-checkbox" :disabled="!semanticMutationAvailable">
-                                            <span class="inline-flex items-center gap-1">Log Scale <help-tip text="Use IGV-style log10 scaling for depth: 10x is twice the height of 1x."></help-tip></span>
-                                        </label>
-                                        <label class="option-label flex items-center gap-2 text-xs text-slate-700 cursor-pointer select-none">
-                                            <input type="checkbox" v-model="adv.depth_show_axis" class="form-checkbox" :disabled="!semanticMutationAvailable">
-                                            <span class="inline-flex items-center gap-1">Depth Axis <help-tip text="Show the depth coverage axis line. Hiding the axis also hides depth tick marks and labels."></help-tip></span>
-                                        </label>
-                                        <label class="option-label flex items-center gap-2 text-xs text-slate-700 cursor-pointer select-none">
-                                            <input type="checkbox" v-model="adv.depth_show_ticks" class="form-checkbox" :disabled="!semanticMutationAvailable">
-                                            <span class="inline-flex items-center gap-1">Depth Ticks <help-tip text="Show depth coverage axis tick marks and x-coverage labels."></help-tip></span>
-                                        </label>
-                                        <label class="option-label flex items-center gap-2 text-xs text-slate-700 cursor-pointer select-none">
-                                            <input type="checkbox" v-model="adv.depth_share_axis" class="form-checkbox" :disabled="!semanticMutationAvailable">
-                                            <span class="inline-flex items-center gap-1">Shared Y-axis <help-tip text="Use one depth axis range across all records so coverage differences between records remain visible."></help-tip></span>
-                                        </label>
+                                        <div class="flex items-center text-xs">
+                                            <label class="option-label flex items-center gap-2 text-xs text-slate-700 cursor-pointer select-none">
+                                                <input type="checkbox" v-model="adv.depth_normalize" aria-describedby="help-circular-log-scale" class="form-checkbox" :disabled="!semanticMutationAvailable">
+                                                <span>Log Scale</span>
+                                            </label>
+                                            <help-tip id="help-circular-log-scale" text="Use IGV-style log10 scaling for depth: 10x is twice the height of 1x."></help-tip>
+                                        </div>
+                                        <div class="flex items-center text-xs">
+                                            <label class="option-label flex items-center gap-2 text-xs text-slate-700 cursor-pointer select-none">
+                                                <input type="checkbox" v-model="adv.depth_show_axis" aria-describedby="help-circular-depth-axis" class="form-checkbox" :disabled="!semanticMutationAvailable">
+                                                <span>Depth Axis</span>
+                                            </label>
+                                            <help-tip id="help-circular-depth-axis" text="Show the depth coverage axis line. Hiding the axis also hides depth tick marks and labels."></help-tip>
+                                        </div>
+                                        <div class="flex items-center text-xs">
+                                            <label class="option-label flex items-center gap-2 text-xs text-slate-700 cursor-pointer select-none">
+                                                <input type="checkbox" v-model="adv.depth_show_ticks" aria-describedby="help-circular-depth-ticks" class="form-checkbox" :disabled="!semanticMutationAvailable">
+                                                <span>Depth Ticks</span>
+                                            </label>
+                                            <help-tip id="help-circular-depth-ticks" text="Show depth coverage axis tick marks and x-coverage labels."></help-tip>
+                                        </div>
+                                        <div class="flex items-center text-xs">
+                                            <label class="option-label flex items-center gap-2 text-xs text-slate-700 cursor-pointer select-none">
+                                                <input type="checkbox" v-model="adv.depth_share_axis" aria-describedby="help-circular-shared-y-axis" class="form-checkbox" :disabled="!semanticMutationAvailable">
+                                                <span>Shared Y-axis</span>
+                                            </label>
+                                            <help-tip id="help-circular-shared-y-axis" text="Use one depth axis range across all records so coverage differences between records remain visible."></help-tip>
+                                        </div>
                                     </div>
                                     <div class="grid grid-cols-2 gap-1.5">
                                         <div>
-                                            <label class="input-label text-[10px]">Depth Window <help-tip text="Window size for depth aggregation. Leave blank for automatic depth aggregation."></help-tip></label>
+                                            <span class="input-label text-[10px]">Depth Window <help-tip id="help-circular-depth-window" text="Window size for depth aggregation. Leave blank for automatic depth aggregation."></help-tip></span>
                                             <auto-value-field :visible="autoValueVisible(adv.depth_window_size, 'depthWindow')" :text="autoValueText('depthWindow')">
-                                                <input type="number" min="1" step="1" v-model.number="adv.depth_window_size" aria-label="Depth Window" class="form-input form-input-compact auto-value-input" :disabled="!semanticMutationAvailable">
+                                                <input type="number" min="1" step="1" v-model.number="adv.depth_window_size" aria-label="Depth Window" aria-describedby="help-circular-depth-window" class="form-input form-input-compact auto-value-input" :disabled="!semanticMutationAvailable">
                                             </auto-value-field>
                                         </div>
                                         <div>
-                                            <label class="input-label text-[10px]">Depth Step <help-tip text="Step size for depth aggregation. Leave blank for automatic depth aggregation."></help-tip></label>
+                                            <span class="input-label text-[10px]">Depth Step <help-tip id="help-circular-depth-step" text="Step size for depth aggregation. Leave blank for automatic depth aggregation."></help-tip></span>
                                             <auto-value-field :visible="autoValueVisible(adv.depth_step_size, 'depthStep')" :text="autoValueText('depthStep')">
-                                                <input type="number" min="1" step="1" v-model.number="adv.depth_step_size" aria-label="Depth Step" class="form-input form-input-compact auto-value-input" :disabled="!semanticMutationAvailable">
+                                                <input type="number" min="1" step="1" v-model.number="adv.depth_step_size" aria-label="Depth Step" aria-describedby="help-circular-depth-step" class="form-input form-input-compact auto-value-input" :disabled="!semanticMutationAvailable">
                                             </auto-value-field>
                                         </div>
                                     </div>
                                     <div class="grid grid-cols-2 gap-1.5">
                                         <div>
-                                            <label class="input-label text-[10px]">Depth Min <help-tip text="Minimum depth for clipping and normalization. Leave blank for auto."></help-tip></label>
+                                            <span class="input-label text-[10px]">Depth Min <help-tip id="help-circular-depth-min" text="Minimum depth for clipping and normalization. Leave blank for auto."></help-tip></span>
                                             <auto-value-field :visible="autoValueVisible(adv.depth_min, 'depthMin')" :text="autoValueText('depthMin')">
-                                                <input type="number" min="0" step="1" v-model.number="adv.depth_min" aria-label="Depth Min" class="form-input form-input-compact auto-value-input" :disabled="!semanticMutationAvailable">
+                                                <input type="number" min="0" step="1" v-model.number="adv.depth_min" aria-label="Depth Min" aria-describedby="help-circular-depth-min" class="form-input form-input-compact auto-value-input" :disabled="!semanticMutationAvailable">
                                             </auto-value-field>
                                         </div>
                                         <div>
-                                            <label class="input-label text-[10px]">Depth Max <help-tip text="Maximum depth for clipping and normalization. Leave blank for auto."></help-tip></label>
+                                            <span class="input-label text-[10px]">Depth Max <help-tip id="help-circular-depth-max" text="Maximum depth for clipping and normalization. Leave blank for auto."></help-tip></span>
                                             <auto-value-field :visible="autoValueVisible(adv.depth_max, 'depthMax')" :text="autoValueText('depthMax')">
-                                                <input type="number" min="0" step="1" v-model.number="adv.depth_max" aria-label="Depth Max" class="form-input form-input-compact auto-value-input" :disabled="!semanticMutationAvailable">
+                                                <input type="number" min="0" step="1" v-model.number="adv.depth_max" aria-label="Depth Max" aria-describedby="help-circular-depth-max" class="form-input form-input-compact auto-value-input" :disabled="!semanticMutationAvailable">
                                             </auto-value-field>
                                         </div>
                                     </div>
                                     <div>
-                                        <label class="input-label text-[10px]">Depth Width <help-tip text="Depth track width in px."></help-tip></label>
+                                        <span class="input-label text-[10px]">Depth Width <help-tip id="help-circular-depth-width" text="Depth track width in px."></help-tip></span>
                                         <auto-value-field :visible="autoValueVisible(adv.depth_width_circular, 'circularDepthWidth')" :text="autoValueText('circularDepthWidth')">
-                                            <input type="number" min="0.01" step="0.5" v-model.number="adv.depth_width_circular" :disabled="!semanticMutationAvailable || (adv.circular_track_slots_enabled)" :title="adv.circular_track_slots_enabled ? 'Custom stack geometry is active. Use each Depth row width, or Reset to copy this value into the stack.' : ''" class="form-input form-input-compact auto-value-input">
+                                            <input type="number" min="0.01" step="0.5" v-model.number="adv.depth_width_circular" :disabled="!semanticMutationAvailable || (adv.circular_track_slots_enabled)" :title="adv.circular_track_slots_enabled ? 'Custom stack geometry is active. Use each Depth row width, or Reset to copy this value into the stack.' : ''" aria-label="Depth Width" aria-describedby="help-circular-depth-width" class="form-input form-input-compact auto-value-input">
                                         </auto-value-field>
                                     </div>
                                 </div>
@@ -1568,13 +1583,14 @@
                                     </div>
                                     <div class="grid grid-cols-[1fr_44px] gap-1.5 items-end">
                                         <div>
-                                            <label class="input-label text-[10px]">Legend title <help-tip text="Legend label shown for this depth coverage track."></help-tip></label>
+                                            <span class="input-label text-[10px]">Legend title <help-tip :id="`help-circular-depth-legend-title-${track.index}`" text="Legend label shown for this depth coverage track."></help-tip></span>
                                             <input
                                                 type="text"
                                                 :value="getDepthTrackLabel(track.index)"
                                                 @input="setDepthTrackLabel(track.index, $event.target.value)"
                                                 class="form-input form-input-compact"
                                                 :aria-label="track.index === 0 ? 'Depth legend title' : `Depth ${track.index + 1} legend title`"
+                                                :aria-describedby="`help-circular-depth-legend-title-${track.index}`"
                                                 :placeholder="track.index === 0 ? 'Depth' : `Depth ${track.index + 1}`"
                                             >
                                         </div>
@@ -1585,6 +1601,7 @@
                                                 :value="getDepthTrackColor(track.index)"
                                                 @input="setDepthTrackColor(track.index, $event.target.value)"
                                                 @change="setDepthTrackColor(track.index, $event.target.value)"
+                                                :aria-label="track.index === 0 ? 'Depth color' : `Depth ${track.index + 1} color`"
                                                 class="h-8 w-full p-0 border rounded"
                                              :disabled="!semanticMutationAvailable">
                                         </div>
@@ -1593,19 +1610,19 @@
                                         <div class="text-[10px] uppercase tracking-wide text-slate-500 font-bold">Per-track settings</div>
                                         <div class="grid grid-cols-3 gap-1.5">
                                             <div>
-                                                <label class="input-label text-[10px]">Large Tick <help-tip text="Large tick interval in x coverage units. Leave blank for min/max ticks."></help-tip></label>
+                                                <span class="input-label text-[10px]">Large Tick <help-tip :id="`help-circular-depth-large-tick-${track.index}`" text="Large tick interval in x coverage units. Leave blank for min/max ticks."></help-tip></span>
                                                 <auto-value-field :visible="autoValueVisible(track.config.large_tick_interval, 'depthLargeTick')" :text="autoValueText('depthLargeTick')">
-                                                    <input type="number" min="0.01" step="1" v-model.number="track.config.large_tick_interval" :aria-label="track.index === 0 ? 'Depth large tick' : `Depth ${track.index + 1} large tick`" class="form-input form-input-compact auto-value-input" :disabled="!semanticMutationAvailable">
+                                                    <input type="number" min="0.01" step="1" v-model.number="track.config.large_tick_interval" :aria-label="track.index === 0 ? 'Depth large tick' : `Depth ${track.index + 1} large tick`" :aria-describedby="`help-circular-depth-large-tick-${track.index}`" class="form-input form-input-compact auto-value-input" :disabled="!semanticMutationAvailable">
                                                 </auto-value-field>
                                             </div>
                                             <div>
-                                                <label class="input-label text-[10px]">Small Tick <help-tip text="Small tick interval in x coverage units. Leave blank to hide small ticks."></help-tip></label>
-                                                <input type="number" min="0.01" step="1" v-model.number="track.config.small_tick_interval" :aria-label="track.index === 0 ? 'Depth small tick' : `Depth ${track.index + 1} small tick`" class="form-input form-input-compact" placeholder="None" :disabled="!semanticMutationAvailable">
+                                                <span class="input-label text-[10px]">Small Tick <help-tip :id="`help-circular-depth-small-tick-${track.index}`" text="Small tick interval in x coverage units. Leave blank to hide small ticks."></help-tip></span>
+                                                <input type="number" min="0.01" step="1" v-model.number="track.config.small_tick_interval" :aria-label="track.index === 0 ? 'Depth small tick' : `Depth ${track.index + 1} small tick`" :aria-describedby="`help-circular-depth-small-tick-${track.index}`" class="form-input form-input-compact" placeholder="None" :disabled="!semanticMutationAvailable">
                                             </div>
                                             <div>
-                                                <label class="input-label text-[10px]">Tick Font <help-tip text="Font size for this track's depth tick labels. Leave blank for auto."></help-tip></label>
+                                                <span class="input-label text-[10px]">Tick Font <help-tip :id="`help-circular-depth-tick-font-${track.index}`" text="Font size for this track's depth tick labels. Leave blank for auto."></help-tip></span>
                                                 <auto-value-field :visible="autoValueVisible(track.config.tick_font_size, 'depthTickFont', track.config)" :text="autoValueText('depthTickFont', track.config)">
-                                                    <input type="number" min="0.01" step="0.5" v-model.number="track.config.tick_font_size" :aria-label="track.index === 0 ? 'Depth tick font size' : `Depth ${track.index + 1} tick font size`" class="form-input form-input-compact auto-value-input" :disabled="!semanticMutationAvailable">
+                                                    <input type="number" min="0.01" step="0.5" v-model.number="track.config.tick_font_size" :aria-label="track.index === 0 ? 'Depth tick font size' : `Depth ${track.index + 1} tick font size`" :aria-describedby="`help-circular-depth-tick-font-${track.index}`" class="form-input form-input-compact auto-value-input" :disabled="!semanticMutationAvailable">
                                                 </auto-value-field>
                                             </div>
                                         </div>
@@ -1863,7 +1880,7 @@
                             <div class="mt-2 pt-2 border-t border-slate-200 border-dashed">
                                 <div class="text-[10px] text-slate-500 font-bold mb-1 flex items-center gap-1">
                                     <i class="ph ph-crop"></i> Region (optional) <span class="text-[9px] font-normal">Applies on Generate</span>
-                                    <help-tip text="Show only a sub-region (1-based, inclusive). For multi-record files, specify the record ID or #index."></help-tip>
+                                    <help-tip :id="`help-linear-region-${seq.uid}`" text="Show only a sub-region (1-based, inclusive). For multi-record files, specify the record ID or #index."></help-tip>
                                 </div>
                                 <div class="grid grid-cols-1 gap-2">
                                     <div class="grid grid-cols-2 gap-2 items-end">
@@ -1875,6 +1892,7 @@
                                                 :disabled="!semanticMutationAvailable || (linearRecordSelectorDisabled(seq))"
                                                 :data-record-selector-uid="seq.uid"
                                                 :aria-label="`Record selector for sequence ${idx + 1}`"
+                                                :aria-describedby="`help-linear-region-${seq.uid}`"
                                                 class="form-select w-full max-w-full min-w-0 px-1 py-0.5 text-xs disabled:bg-slate-100 disabled:text-slate-500"
                                             >
                                                 <option
@@ -1900,11 +1918,11 @@
                                     <div class="grid grid-cols-2 gap-2">
                                         <div>
                                             <label class="text-[9px] block">Start</label>
-                                            <input type="number" min="1" :value="seq.region_start ?? ''" @change="setLinearRecordCrop(seq, 'region_start', $event.target.value)" :aria-label="`Region start for sequence ${idx + 1}`" placeholder="1028779" class="form-input px-1 py-0.5 text-xs" :disabled="!semanticMutationAvailable">
+                                            <input type="number" min="1" :value="seq.region_start ?? ''" @change="setLinearRecordCrop(seq, 'region_start', $event.target.value)" :aria-label="`Region start for sequence ${idx + 1}`" :aria-describedby="`help-linear-region-${seq.uid}`" placeholder="1028779" class="form-input px-1 py-0.5 text-xs" :disabled="!semanticMutationAvailable">
                                         </div>
                                         <div>
                                             <label class="text-[9px] block">End</label>
-                                            <input type="number" min="1" :value="seq.region_end ?? ''" @change="setLinearRecordCrop(seq, 'region_end', $event.target.value)" :aria-label="`Region end for sequence ${idx + 1}`" placeholder="1035047" class="form-input px-1 py-0.5 text-xs" :disabled="!semanticMutationAvailable">
+                                            <input type="number" min="1" :value="seq.region_end ?? ''" @change="setLinearRecordCrop(seq, 'region_end', $event.target.value)" :aria-label="`Region end for sequence ${idx + 1}`" :aria-describedby="`help-linear-region-${seq.uid}`" placeholder="1035047" class="form-input px-1 py-0.5 text-xs" :disabled="!semanticMutationAvailable">
                                         </div>
                                     </div>
                                 </div>
@@ -1932,55 +1950,67 @@
                             <div class="space-y-2 pt-2">
                                 <div class="rounded border border-slate-200 bg-white/80 p-2 space-y-2">
                                     <div class="grid grid-cols-2 gap-y-1 gap-x-1">
-                                        <label class="option-label flex items-center gap-2 text-xs text-slate-700 cursor-pointer select-none">
-                                            <input type="checkbox" v-model="adv.depth_normalize" class="form-checkbox" :disabled="!semanticMutationAvailable">
-                                            <span class="inline-flex items-center gap-1">Log Scale <help-tip text="Use IGV-style log10 scaling for depth: 10x is twice the height of 1x."></help-tip></span>
-                                        </label>
-                                        <label class="option-label flex items-center gap-2 text-xs text-slate-700 cursor-pointer select-none">
-                                            <input type="checkbox" v-model="adv.depth_show_axis" class="form-checkbox" :disabled="!semanticMutationAvailable">
-                                            <span class="inline-flex items-center gap-1">Depth Axis <help-tip text="Show the depth coverage axis line. Hiding the axis also hides depth tick marks and labels."></help-tip></span>
-                                        </label>
-                                        <label class="option-label flex items-center gap-2 text-xs text-slate-700 cursor-pointer select-none">
-                                            <input type="checkbox" v-model="adv.depth_show_ticks" class="form-checkbox" :disabled="!semanticMutationAvailable">
-                                            <span class="inline-flex items-center gap-1">Depth Ticks <help-tip text="Show depth coverage axis tick marks and x-coverage labels."></help-tip></span>
-                                        </label>
-                                        <label class="option-label flex items-center gap-2 text-xs text-slate-700 cursor-pointer select-none">
-                                            <input type="checkbox" v-model="adv.depth_share_axis" class="form-checkbox" :disabled="!semanticMutationAvailable">
-                                            <span class="inline-flex items-center gap-1">Shared Y-axis <help-tip text="Use one depth axis range across all records so coverage differences between records remain visible."></help-tip></span>
-                                        </label>
+                                        <div class="flex items-center text-xs">
+                                            <label class="option-label flex items-center gap-2 text-xs text-slate-700 cursor-pointer select-none">
+                                                <input type="checkbox" v-model="adv.depth_normalize" aria-describedby="help-linear-log-scale" class="form-checkbox" :disabled="!semanticMutationAvailable">
+                                                <span>Log Scale</span>
+                                            </label>
+                                            <help-tip id="help-linear-log-scale" text="Use IGV-style log10 scaling for depth: 10x is twice the height of 1x."></help-tip>
+                                        </div>
+                                        <div class="flex items-center text-xs">
+                                            <label class="option-label flex items-center gap-2 text-xs text-slate-700 cursor-pointer select-none">
+                                                <input type="checkbox" v-model="adv.depth_show_axis" aria-describedby="help-linear-depth-axis" class="form-checkbox" :disabled="!semanticMutationAvailable">
+                                                <span>Depth Axis</span>
+                                            </label>
+                                            <help-tip id="help-linear-depth-axis" text="Show the depth coverage axis line. Hiding the axis also hides depth tick marks and labels."></help-tip>
+                                        </div>
+                                        <div class="flex items-center text-xs">
+                                            <label class="option-label flex items-center gap-2 text-xs text-slate-700 cursor-pointer select-none">
+                                                <input type="checkbox" v-model="adv.depth_show_ticks" aria-describedby="help-linear-depth-ticks" class="form-checkbox" :disabled="!semanticMutationAvailable">
+                                                <span>Depth Ticks</span>
+                                            </label>
+                                            <help-tip id="help-linear-depth-ticks" text="Show depth coverage axis tick marks and x-coverage labels."></help-tip>
+                                        </div>
+                                        <div class="flex items-center text-xs">
+                                            <label class="option-label flex items-center gap-2 text-xs text-slate-700 cursor-pointer select-none">
+                                                <input type="checkbox" v-model="adv.depth_share_axis" aria-describedby="help-linear-shared-y-axis" class="form-checkbox" :disabled="!semanticMutationAvailable">
+                                                <span>Shared Y-axis</span>
+                                            </label>
+                                            <help-tip id="help-linear-shared-y-axis" text="Use one depth axis range across all records so coverage differences between records remain visible."></help-tip>
+                                        </div>
                                     </div>
                                     <div class="grid grid-cols-2 gap-1.5">
                                         <div>
-                                            <label class="input-label text-[10px]">Depth Window <help-tip text="Window size for depth aggregation. Leave blank for automatic depth aggregation."></help-tip></label>
+                                            <span class="input-label text-[10px]">Depth Window <help-tip id="help-linear-depth-window" text="Window size for depth aggregation. Leave blank for automatic depth aggregation."></help-tip></span>
                                             <auto-value-field :visible="autoValueVisible(adv.depth_window_size, 'depthWindow')" :text="autoValueText('depthWindow')">
-                                                <input type="number" min="1" step="1" v-model.number="adv.depth_window_size" class="form-input form-input-compact auto-value-input" :disabled="!semanticMutationAvailable">
+                                                <input type="number" min="1" step="1" v-model.number="adv.depth_window_size" aria-label="Depth Window" aria-describedby="help-linear-depth-window" class="form-input form-input-compact auto-value-input" :disabled="!semanticMutationAvailable">
                                             </auto-value-field>
                                         </div>
                                         <div>
-                                            <label class="input-label text-[10px]">Depth Step <help-tip text="Step size for depth aggregation. Leave blank for automatic depth aggregation."></help-tip></label>
+                                            <span class="input-label text-[10px]">Depth Step <help-tip id="help-linear-depth-step" text="Step size for depth aggregation. Leave blank for automatic depth aggregation."></help-tip></span>
                                             <auto-value-field :visible="autoValueVisible(adv.depth_step_size, 'depthStep')" :text="autoValueText('depthStep')">
-                                                <input type="number" min="1" step="1" v-model.number="adv.depth_step_size" class="form-input form-input-compact auto-value-input" :disabled="!semanticMutationAvailable">
+                                                <input type="number" min="1" step="1" v-model.number="adv.depth_step_size" aria-label="Depth Step" aria-describedby="help-linear-depth-step" class="form-input form-input-compact auto-value-input" :disabled="!semanticMutationAvailable">
                                             </auto-value-field>
                                         </div>
                                     </div>
                                     <div class="grid grid-cols-2 gap-1.5">
                                         <div>
-                                            <label class="input-label text-[10px]">Depth Min <help-tip text="Minimum depth for clipping and normalization. Leave blank for auto."></help-tip></label>
+                                            <span class="input-label text-[10px]">Depth Min <help-tip id="help-linear-depth-min" text="Minimum depth for clipping and normalization. Leave blank for auto."></help-tip></span>
                                             <auto-value-field :visible="autoValueVisible(adv.depth_min, 'depthMin')" :text="autoValueText('depthMin')">
-                                                <input type="number" min="0" step="1" v-model.number="adv.depth_min" class="form-input form-input-compact auto-value-input" :disabled="!semanticMutationAvailable">
+                                                <input type="number" min="0" step="1" v-model.number="adv.depth_min" aria-label="Depth Min" aria-describedby="help-linear-depth-min" class="form-input form-input-compact auto-value-input" :disabled="!semanticMutationAvailable">
                                             </auto-value-field>
                                         </div>
                                         <div>
-                                            <label class="input-label text-[10px]">Depth Max <help-tip text="Maximum depth for clipping and normalization. Leave blank for auto."></help-tip></label>
+                                            <span class="input-label text-[10px]">Depth Max <help-tip id="help-linear-depth-max" text="Maximum depth for clipping and normalization. Leave blank for auto."></help-tip></span>
                                             <auto-value-field :visible="autoValueVisible(adv.depth_max, 'depthMax')" :text="autoValueText('depthMax')">
-                                                <input type="number" min="0" step="1" v-model.number="adv.depth_max" class="form-input form-input-compact auto-value-input" :disabled="!semanticMutationAvailable">
+                                                <input type="number" min="0" step="1" v-model.number="adv.depth_max" aria-label="Depth Max" aria-describedby="help-linear-depth-max" class="form-input form-input-compact auto-value-input" :disabled="!semanticMutationAvailable">
                                             </auto-value-field>
                                         </div>
                                     </div>
                                     <div>
-                                        <label class="input-label text-[10px]">Default Depth Height <help-tip text="Fallback height for linear depth tracks that leave per-track Height blank."></help-tip></label>
+                                        <span class="input-label text-[10px]">Default Depth Height <help-tip id="help-linear-default-depth-height" text="Fallback height for linear depth tracks that leave per-track Height blank."></help-tip></span>
                                         <auto-value-field :visible="autoValueVisible(adv.depth_height, 'linearDepthHeight')" :text="autoValueText('linearDepthHeight')">
-                                            <input type="number" min="0.01" step="0.5" v-model.number="adv.depth_height" class="form-input form-input-compact auto-value-input" :disabled="!semanticMutationAvailable">
+                                            <input type="number" min="0.01" step="0.5" v-model.number="adv.depth_height" aria-label="Default Depth Height" aria-describedby="help-linear-default-depth-height" class="form-input form-input-compact auto-value-input" :disabled="!semanticMutationAvailable">
                                         </auto-value-field>
                                     </div>
                                 </div>
@@ -1996,8 +2026,10 @@
                                     </div>
                                     <div class="grid grid-cols-[1fr_64px_44px] gap-1.5 items-end">
                                         <div>
-                                            <label class="input-label text-[10px]">Legend title <help-tip text="Legend label shown for this depth coverage track."></help-tip></label>
+                                            <span class="input-label text-[10px]">Legend title <help-tip :id="`help-linear-depth-legend-title-${track.index}`" text="Legend label shown for this depth coverage track."></help-tip></span>
                                             <input
+                                                :aria-label="track.index === 0 ? 'Depth legend title' : `Depth ${track.index + 1} legend title`"
+                                                :aria-describedby="`help-linear-depth-legend-title-${track.index}`"
                                                 type="text"
                                                 :value="getDepthTrackLabel(track.index)"
                                                 @input="setDepthTrackLabel(track.index, $event.target.value)"
@@ -2006,9 +2038,11 @@
                                             >
                                         </div>
                                         <div>
-                                            <label class="input-label text-[10px]">Height <help-tip text="Height of this linear depth coverage track in px. Leave blank for auto."></help-tip></label>
+                                            <span class="input-label text-[10px]">Height <help-tip :id="`help-linear-depth-height-${track.index}`" text="Height of this linear depth coverage track in px. Leave blank for auto."></help-tip></span>
                                             <auto-value-field :visible="autoValueVisible(track.config.height, 'linearDepthTrackHeight')" :text="autoValueText('linearDepthTrackHeight')">
                                                 <input
+                                                    :aria-label="track.index === 0 ? 'Depth height' : `Depth ${track.index + 1} height`"
+                                                    :aria-describedby="`help-linear-depth-height-${track.index}`"
                                                     type="number"
                                                     min="0.01"
                                                     step="0.5"
@@ -2025,6 +2059,7 @@
                                                 :value="getDepthTrackColor(track.index)"
                                                 @input="setDepthTrackColor(track.index, $event.target.value)"
                                                 @change="setDepthTrackColor(track.index, $event.target.value)"
+                                                :aria-label="track.index === 0 ? 'Depth color' : `Depth ${track.index + 1} color`"
                                                 class="h-8 w-full p-0 border rounded"
                                              :disabled="!semanticMutationAvailable">
                                         </div>
@@ -2033,19 +2068,19 @@
                                         <div class="text-[10px] uppercase tracking-wide text-slate-500 font-bold">Per-track settings</div>
                                         <div class="grid grid-cols-3 gap-1.5">
                                             <div>
-                                                <label class="input-label text-[10px]">Large Tick <help-tip text="Large tick interval in x coverage units. Leave blank for min/max ticks."></help-tip></label>
+                                                <span class="input-label text-[10px]">Large Tick <help-tip :id="`help-linear-depth-large-tick-${track.index}`" text="Large tick interval in x coverage units. Leave blank for min/max ticks."></help-tip></span>
                                                 <auto-value-field :visible="autoValueVisible(track.config.large_tick_interval, 'depthLargeTick')" :text="autoValueText('depthLargeTick')">
-                                                    <input type="number" min="0.01" step="1" v-model.number="track.config.large_tick_interval" class="form-input form-input-compact auto-value-input" :disabled="!semanticMutationAvailable">
+                                                    <input type="number" min="0.01" step="1" v-model.number="track.config.large_tick_interval" :aria-label="track.index === 0 ? 'Depth large tick' : `Depth ${track.index + 1} large tick`" :aria-describedby="`help-linear-depth-large-tick-${track.index}`" class="form-input form-input-compact auto-value-input" :disabled="!semanticMutationAvailable">
                                                 </auto-value-field>
                                             </div>
                                             <div>
-                                                <label class="input-label text-[10px]">Small Tick <help-tip text="Small tick interval in x coverage units. Leave blank to hide small ticks."></help-tip></label>
-                                                <input type="number" min="0.01" step="1" v-model.number="track.config.small_tick_interval" class="form-input form-input-compact" placeholder="None" :disabled="!semanticMutationAvailable">
+                                                <span class="input-label text-[10px]">Small Tick <help-tip :id="`help-linear-depth-small-tick-${track.index}`" text="Small tick interval in x coverage units. Leave blank to hide small ticks."></help-tip></span>
+                                                <input type="number" min="0.01" step="1" v-model.number="track.config.small_tick_interval" :aria-label="track.index === 0 ? 'Depth small tick' : `Depth ${track.index + 1} small tick`" :aria-describedby="`help-linear-depth-small-tick-${track.index}`" class="form-input form-input-compact" placeholder="None" :disabled="!semanticMutationAvailable">
                                             </div>
                                             <div>
-                                                <label class="input-label text-[10px]">Tick Font <help-tip text="Font size for this track's depth tick labels. Leave blank for auto."></help-tip></label>
+                                                <span class="input-label text-[10px]">Tick Font <help-tip :id="`help-linear-depth-tick-font-${track.index}`" text="Font size for this track's depth tick labels. Leave blank for auto."></help-tip></span>
                                                 <auto-value-field :visible="autoValueVisible(track.config.tick_font_size, 'depthTickFont', track.config)" :text="autoValueText('depthTickFont', track.config)">
-                                                    <input type="number" min="0.01" step="0.5" v-model.number="track.config.tick_font_size" class="form-input form-input-compact auto-value-input" :disabled="!semanticMutationAvailable">
+                                                    <input type="number" min="0.01" step="0.5" v-model.number="track.config.tick_font_size" :aria-label="track.index === 0 ? 'Depth tick font size' : `Depth ${track.index + 1} tick font size`" :aria-describedby="`help-linear-depth-tick-font-${track.index}`" class="form-input form-input-compact auto-value-input" :disabled="!semanticMutationAvailable">
                                                 </auto-value-field>
                                             </div>
                                         </div>
@@ -2123,10 +2158,11 @@
                                 </summary>
                                 <div data-capture="linear-losat-settings" class="min-w-0 space-y-3 pt-2">
                                     <div v-if="linearComparisonUi.sectionKeys.settings.includes('losat-mode')">
-                                        <div class="linear-primary-label mb-1">LOSAT Mode <help-tip text="Choose a nucleotide, protein, or translated nucleotide search. LOSATP settings are preserved while another mode is active."></help-tip></div>
+                                        <div class="linear-primary-label mb-1">LOSAT Mode <help-tip id="help-comparison-losat-mode" text="Choose a nucleotide, protein, or translated nucleotide search. LOSATP settings are preserved while another mode is active."></help-tip></div>
                                         <div
                                             role="group"
                                             aria-label="LOSAT Mode"
+                                            aria-describedby="help-comparison-losat-mode"
                                             data-linear-comparison-losat-mode
                                             class="linear-comparison-actions linear-losat-mode-actions"
                                         >
@@ -2145,7 +2181,7 @@
                                     </div>
 
                                     <div v-if="linearComparisonUi.sectionKeys.settings.includes('losatp-mode')">
-                                        <label for="linear-comparison-losatp-mode" class="linear-primary-label mb-1">LOSATP mode <help-tip text="Choose how protein matches are presented. Similarity groups and Collinear blocks require all-adjacent LOSAT."></help-tip></label>
+                                        <span class="linear-primary-label mb-1"><label for="linear-comparison-losatp-mode">LOSATP mode</label> <help-tip id="help-comparison-losatp-mode" text="Choose how protein matches are presented. Similarity groups and Collinear blocks require all-adjacent LOSAT."></help-tip></span>
                                         <select
                                             id="linear-comparison-losatp-mode"
                                             data-linear-comparison-losatp-mode
@@ -2153,6 +2189,7 @@
                                             :value="linearComparisonUi.activeLosatpModeKey"
                                             @change="setLinearComparisonLosatpMode($event.target.value)"
                                             aria-label="LOSATP mode"
+                                            aria-describedby="help-comparison-losatp-mode"
                                             class="form-input px-2 py-1.5 text-xs"
                                          :disabled="!semanticMutationAvailable">
                                             <option v-for="modeOption in linearComparisonUi.losatpModes" :key="modeOption.key" :value="modeOption.key" :disabled="!modeOption.selectable">{{ modeOption.label }}</option>
@@ -2166,8 +2203,8 @@
                                     <p v-if="linearComparisonUi.sectionKeys.settings.length === 0" class="text-[10px] leading-snug text-slate-500">Choose Run LOSAT or Upload BLAST TSV to configure comparisons.</p>
 
                                     <div v-if="linearComparisonUi.sectionKeys.settings.includes('blastn-task')">
-                                        <label class="linear-primary-label mb-1">LOSATN task <help-tip text="megablast is fastest for highly similar nucleotide sequences; blastn is more sensitive."></help-tip></label>
-                                        <select v-model="losat.blastn.task" aria-label="LOSATN task" class="form-input px-2 py-1.5 text-xs" :disabled="!semanticMutationAvailable">
+                                        <span class="linear-primary-label mb-1">LOSATN task <help-tip id="help-comparison-losatn-task" text="megablast is fastest for highly similar nucleotide sequences; blastn is more sensitive."></help-tip></span>
+                                        <select v-model="losat.blastn.task" aria-label="LOSATN task" aria-describedby="help-comparison-losatn-task" class="form-input px-2 py-1.5 text-xs" :disabled="!semanticMutationAvailable">
                                             <option value="megablast">megablast</option>
                                             <option value="blastn">blastn</option>
                                             <option value="dc-megablast">dc-megablast</option>
@@ -2178,8 +2215,8 @@
                                         <div class="linear-primary-label">Runtime and reproducibility</div>
                                         <div class="grid min-w-0 grid-cols-1 gap-2 sm:grid-cols-2">
                                             <div>
-                                                <label class="linear-primary-label mb-1">Execution <help-tip text="Auto chooses threaded LOSAT only when browser support and workload allow it."></help-tip></label>
-                                                <select v-model="losat.executionMode" aria-label="LOSAT execution" class="form-input px-2 py-1.5 text-xs" :disabled="!semanticMutationAvailable">
+                                                <span class="linear-primary-label mb-1">Execution <help-tip id="help-comparison-execution" text="Auto chooses threaded LOSAT only when browser support and workload allow it."></help-tip></span>
+                                                <select v-model="losat.executionMode" aria-label="LOSAT execution" aria-describedby="help-comparison-execution" class="form-input px-2 py-1.5 text-xs" :disabled="!semanticMutationAvailable">
                                                     <option value="auto">Auto ({{ losatEffectiveExecutionMode }})</option>
                                                     <option value="serial">Serial</option>
                                                     <option value="threaded">Threaded</option>
@@ -2216,33 +2253,36 @@
                                     </div>
 
                                     <div v-if="linearComparisonUi.sectionKeys.settings.includes('blastp-max-hits')">
-                                        <label class="linear-primary-label mb-1">Pairwise display max hits <help-tip text="Maximum filtered matches displayed per query protein in Pairwise mode. This does not limit LOSATP candidates or Similarity/Collinear member evidence."></help-tip></label>
-                                        <input type="number" min="1" step="1" v-model.number="losat.blastp.maxHits" aria-label="Pairwise display max hits per protein" class="form-input px-2 py-1.5 text-xs" :disabled="!semanticMutationAvailable">
+                                        <span class="linear-primary-label mb-1">Pairwise display max hits <help-tip id="help-comparison-pairwise-display-max-hits" text="Maximum filtered matches displayed per query protein in Pairwise mode. This does not limit LOSATP candidates or Similarity/Collinear member evidence."></help-tip></span>
+                                        <input type="number" min="1" step="1" v-model.number="losat.blastp.maxHits" aria-label="Pairwise display max hits per protein" aria-describedby="help-comparison-pairwise-display-max-hits" class="form-input px-2 py-1.5 text-xs" :disabled="!semanticMutationAvailable">
                                     </div>
 
                                     <div v-if="linearComparisonUi.sectionKeys.settings.includes('losatp-candidate')">
-                                        <label class="linear-primary-label mb-1">Max target seqs <help-tip text="Raw LOSATP search limit per query protein (--max-target-seqs). Leave blank for an unbounded search. Changing this value requires matching raw search results. Defaults: 5 for Collinear, unbounded for Similarity groups. Each mode remembers its own hit limits."></help-tip></label>
-                                        <input type="number" min="1" step="1" placeholder="Unbounded" v-model.number="losat.blastp.candidateLimit" aria-label="LOSATP Max target seqs" class="form-input px-2 py-1.5 text-xs" :disabled="!semanticMutationAvailable">
+                                        <span class="linear-primary-label mb-1">Max target seqs <help-tip id="help-comparison-max-target-seqs" text="Raw LOSATP search limit per query protein (--max-target-seqs). Leave blank for an unbounded search. Changing this value requires matching raw search results. Defaults: 5 for Collinear, unbounded for Similarity groups. Each mode remembers its own hit limits."></help-tip></span>
+                                        <input type="number" min="1" step="1" placeholder="Unbounded" v-model.number="losat.blastp.candidateLimit" aria-label="LOSATP Max target seqs" aria-describedby="help-comparison-max-target-seqs" class="form-input px-2 py-1.5 text-xs" :disabled="!semanticMutationAvailable">
                                     </div>
 
                                     <div v-if="linearComparisonUi.sectionKeys.settings.includes('member-hits')">
-                                        <label class="linear-primary-label mb-1">Member hits per protein <help-tip text="Maximum directional subject hits used to construct Similarity groups and Collinear blocks after result filtering. Leave blank to keep all hits passing the result filters. This does not limit raw LOSATP candidates or Pairwise display matches."></help-tip></label>
-                                        <input type="number" min="1" step="1" placeholder="Unbounded" v-model.number="losat.blastp.orthogroupMemberMaxHits" aria-label="Member hits per protein" class="form-input px-2 py-1.5 text-xs" :disabled="!semanticMutationAvailable">
+                                        <span class="linear-primary-label mb-1">Member hits per protein <help-tip id="help-comparison-member-hits-per-protein" text="Maximum directional subject hits used to construct Similarity groups and Collinear blocks after result filtering. Leave blank to keep all hits passing the result filters. This does not limit raw LOSATP candidates or Pairwise display matches."></help-tip></span>
+                                        <input type="number" min="1" step="1" placeholder="Unbounded" v-model.number="losat.blastp.orthogroupMemberMaxHits" aria-label="Member hits per protein" aria-describedby="help-comparison-member-hits-per-protein" class="form-input px-2 py-1.5 text-xs" :disabled="!semanticMutationAvailable">
                                     </div>
 
-                                    <label v-if="linearComparisonUi.sectionKeys.settings.includes('collinear-primary')" class="flex items-start gap-2 text-xs text-slate-600">
-                                        <input type="checkbox" v-model="losat.blastp.collinearInferOrthogroups" aria-label="Infer orthogroups with self-comparisons" class="form-checkbox mt-0.5" :disabled="!semanticMutationAvailable">
-                                        <span>Infer orthogroups with self-comparisons <help-tip text="Include within-record searches and infer orthogroups with paralogs before building blocks. Off by default: build blocks from between-record hits without orthogroup inference."></help-tip></span>
-                                    </label>
+                                    <div v-if="linearComparisonUi.sectionKeys.settings.includes('collinear-primary')" class="flex items-start text-xs">
+                                        <label class="flex items-start gap-2 text-xs text-slate-600">
+                                            <input type="checkbox" v-model="losat.blastp.collinearInferOrthogroups" aria-label="Infer orthogroups with self-comparisons" aria-describedby="help-comparison-infer-orthogroups" class="form-checkbox mt-0.5" :disabled="!semanticMutationAvailable">
+                                            <span>Infer orthogroups with self-comparisons</span>
+                                        </label>
+                                        <help-tip id="help-comparison-infer-orthogroups" text="Include within-record searches and infer orthogroups with paralogs before building blocks. Off by default: build blocks from between-record hits without orthogroup inference."></help-tip>
+                                    </div>
 
                                     <div v-if="linearComparisonUi.sectionKeys.settings.includes('collinear-primary')" class="grid min-w-0 grid-cols-1 gap-2 sm:grid-cols-2">
                                         <div>
-                                            <label class="linear-primary-label mb-1">Max unit gap <help-tip text="Maximum CDS-order gap between neighboring anchors merged into one block."></help-tip></label>
-                                            <input type="number" min="0" step="1" v-model.number="losat.blastp.collinearMaxUnitGap" aria-label="Collinear max unit gap" class="form-input px-2 py-1.5 text-xs" :disabled="!semanticMutationAvailable">
+                                            <span class="linear-primary-label mb-1">Max unit gap <help-tip id="help-comparison-max-unit-gap" text="Maximum CDS-order gap between neighboring anchors merged into one block."></help-tip></span>
+                                            <input type="number" min="0" step="1" v-model.number="losat.blastp.collinearMaxUnitGap" aria-label="Collinear max unit gap" aria-describedby="help-comparison-max-unit-gap" class="form-input px-2 py-1.5 text-xs" :disabled="!semanticMutationAvailable">
                                         </div>
                                         <div>
-                                            <label class="linear-primary-label mb-1">Min block genes <help-tip text="Minimum connected genes required for a Collinear ribbon."></help-tip></label>
-                                            <input type="number" min="1" step="1" v-model.number="losat.blastp.collinearMinAnchors" aria-label="Collinear minimum block genes" class="form-input px-2 py-1.5 text-xs" :disabled="!semanticMutationAvailable">
+                                            <span class="linear-primary-label mb-1">Min block genes <help-tip id="help-comparison-min-block-genes" text="Minimum connected genes required for a Collinear ribbon."></help-tip></span>
+                                            <input type="number" min="1" step="1" v-model.number="losat.blastp.collinearMinAnchors" aria-label="Collinear minimum block genes" aria-describedby="help-comparison-min-block-genes" class="form-input px-2 py-1.5 text-xs" :disabled="!semanticMutationAvailable">
                                         </div>
                                         <div>
                                             <label class="linear-primary-label mb-1">Evidence scope</label>
@@ -2405,30 +2445,30 @@
                     <div class="card-header"><i class="ph ph-sliders"></i> Basic</div>
                     <div class="space-y-2">
                         <div>
-                            <label for="output-prefix" class="input-label">Output Prefix <help-tip :text="mode === 'circular' ? 'Prefix for output files. Leave empty to use record IDs; separate diagrams add deterministic suffixes when IDs collide.' : 'Prefix for output files. Leave empty to use out.'"></help-tip></label>
-                            <input id="output-prefix" type="text" v-model="form.prefix" class="form-input" :placeholder="mode === 'circular' ? 'Optional (Default: Record ID)' : 'Optional (Default: out)'" :disabled="!semanticMutationAvailable">
+                            <span class="input-label"><label for="output-prefix">Output Prefix</label> <help-tip id="help-output-prefix" :text="mode === 'circular' ? 'Prefix for output files. Leave empty to use record IDs; separate diagrams add deterministic suffixes when IDs collide.' : 'Prefix for output files. Leave empty to use out.'"></help-tip></span>
+                            <input id="output-prefix" type="text" v-model="form.prefix" aria-describedby="help-output-prefix" class="form-input" :placeholder="mode === 'circular' ? 'Optional (Default: Record ID)' : 'Optional (Default: out)'" :disabled="!semanticMutationAvailable">
                         </div>
 
                         <template v-if="mode === 'circular'">
                             <div class="grid grid-cols-2 gap-1.5">
                                 <div>
-                                    <label for="circular-species" class="input-label">Species <help-tip text="Species name used in the circular center label when no custom plot title is set."></help-tip></label>
-                                    <input id="circular-species" type="text" v-model="form.species" class="form-input" placeholder="e.g., Escherichia coli" :disabled="!semanticMutationAvailable">
+                                    <span class="input-label"><label for="circular-species">Species</label> <help-tip id="help-species" text="Species name used in the circular center label when no custom plot title is set."></help-tip></span>
+                                    <input id="circular-species" type="text" v-model="form.species" aria-describedby="help-species" class="form-input" placeholder="e.g., Escherichia coli" :disabled="!semanticMutationAvailable">
                                 </div>
                                 <div>
-                                    <label class="input-label">Strain <help-tip text="Strain or isolate name used in the circular center label."></help-tip></label>
-                                    <input type="text" v-model="form.strain" class="form-input" placeholder="e.g. K-12" :disabled="!semanticMutationAvailable">
+                                    <span class="input-label">Strain <help-tip id="help-strain" text="Strain or isolate name used in the circular center label."></help-tip></span>
+                                    <input type="text" v-model="form.strain" aria-label="Strain" aria-describedby="help-strain" class="form-input" placeholder="e.g. K-12" :disabled="!semanticMutationAvailable">
                                 </div>
                             </div>
                         </template>
 
-                        <label class="option-label flex items-center gap-2 text-xs text-slate-700 cursor-pointer select-none rounded border border-slate-200 bg-slate-50 px-2 py-1.5">
-                            <input type="checkbox" v-model="adv.rich_feature_popup" class="form-checkbox" :disabled="!semanticMutationAvailable">
-                            <span class="inline-flex items-center gap-1">
-                                Rich Feature Popup
-                                <help-tip text="When enabled, feature clicks show Details, Qualifiers, and Sequence tabs. Disable for the compact edit-only popup."></help-tip>
-                            </span>
-                        </label>
+                        <div class="flex items-center rounded border border-slate-200 bg-slate-50 px-2 py-1.5 text-xs">
+                            <label class="option-label flex items-center gap-2 text-xs text-slate-700 cursor-pointer select-none">
+                                <input type="checkbox" v-model="adv.rich_feature_popup" aria-describedby="help-rich-feature-popup" class="form-checkbox" :disabled="!semanticMutationAvailable">
+                                <span>Rich Feature Popup</span>
+                            </label>
+                            <help-tip id="help-rich-feature-popup" text="When enabled, feature clicks show Details, Qualifiers, and Sequence tabs. Disable for the compact edit-only popup."></help-tip>
+                        </div>
 
                     </div>
                 </div>
@@ -2541,24 +2581,24 @@
                                 <div class="linear-primary-label">Advanced collinear search</div>
                                 <div class="grid min-w-0 grid-cols-1 gap-2 sm:grid-cols-2">
                                     <div>
-                                        <label class="linear-primary-label mb-1">Unit mode <help-tip text="Auto resolves the current Collinear unit type; CDS and locus require that exact unit type."></help-tip></label>
-                                        <select v-model="losat.blastp.collinearUnitMode" aria-label="Collinear unit mode" class="form-input px-2 py-1.5 text-xs" :disabled="!semanticMutationAvailable">
+                                        <span class="linear-primary-label mb-1">Unit mode <help-tip id="help-comparison-unit-mode" text="Auto resolves the current Collinear unit type; CDS and locus require that exact unit type."></help-tip></span>
+                                        <select v-model="losat.blastp.collinearUnitMode" aria-label="Collinear unit mode" aria-describedby="help-comparison-unit-mode" class="form-input px-2 py-1.5 text-xs" :disabled="!semanticMutationAvailable">
                                             <option value="auto">Auto</option>
                                             <option value="cds">CDS</option>
                                             <option value="locus">Locus</option>
                                         </select>
                                     </div>
                                     <div>
-                                        <label class="linear-primary-label mb-1">Anchor mode <help-tip text="Choose all directional hits, one-to-one hits, or reciprocal best hits as Collinear anchors."></help-tip></label>
-                                        <select v-model="losat.blastp.collinearAnchorMode" aria-label="Collinear anchor mode" class="form-input px-2 py-1.5 text-xs" :disabled="!semanticMutationAvailable">
+                                        <span class="linear-primary-label mb-1">Anchor mode <help-tip id="help-comparison-anchor-mode" text="Choose all directional hits, one-to-one hits, or reciprocal best hits as Collinear anchors."></help-tip></span>
+                                        <select v-model="losat.blastp.collinearAnchorMode" aria-label="Collinear anchor mode" aria-describedby="help-comparison-anchor-mode" class="form-input px-2 py-1.5 text-xs" :disabled="!semanticMutationAvailable">
                                             <option value="all">All hits</option>
                                             <option value="one_to_one">One-to-one</option>
                                             <option value="rbh">Reciprocal best hits</option>
                                         </select>
                                     </div>
                                     <div>
-                                        <label class="linear-primary-label mb-1">Merge orientation <help-tip text="Require compatible strand, gene order, or either orientation when merging Collinear anchors."></help-tip></label>
-                                        <select v-model="losat.blastp.collinearMergeOrientation" aria-label="Collinear merge orientation" class="form-input px-2 py-1.5 text-xs" :disabled="!semanticMutationAvailable">
+                                        <span class="linear-primary-label mb-1">Merge orientation <help-tip id="help-comparison-merge-orientation" text="Require compatible strand, gene order, or either orientation when merging Collinear anchors."></help-tip></span>
+                                        <select v-model="losat.blastp.collinearMergeOrientation" aria-label="Collinear merge orientation" aria-describedby="help-comparison-merge-orientation" class="form-input px-2 py-1.5 text-xs" :disabled="!semanticMutationAvailable">
                                             <option value="strand">Strand</option>
                                             <option value="order">Gene order</option>
                                             <option value="either">Either</option>
