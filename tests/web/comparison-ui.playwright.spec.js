@@ -1215,6 +1215,91 @@ test('structured comparison errors open and focus their owning disclosure', asyn
   await expect(page.getByRole('combobox', { name: 'LOSATP mode' })).toBeFocused();
 });
 
+test('uploaded BLAST IDs bind to endpoint records and contradictions keep the Result', async ({ page }) => {
+  // CO-06 (PD-OI-074): unknown IDs keep positional placement with endpoint
+  // metadata, so match FASTA resolves; a swapped table fails before drawing.
+  test.setTimeout(300000);
+  await openLinear(page);
+  await page.evaluate(async (records) => {
+    const app = window.__GBDRAW_APP__;
+    if (app.linearSeqs.length < 2) app.addLinearSeq();
+    records.forEach((content, index) => app.setLinearSeqPrimaryFile(
+      index,
+      'gb',
+      new File([content], `co06-record-${index + 1}.gbk`, {
+        type: 'text/plain',
+        lastModified: index + 1
+      })
+    ));
+    Object.assign(app.form, {
+      legend: 'none',
+      show_gc: false,
+      show_skew: false,
+      show_depth: false,
+      show_labels_linear: 'none'
+    });
+    await app.setLinearComparisonGlobalAction('losat');
+    const edgeKey = app.linearComparisonResolution.edges[0].edgeKey;
+    app.setLinearComparisonGapAction(edgeKey, 'upload');
+  }, [makeGenbank('Co06A', 'atg'), makeGenbank('Co06B', 'gct')]);
+
+  const hit = (query, subject) => (
+    `${query}\t${subject}\t95\t80\t4\t0\t1\t80\t5\t84\t1e-40\t160\n`
+  );
+  const generateWithTable = (text, name) => page.evaluate(async ({ text_, name_ }) => {
+    const app = window.__GBDRAW_APP__;
+    const edge = app.linearComparisonResolution.edges[0];
+    app.setLinearComparisonCardFile(edge.edgeKey, new File([text_], name_, {
+      type: 'text/tab-separated-values',
+      lastModified: name_.length
+    }));
+    const result = await app.runAnalysis();
+    const content = String(app.results?.[app.selectedResultIndex]?.content || '');
+    const svg = new DOMParser().parseFromString(content, 'image/svg+xml');
+    const match = svg.querySelector('[data-gbdraw-pairwise-match-id]');
+    return {
+      status: result?.status,
+      errorCode: app.errorLog?.code || '',
+      content,
+      recordIds: match ? [
+        match.getAttribute('data-query-record-id'),
+        match.getAttribute('data-subject-record-id')
+      ] : []
+    };
+  }, { text_: text, name_: name });
+
+  const unrelated = await generateWithTable(hit('contig_A', 'contig_B'), 'unrelated-ids.tsv');
+  expect(unrelated.status, unrelated.errorCode).toBe('ok');
+  expect(unrelated.recordIds).toEqual(['Co06A', 'Co06B']);
+
+  const match = page.locator(
+    '.shadow-xl.origin-top > svg [data-gbdraw-pairwise-match-id]'
+  ).first();
+  await match.focus();
+  await match.press('Enter');
+  const matchDialog = page.getByRole('dialog', { name: 'Pairwise match details' });
+  await expect(matchDialog).toBeVisible();
+  const spans = await page.evaluate(() => (
+    window.__GBDRAW_APP__.clickedPairwiseMatch?.sequenceBundle?.entries || []
+  ).map((entry) => ({
+    role: entry.span.role,
+    available: entry.available,
+    reason: entry.unavailableReason || ''
+  })));
+  expect(spans).toEqual([
+    { role: 'query', available: true, reason: '' },
+    { role: 'subject', available: true, reason: '' }
+  ]);
+  await matchDialog.getByRole('button', { name: 'Close match popup' }).click();
+
+  const swapped = await generateWithTable(hit('Co06B', 'Co06A'), 'swapped-ids.tsv');
+  expect(swapped.status).toBe('error');
+  expect(swapped.errorCode).toBe('COMPARISON_IDENTITY');
+  expect(swapped.content).toBe(unrelated.content);
+  await expect(page.getByRole('alert', { name: 'Generation Error' }))
+    .toContainText('Comparison endpoints disagree');
+});
+
 test('mobile layout has no overflow, fixed-action overlap, or semantic tab-order drift', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await openLinear(page);
