@@ -6,7 +6,6 @@ from pathlib import Path
 from typing import Any
 
 from Bio import SeqIO
-from Bio.Seq import Seq
 
 from gbdraw.core.record_metadata import (
     _absolute_display_interval,
@@ -16,6 +15,7 @@ from gbdraw.core.record_metadata import (
     _source_feature_index,
     _source_feature_location_parts,
 )
+from gbdraw.core.sequence import translate_cds
 from gbdraw.features.selector_values import build_feature_selector_values
 from gbdraw.features.ids import (
     compute_feature_hash_from_location_parts,
@@ -261,36 +261,8 @@ def _extract_amino_acid_sequence(feature: Any, nucleotide_sequence: str) -> tupl
         warnings.append("CDS translation skipped because nucleotide sequence is unavailable.")
         return "", warnings
 
-    codon_start_raw = _first_qualifier_value(qualifiers, "codon_start") or "1"
     try:
-        codon_start = int(str(codon_start_raw).strip())
-    except Exception:
-        warnings.append(f"CDS translation skipped because codon_start is invalid: {codon_start_raw}")
-        return "", warnings
-    if codon_start not in {1, 2, 3}:
-        warnings.append(f"CDS translation skipped because codon_start is outside 1..3: {codon_start}")
-        return "", warnings
-
-    transl_table_raw = _first_qualifier_value(qualifiers, "transl_table") or "1"
-    try:
-        transl_table = int(str(transl_table_raw).strip())
-    except Exception:
-        warnings.append(f"CDS translation skipped because transl_table is invalid: {transl_table_raw}")
-        return "", warnings
-
-    coding_sequence = str(nucleotide_sequence)[codon_start - 1 :]
-    if len(coding_sequence) == 0:
-        warnings.append("CDS translation skipped because coding sequence is empty after codon_start.")
-        return "", warnings
-    if len(coding_sequence) % 3 != 0:
-        warnings.append("CDS translation skipped because coding sequence length is not divisible by 3.")
-        return "", warnings
-
-    try:
-        protein = str(Seq(coding_sequence).translate(table=transl_table, to_stop=False))
-        if protein.endswith("*"):
-            protein = protein[:-1]
-        return protein, warnings
+        return translate_cds(feature, nucleotide_sequence, require_whole_codons=True), warnings
     except Exception as exc:
         warnings.append(f"CDS translation skipped: {exc}")
         return "", warnings

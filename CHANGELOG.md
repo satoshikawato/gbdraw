@@ -20,7 +20,18 @@ decisions are in
 
 <!-- web-gui-audit-20260930 P04 -->
 
-<!-- web-gui-audit-20260930 P05 -->
+- Non-pseudo CDS translated without `/translation` now start with `M` when the
+  5' end is complete, the reading frame starts at the first base, and the first
+  codon is a start codon of `transl_table` (for example `GTG` and `TTG` in
+  table 11), as in INSDC `/translation`. This changes **Copy aa FASTA**,
+  Interactive SVG feature metadata, and LOSATP and similarity-group protein
+  inputs for GFF3 input and for GenBank CDS without `/translation` (FE-07).
+- GFF3 CDS phase now sets the reading frame. A CDS with phase 1 or 2 was
+  previously translated out of frame, or skipped by the feature popup when its
+  length was not a multiple of 3 (N-05).
+- LOSATP now skips a CDS whose `codon_start` is invalid instead of translating
+  it from the first base. Saved LOSATP rows for a record whose proteins changed
+  are not reused; the next search recomputes them.
 
 <!-- web-gui-audit-20260930 P06 -->
 

@@ -26,6 +26,9 @@ from gbdraw.features.visibility import compile_feature_visibility_rules, should_
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 PYTHON_HELPERS_PATH = REPO_ROOT / "gbdraw" / "web" / "js" / "app" / "python-helpers.js"
+MG1655_START_CODON_SUBSET = (
+    REPO_ROOT / "tests" / "fixtures" / "cds_translation" / "mg1655_start_codon_subset.gb"
+)
 
 
 @pytest.fixture(scope="module")
@@ -383,6 +386,139 @@ def test_web_feature_extraction_reports_invalid_translation_warning(
     assert feature["nucleotide_sequence"] == "ATGAA"
     assert feature["amino_acid_sequence"] == ""
     assert any("not divisible by 3" in warning for warning in feature["sequence_warnings"])
+
+
+def _write_gff3_cds_rows(
+    tmp_path: Path,
+    sequence: str,
+    rows: list[tuple[int, int, str, str, str]],
+) -> tuple[Path, Path]:
+    """Write one GFF3 contig whose rows are (start, end, strand, phase, attributes)."""
+
+    gff_path = tmp_path / "cds.gff3"
+    fasta_path = tmp_path / "cds.fasta"
+    lines = ["##gff-version 3", f"##sequence-region ctg1 1 {len(sequence)}"]
+    lines.extend(
+        f"ctg1\ttest\tCDS\t{start}\t{end}\t.\t{strand}\t{phase}\t{attributes}"
+        for start, end, strand, phase, attributes in rows
+    )
+    gff_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    fasta_path.write_text(f">ctg1\n{sequence}\n", encoding="utf-8")
+    return gff_path, fasta_path
+
+
+@pytest.mark.parametrize(
+    ("sequence", "transl_table", "expected"),
+    [
+        ("GTGAAATAA", "11", "MK"),
+        ("TTGAAATAA", "11", "MK"),
+        ("ATTAAATAA", "11", "MK"),
+        ("TTGAAATAA", None, "MK"),
+        ("CTGAAATAA", None, "MK"),
+        ("GTGAAATAA", None, "VK"),
+        ("ATTAAATAA", None, "IK"),
+    ],
+)
+def test_web_feature_extraction_translates_table_start_codon_as_methionine(
+    tmp_path: Path,
+    python_helpers_namespace: dict[str, object],
+    sequence: str,
+    transl_table: str | None,
+    expected: str,
+) -> None:
+    qualifiers = {"locus_tag": ["START_0001"]}
+    if transl_table is not None:
+        qualifiers["transl_table"] = [transl_table]
+    record = SeqRecord(Seq(sequence), id="NC_000010", name="Start")
+    record.features.append(
+        SeqFeature(FeatureLocation(0, len(sequence), strand=1), type="CDS", qualifiers=qualifiers)
+    )
+
+    feature = _extract_features(python_helpers_namespace, _write_genbank(tmp_path, record))[0]
+
+    assert feature["amino_acid_sequence"] == expected
+    assert feature["sequence_warnings"] == []
+
+
+def test_web_feature_extraction_translates_offset_or_five_prime_partial_cds_literally(
+    tmp_path: Path,
+    python_helpers_namespace: dict[str, object],
+) -> None:
+    record = SeqRecord(Seq("AGTGAAATAA"), id="NC_000011", name="Offset")
+    record.features.append(
+        SeqFeature(
+            FeatureLocation(0, 10, strand=1),
+            type="CDS",
+            qualifiers={"locus_tag": ["OFFSET_0001"], "codon_start": ["2"], "transl_table": ["11"]},
+        )
+    )
+    offset_feature = _extract_features(
+        python_helpers_namespace,
+        _write_genbank(tmp_path, record),
+    )[0]
+    assert offset_feature["amino_acid_sequence"] == "VK"
+
+    # The 5' end of a plus-strand GFF3 CDS is its start column; of a minus-strand
+    # CDS, its end column. Only an incomplete 5' end keeps the first codon literal.
+    gff_path, fasta_path = _write_gff3_cds_rows(
+        tmp_path,
+        "GTGAAATAA" + "TTATTTCAC" + "GTGAAACCC" + "GGGTTTCAC",
+        [
+            (1, 9, "+", "0", "ID=plus5;transl_table=11;partial=true;start_range=.,1"),
+            (10, 18, "-", "0", "ID=minus5;transl_table=11;partial=true;end_range=18,."),
+            (19, 27, "+", "0", "ID=plus3;transl_table=11;partial=true;end_range=27,."),
+            (28, 36, "-", "0", "ID=minus3;transl_table=11;partial=true;start_range=.,28"),
+        ],
+    )
+    payload = extract_features_from_gff_fasta_payload(
+        gff_path,
+        fasta_path,
+        selected_features=["CDS"],
+    )
+
+    assert {
+        feature["qualifiers"]["id"][0]: feature["amino_acid_sequence"]
+        for feature in payload["features"]
+    } == {"plus5": "VK", "minus5": "VK", "plus3": "MKP", "minus3": "MKP"}
+
+
+def test_web_feature_extraction_uses_gff3_phase_as_reading_frame(tmp_path: Path) -> None:
+    gff_path, fasta_path = _write_gff3_cds_rows(
+        tmp_path,
+        "CATGAAACCCGGGTAA" + "TTATTTCACGC",
+        [
+            (1, 16, "+", "1", "ID=plus;transl_table=11;partial=true;start_range=.,1"),
+            (17, 27, "-", "2", "ID=minus;transl_table=11;partial=true;end_range=27,."),
+        ],
+    )
+
+    payload = extract_features_from_gff_fasta_payload(
+        gff_path,
+        fasta_path,
+        selected_features=["CDS"],
+    )
+
+    features = {feature["qualifiers"]["id"][0]: feature for feature in payload["features"]}
+    assert features["plus"]["amino_acid_sequence"] == "MKPG"
+    assert features["minus"]["amino_acid_sequence"] == "VK"
+    assert features["plus"]["sequence_warnings"] == []
+    assert features["minus"]["sequence_warnings"] == []
+
+
+def test_web_feature_extraction_matches_mg1655_translation_without_the_qualifier() -> None:
+    record = SeqIO.read(MG1655_START_CODON_SUBSET, "genbank")
+    expected: dict[str, str] = {}
+    for feature in record.features:
+        if feature.type == "CDS":
+            expected[feature.qualifiers["locus_tag"][0]] = feature.qualifiers.pop("translation")[0]
+
+    payload = extract_features_from_records_payload([record], selected_features=["CDS"])
+
+    assert {
+        feature["locus_tag"]: feature["amino_acid_sequence"]
+        for feature in payload["features"]
+        if feature["type"] == "CDS"
+    } == expected
 
 
 def test_web_feature_extraction_adds_compound_location_parts(

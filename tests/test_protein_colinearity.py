@@ -13,7 +13,7 @@ import pandas as pd
 import pytest
 from Bio import SeqIO
 from Bio.Seq import Seq
-from Bio.SeqFeature import CompoundLocation, FeatureLocation, SeqFeature
+from Bio.SeqFeature import AfterPosition, BeforePosition, CompoundLocation, FeatureLocation, SeqFeature
 from Bio.SeqRecord import SeqRecord
 from svgwrite import Drawing
 
@@ -58,8 +58,14 @@ from gbdraw.api.diagram import assemble_linear_diagram_from_records
 from gbdraw.api.options import LinearDiagramOptions
 from gbdraw.exceptions import ValidationError
 from gbdraw.io.comparisons import COMPARISON_COLUMNS
+from gbdraw.io.genome import load_gff_fasta
 from gbdraw.io.record_select import reverse_records
 from gbdraw.render.groups.linear.pairwise_match import PairWiseMatchGroup
+
+
+MG1655_START_CODON_SUBSET = (
+    Path(__file__).resolve().parent / "fixtures" / "cds_translation" / "mg1655_start_codon_subset.gb"
+)
 
 
 def _record(
@@ -959,6 +965,200 @@ def test_extract_cds_proteins_handles_compound_location_span() -> None:
     assert protein.start == 0
     assert protein.end == 18
     assert protein.strand == 1
+
+
+def _write_gff3_contig(
+    tmp_path: Path,
+    sequence: str,
+    rows: list[tuple[int, int, str, str, str]],
+) -> tuple[Path, Path]:
+    """Write one GFF3 contig whose CDS rows are (start, end, strand, phase, attributes)."""
+
+    gff_path = tmp_path / "proteins.gff3"
+    fasta_path = tmp_path / "proteins.fasta"
+    lines = ["##gff-version 3", f"##sequence-region ctg1 1 {len(sequence)}"]
+    lines.extend(
+        f"ctg1\ttest\tCDS\t{start}\t{end}\t.\t{strand}\t{phase}\t{attributes}"
+        for start, end, strand, phase, attributes in rows
+    )
+    gff_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    fasta_path.write_text(f">ctg1\n{sequence}\n", encoding="utf-8")
+    return gff_path, fasta_path
+
+
+def _protein_sequences_by_locus_tag(result: object) -> dict[str, str]:
+    return {
+        str(protein.locus_tag): protein.sequence
+        for proteins in result.proteins_by_record  # type: ignore[attr-defined]
+        for protein in proteins
+    }
+
+
+@pytest.mark.linear
+def test_extract_cds_proteins_matches_mg1655_translation_from_gff3(tmp_path: Path) -> None:
+    record = SeqIO.read(MG1655_START_CODON_SUBSET, "genbank")
+    cds_features = [feature for feature in record.features if feature.type == "CDS"]
+    expected = {
+        feature.qualifiers["locus_tag"][0]: feature.qualifiers["translation"][0]
+        for feature in cds_features
+    }
+    rows = [
+        (
+            int(feature.location.start) + 1,
+            int(feature.location.end),
+            "+" if feature.location.strand == 1 else "-",
+            "0",
+            f"ID={tag};locus_tag={tag};transl_table=11",
+        )
+        for feature in cds_features
+        for tag in feature.qualifiers["locus_tag"]
+    ]
+    gff_path, fasta_path = _write_gff3_contig(tmp_path, str(record.seq), rows)
+
+    records = load_gff_fasta([str(gff_path)], [str(fasta_path)])
+
+    assert _protein_sequences_by_locus_tag(extract_cds_proteins(records)) == expected
+
+
+@pytest.mark.linear
+@pytest.mark.parametrize("reverse", [False, True])
+def test_extract_cds_proteins_reads_gff3_phase_and_five_prime_completeness(
+    tmp_path: Path,
+    reverse: bool,
+) -> None:
+    gff_path, fasta_path = _write_gff3_contig(
+        tmp_path,
+        "CATGAAACCCGGGTAA" + "GTGAAACCCGGGTAA" + "GTGAAACCCGGG" + "CCCGGGTTTCAC" + "GTGAAACCCGGG",
+        [
+            (1, 16, "+", "1", "ID=phase1;locus_tag=phase1;partial=true;start_range=.,1"),
+            (17, 31, "+", "0", "ID=complete;locus_tag=complete;transl_table=11"),
+            (32, 43, "+", "0", "ID=plus3;locus_tag=plus3;transl_table=11;partial=true;end_range=43,."),
+            (44, 55, "-", "0", "ID=minus3;locus_tag=minus3;transl_table=11;partial=true;start_range=.,44"),
+            (56, 67, "+", "0", "ID=pseudo;locus_tag=pseudo;transl_table=11;pseudo=true"),
+        ],
+    )
+
+    records = load_gff_fasta(
+        [str(gff_path)],
+        [str(fasta_path)],
+        reverse_flags=[reverse],
+    )
+
+    assert _protein_sequences_by_locus_tag(extract_cds_proteins(records)) == {
+        "phase1": "MKPG",
+        "complete": "MKPG",
+        "plus3": "MKPG",
+        "minus3": "MKPG",
+        "pseudo": "VKPG",
+    }
+
+
+@pytest.mark.linear
+def test_extract_cds_proteins_keeps_fuzzy_five_prime_codon_literal() -> None:
+    record = _record(
+        "record_fuzzy",
+        sequence="GTGAAACCC" + "GGGTTTCAC" + "GTGAAACCC",
+        features=[
+            SeqFeature(
+                FeatureLocation(BeforePosition(0), 9, strand=1),
+                type="CDS",
+                qualifiers={"locus_tag": ["plus5"], "transl_table": ["11"]},
+            ),
+            SeqFeature(
+                FeatureLocation(9, AfterPosition(18), strand=-1),
+                type="CDS",
+                qualifiers={"locus_tag": ["minus5"], "transl_table": ["11"]},
+            ),
+            SeqFeature(
+                FeatureLocation(18, AfterPosition(27), strand=1),
+                type="CDS",
+                qualifiers={"locus_tag": ["plus3"], "transl_table": ["11"]},
+            ),
+        ],
+    )
+
+    assert _protein_sequences_by_locus_tag(extract_cds_proteins([record])) == {
+        "plus5": "VKP",
+        "minus5": "VKP",
+        "plus3": "MKP",
+    }
+
+
+@pytest.mark.linear
+def test_protein_caches_do_not_reuse_results_from_the_literal_start_translation() -> None:
+    """FE-07 evidence: cached LOSATP rows from the literal GTG translation stay unused."""
+
+    def gtg_records(qualifiers: dict[str, list[str]]) -> list[SeqRecord]:
+        return [
+            _record(
+                "record_a",
+                sequence="GTGAAATAG" * 20,
+                features=[_cds(0, 9, qualifiers={"transl_table": ["11"], **qualifiers})],
+            ),
+            _record(
+                "record_b",
+                sequence="GTGAAATAG" * 20,
+                features=[_cds(9, 18, qualifiers={"transl_table": ["11"], **qualifiers})],
+            ),
+        ]
+
+    extraction = extract_protein_identity_manifest(
+        gtg_records({}),
+        record_instance_keys=("left", "right"),
+    )
+    literal = extract_protein_identity_manifest(
+        gtg_records({"translation": ["VK"]}),
+        record_instance_keys=("left", "right"),
+    )
+    query_proteins, subject_proteins = extraction.proteins_by_record
+    assert [protein.sequence for protein in query_proteins + subject_proteins] == ["MK", "MK"]
+    # Current schema-4 raw cache keys include each record's protein-set hash.
+    assert set(extraction.protein_set_hashes).isdisjoint(literal.protein_set_hashes)
+
+    # Legacy schema-2 promotion re-derives the legacy FASTA from the current
+    # extraction, so an entry computed from the literal translation is rejected.
+    literal_query = protein_colinearity_module._with_stable_web_protein_ids(
+        literal.proteins_by_record[0],
+        "legacy_left",
+    )
+    literal_subject = protein_colinearity_module._with_stable_web_protein_ids(
+        literal.proteins_by_record[1],
+        "legacy_right",
+    )
+    _, query_hash, subject_hash = build_web_losat_cache_key(
+        query_fasta=proteins_to_fasta(literal_query),
+        subject_fasta=proteins_to_fasta(literal_subject),
+        args=[],
+    )
+    scan = promote_legacy_protein_raw_cache_entries(
+        [
+            {
+                "schema": 2,
+                "kind": "raw-losat",
+                "key": "literal-start",
+                "program": "blastp",
+                "outfmt": "6",
+                "args": [],
+                "text": (
+                    f"{literal_query[0].protein_id}\t{literal_subject[0].protein_id}"
+                    "\t100\t2\t0\t0\t1\t2\t1\t2\t1e-5\t20\n"
+                ),
+                "queryCanonicalHash": query_hash,
+                "subjectCanonicalHash": subject_hash,
+            }
+        ],
+        query_proteins=query_proteins,
+        subject_proteins=subject_proteins,
+        query_fasta=proteins_to_fasta(query_proteins),
+        subject_fasta=proteins_to_fasta(subject_proteins),
+        identity_manifest=extraction.identity_manifest,
+        expected_args=[],
+    )
+
+    assert scan.promotion is None
+    assert [rejection.reason for rejection in scan.rejections] == [
+        "Legacy query FASTA hash does not match."
+    ]
 
 
 @pytest.mark.linear

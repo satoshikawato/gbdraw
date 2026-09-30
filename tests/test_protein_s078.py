@@ -24,7 +24,8 @@ def test_frozen_source_identity_and_isolation():
         for node in ast.parse(source).body:
             if isinstance(node, ast.FunctionDef):
                 fn = getattr(module, node.name)
-                assert fn is not getattr(live, node.name)
+                # A live helper deleted after S077 cannot alias the frozen copy.
+                assert fn is not getattr(live, node.name, None)
                 assert fn.__globals__ is vars(module)
             elif isinstance(node, ast.ClassDef) and node.name.startswith('_'):
                 assert getattr(module, node.name) is not getattr(live, node.name)

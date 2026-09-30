@@ -39,6 +39,7 @@ from gbdraw.core.record_metadata import (
     _source_feature_index,
     _source_feature_location_parts,
 )
+from gbdraw.core.sequence import translate_cds
 from gbdraw.exceptions import ParseError, ValidationError
 from gbdraw.features.ids import compute_feature_hash_from_location_parts
 from gbdraw.features.visibility import should_include_feature_in_analysis
@@ -2648,27 +2649,6 @@ def _clean_protein_sequence(sequence: object | None) -> str | None:
     return protein
 
 
-def _translation_table(feature: SeqFeature) -> int | str:
-    raw_table = _first_qualifier(feature, "transl_table")
-    if raw_table is None:
-        return 1
-    try:
-        return int(raw_table)
-    except ValueError:
-        return raw_table
-
-
-def _codon_start(feature: SeqFeature) -> int:
-    raw_start = _first_qualifier(feature, "codon_start")
-    if raw_start is None:
-        return 1
-    try:
-        codon_start = int(raw_start)
-    except ValueError:
-        return 1
-    return codon_start if codon_start in {1, 2, 3} else 1
-
-
 def _feature_identifier(feature: SeqFeature) -> str | None:
     feature_id = _first_qualifier(feature, "ID")
     if feature_id:
@@ -2760,11 +2740,7 @@ def _resolve_gene_parent_id(
 
 def _translate_cds_feature(record: SeqRecord, feature: SeqFeature) -> str | None:
     try:
-        nucleotide_sequence = feature.extract(record.seq)
-        offset = _codon_start(feature) - 1
-        if offset:
-            nucleotide_sequence = nucleotide_sequence[offset:]
-        protein = nucleotide_sequence.translate(table=_translation_table(feature), to_stop=False)
+        protein = translate_cds(feature, feature.extract(record.seq))
     except Exception as exc:
         logger.debug(
             "Skipping CDS feature %s on %s: translation failed: %s",

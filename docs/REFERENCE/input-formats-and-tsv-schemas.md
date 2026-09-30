@@ -14,9 +14,20 @@ GFF3 must be paired with FASTA from the same biological source. GFF3 column 1
 and the first token of the matching FASTA header must agree exactly.
 Coordinates are 1-based and inclusive; strand is `+` or `-`; CDS phase is `0`,
 `1`, or `2`. `ID` values should be unique, and `Parent` should preserve the
-source annotation model. A `translation` attribute is used when present.
-Otherwise a valid CDS may be translated from sequence, strand, phase or
-`codon_start`, and genetic code.
+source annotation model.
+
+CDS protein sequences use the GenBank `/translation` qualifier or the GFF3
+`translation` attribute when present. Otherwise gbdraw translates the CDS
+nucleotides with `transl_table` (default 1). The reading frame starts at
+`codon_start` or, for GFF3, at the phase of the 5'-most CDS part. As in INSDC
+`/translation`, the first residue is `M` when the 5' end is complete, the frame
+starts at the first base, and the first codon is a start codon of that table;
+for example, `GTG` and `TTG` become `M` in table 11. A 5' end is incomplete when
+its position is fuzzy (`<` on the plus strand, `>` on the minus strand) or GFF3
+has `start_range` (plus strand) or `end_range` (minus strand). Such a CDS, one
+read from frame 2 or 3, and a `pseudo` or `pseudogene` CDS translate the first
+codon literally. `transl_except` is not applied. Feature popups and Interactive SVG
+metadata do not translate a `pseudo`, `pseudogene`, or fuzzy-location CDS.
 
 When one source contains several records, select the intended record by ID or
 index, or explicitly expand all records. Use Circular presentation for a

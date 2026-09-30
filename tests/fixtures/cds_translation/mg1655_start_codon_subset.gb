@@ -1,0 +1,124 @@
+LOCUS       MG1655_SUBSET           2135 bp    DNA     linear   UNK 01-JAN-1980
+DEFINITION  Escherichia coli K-12 MG1655 CDS subset with ATG, GTG, TTG, ATT and
+            CTG starts; each CDS with 20 bp flanks copied from NC_000913.3.
+ACCESSION   MG1655_CDS_SUBSET
+VERSION     MG1655_CDS_SUBSET
+KEYWORDS    .
+SOURCE      .
+  ORGANISM  Escherichia coli str. K-12 substr. MG1655
+            .
+FEATURES             Location/Qualifiers
+     source          1..2135
+                     /organism="Escherichia coli str. K-12 substr. MG1655"
+                     /mol_type="genomic DNA"
+     CDS             21..77
+                     /gene="ytgB"
+                     /locus_tag="b4822"
+                     /codon_start=1
+                     /transl_table=11
+                     /product="protein YtgB"
+                     /protein_id="YP_010283919.1"
+                     /translation="MLILTLLRHWHVRTKSER"
+     CDS             complement(118..150)
+                     /gene="ybgV"
+                     /locus_tag="b4768"
+                     /codon_start=1
+                     /transl_table=11
+                     /product="protein YbgV"
+                     /protein_id="YP_010051177.1"
+                     /translation="MVDKFNNSDC"
+     CDS             191..241
+                     /gene="ytgA"
+                     /locus_tag="b4800"
+                     /codon_start=1
+                     /transl_table=11
+                     /product="protein YtgA"
+                     /protein_id="YP_010051214.1"
+                     /translation="MSIIILATISTTQENK"
+     CDS             complement(282..494)
+                     /gene="cspH"
+                     /locus_tag="b0989"
+                     /codon_start=1
+                     /transl_table=11
+                     /product="CspA family protein CspH"
+                     /protein_id="NP_415509.1"
+                     /translation="MSRKMTGIVKTFDRKSGKGFIIPSDGRKEVQVHISAFTPRDAEVL
+                     IPGLRVEFCRVNGLRGPTAANVYLS"
+     CDS             535..723
+                     /gene="ymcF"
+                     /locus_tag="b4723"
+                     /codon_start=1
+                     /transl_table=11
+                     /product="protein YmcF"
+                     /protein_id="YP_009518761.1"
+                     /translation="MTQHLHFRCPCCHGSQYRTSAFDVTERNPLGAKCIFCKSTMITFD
+                     NVALQIRTDHAPLDFTK"
+     CDS             complement(764..1306)
+                     /gene="infC"
+                     /locus_tag="b1718"
+                     /codon_start=1
+                     /transl_table=11
+                     /product="translation initiation factor IF-3"
+                     /protein_id="NP_416233.1"
+                     /translation="MKGGKRVQTARPNRINGEIRAQEVRLTGLEGEQLGIVSLREALEK
+                     AEEAGVDLVEISPNAEPPVCRIMDYGKFLYEKSKSSKEQKKKQKVIQVKEIKFRPGTDE
+                     GDYQVKLRSLIRFLEEGDKAKITLRFRGREMAHQQIGMEVLNRVKDDLQELAVVESFPT
+                     KIEGRQMIMVLAPKKKQ"
+     CDS             complement(1347..2048)
+                     /gene="hda"
+                     /locus_tag="b2496"
+                     /codon_start=1
+                     /transl_table=11
+                     /product="inibitor of reinitiation of DNA replication"
+                     /protein_id="NP_416991.2"
+                     /translation="MNTPAQLSLPLYLPDDETFASFWPGDNSSLLAALQNVLRQEHSGY
+                     IYLWAREGAGRSHLLHAACAELSQRGDAVGYVPLDKRTWFVPEVLDGMEHLSLVCIDNI
+                     ECIAGDELWEMAIFDLYNRILESGKTRLLITGDRPPRQLNLGLPDLASRLDWGQIYKLQ
+                     PLSDEDKLQALQLRARLRGFELPEDVGRFLLKRLDREMRTLFMTLDQLDRASITAQRKL
+                     TIPFVKEILKL"
+     CDS             2089..2115
+                     /gene="ymdG"
+                     /locus_tag="b4737"
+                     /codon_start=1
+                     /transl_table=11
+                     /product="protein YmdG"
+                     /protein_id="YP_009518762.2"
+                     /translation="MKNSVAEH"
+ORIGIN
+        1 tccgctgttg cgatgacttc gtgttaatct taacgttatt acggcattgg cacgtcagaa
+       61 caaaatctga gaggtgaatc cgttgagtat aattatcata aatggcgaat caagtactta
+      121 gcaatccgaa ttattaaact tgtctaccac taataactgt cccgaatgaa aaatctgaga
+      181 ggtgaatccg ttgagtataa ttatcttagc gacgatttcg acgactcaag agaataaatg
+      241 acgtttaagc catgaaacaa gtttaaacaa gcagcgtcat attaagagag ataaacattt
+      301 gccgctgttg gtcctcgcag gccatttacg cggcaaaatt ccacacgtaa tcctggtata
+      361 agcacttctg cgtcgcgggg agtgaatgcg gaaatatgga cctgaacttc tttacgaccg
+      421 tcggagggga taatgaatcc tttgccgctt ttgcgatcaa aggttttgac aattcctgtc
+      481 attttacggg acaaacaaat tccttactga aaattacgct ctaaggttgc cattattact
+      541 caacatctcc atttccgctg tccatgttgt catggttcac agtaccgcac atcggcattc
+      601 gatgtgacgg agcgaaaccc tttgggcgct aagtgtattt tttgtaaatc gacgatgatc
+      661 acctttgata acgtcgcgct gcaaatacgc actgaccatg cgccgctgga tttcacaaaa
+      721 taatatcagg ctccctcgtg gaggacagtg ctacttgaag gccttactgt ttcttcttag
+      781 gagcgagcac catgatcatc tggcggcctt cgatcttcgt tgggaaggat tcgaccactg
+      841 ccagttcttg caaatcgtct ttcacgcgat taagcacttc cataccgatt tgctggtgcg
+      901 ccatctcacg accgcggaaa cgcagcgtga ttttggcttt atcaccctct tcgagaaagc
+      961 gaatcaggct gcggagtttt acctgatagt cgccttcatc tgtaccagga cggaatttaa
+     1021 tttccttaac ctggataact ttttgctttt tcttctgttc cttagaagac ttgctctttt
+     1081 catagaggaa tttgccgtaa tccattatac gacaaaccgg cggctcggcg ttagggctga
+     1141 tctcgactaa gtctactccg gcttcttctg ctttctccag agcttctctc agactcacaa
+     1201 taccaagctg ctcgccttcc agacctgtta agcgaacttc ctgggcgcga atttcgccat
+     1261 tgatacggtt agggcgcgcc gtttgaactc gttttccgcc tttaatacct tattcctcca
+     1321 attgtttccg acaataaaca ccttatctac aacttcagaa tttctttcac aaacggaatg
+     1381 gtcagcttac gttgcgcggt aatcgacgca cgatccaact gatccaacgt cataaatagc
+     1441 gtgcgcattt ctctgtcgag ccgcttcagc aagaaacgcc ccacatcttc cggcagttca
+     1501 aaaccacgca aacgcgcgcg taactgtagc gcctgcaact tatcttcatc agaaagtggc
+     1561 tgcaatttgt agatctgccc ccagtcgagt cgcgacgcga gatccggtaa tcccagattc
+     1621 aactgccgcg gtggacgatc gccggtgatc aacaaccgtg ttttgcccga ttccagaatt
+     1681 cgattgtaga gatcgaaaat cgccatctcc cacaactcat cgcctgcaat acactcaatg
+     1741 ttgtcgatac agaccagcga caaatgctcc ataccgtcga gcacttccgg aacaaaccag
+     1801 gtgcgtttat ccagcgggac atagcccacc gcatcgccac gctgcgacaa ttccgcgcaa
+     1861 gccgcgtgca gcagatggct gcgccccgcg ccttcgcgtg cccagagata gatgtaaccg
+     1921 ctatgttcct gacgcagcac gttttgcagc gcggccagta aagaggagtt atcccccggc
+     1981 cagaaacttg caaaggtttc gtcgtcagga agataaagtg gcaaagagag ctgtgccggt
+     2041 gtgttcagag atacctcaac caggatttat gtgagagagt gcaacctgat gaaaaatagt
+     2101 gtcgctgagc actaaaattt aatgtaaatg gtgtg
+//
