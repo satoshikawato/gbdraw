@@ -65,7 +65,7 @@ for (const inputMethod of ['keyboard', 'pointer']) {
     await expectHistory(page, baseline, 0, 'Generate diagram');
 
     const summary = page.locator('summary[aria-label="Labels"]');
-    await summary.click();
+    await summary.press('Enter');
     const select = page.locator('#circular-label-mode');
     await expect(select).toHaveValue('out');
     if (inputMethod === 'keyboard') {

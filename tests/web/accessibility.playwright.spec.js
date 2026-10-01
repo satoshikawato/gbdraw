@@ -132,7 +132,7 @@ for (const mode of ['circular', 'linear']) {
 
 const windowTip = async (page) => {
   const section = page.locator('details').filter({ has: page.locator('summary[aria-label="Dinucleotide content/skew"]') });
-  if (await section.getAttribute('open') === null) await section.locator(':scope > summary').click();
+  if (await section.getAttribute('open') === null) await section.locator(':scope > summary').press('Enter');
   const input = section.getByRole('spinbutton', { name: 'Window', exact: true });
   const descriptionId = await input.getAttribute('aria-describedby', { timeout: 30_000 });
   expect(descriptionId).toBeTruthy();

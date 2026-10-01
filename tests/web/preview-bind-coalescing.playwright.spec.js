@@ -33,7 +33,7 @@ for (const mode of ['circular', 'linear']) {
       await switchMode(page, mode === 'circular' ? 'linear' : 'circular');
       await switchMode(page, mode);
       expect(await page.evaluate(() => window.__GBDRAW_APP__.results[0].content)).toBe(before);
-      await page.locator('summary[aria-label="Features"]').click();
+      await page.locator('summary[aria-label="Features"]').press('Enter');
       await page.getByLabel('Block Stroke Width', { exact: true }).fill('3');
       await expect.poll(() => page.evaluate(() => {
         const app = window.__GBDRAW_APP__;

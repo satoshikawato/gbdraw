@@ -68,7 +68,7 @@ test('chloroplast multipart placement survives strand and label changes and sess
   const strands = await reveal(page.getByRole('checkbox', { name: 'Separate Strands', exact: true, includeHidden: true }));
   await strands.uncheck();
   await generate('03-combined-both');
-  await page.locator('summary[aria-label="Labels"]').click();
+  await page.locator('summary[aria-label="Labels"]').press('Enter');
   await page.locator('#circular-label-mode').selectOption('out');
   await generate('04-combined-outer');
   await strands.check();

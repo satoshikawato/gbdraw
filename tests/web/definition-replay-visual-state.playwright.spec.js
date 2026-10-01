@@ -30,7 +30,7 @@ for (const composite of [false, true]) {
           // Loading the saved preview does not edit its definition. Start a
           // real edit before awaiting the definition owner's helper completion.
           const beforeEdit = completed;
-          await page.getByLabel('Titles and Record Labels', { exact: true }).click();
+          await page.getByLabel('Titles and Record Labels', { exact: true }).press('Enter');
           await page.getByLabel('Default font size', { exact: true }).fill('19');
           await expect.poll(() => completed, { timeout: 180000 }).toBeGreaterThan(beforeEdit);
           expect(await page.evaluate(async () => (

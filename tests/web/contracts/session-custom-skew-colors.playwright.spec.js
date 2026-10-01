@@ -219,7 +219,7 @@ const changePaletteThroughUi = async (page) => {
     has: page.locator('summary[aria-label="Colors"]')
   });
   if (!await colorsPanel.getAttribute('open')) {
-    await colorsPanel.locator('summary[aria-label="Colors"]').click();
+    await colorsPanel.locator('summary[aria-label="Colors"]').press('Enter');
   }
   const palette = page.getByLabel('Palette', { exact: true });
   await expect(palette).toBeVisible();

@@ -119,7 +119,7 @@ test('Linear Accession and Length resolve independent Auto modes from rendered r
   await expect(page.locator('[data-linear-source-card]')).toHaveCount(2);
 
   const titles = page.getByLabel('Titles and Record Labels', { exact: true });
-  await titles.click();
+  await titles.press('Enter');
   const accession = page.getByLabel('Accession visibility', { exact: true });
   const length = page.getByLabel('Length / Coordinates visibility', { exact: true });
   await expect(accession).toHaveValue('auto');
@@ -270,7 +270,7 @@ test('Auto disclosure names draft fields and navigates without changing Result o
   const accession = page.getByLabel('Accession visibility', { exact: true });
   const length = page.getByLabel('Length / Coordinates visibility', { exact: true });
   await expect(layout).toContainText('Accession and Length / Coordinates: Auto will show');
-  await titles.click();
+  await titles.press('Enter');
   await expect(accession).toHaveValue('auto');
   await expect(length).toHaveValue('auto');
 
@@ -329,7 +329,7 @@ test('Auto disclosure names draft fields and navigates without changing Result o
   await focusAfterHistoryCapture(page, length);
   await length.selectOption('auto');
   await page.setViewportSize({ width: 390, height: 844 });
-  await titles.click();
+  await titles.press('Enter');
   for (const [field, control, key] of [
     ['Accession', accession, 'Enter'], ['Length / Coordinates', length, 'Space']
   ]) {
@@ -341,7 +341,7 @@ test('Auto disclosure names draft fields and navigates without changing Result o
     await expect(control).toBeFocused();
     await expect(control).toBeInViewport();
     expect(await snapshot()).toEqual(before);
-    await titles.click();
+    await titles.press('Enter');
   }
   await page.getByRole('button', { name: 'Record Labels: Accession', exact: true }).click();
   await expect(accession).toBeFocused();
@@ -420,7 +420,7 @@ test('independent Linear typography follows linked, imported, and History journe
   const axisCard = page.locator('.card').filter({
     has: page.locator('summary').filter({ hasText: 'Axis & Scale' })
   }).first();
-  await axisCard.locator('summary').click();
+  await axisCard.locator('summary').press('Enter');
   const link = page.getByLabel('Link Linear scale and ruler label font sizes');
   const scaleSize = page.getByLabel('Linear scale font size');
   const rulerSize = page.getByLabel('Linear ruler label font size');
@@ -457,8 +457,8 @@ test('independent Linear typography follows linked, imported, and History journe
   await expect(scaleSize).toHaveValue('26');
   await expect(rulerSize).toHaveValue('13');
 
-  await axisCard.locator('summary').click();
-  await axisCard.locator('summary').click();
+  await axisCard.locator('summary').press('Enter');
+  await axisCard.locator('summary').press('Enter');
   await expect(link).not.toBeChecked();
   await expect(scaleSize).toHaveValue('26');
   await expect(rulerSize).toHaveValue('13');
@@ -497,7 +497,7 @@ test('independent Linear typography follows linked, imported, and History journe
 
   await page.locator('.card').filter({
     has: page.locator('summary').filter({ hasText: 'Axis & Scale' })
-  }).first().locator('summary').click();
+  }).first().locator('summary').press('Enter');
   const importedLink = page.getByLabel('Link Linear scale and ruler label font sizes');
   await focusAfterHistoryCapture(page, importedLink);
   await importedLink.check();

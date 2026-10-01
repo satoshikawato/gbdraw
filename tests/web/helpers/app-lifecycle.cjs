@@ -271,10 +271,12 @@ const openApp = async (
   return assertAppShellReady(page, { waitForPalette, checkErrors });
 };
 
+// Enter toggles a summary wherever its help-tip button sits; a click at the
+// summary center can land on that button and leave the section closed.
 const reveal = async (locator) => {
   for (const details of await locator.locator('xpath=ancestor::details').all()) {
     if (await details.getAttribute('open') === null) {
-      await details.locator(':scope > summary').click();
+      await details.locator(':scope > summary').press('Enter');
     }
   }
   return locator;
