@@ -248,6 +248,14 @@ decisions are in
   as feature popups do, with the table interval added for a cropped record. The
   SVG record group of a cropped or reverse-complemented Linear record carries
   `data-gbdraw-record-source-start`, `-end`, and `-step` (CO-10, PD-OI-076).
+- Sessions saved from `main` with a reverse-complemented Linear record load
+  with the same ribbons: the CLI and the web app convert their stored
+  comparison rows to the search frame once at Load, and the web app rewrites
+  the stored table bytes. A CLI sidecar of `-b` with `--reverse_complement`
+  replays the ribbons of the original run. An empty Similarity alignment
+  target (`""`) in a `main` Web Session is read as no target. A comparison row
+  outside its record reports the new `SEARCH_FRAME` reason of
+  `COMPARISON_INPUT` (CO-07, PD-OI-073).
 
 - Web Custom Track Slots: a Depth row is added only when a logical Depth series
   gets its first file and removed when the series loses its last file, in both
