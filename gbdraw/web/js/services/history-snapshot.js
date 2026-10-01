@@ -468,6 +468,7 @@ const buildFilesData = (state, fileStore) => ({
     record_subtitle: seq.record_subtitle ?? '',
     file_definition: seq.file_definition ?? '',
     file_subtitle: seq.file_subtitle ?? '',
+    inferred_definition: seq.inferred_definition ?? '',
     region_record_id: seq.region_record_id ?? '',
     region_start: seq.region_start ?? null,
     region_end: seq.region_end ?? null,
@@ -505,6 +506,7 @@ const buildIntentFilesData = (state, fileStore) => {
       record_subtitle: seq.record_subtitle ?? '',
       file_definition: seq.file_definition ?? '',
       file_subtitle: seq.file_subtitle ?? '',
+      inferred_definition: seq.inferred_definition ?? '',
       region_record_id: seq.region_record_id ?? '',
       region_start: seq.region_start ?? null,
       region_end: seq.region_end ?? null,
@@ -616,6 +618,7 @@ const applyFilesData = (state, filesData, fileStore, normalizeLinearSeqList = nu
         record_subtitle: seq.record_subtitle ?? '',
         file_definition: seq.file_definition ?? '',
         file_subtitle: seq.file_subtitle ?? '',
+        inferred_definition: seq.inferred_definition ?? '',
         region_record_id: seq.region_record_id ?? '',
         region_start: seq.region_start ?? null,
         region_end: seq.region_end ?? null,
@@ -1257,6 +1260,25 @@ export const createHistorySnapshotService = ({
     && before.identity.compactSignature === after?.identity?.compactSignature
   );
 
+  // The alignment plan, its Reset receipt, and record translations; intents
+  // and checkpoints capture and restore them together.
+  const captureAlignmentState = () => ({
+    receipt: getGeneratedArtifactRef(state.similarityAlignmentResetReceipt, null),
+    plan: getGeneratedArtifactRef(state.similarityAlignmentPlan, null),
+    recordTranslations: getGeneratedArtifactRef(state.linearRecordTranslations, [])
+  });
+  const installAlignmentState = (alignmentState) => {
+    setGeneratedArtifactRef(
+      state.similarityAlignmentResetReceipt,
+      cloneJsonData(alignmentState?.receipt) || null
+    );
+    setGeneratedArtifactRef(state.similarityAlignmentPlan, cloneJsonData(alignmentState?.plan) || null);
+    setGeneratedArtifactRef(
+      state.linearRecordTranslations,
+      cloneJsonData(alignmentState?.recordTranslations) || []
+    );
+  };
+
   const buildGeneratedArtifactSnapshot = () => {
     const ui = typeof buildUiStateData === 'function'
       ? buildUiStateData({ includePreviewNavigation: false })
@@ -1373,11 +1395,7 @@ export const createHistorySnapshotService = ({
     return cloneJsonData({
       config,
       files: buildIntentFilesData(state, fileStore),
-      alignmentState: {
-        receipt: getGeneratedArtifactRef(state.similarityAlignmentResetReceipt, null),
-        plan: getGeneratedArtifactRef(state.similarityAlignmentPlan, null),
-        recordTranslations: getGeneratedArtifactRef(state.linearRecordTranslations, [])
-      },
+      alignmentState: captureAlignmentState(),
       ui: uiIntent,
       drafts: buildDraftIntentData(state),
       features: buildFeatureIntentData(features),
@@ -1467,18 +1485,7 @@ export const createHistorySnapshotService = ({
       if (domains.has('files')) {
         applyFilesData(state, intent.files || {}, fileStore, normalizeLinearSeqList);
       }
-      if (domains.has('alignmentState')) {
-        setGeneratedArtifactRef(state.similarityAlignmentResetReceipt,
-          cloneJsonData(intent.alignmentState?.receipt) || null);
-        setGeneratedArtifactRef(
-          state.similarityAlignmentPlan,
-          cloneJsonData(intent.alignmentState?.plan) || null
-        );
-        setGeneratedArtifactRef(
-          state.linearRecordTranslations,
-          cloneJsonData(intent.alignmentState?.recordTranslations) || []
-        );
-      }
+      if (domains.has('alignmentState')) installAlignmentState(intent.alignmentState);
       if (domains.has('drafts')) applyDraftIntentData(state, intent.drafts || {});
       if (domains.has('features')) applyFeatureIntentData(state, intent.features || {});
       if (domains.has('editorState')) applyEditorIntentData(state, intent.editorState || {});
@@ -1506,6 +1513,7 @@ export const createHistorySnapshotService = ({
     const checkpoint = cloneJsonData({
       config,
       files: buildFilesData(state, fileStore),
+      alignmentState: captureAlignmentState(),
       drafts: buildDraftIntentData(state),
       ...generated,
       editorState
@@ -1548,6 +1556,7 @@ export const createHistorySnapshotService = ({
       await nextTick();
 
       applyFilesData(state, snapshot.files || {}, fileStore, normalizeLinearSeqList);
+      installAlignmentState(snapshot.alignmentState);
 
       if (state.skipCaptureBaseConfig) state.skipCaptureBaseConfig.value = true;
       if (state.skipPositionReapply) state.skipPositionReapply.value = true;

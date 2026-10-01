@@ -166,6 +166,7 @@ const state = {
     record_subtitle: 'Subtitle',
     file_definition: 'Default organism',
     file_subtitle: 'Default subtitle',
+    inferred_definition: '<i>Escherichia coli</i> K-12',
     region_record_id: '#1',
     region_start: 2,
     region_end: 9,
@@ -222,6 +223,8 @@ assert.deepEqual(bindings.linearSeqs[0].gb, {
 assert.equal(bindings.linearSeqs[0].uid, 'linear-uid-1');
 assert.equal(bindings.linearSeqs[0].file_definition, 'Default organism');
 assert.equal(bindings.linearSeqs[0].file_subtitle, 'Default subtitle');
+// IN-06 (D-12): the current writer keeps each record's inferred definition.
+assert.equal(bindings.linearSeqs[0].inferred_definition, '<i>Escherichia coli</i> K-12');
 assert.equal(bindings.linearComparisons[0].id, 'comparison-uid-1');
 assert.deepEqual(Object.keys(bindings.linearComparisons[0]), ['id', 'file']);
 assert.equal(Object.hasOwn(bindings, 'linearCanonicalComparisons'), false);

@@ -46,6 +46,7 @@ import {
   moveLinearSourceGroup,
   planLinearSourceRemoval,
   getLinearSourceDefaultDefinition,
+  inferredDefinitionForRecord,
   setLinearSourceDefaultDefinition,
   getLinearSourceDefaultSubtitle,
   setLinearSourceDefaultSubtitle,
@@ -1041,20 +1042,32 @@ export const createAppSetup = () => {
 
   const pendingLinearRecordExpansions = new Set();
   const pendingLinearMetadataInference = new Set();
-  const expandDiscoveredLinearRecords = ({ uid, records }) => {
-    if (!pendingLinearRecordExpansions.delete(uid)) return;
+  const expandDiscoveredLinearRecords = ({ uid, records, inferDefinitions = false }) => {
+    const expanding = pendingLinearRecordExpansions.delete(uid);
     const index = linearSeqs.findIndex((seq) => seq.uid === uid);
-    if (index < 0 || records.length < 2) return;
+    if (index < 0) return;
     const source = linearSeqs[index];
-    if (source.region_record_id || source.region_start != null || source.region_end != null) return;
+    if (!expanding || records.length < 2 || source.region_record_id) {
+      if (inferDefinitions) {
+        source.inferred_definition = inferredDefinitionForRecord(records, source.region_record_id);
+      }
+      return;
+    }
     const row = linearRecordRowFor(uid, index + 1);
-    const expanded = buildDisambiguatedRecordEntries(records).map((record, recordIndex) => {
-      return createLinearSeq({
-        ...source,
-        uid: recordIndex === 0 ? uid : undefined,
-        region_record_id: record.value
-      });
-    });
+    // Expanded records keep only File-level values. A crop or record display
+    // value of the replaced File does not apply to the new records (IN-04).
+    const expanded = buildDisambiguatedRecordEntries(records).map((record, recordIndex) => createLinearSeq({
+      uid: recordIndex === 0 ? uid : undefined,
+      gb: source.gb,
+      gff: source.gff,
+      fasta: source.fasta,
+      depth: source.depth,
+      losat_gencode: source.losat_gencode,
+      file_definition: source.file_definition,
+      file_subtitle: source.file_subtitle,
+      inferred_definition: inferDefinitions ? record.inferredDefinition || '' : '',
+      region_record_id: record.value
+    }));
     applyLinearSeqMutation([
       ...linearSeqs.slice(0, index), ...expanded, ...linearSeqs.slice(index + 1)
     ], { alignmentMutation: 'record selector changed.' });
@@ -1066,20 +1079,9 @@ export const createAppSetup = () => {
       state.sessionImportRollbackInProgress?.value ||
       state.sessionResourceDiscoveryDeferred?.value
     );
-    if (!isRollbackOrSessionLoad && pendingLinearMetadataInference.delete(uid)) {
-      if (Array.isArray(records) && records.length > 0) {
-        const first = records[0];
-        const group = linearSourceGroups.value.find((entry) => (
-          entry.uid === uid || entry.records.some(({ sequence }) => sequence.uid === uid)
-        ));
-        if (group) {
-          if (first.inferredDefinition && !getLinearSourceDefaultDefinition(group)) {
-            setLinearSourceDefaultDefinition(group, first.inferredDefinition);
-          }
-        }
-      }
-    }
-    return expandDiscoveredLinearRecords({ uid, records });
+    // Only an upload infers record definitions; a loaded Session keeps its own.
+    const inferDefinitions = !isRollbackOrSessionLoad && pendingLinearMetadataInference.delete(uid);
+    return expandDiscoveredLinearRecords({ uid, records, inferDefinitions });
   };
   const materializeAutomaticLinearRecords = async () => {
     if (mode.value !== 'linear') return;
@@ -3182,6 +3184,17 @@ export const createAppSetup = () => {
     return history.runUndoableCheckpoint('Reset settings', async () => {
       featureActions.clearSpecificRulePatternDrafts();
       resetSettingsState(state);
+      // Linear records return to their File defaults and inferred definitions;
+      // Files, record selections, File defaults, and depth stay. The mutation
+      // also clears the alignment plan (D-15).
+      applyLinearSeqMutation(linearSeqs.map((sequence) => ({
+        ...sequence,
+        definition: '',
+        record_subtitle: '',
+        region_start: null,
+        region_end: null,
+        region_reverse: false
+      })), { alignmentMutation: 'settings reset.' });
       invalidateLinearComparisonArtifacts();
       matchSequenceRegistry?.reset?.();
       circularTrackNewRenderer.value = 'dinucleotide_skew';
@@ -4127,6 +4140,10 @@ export const createAppSetup = () => {
     if (String(sequence.region_record_id || '') === next) return false;
     similarityAlignmentActions?.clearForMutation?.('record selector changed.');
     sequence.region_record_id = next;
+    // The inferred definition follows the record the row now selects (D-12).
+    if (lInputType.value === 'gb' && linearRecordSelector.statusFor(sequence) === 'ready') {
+      sequence.inferred_definition = inferredDefinitionForRecord(linearRecordSelector.recordsFor(sequence), next);
+    }
     return true;
   };
 

@@ -4166,7 +4166,7 @@ test('File-level default organism and subtitle apply across records and allow pe
   expect(resetResolved[1]).toEqual({ label: '<i>Escherichia coli</i> O157:H7', subtitle: 'Default Cluster' });
 });
 
-test('GenBank file upload infers the file default organism but leaves the file default subtitle empty', async ({ page }) => {
+test('GenBank file upload infers each record definition and leaves the file defaults empty', async ({ page }) => {
   await openApp(page);
   await page.evaluate(() => {
     window.__GBDRAW_APP__.mode = 'linear';
@@ -4196,29 +4196,26 @@ FEATURES             Location/Qualifiers
     app.setLinearSeqPrimaryFile(0, 'gb', new File([content], 'Sakai_sample.gbk', { type: 'text/plain' }));
   }, sampleGenbank);
 
+  // D-12 (PD-OI-067): the record gets its own inferred definition; both file
+  // defaults stay empty, so nothing is marked as a file default.
   await expect.poll(() => page.evaluate(() => {
     const app = window.__GBDRAW_APP__;
     const group = app.linearSourceGroups[0];
+    const seq = app.linearSeqs[0];
     return {
-      definition: app.getLinearSourceDefaultDefinition(group),
-      subtitle: app.getLinearSourceDefaultSubtitle(group)
+      fileDefinition: app.getLinearSourceDefaultDefinition(group),
+      fileSubtitle: app.getLinearSourceDefaultSubtitle(group),
+      inferred: seq.inferred_definition,
+      effective: app.resolveLinearRecordEffectiveDefinition(seq, group)
     };
   })).toEqual({
-    definition: '<i>Escherichia coli</i> O157:H7 str. Sakai',
-    // Only the organism is inferred as a file default. A subtitle describes one
-    // replicon, so inferring it from the first record would overwrite the others.
-    subtitle: ''
+    fileDefinition: '',
+    fileSubtitle: '',
+    inferred: '<i>Escherichia coli</i> O157:H7 str. Sakai',
+    effective: '<i>Escherichia coli</i> O157:H7 str. Sakai'
   });
 
-  await expect(page.getByLabel('Default definition for file 1')).toHaveValue('<i>Escherichia coli</i> O157:H7 str. Sakai');
+  await expect(page.getByLabel('Default definition for file 1')).toHaveValue('');
   await expect(page.getByLabel('Default subtitle for file 1')).toHaveValue('');
-
-  await page.evaluate(() => {
-    const options = document.querySelector('[data-linear-record-options]');
-    if (options) options.open = true;
-  });
-
-  const recordDefInput = page.getByLabel('Definition for sequence 1');
-  await expect(recordDefInput).toHaveAttribute('placeholder', '<i>Escherichia coli</i> O157:H7 str. Sakai');
-  await expect(page.getByText('Using file default').first()).toBeVisible();
+  await expect(page.getByText('Using file default')).toHaveCount(0);
 });

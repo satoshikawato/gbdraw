@@ -2893,6 +2893,7 @@ const applyWebFileBindings = (
       record_subtitle: String(sequence?.record_subtitle || ''),
       file_definition: String(sequence?.file_definition || ''),
       file_subtitle: String(sequence?.file_subtitle || ''),
+      inferred_definition: String(sequence?.inferred_definition || ''),
       region_record_id: String(sequence?.region_record_id || ''),
       region_start: sequence?.region_start ?? null,
       region_end: sequence?.region_end ?? null,
