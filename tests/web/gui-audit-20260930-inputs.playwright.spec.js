@@ -179,12 +179,14 @@ for (const [version, fixture] of [
   expect(outcome.error.summary).toMatch(/Generate/);
   // D-25 Must preserve: the panel runs the needed Generate, then Save succeeds.
   expect(outcome.error.code).toBe('SESSION_SAVE_REQUIRES_GENERATE');
+  await expect(page.locator('[data-session-save-needs-generate]')).toBeVisible();
   const alert = page.locator('.border-l-red-500');
   await expect(alert.getByRole('button', { name: 'Save Session', exact: true })).toHaveCount(0);
   await alert.getByRole('button', { name: 'Generate', exact: true }).click();
   await page.waitForFunction(() => !window.__GBDRAW_APP__.processing, null, { timeout: 300_000 });
   await settle(page);
   expect(await page.evaluate(() => window.__GBDRAW_APP__.errorLog?.code ?? null)).toBeNull();
+  await expect(page.locator('[data-session-save-needs-generate]')).toHaveCount(0);
   const saved = await attemptSave(page);
   expect(saved.error).toBeNull();
   expect(saved.downloads).toHaveLength(1);

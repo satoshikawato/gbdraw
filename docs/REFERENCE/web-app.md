@@ -147,8 +147,8 @@ Undo history.
 Before the first **Generate Diagram**, Save needs every input of the active
 mode, the same check that Generate uses; an empty card or a missing FASTA is
 reported by its **Sequence** number. A Result loaded from a Session saved before
-Session 40 has no current feature metadata: the load message says so, and
-**Save Session** reports that one Generate is needed and offers **Generate**.
+Session 40 has no current feature metadata: a notice above the Result says so,
+and **Save Session** reports that one Generate is needed and offers **Generate**.
 After that Generate, Save writes the current Session format.
 
 A loaded Circular Session shows its saved Result without reading the embedded

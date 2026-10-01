@@ -3556,6 +3556,9 @@ export const createAppSetup = () => {
   };
 
   const errorDisplay = computed(() => normalizeUserFacingError(errorLog.value));
+  // D-25: a Result without current feature metadata (a Session older than 40)
+  // is saved only after one Generate; the notice comes from the same state.
+  const sessionSaveNeedsGenerate = computed(() => results.value.length > 0 && !state.featureCatalog?.value);
   const reloadAfterOperationError = () => window.location.reload();
 
   const sessionTitleLabel = computed(() => {
@@ -4228,6 +4231,7 @@ export const createAppSetup = () => {
     applyFeatureRecordRotation: featureRecordRotation.apply,
     closeFeaturePopup,
     featurePlacementActions: featureActions.placementActions,
+    sessionSaveNeedsGenerate,
     processing,
     processingStatus,
     sessionImportPending,

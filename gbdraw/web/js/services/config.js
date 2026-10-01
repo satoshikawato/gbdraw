@@ -4705,10 +4705,7 @@ const importSessionDocument = async (e, options = {}) => {
     if (!options.isCurrent()) throw new Error('Session loading was canceled.');
     await options.afterImport?.({ status: 'ok', decompressedCharacters: candidate.characters, isCurrent: options.isCurrent });
     if (!options.isCurrent()) throw new Error('Session loading was canceled.');
-    // D-25: a legacy Result has no current feature metadata until one Generate.
-    alert(state.results.value.length > 0 && !state.featureCatalog?.value
-      ? 'Session loaded successfully! It was saved by an older gbdraw: Generate once before Save Session.'
-      : 'Session loaded successfully!');
+    alert('Session loaded successfully!');
     return {
       status: 'ok',
       data,
