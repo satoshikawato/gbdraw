@@ -18,7 +18,23 @@ decisions are in
 
 <!-- web-gui-audit-20260930 P03 -->
 
-<!-- web-gui-audit-20260930 P04 -->
+- Circular Multi-Record Canvas output (the Web default) no longer reserves an
+  empty depth slot when there is no depth input; a one-record canvas now has the
+  same slot geometry, legend and center definition as a single-record diagram,
+  so every Web-default Circular figure changes (PV-08, N-01).
+- A Multi-Record Canvas legend now uses the same builder as a single-record
+  diagram: custom slot labels and colors, added skew slots, region annotation
+  and depth slot `legend_label` values now appear (TR-01, N-04).
+- When the center definition blocks the inside tracks, the species line is
+  wrapped at word boundaries and the tracks are placed again. An explicit
+  `center_reserved_radius` or a non-default definition font size keeps one
+  line. The remaining failure names the slot and the reserved definition
+  radius, and the Web shows it as `TRACK_LAYOUT` / `DEFINITION_RESERVED`; a
+  failure caused by an explicit `center_reserved_radius` names that radius
+  instead (`CENTER_RESERVED`) (PV-08, PD-OI-078).
+- A specific-color rule whose caption equals a generated legend row, such as a
+  rule captioned `rRNA` on tRNA features, keeps its own color row with a hex
+  suffix (`rRNA [#ff0000]`) instead of being dropped (N-06).
 
 - Non-pseudo CDS translated without `/translation` now start with `M` when the
   5' end is complete, the reading frame starts at the first base, and the first
