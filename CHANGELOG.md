@@ -21,7 +21,9 @@ decisions are in
   parser) now reads the first 12 columns by position and validates their types.
   Tables with extra columns, such as `-outfmt "6 std qlen slen"`, are no longer
   misread. Only lines that start with `#` are comments, so a `#` inside an ID
-  no longer truncates the row (CO-05).
+  no longer truncates the row. The web app reports a malformed table as a
+  comparison-input error with its line number instead of an unclassified
+  validation error (CO-05).
 - **CLI behavior change:** a missing, unreadable, or malformed `-b` file now
   stops the run with a non-zero exit status instead of being skipped, which
   shifted later tables onto the wrong record pair (N-03).

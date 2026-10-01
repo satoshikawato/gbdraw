@@ -48,8 +48,9 @@ integers, and the other values must be finite numbers. The command line, Python
 API, web app, and Circular similarity rings apply the same rule. For a Linear
 comparison, a row with fewer than 12 columns, a value of the wrong type, or a
 missing or unreadable file stops the run; the error names the line of a
-malformed row. A Circular similarity ring whose table is rejected is skipped
-with a warning and keeps its ring position.
+malformed row. In the web app, Generate reports a comparison-input error whose
+details give that line. A Circular similarity ring whose table is rejected is
+skipped with a warning and keeps its ring position.
 
 Query and subject direction must match the displayed endpoint mapping. For a
 Linear comparison, a row whose `qseqid` or `sseqid` names the other endpoint or

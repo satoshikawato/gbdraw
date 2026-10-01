@@ -1,5 +1,5 @@
 {
-  "description": "BLAST outfmt 6/7 table vectors. Every comparison-table reader must give the same result: the first 12 columns are read by position and typed; extra columns are ignored; a line whose first non-blank character is # is a comment; malformed tables fail with the line number. A line is an array of tab-separated fields or a raw string.",
+  "description": "BLAST outfmt 6/7 table vectors. Every comparison-table reader must give the same result: the first 12 columns are read by position and typed; extra columns are ignored; a line whose first non-blank character is # is a comment; malformed tables fail with the line number, and their Web diagnostic (gbdraw.web_support.error_adapter) carries it as row plus the column where a value is invalid. A line is an array of tab-separated fields or a raw string.",
   "columns": ["query", "subject", "identity", "alignment_length", "mismatches", "gap_opens", "qstart", "qend", "sstart", "send", "evalue", "bitscore"],
   "cases": [
     {
@@ -84,7 +84,7 @@
     {
       "name": "11 columns",
       "lines": [["SA", "SB", "95.0", "200", "0", "0", "101", "300", "1101", "1300", "1e-50"]],
-      "expect": {"error": "line 1: expected at least 12 tab-separated BLAST outfmt 6 columns; found 11"}
+      "expect": {"error": "line 1: expected at least 12 tab-separated BLAST outfmt 6 columns; found 11", "diagnostic": {"code": "COMPARISON_INPUT", "context": {"reason": "FIELDS", "row": 1, "columnCount": 12}}}
     },
     {
       "name": "later row has fewer than 12 columns",
@@ -93,7 +93,7 @@
         ["SA", "SB", "95.0", "200", "0", "0", "101", "300", "1101", "1300", "1e-50", "300"],
         ["SA", "SB", "90.5", "50", "5", "0", "2001", "2050", "2050", "2001"]
       ],
-      "expect": {"error": "line 3: expected at least 12 tab-separated BLAST outfmt 6 columns; found 10"}
+      "expect": {"error": "line 3: expected at least 12 tab-separated BLAST outfmt 6 columns; found 10", "diagnostic": {"code": "COMPARISON_INPUT", "context": {"reason": "FIELDS", "row": 3, "columnCount": 12}}}
     },
     {
       "name": "empty value inside a row",
@@ -101,7 +101,7 @@
         ["SA", "SB", "95.0", "200", "0", "0", "101", "300", "1101", "1300", "1e-50", "300"],
         ["SA", "SB", "", "50", "5", "0", "2001", "2050", "2050", "2001", "2e-10", "80.5"]
       ],
-      "expect": {"error": "line 2, column 3 \\(identity\\): '' is not a finite number"}
+      "expect": {"error": "line 2, column 3 \\(identity\\): '' is not a finite number", "diagnostic": {"code": "COMPARISON_INPUT", "context": {"reason": "FINITE", "row": 2, "column": 3}}}
     },
     {
       "name": "numeric sequence IDs stay text",
@@ -111,7 +111,7 @@
     {
       "name": "non-numeric identity",
       "lines": [["SA", "SB", "high", "200", "0", "0", "101", "300", "1101", "1300", "1e-50", "300"]],
-      "expect": {"error": "line 1, column 3 \\(identity\\): 'high' is not a finite number"}
+      "expect": {"error": "line 1, column 3 \\(identity\\): 'high' is not a finite number", "diagnostic": {"code": "COMPARISON_INPUT", "context": {"reason": "FINITE", "row": 1, "column": 3}}}
     },
     {
       "name": "non-integer coordinate after comments",
@@ -120,12 +120,12 @@
         ["SA", "SB", "95.0", "200", "0", "0", "101", "300", "1101", "1300", "1e-50", "300"],
         ["SA", "SB", "95.0", "200", "0", "0", "101.5", "300", "1101", "1300", "1e-50", "300"]
       ],
-      "expect": {"error": "line 3, column 7 \\(qstart\\): '101.5' is not an integer"}
+      "expect": {"error": "line 3, column 7 \\(qstart\\): '101.5' is not an integer", "diagnostic": {"code": "COMPARISON_INPUT", "context": {"reason": "INTEGER", "row": 3, "column": 7}}}
     },
     {
       "name": "non-finite bitscore",
       "lines": [["SA", "SB", "95.0", "200", "0", "0", "101", "300", "1101", "1300", "1e-50", "inf"]],
-      "expect": {"error": "line 1, column 12 \\(bitscore\\): 'inf' is not a finite number"}
+      "expect": {"error": "line 1, column 12 \\(bitscore\\): 'inf' is not a finite number", "diagnostic": {"code": "COMPARISON_INPUT", "context": {"reason": "FINITE", "row": 1, "column": 12}}}
     },
     {
       "name": "header row",
@@ -133,12 +133,12 @@
         ["qseqid", "sseqid", "pident", "length", "mismatch", "gapopen", "qstart", "qend", "sstart", "send", "evalue", "bitscore"],
         ["SA", "SB", "95.0", "200", "0", "0", "101", "300", "1101", "1300", "1e-50", "300"]
       ],
-      "expect": {"error": "line 1, column 3 \\(identity\\): 'pident' is not a finite number"}
+      "expect": {"error": "line 1, column 3 \\(identity\\): 'pident' is not a finite number", "diagnostic": {"code": "COMPARISON_INPUT", "context": {"reason": "FINITE", "row": 1, "column": 3}}}
     },
     {
       "name": "missing query ID",
       "lines": [["", "SB", "95.0", "200", "0", "0", "101", "300", "1101", "1300", "1e-50", "300"]],
-      "expect": {"error": "line 1, column 1 \\(query\\): the sequence ID is empty"}
+      "expect": {"error": "line 1, column 1 \\(query\\): the sequence ID is empty", "diagnostic": {"code": "COMPARISON_INPUT", "context": {"reason": "REQUIRED", "row": 1, "column": 1}}}
     }
   ]
 }

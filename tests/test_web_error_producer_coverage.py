@@ -32,7 +32,7 @@ FILLS = ("", "0", "1", "PRIVATE", "#1")
 # be removed here as soon as the Web defines them.
 PENDING_WEB_FIELDS = frozenset({"dinucleotide"})
 PENDING_WEB_REASONS = frozenset({"POSITIVE_INTEGER_OR_AUTO", "DINUCLEOTIDE", "DEPTH_VALUES"})
-PENDING_WEB_CONTEXT_KEYS = frozenset({"configPath", "innerPx", "outerPx"})
+PENDING_WEB_CONTEXT_KEYS = frozenset({"configPath", "innerPx", "outerPx", "column"})
 
 _TYPED_API = "typed Python API and request contract checks (types, shapes, cross-field rules)"
 _SESSION = "Session document and request decoding checks; the Web Session reader reports Session format errors"

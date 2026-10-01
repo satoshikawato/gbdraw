@@ -41,19 +41,35 @@ _NUMERIC_COLUMNS = COMPARISON_COLUMNS[2:]
 _INTEGER_COLUMNS = frozenset(
     ("alignment_length", "mismatches", "gap_opens", "qstart", "qend", "sstart", "send")
 )
+# Producer diagnostics (gbdraw.web_support.error_adapter): identifiers and
+# 1-based line/column locators only, never a file name or cell value.
+_UNREADABLE = {"code": "INPUT_UNREADABLE", "field": "comparison"}
 
 
 class _InvalidCell(Exception):
     """One invalid value, located by data-row position before it is reported."""
 
-    def __init__(self, row: int, column: str, detail: str) -> None:
+    def __init__(self, row: int, column: str, reason: str, detail: str) -> None:
         super().__init__(detail)
         self.row = row
         self.column = column
+        self.reason = reason
         self.detail = detail
 
+    @property
+    def column_number(self) -> int:
+        return COMPARISON_COLUMNS.index(self.column) + 1
+
     def location(self) -> str:
-        return f"column {COMPARISON_COLUMNS.index(self.column) + 1} ({self.column})"
+        return f"column {self.column_number} ({self.column})"
+
+    def diagnostic(self, row: int) -> dict[str, object]:
+        return {
+            "code": "COMPARISON_INPUT",
+            "reason": self.reason,
+            "row": row,
+            "column": self.column_number,
+        }
 
 
 def _empty_comparison_frame() -> DataFrame:
@@ -64,15 +80,15 @@ def _normalize(frame: DataFrame) -> DataFrame:
     """Type the 12 positional columns of ``frame`` or raise ``_InvalidCell``."""
 
     frame = frame.reset_index(drop=True)
-    first_invalid: tuple[int, int, str, str] | None = None
+    first_invalid: tuple[int, int, str, str, str] | None = None
 
-    def note(rows: np.ndarray, order: int, column: str, detail_for_row) -> None:
+    def note(rows: np.ndarray, order: int, column: str, reason: str, detail_for_row) -> None:
         nonlocal first_invalid
         if rows.size == 0:
             return
         row = int(rows[0])
         if first_invalid is None or (row, order) < first_invalid[:2]:
-            first_invalid = (row, order, column, detail_for_row(row))
+            first_invalid = (row, order, column, reason, detail_for_row(row))
 
     normalized: dict[str, pd.Series] = {}
     for order, column in enumerate(COMPARISON_COLUMNS):
@@ -80,7 +96,13 @@ def _normalize(frame: DataFrame) -> DataFrame:
         if column in _ID_COLUMNS:
             values = series.to_numpy(dtype=object)
             missing = pd.isna(values) | (values == "")
-            note(np.flatnonzero(missing), order, column, lambda _row: "the sequence ID is empty")
+            note(
+                np.flatnonzero(missing),
+                order,
+                column,
+                "REQUIRED",
+                lambda _row: "the sequence ID is empty",
+            )
             normalized[column] = series.astype(str)
             continue
         numeric = series if is_numeric_dtype(series) else pd.to_numeric(series, errors="coerce")
@@ -95,14 +117,15 @@ def _normalize(frame: DataFrame) -> DataFrame:
             np.flatnonzero(invalid),
             order,
             column,
+            "INTEGER" if integer else "FINITE",
             lambda row, series=series, kind=kind: f"{str(series.iloc[row])!r} {kind}",
         )
         if integer and numeric.dtype.kind != "i" and not invalid.any():
             numeric = numeric.astype("int64")
         normalized[column] = numeric
     if first_invalid is not None:
-        row, _order, column, detail = first_invalid
-        raise _InvalidCell(row, column, detail)
+        row, _order, column, reason, detail = first_invalid
+        raise _InvalidCell(row, column, reason, detail)
     # ``frame`` is already private to this call, so its columns need no copy.
     return DataFrame(normalized, columns=list(COMPARISON_COLUMNS), copy=False)
 
@@ -115,7 +138,10 @@ def normalize_comparison_dataframe(dataframe: DataFrame) -> DataFrame:
     """
 
     if not isinstance(dataframe, DataFrame):
-        raise ValidationError("A comparison table must be a pandas DataFrame.")
+        raise ValidationError(
+            "A comparison table must be a pandas DataFrame.",
+            diagnostic={"code": "COMPARISON_INPUT", "field": "comparison"},
+        )
     if set(COMPARISON_COLUMNS).issubset(set(dataframe.columns)):
         frame = dataframe.loc[:, list(COMPARISON_COLUMNS)]
     elif len(dataframe.columns) >= len(COMPARISON_COLUMNS):
@@ -124,13 +150,19 @@ def normalize_comparison_dataframe(dataframe: DataFrame) -> DataFrame:
     else:
         raise ValidationError(
             "A comparison DataFrame must contain the 12 BLAST outfmt 6 columns "
-            f"({', '.join(COMPARISON_COLUMNS)})."
+            f"({', '.join(COMPARISON_COLUMNS)}).",
+            diagnostic={
+                "code": "COMPARISON_INPUT",
+                "reason": "FIELDS",
+                "columnCount": len(COMPARISON_COLUMNS),
+            },
         )
     try:
         return _normalize(frame)
     except _InvalidCell as cell:
         raise ValidationError(
-            f"Comparison DataFrame row {cell.row + 1}, {cell.location()}: {cell.detail}."
+            f"Comparison DataFrame row {cell.row + 1}, {cell.location()}: {cell.detail}.",
+            diagnostic=cell.diagnostic(cell.row + 1),
         ) from None
 
 
@@ -146,7 +178,13 @@ def _is_data_line(line: bytes) -> bool:
 def _short_row_error(name: str, line_number: int, field_count: int) -> ValidationError:
     return ValidationError(
         f"{name}: line {line_number}: expected at least {len(COMPARISON_COLUMNS)} "
-        f"tab-separated BLAST outfmt 6 columns; found {field_count}."
+        f"tab-separated BLAST outfmt 6 columns; found {field_count}.",
+        diagnostic={
+            "code": "COMPARISON_INPUT",
+            "reason": "FIELDS",
+            "row": line_number,
+            "columnCount": len(COMPARISON_COLUMNS),
+        },
     )
 
 
@@ -181,7 +219,8 @@ def read_comparison_table(
     first non-blank character is ``#`` are outfmt 7 comments; blank and
     comment-only tables have no rows. Columns after the first 12 are ignored
     with an INFO log. A missing or unreadable file, a row with fewer than 12
-    columns, or a value of the wrong type raises ValidationError with the line.
+    columns, or a value of the wrong type raises ValidationError with the line;
+    its ``diagnostic`` carries the line as ``row`` and, for a value, the column.
     """
 
     try:
@@ -192,10 +231,15 @@ def read_comparison_table(
             name = label or str(source)
             path = Path(source)
             if not path.is_file():
-                raise ValidationError(f"{name}: the comparison file does not exist or is not a file.")
+                raise ValidationError(
+                    f"{name}: the comparison file does not exist or is not a file.",
+                    diagnostic=_UNREADABLE,
+                )
             data = path.read_bytes()
     except (OSError, UnicodeError) as exc:
-        raise ValidationError(f"{name}: the comparison file could not be read: {exc}") from exc
+        raise ValidationError(
+            f"{name}: the comparison file could not be read: {exc}", diagnostic=_UNREADABLE
+        ) from exc
     # bytes.splitlines() breaks at \n, \r\n and \r, as the pandas C parser does.
     lines = data.splitlines()
     if lines and lines[0].startswith(codecs.BOM_UTF8):
@@ -223,9 +267,14 @@ def read_comparison_table(
             encoding="utf-8-sig",
         )
     except UnicodeError as exc:
-        raise ValidationError(f"{name}: the comparison file could not be read: {exc}") from exc
+        raise ValidationError(
+            f"{name}: the comparison file could not be read: {exc}", diagnostic=_UNREADABLE
+        ) from exc
     except pd.errors.ParserError as exc:
-        raise ValidationError(f"{name}: the comparison table could not be parsed: {exc}") from exc
+        raise ValidationError(
+            f"{name}: the comparison table could not be parsed: {exc}",
+            diagnostic={"code": "COMPARISON_INPUT"},
+        ) from exc
     try:
         return _normalize(raw)
     except _InvalidCell as cell:
@@ -237,7 +286,8 @@ def read_comparison_table(
             cell.row + 1,
         )
         raise ValidationError(
-            f"{name}: line {line_number}, {cell.location()}: {cell.detail}."
+            f"{name}: line {line_number}, {cell.location()}: {cell.detail}.",
+            diagnostic=cell.diagnostic(line_number),
         ) from None
 
 

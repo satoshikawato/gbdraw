@@ -34,6 +34,7 @@ from gbdraw.session_request_codec import (
     _decode_comparisons,
     decode_canonical_request,
 )
+from gbdraw.web_support.error_adapter import serialize_web_error
 
 _VECTORS = json.loads(
     (Path(__file__).parent / "fixtures" / "comparison_outfmt6_table_cases.json").read_text(
@@ -114,6 +115,13 @@ _ENTRY_POINTS = {
     "--comparisons_table": _read_with_comparisons_table,
     "conservation ring": _read_with_conservation,
 }
+# A similarity ring skips an unreadable source and reports its text, so only the
+# entry points that raise the reader error carry its Web diagnostic.
+_DIAGNOSTIC_ENTRY_POINTS = frozenset(_ENTRY_POINTS) - {"conservation ring"}
+
+
+def _web(error: BaseException) -> dict:
+    return serialize_web_error(error, operation="generate", stage="render")
 
 
 @pytest.mark.parametrize("entry_point", list(_ENTRY_POINTS))
@@ -127,8 +135,11 @@ def test_every_comparison_reader_follows_the_shared_outfmt_vectors(
     read = _ENTRY_POINTS[entry_point]
     expect = case["expect"]
     if "error" in expect:
-        with pytest.raises(ValidationError, match=expect["error"]):
+        with pytest.raises(ValidationError, match=expect["error"]) as caught:
             read(path)
+        if entry_point in _DIAGNOSTIC_ENTRY_POINTS:
+            payload = _web(caught.value)
+            assert {key: payload[key] for key in ("code", "context")} == expect["diagnostic"]
         return
 
     frame = read(path)
@@ -181,14 +192,40 @@ def test_normalized_dataframe_uses_first_twelve_positional_columns() -> None:
         normalize_comparison_dataframe(boolean)
 
 
+@pytest.mark.parametrize(
+    ("value", "context"),
+    [
+        (
+            pd.DataFrame([["SA", "SB", "95.0", "200", "0", "0", "x", "300", "1101", "1300", "1e-50", "300"]]),
+            {"reason": "INTEGER", "row": 1, "column": 7},
+        ),
+        (pd.DataFrame([["SA", "SB", "95.0"]]), {"reason": "FIELDS", "columnCount": 12}),
+        ("PRIVATE_TABLE", {"field": "comparison"}),
+    ],
+    ids=["invalid value", "too few columns", "not a DataFrame"],
+)
+def test_normalized_dataframe_failures_carry_a_comparison_diagnostic(value, context) -> None:
+    from gbdraw.io.comparisons import normalize_comparison_dataframe
+
+    with pytest.raises(ValidationError) as caught:
+        normalize_comparison_dataframe(value)
+
+    payload = _web(caught.value)
+    assert payload["code"] == "COMPARISON_INPUT"
+    assert payload["context"] == context
+    assert "PRIVATE" not in json.dumps(payload)
+
+
 def test_load_comparisons_rejects_a_missing_file_instead_of_shifting_later_tables(
     tmp_path: Path,
 ) -> None:
     valid = _write_table(tmp_path / "SB_SC.tsv", _VECTORS["cases"][0]["lines"])
     missing = tmp_path / "SA_SB.tsv"
 
-    with pytest.raises(ValidationError, match=r"SA_SB\.tsv: the comparison file does not exist"):
+    with pytest.raises(ValidationError, match=r"SA_SB\.tsv: the comparison file does not exist") as caught:
         load_comparisons([str(missing), str(valid)], _PERMISSIVE)
+    assert _web(caught.value)["code"] == "INPUT_UNREADABLE"
+    assert _web(caught.value)["context"] == {"field": "comparison"}
 
 
 def test_load_comparisons_rejects_a_malformed_file_instead_of_shifting_later_tables(
@@ -199,6 +236,61 @@ def test_load_comparisons_rejects_a_malformed_file_instead_of_shifting_later_tab
 
     with pytest.raises(ValidationError, match=r"SA_SB\.tsv: line 1: expected at least 12"):
         load_comparisons([str(malformed), str(valid)], _PERMISSIVE)
+
+
+@pytest.fixture(scope="module")
+def web_helpers() -> dict[str, object]:
+    helpers_js = Path(gbdraw.__file__).parent / "web" / "js" / "app" / "python-helpers.js"
+    source = helpers_js.read_text(encoding="utf-8")
+    namespace: dict[str, object] = {}
+    exec(source.split("`", 1)[1].rsplit("`", 1)[0], namespace)
+    return namespace
+
+
+def test_web_generate_reports_a_malformed_blast_table_line_as_a_comparison_diagnostic(
+    tmp_path: Path, web_helpers: dict[str, object]
+) -> None:
+    """The Worker's Generate entry point returns the reader's diagnostic, not UNKNOWN."""
+
+    from gbdraw.api import InMemoryRecordSource, LinearDiagramRequest, RecordInput
+    from gbdraw.session_request_codec import encode_canonical_request
+
+    request = LinearDiagramRequest(
+        records=tuple(
+            RecordInput(source=InMemoryRecordSource(record)) for record in _pair_records("SA", "SB")
+        ),
+        options=LinearDiagramOptions(linear_comparisons=(LinearComparison(0, 1, _hits("SA", "SB")),)),
+    )
+    encoded = encode_canonical_request(request)
+    workspace = tmp_path / "gbdraw-web-render-1"
+    resources = workspace / "resources"
+    resources.mkdir(parents=True)
+    (workspace / ".gbdraw-worker-render-workspace").touch()
+    resource_paths = {}
+    for index, resource in enumerate(encoded.resources, start=1):
+        target = resources / f"{index:04d}.bin"
+        target.write_bytes(resource.content)
+        resource_paths[resource.resource_id] = str(target)
+    # The browser uploads a BLAST table as a nucleotideBlast resource.
+    comparison = encoded.payload["comparisons"][0]
+    comparison["kind"] = "nucleotideBlast"
+    comparison.pop("encoding")
+    case = next(
+        case for case in _VECTORS["cases"] if case["name"] == "non-integer coordinate after comments"
+    )
+    Path(resource_paths[comparison["resourceId"]]).write_text(
+        _table_text(case["lines"]), encoding="utf-8"
+    )
+
+    result = web_helpers["run_canonical_request_wrapper"](
+        json.dumps(encoded.payload), json.dumps(resource_paths), str(workspace)
+    )
+
+    error = result["error"]
+    assert (error["code"], error["operation"]) == ("COMPARISON_INPUT", "generate")
+    assert error["context"] == {"reason": "INTEGER", "row": 3, "column": 7}
+    assert "101.5" not in json.dumps(error)
+    assert not workspace.exists()
 
 
 _COLUMN_MAPPING = re.compile(r"names\s*=\s*(?:list\(|tuple\()?\s*COMPARISON_COLUMNS")
