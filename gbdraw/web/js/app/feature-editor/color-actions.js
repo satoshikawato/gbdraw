@@ -654,12 +654,18 @@ export const createFeatureColorActions = ({
     moveCaptionStateKey(legendColorOverrides, oldCaption, newCaption);
     moveCaptionStateKey(legendStrokeOverrides, oldCaption, newCaption);
     moveAddedLegendCaption(oldCaption, newCaption);
-    syncOriginalLegendMetadataRename(oldCaption, newCaption, color);
 
+    // A renderer-generated row keeps its generated caption as its identity, so
+    // Generate replays the rename onto the regenerated row (PV-02). Rows the
+    // editor added are identified by their current caption.
     const legendEntry = legendEntries.value.find((entry) => captionsMatch(entry?.caption, oldCaption));
+    const generatedRow = Boolean(legendEntry) && originalLegendOrder.value.some(
+      (caption) => captionsMatch(caption, legendEntry.originalCaption || legendEntry.caption)
+    );
+    if (!generatedRow) syncOriginalLegendMetadataRename(oldCaption, newCaption, color);
     if (legendEntry) {
       legendEntry.caption = newCaption;
-      legendEntry.originalCaption = newCaption;
+      if (!generatedRow) legendEntry.originalCaption = newCaption;
       if (color) {
         legendEntry.color = color;
       }
@@ -773,15 +779,21 @@ export const createFeatureColorActions = ({
       features = [];
     }
 
-    if (features.length || manualSpecificRules.some(rule => rule.cap === oldCaption)) {
+    // D-06 (PD-OI-061): a rename onto another entry of a different color asks
+    // Merge, Suffix, or Cancel, with or without features. A target owned by a
+    // specific-color rule keeps the PD-OI-042 caption disambiguation instead.
+    const targetEntry = findLegendEntryByCaption(newCaption);
+    const isDistinctTargetEntry = targetEntry && !captionsMatch(targetEntry.caption, oldCaption);
+    const ruleOwnedTarget = isDistinctTargetEntry
+      && manualSpecificRules.some(rule => captionsMatch(rule.cap, targetEntry.caption));
+    const featureOrRuleRename = features.length > 0 || manualSpecificRules.some(rule => rule.cap === oldCaption);
+
+    if (featureOrRuleRename && (!isDistinctTargetEntry || ruleOwnedTarget || colorsMatch(targetEntry.color, currentColor))) {
       await applyLegendRenameRequest({ ...request, currentColor, features,
         finalCaption: newCaption, finalColor: currentColor });
       clearLegendRenameDialog();
       return;
     }
-
-    const targetEntry = findLegendEntryByCaption(newCaption);
-    const isDistinctTargetEntry = targetEntry && !captionsMatch(targetEntry.caption, oldCaption);
 
     if (isDistinctTargetEntry && !colorsMatch(targetEntry.color, currentColor)) {
       if (!request.targetResolution) {

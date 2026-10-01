@@ -42,6 +42,7 @@ const emptyOperations = () => ({
   legendRenames: [],
   legendDeletes: [],
   legendAdds: [],
+  legendOrder: [],
   callerTransforms: []
 });
 
@@ -225,6 +226,24 @@ const compilePlanBundle = ({
   });
   const allResultIndexes = operationsByResult.map((_, index) => index);
 
+  // D-08 (PD-OI-063): an edited Legend order is replayed over the renderer's
+  // slots. The renderer places generated entries in their generated order and
+  // direct additions after them; only a different order emits an operation,
+  // and a renamed entry then takes its slot from that order.
+  const generatedRank = new Map([...originalCaptions].map((caption, index) => [caption, index]));
+  const defaultLegendOrder = [
+    ...currentEntries.filter((entry) => generatedRank.has(entry.originalCaption))
+      .sort((left, right) => generatedRank.get(left.originalCaption) - generatedRank.get(right.originalCaption)),
+    ...currentEntries.filter((entry) => !generatedRank.has(entry.originalCaption))
+  ];
+  const legendOrderChanged = originalCaptions.size > 0
+    && currentEntries.some((entry, index) => entry !== defaultLegendOrder[index]);
+  if (legendOrderChanged) {
+    addToResults(operationsByResult, allResultIndexes, 'legendOrder', {
+      captions: Object.freeze(currentEntries.map((entry) => entry.caption))
+    });
+  }
+
   currentEntries.forEach((entry) => {
     const isOriginal = originalCaptions.has(entry.originalCaption);
     if (
@@ -236,8 +255,8 @@ const compilePlanBundle = ({
         from: entry.originalCaption,
         to: entry.caption,
         allowMissing: sourceReplaced,
-        xPos: entry.xPos,
-        yPos: entry.yPos
+        xPos: legendOrderChanged ? null : entry.xPos,
+        yPos: legendOrderChanged ? null : entry.yPos
       });
     }
     if (

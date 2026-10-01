@@ -454,6 +454,10 @@ export const createAppSetup = () => {
   let alignmentReviewBlocksEditor = () => false;
   const rightDrawerActions = createRightDrawerController({ state, watch,
     onClose: () => featureActions?.suspendSpecificRulePatternDrafts(),
+    focusReturn: {
+      isFocusInDrawer: () => Boolean(document.querySelector('.right-drawer')?.contains(document.activeElement)),
+      focusToggle: () => document.querySelector('.drawer-toggle')?.focus()
+    },
     getOpenDisabledReason: () => alignmentReviewBlocksEditor()
       ? 'Finish or cancel alignment review before opening Editor.' : '' });
 
@@ -2271,10 +2275,9 @@ export const createAppSetup = () => {
         || context.bindingOptions.isIncrementalEdit
       ) return;
       legendLayout.captureOriginalStroke();
-      canvasPadding.top = 0;
-      canvasPadding.right = 0;
-      canvasPadding.bottom = 0;
-      canvasPadding.left = 0;
+      // Generate already padded its candidates; another batch Result shows
+      // the current canvas padding when it is displayed (D-09).
+      legendLayout.applyCanvasPadding();
     },
     reconcileSelection(context) {
       if (
@@ -2704,7 +2707,7 @@ export const createAppSetup = () => {
   };
   const DISPLAY_PROJECTED_DOMAINS = Object.freeze([
     'featureFills', 'featureStrokes', 'featureVisibility',
-    'legendFills', 'legendStrokes', 'legendRenames', 'legendDeletes', 'legendAdds'
+    'legendFills', 'legendStrokes', 'legendRenames', 'legendDeletes', 'legendAdds', 'legendOrder'
   ]);
   // D-07 (PD-OI-062): a batch Result shows the canonical color, visibility,
   // Legend, and label edits when it is displayed. Labels follow in the

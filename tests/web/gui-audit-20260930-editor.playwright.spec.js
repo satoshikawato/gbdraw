@@ -222,7 +222,6 @@ test('Redo of an Exact product hide hides the feature again', async ({ page }) =
 });
 
 test('a rename of a legend entry without features survives Generate', async ({ browser }) => {
-  test.fail(true, 'PV-02');
   test.setTimeout(600_000);
   const page = await load(browser, HMMT_SESSION);
   try {
@@ -242,7 +241,6 @@ test('a rename of a legend entry without features survives Generate', async ({ b
 });
 
 test('legend order survives Generate', async ({ browser }) => {
-  test.fail(true, 'PV-03');
   test.setTimeout(600_000);
   const page = await load(browser, HMMT_SESSION);
   try {
@@ -261,7 +259,6 @@ test('legend order survives Generate', async ({ browser }) => {
 });
 
 test('renaming a feature legend entry to an existing caption offers the conflict dialog', async ({ browser }) => {
-  test.fail(true, 'PV-04');
   test.setTimeout(600_000);
   const page = await load(browser, HMMT_SESSION);
   try {
@@ -284,7 +281,6 @@ test('renaming a feature legend entry to an existing caption offers the conflict
 });
 
 test('changing the Linear legend position after a legend-free Generate raises no page error', async ({ browser }) => {
-  test.fail(true, 'GE-07');
   test.setTimeout(600_000);
   const page = await load(browser, 'gbdraw/web/gallery/sessions/lambda_basic_linear.gbdraw-session.json');
   const pageErrors = [];
@@ -305,7 +301,6 @@ test('changing the Linear legend position after a legend-free Generate raises no
 });
 
 test('Escape that closes the Editor returns focus to the Editor toggle', async ({ browser }) => {
-  test.fail(true, 'PV-11');
   test.setTimeout(600_000);
   const page = await load(browser, HMMT_SESSION);
   try {

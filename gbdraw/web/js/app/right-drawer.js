@@ -75,7 +75,13 @@ export const restoreRightDrawerState = (
   state.showRightDrawer.value = Boolean(snapshot?.showRightDrawer);
 };
 
-export const createRightDrawerController = ({ state, watch, getOpenDisabledReason = () => '', onClose = () => {} }) => {
+export const createRightDrawerController = ({
+  state,
+  watch,
+  getOpenDisabledReason = () => '',
+  onClose = () => {},
+  focusReturn = null
+}) => {
   const currentOrthogroupCount = () => orthogroupTabContentCountFromState(state);
   const isTabAvailable = (tab) => ALWAYS_AVAILABLE_TABS.has(tab) || isRightDrawerTabAvailable(
     tab,
@@ -89,9 +95,13 @@ export const createRightDrawerController = ({ state, watch, getOpenDisabledReaso
     if (getOpenDisabledReason()) return false;
     return openRightDrawerState(state, tab, currentOrthogroupCount());
   };
+  // Closing returns keyboard focus from inside the drawer to the Editor toggle
+  // (PD-OI-038); focus elsewhere stays where it is.
   const closeRightDrawer = () => {
     onClose();
+    const returnFocus = Boolean(focusReturn?.isFocusInDrawer?.());
     closeRightDrawerState(state);
+    if (returnFocus) focusReturn.focusToggle();
   };
   const resetRightDrawer = () => {
     onClose();

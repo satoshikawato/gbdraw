@@ -821,3 +821,116 @@ assert.equal(updateLegendEntryColorOptions.length, 0);
     assert.equal(rrnaReset?.color, '#71ee7d', `Reset after a ${choice} dialog uses the rRNA default`);
   }
 }
+
+// PV-02 and PV-04 (D-06, PD-OI-061): Legend editor renames.
+{
+  const { compileDirectEditorMutationPlan } = await import(pathToFileURL(join(tempDir, 'app', 'candidate-render.js')));
+  const trna = { id: 't1', svg_id: 't1', type: 'tRNA', product: 'tRNA-Leu', qualifiers: { product: ['tRNA-Leu'] }, start: 1, end: 70 };
+  const fakeEntry = (caption) => {
+    const attributes = new Map([['data-legend-key', caption]]);
+    const text = { textContent: caption };
+    return {
+      getAttribute: (name) => attributes.get(name) || null,
+      setAttribute: (name, value) => attributes.set(name, value),
+      querySelector: (selector) => selector === 'text' ? text : null,
+      querySelectorAll: () => []
+    };
+  };
+  const build = ({ entries, order, rules = [], features = [] }) => {
+    const groupEntries = new Map(entries.map((entry) => [entry.caption, fakeEntry(entry.caption)]));
+    const legendGroup = {
+      querySelector: (selector) => [...groupEntries].find(([caption]) => selector.includes(`"${caption}"`))?.[1] || null
+    };
+    const svgRoot = { legendGroups: [legendGroup] };
+    const committed = [];
+    const legendRenameDialog = {};
+    const stateLegendEntries = ref(entries.map((entry) => ({ featureIds: [], originalCaption: entry.caption, ...entry })));
+    const originalOrder = ref([...order]);
+    const featureList = ref(features);
+    const renameActions = createFeatureColorActions({
+      rulePreparation: createRulePreparation({
+        state: { extractedFeatures: featureList, biologicalFeatures: featureList, manualSpecificRules: rules },
+        evaluate: evaluatePythonRules
+      }),
+      state: {
+        results: ref([]), selectedResultIndex: ref(0), appliedPaletteColors: ref({ tRNA: '#e8b441' }),
+        manualSpecificRules: rules, extractedFeatures: featureList, biologicalFeatures: featureList,
+        featureColorOverrides: {}, svgContainer: ref({ querySelector: (selector) => selector === 'svg' ? svgRoot : null }),
+        clickedFeature: ref(null), featureStyleScopeDialog: {}, resetColorDialog: {}, legendRenameDialog,
+        legendEntries: stateLegendEntries, legendStrokeOverrides: {}, legendColorOverrides: {},
+        originalLegendOrder: originalOrder, originalLegendColors: ref({}), originalSvgStroke: ref({ color: null, width: null }),
+        featureStrokeOverrides: {}, skipCaptureBaseConfig: ref(false), skipExtractOnSvgChange: ref(false),
+        addedLegendCaptions: ref(new Set())
+      },
+      nextTick: async () => {},
+      legendActions: {
+        compactLegendEntries: () => {}, onLegendGeometryChanged: () => {}, extractLegendEntries: () => {},
+        getAllFeatureLegendGroups: (svg) => svg?.legendGroups || []
+      },
+      svgActions: {},
+      ruleActions: {
+        commitSpecificRules: async (nextRules) => { committed.push(nextRules.map((rule) => ({ ...rule }))); return true; },
+        getEffectiveLegendCaption: (feature) => rules.find((rule) => rule.feat === feature.type)?.cap || feature.type,
+        getFeatureQualifier: (feature) => ({ qual: 'hash', val: feature.svg_id }),
+        findFeaturesWithSameLegendItem: () => [], findFeaturesWithSameDisplayedLabel: () => [],
+        findFeaturesWithSameIndividualLabel: () => [], getDisplayedFeatureLabel: (feature) => feature.product,
+        getIndividualFeatureLabel: (feature) => feature.product, getLabelSpecificRule: () => null
+      },
+      featureSvgActions: { getFeatureElements: () => [], getFeatureFillElements: () => [] },
+      previewRuntime: null
+    });
+    return { renameActions, committed, legendRenameDialog, stateLegendEntries, originalOrder };
+  };
+
+  // PV-02: a renamed renderer-generated row keeps its generated identity, so
+  // Generate replays the rename.
+  const gc = build({
+    entries: [{ caption: 'CDS', color: '#54bcf8' }, { caption: 'GC content', color: '#a1a1a1' }],
+    order: ['CDS', 'GC content']
+  });
+  await gc.renameActions.renameLegendEntry(1, 'GC percent');
+  assert.equal(gc.stateLegendEntries.value[1].caption, 'GC percent');
+  assert.equal(gc.stateLegendEntries.value[1].originalCaption, 'GC content');
+  assert.deepEqual(gc.originalOrder.value, ['CDS', 'GC content']);
+  const gcPlan = compileDirectEditorMutationPlan({
+    catalogAdmission: { resultNames: ['a.svg'], renderedTargetsByOverrideKey: new Map(), resultIndexesByRenderedId: new Map() },
+    legendEntries: gc.stateLegendEntries.value,
+    originalLegendOrder: gc.originalOrder.value
+  });
+  assert.deepEqual(gcPlan.operationsByResult[0].legendRenames.map(({ from, to }) => [from, to]), [['GC content', 'GC percent']]);
+
+  // PV-04: renaming a feature row onto another caption of a different color
+  // asks Merge, Suffix, or Cancel before any rule commit.
+  const collide = () => build({
+    entries: [{ caption: 'tRNA', color: '#e8b441', featureIds: ['t1'] }, { caption: 'rRNA', color: '#71ee7d' }],
+    order: ['tRNA', 'rRNA'],
+    features: [trna]
+  });
+  const merge = collide();
+  await merge.renameActions.renameLegendEntry(0, 'rRNA');
+  assert.equal(merge.legendRenameDialog.show, true);
+  assert.equal(merge.legendRenameDialog.mode, 'target');
+  assert.equal(merge.committed.length, 0);
+  await merge.renameActions.handleLegendRenameChoice('merge');
+  assert.deepEqual(merge.committed.at(-1).map(({ cap, color }) => [cap, color]), [['rRNA', '#71ee7d']]);
+  const suffix = collide();
+  await suffix.renameActions.renameLegendEntry(0, 'rRNA');
+  await suffix.renameActions.handleLegendRenameChoice('suffix');
+  assert.deepEqual(suffix.committed.at(-1).map(({ cap, color }) => [cap, color]), [['rRNA (1)', '#e8b441']]);
+  const cancel = collide();
+  await cancel.renameActions.renameLegendEntry(0, 'rRNA');
+  await cancel.renameActions.handleLegendRenameChoice('cancel');
+  assert.equal(cancel.committed.length, 0);
+  assert.equal(cancel.legendRenameDialog.show, false);
+
+  // A target owned by a specific-color rule keeps PD-OI-042 disambiguation.
+  const ruleOwned = build({
+    entries: [{ caption: 'tRNA', color: '#e8b441', featureIds: ['t1'] }, { caption: 'Special', color: '#ff0000' }],
+    order: ['tRNA', 'Special'],
+    rules: [{ feat: 'rRNA', qual: 'product', val: '.*', color: '#ff0000', cap: 'Special' }],
+    features: [trna]
+  });
+  await ruleOwned.renameActions.renameLegendEntry(0, 'Special');
+  assert.notEqual(ruleOwned.legendRenameDialog.show, true);
+  assert.equal(ruleOwned.committed.length, 1);
+}

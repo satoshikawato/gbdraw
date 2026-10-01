@@ -7,7 +7,6 @@ import {
   createRightDrawerController,
   restoreRightDrawerState
 } from '../../gbdraw/web/js/app/right-drawer.js';
-import { assertKnownDefect } from './helpers/known-defect.mjs';
 
 const ref = (value) => ({ value });
 
@@ -133,7 +132,7 @@ test('an active alignment keeps its inspector and Reset tab reachable without gr
 
 // PV-12 (OIC-024): the Legend tab help names only edits that the tab offers.
 // The entry swatch displays the fill color; no control in the tab changes it.
-test('the Legend tab help does not claim a fill color edit it lacks (PV-12 known defect)', async () => {
+test('the Legend tab help does not claim a fill color edit it lacks (PV-12)', () => {
   const html = readFileSync(new URL('../../gbdraw/web/index.html', import.meta.url), 'utf8');
   const start = html.indexOf(`v-show="rightDrawerTab === 'legend'"`);
   const end = html.indexOf('v-if="isFeatureDrawerMounted"', start);
@@ -142,8 +141,27 @@ test('the Legend tab help does not claim a fill color edit it lacks (PV-12 known
   const help = legendTab.match(/<p\b[^>]*>\s*(Live edit:[^<]*)<\/p>/)?.[1] || '';
   assert.match(help, /^Live edit:/);
   assert.match(legendTab, /renameLegendEntry\(|deleteLegendEntry\(|setLegendEntryStrokeColorValue\(/);
-  await assertKnownDefect('PV-12', () => {
-    const claimsFillColor = /\bcolou?rs?\b/i.test(help.replace(/\bstroke colou?rs?\b/gi, ''));
-    assert.ok(!claimsFillColor || /updateLegendEntryColor\(/.test(legendTab), help);
-  });
+  const claimsFillColor = /\bcolou?rs?\b/i.test(help.replace(/\bstroke colou?rs?\b/gi, ''));
+  assert.ok(!claimsFillColor || /updateLegendEntryColor\(/.test(legendTab), help);
+});
+
+// PV-11 (PD-OI-038): Close and Escape return keyboard focus from inside the
+// drawer to the Editor toggle; focus outside the drawer stays where it is.
+test('closing the drawer returns focus from inside it to the Editor toggle', () => {
+  for (const focusInDrawer of [true, false]) {
+    const state = createState({ open: true });
+    const harness = createWatchHarness();
+    const events = [];
+    const drawer = createRightDrawerController({
+      state,
+      watch: harness.watch,
+      focusReturn: {
+        isFocusInDrawer: () => focusInDrawer,
+        focusToggle: () => events.push(`focus:${state.showRightDrawer.value}`)
+      }
+    });
+    drawer.closeRightDrawer();
+    assert.equal(state.showRightDrawer.value, false);
+    assert.deepEqual(events, focusInDrawer ? ['focus:false'] : []);
+  }
 });

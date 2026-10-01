@@ -1,7 +1,10 @@
 import {
+  applyCanvasPaddingToSvg,
   applyCompositionUserDeltas,
   bindCompositionMetadata,
-  compositionUserDeltas
+  compositionUserDeltas,
+  hasCanvasPadding,
+  normalizeCanvasPadding
 } from './composition-actions.js';
 import { recordStructuralMetric } from '../../services/runtime-test-hooks.js';
 import { diagnosticError } from '../../services/error-normalization.js';
@@ -41,9 +44,14 @@ const readDecorations = (svg) => {
   return decorations;
 };
 
-/** Capture only small deltas and source/record bindings; never retain SVG roots. */
+/**
+ * Capture only small deltas, source/record bindings, and the one canvas
+ * padding; never retain SVG roots. The padding reaches every candidate Result
+ * (D-09, PD-OI-064).
+ */
 export const captureDecorationContinuity = ({ canonical, results = [], catalog, mountedSvg = null,
-  selectedResultIndex = 0, parser = globalThis.DOMParser, projectRecordIdentity } = {}) => {
+  selectedResultIndex = 0, parser = globalThis.DOMParser, projectRecordIdentity, canvasPadding = null } = {}) => {
+  const padding = hasCanvasPadding(canvasPadding) ? normalizeCanvasPadding(canvasPadding) : null;
   const snapshots = results.map((result, index) => {
     let deltas;
     try {
@@ -64,7 +72,10 @@ export const captureDecorationContinuity = ({ canonical, results = [], catalog, 
     if (!Object.values(deltas).some(nonzero)) return null;
     return { deltas, identity: projectRecordIdentity(canonical, catalog?.items?.[index]?.recordKeys), index };
   }).filter(Boolean);
-  if (!snapshots.length) return null;
+  const pad = padding ? (svg) => { applyCanvasPaddingToSvg(svg, padding); } : null;
+  if (!snapshots.length) {
+    return pad ? (_candidate, admission) => admission.catalog.items.map(() => pad) : null;
+  }
   const oldIdentities = (catalog?.items || []).map(item => projectRecordIdentity(canonical, item.recordKeys));
   return (candidate, admission) => {
     const identities = admission.catalog.items.map(item => projectRecordIdentity(candidate, item.recordKeys));
@@ -102,6 +113,8 @@ export const captureDecorationContinuity = ({ canonical, results = [], catalog, 
         applyCompositionUserDeltas(svg, deltas);
       };
     }
-    return transforms;
+    return pad ? transforms.map((transform) => (transform
+      ? (svg, context) => { transform(svg, context); pad(svg); }
+      : pad)) : transforms;
   };
 };
