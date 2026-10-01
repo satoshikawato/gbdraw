@@ -182,7 +182,6 @@ test('Save Raw LOSAT TSV of a reversed record re-uploads to the same ribbons', a
 });
 
 test('a renamed Similarity group keeps its name only on the same members after regrouping', async ({ page }) => {
-  test.fail(true, 'CO-08');
   test.setTimeout(900_000);
   await openLinearWith(page, [bgc('BGC0000708'), bgc('BGC0000709')]);
   await useLosat(page, { task: 'blastp', proteinMode: 'orthogroup' });

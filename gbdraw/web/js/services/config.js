@@ -126,7 +126,8 @@ import {
 import { migrateLegacyRecordDisplayDrafts } from '../app/record-display-options.js';
 import {
   buildOrthogroupFeatureIndex,
-  enrichFeaturesWithOrthogroups
+  enrichFeaturesWithOrthogroups,
+  normalizeOrthogroupDormantOverrides
 } from './orthogroup-feature-metadata.js';
 import {
   isResourceBackedCanonicalComparison,
@@ -998,7 +999,8 @@ export const buildConfigData = () => ({
   unmanagedConfigOverrides: cloneJsonData(state.unmanagedConfigOverrides || {}),
   webEdits: {
     orthogroupNameOverrides: cloneStringMap(state.orthogroupNameOverrides),
-    orthogroupDescriptionOverrides: cloneStringMap(state.orthogroupDescriptionOverrides)
+    orthogroupDescriptionOverrides: cloneStringMap(state.orthogroupDescriptionOverrides),
+    orthogroupDormantOverrides: normalizeOrthogroupDormantOverrides(state.orthogroupDormantOverrides)
   }
 });
 
@@ -2327,6 +2329,9 @@ export const applyConfigData = (data, { resolveTrackPlacements = true } = {}) =>
   if (Object.prototype.hasOwnProperty.call(webEdits, 'orthogroupDescriptionOverrides')) {
     replaceStringMap(state.orthogroupDescriptionOverrides, webEdits.orthogroupDescriptionOverrides);
   }
+  // Absent in older Sessions: no dormant names (D-21).
+  clearObject(state.orthogroupDormantOverrides);
+  Object.assign(state.orthogroupDormantOverrides, normalizeOrthogroupDormantOverrides(webEdits.orthogroupDormantOverrides));
   state.modeProfileStateManager?.importState?.(
     data.modeProfiles ?? null,
     state.mode.value,
@@ -2811,6 +2816,11 @@ export const applyOrthogroupStateData = (
   Object.keys(state.orthogroupDescriptionOverrides).forEach((id) => {
     if (!groupIdSet.has(id)) delete state.orthogroupDescriptionOverrides[id];
   });
+  if (Object.hasOwn(orthogroupState, 'orthogroupDormantOverrides')) {
+    clearObject(state.orthogroupDormantOverrides);
+    Object.assign(state.orthogroupDormantOverrides,
+      normalizeOrthogroupDormantOverrides(orthogroupState.orthogroupDormantOverrides));
+  }
 };
 
 const customDepthRequested = (mode, sourceState) => {
@@ -3688,6 +3698,7 @@ const resetSessionBaseline = () => {
   state.selectedOrthogroupAlignmentFeature.value = '';
   clearObject(state.orthogroupNameOverrides);
   clearObject(state.orthogroupDescriptionOverrides);
+  clearObject(state.orthogroupDormantOverrides);
   state.extractedFeatures.value = [];
   if (state.biologicalFeatures) state.biologicalFeatures.value = [];
   state.featureSelectorSafetyScope.value = [];
@@ -3909,7 +3920,8 @@ export const buildOrthogroupStateData = () => ({
   groups: Array.isArray(state.orthogroups.value) ? cloneJsonData(state.orthogroups.value) : [],
   selectedOrthogroupId: String(state.selectedOrthogroupId.value || ''),
   orthogroupNameOverrides: cloneStringMap(state.orthogroupNameOverrides),
-  orthogroupDescriptionOverrides: cloneStringMap(state.orthogroupDescriptionOverrides)
+  orthogroupDescriptionOverrides: cloneStringMap(state.orthogroupDescriptionOverrides),
+  orthogroupDormantOverrides: normalizeOrthogroupDormantOverrides(state.orthogroupDormantOverrides)
 });
 
 export const buildRunStateData = () => ({

@@ -1,4 +1,5 @@
 import { validateAnnotationWarnings } from '../services/session-feature-metadata.js';
+import { rekeyOrthogroupOverrides } from '../services/orthogroup-feature-metadata.js';
 import { resolveLinearRegionBounds } from './feature-metadata-extraction.js';
 import { buildSimilarityAlignmentResetReceipt, validateSimilarityAlignmentResetReceipt } from '../services/session-active-config-contract.js';
 import { prepareLosatRuntime, runLosatPairsParallel } from '../services/losat.js';
@@ -1146,6 +1147,7 @@ export const createRunAnalysis = ({
     selectedOrthogroupAlignmentFeature,
     orthogroupNameOverrides,
     orthogroupDescriptionOverrides,
+    orthogroupDormantOverrides,
     selectedOrthogroupId,
     circularRecordList,
     circularRecordDiscovery,
@@ -1434,15 +1436,20 @@ export const createRunAnalysis = ({
     });
   };
 
-  const pruneOrthogroupOverrides = (groupIds, { clearAll = false } = {}) => {
-    const validIds = new Set(Array.isArray(groupIds) ? groupIds.map((id) => String(id || '').trim()).filter(Boolean) : []);
-    const pruneMap = (overrideMap) => {
-      Object.keys(overrideMap).forEach((id) => {
-        if (clearAll || !validIds.has(id)) delete overrideMap[id];
-      });
-    };
-    pruneMap(orthogroupNameOverrides);
-    pruneMap(orthogroupDescriptionOverrides);
+  // D-21: names follow the exact member set; the rest stay dormant.
+  const rekeyCommittedOrthogroupOverrides = (previousGroups, candidateGroups) => {
+    const next = rekeyOrthogroupOverrides({
+      previousGroups,
+      candidateGroups,
+      names: orthogroupNameOverrides,
+      descriptions: orthogroupDescriptionOverrides,
+      dormant: orthogroupDormantOverrides
+    });
+    [[orthogroupNameOverrides, next.names], [orthogroupDescriptionOverrides, next.descriptions],
+      [orthogroupDormantOverrides, next.dormant]].forEach(([target, values]) => {
+      Object.keys(target).forEach((key) => delete target[key]);
+      Object.assign(target, values);
+    });
   };
 
   const setFeatureEditorStatus = (updates = {}) => {
@@ -4651,6 +4658,7 @@ export const createRunAnalysis = ({
         )
       });
       activatedGeneratedArtifactCandidate = generatedArtifactCandidate;
+      const previousOrthogroups = orthogroups.value;
       generatedArtifactTransactionOwner.activate(generatedArtifactCandidate, {
         selectedResultIndex: nextSelectedResultIndex
       });
@@ -4660,7 +4668,7 @@ export const createRunAnalysis = ({
       const candidateGroupIds = candidateGroups
         .map((group) => String(group?.id || '').trim())
         .filter(Boolean);
-      pruneOrthogroupOverrides(candidateGroupIds);
+      rekeyCommittedOrthogroupOverrides(previousOrthogroups, candidateGroups);
       if (
         !workingSelectedOrthogroupId
         || !candidateGroupIds.includes(String(workingSelectedOrthogroupId || '').trim())

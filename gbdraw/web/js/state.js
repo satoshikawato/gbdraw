@@ -300,6 +300,8 @@ const linearRecordTranslations = ref([]);
 const legacySimilarityAlignment = ref(null);
 const orthogroupNameOverrides = reactive({});
 const orthogroupDescriptionOverrides = reactive({});
+// User names of groups whose members no longer form one group, keyed by member set (D-21).
+const orthogroupDormantOverrides = reactive({});
 const selectedOrthogroupId = ref('');
 const orthogroupSearch = ref('');
 const orthogroupSortMode = ref('id');
@@ -899,6 +901,7 @@ export const state = {
   legacySimilarityAlignment,
   orthogroupNameOverrides,
   orthogroupDescriptionOverrides,
+  orthogroupDormantOverrides,
   selectedOrthogroupId,
   orthogroupSearch,
   orthogroupSortMode,

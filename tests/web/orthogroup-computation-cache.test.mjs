@@ -7,6 +7,7 @@ const context = vm.createContext({ console });
 vm.runInContext(readFileSync(new URL('../../gbdraw/web/vendor/vue/vue.global.js', import.meta.url), 'utf8'), context);
 globalThis.window = { Vue: context.Vue, setTimeout, clearTimeout };
 const { createOrthogroupEditor } = await import('../../gbdraw/web/js/app/orthogroups.js');
+const { rekeyOrthogroupOverrides } = await import('../../gbdraw/web/js/services/orthogroup-feature-metadata.js');
 const { ref, reactive } = context.Vue;
 
 test('group lookup reuses valid identities and invalidates on ID edits, new aliases, duplicates and replacement', () => {
@@ -39,9 +40,20 @@ test('group lookup reuses valid identities and invalidates on ID edits, new alia
   assert.equal(editor.orthogroupRows.value[0].renamed, true);
   delete state.orthogroupDescriptionOverrides.one;
   assert.equal(editor.orthogroupRows.value[0].renamed, false);
+  // CO-08 (D-21): a name belongs to the member set, not to the ID string. An
+  // ID edit re-indexes the lookup; the name follows only by member set.
+  state.orthogroupNameOverrides.one = 'User name';
+  const before = [{ id: 'one', members: [{ proteinId: 'h_a' }] }];
   group.id = 'renamed';
   assert.equal(editor.getOrthogroupById('one'), null);
   assert.equal(editor.getOrthogroupById('renamed'), group);
+  assert.equal(editor.orthogroupRows.value[0].name, 'renamed', 'an ID string alone carries no name');
+  const followed = rekeyOrthogroupOverrides({
+    previousGroups: before, candidateGroups: [{ id: 'renamed', members: [{ proteinId: 'h_a' }] }],
+    names: state.orthogroupNameOverrides, descriptions: {}, dormant: {}
+  });
+  assert.deepEqual(followed, { names: { renamed: 'User name' }, descriptions: {}, dormant: {} });
+  delete state.orthogroupNameOverrides.one;
   group.orthogroup_id = 'conflict';
   assert.equal(editor.getOrthogroupById('renamed'), null);
   delete group.orthogroup_id;
@@ -53,4 +65,26 @@ test('group lookup reuses valid identities and invalidates on ID edits, new alia
   state.orthogroups.value = [{ id: 'replacement', members: [] }];
   assert.equal(editor.getOrthogroupById('renamed'), null);
   assert.equal(editor.getOrthogroupById('replacement'), state.orthogroups.value[0]);
+});
+
+test('group names follow exact member sets and unmatched names stay dormant (CO-08, D-21)', () => {
+  const group = (id, ...members) => ({ id, members: members.map((proteinId) => ({ proteinId })) });
+  const first = rekeyOrthogroupOverrides({
+    previousGroups: [group('og_16', 'a', 'b'), group('og_17', 'c', 'd')],
+    candidateGroups: [group('og_16', 'c', 'd', 'e'), group('og_17', 'a', 'b')],
+    names: { og_16: 'LivB', og_17: 'LivC' },
+    descriptions: { og_17: 'transporter' },
+    dormant: {}
+  });
+  assert.deepEqual(first.names, { og_17: 'LivB' }, 'the name moves with {a,b} and never stays on og_16');
+  assert.deepEqual(first.descriptions, {});
+  assert.deepEqual(Object.values(first.dormant), [{ name: 'LivC', description: 'transporter' }]);
+  const restored = rekeyOrthogroupOverrides({
+    previousGroups: [group('og_16', 'c', 'd', 'e'), group('og_17', 'a', 'b')],
+    candidateGroups: [group('og_3', 'c', 'd'), group('og_4', 'b', 'a')],
+    names: first.names, descriptions: first.descriptions, dormant: first.dormant
+  });
+  assert.deepEqual(restored, {
+    names: { og_3: 'LivC', og_4: 'LivB' }, descriptions: { og_3: 'transporter' }, dormant: {}
+  }, 'a dormant name returns when its member set forms one group again');
 });

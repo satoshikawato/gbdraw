@@ -4716,6 +4716,8 @@ export const createAppSetup = () => {
     setOrthogroupNameOverride: orthogroupActions.setOrthogroupNameOverride,
     setOrthogroupDescriptionOverride: orthogroupActions.setOrthogroupDescriptionOverride,
     resetOrthogroupRename: orthogroupActions.resetOrthogroupRename,
+    orthogroupDormantNames: orthogroupActions.orthogroupDormantNames,
+    clearOrthogroupDormantOverrides: orthogroupActions.clearOrthogroupDormantOverrides,
     highlightOrthogroupById: orthogroupActions.highlightOrthogroupById,
     similarityAlignmentDraft: similarityAlignmentActions.draft,
     similarityAlignmentStatus: similarityAlignmentActions.status,
