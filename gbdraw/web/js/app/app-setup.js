@@ -1400,7 +1400,6 @@ export const createAppSetup = () => {
     disposePanZoom();
     setUnmanagedConfigOverrideValidator(null);
     disposeSessionOperations();
-    resultsManager.cancelDefinitionUpdate();
     state.sessionPreparationBusyReason = null;
     disposeDiagramGenerationWorker();
   });
@@ -1968,15 +1967,10 @@ export const createAppSetup = () => {
     },
     { immediate: true }
   );
-  // A mode switch restores that mode's title and fonts, which its Result
-  // already shows; the restore must not start a live definition edit.
-  let restoringModeProfile = false;
   watch(mode, (nextMode, previousMode) => {
     if (nextMode === previousMode) return;
     if (state.semanticFileWatchersSuppressed.value) return;
-    restoringModeProfile = true;
     state.modeProfileStateManager.transition(adv, previousMode, nextMode);
-    nextTick(() => { restoringModeProfile = false; });
     matchSequenceRegistry?.reset?.();
     clickedPairwiseMatch.value = null;
   });
@@ -2452,16 +2446,10 @@ export const createAppSetup = () => {
       return restoreGeneratedArtifactRuntimeState(snapshot, options);
     }
   });
-  const resultsManager = createResultsManager({
-    state,
-    legendLayout,
-    rerenderLinearDefinitions: runLabelReflow,
-    makeRef: ref
-  });
+  const resultsManager = createResultsManager({ state });
 
   const { waitForAuxiliaryFileImport, auxiliaryFileImportPending, canRetryAuxiliaryImportFailure, retryAuxiliaryImportFailure } = setupWatchers({
     state,
-    isRestoringModeProfile: () => restoringModeProfile,
     rulePreparation,
     ref, computed, watch,
     nextTick,
@@ -2483,9 +2471,6 @@ export const createAppSetup = () => {
   state.sessionPreparationBusyReason = () => {
     if (history.mutationPending() || ruleMatchingPending.value || auxiliaryFileImportPending()) {
       return 'Applying an edit. Retry after the edit finishes.';
-    }
-    if (resultsManager.definitionUpdatePending()) {
-      return 'Updating diagram. Retry after the update finishes.';
     }
     return '';
   };
@@ -2667,7 +2652,7 @@ export const createAppSetup = () => {
     await nextTick();
   });
 
-  const { updatePalette, resetColors, cancelDefinitionUpdate } = resultsManager;
+  const { updatePalette, resetColors } = resultsManager;
   const undoableAction = (label, fn) => (...args) => history.runUndoable(label, () => fn(...args));
   const addFeatureVisibilityRuleWithHistory = undoableAction('Add feature visibility rule', addFeatureVisibilityRule);
   const moveFeatureVisibilityRuleDownWithHistory = undoableAction('Move feature visibility rule', moveFeatureVisibilityRuleDown);
@@ -2879,7 +2864,6 @@ export const createAppSetup = () => {
           if (mode.value === 'linear') await focusLinearComparisonIssue();
           return { status: 'error', error: errorLog.value };
         }
-        cancelDefinitionUpdate();
         return { status: 'ready', comparisonPlanSnapshot, comparisonExecution };
       },
       afterGenerate: async (result) => {
@@ -3227,7 +3211,6 @@ export const createAppSetup = () => {
     if (!proceed) return false;
 
     return history.runUndoableCheckpoint('Reset settings', async () => {
-      cancelDefinitionUpdate();
       featureActions.clearSpecificRulePatternDrafts();
       resetSettingsState(state);
       invalidateLinearComparisonArtifacts();

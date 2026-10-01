@@ -1,7 +1,7 @@
 const OPERATIONS = new Set(['unknown', 'generate', 'align', 'feature-extraction', 'export-svg', 'export-png', 'export-pdf', 'evaluateRules', 'readPdfFont', 'buildProteinLosatCacheKeys', 'convertLosatNucleotideToDisplayTsv',
   'convertLosatpPairsToGenomicPayload', 'extractCdsProteinFasta', 'extractFirstFasta', 'generateLegendEntrySvg',
   'hydrateProteinLosatTsv', 'listGffFastaRecords', 'listSequenceRecords', 'measureLegendText',
-  'promoteLegacyLosatpCache', 'regenerateDefinitionSvgs', 'resolveLegacyProteinReferences',
+  'promoteLegacyLosatpCache', 'resolveLegacyProteinReferences',
   'resolveSimilarityAlignment', 'validateConfigOverrides']);
 const STAGES = new Set(['unknown', 'initialization', 'resource-staging', 'request-validation',
   'helper', 'rule-validation', 'render', 'result-admission', 'cleanup', 'export-capture', 'export-conversion', 'font-validation', 'transport', 'read']);

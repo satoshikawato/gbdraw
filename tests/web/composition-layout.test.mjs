@@ -13,7 +13,6 @@ import {
   normalizeLegacyComposition,
   parseCompositionMetadata,
   planComposition,
-  reconcileCompositionTitle,
   resetCompositionUserDeltas
 } from '../../gbdraw/web/js/app/legend-layout/composition-actions.js';
 import {
@@ -614,34 +613,6 @@ assert.deepEqual(minimumExtentGrowth.placements.primary.finalBounds, {
       new RegExp(`overlayPolicy\\.${field}`)
     );
   }
-}
-
-{
-  const { svg } = schemaOneSvg();
-  const metadata = JSON.parse(svg.getAttribute(COMPOSITION_METADATA_ATTRIBUTE));
-  metadata.title = null;
-  metadata.titleSide = 'none';
-  svg.setAttribute(COMPOSITION_METADATA_ATTRIBUTE, JSON.stringify(metadata));
-  svg.children = svg.children.filter(
-    (child) => child.getAttribute(COMPOSITION_ROLE_ATTRIBUTE) !== 'title'
-  );
-
-  const title = new FakeElement({
-    id: 'plot_title',
-    attributes: { transform: 'scale(1.25) rotate(4)' },
-    bbox: { x: -8, y: -10, width: 80, height: 20 }
-  });
-  svg.appendChild(title);
-  const added = reconcileCompositionTitle(svg, title, 'top');
-  assert.equal(added.metadata.titleSide, 'top');
-  assert.equal(title.getAttribute(COMPOSITION_ROLE_ATTRIBUTE), 'title');
-  assert.match(title.getAttribute('transform'), /^translate\([^)]*\) scale\(1\.25\) rotate\(4\)$/);
-  assert.deepEqual(compositionUserDeltas(svg).title, [0, 0]);
-
-  const removed = reconcileCompositionTitle(svg, null, 'none');
-  assert.equal(removed.metadata.title, null);
-  assert.equal(removed.metadata.titleSide, 'none');
-  assert.equal(title.getAttribute(COMPOSITION_ROLE_ATTRIBUTE), null);
 }
 
 {

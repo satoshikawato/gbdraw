@@ -24,7 +24,6 @@
       "app/feature-metadata-extraction.js",
       "app/legend/entry-actions.js",
       "app/record-discovery.js",
-      "app/results.js",
       "app/run-analysis.js"
     ],
     "services/diagram-resource-staging.js": [
@@ -85,7 +84,6 @@
       "app/legend/entry-actions.js",
       "app/legend/sort-actions.js",
       "app/legend/stroke-actions.js",
-      "app/results.js",
       "app/svg-styles.js",
       "services/config.js",
       "services/export.js",
@@ -129,7 +127,6 @@
       "app/legend/sort-actions.js",
       "app/legend/stroke-actions.js",
       "app/preview-runtime.js",
-      "app/results.js",
       "app/run-analysis.js",
       "app/svg-styles.js",
       "services/config.js",

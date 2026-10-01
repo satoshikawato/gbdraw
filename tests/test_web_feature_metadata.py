@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import json
 import re
-import xml.etree.ElementTree as ET
 from pathlib import Path
 
 import pandas as pd
@@ -16,7 +15,6 @@ from gbdraw.features.ids import compute_feature_hash
 from gbdraw.io.genome import load_gff_fasta
 from gbdraw.io.regions import apply_region_specs, parse_region_specs
 from gbdraw.io.record_select import reverse_records
-from gbdraw.svg.ids import definition_group_svg_id
 from gbdraw.web_support.feature_metadata import _source_anchor_profile
 from gbdraw.web_support.feature_metadata import extract_features_from_genbank_payload
 from gbdraw.web_support.feature_metadata import extract_features_from_gff_fasta_payload
@@ -135,107 +133,6 @@ def test_canonical_request_wrapper_returns_svg_content_as_utf8_bytes(
         "results": [{"name": "diagram.svg", "content": "<svg>µ</svg>".encode()}],
         "metadata": b'{"featureCatalog":{"schema":1}}',
     }
-
-
-def test_regenerate_definition_svgs_accepts_nullish_font_sizes(
-    tmp_path: Path,
-    python_helpers_namespace: dict[str, object],
-) -> None:
-    record = SeqRecord(Seq("ATGAAATAA"), id="NC_000010", name="Nullish")
-    record.features.append(
-        SeqFeature(
-            FeatureLocation(0, 9, strand=1),
-            type="CDS",
-            qualifiers={"locus_tag": ["NULLISH_001"], "translation": ["MK"]},
-        )
-    )
-    path = _write_genbank(tmp_path, record)
-    regenerate = python_helpers_namespace["regenerate_definition_svgs"]
-
-    payload = json.loads(
-        regenerate(  # type: ignore[operator]
-            str(path),
-            font_size=JsNull(),
-            plot_title_font_size=JsUndefined(),
-        )
-    )
-
-    assert "error" not in payload
-    assert payload["definitions"]
-
-
-def test_regenerate_definition_svgs_accepts_numeric_font_size_strings(
-    tmp_path: Path,
-    python_helpers_namespace: dict[str, object],
-) -> None:
-    record = SeqRecord(Seq("ATGAAATAA"), id="NC_000011", name="Numeric")
-    path = _write_genbank(tmp_path, record)
-    regenerate = python_helpers_namespace["regenerate_definition_svgs"]
-
-    payload = json.loads(
-        regenerate(  # type: ignore[operator]
-            str(path),
-            font_size="12.5",
-            plot_title_font_size="16",
-            plot_title="Numeric title",
-            plot_title_position="top",
-        )
-    )
-
-    assert "error" not in payload
-    assert len(payload["definitions"]) == 2
-
-
-def test_regenerate_definition_svgs_reports_invalid_font_size_strings(
-    tmp_path: Path,
-    python_helpers_namespace: dict[str, object],
-) -> None:
-    record = SeqRecord(Seq("ATGAAATAA"), id="NC_000012", name="InvalidNumeric")
-    path = _write_genbank(tmp_path, record)
-    regenerate = python_helpers_namespace["regenerate_definition_svgs"]
-
-    payload = json.loads(regenerate(str(path), font_size="not-a-number"))  # type: ignore[operator]
-
-    assert "error" in payload
-    assert payload["error"]["code"] == "INPUT_INVALID"
-    assert payload["error"]["context"] == {"field": "font_size", "reason": "FINITE"}
-    assert "not-a-number" not in json.dumps(payload)
-
-
-def test_regenerate_definition_svgs_matches_duplicate_definition_id_contract(
-    tmp_path: Path,
-    python_helpers_namespace: dict[str, object],
-) -> None:
-    records = [
-        SeqRecord(Seq("ATGAAATAA"), id="123/unsafe", name=f"Duplicate{index}")
-        for index in range(2)
-    ]
-    for record in records:
-        record.annotations["molecule_type"] = "DNA"
-    path = tmp_path / "duplicates.gb"
-    SeqIO.write(records, path, "genbank")
-    parsed_record_ids = [record.id for record in SeqIO.parse(path, "genbank")]
-    regenerate = python_helpers_namespace["regenerate_definition_svgs"]
-
-    payload = json.loads(regenerate(str(path), multi_record_canvas=True))  # type: ignore[operator]
-
-    assert "error" not in payload
-    definitions = payload["definitions"]
-    assert [entry["record_index"] for entry in definitions] == [0, 1]
-    assert [entry["definition_group_id"] for entry in definitions] == [
-        definition_group_svg_id(
-            record_id,
-            mode="circular",
-            record_index=index,
-            record_count=2,
-        )
-        for index, record_id in enumerate(parsed_record_ids)
-    ]
-    for index, (entry, record_id) in enumerate(zip(definitions, parsed_record_ids)):
-        group = ET.fromstring(entry["svg"])
-        assert group.attrib["data-gbdraw-role"] == "record-definition"
-        assert group.attrib["data-gbdraw-record-id"] == record_id
-        assert group.attrib["data-gbdraw-record-index"] == str(index)
 
 
 def test_importable_feature_metadata_matches_pyodide_wrapper(

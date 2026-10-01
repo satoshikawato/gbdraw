@@ -6,17 +6,11 @@ import {
   resolvePairwiseLegendGradientColorKeys
 } from './color-utils.js';
 import {
-  FEATURE_SELECTOR,
   getFeatureElementIndex,
   getFeatureFillElements,
   getFeatureIdentity
 } from './feature-editor/svg-actions.js';
-import {
-  FEATURE_PART_BLOCK,
-  FEATURE_PART_CONNECTOR,
-  getFeaturePart,
-  isFeatureFillTarget
-} from './feature-dom.js';
+import { isFeatureFillTarget } from './feature-dom.js';
 import { PAIRWISE_LEGEND_SELECTOR, parseTransformXY } from './legend/utils.js';
 import { serializeCleanSvg } from '../services/svg-serialization.js';
 import { getFeatureOverride } from '../services/feature-override-identity.js';
@@ -406,147 +400,6 @@ export const createSvgStyles = ({ state, watch, nextTick, legendActions, rulePre
     }
   };
 
-  const applyStylesToSvg = () => {
-    const sessionBusy = state.sessionOperationAvailability?.();
-    if (sessionBusy) return sessionBusy;
-    if (!svgContent.value) return;
-    if (!svgContainer.value) return;
-
-    const svg = svgContainer.value.querySelector('svg');
-    if (!svg) return;
-
-    let updatedCount = 0;
-
-    if (adv.block_stroke_color || adv.block_stroke_width !== null) {
-      const featurePaths = Array.from(svg.querySelectorAll(FEATURE_SELECTOR))
-        .filter((element) => getFeaturePart(element) === FEATURE_PART_BLOCK);
-      featurePaths.forEach((path) => {
-        if (adv.block_stroke_color) {
-          path.setAttribute('stroke', adv.block_stroke_color);
-          updatedCount++;
-        }
-        if (adv.block_stroke_width !== null) {
-          path.setAttribute('stroke-width', adv.block_stroke_width);
-          updatedCount++;
-        }
-      });
-    }
-
-    const axisGroups = getGroupsByBaseIds(svg, ['Axis']);
-    axisGroups.forEach((axisGroup) => {
-      const axisElements = axisGroup.querySelectorAll('path, line, circle');
-      axisElements.forEach((el) => {
-        if (adv.axis_stroke_color) {
-          el.setAttribute('stroke', adv.axis_stroke_color);
-          updatedCount++;
-        }
-        if (adv.axis_stroke_width !== null) {
-          el.setAttribute('stroke-width', adv.axis_stroke_width);
-          updatedCount++;
-        }
-      });
-    });
-
-    const tickGroups = getGroupsByBaseIds(svg, ['tick'], ['ticks']);
-    tickGroups.forEach((tickGroup) => {
-      const tickElements = tickGroup.querySelectorAll('path, line');
-      tickElements.forEach((el) => {
-        if (adv.axis_stroke_color) {
-          el.setAttribute('stroke', adv.axis_stroke_color);
-          updatedCount++;
-        }
-        if (adv.axis_stroke_width !== null) {
-          el.setAttribute('stroke-width', adv.axis_stroke_width);
-          updatedCount++;
-        }
-      });
-    });
-
-    if (adv.line_stroke_color || adv.line_stroke_width !== null) {
-      const connectorPaths = Array.from(svg.querySelectorAll(FEATURE_SELECTOR)).filter(
-        (path) => getFeaturePart(path) === FEATURE_PART_CONNECTOR
-      );
-      connectorPaths.forEach((path) => {
-        if (adv.line_stroke_color) {
-          path.setAttribute('stroke', adv.line_stroke_color);
-          updatedCount++;
-        }
-        if (adv.line_stroke_width !== null) {
-          path.setAttribute('stroke-width', adv.line_stroke_width);
-          updatedCount++;
-        }
-      });
-    }
-
-    const lengthBarGroup = svg.getElementById('length_bar');
-    if (lengthBarGroup) {
-      const scaleElements = lengthBarGroup.querySelectorAll('line, path');
-      scaleElements.forEach((el) => {
-        if (adv.scale_stroke_color) {
-          el.setAttribute('stroke', adv.scale_stroke_color);
-          updatedCount++;
-        }
-        if (adv.scale_stroke_width !== null) {
-          el.setAttribute('stroke-width', adv.scale_stroke_width);
-          updatedCount++;
-        }
-      });
-    }
-
-    if (adv.block_stroke_color || adv.block_stroke_width !== null) {
-      const legendGroups = [];
-      const mainLegend = svg.getElementById('legend');
-      if (mainLegend) {
-        const featureLegend = mainLegend.querySelector('#feature_legend');
-        if (featureLegend) legendGroups.push(featureLegend);
-        else legendGroups.push(mainLegend);
-      }
-      const hLegend = svg.getElementById('legend_horizontal');
-      if (hLegend) {
-        const hFeatureLegend = hLegend.querySelector('#feature_legend_h');
-        if (hFeatureLegend) legendGroups.push(hFeatureLegend);
-      }
-      const vLegend = svg.getElementById('legend_vertical');
-      if (vLegend) {
-        const vFeatureLegend = vLegend.querySelector('#feature_legend_v');
-        if (vFeatureLegend) legendGroups.push(vFeatureLegend);
-      }
-
-      legendGroups.forEach((legendGroup) => {
-        const paths = legendGroup.querySelectorAll('path');
-        paths.forEach((path) => {
-          const fill = path.getAttribute('fill');
-          const stroke = path.getAttribute('stroke');
-          const d = path.getAttribute('d') || '';
-          if (
-            fill &&
-            fill !== 'none' &&
-            fill !== 'white' &&
-            fill !== '#ffffff' &&
-            !fill.startsWith('url(') &&
-            stroke &&
-            d.includes('z') &&
-            d.split(' ').length < 20
-          ) {
-            if (adv.block_stroke_color) {
-              path.setAttribute('stroke', adv.block_stroke_color);
-              updatedCount++;
-            }
-            if (adv.block_stroke_width !== null) {
-              path.setAttribute('stroke-width', adv.block_stroke_width);
-              updatedCount++;
-            }
-          }
-        });
-      });
-    }
-
-    if (updatedCount > 0) {
-      persistSvgEdit(svg);
-      console.log(`Applied styles: updated ${updatedCount} elements`);
-    }
-  };
-
   const applyTrackVisibility = () => {
     const sessionBusy = state.sessionOperationAvailability?.();
     if (sessionBusy) return sessionBusy;
@@ -648,26 +501,6 @@ export const createSvgStyles = ({ state, watch, nextTick, legendActions, rulePre
   );
 
   watch(
-    () => [
-      mode.value,
-      adv.block_stroke_color,
-      adv.block_stroke_width,
-      adv.line_stroke_color,
-      adv.line_stroke_width,
-      adv.axis_stroke_color,
-      adv.axis_stroke_width,
-      adv.scale_stroke_color,
-      adv.scale_stroke_width
-    ],
-    (values, previousValues) => {
-      // Mode profiles and artifact restores retain the saved Result unchanged.
-      if (values[0] !== previousValues[0] || state.semanticFileWatchersSuppressed?.value || state.sessionOperationAvailability?.()) return;
-      applyStylesToSvg();
-    },
-    { flush: 'post' }
-  );
-
-  watch(
     () => [form.suppress_gc, form.suppress_skew, form.show_gc, form.show_skew, form.show_depth],
     () => {
       if (state.semanticFileWatchersSuppressed?.value || state.sessionOperationAvailability?.()) return;
@@ -678,7 +511,6 @@ export const createSvgStyles = ({ state, watch, nextTick, legendActions, rulePre
   return {
     applyPaletteToSvg,
     applySpecificRulesToSvg,
-    applyStylesToSvg,
     applyTrackVisibility
   };
 };

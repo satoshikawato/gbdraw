@@ -12,7 +12,6 @@ export const DIAGRAM_HELPER_OPERATIONS = Object.freeze({
   LIST_SEQUENCE_RECORDS: 'listSequenceRecords',
   MEASURE_LEGEND_TEXT: 'measureLegendText',
   PROMOTE_LEGACY_LOSATP_CACHE: 'promoteLegacyLosatpCache',
-  REGENERATE_DEFINITION_SVGS: 'regenerateDefinitionSvgs',
   RESOLVE_LEGACY_PROTEIN_REFERENCES: 'resolveLegacyProteinReferences',
   RESOLVE_SIMILARITY_ALIGNMENT: 'resolveSimilarityAlignment',
   VALIDATE_CONFIG_OVERRIDES: 'validateConfigOverrides'

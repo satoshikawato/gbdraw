@@ -65,24 +65,6 @@ def journey():
     return Journey()
 
 
-@pytest.mark.parametrize('args,kwargs,valid', [
-    (('seed',), {}, True),
-    (('seed', True), {}, True),
-    (('seed', False), {}, False),
-    (('seed',), {'valid': False}, False),
-])
-def test_load_preserves_original_valid_argument(journey, args, kwargs, valid):
-    assert journey.load(*args, **kwargs) == ('accepted' if valid else 'rejected')
-    assert journey.calls == [('load', 'seed', valid)]
-
-
-def test_c01_waits_for_definition_callback_after_valid_load(journey):
-    journey.jid = 'C01'
-    assert journey.load('C01-03-save.json') == 'accepted'
-    assert [call[0] for call in journey.calls] == ['load', 'wait', 'observe']
-    assert journey.calls[1][1] == 'window.__DEFINITION_COMPLETED__ > 0'
-
-
 def test_color_comparison_precedes_close_and_preserves_pointer_arguments(journey):
     target = journey.edit('color', '#123456', record=2)
     assert target == {'svg_id': 'target'}

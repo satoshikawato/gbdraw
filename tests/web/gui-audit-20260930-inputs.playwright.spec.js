@@ -64,7 +64,6 @@ const attemptSave = async (page) => {
 };
 
 test('a Circular definition edit after Generate leaves the committed Result unchanged', async ({ page }) => {
-  test.fail(true, 'IN-01');
   test.setTimeout(300_000);
   await openWithGenBank(page, HMMT, () => {
     Object.assign(window.__GBDRAW_APP__.form, {

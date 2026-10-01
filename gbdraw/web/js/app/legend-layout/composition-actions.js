@@ -847,52 +847,6 @@ export const applyCompositionEdit = (svg, options = {}) => {
   return bindCompositionMetadata(svg);
 };
 
-export const reconcileCompositionTitle = (
-  svg,
-  titleTarget,
-  titleSide = 'none',
-  { canvasPadding = null } = {}
-) => {
-  const metadata = parseCompositionMetadata(svg);
-  if (!TITLE_SIDES.has(titleSide)) fail(`Unknown title side ${JSON.stringify(titleSide)}.`);
-
-  targetsFor(svg, ROLE_SELECTORS.title).forEach((target) => {
-    if (target !== titleTarget) target.removeAttribute(COMPOSITION_ROLE_ATTRIBUTE);
-  });
-
-  let titlePayload = null;
-  if (titleTarget) {
-    if (titleSide !== 'none') titleTarget.removeAttribute('display');
-    let leading = readLeadingTranslate(titleTarget.getAttribute?.('transform') || '');
-    if (!leading.found) {
-      titleTarget.setAttribute(
-        'transform',
-        prependTranslate(titleTarget.getAttribute?.('transform'), 0, 0)
-      );
-      leading = readLeadingTranslate(titleTarget.getAttribute('transform'));
-    }
-    titleTarget.setAttribute(COMPOSITION_ROLE_ATTRIBUTE, 'title');
-    titlePayload = metadata.title || targetPayload(
-      'title',
-      wireTranslation([leading.x, leading.y]),
-      'localBounds',
-      wireBounds(measureCompositionTargetLocalBounds(titleTarget))
-    );
-  }
-
-  const nextMetadata = {
-    ...metadata,
-    title: titlePayload,
-    titleSide: titleTarget ? titleSide : 'none'
-  };
-  svg.setAttribute(COMPOSITION_METADATA_ATTRIBUTE, JSON.stringify(nextMetadata));
-  return applyCompositionEdit(svg, {
-    titleSide: nextMetadata.titleSide,
-    titleLocalBounds: titleTarget ? measureCompositionTargetLocalBounds(titleTarget) : null,
-    canvasPadding
-  });
-};
-
 export const resetCompositionUserDeltas = (svg) => {
   const binding = bindCompositionMetadata(svg);
   binding.primary.targets.forEach((target) => {

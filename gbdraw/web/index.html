@@ -2463,6 +2463,7 @@
                         </div>
 
                         <template v-if="mode === 'circular'">
+                            <p class="text-[10px] text-slate-500">Applies on Generate: Species and Strain.</p>
                             <div class="grid grid-cols-2 gap-1.5">
                                 <div>
                                     <span class="input-label"><label for="circular-species">Species</label> <help-tip id="help-species" text="Species name used in the circular center label when no custom plot title is set."></help-tip></span>
@@ -3713,6 +3714,7 @@
                 <div class="card bg-slate-50/50">
                     <details>
                         <summary aria-label="Titles and Record Labels"><i class="ph ph-textbox"></i> Titles &amp; Record Labels <help-tip text="Adjust the plot title and record-label text."></help-tip></summary>
+                        <p class="mt-2 text-[10px] text-slate-500">Applies on Generate: plot title and record-label settings.</p>
                         <div class="mt-2 space-y-4 pt-2 border-t border-slate-200">
                             <section aria-labelledby="plot-title-settings-heading" class="space-y-2">
                                 <h4 id="plot-title-settings-heading" class="text-[11px] font-bold text-slate-600">Plot Title</h4>
@@ -4165,6 +4167,7 @@
                                             <input type="number" min="0.01" step="0.5" v-model.number="adv.feature_width_circular" :disabled="!semanticMutationAvailable || (adv.circular_track_slots_enabled)" :title="adv.circular_track_slots_enabled ? 'Custom stack geometry is active. Use the Features row width, or Reset to copy this value into the stack.' : ''" aria-label="Feature Track Width" aria-describedby="help-feature-feature-track-width" class="form-input form-input-compact auto-value-input">
                                         </auto-value-field>
                                     </div>
+                                    <p class="text-[10px] text-slate-500">Applies on Generate: block and line stroke colors and widths.</p>
                                     <div class="grid grid-cols-2 gap-1.5">
                                         <div>
                                             <span class="input-label text-[10px]">Block Stroke Color <help-tip id="help-feature-block-stroke-color" text="Use Auto for the configured default, None for no outline, or Color for an explicit value."></help-tip></span>
@@ -4432,7 +4435,7 @@
                 <div v-if="mode === 'linear'" class="card bg-slate-50/50">
                     <details>
                         <summary aria-label="Axis &amp; Scale"><i class="ph ph-ruler"></i> Axis &amp; Scale <help-tip text="Adjust axis stroke settings plus the linear scale bar or ruler style."></help-tip></summary>
-                        <p class="mt-2 text-[10px] text-slate-500">Applies on Generate: scale visibility, style, interval, and label sizes. Live edit: axis and scale line colors and widths on existing targets.</p>
+                        <p class="mt-2 text-[10px] text-slate-500">Applies on Generate: scale visibility, style, interval, label sizes, and axis and scale line colors and widths.</p>
                         <div class="mt-2 space-y-3 pt-2 border-t border-slate-200">
                             <div class="flex items-center text-xs">
                                 <label class="option-label flex items-center gap-2 text-xs text-slate-700 cursor-pointer select-none">
@@ -4572,7 +4575,7 @@
                 <div v-if="mode === 'circular'" class="card bg-slate-50/50">
                     <details>
                         <summary aria-label="Axis &amp; Scale"><i class="ph ph-paint-brush"></i> Axis &amp; Scale <help-tip text="Adjust axis stroke settings and the circular scale interval."></help-tip></summary>
-                        <p class="mt-2 text-[10px] text-slate-500">Applies on Generate: scale visibility, style, interval, and label sizes. Live edit: axis and scale line colors and widths on existing targets.</p>
+                        <p class="mt-2 text-[10px] text-slate-500">Applies on Generate: scale visibility, interval, label sizes, and axis line colors and widths.</p>
                         <div class="mt-2 space-y-3 pt-2 border-t border-slate-200">
                             <div class="flex items-center text-xs">
                                 <label
