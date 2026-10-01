@@ -97,7 +97,7 @@ settings. The app does not show a separate always-on application status.
 | Operation label | When the Result changes |
 |---|---|
 | **Applies on Generate** | A successful **Generate Diagram** applies crop, row layout, Definition Lock, scale label sizes, track slots, **Species**, **Strain**, plot title and record-label settings, and the global block, line, axis, and scale stroke colors and widths. |
-| **Live edit** | Feature color, label text, and visibility update the current Result directly; geometry changes may rerender automatically. Stroke edits on selected features or legend entries are live. Palette selection is live when **Instant Preview** is on. |
+| **Live edit** | Feature color, label text, and visibility update the current Result directly; geometry changes may rerender automatically. A label rerender uses the settings of the last Generate plus the current feature, label, color, and legend edits. Stroke edits on selected features or legend entries are live. Palette selection is live when **Instant Preview** is on. |
 | **Apply required** | Alignment choices stay in the review draft until **Apply** succeeds. |
 
 A live edit can succeed while other settings stay in the draft. **Live edit
@@ -764,6 +764,23 @@ rule for indistinguishable duplicates: a **This feature only** color then
 applies to both copies. A one-feature rule uses a qualifier value only when no other
 feature of that record and type has the same value ignoring case, because the
 Python matcher ignores case; `orfA` and `ORFA` are one value.
+
+When a Circular file gives one Result per record (**Multi-record canvas**
+off), the Features list, its **Edit** actions, and its record picker follow the
+displayed Result; the record picker appears only when the displayed Result
+shows more than one record. Color, visibility, legend, and label edits made on
+one Result apply to every Result: another Result shows them in its preview,
+export, and saved Session once it is displayed, and **Undo** and **Redo**
+reach it the same way. A Result that was never displayed keeps its earlier
+SVG in a saved Session until it is displayed or Generate runs. An undone legend
+rename or legend color reaches another Result at the next Generate.
+
+Label text and label visibility edits stay with their feature when the
+displayed Result, record, or visibility changes. After Generate replaces a
+source file, only the edits of features that no longer exist are removed; an
+edit that replaces every label with the same text stays. When labels are off,
+**Whitelist only** or **Show all labels** in **Enable Labels** applies that label
+selection to the current Result with the label rerender.
 
 On a narrow preview, the same **Editor** sits below the canvas.
 Its content scrolls independently, while its header, Close action, and tabs stay

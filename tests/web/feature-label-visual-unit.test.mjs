@@ -69,7 +69,6 @@ const buildHarness = ({
     labelTextBulkOverrides: {},
     labelTextFeatureOverrideSources: {},
     labelVisibilityOverrides: { ...visibilityOverrides },
-    labelOverrideContextKey: ref(''),
     labelOverrideBuildWarning: ref(''),
     globalLabelModeDialog: { show: false },
     autoLabelReflowEnabled: ref(false),
@@ -218,4 +217,36 @@ test('stored override on a metadata-free Result fails closed without partial mut
     harness.state.labelReflowForceRequestReason.value,
     'label-visibility-binding-refresh'
   );
+});
+
+test('mounting Results with disjoint features keeps every label override (FE-01)', () => {
+  const resultSvg = (featureId) => new DOMParser().parseFromString([
+    '<svg>',
+    `<path data-gbdraw-feature-id="${featureId}" d="M0 0" />`,
+    `<text data-label-editable="true" data-label-key="label-1" data-label-feature-id="${featureId}" `,
+    'data-gbdraw-label-binding-schema="1">source</text>',
+    '</svg>'
+  ].join(''), 'image/svg+xml').documentElement;
+  const resultA = resultSvg('fa');
+  const resultB = resultSvg('fb');
+  const harness = buildHarness({ svg: resultA, featureId: 'fa' });
+  const { state, actions } = harness;
+  let mounted = resultA;
+  state.svgContainer.value = { querySelector: (selector) => (selector === 'svg' ? mounted : null) };
+  Object.assign(state.labelTextFeatureOverrides, { fb: 'EDITED_B' });
+  Object.assign(state.labelTextFeatureOverrideSources, { fb: 'source' });
+  Object.assign(state.labelTextBulkOverrides, { source: 'BULK' });
+  Object.assign(state.labelVisibilityOverrides, { fb: 'off' });
+  const before = JSON.stringify([
+    state.labelTextFeatureOverrides, state.labelTextFeatureOverrideSources,
+    state.labelTextBulkOverrides, state.labelVisibilityOverrides
+  ]);
+  for (const next of [resultB, resultA, resultB]) {
+    mounted = next;
+    actions.syncLabelEditor({ queueIncompleteVisibility: false });
+    assert.equal(JSON.stringify([
+      state.labelTextFeatureOverrides, state.labelTextFeatureOverrideSources,
+      state.labelTextBulkOverrides, state.labelVisibilityOverrides
+    ]), before);
+  }
 });

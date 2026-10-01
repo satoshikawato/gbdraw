@@ -3,6 +3,8 @@ import {
   buildFeatureVisibilityChanges,
   createDefaultFeatureVisibilityRule,
   deriveFeatureVisibilityRulesForBoundary,
+  exactRegexValue,
+  featureMatchesExactQualifier,
   featureVisibilityQualifierSuggestions,
   getFeatureVisibilityOverride,
   normalizeFeatureVisibilityRule,
@@ -121,13 +123,10 @@ export const createFeatureVisibilityActions = ({ state, featureSvgActions, previ
   };
 
   const getMatchingQualifierFeatures = ({ featureType, qualifier, value }) => {
-    const normalizedType = normalizeText(featureType);
-    const normalizedQualifier = normalizeText(qualifier).toLowerCase();
-    const normalizedValue = normalizeText(value).toLowerCase();
-    if (!normalizedType || !normalizedQualifier || !normalizedValue) return [];
+    if (!normalizeText(featureType) || !normalizeText(qualifier) || !normalizeText(value)) return [];
+    const selector = { featureType, qualifier, value: exactRegexValue(normalizeText(value)) };
     return (Array.isArray(extractedFeatures.value) ? extractedFeatures.value : [])
-      .filter((feat) => getFeatureType(feat) === normalizedType)
-      .filter((feat) => getQualifierValue(feat, normalizedQualifier).toLowerCase() === normalizedValue);
+      .filter((feat) => featureMatchesExactQualifier(feat, selector));
   };
 
   const buildVisibilityScopes = (feat) => {
@@ -192,32 +191,34 @@ export const createFeatureVisibilityActions = ({ state, featureSvgActions, previ
         )
   );
 
-  const collectAffectedFeatureIds = (scope, feat) => {
-    if (scope?.id === 'orthogroup') {
-      return uniqueFeaturesBySvgId(scope.features || [])
-        .map((member) => normalizeText(member?.svg_id ?? member?.svgId ?? member?.id))
-        .filter(Boolean);
-    }
+  const featureSvgId = (feature) => normalizeText(feature?.svg_id ?? feature?.svgId ?? feature?.id);
+
+  const collectAffectedFeatures = (scope, feat) => {
+    if (scope?.id === 'orthogroup') return uniqueFeaturesBySvgId(scope.features || []);
     if (scope?.id === 'product' || scope?.id === 'protein_id') {
-      return uniqueFeaturesBySvgId(getMatchingQualifierFeatures(scope))
-        .map((candidate) => normalizeText(candidate?.svg_id ?? candidate?.svgId ?? candidate?.id))
-        .filter(Boolean);
+      return uniqueFeaturesBySvgId(getMatchingQualifierFeatures(scope));
     }
-    const svgId = normalizeText(feat?.svg_id ?? feat?.svgId ?? feat?.id);
-    return svgId ? [svgId] : [];
+    return featureSvgId(feat) ? [feat] : [];
   };
 
+  const collectAffectedFeatureIds = (scope, feat) => (
+    collectAffectedFeatures(scope, feat).map(featureSvgId).filter(Boolean)
+  );
+
+  const effectiveFeatureVisibility = (feature) => resolveEffectiveFeatureVisibility(
+    featureSvgId(feature), featureVisibilityOverrides, null, featureVisibilityManualRules, feature
+  );
+
   const applyVisibilityPreviewForScope = (scope, feat, mode) => {
-    const changes = collectAffectedFeatureIds(scope, feat).map((svgId) => {
+    const changes = collectAffectedFeatures(scope, feat).map((feature) => {
+      const svgId = featureSvgId(feature);
       const specificHashMode = (scope?.id === 'product' || scope?.id === 'protein_id')
         ? featureVisibilityOverrides[svgId]
         : '';
       const effectiveMode = specificHashMode ||
-        (mode === 'default'
-          ? resolveEffectiveFeatureVisibility(svgId, featureVisibilityOverrides, null, featureVisibilityManualRules)
-          : mode);
+        (mode === 'default' ? effectiveFeatureVisibility(feature) : mode);
       return { featureId: svgId, mode: effectiveMode };
-    });
+    }).filter((change) => change.featureId);
     return applyVisibilityPreviewChanges(changes);
   };
 
@@ -488,16 +489,12 @@ export const createFeatureVisibilityActions = ({ state, featureSvgActions, previ
     return '';
   };
 
-  const reconcileFeatureVisibility = () => {
-    const changed = applyVisibilityPreviewChanges(
-      uniqueFeaturesBySvgId(Array.isArray(extractedFeatures.value) ? extractedFeatures.value : [])
-        .map((feature) => ({
-          featureId: normalizeText(feature?.svg_id ?? feature?.svgId ?? feature?.id),
-          mode: getFeatureVisibility(feature)
-        }))
-    );
-    return changed;
-  };
+  // Reconcile with the same resolver as the visibility action, so Undo and
+  // Redo of a scoped hide leave the preview as the action left it (FE-04).
+  const reconcileFeatureVisibility = () => applyVisibilityPreviewChanges(
+    uniqueFeaturesBySvgId(Array.isArray(extractedFeatures.value) ? extractedFeatures.value : [])
+      .map((feature) => ({ featureId: featureSvgId(feature), mode: effectiveFeatureVisibility(feature) }))
+  );
 
   return {
     addFeatureVisibilityRule,

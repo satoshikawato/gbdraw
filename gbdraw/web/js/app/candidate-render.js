@@ -282,9 +282,12 @@ const compilePlanBundle = ({
     if (stroke && typeof stroke === 'object') {
       const strokeColor = hasOwn(stroke, 'strokeColor') ? normalizePaint(stroke.strokeColor, 'legend stroke color') : '';
       const strokeWidth = hasOwn(stroke, 'strokeWidth') ? normalizeStrokeWidth(stroke.strokeWidth) : null;
-      if (strokeColor || strokeWidth !== null) addToResults(operationsByResult, allResultIndexes, 'legendStrokes', {
-        caption: targetCaption, strokeColor, strokeWidth, allowMissing,
-        renderedIds: legendRenderedIds.filter(id => renderedResultIndexes(catalogAdmission, id).size > 0)
+      // Each Result strokes only the category features it renders.
+      if (strokeColor || strokeWidth !== null) operationsByResult.forEach((operations, resultIndex) => {
+        operations.legendStrokes.push({
+          caption: targetCaption, strokeColor, strokeWidth, allowMissing,
+          renderedIds: legendRenderedIds.filter(id => renderedResultIndexes(catalogAdmission, id).has(resultIndex))
+        });
       });
     }
   });

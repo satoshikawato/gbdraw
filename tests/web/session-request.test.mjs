@@ -18,6 +18,7 @@ const {
   managedConfigOverridePathsForMode,
   normalizeWebGridColumnOrdering,
   promoteCanonicalRenderRequestToCurrent,
+  projectCommittedEditorIntent,
   projectCommittedRecordTransform,
   projectCanonicalSessionRequest
 } = await import(
@@ -2144,6 +2145,64 @@ for (const [label, targetPatch, transformPatch, requestPatch] of [
     transform: { recordLength: 100, startCoordinate: 75, reverseComplement: true, ...transformPatch }
   }), undefined, label);
 }
+// N-16: a label reflow renders the committed Session with only the editor
+// tables replaced; draft settings that apply on Generate stay out.
+{
+  const committed = structuredClone(unchangedOneSource);
+  const committedBefore = structuredClone(committed);
+  const text = (canonical, ref) => Buffer.from(
+    canonical.resources[ref.resourceId].data, 'base64'
+  ).toString('utf8');
+  const draft = {
+    ...oneSourceState,
+    form: { ...oneSourceState.form, species: 'Draft species', show_labels_linear: 'all' },
+    adv: { ...oneSourceState.adv, block_stroke_width: 7 },
+    manualSpecificRules: [{ feat: 'CDS', qual: 'gene', val: '^alpha$', color: '#445566', cap: 'Alpha' }],
+    featureVisibilityRules: ref([{
+      id: 'visibility-1', source: 'editor', recordId: '*', featureType: 'CDS',
+      qualifier: 'product', value: '^beta$', action: 'off'
+    }]),
+    filterMode: ref('Whitelist'),
+    manualWhitelist: [{ feat: 'CDS', qual: 'gene', key: 'alpha' }],
+    generatedLabelOverrideTsv: '*\t*\thash\t^f1$\tRenamed alpha\n'
+  };
+  const reflow = projectCommittedEditorIntent({ committed, state: draft });
+  assert.deepEqual(committed, committedBefore, 'the committed Session is not modified');
+  const { diagramOptions: options, ...requestRest } = reflow.renderRequest;
+  const { diagramOptions: committedOptions, ...committedRest } = committed.renderRequest;
+  assert.deepEqual(requestRest, committedRest);
+  assert.deepEqual(options.configOverrides, committedOptions.configOverrides);
+  assert.match(text(reflow, options.colors.colorTableFile), /\^alpha\$/);
+  assert.match(text(reflow, options.featureVisibilityTableFile), /\^beta\$/);
+  assert.match(text(reflow, options.labelOverrideFile), /Renamed alpha/);
+  assert.equal(options.labelWhitelistFile, committedOptions.labelWhitelistFile);
+  Object.keys(committed.resources).forEach((resourceId) => {
+    if (!/^(?:colors-|feature-visibility|label-override)/.test(resourceId)) {
+      assert.equal(reflow.resources[resourceId], committed.resources[resourceId]);
+    }
+  });
+
+  const enableLabels = projectCommittedEditorIntent({ committed, state: draft, labelSelection: true });
+  const labelOptions = enableLabels.renderRequest.diagramOptions;
+  assert.equal(labelOptions.configOverrides['labels.linear.scope'], 'all');
+  assert.deepEqual(labelOptions.configOverrides['labels.filtering.blacklist_keywords'], []);
+  assert.match(text(enableLabels, labelOptions.labelWhitelistFile), /CDS\tgene\talpha/);
+  assert.equal(
+    labelOptions.configOverrides['objects.features.block_stroke_width'],
+    committedOptions.configOverrides['objects.features.block_stroke_width']
+  );
+
+  // A Session loaded from an older request schema keeps its request until the
+  // next Generate; the reflow promotes it instead of rejecting it.
+  const older = structuredClone(committed);
+  older.renderRequest.schema = 7;
+  const promoted = projectCommittedEditorIntent({ committed: older, state: draft });
+  assert.equal(older.renderRequest.schema, 7, 'the committed Session is not modified');
+  assert.equal(promoted.renderRequest.schema, 8);
+  assert.deepEqual(promoted.renderRequest.records, reflow.renderRequest.records);
+  assert.deepEqual(promoted.renderRequest.diagramOptions, reflow.renderRequest.diagramOptions);
+}
+
 state.form.prefix = '';
 const linearDefaultCanonical = buildCanonicalRenderRequest({ state, filesData: linearFilesData });
 assert.equal(linearDefaultCanonical.renderRequest.grouping, 'single');

@@ -119,6 +119,62 @@ export const createLegendEntryActions = ({
     );
   };
 
+  // A batch Result keeps the Legend entries that a deletion removed from it,
+  // so an Undo or restore of that deletion returns them when the Result is
+  // displayed again (D-07). Keyed by the mounted Result's runtime identity.
+  const retiredEntriesByResult = new Map();
+  const rememberResultEntry = (
+    caption, targetGroup, targetIndex, entryGroup,
+    identity = previewRuntime?.getActiveRuntime?.()?.resultIdentity
+  ) => {
+    if (!identity || !entryGroup?.cloneNode) return;
+    const entries = retiredEntriesByResult.get(identity) || new Map();
+    const targetKey = targetGroupKey(targetGroup, targetIndex);
+    entries.set(`${targetKey}\u0000${caption}`, { caption, targetKey, node: entryGroup.cloneNode(true) });
+    retiredEntriesByResult.set(identity, entries);
+  };
+
+  const hasRetiredResultLegend = ({ resultIdentity, deletedCaptions = [] } = {}) => {
+    const deleted = new Set(deletedCaptions.map((caption) => String(caption || '').trim()));
+    return [...(retiredEntriesByResult.get(resultIdentity)?.values() || [])]
+      .some((entry) => !deleted.has(entry.caption));
+  };
+
+  // Before the displayed Result receives the diagram-wide Legend operations:
+  // return its entries whose deletion is no longer intended, and keep the
+  // entries that the operations delete. Returns whether its Legend changes.
+  const prepareDisplayedResultLegend = (svg, {
+    resultIdentity: identity,
+    liveResultIdentities = [],
+    deletedCaptions = []
+  } = {}) => {
+    const liveIdentities = new Set(liveResultIdentities);
+    [...retiredEntriesByResult.keys()].forEach((key) => {
+      if (!liveIdentities.has(key)) retiredEntriesByResult.delete(key);
+    });
+    const deleted = new Set(deletedCaptions.map((caption) => String(caption || '').trim()));
+    const retired = retiredEntriesByResult.get(identity);
+    let changed = false;
+    getAllFeatureLegendGroups(svg).forEach((targetGroup, targetIndex) => {
+      const targetKey = targetGroupKey(targetGroup, targetIndex);
+      retired?.forEach((entry, key) => {
+        if (entry.targetKey !== targetKey || deleted.has(entry.caption)) return;
+        if (!findLegendEntryGroup(targetGroup, entry.caption)) {
+          targetGroup.appendChild(entry.node.cloneNode(true));
+          changed = true;
+        }
+        retired.delete(key);
+      });
+      deleted.forEach((caption) => {
+        const entryGroup = findLegendEntryGroup(targetGroup, caption);
+        if (!entryGroup) return;
+        rememberResultEntry(caption, targetGroup, targetIndex, entryGroup, identity);
+        changed = true;
+      });
+    });
+    return changed;
+  };
+
   const restoredEntryTemplate = (caption, targetGroup, targetIndex) => {
     const templates = retiredEntryTemplates.get(String(caption || '').trim());
     if (!templates) return null;
@@ -513,6 +569,7 @@ export const createLegendEntryActions = ({
       const entryGroup = targetGroup.querySelector(`g[data-legend-key="${CSS.escape(caption)}"]`);
       if (entryGroup) {
         rememberRetiredEntry(caption, targetGroup, targetIndex, entryGroup);
+        rememberResultEntry(caption, targetGroup, targetIndex, entryGroup);
         entryGroup.remove();
         removed = true;
       }
@@ -1057,7 +1114,9 @@ export const createLegendEntryActions = ({
     deleteLegendEntry,
     extractLegendEntries,
     legendEntryExists,
+    hasRetiredResultLegend,
     onLegendGeometryChanged,
+    prepareDisplayedResultLegend,
     removeLegendEntry,
     reconcileLegendEntries,
     restoreDeletedLegendEntries,

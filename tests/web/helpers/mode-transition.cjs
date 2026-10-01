@@ -94,7 +94,7 @@ const snapshot = page => page.evaluate(async () => {
     labelSources: { ...s.labelTextFeatureOverrideSources }, visibility: { ...s.labelVisibilityOverrides },
     featureVisibility: { ...s.featureVisibilityOverrides }, visibilityRules: [...s.featureVisibilityManualRules],
     colors: { ...s.featureColorOverrides }, rules: s.manualSpecificRules.map(rule => ({ ...rule, fromFile: Boolean(rule.fromFile) })),
-    context: s.labelOverrideContextKey.value, featureCount: s.extractedFeatures.value.length,
+    featureCount: s.extractedFeatures.value.length,
     resultIdentity: ingestion.getCommittedSvgResultRuntimeIdentity(result),
     markedMounted: ingestion.isCommittedSvgResultMounted(result),
     result: result.content, payload: s.svgContent.value, mounted: root.outerHTML,

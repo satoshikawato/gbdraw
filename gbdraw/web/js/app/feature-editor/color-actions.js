@@ -1292,7 +1292,6 @@ export const createFeatureColorActions = ({
     if (siblings.length > 0) {
       resetColorDialog.show = true;
       resetColorDialog.caption = caption;
-      resetColorDialog.defaultColor = defaultColor;
       resetColorDialog.siblingCount = siblings.length;
     } else {
       doResetFillColor('this');
@@ -1310,7 +1309,8 @@ export const createFeatureColorActions = ({
     const feature = clickedFeature.value?.feat;
     if (!feature || choice === 'cancel') return false;
     const caption = getEffectiveLegendCaption(feature);
-    const color = resetColorDialog.defaultColor || appliedPaletteColors.value[feature.type];
+    // The reset color is the palette default of the feature being reset.
+    const color = appliedPaletteColors.value[feature.type];
     if (choice === 'this_with_legend') return setFeatureColor(feature, color, caption);
     let rules = manualSpecificRules.filter(rule => choice === 'all'
       ? rule.cap !== caption : !hashRuleTargetsFeatureExactly(rule, feature));

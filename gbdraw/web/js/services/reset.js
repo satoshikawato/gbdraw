@@ -108,7 +108,6 @@ const resetEditorDraftState = (state) => {
   clearReactiveObject(state.labelTextBulkOverrides);
   clearReactiveObject(state.labelTextFeatureOverrideSources);
   clearReactiveObject(state.labelVisibilityOverrides);
-  state.labelOverrideContextKey.value = '';
   state.labelOverrideBuildWarning.value = '';
   state.autoLabelReflowEnabled.value = false;
   state.labelReflowLastError.value = null;

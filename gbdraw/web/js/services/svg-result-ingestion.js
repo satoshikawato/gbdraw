@@ -492,6 +492,35 @@ const applyLegendOperations = (index, operations) => {
   });
 };
 
+/**
+ * Apply one Result's compiled editor operations to its mounted SVG with the
+ * executor that Generate admission uses (D-07, PD-OI-062). The preview binder
+ * owns label DOM identity, so label operations stay with it. Legend operations
+ * are diagram-wide and a batch Result shows only its own categories and
+ * features, so an absent caption or feature is skipped.
+ */
+export const applyEditorOperationsToMountedSvg = (svg, operations, { resultIndex = 0 } = {}) => {
+  const index = createLazyMutationIndex(svg, { phase: 'result-selection', resultIndex });
+  const present = ({ renderedId }) => (index.features().get(renderedId) || []).length > 0;
+  applyFeatureOperations(index, {
+    featureFills: operations.featureFills.filter(present),
+    featureStrokes: operations.featureStrokes.filter(present),
+    featureVisibility: operations.featureVisibility.filter(present)
+  });
+  if (index.legends().groups.length === 0) return;
+  const allowMissing = (operation) => ({ ...operation, allowMissing: true });
+  applyLegendOperations(index, {
+    legendFills: operations.legendFills.map(allowMissing),
+    legendStrokes: operations.legendStrokes.map((operation) => ({
+      ...allowMissing(operation),
+      renderedIds: (operation.renderedIds || []).filter((renderedId) => present({ renderedId }))
+    })),
+    legendRenames: operations.legendRenames.map(allowMissing),
+    legendDeletes: operations.legendDeletes.map(allowMissing),
+    legendAdds: operations.legendAdds
+  });
+};
+
 const admitCurrentResult = (
   result,
   metadata,

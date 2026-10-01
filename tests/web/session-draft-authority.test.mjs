@@ -728,6 +728,7 @@ activeIntentSession.features = {
   labelTextBulkOverrides: {},
   labelTextFeatureOverrideSources: { [activeFeatureId]: 'Original label' },
   labelVisibilityOverrides: { [activeFeatureId]: 'off' },
+  // A current reader ignores this retired writer field.
   labelOverrideContextKey: 'saved-active-context'
 };
 activeIntentSession.editorState = {
