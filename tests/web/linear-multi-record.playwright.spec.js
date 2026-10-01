@@ -444,7 +444,8 @@ test('Web fresh/reset Lock ON preserves explicit drafts, Result on Load, and reg
   await helpButton.scrollIntoViewIfNeeded();
   await helpButton.click();
   await expect(tooltip).toContainText('Changes apply on Generate');
-  await helpButton.locator('xpath=ancestor::label').screenshot({ path: testInfo.outputPath('definition-lock-help.png') });
+  // The tip sits beside the checkbox label; capture the row that holds both.
+  await helpButton.locator('xpath=ancestor::div[1]').screenshot({ path: testInfo.outputPath('definition-lock-help.png') });
 });
 
 test('Linear Lock Definition Column measures single, shared, and mixed rows after unequal translations', async ({ page }, testInfo) => {
