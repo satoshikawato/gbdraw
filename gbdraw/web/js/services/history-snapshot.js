@@ -738,6 +738,7 @@ export const createHistorySnapshotService = ({
       ),
       linearRecordOrientations: artifactOwnedValue(captureLinearRecordOrientations()),
       annotationWarnings: artifactOwnedValue(getGeneratedArtifactRef(state.annotationWarnings, null)),
+      comparisonWarnings: artifactOwnedValue(getGeneratedArtifactRef(state.comparisonWarnings, null)),
       specificRules: (state.manualSpecificRules || []).map(rule => ({ ...rule })),
       fileLegendCaptions: new Set(state.fileLegendCaptions?.value || []),
       trackSlotResolvedGeometry: artifactOwnedValue(
@@ -838,6 +839,7 @@ export const createHistorySnapshotService = ({
     );
     installLinearRecordOrientations(ownerSet.linearRecordOrientations);
     setGeneratedArtifactRef(state.annotationWarnings, ownerSet.annotationWarnings || []);
+    setGeneratedArtifactRef(state.comparisonWarnings, ownerSet.comparisonWarnings || []);
     if (state.manualSpecificRules && ownerSet.specificRules) {
       state.manualSpecificRules.splice(0, state.manualSpecificRules.length, ...ownerSet.specificRules.map(rule => ({ ...rule })));
     }
@@ -934,6 +936,7 @@ export const createHistorySnapshotService = ({
       'linearRecordTranslations',
       'trackSlotResolvedGeometry',
       'annotationWarnings',
+      'comparisonWarnings',
       'proteinIdentityManifest',
       'legacyProteinRawCandidates',
       'legacyProteinDerivedEvidence',

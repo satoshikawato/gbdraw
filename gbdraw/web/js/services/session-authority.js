@@ -1,4 +1,5 @@
 import { validateAnnotationWarnings } from './session-feature-metadata.js';
+import { validateComparisonWarnings } from './comparison-warnings.js';
 import { assertSafeObjectKeys } from './safe-object-keys.js';
 import { validateWebFileBindings } from './session-resource-backing.js';
 import { validateCurrentWriterActiveConfig, validateAlignmentResetReceiptShape } from './session-active-config-contract.js';
@@ -445,6 +446,7 @@ export const validateSessionAuthorityInventory = (sessionData, version) => {
     throw new Error(`Session contains unclassified top-level field(s): ${unknown.join(', ')}`);
   }
   validateAnnotationWarnings(sessionData.runMetadata?.annotationWarnings, sessionData.results);
+  validateComparisonWarnings(sessionData.runMetadata?.comparisonWarnings, sessionData.results);
   if (isSettingsOnlySessionDocument(sessionData)) validateSettingsOnlyDocument(sessionData);
 };
 

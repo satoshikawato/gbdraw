@@ -3684,6 +3684,7 @@ const resetSessionBaseline = () => {
   state.lastRunInfo.value = null;
   state.trackSlotResolvedGeometry.value = null;
   state.annotationWarnings.value = [];
+  state.comparisonWarnings.value = [];
   applyFiles(null);
   state.losatCache.value = new Map();
   state.losatDerivedCache.value = new Map();
@@ -4147,7 +4148,9 @@ const exportSessionDocument = async (
     ...(!settingsOnly ? { runMetadata: {
       ...(state.trackSlotResolvedGeometry.value
         ? { trackSlotGeometry: cloneJsonData(state.trackSlotResolvedGeometry.value) } : {}),
-      annotationWarnings: cloneJsonData(state.annotationWarnings.value)
+      annotationWarnings: cloneJsonData(state.annotationWarnings.value),
+      ...(state.comparisonWarnings.value.length
+        ? { comparisonWarnings: cloneJsonData(state.comparisonWarnings.value) } : {})
     } } : {}),
     features: {
       selectedFeatureRecordIdx: state.selectedFeatureRecordIdx.value,
@@ -4661,6 +4664,9 @@ const importSessionDocument = async (e, options = {}) => {
     applyResultsData(committedImportedResults, ui);
     state.annotationWarnings.value = cloneJsonData(
       projectionResult?.artifactState?.runMetadata?.annotationWarnings || []
+    );
+    state.comparisonWarnings.value = cloneJsonData(
+      projectionResult?.artifactState?.runMetadata?.comparisonWarnings || []
     );
     state.trackSlotResolvedGeometry.value = cloneJsonData(
       projectionResult?.artifactState?.runMetadata?.trackSlotGeometry ?? null

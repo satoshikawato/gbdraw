@@ -1,4 +1,5 @@
 import { validateAnnotationWarnings } from '../services/session-feature-metadata.js';
+import { validateComparisonWarnings } from '../services/comparison-warnings.js';
 import { rekeyOrthogroupOverrides } from '../services/orthogroup-feature-metadata.js';
 import { resolveLinearRegionBounds } from './feature-metadata-extraction.js';
 import { buildSimilarityAlignmentResetReceipt, validateSimilarityAlignmentResetReceipt } from '../services/session-active-config-contract.js';
@@ -1023,6 +1024,7 @@ export const executeCanonicalRenderCandidate = async ({
     ? generationResponse.metadata
     : {};
   const annotationWarnings = validateAnnotationWarnings(metadata.annotationWarnings, results);
+  const comparisonWarnings = validateComparisonWarnings(metadata.comparisonWarnings, results);
   recordSessionLifecycleEvent('candidate-result-validation-start');
   const catalogState = catalogAdmission(metadata.featureCatalog, results, {
     adopt: true,
@@ -1051,6 +1053,7 @@ export const executeCanonicalRenderCandidate = async ({
     generationResponse,
     generationMetadata: metadata,
     annotationWarnings,
+    comparisonWarnings,
     results,
     catalogAdmission: catalogState,
     catalog: catalogState.catalog,
@@ -4568,6 +4571,7 @@ export const createRunAnalysis = ({
           : [],
         trackSlotResolvedGeometry: generationMetadata.trackSlotGeometry || null,
         annotationWarnings: canonicalExecution.annotationWarnings,
+        comparisonWarnings: canonicalExecution.comparisonWarnings,
         specificRules: candidateRules,
         fileLegendCaptions: new Set(candidateRules.filter(rule => rule.fromFile && rule.cap).map(rule => rule.cap)),
         proteinIdentityManifest: workingProteinIdentityManifest,
@@ -5044,6 +5048,7 @@ export const createRunAnalysis = ({
         trackSlotResolvedGeometry:
           execution.generationMetadata.trackSlotGeometry || null,
         annotationWarnings: execution.annotationWarnings,
+        comparisonWarnings: execution.comparisonWarnings,
         matchSequenceOwner: matchSequenceRegistry?.buildTrustedOwner?.(
           candidateCommit.featureState.sequenceSources
         ) || currentOwnerSet.matchSequenceOwner,

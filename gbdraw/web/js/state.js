@@ -58,6 +58,7 @@ const resultPanelTab = ref('preview');
 const lastRunInfo = ref(null);
 const trackSlotResolvedGeometry = ref(null);
 const annotationWarnings = ref([]);
+const comparisonWarnings = ref([]);
 // Store original pairwise match factors for re-interpolation
 const pairwiseMatchFactors = ref({}); // { pathId: factor }
 // Analysis-scoped materialized nucleotide sources used by match span popups.
@@ -847,6 +848,7 @@ export const state = {
   lastRunInfo,
   trackSlotResolvedGeometry,
   annotationWarnings,
+  comparisonWarnings,
   pairwiseMatchFactors,
   matchSequenceRegistry,
   svgContent,

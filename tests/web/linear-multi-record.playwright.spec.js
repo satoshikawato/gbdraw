@@ -3195,6 +3195,8 @@ const completeComparisonSnapshot = (page) => page.evaluate(() => {
   ].join('->'));
   return {
     error: app.errorLog,
+    // LOSAT rows carry the displayed record IDs, so they never raise the PD-OI-074 notice.
+    comparisonWarnings: app.comparisonWarnings,
     selectors: request.records.map((record) => record.selector.value),
     rows: request.records.map((record) => record.presentation.gridRow),
     pairs: request.comparisons.filter((comparison) => comparison.kind === 'nucleotideBlast')
@@ -3586,6 +3588,7 @@ test('@comparison-contract OIC-015: multi-record Adjacent searches all six pairs
   expect(restored.rows).toEqual([1, 1, 2, 2, 3]);
   expect(restored.pairs).toEqual([[0, 2], [0, 3], [1, 2], [1, 3], [2, 4], [3, 4]]);
   expect(restored.error).toBeNull();
+  expect(restored.comparisonWarnings).toEqual([]);
   expect(restored.sourceCount).toBe(2);
   await page.setViewportSize({ width: 390, height: 844 });
   await controls.last().scrollIntoViewIfNeeded();
@@ -3645,6 +3648,7 @@ for (const mode of ['orthogroup', 'collinear']) {
     expect(pairs).toEqual(allPairs);
     expect(snapshot.sourceCount).toBe(2);
     expect(snapshot.error).toBeNull();
+    expect(snapshot.comparisonWarnings).toEqual([]);
     if (mode === 'orthogroup') {
       expect(snapshot.svgPairs).toEqual(['0->2', '1->2', '2->3', '2->4']);
     }
