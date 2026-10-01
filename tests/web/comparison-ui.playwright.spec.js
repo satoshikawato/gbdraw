@@ -1215,7 +1215,7 @@ test('structured comparison errors open and focus their owning disclosure', asyn
   await expect(page.getByRole('combobox', { name: 'LOSATP mode' })).toBeFocused();
 });
 
-test('uploaded BLAST IDs bind to endpoint records and contradictions keep the Result', async ({ page }) => {
+test('uploaded BLAST IDs bind to endpoint records and malformed or contradictory tables keep the Result', async ({ page }) => {
   // CO-06 (PD-OI-074): unknown IDs keep positional placement with endpoint
   // metadata, so match FASTA resolves; a swapped table fails before drawing.
   test.setTimeout(300000);
@@ -1291,6 +1291,19 @@ test('uploaded BLAST IDs bind to endpoint records and contradictions keep the Re
     { role: 'subject', available: true, reason: '' }
   ]);
   await matchDialog.getByRole('button', { name: 'Close match popup' }).click();
+
+  // CO-05: a short row reports its line through the reader's diagnostic.
+  const shortRow = await generateWithTable(
+    '# BLASTN\nCo06A\tCo06B\t95\t80\t4\t0\t1\t80\t5\t84\t1e-40\n',
+    'short-row-table.tsv'
+  );
+  expect(shortRow.status).toBe('error');
+  expect(shortRow.errorCode).toBe('COMPARISON_INPUT');
+  expect(shortRow.content).toBe(unrelated.content);
+  expect(await page.evaluate(() => window.__GBDRAW_APP__.errorLog.context))
+    .toEqual({ reason: 'FIELDS', row: 2, columnCount: 12 });
+  await expect(page.getByRole('alert', { name: 'Generation Error' }))
+    .toContainText('Required columns: 12.');
 
   const swapped = await generateWithTable(hit('Co06B', 'Co06A'), 'swapped-ids.tsv');
   expect(swapped.status).toBe('error');
