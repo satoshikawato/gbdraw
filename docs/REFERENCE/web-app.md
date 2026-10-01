@@ -88,8 +88,8 @@ settings. The app does not show a separate always-on application status.
 
 | Operation label | When the Result changes |
 |---|---|
-| **Applies on Generate** | A successful **Generate Diagram** applies crop, row layout, Definition Lock, scale label sizes, and track slots. |
-| **Live edit** | Feature color, label text, and visibility update the current Result directly; geometry changes may rerender automatically. Palette selection is live when **Instant Preview** is on. |
+| **Applies on Generate** | A successful **Generate Diagram** applies crop, row layout, Definition Lock, scale label sizes, track slots, **Species**, **Strain**, plot title and record-label settings, and the global block, line, axis, and scale stroke colors and widths. |
+| **Live edit** | Feature color, label text, and visibility update the current Result directly; geometry changes may rerender automatically. Stroke edits on selected features or legend entries are live. Palette selection is live when **Instant Preview** is on. |
 | **Apply required** | Alignment choices stay in the review draft until **Apply** succeeds. |
 
 A live edit can succeed while other settings stay in the draft. **Live edit

@@ -106,7 +106,17 @@ decisions are in
 
 <!-- web-gui-audit-20260930 P10 -->
 
-<!-- web-gui-audit-20260930 P11 -->
+- Circular **Species**, **Strain**, plot title text, position, and font size,
+  **Keep Full Definition with Plot Title**, and **Default font size** now apply
+  on Generate, as in Linear. Editing them after Generate no longer rebuilds the
+  record definitions from the whole input file, which replaced the region
+  length, GC%, and record label in the Result, Save Session, and exports
+  (IN-01).
+- The global block, line, axis, and scale stroke colors and widths now apply on
+  Generate. A cleared or invalid width no longer reaches the current Result,
+  and the global setting no longer overwrites a feature's own stroke before
+  Generate. Stroke edits on selected features and legend entries stay live
+  (GE-02).
 
 <!-- web-gui-audit-20260930 P12 -->
 
