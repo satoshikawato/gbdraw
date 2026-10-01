@@ -413,6 +413,39 @@ def test_unknown_table_ids_keep_positional_placement_with_a_warning(
     assert "1 row(s) use sequence IDs that match no displayed record ('contig_A', 'contig_B')" in caplog.text
 
 
+def test_unknown_table_ids_are_returned_as_structured_warnings() -> None:
+    """PD-OI-074: the Web carries the warning the CLI logs (logging is off in the browser)."""
+
+    def build(*tables: pd.DataFrame):
+        return assemble_linear_diagram_from_records(
+            _pair_records("R2", "R3"),
+            cfg=apply_config_overrides(
+                None,
+                {
+                    "labels.linear.scope": "none",
+                    "canvas.show_gc": False,
+                    "canvas.show_skew": False,
+                },
+            ),
+            linear_comparisons=[LinearComparison(0, 1, table) for table in tables],
+            legend="none",
+            _return_build_result=True,
+        )
+
+    warnings = build(_hits("contig_A", "contig_B")).metadata.comparison_warnings
+    assert len(warnings) == 1
+    warning = warnings[0]
+    assert warning.code == "comparison_record_id_unmatched"
+    assert (warning.query_record_index, warning.subject_record_index) == (0, 1)
+    assert (warning.query_record_id, warning.subject_record_id) == ("R2", "R3")
+    assert warning.row_count == 1
+    assert warning.example_ids == ("contig_A", "contig_B")
+    assert warning.message.startswith("Comparison between query record #1 'R2' and subject record #2 'R3'")
+
+    # Matching IDs, including version-suffix differences, warn about nothing.
+    assert build(_hits("R2", "R3")).metadata.comparison_warnings == ()
+
+
 def test_uploaded_rows_merged_with_source_bound_rows_are_still_checked() -> None:
     records = _pair_records("R2", "R3")
     # Source-bound rows are checked by feature identity, so their table IDs are exempt.
