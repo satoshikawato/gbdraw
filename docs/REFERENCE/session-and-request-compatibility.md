@@ -97,6 +97,13 @@ these Web-only defaults,
 because these fields describe Web editing state rather than the
 render request: a reader that ignores them still renders identical output.
 
+`webFiles.bindings.linearSeqs[].inferred_definition` stores the definition
+inferred from the record that row selects. It is written when a GenBank File is
+uploaded or a row selects another record, and a record's definition is its own
+value, then the file default, then this value. Sessions saved before the field
+existed, and Sessions written by the CLI, carry none and are not re-inferred when
+loaded, so their records keep the definitions they were drawn with.
+
 Session 44 replaces the two editable Linear visibility booleans with independent
 selected modes: `linear_accession_visibility` and `linear_length_visibility`,
 each set to `auto`, `show`, or `hide`. Auto resolves from the effective rendered
