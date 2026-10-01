@@ -135,6 +135,7 @@ export const createLinearSeq = (overrides = {}) => {
     record_subtitle: String(source.record_subtitle ?? ''),
     file_definition: String(source.file_definition ?? ''),
     file_subtitle: String(source.file_subtitle ?? ''),
+    inferred_definition: String(source.inferred_definition ?? ''),
     region_record_id: String(source.region_record_id ?? ''),
     region_start: normalizeLinearSeqNumber(source.region_start),
     region_end: normalizeLinearSeqNumber(source.region_end),

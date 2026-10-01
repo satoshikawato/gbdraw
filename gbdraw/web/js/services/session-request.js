@@ -45,6 +45,7 @@ import {
 } from '../app/depth-track-state.js';
 import {
   buildDisambiguatedRecordEntries,
+  resolveCircularRequestRecordSet,
   resolveDisambiguatedRecordSelection
 } from '../app/record-options.js';
 import {
@@ -1005,37 +1006,18 @@ const buildRecords = ({ state, filesData, resources }) => {
         kind: 'genbank',
         resourceId: resources.addFile('record-1-genbank', 'genbank', filesData.c_gb)
       };
-  const knownRecords = Array.isArray(state.circularRecordList.value)
-    ? state.circularRecordList.value
-    : [];
-  const recordSelectors = buildDisambiguatedRecordEntries(
-    knownRecords.map((record) => ({
-      ...record,
-      recordId: record?.record_id ?? record?.recordId
-    }))
-  );
-  const requestedSelector = String(state.form.circular_record_selector || '').trim();
-  const selection = resolveDisambiguatedRecordSelection(
-    recordSelectors,
-    requestedSelector
-  );
-  const singlePresentationRequested = (
-    !state.form.multi_record_canvas &&
-    state.adv.circular_grouping_intent !== 'batch'
-  );
-  if (
-    singlePresentationRequested &&
-    requestedSelector &&
-    selection.status !== 'resolved'
-  ) {
-    throw diagnosticError('RECORD_SELECTION', { reason: selection.status === 'ambiguous' ? 'AMBIGUOUS' : 'NO_MATCH' });
-  }
-  const selectedRecords = singlePresentationRequested && selection.record
-    ? [selection.record]
-    : (recordSelectors.length > 0 ? recordSelectors : [null]);
+  const recordSet = resolveCircularRequestRecordSet({
+    records: state.circularRecordList.value,
+    selector: state.form.circular_record_selector,
+    multiRecordCanvas: state.form.multi_record_canvas,
+    groupingIntent: state.adv.circular_grouping_intent
+  });
+  if (recordSet.selectionFailure) throw diagnosticError('RECORD_SELECTION', { reason: recordSet.selectionFailure });
+  const { recordSelectors } = recordSet;
+  const selectedRecords = recordSet.records.length > 0 ? recordSet.records : [null];
   const singleJourney = (
     selectedRecords.length === 1 &&
-    singlePresentationRequested
+    recordSet.singlePresentation
   );
   const records = selectedRecords.map((record, index) => {
     const region = singleJourney
@@ -2893,6 +2875,7 @@ const applyWebFileBindings = (
       record_subtitle: String(sequence?.record_subtitle || ''),
       file_definition: String(sequence?.file_definition || ''),
       file_subtitle: String(sequence?.file_subtitle || ''),
+      inferred_definition: String(sequence?.inferred_definition || ''),
       region_record_id: String(sequence?.region_record_id || ''),
       region_start: sequence?.region_start ?? null,
       region_end: sequence?.region_end ?? null,

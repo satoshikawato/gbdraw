@@ -4,6 +4,7 @@ import {
   orderedOptionalConservationFiles
 } from './conservation-series.js';
 import { readFileText } from '../services/file-content-cache.js';
+import { genbankHeaderIds } from './genbank-header.js';
 
 const IUPAC_COMPLEMENT = Object.freeze({
   A: 'T', C: 'G', G: 'C', T: 'A', U: 'A',
@@ -816,13 +817,11 @@ const parseGenbankSequenceRecords = (value) => {
   const records = [];
   String(value ?? '').split(/^\/\/\s*$/m).forEach((chunk) => {
     const originMatch = chunk.match(/\nORIGIN\b([\s\S]*)$/i);
-    if (!originMatch) return;
-    const locus = text(chunk.match(/^LOCUS\s+(\S+)/m)?.[1]);
-    const accession = text(chunk.match(/^ACCESSION\s+(\S+)/m)?.[1]);
-    const version = text(chunk.match(/^VERSION\s+(\S+)/m)?.[1]);
+    const header = originMatch ? genbankHeaderIds(chunk) : null;
+    if (!header) return;
+    const { recordId, version, accession, locus } = header;
     const sequence = normalizedSequence(originMatch[1].replace(/[^A-Za-z]/g, ''));
     if (!sequence) return;
-    const recordId = version || accession || locus || `record_${records.length + 1}`;
     records.push({
       recordId,
       header: recordId,

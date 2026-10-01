@@ -1639,10 +1639,10 @@ def list_sequence_records(path, format):
         return json.dumps({'error': serialize_web_error(error, operation='listSequenceRecords', stage="helper")})
 
 def list_gff_fasta_records(gff_path, fasta_path):
-    """List every FASTA record available to paired GFF3 diagram generation."""
+    """List the records load_gff_fasta reads: GFF3 records the FASTA names, in FASTA order."""
     try:
-        from Bio import SeqIO
-        records = list(SeqIO.parse(fasta_path, "fasta"))
+        from gbdraw.io.genome import load_gff_fasta
+        records = load_gff_fasta([gff_path], [fasta_path])
         payload = [
             {
                 "selector": f"#{idx + 1}",

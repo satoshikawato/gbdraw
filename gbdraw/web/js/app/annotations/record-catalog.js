@@ -133,12 +133,13 @@ const buildLinearCatalog = (sources) => {
     records: finalized,
     issues,
     requiresSelection: finalized.length > 1,
-    allowExplicitSelectors: true,
     signature: finalized.map((record) => record.key).join('|')
   };
 };
 
-const buildCircularCatalog = (source, multiRecordCanvas) => {
+// circularSource.records are the records the Circular request draws
+// (resolveCircularRequestRecordSet); several records need an explicit target.
+const buildCircularCatalog = (source) => {
   const issues = [];
   if (!source?.hasInput) {
     issues.push(catalogIssue('INPUT_REQUIRED'));
@@ -148,14 +149,12 @@ const buildCircularCatalog = (source, multiRecordCanvas) => {
       : catalogIssue('RECORD_SELECTION', { reason: 'DISCOVERY_PENDING' }));
   }
   const records = issues.length === 0 ? finalizeRecords(sourceRecords(source, 'circular-source')) : [];
-  const allowExplicitSelectors = Boolean(multiRecordCanvas) || records.length <= 1;
   return {
     mode: 'circular',
     status: issues.length === 0 ? 'ready' : (source?.status === 'loading' ? 'loading' : 'error'),
     records,
     issues,
-    requiresSelection: Boolean(multiRecordCanvas) && records.length > 1,
-    allowExplicitSelectors,
+    requiresSelection: records.length > 1,
     signature: records.map((record) => record.key).join('|')
   };
 };
@@ -164,11 +163,10 @@ export const buildAnnotationRecordCatalog = ({
   mode,
   inputType = 'gb',
   loadComparison = false,
-  multiRecordCanvas = false,
   circularSource = null,
   linearSources = []
 } = {}) => (
   cleanText(mode) === 'linear'
     ? buildLinearCatalog(linearSources)
-    : buildCircularCatalog(circularSource, Boolean(multiRecordCanvas))
+    : buildCircularCatalog(circularSource)
 );

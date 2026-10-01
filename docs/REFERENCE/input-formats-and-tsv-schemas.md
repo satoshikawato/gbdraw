@@ -11,7 +11,10 @@ topology, sequence, feature locations, strand, and qualifiers. The reader does
 not split one biological sequence into artificial records.
 
 GFF3 must be paired with FASTA from the same biological source. GFF3 column 1
-and the first token of the matching FASTA header must agree exactly.
+and the first token of the matching FASTA header must agree exactly. The
+records are the FASTA sequences that have GFF3 rows, including a row that only
+declares a `region`; a FASTA sequence with no GFF3 row is not a record, in the
+command line and the Web app alike.
 Coordinates are 1-based and inclusive; strand is `+` or `-`; CDS phase is `0`,
 `1`, or `2`. `ID` values should be unique, and `Parent` should preserve the
 source annotation model.

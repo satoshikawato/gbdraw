@@ -545,7 +545,8 @@ canonicalWithWebBindings.webFiles.bindings = {
     fasta: null,
     depth: null,
     blast: null,
-    losat_gencode: 11
+    losat_gencode: 11,
+    inferred_definition: '<i>Bound organism</i>'
   }],
   linearComparisons: [{
     id: 'inactive-comparison-uid',
@@ -568,6 +569,7 @@ assert.equal(webBindingProjection.files.c_gb.name, 'bound-circular.gb');
 assert.equal(webBindingProjection.files.c_gb.type, 'text/x-genbank');
 assert.equal(webBindingProjection.files.c_gb.lastModified, 123);
 assert.equal(webBindingProjection.files.linearSeqs[0].uid, 'inactive-linear-uid');
+assert.equal(webBindingProjection.files.linearSeqs[0].inferred_definition, '<i>Bound organism</i>');
 assert.equal(webBindingProjection.files.linearSeqs[0].gb.name, 'bound-linear.gb');
 assert.equal(
   webBindingProjection.files.linearComparisons[0].file.name,

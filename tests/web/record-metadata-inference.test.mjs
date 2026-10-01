@@ -156,17 +156,14 @@ test('record discovery returns the loader records or declines to the Worker', as
   assert.ok(CASES.discovery.length >= 10);
   for (const testCase of CASES.discovery) {
     const observed = await discoverCase(testCase);
-    const matches = testCase.expected.error
-      ? Object.hasOwn(observed, 'error')
-      : JSON.stringify(observed.records) === JSON.stringify(testCase.expected.records);
-    if (testCase.knownDefect) {
-      assert.equal(
-        matches,
-        false,
-        `${testCase.name}: known defect ${testCase.knownDefect} no longer reproduces; remove its knownDefect mark.`
-      );
+    if (testCase.expected.error) {
+      assert.equal(Object.hasOwn(observed, 'error'), true, `${testCase.name}: ${JSON.stringify(observed)}`);
+      // Only the Worker's loader can report this failure, so the fast path declines.
+      assert.equal(observed.calls.length, 1, `${testCase.name}: the fast path declines to the Worker`);
     } else {
-      assert.equal(matches, true, `${testCase.name}: ${JSON.stringify(observed)}`);
+      assert.deepEqual(observed.records, testCase.expected.records, testCase.name);
+      // An upload whose records the fast path can read does not start the Worker.
+      assert.equal(observed.calls.length, 0, `${testCase.name}: answered without the Worker`);
     }
   }
 });

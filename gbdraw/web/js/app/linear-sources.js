@@ -1,5 +1,6 @@
 import { getSessionResourceSource } from '../services/file-content-cache.js';
 import { depthFileSlotsFromValue } from './depth-track-state.js';
+import { resolveDisambiguatedRecordSelection } from './record-options.js';
 
 const sourceFileIdentity = (file) => getSessionResourceSource(file)?.descriptor || file;
 
@@ -132,11 +133,23 @@ export const setLinearSourceDefaultSubtitle = (source, value) => {
   }
 };
 
+// A record draws its own Definition, else the File default the user entered,
+// else the definition inferred from that record (D-12).
 export const resolveLinearRecordEffectiveDefinition = (sequence, source = null) => {
   const own = String(sequence?.definition ?? '').trim();
   if (own) return sequence.definition;
   const fileDef = String(sequence?.file_definition ?? (source ? getLinearSourceDefaultDefinition(source) : '')).trim();
-  return fileDef || '';
+  return fileDef || String(sequence?.inferred_definition ?? '').trim();
+};
+
+// The definition inferred from the record a row selects; an automatic selector
+// names a record only when its File has exactly one.
+export const inferredDefinitionForRecord = (records, selector) => {
+  const list = Array.isArray(records) ? records : [];
+  const record = String(selector ?? '').trim()
+    ? resolveDisambiguatedRecordSelection(list, selector).record
+    : (list.length === 1 ? list[0] : null);
+  return String(record?.inferredDefinition || '');
 };
 
 export const resolveLinearRecordEffectiveSubtitle = (sequence, source = null) => {

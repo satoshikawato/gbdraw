@@ -58,3 +58,35 @@ export const resolveDisambiguatedRecordSelection = (records, requestedValue) => 
   }
   return { status: 'missing', requested, entries, record: null };
 };
+
+// The source records one Circular request draws: the selected record of a
+// single presentation, otherwise every record. services/session-request.js
+// builds the request from this set and the region annotation record catalog
+// offers the same records.
+export const resolveCircularRequestRecordSet = ({
+  records,
+  selector = '',
+  multiRecordCanvas = false,
+  groupingIntent = ''
+} = {}) => {
+  const recordSelectors = buildDisambiguatedRecordEntries(
+    (Array.isArray(records) ? records : []).map((record) => ({
+      ...record,
+      recordId: record?.record_id ?? record?.recordId
+    }))
+  );
+  const requestedSelector = String(selector || '').trim();
+  const selection = resolveDisambiguatedRecordSelection(recordSelectors, requestedSelector);
+  const singlePresentation = !multiRecordCanvas && groupingIntent !== 'batch';
+  // 'AMBIGUOUS' or 'NO_MATCH' (the RECORD_SELECTION reasons) when a single
+  // presentation names a record the input does not resolve to exactly one.
+  const selectionFailure = singlePresentation && requestedSelector && selection.status !== 'resolved'
+    ? (selection.status === 'ambiguous' ? 'AMBIGUOUS' : 'NO_MATCH')
+    : '';
+  return {
+    recordSelectors,
+    records: singlePresentation && selection.record ? [selection.record] : recordSelectors,
+    singlePresentation,
+    selectionFailure
+  };
+};

@@ -135,12 +135,8 @@ export const createFeatureColorActions = ({
     const isExact = (candidate) => (
       Boolean(candidate) && (ruleValue === candidate || ruleValue === exactRegexValue(candidate))
     );
-    if (renderedId !== generationHash && isExact(renderedId)) return true;
-    if (!isExact(generationHash)) return false;
-    const collisionCount = extractedFeatures.value.filter(
-      (candidate) => candidate?.type === feature?.type && getFeatureHashCandidates(candidate)[0] === generationHash
-    ).length;
-    return collisionCount <= 1;
+    // Python matches only the stable hash, which duplicate records share.
+    return isExact(generationHash) || (renderedId !== generationHash && isExact(renderedId));
   };
 
   const normalizeStrokeWidthValue = (value) => {

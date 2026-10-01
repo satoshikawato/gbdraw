@@ -1,5 +1,6 @@
 import { normalizeUserFacingError } from '../services/error-normalization.js';
 import { plainTextLinearRecordLabel } from './linear-comparisons.js';
+import { resolveLinearRecordEffectiveDefinition } from './linear-sources.js';
 import { canonicalRecordReverseComplement } from './record-display-options.js';
 import { validateSimilarityAlignmentResetReceipt } from '../services/session-active-config-contract.js';
 import {
@@ -155,7 +156,7 @@ const recordNames = ({ recordKeys, request = null, linearSeqs = [], catalog = nu
     const sequence = (Array.isArray(linearSeqs) ? linearSeqs : [])
       .find((entry) => String(entry?.uid || '') === recordKey);
     const name = plainTextLinearRecordLabel(displayText(record?.presentation?.label,
-      sequence?.definition, sequence?.file_definition));
+      sequence ? resolveLinearRecordEffectiveDefinition(sequence) : ''));
     const accession = displayText(sequence?.accession, accessions.get(recordKey));
     return [...new Set([name, accession].filter(Boolean))].join(' · ')
       || plainTextLinearRecordLabel(displayText(sequence?.gb?.name, sequence?.gff?.name))

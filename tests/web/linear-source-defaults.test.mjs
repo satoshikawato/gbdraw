@@ -21,6 +21,7 @@ const {
   setLinearSourceDefaultDefinition,
   getLinearSourceDefaultSubtitle,
   setLinearSourceDefaultSubtitle,
+  inferredDefinitionForRecord,
   resolveLinearRecordEffectiveDefinition,
   resolveLinearRecordEffectiveSubtitle
 } = await import('../../gbdraw/web/js/app/linear-sources.js');
@@ -91,6 +92,37 @@ test('resolveLinearRecordEffectiveDefinition falls back to file default when rec
   // Test without passing source group explicitly
   assert.equal(resolveLinearRecordEffectiveDefinition(seq1), '<i>Escherichia coli</i>');
   assert.equal(resolveLinearRecordEffectiveDefinition(seq2), '<i>Custom E. coli</i>');
+});
+
+// IN-06 (D-12, PD-OI-067): a record draws its own Definition, else the File
+// default the user entered, else the definition inferred from that record.
+test('each record falls back to its own inferred definition after the File default', () => {
+  const file = { name: 'two_organisms.gb' };
+  const recordA = createLinearSeq({ uid: 'a', gb: file, inferred_definition: '<i>Escherichia coli</i> K-12' });
+  const recordB = createLinearSeq({ uid: 'b', gb: file, inferred_definition: '<i>Bacillus subtilis</i> 168' });
+  assert.equal(resolveLinearRecordEffectiveDefinition(recordA), '<i>Escherichia coli</i> K-12');
+  assert.equal(resolveLinearRecordEffectiveDefinition(recordB), '<i>Bacillus subtilis</i> 168');
+  const [group] = groupLinearSourceRecords([recordA, recordB]);
+  setLinearSourceDefaultDefinition(group, 'Shared organism');
+  assert.equal(resolveLinearRecordEffectiveDefinition(recordA), 'Shared organism');
+  assert.equal(resolveLinearRecordEffectiveDefinition(recordB), 'Shared organism');
+  recordB.definition = 'Own value';
+  assert.equal(resolveLinearRecordEffectiveDefinition(recordB), 'Own value');
+  setLinearSourceDefaultDefinition(group, '');
+  recordB.definition = '';
+  assert.equal(resolveLinearRecordEffectiveDefinition(recordB), '<i>Bacillus subtilis</i> 168');
+});
+
+test('the inferred definition belongs to the record a row selects', () => {
+  const records = [
+    { selector: '#1', recordId: 'REC_A.1', inferredDefinition: 'A' },
+    { selector: '#2', recordId: 'REC_B.1', inferredDefinition: 'B' }
+  ];
+  assert.equal(inferredDefinitionForRecord(records, 'REC_B.1'), 'B');
+  assert.equal(inferredDefinitionForRecord(records, '#1'), 'A');
+  assert.equal(inferredDefinitionForRecord(records, ''), '', 'an automatic selector over two records names none');
+  assert.equal(inferredDefinitionForRecord(records.slice(1), ''), 'B');
+  assert.equal(inferredDefinitionForRecord(records, 'missing'), '');
 });
 
 test('resolveLinearRecordEffectiveSubtitle falls back to file default when record subtitle is empty', () => {

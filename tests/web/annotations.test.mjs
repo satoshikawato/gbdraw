@@ -21,6 +21,7 @@ const {
   parseAnnotationRecordSelectorValue
 } = await load('app/annotations/target-actions.js');
 const { buildAnnotationRecordCatalog } = await load('app/annotations/record-catalog.js');
+const { resolveCircularRequestRecordSet } = await load('app/record-options.js');
 const {
   annotationRecordOptions,
   reconcileAnnotationRecordBindings,
@@ -386,17 +387,49 @@ const replacedSourceCatalog = buildAnnotationRecordCatalog({
 });
 assert.deepEqual(validateAnnotationRecordTargets([duplicateTargetSet], replacedSourceCatalog), { code: 'ANNOTATION_TARGET', context: { reason: 'TARGET_RECORD' } });
 
+// FE-05 (PD-OI-041): a Circular request that draws several records, in one
+// figure or one output per record, needs an explicit target record, which
+// Python binds to that record alone. A target without a record is ambiguous.
 targetSet.annotations[0].target.record = { kind: 'recordId', value: 'RecA' };
 targetSet.annotations[0].metadata = {};
 const circularMultiOutputCatalog = buildAnnotationRecordCatalog({
   mode: 'circular',
-  multiRecordCanvas: false,
   circularSource: {
     sourceKey: 'circular', hasInput: true, status: 'ready',
     records: [{ record_id: 'RecA' }, { record_id: 'RecB' }]
   }
 });
-assert.deepEqual(validateAnnotationRecordTargets([targetSet], circularMultiOutputCatalog), { code: 'ANNOTATION_TARGET', context: { reason: 'TARGET_MODE' } });
+assert.equal(circularMultiOutputCatalog.requiresSelection, true);
+assert.equal(validateAnnotationRecordTargets([targetSet], circularMultiOutputCatalog), null);
+assert.deepEqual(
+  annotationRecordOptions(circularMultiOutputCatalog, targetSet.annotations[0]).map((option) => option.label),
+  ['Select target record', '#1 · RecA', '#2 · RecB']
+);
+targetSet.annotations[0].target.record = null;
+assert.deepEqual(validateAnnotationRecordTargets([targetSet], circularMultiOutputCatalog), { code: 'ANNOTATION_TARGET', context: { reason: 'TARGET_RECORD' } });
+targetSet.annotations[0].target.record = { kind: 'recordId', value: 'RecA' };
+// The catalog offers the records the Circular request draws: the selected
+// record of a single presentation, every record of a grid or batch.
+const circularRecords = [{ selector: '#1', record_id: 'RecA' }, { selector: '#2', record_id: 'RecB' }];
+const drawnIds = (options) => resolveCircularRequestRecordSet({ records: circularRecords, ...options })
+  .records.map((record) => record.recordId);
+assert.deepEqual(drawnIds({ selector: 'RecB' }), ['RecB']);
+assert.deepEqual(drawnIds({ selector: '' }), ['RecA', 'RecB']);
+assert.deepEqual(drawnIds({ selector: 'RecB', multiRecordCanvas: true }), ['RecA', 'RecB']);
+assert.deepEqual(drawnIds({ selector: 'RecB', groupingIntent: 'batch' }), ['RecA', 'RecB']);
+assert.equal(resolveCircularRequestRecordSet({ records: circularRecords, selector: 'missing' }).selectionFailure, 'NO_MATCH');
+const circularSelectedCatalog = buildAnnotationRecordCatalog({
+  mode: 'circular',
+  circularSource: {
+    sourceKey: 'circular', hasInput: true, status: 'ready',
+    records: resolveCircularRequestRecordSet({ records: circularRecords, selector: 'RecB' }).records
+  }
+});
+assert.deepEqual(circularSelectedCatalog.records.map((record) => record.recordId), ['RecB']);
+assert.equal(circularSelectedCatalog.requiresSelection, false);
+targetSet.annotations[0].target.record = { kind: 'recordId', value: 'RecB' };
+assert.equal(validateAnnotationRecordTargets([targetSet], circularSelectedCatalog), null);
+targetSet.annotations[0].target.record = { kind: 'recordId', value: 'RecA' };
 
 const circularSingleCatalog = buildAnnotationRecordCatalog({
   mode: 'circular',

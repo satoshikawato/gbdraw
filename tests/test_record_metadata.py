@@ -132,18 +132,7 @@ def test_loader_is_the_record_discovery_oracle(case: dict, tmp_path: Path) -> No
     assert _loader_discovery(tmp_path, case) == case["expected"]
 
 
-def _worker_helper_case(case: dict):
-    defect = case.get("workerHelperKnownDefect")
-    if not defect:
-        return case
-    return pytest.param(case, marks=pytest.mark.xfail(strict=True, reason=defect))
-
-
-@pytest.mark.parametrize(
-    "case",
-    [_worker_helper_case(case) for case in _CASES["discovery"]],
-    ids=_discovery_case_id,
-)
+@pytest.mark.parametrize("case", _CASES["discovery"], ids=_discovery_case_id)
 def test_worker_record_helper_matches_the_loader(
     case: dict, tmp_path: Path, _python_helpers_namespace: dict[str, object]
 ) -> None:

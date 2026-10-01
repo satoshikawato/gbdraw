@@ -116,6 +116,7 @@ import {
   discoverGffFastaRecords,
   discoverSequenceRecords
 } from './record-discovery.js';
+import { genbankHeaderIds } from './genbank-header.js';
 import {
   LOSAT_DERIVED_CACHE_SCHEMA,
   NUCLEOTIDE_LOSAT_CACHE_SCHEMA,
@@ -771,13 +772,10 @@ const parseGenbankRecordsFast = (text) => {
   const recordChunks = String(text || '').split(/^\/\/\s*$/m);
   recordChunks.forEach((chunk) => {
     const originMatch = chunk.match(/\nORIGIN\b([\s\S]*)$/i);
-    if (!originMatch) return;
-    const locusMatch = chunk.match(/^LOCUS\s+(\S+)/m);
-    const accessionMatch = chunk.match(/^ACCESSION\s+(\S+)/m);
-    const versionMatch = chunk.match(/^VERSION\s+(\S+)/m);
-    const id = versionMatch?.[1] || accessionMatch?.[1] || locusMatch?.[1] || `record_${records.length + 1}`;
+    const header = originMatch ? genbankHeaderIds(chunk) : null;
+    if (!header) return;
     const sequence = originMatch[1].replace(/[^A-Za-z]/g, '').toUpperCase();
-    if (sequence) records.push({ id, sequence });
+    if (sequence) records.push({ id: header.recordId, sequence });
   });
   return records;
 };
@@ -1702,9 +1700,17 @@ export const createRunAnalysis = ({
   };
 
   const runCircularRecordRefresh = async ({ suppress = false, automatic = false } = {}) => {
+    // An inactive Circular source keeps its records and Multi-Record Canvas
+    // order; only a read still running for it is superseded.
+    if (mode.value !== 'circular') {
+      if (circularRecordDiscovery.status === 'loading') {
+        circularRecordRefreshGeneration += 1;
+        circularRecordDiscovery.status = 'idle';
+      }
+      return;
+    }
     if (automatic && circularDiscoveryTargetsCurrentInput()
-      && (circularRecordDiscovery.status === 'deferred'
-        || (mode.value === 'circular' && ['ready', 'error'].includes(circularRecordDiscovery.status)))) return;
+      && ['deferred', 'ready', 'error'].includes(circularRecordDiscovery.status)) return;
     const refreshGeneration = ++circularRecordRefreshGeneration;
     if (suppress || recordDiscoverySuppressed()) return;
     if (!Array.isArray(adv.multi_record_positions)) {
@@ -1714,7 +1720,6 @@ export const createRunAnalysis = ({
     const primaryFile = inputType === 'gff' ? files.c_gff : files.c_gb;
     const pairedFile = inputType === 'gff' ? files.c_fasta : null;
     const hasCompleteInput = Boolean(primaryFile && (inputType !== 'gff' || pairedFile));
-    const hasActiveInput = mode.value === 'circular' && hasCompleteInput;
     const preserveCanonicalRecordKeys = circularDiscoveryTargetsCurrentInput();
     const preservedRecordKeys = new Map();
     if (preserveCanonicalRecordKeys) {
@@ -1734,7 +1739,7 @@ export const createRunAnalysis = ({
         });
     }
     Object.assign(circularRecordDiscovery, {
-      status: hasActiveInput ? 'loading' : 'idle',
+      status: hasCompleteInput ? 'loading' : 'idle',
       error: '',
       inputType,
       primaryFile: primaryFile || null,
@@ -1744,7 +1749,7 @@ export const createRunAnalysis = ({
         : []
     });
     circularRecordList.value = [];
-    if (!hasActiveInput) {
+    if (!hasCompleteInput) {
       adv.multi_record_positions.splice(0, adv.multi_record_positions.length);
       return;
     }
@@ -1759,16 +1764,8 @@ export const createRunAnalysis = ({
 
     try {
       const records = inputType === 'gff'
-        ? await discoverGffFastaRecords({
-            gffFile: primaryFile,
-            fastaFile: pairedFile,
-            readText: readFileText
-          })
-        : await discoverSequenceRecords({
-            file: primaryFile,
-            format: 'genbank',
-            readText: readFileText
-          });
+        ? await discoverGffFastaRecords({ gffFile: primaryFile, fastaFile: pairedFile })
+        : await discoverSequenceRecords({ file: primaryFile, format: 'genbank' });
       if (
         refreshGeneration !== circularRecordRefreshGeneration ||
         recordDiscoverySuppressed() ||

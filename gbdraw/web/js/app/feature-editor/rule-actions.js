@@ -444,29 +444,11 @@ export const createFeatureRuleActions = ({ state, nextTick, legendActions, ruleP
 
   const canEditFeatureColor = () => true;
 
-  // One reactive count index replaces a full feature scan for every prepared
-  // color-rule target. Counts still follow edits and feature-array replacement.
-  const generationHashCounts = computed(() => {
-    const byType = new Map();
-    for (const feature of extractedFeatures.value) {
-      const hash = getFeatureGenerationHash(feature);
-      if (!hash) continue;
-      const type = feature?.type;
-      let counts = byType.get(type);
-      if (!counts) { counts = new Map(); byType.set(type, counts); }
-      counts.set(hash, (counts.get(hash) || 0) + 1);
-    }
-    return byType;
-  });
-
+  // Python matches a single-feature color rule only by the stable generation
+  // hash, so duplicate record instances that share one hash share the rule.
   const getFeatureQualifier = (feat) => {
     const generationHash = getFeatureGenerationHash(feat);
-    if (!generationHash) return null;
-    const collisionCount = generationHashCounts.value.get(feat?.type)?.get(generationHash) || 0;
-    const renderedId = String(feat?.svg_id || '').trim();
-    // Preserve the rendered instance when duplicate records share one generation hash.
-    const value = collisionCount > 1 && renderedId ? renderedId : generationHash;
-    return { qual: 'hash', val: value };
+    return generationHash ? { qual: 'hash', val: generationHash } : null;
   };
 
   const getLabelSpecificRule = (feat, label) => {

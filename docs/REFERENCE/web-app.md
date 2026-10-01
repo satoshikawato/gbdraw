@@ -48,10 +48,11 @@ normal row layout, its records stay together in one row and the row positions
 follow the new File order. If a File spans rows or Files share a row, File
 movement is unavailable; use **Record Layout** to edit or normalize that custom
 placement first.
-Uploading a GenBank file fills the file default
-**Organism / strain** from its `/organism` and `/strain` qualifiers when that
-field is still empty; the file default **Subtitle / title** is yours to fill,
-because a subtitle names one replicon rather than the whole file. The prominent
+Uploading a GenBank file gives each of its records a **Definition** inferred
+from that record's own `/organism` and `/strain` qualifiers, so a File of
+several organisms shows each organism's name. The file default **Organism /
+strain** and **Subtitle / title** stay yours to fill: a subtitle names one
+replicon rather than the whole file. The prominent
 **Add sequence** action appears below the Linear File list. A GenBank file may
 contain several biological records. GFF3 input requires the matching FASTA
 sequence and exact sequence-ID agreement. See [Input formats and TSV
@@ -66,6 +67,12 @@ record selectors, crop and reverse-complement drafts, labels, Depth bindings,
 comparison endpoints, and source-derived state as one undoable change. The only
 File cannot be deleted. Removing an empty final File is immediate; removing a
 populated final File asks for confirmation. Cancel and Escape change nothing.
+
+Replacing a File with one that holds several records expands it into one row
+per record. The new rows keep only File-level values (the File, its Depth TSV,
+and the file defaults); the crop, reverse complement, **Definition**, and
+**Subtitle** of the replaced File's row do not carry over. Replacing a single-record
+File with another single-record File keeps them.
 
 Each Linear File card starts with its **Depth TSV** disclosure open. Its summary
 reports the File's record count, logical series count, and whether any series
@@ -317,7 +324,9 @@ needed. **Source records** shows **Inspecting source records…** and then the
 count, such as **1 source record(s) inspected**. Each record's rotation row
 appears at the same time, before **Generate Diagram**. A GFF3 file alone shows
 **Upload both GFF3 and FASTA files to inspect records.** Replacing the file
-inspects the new source.
+inspects the new source. For GFF3 + FASTA, the records are the sequences that
+have GFF3 rows, in FASTA order, as on the command line; a FASTA sequence with no
+GFF3 row is not offered, and drawing it needs a `region` row in the GFF3.
 
 If a source cannot be inspected, **Source records** reports the failure and
 offers **Retry source inspection**. Replace or remove the file to continue. The
@@ -348,6 +357,11 @@ used. After you close it, later edits leave it closed. The app does not choose a
 record or change **Multi-Record Canvas** for you. Empty **Record label** and
 **Subtitle** keep the inferred title lines. A region needs both coordinates
 within the record. These settings apply on **Generate Diagram**.
+
+**Region Annotations** offers the records the next Circular Generate draws. One
+selected record offers that record alone; **All records**, or **Multi-Record
+Canvas** on, offers every record, and each annotation then needs an explicit
+target record, which binds it to that record.
 
 ## Circular multi-record canvas
 
@@ -387,9 +401,13 @@ reserved.
 
 Each Linear input card owns its record selector, inclusive **Start** and
 **End** coordinates, **Reverse complement** state, definition, and row
-placement. A record whose definition or subtitle is empty inherits its file
-default and is marked **Using file default**; typing a value overrides it, and
-**Reset to default** restores inheritance. A region changes the displayed interval, not the source file.
+placement. A record's definition is, in order, the value typed on the record, the file
+default you typed on the File card, and the definition inferred from that
+record's `/organism` and `/strain`. A record without its own subtitle inherits
+the file default subtitle. A record that inherits a file default you typed is marked
+**Using file default**; typing a value overrides it, and **Reset to default**
+restores inheritance. Choosing another record in a row infers the definition of
+that record again for a GenBank File. A region changes the displayed interval, not the source file.
 Reverse complementation changes displayed coordinates, feature orientation,
 and comparison endpoint mapping without rewriting the input.
 
@@ -740,9 +758,10 @@ editor state. **Apply to all label** and **Apply to all source label** become
 one anchored qualifier rule only when the selected features share one feature
 type, qualifier, and value and that rule matches exactly the intended loaded
 features. Otherwise the editor keeps one exact `hash` rule per biological
-feature. Identical duplicate records can share the same hash, so a regenerated
-diagram cannot preserve a one-instance-only rule for indistinguishable
-duplicates. A one-feature rule uses a qualifier value only when no other
+feature, also when two records share a record ID. Identical duplicate records can
+share the same hash, so a regenerated diagram cannot preserve a one-instance-only
+rule for indistinguishable duplicates: a **This feature only** color then
+applies to both copies. A one-feature rule uses a qualifier value only when no other
 feature of that record and type has the same value ignoring case, because the
 Python matcher ignores case; `orfA` and `ORFA` are one value.
 
@@ -778,7 +797,10 @@ the keyboard, and also when a text field had focus; a text field's edit is its
 own step. Ctrl+Z undoes and Ctrl+Shift+Z or Ctrl+Y redoes (Cmd on macOS), also
 while a select has focus; in a text field these keys keep the browser's text
 undo. **Reset Settings** is broader than undo and requires
-confirmation. Generate when the exported figure should include draft settings.
+confirmation. In Linear it also clears each record's **Definition**, **Subtitle**,
+crop, and reverse complement, and the comparison alignment plan; the Files, each
+row's selected record, the file defaults, and Depth assignments stay. **Undo**
+restores them. Generate when the exported figure should include draft settings.
 
 The export actions and session handoff rules are documented in [Output formats
 and export](output-formats-and-export.md) and [Session and request

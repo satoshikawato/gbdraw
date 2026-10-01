@@ -101,7 +101,39 @@ decisions are in
   (D-25, SE-05). The error panel offers **Generate** when that is the correction
   and no **Save Session** after a failed Save (N-12).
 
-<!-- web-gui-audit-20260930 P08 -->
+- Each Linear record gets a **Definition** inferred from its own `/organism`
+  and `/strain`; the first record's value is no longer the file default for all
+  records. A definition is the record's own value, then the file default you
+  typed, then the inferred value, and **Using file default** marks only a value
+  you typed. Choosing another record in a row infers that record's definition.
+  Sessions save it as `inferred_definition`; older and CLI Sessions are not
+  re-inferred when loaded (IN-06, D-12).
+- **Reset Settings** also clears each Linear record's **Definition**,
+  **Subtitle**, crop, and reverse complement, and the comparison alignment plan;
+  Files, selected records, file defaults, and Depth assignments stay, and
+  **Undo** restores all of it, alignment plan included (SE-10, D-15).
+- A GenBank record whose ACCESSION or VERSION line is empty (Prokka format) is
+  named by its LOCUS instead of `KEYWORDS` in the record choices, the LOSAT FASTA
+  extraction, and the match sequences, and an empty ORGANISM line no longer gives
+  `Unclassified.` as the organism. The browser reads the header in one place and
+  hands any file it cannot read exactly to the Python reader; a file that starts
+  with a UTF-8 byte-order mark is rejected as the command line rejects it instead
+  of being counted as one record (IN-02, N-02, D-33).
+- GFF3 + FASTA record discovery lists only the sequences that have GFF3 rows, in
+  FASTA order, like the command line; a FASTA-only sequence is no longer offered
+  as a record that Generate cannot draw (IN-03, D-13).
+- Replacing a cropped Linear File with a multi-record File expands it into one
+  row per record carrying only File-level values, instead of keeping one row
+  with the old crop and definition (IN-04).
+- A Circular source turned inactive keeps its Multi-Record Canvas record order
+  across a switch to Linear and back (IN-05).
+- Circular **Region Annotations** offer the records the next Generate draws and
+  require a target record whenever it draws several, whether on one canvas or
+  as separate diagrams; before, separate diagrams accepted a target the Python
+  request could not bind (FE-05).
+- **This feature only** always writes the stable feature hash, also when two
+  records share a record ID; before, it wrote a rendered ID Python could not
+  match. For identical duplicate features the color applies to both (FE-09, D-14).
 
 - History records one Undo step for each checkbox, radio button, or button
   change, also when it is made with its label text or the keyboard, or while a

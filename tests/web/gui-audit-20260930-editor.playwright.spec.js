@@ -75,7 +75,6 @@ test('batch live legend deletion reaches the other Result when it is displayed',
 });
 
 test('Selected features annotations generate for a Circular multi-record batch', async ({ page }) => {
-  test.fail(true, 'FE-05');
   test.setTimeout(300_000);
   await openBatch(page);
   await page.evaluate(async () => {
@@ -88,6 +87,11 @@ test('Selected features annotations generate for a Circular multi-record batch',
     await window.Vue.nextTick();
   });
   await generateAndWaitForResult(page);
+  // Python binds each explicit target to its own record's output only.
+  expect(await page.evaluate(() => window.__GBDRAW_APP__.results.map((result) => (
+    new DOMParser().parseFromString(result.content || '', 'image/svg+xml')
+      .querySelectorAll('[data-gbdraw-annotation-id]').length > 0
+  )))).toEqual([true, false]);
 });
 
 test('Reset fill after a canceled reset dialog uses the reset feature type default', async ({ page }) => {

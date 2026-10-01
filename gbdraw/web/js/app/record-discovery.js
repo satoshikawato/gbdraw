@@ -2,9 +2,12 @@ import {
   DIAGRAM_HELPER_OPERATIONS,
   runDiagramHelperOperation
 } from '../services/diagram-generation.js';
+import { scanGenBankHeader } from './genbank-header.js';
 import {
+  bytesToText,
   cloneFileBytesForTransfer,
   getSessionResourceSource,
+  readFileBytes,
   readFileText
 } from '../services/file-content-cache.js';
 
@@ -67,7 +70,11 @@ export const formatInferredOrganismStrain = ({ organism = '', strain = '' } = {}
   return rest ? `${speciesPart} ${rest}`.trim() : speciesPart.trim();
 };
 
-export const extractGenBankMetadata = (chunk) => {
+const declineToPythonReader = (subject) => {
+  throw new Error(`${subject} needs the Python reader.`);
+};
+
+export const extractGenBankMetadata = (chunk, header = undefined) => {
   const text = String(chunk || '');
   const sourceMatch = text.match(/^ {5}source\s+[\s\S]*?(?=^ {5}[a-z]|\/\/)/mi);
   const sourceBlock = sourceMatch ? sourceMatch[0] : text;
@@ -79,12 +86,9 @@ export const extractGenBankMetadata = (chunk) => {
     return match[1].replace(/\r?\n\s+/g, ' ').trim();
   };
 
-  let organism = extractQualifier('organism', sourceBlock);
-  if (!organism) {
-    const orgLine = text.match(/^ {2}ORGANISM\s+([^\r\n]+)/m);
-    if (orgLine) organism = orgLine[1].trim();
-  }
-
+  // infer_record_source_metadata prefers the source /organism to ORGANISM.
+  const organism = extractQualifier('organism', sourceBlock)
+    || (header === undefined ? scanGenBankHeader(text) : header)?.organism || '';
   const strain = extractQualifier('strain', sourceBlock);
   const isolate = extractQualifier('isolate', sourceBlock);
 
@@ -131,17 +135,14 @@ export const normalizeSequenceRecords = (payload) => {
 const parseGenBankRecordText = (text) => {
   const records = String(text || '')
     .split(/^\/\/\s*$/m)
-    .map((chunk, index) => {
-      const locus = chunk.match(/^LOCUS\s+(\S+)(?:\s+(\d+)\s+(?:bp|aa)\b)?/m);
-      if (!locus) return null;
-      const accession = chunk.match(/^ACCESSION\s+(\S+)/m)?.[1];
-      const version = chunk.match(/^VERSION\s+(\S+)/m)?.[1];
-      const metadata = extractGenBankMetadata(chunk);
+    .map((chunk) => {
+      const header = scanGenBankHeader(chunk);
+      if (!header) return null;
+      const metadata = extractGenBankMetadata(chunk, header);
       return {
-        selector: `#${index + 1}`,
-        record_id: version || accession || locus[1],
-        record_length: locus[2] ? Number(locus[2]) : null,
-        topology: chunk.match(/^LOCUS\s+\S+\s+\d+\s+(?:bp|aa)\b[^\r\n]*\s(circular|linear)(?:\s|$)/m)?.[1] || 'unknown',
+        record_id: header.recordId,
+        record_length: header.recordLength,
+        topology: header.topology,
         organism: metadata.organism,
         strain: metadata.strain,
         inferredDefinition: metadata.inferredDefinition
@@ -152,23 +153,83 @@ const parseGenBankRecordText = (text) => {
   return normalizeSequenceRecords({ records });
 };
 
-const parseFastaRecordText = (text) => {
-  const records = [];
+// Sequence entries with Biopython's FASTA rules; text before the first record
+// or an entry without an ID is left to the Python reader.
+const fastaEntries = (lines) => {
+  const entries = [];
   let current = null;
-  String(text || '').split(/\r?\n/).forEach((line) => {
+  lines.forEach((line) => {
     if (line.startsWith('>')) {
-      if (current) records.push(current);
-      current = {
-        selector: `#${records.length + 1}`,
-        record_id: line.slice(1).trim().split(/\s+/)[0],
-        record_length: 0
-      };
+      const id = line.slice(1).trim().split(/\s+/)[0];
+      if (!id) declineToPythonReader('A FASTA entry without an ID');
+      current = { id, length: 0 };
+      entries.push(current);
     } else if (current) {
-      current.record_length += line.replace(/\s+/g, '').length;
+      current.length += line.replace(/\s+/g, '').length;
+    } else if (line.trim()) {
+      declineToPythonReader('Text before the first FASTA entry');
     }
   });
-  if (current) records.push(current);
-  return normalizeSequenceRecords({ records });
+  return entries;
+};
+
+const parseFastaRecordText = (text) => normalizeSequenceRecords({
+  records: fastaEntries(String(text || '').split(/\r?\n/)).map((entry, index) => ({
+    selector: `#${index + 1}`,
+    record_id: entry.id,
+    record_length: entry.length
+  }))
+});
+
+// The record IDs BCBio builds from a GFF3 file: the seqid of every feature line
+// before ##FASTA and every embedded FASTA entry. Lines BCBio would reject or
+// match by NCBI-style IDs are left to the Python reader.
+const gffRecordIds = (text) => {
+  const lines = String(text || '').split(/\r?\n/);
+  const ids = new Set();
+  let index = 0;
+  for (; index < lines.length; index += 1) {
+    const line = lines[index].trim();
+    if (line.startsWith('##')) {
+      if (line.slice(2) === 'FASTA') {
+        index += 1;
+        break;
+      }
+      continue;
+    }
+    if (!line || line.startsWith('#')) continue;
+    const columns = line.split('\t');
+    const [seqid, , , start, end] = columns;
+    if (columns.length < 8 || seqid === '.' || seqid.includes('|')
+      || !/^\d+$/.test(start) || !/^\d+$/.test(end)) {
+      declineToPythonReader('This GFF3 line');
+    }
+    ids.add(seqid);
+  }
+  fastaEntries(lines.slice(index)).forEach(({ id }) => {
+    if (id.includes('|')) declineToPythonReader('An NCBI-style embedded FASTA ID');
+    ids.add(id);
+  });
+  return ids;
+};
+
+// load_gff_fasta keeps the GFF3 records the FASTA file names, in FASTA order.
+// A GFF3 record missing from the FASTA file is the loader's error to report.
+const parseGffFastaRecordText = (gffText, fastaText) => {
+  const fasta = fastaEntries(String(fastaText || '').split(/\r?\n/));
+  const fastaIds = new Set(fasta.map(({ id }) => id));
+  if (fastaIds.size !== fasta.length) declineToPythonReader('A FASTA file with repeated IDs');
+  const gffIds = gffRecordIds(gffText);
+  gffIds.forEach((id) => {
+    if (!fastaIds.has(id)) declineToPythonReader('A GFF3 record without a FASTA entry');
+  });
+  return normalizeSequenceRecords({
+    records: fasta.filter(({ id }) => gffIds.has(id)).map((entry, index) => ({
+      selector: `#${index + 1}`,
+      record_id: entry.id,
+      record_length: entry.length
+    }))
+  });
 };
 
 export const parseSequenceRecordText = (text, format) => {
@@ -177,29 +238,40 @@ export const parseSequenceRecordText = (text, format) => {
   throw new Error(`Unsupported format: ${String(format)}.`);
 };
 
-const defaultTextReader = (file) => (
-  typeof file?.text === 'function' || getSessionResourceSource(file)
-    ? () => readFileText(file)
-    : null
+const startsWithUtf8ByteOrderMark = (bytes) => (
+  bytes[0] === 0xef && bytes[1] === 0xbb && bytes[2] === 0xbf
 );
+
+// The text the no-Worker fast path reads, or null to decline to the Worker.
+// Biopython and BCBio read a leading UTF-8 byte order mark as content while the
+// browser's text decoder drops it, so an upload that starts with one declines.
+// A Session resource is a file Python already read for its Result.
+const readFastPathText = async (file) => {
+  if (getSessionResourceSource(file)) return readFileText(file);
+  if (typeof file?.text !== 'function') return null;
+  if (typeof file.arrayBuffer !== 'function') return file.text();
+  const bytes = await readFileBytes(file);
+  return startsWithUtf8ByteOrderMark(bytes) ? null : bytesToText(bytes);
+};
+
+// The fast path returns exactly the records the loader reads, or declines.
+const fastPathRecords = async (files, parse) => {
+  try {
+    const texts = await Promise.all(files.map(readFastPathText));
+    return texts.every((text) => typeof text === 'string') ? parse(...texts) : null;
+  } catch {
+    return null;
+  }
+};
 
 export const discoverSequenceRecords = async ({
   file,
   format,
-  readText = null,
   runHelperOperation = runDiagramHelperOperation
 }) => {
   if (!file) throw new Error('A sequence file is required.');
-  const readSourceText = typeof readText === 'function'
-    ? () => readText(file)
-    : defaultTextReader(file);
-  if (readSourceText) {
-    try {
-      return parseSequenceRecordText(await readSourceText(), format);
-    } catch {
-      // The packaged Worker parser handles variants beyond the lightweight text fast path.
-    }
-  }
+  const records = await fastPathRecords([file], (text) => parseSequenceRecordText(text, format));
+  if (records) return records;
   const response = await runHelperOperation(
     DIAGRAM_HELPER_OPERATIONS.LIST_SEQUENCE_RECORDS,
     {
@@ -213,20 +285,11 @@ export const discoverSequenceRecords = async ({
 export const discoverGffFastaRecords = async ({
   gffFile,
   fastaFile,
-  readText = null,
   runHelperOperation = runDiagramHelperOperation
 }) => {
   if (!gffFile || !fastaFile) throw new Error('GFF3 and FASTA files are required.');
-  const readSourceText = typeof readText === 'function'
-    ? () => readText(fastaFile)
-    : defaultTextReader(fastaFile);
-  if (readSourceText) {
-    try {
-      return parseSequenceRecordText(await readSourceText(), 'fasta');
-    } catch {
-      // Let the Worker validate the paired GFF3/FASTA record set together.
-    }
-  }
+  const records = await fastPathRecords([gffFile, fastaFile], parseGffFastaRecordText);
+  if (records) return records;
   const response = await runHelperOperation(
     DIAGRAM_HELPER_OPERATIONS.LIST_GFF_FASTA_RECORDS,
     {

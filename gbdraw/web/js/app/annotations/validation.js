@@ -44,7 +44,6 @@ export const validateAnnotationRecordTargets = (sets, catalog) => {
       if (catalog?.requiresSelection) return targetIssue('TARGET_RECORD');
       continue;
     }
-    if (catalog?.allowExplicitSelectors === false) return targetIssue('TARGET_MODE');
     if (annotationRecordBinding(annotation) && !resolveAnnotationRecord(catalog, annotation)) {
       return targetIssue('TARGET_RECORD');
     }
