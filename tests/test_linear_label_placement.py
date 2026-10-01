@@ -83,6 +83,11 @@ def _comparison_row(**metadata: object) -> dict[str, object]:
             "subject": "subject",
             "identity": 100.0,
             "alignment_length": 100,
+            # In the search frame on the first CDS of each synthetic record (PD-OI-073).
+            "qstart": 101,
+            "qend": 300,
+            "sstart": 101,
+            "send": 300,
             "evalue": 0.0,
             "bitscore": 100.0,
         }
