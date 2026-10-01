@@ -18,7 +18,7 @@ const inspect = page => page.evaluate(async () => {
 });
 const reveal = async locator => {
   for(const details of await locator.locator('xpath=ancestor::details').all()) {
-    if(await details.getAttribute('open')===null) await details.locator(':scope > summary').click();
+    if(await details.getAttribute('open')===null) await details.locator(':scope > summary').press('Enter');
   }
 };
 const history = async (page, name) => {

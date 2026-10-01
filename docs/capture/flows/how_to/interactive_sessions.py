@@ -47,6 +47,7 @@ from flows.human_circular import (
     load_raw_human_circular,
 )
 from flows.web_capture import (
+    toggle_disclosure,
     assert_output_paths,
     capture_screenshot,
     fit_complete_linear_preview,
@@ -1169,7 +1170,7 @@ def _load_current_session(page: Page, path: Path) -> None:
 
 def _set_history_marker(page: Page, marker: str) -> Any:
     panel = page.get_by_label("Titles and Record Labels", exact=True)
-    panel.click()
+    toggle_disclosure(panel)
     title = page.get_by_role("textbox", name="Plot Title", exact=True)
     title.fill(marker)
     title.press("Tab")

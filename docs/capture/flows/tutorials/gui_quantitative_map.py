@@ -23,6 +23,7 @@ from flows.how_to.tracks import (
     CaptureResult,
 )
 from flows.web_capture import (
+    toggle_disclosure,
     assert_output_paths,
     capture_screenshot,
     generate_and_inspect,
@@ -311,7 +312,7 @@ def capture_gui_quantitative_map(
         page.get_by_label("Separate Strands", exact=True).check()
 
         depth_section = page.get_by_label("Depth TSV tracks", exact=True)
-        depth_section.click()
+        toggle_disclosure(depth_section)
         page.get_by_label("Depth TSV", exact=True).set_input_files(
             GUI_QUANTITATIVE_DEPTH_PATH
         )
@@ -334,7 +335,7 @@ def capture_gui_quantitative_map(
         dinucleotide_summary = page.get_by_label(
             "Dinucleotide content/skew", exact=True
         )
-        dinucleotide_summary.click()
+        toggle_disclosure(dinucleotide_summary)
         dinucleotide = dinucleotide_summary.locator("xpath=..")
         _number_control(dinucleotide, "Window").fill("1000")
         _number_control(dinucleotide, "Step").fill("1000")
@@ -353,9 +354,9 @@ def capture_gui_quantitative_map(
         _number_control(dinucleotide, "Small Tick").fill("5")
 
         legend = page.get_by_label("Legend settings", exact=True)
-        legend.click()
+        toggle_disclosure(legend)
         page.get_by_label("Legend position", exact=True).select_option("right")
-        legend.click()
+        toggle_disclosure(legend)
 
         slots = _configure_slots(page)
         state = _capture_state(page)

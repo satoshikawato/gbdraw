@@ -83,7 +83,7 @@ const loadSessionThroughUi = async (page, sessionPath) => {
 const openCustomTrackSlots = async (page) => {
   const layoutSummary = page.locator('summary[aria-label="Layout"]');
   if (!await layoutSummary.evaluate((summary) => summary.parentElement.open)) {
-    await layoutSummary.click();
+    await layoutSummary.press('Enter');
   }
   const panel = page.locator('#circular-custom-track-slots-panel');
   if (!await panel.isVisible()) {
@@ -219,7 +219,7 @@ const changePaletteThroughUi = async (page) => {
     has: page.locator('summary[aria-label="Colors"]')
   });
   if (!await colorsPanel.getAttribute('open')) {
-    await colorsPanel.locator('summary[aria-label="Colors"]').click();
+    await colorsPanel.locator('summary[aria-label="Colors"]').press('Enter');
   }
   const palette = page.getByLabel('Palette', { exact: true });
   await expect(palette).toBeVisible();

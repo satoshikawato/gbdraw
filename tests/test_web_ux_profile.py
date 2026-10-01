@@ -50,7 +50,13 @@ def test_first_circular_tutorial_controls_have_stable_accessible_selectors() -> 
     assert 'aria-label="Generate Diagram" @click="runAnalysis"' in index
     assert 'role="region" aria-label="Result Preview"' in index
     assert 'aria-label="SVG" @click="downloadSVG"' in index
-    assert 'cursor-help" aria-hidden="true"' in index
+    # PD-OI-057: every help tip is one focusable disclosure button.
+    tip_start = index.index('<script type="text/x-template" id="help-tip-template">')
+    tip_template = index[tip_start : index.index("</script>", tip_start)]
+    assert tip_template.count("<button") == 1
+    assert 'v-else' not in tip_template
+    assert ':aria-expanded="visible"' in tip_template
+    assert '@keydown.esc.stop="close"' in tip_template
 
 
 def test_first_linear_tutorial_controls_have_stable_accessible_selectors() -> None:
@@ -216,14 +222,26 @@ def test_phase_one_web_ergonomics_are_encoded_in_the_template() -> None:
     assert '[class~="text-[9px]"]' in index
     assert '[class~="text-[10px]"]' in index
     assert index.count(
-        'Separate Strands <help-tip text="Display features on separate strands '
-        'for better distinction."></help-tip>'
+        '<help-tip id="help-linear-separate-strands" text="Display features on '
+        'separate strands for better distinction."></help-tip>'
     ) == 1
-    assert 'Resolve Overlaps <help-tip' not in index
-    assert 'Multi-Record Canvas <help-tip' not in index
-    assert 'Hide GC Content <help-tip' not in index
-    assert 'Hide GC Skew <help-tip' not in index
-    assert index.count('Show Depth <help-tip') == 1
+
+    def option_has_tip(start: int) -> bool:
+        after_label = index[index.index("</label>", start) + len("</label>"):]
+        return after_label.lstrip().startswith("<help-tip")
+
+    for name in (
+        "Resolve Overlaps",
+        "Multi-Record Canvas",
+        "Hide GC Content",
+        "Hide GC Skew",
+    ):
+        assert not option_has_tip(index.index(f"<span>{name}</span>")), name
+    # Only the Linear Show Depth option carries a tip.
+    first_depth = index.index("<span>Show Depth</span>")
+    second_depth = index.index("<span>Show Depth</span>", first_depth + 1)
+    assert index.count("<span>Show Depth</span>") == 2
+    assert sorted([option_has_tip(first_depth), option_has_tip(second_depth)]) == [False, True]
 
 
 def test_file_uploader_exposes_a_native_keyboard_trigger() -> None:

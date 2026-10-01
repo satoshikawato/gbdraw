@@ -221,7 +221,7 @@ test('changing the Linear legend position after a legend-free Generate raises no
   try {
     const position = page.getByLabel('Legend position', { exact: true });
     for (const details of await position.locator('xpath=ancestor::details').all()) {
-      if (await details.getAttribute('open') === null) await details.locator(':scope > summary').click();
+      if (await details.getAttribute('open') === null) await details.locator(':scope > summary').press('Enter');
     }
     await position.selectOption('none');
     await generate(page);
@@ -251,7 +251,6 @@ test('Escape that closes the Editor returns focus to the Editor toggle', async (
 });
 
 test('an Undo of a checkpoint edit keeps the feature catalog across a mode round trip', async ({ browser }) => {
-  test.fail(true, 'SE-01');
   test.setTimeout(600_000);
   const page = await load(browser, HMMT_SESSION);
   const pageErrors = [];

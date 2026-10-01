@@ -85,7 +85,7 @@ test('coordinate scale visibility follows simple controls and explicit Circular 
     await window.Vue.nextTick();
   });
   const circularAxisCard = page.locator('summary').filter({ hasText: 'Axis & Scale' });
-  await circularAxisCard.click();
+  await circularAxisCard.press('Enter');
   await expect(page.getByLabel('Show Coordinate Scale (Circular)')).toBeDisabled();
   await expect(page.locator('[data-scale-visibility-note]')).toContainText(
     'Use an enabled Ticks slot'
@@ -143,7 +143,7 @@ test('coordinate scale visibility follows simple controls and explicit Circular 
     window.__GBDRAW_APP__.form.show_scale = false;
   });
   const linearAxisCard = page.locator('summary').filter({ hasText: 'Axis & Scale' });
-  await linearAxisCard.click();
+  await linearAxisCard.press('Enter');
   await expect(page.getByLabel('Linear scale style')).toBeDisabled();
   await expect(page.getByLabel('Axis stroke color mode')).toBeEnabled();
 
@@ -181,7 +181,7 @@ test('Arrow controls render in both modes and survive a session round trip', asy
   const featuresCard = page.locator('.card').filter({
     has: page.locator('summary').filter({ hasText: 'Features' })
   }).first();
-  await featuresCard.locator('summary').click();
+  await featuresCard.locator('summary').press('Enter');
   const rendering = page.getByLabel('Rendering for CDS');
   const headRatio = page.getByLabel('Arrow head length ratio');
   const shaftRatio = page.getByLabel('Arrow shaft width ratio');

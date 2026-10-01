@@ -2,6 +2,7 @@
 
 import json
 import xml.etree.ElementTree as ET
+from types import SimpleNamespace
 
 import pandas as pd
 import pytest
@@ -248,3 +249,89 @@ def test_normalized_specific_rows_preserve_default_and_numeric_legend_names(
         f"{caption} [#112233]",
         f"{caption} [#445566]",
     ]
+
+
+@pytest.mark.parametrize("rule_color", ["#ff0000", "red"])
+def test_rule_caption_equal_to_a_default_type_keeps_the_rule_color(rule_color, tmp_path):
+    """N-06: a rule caption equal to a default legend name keeps its own row."""
+    from gbdraw.io.colors import load_default_colors
+
+    record = SeqRecord(
+        Seq("ATGC" * 250),
+        id="legend",
+        annotations={"molecule_type": "DNA", "topology": "circular"},
+    )
+    record.features = [
+        SeqFeature(
+            SimpleLocation(i * 200 + 10, i * 200 + 90, strand=1),
+            type=feature_type,
+            qualifiers={"product": [product]},
+        )
+        for i, (feature_type, product) in enumerate(
+            [("tRNA", "tRNA-Phe"), ("rRNA", "12S ribosomal RNA"), ("tRNA", "tRNA-Val")]
+        )
+    ]
+    rows = table([["tRNA", "product", ".*", rule_color, "rRNA"]])
+    result = render_request(
+        CircularDiagramRequest(
+            records=(RecordInput(source=InMemoryRecordSource(record)),),
+            options=CircularDiagramOptions(
+                colors=ColorOptions(color_table=rows),
+                selected_features_set=("tRNA", "rRNA"),
+            ),
+            output=RenderOutputRequest(
+                formats=("svg",), output_directory=tmp_path, output_prefix="legend"
+            ),
+        )
+    )
+    svg = ET.fromstring(result.output_paths[0].read_text())
+    fills = {
+        node.get("data-legend-key"): next(
+            (
+                child.get("fill").lower()
+                for child in node.iter()
+                if child.get("fill") not in (None, "none")
+            ),
+            None,
+        )
+        for node in svg.iter()
+        if node.get("data-legend-key")
+    }
+    defaults = load_default_colors("", palette="default")
+    default_rrna = str(
+        defaults.loc[defaults["feature_type"] == "rRNA", "color"].iloc[0]
+    ).lower()
+
+    assert fills["rRNA"] == default_rrna
+    assert fills["rRNA [#ff0000]"] == ("#ff0000" if rule_color.startswith("#") else "red")
+    assert list(fills).count("rRNA") == 1
+
+
+def test_rule_caption_equal_to_a_default_type_with_the_same_color_shares_one_row():
+    from gbdraw.legend.table import prepare_legend_table
+
+    feature_config = SimpleNamespace(
+        color_table=table([["tRNA", "product", ".*", "#71ee7d", "rRNA"]]),
+        default_colors=pd.DataFrame(
+            [["tRNA", "#ff00ff"], ["rRNA", "#71EE7D"]], columns=["feature_type", "color"]
+        ),
+        block_stroke_color="black",
+        block_stroke_width=1.0,
+    )
+    numeric = SimpleNamespace(
+        stroke_color="none", stroke_width=0, high_fill_color="#111111",
+        low_fill_color="#222222", dinucleotide="GC",
+    )
+    legend = prepare_legend_table(
+        numeric,
+        numeric,
+        feature_config,
+        ["tRNA", "rRNA"],
+        used_color_rules={("rRNA", "#71ee7d")},
+        default_used_features={"rRNA"},
+        show_gc=False,
+        show_skew=False,
+        show_depth=False,
+    )
+
+    assert list(legend) == ["rRNA"]

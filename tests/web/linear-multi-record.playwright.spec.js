@@ -119,7 +119,7 @@ test('Linear automatic replicon names follow Generate and preserve saved subtitl
   await expect.poll(() => page.evaluate(() => window.__GBDRAW_APP__.linearSeqs.length)).toBe(4);
   expect(await page.evaluate(() => window.__GBDRAW_APP__.linearSeqs.map((s) => s.record_subtitle)))
     .toEqual(['', '', '', '']);
-  await page.locator('summary[aria-label="Titles and Record Labels"]').click();
+  await page.locator('summary[aria-label="Titles and Record Labels"]').press('Enter');
   const show = page.getByRole('checkbox', { name: 'Replicon visibility', exact: true });
   for (const enabled of [false, true, false]) {
     await show.setChecked(enabled);
@@ -352,7 +352,7 @@ test('Web fresh/reset Lock ON preserves explicit drafts, Result on Load, and reg
   await expect(lock).toHaveAttribute('aria-describedby', 'linear-definition-lock-help');
   await expect(lock).toHaveAccessibleDescription(new RegExp(['ON aligns Linear definitions in a common left column',
     'OFF centers them in a common column width and follows row offsets', 'Changes apply on Generate'].join('.*')));
-  const helpButton = page.locator('.help-tip:has(#linear-definition-lock-help) > button');
+  const helpButton = page.locator('.help-tip > button[aria-describedby="linear-definition-lock-help"]');
   const tooltip = page.locator('[role="tooltip"]');
   await expect(tooltip).toHaveCount(0);
   await lock.focus();
@@ -444,7 +444,8 @@ test('Web fresh/reset Lock ON preserves explicit drafts, Result on Load, and reg
   await helpButton.scrollIntoViewIfNeeded();
   await helpButton.click();
   await expect(tooltip).toContainText('Changes apply on Generate');
-  await helpButton.locator('xpath=ancestor::label').screenshot({ path: testInfo.outputPath('definition-lock-help.png') });
+  // The tip sits beside the checkbox label; capture the row that holds both.
+  await helpButton.locator('xpath=ancestor::div[1]').screenshot({ path: testInfo.outputPath('definition-lock-help.png') });
 });
 
 test('Linear Lock Definition Column measures single, shared, and mixed rows after unequal translations', async ({ page }, testInfo) => {
@@ -2749,7 +2750,7 @@ ORIGIN
     app.addCoordinateAnnotation(set, { start: 1, end: 10 });
   }, genbank);
 
-  await page.getByText('Region Annotations', { exact: false }).click();
+  await page.locator('summary[aria-label="Region Annotations"]').press('Enter');
   const selector = page.getByLabel('Annotation target record');
   await expect(selector).toHaveCount(1);
   await expect(selector).toHaveValue('');
@@ -2784,7 +2785,7 @@ test('Region annotation IDs accept continuous typing without losing focus', asyn
     app.addCoordinateAnnotation(set);
   });
 
-  await page.getByText('Region Annotations', { exact: false }).click();
+  await page.locator('summary[aria-label="Region Annotations"]').press('Enter');
   const idInput = page.getByPlaceholder('annotation_id');
   await idInput.selectText();
   await idInput.pressSequentially('Repeat');
@@ -2837,7 +2838,7 @@ AAAAAAAAAA
     .map((seq) => seq.region_record_id))).toEqual(['RecB', 'RecA']);
   await expect(page.locator('[data-linear-source-card]')).toHaveCount(1);
   await expect(page.locator('[data-linear-source-card]').getByRole('button', { name: /^Choose (GenBank \/ DDBJ File|GFF3|FASTA)$/ })).toHaveCount(2);
-  await page.getByText('Region Annotations', { exact: false }).click();
+  await page.locator('summary[aria-label="Region Annotations"]').press('Enter');
   await expect(page.getByLabel('Annotation target record').locator('option')).toHaveText([
     'Select target record',
     '#1 · RecB · 12 bp',

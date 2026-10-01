@@ -210,3 +210,221 @@ test('adjacent numeric/unit focus transitions retain distinct operations instead
     cleanup();
   }
 });
+
+// R11 boundary matrix (SE-02, SE-03, SE-04, N-18). A trusted browser event runs a
+// microtask checkpoint between listeners; the harness reproduces that ordering.
+await writeFile(
+  join(tempDir, 'app', 'history-shortcuts.js'),
+  await readFile(join(repoRoot, 'gbdraw', 'web', 'js', 'app', 'history-shortcuts.js'), 'utf8'),
+  'utf8'
+);
+const { setupHistoryShortcuts } = await import(pathToFileURL(join(tempDir, 'app', 'history-shortcuts.js')));
+const drainMicrotasks = async () => { for (let index = 0; index < 50; index += 1) await Promise.resolve(); };
+const settleTasks = () => new Promise(resolve => setTimeout(resolve, 5));
+
+const createBoundaryHarness = async () => {
+  const state = { flag: false, choice: 'gb', mode: 'circular', prefix: '', labels: 'out' };
+  const history = createHistoryManager({
+    buildIntent: () => ({ ...state }),
+    applyIntent: (restored) => { Object.assign(state, restored); },
+    buildCheckpoint: () => assert.fail('Control edits use intent History'),
+    applyCheckpoint: () => assert.fail('Control edits restore intent History')
+  });
+  await history.initializeIntentBaseline();
+  const listeners = [];
+  const root = {
+    addEventListener: (type, handler, capture) => listeners.push({ type, handler, capture: Boolean(capture) }),
+    removeEventListener: (type, handler, capture) => {
+      const index = listeners.findIndex(entry => (
+        entry.type === type && entry.handler === handler && entry.capture === Boolean(capture)
+      ));
+      if (index >= 0) listeners.splice(index, 1);
+    }
+  };
+  const documentListeners = new Map();
+  globalThis.document = {
+    addEventListener: (type, handler) => documentListeners.set(type, handler),
+    removeEventListener: (type) => documentListeners.delete(type)
+  };
+  const control = (tagName, type = '') => {
+    const element = { tagName, type, isContentEditable: false };
+    element.closest = (selector) => {
+      if (selector.startsWith('input,')) return element;
+      if (selector === 'button') return tagName === 'BUTTON' ? element : null;
+      return null;
+    };
+    return element;
+  };
+  const controls = {
+    checkbox: control('INPUT', 'checkbox'),
+    radio: control('INPUT', 'radio'),
+    select: control('SELECT', 'select-one'),
+    text: control('INPUT', 'text'),
+    button: control('BUTTON', 'button'),
+    label: { tagName: 'LABEL', closest: () => null }
+  };
+  const cleanup = setupHistoryInputs({ root, history, nextTick: () => Promise.resolve() });
+  setupHistoryShortcuts({ history, onMounted: callback => callback(), onUnmounted: () => {} });
+  // Capture listeners, then the target-phase owner (for example v-model), then bubble.
+  const dispatch = async (type, target, { atTarget = null, ...init } = {}) => {
+    const event = { type, target, preventDefault: () => {}, ...init };
+    for (const entry of listeners.filter(item => item.type === type && item.capture)) {
+      entry.handler(event);
+      await drainMicrotasks();
+    }
+    atTarget?.();
+    await drainMicrotasks();
+    for (const entry of listeners.filter(item => item.type === type && !item.capture)) {
+      entry.handler(event);
+      await drainMicrotasks();
+    }
+    if (type === 'keydown') documentListeners.get('keydown')?.(event);
+    await drainMicrotasks();
+  };
+  const key = (target, keyName, modifiers = {}) => dispatch('keydown', target, {
+    key: keyName, ctrlKey: false, metaKey: false, altKey: false, shiftKey: false, ...modifiers
+  });
+  const typeText = async (value) => {
+    await dispatch('focusin', controls.text);
+    await key(controls.text, value.at(-1));
+    state.prefix = value;
+  };
+  return {
+    state, history, controls, dispatch, key, typeText,
+    counts: () => [history.getUndoCount(), history.getRedoCount()],
+    cleanup: () => { cleanup(); delete globalThis.document; }
+  };
+};
+
+const toggleThroughLabel = async (h) => {
+  await h.dispatch('pointerdown', h.controls.label);
+  await h.dispatch('click', h.controls.checkbox);
+  await h.dispatch('change', h.controls.checkbox, { atTarget: () => { h.state.flag = !h.state.flag; } });
+};
+const toggleWithSpace = async (h) => {
+  await h.dispatch('focusin', h.controls.checkbox);
+  await h.key(h.controls.checkbox, ' ');
+  await h.dispatch('click', h.controls.checkbox);
+  await h.dispatch('change', h.controls.checkbox, { atTarget: () => { h.state.flag = !h.state.flag; } });
+};
+const moveRadioWithArrow = async (h) => {
+  await h.dispatch('focusin', h.controls.radio);
+  await h.key(h.controls.radio, 'ArrowRight');
+  await h.dispatch('click', h.controls.radio);
+  await h.dispatch('change', h.controls.radio, { atTarget: () => { h.state.choice = 'gff'; } });
+};
+const clickCheckboxFromText = async (h) => {
+  await h.dispatch('pointerdown', h.controls.checkbox);
+  await h.dispatch('change', h.controls.text);
+  await h.dispatch('focusout', h.controls.text);
+  await h.dispatch('focusin', h.controls.checkbox);
+  await h.dispatch('click', h.controls.checkbox);
+  await h.dispatch('change', h.controls.checkbox, { atTarget: () => { h.state.flag = !h.state.flag; } });
+};
+const clickButtonFromText = async (h) => {
+  await h.dispatch('pointerdown', h.controls.button);
+  await h.dispatch('change', h.controls.text);
+  await h.dispatch('focusout', h.controls.text);
+  await h.dispatch('click', h.controls.button, { atTarget: () => { h.state.mode = 'linear'; } });
+  await settleTasks();
+};
+
+for (const [name, act, changed] of [
+  ['checkbox label text click', toggleThroughLabel, { flag: true }],
+  ['checkbox Space key', toggleWithSpace, { flag: true }],
+  ['radio Arrow key', moveRadioWithArrow, { choice: 'gff' }]
+]) {
+  test(`SE-02: ${name} records exactly one Undo step`, async () => {
+    const h = await createBoundaryHarness();
+    try {
+      const before = { ...h.state };
+      await act(h);
+      await settleTasks();
+      assert.deepEqual(h.counts(), [1, 0]);
+      assert.deepEqual({ ...h.state }, { ...before, ...changed });
+      await h.history.undo();
+      assert.deepEqual({ ...h.state }, before);
+    } finally { h.cleanup(); }
+  });
+}
+
+for (const [name, act, changed] of [
+  ['checkbox click', clickCheckboxFromText, { flag: true }],
+  ['mode button click', clickButtonFromText, { mode: 'linear' }]
+]) {
+  test(`SE-03: ${name} while a typed text field has focus records its own step`, async () => {
+    const h = await createBoundaryHarness();
+    try {
+      const before = { ...h.state };
+      await h.typeText('audit');
+      await act(h);
+      await settleTasks();
+      assert.deepEqual(h.counts(), [2, 0]);
+      await h.history.undo();
+      assert.deepEqual({ ...h.state }, { ...before, prefix: 'audit' });
+      await h.history.undo();
+      assert.deepEqual({ ...h.state }, before);
+      await h.history.redo();
+      await h.history.redo();
+      assert.deepEqual({ ...h.state }, { ...before, prefix: 'audit', ...changed });
+    } finally { h.cleanup(); }
+  });
+}
+
+test('SE-04: shortcuts on a focused select undo and redo without recording the Undo as an edit', async () => {
+  const h = await createBoundaryHarness();
+  try {
+    await h.dispatch('focusin', h.controls.select);
+    await h.key(h.controls.select, 'ArrowDown');
+    await h.dispatch('change', h.controls.select, { atTarget: () => { h.state.labels = 'both'; } });
+    await h.dispatch('focusout', h.controls.select);
+    await settleTasks();
+    assert.deepEqual(h.counts(), [1, 0]);
+    await h.dispatch('focusin', h.controls.select);
+    await h.key(h.controls.select, 'z', { ctrlKey: true });
+    await settleTasks();
+    assert.equal(h.state.labels, 'out');
+    await h.key(h.controls.select, 'z', { ctrlKey: true, shiftKey: true });
+    await settleTasks();
+    assert.equal(h.state.labels, 'both');
+    await h.key(h.controls.select, 'y', { ctrlKey: true });
+    await h.key(h.controls.select, 'z', { metaKey: true });
+    await settleTasks();
+    assert.equal(h.state.labels, 'out');
+    await h.dispatch('focusout', h.controls.select);
+    await settleTasks();
+    assert.deepEqual(h.counts(), [0, 1]);
+  } finally { h.cleanup(); }
+});
+
+test('text fields keep the browser undo for Ctrl+Z', async () => {
+  const h = await createBoundaryHarness();
+  try {
+    await h.typeText('audit');
+    await h.key(h.controls.text, 'z', { ctrlKey: true });
+    await h.key(h.controls.text, 'y', { ctrlKey: true });
+    await settleTasks();
+    assert.equal(h.state.prefix, 'audit');
+    assert.deepEqual(h.counts(), [0, 0]);
+  } finally { h.cleanup(); }
+});
+
+test('N-18: a gesture owner settles the focused control before its own transaction', async () => {
+  const h = await createBoundaryHarness();
+  try {
+    await h.typeText('audit');
+    const gesture = await h.history.begin('Move legend', { source: 'legend-drag', owner: Symbol('legend-drag') });
+    assert.deepEqual(h.counts(), [1, 0]);
+    h.state.mode = 'moved';
+    await h.history.commit(gesture);
+    assert.deepEqual(h.counts(), [2, 0]);
+    // An ownerless action joins the open transaction instead of splitting it.
+    const owned = await h.history.begin('Owned edit', { owner: 'owner-a' });
+    const joined = await h.history.begin('Joined edit');
+    assert.equal(joined, owned);
+    h.history.cancel(owned);
+    await h.history.undo();
+    assert.equal(h.state.mode, 'circular');
+    assert.equal(h.state.prefix, 'audit');
+  } finally { h.cleanup(); }
+});

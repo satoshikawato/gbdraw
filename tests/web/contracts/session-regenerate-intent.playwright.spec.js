@@ -1683,7 +1683,7 @@ test('loaded current preview supports direct edits before the first Generate', a
 
   const titleSummary = page.locator('summary[aria-label="Titles and Record Labels"]');
   const titleDetails = titleSummary.locator('..');
-  if ((await titleDetails.getAttribute('open')) === null) await titleSummary.click();
+  if ((await titleDetails.getAttribute('open')) === null) await titleSummary.press('Enter');
   await page.getByRole('textbox', { name: 'Plot Title', exact: true }).fill(DIRECT_REGENERATED_TITLE);
   await page.getByLabel('Plot Title Position').selectOption('top');
   await settleMountedDom(page);

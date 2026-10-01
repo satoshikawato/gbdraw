@@ -216,12 +216,22 @@ def wait_for_app_shell(page: Page, *, timeout_ms: int = GENERATION_TIMEOUT_MS) -
         raise AssertionError("Capture page is not cross-origin isolated")
 
 
+def toggle_disclosure(summary: Locator) -> None:
+    """Click a disclosure summary at its marker.
+
+    A summary can hold a help-tip button, which a click at the summary's
+    center may hit; the tip then opens instead of the disclosure.
+    """
+
+    summary.click(position={"x": 4, "y": 4})
+
+
 def open_ancestor_details(locator: Locator) -> Locator:
     """Open every closed disclosure that contains one control."""
 
     for details in locator.locator("xpath=ancestor::details").all():
         if details.get_attribute("open") is None:
-            details.locator(":scope > summary").click()
+            toggle_disclosure(details.locator(":scope > summary"))
     return locator
 
 

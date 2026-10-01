@@ -20,6 +20,7 @@ from config import (
     FIRST_LINEAR_LABEL_RULE_SIZE,
 )
 from flows.web_capture import (
+    toggle_disclosure,
     assert_fixture_identity,
     expect_circular_source_status,
     generate_and_inspect,
@@ -112,14 +113,14 @@ def apply_finished_human_settings(page: Page, *, output_prefix: str) -> None:
     expect(hide_gc_skew).not_to_be_checked()
 
     legend_panel = page.get_by_label("Legend settings", exact=True)
-    legend_panel.click()
+    toggle_disclosure(legend_panel)
     legend_position = page.get_by_label("Legend position", exact=True)
     legend_position.select_option("right")
     expect(legend_position).to_have_value("right")
-    legend_panel.click()
+    toggle_disclosure(legend_panel)
 
     labels = page.get_by_label("Labels", exact=True)
-    labels.click()
+    toggle_disclosure(labels)
     label_mode = page.get_by_label("Label Mode", exact=True)
     label_mode.select_option("out")
     expect(label_mode).to_have_value("out")
@@ -131,7 +132,7 @@ def apply_finished_human_settings(page: Page, *, output_prefix: str) -> None:
             "group", name="Priority File (TSV) selection", exact=True
         )
     ).to_contain_text(FIRST_LINEAR_LABEL_RULE_PATH.name)
-    labels.click()
+    toggle_disclosure(labels)
 
 
 def generate_finished_human_diagram(page: Page) -> dict[str, Any]:

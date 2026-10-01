@@ -71,6 +71,18 @@ spacing, and an axis boundary. A feature slot's reserved band and the feature
 glyph height are different settings. Invalid anchor chains, missing logical
 depth indices, and contradictory overlay order are rejected.
 
+Circular inside tracks stack outward from the center definition. If they do not
+fit only because of the definition, the species line is wrapped at word
+boundaries into the fewest lines that let them fit, and the tracks are placed
+again; the text is unchanged. The wrap is not applied to a figure that already
+fits, to an explicit **Center Reserved Radius** (`--center_reserved_radius`),
+or to a definition font size other than the default 18. If the tracks still do
+not fit, the error names the slot that could not be placed and the reserved
+definition radius. Shorten the species or strain text, reduce the definition
+font size, set a smaller center reserved radius, or place tracks outside. When
+an explicit center reserved radius is the limit, the error names that radius
+instead; set a smaller radius or place tracks outside.
+
 GC-content mode can show deviation from the record mean or an absolute
 percentage. Window and step control smoothing and sampling: larger values
 produce a smoother, less local trace. Reversing a configured base pair leaves
@@ -81,8 +93,9 @@ Each repeated depth input is one logical series. It can use one source for all
 records or one source, `DataFrame`, or `None` per displayed record. A missing
 entry is not converted to zero and does not borrow another record's data. In a
 Linear layout it reserves no painted track space for that record, while the
-series identity remains stable where data exists. A logarithmic depth axis
-requires a positive minimum.
+series identity remains stable where data exists. On a Circular multi-record
+canvas the record keeps an empty depth slot; without any depth input no depth
+slot is reserved. A logarithmic depth axis requires a positive minimum.
 
 An annotation renderer draws one named `set_id`, not every row in an annotation
 table. Coordinate targets and feature targets are mutually exclusive.
@@ -129,6 +142,12 @@ restores it. Other feature types use `other <feature type>s` for the same remain
 (for example, `other genes`). This contract also applies to Web regeneration after
 a **This feature only** color edit creates a specific rule: the default caption
 changes because its category now contains only the remaining members.
+
+A used specific rule whose caption equals a generated legend row (a feature
+type, an `other <feature type>s` row, or a GC content, skew, or depth row)
+keeps its color. The generated row keeps its name and the rule row gets the
+lowercase hex suffix, for example `rRNA [#ff0000]`. A rule with the same color
+as the generated row shares that row.
 
 Whitelist and blacklist label filters are mutually exclusive. An ordinary
 label override cannot restore a label removed by the active filter. Exact-match

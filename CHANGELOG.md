@@ -33,7 +33,23 @@ decisions are in
   Result. Unknown IDs keep the positional pair (the CLI logs a warning), and
   SVG record-ID metadata always names the endpoint records (CO-06).
 
-<!-- web-gui-audit-20260930 P04 -->
+- Circular Multi-Record Canvas output (the Web default) no longer reserves an
+  empty depth slot when there is no depth input; a one-record canvas now has the
+  same slot geometry, legend and center definition as a single-record diagram,
+  so every Web-default Circular figure changes (PV-08, N-01).
+- A Multi-Record Canvas legend now uses the same builder as a single-record
+  diagram: custom slot labels and colors, added skew slots, region annotation
+  and depth slot `legend_label` values now appear (TR-01, N-04).
+- When the center definition blocks the inside tracks, the species line is
+  wrapped at word boundaries and the tracks are placed again. An explicit
+  `center_reserved_radius` or a non-default definition font size keeps one
+  line. The remaining failure names the slot and the reserved definition
+  radius, and the Web shows it as `TRACK_LAYOUT` / `DEFINITION_RESERVED`; a
+  failure caused by an explicit `center_reserved_radius` names that radius
+  instead (`CENTER_RESERVED`) (PV-08, PD-OI-078).
+- A specific-color rule whose caption equals a generated legend row, such as a
+  rule captioned `rRNA` on tRNA features, keeps its own color row with a hex
+  suffix (`rRNA [#ff0000]`) instead of being dropped (N-06).
 
 - Non-pseudo CDS translated without `/translation` now start with `M` when the
   5' end is complete, the reading frame starts at the first base, and the first
@@ -73,7 +89,20 @@ decisions are in
 
 <!-- web-gui-audit-20260930 P08 -->
 
-<!-- web-gui-audit-20260930 P09 -->
+- History records one Undo step for each checkbox, radio button, or button
+  change, also when it is made with its label text or the keyboard, or while a
+  text field has focus. Such changes were previously dropped or merged into
+  another step, so edits can now produce more Undo steps (SE-02, SE-03, N-18).
+- Ctrl+Z, Ctrl+Shift+Z, and Ctrl+Y (Cmd on macOS) now work while a select has
+  focus; text fields keep the browser's text undo (SE-04).
+- **Undo** and **Redo** are unavailable while a diagram is generating, and the
+  header names the reason. They previously reverted the draft behind a running
+  Generate. Settings edits remain available (GE-06).
+- Undo or Redo of a step such as a feature color that adds a legend entry, or
+  **Reset Settings**, no longer empties the feature list after a mode switch;
+  these History steps no longer copy the feature metadata (SE-01, N-19, N-20).
+- Cancel during Generate preparation no longer stops the loaded diagram
+  engine, so the next Generate reuses it (GE-09).
 
 <!-- web-gui-audit-20260930 P10 -->
 
@@ -106,7 +135,19 @@ decisions are in
   match the CLI PDF. Curved and tick labels keep their spaces in the PDF text
   layer (PV-05, PV-06).
 
-<!-- web-gui-audit-20260930 P18 -->
+- Every visible Web form control has an accessible name. Controls with a
+  visible label use that label, including **Window**, **Step**,
+  **Dinucleotide**, **GC Content Mode**, and the depth and color-rule fields;
+  Custom Track Slots row controls are named by slot id in both modes.
+  Placeholders and state-dependent titles are no longer names (TR-10).
+- Every **?** help tip is a **Help** button that hover, keyboard focus, a click,
+  or a tap opens and **Escape** closes. Tips sit outside labels, and the
+  control a tip explains references its text as the accessible description
+  (TR-10, PD-OI-057).
+- Custom Track Slots rows put the move, duplicate, and remove buttons on their
+  own line in both modes, so the slot id and renderer stay readable (TR-11).
+- The Vibrio harveyi group Gallery tutorial links to the current Linear record
+  layout reference, and a packaging test checks every tutorial link (TR-12).
 
 <!-- web-gui-audit-20260930 P19 -->
 

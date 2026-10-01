@@ -25,6 +25,7 @@ from config import (
     PYTHON_OPERATION_TIMEOUT_MS,
 )
 from flows.web_capture import (
+    toggle_disclosure,
     assert_fixture_identity,
     capture_screenshot,
     fit_complete_linear_preview,
@@ -168,25 +169,25 @@ def _set_presentation(page: Page, *, title: str) -> None:
         expect(checkbox).to_be_checked()
 
     axis = page.get_by_label("Axis & Scale", exact=True)
-    axis.click()
+    toggle_disclosure(axis)
     page.get_by_label("Show Coordinate Scale (Linear)", exact=True).check()
     page.get_by_label("Linear scale style", exact=True).select_option("ruler")
-    axis.click()
+    toggle_disclosure(axis)
 
     colors = page.get_by_label("Colors", exact=True)
-    colors.click()
+    toggle_disclosure(colors)
     page.get_by_label("Palette", exact=True).select_option("ajisai")
-    colors.click()
+    toggle_disclosure(colors)
 
     title_panel = page.get_by_label("Titles and Record Labels", exact=True)
-    title_panel.click()
+    toggle_disclosure(title_panel)
     page.get_by_role("textbox", name="Plot Title", exact=True).fill(title)
     page.get_by_label("Plot Title Position", exact=True).select_option("top")
-    title_panel.click()
+    toggle_disclosure(title_panel)
     legend_panel = page.get_by_label("Legend settings", exact=True)
-    legend_panel.click()
+    toggle_disclosure(legend_panel)
     page.get_by_label("Legend position", exact=True).select_option("right")
-    legend_panel.click()
+    toggle_disclosure(legend_panel)
 
 
 def _configure_all_record_collinear(

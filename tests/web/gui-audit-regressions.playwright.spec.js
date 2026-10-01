@@ -34,7 +34,7 @@ test('new annotation IDs still select their editor row after deletion and regene
   test.setTimeout(180000);
   await session(page);
   const panel = annotations(page);
-  await panel.locator('summary').click();
+  await panel.locator('summary').press('Enter');
   await panel.getByRole('button', { name: /Add set/ }).click();
   const add = panel.getByRole('button', { name: /Coordinates/ });
   for (let i = 0; i < 3; i += 1) await add.click();
@@ -61,7 +61,7 @@ test('imported annotation colors edit the rendered row style', async ({ page }) 
   test.setTimeout(180000);
   await session(page);
   const panel = annotations(page);
-  await panel.locator('summary').click();
+  await panel.locator('summary').press('Enter');
   await panel.locator('input[type=file]').setInputFiles({ name: 'regions.tsv', mimeType: 'text/plain', buffer: Buffer.from('set_id\tid\tmark\tstart\tend\tstroke\tfill\nregions\ta\tband\t1000\t3000\t#123456\t#94a3b8\n') });
   await panel.getByTitle('Fill color', { exact: true }).fill('#ff0000');
   await panel.getByTitle('Stroke color', { exact: true }).fill('#00ff00');
@@ -75,14 +75,14 @@ test('selected D-loop without gene or locus_tag generates a feature annotation',
   test.setTimeout(180000);
   await session(page);
   const features = page.locator('details').filter({ has: page.locator('summary[aria-label="Features"]') });
-  await features.locator('summary').click();
+  await features.locator('summary').press('Enter');
   await features.locator('select').filter({ has: page.locator('option[value="D-loop"]') }).selectOption('D-loop');
   await features.getByRole('button', { name: /Add$/ }).click();
   await generateAndWaitForResult(page);
   const id = await page.evaluate(() => window.__GBDRAW_APP__.extractedFeatures.find((feature) => feature.type === 'D-loop').svg_id);
   await page.locator(`.origin-top svg [data-gbdraw-feature-id="${id}"]`).first().dispatchEvent('click', { ctrlKey: true });
   const panel = annotations(page);
-  await panel.locator('summary').click();
+  await panel.locator('summary').press('Enter');
   await panel.getByRole('button', { name: /Add set/ }).click();
   await panel.getByRole('button', { name: /Selected features/ }).click();
   await generateAndWaitForResult(page);
@@ -180,7 +180,7 @@ test('malformed annotations preserve the draft and a valid import is undoable', 
   page.on('pageerror', (error) => errors.push(error.message));
   page.on('dialog', (dialog) => { dialogs.push(dialog.message()); dialog.dismiss(); });
   const panel = annotations(page);
-  await panel.locator('summary').click();
+  await panel.locator('summary').press('Enter');
   await panel.getByRole('button', { name: /Add set/ }).click();
   await panel.getByRole('button', { name: /Coordinates/ }).click();
   const before = await page.evaluate(() => JSON.stringify(window.__GBDRAW_APP__.annotationSets));
@@ -323,7 +323,7 @@ test('invalid annotation coordinates preserve the draft and the last successful 
   test.setTimeout(180000);
   await session(page);
   const panel = annotations(page);
-  await panel.locator('summary').click();
+  await panel.locator('summary').press('Enter');
   await panel.getByRole('button', { name: /Add set/ }).click();
   await panel.getByRole('button', { name: /Coordinates/ }).click();
   const before = await page.evaluate(() => JSON.stringify(window.__GBDRAW_APP__.annotationSets));

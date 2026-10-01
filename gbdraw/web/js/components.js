@@ -7,17 +7,23 @@ import {
 
 import { normalizeUserFacingError, operationErrorTitle, generationRecoveryGuidance } from './services/error-normalization.js';
 
-const { ref, reactive, computed, nextTick, watch } = window.Vue;
+const { ref, reactive, computed, nextTick, watch, useId } = window.Vue;
 
-// A tip with `id` replaces always-on text: one text source feeds the visible
-// tooltip and the accessible description that the described control
-// references. Hover and keyboard focus show it, a click or tap pins it, and
-// Escape or blur closes it. A tip without `id` stays a hover-only icon that
-// leaves the accessible name of a surrounding label unchanged.
+// Every tip is a disclosure button (PD-OI-057). One text source feeds the
+// visible tooltip and the accessible description, identified by `id` or an
+// automatic id; the control that a tip explains references that id through
+// aria-describedby. The description is a hidden element teleported to <body>,
+// so the text around the tip stays its visible label and screen readers do
+// not read the tip text twice. Mouse hover and keyboard focus show the
+// tooltip, a click or tap toggles it, and Escape or blur closes it. Place
+// tips outside <label> so they never change the accessible name of a label or
+// its control.
 export const HelpTip = {
   template: '#help-tip-template',
   props: ['text', 'id', 'label'],
-  setup() {
+  setup(props) {
+    const automaticId = `help-tip-${useId()}`;
+    const descriptionId = computed(() => props.id || automaticId);
     const hovered = ref(false);
     const keyboardFocus = ref(false);
     const pinned = ref(false);
@@ -58,7 +64,8 @@ export const HelpTip = {
       style.transform = transform;
     };
     watch(visible, (open) => { if (open) position(); });
-    const onEnter = () => { hovered.value = true; };
+    // A touch tap also reports pointerenter; only a hovering pointer shows it.
+    const onEnter = (event) => { hovered.value = event.pointerType !== 'touch'; };
     const onLeave = () => { hovered.value = false; };
     const onFocus = () => { keyboardFocus.value = Boolean(trigger.value?.matches?.(':focus-visible')); };
     const close = () => {
@@ -67,7 +74,7 @@ export const HelpTip = {
       pinned.value = false;
     };
     const toggle = () => { pinned.value = !pinned.value; };
-    return { visible, style, trigger, onEnter, onLeave, onFocus, close, toggle };
+    return { descriptionId, visible, style, trigger, onEnter, onLeave, onFocus, close, toggle };
   }
 };
 
@@ -86,7 +93,8 @@ export const ColorValueControl = {
     modelValue: { default: null },
     fallback: { type: String, default: '#000000' },
     allowNone: { type: Boolean, default: true },
-    ariaLabel: { type: String, default: 'Color value' }
+    ariaLabel: { type: String, default: 'Color value' },
+    ariaDescribedby: { type: String, default: null }
   },
   emits: ['update:modelValue'],
   setup(props, { emit }) {
@@ -122,6 +130,7 @@ export const ColorValueControl = {
         @change="updateMode"
         class="form-input form-input-compact min-w-0"
         :aria-label="\`\${ariaLabel} mode\`"
+        :aria-describedby="ariaDescribedby"
       >
         <option value="auto">Auto</option>
         <option v-if="allowNone" value="none">None</option>
@@ -134,6 +143,7 @@ export const ColorValueControl = {
         :disabled="!controlAvailable || mode !== 'color'"
         class="h-8 w-full p-0 border rounded disabled:opacity-40"
         :aria-label="ariaLabel"
+        :aria-describedby="ariaDescribedby"
       >
     </div>
   `

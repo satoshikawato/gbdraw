@@ -45,7 +45,7 @@ for (const width of [1440, 390]) {
     await openApp(page);
     const downloads = [];
     page.on('download', (download) => downloads.push(download));
-    await panel(page).locator('summary').click();
+    await panel(page).locator('summary').press('Enter');
     const button = panel(page).getByRole('button', { name: 'Download TSV', exact: true });
     await expect(button).toBeDisabled();
     await expect(button).toHaveAccessibleDescription('Add an annotation row to download TSV.');
@@ -130,7 +130,7 @@ for (const width of [1440, 390]) {
           const fresh = await context.newPage();
           await openApp(fresh);
           await context.setOffline(true);
-          await panel(fresh).locator('summary').click();
+          await panel(fresh).locator('summary').press('Enter');
           await panel(fresh).locator('input[type=file]').setInputFiles(path);
           await expect.poll(() => effectiveRows(fresh)).toEqual(expected);
           await assertDiagramWorkerIdle(fresh);
