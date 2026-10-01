@@ -946,6 +946,11 @@ from original input files and public CLI settings; **Exact replay** uses its
 saved canonical session and analysis artifacts. Both downloads refer to the
 successful Result, even when controls hold a newer draft. An unavailable Source
 recipe includes a reason; it does not silently omit unsupported settings.
+Source recipe reads each track-slot token back with the CLI split rules, so a
+slot legend label that contains `,` or ` #`, or a slot ID that contains `:`,
+`@` or ` #`, makes the recipe unavailable. A Linear scale font without a
+ruler-label font also makes it unavailable while ruler labels are drawn,
+because CLI ruler labels follow `--scale_font_size`.
 See [Replay boundaries](session-and-request-compatibility.md#replay-boundaries)
 for required files and the distinction from saving subsequent editor changes.
 Rotation may split one logical comparison match into several SVG paths. Popups

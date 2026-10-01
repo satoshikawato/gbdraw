@@ -5,7 +5,6 @@ import { cp, readFile, stat, writeFile, mkdtemp } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { delimiter, join } from 'node:path';
 import test from 'node:test';
-import { assertKnownDefect } from './helpers/known-defect.mjs';
 import { pathToFileURL } from 'node:url';
 
 const repoRoot = process.cwd();
@@ -1077,7 +1076,7 @@ for (const mode of ['circular', 'linear']) {
 
 // TR-07: a slot legend label that the CLI slot grammar cannot carry must make
 // the recipe unavailable instead of producing a command the CLI rejects.
-test('slot legend labels with a comma or an inline comment marker stay lossless (TR-07 known defect)', async () => {
+test('slot legend labels with a comma or an inline comment marker stay lossless (TR-07)', async () => {
   const outcomes = [];
   for (const label of ['GC skew (1 kb, AT-rich)', 'a #b']) {
     const session = structuredClone(circularGallerySession);
@@ -1107,17 +1106,27 @@ test('slot legend labels with a comma or an inline comment marker stay lossless 
   assert.equal(parsed.status, 0, parsed.stderr);
   const labels = JSON.parse(parsed.stdout);
   outcomes.filter(({ token }) => token).forEach((outcome, index) => { outcome.parsed = labels[index]; });
-  await assertKnownDefect('TR-07', () => {
-    for (const outcome of outcomes) {
-      assert.ok(outcome.unavailable || outcome.parsed === outcome.label, JSON.stringify(outcome));
-    }
-  });
+  for (const outcome of outcomes) {
+    assert.ok(outcome.unavailable || outcome.parsed === outcome.label, JSON.stringify(outcome));
+  }
+  assert.deepEqual(outcomes.map(({ unavailable }) => Boolean(unavailable)), [true, true]);
+  // A label the CLI grammar can carry still yields a lossless token.
+  const plain = structuredClone(circularGallerySession);
+  plain.renderRequest.diagramOptions.tracks.circularTrackSlots = [{
+    kind: 'circularTrackSlot', id: 'ticks', renderer: 'ticks', enabled: true, side: null,
+    radius: null, width: null, z: 0,
+    params: { tick_label_layout: 'label_out_tick_in', legend_label: 'GC skew 1 kb#AT=rich' },
+    innerGapPx: null, outerGapPx: null
+  }];
+  plain.renderRequest.diagramOptions.tracks.circularTrackAxisIndex = 0;
+  const plainRecipe = await buildSourceRecipe(plain);
+  assert.equal(plainRecipe.available, true, plainRecipe.unavailableReason);
 });
 
 // GE-03 (Linear): with the scale font set and no ruler-label font, the CLI makes
 // the ruler labels follow the scale font while the Web keeps the configured
 // ruler-label defaults, so the recipe is unavailable with a reason.
-test('a Linear scale font without a ruler-label font is not a lossless recipe (GE-03 known defect)', async () => {
+test('a Linear scale font without a ruler-label font is not a lossless recipe (GE-03)', async () => {
   const session = structuredClone(linearGallerySession);
   Object.assign(session.renderRequest.diagramOptions.configOverrides, {
     'objects.scale.style': 'ruler',
@@ -1125,8 +1134,16 @@ test('a Linear scale font without a ruler-label font is not a lossless recipe (G
     'objects.scale.font_size.long': 10
   });
   const recipe = await buildSourceRecipe(session);
-  await assertKnownDefect('GE-03', () => {
-    assert.equal(recipe.available, false, JSON.stringify(recipe.args || []));
-    assert.match(recipe.unavailableReason, /ruler/i);
+  assert.equal(recipe.available, false, JSON.stringify(recipe.args || []));
+  assert.match(recipe.unavailableReason, /ruler/i);
+  // Linked fonts send both sizes, so the CLI receives both flags.
+  Object.assign(session.renderRequest.diagramOptions.configOverrides, {
+    'objects.scale.ruler_label_font_size.short': 10,
+    'objects.scale.ruler_label_font_size.long': 10
   });
+  const linked = await buildSourceRecipe(session);
+  assert.equal(linked.available, true, linked.unavailableReason);
+  for (const flag of ['--scale_font_size', '--ruler_label_font_size']) {
+    assert.equal(linked.args[linked.args.indexOf(flag) + 1], '10', JSON.stringify(linked.args));
+  }
 });

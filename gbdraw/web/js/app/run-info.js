@@ -936,6 +936,22 @@ const appendConfigOverrides = (args, request) => {
   }
 
   if (request.mode === 'linear') {
+    // Without --ruler_label_font_size the CLI ruler labels follow
+    // --scale_font_size; this render keeps the configured ruler-label sizes.
+    const hasSizedOverride = (prefix) => ['short', 'long'].some(
+      (size) => Object.hasOwn(overrides, `${prefix}.${size}`)
+    );
+    const drawsRulerLabels = overrides['objects.scale.style'] === 'ruler'
+      || overrides['canvas.linear.ruler_on_axis'] === true;
+    if (
+      drawsRulerLabels
+      && hasSizedOverride('objects.scale.font_size')
+      && !hasSizedOverride('objects.scale.ruler_label_font_size')
+    ) {
+      throw new SourceRecipeUnavailable(
+        'Source recipe unavailable: the CLI ruler labels follow --scale_font_size, while this render keeps the default ruler-label font sizes.'
+      );
+    }
     appendBooleanOption(args, take('objects.definition.linear.show_replicon'), '--show_replicon');
     appendBooleanOption(args, take('objects.definition.linear.show_accession'), '', '--hide_accession');
     appendBooleanOption(args, take('objects.definition.linear.show_length'), '', '--hide_length');
@@ -1162,6 +1178,42 @@ const validateStructuredTrackSlot = (slot, mode) => {
   return slot;
 };
 
+// Read a slot token back with the CLI split rules (gbdraw/tracks/parsing.py:
+// strip_inline_comment, one "@", one ":" in the head, "," between key=value
+// options) and require the same identity and well-formed options. A token that
+// the CLI would cut, re-split, or rename makes the recipe unavailable.
+const assertCliSlotTokenLossless = (token, mode, { id, renderer, exact = false }) => {
+  const unavailable = () => new SourceRecipeUnavailable(
+    `Source recipe unavailable: a ${mode} track slot contains text (",", ":", "@", or " #") that the CLI slot grammar cannot carry.`
+  );
+  const text = String(token).trim();
+  const commentIndex = [' #', '\t#'].map((marker) => text.indexOf(marker)).find((index) => index >= 0);
+  if (!text || text.startsWith('#') || commentIndex !== undefined) throw unavailable();
+  const atIndex = text.indexOf('@');
+  const head = atIndex < 0 ? text : text.slice(0, atIndex);
+  const colonIndex = head.indexOf(':');
+  if (colonIndex < 0) throw unavailable();
+  const readId = head.slice(0, colonIndex).trim();
+  const readRenderer = head.slice(colonIndex + 1).trim();
+  const entries = (atIndex < 0 ? '' : text.slice(atIndex + 1)).split(',')
+    .map((part) => part.trim()).filter(Boolean)
+    .map((part) => {
+      const equalsIndex = part.indexOf('=');
+      if (equalsIndex < 0) throw unavailable();
+      return [part.slice(0, equalsIndex).trim(), part.slice(equalsIndex + 1).trim()];
+    });
+  if (readId !== String(id).trim() || readRenderer !== String(renderer).trim()) throw unavailable();
+  if (entries.some(([key, value]) => !key || !value)) {
+    throw new SourceRecipeUnavailable(
+      `Source recipe unavailable: a canonical ${mode} track slot has a malformed option.`
+    );
+  }
+  const reread = `${readId}:${readRenderer}${entries.length
+    ? `@${entries.map(([key, value]) => `${key}=${value}`).join(',')}`
+    : ''}`;
+  if (exact && reread !== text) throw unavailable();
+};
+
 const trackSlotForRecipe = (slot, mode, options) => {
   if (typeof slot === 'string') {
     const text = slot.trim();
@@ -1174,21 +1226,7 @@ const trackSlotForRecipe = (slot, mode, options) => {
       const parsed = mode === 'circular'
         ? parseCircularTrackSlotSpec(text)
         : parseLinearTrackSlotSpec(text);
-      const atIndex = text.indexOf('@');
-      const canonicalHead = `${parsed.id}:${parsed.renderer}`;
-      if ((atIndex < 0 ? text : text.slice(0, atIndex)).trim() !== canonicalHead) {
-        throw new SourceRecipeUnavailable(
-          `Source recipe unavailable: a canonical ${mode} track slot would change identity in the current CLI projection.`
-        );
-      }
-      if (atIndex >= 0 && text.slice(atIndex + 1).split(',').some((entry) => {
-        const equalsIndex = entry.indexOf('=');
-        return equalsIndex <= 0 || !entry.slice(equalsIndex + 1).trim();
-      })) {
-        throw new SourceRecipeUnavailable(
-          `Source recipe unavailable: a canonical ${mode} track slot has a malformed option.`
-        );
-      }
+      assertCliSlotTokenLossless(text, mode, parsed);
       validateTrackParams(mode, parsed.renderer, parsed.params || {});
     } catch (error) {
       if (error instanceof SourceRecipeUnavailable) throw error;
@@ -1200,23 +1238,27 @@ const trackSlotForRecipe = (slot, mode, options) => {
   }
 
   validateStructuredTrackSlot(slot, mode);
+  let token;
   try {
     if (mode === 'circular') {
-      return buildCircularTrackSlotSpec(
+      token = buildCircularTrackSlotSpec(
         circularTrackSlotForRecipe(slot),
         options.dinucleotide,
         options.configOverrides?.['canvas.circular.track_type']
       );
+    } else {
+      const parsed = parseLinearTrackSlotSpec(slot);
+      validateTrackParams('linear', parsed.renderer, parsed.params || {});
+      token = buildLinearTrackSlotSpec(linearTrackSlotForRecipe(parsed), { includeEnabled: true });
     }
-    const parsed = parseLinearTrackSlotSpec(slot);
-    validateTrackParams('linear', parsed.renderer, parsed.params || {});
-    return buildLinearTrackSlotSpec(linearTrackSlotForRecipe(parsed), { includeEnabled: true });
   } catch (error) {
     if (error instanceof SourceRecipeUnavailable) throw error;
     throw new SourceRecipeUnavailable(
       `Source recipe unavailable: a canonical ${mode} track slot cannot be projected losslessly.`
     );
   }
+  assertCliSlotTokenLossless(token, mode, { id: slot.id, renderer: slot.renderer, exact: true });
+  return token;
 };
 
 const circularTrackSlotForRecipe = (slot) => ({

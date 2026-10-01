@@ -309,7 +309,9 @@ const projectedSyntheticGui = projectCanonicalSessionRequest({
   resources: promotedSyntheticGui.resources,
   webFiles: promotedSyntheticGui.webFiles
 });
-assert.equal(projectedSyntheticGui.config.form.legend, 'right');
+// The legend is a layout preference of the committed slot, not a form field.
+assert.equal(Object.hasOwn(projectedSyntheticGui.config.form, 'legend'), false);
+assert.equal(projectedSyntheticGui.layoutPreferences.circular.single.legend, 'right');
 assert.equal(projectedSyntheticGui.config.adv.def_font_size, 10);
 assert.equal(projectedSyntheticGui.config.colors.CDS, undefined);
 assert.equal(

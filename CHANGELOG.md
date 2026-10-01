@@ -150,7 +150,18 @@ decisions are in
 - Cancel during Generate preparation no longer stops the loaded diagram
   engine, so the next Generate reuses it (GE-09).
 
-<!-- web-gui-audit-20260930 P10 -->
+- A CLI Linear BLAST Session keeps its comparison read-only, and **Inherit
+  saved comparison** then Generate succeeds: each Linear file takes the record
+  identity of the committed request instead of the CLI binding uid, and the
+  saved comparison of an older CLI Session (version 42) is promoted to the
+  current request schema before reuse (SE-06, N-17, D-36).
+- A CLI Session keeps its `--legend` position through loading and the first
+  Generate. The legend position was written into the wrong layout slot and
+  replaced by the Web default (SE-07).
+- **Source recipe** is unavailable, with a reason, when a track slot legend
+  label contains `,` or ` #` (the CLI would cut or reject it), and for a Linear
+  scale font without a ruler-label font while ruler labels are drawn (the CLI
+  ruler labels would follow the scale font) (TR-07, GE-03).
 
 - Circular **Species**, **Strain**, plot title text, position, and font size,
   **Keep Full Definition with Plot Title**, and **Default font size** now apply
