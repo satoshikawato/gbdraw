@@ -25,7 +25,7 @@ const UNCLASSIFIED_THROW_BASELINE = {
   'app/legend-layout/decoration-continuity.js': 0,
   'app/linear-track-slots.js': 34,
   'app/record-display-options.js': 23,
-  'app/run-analysis.js': 19,
+  'app/run-analysis.js': 18,
   'app/track-slot-validation.js': 31,
   'mode-profiles.js': 9,
   'services/config.js': 23,
@@ -99,7 +99,7 @@ test('JS validation throw sites normalize to a recognized diagnostic or shrink (
 });
 
 // The message-classification tables in the JS wording owner (R6 ratchet).
-const NATIVE_VALIDATION_BASELINE = { exactMessages: 92, patterns: 22 };
+const NATIVE_VALIDATION_BASELINE = { exactMessages: 92, patterns: 21 };
 
 test('the JS message-classification tables only shrink (R6 ratchet)', async () => {
   const source = readFileSync(new URL('services/error-normalization.js', WEB_ROOT), 'utf8');
