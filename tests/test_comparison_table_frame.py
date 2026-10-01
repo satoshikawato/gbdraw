@@ -139,3 +139,31 @@ def test_row_outside_its_record_reports_a_comparison_diagnostic() -> None:
         )
     error = serialize_web_error(caught.value, operation="generate", stage="render")
     assert (error["code"], error["context"]) == ("COMPARISON_INPUT", {"reason": "SEARCH_FRAME"})
+
+
+_SESSIONS = Path(__file__).parent / "fixtures" / "sessions"
+
+
+@pytest.mark.linear
+def test_main_cli_session_with_a_reversed_record_draws_the_ribbons_main_drew(tmp_path: Path) -> None:
+    # origin/main read the -b table after --reverse_complement, and its CLI
+    # sidecar embeds that reverse-complemented record as the source, so the
+    # stored rows already use the search frame of the embedded record.
+    import gzip
+    import json
+
+    from gbdraw.session_io import load_session
+
+    provenance = json.loads((_SESSIONS / "q-frame-main-linear-reverse.provenance.json").read_text(encoding="utf-8"))
+    session = tmp_path / "main.gbdraw-session.json"
+    session.write_bytes(gzip.decompress((_SESSIONS / "q-frame-main-linear-reverse.v42.gbdraw-session.json.gz").read_bytes()))
+    sidecar = tmp_path / "resaved.gbdraw-session.json"
+    linear_cli.linear_main([
+        "--session", str(session), "-o", str(tmp_path / "replayed"), "-f", "svg", "--session_output", str(sidecar),
+    ])
+    expected = [tuple(tuple(side) for side in ribbon) for ribbon in provenance["mainRibbonSpans"]]
+    assert _ribbon_spans((tmp_path / "replayed.svg").read_text(encoding="utf-8")) == expected
+    # The re-saved Session is in the search frame and replays unchanged.
+    assert load_session(sidecar)["version"] > 42
+    linear_cli.linear_main(["--session", str(sidecar), "-o", str(tmp_path / "resaved"), "-f", "svg"])
+    assert _ribbon_spans((tmp_path / "resaved.svg").read_text(encoding="utf-8")) == expected
