@@ -2951,8 +2951,10 @@ def test_pairwise_match_path_emits_plain_required_metadata() -> None:
 
     assert 'data-gbdraw-pairwise-match-id="comparison1_match7"' in svg_text
     assert 'data-match-kind="pairwise"' in svg_text
-    assert 'data-query-record-id="query_record"' in svg_text
-    assert 'data-subject-record-id="subject_record"' in svg_text
+    # Record identity comes from the endpoint records, never from table IDs (CO-06).
+    assert 'data-query-record-id="record_a"' in svg_text
+    assert 'data-subject-record-id="record_b"' in svg_text
+    assert "query_record" not in svg_text
     assert 'data-identity="87.5"' in svg_text
     assert 'data-alignment-length="120"' in svg_text
     assert 'data-evalue="2e-30"' in svg_text

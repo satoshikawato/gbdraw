@@ -89,10 +89,14 @@ for reproducibility. The Python and CLI omission defaults retain their previous
 behavior; typed requests can explicitly set `collinear_infer_orthogroups=False`.
 
 Prepared rows retain `qseqid`, `sseqid`, `pident`, `length`, `mismatch`,
-`gapopen`, `qstart`, `qend`, `sstart`, `send`, `evalue`, and `bitscore`.
-Query and subject are directional. They must map to the intended displayed
-records, including version suffixes. A start greater than its end marks reverse
-orientation; it does not by itself mean that a hit crosses a Circular origin.
+`gapopen`, `qstart`, `qend`, `sstart`, `send`, `evalue`, and `bitscore` from
+the first 12 columns; extra columns are ignored. Query and subject are
+directional. In Linear mode, a row that names the other endpoint or another
+displayed record is rejected, a version suffix difference is accepted, and IDs
+that match no displayed record keep the positional pair with a warning. See
+[Comparison and numeric tables](input-formats-and-tsv-schemas.md#comparison-and-numeric-tables).
+A start greater than its end marks reverse orientation; it does not by itself
+mean that a hit crosses a Circular origin.
 
 For a Circular ring, the selected reference side is `query`, `subject`, or
 `auto`. The renderer paints retained spans from that side on the displayed

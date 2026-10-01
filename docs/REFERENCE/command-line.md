@@ -144,7 +144,10 @@ layout](palettes-feature-rules-labels-shapes-and-tracks.md).
 compatibility token), or Collinear protein comparisons through LOSATP or a
 compatible BLASTP runtime. LOSATN and TLOSATX are not command-line search
 modes. Read their prepared evidence with `--blast`, `--comparisons_table`, or
-`--conservation_blast`.
+`--conservation_blast`. Each `--blast` file belongs to one adjacent pair, so a
+missing, unreadable, or malformed file stops the run instead of being skipped.
+The table rules are in [Comparison and numeric
+tables](input-formats-and-tsv-schemas.md#comparison-and-numeric-tables).
 
 Default LOSATP Pairwise mode searches each adjacent input pair. With three or
 more records, it does not add an implicit first-to-last comparison.

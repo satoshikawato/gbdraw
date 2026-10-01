@@ -1,0 +1,144 @@
+{
+  "description": "BLAST outfmt 6/7 table vectors. Every comparison-table reader must give the same result: the first 12 columns are read by position and typed; extra columns are ignored; a line whose first non-blank character is # is a comment; malformed tables fail with the line number, and their Web diagnostic (gbdraw.web_support.error_adapter) carries it as row plus the column where a value is invalid. A line is an array of tab-separated fields or a raw string.",
+  "columns": ["query", "subject", "identity", "alignment_length", "mismatches", "gap_opens", "qstart", "qend", "sstart", "send", "evalue", "bitscore"],
+  "cases": [
+    {
+      "name": "12 columns",
+      "lines": [["SA", "SB", "95.0", "200", "0", "0", "101", "300", "1101", "1300", "1e-50", "300"]],
+      "expect": {"rowCount": 1, "firstRow": ["SA", "SB", 95.0, 200, 0, 0, 101, 300, 1101, 1300, 1e-50, 300]}
+    },
+    {
+      "name": "13 columns (std qlen)",
+      "lines": [["SA", "SB", "95.0", "200", "0", "0", "101", "300", "1101", "1300", "1e-50", "300", "3000"]],
+      "expect": {"rowCount": 1, "firstRow": ["SA", "SB", 95.0, 200, 0, 0, 101, 300, 1101, 1300, 1e-50, 300]}
+    },
+    {
+      "name": "14 columns (std qlen slen)",
+      "lines": [["SA", "SB", "95.0", "200", "0", "0", "101", "300", "1101", "1300", "1e-50", "300", "3000", "3000"]],
+      "expect": {"rowCount": 1, "firstRow": ["SA", "SB", 95.0, 200, 0, 0, 101, 300, 1101, 1300, 1e-50, 300]}
+    },
+    {
+      "name": "outfmt 7 comments with 14 columns",
+      "lines": [
+        "# BLASTN 2.15.0+",
+        "# Query: SA",
+        "# Fields: query acc.ver, subject acc.ver, % identity, alignment length, mismatches, gap opens, q. start, q. end, s. start, s. end, evalue, bit score, query length, subject length",
+        "# 2 hits found",
+        ["SA", "SB", "95.0", "200", "0", "0", "101", "300", "1101", "1300", "1e-50", "300", "3000", "3000"],
+        ["SA", "SB", "90.5", "50", "5", "0", "2001", "2050", "2050", "2001", "2e-10", "80.5", "3000", "3000"]
+      ],
+      "expect": {"rowCount": 2, "firstRow": ["SA", "SB", 95.0, 200, 0, 0, 101, 300, 1101, 1300, 1e-50, 300]}
+    },
+    {
+      "name": "later row has extra columns",
+      "lines": [
+        ["SA", "SB", "95.0", "200", "0", "0", "101", "300", "1101", "1300", "1e-50", "300"],
+        ["SA", "SB", "90.5", "50", "5", "0", "2001", "2050", "2050", "2001", "2e-10", "80.5", "3000", "3000"]
+      ],
+      "expect": {"rowCount": 2, "firstRow": ["SA", "SB", 95.0, 200, 0, 0, 101, 300, 1101, 1300, 1e-50, 300]}
+    },
+    {
+      "name": "hash inside a field is data",
+      "lines": [["SA#1", "SB", "95.0", "200", "0", "0", "101", "300", "1101", "1300", "1e-50", "300"]],
+      "expect": {"rowCount": 1, "firstRow": ["SA#1", "SB", 95.0, 200, 0, 0, 101, 300, 1101, 1300, 1e-50, 300]}
+    },
+    {
+      "name": "quote inside a field is data",
+      "lines": [
+        ["\"SA", "SB", "95.0", "200", "0", "0", "101", "300", "1101", "1300", "1e-50", "300"],
+        ["SA", "SB", "95.0", "200", "0", "0", "101", "300", "1101", "1300", "1e-50", "300"]
+      ],
+      "expect": {"rowCount": 2, "firstRow": ["\"SA", "SB", 95.0, 200, 0, 0, 101, 300, 1101, 1300, 1e-50, 300]}
+    },
+    {
+      "name": "CRLF line endings with outfmt 7 comments",
+      "lines": [
+        "# BLASTN 2.15.0+\r",
+        "SA\tSB\t95.0\t200\t0\t0\t101\t300\t1101\t1300\t1e-50\t300\r",
+        "SA\tSB\t95.0\t200\t0\t0\t101\t300\t1101\t1300\t1e-50\t300\r"
+      ],
+      "expect": {"rowCount": 2, "firstRow": ["SA", "SB", 95.0, 200, 0, 0, 101, 300, 1101, 1300, 1e-50, 300]}
+    },
+    {
+      "name": "UTF-8 byte order mark before outfmt 7 comments",
+      "lines": [
+        "﻿# BLASTN 2.15.0+",
+        ["SA", "SB", "95.0", "200", "0", "0", "101", "300", "1101", "1300", "1e-50", "300"]
+      ],
+      "expect": {"rowCount": 1, "firstRow": ["SA", "SB", 95.0, 200, 0, 0, 101, 300, 1101, 1300, 1e-50, 300]}
+    },
+    {
+      "name": "empty file",
+      "lines": [],
+      "expect": {"rowCount": 0}
+    },
+    {
+      "name": "outfmt 7 with no hits",
+      "lines": [
+        "# BLASTN 2.15.0+",
+        "# Query: SA",
+        "# 0 hits found"
+      ],
+      "expect": {"rowCount": 0}
+    },
+    {
+      "name": "11 columns",
+      "lines": [["SA", "SB", "95.0", "200", "0", "0", "101", "300", "1101", "1300", "1e-50"]],
+      "expect": {"error": "line 1: expected at least 12 tab-separated BLAST outfmt 6 columns; found 11", "diagnostic": {"code": "COMPARISON_INPUT", "context": {"reason": "FIELDS", "row": 1, "columnCount": 12}}}
+    },
+    {
+      "name": "later row has fewer than 12 columns",
+      "lines": [
+        "# Fields: query acc.ver, subject acc.ver, % identity, alignment length, mismatches, gap opens, q. start, q. end, s. start, s. end, evalue, bit score",
+        ["SA", "SB", "95.0", "200", "0", "0", "101", "300", "1101", "1300", "1e-50", "300"],
+        ["SA", "SB", "90.5", "50", "5", "0", "2001", "2050", "2050", "2001"]
+      ],
+      "expect": {"error": "line 3: expected at least 12 tab-separated BLAST outfmt 6 columns; found 10", "diagnostic": {"code": "COMPARISON_INPUT", "context": {"reason": "FIELDS", "row": 3, "columnCount": 12}}}
+    },
+    {
+      "name": "empty value inside a row",
+      "lines": [
+        ["SA", "SB", "95.0", "200", "0", "0", "101", "300", "1101", "1300", "1e-50", "300"],
+        ["SA", "SB", "", "50", "5", "0", "2001", "2050", "2050", "2001", "2e-10", "80.5"]
+      ],
+      "expect": {"error": "line 2, column 3 \\(identity\\): '' is not a finite number", "diagnostic": {"code": "COMPARISON_INPUT", "context": {"reason": "FINITE", "row": 2, "column": 3}}}
+    },
+    {
+      "name": "numeric sequence IDs stay text",
+      "lines": [["001", "2", "95.0", "200", "0", "0", "101", "300", "1101", "1300", "1e-50", "300"]],
+      "expect": {"rowCount": 1, "firstRow": ["001", "2", 95.0, 200, 0, 0, 101, 300, 1101, 1300, 1e-50, 300]}
+    },
+    {
+      "name": "non-numeric identity",
+      "lines": [["SA", "SB", "high", "200", "0", "0", "101", "300", "1101", "1300", "1e-50", "300"]],
+      "expect": {"error": "line 1, column 3 \\(identity\\): 'high' is not a finite number", "diagnostic": {"code": "COMPARISON_INPUT", "context": {"reason": "FINITE", "row": 1, "column": 3}}}
+    },
+    {
+      "name": "non-integer coordinate after comments",
+      "lines": [
+        "# BLASTN 2.15.0+",
+        ["SA", "SB", "95.0", "200", "0", "0", "101", "300", "1101", "1300", "1e-50", "300"],
+        ["SA", "SB", "95.0", "200", "0", "0", "101.5", "300", "1101", "1300", "1e-50", "300"]
+      ],
+      "expect": {"error": "line 3, column 7 \\(qstart\\): '101.5' is not an integer", "diagnostic": {"code": "COMPARISON_INPUT", "context": {"reason": "INTEGER", "row": 3, "column": 7}}}
+    },
+    {
+      "name": "non-finite bitscore",
+      "lines": [["SA", "SB", "95.0", "200", "0", "0", "101", "300", "1101", "1300", "1e-50", "inf"]],
+      "expect": {"error": "line 1, column 12 \\(bitscore\\): 'inf' is not a finite number", "diagnostic": {"code": "COMPARISON_INPUT", "context": {"reason": "FINITE", "row": 1, "column": 12}}}
+    },
+    {
+      "name": "header row",
+      "lines": [
+        ["qseqid", "sseqid", "pident", "length", "mismatch", "gapopen", "qstart", "qend", "sstart", "send", "evalue", "bitscore"],
+        ["SA", "SB", "95.0", "200", "0", "0", "101", "300", "1101", "1300", "1e-50", "300"]
+      ],
+      "expect": {"error": "line 1, column 3 \\(identity\\): 'pident' is not a finite number", "diagnostic": {"code": "COMPARISON_INPUT", "context": {"reason": "FINITE", "row": 1, "column": 3}}}
+    },
+    {
+      "name": "missing query ID",
+      "lines": [["", "SB", "95.0", "200", "0", "0", "101", "300", "1101", "1300", "1e-50", "300"]],
+      "expect": {"error": "line 1, column 1 \\(query\\): the sequence ID is empty", "diagnostic": {"code": "COMPARISON_INPUT", "context": {"reason": "REQUIRED", "row": 1, "column": 1}}}
+    }
+  ]
+}

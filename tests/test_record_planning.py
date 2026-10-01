@@ -353,14 +353,17 @@ def test_linear_comparison_table_resolves_after_record_expansion(
 
 def test_linear_comparison_reader_does_not_hide_unexpected_errors(
     monkeypatch,
+    tmp_path: Path,
 ) -> None:
+    blast = tmp_path / "pair.tsv"
+    blast.write_text("left\tright\t90\t100\t0\t0\t1\t100\t1\t100\t1e-20\t200\n", encoding="utf-8")
     table = SimpleNamespace(
         table_path="comparisons.tsv",
         rows=(
             SimpleNamespace(
                 query="#1",
                 subject="#2",
-                blast="pair.tsv",
+                blast=str(blast),
                 row_number=2,
             ),
         ),
@@ -373,8 +376,9 @@ def test_linear_comparison_reader_does_not_hide_unexpected_errors(
     def fail_reader(*_args, **_kwargs):
         raise RuntimeError("reader implementation bug")
 
+    # The shared comparison reader converts only input errors to ValidationError.
     monkeypatch.setattr(
-        "gbdraw.api.record_planning.pd.read_csv",
+        "gbdraw.io.comparisons.pd.read_csv",
         fail_reader,
     )
 

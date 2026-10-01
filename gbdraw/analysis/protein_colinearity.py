@@ -43,7 +43,7 @@ from gbdraw.core.sequence import translate_cds
 from gbdraw.exceptions import ParseError, ValidationError
 from gbdraw.features.ids import compute_feature_hash_from_location_parts
 from gbdraw.features.visibility import should_include_feature_in_analysis
-from gbdraw.io.comparisons import COMPARISON_COLUMNS
+from gbdraw.io.comparisons import COMPARISON_COLUMNS, read_comparison_table
 
 # Historical internal import; edge identity is owned by ortholog_paths.
 _edge_id = ortholog_edge_id
@@ -3067,17 +3067,11 @@ def parse_losatp_outfmt6(text: str) -> DataFrame:
                 "LOSATP blastp output contains non-numeric outfmt 6 fields."
             )
     try:
-        df = pd.read_csv(
-            StringIO("\n".join(data_lines)),
-            sep="\t",
-            names=COMPARISON_COLUMNS,
+        return read_comparison_table(
+            StringIO("\n".join(data_lines)), label="LOSATP blastp output"
         )
-    except Exception as exc:
+    except ValidationError as exc:
         raise ParseError(f"Failed to parse LOSATP blastp output: {exc}") from exc
-
-    if len(df.columns) != len(COMPARISON_COLUMNS):
-        raise ParseError("LOSATP blastp output does not match outfmt 6 columns.")
-    return _coerce_outfmt6_numeric_columns(df)
 
 
 def _validate_max_hits(max_hits: int, *, option_name: str = "protein_blastp_max_hits") -> None:
