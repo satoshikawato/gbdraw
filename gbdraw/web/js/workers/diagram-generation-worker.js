@@ -720,6 +720,19 @@ const HELPER_OPERATION_SPECS = Object.freeze({
       return result;
     }
   },
+  [DIAGRAM_HELPER_OPERATIONS.CONVERT_MAIN_SESSION_COMPARISON_FRAME]: {
+    keys: ['tableText', 'queryFrame', 'subjectFrame'],
+    fileRoles: [],
+    run: (pyodide, payload) => callJsonHelper(
+      pyodide,
+      'main_session_table_text_to_search_frame_json',
+      [
+        String(payload.tableText || ''),
+        jsonArgument(payload.queryFrame, {}),
+        jsonArgument(payload.subjectFrame, {})
+      ]
+    )
+  },
   [DIAGRAM_HELPER_OPERATIONS.HYDRATE_PROTEIN_LOSAT_TSV]: {
     keys: ['entry', 'identityManifest'],
     fileRoles: [],

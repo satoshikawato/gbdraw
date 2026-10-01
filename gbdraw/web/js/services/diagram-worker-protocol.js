@@ -3,6 +3,7 @@ export const DIAGRAM_HELPER_OPERATIONS = Object.freeze({
   READ_PDF_FONT: 'readPdfFont',
   BUILD_PROTEIN_LOSAT_CACHE_KEYS: 'buildProteinLosatCacheKeys',
   CONVERT_LOSATP_PAIRS_TO_GENOMIC_PAYLOAD: 'convertLosatpPairsToGenomicPayload',
+  CONVERT_MAIN_SESSION_COMPARISON_FRAME: 'convertMainSessionComparisonFrame',
   EXTRACT_CDS_PROTEIN_FASTA: 'extractCdsProteinFasta',
   EXTRACT_FIRST_FASTA: 'extractFirstFasta',
   GENERATE_LEGEND_ENTRY_SVG: 'generateLegendEntrySvg',

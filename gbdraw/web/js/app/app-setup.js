@@ -36,6 +36,7 @@ import {
   setUnmanagedConfigOverrideValidator,
   setPreviewRuntime
 } from '../services/config.js';
+import { setMainSessionComparisonFrameConverter } from '../services/main-session-comparison-frame.js';
 import { createHistoryManager } from '../services/history.js';
 import { createHistoryFileStore } from '../services/history-files.js';
 import { createHistorySnapshotService } from '../services/history-snapshot.js';
@@ -246,6 +247,10 @@ export const createSessionImportRollbackState = ({
 export const createAppSetup = () => {
   setUnmanagedConfigOverrideValidator((payload) => runDiagramHelperOperation(
     DIAGRAM_HELPER_OPERATIONS.VALIDATE_CONFIG_OVERRIDES,
+    payload
+  ));
+  setMainSessionComparisonFrameConverter((payload) => runDiagramHelperOperation(
+    DIAGRAM_HELPER_OPERATIONS.CONVERT_MAIN_SESSION_COMPARISON_FRAME,
     payload
   ));
   const {
@@ -1409,6 +1414,7 @@ export const createAppSetup = () => {
     featureActions.dispose();
     disposePanZoom();
     setUnmanagedConfigOverrideValidator(null);
+    setMainSessionComparisonFrameConverter(null);
     disposeSessionOperations();
     state.sessionPreparationBusyReason = null;
     disposeDiagramGenerationWorker();

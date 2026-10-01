@@ -7,7 +7,7 @@ const { mkdirSync, readFileSync, writeFileSync } = require('node:fs');
 const path = require('node:path');
 const { promisify } = require('node:util');
 const { evaluateWithRetainedPromise, generateAndWaitForResult } = require('./helpers/app-lifecycle.cjs');
-const { BATCH_FIXTURE, openFresh, settle } = require('./helpers/audit-browser.cjs');
+const { BATCH_FIXTURE, loadSessionFile, openFresh, settle } = require('./helpers/audit-browser.cjs');
 
 test.describe.configure({ retries: 0 });
 
@@ -309,3 +309,18 @@ test('the match popup and its FASTA header report source coordinates of a croppe
   expect(queryHeader, JSON.stringify(popup.headers)).toMatch(/coords=2001\.\.3000/);
 });
 
+
+// origin/main Web Sessions stored rows of a reversed record after the reverse
+// complement; Load converts them to the search frame once (D-18 Must preserve).
+for (const scenario of ['upload', 'losatn']) {
+  test(`a main Web Session with a reversed record and ${scenario} rows keeps main's ribbons`, async ({ page }) => {
+    test.setTimeout(600_000);
+    const sessions = path.join(root, 'tests/fixtures/sessions');
+    const provenance = JSON.parse(readFileSync(path.join(sessions, 'q-frame-main-web.provenance.json'), 'utf8'));
+    await openFresh(page);
+    await loadSessionFile(page, path.join(sessions, `q-frame-main-web-${scenario}.v42.gbdraw-session.json.gz`));
+    await generateAndWaitForResult(page);
+    const spans = (await committedRibbons(page)).map(({ queryX, subjectX }) => [queryX, subjectX]);
+    expect(spans).toEqual(provenance.mainRibbonSpans);
+  });
+}

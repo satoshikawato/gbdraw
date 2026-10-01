@@ -14,7 +14,7 @@ from typing import Iterator
 from gbdraw.exceptions import ComparisonIdentityError, GbdrawError, InputFileError, ParseError, ValidationError
 
 OPERATIONS = frozenset("""unknown generate align feature-extraction export-svg export-png export-pdf evaluateRules readPdfFont
-buildProteinLosatCacheKeys convertLosatpPairsToGenomicPayload
+buildProteinLosatCacheKeys convertLosatpPairsToGenomicPayload convertMainSessionComparisonFrame
 extractCdsProteinFasta extractFirstFasta generateLegendEntrySvg hydrateProteinLosatTsv
 listGffFastaRecords listSequenceRecords measureLegendText promoteLegacyLosatpCache
 resolveLegacyProteinReferences resolveSimilarityAlignment validateConfigOverrides""".split())
