@@ -2663,7 +2663,6 @@ ${origin}
       feat: target,
       color: '#ff00ff'
     };
-    app.resetColorDialog.defaultColor = defaultColor;
     app.resetColorDialog.caption = 'wsv360-like protein';
     await app.handleResetColorChoice('this');
     return {

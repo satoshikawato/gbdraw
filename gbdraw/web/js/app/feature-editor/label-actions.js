@@ -339,30 +339,6 @@ const assignFeatureIdsToLabels = (svg, labelElements, featureGeometry, mode) => 
   return assignments;
 };
 
-const buildContextKey = (svg, mode) => {
-  const ids = Array.from(
-    new Set(
-      Array.from(svg.querySelectorAll(FEATURE_SELECTOR))
-        .map((el) => getFeatureIdentity(el))
-        .filter((value) => value && value.trim() !== '')
-    )
-  ).sort();
-  return `${mode}:${ids.join(',')}`;
-};
-
-const hasFeatureScopedOverrideInSvg = (svg, ...overrideMaps) => {
-  const renderedFeatureIds = new Set(
-    Array.from(svg.querySelectorAll(FEATURE_SELECTOR))
-      .map((element) => normalizeKeyToken(getFeatureIdentity(element)))
-      .filter(Boolean)
-  );
-  return overrideMaps.some((overrides) => (
-    Object.keys(overrides || {}).some(
-      (featureId) => renderedFeatureIds.has(normalizeKeyToken(featureId))
-    )
-  ));
-};
-
 export const createFeatureLabelActions = ({ state, previewRuntime = null, rulePreparation, ref, computed }) => {
   const {
     mode,
@@ -382,7 +358,6 @@ export const createFeatureLabelActions = ({ state, previewRuntime = null, rulePr
     labelTextBulkOverrides,
     labelTextFeatureOverrideSources,
     labelVisibilityOverrides,
-    labelOverrideContextKey,
     labelOverrideBuildWarning,
     globalLabelModeDialog,
     autoLabelReflowEnabled,
@@ -686,22 +661,9 @@ export const createFeatureLabelActions = ({ state, previewRuntime = null, rulePr
     const svg = svgContainer.value.querySelector('svg');
     if (!svg) return;
 
-    const contextKey = buildContextKey(svg, mode.value);
-    if (
-      labelOverrideContextKey.value &&
-      labelOverrideContextKey.value !== contextKey &&
-      !hasFeatureScopedOverrideInSvg(
-        svg,
-        labelTextFeatureOverrides,
-        labelVisibilityOverrides
-      )
-    ) {
-      clearOverrides();
-      labelTextScopeDialog.show = false;
-      closeGlobalLabelModeDialog();
-    }
-    labelOverrideContextKey.value = contextKey;
-
+    // Label intent is keyed by feature identity, not by the mounted view: a
+    // Result switch, record selection, hide, or reflow changes which labels
+    // this SVG shows, never which overrides exist (FE-01, R2).
     const featureGeometry = collectFeatureGeometry(svg);
     const labelElements = collectEditableLabelElements(svg, mode.value);
     requireUniqueEditableLabelBindings(
@@ -989,7 +951,6 @@ export const createFeatureLabelActions = ({ state, previewRuntime = null, rulePr
     if (svg) resetLabelsToSourceText(svg);
     clearOverrides();
     if (!svgContainer.value) {
-      labelOverrideContextKey.value = '';
       editableLabels.value = [];
       closeLabelTextScopeDialog();
       closeGlobalLabelModeDialog();

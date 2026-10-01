@@ -455,15 +455,15 @@ const generateAndWaitForResult = async (
 // selection, a no-change Generate, a mode round trip, an Undo+Redo pair, an
 // unrelated toggle) must leave user-owned state unchanged. The snapshot follows
 // the audit harness: config, UI and editor state plus the user-owned feature,
-// label, and group maps; the feature catalog, bulk feature tables, preview
-// navigation, and derived context keys are excluded.
+// label, and group maps; the feature catalog, bulk feature tables, and preview
+// navigation are excluded.
 const snapshotUserOwnedState = (page) => page.evaluate(async () => {
   const { state } = await import('/gbdraw/web/js/state.js');
   const config = await import('/gbdraw/web/js/services/config.js');
   const editor = config.buildEditorStateData();
   delete editor.featureCatalog;
   const features = config.buildFeatureStateData();
-  for (const key of ['extractedFeatures', 'biologicalFeatures', 'featureSelectorSafetyScope', 'labelOverrideContextKey']) {
+  for (const key of ['extractedFeatures', 'biologicalFeatures', 'featureSelectorSafetyScope']) {
     delete features[key];
   }
   const orthogroups = config.buildOrthogroupStateData();

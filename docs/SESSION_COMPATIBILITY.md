@@ -32,6 +32,10 @@ are not settings. Load no longer keeps them as a preserved
 `labels.filtering.raw` setting, and attaching a label table recompiles them, so
 Qualifier Priority and whitelist edits take effect.
 
+Web Sessions no longer write `features.labelOverrideContextKey`. Readers ignore
+it in Session 44 files that contain it; label edits no longer depend on which
+Result was displayed when the Session was saved.
+
 A Circular request that sets `objects.definition.circular.font_size` without
 `objects.definition.circular.interval` uses the font size plus 2, truncated to
 an integer, as the definition line interval. This restores the 0.13.0 Web and

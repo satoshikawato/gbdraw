@@ -164,7 +164,21 @@ decisions are in
   Generate. Stroke edits on selected features and legend entries stay live
   (GE-02).
 
-<!-- web-gui-audit-20260930 P12 -->
+- Label text and label visibility edits are no longer cleared when another
+  Result, record, or hidden feature changes the displayed diagram. After
+  Generate replaces a source file, only the edits of features that no longer
+  exist are removed (FE-01).
+- With one Result per record, the Features list and its **Edit** actions follow
+  the displayed Result, and its color, visibility, legend, and label edits reach
+  the other Results when they are displayed, including their export and saved
+  Session (FE-02, FE-03, PV-09).
+- Redo, or an unrelated Undo, keeps a feature hidden by **Exact product** or
+  **Exact protein ID**; the editor matches these rules like Generate, ignoring
+  case (FE-04).
+- **Reset fill color** uses the default color of the feature it resets, also
+  after the Reset dialog of another feature was canceled (FE-10).
+- A label rerender no longer applies settings that wait for Generate, such as
+  **Species** or a block stroke width (N-16).
 
 <!-- web-gui-audit-20260930 P13 -->
 

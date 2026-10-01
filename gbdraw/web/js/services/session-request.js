@@ -420,6 +420,15 @@ const MODE_LABEL_SCOPE_PATHS = Object.freeze({
   linear: 'labels.linear.scope'
 });
 
+const labelScopeOverride = (form, circular) => (circular
+  ? ({ none: 'none', out: 'outer', both: 'both' }[form.labels_mode] || 'none')
+  : form.show_labels_linear);
+
+const labelBlacklistOverride = (state) => (state.filterMode.value === 'Blacklist'
+  ? String(state.manualBlacklist.value || '').split(/[,\n]/)
+    .map((keyword) => keyword.trim()).filter(Boolean)
+  : []);
+
 const LINEAR_DEFINITION_STYLE_PATHS = Object.freeze(
   Object.fromEntries(
     ['name', 'subtitle', 'replicon', 'accession', 'length'].map((kind) => [
@@ -1098,9 +1107,7 @@ const buildConfigOverrides = (
       ? !form.suppress_skew
       : Boolean(form.show_skew),
     [CONFIG_OVERRIDE_PATHS.showDepth]: Boolean(depthRequested),
-    [MODE_LABEL_SCOPE_PATHS[state.mode.value]]: circular
-      ? ({ none: 'none', out: 'outer', both: 'both' }[form.labels_mode] || 'none')
-      : form.show_labels_linear,
+    [MODE_LABEL_SCOPE_PATHS[state.mode.value]]: labelScopeOverride(form, circular),
     [CONFIG_OVERRIDE_PATHS.strandedness]: Boolean(form.separate_strands),
     [CONFIG_OVERRIDE_PATHS.resolveOverlaps]: Boolean(adv.resolve_overlaps),
     [CONFIG_OVERRIDE_PATHS.featureOverlapToleranceBp]: adv.feature_overlap_tolerance_bp ?? 0,
@@ -1129,10 +1136,7 @@ const buildConfigOverrides = (
     [CONFIG_OVERRIDE_PATHS.depthShareAxis]: Boolean(adv.depth_share_axis),
     [CONFIG_OVERRIDE_PATHS.showScale]: form.show_scale !== false,
     [CONFIG_OVERRIDE_PATHS.scaleInterval]: leaf(CONFIG_OVERRIDE_PATHS.scaleInterval, adv.scale_interval),
-    [CONFIG_OVERRIDE_PATHS.labelBlacklist]: state.filterMode.value === 'Blacklist'
-      ? String(state.manualBlacklist.value || '').split(/[,\n]/)
-        .map((keyword) => keyword.trim()).filter(Boolean)
-      : [],
+    [CONFIG_OVERRIDE_PATHS.labelBlacklist]: labelBlacklistOverride(state),
     ...(circular
       ? {
           [CONFIG_OVERRIDE_PATHS.circularAxisStrokeColor]:
@@ -1258,8 +1262,29 @@ const buildConfigOverrides = (
   };
 };
 
-const addGeneratedTableResources = (state, resources, diagramOptions) => {
+const ALL_GENERATED_TABLES = Object.freeze({
+  colors: true, visibility: true, whitelist: true, priority: true, labelOverrides: true
+});
+
+const addGeneratedTableResources = (
+  state, resources, diagramOptions, tables = ALL_GENERATED_TABLES
+) => {
   recordStructuralMetric('generatedTableBuildCount');
+  if (tables.colors) addColorTableResources(state, resources, diagramOptions);
+  if (tables.visibility) {
+    const visibility = serializeFeatureVisibilityRules(state.featureVisibilityRules?.value || []);
+    if (visibility.trim()) {
+      diagramOptions.featureVisibilityTableFile = fileRef(resources.addText(
+        'feature-visibility-table-file', 'feature-visibility-table-file', 'feature-visibility.tsv', visibility
+      ));
+    }
+  }
+  if (tables.whitelist) addLabelWhitelistResource(state, resources, diagramOptions);
+  if (tables.priority) addQualifierPriorityResource(state, resources, diagramOptions);
+  if (tables.labelOverrides) addLabelOverrideResource(state, resources, diagramOptions);
+};
+
+const addColorTableResources = (state, resources, diagramOptions) => {
   const paletteName = String(state.selectedPalette.value || 'default');
   const paletteColors = state.canonicalPublicationFiles && !state.canonicalPublicationFiles.d_color ? {}
     : state.normalizePaletteColors(state.paletteDefinitions.value?.[paletteName]
@@ -1290,13 +1315,10 @@ const addGeneratedTableResources = (state, resources, diagramOptions) => {
     defaultColorsFile:
       defaultColorsFile?.representation === 'canonicalTsv' ? null : defaultColorsFile
   };
+};
 
-  const visibility = serializeFeatureVisibilityRules(state.featureVisibilityRules?.value || []);
-  if (visibility.trim()) {
-    diagramOptions.featureVisibilityTableFile = fileRef(resources.addText(
-      'feature-visibility-table-file', 'feature-visibility-table-file', 'feature-visibility.tsv', visibility
-    ));
-  }
+const addLabelWhitelistResource = (state, resources, diagramOptions) => {
+  const publicationFiles = state.canonicalPublicationFiles || {};
   const preservedWhitelist = publicationFileRef(
     resources, publicationFiles, 'whitelist', 'label-whitelist-file'
   );
@@ -1313,6 +1335,10 @@ const addGeneratedTableResources = (state, resources, diagramOptions) => {
       ));
     }
   }
+};
+
+const addQualifierPriorityResource = (state, resources, diagramOptions) => {
+  const publicationFiles = state.canonicalPublicationFiles || {};
   const priority = state.manualPriorityRules
     .filter((rule) => rule?.feat && rule?.order)
     .map((rule) => `${rule.feat}\t${rule.order}`)
@@ -1330,6 +1356,9 @@ const addGeneratedTableResources = (state, resources, diagramOptions) => {
       'qualifier-priority-file', 'qualifier-priority-file', 'qualifier-priority.tsv', `${priority}\n`
     ));
   }
+};
+
+const addLabelOverrideResource = (state, resources, diagramOptions) => {
   // Generate supplies the table it already built for this operation (CW-02).
   const labelOverrideTsv = serializeLabelOverrideRows(state.canonicalLabelOverrideRows?.value)
     || (typeof state.generatedLabelOverrideTsv === 'string' ? state.generatedLabelOverrideTsv
@@ -4895,17 +4924,21 @@ const shiftCanonicalComparisonIndexes = (comparisons, recordIndex, expansion) =>
   })
 );
 
+const requireCurrentCommittedRequest = (committed, request) => {
+  if (!request || request.schema !== CANONICAL_REQUEST_SCHEMA
+    || !['circular', 'linear'].includes(request.mode)
+    || !committed?.resources || typeof committed.resources !== 'object') {
+    throw new Error('A current committed canonical Session is required.');
+  }
+};
+
 /**
  * Clone the last committed canonical Session and overlay one record transform.
  * No live form state participates in this projection.
  */
 export const projectCommittedRecordTransform = ({ committed, target, transform }) => {
   const request = committed?.renderRequest;
-  if (!request || request.schema !== CANONICAL_REQUEST_SCHEMA
-    || !['circular', 'linear'].includes(request.mode)
-    || !committed?.resources || typeof committed.resources !== 'object') {
-    throw new Error('A current committed canonical Session is required.');
-  }
+  requireCurrentCommittedRequest(committed, request);
   validateRecordTransformTarget(target, transform, request.mode);
   const matchingIndexes = request.records
     .map((record, index) => ({ record, index }))
@@ -4991,6 +5024,87 @@ export const projectCommittedRecordTransform = ({ committed, target, transform }
       reverseComplement: transform.reverseComplement
     })
   };
+};
+
+const COMMITTED_EDITOR_TABLE_OPTIONS = Object.freeze({
+  colors: ['colors'],
+  visibility: ['featureVisibilityTableFile'],
+  whitelist: ['labelWhitelistFile'],
+  labelOverrides: ['labelOverrideFile']
+});
+
+const referencedResourceIds = (value, ids = new Set()) => {
+  if (Array.isArray(value)) value.forEach((entry) => referencedResourceIds(entry, ids));
+  else if (value && typeof value === 'object') {
+    Object.entries(value).forEach(([key, entry]) => {
+      if (key === 'resourceId' && typeof entry === 'string' && entry) ids.add(entry);
+      else referencedResourceIds(entry, ids);
+    });
+  }
+  return ids;
+};
+
+/**
+ * Clone the last committed canonical Session and replace only the tables of
+ * live editor intent: feature colors (rules and the applied palette), feature
+ * visibility, and label overrides. A label reflow renders this request, so no
+ * other draft setting reaches the Result before Generate (R1(c), N-16). The
+ * Enable Labels choice also carries its label selection: the label scope,
+ * blacklist, and whitelist.
+ */
+export const projectCommittedEditorIntent = ({
+  committed,
+  state,
+  labelSelection = false,
+  promotion = {}
+}) => {
+  // A Session loaded from an older supported request schema keeps that request
+  // until the next Generate; promote it the way Save does before overlaying.
+  const request = [5, 6, 7].includes(committed?.renderRequest?.schema)
+    ? promoteCanonicalRenderRequestToCurrent(committed.renderRequest, promotion)
+    : committed?.renderRequest;
+  requireCurrentCommittedRequest(committed, request);
+  const candidate = {
+    ...committed,
+    renderRequest: cloneCanonicalJsonValue(request),
+    resources: { ...committed.resources }
+  };
+  const options = candidate.renderRequest.diagramOptions || {};
+  candidate.renderRequest.diagramOptions = options;
+  const tables = {
+    colors: true, visibility: true, whitelist: labelSelection, priority: false, labelOverrides: true
+  };
+  const retired = new Set();
+  Object.entries(COMMITTED_EDITOR_TABLE_OPTIONS).forEach(([table, keys]) => {
+    if (!tables[table]) return;
+    keys.forEach((key) => {
+      referencedResourceIds(options[key], retired);
+      delete options[key];
+    });
+  });
+  const stillReferenced = referencedResourceIds(candidate.renderRequest);
+  retired.forEach((resourceId) => {
+    if (!stillReferenced.has(resourceId)) delete candidate.resources[resourceId];
+  });
+  const resources = createResourceBuilder();
+  addGeneratedTableResources(state, resources, options, tables);
+  Object.assign(candidate.resources, resources.resources);
+  if (labelSelection) {
+    const circular = request.mode === 'circular';
+    options.configOverrides = {
+      ...(options.configOverrides || {}),
+      [MODE_LABEL_SCOPE_PATHS[request.mode]]: labelScopeOverride(state.form, circular),
+      [CONFIG_OVERRIDE_PATHS.labelBlacklist]: labelBlacklistOverride(state)
+    };
+  }
+  projectCanonicalSessionRequest({
+    renderRequest: candidate.renderRequest,
+    resources: candidate.resources,
+    webFiles: candidate.webFiles || {},
+    storedConfig: candidate.config || null,
+    deferResourceContent: true
+  });
+  return candidate;
 };
 
 /** Project only alignment-owned fields of the last committed canonical artifact. */

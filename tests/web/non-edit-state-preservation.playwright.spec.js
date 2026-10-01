@@ -105,7 +105,6 @@ const ROWS = [
   },
   {
     name: 'Result selection keeps label edits made on another Result',
-    knownDefect: 'FE-01',
     setup: async (page) => {
       await openBatch(page);
       await selectResult(page, 1);

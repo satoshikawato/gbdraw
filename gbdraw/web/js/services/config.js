@@ -3720,7 +3720,6 @@ const resetSessionBaseline = () => {
   clearObject(state.labelTextBulkOverrides);
   clearObject(state.labelTextFeatureOverrideSources);
   clearObject(state.labelVisibilityOverrides);
-  state.labelOverrideContextKey.value = '';
   state.labelOverrideBuildWarning.value = '';
   state.labelLayoutDirtyReason.value = '';
   state.generatedMode.value = 'circular';
@@ -3887,8 +3886,7 @@ export const buildFeatureStateData = () => ({
   labelOverrideRows: cloneJsonData(state.canonicalLabelOverrideRows.value),
   labelTextBulkOverrides: cloneJsonData(state.labelTextBulkOverrides),
   labelTextFeatureOverrideSources: cloneJsonData(state.labelTextFeatureOverrideSources),
-  labelVisibilityOverrides: cloneJsonData(state.labelVisibilityOverrides),
-  labelOverrideContextKey: String(state.labelOverrideContextKey.value || '')
+  labelVisibilityOverrides: cloneJsonData(state.labelVisibilityOverrides)
 });
 
 export const applyFeatureStateData = (features = {}) => {
@@ -3918,7 +3916,6 @@ export const applyFeatureStateData = (features = {}) => {
   replacePlainObject(state.labelTextBulkOverrides, cloneStringMap(features.labelTextBulkOverrides));
   replacePlainObject(state.labelTextFeatureOverrideSources, cloneStringMap(features.labelTextFeatureOverrideSources));
   replacePlainObject(state.labelVisibilityOverrides, cloneJsonObject(features.labelVisibilityOverrides));
-  state.labelOverrideContextKey.value = String(features.labelOverrideContextKey || '');
 };
 
 export const buildOrthogroupStateData = () => ({
@@ -4162,8 +4159,7 @@ const exportSessionDocument = async (
       labelOverrideRows: cloneJsonData(state.canonicalLabelOverrideRows.value),
       labelTextBulkOverrides: cloneJsonData(state.labelTextBulkOverrides),
       labelTextFeatureOverrideSources: cloneJsonData(state.labelTextFeatureOverrideSources),
-      labelVisibilityOverrides: cloneJsonData(state.labelVisibilityOverrides),
-      labelOverrideContextKey: String(state.labelOverrideContextKey.value || '')
+      labelVisibilityOverrides: cloneJsonData(state.labelVisibilityOverrides)
     },
     editorState,
     orthogroupState: {
