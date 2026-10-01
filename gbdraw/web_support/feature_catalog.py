@@ -338,6 +338,7 @@ class _RenderedSvgCatalogIndex:
     annotation_candidates: tuple[_SvgCatalogCandidate, ...]
     dom_element_count: int
     feature_candidate_count: int
+    record_source_spans: Mapping[int, tuple[int, int, int]]
 
 
 @dataclass(frozen=True)
@@ -415,10 +416,14 @@ def _build_rendered_svg_catalog_index(
     rendered_features: dict[str, _RenderedFeatureEntry] = {}
     match_candidates: list[_SvgCatalogCandidate] = []
     annotation_candidates: list[_SvgCatalogCandidate] = []
+    record_source_spans: dict[int, tuple[int, int, int]] = {}
     dom_element_count = 0
     feature_candidate_count = 0
     for element in root.iter():
         dom_element_count += 1
+        span = _record_source_span(element)
+        if span is not None:
+            record_source_spans[span[0]] = span[1]
         if _is_feature_candidate(element):
             feature_candidate_count += 1
             entry = _rendered_feature_entry(element)
@@ -446,6 +451,7 @@ def _build_rendered_svg_catalog_index(
         annotation_candidates=tuple(annotation_candidates),
         dom_element_count=dom_element_count,
         feature_candidate_count=feature_candidate_count,
+        record_source_spans=MappingProxyType(record_source_spans),
     )
     _record_catalog_index_metrics(diagnostics, index)
     return index
@@ -510,9 +516,60 @@ def _match_payload(
     return dict(_compact_wire_value(payload) or {})
 
 
+def _record_source_span(element: ET.Element) -> tuple[int, tuple[int, int, int]] | None:
+    """Read one record group's input-file span (PD-OI-076), as the Web reads it."""
+
+    raw = (
+        element.get("data-gbdraw-record-index"),
+        element.get("data-gbdraw-record-source-start"),
+        element.get("data-gbdraw-record-source-end"),
+        element.get("data-gbdraw-record-source-step"),
+    )
+    if raw[3] is None or raw[0] is None:
+        return None
+    try:
+        index, start, end, step = (int(str(value)) for value in raw)
+    except ValueError:
+        return None
+    if index < 0 or start < 1 or end < start or step not in (1, -1):
+        return None
+    return index, (start, end, step)
+
+
+def _record_source_interval_fields(
+    payload: Mapping[str, object],
+    record_source_spans: Mapping[int, tuple[int, int, int]],
+) -> dict[str, str]:
+    """Source coordinates of a match on cropped or reversed records (PD-OI-076).
+
+    Mirrors ``recordSourceInterval`` in ``app/record-source-coordinates.js``,
+    which fills the same fields for Interactive SVGs built without a catalog.
+    """
+
+    if _text(payload.get("match_kind")) == "homology":
+        return {}
+    fields: dict[str, str] = {}
+    for role, prefix in (("query", "q"), ("subject", "s")):
+        try:
+            span = record_source_spans.get(int(str(payload.get(f"{role}_record_index"))))
+            local = [float(str(payload.get(f"{prefix}{name}"))) for name in ("start", "end")]
+        except (TypeError, ValueError):
+            continue
+        if span is None or not all(value.is_integer() and value >= 1 for value in local):
+            continue
+        low, high, step = span
+        start, end = (low + int(value) - 1 if step == 1 else high - int(value) + 1 for value in local)
+        fields[f"{prefix}source_start"] = str(start)
+        fields[f"{prefix}source_end"] = str(end)
+        if low != 1:
+            fields[f"{prefix}table_interval"] = f"{start - low + 1}..{end - low + 1}"
+    return fields
+
+
 def _match_payloads(
     candidates: Sequence[_SvgCatalogCandidate],
     rendered_features: Mapping[str, Mapping[str, object]],
+    record_source_spans: Mapping[int, tuple[int, int, int]],
 ) -> list[dict[str, object]]:
     payloads: list[dict[str, object]] = []
     grouped: dict[str, list[_SvgCatalogCandidate]] = {}
@@ -536,6 +593,7 @@ def _match_payloads(
                 f"{role}_stable_feature_svg_id", _feature_stable_id(rendered)
             )
             payload.setdefault(f"{role}_feature_index", rendered.get("feature_index"))
+        payload.update(_record_source_interval_fields(payload, record_source_spans))
         payloads.append(dict(_compact_wire_value(payload) or {}))
     return payloads
 
@@ -2009,6 +2067,7 @@ def build_feature_catalog_item(
     raw_matches = _match_payloads(
         svg_index.match_candidates,
         rendered_match_identities,
+        svg_index.record_source_spans,
     )
     orthogroups = list(context.orthogroups)
     known_group_ids: set[str] = set()
