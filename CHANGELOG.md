@@ -135,7 +135,19 @@ decisions are in
   match the CLI PDF. Curved and tick labels keep their spaces in the PDF text
   layer (PV-05, PV-06).
 
-<!-- web-gui-audit-20260930 P18 -->
+- Every visible Web form control has an accessible name. Controls with a
+  visible label use that label, including **Window**, **Step**,
+  **Dinucleotide**, **GC Content Mode**, and the depth and color-rule fields;
+  Custom Track Slots row controls are named by slot id in both modes.
+  Placeholders and state-dependent titles are no longer names (TR-10).
+- Every **?** help tip is a **Help** button that hover, keyboard focus, a click,
+  or a tap opens and **Escape** closes. Tips sit outside labels, and the
+  control a tip explains references its text as the accessible description
+  (TR-10, PD-OI-057).
+- Custom Track Slots rows put the move, duplicate, and remove buttons on their
+  own line in both modes, so the slot id and renderer stay readable (TR-11).
+- The Vibrio harveyi group Gallery tutorial links to the current Linear record
+  layout reference, and a packaging test checks every tutorial link (TR-12).
 
 <!-- web-gui-audit-20260930 P19 -->
 

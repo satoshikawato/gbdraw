@@ -33,6 +33,7 @@ from flows.how_to.interactive_sessions import (
     _reset_finished_preview_viewport,
 )
 from flows.web_capture import (
+    toggle_disclosure,
     assert_fixture_identity,
     assert_output_paths,
     capture_screenshot,
@@ -139,11 +140,11 @@ def capture_first_circular(
         hide_gc_skew.uncheck()
         expect(hide_gc_skew).not_to_be_checked()
 
-        page.get_by_label("Legend settings", exact=True).click()
+        toggle_disclosure(page.get_by_label("Legend settings", exact=True))
         legend_position = page.get_by_label("Legend position", exact=True)
         legend_position.select_option("right")
         expect(legend_position).to_have_value("right")
-        page.get_by_label("Labels", exact=True).click()
+        toggle_disclosure(page.get_by_label("Labels", exact=True))
         label_mode = page.get_by_label("Label Mode", exact=True)
         label_mode.select_option("out")
         expect(label_mode).to_have_value("out")

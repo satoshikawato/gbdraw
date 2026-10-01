@@ -745,6 +745,24 @@ has the mode-qualified accessible name **Show Coordinate Scale (Circular)** or
 uses **Show annotation labels**. Mode buttons expose pressed state, file
 controls are labelled, and the preview is a named region.
 
+Every visible form control has an author-provided accessible name. A control
+with a visible label uses that label as its name; a control without one, such
+as a Region Annotations coordinate field, has a descriptive name. Placeholder
+text and state-dependent titles are not used as names.
+Custom Track Slots rows name their controls by slot id in both modes, for
+example **Enable linear track slot features**, **Linear track slot id
+features**, and **Linear track renderer features**; the enable checkbox keeps
+its name when it is checked or cleared. Each row shows the checkbox, slot id,
+and renderer on one line and its move, duplicate, and remove buttons on the
+next line.
+
+Each **?** help tip is a button named **Help**, placed outside the label it
+explains. Hover, keyboard focus, a click, or a tap shows the tip text; a second
+click or tap, **Escape**, or moving focus away closes it. The tip text is the
+button's accessible description, and the control that the tip explains
+references the same text through `aria-describedby`; the text is not repeated
+in the page reading order. Each tip adds one tab stop.
+
 The Linear comparison command group is named **Set all adjacent comparisons**.
 Its buttons are named **Set no comparison**, **Run LOSAT for all adjacent
 pairs**, and **Use uploaded BLAST TSV for all adjacent pairs**. The buttons do

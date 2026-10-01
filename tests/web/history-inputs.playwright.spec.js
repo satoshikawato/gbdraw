@@ -65,11 +65,16 @@ for (const inputMethod of ['keyboard', 'pointer']) {
     await expectHistory(page, baseline, 0, 'Generate diagram');
 
     const summary = page.locator('summary[aria-label="Labels"]');
-    await summary.click();
+    await summary.press('Enter');
     const select = page.locator('#circular-label-mode');
     await expect(select).toHaveValue('out');
     if (inputMethod === 'keyboard') {
       await summary.focus();
+      // The Labels and Label Mode help tips are tab stops before the select.
+      await page.keyboard.press('Tab');
+      await expect(summary.getByRole('button', { name: 'Help', exact: true })).toBeFocused();
+      await page.keyboard.press('Tab');
+      await expect(page.locator('button[aria-describedby="help-label-label-mode"]')).toBeFocused();
       await page.keyboard.press('Tab');
       await expect(select).toBeFocused();
       await page.keyboard.press('ArrowDown');

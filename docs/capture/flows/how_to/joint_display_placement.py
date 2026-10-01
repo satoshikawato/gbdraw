@@ -16,7 +16,8 @@ from flows.tutorials.gui_annotated_chloroplast import (
 )
 from flows.web_capture import (
     assert_fixture_identity, assert_output_paths, generate_and_inspect,
-    open_ancestor_details, open_browser_capture, wait_for_app_shell,
+    open_ancestor_details, open_browser_capture, toggle_disclosure,
+    wait_for_app_shell,
 )
 
 NAMES = ('01-record-start.png', '02-feature-placement.png')
@@ -48,7 +49,7 @@ def capture_joint_display_placement(browser_type, base_url, output_paths, downlo
         page.get_by_label('Separate Strands', exact=True).uncheck()
         page.get_by_label('Resolve Overlaps', exact=True).check()
         annotations = page.get_by_label('Region Annotations', exact=True)
-        annotations.click()
+        toggle_disclosure(annotations)
         with page.expect_file_chooser() as chooser:
             open_ancestor_details(page.get_by_role('button', name='Import TSV', exact=True)).click()
         chooser.value.set_files(GUI_ANNOTATION_TABLE_PATH)

@@ -42,6 +42,7 @@ from config import (
     PYTHON_OPERATION_TIMEOUT_MS,
 )
 from flows.web_capture import (
+    toggle_disclosure,
     assert_fixture_identity,
     assert_output_paths,
     capture_screenshot,
@@ -877,7 +878,7 @@ def capture_gui_circular_rings(
         species.fill("<i>Homo sapiens</i>")
         expect(species).to_have_value("<i>Homo sapiens</i>")
         # Layout starts closed in Circular mode; open it before its controls.
-        page.get_by_label("Layout", exact=True).click()
+        toggle_disclosure(page.get_by_label("Layout", exact=True))
         separate_strands = page.get_by_label("Separate Strands", exact=True)
         expect(separate_strands).to_be_visible()
         separate_strands.uncheck()
@@ -886,7 +887,7 @@ def capture_gui_circular_rings(
         track_preset.select_option("middle")
         expect(track_preset).to_have_value("middle")
 
-        page.get_by_label("Pairwise Comparisons", exact=True).click()
+        toggle_disclosure(page.get_by_label("Pairwise Comparisons", exact=True))
         run_losat = page.get_by_role("radio", name="Run LOSAT", exact=True).last
         run_losat.check()
         expect(run_losat).to_be_checked()
@@ -945,20 +946,20 @@ def capture_gui_circular_rings(
         ring_gap.press("Tab")
         expect(ring_gap).to_have_value("4")
 
-        page.get_by_label("Labels", exact=True).click()
+        toggle_disclosure(page.get_by_label("Labels", exact=True))
         label_mode = page.get_by_label("Label Mode", exact=True)
         label_mode.select_option("out")
         expect(label_mode).to_have_value("out")
         page.get_by_label("Priority File (TSV)", exact=True).set_input_files(
             FIRST_LINEAR_LABEL_RULE_PATH
         )
-        page.get_by_label("Titles and Record Labels", exact=True).click()
+        toggle_disclosure(page.get_by_label("Titles and Record Labels", exact=True))
         title = page.get_by_role("textbox", name="Plot Title", exact=True)
         title.fill(CIRCULAR_RING_TITLE)
         expect(title).to_have_value(CIRCULAR_RING_TITLE)
         page.get_by_label("Plot Title Position", exact=True).select_option("top")
         page.get_by_label("Default font size", exact=True).fill("18")
-        page.get_by_label("Legend settings", exact=True).click()
+        toggle_disclosure(page.get_by_label("Legend settings", exact=True))
         page.get_by_label("Legend position", exact=True).select_option("right")
 
         page.get_by_label("Comparison ring label 1", exact=True).scroll_into_view_if_needed()

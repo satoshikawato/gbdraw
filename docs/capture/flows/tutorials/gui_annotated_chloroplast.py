@@ -30,6 +30,7 @@ from flows.web_capture import (
     generate_and_inspect,
     open_ancestor_details,
     open_browser_capture,
+    toggle_disclosure,
     wait_for_app_shell,
 )
 
@@ -149,7 +150,7 @@ def _feature_details(page: Page) -> Any:
 
 def _configure_feature_types(page: Page) -> None:
     details = _feature_details(page)
-    page.get_by_label("Features", exact=True).click()
+    toggle_disclosure(page.get_by_label("Features", exact=True))
     current = tuple(
         page.evaluate(
             "() => (window.__GBDRAW_APP__?.adv?.features || []).map(String)"
@@ -182,7 +183,7 @@ def _configure_feature_types(page: Page) -> None:
         raise AssertionError(f"Unexpected chloroplast feature types: {selected!r}")
     page.get_by_label("Block Stroke Width", exact=True).fill("1")
     page.get_by_label("Line Stroke Width", exact=True).fill("2")
-    page.get_by_label("Features", exact=True).click()
+    toggle_disclosure(page.get_by_label("Features", exact=True))
 
 
 def _configure_gallery_presentation(page: Page) -> None:
@@ -197,14 +198,14 @@ def _configure_gallery_presentation(page: Page) -> None:
     _configure_feature_types(page)
 
     colors = page.get_by_label("Colors", exact=True)
-    colors.click()
+    toggle_disclosure(colors)
     page.get_by_label("Specific Table (-t)", exact=True).set_input_files(
         SPECIFIC_COLORS_PATH
     )
-    colors.click()
+    toggle_disclosure(colors)
 
     labels = page.get_by_label("Labels", exact=True)
-    labels.click()
+    toggle_disclosure(labels)
     page.get_by_label("Label Mode", exact=True).select_option("both")
     for label, value in (
         ("Outer X Offset", "0.9"),
@@ -221,23 +222,23 @@ def _configure_gallery_presentation(page: Page) -> None:
     page.get_by_label("Priority File (TSV)", exact=True).set_input_files(
         QUALIFIER_PRIORITY_PATH
     )
-    labels.click()
+    toggle_disclosure(labels)
 
     axis = page.locator("summary").filter(has_text="Axis & Scale")
-    axis.click()
+    toggle_disclosure(axis)
     page.get_by_label("Axis Stroke Width", exact=True).fill("3")
-    axis.click()
+    toggle_disclosure(axis)
 
     title = page.get_by_label("Titles and Record Labels", exact=True)
-    title.click()
+    toggle_disclosure(title)
     page.get_by_role("textbox", name="Plot Title", exact=True).fill("")
     page.get_by_label("Plot Title Position", exact=True).select_option("none")
     page.get_by_label("Default font size", exact=True).fill("28")
-    title.click()
+    toggle_disclosure(title)
     legend = page.get_by_label("Legend settings", exact=True)
-    legend.click()
+    toggle_disclosure(legend)
     page.get_by_label("Legend position", exact=True).select_option("upper_left")
-    legend.click()
+    toggle_disclosure(legend)
 
 
 def _remove_slot_if_present(page: Page, slot_id: str) -> None:
@@ -252,7 +253,7 @@ def _configure_gallery_slots(page: Page) -> tuple[dict[str, Any], ...]:
     custom_slots = page.locator("button[aria-controls='circular-custom-track-slots-panel']")
     for details in custom_slots.locator("xpath=ancestor::details").all():
         if details.get_attribute("open") is None:
-            details.locator(":scope > summary").click()
+            toggle_disclosure(details.locator(":scope > summary"))
     if custom_slots.get_attribute("aria-expanded") != "true":
         custom_slots.click()
     page.get_by_role("checkbox", name="Use custom stack", exact=True).check()
@@ -390,7 +391,7 @@ def capture_gui_annotated_chloroplast(
             pan_left_ratio=0.0,
         )
         annotations = page.get_by_label("Region Annotations", exact=True)
-        annotations.click()
+        toggle_disclosure(annotations)
         with page.expect_file_chooser() as chooser:
             page.get_by_role("button", name="Import TSV", exact=True).click()
         chooser.value.set_files(GUI_ANNOTATION_TABLE_PATH)

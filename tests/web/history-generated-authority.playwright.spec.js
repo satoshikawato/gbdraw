@@ -73,7 +73,7 @@ test('Undo Generate restores request A and Result A while preserving draft B thr
     await generate(page);
     const a = await inspect(page, testInfo, 'a');
     await noDerivedStatus(page);
-    await page.locator('summary[aria-label="Labels"]').click();
+    await page.locator('summary[aria-label="Labels"]').press('Enter');
     const labels = page.locator('#circular-label-mode');
     await labels.focus();
     await labels.selectOption('none');
@@ -152,7 +152,7 @@ test('Live palette and its History keep the scale draft out of the committed req
       await window.Vue.nextTick();
     });
     await noDerivedStatus(page);
-    await page.locator('summary[aria-label="Colors"]').click();
+    await page.locator('summary[aria-label="Colors"]').press('Enter');
     const paletteHelp=page.locator('[data-palette-application-help]');
     await expect(paletteHelp).toContainText('Live edit');
     await page.getByText('Palette instant preview',{exact:true}).click();

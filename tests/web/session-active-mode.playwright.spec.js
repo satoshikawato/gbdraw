@@ -151,7 +151,7 @@ test('each mode keeps its own title and fonts while missing Linear layout starts
   await openApp(page);
   await load(page, fixture);
   const titles = page.locator('summary[aria-label="Titles and Record Labels"]');
-  if (!(await titles.evaluate(summary => summary.parentElement.open))) await titles.click();
+  if (!(await titles.evaluate(summary => summary.parentElement.open))) await titles.press('Enter');
   const plotTitle = page.getByRole('textbox', { name: 'Plot Title', exact: true });
   await plotTitle.fill('Circular title');
   await plotTitle.press('Tab');

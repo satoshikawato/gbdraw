@@ -25,6 +25,7 @@ from config import (
     GUI_BGC_FIXTURES,
 )
 from flows.web_capture import (
+    toggle_disclosure,
     assert_fixture_identity,
     capture_screenshot,
     fit_complete_linear_preview,
@@ -185,7 +186,7 @@ def _set_gallery_quality_presentation(
     match_gallery_definitions: bool,
 ) -> None:
     colors = page.get_by_label("Colors", exact=True)
-    colors.click()
+    toggle_disclosure(colors)
     palette = page.get_by_label("Palette", exact=True)
     palette.select_option("orange")
     expect(palette).to_have_value("orange")
@@ -195,10 +196,10 @@ def _set_gallery_quality_presentation(
     page.get_by_label("Specific Table (-t)", exact=True).set_input_files(
         BGC_SPECIFIC_COLORS
     )
-    colors.click()
+    toggle_disclosure(colors)
 
     labels = page.get_by_label("Labels", exact=True)
-    labels.click()
+    toggle_disclosure(labels)
     show_labels = page.get_by_label("Show Labels", exact=True)
     show_labels.select_option("first")
     expect(show_labels).to_have_value("first")
@@ -214,10 +215,10 @@ def _set_gallery_quality_presentation(
     label_rotation = page.get_by_label("Label Rotation", exact=True)
     label_rotation.fill("45")
     expect(label_rotation).to_have_value("45")
-    labels.click()
+    toggle_disclosure(labels)
 
     features = page.get_by_label("Features", exact=True)
-    features.click()
+    toggle_disclosure(features)
     feature_height = page.get_by_label("Feature Height", exact=True)
     feature_height.fill("75")
     expect(feature_height).to_have_value("75")
@@ -232,10 +233,10 @@ def _set_gallery_quality_presentation(
     line_stroke_width = page.get_by_label("Line Stroke Width", exact=True)
     line_stroke_width.fill("2")
     expect(line_stroke_width).to_have_value("2")
-    features.click()
+    toggle_disclosure(features)
 
     axis_and_scale = page.get_by_label("Axis & Scale", exact=True)
-    axis_and_scale.click()
+    toggle_disclosure(axis_and_scale)
     show_scale = page.get_by_label("Show Coordinate Scale (Linear)", exact=True)
     show_scale.check()
     expect(show_scale).to_be_checked()
@@ -245,10 +246,10 @@ def _set_gallery_quality_presentation(
     axis_stroke_width = page.get_by_label("Axis Stroke Width", exact=True)
     axis_stroke_width.fill("5")
     expect(axis_stroke_width).to_have_value("5")
-    axis_and_scale.click()
+    toggle_disclosure(axis_and_scale)
 
     title_and_labels = page.get_by_label("Titles and Record Labels", exact=True)
-    title_and_labels.click()
+    toggle_disclosure(title_and_labels)
     page.get_by_role("textbox", name="Plot Title", exact=True).fill(title)
     page.get_by_label("Plot Title Position", exact=True).select_option("bottom")
 
@@ -280,11 +281,11 @@ def _set_gallery_quality_presentation(
         set_definition_line("Subtitle", size="20")
         set_definition_line("Accession", size="20", color="#7b7c7d")
         set_definition_line("Length / Coordinates", size="20", color="#7b7c7d")
-    title_and_labels.click()
+    toggle_disclosure(title_and_labels)
     legend_panel = page.get_by_label("Legend settings", exact=True)
-    legend_panel.click()
+    toggle_disclosure(legend_panel)
     page.get_by_label("Legend position", exact=True).select_option("bottom")
-    legend_panel.click()
+    toggle_disclosure(legend_panel)
 
     track_layout = page.get_by_label("Track Layout", exact=True)
     track_layout.select_option("middle")

@@ -574,8 +574,8 @@
       "href": "./#vibrio-harveyi-group-collinear"
     },
     {
-      "label": "Read the Linear layout tutorial",
-      "href": "../../../docs/TUTORIALS/7_Linear_Layout.md#two-strains-with-multiple-replicons"
+      "label": "Read how Linear rows and record order work",
+      "href": "https://github.com/satoshikawato/gbdraw/blob/main/docs/REFERENCE/web-app.md#record-selection-and-layout"
     },
     {
       "label": "Compare with the Hepatoplasmataceae collinear example",

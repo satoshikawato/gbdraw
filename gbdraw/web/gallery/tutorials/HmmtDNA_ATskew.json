@@ -251,18 +251,21 @@
           },
           "capture": {
             "source": "webapp",
+            "viewport": {"width": 1280, "height": 1100},
             "selector": "[data-capture='circular-track-slot-a_skew_2']",
             "highlightSelector": "[data-capture='circular-track-slot-a_skew_2']",
             "actions": [
+              {"type": "click", "selector": "button[aria-controls='circular-custom-track-slots-panel'][aria-expanded='false']"},
               {
                 "type": "evaluate",
                 "script": "const app = window.__GBDRAW_APP__; if (app) app.sidebarWidth = 320;"
-              }
+              },
+              {"type": "evaluate", "script": "document.querySelector(\"[data-capture='circular-track-slot-a_skew_2']\")?.scrollIntoView({ block: 'center' });"}
             ],
             "cropPadding": {
-              "top": 200,
+              "top": 246,
               "right": 8,
-              "bottom": 178,
+              "bottom": 240,
               "left": 8
             },
             "openDetails": ["Layout"],
@@ -303,6 +306,7 @@
             "selector": "[data-capture='circular-track-slot-ticks']",
             "highlightSelector": "[data-capture='circular-track-slot-ticks']",
             "actions": [
+              {"type": "click", "selector": "button[aria-controls='circular-custom-track-slots-panel'][aria-expanded='false']"},
               {
                 "type": "evaluate",
                 "script": "const app = window.__GBDRAW_APP__; if (app) app.sidebarWidth = 320;"
