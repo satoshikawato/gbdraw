@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping as MappingABC, Sequence as SequenceABC
 from copy import deepcopy
-from dataclasses import MISSING, asdict, dataclass, fields, is_dataclass
+from dataclasses import MISSING, asdict, dataclass, fields, is_dataclass, replace
 from io import StringIO
 import json
 import math
@@ -43,7 +43,8 @@ from gbdraw.features.placement import FeaturePlacementOverride
 from gbdraw.io.record_select import RecordSelector
 from gbdraw.io.regions import RegionSpec
 from gbdraw.io.comparisons import read_comparison_table
-from gbdraw.linear_comparison import LinearComparison
+from gbdraw.core.record_metadata import _read_coord_map
+from gbdraw.linear_comparison import LinearComparison, reverse_unbound_endpoint_rows
 from gbdraw.tracks import CircularTrackSlot, LinearTrackSlot, ScalarSpec
 from gbdraw.tracks.circular import (
     _InternalCircularTrackSlot,
@@ -659,7 +660,9 @@ def _encode_canonical_request(request: DiagramRequest) -> EncodedCanonicalReques
             resources=resources,
         ),
         "layout": _encode_layout(request),
-        "comparisons": _encode_comparisons(request.options, mode=mode, resources=resources),
+        "comparisons": _encode_comparisons(
+            _persisted_record_frame_options(request), mode=mode, resources=resources
+        ),
         "output": (
             [_encode_output(output) for output in request.outputs]
             if isinstance(request, CircularBatchRequest)
@@ -3168,6 +3171,32 @@ def _decode_resource_matrix(
                 )
         result.append(tuple(decoded_row))
     return tuple(result)
+
+
+def _persisted_record_frame_options(request: Any) -> Any:
+    """Write comparison rows in the search frame of each persisted record (PD-OI-073).
+
+    A materialized reverse-complemented record is persisted as its reversed
+    sequence, whose search frame is the displayed one, so its unbound rows are
+    projected once here; a file source with ``reverseComplement`` keeps them.
+    """
+
+    options = getattr(request, "options", None)
+    if not isinstance(options, LinearDiagramOptions) or not options.linear_comparisons:
+        return options
+    frames = []
+    for record_input in request.records:
+        record = getattr(record_input.source, "record", None)
+        reversed_record = isinstance(record_input.source, InMemoryRecordSource) and _read_coord_map(record)[1] == -1
+        frames.append((len(record), True) if reversed_record else (0, False))
+    if not any(reverse for _length, reverse in frames):
+        return options
+    return replace(options, linear_comparisons=tuple(
+        reverse_unbound_endpoint_rows(
+            comparison, frames[comparison.query_record_index], frames[comparison.subject_record_index]
+        )
+        for comparison in options.linear_comparisons
+    ))
 
 
 def _encode_comparisons(

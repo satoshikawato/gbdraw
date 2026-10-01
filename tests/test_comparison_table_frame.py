@@ -167,3 +167,41 @@ def test_main_cli_session_with_a_reversed_record_draws_the_ribbons_main_drew(tmp
     assert load_session(sidecar)["version"] > 42
     linear_cli.linear_main(["--session", str(sidecar), "-o", str(tmp_path / "resaved"), "-f", "svg"])
     assert _ribbon_spans((tmp_path / "resaved.svg").read_text(encoding="utf-8")) == expected
+
+
+@pytest.mark.linear
+@pytest.mark.parametrize("scenario", ["upload", "losatn"])
+def test_main_web_session_with_a_reversed_record_draws_the_ribbons_main_drew(tmp_path: Path, scenario: str) -> None:
+    # origin/main's Web Save kept the source records with
+    # presentation.reverseComplement and stored the reversed endpoint's rows
+    # after the reverse complement; the reader converts them once (D-18).
+    import gzip
+    import json
+
+    from gbdraw.session_io import load_session
+
+    provenance = json.loads((_SESSIONS / "q-frame-main-web.provenance.json").read_text(encoding="utf-8"))
+    session = tmp_path / "main.gbdraw-session.json"
+    session.write_bytes(
+        gzip.decompress((_SESSIONS / f"q-frame-main-web-{scenario}.v42.gbdraw-session.json.gz").read_bytes())
+    )
+    sidecar = tmp_path / "resaved.gbdraw-session.json"
+    linear_cli.linear_main([
+        "--session", str(session), "-o", str(tmp_path / "replayed"), "-f", "svg", "--session_output", str(sidecar),
+    ])
+    expected = [tuple(tuple(side) for side in ribbon) for ribbon in provenance["mainRibbonSpans"]]
+    assert _ribbon_spans((tmp_path / "replayed.svg").read_text(encoding="utf-8")) == expected
+    assert load_session(sidecar)["version"] > 42
+    linear_cli.linear_main(["--session", str(sidecar), "-o", str(tmp_path / "resaved"), "-f", "svg"])
+    assert _ribbon_spans((tmp_path / "resaved.svg").read_text(encoding="utf-8")) == expected
+
+
+def test_main_session_table_rewrite_maps_reversed_endpoints_only() -> None:
+    from gbdraw.linear_comparison import main_session_table_text_to_search_frame
+
+    row = "R2c\tR3c\t100.0\t1000\t0\t0\t2001\t3000\t3000\t2001\t0.0\t1847\n"
+    assert main_session_table_text_to_search_frame(row, (3000, False), (3000, True)) == (
+        "R2c\tR3c\t100.0\t1000\t0\t0\t2001\t3000\t1\t1000\t0.0\t1847\n"
+    )
+    with pytest.raises(GbdrawError, match="outside 1..2000"):
+        main_session_table_text_to_search_frame(row, (3000, False), (2000, True))

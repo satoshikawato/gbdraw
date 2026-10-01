@@ -225,7 +225,6 @@ def project_search_frame_comparisons(
         if frame.empty:
             projected.append(comparison)
             continue
-        updated = comparison.matches.copy()
         for role, record_index, columns in (
             ("query", comparison.query_record_index, ("qstart", "qend")),
             ("subject", comparison.subject_record_index, ("sstart", "send")),
@@ -245,11 +244,67 @@ def project_search_frame_comparisons(
                     "of the selected and cropped record in the source strand.",
                     diagnostic={"code": "COMPARISON_INPUT", "reason": "SEARCH_FRAME"},
                 )
-            if _read_coord_map(record)[1] == -1:
-                for column in columns:
-                    updated.loc[frame.index, column] = length + 1 - values[column].astype(int)
-        projected.append(replace(comparison, matches=updated))
+        projected.append(reverse_unbound_endpoint_rows(
+            comparison,
+            *(_endpoint_frame(records[index]) for index in (comparison.query_record_index, comparison.subject_record_index)),
+        ))
     return tuple(projected)
+
+
+def _endpoint_frame(record: object) -> tuple[int, bool]:
+    return len(record), _read_coord_map(record)[1] == -1  # type: ignore[arg-type]
+
+
+def reverse_unbound_endpoint_rows(
+    comparison: LinearComparison,
+    query: tuple[int, bool],
+    subject: tuple[int, bool],
+) -> LinearComparison:
+    """Map the unbound rows of each reversed endpoint ``(L, True)`` x -> L + 1 - x.
+
+    The map is its own inverse: it projects search-frame rows onto a reversed
+    record and converts rows of a reversed record back to its search frame.
+    """
+
+    frame = _rows_without_feature_binding(comparison.matches)
+    if frame.empty or not (query[1] or subject[1]):
+        return comparison
+    updated = comparison.matches.copy()
+    for (length, reverse), columns in ((query, ("qstart", "qend")), (subject, ("sstart", "send"))):
+        if reverse:
+            for column in columns:
+                updated.loc[frame.index, column] = int(length) + 1 - pd.to_numeric(frame[column]).astype(int)
+    return replace(comparison, matches=updated)
+
+
+def main_session_table_text_to_search_frame(
+    text: str,
+    query: tuple[int, bool],
+    subject: tuple[int, bool],
+) -> str:
+    """Rewrite one origin/main Web Session nucleotide table to the search frame.
+
+    Sessions up to version 42 stored the rows of a reverse-complemented
+    endpoint after the reverse complement. ``query`` and ``subject`` are
+    ``(L, reversed)`` of each endpoint record, and x -> L + 1 - x, the map of
+    :func:`project_search_frame_comparisons`, is its own inverse. The Web
+    Session reader applies it once at Load; the CLI reader projects the plan.
+    """
+
+    from io import StringIO
+
+    from gbdraw.io.comparisons import read_comparison_table
+
+    frame = read_comparison_table(StringIO(str(text or "")), label="Session comparison table")
+    for (length, reverse), columns in ((query, ("qstart", "qend")), (subject, ("sstart", "send"))):
+        values = frame.loc[:, list(columns)].astype(int)
+        if reverse and not ((values >= 1) & (values <= int(length))).all(axis=None):
+            raise ValidationError(
+                f"Session comparison rows lie outside 1..{int(length)} of their reversed record.",
+                diagnostic={"code": "COMPARISON_INPUT", "reason": "SEARCH_FRAME"},
+            )
+    converted = reverse_unbound_endpoint_rows(LinearComparison(0, 1, frame), query, subject).matches
+    return converted.to_csv(sep="\t", header=False, index=False, lineterminator="\n")
 
 
 COMPARISON_RECORD_ID_UNMATCHED = "comparison_record_id_unmatched"
