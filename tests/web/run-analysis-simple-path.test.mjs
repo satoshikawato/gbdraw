@@ -1462,7 +1462,9 @@ test('neutral conservation replay delegates lazy resources to the shared reader'
       committedRenderRequest = canonical.renderRequest;
       committedCanonicalSession = canonical;
     },
-    getCommittedCanonicalRenderRequest: () => committedRenderRequest,
+    getCommittedCanonicalSession: () => (committedCanonicalSession
+      ? { ...committedCanonicalSession, renderRequest: committedRenderRequest }
+      : null),
     prepareLinearRecordCatalog: async () => ({
       catalog: { mode: 'linear', status: 'ready', records: [] },
       error: ''

@@ -15,6 +15,7 @@ import {
   projectCompositionRecordIdentity,
   buildCanonicalRenderRequest,
   bindCanonicalTypedResource,
+  committedFeatureVisibilityMatches,
   projectCommittedEditorIntent,
   projectCommittedRecordTransform,
   projectCommittedSimilarityAlignment,
@@ -473,10 +474,11 @@ const sameNumber = (left, right) => Number(left) === Number(right);
 
 const canReuseResolvedProteinArtifacts = ({
   canonicalComparisons,
-  committedRequest,
+  committedSession,
   sequences,
   active
 }) => {
+  const committedRequest = committedSession?.renderRequest || null;
   const persisted = Array.isArray(canonicalComparisons) ? canonicalComparisons : [];
   const committed = Array.isArray(committedRequest?.comparisons)
     ? committedRequest.comparisons
@@ -488,6 +490,8 @@ const canReuseResolvedProteinArtifacts = ({
     comparison?.kind === 'generatedProteinComparison' && comparison.mode === 'none'
   ));
   if (!persistedMarker || !committedMarker || !active) return false;
+  // Selected proteins follow the Feature visibility rules (CO-02).
+  if (!committedFeatureVisibilityMatches(committedSession, active.featureVisibility)) return false;
 
   // Derived rows carry view coordinates and feature IDs. Raw LOSATP evidence
   // remains reusable, but a reversed view needs these rows to be projected again.
@@ -1061,7 +1065,6 @@ export const createRunAnalysis = ({
   serializeCanonicalFiles,
   canonicalSessionVersion,
   adoptCanonicalRenderArtifacts,
-  getCommittedCanonicalRenderRequest = null,
   getCommittedCanonicalSession = null,
   captureDecorationContinuity = () => null,
   captureGeneratedArtifactHandle,
@@ -2921,10 +2924,11 @@ export const createRunAnalysis = ({
           && canReuseResolvedProteinArtifacts({
             canonicalComparisons: files.linearCanonicalComparisons,
             sequences: linearSeqs,
-            committedRequest: typeof getCommittedCanonicalRenderRequest === 'function'
-              ? getCommittedCanonicalRenderRequest()
+            committedSession: typeof getCommittedCanonicalSession === 'function'
+              ? getCommittedCanonicalSession()
               : null,
             active: {
+              featureVisibility: featureVisibilityCacheKey,
               mode: blastpMode,
               candidateLimit: blastpCandidateLimit,
               ...comparisonThresholds,

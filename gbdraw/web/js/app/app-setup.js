@@ -2318,7 +2318,6 @@ export const createAppSetup = () => {
     assertActiveModeInputs,
     canonicalSessionVersion: SESSION_VERSION,
     adoptCanonicalRenderArtifacts,
-    getCommittedCanonicalRenderRequest,
     getCommittedCanonicalSession,
     captureDecorationContinuity: legendLayout.captureDecorationContinuity,
     captureGeneratedArtifactHandle: historySnapshots.captureGeneratedArtifactHandle,

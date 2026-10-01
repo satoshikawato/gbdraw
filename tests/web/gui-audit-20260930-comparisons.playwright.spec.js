@@ -90,7 +90,6 @@ const featureSpan = (page, locusTag) => page.evaluate((tag) => {
 const contains = (outer, inner) => outer[0] <= inner[0] + 1 && outer[1] >= inner[1] - 1;
 
 test('a LOSATP rerun after a Feature visibility change matches a fresh run with that rule', async ({ page, browser }) => {
-  test.fail(true, 'CO-02');
   test.setTimeout(900_000);
   const files = [bgc('BGC0000708'), bgc('BGC0000709')];
   const hideProtein = async () => {
