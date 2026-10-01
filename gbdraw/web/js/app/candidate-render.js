@@ -1,4 +1,5 @@
 import { resolveColorToHex } from './color-utils.js';
+import { isLegendOrderEdited } from './legend/utils.js';
 import { cloneJsonValue } from '../services/json-clone.js';
 import {
   admitCurrentGeneratedResults
@@ -230,14 +231,7 @@ const compilePlanBundle = ({
   // slots. The renderer places generated entries in their generated order and
   // direct additions after them; only a different order emits an operation,
   // and a renamed entry then takes its slot from that order.
-  const generatedRank = new Map([...originalCaptions].map((caption, index) => [caption, index]));
-  const defaultLegendOrder = [
-    ...currentEntries.filter((entry) => generatedRank.has(entry.originalCaption))
-      .sort((left, right) => generatedRank.get(left.originalCaption) - generatedRank.get(right.originalCaption)),
-    ...currentEntries.filter((entry) => !generatedRank.has(entry.originalCaption))
-  ];
-  const legendOrderChanged = originalCaptions.size > 0
-    && currentEntries.some((entry, index) => entry !== defaultLegendOrder[index]);
+  const legendOrderChanged = isLegendOrderEdited(currentEntries, [...originalCaptions]);
   if (legendOrderChanged) {
     addToResults(operationsByResult, allResultIndexes, 'legendOrder', {
       captions: Object.freeze(currentEntries.map((entry) => entry.caption))

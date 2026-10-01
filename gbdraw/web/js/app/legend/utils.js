@@ -146,6 +146,30 @@ export const moveLegendEntryToAnchor = (entryGroup, xPos, yPos) => {
   return true;
 };
 
+/**
+ * Whether Legend entries are in an edited order (D-08). The default order is
+ * the generated entries ranked by the generated order (a renamed entry ranks
+ * by its generated caption), followed by the other entries in their current
+ * order. Generate replays an edited order; the extraction of a Generate keeps
+ * the generated order only while an edited order is replayed.
+ */
+export const isLegendOrderEdited = (entries, generatedOrder) => {
+  const rank = new Map();
+  (Array.isArray(generatedOrder) ? generatedOrder : []).forEach((caption) => {
+    const key = String(caption ?? '').trim();
+    if (key && !rank.has(key)) rank.set(key, rank.size);
+  });
+  if (rank.size === 0) return false;
+  const list = Array.isArray(entries) ? entries : [];
+  const generated = (entry) => String(entry?.originalCaption || entry?.caption || '').trim();
+  const defaultOrder = [
+    ...list.filter((entry) => rank.has(generated(entry)))
+      .sort((left, right) => rank.get(generated(left)) - rank.get(generated(right))),
+    ...list.filter((entry) => !rank.has(generated(entry)))
+  ];
+  return list.some((entry, index) => entry !== defaultOrder[index]);
+};
+
 const legendEntryGroups = (targetGroup) => {
   const direct = Array.from(targetGroup?.children || []).filter(
     (child) => String(child.tagName || '').toLowerCase() === 'g' && child.hasAttribute?.('data-legend-key')
