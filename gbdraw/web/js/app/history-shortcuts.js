@@ -4,7 +4,9 @@ const isTextEditingTarget = (target) => {
   const editable = target.closest?.('input, textarea, select, [contenteditable="true"]');
   if (!editable) return false;
   const tag = String(editable.tagName || '').toLowerCase();
-  if (tag === 'textarea' || tag === 'select') return true;
+  // A select has no native Undo, so History shortcuts apply to it (SE-04).
+  if (tag === 'select') return false;
+  if (tag === 'textarea') return true;
   if (tag !== 'input') return Boolean(editable.isContentEditable);
   const type = String(editable.type || 'text').toLowerCase();
   return !['checkbox', 'radio', 'button', 'submit', 'reset', 'file', 'color'].includes(type);

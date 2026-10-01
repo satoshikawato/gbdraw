@@ -25,7 +25,7 @@ from gbdraw.mode_profiles import (
     ComparisonThresholds,
     mode_profiles_payload,
 )
-from gbdraw.tracks import CircularTrackSlot
+from gbdraw.tracks import CircularTrackSlot, ScalarSpec
 from gbdraw.web_support.error_adapter import serialize_web_error
 
 
@@ -134,25 +134,69 @@ def _small_radial_canvas():
     return canvas_config
 
 
-def test_track_fit_failure_reports_row_and_band_without_slot_id():
+_NUMERIC_STACK = (
+    CircularTrackSlot(id="gc_content", renderer="dinucleotide_content"),
+    CircularTrackSlot(id="gc_skew", renderer="dinucleotide_skew"),
+    CircularTrackSlot(id="PRIVATE_SLOT", renderer="dinucleotide_skew"),
+)
+
+
+@pytest.mark.parametrize(
+    ("slots", "explicit_radius", "reason", "slot_index", "cause"),
+    [
+        # The numeric stack sits directly on the center definition band.
+        (_NUMERIC_STACK, False, "DEFINITION_RESERVED", 2, "the center definition text reserves 70.0px"),
+        # The same band given as an explicit center_reserved_radius.
+        (_NUMERIC_STACK, True, "CENTER_RESERVED", 2, "center_reserved_radius reserves 70.0px"),
+        # A pinned inner slot, not the center band, is the inner limit.
+        (
+            (
+                CircularTrackSlot(id="PRIVATE_SLOT", renderer="dinucleotide_content"),
+                CircularTrackSlot(id="gc_skew", renderer="dinucleotide_skew"),
+                CircularTrackSlot(id="at_skew", renderer="dinucleotide_skew"),
+                CircularTrackSlot(
+                    id="inner_spacer",
+                    renderer="spacer",
+                    radius=ScalarSpec(85.0, "px"),
+                    width=ScalarSpec(8.0, "px"),
+                ),
+            ),
+            False,
+            "CANNOT_FIT",
+            0,
+            None,
+        ),
+    ],
+)
+def test_track_fit_failure_reports_row_and_band_without_slot_id(
+    slots, explicit_radius, reason, slot_index, cause
+):
     with pytest.raises(ValidationError) as caught:
         resolve_circular_radial_layout(
             total_length=1000,
             canvas_config=_small_radial_canvas(),
-            slots=[
-                CircularTrackSlot(id="gc_content", renderer="dinucleotide_content"),
-                CircularTrackSlot(id="gc_skew", renderer="dinucleotide_skew"),
-                CircularTrackSlot(id="PRIVATE_SLOT", renderer="dinucleotide_skew"),
-            ],
-            definition_reserved_radius_px=70.0,
+            slots=list(slots),
+            definition_reserved_radius_px=70.0 if cause is not None else 30.0,
+            center_reserved_radius_explicit=explicit_radius,
         )
+    message = str(caught.value)
+    # The message names the slot that could not be placed and the limiting cause;
+    # an explicit radius is not blamed on the species text.
+    assert message.startswith("Circular track slot 'PRIVATE_SLOT' cannot fit inside between ")
+    if cause is not None:
+        assert cause in message
+    assert ("species" in message) is (reason == "DEFINITION_RESERVED")
     payload = _web(caught.value)
     assert payload["code"] == "TRACK_LAYOUT"
     context = payload["context"]
-    assert context["reason"] == "CANNOT_FIT"
-    assert context["slotIndex"] == 2
-    assert 0 <= context["innerPx"] < context["outerPx"]
+    assert context["reason"] == reason
+    assert context["slotIndex"] == slot_index
+    assert context["innerPx"] >= 0 and context["outerPx"] >= 0
+    if cause is not None:  # a pinned slot can leave no band at all (inner > outer)
+        assert context["innerPx"] < context["outerPx"]
     assert "PRIVATE" not in json.dumps(payload)
+    # A message that merely looks like a layout failure is not classified.
+    assert _web(ValidationError(message))["code"] == "VALIDATION_UNCLASSIFIED"
 
 
 @pytest.mark.parametrize("surface", ["logical", "record-major"])

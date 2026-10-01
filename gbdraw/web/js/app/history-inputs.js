@@ -46,7 +46,6 @@ export const setupHistoryInputs = ({ root, history, nextTick }) => {
   const txByElement = new WeakMap();
   const beginByElement = new WeakMap();
   let pendingCommit = null;
-  let activeButtonTx = null;
 
   const beginForElement = (element, source = 'input-adapter') => {
     if (!element || element.disabled || isIgnoredTarget(element)) return Promise.resolve(null);
@@ -58,7 +57,8 @@ export const setupHistoryInputs = ({ root, history, nextTick }) => {
       if (pendingCommit) await pendingCommit;
       const existing = txByElement.get(element);
       if (existing && !existing.closed) return existing;
-      const tx = await history.begin(controlLabel(element), { source });
+      // The control owns its transaction; another owner settles it first (R11).
+      const tx = await history.begin(controlLabel(element), { source, owner: element });
       if (tx) txByElement.set(element, tx);
       return tx;
     })();
@@ -90,16 +90,12 @@ export const setupHistoryInputs = ({ root, history, nextTick }) => {
   const findControl = (eventTarget) =>
     eventTarget?.closest?.('input, textarea, select, button, [contenteditable="true"], .upload-zone') || null;
 
+  // R11: a discrete control begins in the capture phase of its committing
+  // event (checkbox and radio: change; button: click), so a pointer, its label,
+  // and the keyboard record the same one step. Text-like controls begin on focus.
   const onPointerDown = (event) => {
     const target = findControl(event.target);
-    if (!target || isIgnoredTarget(target)) return;
-    const button = target.closest?.('button');
-    if (button) {
-      void beginForElement(button).then((tx) => {
-        activeButtonTx = tx;
-      });
-      return;
-    }
+    if (!target || isIgnoredTarget(target) || target.closest?.('button')) return;
     if (target.classList?.contains('upload-zone')) {
       const input = target.querySelector?.('input[type="file"]');
       if (input) void beginForElement(input);
@@ -107,7 +103,7 @@ export const setupHistoryInputs = ({ root, history, nextTick }) => {
     }
     const tag = String(target.tagName || '').toLowerCase();
     const type = String(target.type || '').toLowerCase();
-    if (tag === 'select' || type === 'checkbox' || type === 'radio' || type === 'color' || type === 'file') {
+    if (tag === 'select' || type === 'color' || type === 'file') {
       void beginForElement(target);
     }
   };
@@ -121,11 +117,20 @@ export const setupHistoryInputs = ({ root, history, nextTick }) => {
   };
 
   const onKeyDown = (event) => {
+    // A shortcut chord is not an edit of the focused control.
+    if (event.ctrlKey || event.metaKey || event.altKey) return;
     const target = findControl(event.target);
     if (!target || isIgnoredTarget(target)) return;
     if (isEditableControl(target) || target?.isContentEditable) {
       void beginForElement(target);
     }
+  };
+
+  const onChangeCapture = (event) => {
+    const target = findControl(event.target);
+    if (!target || isIgnoredTarget(target)) return;
+    const type = String(target.type || '').toLowerCase();
+    if (type === 'checkbox' || type === 'radio') void beginForElement(target);
   };
 
   const onChange = (event) => {
@@ -152,29 +157,20 @@ export const setupHistoryInputs = ({ root, history, nextTick }) => {
   const onClick = (event) => {
     const button = event.target?.closest?.('button');
     if (!button || isIgnoredTarget(button)) return;
-    setTimeout(() => {
-      const tx = activeButtonTx || txByElement.get(button);
-      activeButtonTx = null;
-      if (!tx) return;
-      if (tx.deferAdapterCommit) return;
-      txByElement.delete(button);
-      if (tx.closed) return;
-      void nextTick().then(() => history.commit(tx));
-    }, 0);
+    // Commit after the click handlers and the state they update in this task.
+    setTimeout(() => { void commitElement(button); }, 0);
   };
 
   const onClickCapture = (event) => {
     const button = event.target?.closest?.('button');
     if (!button || isIgnoredTarget(button)) return;
-    if (txByElement.has(button) || activeButtonTx) return;
-    void beginForElement(button).then((tx) => {
-      activeButtonTx = tx;
-    });
+    void beginForElement(button);
   };
 
   appRoot.addEventListener('pointerdown', onPointerDown, true);
   appRoot.addEventListener('focusin', onFocusIn, true);
   appRoot.addEventListener('keydown', onKeyDown, true);
+  appRoot.addEventListener('change', onChangeCapture, true);
   appRoot.addEventListener('change', onChange, false);
   appRoot.addEventListener('focusout', onFocusOut, false);
   appRoot.addEventListener('click', onClickCapture, true);
@@ -184,6 +180,7 @@ export const setupHistoryInputs = ({ root, history, nextTick }) => {
     appRoot.removeEventListener('pointerdown', onPointerDown, true);
     appRoot.removeEventListener('focusin', onFocusIn, true);
     appRoot.removeEventListener('keydown', onKeyDown, true);
+    appRoot.removeEventListener('change', onChangeCapture, true);
     appRoot.removeEventListener('change', onChange, false);
     appRoot.removeEventListener('focusout', onFocusOut, false);
     appRoot.removeEventListener('click', onClickCapture, true);

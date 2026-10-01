@@ -3,7 +3,7 @@ const { createHash } = require('node:crypto');
 const { gunzipSync } = require('node:zlib');
 const { readFileSync } = require('node:fs');
 const { semantics } = require('./helpers/visual-state.cjs');
-const { seeds, load, generate, snapshot, download, popup, closeEditor } = require('./helpers/mode-transition.cjs');
+const { seeds, load, generate, switchMode, snapshot, download, popup, closeEditor } = require('./helpers/mode-transition.cjs');
 const { evaluateWithRetainedPromise } = require('./helpers/app-lifecycle.cjs');
 
 // PD-OI-037 revision 2: there is no derived application status. Draft edits stay
@@ -407,6 +407,7 @@ for (const mode of ['linear', 'circular']) {
         const config = await import('./js/services/config.js');
         const { state } = await import('./js/state.js');
         const prior = config.canonicalRenderArtifactOwner.capture();
+        const catalog = window.Vue.toRaw(state.featureCatalog.value);
         const draft = config.buildConfigData();
         const counts = [window.__GBDRAW_HISTORY__.getUndoCount(), window.__GBDRAW_HISTORY__.getRedoCount()];
         const file = new File([await (await fetch('/gbdraw/web/gallery/sessions/HmmtDNA_basic_circular.gbdraw-session.json')).arrayBuffer()], 'replacement.json');
@@ -419,13 +420,15 @@ for (const mode of ['linear', 'circular']) {
           sameRequest: current.committedCanonicalSession === prior.committedCanonicalSession,
           sameResources: current.activeSessionResourceTable === prior.activeSessionResourceTable,
           sameDraft: JSON.stringify(config.buildConfigData()) === JSON.stringify(draft),
+          // N-19: the rollback restores the admitted catalog by reference.
+          sameCatalog: Boolean(catalog) && window.Vue.toRaw(state.featureCatalog.value) === catalog,
           sameHistory: JSON.stringify(counts) === JSON.stringify([
             window.__GBDRAW_HISTORY__.getUndoCount(), window.__GBDRAW_HISTORY__.getRedoCount()
           ]), width: state.adv.block_stroke_width
         };
       });
       expect(rollback).toEqual({ status: 'error', error: { code: 'UNKNOWN', stage: 'request-validation' },
-        sameRequest: true, sameResources: true, sameDraft: true,
+        sameRequest: true, sameResources: true, sameDraft: true, sameCatalog: true,
         sameHistory: true, width: 2 });
       expect(await draftAdv(fresh, 'scale_interval')).toBe(12345);
       expect(await committedScaleInterval(fresh)).not.toBe(12345);
@@ -457,4 +460,147 @@ test('Unedited Circular Save and fresh Load keeps the committed request without 
     await page.context().close();
     if (fresh) await fresh.context().close();
   }
+});
+
+
+// SE-01, N-19, N-20 (R11): checkpoint Undo and Redo restore the admitted feature
+// catalog by reference; the checkpoint JSON neither copies nor signs it.
+test('Checkpoint Undo and Redo keep the admitted feature catalog through a mode round trip', async ({ browser }, info) => {
+  test.setTimeout(300000);
+  const page = await load(browser);
+  const errors = [];
+  page.on('pageerror', error => errors.push(error.message));
+  try {
+    const catalogState = () => page.evaluate(async () => {
+      const { state } = await import('./js/state.js');
+      const { isAdoptedFeatureCatalog } = await import('./js/services/feature-catalog.js');
+      const catalog = window.Vue.toRaw(state.featureCatalog.value);
+      window.__P09_CATALOG__ ??= catalog;
+      return {
+        same: catalog === window.__P09_CATALOG__,
+        adopted: isAdoptedFeatureCatalog(catalog),
+        features: state.extractedFeatures.value.length
+      };
+    });
+    const history = () => page.evaluate(() => {
+      const owner = window.__GBDRAW_HISTORY__;
+      const checkpoint = owner.getCurrentCheckpoint();
+      return {
+        counts: [owner.getUndoCount(), owner.getRedoCount()],
+        label: owner.undoLabel(),
+        checkpointBytes: owner.getDiagnostics().checkpointEstimatedBytes,
+        checkpoint: Boolean(checkpoint),
+        checkpointHasCatalog: Boolean(checkpoint?.editorState && 'featureCatalog' in checkpoint.editorState)
+      };
+    });
+    const retained = { same: true, adopted: true, features: 37 };
+    expect(await catalogState()).toEqual(retained);
+    const before = await history();
+    const catalogBytes = await page.evaluate(async () => {
+      const { state } = await import('./js/state.js');
+      return JSON.stringify(state.featureCatalog.value).length * 2;
+    });
+    // A color that adds a legend entry is recorded as a checkpoint.
+    await page.evaluate(async () => {
+      const app = window.__GBDRAW_APP__;
+      await app.setFeatureColorValue(app.extractedFeatures.find(feature => feature.type === 'CDS'), '#123456');
+    });
+    await expect.poll(async () => (await history()).counts).toEqual([before.counts[0] + 1, 0]);
+    const colored = await history();
+    await info.attach('n20-checkpoint-bytes', {
+      body: JSON.stringify({ checkpointBytes: colored.checkpointBytes - before.checkpointBytes, catalogBytes }),
+      contentType: 'application/json'
+    });
+    expect(await catalogState()).toEqual(retained);
+
+    for (const direction of ['Undo', 'Redo', 'Undo']) {
+      await page.getByRole('button', { name: direction, exact: true }).click();
+      await expect.poll(async () => (await history()).counts)
+        .toEqual(direction === 'Undo' ? before.counts.map((count, index) => count + index) : colored.counts);
+      expect(await catalogState(), direction).toEqual(retained);
+    }
+    await switchMode(page, 'linear');
+    await switchMode(page, 'circular');
+    await expect.poll(catalogState).toEqual(retained);
+    expect(errors).toEqual([]);
+    // N-20: the checkpoint JSON holds no copy of the catalog.
+    expect(colored).toMatchObject({ checkpoint: true, checkpointHasCatalog: false });
+  } finally { await page.context().close(); }
+});
+
+// GE-06 (D-28, PD-OI-082): Undo and Redo are busy while Generate replaces the
+// artifact; draft edits stay allowed (PD-OI-051).
+test('Undo and Redo are busy during Generate and leave the committed request unchanged', async ({ browser }) => {
+  test.setTimeout(300000);
+  const page = await load(browser);
+  try {
+    await generate(page);
+    const labels = page.locator('#circular-label-mode');
+    await page.locator('summary[aria-label="Labels"]').click();
+    for (const value of ['none', 'both']) {
+      await labels.focus();
+      await labels.selectOption(value);
+      await labels.press('Tab');
+    }
+    await page.getByRole('button', { name: 'Undo', exact: true }).click();
+    await expect(labels).toHaveValue('none');
+    const observe = () => page.evaluate(async () => {
+      const { getCommittedCanonicalRenderRequest } = await import('./js/services/config.js');
+      const history = window.__GBDRAW_HISTORY__;
+      return {
+        counts: [history.getUndoCount(), history.getRedoCount()],
+        labels: window.__GBDRAW_APP__.form.labels_mode,
+        request: getCommittedCanonicalRenderRequest()
+      };
+    });
+    const before = await observe();
+    expect(before.counts[1]).toBe(1);
+
+    await page.evaluate(() => {
+      window.__GBDRAW_TEST_HOOKS__.beforeDiagramGenerationResponse = () => new Promise(resolve => {
+        window.__P09_RELEASE_GENERATE__ = resolve;
+      });
+    });
+    const key = await page.evaluate(async () => (await import('./js/state.js')).state.resultGenerationKey.value);
+    await page.getByRole('button', { name: 'Generate Diagram', exact: true }).click();
+    await expect.poll(() => page.evaluate(() => typeof window.__P09_RELEASE_GENERATE__), { timeout: 180000 })
+      .toBe('function');
+    const undo = page.getByRole('button', { name: 'Undo', exact: true });
+    const redo = page.getByRole('button', { name: 'Redo', exact: true });
+    await expect(undo).toBeDisabled();
+    await expect(redo).toBeDisabled();
+    const reason = 'Generating diagram. Retry after generation finishes.';
+    await expect(page.locator('[data-session-busy-reason]')).toHaveText(reason);
+    await page.keyboard.press('Control+z');
+    await page.keyboard.press('Control+y');
+    await page.keyboard.press('Control+Shift+z');
+    expect(await page.evaluate(async () => [
+      await window.__GBDRAW_HISTORY__.undo(),
+      await window.__GBDRAW_HISTORY__.redo()
+    ])).toEqual([{ status: 'busy', reason }, { status: 'busy', reason }]);
+    expect(await observe()).toEqual(before);
+
+    // PD-OI-051: a draft edit during Generate is still recorded.
+    await page.evaluate(() => window.__GBDRAW_HISTORY__.runUndoable('Draft during Generate', () => {
+      window.__GBDRAW_APP__.form.prefix = 'during-generate';
+    }));
+    expect(await page.evaluate(() => window.__GBDRAW_APP__.form.prefix)).toBe('during-generate');
+    expect((await observe()).counts).toEqual([before.counts[0] + 1, 0]);
+
+    await page.evaluate(() => {
+      delete window.__GBDRAW_TEST_HOOKS__.beforeDiagramGenerationResponse;
+      window.__P09_RELEASE_GENERATE__();
+    });
+    await expect.poll(() => page.evaluate(async () => {
+      const { state } = await import('./js/state.js');
+      return { key: state.resultGenerationKey.value, processing: state.processing.value, error: state.errorLog.value };
+    }), { timeout: 180000 }).toEqual({ key: key + 1, processing: false, error: null });
+    const after = await observe();
+    expect(after.counts).toEqual([before.counts[0] + 2, 0]);
+    expect(after.request).not.toEqual(before.request);
+    await expect(undo).toBeEnabled();
+    await undo.click();
+    await expect.poll(async () => (await observe()).request).toEqual(before.request);
+    expect(page.externalRequests).toEqual([]);
+  } finally { await page.context().close(); }
 });

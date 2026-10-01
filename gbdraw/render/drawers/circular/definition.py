@@ -41,11 +41,14 @@ class DefinitionDrawer:
         font_size: float | None = None,
         name_font_weight: str = "bold",
         record_transform: RecordDisplayTransform | None = None,
+        species_line_parts: list[list[dict]] | None = None,
     ) -> Group:
         lines: list[dict] = []
         active_font_size = float(font_size) if font_size is not None else float(self.font_size)
 
-        if species_parts and species_parts[0]["text"] is not None:
+        if species_line_parts:
+            lines.extend({"kind": "name", "parts": parts} for parts in species_line_parts)
+        elif species_parts and species_parts[0]["text"] is not None:
             lines.append({"kind": "name", "parts": species_parts})
         if strain_parts and strain_parts[0]["text"] is not None:
             lines.append({"kind": "name", "parts": strain_parts})

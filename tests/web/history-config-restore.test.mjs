@@ -67,3 +67,61 @@ assert.deepEqual(state.linearRecordTranslations.value, [
   { recordKey: 'record-a', x: 21, y: 4 }
 ]);
 console.log('History restores nullable config values and preserves key guards.');
+
+// SE-01, N-19, N-20: History checkpoints and the Session rollback hold the
+// admitted feature catalog by reference; state admits no other catalog.
+{
+  const { admitFeatureCatalog, featureStateFromCatalog } = await import('../../gbdraw/web/js/services/feature-catalog.js');
+  const { buildEditorStateData, applyEditorStateData } = await import('../../gbdraw/web/js/services/config.js');
+  const marker = 'se01-catalog-payload';
+  const catalog = admitFeatureCatalog({
+    schema: 4,
+    items: [{
+      resultIndex: 0, resultName: 'diagram.svg', recordKeys: ['record-a'],
+      features: [{ svgId: 'f0001', recordKey: 'record-a', biologicalFeatureId: 'feature-a', fillColor: '#abcdef' }],
+      biologicalFeatures: [{
+        recordKey: 'record-a', biologicalFeatureId: 'feature-a', stableFeatureId: 'stable-a', record_idx: 0,
+        sourceFeatureIndex: 0, record_id: 'record-a', type: 'CDS', start: 1, end: 6, strand: 1,
+        anchorProfile: { precision: 'exact', operator: 'single', partOrder: 'biological', strand: '+' },
+        qualifiers: { note: [marker] }
+      }],
+      orthogroups: [], annotations: [], comparisonMatches: [], sequenceSources: []
+    }]
+  }, [{ name: 'diagram.svg', content: '<svg />' }], { adopt: true, mode: 'circular' }).catalog;
+  state.mode.value = 'circular';
+  state.results.value = [{ name: 'diagram.svg', content: '<svg />' }];
+  state.featureCatalog.value = catalog;
+  const liveCatalog = () => window.Vue.toRaw?.(state.featureCatalog.value) ?? state.featureCatalog.value;
+  assert.strictEqual(liveCatalog(), catalog);
+
+  const artifactSnapshots = createHistorySnapshotService({
+    state, fileStore: createHistoryFileStore(), buildConfigData, applyConfigData,
+    buildEditorStateData, applyEditorStateData
+  });
+  const artifactHistory = createHistoryManager({
+    buildIntent: artifactSnapshots.buildHistoryIntent,
+    applyIntent: artifactSnapshots.applyHistoryIntent,
+    buildCheckpoint: artifactSnapshots.buildArtifactCheckpoint,
+    applyCheckpoint: artifactSnapshots.applyArtifactCheckpoint,
+    signatureFor: artifactSnapshots.snapshotSignature
+  });
+  await artifactHistory.captureBaseline();
+  assert.equal(JSON.stringify(artifactHistory.getCurrentCheckpoint()).includes(marker), false);
+  await artifactHistory.runUndoableCheckpoint('Change legend', () => {
+    state.legendEntries.value = [{ caption: 'SE-01', color: '#123456' }];
+  });
+  for (const direction of ['undo', 'redo', 'undo']) {
+    await artifactHistory[direction]();
+    assert.strictEqual(liveCatalog(), catalog, `${direction} keeps the admitted catalog object`);
+    assert.equal(featureStateFromCatalog(liveCatalog(), { mode: 'circular' }).extractedFeatures.length, 1);
+  }
+
+  applyEditorStateData(buildEditorStateData({ preserveAdoptedCatalog: true }));
+  assert.strictEqual(liveCatalog(), catalog, 'Session rollback restores the admitted catalog');
+  applyEditorStateData({ featureCatalog: structuredClone(catalog) });
+  assert.equal(state.featureCatalog.value, null, 'an unadmitted catalog never enters state');
+  state.featureCatalog.value = null;
+  state.results.value = [];
+  state.legendEntries.value = [];
+  console.log('History and Session rollback keep the admitted feature catalog by reference.');
+}

@@ -2,7 +2,6 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import { setupHistoryShortcuts } from '../../gbdraw/web/js/app/history-shortcuts.js';
-import { assertKnownDefect } from './helpers/known-defect.mjs';
 
 const installShortcuts = () => {
   const listeners = new Map();
@@ -36,12 +35,11 @@ test('text entry keeps the browser undo while checkbox focus uses History', () =
   assert.deepEqual(calls, ['undo', 'redo']);
 });
 
-test('Undo and Redo shortcuts work while a select has focus (SE-04 known defect)', async () => {
+// SE-04: a select has no native Undo, so History shortcuts apply to it.
+test('Undo and Redo shortcuts work while a select has focus', () => {
   const { calls, press } = installShortcuts();
-  await assertKnownDefect('SE-04', () => {
-    press({ tagName: 'SELECT' });
-    press({ tagName: 'SELECT', shiftKey: true });
-    press({ tagName: 'SELECT', key: 'y' });
-    assert.deepEqual(calls, ['undo', 'redo', 'redo']);
-  });
+  press({ tagName: 'SELECT' });
+  press({ tagName: 'SELECT', shiftKey: true });
+  press({ tagName: 'SELECT', key: 'y' });
+  assert.deepEqual(calls, ['undo', 'redo', 'redo']);
 });

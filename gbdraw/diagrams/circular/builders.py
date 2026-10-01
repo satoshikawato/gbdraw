@@ -224,6 +224,7 @@ def add_record_definition_group_on_canvas(
     record_index: int = 0,
     record_count: int = 1,
     record_transform: RecordDisplayTransform | None = None,
+    species_line_count: int = 1,
 ) -> Drawing:
     """
     Adds the record definition group to the canvas.
@@ -250,6 +251,7 @@ def add_record_definition_group_on_canvas(
         record_index=record_index,
         record_count=record_count,
         record_transform=record_transform,
+        species_line_count=species_line_count,
     )
     definition_group: Group = definition_builder.get_group()
     setattr(definition_group, "_gbdraw_local_bounds", definition_builder.local_bounds)

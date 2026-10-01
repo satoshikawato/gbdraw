@@ -1013,16 +1013,15 @@ const defaultEditorStateData = () => ({
   featureCatalog: null
 });
 
-const serializableFeatureCatalog = (preserveAdoptedCatalog) => {
-  const liveCatalog = state.featureCatalog?.value;
-  // Vue proxies obscure the identity used by the validated/adopted catalog cache.
-  const rawCatalog = rawReactiveValue(liveCatalog);
-  return preserveAdoptedCatalog && isAdoptedFeatureCatalog(rawCatalog)
-    ? rawCatalog
-    : cloneJsonValue(liveCatalog, null);
+// State, History, and Session rollback hold the Generate-owned catalog by
+// reference; only an admitted catalog may enter state. Vue proxies obscure the
+// identity that admission records.
+const admittedFeatureCatalog = (catalog) => {
+  const rawCatalog = rawReactiveValue(catalog);
+  return isAdoptedFeatureCatalog(rawCatalog) ? rawCatalog : null;
 };
 
-export const buildEditorStateData = ({ preserveAdoptedCatalog = false } = {}) => ({
+export const buildEditorStateData = () => ({
   legend: {
     entries: cloneJsonArray(state.legendEntries.value),
     deletedEntries: cloneJsonArray(state.deletedLegendEntries.value),
@@ -1042,7 +1041,7 @@ export const buildEditorStateData = ({ preserveAdoptedCatalog = false } = {}) =>
     width: state.originalSvgStroke.value?.width ?? null
   },
   alignmentResetReceipt: cloneJsonValue(state.similarityAlignmentResetReceipt?.value, null),
-  featureCatalog: serializableFeatureCatalog(preserveAdoptedCatalog)
+  featureCatalog: admittedFeatureCatalog(state.featureCatalog?.value)
 });
 
 const normalizeEditorStateData = (editorState = {}, { featureCatalog = undefined } = {}) => {
@@ -1074,11 +1073,9 @@ const normalizeEditorStateData = (editorState = {}, { featureCatalog = undefined
         : defaults.originalSvgStroke.width
     },
     alignmentResetReceipt: cloneJsonValue(source.alignmentResetReceipt, null),
-    featureCatalog: featureCatalog !== undefined
-      ? featureCatalog
-      : isPlainObject(source.featureCatalog)
-        ? cloneJsonData(source.featureCatalog)
-        : null
+    featureCatalog: admittedFeatureCatalog(
+      featureCatalog !== undefined ? featureCatalog : source.featureCatalog
+    )
   };
 };
 
@@ -1145,13 +1142,11 @@ const validateUnmanagedConfigOverrides = async ({
 
 export const applyEditorStateData = (
   editorState = {},
-  { trusted = false, normalized: alreadyNormalized = false, adoptCatalog = false } = {}
+  { normalized: alreadyNormalized = false } = {}
 ) => {
   const normalized = alreadyNormalized
     ? editorState
-    : trusted
-      ? cloneJsonData(editorState)
-      : normalizeEditorStateData(editorState);
+    : normalizeEditorStateData(editorState);
 
   if (state.similarityAlignmentResetReceipt) {
     state.similarityAlignmentResetReceipt.value = normalized.alignmentResetReceipt ?? null;
@@ -1166,9 +1161,7 @@ export const applyEditorStateData = (
   replacePlainObject(state.featureStrokeOverrides, normalized.featureStrokes.overrides);
   state.originalSvgStroke.value = normalized.originalSvgStroke;
   if (state.featureCatalog) {
-    state.featureCatalog.value = adoptCatalog
-      ? normalized.featureCatalog
-      : cloneJsonValue(normalized.featureCatalog, null);
+    state.featureCatalog.value = admittedFeatureCatalog(normalized.featureCatalog);
   }
 };
 
@@ -3576,7 +3569,7 @@ const captureSessionImportSnapshot = () => ({
   files: cloneLiveFileState(),
   results: state.results.value,
   features: buildFeatureStateData(),
-  editorState: buildEditorStateData({ preserveAdoptedCatalog: true }),
+  editorState: buildEditorStateData(),
   orthogroupState: buildOrthogroupStateData(),
   collinearGroups: state.collinearGroups.value,
   runState: buildRunStateData(),
@@ -4013,17 +4006,16 @@ const exportSessionDocument = async (
 
   recordSessionLifecycleEvent('session-save-projection-start');
   const logicalResults = serializeResults();
-  const editorState = buildEditorStateData({ preserveAdoptedCatalog: true });
+  const editorState = buildEditorStateData();
   if (logicalResults.length > 0) {
     if (!editorState.featureCatalog) {
       throw new Error(SESSION_FEATURE_CATALOG_SAVE_ERROR);
     }
     try {
-      const adoptedCatalog = isAdoptedFeatureCatalog(editorState.featureCatalog);
       editorState.featureCatalog = validateFeatureCatalog(
         editorState.featureCatalog,
         logicalResults,
-        { adopt: adoptedCatalog, mode: state.mode.value }
+        { adopt: true, mode: state.mode.value }
       );
     } catch (error) {
       console.warn('Session feature catalog validation failed.', normalizeUserFacingError(error));
@@ -4641,10 +4633,7 @@ const importSessionDocument = async (e, options = {}) => {
         catalogFeatureState: currentCatalogFeatureState
       }
     );
-    applyEditorStateData(restoredEditorState, {
-      normalized: currentSchemaSession,
-      adoptCatalog: currentSchemaSession
-    });
+    applyEditorStateData(restoredEditorState, { normalized: currentSchemaSession });
     if (legacyFeatureRecoveryPlan) {
       applySessionFeatureRecoveryPlan(legacyFeatureRecoveryPlan, { generationId: 'session-load' });
     }
