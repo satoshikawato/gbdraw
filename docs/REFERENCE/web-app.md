@@ -71,7 +71,8 @@ Each Linear File card starts with its **Depth TSV** disclosure open. Its summary
 reports the File's record count, logical series count, and whether any series
 has mixed per-record assignments. Collapse it to shorten the sidebar; the open
 state is not saved. Use **Add Depth TSV series** there to add one logical series
-for every record while preserving existing assignments.
+for every record while preserving existing assignments. A new series has no file,
+so it adds no track row; see [Custom Track Slots](#custom-track-slots).
 
 ## Main workflow
 
@@ -231,6 +232,35 @@ and Result; correct the field and Generate again. A valid Session saves the
 editing draft separately from the committed Result, including disabled and
 inactive track values. Loading it shows the saved preview; Generate applies
 the restored draft. Invalid drafts cannot be saved as valid Sessions.
+
+### Custom Track Slots
+
+**Use custom stack** draws the saved stack. Turning it on for the first time
+uses the saved default stack as it is, including its **Ticks** row. **Reset**
+and **Reset to Tuckin**, **Reset to Middle**, or **Reset to Spreadout** rebuild
+the stack from **Show Coordinate Scale**, **Hide GC Content**, **Hide GC Skew**,
+and the loaded Depth series.
+
+Depth rows follow Depth files the same way in Circular and Linear. When a
+logical Depth series gets its first file, the stack gains one Depth row for it,
+unless a row, enabled or disabled, already references that series. When the
+series loses its last file, the rows that still have their default settings are
+removed. This happens whether or not the custom stack is in use. Other settings
+never add, re-enable, or move a Depth row, so a row you removed, disabled, or
+moved stays as you left it. **Add Depth TSV series** and a series **Remove**
+add no row.
+
+An enabled Depth row whose series has no file, for example after a Linear
+File's Depth TSV is cleared, shows "Depth track '<id>' has no logical Depth
+source." **Generate Diagram** then stops on that row. Add a file, or disable or
+remove the row. A Session whose inactive custom stack has no Depth row does not
+gain one when you turn the stack on; use **Reset**.
+
+**Hide GC Content** and **Hide GC Skew** disable the matching enabled rows,
+whether or not the custom stack is in use, and turning the option off enables
+those rows again. Rows you disabled yourself stay disabled. A row's resolved
+**(auto)** geometry comes from the last generated diagram and appears only for
+rows it drew; a disabled row shows the estimate.
 
 ### Follow a Result and its settings draft
 

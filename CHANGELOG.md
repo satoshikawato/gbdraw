@@ -140,7 +140,20 @@ decisions are in
 
 <!-- web-gui-audit-20260930 P15 -->
 
-<!-- web-gui-audit-20260930 P16 -->
+- Web Custom Track Slots: a Depth row is added only when a logical Depth series
+  gets its first file and removed when the series loses its last file, in both
+  Circular and Linear. Unrelated toggles and **Add Depth TSV series** no longer
+  re-create, re-enable, or move Depth rows, and removing a Depth file with the
+  uploader **Remove** leaves a stack that generates (TR-02, TR-03).
+- Linear: an enabled Depth row whose series has no file shows the same row issue
+  as Circular and stops Generate on that row (TR-03).
+- Turning off **Hide GC Content** or **Hide GC Skew** while the custom stack is
+  off restores the rows that Hide disabled; rows you disabled stay disabled
+  (TR-06).
+- A disabled track row no longer shows another row's resolved **(auto)**
+  geometry (TR-08).
+- **Reset to Tuckin**, **Reset to Middle**, and **Reset to Spreadout** follow
+  **Show Coordinate Scale**, like **Reset** (TR-09).
 
 - Feature Search and Interactive SVG search: **All** no longer matches
   nucleotide or amino-acid sequences or `/translation` values; use the

@@ -445,35 +445,37 @@ test('Linear depth add, clear, and remove keep global sparse columns aligned', a
     app.resetLinearTrackSlotsFromSimpleControls();
     app.setLinearTrackSlotsEnabled(true);
     const clonePlain = (value) => JSON.parse(JSON.stringify(value));
+    const depthRows = () => app.adv.linear_track_slots
+      .filter((slot) => slot.renderer === 'depth')
+      .map((slot) => `${slot.id}:${slot.params.track_index}:${slot.enabled === false ? 'off' : 'on'}`);
     const originalSlots = clonePlain(app.adv.linear_track_slots);
     const originalAxisIndex = app.adv.linear_track_slots_axis_index;
     const originalFeatureSlot = clonePlain(
       app.adv.linear_track_slots.find((slot) => slot.renderer === 'features')
     );
-    const duplicateManagedSlot = clonePlain(
-      app.adv.linear_track_slots.find((slot) => (
-        slot.renderer === 'depth' && slot.params.track_index === 0
-      ))
-    );
+    // PD-OI-058: a row the user disabled stays disabled, and a series that
+    // regains its source gets no managed row while a row references it.
     app.adv.linear_track_slots.splice(
       0,
       app.adv.linear_track_slots.length,
       {
-        id: 'manual_depth', renderer: 'depth', enabled: true, side: 'above',
+        id: 'manual_depth', renderer: 'depth', enabled: false, side: 'above',
         params: { track_index: 0, custom: 'manual' }
       },
-      duplicateManagedSlot,
       originalFeatureSlot
     );
-    app.adv.linear_track_slots_axis_index = 2;
-    app.ensureLinearTrackDepthSlots();
-    const deduplicatedSlots = {
-      ids: app.adv.linear_track_slots.map((slot) => slot.id),
+    app.adv.linear_track_slots_axis_index = 1;
+    app.setLinearDepthFile(app.linearSeqs[0], 0, null);
+    app.setLinearDepthFile(app.linearSeqs[0], 0, first);
+    const preservedSlots = {
+      depthRows: depthRows(),
+      manualParams: clonePlain(app.adv.linear_track_slots[0].params),
       axisIndex: app.adv.linear_track_slots_axis_index
     };
     app.adv.linear_track_slots.splice(0, app.adv.linear_track_slots.length, ...originalSlots);
     app.adv.linear_track_slots_axis_index = originalAxisIndex;
     app.addLinearDepthTrack();
+    const afterAddSeries = depthRows();
     app.setLinearDepthFile(app.linearSeqs[1], 1, second);
     await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
 
@@ -493,9 +495,10 @@ test('Linear depth add, clear, and remove keep global sparse columns aligned', a
         .map((slot) => slot.params.track_index)
     };
     const featureSlot = app.adv.linear_track_slots.find((slot) => slot.renderer === 'features');
-    const trackZeroSlot = app.adv.linear_track_slots.find((slot) => (
-      slot.renderer === 'depth' && slot.params.track_index === 0
-    ));
+    // Series 0 lost its last source, so its managed row is gone; rebuild one.
+    const trackZeroSlot = {
+      id: 'depth', renderer: 'depth', enabled: true, side: 'above', params: { track_index: 0 }
+    };
     const trackOneSlot = app.adv.linear_track_slots.find((slot) => (
       slot.renderer === 'depth' && slot.params.track_index === 1
     ));
@@ -547,10 +550,15 @@ test('Linear depth add, clear, and remove keep global sparse columns aligned', a
       trackIndex: manualSlot.params.track_index,
       error: manualSlot.depth_binding_error ?? null
     };
-    return { deduplicatedSlots, beforeClear, afterClear, afterRemove, afterRepair };
+    return { preservedSlots, afterAddSeries, beforeClear, afterClear, afterRemove, afterRepair };
   });
 
-  expect(result.deduplicatedSlots).toEqual({ ids: ['manual_depth', 'features'], axisIndex: 1 });
+  expect(result.preservedSlots).toMatchObject({
+    depthRows: ['manual_depth:0:off'],
+    manualParams: { track_index: 0, custom: 'manual' },
+    axisIndex: 1
+  });
+  expect(result.afterAddSeries).toEqual(['depth:0:on']);
   expect(result.beforeClear.rows).toEqual([
     ['sample-a.tsv', null],
     [null, 'sample-b.tsv']
@@ -561,7 +569,7 @@ test('Linear depth add, clear, and remove keep global sparse columns aligned', a
     [null, 'sample-b.tsv']
   ]);
   expect(result.afterClear.labels).toEqual(result.beforeClear.labels);
-  expect(result.afterClear.slotIndexes).toEqual(result.beforeClear.slotIndexes);
+  expect(result.afterClear.slotIndexes).toEqual([1]);
   expect(result.afterRemove.rows).toEqual([
     [null],
     ['sample-b.tsv']

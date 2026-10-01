@@ -1,7 +1,8 @@
 import {
+  activeDepthTrackIndices,
   depthTrackMatrixWidth,
-  dropInvalidManagedDepthSlots,
-  parseDepthTrackIndexIdentity
+  parseDepthTrackIndexIdentity,
+  reconcileManagedDepthSlots
 } from './depth-track-state.js';
 import { resolveColorToHex } from './color-utils.js';
 import { resolveTrackSlotSkewColorValue } from './track-slot-colors.js';
@@ -159,6 +160,10 @@ export const linearAvailableDepthTrackCountForState = (state) => {
   const seqs = Array.isArray(state?.linearSeqs) ? state.linearSeqs : [];
   return depthTrackMatrixWidth(seqs.map((seq) => seq?.depth));
 };
+
+const linearSourcedDepthTrackIndexesForState = (state) => (
+  activeDepthTrackIndices((Array.isArray(state?.linearSeqs) ? state.linearSeqs : []).map((seq) => seq?.depth))
+);
 
 export const linearDepthTrackCountForState = (state) => (
   Boolean(state?.form?.show_depth)
@@ -843,6 +848,7 @@ export const createLinearTrackSlotEditor = ({ state }) => {
     axisIndex: adv.linear_track_slots_axis_index,
     trackType: form.linear_track_layout,
     depthTrackCount: linearAvailableDepthTrackCountForState(state),
+    depthSourcedTrackIndexes: linearSourcedDepthTrackIndexesForState(state),
     annotationSetIds: annotationSetIds(),
     visibleFeatureUnderlays: visibleFeatureUnderlaysForState(state),
     conservationSeries: []
@@ -1315,73 +1321,30 @@ export const createLinearTrackSlotEditor = ({ state }) => {
     normalizeCurrentSlots();
   };
 
-  const ensureLinearTrackDepthSlots = () => {
-    const desiredCount = linearDepthTrackCountForState(state);
-    if (!Boolean(form.show_depth) || desiredCount <= 0) {
-      adv.linear_track_slots.splice(
-        0,
-        adv.linear_track_slots.length,
-        ...dropInvalidManagedDepthSlots({
-          slots: adv.linear_track_slots,
-          activeCount: 0,
-          managedPredicate: (slot) => isDefaultManagedLinearSlot(slot, 'depth')
-        })
-      );
-      normalizeCurrentSlots();
-      return;
-    }
-
-    normalizeCurrentSlots();
-    adv.linear_track_slots.splice(
-      0,
-      adv.linear_track_slots.length,
-      ...dropInvalidManagedDepthSlots({
-        slots: adv.linear_track_slots,
-        activeCount: desiredCount,
-        managedPredicate: (slot) => isDefaultManagedLinearSlot(slot, 'depth')
-      })
-    );
-    const slots = adv.linear_track_slots;
-    const managedDepthEntries = slots
-      .map((slot, index) => ({ slot, index }))
-      .filter((entry) => isDefaultManagedLinearSlot(entry.slot, 'depth'));
-    const claimed = new Set(
-      slots
-        .filter((slot) => (
-          normalizeRenderer(slot?.renderer) === 'depth' &&
-          slot?.enabled !== false &&
-          !isDefaultManagedLinearSlot(slot, 'depth')
-        ))
-        .map((slot) => normalizeTrackIndex(slot?.params?.track_index))
-        .filter((trackIndex) => trackIndex !== null && trackIndex < desiredCount)
-    );
-    const removeIndexes = [];
-    managedDepthEntries.forEach((entry) => {
-      const trackIndex = normalizeTrackIndex(entry.slot?.params?.track_index);
-      if (trackIndex !== null && trackIndex < desiredCount && !claimed.has(trackIndex)) {
-        entry.slot.enabled = true;
-        entry.slot.params = { track_index: trackIndex };
-        claimed.add(trackIndex);
-      } else {
-        removeIndexes.push(entry.index);
-      }
+  // Managed Depth rows follow Depth sources (PD-OI-058), as in Circular. A
+  // manual row left on a series without a source reports a row issue
+  // (PD-OI-083); a logical series itself is kept (PD-OI-025).
+  const reconcileLinearDepthSlots = (previousSourced) => {
+    const slots = Array.isArray(adv.linear_track_slots) ? adv.linear_track_slots : [];
+    if (slots.length === 0 && !adv.linear_track_slots_enabled) return;
+    const { slots: nextSlots, additions } = reconcileManagedDepthSlots({
+      slots,
+      previousSourced,
+      sourced: linearSourcedDepthTrackIndexesForState(state),
+      managedPredicate: (slot) => isDefaultManagedLinearSlot(slot, 'depth')
     });
-    const previousAxisIndex = clampLinearTrackAxisIndex(
-      adv.linear_track_slots_axis_index,
-      slots.length
-    );
+    if (additions.length === 0 && nextSlots.length === slots.length) return;
+    const previousAxisIndex = clampLinearTrackAxisIndex(adv.linear_track_slots_axis_index, slots.length);
     if (previousAxisIndex !== null) {
-      const removedBeforeAxis = removeIndexes.filter((index) => index < previousAxisIndex).length;
-      adv.linear_track_slots_axis_index = Math.max(0, previousAxisIndex - removedBeforeAxis);
+      const removedBeforeAxis = slots
+        .slice(0, previousAxisIndex)
+        .filter((slot) => !nextSlots.includes(slot)).length;
+      adv.linear_track_slots_axis_index = previousAxisIndex - removedBeforeAxis;
     }
-    removeIndexes.sort((a, b) => b - a).forEach((index) => {
-      slots.splice(index, 1);
-    });
-
-    const existingIds = new Set(slots.map((slot) => String(slot?.id || '').trim()).filter(Boolean));
-    for (let trackIndex = 0; trackIndex < desiredCount; trackIndex += 1) {
-      if (claimed.has(trackIndex)) continue;
-      const preferredId = desiredCount === 1 ? 'depth' : `depth_${trackIndex + 1}`;
+    const seriesCount = linearAvailableDepthTrackCountForState(state);
+    const existingIds = new Set(nextSlots.map((slot) => String(slot?.id || '').trim()).filter(Boolean));
+    const newSlots = additions.map((trackIndex) => {
+      const preferredId = seriesCount <= 1 ? 'depth' : `depth_${trackIndex + 1}`;
       let id = preferredId;
       let suffix = 2;
       while (existingIds.has(id)) {
@@ -1389,14 +1352,17 @@ export const createLinearTrackSlotEditor = ({ state }) => {
         suffix += 1;
       }
       existingIds.add(id);
-      slots.push(defaultSlot('depth', {
-        id,
-        side: 'below',
-        params: { track_index: trackIndex }
-      }));
-      claimed.add(trackIndex);
-    }
+      return defaultSlot('depth', { id, side: 'below', params: { track_index: trackIndex } });
+    });
+    adv.linear_track_slots.splice(0, slots.length, ...nextSlots, ...newSlots);
     normalizeCurrentSlots();
+  };
+
+  // The only entry for Depth source changes: run the change, then reconcile.
+  const changeLinearDepthSources = (mutate) => {
+    const previousSourced = linearSourcedDepthTrackIndexesForState(state);
+    mutate();
+    reconcileLinearDepthSlots(previousSourced);
   };
 
   const linearTrackStackEntries = () => {
@@ -1521,13 +1487,12 @@ export const createLinearTrackSlotEditor = ({ state }) => {
 
   const selectedResultIndexValue = () => Number(state?.selectedResultIndex?.value ?? 0) || 0;
 
-  const resolvedLinearSlotGeometry = (slotIndex, slotId) => findTrackSlotGeometry({
+  const resolvedLinearSlotGeometry = (slotId) => findTrackSlotGeometry({
     geometry: String(state?.trackSlotResolvedGeometry?.value?.mode || '') === 'linear'
       ? state.trackSlotResolvedGeometry.value
       : null,
     resultIndex: selectedResultIndexValue(),
     recordIndex: 0,
-    slotIndex,
     slotId
   });
 
@@ -1552,15 +1517,18 @@ export const createLinearTrackSlotEditor = ({ state }) => {
     };
   };
 
-  const linearTrackSlotDisplayGeometry = (slot, slotIndex) => {
-    const resolved = resolvedLinearSlotGeometry(slotIndex, slot?.id);
+  // Only a rendered row has resolved geometry; a disabled row shows the estimate.
+  const linearTrackSlotDisplayGeometry = (slot) => {
+    const resolved = slot?.enabled !== false ? resolvedLinearSlotGeometry(slot?.id) : null;
     if (resolved) return { ...resolved, source: 'resolved' };
     return estimateLinearSlotGeometry(slot);
   };
 
-  const linearTrackSlotGeometryAutoText = (slot, slotIndex, field) => {
+  // The row index is part of the shared template call; Linear geometry is
+  // found by slot ID alone.
+  const linearTrackSlotGeometryAutoText = (slot, _slotIndex, field) => {
     if (isManualSlotValue(linearSlotManualValue(slot, field))) return '';
-    const geometry = linearTrackSlotDisplayGeometry(slot, slotIndex);
+    const geometry = linearTrackSlotDisplayGeometry(slot);
     const value = field === 'height'
       ? geometry.heightPx
       : (field === 'spacing' ? geometry.spacingAfterPx : null);
@@ -1639,7 +1607,7 @@ export const createLinearTrackSlotEditor = ({ state }) => {
     linearTrackRendererLabel,
     normalizeLinearTrackSlots: normalizeCurrentSlots,
     resetLinearTrackSlotsFromSimpleControls,
-    ensureLinearTrackDepthSlots,
+    changeLinearDepthSources,
     setLinearTrackSlotsEnabled,
     addLinearTrackSlot,
     canAddLinearTrackRenderer,

@@ -4,7 +4,6 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import test from 'node:test';
-import { assertKnownDefect } from './helpers/known-defect.mjs';
 
 const repoRoot = process.cwd();
 const tempRoot = await mkdtemp(join(tmpdir(), 'gbdraw-track-slot-display-'));
@@ -101,28 +100,6 @@ test('resolves shifted Circular public geometry by slot ID', () => {
       geometry.records[0].slots[resolvedIndex]
     );
   }
-});
-
-test('falls back to slot index for older geometry without slot IDs', () => {
-  const geometry = {
-    records: [{
-      resultIndex: 0,
-      recordIndex: 0,
-      slots: [
-        { slotIndex: 0, renderer: 'features', height: 41 },
-        { slotIndex: 1, renderer: 'depth', height: 17 }
-      ]
-    }]
-  };
-
-  assert.deepEqual(
-    findTrackSlotGeometry({ geometry, slotIndex: 1, slotId: 'depth' }),
-    geometry.records[0].slots[1]
-  );
-  assert.deepEqual(
-    findTrackSlotGeometry({ geometry, slotIndex: 0 }),
-    geometry.records[0].slots[0]
-  );
 });
 
 test('Linear placement actions preserve the Axis boundary and row sides', () => {
@@ -301,9 +278,9 @@ test('Circular editor requests resolved geometry with each public slot ID', () =
   }
 });
 
-test('a disabled row without geometry does not show another row geometry (TR-08 known defect)', async () => {
-  // Current geometry carries slot IDs. The disabled ticks row was not rendered,
-  // so its public index now belongs to gc_content.
+// TR-08: Python emits geometry only for rendered rows, so a slot index does not
+// identify a row. Geometry is found by slot ID alone.
+test('a row without rendered geometry does not resolve to another row', () => {
   const geometry = {
     records: [{
       resultIndex: 0,
@@ -314,7 +291,97 @@ test('a disabled row without geometry does not show another row geometry (TR-08 
       ]
     }]
   };
-  await assertKnownDefect('TR-08', () => {
-    assert.equal(findTrackSlotGeometry({ geometry, slotIndex: 1, slotId: 'ticks' }), null);
+  assert.equal(findTrackSlotGeometry({ geometry, slotId: 'ticks' }), null);
+  assert.equal(findTrackSlotGeometry({ geometry, slotIndex: 1, slotId: 'ticks' }), null);
+  assert.equal(findTrackSlotGeometry({ geometry, slotIndex: 1 }), null);
+  assert.deepEqual(findTrackSlotGeometry({ geometry, slotId: 'gc_content' }), geometry.records[0].slots[1]);
+});
+
+// TR-08: a disabled row, including one that shares an ID with a rendered row,
+// shows its estimate instead of resolved geometry.
+test('disabled rows show their estimate in both editors', () => {
+  const circularGeometry = {
+    mode: 'circular',
+    records: [{
+      resultIndex: 0,
+      recordIndex: 0,
+      slots: [
+        { slotIndex: 0, slotId: 'features', widthPx: 60, radiusFactor: 0.9 },
+        { slotIndex: 1, slotId: 'gc_content', widthPx: 74.1, radiusFactor: 0.69 }
+      ]
+    }]
+  };
+  const circularState = (geometry) => ({
+    mode: { value: 'circular' },
+    form: {
+      track_type: 'tuckin', show_depth: false, suppress_gc: false,
+      suppress_skew: true, show_scale: true, separate_strands: true
+    },
+    adv: {
+      circular_track_slots: [
+        { id: 'features', renderer: 'features', enabled: true, side: 'inside', params: {} },
+        { id: 'ticks', renderer: 'ticks', enabled: false, side: 'inside', params: {} },
+        { id: 'gc_content', renderer: 'dinucleotide_content', enabled: true, side: 'inside', params: { nt: 'GC' } },
+        { id: 'gc_content', renderer: 'dinucleotide_content', enabled: false, side: 'inside', params: { nt: 'GC' } }
+      ],
+      circular_track_slots_axis_index: 0,
+      nt: 'GC',
+      features: ['CDS'],
+      feature_shapes: { CDS: 'arrow' },
+      depth_tracks: [],
+      feature_width_circular: null,
+      depth_width_circular: null,
+      gc_content_width_circular: null,
+      gc_content_radius_circular: null,
+      gc_skew_width_circular: null,
+      gc_skew_radius_circular: null
+    },
+    files: { c_depth: [] },
+    circularConservation: { enabled: false, series: [] },
+    circularRecordList: { value: [] },
+    annotationSets: [],
+    selectedResultIndex: { value: 0 },
+    trackSlotResolvedGeometry: { value: geometry }
   });
+  const resolved = createCircularTrackSlotEditor({ state: circularState(circularGeometry) });
+  const estimated = createCircularTrackSlotEditor({ state: circularState(null) });
+  const circularText = (editor, index, field) => (
+    editor.circularTrackSlotGeometryAutoText(editor.circularTrackSlots()[index], index, field)
+  );
+  assert.equal(circularText(resolved, 2, 'width'), '74.1 px (auto)');
+  for (const index of [1, 3]) {
+    for (const field of ['width', 'radius']) {
+      assert.equal(circularText(resolved, index, field), circularText(estimated, index, field), `${index} ${field}`);
+    }
+  }
+
+  const linearSlots = [
+    { id: 'features', renderer: 'features', enabled: true, side: 'overlay', height: null, spacing: null, z: 0, params: {} },
+    { id: 'gc_content', renderer: 'dinucleotide_content', enabled: true, side: 'below', height: null, spacing: null, z: 0, params: { nt: 'GC' } },
+    { id: 'gc_content', renderer: 'dinucleotide_content', enabled: false, side: 'below', height: null, spacing: null, z: 0, params: { nt: 'GC' } }
+  ];
+  const linearEditor = createLinearTrackSlotEditor({
+    state: {
+      form: { linear_track_layout: 'middle', show_depth: false },
+      adv: {
+        linear_track_slots: linearSlots,
+        linear_track_slots_axis_index: 0,
+        depth_tracks: [],
+        depth_height: null,
+        gc_height: null,
+        nt: 'GC'
+      },
+      linearSeqs: [],
+      annotationSets: [],
+      selectedResultIndex: { value: 0 },
+      trackSlotResolvedGeometry: {
+        value: {
+          mode: 'linear',
+          records: [{ resultIndex: 0, recordIndex: 0, slots: [{ slotIndex: 1, slotId: 'gc_content', heightPx: 77 }] }]
+        }
+      }
+    }
+  });
+  assert.equal(linearEditor.linearTrackSlotGeometryAutoText(linearSlots[1], 1, 'height'), '77 px (auto)');
+  assert.notEqual(linearEditor.linearTrackSlotGeometryAutoText(linearSlots[2], 2, 'height'), '77 px (auto)');
 });
