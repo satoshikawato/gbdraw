@@ -104,6 +104,7 @@ from ...layout.similarity_alignment import (
 from ...linear_comparison import (
     LinearComparison,
     merge_linear_comparisons,
+    validate_linear_comparison_record_ids,
     validate_linear_comparison_topology,
 )
 from ...layout.scalar_axis import linear_scalar_axis_tick_font_size_px  # type: ignore[reportMissingImports]
@@ -1878,6 +1879,7 @@ def assemble_linear_diagram(
         )
     normalized_comparisons = list(merge_linear_comparisons(normalized_comparisons))
     validate_linear_comparison_topology(normalized_comparisons, rows_by_record)
+    validate_linear_comparison_record_ids(normalized_comparisons, records)
     comparisons = [item.matches for item in normalized_comparisons]
     has_blast = bool(normalized_comparisons)
 

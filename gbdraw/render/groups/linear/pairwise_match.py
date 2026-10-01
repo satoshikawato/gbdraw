@@ -432,16 +432,9 @@ class PairWiseMatchGroup:
         subject_record_index = int(
             getattr(self, "subject_record_index", self.comparison_count)
         )
-        query_record_id = (
-            _attribute_text(_row_value(row, "query", ""))
-            or _attribute_text(_row_value(row, "qseqid", ""))
-            or self._record_id_for_index(query_record_index)
-        )
-        subject_record_id = (
-            _attribute_text(_row_value(row, "subject", ""))
-            or _attribute_text(_row_value(row, "sseqid", ""))
-            or self._record_id_for_index(subject_record_index)
-        )
+        # Endpoint records own record identity; table IDs never override them.
+        query_record_id = self._record_id_for_index(query_record_index)
+        subject_record_id = self._record_id_for_index(subject_record_index)
         match_id = self._next_pairwise_match_id(match_index)
         required_attributes = {
             "data-gbdraw-match-id": match_id,

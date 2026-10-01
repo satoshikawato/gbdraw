@@ -946,7 +946,10 @@ def test_current_schema_rejects_populated_wrong_mode_track_fields(
 def test_linear_comparison_kinds_and_payload_round_trip(tmp_path: Path) -> None:
     gbk_a = _source_file(tmp_path / "a.gbk")
     gbk_b = _source_file(tmp_path / "b.gbk")
-    nucleotide = _source_file(tmp_path / "nucleotide.tsv", "a\tb\n")
+    nucleotide = _source_file(
+        tmp_path / "nucleotide.tsv",
+        "record-a\trecord-b\t90\t30\t0\t0\t10\t40\t20\t50\t1e-20\t100\n",
+    )
     protein_table = _table()
     member = OrthogroupMember(
         orthogroup_id="OG1",
