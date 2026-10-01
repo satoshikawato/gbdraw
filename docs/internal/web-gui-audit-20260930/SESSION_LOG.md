@@ -33,3 +33,4 @@
 - 2026-10-01（Owner-delegated、P03）: 比較表のエラーは TABLE_INVALID ではなく既存の COMPARISON_INPUT にした（Web の文言と操作が比較の入力を指すため）。欠けたファイルは depth と同じ INPUT_UNREADABLE。列の位置は新しい整数の locator column（Web 側は P07 で定義）。
 - 2026-10-01 13:57（進め方）: #661（P09）は 13:06 に CLEAN になったが、Owner の指定した順（#658 → #661）を守り、#658 のマージ後に追従させた。
 - 2026-10-01 14:30（staging）: #660 のマージ後の dev staging（Tests run 36812529867、5b7f50d2）で P17 の 3 件は通った。新たに chloroplast-placement.playwright.spec.js:95→55 が 3/3 で失敗。Session を保存して別の context で読み込んだ後、feature editor の Feature placement が 5 秒以内に出ない（"Applying an edit" の busy が続く）。手元で abf25c8f は通り、ceeb38d3（#657 P06）で失敗するので P06 が原因。同じ Session で popup まで abf25c8f 7.8 秒、ceeb38d3 21 秒。規則どおり runtime のマージ（#661、#659）を止め、修正担当を付けた。
+- 2026-10-01 20:20（進め方）: 使用量を減らすため、検証の予算を agent-common.md に追加した（P02 の印がある ID は dev で再実行しない、基準 worktree を作らない、手元で functional を全部流さない、ログはファイルに出して失敗だけ読む、エージェントは CI を待たず orchestrator が watch.sh でまとめて監視する）。完了の定義（修正前に失敗するテスト）は P02 の記録と最小の runner での確認で満たす。
