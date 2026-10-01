@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 import math
 from numbers import Integral, Real
+from types import MappingProxyType
 from typing import Literal, Mapping, cast
 
 from gbdraw.exceptions import ValidationError
@@ -23,33 +24,65 @@ DEFAULT_FEATURE_TYPES = (
 )
 
 
-def _finite_nonnegative(value: object, *, field_name: str) -> float:
-    if isinstance(value, bool) or not isinstance(value, Real):
-        raise ValidationError(f"{field_name} must be a finite number >= 0.")
-    try:
-        normalized = float(value)
-    except (OverflowError, TypeError, ValueError) as exc:
+@dataclass(frozen=True)
+class ComparisonThresholdDomain:
+    """Accepted values of one comparison threshold, published to the Web."""
+
+    minimum: float
+    maximum: float | None
+    integer: bool
+    reason: str
+    requirement: str
+
+
+# Owner of the comparison-threshold domains. The Web evaluates the generated
+# copy only where it uses a threshold before Python (LOSAT post-processing).
+COMPARISON_THRESHOLD_DOMAINS: Mapping[str, ComparisonThresholdDomain] = MappingProxyType({
+    "evalue": ComparisonThresholdDomain(0, None, False, "NONNEGATIVE", "a finite number >= 0"),
+    "bitscore": ComparisonThresholdDomain(0, None, False, "NONNEGATIVE", "a finite number >= 0"),
+    "identity": ComparisonThresholdDomain(0, 100, False, "PERCENT", "a finite number between 0 and 100"),
+    "alignment_length": ComparisonThresholdDomain(0, None, True, "NONNEGATIVE_INTEGER", "an integer >= 0"),
+})
+
+
+def validate_comparison_threshold(field_name: str, value: object) -> float | int:
+    """Return one threshold normalized by its domain or raise a typed error."""
+
+    domain = COMPARISON_THRESHOLD_DOMAINS[field_name]
+    normalized: float | int | None = None
+    if domain.integer:
+        if not isinstance(value, bool) and isinstance(value, Integral):
+            normalized = int(value)
+    elif not isinstance(value, bool) and isinstance(value, Real):
+        try:
+            normalized = float(value)
+        except (OverflowError, TypeError, ValueError):
+            normalized = None
+    if (
+        normalized is None
+        or not math.isfinite(normalized)
+        or normalized < domain.minimum
+        or (domain.maximum is not None and normalized > domain.maximum)
+    ):
         raise ValidationError(
-            f"{field_name} must be a finite number >= 0."
-        ) from exc
-    if not math.isfinite(normalized) or normalized < 0:
-        raise ValidationError(f"{field_name} must be a finite number >= 0.")
+            f"{field_name} must be {domain.requirement}.",
+            diagnostic={"code": "INPUT_INVALID", "field": field_name, "reason": domain.reason},
+        )
     return normalized
 
 
-def _identity_percent(value: object) -> float:
-    normalized = _finite_nonnegative(value, field_name="identity")
-    if normalized > 100:
-        raise ValidationError("identity must be a finite number in [0, 100].")
-    return normalized
+_DINUCLEOTIDE_BASES = frozenset("ACGTU")
 
 
-def _alignment_length(value: object) -> int:
-    if isinstance(value, bool) or not isinstance(value, Integral):
-        raise ValidationError("alignment_length must be >= 0 and an integer.")
-    normalized = int(value)
-    if normalized < 0:
-        raise ValidationError("alignment_length must be >= 0 and an integer.")
+def validate_dinucleotide(value: object, *, field_name: str = "dinucleotide") -> str:
+    """Return an upper-case pair from A, C, G, T, and U (U is counted as T)."""
+
+    normalized = value.strip().upper() if isinstance(value, str) else ""
+    if len(normalized) != 2 or not set(normalized) <= _DINUCLEOTIDE_BASES:
+        raise ValidationError(
+            f"{field_name} must be two letters from A, C, G, T, and U.",
+            diagnostic={"code": "INPUT_INVALID", "field": "dinucleotide", "reason": "DINUCLEOTIDE"},
+        )
     return normalized
 
 
@@ -63,22 +96,12 @@ class ComparisonThresholds:
     alignment_length: int = 0
 
     def __post_init__(self) -> None:
-        object.__setattr__(
-            self,
-            "evalue",
-            _finite_nonnegative(self.evalue, field_name="evalue"),
-        )
-        object.__setattr__(
-            self,
-            "bitscore",
-            _finite_nonnegative(self.bitscore, field_name="bitscore"),
-        )
-        object.__setattr__(self, "identity", _identity_percent(self.identity))
-        object.__setattr__(
-            self,
-            "alignment_length",
-            _alignment_length(self.alignment_length),
-        )
+        for field_name in COMPARISON_THRESHOLD_DOMAINS:
+            object.__setattr__(
+                self,
+                field_name,
+                validate_comparison_threshold(field_name, getattr(self, field_name)),
+            )
 
 
 @dataclass(frozen=True)
@@ -172,11 +195,25 @@ def resolve_mode_profile_overrides(
     return resolved
 
 
+def _camel_threshold_name(name: str) -> str:
+    head, *tail = name.split("_")
+    return head + "".join(part.title() for part in tail)
+
+
 def mode_profiles_payload() -> dict[str, object]:
     """Return the JSON-compatible profile representation used by the web app."""
 
     return {
         "version": MODE_PROFILE_VERSION,
+        "comparisonDomains": {
+            _camel_threshold_name(name): {
+                "minimum": domain.minimum,
+                "maximum": domain.maximum,
+                "integer": domain.integer,
+                "reason": domain.reason,
+            }
+            for name, domain in COMPARISON_THRESHOLD_DOMAINS.items()
+        },
         "featureTypes": list(DEFAULT_FEATURE_TYPES),
         "modes": {
             mode: {
@@ -200,6 +237,8 @@ def mode_profiles_payload() -> dict[str, object]:
 
 __all__ = [
     "CIRCULAR_MODE_PROFILE",
+    "COMPARISON_THRESHOLD_DOMAINS",
+    "ComparisonThresholdDomain",
     "ComparisonThresholds",
     "DEFAULT_FEATURE_TYPES",
     "DiagramMode",
@@ -210,4 +249,6 @@ __all__ = [
     "get_mode_profile",
     "mode_profiles_payload",
     "resolve_mode_profile_overrides",
+    "validate_comparison_threshold",
+    "validate_dinucleotide",
 ]

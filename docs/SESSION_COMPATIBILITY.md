@@ -8,6 +8,29 @@ session files, canonical render requests, and saved LOSAT results. The concise
 documents current support. Tutorials and the FAQ describe what a user should
 do; release notes record when a format changed.
 
+## Unreleased: value checks, derived label maps, and definition spacing
+
+Session version 44 and request schema 8 are unchanged. Replaying a Session, or
+generating from it, applies the value checks shared with the CLI and Python API:
+window, step, and depth window or step must be positive integers, the
+dinucleotide must be two letters from `A`, `C`, `G`, `T`, and `U` (`U` counts
+as `T`), font sizes must be greater than zero, and stroke widths must be zero
+or greater. A Session holding another value fails with the field or setting
+named instead of drawing an empty or flat track.
+
+CLI Sessions and Sessions saved from `main` can contain the label maps
+`whitelist_map`, `priority_map`, and `label_override_rules` under
+`labels.filtering`. They are compiled from the label tables during a render and
+are not settings. Load no longer keeps them as a preserved
+`labels.filtering.raw` setting, and attaching a label table recompiles them, so
+Qualifier Priority and whitelist edits take effect.
+
+A Circular request that sets `objects.definition.circular.font_size` without
+`objects.definition.circular.interval` uses the font size plus 2, truncated to
+an integer, as the definition line interval. This restores the 0.13.0 Web and
+CLI spacing. The rule is applied when the overrides are applied, so the stored
+request is unchanged and replay writes the same overrides back.
+
 ## Session 44: typed Similarity alignment display state
 
 The current Session 44 writer uses canonical request schema 8 to move

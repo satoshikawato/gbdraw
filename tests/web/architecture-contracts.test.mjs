@@ -255,6 +255,31 @@ const assertMetadataImportOwners = (sources) => {
   ]);
 };
 
+// IN-01 and GE-02 (Web GUI audit 2026-09-30, D-04 and D-05) retire the live
+// definition and stroke rewrites. Their operators and imports may shrink or
+// disappear without editing this guard; they may not grow, and no owner is added.
+const RETIRING_REPLACEMENT_CEILINGS = Object.freeze({
+  'app/legend-layout/reposition-actions.js': 2,
+  'app/results.js': 4,
+  'app/svg-styles.js': 2
+});
+const retiringReplacementOperators = (detected, path) => {
+  const ceiling = RETIRING_REPLACEMENT_CEILINGS[path];
+  const match = detected.operatorMatchesByCapability['Mounted SVG/Result replacement']
+    .find((entry) => entry.path === path);
+  if (!match) return [];
+  assert.ok(match.count > 0 && match.count <= ceiling,
+    `${path}: retiring Result replacement may only contract (ceiling ${ceiling})`);
+  return [{ path, count: match.count }];
+};
+const importersWithRetiringOwners = (target, required, retiring) => {
+  const actual = importersOf(target);
+  const allowed = new Set([...required, ...retiring]);
+  assert.deepEqual(actual.filter((path) => !allowed.has(path)), [],
+    `${target}: no importer may be added`);
+  return [...required, ...retiring.filter((path) => actual.includes(path))].sort();
+};
+
 // A removed replacement is a contraction, not a missing canonical owner.
 // Keep the required operator location and the existing five-operator ceiling.
 const legendReplacementCount = (detected) => {
@@ -304,14 +329,17 @@ test('Worker construction and the diagram-generation client have explicit owners
       ['workers/diagram-generation-worker.js', 2]
     ])
   );
-  assert.deepEqual(importersOf('services/diagram-generation.js'), [
-    'app/app-setup.js',
-    'app/feature-metadata-extraction.js',
-    'app/legend/entry-actions.js',
-    'app/record-discovery.js',
-    'app/results.js',
-    'app/run-analysis.js'
-  ]);
+  assert.deepEqual(importersOf('services/diagram-generation.js'), importersWithRetiringOwners(
+    'services/diagram-generation.js',
+    [
+      'app/app-setup.js',
+      'app/feature-metadata-extraction.js',
+      'app/legend/entry-actions.js',
+      'app/record-discovery.js',
+      'app/run-analysis.js'
+    ],
+    ['app/results.js']
+  ));
 });
 
 test('Pyodide initialization and helper execution are Worker-only', () => {
@@ -434,11 +462,11 @@ test('History intent and SVG admission have one production ownership path', () =
     'state.js'
   ]);
   assertMetadataImportOwners(productionSources);
-  assert.deepEqual(importersOf('services/svg-result-normalization.js'), [
-    'app/svg-styles.js',
-    'services/config.js',
-    'services/svg-result-ingestion.js'
-  ]);
+  assert.deepEqual(importersOf('services/svg-result-normalization.js'), importersWithRetiringOwners(
+    'services/svg-result-normalization.js',
+    ['services/config.js', 'services/svg-result-ingestion.js'],
+    ['app/svg-styles.js']
+  ));
   assert.doesNotMatch(
     productionSources.get('app/session-feature-metadata.js'),
     /DOMParser|parseFromString|result\?\.content/
@@ -584,15 +612,15 @@ test('shared privileged detectors preserve the characterized current-source fact
       { path: 'app/feature-editor/svg-actions.js', count: 4 },
       { path: 'app/legend-layout/canvas-actions.js', count: 2 },
       { path: 'app/legend-layout/diagram-drag.js', count: 2 },
-      { path: 'app/legend-layout/reposition-actions.js', count: 2 },
+      ...retiringReplacementOperators(detected, 'app/legend-layout/reposition-actions.js'),
       { path: 'app/legend/drag-actions.js', count: 4 },
       { path: 'app/legend/entry-actions.js', count: legendReplacementCount(detected) },
       { path: 'app/legend/sort-actions.js', count: 2 },
       { path: 'app/legend/stroke-actions.js', count: 2 },
       { path: 'app/preview-runtime.js', count: 4 },
-      { path: 'app/results.js', count: 4 },
+      ...retiringReplacementOperators(detected, 'app/results.js'),
       { path: 'app/run-analysis.js', count: 2 },
-      { path: 'app/svg-styles.js', count: 2 },
+      ...retiringReplacementOperators(detected, 'app/svg-styles.js'),
       { path: 'services/config.js', count: 5 },
       { path: 'services/history-snapshot.js', count: 1 },
       { path: 'services/svg-result-ingestion.js', count: 1 }
@@ -663,6 +691,25 @@ test('legend replacement characterization permits contraction but rejects growth
     if (count === 4 || count === 5) assert.equal(legendReplacementCount(detected), count);
     else assert.throws(() => legendReplacementCount(detected));
   }
+});
+
+test('retiring Result replacement owners may contract or disappear but never grow', () => {
+  for (const [path, ceiling] of Object.entries(RETIRING_REPLACEMENT_CEILINGS)) {
+    for (const count of [0, 1, ceiling, ceiling + 1]) {
+      const code = 'results.value = candidate;\n'.repeat(count);
+      const detected = detectPrivilegedWebCapabilities(new Map([[path, code]]));
+      if (count <= ceiling) {
+        assert.deepEqual(retiringReplacementOperators(detected, path), count ? [{ path, count }] : []);
+      } else {
+        assert.throws(() => retiringReplacementOperators(detected, path), /may only contract/);
+      }
+    }
+  }
+  const required = importersOf('services/diagram-generation.js').filter((path) => path !== 'app/results.js');
+  assert.throws(
+    () => importersWithRetiringOwners('services/diagram-generation.js', required.slice(1), ['app/results.js']),
+    /no importer may be added/
+  );
 });
 
 test('versioned architecture detectors expose stable normalized subjects', () => {

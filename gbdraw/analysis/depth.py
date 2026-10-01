@@ -18,6 +18,11 @@ from gbdraw.exceptions import ParseError, ValidationError  # type: ignore[report
 
 DEPTH_COLUMNS = ["reference_name", "position", "depth"]
 _DEPTH_TSV_CACHE_MAXSIZE = 8
+_UNREADABLE = {"code": "INPUT_UNREADABLE"}
+
+
+def _invalid_depth(reason: str) -> dict[str, str]:
+    return {"code": "DEPTH_INVALID", "reason": reason}
 
 
 def _is_int_like(value: str) -> bool:
@@ -41,14 +46,17 @@ def _first_line_has_header(path: Path) -> bool:
         with path.open("rt", encoding="utf-8") as handle:
             first_line = handle.readline()
     except OSError as exc:
-        raise ParseError(f"Unable to read depth file '{path}': {exc}") from exc
+        raise ParseError(
+            f"Unable to read depth file '{path}': {exc}", diagnostic=_UNREADABLE
+        ) from exc
 
     if not first_line:
         return False
     fields = first_line.rstrip("\n\r").split("\t")
     if len(fields) < 3:
         raise ParseError(
-            f"Depth file '{path}' must contain at least 3 tab-separated columns."
+            f"Depth file '{path}' must contain at least 3 tab-separated columns.",
+            diagnostic={"code": "TABLE_INVALID", "reason": "THREE_COLUMNS"},
         )
     return not (_is_int_like(fields[1]) and _is_float_like(fields[2]))
 
@@ -56,13 +64,15 @@ def _first_line_has_header(path: Path) -> bool:
 def _depth_tsv_cache_key(path: str) -> tuple[str, int, int]:
     depth_path = Path(path)
     if not depth_path.exists():
-        raise ParseError(f"Depth file does not exist: {path}")
+        raise ParseError(f"Depth file does not exist: {path}", diagnostic=_UNREADABLE)
     if not depth_path.is_file():
-        raise ParseError(f"Depth path is not a file: {path}")
+        raise ParseError(f"Depth path is not a file: {path}", diagnostic=_UNREADABLE)
     try:
         file_stat = depth_path.stat()
     except OSError as exc:
-        raise ParseError(f"Unable to read depth file '{path}': {exc}") from exc
+        raise ParseError(
+            f"Unable to read depth file '{path}': {exc}", diagnostic=_UNREADABLE
+        ) from exc
     try:
         resolved_path = str(depth_path.resolve())
     except OSError:
@@ -89,7 +99,10 @@ def _read_depth_tsv_cached(resolved_path: str, mtime_ns: int, size: int) -> Data
             },
         )
     except ValueError as exc:
-        raise ParseError(f"Unable to parse depth file '{resolved_path}': {exc}") from exc
+        raise ParseError(
+            f"Unable to parse depth file '{resolved_path}': {exc}",
+            diagnostic=_invalid_depth("DEPTH_VALUES"),
+        ) from exc
 
     _validate_depth_table(depth_table)
     return depth_table
@@ -123,11 +136,20 @@ def _normalize_depth_table(depth_table: DataFrame) -> DataFrame:
         normalized = depth_table.iloc[:, [0, 1, 2]].copy()
         normalized.columns = DEPTH_COLUMNS
     else:
-        raise ValidationError("Depth table must contain at least 3 columns.")
+        raise ValidationError(
+            "Depth table must contain at least 3 columns.",
+            diagnostic={"code": "TABLE_INVALID", "reason": "THREE_COLUMNS"},
+        )
 
     normalized["reference_name"] = normalized["reference_name"].astype("string")
-    normalized["position"] = pd.to_numeric(normalized["position"], errors="raise").astype("int64")
-    normalized["depth"] = pd.to_numeric(normalized["depth"], errors="raise").astype("float64")
+    try:
+        normalized["position"] = pd.to_numeric(normalized["position"], errors="raise").astype("int64")
+        normalized["depth"] = pd.to_numeric(normalized["depth"], errors="raise").astype("float64")
+    except (TypeError, ValueError) as exc:
+        raise ValidationError(
+            "Depth table positions and values must be numeric.",
+            diagnostic=_invalid_depth("DEPTH_VALUES"),
+        ) from exc
     _validate_depth_table(normalized)
     return normalized
 
@@ -136,11 +158,20 @@ def _validate_depth_table(depth_table: DataFrame) -> None:
     if depth_table.empty:
         return
     if depth_table["reference_name"].isna().any():
-        raise ValidationError("Depth table contains missing reference names.")
+        raise ValidationError(
+            "Depth table contains missing reference names.",
+            diagnostic=_invalid_depth("REFERENCE_REQUIRED"),
+        )
     if (depth_table["position"] <= 0).any():
-        raise ValidationError("Depth positions must be 1-based positive integers.")
+        raise ValidationError(
+            "Depth positions must be 1-based positive integers.",
+            diagnostic=_invalid_depth("POSITIVE_INTEGER"),
+        )
     if (depth_table["depth"] < 0).any():
-        raise ValidationError("Depth values must be non-negative.")
+        raise ValidationError(
+            "Depth values must be non-negative.",
+            diagnostic=_invalid_depth("NONNEGATIVE"),
+        )
 
 
 def _unique_references(depth_table: DataFrame) -> list[str]:
@@ -160,7 +191,8 @@ def _select_record_depth_rows(record: SeqRecord, depth_table: DataFrame) -> Data
 
     raise ValidationError(
         "Depth file references do not match record "
-        f"'{record_id}'. Available references: {', '.join(references)}"
+        f"'{record_id}'. Available references: {', '.join(references)}",
+        diagnostic=_invalid_depth("REFERENCE_MISMATCH"),
     )
 
 

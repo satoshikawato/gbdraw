@@ -288,3 +288,36 @@ test('returns deterministic failures for identical inputs', () => {
     evaluateSessionRegenerationContract(structuredClone(input))
   );
 });
+
+// N-14 (Web GUI audit 2026-09-30): an absent metric used to read as zero, so an
+// exact-zero rule passed without any observation.
+test('rejects a missing or non-finite metric instead of reading it as zero', () => {
+  for (const [key, code] of [
+    ['applicationSvgParseCount', 'REGEN_EMPTY_APPLICATION_PARSE'],
+    ['generatedArtifactHeavyTraversalCount', 'REGEN_HEAVY_HISTORY_TRAVERSAL'],
+    ['preReadyLegendDomFullScanCount', 'PREVIEW_LEGEND_SCAN'],
+    ['rendererExecutionCount', 'REGEN_RENDERER_EXECUTION']
+  ]) {
+    const metrics = successMetrics('first-generate');
+    delete metrics[key];
+    const failures = evaluateSessionRegenerationContract({
+      profile: 'first-generate',
+      metrics,
+      events: successEvents(),
+      resultCount: 1,
+      state: { terminalOutcome: 'success', interactiveProbePassed: true }
+    });
+    assert.deepEqual(
+      failures,
+      [`${code} [${key.startsWith('pre') ? 'SWC-WEB-PREVIEW-001' : 'SWC-WEB-REGEN-001'}] ${key} was not observed; a missing metric is not read as zero.`]
+    );
+  }
+  expectFailure({ code: 'REGEN_EMPTY_SERIALIZATION', overrides: { svgSerializationCount: Number.NaN } });
+  expectFailure({ code: 'REGEN_EMPTY_SERIALIZATION', overrides: { svgSerializationCount: undefined } });
+  expectFailure({ code: 'REGEN_EMPTY_SERIALIZATION', overrides: { svgSerializationCount: '0' } });
+  assert.deepEqual(evaluateSessionRegenerationContract({
+    profile: 'saved-preview',
+    metrics: { workerConstructionCount: 0, workerInitializationCount: 0, previewBinderInvocationCount: 1, previewReadyReceiptAcceptedCount: 1 },
+    state: { selectedResultCount: 1, currentCatalog: true, activeDraftCommittedDistinct: true, interactiveProbePassed: true }
+  }), ['SAVED_PREVIEW_ADOPTION [SWC-WEB-PREVIEW-001] previewMountAdoptionCount was not observed; a missing metric is not read as zero.']);
+});

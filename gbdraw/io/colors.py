@@ -329,7 +329,8 @@ def read_color_table(color_table_file: str) -> Optional[DataFrame]:
         if not _is_specific_table_color(color):
             raise ValidationError(
                 f"Invalid color {color!r} in '{color_table_file}' at line {idx + 1}. "
-                "Use none, an SVG color name, #RGB, or #RRGGBB."
+                "Use none, an SVG color name, #RGB, or #RRGGBB.",
+                diagnostic={"code": "TABLE_INVALID", "field": "color", "reason": "COLOR", "row": idx + 1},
             )
 
     return df

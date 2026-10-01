@@ -544,6 +544,16 @@ class ObjectsDefinitionLinearConfig:
         )
 
 
+def circular_definition_interval_for_font(font_size: float) -> int:
+    """Return the Circular definition line interval that follows its font size.
+
+    The CLI ``--definition_font_size`` and a canonical request that sets
+    ``objects.definition.circular.font_size`` without an interval both use it.
+    """
+
+    return int(float(font_size) + 2.0)
+
+
 @dataclass(frozen=True)
 class ObjectsDefinitionCircularConfig:
     interval: int

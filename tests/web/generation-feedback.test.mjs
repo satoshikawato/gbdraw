@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
+import { assertKnownDefect } from './helpers/known-defect.mjs';
 
 // Hold real client boundaries; no clock drives progress.
 globalThis.location = { href: 'https://example.test/gbdraw/web/' };
@@ -151,4 +152,27 @@ test('Generate helper preparation reports real cold initialization and shares th
   assert.equal(canceledWorker.terminated, true);
   assertClean(canceledWorker);
   assert.equal(canceledEvents.length, 1);
+});
+
+// GE-09 (Web GUI audit 2026-09-30): a Cancel while no Worker-side request is
+// active (for example, during JS-side preparation) keeps the warm Worker, so the
+// next run is not a cold start.
+test('Cancel without Worker-side work keeps the warm Worker (GE-09 known defect)', async () => {
+  const helper = runDiagramHelperOperation('evaluateRules', { rules: [] });
+  const worker = ControlledWorker.instances.at(-1);
+  worker.initialize();
+  await flush();
+  const requestId = worker.messages.find(message => message.type === 'helper').requestId;
+  worker.emit({ type: 'helper', requestId, ok: true, result: { rules: [] } });
+  await helper;
+  assertClean(worker);
+  const constructions = ControlledWorker.instances.length;
+  const canceled = cancelDiagramGeneration();
+  await assertKnownDefect('GE-09', () => {
+    assert.deepEqual(
+      { canceled, terminated: Boolean(worker.terminated), constructions: ControlledWorker.instances.length },
+      { canceled: false, terminated: false, constructions }
+    );
+  });
+  disposeDiagramGenerationWorker();
 });

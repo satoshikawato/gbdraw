@@ -501,18 +501,12 @@ def _get_args(
         parser.error("--gc_content_large_tick_interval must be > 0")
     if args.gc_content_small_tick_interval is not None and args.gc_content_small_tick_interval <= 0:
         parser.error("--gc_content_small_tick_interval must be > 0")
-    if args.gc_content_tick_font_size is not None and args.gc_content_tick_font_size <= 0:
-        parser.error("--gc_content_tick_font_size must be > 0")
     if args.gc_skew_width is not None and args.gc_skew_width <= 0:
         parser.error("--gc_skew_width must be > 0")
     if args.gc_skew_radius is not None and args.gc_skew_radius <= 0:
         parser.error("--gc_skew_radius must be > 0")
     if args.depth_width is not None and args.depth_width <= 0:
         parser.error("--depth_width must be > 0")
-    if args.depth_window is not None and args.depth_window <= 0:
-        parser.error("--depth_window must be > 0")
-    if args.depth_step is not None and args.depth_step <= 0:
-        parser.error("--depth_step must be > 0")
     if args.conservation_ring_width is not None and args.conservation_ring_width <= 0:
         parser.error("--conservation_ring_width must be > 0")
     if args.conservation_ring_gap is not None and args.conservation_ring_gap <= 0:
@@ -548,8 +542,6 @@ def _get_args(
         parser.error("--depth_large_tick_interval must be > 0")
     if args.depth_small_tick_interval is not None and args.depth_small_tick_interval <= 0:
         parser.error("--depth_small_tick_interval must be > 0")
-    if args.depth_tick_font_size is not None and args.depth_tick_font_size <= 0:
-        parser.error("--depth_tick_font_size must be > 0")
     for option_name in (
         "depth_track_large_tick_interval",
         "depth_track_small_tick_interval",
@@ -565,8 +557,6 @@ def _get_args(
                 parser.error(f"--{option_name} values must be numbers or auto")
             if numeric_option_value <= 0:
                 parser.error(f"--{option_name} values must be > 0")
-    if args.tick_label_font_size is not None and args.tick_label_font_size <= 0:
-        parser.error("--tick_label_font_size must be > 0")
     if args.circular_label_spacing is not None and args.circular_label_spacing <= 0:
         parser.error("--circular_label_spacing must be > 0")
     if args.circular_track_order and args.circular_track_slot:
@@ -819,8 +809,6 @@ def run_circular_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
     gc_content_tick_font_size: Optional[float] = args.gc_content_tick_font_size
     gc_skew_width: Optional[float] = args.gc_skew_width
     gc_skew_radius: Optional[float] = args.gc_skew_radius
-    if plot_title_font_size is not None and float(plot_title_font_size) <= 0:
-        raise ValidationError("plot_title_font_size must be > 0")
     depth_tracks = depth_track_inputs_from_cli(
         depth_track_groups,
         labels=depth_track_labels,
@@ -948,10 +936,6 @@ def run_circular_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
         "objects.legends.font_size.long",
     ):
         override_candidates[size_path] = legend_font_size
-    if definition_font_size is not None:
-        override_candidates["objects.definition.circular.interval"] = (
-            int(float(definition_font_size) + 2.0)
-        )
     config_dict = modify_config_dict(
         config_dict,
         {

@@ -1692,20 +1692,10 @@ def _migrate_flat_config_overrides(
         consumed.add("circular_definition_font_size")
         value = overrides["circular_definition_font_size"]
         if value is not None:
+            # The interval follows this font when the override is applied.
             assign(
                 "objects.definition.circular.font_size",
                 value,
-                source="circular_definition_font_size",
-            )
-            try:
-                interval = int(float(value) + 2)
-            except (TypeError, ValueError, OverflowError) as exc:
-                raise CanonicalRequestDecodingError(
-                    f"{path}.circular_definition_font_size must be numeric."
-                ) from exc
-            assign(
-                "objects.definition.circular.interval",
-                interval,
                 source="circular_definition_font_size",
             )
 

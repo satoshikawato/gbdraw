@@ -103,6 +103,7 @@ from gbdraw.config.models import (  # type: ignore[reportMissingImports]
 from gbdraw.config.models.labels import LabelsFilteringConfig  # type: ignore[reportMissingImports]
 from gbdraw.io.colors import load_default_colors, read_color_table  # type: ignore[reportMissingImports]
 from gbdraw.labels.filtering import (  # type: ignore[reportMissingImports]
+    DERIVED_LABEL_FILTERING_KEYS,
     read_filter_list_file,
     read_label_override_file,
     read_qualifier_priority_file,
@@ -162,6 +163,7 @@ from gbdraw.tracks import (  # type: ignore[reportMissingImports]
     parse_linear_track_slots,
     parse_nonnegative_integer,
 )
+from gbdraw.tracks.parsing import slot_dinucleotide  # type: ignore[reportMissingImports]
 
 from .prepared import ResolvedFeatureInputs, resolve_feature_inputs
 
@@ -283,14 +285,16 @@ def _resolve_diagram_options_config(
         return cfg
 
     filtering = copy.deepcopy(cfg.labels.filtering.as_dict())
+    # Maps compiled by a previous render (for example, persisted in a CLI
+    # Session config) would otherwise shadow the attached tables.
+    for derived_key in DERIVED_LABEL_FILTERING_KEYS:
+        filtering.pop(derived_key, None)
     if whitelist_given:
         filtering["whitelist_df"] = whitelist
     if priority_given:
         filtering["qualifier_priority_df"] = priority
     if override_given:
         filtering["label_override_df"] = label_override
-        # A previous render may have compiled a different table on this config.
-        filtering.pop("label_override_rules", None)
     cfg = replace(
         cfg,
         labels=replace(
@@ -378,10 +382,7 @@ def _dinucleotides_from_circular_slots(
     for slot in slots or []:
         if not slot.enabled or str(slot.renderer) not in {"dinucleotide_content", "dinucleotide_skew"}:
             continue
-        params = slot.params or {}
-        nt = str(params.get("nt", params.get("dinucleotide", default_nt)) or default_nt).upper()
-        if len(nt) >= 2:
-            nts.add(nt)
+        nts.add(slot_dinucleotide(slot.params, default_nt))
     return nts
 
 
@@ -699,8 +700,6 @@ def _validate_depth_config(depth_config) -> None:
         raise ValidationError("depth_large_tick_interval must be > 0")
     if depth_config.small_tick_interval is not None and float(depth_config.small_tick_interval) <= 0:
         raise ValidationError("depth_small_tick_interval must be > 0")
-    if depth_config.tick_font_size is not None and float(depth_config.tick_font_size) <= 0:
-        raise ValidationError("depth_tick_font_size must be > 0")
 
 
 def _validate_gc_content_config(gc_content_config) -> None:
@@ -717,7 +716,6 @@ def _validate_gc_content_config(gc_content_config) -> None:
     for attr, label in (
         ("large_tick_interval", "gc_content_large_tick_interval"),
         ("small_tick_interval", "gc_content_small_tick_interval"),
-        ("tick_font_size", "gc_content_tick_font_size"),
     ):
         value = getattr(gc_content_config, attr, None)
         if value is not None and (not math.isfinite(float(value)) or float(value) <= 0):

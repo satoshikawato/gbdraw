@@ -204,6 +204,16 @@ impossible layouts, incompatible track stacks, and unsafe output paths fail
 before a successful result is reported. A warning identifies an ignored or
 adjusted combination; it does not make the requested combination valid.
 
+The command line, the Python API, and Web or Session requests share one set of
+value checks. `--window`, `--step`, `--depth_window`, and `--depth_step` take
+positive integers. `-n/--nt` and a track slot's `nt` take two letters from `A`,
+`C`, `G`, `T`, and `U` in any case; `U` is counted as `T`, and track and legend
+names keep the given letters in upper case, for example `AU skew`. Font sizes
+must be greater than zero and stroke widths zero or greater; offsets, spacing,
+`track_axis_gap`, and label rotation keep their current ranges. A rejected
+value stops with an `ERROR:` line that names the option or setting instead of
+drawing an empty or flat track or printing a traceback.
+
 ## Rotate a plastome and place a multipart feature
 
 This example keeps the colors, radial labels, structural-region brackets and GC

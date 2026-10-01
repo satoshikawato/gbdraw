@@ -410,7 +410,7 @@ def _get_args(args) -> argparse.Namespace:
     parser.add_argument(
         '-n',
         '--nt',
-        help='dinucleotide skew (default: GC). ',
+        help='dinucleotide skew: two letters from A, C, G, T, and U; case-insensitive, U counts as T (default: GC).',
         type=str,
         default="GC")
     _add_window_step_args(parser)
@@ -790,10 +790,6 @@ def _get_args(args) -> argparse.Namespace:
         parser.error("--align_orthogroup_feature requires --protein_blastp_mode orthogroup")
     if args.depth_height is not None and args.depth_height <= 0:
         parser.error("--depth_height must be > 0")
-    if args.depth_window is not None and args.depth_window <= 0:
-        parser.error("--depth_window must be > 0")
-    if args.depth_step is not None and args.depth_step <= 0:
-        parser.error("--depth_step must be > 0")
     if args.depth_min is not None and args.depth_min < 0:
         parser.error("--depth_min must be >= 0")
     if args.depth_max is not None and args.depth_max < 0:
@@ -804,8 +800,6 @@ def _get_args(args) -> argparse.Namespace:
         parser.error("--depth_large_tick_interval must be > 0")
     if args.depth_small_tick_interval is not None and args.depth_small_tick_interval <= 0:
         parser.error("--depth_small_tick_interval must be > 0")
-    if args.depth_tick_font_size is not None and args.depth_tick_font_size <= 0:
-        parser.error("--depth_tick_font_size must be > 0")
     for option_name in (
         "depth_track_height",
         "depth_track_large_tick_interval",
@@ -838,8 +832,6 @@ def _get_args(args) -> argparse.Namespace:
         parser.error("--gc_content_large_tick_interval must be > 0")
     if args.gc_content_small_tick_interval is not None and args.gc_content_small_tick_interval <= 0:
         parser.error("--gc_content_small_tick_interval must be > 0")
-    if args.gc_content_tick_font_size is not None and args.gc_content_tick_font_size <= 0:
-        parser.error("--gc_content_tick_font_size must be > 0")
     if args.linear_track_order and args.linear_track_slot:
         parser.error("--linear_track_order cannot be combined with --linear_track_slot")
     if args.linear_track_axis_index is not None and not (args.linear_track_order or args.linear_track_slot):
@@ -1231,8 +1223,6 @@ def run_linear_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
     axis_stroke_width: Optional[float] = args.axis_stroke_width
     line_stroke_color: Optional[str] = args.line_stroke_color
     line_stroke_width: Optional[float] = args.line_stroke_width
-    if plot_title_font_size is not None and float(plot_title_font_size) <= 0:
-        raise ValidationError("plot_title_font_size must be > 0")
     if args.linear_label_spacing is not None and float(args.linear_label_spacing) <= 0:
         raise ValidationError("linear_label_spacing must be > 0")
     filtering_override = dict(filtering_cfg)

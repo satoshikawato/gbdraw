@@ -296,7 +296,7 @@ def test_build_linear_diagram_forwards_alignment_length(monkeypatch: pytest.Monk
 
 @pytest.mark.linear
 def test_assemble_linear_diagram_rejects_negative_alignment_length() -> None:
-    with pytest.raises(ValidationError, match="alignment_length must be >= 0"):
+    with pytest.raises(ValidationError, match="alignment_length must be an integer >= 0"):
         assemble_linear_diagram_from_records(
             [_build_record()],
             cfg=apply_config_overrides(None, None),

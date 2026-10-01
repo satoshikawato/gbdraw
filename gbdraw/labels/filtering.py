@@ -24,6 +24,10 @@ from ..features.selector_values import (
 logger = logging.getLogger(__name__)
 
 DEFAULT_LABEL_PRIORITY = ["product", "gene", "locus_tag", "protein_id", "old_locus_tag", "note"]
+# Compiled by ``preprocess_label_filtering`` from the attached tables. They are
+# render artifacts, never user settings, and are recompiled whenever a table is
+# attached (SE-08).
+DERIVED_LABEL_FILTERING_KEYS = frozenset({"whitelist_map", "priority_map", "label_override_rules"})
 _LABEL_OVERRIDE_REQUIRED_COLS = [
     "record_id",
     "feature_type",
@@ -409,7 +413,7 @@ def preprocess_label_filtering(label_filtering: dict):
     override_df = label_filtering.get("label_override_df")
     if isinstance(override_df, str):
         override_df = None
-    already_processed = "whitelist_map" in label_filtering and "priority_map" in label_filtering
+    already_processed = {"whitelist_map", "priority_map"} <= label_filtering.keys()
     if already_processed and ("label_override_rules" in label_filtering or override_df is None):
         return label_filtering
 
@@ -529,6 +533,7 @@ def get_label_text(feature: Any, label_filtering: dict, record_id: Optional[str]
 
 
 __all__ = [
+    "DERIVED_LABEL_FILTERING_KEYS",
     "get_label_text",
     "preprocess_label_filtering",
     "read_filter_list_file",

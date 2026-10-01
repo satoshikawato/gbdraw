@@ -2701,9 +2701,12 @@ def test_encode_rejects_noncanonical_option_values(tmp_path: Path) -> None:
     source = _source_file(tmp_path / "record.gbk")
     invalid_config = load_default_config()
     invalid_config["labels"]["filtering"]["extension"] = object()
+    # Typed options now reject a non-integer window themselves (X-02).
+    with pytest.raises(ValidationError, match="window must be a positive integer"):
+        LinearDiagramOptions(window="10")
     invalid_type = LinearDiagramRequest(
         records=(RecordInput(source=GenBankInputSource(source)),),
-        options=LinearDiagramOptions(window="10"),
+        options=LinearDiagramOptions(plot_title=123),
     )
     invalid_json = LinearDiagramRequest(
         records=(RecordInput(source=GenBankInputSource(source)),),

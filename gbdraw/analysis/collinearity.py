@@ -191,7 +191,8 @@ def normalize_collinearity_color_mode(mode: str | None) -> CollinearityColorMode
     if normalized not in COLLINEARITY_COLOR_MODES:
         raise ValidationError(
             "collinear_color_mode must be one of: "
-            + ", ".join(COLLINEARITY_COLOR_MODES)
+            + ", ".join(COLLINEARITY_COLOR_MODES),
+            diagnostic={"code": "INPUT_INVALID", "field": "collinear_color_mode", "reason": "COLLINEAR_COLOR_MODE"},
         )
     return normalized  # type: ignore[return-value]
 
@@ -215,7 +216,8 @@ def normalize_collinearity_anchor_mode(mode: str | None) -> CollinearityAnchorMo
     if normalized not in COLLINEARITY_ANCHOR_MODES:
         raise ValidationError(
             "collinear_anchor_mode must be one of: "
-            + ", ".join(COLLINEARITY_ANCHOR_MODES)
+            + ", ".join(COLLINEARITY_ANCHOR_MODES),
+            diagnostic={"code": "INPUT_INVALID", "field": "collinear_anchor_mode", "reason": "COLLINEAR_ANCHOR_MODE"},
         )
     return normalized  # type: ignore[return-value]
 
@@ -225,7 +227,8 @@ def normalize_collinearity_search_scope(scope: str | None) -> CollinearitySearch
     if normalized not in COLLINEARITY_SEARCH_SCOPES:
         raise ValidationError(
             "collinear_search_scope must be one of: "
-            + ", ".join(COLLINEARITY_SEARCH_SCOPES)
+            + ", ".join(COLLINEARITY_SEARCH_SCOPES),
+            diagnostic={"code": "INPUT_INVALID", "field": "collinear_search_scope", "reason": "ADJACENT_ALL"},
         )
     return normalized  # type: ignore[return-value]
 
