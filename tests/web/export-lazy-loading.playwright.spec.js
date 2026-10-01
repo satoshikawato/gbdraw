@@ -23,8 +23,15 @@ const installRequestCounter = (page) => {
   return (path) => counts.get(path) || 0;
 };
 
+const displayedErrorOperation = (page) => page.evaluate(
+  () => window.__GBDRAW_APP__.errorDisplay?.operation || null
+);
+
+// The fixture is a legacy imported SVG without composition metadata. Mounting
+// it must leave the displayed error unchanged.
 const mountExportFixture = async (page, { interactive = false } = {}) => {
   await page.waitForFunction(() => window.__GBDRAW_APP__);
+  const errorBeforeMount = await displayedErrorOperation(page);
   await page.evaluate(async ({ interactive }) => {
     const { state } = await import('/gbdraw/web/js/state.js');
     const { admitLegacyImportedResults, createLegacyImportResultSource } = await import(
@@ -85,6 +92,9 @@ const mountExportFixture = async (page, { interactive = false } = {}) => {
     } : { schema: 4, items: [] };
   }, { interactive });
   await expect(page.locator('.origin-top svg')).toBeAttached();
+  // The preview binds the mounted root in microtasks; two frames cover it.
+  await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+  expect(await displayedErrorOperation(page)).toBe(errorBeforeMount);
 };
 
 const expectNoPdfOrInteractiveRequests = (requestCount) => {

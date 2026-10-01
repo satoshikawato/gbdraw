@@ -2210,6 +2210,13 @@ export const createAppSetup = () => {
     || Object.keys(labelTextBulkOverrides).length > 0
     || Object.keys(labelVisibilityOverrides).length > 0
   );
+  // A legacy imported SVG without composition metadata stays unbound: it has
+  // no composition to capture and no canvas to pad.
+  const shouldBindComposition = (context) => (
+    context.root.getAttribute(COMPOSITION_SCHEMA_ATTRIBUTE) !== null
+    || context.root.getAttribute(COMPOSITION_METADATA_ATTRIBUTE) !== null
+    || (!context.bindingOptions.isIncrementalEdit && context.sourceClass !== 'legacy-import')
+  );
   previewRuntime.configureMountedResultBinder({
     async adoptLegend(context) {
       if (context.phase === 'result-selection' && !context.bindingOptions.trustedRestore) {
@@ -2231,18 +2238,7 @@ export const createAppSetup = () => {
     },
     bindComposition(context) {
       if (context.bindingOptions.trustedRestore) return;
-      const hasCompositionMetadata = (
-        context.root.getAttribute(COMPOSITION_SCHEMA_ATTRIBUTE) !== null
-        || context.root.getAttribute(COMPOSITION_METADATA_ATTRIBUTE) !== null
-      );
-      const shouldBind = (
-        hasCompositionMetadata
-        || (
-          !context.bindingOptions.isIncrementalEdit
-          && context.sourceClass !== 'legacy-import'
-        )
-      );
-      if (shouldBind) legendLayout.captureBaseConfig();
+      if (shouldBindComposition(context)) legendLayout.captureBaseConfig();
     },
     setupDragAffordances(context) {
       legendActions.setupLegendDrag();
@@ -2278,7 +2274,7 @@ export const createAppSetup = () => {
       legendLayout.captureOriginalStroke();
       // Generate already padded its candidates; another batch Result shows
       // the current canvas padding when it is displayed (D-09).
-      legendLayout.applyCanvasPadding();
+      if (shouldBindComposition(context)) legendLayout.applyCanvasPadding();
     },
     reconcileSelection(context) {
       if (
