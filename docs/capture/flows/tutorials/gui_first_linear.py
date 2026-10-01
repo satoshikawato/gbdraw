@@ -147,6 +147,8 @@ def capture_first_linear(
         scale_style.select_option("ruler")
         expect(scale_style).to_have_value("ruler")
         scale_style.scroll_into_view_if_needed()
+        # Keep the pointer off the number inputs so no spin buttons show.
+        page.mouse.move(0, 0)
         screenshot_bytes["03-layout-settings.png"] = capture_screenshot(
             page, output_paths["03-layout-settings.png"], "Linear"
         )
