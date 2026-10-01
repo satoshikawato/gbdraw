@@ -413,8 +413,10 @@ the file default subtitle. A record that inherits a file default you typed is ma
 **Using file default**; typing a value overrides it, and **Reset to default**
 restores inheritance. Choosing another record in a row infers the definition of
 that record again for a GenBank File. A region changes the displayed interval, not the source file.
-Reverse complementation changes displayed coordinates, feature orientation,
-and comparison endpoint mapping without rewriting the input.
+Reverse complementation changes displayed coordinates and feature orientation
+without rewriting the input. Comparison tables keep the search frame of the
+cropped record, and gbdraw maps their rows onto the displayed orientation; see
+[Comparison and numeric tables](input-formats-and-tsv-schemas.md#comparison-and-numeric-tables).
 
 Turn on **Arrange in rows** to assign records to rows. Record-card order is the
 left-to-right order within a row, and **Record gap (px)** separates records in
@@ -752,7 +754,11 @@ A normal feature click opens its identity, location, strand, qualifiers, and
 available sequence actions. The feature list, feature popup, hover summary,
 and the feature sections of match popups show each part of a split or
 origin-spanning location, and the length is the sum of the parts. Match popups
-report mapped endpoints and evidence;
+report endpoints and evidence. A Linear match interval is in input-file
+coordinates, as in the feature popup; for a cropped record the popup also shows
+the **Query table interval** or **Subject table interval** (the search-frame
+coordinates of the table row). Match FASTA headers use the same input-file
+`coords=` and `strand=`;
 Similarity-group and Collinear popups add member or anchor context. Sequence
 downloads are available only when the required source sequence and metadata
 are present.

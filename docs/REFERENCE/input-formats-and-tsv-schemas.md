@@ -55,6 +55,16 @@ malformed row. In the web app, Generate reports a comparison-input error whose
 details give that line. A Circular similarity ring whose table is rejected is
 skipped with a warning and keeps its ring position.
 
+Coordinates use the search frame: the selected and cropped record, 1-based,
+on the source strand, as a search of that record reports them. A crop shifts
+coordinates to the cropped record. Reverse complementation does not change the
+table: gbdraw maps a row onto a reverse-complemented record when it draws it,
+so the same table draws the same homologous region in either orientation, on
+the command line, in the Python API, and in the web app. A row outside
+1..record length stops the run with a comparison-input error. Tables made for
+the full record do not match a crop of it. **Save Raw LOSAT TSV** writes this
+frame, so its file can be uploaded again.
+
 Query and subject direction must match the displayed endpoint mapping. For a
 Linear comparison, a row whose `qseqid` or `sseqid` names the other endpoint or
 another displayed record stops the run; in the web app, Generate reports a
