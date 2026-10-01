@@ -186,6 +186,21 @@ export const createRecordDisplayControls = ({ state, computed, watch, linearReco
       } catch { return []; } // Existing selector control owns its visible validation error.
     }));
   const draftFor = (row) => state.recordDisplayDrafts.find((draft) => recordDisplayKey(draft) === row.key) || {};
+  // Linear orientation has one owner, the File card's region_reverse (CO-03,
+  // N-09). A row that is the only record its card draws writes it there; the
+  // row override remains only for Circular and for a Linear card that draws
+  // several records.
+  const linearOrientationOwner = (row) => {
+    if (row?.scope !== 'linear') return null;
+    const sequence = state.linearSeqs.find((seq) => seq.uid === row.sourceUid);
+    return sequence && rows.value.filter((entry) => entry.scope === 'linear'
+      && entry.sourceUid === row.sourceUid).length === 1 ? sequence : null;
+  };
+  const writeReverseComplement = (row, draft, reverseComplement) => {
+    const owner = reverseComplement === null ? null : linearOrientationOwner(row);
+    if (owner) owner.region_reverse = reverseComplement;
+    draft.reverseComplementOverride = owner ? null : reverseComplement;
+  };
   const surfaceFor = (row) => {
     const surface = recordDisplaySurface(row, draftFor(row), row);
     const busy = state.sessionOperationAvailability?.();
@@ -200,7 +215,11 @@ export const createRecordDisplayControls = ({ state, computed, watch, linearReco
       state.recordDisplayDrafts.push(draft);
       draft = state.recordDisplayDrafts[state.recordDisplayDrafts.length - 1];
     }
-    Object.assign(draft, patch);
+    const { reverseComplementOverride, ...rest } = patch;
+    Object.assign(draft, rest);
+    if (Object.hasOwn(patch, 'reverseComplementOverride')) {
+      writeReverseComplement(row, draft, reverseComplementOverride);
+    }
   });
   const writeResolvedTransform = (row, { startCoordinate, reverseComplement, anchorIntent }) => {
     const busy = state.sessionOperationAvailability?.();
@@ -225,12 +244,10 @@ export const createRecordDisplayControls = ({ state, computed, watch, linearReco
         anchorIntent: null
       };
       state.recordDisplayDrafts.push(draft);
+      draft = state.recordDisplayDrafts[state.recordDisplayDrafts.length - 1];
     }
-    Object.assign(draft, {
-      startCoordinate: resolvedStart,
-      reverseComplementOverride: reverseComplement,
-      anchorIntent: resolvedIntent
-    });
+    Object.assign(draft, { startCoordinate: resolvedStart, anchorIntent: resolvedIntent });
+    writeReverseComplement(row, draft, reverseComplement);
   };
   const alignmentRows = (orientations) => {
     refreshCommittedRows();
@@ -427,13 +444,19 @@ export const createRecordDisplayControls = ({ state, computed, watch, linearReco
     const index = state.recordDisplayDrafts.findIndex(
       (draft) => recordDisplayKey(draft) === key
     );
+    const owner = linearOrientationOwner(row);
     return {
       key,
       index,
-      draft: index >= 0 ? cloneJsonData(state.recordDisplayDrafts[index]) : null
+      draft: index >= 0 ? cloneJsonData(state.recordDisplayDrafts[index]) : null,
+      ...(owner ? { ownerUid: owner.uid, ownerReverse: Boolean(owner.region_reverse) } : {})
     };
   };
   const restoreTargetDraft = (checkpoint) => {
+    if (checkpoint.ownerUid) {
+      const owner = state.linearSeqs.find((seq) => seq.uid === checkpoint.ownerUid);
+      if (owner) owner.region_reverse = checkpoint.ownerReverse;
+    }
     const index = state.recordDisplayDrafts.findIndex(
       (draft) => recordDisplayKey(draft) === checkpoint.key
     );

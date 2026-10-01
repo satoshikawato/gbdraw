@@ -3276,6 +3276,21 @@ const resourceTextFromRef = (resources, ref) => (
   ref?.resourceId ? decodeCanonicalResourceText(resources, ref.resourceId) : null
 );
 
+// Whether the committed Session drew with the given Feature visibility rules
+// (TSV), compared after normalization. Reusing resolved protein comparisons is
+// valid only when it holds (CO-02); an unreadable committed table declines.
+export const committedFeatureVisibilityMatches = (committedSession, activeRulesTsv) => {
+  const normalize = (text) => serializeFeatureVisibilityRules(parseFeatureVisibilityRules(String(text ?? '')).rules);
+  try {
+    return normalize(resourceTextFromRef(
+      committedSession?.resources,
+      committedSession?.renderRequest?.diagramOptions?.featureVisibilityTableFile
+    )) === normalize(activeRulesTsv);
+  } catch {
+    return false;
+  }
+};
+
 const nestedConfigValue = (config, path) => {
   let current = config;
   for (const key of path.split('.')) {

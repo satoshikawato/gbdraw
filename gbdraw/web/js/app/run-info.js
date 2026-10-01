@@ -1685,6 +1685,11 @@ const finalizeGeneratedRecipeFiles = (generatedFiles, allocatedMetadata) => {
   });
 };
 
+// PD-OI-018 revision 4 and D-40: the Web search database differs from the CLI.
+export const LOSAT_DATABASE_SCOPE_NOTE = 'LOSAT E-values use the subject source file as the search database, '
+  + 'without the query record when both records come from the same file. '
+  + 'The CLI searches each record pair separately, so E-values for multi-record files can differ.';
+
 export const buildRunInfo = ({
   mode,
   args,
@@ -1694,7 +1699,8 @@ export const buildRunInfo = ({
   elapsedMs,
   resultCount,
   startedAtIso,
-  generatedBy = 'gbdraw-web'
+  generatedBy = 'gbdraw-web',
+  losatComparisons = false
 } = {}) => {
   const normalizedMode = String(mode || '').trim() === 'linear' ? 'linear' : 'circular';
   let sourceAvailable = sourceRecipe?.available !== false;
@@ -1794,6 +1800,9 @@ export const buildRunInfo = ({
   }
   if (notes.length === 0) {
     notes.push('The source recipe can be rerun with the uploaded file names shown here.');
+  }
+  if (losatComparisons) {
+    notes.push(LOSAT_DATABASE_SCOPE_NOTE);
   }
   if (exact?.helperFiles.length > 0) {
     notes.push(

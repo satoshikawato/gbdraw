@@ -90,7 +90,6 @@ const featureSpan = (page, locusTag) => page.evaluate((tag) => {
 const contains = (outer, inner) => outer[0] <= inner[0] + 1 && outer[1] >= inner[1] - 1;
 
 test('a LOSATP rerun after a Feature visibility change matches a fresh run with that rule', async ({ page, browser }) => {
-  test.fail(true, 'CO-02');
   test.setTimeout(900_000);
   const files = [bgc('BGC0000708'), bgc('BGC0000709')];
   const hideProtein = async () => {
@@ -133,7 +132,6 @@ test('a LOSATP rerun after a Feature visibility change matches a fresh run with 
 });
 
 test('Rotate with Orient feature forward keeps LOSATN ribbons on the homologous block', async ({ page }) => {
-  test.fail(true, 'CO-03');
   test.setTimeout(600_000);
   await openLinearWith(page, [{ name: 'R2c.gb', text: R2C }, { name: 'R3c.gb', text: R3C }]);
   await useLosat(page, { task: 'blastn' });
@@ -184,7 +182,6 @@ test('Save Raw LOSAT TSV of a reversed record re-uploads to the same ribbons', a
 });
 
 test('a renamed Similarity group keeps its name only on the same members after regrouping', async ({ page }) => {
-  test.fail(true, 'CO-08');
   test.setTimeout(900_000);
   await openLinearWith(page, [bgc('BGC0000708'), bgc('BGC0000709')]);
   await useLosat(page, { task: 'blastp', proteinMode: 'orthogroup' });

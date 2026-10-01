@@ -490,3 +490,51 @@ export const enrichFeaturesWithOrthogroups = (features, index) => (
     enrichFeatureWithOrthogroup(index, feature)
   ))
 );
+
+const memberSetEntry = (member) => normalizeText(member?.proteinId)
+  || [member?.recordId, member?.featureSvgId, member?.start, member?.end].map(normalizeText).join('|');
+
+// The member set that a user name belongs to (D-21, PD-OI-075).
+export const orthogroupMemberSetKey = (group) => JSON.stringify(
+  [...new Set((Array.isArray(group?.members) ? group.members : []).map(memberSetEntry).filter(Boolean))].sort()
+);
+
+export const normalizeOrthogroupDormantOverrides = (value) => {
+  const result = {};
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return result;
+  Object.entries(value).forEach(([key, entry]) => {
+    const name = normalizeText(entry?.name);
+    const description = normalizeText(entry?.description);
+    if (!key || key === '[]' || (!name && !description)) return;
+    result[key] = { ...(name ? { name } : {}), ...(description ? { description } : {}) };
+  });
+  return result;
+};
+
+// D-21 (PD-OI-075): a group name and description follow the exact member set
+// across a regrouping. Names whose members no longer form one group stay
+// dormant and return when that group forms again; nothing moves by ID alone.
+export const rekeyOrthogroupOverrides = ({
+  previousGroups, candidateGroups, names = {}, descriptions = {}, dormant = {}
+}) => {
+  const pool = new Map(Object.entries(normalizeOrthogroupDormantOverrides(dormant)));
+  (Array.isArray(previousGroups) ? previousGroups : []).forEach((group) => {
+    const id = normalizeText(group?.id);
+    const name = normalizeText(names[id]);
+    const description = normalizeText(descriptions[id]);
+    const key = orthogroupMemberSetKey(group);
+    if (!id || key === '[]' || (!name && !description)) return;
+    pool.set(key, { ...(name ? { name } : {}), ...(description ? { description } : {}) });
+  });
+  const next = { names: {}, descriptions: {} };
+  (Array.isArray(candidateGroups) ? candidateGroups : []).forEach((group) => {
+    const id = normalizeText(group?.id);
+    const key = orthogroupMemberSetKey(group);
+    const entry = id && pool.get(key);
+    if (!entry) return;
+    if (entry.name) next.names[id] = entry.name;
+    if (entry.description) next.descriptions[id] = entry.description;
+    pool.delete(key);
+  });
+  return { ...next, dormant: Object.fromEntries(pool) };
+};

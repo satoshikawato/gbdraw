@@ -8,10 +8,10 @@ import {
   linearSourceDepthStatus,
   moveLinearSourceGroup,
   planLinearSourceRemoval,
+  planLosatSourceJobs,
   prepareLosatSourceBatches,
   splitLosatSourceResult
 } from '../../gbdraw/web/js/app/linear-sources.js';
-import { assertKnownDefect } from './helpers/known-defect.mjs';
 import {
   adoptCurrentSessionResources,
   createSessionResourceFileView
@@ -198,13 +198,37 @@ const specs = sequences.flatMap((_, queryIndex) => sequences.map((_, subjectInde
 const planFor = (records = sequences, jobs = specs, getEntry = async () => ({ fasta: '>duplicate\nACGT\n' })) => prepareLosatSourceBatches({
   sequences: records, specs: jobs, getEntry, buildArgs: () => ['--task', 'blastn'], hashText, protein: false
 });
+// PD-OI-018 revision 4 (D-19): sources stay batched between files; a record
+// searches itself only when that self comparison is requested, and a
+// comparison within one source searches the source without the query record.
 const plan = await planFor();
-assert.equal(plan.batches.length, 4, 'eight records in two sources require four LOSAT jobs');
+const byScope = (batches) => Object.fromEntries(['between-sources', 'within-source', 'self']
+  .map((scope) => [scope, batches.filter((batch) => batch.scope === scope).length]));
+assert.deepEqual(byScope(plan.batches), { 'between-sources': 2, 'within-source': 8, self: 8 },
+  'eight records in two sources: two between-source jobs, one within-source and one self job per record, never 64');
 assert.equal(plan.batches.reduce((sum, batch) => sum + batch.specs.length, 0), 64);
+assert.equal(
+  planLosatSourceJobs({ sequences, specs, buildArgs: () => ['--task', 'blastn'] }).jobs.length,
+  plan.batches.length,
+  'the job-count estimate and the execution share one plan'
+);
 for (const batch of plan.batches) {
   assert.equal(batch.query.ids.size, batch.query.indexes.length);
   assert.equal(batch.subject.ids.size, batch.subject.indexes.length);
-  assert.match(batch.searchContext, /^[0-9a-f]{64}$/);
+  if (batch.scope === 'self') {
+    assert.deepEqual(batch.query.indexes, batch.subject.indexes, 'a requested self search uses the record alone');
+    assert.equal(batch.query.indexes.length, 1);
+  } else {
+    assert.deepEqual(batch.query.indexes.filter((index) => batch.subject.indexes.includes(index)), [],
+      'no unrequested self search');
+  }
+  if (batch.scope === 'within-source') {
+    const [queryIndex] = batch.query.indexes;
+    const source = queryIndex < 6 ? [0, 1, 2, 3, 4, 5] : [6, 7];
+    assert.deepEqual([...batch.subject.indexes].sort(), source.filter((index) => index !== queryIndex),
+      'the within-source database is the source without the query record');
+  }
+  assert.equal(batch.searchContext === null, batch.query.indexes.length === 1 && batch.subject.indexes.length === 1);
   const jobs = batch.specs.map((spec) => ({ ...spec, cacheKey: `${spec.queryIndex}:${spec.subjectIndex}` }));
   const text = [...batch.query.ids.keys()].flatMap((query) => [...batch.subject.ids.keys()].map(
     (subject) => [query, subject, 100, 4, 0, 0, 1, 4, 1, 4, '1e-20', 50].join('\t')
@@ -217,8 +241,9 @@ for (const batch of plan.batches) {
 }
 const adjacentSpecs = specs.filter((spec) => spec.queryIndex < 6 && spec.subjectIndex >= 6);
 assert.equal((await planFor(sequences, adjacentSpecs)).batches.length, 1);
+const intoSecondSource = (batches) => batches.find((batch) => batch.scope === 'between-sources' && batch.subject.indexes.includes(7));
 const changed = await planFor(sequences, specs, async (index) => ({ fasta: `>duplicate\n${index === 7 ? 'ACGA' : 'ACGT'}\n` }));
-assert.notEqual(plan.batches[1].searchContext, changed.batches[1].searchContext, 'database contents change cache scope');
+assert.notEqual(intoSecondSource(plan.batches).searchContext, intoSecondSource(changed.batches).searchContext, 'database contents change cache scope');
 const reordered = [...sequences].reverse();
 const replay = await planFor(reordered);
 assert.deepEqual(replay.batches.map((batch) => batch.searchContext).sort(), plan.batches.map((batch) => batch.searchContext).sort(), 'record ordering does not change the searched source sets');
@@ -234,34 +259,35 @@ assert.deepEqual(codePlan.batches.map((batch) => batch.query.indexes.length).sor
 const noSelf = await prepareLosatSourceBatches({
   sequences, specs: specs.filter(({ queryIndex, subjectIndex }) => queryIndex !== subjectIndex),
   getEntry: async (index) => ({ fasta: `>protein-${index}\nMKK\n` }),
-  buildArgs: () => ['--max-target-seqs', '5'], hashText, protein: true,
-  excludeSelfComparisons: true
+  buildArgs: () => ['--max-target-seqs', '5'], hashText, protein: true
 });
 for (const batch of noSelf.batches) {
   assert(!batch.query.indexes.some((index) => batch.subject.indexes.includes(index)),
-    'Collinear OFF must never submit a within-record search, including multi-record sources');
+    'no mode submits an unrequested within-record search, including multi-record sources');
 }
-assert.equal(noSelf.batches.length, 34);
+assert.equal(noSelf.batches.length, 2 + 8);
 assert.equal(noSelf.batches.reduce((sum, batch) => sum + batch.specs.length, 0), 56);
 
 // CO-04 (D-19, PD-OI-018 revision 4): two records packaged in one source file
-// keep one source batch, but no mode searches a record against itself unless
-// that comparison was requested.
-test('one-file records never search themselves without a request (CO-04 known defect)', async () => {
-  const sourceFile = { name: 'two-records.gbk' };
-  const records = [0, 1].map((index) => ({ uid: `record-${index}`, gb: sourceFile, gff: null, fasta: null }));
-  const planned = await prepareLosatSourceBatches({
-    sequences: records,
+// search the same database as two single-record files, so an unrequested
+// self hit cannot fill max-target-seqs.
+test('one-file records never search themselves without a request', async () => {
+  const planFiles = (packaged) => prepareLosatSourceBatches({
+    sequences: [0, 1].map((index) => ({
+      uid: `record-${index}`, gb: packaged ? packaged : { name: `record-${index}.gbk` }, gff: null, fasta: null
+    })),
     specs: [{ queryIndex: 0, subjectIndex: 1 }],
     getEntry: async (index) => ({ fasta: `>protein-${index}\nMKK\n` }),
     buildArgs: () => ['--max-target-seqs', '1'],
     hashText,
     protein: true
   });
-  await assertKnownDefect('CO-04', () => {
-    for (const batch of planned.batches) {
-      assert.deepEqual(batch.query.indexes.filter((index) => batch.subject.indexes.includes(index)), [],
-        'an unrequested within-record search fills max-target-seqs with self hits');
-    }
-  });
+  const oneFile = await planFiles({ name: 'two-records.gbk' });
+  const twoFiles = await planFiles(null);
+  for (const batch of oneFile.batches) {
+    assert.deepEqual(batch.query.indexes.filter((index) => batch.subject.indexes.includes(index)), [],
+      'an unrequested within-record search fills max-target-seqs with self hits');
+  }
+  const identity = ({ batches }) => batches.map(({ query, subject, searchContext }) => [query.hash, subject.hash, searchContext]);
+  assert.deepEqual(identity(oneFile), identity(twoFiles), 'file packaging does not change a two-record search');
 });

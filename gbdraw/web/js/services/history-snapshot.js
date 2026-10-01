@@ -64,7 +64,8 @@ const buildOrthogroupIntentData = (orthogroupState = {}) => ({
   selectedOrthogroupId: String(orthogroupState.selectedOrthogroupId || ''),
   selectedOrthogroupAlignmentFeature: String(orthogroupState.selectedOrthogroupAlignmentFeature || ''),
   orthogroupNameOverrides: clonePlainObject(orthogroupState.orthogroupNameOverrides),
-  orthogroupDescriptionOverrides: clonePlainObject(orthogroupState.orthogroupDescriptionOverrides)
+  orthogroupDescriptionOverrides: clonePlainObject(orthogroupState.orthogroupDescriptionOverrides),
+  orthogroupDormantOverrides: clonePlainObject(orthogroupState.orthogroupDormantOverrides)
 });
 
 const buildUiIntentData = (ui = {}) => {
@@ -120,6 +121,7 @@ const applyOrthogroupIntentData = (state, orthogroupState = {}) => {
     state.orthogroupDescriptionOverrides,
     clonePlainObject(orthogroupState.orthogroupDescriptionOverrides)
   );
+  replacePlainObject(state.orthogroupDormantOverrides, clonePlainObject(orthogroupState.orthogroupDormantOverrides));
 };
 
 const cloneLinearComparisonPlanMetadata = (plan = {}) => ({
@@ -389,7 +391,8 @@ const buildFallbackOrthogroupStateData = (state) => ({
   selectedOrthogroupId: getRef(state.selectedOrthogroupId, ''),
   selectedOrthogroupAlignmentFeature: getRef(state.selectedOrthogroupAlignmentFeature, ''),
   orthogroupNameOverrides: clonePlainObject(state.orthogroupNameOverrides),
-  orthogroupDescriptionOverrides: clonePlainObject(state.orthogroupDescriptionOverrides)
+  orthogroupDescriptionOverrides: clonePlainObject(state.orthogroupDescriptionOverrides),
+  orthogroupDormantOverrides: clonePlainObject(state.orthogroupDormantOverrides)
 });
 
 const applyFallbackOrthogroupStateData = (state, data = {}) => {
@@ -398,6 +401,7 @@ const applyFallbackOrthogroupStateData = (state, data = {}) => {
   setRef(state.selectedOrthogroupAlignmentFeature, String(data.selectedOrthogroupAlignmentFeature || ''));
   replacePlainObject(state.orthogroupNameOverrides, clonePlainObject(data.orthogroupNameOverrides));
   replacePlainObject(state.orthogroupDescriptionOverrides, clonePlainObject(data.orthogroupDescriptionOverrides));
+  replacePlainObject(state.orthogroupDormantOverrides, clonePlainObject(data.orthogroupDormantOverrides));
 };
 
 const buildFallbackResultsData = (state) => {
@@ -734,6 +738,7 @@ export const createHistorySnapshotService = ({
       ),
       linearRecordOrientations: artifactOwnedValue(captureLinearRecordOrientations()),
       annotationWarnings: artifactOwnedValue(getGeneratedArtifactRef(state.annotationWarnings, null)),
+      comparisonWarnings: artifactOwnedValue(getGeneratedArtifactRef(state.comparisonWarnings, null)),
       specificRules: (state.manualSpecificRules || []).map(rule => ({ ...rule })),
       fileLegendCaptions: new Set(state.fileLegendCaptions?.value || []),
       trackSlotResolvedGeometry: artifactOwnedValue(
@@ -834,6 +839,7 @@ export const createHistorySnapshotService = ({
     );
     installLinearRecordOrientations(ownerSet.linearRecordOrientations);
     setGeneratedArtifactRef(state.annotationWarnings, ownerSet.annotationWarnings || []);
+    setGeneratedArtifactRef(state.comparisonWarnings, ownerSet.comparisonWarnings || []);
     if (state.manualSpecificRules && ownerSet.specificRules) {
       state.manualSpecificRules.splice(0, state.manualSpecificRules.length, ...ownerSet.specificRules.map(rule => ({ ...rule })));
     }
@@ -930,6 +936,7 @@ export const createHistorySnapshotService = ({
       'linearRecordTranslations',
       'trackSlotResolvedGeometry',
       'annotationWarnings',
+      'comparisonWarnings',
       'proteinIdentityManifest',
       'legacyProteinRawCandidates',
       'legacyProteinDerivedEvidence',
@@ -981,7 +988,8 @@ export const createHistorySnapshotService = ({
           mutableIntent.orthogroupState.selectedOrthogroupAlignmentFeature,
         orthogroupNameOverrides: mutableIntent.orthogroupState.orthogroupNameOverrides,
         orthogroupDescriptionOverrides:
-          mutableIntent.orthogroupState.orthogroupDescriptionOverrides
+          mutableIntent.orthogroupState.orthogroupDescriptionOverrides,
+        orthogroupDormantOverrides: mutableIntent.orthogroupState.orthogroupDormantOverrides
       },
       alignmentState: mutableIntent.alignmentState,
       presentation: {
@@ -1053,7 +1061,8 @@ export const createHistorySnapshotService = ({
       orthogroupNameOverrides: clonePlainObject(state.orthogroupNameOverrides),
       orthogroupDescriptionOverrides: clonePlainObject(
         state.orthogroupDescriptionOverrides
-      )
+      ),
+      orthogroupDormantOverrides: clonePlainObject(state.orthogroupDormantOverrides)
     };
     const mutableIntent = Object.freeze({
       ui,
@@ -1162,6 +1171,10 @@ export const createHistorySnapshotService = ({
       replacePlainObject(
         state.orthogroupDescriptionOverrides,
         clonePlainObject(mutableIntent.orthogroupState?.orthogroupDescriptionOverrides)
+      );
+      replacePlainObject(
+        state.orthogroupDormantOverrides,
+        clonePlainObject(mutableIntent.orthogroupState?.orthogroupDormantOverrides)
       );
 
       const trustedEditorState = {
@@ -1374,7 +1387,8 @@ export const createHistorySnapshotService = ({
       selectedOrthogroupId: getRef(state.selectedOrthogroupId, ''),
       selectedOrthogroupAlignmentFeature: getRef(state.selectedOrthogroupAlignmentFeature, ''),
       orthogroupNameOverrides: state.orthogroupNameOverrides,
-      orthogroupDescriptionOverrides: state.orthogroupDescriptionOverrides
+      orthogroupDescriptionOverrides: state.orthogroupDescriptionOverrides,
+      orthogroupDormantOverrides: state.orthogroupDormantOverrides
     };
 
     const uiIntent = buildUiIntentData(ui);

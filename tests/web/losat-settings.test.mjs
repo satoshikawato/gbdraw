@@ -36,8 +36,10 @@ const source = await readFile(new URL('losat-settings.js', sourceRoot), 'utf8');
 await writeFile(
   tempModulePath,
   source.replace("./losat-normalization.js", "./losat-normalization.mjs")
+    .replace("./linear-comparisons.js", new URL("linear-comparisons.js", sourceRoot).href)
     .replace("./linear-sources.js", new URL("linear-sources.js", sourceRoot).href)
     .replace("../services/losat-thread-plan.js", new URL("../services/losat-thread-plan.js", sourceRoot).href)
+    .replace("../services/losat.js", new URL("../services/losat.js", sourceRoot).href)
 );
 await writeFile(
   tempNormalizationPath,
@@ -186,7 +188,9 @@ const sourceFiles = [{ name: 'upper.gb' }, { name: 'lower.gb' }];
 expansionState.linearComparisonResolution.value.valid = true;
 expansionState.linearSeqs.forEach((sequence, index) => { sequence.gb = sourceFiles[index < 2 ? 0 : 1]; });
 expansionState.losat.blastp.mode = 'orthogroup';
-assert.equal(expansionSettings.losatEstimatedJobCount.value, 4);
+// PD-OI-018 revision 4: two between-source jobs, plus one self job and one
+// within-source job (database without the query record) per record.
+assert.equal(expansionSettings.losatEstimatedJobCount.value, 2 + 2 * 5);
 expansionState.losat.blastp.mode = 'pairwise';
 expansionState.linearComparisonResolution = { value: {
   mode: 'adjacent', defaultSource: 'losat', valid: true, hasLosatIntent: true,
@@ -238,3 +242,7 @@ for (const mode of ['blastn', 'tblastx']) {
   assert.equal(budgetState.losat.threadsPerJob, '8');
 }
 console.log('losat total-budget allocation tests passed');
+
+// CO-01: Node has no cross-origin isolation, so the Threaded option says so.
+assert.equal(globalThis.crossOriginIsolated, undefined);
+assert.equal(budgetSettings.losatThreadedOptionLabel.value, 'Threaded (unavailable here)');

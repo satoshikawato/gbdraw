@@ -58,6 +58,7 @@ const resultPanelTab = ref('preview');
 const lastRunInfo = ref(null);
 const trackSlotResolvedGeometry = ref(null);
 const annotationWarnings = ref([]);
+const comparisonWarnings = ref([]);
 // Store original pairwise match factors for re-interpolation
 const pairwiseMatchFactors = ref({}); // { pathId: factor }
 // Analysis-scoped materialized nucleotide sources used by match span popups.
@@ -300,6 +301,8 @@ const linearRecordTranslations = ref([]);
 const legacySimilarityAlignment = ref(null);
 const orthogroupNameOverrides = reactive({});
 const orthogroupDescriptionOverrides = reactive({});
+// User names of groups whose members no longer form one group, keyed by member set (D-21).
+const orthogroupDormantOverrides = reactive({});
 const selectedOrthogroupId = ref('');
 const orthogroupSearch = ref('');
 const orthogroupSortMode = ref('id');
@@ -845,6 +848,7 @@ export const state = {
   lastRunInfo,
   trackSlotResolvedGeometry,
   annotationWarnings,
+  comparisonWarnings,
   pairwiseMatchFactors,
   matchSequenceRegistry,
   svgContent,
@@ -899,6 +903,7 @@ export const state = {
   legacySimilarityAlignment,
   orthogroupNameOverrides,
   orthogroupDescriptionOverrides,
+  orthogroupDormantOverrides,
   selectedOrthogroupId,
   orthogroupSearch,
   orthogroupSortMode,

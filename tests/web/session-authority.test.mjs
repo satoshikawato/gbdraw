@@ -409,3 +409,26 @@ for (const invalid of [
   [{ ...warning, annotationId: '' }], [{ ...warning, message: {} }]
 ]) assert.throws(() => validateAnnotationWarnings(invalid, warningResults), /Result metadata schema/);
 assert.doesNotThrow(() => validateAnnotationWarnings([{ ...warning, code: 'empty_span', missingCount: 0 }], warningResults));
+
+// PD-OI-074: unmatched comparison table IDs reach the Web as Result metadata.
+const { validateComparisonWarnings } = await import(pathToFileURL(join(repoRoot, 'gbdraw/web/js/services/comparison-warnings.js')));
+const comparisonWarning = { code: 'comparison_record_id_unmatched', queryRecordIndex: 0, subjectRecordIndex: 1,
+  queryRecordId: 'R2', subjectRecordId: 'R3', rowCount: 2, exampleIds: ['contig_A', 'contig_B'],
+  message: 'Comparison between query record #1 \'R2\' and subject record #2 \'R3\': 2 row(s) use sequence IDs that match no displayed record (\'contig_A\', \'contig_B\'); these rows are drawn on the records assigned by position.',
+  resultIndex: 0, resultName: 'out.svg' };
+const comparisonWarningList = [comparisonWarning];
+assert.equal(validateComparisonWarnings(comparisonWarningList, warningResults), comparisonWarningList);
+assert.deepEqual(validateComparisonWarnings(undefined, warningResults), []);
+assert.deepEqual(validateComparisonWarnings([], warningResults), []);
+for (const invalid of [
+  null, {}, [null], [{ ...comparisonWarning, unknown: true }], [{ ...comparisonWarning, rowCount: 0 }],
+  [{ ...comparisonWarning, rowCount: 1.5 }], [{ ...comparisonWarning, queryRecordIndex: -1 }],
+  [{ ...comparisonWarning, subjectRecordIndex: true }], [{ ...comparisonWarning, code: 'unknown' }],
+  [{ ...comparisonWarning, resultName: 'stale.svg' }], [{ ...comparisonWarning, resultIndex: 1 }],
+  [{ ...comparisonWarning, exampleIds: 'contig_A' }], [{ ...comparisonWarning, exampleIds: [1] }],
+  [{ ...comparisonWarning, message: '' }], [{ ...comparisonWarning, message: {} }]
+]) assert.throws(() => validateComparisonWarnings(invalid, warningResults), /Result metadata schema/);
+// The Session validator checks a saved warning against the saved Results.
+assert.throws(() => validateSessionAuthorityInventory({
+  ...frozen, runMetadata: { comparisonWarnings: [comparisonWarning] }
+}, 41), /Result metadata schema/);
