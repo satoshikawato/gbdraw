@@ -236,6 +236,26 @@ test('explicit popup target and its draft checkpoint stay record-bound', () => {
   );
 });
 
+test('a Linear rotation writes the File card orientation and leaves no row override (CO-03, N-09)', () => {
+  const model = compositeControls({ linear: true });
+  const row = model.controls.rows.value.find((entry) => entry.sourceUid === 'record-2');
+  const sequence = model.state.linearSeqs[1];
+  const before = model.controls.captureTargetDraft(row);
+  model.controls.commitResolvedTransform(row, { startCoordinate: 25, reverseComplement: true, anchorIntent });
+  assert.equal(sequence.region_reverse, true, 'the card checkbox shows the applied orientation');
+  assert.equal(model.state.recordDisplayDrafts[0].reverseComplementOverride, null);
+  assert.equal(model.state.recordDisplayDrafts[0].startCoordinate, 25);
+  sequence.region_reverse = false;
+  assert.equal(model.controls.rows.value.find((entry) => entry.sourceUid === 'record-2').reverse, false,
+    'no override can mask a later card checkbox edit');
+  sequence.region_reverse = true;
+  model.controls.restoreTargetDraft(before);
+  assert.equal(sequence.region_reverse, false, 'a failed apply restores the card orientation');
+  assert.deepEqual(model.state.recordDisplayDrafts, []);
+  model.controls.setReverseComplement(row, true);
+  assert.deepEqual([sequence.region_reverse, model.state.recordDisplayDrafts[0].reverseComplementOverride], [true, null]);
+});
+
 test('same-name, same-content source replacement does not retain old feature capability', () => {
   const model = compositeControls();
   assert.equal(model.enabled().length, 4);

@@ -132,7 +132,6 @@ test('a LOSATP rerun after a Feature visibility change matches a fresh run with 
 });
 
 test('Rotate with Orient feature forward keeps LOSATN ribbons on the homologous block', async ({ page }) => {
-  test.fail(true, 'CO-03');
   test.setTimeout(600_000);
   await openLinearWith(page, [{ name: 'R2c.gb', text: R2C }, { name: 'R3c.gb', text: R3C }]);
   await useLosat(page, { task: 'blastn' });
