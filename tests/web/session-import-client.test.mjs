@@ -52,15 +52,18 @@ test('structured errors, crashes, unreadable and malformed replies settle and re
     const worker = ImportWorker.instances.at(-1);
     if (kind === 'structured') {
       worker.reply({ operationId: worker.message.operationId, status: 'error',
-        error: { name: 'SyntaxError', code: 'SESSION_IMPORT_PARSE_FAILED', stage: 'parse', message: 'Invalid JSON structure.' } });
+        error: { code: 'INPUT_INVALID', stage: 'parse', context: { field: 'schema', reason: 'JSON_FORMAT' } } });
     } else if (kind === 'crash') worker.listeners.get('error')({ preventDefault() {} });
     else if (kind === 'messageerror') worker.listeners.get('messageerror')();
     else worker.reply({ operationId: worker.message.operationId, status: 'ok' });
+    // X-01 (SE-09): the Worker's final code survives; a dead Worker is unavailable.
     await assert.rejects(pending, error => {
-      assert.match(error.code, /^SESSION_IMPORT_/);
       if (kind === 'structured') {
+        assert.equal(error.code, 'INPUT_INVALID');
         assert.equal(error.stage, 'parse');
-        assert.equal(error.name, 'SyntaxError');
+        assert.deepEqual(error.context, { field: 'schema', reason: 'JSON_FORMAT' });
+      } else {
+        assert.equal(error.code, 'SESSION_IMPORT_UNAVAILABLE');
       }
       return true;
     });
@@ -99,9 +102,9 @@ test('Worker unavailable, constructor and postMessage failures have no main pars
   delete globalThis.Worker;
   await assert.rejects(importSessionFile(blob), { code: 'SESSION_IMPORT_UNAVAILABLE' });
   globalThis.Worker = class { constructor() { throw new Error('blocked'); } };
-  await assert.rejects(importSessionFile(blob), { code: 'SESSION_IMPORT_START_FAILED' });
+  await assert.rejects(importSessionFile(blob), { code: 'SESSION_IMPORT_UNAVAILABLE' });
   globalThis.Worker = class extends ImportWorker { postMessage() { throw new Error('clone failed'); } };
-  await assert.rejects(importSessionFile(blob), { code: 'SESSION_IMPORT_START_FAILED' });
+  await assert.rejects(importSessionFile(blob), { code: 'SESSION_IMPORT_UNAVAILABLE' });
   clean(ImportWorker.instances.at(-1));
   delete globalThis.Worker;
 });

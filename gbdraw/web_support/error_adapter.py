@@ -34,7 +34,9 @@ collinear_singleton_merge_gap collinear_max_diagonal_drift collinear_gap_penalty
 collinear_nearby_duplicate_window collinear_constant_anchor_score
 collinear_infer_orthogroups collinear_min_score collinear_min_block_span
 record_gap_px record_axis_height depth_window depth_step depth_min depth_max
-min_gc max_gc gc_tick_interval gc_axis_font_size depth_tick_interval depth_axis_font_size
+min_gc max_gc gc_tick_interval gc_axis_font_size depth_tick_interval depth_axis_font_size dinucleotide
+conservation_ring_width conservation_ring_gap center_reserved_radius multi_record_min_radius_ratio
+multi_record_column_gap_ratio multi_record_row_gap_ratio
 protein_blastp_mode protein_blastp_candidate_limit collinear_search_scope collinear_unit_mode collinear_anchor_mode collinear_merge_orientation collinear_color_mode orthogroup_membership_mode collinear_max_unit_gap collinear_max_conflicts collinear_max_paralog_links_per_orthogroup circular_multi_record_size_mode linear_track_layout linear_label_placement set_id anchor_slot side renderer lane_gap_px padding_px cover_anchor overflow layer z axis match_height source fasta gff annotations featurePlacements output_prefix
 """.split())
 
@@ -42,7 +44,7 @@ protein_blastp_mode protein_blastp_candidate_limit collinear_search_scope collin
 # owner (services/error-normalization.js) defines, never document values.
 # tests/test_web_error_producer_coverage.py keeps it aligned with producers.
 DIAGNOSTIC_CODES = frozenset("INPUT_INVALID INPUT_UNREADABLE DEPTH_INVALID TABLE_INVALID COMPARISON_INPUT TRACK_LAYOUT".split())
-DIAGNOSTIC_REASONS = frozenset("""BOOLEAN INTEGER FINITE POSITIVE NONNEGATIVE POSITIVE_INTEGER REQUIRED FIELDS
+DIAGNOSTIC_REASONS = frozenset("""BOOLEAN INTEGER FINITE POSITIVE NONNEGATIVE POSITIVE_INTEGER REQUIRED FIELDS POSITIVE_UNIT_INTERVAL
 POSITIVE_OR_AUTO POSITIVE_INTEGER_OR_AUTO NONNEGATIVE_INTEGER PERCENT UNKNOWN_CONFIG_PATH
 DINUCLEOTIDE CANNOT_FIT DEFINITION_RESERVED CENTER_RESERVED THREE_COLUMNS DEPTH_VALUES
 REFERENCE_REQUIRED REFERENCE_MISMATCH ADJACENT_ALL COLLINEAR_ANCHOR_MODE COLLINEAR_COLOR_MODE COLOR""".split())

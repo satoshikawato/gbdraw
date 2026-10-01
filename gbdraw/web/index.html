@@ -4648,13 +4648,13 @@
                                 <div>
                                     <span class="input-label text-[10px]">Window <help-tip id="help-gc-window" text="Window size for GC content/skew. Default: 1kb (<1Mb), 10kb (<10Mb), 100kb (>=10Mb)."></help-tip></span>
                                     <auto-value-field :visible="autoValueVisible(adv.window_size, 'dinucleotideWindow')" :text="autoValueText('dinucleotideWindow')">
-                                        <input type="number" v-model.number="adv.window_size" aria-label="Window" aria-describedby="help-gc-window" class="form-input form-input-compact auto-value-input" :disabled="!semanticMutationAvailable">
+                                        <input type="number" min="1" step="1" v-model.number="adv.window_size" aria-label="Window" aria-describedby="help-gc-window" class="form-input form-input-compact auto-value-input" :disabled="!semanticMutationAvailable">
                                     </auto-value-field>
                                 </div>
                                 <div>
                                     <span class="input-label text-[10px]">Step <help-tip id="help-gc-step" text="Step size for GC content/skew. Default: 100bp (<1Mb), 1kb (<10Mb), 10kb (>=10Mb)."></help-tip></span>
                                     <auto-value-field :visible="autoValueVisible(adv.step_size, 'dinucleotideStep')" :text="autoValueText('dinucleotideStep')">
-                                        <input type="number" v-model.number="adv.step_size" aria-label="Step" aria-describedby="help-gc-step" class="form-input form-input-compact auto-value-input" :disabled="!semanticMutationAvailable">
+                                        <input type="number" min="1" step="1" v-model.number="adv.step_size" aria-label="Step" aria-describedby="help-gc-step" class="form-input form-input-compact auto-value-input" :disabled="!semanticMutationAvailable">
                                     </auto-value-field>
                                 </div>
                                 <div>
@@ -4841,7 +4841,8 @@
                     <button v-if="canRetryLabelImportFailure" type="button" @click="editLabelImportFailure" class="btn-secondary text-xs">Reselect Label TSV</button>
                     <button v-if="canRetrySpecificRuleFailure" type="button" @click="retrySpecificRuleFailure" :disabled="!semanticMutationAvailable" class="btn-secondary text-xs">Retry rule operation</button>
                     <button v-if="canEditSpecificRuleFailure && errorDisplay.actions.includes('edit-pattern')" type="button" @click="editSpecificRuleFailure" class="btn-secondary text-xs">Edit pattern</button>
-                    <button v-if="errorDisplay.actions.includes('save-session') || generationFailureRecovery === 'restore-failed'" type="button" @click="saveSessionWithTitle" :disabled="sessionImportPending" class="btn-secondary text-xs">Save Session</button>
+                    <button v-if="errorDisplay.actions.includes('generate') && errorDisplay.operation !== 'generate'" type="button" @click="runAnalysis" :disabled="processing" class="btn-secondary text-xs">Generate</button>
+                    <button v-if="(errorDisplay.actions.includes('save-session') && errorDisplay.operation !== 'session-save') || generationFailureRecovery === 'restore-failed'" type="button" @click="saveSessionWithTitle" :disabled="sessionImportPending" class="btn-secondary text-xs">Save Session</button>
                     <button v-if="generationFailureRecovery === 'restore-failed' || errorDisplay.actions.includes('reload')" type="button" @click="reloadAfterOperationError" class="btn-secondary text-xs">Reload</button>
                     <button v-if="errorDisplay.operation.startsWith('export-') && errorDisplay.actions.includes('use-svg')" type="button" @click="downloadSVG" class="btn-secondary text-xs">Use SVG</button>
                     <button v-if="errorDisplay.operation === 'export-svg' && !canRetryInteractiveSvgExport && errorDisplay.actions.includes('retry')" type="button" @click="downloadSVG" class="btn-secondary text-xs">Retry SVG export</button>

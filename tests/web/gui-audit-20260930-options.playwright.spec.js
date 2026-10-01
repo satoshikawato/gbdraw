@@ -34,7 +34,6 @@ const withBoundedWait = (page, predicate, argument, timeout = 10_000) => page
   .waitForFunction(predicate, argument, { timeout }).then(() => true, () => false);
 
 test('a GC window of 0 is rejected instead of silently becoming Auto', async ({ page }) => {
-  test.fail(true, 'TR-04');
   test.setTimeout(300_000);
   await openWithGenBank(page, HMMT);
   const window = (await dinucleotideSection(page)).locator('input[type="number"]').first();
@@ -45,7 +44,6 @@ test('a GC window of 0 is rejected instead of silently becoming Auto', async ({ 
 });
 
 test('a decimal GC step is rejected instead of silently becoming Auto', async ({ page }) => {
-  test.fail(true, 'GE-08');
   test.setTimeout(300_000);
   await openWithGenBank(page, HMMT);
   const step = (await dinucleotideSection(page)).locator('input[type="number"]').nth(1);
@@ -56,7 +54,6 @@ test('a decimal GC step is rejected instead of silently becoming Auto', async ({
 });
 
 test('a non-numeric comparison e-value is rejected instead of using the default filter', async ({ page }) => {
-  test.fail(true, 'GE-04');
   test.setTimeout(300_000);
   await openFresh(page);
   const examples = path.join(root, 'examples');

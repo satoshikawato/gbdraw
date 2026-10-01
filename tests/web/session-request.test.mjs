@@ -808,7 +808,7 @@ const invalidCircularCases = [
   [{ circular_region_start: 3, circular_region_end: null }, /requires both Start and End/],
   [{ circular_region_start: 8, circular_region_end: 3 }, /must not exceed End/],
   [{ circular_region_start: 3, circular_region_end: 19 }, /exceeds the selected record length/],
-  [{ circular_record_selector: 'missing-record', circular_region_start: null, circular_region_end: null }, /was not found/]
+  [{ circular_record_selector: 'missing-record', circular_region_start: null, circular_region_end: null }, { code: 'RECORD_SELECTION', context: { reason: 'NO_MATCH' } }]
 ];
 for (const [overrides, message] of invalidCircularCases) {
   Object.assign(state.form, {
@@ -830,7 +830,7 @@ Object.assign(state.form, {
 });
 assert.throws(
   () => buildCanonicalRenderRequest({ state, filesData }),
-  /is ambiguous/
+  { code: 'RECORD_SELECTION', context: { reason: 'AMBIGUOUS' } }
 );
 
 Object.assign(state.form, {
@@ -3323,13 +3323,13 @@ assert.equal(projectCanonicalSessionRequest(autoHeightCanonical).config.adv.comp
 state.adv.comparison_height = -2;
 assert.throws(
   () => buildCanonicalRenderRequest({ state, filesData: linearFilesData }),
-  /Pairwise Match Height must be Auto or a positive finite number/
+  { code: 'INPUT_INVALID', context: { field: 'match_height', reason: 'POSITIVE_OR_AUTO' } }
 );
 const historicalInvalidHeight = structuredClone(linearCanonical);
 historicalInvalidHeight.renderRequest.diagramOptions.configOverrides.comparison_height = -2;
 assert.throws(
   () => projectCanonicalSessionRequest(historicalInvalidHeight),
-  /Pairwise Match Height must be Auto or a positive finite number/
+  { code: 'INPUT_INVALID', context: { field: 'match_height', reason: 'POSITIVE_OR_AUTO' } }
 );
 assert.equal(
   projectCanonicalSessionRequest({
@@ -3920,7 +3920,7 @@ for (const invalidGeometry of [0, -1, Number.NaN, Number.POSITIVE_INFINITY]) {
       }),
       filesData
     }),
-    /Feature Width must be Auto or a positive finite number/
+    { code: 'INPUT_INVALID', context: { field: 'feature_width_circular', reason: 'POSITIVE_OR_AUTO' } }
   );
 }
 

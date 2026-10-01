@@ -1,4 +1,5 @@
 import { readSessionText } from '../services/session-file.js';
+import { normalizeUserFacingError } from '../services/error-normalization.js';
 
 import { sendBoundedJson } from '../services/bounded-json-transport.js';
 
@@ -34,16 +35,15 @@ self.addEventListener('message', async ({ data: { operationId, file, ack } }) =>
         replyMs: performance.now() - replyStarted }
     });
   } catch (error) {
+    // The final diagnostic code and bounded context; never the cause message,
+    // which can quote uploaded text.
+    const known = normalizeUserFacingError(error, { stage });
     self.postMessage({
       operationId, status: 'error',
-      error: {
-        name: error?.name || 'Error',
-        code: `SESSION_IMPORT_${stage.toUpperCase()}_FAILED`, stage,
-        // JSON SyntaxError messages can quote uploaded text.
-        message: stage === 'parse' ? 'Invalid JSON structure.'
-          : stage === 'reply' ? 'Session import Worker reply failed.'
-            : error?.message || 'Session file could not be read.'
-      }
+      error: known.code !== 'UNKNOWN' ? { code: known.code, stage: known.stage, context: known.context }
+        : stage === 'read' ? { code: 'INPUT_UNREADABLE', stage, context: { field: 'schema' } }
+          : stage === 'parse' ? { code: 'INPUT_INVALID', stage, context: { field: 'schema', reason: 'JSON_FORMAT' } }
+            : { code: 'SESSION_IMPORT_UNAVAILABLE', stage: 'transport', context: {} }
     });
   }
 });

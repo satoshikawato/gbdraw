@@ -2,9 +2,9 @@ const OPERATIONS = new Set(['unknown', 'generate', 'align', 'feature-extraction'
   'convertLosatpPairsToGenomicPayload', 'extractCdsProteinFasta', 'extractFirstFasta', 'generateLegendEntrySvg',
   'hydrateProteinLosatTsv', 'listGffFastaRecords', 'listSequenceRecords', 'measureLegendText',
   'promoteLegacyLosatpCache', 'resolveLegacyProteinReferences',
-  'resolveSimilarityAlignment', 'validateConfigOverrides']);
+  'resolveSimilarityAlignment', 'validateConfigOverrides', 'session-save']);
 const STAGES = new Set(['unknown', 'initialization', 'resource-staging', 'request-validation',
-  'helper', 'rule-validation', 'render', 'result-admission', 'cleanup', 'export-capture', 'export-conversion', 'font-validation', 'transport', 'read']);
+  'helper', 'rule-validation', 'render', 'result-admission', 'cleanup', 'export-capture', 'export-conversion', 'font-validation', 'transport', 'read', 'parse']);
 const FIELDS = new Set(`legend title scale decorations pattern record_selector region start end sourceStart sourceEnd recordLength
 recordIndex queryIndex subjectIndex depth min_depth max_depth window step tick font_size plot_title_font_size height large_tick_interval small_tick_interval tick_font_size
 inner_gap_px outer_gap_px radius width spacing arrow_head_length_ratio arrow_shaft_width_ratio keep_definition_left_aligned color action feature_type qualifier value record_id label_text
@@ -15,7 +15,10 @@ collinear_singleton_merge_gap collinear_max_diagonal_drift collinear_gap_penalty
 collinear_nearby_duplicate_window collinear_constant_anchor_score collinear_infer_orthogroups
 collinear_min_score collinear_min_block_span record_gap_px record_axis_height depth_window depth_step
 depth_min depth_max min_gc max_gc gc_tick_interval gc_axis_font_size depth_tick_interval
-depth_axis_font_size protein_blastp_mode protein_blastp_candidate_limit collinear_search_scope collinear_unit_mode collinear_anchor_mode collinear_merge_orientation collinear_color_mode orthogroup_membership_mode collinear_max_unit_gap collinear_max_conflicts collinear_max_paralog_links_per_orthogroup circular_multi_record_size_mode linear_track_layout linear_label_placement set_id anchor_slot side renderer lane_gap_px padding_px cover_anchor overflow layer z axis match_height source fasta gff annotations featurePlacements output_prefix`.split(/\s+/));
+depth_axis_font_size dinucleotide feature_width_circular depth_width_circular gc_content_width_circular
+gc_content_radius_circular gc_skew_width_circular gc_skew_radius_circular conservation_ring_width
+conservation_ring_gap center_reserved_radius multi_record_min_radius_ratio multi_record_column_gap_ratio
+multi_record_row_gap_ratio protein_blastp_mode protein_blastp_candidate_limit collinear_search_scope collinear_unit_mode collinear_anchor_mode collinear_merge_orientation collinear_color_mode orthogroup_membership_mode collinear_max_unit_gap collinear_max_conflicts collinear_max_paralog_links_per_orthogroup circular_multi_record_size_mode linear_track_layout linear_label_placement set_id anchor_slot side renderer lane_gap_px padding_px cover_anchor overflow layer z axis match_height source fasta gff annotations featurePlacements output_prefix`.split(/\s+/));
 const REASONS = Object.freeze({
   DECORATION_IDENTITY: 'Source, region, mode, grouping or record identity changed, is unknown, or is ambiguous.',
   DECORATION_TARGET: 'The decoration target is missing or ambiguous.',
@@ -82,7 +85,13 @@ const REASONS = Object.freeze({
   CANNOT_FIT: 'Move the track, reduce widths, disable conflicting labels, or place it outside.',
   DEFINITION_RESERVED: 'The center definition text limits the inside tracks. Shorten Species or Strain, reduce Default font size, set a smaller Center Reserved Radius, or place tracks outside.',
   CENTER_RESERVED: 'The Center Reserved Radius limits the inside tracks. Set a smaller Center Reserved Radius or place tracks outside.',
-  THREE_COLUMNS: 'Supply at least three tab-separated columns.', READ: 'Replace or reselect the input.',
+  THREE_COLUMNS: 'Supply at least three tab-separated columns.',
+  POSITIVE_INTEGER_OR_AUTO: 'Use Auto or an integer greater than zero.',
+  DINUCLEOTIDE: 'Use two letters from A, C, G, T, and U, for example GC.',
+  DEPTH_VALUES: 'Use integer positions and numeric depth values.',
+  SELECT_RECORD_FOR_REGION: 'Choose a Record before setting a region on a multi-record file.',
+  DISCOVERY_PENDING: 'Wait for the record list to finish loading, then retry.',
+  SESSION_FORMAT: 'Choose a gbdraw Session file.',
   FORMAT: 'Use GenBank or the required GFF3 and FASTA inputs.', NO_PROTEINS: 'Choose input containing CDS proteins.',
   EMPTY_ENDPOINT: 'Check the comparison endpoints.', INDEX_ALIGNMENT: 'Check the comparison endpoints.',
   SOURCE_INDEX: 'Check the comparison endpoints.', SOURCE_VIEW_CONFLICT: 'Check the comparison inputs and display transforms.'
@@ -99,6 +108,7 @@ const DEFINITIONS = Object.freeze({
   INPUT_REQUIRED: ['Supply GenBank input or matching GFF3 and FASTA inputs.', ['select-input', 'retry']],
   FASTA_REQUIRED: ['Supply a matching FASTA input for each GFF3 input.', ['select-input', 'retry']],
   INPUT_UNREADABLE: ['An input could not be read. Replace or reselect it.', ['select-input', 'retry']],
+  SESSION_SAVE_REQUIRES_GENERATE: ['Save Session needs current feature metadata for the loaded Result. Generate once, then Save Session.', ['generate']],
   NO_RECORDS: ['No records were found. Choose input containing records.', ['select-input', 'retry']],
   RECORD_SELECTION: ['The record selection is invalid.', ['select-record', 'retry']],
   REGION_INVALID: ['The region is invalid.', ['edit-region', 'retry']],
@@ -127,22 +137,36 @@ const DEFINITIONS = Object.freeze({
 
 const FIELD_LABELS = Object.freeze({ protein_blastp_max_hits: 'Protein BLASTP Pairwise max hits',
   arrow_head_length_ratio: 'Arrow head length ratio', arrow_shaft_width_ratio: 'Arrow shaft width ratio',
-  keep_definition_left_aligned: 'Lock Definition Column' });
+  keep_definition_left_aligned: 'Lock Definition Column', window: 'Window', step: 'Step',
+  depth_window: 'Depth Window', depth_step: 'Depth Step', dinucleotide: 'Dinucleotide',
+  evalue: 'E-value', bitscore: 'Bitscore', identity: 'Identity', alignment_length: 'Alignment length',
+  plot_title_font_size: 'Plot Title Font Size', feature_width_circular: 'Feature Width',
+  depth_width_circular: 'Depth Width', gc_content_width_circular: 'GC Content Width',
+  gc_content_radius_circular: 'GC Content Radius', gc_skew_width_circular: 'GC Skew Width',
+  gc_skew_radius_circular: 'GC Skew Radius', match_height: 'Pairwise Match Height',
+  conservation_ring_width: 'Comparison ring width', conservation_ring_gap: 'Comparison ring gap',
+  center_reserved_radius: 'Center Reserved Radius', multi_record_min_radius_ratio: 'Minimum radius ratio',
+  multi_record_column_gap_ratio: 'Column gap ratio', multi_record_row_gap_ratio: 'Row gap ratio' });
 const CODES = new Set(Object.keys(DEFINITIONS));
+// Locators shown in the summary; indexes are zero-based, ordinals one-based.
+const ORDINAL_LABELS = Object.freeze({ DECORATION_CONTINUITY: 'Result', COMPARISON_INPUT: 'Comparison FASTA' });
+const CONFIG_PATH = /^[a-z][a-z0-9_]*(?:\.[a-z0-9_]+)+$/;
+
+/**
+ * The single JS producer contract for a user-correctable failure: a code and
+ * bounded context; wording stays here. The message is a fixed identifier, so an
+ * uncaught error never carries document values.
+ */
+export const diagnosticError = (code, context = {}, { stage = 'request-validation', operation } = {}) =>
+  Object.assign(new Error(`${code}/${context.reason || ''}`), { code, stage, ...(operation && { operation }), context });
 // Exact native JS validation messages with no document interpolation.
 const NATIVE_VALIDATIONS = new Map([
   ['The diagram engine returned incompatible feature metadata. Reload the page and Generate again.', { code: 'FEATURE_METADATA', stage: 'result-admission' }],
   ['A File-like object with arrayBuffer() or text() is required.', { code: 'RESOURCE_INVALID', stage: 'resource-staging' }],
   ['A File-like object with arrayBuffer() is required.', { code: 'RESOURCE_INVALID', stage: 'resource-staging' }],
-  ['Session file is too large.', { code: 'SESSION_SIZE_LIMIT', stage: 'read' }],
-  ['Expanded session file is too large.', { code: 'SESSION_SIZE_LIMIT', stage: 'read' }],
-  ['This browser does not support gzip session export.', { code: 'SESSION_BROWSER_UNSUPPORTED', stage: 'transport' }],
-  ['This browser does not support gzip session import.', { code: 'SESSION_BROWSER_UNSUPPORTED', stage: 'read' }]
 ]);
 for (const [message, field, reason] of [
   ['Depth minimum must be less than or equal to depth maximum.', 'min_depth', 'ORDER'],
-  ['Depth window must be greater than 0.', 'window', 'POSITIVE'],
-  ['Depth step must be greater than 0.', 'step', 'POSITIVE'],
   ['Depth large tick interval must be greater than 0.', 'large_tick_interval', 'POSITIVE'],
   ['Depth small tick interval must be greater than 0.', 'small_tick_interval', 'POSITIVE'],
   ['Depth tick font size must be greater than 0.', 'tick_font_size', 'POSITIVE'],
@@ -151,11 +175,9 @@ for (const [message, field, reason] of [
   ['GC content minimum percent must be less than or equal to maximum percent.', 'min_gc', 'ORDER'],
   ['GC content large tick interval must be greater than 0.', 'large_tick_interval', 'POSITIVE'],
   ['GC content small tick interval must be greater than 0.', 'small_tick_interval', 'POSITIVE'],
-  ['GC content tick font size must be greater than 0.', 'tick_font_size', 'POSITIVE'],
-  ['Pairwise Match Height must be Auto or a positive finite number.', 'match_height', 'POSITIVE_OR_AUTO']
+  ['GC content tick font size must be greater than 0.', 'tick_font_size', 'POSITIVE']
 ]) NATIVE_VALIDATIONS.set(message, { code: 'INPUT_INVALID', stage: 'request-validation', context: { field, reason } });
 for (const [message, code] of [
-  ['Please upload a GenBank file.', 'INPUT_REQUIRED'], ['GFF3 and FASTA are required.', 'FASTA_REQUIRED'],
   ['Please upload a Depth TSV file or disable Show depth track.', 'DEPTH_INVALID'],
   ['Please upload at least one Depth TSV file or disable the depth track.', 'DEPTH_INVALID'],
   ['Please upload at least one BLAST outfmt 6/7 file for Pairwise Comparisons.', 'COMPARISON_INPUT'],
@@ -210,7 +232,6 @@ for (const message of ['The vendored jsPDF library did not initialize.', 'The ve
   NATIVE_VALIDATIONS.set(message, { code: 'PDF_LIBRARY', operation: 'export-pdf', stage: 'initialization' });
 for (const message of [
   'Select an exact reference feature before aligning this Similarity Group.',
-  'An exact reference feature is required for alignment.',
   'The resolver did not resolve every record. Review the choices and retry.'
 ]) NATIVE_VALIDATIONS.set(message, { code: 'INPUT_INVALID', operation: 'align', stage: 'helper', context: { field: 'anchors', reason: 'TARGET_RECORD' } });
 NATIVE_VALIDATIONS.set('Validated directions or reference placement changed. Review the updated preview and Apply again.',
@@ -271,15 +292,10 @@ const nativeValidation = (message) => {
     [/^Custom Track Slots use an obsolete schema\. Recreate the slots with schema version [0-9]+\.$/, 'TRACK_SCHEMA'],
     [/^Session contains unclassified top-level field\(s\): [\s\S]*$/, 'SESSION_FIELDS']
   ]) if (template.test(message)) return { code: 'INPUT_INVALID', stage: 'request-validation', context: { field: 'schema', reason } };
-  if (/^Session version [0-9]+ is newer than this gbdraw supports \([0-9]+\)\.$/.test(message)) return { code: 'INPUT_INVALID', stage: 'request-validation', context: { field: 'schema', reason: 'FIELDS' } };
   if (/^Invalid managed flag for (?:circular|linear)\.[a-z_]+\.$/.test(message)) return { code: 'INPUT_INVALID', stage: 'request-validation', context: { field: 'config', reason: 'FIELDS' } };
   if (/^Missing canonical resource:/.test(message) || /^Session resource [\s\S]* has an unsupported encoded payload\.$/.test(message)) return { code: 'INPUT_INVALID', stage: 'request-validation', context: { field: 'schema', reason: 'FIELDS' } };
   if (/^The SVG composition metadata is not valid JSON:/.test(message)) return { code: 'INPUT_INVALID', stage: 'request-validation', context: { field: 'schema', reason: 'JSON_FORMAT' } };
-  if (/^Unsupported session version: [0-9]+\.$/.test(message)) return { code: 'INPUT_INVALID', stage: 'request-validation', context: { field: 'schema', reason: 'FIELDS' } };
   if (NATIVE_VALIDATIONS.has(message)) return NATIVE_VALIDATIONS.get(message);
-  if (/^Could not read records from the (?:circular|Linear) input file\(s\)\.$/.test(message)) {
-    return { code: 'INPUT_UNREADABLE', stage: 'request-validation' };
-  }
   if (/^Invalid region (?:spec|coordinates) for LOSAT FASTA extraction: [\s\S]*$/.test(message)) {
     return { code: 'REGION_INVALID', stage: 'request-validation', context: { reason: 'REGION_FORMAT' } };
   }
@@ -300,37 +316,14 @@ const nativeValidation = (message) => {
   const slot = /^(?:Circular|Linear) depth slot '[\s\S]*' references removed depth track index (unknown|[0-9]+)\. Select an existing Depth TSV or remove the slot\.$/.exec(message);
   if (slot) return { code: 'DEPTH_INVALID', stage: 'request-validation', context: {
     ...(slot[1] === 'unknown' ? {} : { seriesIndex: Number(slot[1]) }), reason: 'DEPTH_SERIES' } };
-  for (const [template, reason] of [
-    [/^Region annotation [\s\S]*: start and end must be positive integers \(1-based coordinates\)\.$/, 'POSITIVE_INTEGER'],
-    [/^Choose a (?:valid )?target record for region annotation [\s\S]*\.$/, 'TARGET_RECORD'],
-    [/^Region annotation [\s\S]*: clear the target record or enable Multi-record canvas\.$/, 'TARGET_MODE'],
-    [/^Region annotation [\s\S]*: the selected target record is no longer available; choose it again\.$/, 'TARGET_RECORD'],
-    [/^Region annotation [\s\S]*: record index #[0-9]+ is out of range\.$/, 'OUT_OF_RANGE'],
-    [/^Region annotation [\s\S]*: record ID [\s\S]* is not available\.$/, 'NO_MATCH'],
-    [/^Region annotation [\s\S]*: record ID [\s\S]* is duplicated; choose a #index entry\.$/, 'AMBIGUOUS']
-  ]) if (template.test(message)) return { code: 'ANNOTATION_TARGET', stage: 'request-validation', context: { reason } };
   const emptyFasta = /^Pairwise comparison FASTA #([0-9]+) has no sequence data\.$/.exec(message);
   if (emptyFasta) return { code: 'COMPARISON_INPUT', stage: 'request-validation', context: { inputOrdinal: Number(emptyFasta[1]), reason: 'REQUIRED' } };
   const glyph = /^PDF fonts do not contain U\+([0-9A-F]{1,6})\. Use SVG to retain this text\.$/.exec(message);
   if (glyph) return { code: 'PDF_GLYPH', operation: 'export-pdf', stage: 'font-validation', context: { codepoint: parseInt(glyph[1], 16) } };
-  const sequence = /^Sequence #([0-9]+): (Provide both Region start and end, or leave both empty\.|Region start\/end must be numbers\.|Region start\/end must be integers\.|Region start\/end must be >= 1\.|Missing GenBank file\.|GFF3 and FASTA are required\.)$/.exec(message);
-  if (sequence) {
-    const reasons = { 'Provide both Region start and end, or leave both empty.': 'BOTH_ENDPOINTS',
-      'Region start/end must be numbers.': 'FINITE', 'Region start/end must be integers.': 'INTEGER',
-      'Region start/end must be >= 1.': 'POSITIVE_INTEGER' };
-    return { code: sequence[2] === 'Missing GenBank file.' ? 'INPUT_REQUIRED' : sequence[2] === 'GFF3 and FASTA are required.' ? 'FASTA_REQUIRED' : 'REGION_INVALID',
-      stage: 'request-validation', context: { inputOrdinal: Number(sequence[1]), reason: reasons[sequence[2]] } };
-  }
-  const row = /^Invalid specific-color TSV at line ([0-9]+): (expected 4 or 5 columns\.|column ([1-4]) is required\.)$/.exec(message);
-  if (row) return { code: 'TABLE_INVALID', stage: 'request-validation', context: { row: Number(row[1]),
-    field: ['feature_type', 'qualifier', 'pattern', 'color'][Number(row[3]) - 1],
-    reason: row[3] ? 'REQUIRED' : 'SPECIFIC_COLUMNS' } };
   const labelColumns = /^Invalid label TSV at line ([0-9]+): expected 5 columns, found ([0-9]+)\.$/.exec(message);
   if (labelColumns) return { code: 'TABLE_INVALID', stage: 'request-validation', context: { row: Number(labelColumns[1]), columnCount: 5, reason: 'FIELDS' } };
   const labelRequired = /^Invalid label TSV at line ([0-9]+): column ([1-4]) \((record_id|feature_type|qualifier|value)\) is required\.$/.exec(message);
   if (labelRequired) return { code: 'TABLE_INVALID', stage: 'request-validation', context: { row: Number(labelRequired[1]), field: labelRequired[3], reason: 'REQUIRED' } };
-  const color = /^Invalid specific-color value at line ([0-9]+): [\s\S]*$/.exec(message);
-  if (color) return { code: 'TABLE_INVALID', stage: 'request-validation', context: { row: Number(color[1]), field: 'color', reason: 'COLOR' } };
   const series = /^Depth series #([0-9]+) \(logical track index ([0-9]+)\) has no TSV source in any record\.(?: Add a TSV or remove the series\.)?$/.exec(message);
   if (series) return { code: 'DEPTH_INVALID', stage: 'request-validation', context: { seriesIndex: Number(series[2]), reason: 'REQUIRED' } };
   return null;
@@ -377,7 +370,8 @@ const contextFor = (value) => {
   if (FIELDS.has(value.field)) context.field = value.field;
   if (typeof value.reason === 'string' && Object.hasOwn(REASONS, value.reason)) context.reason = value.reason;
   if (value.positionUnit === 'python-character') context.positionUnit = value.positionUnit;
-  for (const key of ['position', 'row', 'inputOrdinal', 'recordIndex', 'seriesIndex', 'slotIndex', 'recordCount', 'columnCount', 'codepoint']) {
+  if (typeof value.configPath === 'string' && value.configPath.length <= 80 && CONFIG_PATH.test(value.configPath)) context.configPath = value.configPath;
+  for (const key of ['position', 'row', 'column', 'inputOrdinal', 'recordIndex', 'seriesIndex', 'slotIndex', 'recordCount', 'columnCount', 'codepoint', 'innerPx', 'outerPx']) {
     if (Number.isSafeInteger(value[key]) && value[key] >= 0 && value[key] <= (key === 'codepoint' ? 0x10ffff : 10000000)) {
       if (key !== 'position' || context.positionUnit === 'python-character') context[key] = value[key];
     }
@@ -404,6 +398,16 @@ export const normalizeUserFacingError = (value, {
     result.secondary.push({ code: 'CLEANUP_FAILED', stage: 'cleanup' });
   }
   const [message, actions] = DEFINITIONS[result.code];
+  const { inputOrdinal, row, column, slotIndex, seriesIndex, innerPx, outerPx, configPath } = result.context;
+  const locators = [
+    inputOrdinal !== undefined ? `${ORDINAL_LABELS[result.code] || 'Sequence'} ${inputOrdinal}.` : '',
+    row !== undefined ? `Line ${row}.` : '',
+    column !== undefined ? `Column ${column}.` : '',
+    slotIndex !== undefined ? `Track row ${slotIndex + 1}.` : '',
+    seriesIndex !== undefined ? `Depth series ${seriesIndex + 1}.` : '',
+    configPath !== undefined ? `Setting: ${configPath}.` : ''
+  ].filter(Boolean).map((text) => ` ${text}`).join('');
+  const band = innerPx !== undefined && outerPx !== undefined ? ` Available band: ${innerPx}–${outerPx} px.` : '';
   const guidance = REASONS[result.context.reason] || '';
   const field = result.context.field ? ` Field: ${FIELD_LABELS[result.context.field] || result.context.field}.` : '';
   const position = result.context.position !== undefined ? ` Python character position ${result.context.position} (zero-based).` : '';
@@ -413,9 +417,7 @@ export const normalizeUserFacingError = (value, {
     ? ' Load a supported Session file or recreate it with the current writer.' : '';
   const continuation = result.operation === 'align' && result.context.field === 'direction'
     && result.context.reason === 'SOURCE_VIEW_CONFLICT' ? ' Review the updated preview and Apply again.' : '';
-  const decorationResult = result.code === 'DECORATION_CONTINUITY' && result.context.inputOrdinal !== undefined
-    ? ` Result ${result.context.inputOrdinal}.` : '';
-  result.summary = `${message}${decorationResult}${field}${guidance ? ` ${guidance}` : ''}${position}${columns}${count}${continuation}${schemaGuidance}`
+  result.summary = `${message}${locators}${field}${guidance ? ` ${guidance}` : ''}${band}${position}${columns}${count}${continuation}${schemaGuidance}`
     .slice(0, Number.isSafeInteger(summaryLimit) ? Math.max(0, Math.min(summaryLimit, 1000)) : 1000);
   const detail = [`Code: ${result.code}`, `Operation: ${result.operation}`, `Stage: ${result.stage}`,
     ...Object.entries(result.context).map(([key, item]) => `${key}: ${item}`),

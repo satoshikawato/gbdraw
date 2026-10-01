@@ -260,7 +260,7 @@ test('Save Session is single-flight, paints pending state, and releases every se
     };
   });
   expect(compressionFailure.result).toMatchObject({ status: 'error',
-    error: { code: 'UNKNOWN', operation: 'unknown', stage: 'unknown' } });
+    error: { code: 'UNKNOWN', operation: 'session-save', stage: 'unknown' } });
   expect(compressionFailure.pending).toBe(false);
   expect(compressionFailure.errorSummary).toContain('without recognized diagnostic information');
   expect(compressionFailure.errorSummary).not.toContain('controlled compression failure');

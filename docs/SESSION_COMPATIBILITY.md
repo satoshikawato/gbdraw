@@ -16,7 +16,14 @@ window, step, and depth window or step must be positive integers, the
 dinucleotide must be two letters from `A`, `C`, `G`, `T`, and `U` (`U` counts
 as `T`), font sizes must be greater than zero, and stroke widths must be zero
 or greater. A Session holding another value fails with the field or setting
-named instead of drawing an empty or flat track.
+named instead of drawing an empty or flat track. The Web app sends these values
+as typed and no longer replaces a rejected value with Auto or a default.
+
+A Web Session older than Session 40 loads with its saved preview, but its Result
+has no current feature metadata. **Save Session** then asks for one **Generate
+Diagram** and offers it; after that Generate, Save writes Session 44. Loading
+such a Session and saving it directly, as 0.13.0 allowed, is retired. Session
+40 and later Sessions save unchanged.
 
 CLI Sessions and Sessions saved from `main` can contain the label maps
 `whitelist_map`, `priority_map`, and `label_override_rules` under

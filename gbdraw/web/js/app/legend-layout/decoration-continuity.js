@@ -4,13 +4,10 @@ import {
   compositionUserDeltas
 } from './composition-actions.js';
 import { recordStructuralMetric } from '../../services/runtime-test-hooks.js';
+import { diagnosticError } from '../../services/error-normalization.js';
 
-const fail = (target, reason, { field = 'decorations', inputOrdinal = 1, diagnosticReason = 'DECORATION_METADATA' } = {}) => {
-  const error = new Error(`Cannot preserve ${target} placement: ${reason}. The previous Result is unchanged. Reset this item's position or use Reset Layout on the previous Result, or restore the matching settings, then Generate again.`);
-  error.code = 'DECORATION_CONTINUITY';
-  error.stage = 'result-admission';
-  error.context = { field, inputOrdinal, reason: diagnosticReason };
-  throw error;
+const fail = ({ field = 'decorations', inputOrdinal = 1, diagnosticReason = 'DECORATION_METADATA' } = {}) => {
+  throw diagnosticError('DECORATION_CONTINUITY', { field, inputOrdinal, reason: diagnosticReason }, { stage: 'result-admission' });
 };
 
 const sameValue = (left, right) => {
@@ -37,9 +34,9 @@ const readDecorations = (svg) => {
   const scaleIndexes = binding.primary.targets.flatMap((target, index) => target.id === 'length_bar' ? [index] : []);
   const decorations = { legend: deltas.legend, title: deltas.title,
     scale: scaleIndexes.length === 1 ? deltas.primary[scaleIndexes[0]] : null };
-  if (scaleIndexes.length > 1) fail('Linear scale', 'duplicate targets', { field: 'scale', diagnosticReason: 'DECORATION_TARGET' });
+  if (scaleIndexes.length > 1) fail({ field: 'scale', diagnosticReason: 'DECORATION_TARGET' });
   Object.entries(decorations).forEach(([role, delta]) => {
-    if (delta && (delta.length !== 2 || !delta.every(Number.isFinite))) fail(role, 'non-finite offset', { field: role, diagnosticReason: 'FINITE' });
+    if (delta && (delta.length !== 2 || !delta.every(Number.isFinite))) fail({ field: role, diagnosticReason: 'FINITE' });
   });
   return decorations;
 };
@@ -62,7 +59,7 @@ export const captureDecorationContinuity = ({ canonical, results = [], catalog, 
         error.context.inputOrdinal = index + 1;
         throw error;
       }
-      fail(`Result ${index + 1} decorations`, error.message, { inputOrdinal: index + 1 });
+      fail({ inputOrdinal: index + 1 });
     }
     if (!Object.values(deltas).some(nonzero)) return null;
     return { deltas, identity: projectRecordIdentity(canonical, catalog?.items?.[index]?.recordKeys), index };
@@ -74,32 +71,31 @@ export const captureDecorationContinuity = ({ canonical, results = [], catalog, 
     const transforms = identities.map(() => null);
     for (const snapshot of snapshots) {
       const roles = Object.entries(snapshot.deltas).filter(([, delta]) => nonzero(delta)).map(([role]) => role);
-      const target = `Result ${snapshot.index + 1} ${roles.join('/')}`;
       const matches = identities.flatMap((identity, index) => snapshot.identity && identity
         && sameValue(snapshot.identity, identity) ? [index] : []);
       const oldMatches = oldIdentities.filter(identity => snapshot.identity && identity
         && sameValue(snapshot.identity, identity));
       if (matches.length !== 1 || oldMatches.length !== 1 || transforms[matches[0]]) {
-        fail(target, 'source, region, mode, grouping or record identity is changed, unknown or ambiguous', { inputOrdinal: snapshot.index + 1, diagnosticReason: 'DECORATION_IDENTITY' });
+        fail({ inputOrdinal: snapshot.index + 1, diagnosticReason: 'DECORATION_IDENTITY' });
       }
       transforms[matches[0]] = (svg) => {
         let binding;
         try { binding = bindCompositionMetadata(svg); }
-        catch (error) { fail(target, error.message, { inputOrdinal: snapshot.index + 1 }); }
+        catch { fail({ inputOrdinal: snapshot.index + 1 }); }
         const deltas = {};
         for (const role of roles) {
           const automatic = role === 'scale' ? binding.metadata.primary.automaticTranslation
             : binding[role].metadata?.automaticTranslation;
           if (automatic && !snapshot.deltas[role].every((value, index) => Number.isFinite(value + automatic[index]))) {
-            fail(target, 'non-finite placement', { field: role, inputOrdinal: snapshot.index + 1, diagnosticReason: 'FINITE' });
+            fail({ field: role, inputOrdinal: snapshot.index + 1, diagnosticReason: 'FINITE' });
           }
           if (role === 'scale') {
             const indexes = binding.primary.targets.flatMap((element, index) => element.id === 'length_bar' ? [index] : []);
-            if (indexes.length !== 1) fail(target, 'Linear scale target is missing or ambiguous', { field: 'scale', inputOrdinal: snapshot.index + 1, diagnosticReason: 'DECORATION_TARGET' });
+            if (indexes.length !== 1) fail({ field: 'scale', inputOrdinal: snapshot.index + 1, diagnosticReason: 'DECORATION_TARGET' });
             deltas.primary = [];
             deltas.primary[indexes[0]] = snapshot.deltas.scale;
           } else {
-            if (binding[role].targets.length !== 1) fail(target, `${role} target is missing or ambiguous`, { field: role, inputOrdinal: snapshot.index + 1, diagnosticReason: 'DECORATION_TARGET' });
+            if (binding[role].targets.length !== 1) fail({ field: role, inputOrdinal: snapshot.index + 1, diagnosticReason: 'DECORATION_TARGET' });
             deltas[role] = snapshot.deltas[role];
           }
         }

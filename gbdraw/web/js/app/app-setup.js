@@ -26,6 +26,7 @@ import {
   disposeSessionOperations,
   getCommittedCanonicalSession,
   getCommittedCanonicalRenderRequest,
+  assertActiveModeInputs,
   importSession as importSessionFromFile,
   SESSION_VERSION,
   serializeActiveRenderFiles,
@@ -76,7 +77,7 @@ import { createLegendManager } from './legend.js';
 import { createPaletteLoader } from './palettes.js';
 import { afterPaint, createRunAnalysis } from './run-analysis.js';
 import { createSimilarityAlignmentActions } from './similarity-alignment.js';
-import { normalizeUserFacingError } from '../services/error-normalization.js';
+import { diagnosticError, normalizeUserFacingError } from '../services/error-normalization.js';
 import { formatElapsedMs, reproducibilityLabel } from './run-info.js';
 import { createLegendLayout } from './legend-layout.js';
 import {
@@ -458,7 +459,7 @@ export const createAppSetup = () => {
       linearComparisonResolution.value?.hasComparisonIntent !== true
     ) return '';
     return classifyOptionalPositiveNumber(adv.comparison_height).status === 'invalid'
-      ? 'Pairwise Match Height must be Auto or a positive finite number.'
+      ? normalizeUserFacingError(diagnosticError('INPUT_INVALID', { field: 'match_height', reason: 'POSITIVE_OR_AUTO' })).summary
       : '';
   });
 
@@ -2333,6 +2334,7 @@ export const createAppSetup = () => {
       })
     ),
     prepareLinearRecordCatalog,
+    assertActiveModeInputs,
     canonicalSessionVersion: SESSION_VERSION,
     adoptCanonicalRenderArtifacts,
     getCommittedCanonicalRenderRequest,
@@ -2779,6 +2781,10 @@ export const createAppSetup = () => {
     'exact replay command'
   );
 
+  const catalogIssueError = (catalog) => {
+    const issue = catalog.issues[0];
+    return issue ? diagnosticError(issue.code, issue.context) : diagnosticError('INPUT_UNREADABLE');
+  };
   async function prepareLinearRecordCatalog(loadComparison = false, { privateCandidate = false } = {}) {
     if (mode.value !== 'linear') return { catalog: null, error: '' };
     const hasAutomaticSequence = linearSeqs.some((sequence) => {
@@ -2809,7 +2815,7 @@ export const createAppSetup = () => {
       }));
       const catalog = getAnnotationRecordCatalog(loadComparison, sources);
       return catalog.status === 'ready' ? { catalog, error: '' }
-        : { catalog: null, error: catalog.issues[0] || 'Could not read records from the Linear input file(s).' };
+        : { catalog: null, error: catalogIssueError(catalog) };
     }
     let catalog = getAnnotationRecordCatalog(loadComparison);
     if (catalog.status !== 'ready') {
@@ -2825,7 +2831,7 @@ export const createAppSetup = () => {
       : {
           catalog: null,
           error: linearSeqs.map(seq => linearRecordSelector.errorModelFor(seq)).find(error => error?.code)
-            || catalog.issues[0] || 'Could not read records from the Linear input file(s).'
+            || catalogIssueError(catalog)
         };
   }
 

@@ -520,7 +520,8 @@ class CircularMultiRecordOptions:
             or min_radius_ratio > 1
         ):
             raise ValidationError(
-                "multi_record_min_radius_ratio must be a finite number in (0, 1]."
+                "multi_record_min_radius_ratio must be a finite number in (0, 1].",
+                diagnostic=_invalid_input("multi_record_min_radius_ratio", "POSITIVE_UNIT_INTERVAL"),
             )
         for field_name, value in (
             ("multi_record_column_gap_ratio", column_gap_ratio),

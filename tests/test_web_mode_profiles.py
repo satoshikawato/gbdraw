@@ -70,12 +70,15 @@ def test_web_mode_profile_consumers_use_mode_specific_defaults() -> None:
         in setup_source
     )
 
-    circular_normalization = run_source.split(
-        "const normalizeConservationState = () => {", 1
-    )[1].split("const runCircularLosatConservation", 1)[0]
-    assert "DEFAULT_LINEAR_BLAST_FILTERS" not in circular_normalization
-    assert "DEFAULT_CIRCULAR_CONSERVATION_BLAST_FILTERS" in circular_normalization
-    assert "comparisonFiltersForMode('circular')" in run_source
+    # Each mode resolves its thresholds with its own defaults (X-02: one
+    # resolver on the generated domains; Generate keeps the draft).
+    mode_profiles_source = (WEB_ROOT / "js" / "mode-profiles.js").read_text(encoding="utf-8")
+    resolver = mode_profiles_source.split("export const resolveComparisonThresholds", 1)[1]
+    assert "comparisonFiltersForMode(mode)" in resolver.split("export const", 1)[0]
+    assert "resolveComparisonThresholds(adv, 'circular')" in run_source
+    assert "resolveComparisonThresholds(adv, 'linear')" in run_source
+    assert "normalizeBlastThreshold" not in run_source
+    assert "resolveComparisonThresholds(state.adv, state.mode.value)" in request_source
     assert "comparisonFiltersForMode('linear')" in run_source
     assert not (WEB_ROOT / "js" / "app" / "cli-args.js").exists()
     assert "effectiveLinearAxisColor({" in request_source

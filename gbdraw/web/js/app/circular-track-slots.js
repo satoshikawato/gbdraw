@@ -22,6 +22,7 @@ import {
 } from './track-slot-display.js';
 import { parseOptionalCircularScalar, parseOptionalPixel, validateCustomTrackPlan } from './track-slot-validation.js';
 import { visibleFeatureUnderlaysForState } from '../utils/feature-rendering.js';
+import { diagnosticError } from '../services/error-normalization.js';
 
 const SUPPORTED_RENDERERS = [
   'features',
@@ -751,29 +752,27 @@ export const createDefaultCircularTrackSlots = ({
   return slots;
 };
 
+// Shortcut -> diagnostic field (the Web control's adv key).
 const CIRCULAR_GEOMETRY_SHORTCUT_FIELDS = Object.freeze({
-  featureWidth: 'Feature Width',
-  depthWidth: 'Depth Width',
-  gcContentWidth: 'GC Content Width',
-  gcContentRadius: 'GC Content Radius',
-  gcSkewWidth: 'GC Skew Width',
-  gcSkewRadius: 'GC Skew Radius'
+  featureWidth: 'feature_width_circular',
+  depthWidth: 'depth_width_circular',
+  gcContentWidth: 'gc_content_width_circular',
+  gcContentRadius: 'gc_content_radius_circular',
+  gcSkewWidth: 'gc_skew_width_circular',
+  gcSkewRadius: 'gc_skew_radius_circular'
 });
 
 export const normalizeCircularGeometryShortcuts = (values = {}) => {
   const normalized = {};
-  for (const [field, label] of Object.entries(CIRCULAR_GEOMETRY_SHORTCUT_FIELDS)) {
+  for (const [field, diagnosticField] of Object.entries(CIRCULAR_GEOMETRY_SHORTCUT_FIELDS)) {
     const raw = values?.[field];
     if (raw === null || raw === undefined || raw === '') {
       normalized[field] = null;
       continue;
     }
-    if (typeof raw === 'boolean') {
-      throw new Error(`${label} must be Auto or a positive finite number.`);
-    }
-    const numeric = Number(raw);
+    const numeric = typeof raw === 'boolean' ? NaN : Number(raw);
     if (!Number.isFinite(numeric) || numeric <= 0) {
-      throw new Error(`${label} must be Auto or a positive finite number.`);
+      throw diagnosticError('INPUT_INVALID', { field: diagnosticField, reason: 'POSITIVE_OR_AUTO' });
     }
     normalized[field] = numeric;
   }

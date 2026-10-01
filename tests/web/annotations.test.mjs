@@ -64,7 +64,7 @@ test('invalid annotation coordinates cannot be silently clamped or truncated', (
   for (const start of ['abc', '0', '-10', '1.5', '', 'Infinity']) {
     assert.throws(() => parseAnnotationTable(`set_id\tid\tmark\tstart\tend\ns\ta\thighlight\t${start}\t30\n`), /positive integers/);
     const invalid = [{ id: 's', annotations: [{ id: 'a', target: coordinateTarget({ start, end: 30 }) }] }];
-    assert.match(validateAnnotationRecordTargets(invalid, { records: [] }), /positive integers/);
+    assert.deepEqual(validateAnnotationRecordTargets(invalid, { records: [] }), { code: 'ANNOTATION_TARGET', context: { reason: 'POSITIVE_INTEGER' } });
   }
   assert.equal(parseAnnotationTable('set_id\tid\tmark\tstart\tend\ns\ta\thighlight\t10\t30\n')[0].annotations[0].target.start, 10);
 });
@@ -257,33 +257,30 @@ const targetSet = createAnnotationSet({
   id: 'targets',
   annotations: [{ id: 'window', target: coordinateTarget({ start: 1, end: 5 }), label: '', mark: 'band' }]
 });
-assert.match(validateAnnotationRecordTargets([targetSet], linearCatalog), /targets\/window/);
+assert.deepEqual(validateAnnotationRecordTargets([targetSet], linearCatalog), { code: 'ANNOTATION_TARGET', context: { reason: 'TARGET_RECORD' } });
 const featureTargetSet = createAnnotationSet({
   id: 'features',
   annotations: [{ id: 'gene', target: featureTarget({ selector: 'locus_tag=ABC_1' }), label: '', mark: 'bracket' }]
 });
-assert.match(validateAnnotationRecordTargets([featureTargetSet], linearCatalog), /features\/gene/);
+assert.deepEqual(validateAnnotationRecordTargets([featureTargetSet], linearCatalog), { code: 'ANNOTATION_TARGET', context: { reason: 'TARGET_RECORD' } });
 assert.deepEqual(
   annotationRecordOptions(linearCatalog, targetSet.annotations[0]).map((option) => option.value),
   ['', linearCatalog.records[0].key, linearCatalog.records[1].key]
 );
 setAnnotationRecordValue(linearCatalog, targetSet.annotations[0], linearCatalog.records[1].key);
 assert.deepEqual(targetSet.annotations[0].target.record, { kind: 'recordId', value: 'RecB' });
-assert.equal(validateAnnotationRecordTargets([targetSet], linearCatalog), '');
+assert.equal(validateAnnotationRecordTargets([targetSet], linearCatalog), null);
 assert.equal(encodeAnnotationTable([targetSet]).trim().split('\n')[1].split('\t')[3], 'RecB');
 delete targetSet.annotations[0].metadata._gbdraw_web_target_record_key;
 targetSet.annotations[0].target.record = { kind: 'recordIndex', index: 2 };
-assert.match(validateAnnotationRecordTargets([targetSet], linearCatalog), /out of range/);
+assert.deepEqual(validateAnnotationRecordTargets([targetSet], linearCatalog), { code: 'ANNOTATION_TARGET', context: { reason: 'OUT_OF_RANGE' } });
 targetSet.annotations[0].target.record = { kind: 'recordId', value: 'missing' };
-assert.match(validateAnnotationRecordTargets([targetSet], linearCatalog), /not available/);
+assert.deepEqual(validateAnnotationRecordTargets([targetSet], linearCatalog), { code: 'ANNOTATION_TARGET', context: { reason: 'NO_MATCH' } });
 setAnnotationRecordValue(duplicateCatalog, targetSet.annotations[0], duplicateCatalog.records[0].key);
-assert.equal(validateAnnotationRecordTargets([targetSet], duplicateCatalog), '');
+assert.equal(validateAnnotationRecordTargets([targetSet], duplicateCatalog), null);
 targetSet.annotations[0].target.record = { kind: 'recordIndex', index: -1 };
 delete targetSet.annotations[0].metadata._gbdraw_web_target_record_key;
-assert.match(
-  validateAnnotationRecordTargets([targetSet], linearCatalog),
-  /valid target record/
-);
+assert.deepEqual(validateAnnotationRecordTargets([targetSet], linearCatalog), { code: 'ANNOTATION_TARGET', context: { reason: 'TARGET_RECORD' } });
 
 const automaticSourceCatalog = buildAnnotationRecordCatalog({
   mode: 'linear',
@@ -315,7 +312,7 @@ const emptySourceCatalog = buildAnnotationRecordCatalog({
   linearSources: [{ sourceKey: 'empty', hasInput: true, status: 'ready', selector: '', records: [] }]
 });
 assert.equal(emptySourceCatalog.status, 'error');
-assert.match(emptySourceCatalog.issues[0], /no records were found/);
+assert.deepEqual(emptySourceCatalog.issues[0], { code: 'NO_RECORDS', context: { inputOrdinal: 1 } });
 
 const gbComparisonCatalog = buildAnnotationRecordCatalog({
   mode: 'linear',
@@ -382,12 +379,12 @@ const reorderedDuplicateCatalog = buildAnnotationRecordCatalog({
 });
 reconcileAnnotationRecordBindings([duplicateTargetSet], reorderedDuplicateCatalog);
 assert.deepEqual(duplicateTargetSet.annotations[0].target.record, { kind: 'recordIndex', index: 0 });
-assert.equal(validateAnnotationRecordTargets([duplicateTargetSet], reorderedDuplicateCatalog), '');
+assert.equal(validateAnnotationRecordTargets([duplicateTargetSet], reorderedDuplicateCatalog), null);
 const replacedSourceCatalog = buildAnnotationRecordCatalog({
   mode: 'linear',
   linearSources: [{ sourceKey: 'replacement', hasInput: true, status: 'ready', selector: '', records: [{ recordId: 'dup' }] }]
 });
-assert.match(validateAnnotationRecordTargets([duplicateTargetSet], replacedSourceCatalog), /no longer available/);
+assert.deepEqual(validateAnnotationRecordTargets([duplicateTargetSet], replacedSourceCatalog), { code: 'ANNOTATION_TARGET', context: { reason: 'TARGET_RECORD' } });
 
 targetSet.annotations[0].target.record = { kind: 'recordId', value: 'RecA' };
 targetSet.annotations[0].metadata = {};
@@ -399,14 +396,14 @@ const circularMultiOutputCatalog = buildAnnotationRecordCatalog({
     records: [{ record_id: 'RecA' }, { record_id: 'RecB' }]
   }
 });
-assert.match(validateAnnotationRecordTargets([targetSet], circularMultiOutputCatalog), /enable Multi-record canvas/);
+assert.deepEqual(validateAnnotationRecordTargets([targetSet], circularMultiOutputCatalog), { code: 'ANNOTATION_TARGET', context: { reason: 'TARGET_MODE' } });
 
 const circularSingleCatalog = buildAnnotationRecordCatalog({
   mode: 'circular',
   circularSource: { sourceKey: 'single', hasInput: true, status: 'ready', records: [{ record_id: 'RecA' }] }
 });
 targetSet.annotations[0].target.record = null;
-assert.equal(validateAnnotationRecordTargets([targetSet], circularSingleCatalog), '');
+assert.equal(validateAnnotationRecordTargets([targetSet], circularSingleCatalog), null);
 
 const tableLines = table.trimEnd().split('\n');
 const tableHeader = tableLines[0].split('\t');
@@ -419,7 +416,7 @@ const nullRecordRow = tableLines[1].split('\t');
 nullRecordRow[recordColumn] = 'NULL';
 const nullRecordSets = parseAnnotationTable(`${tableLines[0]}\n${nullRecordRow.join('\t')}\n`);
 assert.equal(nullRecordSets[0].annotations[0].target.record, null);
-assert.match(validateAnnotationRecordTargets(nullRecordSets, linearCatalog), /Choose a target record/);
+assert.deepEqual(validateAnnotationRecordTargets(nullRecordSets, linearCatalog), { code: 'ANNOTATION_TARGET', context: { reason: 'TARGET_RECORD' } });
 const invalidIndexRow = tableLines[1].split('\t');
 invalidIndexRow[recordColumn] = '#0';
 assert.throws(

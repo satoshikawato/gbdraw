@@ -85,7 +85,21 @@ decisions are in
   Track row, Depth series, table line, or setting path instead of an
   unclassified error (X-01).
 
-<!-- web-gui-audit-20260930 P07 -->
+- Web validation failures report a recognized code with the field and the
+  Sequence, Line, Track row, Depth series, setting, or available band that
+  applies, instead of an unknown error. Session import keeps the Worker's
+  diagnosis: a file that is not JSON or not a Session names the format problem
+  (X-01, SE-09).
+- Generate sends numeric settings as typed and no longer replaces a rejected
+  value with Auto or a default: a GC window of 0, a decimal step, a non-numeric
+  e-value, or a comparison filter outside its range is rejected with the field
+  named, and Generate no longer rewrites the settings it reads (X-02: TR-04,
+  GE-08, GE-04, CO-09).
+- Save before the first Generate explains the missing input with the same check
+  Generate uses (IN-08). After loading a Session older than Session 40, Save asks
+  for one Generate and offers it; Generate then Save writes the current format
+  (D-25, SE-05). The error panel offers **Generate** when that is the correction
+  and no **Save Session** after a failed Save (N-12).
 
 <!-- web-gui-audit-20260930 P08 -->
 

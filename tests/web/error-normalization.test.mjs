@@ -3,8 +3,7 @@ import { execFileSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import test from 'node:test';
 import { normalizeCircularGeometryShortcuts } from '../../gbdraw/web/js/app/circular-track-slots.js';
-import { assertKnownDefect } from './helpers/known-defect.mjs';
-import { normalizeUserFacingError } from '../../gbdraw/web/js/services/error-normalization.js';
+import { diagnosticError, normalizeUserFacingError } from '../../gbdraw/web/js/services/error-normalization.js';
 import { deserializeWorkerError, normalizeGenerationResponse } from '../../gbdraw/web/js/services/diagram-generation.js';
 globalThis.self = {};
 const { serializeError, callJsonHelper, resolveGenerationCleanupOutcome } = await import('../../gbdraw/web/js/workers/diagram-generation-worker.js');
@@ -48,7 +47,7 @@ assert(normalizeUserFacingError(source, { summaryLimit: 5000, detailLimit: 9000 
 
 // Diagnostic numeric boundaries must survive transport exactly, while larger,
 // fractional, nonfinite and nonnumeric values are omitted rather than clamped.
-for (const key of ['position', 'row', 'inputOrdinal', 'recordIndex', 'seriesIndex', 'slotIndex', 'recordCount', 'columnCount', 'codepoint']) {
+for (const key of ['position', 'row', 'column', 'inputOrdinal', 'recordIndex', 'seriesIndex', 'slotIndex', 'recordCount', 'columnCount', 'codepoint', 'innerPx', 'outerPx']) {
   const maximum = key === 'codepoint' ? 0x10ffff : 10000000;
   const bounded = value => roundtrip({ ...source, context: { [key]: value, positionUnit: 'python-character' } });
   for (const value of [0, maximum]) assert.equal(bounded(value).context[key], value, key);
@@ -140,7 +139,7 @@ for (const [validator, input, field, reason] of [
 const { validateAnnotationRecordTargets } = await import('../../gbdraw/web/js/app/annotations/validation.js');
 const annotationError = validateAnnotationRecordTargets([{ id: 'PRIVATE_SET', annotations: [{ id: 'PRIVATE_ID',
   target: { kind: 'coordinateSpan', start: 0, end: 1 } }] }], { records: [] });
-const annotationModel = roundtrip(new Error(annotationError));
+const annotationModel = roundtrip(diagnosticError(annotationError.code, annotationError.context));
 assert.equal(annotationModel.code, 'ANNOTATION_TARGET');
 assert.equal(annotationModel.context.reason, 'POSITIVE_INTEGER');
 assert.doesNotMatch(JSON.stringify(annotationModel), /PRIVATE_/);
@@ -153,8 +152,29 @@ await assert.rejects(runDiagramHelperOperation('evaluateRules', []), error =>
 assert.equal(serializeError(null, { operation: 'generate', stage: 'render' }).code, 'UNKNOWN');
 // Keep independent Python and JS finite domains aligned without importing the
 // privileged Worker protocol into the public wording owner.
-const pythonContract = JSON.parse(execFileSync(process.env.PYTHON || 'python', ['-c',
-  'import json; from gbdraw.web_support.error_adapter import OPERATIONS, STAGES, FIELDS; print(json.dumps(dict(operations=sorted(OPERATIONS), stages=sorted(STAGES), fields=sorted(FIELDS))))'], { encoding: 'utf8' }));
+// X-01 vocabulary parity: every code, reason and context key a Python producer
+// or the Python adapter emits is defined by the JS wording owner.
+const pythonContract = JSON.parse(execFileSync(process.env.PYTHON || 'python', ['-c', `
+import json
+from gbdraw.web_support import error_adapter as a
+exact = list(a._EXACT.values())
+print(json.dumps(dict(
+    operations=sorted(a.OPERATIONS), stages=sorted(a.STAGES), fields=sorted(a.FIELDS),
+    codes=sorted(a.DIAGNOSTIC_CODES | {code for code, _ in exact} | {row[1] for row in a._TEMPLATES}),
+    reasons=sorted(a.DIAGNOSTIC_REASONS | {ctx["reason"] for _, ctx in exact if "reason" in ctx}
+        | {row[2] for row in a._TEMPLATES} | set(a._CONSTRAINTS.values())),
+    contextKeys=sorted(a._DIAGNOSTIC_INTEGER_KEYS | {"configPath"}))))
+`], { encoding: 'utf8' }));
+for (const code of pythonContract.codes) assert.equal(roundtrip({ code }).code, code, code);
+for (const reason of pythonContract.reasons) {
+  const model = roundtrip({ code: 'INPUT_INVALID', context: { reason } });
+  assert.equal(model.context.reason, reason, reason);
+  assert.notEqual(model.summary, normalizeUserFacingError({ code: 'INPUT_INVALID' }).summary, reason);
+}
+for (const key of pythonContract.contextKeys) {
+  const value = key === 'configPath' ? 'objects.scale.interval' : 3;
+  assert.equal(roundtrip({ code: 'INPUT_INVALID', context: { [key]: value } }).context[key], value, key);
+}
 const { DIAGRAM_HELPER_OPERATION_NAMES } = await import('../../gbdraw/web/js/services/diagram-worker-protocol.js');
 assert.deepEqual(pythonContract.operations, ['unknown', 'generate', 'align', 'feature-extraction', 'export-svg', 'export-png', 'export-pdf', ...DIAGRAM_HELPER_OPERATION_NAMES].sort());
 for (const operation of pythonContract.operations) assert.equal(roundtrip({ code: 'UNKNOWN', operation }).operation, operation);
@@ -253,45 +273,76 @@ assert.equal(busy.stage, 'render');
 assert.match(busy.summary, /Wait for it to finish/);
 assert.deepEqual(busy.actions, ['retry', 'save-session']);
 
-for (const [message, code] of [
-  ['Session file is too large.', 'SESSION_SIZE_LIMIT'],
-  ['Expanded session file is too large.', 'SESSION_SIZE_LIMIT'],
-  ['This browser does not support gzip session export.', 'SESSION_BROWSER_UNSUPPORTED'],
-  ['This browser does not support gzip session import.', 'SESSION_BROWSER_UNSUPPORTED']
-]) {
-  const model = roundtrip(new Error(message));
-  assert.equal(model.code, code);
-  assert.notEqual(model.code, 'UNKNOWN');
-}
 assert.equal(roundtrip(Object.assign(new Error('This browser does not support Session import Workers.'),
   { code: 'SESSION_IMPORT_UNAVAILABLE', stage: 'transport' })).code, 'SESSION_IMPORT_UNAVAILABLE');
 
 // X-01 (PD-OI-046, R6): a user-facing validation producer yields a recognized
 // diagnostic, not the UNKNOWN or unclassified fallback.
-test('Circular geometry shortcut rejection is a recognized diagnostic (X-01 known defect)', async () => {
-  let rejection = null;
-  try {
-    normalizeCircularGeometryShortcuts({ featureWidth: 0 });
-  } catch (error) {
-    rejection = error;
-  }
-  assert.ok(rejection, 'Feature Width 0 is rejected');
-  const model = normalizeUserFacingError(rejection, { operation: 'generate', stage: 'request-validation' });
-  await assertKnownDefect('X-01', () => {
-    assert.ok(!['UNKNOWN', 'VALIDATION_UNCLASSIFIED'].includes(model.code), model.code);
+test('Circular geometry shortcut rejection is a recognized diagnostic (X-01)', () => {
+  assert.throws(() => normalizeCircularGeometryShortcuts({ featureWidth: 0 }), (error) => {
+    const model = normalizeUserFacingError(error, { operation: 'generate', stage: 'request-validation' });
+    assert.equal(model.code, 'INPUT_INVALID');
+    assert.deepEqual(model.context, { field: 'feature_width_circular', reason: 'POSITIVE_OR_AUTO' });
+    assert.match(model.summary, /Field: Feature Width\. Use Auto or a finite value greater than zero\./);
+    return true;
   });
 });
 
-// N-12: an error whose guidance is to Generate again offers that action in the
-// operation error panel, as Retry and Save Session are offered.
-test('the operation error panel offers the Generate action (N-12 known defect)', async () => {
+// N-12: an error whose guidance is to Generate again offers that action, and a
+// failed Save never offers Save Session again.
+test('the operation error panel offers Generate and no Save after a failed Save (N-12)', () => {
   const exportInput = normalizeUserFacingError({ code: 'EXPORT_INPUT' }, { operation: 'export-png' });
   assert.ok(exportInput.actions.includes('generate'));
   const indexHtml = readFileSync(new URL('../../gbdraw/web/index.html', import.meta.url), 'utf8');
-  assert.match(indexHtml, /errorDisplay\.actions\.includes\('save-session'\)/);
-  await assertKnownDefect('N-12', () => {
-    assert.match(indexHtml, /errorDisplay\.actions\.includes\('generate'\)/);
-  });
+  assert.match(indexHtml, /errorDisplay\.actions\.includes\('generate'\) && errorDisplay\.operation !== 'generate'" type="button" @click="runAnalysis"/);
+  assert.match(indexHtml, /errorDisplay\.actions\.includes\('save-session'\) && errorDisplay\.operation !== 'session-save'/);
+  const saveFailure = normalizeUserFacingError(new Error('PRIVATE'), { operation: 'session-save' });
+  assert.equal(saveFailure.code, 'UNKNOWN');
+  assert.equal(saveFailure.operation, 'session-save');
+});
+
+// R6: locators the producer keeps are shown in the summary, wording only here.
+test('summary shows Sequence, Line, Track row, Depth series, band and setting locators', () => {
+  for (const [source, pattern] of [
+    [diagnosticError('INPUT_REQUIRED', { inputOrdinal: 2 }), /^Supply GenBank input or matching GFF3 and FASTA inputs\. Sequence 2\.$/],
+    [diagnosticError('COMPARISON_INPUT', { inputOrdinal: 1, reason: 'REQUIRED' }), / Comparison FASTA 1\. Supply the required value\.$/],
+    [diagnosticError('DECORATION_CONTINUITY', { inputOrdinal: 3, field: 'scale', reason: 'DECORATION_TARGET' }), / Result 3\. Field: scale\./],
+    [diagnosticError('TABLE_INVALID', { row: 3, field: 'color', reason: 'COLOR' }), /^The table is invalid\. Line 3\. Field: color\. Use none/],
+    [{ code: 'COMPARISON_INPUT', context: { reason: 'NONNEGATIVE_INTEGER', row: 4, column: 7 } }, / Line 4\. Column 7\. Use an integer of zero or greater\.$/],
+    [{ code: 'TRACK_LAYOUT', context: { reason: 'CANNOT_FIT', slotIndex: 1, innerPx: 181, outerPx: 209 } },
+      /^A circular track does not fit inside\. Track row 2\. Move the track.*outside\. Available band: 181–209 px\.$/],
+    [{ code: 'DEPTH_INVALID', context: { reason: 'DEPTH_VALUES', seriesIndex: 0 } }, / Depth series 1\. Use integer positions/],
+    [{ code: 'INPUT_INVALID', context: { reason: 'INTEGER', configPath: 'objects.scale.interval' } }, / Setting: objects\.scale\.interval\. Use an integer\.$/]
+  ]) assert.match(roundtrip(source).summary, pattern);
+  for (const configPath of ['PRIVATE VALUE', 'a', 'Objects.scale', `objects.${'x'.repeat(80)}`, 7]) {
+    assert.equal(roundtrip({ code: 'INPUT_INVALID', context: { configPath } }).context.configPath, undefined);
+  }
+});
+
+// X-01: the producer contract message is a fixed identifier, never a document value.
+test('diagnosticError carries a fixed message, stage, operation and bounded context', () => {
+  const error = diagnosticError('REGION_INVALID', { inputOrdinal: 1, reason: 'SELECT_RECORD_FOR_REGION' });
+  assert.equal(error.message, 'REGION_INVALID/SELECT_RECORD_FOR_REGION');
+  assert.equal(error.stage, 'request-validation');
+  assert.equal(Object.hasOwn(error, 'operation'), false);
+  const save = diagnosticError('SESSION_SAVE_REQUIRES_GENERATE', {}, { operation: 'session-save', stage: 'result-admission' });
+  const model = normalizeUserFacingError(save);
+  assert.deepEqual([model.code, model.operation, model.stage, model.actions], ['SESSION_SAVE_REQUIRES_GENERATE', 'session-save', 'result-admission', ['generate']]);
+  assert.match(model.summary, /Generate once, then Save Session\./);
+  // Literal codes only: no producer interpolates a document value into the code.
+  // Pass-through forms re-raise a code another producer already chose.
+  const passThrough = new Set(['issue.code', 'annotationError.code', 'model.code', 'code']);
+  const files = execFileSync('git', ['grep', '-l', 'diagnosticError(', '--', 'gbdraw/web/js'], { encoding: 'utf8' })
+    .split('\n').filter(Boolean);
+  let literal = 0;
+  for (const file of files) {
+    const text = readFileSync(file, 'utf8');
+    for (const match of text.matchAll(/diagnosticError\(\s*([^,)]*)/g)) {
+      if (/^'[A-Z][A-Z0-9_]*'$/.test(match[1])) { literal += 1; continue; }
+      assert.ok(passThrough.has(match[1].trim()), `${file}: diagnosticError(${match[1]}`);
+    }
+  }
+  assert.ok(literal >= 20, literal);
 });
 
 test('a Circular placement limited by the center reservation names that cause', () => {

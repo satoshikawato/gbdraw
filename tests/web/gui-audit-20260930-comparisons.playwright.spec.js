@@ -214,7 +214,6 @@ test('a renamed Similarity group keeps its name only on the same members after r
 });
 
 test('comparison filters outside their domain are rejected instead of replaced', async ({ page }) => {
-  test.fail(true, 'CO-09');
   test.setTimeout(600_000);
   await openLinearWith(page, [{ name: 'TESTA.gb', text: TESTA }, { name: 'TESTB.gb', text: TESTB }]);
   await uploadComparison(page, 'TESTA.TESTB.tsv', [

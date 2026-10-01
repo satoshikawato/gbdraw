@@ -1,11 +1,11 @@
 import { createBoundedJsonReceiver } from './bounded-json-transport.js';
 import { recordSessionLifecycleEvent } from './runtime-test-hooks.js';
+import { diagnosticError } from './error-normalization.js';
 
 let nextOperationId = 1;
 
-const importError = (message, code, stage, name = 'Error') => Object.assign(
-  new Error(message), { name, code, stage }
-);
+// A Worker that cannot start, crashes or replies unreadably leaves no import path.
+const unavailable = () => diagnosticError('SESSION_IMPORT_UNAVAILABLE', {}, { stage: 'transport' });
 
 // This owns transport lifetime only. The caller still admits an untrusted candidate.
 export const importSessionFile = (file, { signal } = {}) => new Promise((resolve, reject) => {
@@ -31,16 +31,14 @@ export const importSessionFile = (file, { signal } = {}) => new Promise((resolve
     if (error) reject(error);
     else resolve(reply);
   };
-  const cancel = () => settle(importError(
-    'Session loading was canceled.', 'SESSION_IMPORT_CANCELED', 'transport', 'AbortError'
+  const cancel = () => settle(Object.assign(
+    new Error('Session loading was canceled.'), { name: 'AbortError', code: 'SESSION_IMPORT_CANCELED', stage: 'transport' }
   ));
   const crash = (event) => {
     event.preventDefault?.();
-    settle(importError('Session import Worker failed.', 'SESSION_IMPORT_CRASH', 'transport'));
+    settle(unavailable());
   };
-  const unreadable = () => settle(importError(
-    'Session import Worker reply could not be read.', 'SESSION_IMPORT_REPLY_FAILED', 'transport'
-  ));
+  const unreadable = () => settle(unavailable());
   const receive = ({ data: reply }) => {
     if (reply?.operationId !== operationId || settled) return;
     if (reply.status === 'part') {
@@ -49,12 +47,8 @@ export const importSessionFile = (file, { signal } = {}) => new Promise((resolve
         worker.postMessage({ operationId, ack: true });
       } catch { unreadable(); }
     } else if (reply.status === 'error') {
-      settle(importError(
-        reply.error?.message || 'Session import failed.',
-        reply.error?.code || 'SESSION_IMPORT_FAILED',
-        reply.error?.stage || 'transport',
-        reply.error?.name || 'Error'
-      ));
+      const { code = 'UNKNOWN', stage = 'transport', context = {} } = reply.error || {};
+      settle(diagnosticError(code, context, { stage }));
     } else if (reply.status === 'ok' && Number.isSafeInteger(reply.characters) && reply.characters >= 0) {
       try {
         settle(null, { data: assembly.getValue(), characters: reply.characters, timings: reply.timings });
@@ -65,10 +59,7 @@ export const importSessionFile = (file, { signal } = {}) => new Promise((resolve
   };
   if (signal?.aborted) { cancel(); return; }
   if (typeof Worker !== 'function') {
-    settle(importError(
-      'This browser does not support Session import Workers.',
-      'SESSION_IMPORT_UNAVAILABLE', 'transport'
-    ));
+    settle(unavailable());
     return;
   }
   try {
@@ -80,8 +71,6 @@ export const importSessionFile = (file, { signal } = {}) => new Promise((resolve
     recordSessionLifecycleEvent('session-import-worker-start', { operationId, fileBytes: file.size });
     worker.postMessage({ operationId, file });
   } catch {
-    settle(importError(
-      'Session import Worker could not be started.', 'SESSION_IMPORT_START_FAILED', 'transport'
-    ));
+    settle(unavailable());
   }
 });

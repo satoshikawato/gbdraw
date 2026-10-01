@@ -27,12 +27,9 @@ UNCLASSIFIED = {"UNKNOWN", "VALIDATION_UNCLASSIFIED"}
 # Placeholder values for interpolations: empty, numbers, private text, a #index.
 FILLS = ("", "0", "1", "PRIVATE", "#1")
 
-# Identifiers that Python producers already emit but the Web wording owner
-# does not define yet. The Web half of X-01/X-02 (P07) adds them; entries must
-# be removed here as soon as the Web defines them.
-PENDING_WEB_FIELDS = frozenset({"dinucleotide"})
-PENDING_WEB_REASONS = frozenset({"POSITIVE_INTEGER_OR_AUTO", "DINUCLEOTIDE", "DEPTH_VALUES"})
-PENDING_WEB_CONTEXT_KEYS = frozenset({"configPath", "innerPx", "outerPx", "column"})
+# Shrink-only sizes of the adapter's message-classification tables (R6). A
+# producer migrated to diagnostic= removes its row; lower the count with it.
+NATIVE_TABLE_BASELINE = {"_EXACT": 26, "_TEMPLATES": 20, "_CONSTRAINTS": 22}
 
 _TYPED_API = "typed Python API and request contract checks (types, shapes, cross-field rules)"
 _SESSION = "Session document and request decoding checks; the Web Session reader reports Session format errors"
@@ -64,9 +61,9 @@ UNPROVEN_BASELINE: dict[str, tuple[int, str]] = {
     "gbdraw/annotations/planning.py": (1, _ANNOTATIONS),
     "gbdraw/annotations/resolve.py": (8, _ANNOTATIONS),
     "gbdraw/api/config.py": (1, _TYPED_API),
-    "gbdraw/api/diagram.py": (68, _TYPED_API),
+    "gbdraw/api/diagram.py": (66, _TYPED_API),
     "gbdraw/api/io.py": (7, _TYPED_API),
-    "gbdraw/api/options.py": (63, _TYPED_API),
+    "gbdraw/api/options.py": (62, _TYPED_API),
     "gbdraw/api/prepared.py": (3, _TYPED_API),
     "gbdraw/api/record_planning.py": (45, _TYPED_API),
     "gbdraw/api/render.py": (10, _TYPED_API),
@@ -288,10 +285,7 @@ def test_literal_diagnostics_use_the_published_vocabulary():
         if "reason" in diagnostic:
             assert diagnostic["reason"] in error_adapter.DIAGNOSTIC_REASONS, (path, diagnostic)
         if "field" in diagnostic:
-            assert (
-                diagnostic["field"] in error_adapter.FIELDS
-                or diagnostic["field"] in PENDING_WEB_FIELDS
-            ), (path, diagnostic)
+            assert diagnostic["field"] in error_adapter.FIELDS, (path, diagnostic)
         payload = serialize_web_error(
             ValidationError("PRIVATE", diagnostic=diagnostic),
             operation="generate",
@@ -312,12 +306,23 @@ def test_python_diagnostic_vocabulary_matches_the_web_wording_owner():
     web_reasons = set(re.findall(r"\b([A-Z][A-Z0-9_]+): '", _web_block("const REASONS")))
     text = WEB_WORDING.read_text(encoding="utf-8")
     context_block = text[text.index("const contextFor") : text.index("export const normalizeUserFacingError")]
-    web_context_keys = set(re.findall(r"'([A-Za-z]+)'", context_block)) | {"field", "reason"}
+    web_context_keys = (
+        set(re.findall(r"'([A-Za-z]+)'", context_block))
+        | set(re.findall(r"value\.([A-Za-z]+)", context_block))
+    )
+    web_fields = set(re.findall(r"[a-zA-Z_]+", text[text.index("const FIELDS") : text.index("const REASONS")]))
     assert error_adapter.DIAGNOSTIC_CODES <= web_codes
-    assert error_adapter.DIAGNOSTIC_REASONS - web_reasons == PENDING_WEB_REASONS
-    python_context_keys = error_adapter._DIAGNOSTIC_INTEGER_KEYS | {"configPath"}
-    assert python_context_keys - web_context_keys == PENDING_WEB_CONTEXT_KEYS
-    assert not PENDING_WEB_FIELDS & error_adapter.FIELDS
+    assert error_adapter.DIAGNOSTIC_REASONS <= web_reasons
+    assert error_adapter._DIAGNOSTIC_INTEGER_KEYS | {"configPath"} <= web_context_keys
+    assert error_adapter.FIELDS <= web_fields
+
+
+def test_native_message_tables_only_shrink():
+    actual = {name: len(getattr(error_adapter, name)) for name in NATIVE_TABLE_BASELINE}
+    assert actual == NATIVE_TABLE_BASELINE, (
+        "The adapter's English classification tables may only shrink; raise new "
+        f"failures with diagnostic= and lower NATIVE_TABLE_BASELINE (actual: {actual})"
+    )
 
 
 def _producer_messages() -> set[str]:

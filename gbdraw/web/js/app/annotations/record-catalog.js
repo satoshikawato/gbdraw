@@ -3,8 +3,18 @@ import {
   parseAnnotationRecordSelectorValue
 } from './target-actions.js';
 import { buildDisambiguatedRecordEntries, formatRecordLength } from '../record-options.js';
+import { normalizeUserFacingError } from '../../services/error-normalization.js';
 
 const cleanText = (value) => String(value ?? '').trim();
+// Catalog issues are producer diagnostics ({ code, context }); wording stays
+// with the error normalizer.
+const catalogIssue = (code, context = {}) => ({ code, context });
+const discoveryIssue = (error, context = {}) => {
+  const model = normalizeUserFacingError(error || null);
+  return model && model.code !== 'UNKNOWN'
+    ? catalogIssue(model.code, { ...model.context, ...context })
+    : catalogIssue('INPUT_UNREADABLE', context);
+};
 const fileFingerprint = (file) => file
   ? [String(file.name || ''), Number(file.size || 0)]
   : null;
@@ -50,14 +60,14 @@ const sourceRecords = (source, fallbackSourceKey) => (
 
 const selectSourceRecords = (records, selectorValue) => {
   const parsed = parseAnnotationRecordSelectorValue(selectorValue);
-  if (parsed.error) return { records: [], error: parsed.error, explicit: true };
+  if (parsed.error) return { records: [], error: 'SELECTOR_FORMAT', explicit: true };
   const selector = parsed.selector;
   if (!selector) return { records, error: '', explicit: false };
   if (selector.kind === 'recordIndex') {
     const selected = records.find((record) => record.localIndex === selector.index);
     return {
       records: selected ? [selected] : [],
-      error: selected ? '' : `record selector #${selector.index + 1} is out of range`,
+      error: selected ? '' : 'OUT_OF_RANGE',
       explicit: true
     };
   }
@@ -65,9 +75,7 @@ const selectSourceRecords = (records, selectorValue) => {
   if (matches.length !== 1) {
     return {
       records: [],
-      error: matches.length > 1
-        ? `record ID ${JSON.stringify(selector.value)} is duplicated; choose a #index entry`
-        : `record ID ${JSON.stringify(selector.value)} is not available`,
+      error: matches.length > 1 ? 'AMBIGUOUS' : 'NO_MATCH',
       explicit: true
     };
   }
@@ -95,25 +103,25 @@ const buildLinearCatalog = (sources) => {
   const records = [];
   const issues = [];
   normalizedSources.forEach((source, sourceIndex) => {
-    const sourceLabel = `Sequence #${sourceIndex + 1}`;
+    const inputOrdinal = sourceIndex + 1;
     if (!source?.hasInput) {
-      issues.push(`${sourceLabel}: upload the required sequence file(s).`);
+      issues.push(catalogIssue('INPUT_REQUIRED', { inputOrdinal }));
       return;
     }
     if (source?.status !== 'ready') {
       issues.push(source?.status === 'error'
-        ? `${sourceLabel}: ${cleanText(source?.error) || 'record discovery failed.'}`
-        : `${sourceLabel}: wait for the record list to finish loading.`);
+        ? discoveryIssue(source?.error, { inputOrdinal })
+        : catalogIssue('RECORD_SELECTION', { inputOrdinal, reason: 'DISCOVERY_PENDING' }));
       return;
     }
     const availableRecords = sourceRecords(source, `linear-source-${sourceIndex + 1}`);
     if (availableRecords.length === 0) {
-      issues.push(`${sourceLabel}: no records were found.`);
+      issues.push(catalogIssue('NO_RECORDS', { inputOrdinal }));
       return;
     }
     const selected = selectSourceRecords(availableRecords, source?.selector);
     if (selected.error) {
-      issues.push(`${sourceLabel}: ${selected.error}.`);
+      issues.push(catalogIssue('RECORD_SELECTION', { inputOrdinal, reason: selected.error }));
       return;
     }
     records.push(...selected.records.map((record) => ({ ...record, sourceIndex })));
@@ -133,13 +141,11 @@ const buildLinearCatalog = (sources) => {
 const buildCircularCatalog = (source, multiRecordCanvas) => {
   const issues = [];
   if (!source?.hasInput) {
-    issues.push('Upload the required circular sequence file(s).');
+    issues.push(catalogIssue('INPUT_REQUIRED'));
   } else if (source?.status !== 'ready') {
     issues.push(source?.status === 'error'
-      ? cleanText(source?.error) || 'Circular record discovery failed.'
-      : source?.status === 'deferred'
-        ? 'Inspect source records before choosing circular annotation records.'
-        : 'Wait for the circular record list to finish loading.');
+      ? discoveryIssue(source?.error)
+      : catalogIssue('RECORD_SELECTION', { reason: 'DISCOVERY_PENDING' }));
   }
   const records = issues.length === 0 ? finalizeRecords(sourceRecords(source, 'circular-source')) : [];
   const allowExplicitSelectors = Boolean(multiRecordCanvas) || records.length <= 1;

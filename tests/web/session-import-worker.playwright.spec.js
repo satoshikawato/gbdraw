@@ -79,10 +79,13 @@ test('unsafe keys, malformed JSON/gzip, fatal UTF-8 and Worker crash preserve th
     const alert = page.getByRole('alert', { name: 'Operation error' });
     await expect(alert).toBeVisible();
     const error = await page.evaluate(() => window.__GBDRAW_APP__.errorLog);
-    expect(error).toMatchObject(index === 1
-      ? { code: 'INPUT_INVALID', operation: 'unknown', stage: 'request-validation', context: { field: 'schema', reason: 'JSON_FORMAT' } }
-      // Bytes that are not UTF-8 or not valid gzip fail while the Worker reads them.
-      : { code: 'UNKNOWN', operation: 'unknown', stage: index === 0 ? 'request-validation' : 'read' });
+    // X-01 (SE-09): the Worker's final diagnostic reaches the panel unchanged.
+    expect(error).toMatchObject(index === 0
+      ? { code: 'UNKNOWN', operation: 'unknown', stage: 'request-validation' }
+      : index === 1
+        ? { code: 'INPUT_INVALID', operation: 'unknown', stage: 'parse', context: { field: 'schema', reason: 'JSON_FORMAT' } }
+        // Bytes that are not UTF-8 or not valid gzip fail while the Worker reads them.
+        : { code: 'INPUT_UNREADABLE', operation: 'unknown', stage: 'read', context: { field: 'schema' } });
     expect(JSON.stringify(error)).not.toMatch(/private broken|__proto__|Traceback/);
     expect(dialogs).toEqual(['Session loaded successfully!']);
     await expectRetained(page);
@@ -92,9 +95,9 @@ test('unsafe keys, malformed JSON/gzip, fatal UTF-8 and Worker crash preserve th
   }));
   await load(page, baseline);
   await expect(page.getByRole('alert', { name: 'Operation error' })).toBeVisible();
-  // A crashed import Worker is a transport failure.
+  // A crashed import Worker leaves no import path: a transport failure.
   expect(await page.evaluate(() => window.__GBDRAW_APP__.errorLog)).toMatchObject({
-    code: 'UNKNOWN', operation: 'unknown', stage: 'transport'
+    code: 'SESSION_IMPORT_UNAVAILABLE', operation: 'unknown', stage: 'transport'
   });
   expect(dialogs).toEqual(['Session loaded successfully!']);
   await expectRetained(page);
