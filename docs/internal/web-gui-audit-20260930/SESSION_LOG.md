@@ -34,3 +34,5 @@
 - 2026-10-01 13:57（進め方）: #661（P09）は 13:06 に CLEAN になったが、Owner の指定した順（#658 → #661）を守り、#658 のマージ後に追従させた。
 - 2026-10-01 14:30（staging）: #660 のマージ後の dev staging（Tests run 36812529867、5b7f50d2）で P17 の 3 件は通った。新たに chloroplast-placement.playwright.spec.js:95→55 が 3/3 で失敗。Session を保存して別の context で読み込んだ後、feature editor の Feature placement が 5 秒以内に出ない（"Applying an edit" の busy が続く）。手元で abf25c8f は通り、ceeb38d3（#657 P06）で失敗するので P06 が原因。同じ Session で popup まで abf25c8f 7.8 秒、ceeb38d3 21 秒。規則どおり runtime のマージ（#661、#659）を止め、修正担当を付けた。
 - 2026-10-01 20:20（進め方）: 使用量を減らすため、検証の予算を agent-common.md に追加した（P02 の印がある ID は dev で再実行しない、基準 worktree を作らない、手元で functional を全部流さない、ログはファイルに出して失敗だけ読む、エージェントは CI を待たず orchestrator が watch.sh でまとめて監視する）。完了の定義（修正前に失敗するテスト）は P02 の記録と最小の runner での確認で満たす。
+- 2026-10-01 20:40（進め方）: 使用量が 5 時間もたないため、同時に動かすエージェントを 2 本（P07 と P18）に減らし、PR を開けない P08、P12、P16 を WIP の push の後に止めた。以後のエージェントには必要な抜粋だけを渡し、長い PR は文脈を新しくした段階ごとのエージェントに分ける。機械的な作業は Sonnet に回す。
+- 2026-10-01 20:47（staging）: dev 4c59814d（#662 のマージ）で Tests（Dev staging / gate）が緑になった。P17、P06、P03 の runtime の周期を確認したので、次の周期（#661 P09、#659 P04、#663 P18）に進む。
