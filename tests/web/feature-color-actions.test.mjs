@@ -742,3 +742,79 @@ assert.equal(legendAttributes.get('data-legend-key'), 'Oxidative phosphorylation
 assert.equal(addLegendEntryOptions.length, 0);
 assert.equal(removeLegendEntryOptions.length, 0);
 assert.equal(updateLegendEntryColorOptions.length, 0);
+
+// FE-10: Reset fill uses the palette default of the feature being reset. A
+// canceled or completed Reset dialog of another feature type must not leave a
+// color behind for a later Reset that has no dialog.
+{
+  const trnaA = { id: 'trna-a', svg_id: 'trna-a', type: 'tRNA', product: 'tRNA-Leu', start: 1, end: 70 };
+  const trnaB = { id: 'trna-b', svg_id: 'trna-b', type: 'tRNA', product: 'tRNA-Leu', start: 80, end: 150 };
+  const rrna = { id: 'rrna-s', svg_id: 'rrna-s', type: 'rRNA', product: 's-rRNA', start: 200, end: 900 };
+  const resetRules = [{ feat: 'rRNA', qual: 'product', val: '^s-rRNA$', color: '#ff00ff', cap: 'small rRNA' }];
+  const committed = [];
+  const resetDialog = { show: false, caption: '', siblingCount: 0 };
+  const resetClicked = ref(null);
+  const resetFeatures = ref([trnaA, trnaB, rrna]);
+  const resetPreparation = createRulePreparation({
+    state: { extractedFeatures: resetFeatures, biologicalFeatures: resetFeatures, manualSpecificRules: resetRules },
+    evaluate: evaluatePythonRules
+  });
+  const resetActions = createFeatureColorActions({
+    rulePreparation: resetPreparation,
+    state: {
+      results: ref([]),
+      selectedResultIndex: ref(0),
+      appliedPaletteColors: ref({ tRNA: '#e8b441', rRNA: '#71ee7d' }),
+      manualSpecificRules: resetRules,
+      extractedFeatures: resetFeatures,
+      biologicalFeatures: resetFeatures,
+      featureColorOverrides: {},
+      svgContainer: ref({ querySelector: () => null }),
+      clickedFeature: resetClicked,
+      featureStyleScopeDialog: {},
+      resetColorDialog: resetDialog,
+      legendRenameDialog: {},
+      legendEntries: ref([]),
+      legendStrokeOverrides: {},
+      legendColorOverrides: {},
+      originalLegendOrder: ref([]),
+      originalLegendColors: ref({}),
+      originalSvgStroke: ref({ color: null, width: null }),
+      featureStrokeOverrides: {},
+      skipCaptureBaseConfig: ref(false),
+      skipExtractOnSvgChange: ref(false),
+      addedLegendCaptions: ref(new Set())
+    },
+    nextTick: async () => {},
+    legendActions: {},
+    svgActions: {},
+    ruleActions: {
+      commitSpecificRules: async (rules) => {
+        committed.push(rules.map((rule) => ({ ...rule })));
+        return true;
+      },
+      getEffectiveLegendCaption: (feature) => feature.type,
+      getFeatureQualifier: (feature) => ({ qual: 'hash', val: feature.svg_id }),
+      findFeaturesWithSameLegendItem: () => [],
+      findFeaturesWithSameDisplayedLabel: () => [],
+      findFeaturesWithSameIndividualLabel: () => [],
+      getDisplayedFeatureLabel: (feature) => feature.product,
+      getIndividualFeatureLabel: (feature) => feature.product,
+      getLabelSpecificRule: () => null
+    },
+    featureSvgActions: { getFeatureElements: () => [], getFeatureFillElements: () => [] },
+    previewRuntime: null
+  });
+  for (const choice of ['cancel', 'this']) {
+    committed.length = 0;
+    resetClicked.value = { svg_id: trnaA.svg_id, feat: trnaA };
+    await resetActions.resetClickedFeatureFillColor();
+    assert.equal(resetDialog.show, true, 'a tRNA with a sibling opens the Reset dialog');
+    assert.equal(Object.hasOwn(resetDialog, 'defaultColor'), false, 'the dialog holds display values only');
+    await resetActions.handleResetColorChoice(choice);
+    resetClicked.value = { svg_id: rrna.svg_id, feat: rrna };
+    await resetActions.resetClickedFeatureFillColor();
+    const rrnaReset = committed.at(-1).find((rule) => rule.qual === 'hash' && rule.val === rrna.svg_id);
+    assert.equal(rrnaReset?.color, '#71ee7d', `Reset after a ${choice} dialog uses the rRNA default`);
+  }
+}

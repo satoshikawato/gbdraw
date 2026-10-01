@@ -359,6 +359,7 @@ export const createAppSetup = () => {
     featureListViewportHeight,
     isFeatureDrawerMounted,
     visibleFeatureRows,
+    featureRecordPickerVisible,
     featureListTopSpacerPx,
     featureListBottomSpacerPx,
     labelSearch,
@@ -368,7 +369,6 @@ export const createAppSetup = () => {
     labelTextBulkOverrides,
     labelTextFeatureOverrideSources,
     labelVisibilityOverrides,
-    labelOverrideContextKey,
     labelOverrideBuildWarning,
     autoLabelReflowEnabled,
     labelReflowProcessing,
@@ -1370,7 +1370,10 @@ export const createAppSetup = () => {
     }, delay);
   });
   watch(
-    () => [selectedFeatureRecordIdx.value, showRightDrawer.value, rightDrawerTab.value, extractedFeatures.value.length],
+    () => [
+      selectedFeatureRecordIdx.value, selectedResultIndex.value, showRightDrawer.value,
+      rightDrawerTab.value, extractedFeatures.value.length
+    ],
     resetFeatureListScroll
   );
 
@@ -4763,6 +4766,7 @@ export const createAppSetup = () => {
     applySelectedFeatureVisibility,
     applySelectedFeatureStroke,
     visibleFeatureRows,
+    featureRecordPickerVisible,
     featureListTopSpacerPx,
     featureListBottomSpacerPx,
     isFeatureDrawerMounted,
@@ -4775,7 +4779,6 @@ export const createAppSetup = () => {
     labelTextBulkOverrides,
     labelTextFeatureOverrideSources,
     labelVisibilityOverrides,
-    labelOverrideContextKey,
     labelOverrideBuildWarning,
     autoLabelReflowEnabled,
     labelReflowProcessing,

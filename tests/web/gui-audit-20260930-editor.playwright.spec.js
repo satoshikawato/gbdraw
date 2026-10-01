@@ -19,7 +19,6 @@ const { generate, load } = require('./helpers/mode-transition.cjs');
 test.describe.configure({ retries: 0 });
 
 test('batch drawer lists and edits the features of the displayed Result', async ({ page }) => {
-  test.fail(true, 'FE-03');
   test.setTimeout(300_000);
   await openBatch(page);
   await selectResult(page, 1);
@@ -33,7 +32,6 @@ test('batch drawer lists and edits the features of the displayed Result', async 
 });
 
 test('batch record-wide color and visibility scopes reach the other Result when it is displayed', async ({ page }) => {
-  test.fail(true, 'FE-02');
   test.setTimeout(300_000);
   await openBatch(page);
   await page.evaluate(async () => {
@@ -60,7 +58,6 @@ test('batch record-wide color and visibility scopes reach the other Result when 
 });
 
 test('batch live legend deletion reaches the other Result when it is displayed', async ({ page }) => {
-  test.fail(true, 'PV-09');
   test.setTimeout(300_000);
   await openBatch(page);
   expect(await legendCaptions(page)).toContain('GC content');
@@ -95,7 +92,6 @@ test('Selected features annotations generate for a Circular multi-record batch',
 });
 
 test('Reset fill after a canceled reset dialog uses the reset feature type default', async ({ page }) => {
-  test.fail(true, 'FE-10');
   test.setTimeout(300_000);
   await openFresh(page);
   await loadSessionFile(page, HMMT_SESSION);
@@ -129,7 +125,6 @@ test('Reset fill after a canceled reset dialog uses the reset feature type defau
 });
 
 test('Redo of an Exact product hide hides the feature again', async ({ page }) => {
-  test.fail(true, 'FE-04');
   test.setTimeout(300_000);
   await openFresh(page);
   await loadSessionFile(page, HMMT_SESSION);

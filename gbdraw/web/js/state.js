@@ -21,6 +21,7 @@ import { WEB_UX_PROFILE } from './web-ux-profile.js';
 import { createDefaultFeatureRenderings } from './utils/feature-rendering.js';
 import {
   getCommittedSvgContent,
+  getCommittedSvgResultMetadata,
   getCommittedSvgResultRuntimeIdentity
 } from './services/svg-result-ingestion.js';
 import { createImportedComparisonIntentState } from './services/imported-comparison-intent.js';
@@ -32,6 +33,7 @@ import {
 } from './services/session-active-config-contract.js';
 export { createDefaultAdv, createDefaultCircularConservation, createDefaultForm, createDefaultLosat };
 const { ref, reactive, computed } = window.Vue;
+const toRaw = window.Vue.toRaw || ((value) => value);
 const shallowRef = window.Vue.shallowRef || ref;
 
 // System State
@@ -462,7 +464,6 @@ const canonicalLabelOverrideRows = ref([]);
 const labelTextBulkOverrides = reactive({}); // { sourceText: text }
 const labelTextFeatureOverrideSources = reactive({}); // { featureId: sourceText }
 const labelVisibilityOverrides = reactive({}); // { featureId: 'on' | 'off' }
-const labelOverrideContextKey = ref('');
 const labelOverrideBuildWarning = ref('');
 const autoLabelReflowEnabled = ref(false);
 const labelReflowProcessing = ref(false);
@@ -527,7 +528,6 @@ const featureStyleScopeDialog = reactive({
 const resetColorDialog = reactive({
   show: false,
   caption: '',
-  defaultColor: '',
   siblingCount: 0
 });
 
@@ -710,11 +710,29 @@ const newFeatureToAdd = ref(defaultEditorDraftState.newFeatureToAdd);
 const addedLegendCaptions = ref(new Set());
 const fileLegendCaptions = ref(new Set());
 
-const filteredFeatures = computed(() => {
-  let features = [...extractedFeatures.value];
+// The Features drawer lists the features rendered in the displayed Result.
+// A batch Result shows one record, so the record picker appears only when the
+// displayed Result shows several records (FE-03).
+const displayedResultFeatures = computed(() => {
+  const renderedIds = getCommittedSvgResultMetadata(toRaw(results.value[selectedResultIndex.value]))
+    ?.renderedFeatureIdentities?.renderedIds;
+  const features = extractedFeatures.value;
+  return renderedIds instanceof Set
+    ? features.filter((feature) => renderedIds.has(feature.svg_id))
+    : features;
+});
+const featureRecordPickerVisible = computed(() => (
+  featureRecordIds.value.length > 1
+  && new Set(displayedResultFeatures.value.map((feature) => (
+    mode.value === 'circular' ? feature.record_idx : feature.displayRecordId
+  ))).size > 1
+));
 
-  // Filter by selected record (if multiple records exist)
-  if (featureRecordIds.value.length > 1) {
+const filteredFeatures = computed(() => {
+  let features = [...displayedResultFeatures.value];
+
+  // Filter by the selected record when the displayed Result shows several.
+  if (featureRecordPickerVisible.value) {
     const selectedIdx = selectedFeatureRecordIdx.value;
     if (mode.value === 'circular') {
       // For circular: filter by record_idx within the file
@@ -945,6 +963,7 @@ export const state = {
   featureListViewportHeight,
   isFeatureDrawerMounted,
   visibleFeatureRows,
+  featureRecordPickerVisible,
   featureListTopSpacerPx,
   featureListBottomSpacerPx,
   featureColorOverrides,
@@ -964,7 +983,6 @@ export const state = {
   labelTextBulkOverrides,
   labelTextFeatureOverrideSources,
   labelVisibilityOverrides,
-  labelOverrideContextKey,
   labelOverrideBuildWarning,
   autoLabelReflowEnabled,
   labelReflowProcessing,

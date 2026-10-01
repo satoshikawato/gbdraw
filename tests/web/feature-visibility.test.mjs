@@ -35,6 +35,7 @@ const {
   buildFeatureVisibilitySelectorCache,
   deriveFeatureVisibilityRulesForBoundary,
   exactRegexValue,
+  featureMatchesExactQualifier,
   featureVisibilityOverridesToRules,
   featureVisibilityRulesFromOverrideCache,
   getEditorFeatureVisibilityMode,
@@ -418,6 +419,22 @@ assert.deepEqual(
     ),
     'on'
   );
+}
+
+{
+  const productRule = {
+    source: 'editor', recordId: '*', featureType: 'CDS', qualifier: 'product',
+    value: '^NADH dehydrogenase subunit 1$', action: 'off'
+  };
+  const nd1 = { svg_id: 'nd1', type: 'CDS', qualifiers: { product: ['nadh dehydrogenase SUBUNIT 1'] } };
+  assert.equal(resolveEffectiveFeatureVisibility('nd1', {}, null, [productRule], nd1), 'off');
+  assert.equal(resolveEffectiveFeatureVisibility('nd1', { nd1: 'on' }, null, [productRule], nd1), 'on');
+  assert.equal(resolveEffectiveFeatureVisibility('nd1', {}, null, [productRule]), 'on');
+  assert.equal(resolveEffectiveFeatureVisibility(
+    'nd1', {}, null, [{ ...productRule, featureType: 'tRNA' }], nd1
+  ), 'on');
+  assert.equal(featureMatchesExactQualifier(nd1, productRule), true);
+  assert.equal(featureMatchesExactQualifier({ ...nd1, qualifiers: { product: 'other' } }, productRule), false);
 }
 
 console.log('feature visibility tests passed');

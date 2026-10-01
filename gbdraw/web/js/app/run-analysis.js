@@ -73,7 +73,7 @@ import { serializeSpecificRules } from './file-imports.js';
 import {
   buildFeatureVisibilitySelectorCache,
   preserveFeatureVisibilitySelectorCacheForOverrides,
-  reconcileFeatureVisibilityOverrides,
+  pruneUnmatchedFeatureOverrides,
   serializeFeatureVisibilityRules
 } from './feature-visibility.js';
 import {
@@ -1916,6 +1916,7 @@ export const createRunAnalysis = ({
     let workingBiologicalFeatures = committedArtifactHandle?.ownerSet?.biologicalFeatures
       ?? biologicalFeatures?.value;
     const hasSourceBoundEditorIntent = Object.keys(featureVisibilityOverrides).length > 0
+      || Object.keys(labelTextFeatureOverrides).length > 0 || Object.keys(labelVisibilityOverrides).length > 0
       || Object.keys(legendColorOverrides).length > 0 || Object.keys(legendStrokeOverrides).length > 0
       || legendEntries.value.some(entry => entry.originalCaption && entry.originalCaption !== entry.caption);
     const sourceReplaced = !isReflow && hasSourceBoundEditorIntent
@@ -4815,12 +4816,20 @@ export const createRunAnalysis = ({
           await restoreCommittedArtifact();
           return { status: 'stale' };
         }
-        const removedVisibilityTargets = sourceReplaced && reconcileFeatureVisibilityOverrides(
+        const removedVisibilityTargets = sourceReplaced && pruneUnmatchedFeatureOverrides(
           featureVisibilityOverrides,
           candidateBiologicalFeatures,
           workingExtractedFeatures,
           state.featureVisibilitySelectorCache
         );
+        if (sourceReplaced) {
+          // D-10: drop only the label edits whose feature is gone; bulk label
+          // overrides stay as text matchers.
+          [labelTextFeatureOverrides, labelTextFeatureOverrideSources, labelVisibilityOverrides]
+            .forEach((overrides) => pruneUnmatchedFeatureOverrides(
+              overrides, candidateBiologicalFeatures, workingExtractedFeatures
+            ));
+        }
         if (removedVisibilityTargets > 0) {
           state.replaceFeatureVisibilitySelectorCacheOwner(preserveFeatureVisibilitySelectorCacheForOverrides(
             buildFeatureVisibilitySelectorCache(candidateExtractedFeatures, candidateCommit.featureState.featureSelectorSafetyScope),

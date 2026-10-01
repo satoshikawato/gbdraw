@@ -6724,7 +6724,7 @@
                                 <span class="text-[10px] text-slate-400 truncate" :title="featureEditorStatus.error || featureEditorStatusText">{{ featureEditorStatusText }}</span>
                             </div>
                         </div>
-                        <div v-if="featureRecordIds.length > 1" class="px-4 py-2 border-b border-slate-100 shrink-0">
+                        <div v-if="featureRecordPickerVisible" class="px-4 py-2 border-b border-slate-100 shrink-0">
                             <select v-model="selectedFeatureRecordIdx" class="form-select text-xs w-full">
                                 <option v-for="(rid, idx) in featureRecordIds" :key="idx" :value="idx">{{ rid }}</option>
                             </select>

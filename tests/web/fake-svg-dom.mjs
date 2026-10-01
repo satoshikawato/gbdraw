@@ -104,6 +104,14 @@ class FakeSvgElement {
     return this.querySelectorAll(selector)[0] || null;
   }
 
+  closest(selector) {
+    const selectors = selectorParts(selector);
+    for (let node = this; node; node = node.parentElement) {
+      if (selectors.some((part) => matchesSelectorPart(node, part))) return node;
+    }
+    return null;
+  }
+
   getElementById(id) {
     if (this.id === id) return this;
     return this.querySelector(`#${id}`);

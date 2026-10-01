@@ -76,8 +76,7 @@ const ARTIFACT_FEATURE_FIELDS = Object.freeze([
   'labelOverrideRows',
   'labelTextBulkOverrides',
   'labelTextFeatureOverrideSources',
-  'labelVisibilityOverrides',
-  'labelOverrideContextKey'
+  'labelVisibilityOverrides'
 ]);
 
 const isPlainObject = (value) => (

@@ -43,8 +43,7 @@ const buildFeatureIntentData = (features = {}) => ({
   labelTextFeatureOverrides: clonePlainObject(features.labelTextFeatureOverrides),
   labelTextBulkOverrides: clonePlainObject(features.labelTextBulkOverrides),
   labelTextFeatureOverrideSources: clonePlainObject(features.labelTextFeatureOverrideSources),
-  labelVisibilityOverrides: clonePlainObject(features.labelVisibilityOverrides),
-  labelOverrideContextKey: String(features.labelOverrideContextKey || '')
+  labelVisibilityOverrides: clonePlainObject(features.labelVisibilityOverrides)
 });
 
 const buildEditorIntentData = (editorState = {}) => ({
@@ -91,7 +90,6 @@ const applyFeatureIntentData = (state, features = {}) => {
     clonePlainObject(features.labelTextFeatureOverrideSources)
   );
   replacePlainObject(state.labelVisibilityOverrides, clonePlainObject(features.labelVisibilityOverrides));
-  setRef(state.labelOverrideContextKey, String(features.labelOverrideContextKey || ''));
 };
 
 const applyEditorIntentData = (state, editorState = {}) => {
@@ -364,8 +362,7 @@ const buildFallbackFeatureStateData = (state) => ({
   labelTextFeatureOverrides: clonePlainObject(state.labelTextFeatureOverrides),
   labelTextBulkOverrides: clonePlainObject(state.labelTextBulkOverrides),
   labelTextFeatureOverrideSources: clonePlainObject(state.labelTextFeatureOverrideSources),
-  labelVisibilityOverrides: clonePlainObject(state.labelVisibilityOverrides),
-  labelOverrideContextKey: getRef(state.labelOverrideContextKey, '')
+  labelVisibilityOverrides: clonePlainObject(state.labelVisibilityOverrides)
 });
 
 const applyFallbackFeatureStateData = (state, features = {}) => {
@@ -385,7 +382,6 @@ const applyFallbackFeatureStateData = (state, features = {}) => {
     clonePlainObject(features.labelTextFeatureOverrideSources)
   );
   replacePlainObject(state.labelVisibilityOverrides, clonePlainObject(features.labelVisibilityOverrides));
-  setRef(state.labelOverrideContextKey, String(features.labelOverrideContextKey || ''));
 };
 
 const buildFallbackOrthogroupStateData = (state) => ({
@@ -972,8 +968,7 @@ export const createHistorySnapshotService = ({
         labelOverrideRows: mutableIntent.features.labelOverrideRows,
         labelTextBulkOverrides: mutableIntent.features.labelTextBulkOverrides,
         labelTextFeatureOverrideSources: mutableIntent.features.labelTextFeatureOverrideSources,
-        labelVisibilityOverrides: mutableIntent.features.labelVisibilityOverrides,
-        labelOverrideContextKey: mutableIntent.features.labelOverrideContextKey
+        labelVisibilityOverrides: mutableIntent.features.labelVisibilityOverrides
       },
       editor: {
         legend: mutableIntent.editorState.legend,
@@ -1020,10 +1015,7 @@ export const createHistorySnapshotService = ({
       labelTextFeatureOverrideSources: clonePlainObject(
         state.labelTextFeatureOverrideSources
       ),
-      labelVisibilityOverrides: clonePlainObject(state.labelVisibilityOverrides),
-      labelOverrideContextKey: String(
-        getGeneratedArtifactRef(state.labelOverrideContextKey, '') || ''
-      )
+      labelVisibilityOverrides: clonePlainObject(state.labelVisibilityOverrides)
     };
     const editorState = {
       legend: {
@@ -1365,8 +1357,7 @@ export const createHistorySnapshotService = ({
       labelTextFeatureOverrides: state.labelTextFeatureOverrides,
       labelTextBulkOverrides: state.labelTextBulkOverrides,
       labelTextFeatureOverrideSources: state.labelTextFeatureOverrideSources,
-      labelVisibilityOverrides: state.labelVisibilityOverrides,
-      labelOverrideContextKey: getRef(state.labelOverrideContextKey, '')
+      labelVisibilityOverrides: state.labelVisibilityOverrides
     };
     const editorState = {
       legend: {
