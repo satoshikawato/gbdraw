@@ -113,9 +113,9 @@ export const createLegendRepositionActions = ({
 
     const binding = bindCompositionMetadata(svg);
     const legendGroup = binding.legend.targets[0] || null;
-    if (!legendGroup && newPosition !== 'none') {
-      throw new Error('This diagram has no legend composition target. Regenerate it with a legend before changing its side.');
-    }
+    // A diagram generated without a legend cannot show one in place; the
+    // Result stays unchanged and the next Generate applies the side (GE-07).
+    if (!legendGroup && newPosition !== 'none') return false;
 
     if (legendGroup && newPosition !== 'none') {
       legendGroup.removeAttribute('display');

@@ -191,7 +191,21 @@ decisions are in
 - A label rerender no longer applies settings that wait for Generate, such as
   **Species** or a block stroke width (N-16).
 
-<!-- web-gui-audit-20260930 P13 -->
+- A legend order made with **Sort** or the move buttons, and a renamed legend
+  entry without features such as **GC content**, now survive Generate and Save
+  Session; entries that appear later follow the ordered ones (PV-02, PV-03,
+  D-08).
+- Canvas padding now survives Generate and reaches every Result of a batch,
+  without being applied twice (PV-07, D-09).
+- Renaming a legend entry with features to the caption of another entry of a
+  different color offers **Merge**, **Suffix**, or **Cancel** instead of
+  failing with an unrecognized error (PV-04, D-06).
+- A Linear **Legend position** change now applies on Generate, like Circular;
+  the in-place move did not match the generated layout. Changing it after a
+  Generate without a legend no longer raises an error (PV-10, D-30, GE-07).
+- Closing the **Editor** with Close or Escape returns keyboard focus to the
+  Editor toggle (PV-11), and the **Legend** tab help names the edits it offers
+  (PV-12).
 
 - Web LOSAT keeps one job per source file pair, but a record no longer
   searches a database that contains itself unless that search was requested.

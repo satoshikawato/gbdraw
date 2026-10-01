@@ -52,7 +52,8 @@ export const createLegendLayout = ({
     captureDecorationContinuity: (canonical, projectRecordIdentity) => captureDecorationContinuity({
       canonical, projectRecordIdentity, results: state.results.value, catalog: state.featureCatalog.value,
       mountedSvg: state.svgContainer.value?.querySelector?.('svg') || null,
-      selectedResultIndex: state.selectedResultIndex.value
+      selectedResultIndex: state.selectedResultIndex.value,
+      canvasPadding: state.canvasPadding
     }),
     ...canvasActions,
     ...repositionActions,

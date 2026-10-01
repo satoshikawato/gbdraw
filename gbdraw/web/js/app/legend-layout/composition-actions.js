@@ -719,13 +719,67 @@ const wireBounds = (bounds) => ({
   y: wireNumber(bounds.y)
 });
 
-const editorPadding = (value) => {
-  if (!isPlainObject(value)) return null;
-  const padding = Object.fromEntries(['top', 'right', 'bottom', 'left'].map((side) => {
-    const number = Number(value[side]);
+const CANVAS_PADDING_SIDES = Object.freeze(['top', 'right', 'bottom', 'left']);
+
+/** Normalize editor canvas padding; invalid or negative sides are 0. */
+export const normalizeCanvasPadding = (value) => Object.fromEntries(
+  CANVAS_PADDING_SIDES.map((side) => {
+    const number = Number(value?.[side]);
     return [side, Number.isFinite(number) && number >= 0 ? number : 0];
-  }));
-  return Object.values(padding).some((number) => number !== 0) ? padding : null;
+  })
+);
+
+export const hasCanvasPadding = (value) => (
+  Object.values(normalizeCanvasPadding(value)).some((number) => number !== 0)
+);
+
+const setRootAttribute = (svg, name, value) => {
+  if (svg.getAttribute(name) === value) return false;
+  svg.setAttribute(name, value);
+  return true;
+};
+
+/**
+ * Apply editor canvas padding around the unpadded canvas of one SVG root. The
+ * unpadded viewBox and size are recorded once on the root, so applying the
+ * same padding again changes nothing. Returns whether the root changed.
+ */
+export const applyCanvasPaddingToSvg = (svg, value) => {
+  const padding = normalizeCanvasPadding(value);
+  const padded = Object.values(padding).some((number) => number !== 0);
+  const recordedBase = svg.getAttribute('data-original-view-box');
+  if (!recordedBase && !padded) return false;
+  const base = recordedBase || svg.getAttribute('viewBox');
+  const [x, y, width, height] = String(base || '').trim().split(/[\s,]+/).map(Number);
+  if (![x, y, width, height].every(Number.isFinite) || width <= 0 || height <= 0) {
+    throw new Error('The SVG base viewBox is invalid. Regenerate the diagram.');
+  }
+  const baseWidth = svg.getAttribute('data-original-width')
+    || String(Number.parseFloat(svg.getAttribute('width')) || width);
+  const baseHeight = svg.getAttribute('data-original-height')
+    || String(Number.parseFloat(svg.getAttribute('height')) || height);
+  let changed = false;
+  if (!recordedBase) {
+    changed = setRootAttribute(svg, 'data-original-view-box', base) || changed;
+    changed = setRootAttribute(svg, 'data-original-width', baseWidth) || changed;
+    changed = setRootAttribute(svg, 'data-original-height', baseHeight) || changed;
+  }
+  if (!padded) {
+    changed = setRootAttribute(svg, 'viewBox', base) || changed;
+    changed = setRootAttribute(svg, 'width', `${baseWidth}px`) || changed;
+    return setRootAttribute(svg, 'height', `${baseHeight}px`) || changed;
+  }
+  const paddedWidth = width + padding.left + padding.right;
+  const paddedHeight = height + padding.top + padding.bottom;
+  const scaled = (size, extent, paddedExtent) => {
+    const number = Number.parseFloat(size);
+    return number === extent ? paddedExtent : number * (paddedExtent / extent);
+  };
+  changed = setRootAttribute(svg, 'viewBox', [
+    x - padding.left, y - padding.top, paddedWidth, paddedHeight
+  ].map(wireNumber).join(' ')) || changed;
+  changed = setRootAttribute(svg, 'width', `${wireNumber(scaled(baseWidth, width, paddedWidth))}px`) || changed;
+  return setRootAttribute(svg, 'height', `${wireNumber(scaled(baseHeight, height, paddedHeight))}px`) || changed;
 };
 
 export const applyCompositionEdit = (svg, options = {}) => {
@@ -825,23 +879,10 @@ export const applyCompositionEdit = (svg, options = {}) => {
   };
   const baseWidth = wireNumber(plan.width);
   const baseHeight = wireNumber(plan.height);
-  if (svg.dataset) {
-    svg.dataset.originalViewBox = `0 0 ${baseWidth} ${baseHeight}`;
-    svg.dataset.originalWidth = String(baseWidth);
-    svg.dataset.originalHeight = String(baseHeight);
-  }
-  const padding = editorPadding(options.canvasPadding);
-  if (padding) {
-    const width = baseWidth + padding.left + padding.right;
-    const height = baseHeight + padding.top + padding.bottom;
-    svg.setAttribute('viewBox', `${-padding.left} ${-padding.top} ${wireNumber(width)} ${wireNumber(height)}`);
-    svg.setAttribute('width', `${wireNumber(width)}px`);
-    svg.setAttribute('height', `${wireNumber(height)}px`);
-  } else {
-    svg.setAttribute('viewBox', `0 0 ${baseWidth} ${baseHeight}`);
-    svg.setAttribute('width', `${baseWidth}px`);
-    svg.setAttribute('height', `${baseHeight}px`);
-  }
+  svg.setAttribute('data-original-view-box', `0 0 ${baseWidth} ${baseHeight}`);
+  svg.setAttribute('data-original-width', String(baseWidth));
+  svg.setAttribute('data-original-height', String(baseHeight));
+  applyCanvasPaddingToSvg(svg, options.canvasPadding);
   svg.setAttribute(COMPOSITION_SCHEMA_ATTRIBUTE, String(COMPOSITION_SCHEMA_VERSION));
   svg.setAttribute(COMPOSITION_METADATA_ATTRIBUTE, JSON.stringify(nextMetadata));
   return bindCompositionMetadata(svg);

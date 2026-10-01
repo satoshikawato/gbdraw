@@ -104,3 +104,95 @@ export const isCurrentLegendHorizontal = (svg) => {
 
   return false;
 };
+
+export const getLegendEntrySwatch = (entryGroup) => Array.from(
+  entryGroup?.querySelectorAll?.('path') || []
+).find((path) => {
+  const fill = path.getAttribute('fill');
+  return fill && fill !== 'none' && !fill.startsWith('url(');
+}) || null;
+
+/** The anchor of a Legend entry: its text position, else its swatch position. */
+export const legendEntryAnchor = (entryGroup) => {
+  const groupOffset = parseTransformXY(entryGroup?.getAttribute?.('transform'));
+  const target = entryGroup?.querySelector?.('text') || getLegendEntrySwatch(entryGroup);
+  const targetOffset = parseTransformXY(target?.getAttribute?.('transform'));
+  return { x: groupOffset.x + targetOffset.x, y: groupOffset.y + targetOffset.y };
+};
+
+export const moveLegendEntryToAnchor = (entryGroup, xPos, yPos) => {
+  if (!Number.isFinite(xPos) || !Number.isFinite(yPos)) return false;
+  const current = legendEntryAnchor(entryGroup);
+  const deltaX = xPos - current.x;
+  const deltaY = yPos - current.y;
+  if (Math.abs(deltaX) < 1e-6 && Math.abs(deltaY) < 1e-6) return false;
+  if (entryGroup.hasAttribute?.('transform')) {
+    const groupOffset = parseTransformXY(entryGroup.getAttribute('transform'));
+    entryGroup.setAttribute(
+      'transform',
+      `translate(${groupOffset.x + deltaX}, ${groupOffset.y + deltaY})`
+    );
+    return true;
+  }
+  const transformedChildren = Array.from(entryGroup.querySelectorAll?.('[transform]') || []);
+  if (transformedChildren.length === 0) {
+    entryGroup.setAttribute('transform', `translate(${deltaX}, ${deltaY})`);
+    return true;
+  }
+  transformedChildren.forEach((node) => {
+    const position = parseTransformXY(node.getAttribute('transform'));
+    node.setAttribute('transform', `translate(${position.x + deltaX}, ${position.y + deltaY})`);
+  });
+  return true;
+};
+
+const legendEntryGroups = (targetGroup) => {
+  const direct = Array.from(targetGroup?.children || []).filter(
+    (child) => String(child.tagName || '').toLowerCase() === 'g' && child.hasAttribute?.('data-legend-key')
+  );
+  return direct.length > 0
+    ? direct
+    : Array.from(targetGroup?.querySelectorAll?.('g[data-legend-key]') || []);
+};
+
+/**
+ * Put one Legend group's entries in the requested caption order. Entries keep
+ * the group's current slots (row-major anchor order) and receive them in the
+ * new order; captions missing from the order follow in their current order.
+ * Live Sort and Move and the Generate replay of the order (D-08) share this.
+ * Returns whether any entry moved or changed document order.
+ */
+export const orderLegendEntries = (targetGroup, captionOrder) => {
+  const entryGroups = legendEntryGroups(targetGroup);
+  if (entryGroups.length < 2) return false;
+  const rank = new Map();
+  (Array.isArray(captionOrder) ? captionOrder : []).forEach((caption) => {
+    const key = String(caption ?? '').trim();
+    if (key && !rank.has(key)) rank.set(key, rank.size);
+  });
+  const caption = (entryGroup) => String(entryGroup.getAttribute('data-legend-key') || '').trim();
+  const positioned = entryGroups
+    .map((entryGroup, index) => ({ entryGroup, index, anchor: legendEntryAnchor(entryGroup) }))
+    .sort((left, right) => {
+      const yDelta = left.anchor.y - right.anchor.y;
+      if (Math.abs(yDelta) >= 1) return yDelta;
+      return left.anchor.x - right.anchor.x || left.index - right.index;
+    });
+  const ordered = positioned
+    .map((item, slot) => ({ ...item, slot }))
+    .sort((left, right) => {
+      const leftRank = rank.has(caption(left.entryGroup)) ? rank.get(caption(left.entryGroup)) : Infinity;
+      const rightRank = rank.has(caption(right.entryGroup)) ? rank.get(caption(right.entryGroup)) : Infinity;
+      return leftRank === rightRank ? left.slot - right.slot : leftRank - rightRank;
+    });
+  let changed = false;
+  ordered.forEach(({ entryGroup }, slot) => {
+    const { x, y } = positioned[slot].anchor;
+    changed = moveLegendEntryToAnchor(entryGroup, x, y) || changed;
+  });
+  ordered.forEach(({ entryGroup }, index) => {
+    if (entryGroups[index] !== entryGroup) changed = true;
+    targetGroup.appendChild(entryGroup);
+  });
+  return changed;
+};

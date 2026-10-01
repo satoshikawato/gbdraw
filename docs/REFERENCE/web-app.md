@@ -98,8 +98,8 @@ settings. The app does not show a separate always-on application status.
 
 | Operation label | When the Result changes |
 |---|---|
-| **Applies on Generate** | A successful **Generate Diagram** applies crop, row layout, Definition Lock, scale label sizes, track slots, **Species**, **Strain**, plot title and record-label settings, and the global block, line, axis, and scale stroke colors and widths. |
-| **Live edit** | Feature color, label text, and visibility update the current Result directly; geometry changes may rerender automatically. A label rerender uses the settings of the last Generate plus the current feature, label, color, and legend edits. Stroke edits on selected features or legend entries are live. Palette selection is live when **Instant Preview** is on. |
+| **Applies on Generate** | A successful **Generate Diagram** applies crop, row layout, Definition Lock, scale label sizes, track slots, **Species**, **Strain**, plot title and record-label settings, the legend position, swatch size, and font size, and the global block, line, axis, and scale stroke colors and widths. |
+| **Live edit** | Feature color, label text, and visibility update the current Result directly; geometry changes may rerender automatically. A label rerender uses the settings of the last Generate plus the current feature, label, color, and legend edits. Legend text, order, stroke, and removal, and stroke edits on selected features, are live. Palette selection is live when **Instant Preview** is on. |
 | **Apply required** | Alignment choices stay in the review draft until **Apply** succeeds. |
 
 A live edit can succeed while other settings stay in the draft. **Live edit
@@ -109,7 +109,10 @@ the previous diagram geometry; correct the edit and retry. An unapplied alignmen
 review is a local selection, not an applied Result or a generation-setting change.
 
 **Generate Diagram** recalculates placement and resets zoom. Supported color,
-label, visibility, and record-layout edits are carried forward. For the same
+label, visibility, legend text and order, canvas padding, and record-layout
+edits are carried forward. Generate places legend entries in the edited order
+on its new layout; an entry that appears later follows them. Canvas padding
+applies once to every Result, including each Result of a batch. For the same
 diagram, a manually moved legend, plot title, or Linear scale keeps its offset
 from the newly calculated position. The absolute position can change when
 settings change. Other manual positions have no new regeneration guarantee.
@@ -756,7 +759,10 @@ are present.
 
 Ctrl-click selects features for bulk color, legend-caption, visibility, and
 stroke edits. Use the visible **Apply** action to make an edit part of the
-editor state. **Apply to all label** and **Apply to all source label** become
+editor state. Renaming a legend entry, with or without features, to the caption
+of another entry of a different color asks **Merge**, **Suffix**, or **Cancel**;
+a caption that a specific color rule already uses is distinguished as that rule
+describes instead. **Apply to all label** and **Apply to all source label** become
 one anchored qualifier rule only when the selected features share one feature
 type, qualifier, and value and that rule matches exactly the intended loaded
 features. Otherwise the editor keeps one exact `hash` rule per biological
@@ -787,7 +793,7 @@ selection to the current Result with the label rerender.
 On a narrow preview, the same **Editor** sits below the canvas.
 Its content scrolls independently, while its header, Close action, and tabs stay
 reachable. **Close** and **Escape** change visibility only and retain the selected
-tab. On short screens, scroll the page and Editor content to reach all controls;
+tab; when focus was inside the Editor, it returns to the Editor toggle. On short screens, scroll the page and Editor content to reach all controls;
 on wide previews the Editor remains beside the canvas.
 
 Feature search stays in its own row above the canvas, and the zoom and layout
@@ -809,7 +815,9 @@ position, including after a second Generate. If the new diagram cannot match a
 moved item, the previous Result remains available. Use that item's position
 reset or **Reset Layout**, or restore the matching settings, then Generate again.
 An offset near an edge may still clip or overlap another item; adjust canvas
-padding or reset its position. **Undo** and **Redo** traverse supported form and
+padding, which Generate keeps, or reset its position. A Linear legend side
+change does not move the legend in place, because the generated layout uses
+the renderer's text measurements; Generate applies it. **Undo** and **Redo** traverse supported form and
 editor changes. Each change of a checkbox, radio button, select, or button is
 one step, whether it is made with the pointer, a click on its label text, or
 the keyboard, and also when a text field had focus; a text field's edit is its

@@ -129,7 +129,6 @@ const ROWS = [
   },
   {
     name: 'a Generate without changes keeps canvas padding',
-    knownDefect: 'PV-07',
     setup: async (page) => {
       await openWithGenBank(page, HMMT);
       await generateAndWaitForResult(page);

@@ -1,5 +1,10 @@
 import { FEATURE_SELECTOR, filterFeatureFillTargets, getFeatureIdentity } from '../app/feature-dom.js';
-import { getAllFeatureLegendGroups, parseTransformXY } from '../app/legend/utils.js';
+import {
+  getAllFeatureLegendGroups,
+  getLegendEntrySwatch as legendSwatch,
+  moveLegendEntryToAnchor,
+  orderLegendEntries
+} from '../app/legend/utils.js';
 import { isCurrentWorkerGenerationResponse } from './current-worker-result-source.js';
 import { sanitizeSvgContent } from './svg-sanitization.js';
 import { serializeCleanSvg } from './svg-serialization.js';
@@ -215,6 +220,7 @@ const hasOperations = (operations) => Boolean(
     || operations.legendRenames.length
     || operations.legendDeletes.length
     || operations.legendAdds.length
+    || operations.legendOrder.length
     || operations.callerTransforms.length
   )
 );
@@ -230,6 +236,7 @@ const hasDetachedOperations = (operations) => Boolean(
     || operations.legendRenames.length
     || operations.legendDeletes.length
     || operations.legendAdds.length
+    || operations.legendOrder.length
     || operations.callerTransforms.length
   )
 );
@@ -261,6 +268,7 @@ const freezeEmptyOperations = () => Object.freeze({
   legendRenames: Object.freeze([]),
   legendDeletes: Object.freeze([]),
   legendAdds: Object.freeze([]),
+  legendOrder: Object.freeze([]),
   callerTransforms: Object.freeze([])
 });
 
@@ -288,13 +296,6 @@ const removeAttributeIfPresent = (element, name) => {
   element.removeAttribute(name);
   return true;
 };
-
-const legendSwatch = (entryGroup) => Array.from(
-  entryGroup?.querySelectorAll?.('path') || []
-).find((path) => {
-  const fill = path.getAttribute('fill');
-  return fill && fill !== 'none' && !fill.startsWith('url(');
-}) || null;
 
 const createLazyMutationIndex = (svg, { phase, resultIndex }) => {
   const state = {
@@ -392,38 +393,6 @@ const updateLegendCaption = (entry, caption) => {
   if (label) label.textContent = caption;
 };
 
-const legendEntryAnchor = (entry) => {
-  const groupOffset = parseTransformXY(entry?.getAttribute?.('transform'));
-  const target = entry?.querySelector?.('text') || legendSwatch(entry);
-  const targetOffset = parseTransformXY(target?.getAttribute?.('transform'));
-  return { x: groupOffset.x + targetOffset.x, y: groupOffset.y + targetOffset.y };
-};
-
-const moveLegendEntryToAnchor = (entry, xPos, yPos) => {
-  if (!Number.isFinite(xPos) || !Number.isFinite(yPos)) return;
-  const current = legendEntryAnchor(entry);
-  const deltaX = xPos - current.x;
-  const deltaY = yPos - current.y;
-  if (Math.abs(deltaX) < 1e-6 && Math.abs(deltaY) < 1e-6) return;
-  if (entry.hasAttribute?.('transform')) {
-    const groupOffset = parseTransformXY(entry.getAttribute('transform'));
-    entry.setAttribute(
-      'transform',
-      `translate(${groupOffset.x + deltaX}, ${groupOffset.y + deltaY})`
-    );
-    return;
-  }
-  const transformedChildren = Array.from(entry.querySelectorAll?.('[transform]') || []);
-  if (transformedChildren.length === 0) {
-    entry.setAttribute('transform', `translate(${deltaX}, ${deltaY})`);
-    return;
-  }
-  transformedChildren.forEach((node) => {
-    const position = parseTransformXY(node.getAttribute('transform'));
-    node.setAttribute('transform', `translate(${position.x + deltaX}, ${position.y + deltaY})`);
-  });
-};
-
 const applyLegendOperations = (index, operations) => {
   operations.legendFills.forEach(({ caption, color, allowMissing }) => {
     requireLegendEntries(index, caption, { allowMissing }).forEach((entry) => {
@@ -490,6 +459,10 @@ const applyLegendOperations = (index, operations) => {
       group.appendChild(added);
     });
   });
+  // The edited Legend order is replayed last, over the renderer's slots (D-08).
+  operations.legendOrder.forEach(({ captions }) => {
+    index.legends().groups.forEach((group) => orderLegendEntries(group, captions));
+  });
 };
 
 /**
@@ -517,7 +490,8 @@ export const applyEditorOperationsToMountedSvg = (svg, operations, { resultIndex
     })),
     legendRenames: operations.legendRenames.map(allowMissing),
     legendDeletes: operations.legendDeletes.map(allowMissing),
-    legendAdds: operations.legendAdds
+    legendAdds: operations.legendAdds,
+    legendOrder: operations.legendOrder
   });
 };
 

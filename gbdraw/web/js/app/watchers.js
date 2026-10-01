@@ -221,7 +221,10 @@ export const setupWatchers = ({
     (newPos, oldPos) => {
       if (semanticFileWatchersSuppressed.value || state.sessionOperationAvailability?.()) return;
       if (generatedMode.value !== mode.value) return;
-      if (mode.value === 'circular' && shouldDeferCircularPreviewUpdates.value) return;
+      // D-30 (PD-OI-084): a Linear legend side applies on Generate. An
+      // in-place move cannot match the renderer, which plans the Legend with
+      // its own text metrics, so the Result stays unchanged until Generate.
+      if (mode.value !== 'circular' || shouldDeferCircularPreviewUpdates.value) return;
       if (
         svgContent.value &&
         oldPos !== undefined &&
@@ -230,7 +233,7 @@ export const setupWatchers = ({
       ) {
         nextTick(() => {
           if (semanticFileWatchersSuppressed.value || state.sessionOperationAvailability?.()) return;
-          if (mode.value === 'circular' && shouldDeferCircularPreviewUpdates.value) return;
+          if (mode.value !== 'circular' || shouldDeferCircularPreviewUpdates.value) return;
           repositionForLegendChange(newPos, generatedLegendPosition.value);
         });
       }
