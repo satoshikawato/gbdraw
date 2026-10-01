@@ -279,8 +279,11 @@ def test_group_alignment_projects_member_centers_before_translation():
 
 @pytest.mark.parametrize("reverse", [False, True])
 def test_final_hsp_vertices_equal_independent_common_t_oracle(reverse):
+    # Tables are read in the search frame; the planner projects the reversal
+    # (PD-OI-073), so the same record-local HSP 60..21 is 41..80 in the table.
+    table = (101 - 60, 101 - 21, 31, 90) if reverse else (60, 21, 31, 90)
     _, root = svg(request("linear", [record(), record(120, "subject")], [41, 51], [reverse, False],
-                          linear_comparisons=[LinearComparison(0, 1, hit_frame(60, 21, 31, 90))]))
+                          linear_comparisons=[LinearComparison(0, 1, hit_frame(*table))]))
     paths = [n for n in root.iter() if n.get("data-gbdraw-match-id")]
     axes = [n for n in root.iter() if n.get("data-gbdraw-record-id") and any(c.tag.endswith("}line") for c in n)]
     scales = [float(next(c for c in axis if c.tag.endswith("}line")).get("x2")) / length

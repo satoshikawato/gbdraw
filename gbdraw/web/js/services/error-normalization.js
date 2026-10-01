@@ -1,4 +1,4 @@
-const OPERATIONS = new Set(['unknown', 'generate', 'align', 'feature-extraction', 'export-svg', 'export-png', 'export-pdf', 'evaluateRules', 'readPdfFont', 'buildProteinLosatCacheKeys', 'convertLosatNucleotideToDisplayTsv',
+const OPERATIONS = new Set(['unknown', 'generate', 'align', 'feature-extraction', 'export-svg', 'export-png', 'export-pdf', 'evaluateRules', 'readPdfFont', 'buildProteinLosatCacheKeys',
   'convertLosatpPairsToGenomicPayload', 'extractCdsProteinFasta', 'extractFirstFasta', 'generateLegendEntrySvg',
   'hydrateProteinLosatTsv', 'listGffFastaRecords', 'listSequenceRecords', 'measureLegendText',
   'promoteLegacyLosatpCache', 'resolveLegacyProteinReferences',
@@ -66,6 +66,7 @@ const REASONS = Object.freeze({
   GROUP_NAME: 'Check the group name.', SYNTAX_ERROR: 'Correct the Python regular expression.',
   ADJACENT_ALL: 'Choose adjacent or all.', BLASTP_MODE: 'Choose pairwise, orthogroup, or collinear.',
   UNIQUE_IDS: 'Use distinct record or protein identifiers.', MATCH_IDS: 'Use matching protein FASTA and metadata identifiers.',
+  SEARCH_FRAME: 'Use comparison coordinates within the selected and cropped record, counted on its source strand.',
   JSON_FORMAT: 'Use valid JSON.', VISIBILITY_ACTION: 'Use show, off, or exclude_matching; accepted aliases are on, hide, false, and 0.',
   TARGET_RECORD: 'Choose an available target record.',
   DEPTH_SERIES: 'Select an existing Depth TSV or remove the slot.',

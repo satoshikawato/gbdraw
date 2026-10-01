@@ -1684,12 +1684,6 @@ test('neutral conservation replay delegates lazy resources to the shared reader'
       key: JSON.stringify(['linear', 'middle', '#1']), selector: '#1', recordId: 'MIDDLE', recordLength: 8,
       reverse: true, cropped: false, detectedTopology: 'linear' }] };
     const linearResult = result('lazy-linear.svg', 'lazy-linear');
-    workerHelperResponses.push({
-      ok: true,
-      result: {
-        tsv: 'MIDDLE\tTHIRD\t100\t8\t0\t0\t1\t8\t1\t8\t1e-10\t20\n'
-      }
-    });
     workerResponses.push(response(linearResult, validCatalog(linearResult.name)));
     assert.deepEqual(
       await runner.runAnalysis(comparisonPlanSnapshot),
@@ -1699,17 +1693,14 @@ test('neutral conservation replay delegates lazy resources to the shared reader'
     assert.equal(losatCalls, 1);
     assert.ok(capturedSequences.includes('>MIDDLE\nCCCCGGGG\n'));
     assert.ok(capturedSequences.includes('>THIRD\nTTTTAAAA\n'));
-    const conversionRequest = workerMessages.findLast((message) => (
-      message.type === 'helper' &&
-      message.operation === 'convertLosatNucleotideToDisplayTsv'
-    ));
-    assert.deepEqual(conversionRequest?.payload.queryViewTransform, {
-      length: 8,
-      reverse: true
-    });
+    // Generated LOSATN rows stay in the search frame; the Python planner
+    // projects the reversed record (PD-OI-073), so no Web conversion runs.
+    assert.equal(workerMessages.some(({ type, operation }) => (
+      type === 'helper' && /nucleotide/i.test(String(operation || ''))
+    )), false);
     const projectedRun = workerMessages.findLast(({ type }) => type === 'run').payload.request;
     assert.equal(projectedRun.records.find(({ recordKey }) => recordKey === 'middle')
-      .presentation.reverseComplement, conversionRequest.payload.queryViewTransform.reverse);
+      .presentation.reverseComplement, true);
     assert.equal(state.linearSeqs.find(({ uid }) => uid === 'middle').region_reverse, true);
     delete state.recordDisplayRows;
     assert.equal(
