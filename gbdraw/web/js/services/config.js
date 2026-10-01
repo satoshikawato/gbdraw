@@ -1838,12 +1838,16 @@ const hasStoredLayoutPreferences = (ui) => (
 
 // A saved layout owner (current or legacy ui fields) wins. Without one, a
 // canonical Session takes the layout preferences projected from its committed
-// request; other payloads migrate from the active values.
+// request. Legacy fields migrate with the committed values (canonical) or the
+// active values (other payloads) as their fallback.
 const restoreLayoutPreferences = (ui = {}, { projected = null } = {}) => {
   if (projected && !hasStoredLayoutPreferences(ui)) {
     replaceLayoutPreferences(state.layoutPreferences, normalizeLayoutPreferences(projected));
     return;
   }
+  const active = projected
+    ? resolveActiveLayoutPreference(projected, state.mode.value, Boolean(state.form.multi_record_canvas))
+    : { legend: state.form.legend, plotTitlePosition: state.adv.plot_title_position };
   const migrationUi = (
     !isPlainObject(ui.layoutPreferences) &&
     state.mode.value === 'linear' &&
@@ -1857,8 +1861,8 @@ const restoreLayoutPreferences = (ui = {}, { projected = null } = {}) => {
     migrateLegacyLayoutPreferences(migrationUi, {
       mode: state.mode.value,
       multiRecord: Boolean(state.form.multi_record_canvas),
-      activeLegend: state.form.legend,
-      activePlotTitlePosition: state.adv.plot_title_position
+      activeLegend: active.legend,
+      activePlotTitlePosition: active.plotTitlePosition
     })
   );
 };
