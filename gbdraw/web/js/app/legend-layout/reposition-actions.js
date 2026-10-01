@@ -2,8 +2,7 @@ import { serializeCleanSvg } from '../../services/svg-serialization.js';
 import {
   applyCompositionEdit,
   bindCompositionMetadata,
-  compositionUserDeltas,
-  reconcileCompositionTitle
+  compositionUserDeltas
 } from './composition-actions.js';
 
 const isHorizontalSide = (side) => side === 'top' || side === 'bottom';
@@ -152,28 +151,7 @@ export const createLegendRepositionActions = ({
     });
   };
 
-  const refreshCompositionGeometry = ({ titleSide = null, titleTarget = undefined } = {}) => {
-    if (!svgContainer.value || !svgContent.value) return false;
-    const svg = svgContainer.value.querySelector('svg');
-    if (!svg) return false;
-    const binding = titleTarget === undefined
-      ? applyCompositionEdit(svg, {
-          titleSide: titleSide ?? bindCompositionMetadata(svg).metadata.titleSide,
-          canvasPadding
-        })
-      : reconcileCompositionTitle(
-          svg,
-          titleTarget,
-          titleSide ?? (titleTarget ? 'bottom' : 'none'),
-          { canvasPadding }
-        );
-    syncStateFromComposition(svg, binding);
-    persist(svg);
-    return true;
-  };
-
   return {
-    refreshCompositionGeometry,
     refreshLegendGeometry,
     repositionForLegendChange,
     syncStateFromComposition

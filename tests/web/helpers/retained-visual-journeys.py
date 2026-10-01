@@ -84,15 +84,6 @@ def install_operation_adapters(journey_class):
     journey_class.edit = edit
     journey_class.observe = observe
     journey_class.record = record
-    original_load = journey_class.load
-
-    def load(self, seed, valid=True):
-        result = original_load(self, seed, valid=valid)
-        if self.jid == 'C01' and '-03-save' in str(seed):
-            self.page.wait_for_function('window.__DEFINITION_COMPLETED__ > 0', timeout=180000)
-            self.observe('Web Load definition callback completed before Generate')
-        return result
-    journey_class.load = load
 
 
 def main():
@@ -172,7 +163,6 @@ def main():
     harness.OUT = audit.OUT = args.output.resolve()
     harness.LINEAR_FILES = journeys.LINEAR_FILES = [harness.ROOT / 'examples' / name for name in ['MellatMJNV.gb', 'MeenMJNV.gb', 'LvMJNV.gb']]
     # The retained harness uses port 4194 for its local-only request policy.
-    harness.INIT = harness.INIT.replace('window.__SWEEP__=', "window.__DEFINITION_COMPLETED__=0;const log=console.log;console.log=(...a)=>{if(a[0]==='Definition text updated')window.__DEFINITION_COMPLETED__++;log(...a)};window.__SWEEP__=")
     manifest = {'archive': str(args.archive.resolve()), 'sourceHashes': HASHES,
                 'comparatorSha256': hashlib.sha256((args.root / 'tests/web/helpers/svg-visual-semantics.mjs').read_bytes()).hexdigest(), 'journeys': args.journeys}
     (args.output / 'runner-inputs.json').write_text(json.dumps(manifest, indent=2))

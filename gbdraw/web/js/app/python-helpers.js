@@ -1,10 +1,6 @@
 export const PYTHON_HELPERS = `
 import warnings
 warnings.simplefilter('ignore', SyntaxWarning)
-try:
-    import tomllib
-except ImportError:
-    import tomli as tomllib
 import json
 from gbdraw.web_support.feature_metadata import (
     extract_features_from_genbank_json,
@@ -1690,139 +1686,6 @@ def generate_legend_entry_svg(caption, color, y_offset, rect_size=14, font_size=
 
     return json.dumps({"rect": rect_svg, "text": text_svg})
 
-def regenerate_definition_svgs(
-    gb_path,
-    species=None,
-    strain=None,
-    plot_title=None,
-    font_size=None,
-    plot_title_font_size=None,
-    plot_title_position="none",
-    multi_record_canvas=False,
-    keep_full_definition_with_plot_title=False,
-):
-    """Regenerate definition group SVGs for all records in an input file"""
-    from Bio import SeqIO
-    from gbdraw.render.groups.circular.definition import DefinitionGroup
-    from gbdraw.canvas import CircularCanvasConfigurator
-    from gbdraw.config.models import CircularRenderProfile, GbdrawConfig
-    from gbdraw.svg.ids import definition_group_svg_id
-    from importlib import resources
-
-    try:
-        # Load default config
-        with resources.files("gbdraw.data").joinpath("config.toml").open("rb") as fh:
-            config_dict = tomllib.load(fh)
-
-        # Override font sizes if provided
-        from gbdraw.exceptions import ValidationError
-        for field_name, value in (("font_size", font_size), ("plot_title_font_size", plot_title_font_size)):
-            if _is_blank_or_js_nullish(value):
-                continue
-            try:
-                config_dict["objects"]["definition"]["circular"][field_name] = float(value)
-            except (TypeError, ValueError) as error:
-                raise ValidationError(
-                    f"{field_name} must be finite.",
-                    diagnostic={"code": "INPUT_INVALID", "field": field_name, "reason": "FINITE"},
-                ) from error
-        cfg = GbdrawConfig.from_dict(config_dict)
-        render_profile = CircularRenderProfile(cfg)
-
-        # Parse the GenBank file
-        records = list(SeqIO.parse(gb_path, "genbank"))
-        if not records:
-            return json.dumps({'error': serialize_web_error(ValueError('No records found'), operation='regenerateDefinitionSvgs', stage="helper")})
-
-        normalized_plot_title_position = str(plot_title_position or "none").strip().lower()
-        if normalized_plot_title_position not in {"none", "top", "bottom"}:
-            normalized_plot_title_position = "none"
-        normalized_plot_title = str(plot_title or "").strip()
-        show_plot_title = normalized_plot_title_position in {"top", "bottom"}
-        keep_full_definition = bool(keep_full_definition_with_plot_title)
-
-        definitions = []
-        record_count = len(records)
-        record_id_counts = {}
-        for record in records:
-            raw_record_id = str(record.id)
-            record_id_counts[raw_record_id] = record_id_counts.get(raw_record_id, 0) + 1
-        for index, record in enumerate(records):
-            # Create canvas config
-            canvas_config = CircularCanvasConfigurator(
-                output_prefix=f"temp_{index}",
-                profile=render_profile,
-                legend="none",
-                gb_record=record,
-            )
-
-            if show_plot_title and keep_full_definition:
-                profile = "full"
-            else:
-                profile = "record_summary" if bool(multi_record_canvas) or show_plot_title else "full"
-            raw_record_id = str(record.id)
-            has_duplicate_record_id = record_id_counts[raw_record_id] > 1
-            definition_group_id = (
-                definition_group_svg_id(
-                    raw_record_id,
-                    mode="circular",
-                    record_index=index,
-                    record_count=record_count,
-                )
-                if has_duplicate_record_id
-                else None
-            )
-            def_group = DefinitionGroup(
-                gb_record=record,
-                canvas_config=canvas_config,
-                species=species if species else None,
-                strain=strain if strain else None,
-                plot_title=None,
-                definition_profile=profile,
-                definition_group_id=definition_group_id,
-                record_index=index,
-                record_count=record_count if has_duplicate_record_id else 1,
-                cfg=cfg,
-            )
-
-            group = def_group.get_group()
-            definitions.append(
-                {
-                    "svg": group.tostring(),
-                    "definition_group_id": def_group.definition_group_id,
-                    "record_index": index,
-                }
-            )
-
-        if show_plot_title:
-            shared_canvas_config = CircularCanvasConfigurator(
-                output_prefix="temp_shared",
-                profile=render_profile,
-                legend="none",
-                gb_record=records[0],
-            )
-            shared_group = DefinitionGroup(
-                gb_record=records[0],
-                canvas_config=shared_canvas_config,
-                species=species if species else None,
-                strain=strain if strain else None,
-                plot_title=normalized_plot_title if normalized_plot_title else None,
-                definition_profile="shared_common",
-                definition_group_id="plot_title",
-                cfg=cfg,
-            )
-            definitions.append(
-                {
-                    "svg": shared_group.get_group().tostring(),
-                    "definition_group_id": "plot_title",
-                    "record_index": None,
-                }
-            )
-
-        return json.dumps({"definitions": definitions})
-    except Exception as error:
-        return json.dumps({'error': serialize_web_error(error, operation='regenerateDefinitionSvgs', stage="helper")})
-
 def extract_features_from_genbank(gb_path, region_spec=None, record_selector=None, reverse_flag=None, selected_features=None, feature_visibility_table_path=None, include_biological_features=False):
     """Extract feature info from GenBank file for UI display."""
     return extract_features_from_genbank_json(
@@ -1862,7 +1725,6 @@ _WEB_JSON_HELPERS = {
     "convert_losatp_blastp_pairs_to_genomic_payload": (convert_losatp_blastp_pairs_to_genomic_payload, "convertLosatpPairsToGenomicPayload"),
     "convert_losat_nucleotide_to_display_tsv": (convert_losat_nucleotide_to_display_tsv, "convertLosatNucleotideToDisplayTsv"),
     "hydrate_protein_losat_tsv_json": (hydrate_protein_losat_tsv_json, "hydrateProteinLosatTsv"),
-    "regenerate_definition_svgs": (regenerate_definition_svgs, "regenerateDefinitionSvgs"),
     "list_sequence_records": (list_sequence_records, "listSequenceRecords"),
     "list_gff_fasta_records": (list_gff_fasta_records, "listGffFastaRecords"),
     "measure_legend_text_json": (measure_legend_text_json, "measureLegendText"),

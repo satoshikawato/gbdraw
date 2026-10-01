@@ -4,7 +4,7 @@ const { gunzipSync } = require('node:zlib');
 const { readFileSync } = require('node:fs');
 const { semantics } = require('./helpers/visual-state.cjs');
 const { seeds, load, generate, switchMode, snapshot, download, popup, closeEditor } = require('./helpers/mode-transition.cjs');
-const { evaluateWithRetainedPromise } = require('./helpers/app-lifecycle.cjs');
+const { evaluateWithRetainedPromise, reveal } = require('./helpers/app-lifecycle.cjs');
 
 // PD-OI-037 revision 2: there is no derived application status. Draft edits stay
 // free of Worker, byte, digest, and SVG-clone work, and never replace the
@@ -177,30 +177,141 @@ test('Live palette and its History keep the scale draft out of the committed req
 });
 
 
-test('Live global stroke keeps the scale draft out of the committed request', async ({ browser }) => {
-  test.setTimeout(180000);
+// PD-OI-059/PD-OI-060 (D-04, D-05) and OIC-027: Applies on Generate settings
+// never rewrite the current Result; only a successful Generate applies them.
+const resultContent = page => page.evaluate(() => window.__GBDRAW_APP__.results[0].content);
+const resultRewrittenWithin = (page, original, timeout) => page.waitForFunction(
+  original => window.__GBDRAW_APP__.results[0]?.content !== original, original, { timeout }
+).then(() => true, () => false);
+const expectUnchangedResult = async (page, committed, timeout = 3000) => {
+  expect(await resultRewrittenWithin(page, committed, timeout), 'Result rewritten before Generate').toBe(false);
+  expect(hash(await resultContent(page))).toBe(hash(committed));
+};
+const svgFacts = (page, content) => page.evaluate(content => {
+  const root = new DOMParser().parseFromString(content, 'image/svg+xml').documentElement;
+  const text = selector => [...root.querySelectorAll(selector)].map(node => node.textContent).join(' / ');
+  const definition = root.querySelector('g[data-gbdraw-role="record-definition"]');
+  const blocks = [...root.querySelectorAll('[data-gbdraw-feature-part="block"]')];
+  return {
+    definition: definition ? text('g[data-gbdraw-role="record-definition"] text') : '',
+    definitionFontSize: Number(definition?.querySelector('text')?.getAttribute('font-size')),
+    plotTitle: text('#plot_title text'),
+    blockStrokeWidths: [...new Set(blocks.map(node => Number(node.getAttribute('stroke-width'))))],
+    blockStrokes: [...new Set(blocks.map(node => node.getAttribute('stroke')))]
+  };
+}, content);
+
+test('Circular definition settings apply on Generate and keep crop length, GC% and record label', async ({ browser }, testInfo) => {
+  test.setTimeout(360000);
+  const page = await load(browser);
+  try {
+    await page.evaluate(async () => {
+      const { state } = await import('./js/state.js');
+      Object.assign(state.form, {
+        multi_record_canvas: false, circular_region_start: 1000, circular_region_end: 9000,
+        circular_record_label: 'Custom label', circular_record_subtitle: 'Sub'
+      });
+      await window.Vue.nextTick();
+    });
+    await generate(page);
+    const committed = await resultContent(page);
+    const committedRequest = (await snapshot(page)).request;
+    const generated = await svgFacts(page, committed);
+    expect(generated.definition).toContain('Custom label');
+    expect(generated.definition).toContain('8,001 bp');
+    expect(generated.definition).toContain('44.41');
+
+    const edits = [
+      ['form', 'species', 'Homo sapiens'], ['form', 'strain', 'X1'], ['form', 'plot_title', 'Audit title'],
+      ['adv', 'plot_title_position', 'top'], ['adv', 'plot_title_font_size', 30], ['adv', 'def_font_size', 22],
+      ['adv', 'keep_full_definition_with_plot_title', true]
+    ];
+    for (const [owner, field, value] of edits) {
+      await page.evaluate(async ({ owner, field, value }) => {
+        const { state } = await import('./js/state.js');
+        state[owner][field] = value;
+        await window.Vue.nextTick();
+      }, { owner, field, value });
+      await expectUnchangedResult(page, committed);
+    }
+    // The visible field keeps its History step.
+    const undoCount = await page.evaluate(() => window.__GBDRAW_HISTORY__.getUndoCount());
+    const species = page.getByLabel('Species', { exact: true });
+    await species.fill('Mus musculus');
+    await species.press('Tab');
+    await expect.poll(() => page.evaluate(() => window.__GBDRAW_HISTORY__.getUndoCount())).toBeGreaterThan(undoCount);
+    await expectUnchangedResult(page, committed);
+    expect((await snapshot(page)).request).toEqual(committedRequest);
+    await expect(page.getByText('Applies on Generate: Species and Strain.', { exact: true })).toBeVisible();
+    await page.locator('summary[aria-label="Titles and Record Labels"]').press('Enter');
+    await expect(page.getByText('Applies on Generate: plot title and record-label settings.', { exact: true })).toBeVisible();
+    const saved = JSON.parse(gunzipSync(await download(page, 'Save Session', testInfo.outputPath('draft.gbdraw-session.json.gz'))));
+    expect(hash(saved.results[0].content)).toBe(hash(committed));
+    expect(saved.config.form.species).toBe('Mus musculus');
+    expect(saved.config.adv.def_font_size).toBe(22);
+
+    await generate(page);
+    const applied = await svgFacts(page, await resultContent(page));
+    expect(applied.definition).toContain('Custom label');
+    expect(applied.definition).toContain('8,001 bp');
+    expect(applied.definition).toContain('44.41');
+    expect(applied.definitionFontSize).toBe(22);
+    expect(applied.plotTitle).toContain('Audit title');
+    await page.screenshot({ path: testInfo.outputPath('definition-applied.png') });
+  } finally { await page.context().close(); }
+});
+
+test('Global stroke settings apply on Generate and leave the Result unchanged before it', async ({ browser }, testInfo) => {
+  test.setTimeout(360000);
   const page = await load(browser);
   try {
     await generate(page);
+    const committed = await resultContent(page);
+    const committedRequest = (await snapshot(page)).request;
+    expect(await committedScaleInterval(page)).not.toBe(12345);
+    const width = await reveal(page.getByLabel('Block Stroke Width', { exact: true }).first());
+    for (const value of ['5', '', '-1']) {
+      await width.fill(value);
+      await expectUnchangedResult(page, committed);
+    }
+    await expect(page.getByText('Applies on Generate: block and line stroke colors and widths.', { exact: true })).toBeVisible();
     await page.evaluate(async () => {
       const { state } = await import('./js/state.js');
       state.adv.scale_interval = 12345;
-      await window.__GBDRAW_HISTORY__.runUndoable('Live stroke', async () => {
-        state.adv.block_stroke_width = 2;
+      await window.__GBDRAW_HISTORY__.runUndoable('Stroke draft', async () => {
+        Object.assign(state.adv, {
+          block_stroke_color: '#ff0000', line_stroke_width: 3,
+          axis_stroke_color: '#00ff00', axis_stroke_width: 4
+        });
         await window.Vue.nextTick();
       });
     });
+    await expectUnchangedResult(page, committed);
     expect(await committedScaleInterval(page)).not.toBe(12345);
-    expect(await page.locator('.gbdraw-preview-surface svg path[data-gbdraw-feature-id][data-gbdraw-feature-part="block"]').first().getAttribute('stroke-width')).toBe('2');
+    for (const action of ['undo', 'redo']) {
+      await page.evaluate(action => window.__GBDRAW_HISTORY__[action](), action);
+      await noDerivedStatus(page);
+      await expectUnchangedResult(page, committed, 1000);
+    }
+    expect((await snapshot(page)).request).toEqual(committedRequest);
+
+    // An invalid width is still rejected by Generate, which keeps the Result.
+    const failed = await evaluateWithRetainedPromise(page, () => window.__GBDRAW_APP__.runAnalysis());
+    expect(failed.status).toBe('error');
+    expect(hash(await resultContent(page))).toBe(hash(committed));
+
     await page.evaluate(async () => {
-      const { state } = await import('./js/state.js');state.adv.scale_interval = null;
+      const { state } = await import('./js/state.js');
+      state.adv.scale_interval = null;
+      state.adv.block_stroke_width = 5;
       await window.Vue.nextTick();
     });
-    await noDerivedStatus(page);
-    await page.evaluate(() => window.__GBDRAW_HISTORY__.undo());
-    await noDerivedStatus(page);
-    await page.evaluate(() => window.__GBDRAW_HISTORY__.redo());
-    await noDerivedStatus(page);
+    await page.evaluate(() => { window.__GBDRAW_APP__.errorLog = null; });
+    await generate(page);
+    const applied = await svgFacts(page, await resultContent(page));
+    expect(applied.blockStrokeWidths).toEqual([5]);
+    expect(applied.blockStrokes).toEqual(['#ff0000']);
+    await page.screenshot({ path: testInfo.outputPath('stroke-applied.png') });
   } finally { await page.context().close(); }
 });
 
@@ -363,20 +474,25 @@ for (const mode of ['circular','linear']) {
 
 
 for (const mode of ['linear', 'circular']) {
-  test(`${mode} saved live block width survives Save and Load with a separate draft`, async ({ browser }, info) => {
-    test.setTimeout(240000);
+  // PD-OI-060 (D-05): the global block width applies on Generate; the applied
+  // width then travels with the saved Result, separate from a later draft.
+  test(`${mode} generated block width survives Save and Load with a separate draft`, async ({ browser }, info) => {
+    test.setTimeout(300000);
     const page = await load(browser, seeds[mode]);
     let fresh;
     try {
       await generate(page);
       await noDerivedStatus(page);
+      const generated = await resultContent(page);
       await page.locator('input[aria-label="Block Stroke Width"]').evaluate(
         element => { element.closest('details').open = true; });
       const field = page.getByLabel('Block Stroke Width', { exact: true });
       await field.fill('2');
       await field.press('Tab');
+      await expectUnchangedResult(page, generated, 1000);
+      await generate(page);
       const blocks = '.gbdraw-preview-surface path[data-gbdraw-feature-id][data-gbdraw-feature-part="block"]';
-      await expect(page.locator(blocks).first()).toHaveAttribute('stroke-width', '2');
+      await expect(page.locator(blocks).first()).toHaveAttribute('stroke-width', /^2(\.0)?$/);
       await noDerivedStatus(page);
       const before = await snapshot(page);
       const savedPath = info.outputPath(`${mode}-live-width.json.gz`);
@@ -384,7 +500,7 @@ for (const mode of ['linear', 'circular']) {
       expect(saved.editorState.originalSvgStroke.width).toBe(2);
       expect(saved.renderRequest).toEqual(before.request);
       fresh = await load(browser, savedPath);
-      await expect(fresh.locator(blocks).first()).toHaveAttribute('stroke-width', '2');
+      await expect(fresh.locator(blocks).first()).toHaveAttribute('stroke-width', /^2(\.0)?$/);
       await noDerivedStatus(fresh);
       expect((await snapshot(fresh)).request).toEqual(before.request);
       // Admission sanitizes persisted SVG; compare the actual sanitized Result,
@@ -432,7 +548,7 @@ for (const mode of ['linear', 'circular']) {
         sameHistory: true, width: 2 });
       expect(await draftAdv(fresh, 'scale_interval')).toBe(12345);
       expect(await committedScaleInterval(fresh)).not.toBe(12345);
-      await expect(fresh.locator(blocks).first()).toHaveAttribute('stroke-width', '2');
+      await expect(fresh.locator(blocks).first()).toHaveAttribute('stroke-width', /^2(\.0)?$/);
       expect(page.externalRequests).toEqual([]);
       expect(fresh.externalRequests).toEqual([]);
     } finally {

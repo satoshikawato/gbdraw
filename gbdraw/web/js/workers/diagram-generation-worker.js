@@ -742,35 +742,6 @@ const HELPER_OPERATION_SPECS = Object.freeze({
       [jsonArgument(payload.entry, {}), jsonArgument(payload.identityManifest, {})]
     )
   },
-  [DIAGRAM_HELPER_OPERATIONS.REGENERATE_DEFINITION_SVGS]: {
-    keys: [
-      'files',
-      'species',
-      'strain',
-      'plotTitle',
-      'definitionFontSize',
-      'plotTitleFontSize',
-      'plotTitlePosition',
-      'multiRecordCanvas',
-      'keepFullDefinitionWithPlotTitle'
-    ],
-    fileRoles: ['source'],
-    run: (pyodide, payload, paths, operation) => callJsonHelper(
-      pyodide,
-      'regenerate_definition_svgs',
-      [
-        requireHelperFile(paths, 'source', operation),
-        payload.species ?? null,
-        payload.strain ?? null,
-        payload.plotTitle ?? null,
-        payload.definitionFontSize ?? null,
-        payload.plotTitleFontSize ?? null,
-        payload.plotTitlePosition ?? 'none',
-        Boolean(payload.multiRecordCanvas),
-        Boolean(payload.keepFullDefinitionWithPlotTitle)
-      ]
-    )
-  },
   [DIAGRAM_HELPER_OPERATIONS.LIST_SEQUENCE_RECORDS]: {
     keys: ['files', 'format'],
     fileRoles: ['source'],

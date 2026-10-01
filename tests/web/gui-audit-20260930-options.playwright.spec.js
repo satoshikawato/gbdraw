@@ -89,7 +89,6 @@ test('a non-numeric comparison e-value is rejected instead of using the default 
 });
 
 test('a live stroke edit leaves the committed Result unchanged until Generate', async ({ page }) => {
-  test.fail(true, 'GE-02');
   test.setTimeout(300_000);
   await openWithGenBank(page, HMMT);
   await generateAndWaitForResult(page);

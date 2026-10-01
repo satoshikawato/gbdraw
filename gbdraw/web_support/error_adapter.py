@@ -17,7 +17,7 @@ OPERATIONS = frozenset("""unknown generate align feature-extraction export-svg e
 buildProteinLosatCacheKeys convertLosatNucleotideToDisplayTsv convertLosatpPairsToGenomicPayload
 extractCdsProteinFasta extractFirstFasta generateLegendEntrySvg hydrateProteinLosatTsv
 listGffFastaRecords listSequenceRecords measureLegendText promoteLegacyLosatpCache
-regenerateDefinitionSvgs resolveLegacyProteinReferences resolveSimilarityAlignment validateConfigOverrides""".split())
+resolveLegacyProteinReferences resolveSimilarityAlignment validateConfigOverrides""".split())
 STAGES = frozenset("""unknown initialization resource-staging request-validation helper
 rule-validation render result-admission cleanup export-capture export-conversion font-validation""".split())
 

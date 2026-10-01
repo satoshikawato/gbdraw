@@ -52,8 +52,7 @@ export const setupWatchers = ({
   resetPreviewViewport,
   resetRightDrawer,
   previewRuntime = null,
-  preparePaletteDefinitions = null,
-  isRestoringModeProfile = () => false
+  preparePaletteDefinitions = null
 }) => {
   const {
     manualSpecificRules,
@@ -139,8 +138,6 @@ export const setupWatchers = ({
   } = legendLayout;
   const {
     applyPaletteDraftToPreview,
-    scheduleDefinitionUpdate,
-    cancelDefinitionUpdate,
     syncPaletteDraftState
   } = resultsManager;
 
@@ -181,18 +178,6 @@ export const setupWatchers = ({
     } else {
       replacePlainObject(state.featureVisibilitySelectorCache, nextCache);
     }
-  };
-
-  const scheduleCircularDefinitionUpdate = () => {
-    if (mode.value !== 'circular') return;
-    if (isRestoringModeProfile()) return;
-    if (generatedMode.value !== mode.value) return;
-    if (semanticFileWatchersSuppressed.value || shouldDeferCircularPreviewUpdates.value) {
-      cancelDefinitionUpdate();
-      return;
-    }
-    if (state.sessionOperationAvailability?.()) return;
-    scheduleDefinitionUpdate();
   };
 
   watch(
@@ -255,7 +240,6 @@ export const setupWatchers = ({
   watch(
     () => form.multi_record_canvas,
     (enabled, previousEnabled) => {
-      cancelDefinitionUpdate();
       if (mode.value !== 'circular') return;
       if (enabled === previousEnabled) return;
 
@@ -373,7 +357,6 @@ export const setupWatchers = ({
     () => mode.value,
     () => {
       if (semanticFileWatchersSuppressed.value) return;
-      cancelDefinitionUpdate();
 
       // Vue replaces the mode-keyed container. Release its frozen live-edit
       // payload first so the new root materializes the selected Result content.
@@ -571,18 +554,6 @@ export const setupWatchers = ({
     }
   );
 
-  watch(() => form.species, scheduleCircularDefinitionUpdate);
-  watch(() => form.strain, scheduleCircularDefinitionUpdate);
-  watch(() => form.plot_title, scheduleCircularDefinitionUpdate);
-  watch(() => state.adv.def_font_size, scheduleCircularDefinitionUpdate);
-  watch(
-    () => state.adv.plot_title_position,
-    () => {
-      scheduleCircularDefinitionUpdate();
-    }
-  );
-  watch(() => state.adv.plot_title_font_size, scheduleCircularDefinitionUpdate);
-  watch(() => state.adv.keep_full_definition_with_plot_title, scheduleCircularDefinitionUpdate);
   watch(
     () => [
       semanticFileWatchersSuppressed.value,
