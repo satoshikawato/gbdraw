@@ -30,7 +30,7 @@ for (const value of [undefined, Number.NaN, Number.POSITIVE_INFINITY, Number.NEG
 // R7: the projection passes every finite number literally (Python owns the
 // range) and rejects only what JSON cannot carry as a number.
 for (const [value, expected] of [
-  [null, null], [undefined, null], ['', null], ['  ', null], ['Auto', null],
+  [null, null], [undefined, null], ['', null], ['  ', null], ['Auto', null], ['none', null], ['NULL', null],
   [0, 0], [-5, -5], [12.5, 12.5], ['-100', -100], [' 500.5 ', 500.5], ['1e3', 1000]
 ]) {
   assert.equal(classifyOptionalNumber(value).status === 'invalid', false, JSON.stringify(value));

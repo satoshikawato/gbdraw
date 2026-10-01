@@ -2,15 +2,19 @@ import { diagnosticError } from '../services/error-normalization.js';
 
 export const DECIMAL_NUMBER_PATTERN = /^[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?$/;
 
+// Text that the Python config domain reads as no value (config.toml uses "none").
+const NO_VALUE_TOKENS = new Set(['', 'auto', 'none', 'null']);
+
 /**
- * JSON-representable classification of an optional number: blank or Auto is
- * 'auto', a finite number (any sign) is 'valid', anything else is 'invalid'.
+ * JSON-representable classification of an optional number: blank, Auto, or a
+ * no-value token is 'auto', a finite number (any sign) is 'valid', anything
+ * else is 'invalid'.
  */
 export const classifyOptionalNumber = (value) => {
   if (value === null || value === undefined) return { status: 'auto', value: null };
   if (typeof value === 'string') {
     const normalized = value.trim();
-    if (!normalized || normalized.toLowerCase() === 'auto') return { status: 'auto', value: null };
+    if (NO_VALUE_TOKENS.has(normalized.toLowerCase())) return { status: 'auto', value: null };
     const numeric = DECIMAL_NUMBER_PATTERN.test(normalized) ? Number(normalized) : NaN;
     return Number.isFinite(numeric) ? { status: 'valid', value: numeric } : { status: 'invalid', raw: value };
   }
