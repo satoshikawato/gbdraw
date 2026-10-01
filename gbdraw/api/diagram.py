@@ -36,12 +36,10 @@ from gbdraw.analysis.depth_tracks import (  # type: ignore[reportMissingImports]
     index_depth_track_row,
     normalize_depth_tracks,
     representative_depth_tracks,
-    sync_depth_track_legend_entries,
 )
 from gbdraw.analysis.conservation import (  # type: ignore[reportMissingImports]
     ConservationLoadResult,
     ConservationTrack,
-    conservation_track_gradient_colors,
     load_conservation_sources,
     normalize_conservation_reference,
     normalize_conservation_tracks_for_record,
@@ -117,10 +115,12 @@ from gbdraw.configurators import (  # type: ignore[reportMissingImports]
     GcSkewConfigurator,
     LegendDrawingConfigurator,
 )
-from gbdraw.core.sequence import create_dict_for_sequence_lengths, check_feature_presence  # type: ignore[reportMissingImports]
+from gbdraw.core.sequence import create_dict_for_sequence_lengths  # type: ignore[reportMissingImports]
 from gbdraw.diagrams.circular.assemble import (  # type: ignore[reportMissingImports]
     CircularAssemblyResult,
     _assemble_circular_diagram_result,
+    build_circular_legend_table,
+    plan_circular_annotation_slots,
 )
 from gbdraw.diagrams.linear import assemble_linear_diagram  # type: ignore[reportMissingImports]
 from gbdraw.features.placement import ResolvedPlacementInputs
@@ -140,10 +140,8 @@ from gbdraw.mode_profiles import (
     LINEAR_MODE_PROFILE,
 )
 from gbdraw.annotations import ResolvedAnnotationBundle, resolve_annotations
-from gbdraw.features.colors import precompute_used_color_rules  # type: ignore[reportMissingImports]
 from gbdraw.legend.table import (  # type: ignore[reportMissingImports]
     configure_pairwise_identity_legend_from_comparisons,
-    prepare_legend_table,
 )
 from gbdraw.render.groups.circular import DefinitionGroup, LegendGroup  # type: ignore[reportMissingImports]
 from gbdraw.render.composition import (
@@ -2205,6 +2203,9 @@ def assemble_circular_diagram_from_record(
     If default_colors is None, it loads the built-in default palette.
     If color_table is None and color_table_file is provided, it is loaded.
     If selected_features_set is None, it uses the CLI default feature list.
+    The private ``_precomputed_depth_tracks`` is None when the canvas has no
+    depth input; ``[]`` means depth input without a cell for this record, which
+    keeps the record's depth slot.
     """
     if not isinstance(cfg, GbdrawConfig):
         raise ValidationError("cfg must be GbdrawConfig")
@@ -2892,7 +2893,11 @@ def assemble_circular_diagram_from_records(
         mode=normalized_multi_record_size_mode,
         min_radius_ratio=normalized_multi_record_min_radius_ratio,
     )
-    record_depth_track_data: list[list[DepthTrackData]] = [[] for _ in records]
+    # None means no depth input at all; [] means depth input without a cell
+    # for that record, which still reserves the record's depth slot.
+    record_depth_track_data: list[list[DepthTrackData]] | None = (
+        None if record_depth_tracks is None else [[] for _ in records]
+    )
     if cfg.canvas.show_depth and record_depth_tracks is not None:
         record_depth_window_steps: list[tuple[int, int]] = []
         for record in records:
@@ -2989,8 +2994,16 @@ def assemble_circular_diagram_from_records(
             alignment_length=alignment_length,
             _definition_profile=record_definition_profile,
             _tick_track_channel_override=tick_track_channel_override,
-            _precomputed_depth_tracks=record_depth_track_data[record_index],
-            _precomputed_depth_track_count=available_depth_track_count,
+            _precomputed_depth_tracks=(
+                record_depth_track_data[record_index]
+                if record_depth_track_data is not None
+                else None
+            ),
+            _precomputed_depth_track_count=(
+                available_depth_track_count
+                if record_depth_track_data is not None
+                else None
+            ),
             _precomputed_conservation_tracks=record_conservation_tracks,
             _resolved_feature_inputs=resolved_feature_inputs,
             _resolved_placement_inputs=(_resolved_placement_inputs[record_index],) if _resolved_placement_inputs else (),
@@ -3094,66 +3107,37 @@ def assemble_circular_diagram_from_records(
             default_color_map=resolved_feature_inputs.default_color_map,
             canvas_config=legend_canvas_config,
         )
-        color_map = feature_config.specific_color_rules
-        default_color_map = feature_config.default_color_map
-        features_present = check_feature_presence(
-            list(records),
-            list(selected_features_set),
-            feature_visibility_rules=feature_config.feature_visibility_rules,
-            specific_color_rules=color_map,
-        )
-        used_color_rules, default_used_features = precompute_used_color_rules(
-            list(records),
-            color_map,
-            default_color_map,
-            set(feature_config.selected_features_set),
-            feature_visibility_rules=feature_config.feature_visibility_rules,
-        )
-        legend_table = prepare_legend_table(
-            gc_config,
-            skew_config,
-            feature_config,
-            features_present,
-            used_color_rules=used_color_rules,
-            default_used_features=default_used_features,
-            depth_config=depth_config if depth_track_data_count(record_depth_track_data) == 1 else None,
+        legend_slots, legend_annotations = plan_circular_annotation_slots(
+            resolved_annotations,
+            records,
+            parsed_circular_track_slots,
+            show_ticks=bool(cfg.objects.scale.show),
+            show_depth=bool(profile.show_depth and depth_config is not None),
             show_gc=profile.show_gc,
             show_skew=profile.show_skew,
-            show_depth=bool(
-                profile.show_depth
-                and depth_track_data_count(record_depth_track_data) == 1
-            ),
+            depth_track_count=max(1, available_depth_track_count),
         )
-        if profile.show_depth:
-            legend_table = sync_depth_track_legend_entries(
-                legend_table,
-                representative_depth_tracks(record_depth_track_data),
-            )
-        if first_record_conservation_tracks:
-            if any(track.track_color for track in first_record_conservation_tracks):
-                for track in first_record_conservation_tracks:
-                    min_color, max_color = conservation_track_gradient_colors(
-                        track.track_color,
-                        default_min_color=cfg.objects.conservation.min_color,
-                        default_max_color=cfg.objects.conservation.max_color,
-                    )
-                    legend_table[track.track_label] = {
-                        "type": "gradient",
-                        "min_color": min_color,
-                        "max_color": max_color,
-                        "stroke": "none",
-                        "width": 0,
-                        "min_value": float(identity),
-                    }
-            else:
-                legend_table["Conservation identity"] = {
-                    "type": "gradient",
-                    "min_color": cfg.objects.conservation.min_color,
-                    "max_color": cfg.objects.conservation.max_color,
-                    "stroke": "none",
-                    "width": 0,
-                    "min_value": float(identity),
-                }
+        legend_depth_tracks = representative_depth_tracks(record_depth_track_data)
+        legend_depth_track_zero = index_depth_track_row(legend_depth_tracks).get(0)
+        legend_table = build_circular_legend_table(
+            records,
+            feature_config=feature_config,
+            gc_config=gc_config,
+            skew_config=skew_config,
+            profile=profile,
+            depth_config=depth_config,
+            depth_df=(
+                legend_depth_track_zero.df
+                if legend_depth_track_zero is not None
+                else None
+            ),
+            depth_tracks=legend_depth_tracks,
+            depth_track_count_value=depth_track_data_count(record_depth_track_data),
+            circular_track_slots=legend_slots,
+            annotations=legend_annotations,
+            conservation_tracks=first_record_conservation_tracks,
+            conservation_min_identity=float(identity),
+        )
         if legend_table:
             legend_config = LegendDrawingConfigurator(
                 color_table=color_table,

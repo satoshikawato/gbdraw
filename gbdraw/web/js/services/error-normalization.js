@@ -80,6 +80,8 @@ const REASONS = Object.freeze({
   SELECTOR_FORMAT: 'Use #<number> or a record ID.', SELECT_ONE: 'Select exactly one record.',
   REGION_FORMAT: 'Use record_id:start-end[:rc] or #index:start-end[:rc].',
   CANNOT_FIT: 'Move the track, reduce widths, disable conflicting labels, or place it outside.',
+  DEFINITION_RESERVED: 'The center definition text limits the inside tracks. Shorten Species or Strain, reduce Default font size, set a smaller Center Reserved Radius, or place tracks outside.',
+  CENTER_RESERVED: 'The Center Reserved Radius limits the inside tracks. Set a smaller Center Reserved Radius or place tracks outside.',
   THREE_COLUMNS: 'Supply at least three tab-separated columns.', READ: 'Replace or reselect the input.',
   FORMAT: 'Use GenBank or the required GFF3 and FASTA inputs.', NO_PROTEINS: 'Choose input containing CDS proteins.',
   EMPTY_ENDPOINT: 'Check the comparison endpoints.', INDEX_ALIGNMENT: 'Check the comparison endpoints.',
