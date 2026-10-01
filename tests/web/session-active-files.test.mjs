@@ -196,7 +196,7 @@ await assert.rejects(
       mode: 'linear', status: 'ready', issues: [], records: []
     }
   }),
-  /did not find any records/
+  { code: 'NO_RECORDS' }
 );
 const arrangedAutomatic = await serializeActiveRenderFiles('linear', {
     ...automaticLinearState,
@@ -221,7 +221,7 @@ await assert.rejects(
       records: [{ sourceIndex: 0, localIndex: 0 }, { sourceIndex: 0, localIndex: 1 }]
     }
   }),
-  /choose a Record before setting a region/
+  { code: 'REGION_INVALID', context: { inputOrdinal: 1, reason: 'SELECT_RECORD_FOR_REGION' } }
 );
 
 const activeComparison = readableFile('active-comparison.tsv', 'q\ts\t99');

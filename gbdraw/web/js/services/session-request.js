@@ -67,7 +67,8 @@ import {
   validateTrackSlotBindingInvariants
 } from '../app/track-slot-validation.js';
 import { annotationOptionsPayload, normalizeAnnotationSets } from '../app/annotations/state.js';
-import { classifyOptionalPositiveNumber } from '../utils/optional-positive-number.js';
+import { classifyOptionalNumber, classifyOptionalPositiveNumber, projectOptionalNumber } from '../utils/optional-positive-number.js';
+import { diagnosticError } from './error-normalization.js';
 import { materializeLegacySimilarityAlignment } from './legacy-similarity-alignment.js';
 import {
   arrowHeadLengthRatioForState,
@@ -82,6 +83,7 @@ import {
   effectiveLinearAxisColor,
   MODE_DEFAULT_FEATURE_TYPES,
   modeProfile,
+  resolveComparisonThresholds,
   trackDefaultsForMode
 } from '../mode-profiles.js';
 import { WEB_UX_PROFILE } from '../web-ux-profile.js';
@@ -552,15 +554,15 @@ const renderOutputPayload = (prefix) => ({
   interactiveMetadataPolicy: 'auto'
 });
 
-const optionalNumber = (value) => {
-  if (value === null || value === undefined || String(value).trim() === '') return null;
-  const numeric = Number(value);
-  return Number.isFinite(numeric) ? numeric : null;
-};
-
-const optionalPositiveInteger = (value) => {
-  const numeric = optionalNumber(value);
-  return Number.isInteger(numeric) && numeric > 0 ? numeric : null;
+const projectComparisonThresholds = ({ evalue, bitscore, identity, alignmentLength }) => ({
+  evalue: Number(evalue), bitscore, identity, alignmentLength
+});
+// An integer setting that the current request does not use for rendering
+// (a mode-inactive protein parameter or a LOSAT execution choice) keeps its
+// documented fallback; projected render values use projectOptionalNumber.
+const integerSettingOr = (value, fallback, minimum) => {
+  const { value: numeric } = classifyOptionalNumber(value);
+  return Number.isInteger(numeric) && numeric >= minimum ? numeric : fallback;
 };
 
 // A record label or subtitle is saved resolved. Sessions written since file
@@ -571,15 +573,6 @@ const resolveSavedRecordOverride = ({ savedOverride, fileDefault, resolved }) =>
   if (savedOverride !== undefined && savedOverride !== null) return String(savedOverride);
   if (!fileDefault) return resolved;
   return resolved === fileDefault ? '' : resolved;
-};
-
-const canonicalOptionalPositiveNumber = (value, fieldName) => {
-  if (value === null || value === undefined || String(value).trim() === '') return null;
-  const numeric = Number(value);
-  if (!Number.isFinite(numeric) || numeric <= 0) {
-    throw new Error(`${fieldName} must be null or a positive finite number.`);
-  }
-  return numeric;
 };
 
 const validateProjectedDepthSources = (depthRows, logicalTrackCount) => {
@@ -869,11 +862,11 @@ const circularRecordKey = (record) => {
 };
 
 const linearRegionPayload = (seq) => {
-  const start = optionalPositiveInteger(seq?.region_start);
-  const end = optionalPositiveInteger(seq?.region_end);
+  const start = projectOptionalNumber(seq?.region_start, { field: 'region' });
+  const end = projectOptionalNumber(seq?.region_end, { field: 'region' });
   if (start === null && end === null) return null;
   if (start === null || end === null) {
-    throw new Error('Canonical linear regions require both start and end coordinates.');
+    throw diagnosticError('REGION_INVALID', { field: 'region', reason: 'BOTH_ENDPOINTS' });
   }
   return {
     selector: selectorPayload(seq?.region_record_id),
@@ -976,9 +969,9 @@ const buildRecords = ({ state, filesData, resources }) => {
           : null
       );
       if (knownRecords.length > 0 && !selectedKnownRecord) {
-        const reason = selection.status === 'ambiguous' ? 'is ambiguous' : 'was not found';
-        const label = requestedSelector || '(automatic)';
-        throw new Error(`Circular record selector '${label}' ${reason} in the current input.`);
+        throw diagnosticError('RECORD_SELECTION', {
+          reason: !requestedSelector ? 'SELECT_ONE' : selection.status === 'ambiguous' ? 'AMBIGUOUS' : 'NO_MATCH'
+        });
       }
       const selected = selectedKnownRecord || {
         value: requestedSelector,
@@ -1035,8 +1028,7 @@ const buildRecords = ({ state, filesData, resources }) => {
     requestedSelector &&
     selection.status !== 'resolved'
   ) {
-    const reason = selection.status === 'ambiguous' ? 'is ambiguous' : 'was not found';
-    throw new Error(`Circular record selector '${requestedSelector}' ${reason} in the current input.`);
+    throw diagnosticError('RECORD_SELECTION', { reason: selection.status === 'ambiguous' ? 'AMBIGUOUS' : 'NO_MATCH' });
   }
   const selectedRecords = singlePresentationRequested && selection.record
     ? [selection.record]
@@ -1084,6 +1076,9 @@ const buildConfigOverrides = (
 ) => {
   const { form, adv } = state;
   const circular = state.mode.value === 'circular';
+  // R7: a config leaf is projected literally; Python validates its domain.
+  const leaf = (configPath, value) => projectOptionalNumber(value, { configPath });
+  const sharedLeaf = (path, value) => leaf(`${path}.short`, value);
   const linearLabelPlacement = circular
     ? null
     : requireCurrentLinearLabelPlacement(adv.label_placement);
@@ -1094,7 +1089,7 @@ const buildConfigOverrides = (
     ? classifyOptionalPositiveNumber(adv.comparison_height)
     : null;
   if (comparisonHeight?.status === 'invalid') {
-    throw new Error('Pairwise Match Height must be Auto or a positive finite number.');
+    throw diagnosticError('INPUT_INVALID', { field: 'match_height', reason: 'POSITIVE_OR_AUTO' });
   }
   const linearAxisManaged = state.modeProfileStateManager?.isManaged?.(
     adv,
@@ -1128,30 +1123,30 @@ const buildConfigOverrides = (
     [CONFIG_OVERRIDE_PATHS.resolveOverlaps]: Boolean(adv.resolve_overlaps),
     [CONFIG_OVERRIDE_PATHS.featureOverlapToleranceBp]: adv.feature_overlap_tolerance_bp ?? 0,
     [CONFIG_OVERRIDE_PATHS.gcContentMode]: adv.gc_content_mode || 'deviation',
-    [CONFIG_OVERRIDE_PATHS.gcContentMinPercent]: optionalNumber(adv.gc_content_min_percent),
-    [CONFIG_OVERRIDE_PATHS.gcContentMaxPercent]: optionalNumber(adv.gc_content_max_percent),
+    [CONFIG_OVERRIDE_PATHS.gcContentMinPercent]: leaf(CONFIG_OVERRIDE_PATHS.gcContentMinPercent, adv.gc_content_min_percent),
+    [CONFIG_OVERRIDE_PATHS.gcContentMaxPercent]: leaf(CONFIG_OVERRIDE_PATHS.gcContentMaxPercent, adv.gc_content_max_percent),
     [CONFIG_OVERRIDE_PATHS.gcContentShowAxis]: Boolean(adv.gc_content_show_axis),
     [CONFIG_OVERRIDE_PATHS.gcContentShowTicks]: Boolean(adv.gc_content_show_ticks),
     [CONFIG_OVERRIDE_PATHS.gcContentLargeTickInterval]:
-      optionalNumber(adv.gc_content_tick_interval),
+      leaf(CONFIG_OVERRIDE_PATHS.gcContentLargeTickInterval, adv.gc_content_tick_interval),
     [CONFIG_OVERRIDE_PATHS.gcContentSmallTickInterval]:
-      optionalNumber(adv.gc_content_small_tick_interval),
+      leaf(CONFIG_OVERRIDE_PATHS.gcContentSmallTickInterval, adv.gc_content_small_tick_interval),
     [CONFIG_OVERRIDE_PATHS.gcContentTickFontSize]:
-      optionalNumber(adv.gc_content_tick_font_size),
+      leaf(CONFIG_OVERRIDE_PATHS.gcContentTickFontSize, adv.gc_content_tick_font_size),
     [CONFIG_OVERRIDE_PATHS.depthColor]: adv.depth_color || null,
-    [CONFIG_OVERRIDE_PATHS.depthMin]: optionalNumber(adv.depth_min),
-    [CONFIG_OVERRIDE_PATHS.depthMax]: optionalNumber(adv.depth_max),
+    [CONFIG_OVERRIDE_PATHS.depthMin]: leaf(CONFIG_OVERRIDE_PATHS.depthMin, adv.depth_min),
+    [CONFIG_OVERRIDE_PATHS.depthMax]: leaf(CONFIG_OVERRIDE_PATHS.depthMax, adv.depth_max),
     [CONFIG_OVERRIDE_PATHS.depthNormalize]: Boolean(adv.depth_normalize),
     [CONFIG_OVERRIDE_PATHS.depthShowAxis]: Boolean(adv.depth_show_axis),
     [CONFIG_OVERRIDE_PATHS.depthShowTicks]: Boolean(adv.depth_show_ticks),
     [CONFIG_OVERRIDE_PATHS.depthLargeTickInterval]:
-      optionalNumber(adv.depth_large_tick_interval),
+      leaf(CONFIG_OVERRIDE_PATHS.depthLargeTickInterval, adv.depth_large_tick_interval),
     [CONFIG_OVERRIDE_PATHS.depthSmallTickInterval]:
-      optionalNumber(adv.depth_small_tick_interval),
-    [CONFIG_OVERRIDE_PATHS.depthTickFontSize]: optionalNumber(adv.depth_tick_font_size),
+      leaf(CONFIG_OVERRIDE_PATHS.depthSmallTickInterval, adv.depth_small_tick_interval),
+    [CONFIG_OVERRIDE_PATHS.depthTickFontSize]: leaf(CONFIG_OVERRIDE_PATHS.depthTickFontSize, adv.depth_tick_font_size),
     [CONFIG_OVERRIDE_PATHS.depthShareAxis]: Boolean(adv.depth_share_axis),
     [CONFIG_OVERRIDE_PATHS.showScale]: form.show_scale !== false,
-    [CONFIG_OVERRIDE_PATHS.scaleInterval]: optionalNumber(adv.scale_interval),
+    [CONFIG_OVERRIDE_PATHS.scaleInterval]: leaf(CONFIG_OVERRIDE_PATHS.scaleInterval, adv.scale_interval),
     [CONFIG_OVERRIDE_PATHS.labelBlacklist]: state.filterMode.value === 'Blacklist'
       ? String(state.manualBlacklist.value || '').split(/[,\n]/)
         .map((keyword) => keyword.trim()).filter(Boolean)
@@ -1161,25 +1156,25 @@ const buildConfigOverrides = (
           [CONFIG_OVERRIDE_PATHS.circularAxisStrokeColor]:
             adv.axis_stroke_color || null,
           [CONFIG_OVERRIDE_PATHS.circularDefinitionFontSize]:
-            optionalNumber(adv.def_font_size),
-          [CONFIG_OVERRIDE_PATHS.circularDefinitionInterval]: optionalNumber(adv.circular_definition_interval),
+            leaf(CONFIG_OVERRIDE_PATHS.circularDefinitionFontSize, adv.def_font_size),
+          [CONFIG_OVERRIDE_PATHS.circularDefinitionInterval]: leaf(CONFIG_OVERRIDE_PATHS.circularDefinitionInterval, adv.circular_definition_interval),
           [CONFIG_OVERRIDE_PATHS.plotTitleFontSize]:
-            optionalNumber(adv.plot_title_font_size),
+            leaf(CONFIG_OVERRIDE_PATHS.plotTitleFontSize, adv.plot_title_font_size),
           [CONFIG_OVERRIDE_PATHS.circularLabelSpacing]:
-            optionalNumber(adv.circular_label_spacing),
+            leaf(CONFIG_OVERRIDE_PATHS.circularLabelSpacing, adv.circular_label_spacing),
           [CONFIG_OVERRIDE_PATHS.circularLabelPlacement]:
             adv.circular_label_placement || 'horizontal',
           [CONFIG_OVERRIDE_PATHS.trackType]: form.track_type,
           [CONFIG_OVERRIDE_PATHS.tickLabelFontSize]:
-            optionalNumber(adv.tick_label_font_size),
+            leaf(CONFIG_OVERRIDE_PATHS.tickLabelFontSize, adv.tick_label_font_size),
           [CONFIG_OVERRIDE_PATHS.outerLabelXRadiusOffset]:
-            optionalNumber(adv.outer_label_x_offset),
+            leaf(CONFIG_OVERRIDE_PATHS.outerLabelXRadiusOffset, adv.outer_label_x_offset),
           [CONFIG_OVERRIDE_PATHS.outerLabelYRadiusOffset]:
-            optionalNumber(adv.outer_label_y_offset),
+            leaf(CONFIG_OVERRIDE_PATHS.outerLabelYRadiusOffset, adv.outer_label_y_offset),
           [CONFIG_OVERRIDE_PATHS.innerLabelXRadiusOffset]:
-            optionalNumber(adv.inner_label_x_offset),
+            leaf(CONFIG_OVERRIDE_PATHS.innerLabelXRadiusOffset, adv.inner_label_x_offset),
           [CONFIG_OVERRIDE_PATHS.innerLabelYRadiusOffset]:
-            optionalNumber(adv.inner_label_y_offset)
+            leaf(CONFIG_OVERRIDE_PATHS.innerLabelYRadiusOffset, adv.inner_label_y_offset)
         }
       : {
           [CONFIG_OVERRIDE_PATHS.linearAxisStrokeColor]: linearAxisStrokeColor,
@@ -1194,14 +1189,14 @@ const buildConfigOverrides = (
               hasSharedRow: linearHasSharedRow
             }),
           [CONFIG_OVERRIDE_PATHS.linearLabelSpacing]:
-            optionalNumber(adv.linear_label_spacing),
+            leaf(CONFIG_OVERRIDE_PATHS.linearLabelSpacing, adv.linear_label_spacing),
           [CONFIG_OVERRIDE_PATHS.labelPlacement]: linearLabelPlacement,
-          [CONFIG_OVERRIDE_PATHS.labelRotation]: optionalNumber(adv.label_rotation),
+          [CONFIG_OVERRIDE_PATHS.labelRotation]: leaf(CONFIG_OVERRIDE_PATHS.labelRotation, adv.label_rotation),
           [CONFIG_OVERRIDE_PATHS.alignCenter]: Boolean(form.align_center),
           [CONFIG_OVERRIDE_PATHS.keepDefinitionLeftAligned]:
             Boolean(form.keep_definition_left_aligned),
           [CONFIG_OVERRIDE_PATHS.linearTrackLayout]: linearTrackLayout,
-          [CONFIG_OVERRIDE_PATHS.linearTrackAxisGap]: optionalNumber(adv.track_axis_gap),
+          [CONFIG_OVERRIDE_PATHS.linearTrackAxisGap]: leaf(CONFIG_OVERRIDE_PATHS.linearTrackAxisGap, adv.track_axis_gap),
           [CONFIG_OVERRIDE_PATHS.linearRulerOnAxis]: Boolean(form.linear_ruler_on_axis),
           ...(hasComparisonIntent
             ? {
@@ -1210,43 +1205,43 @@ const buildConfigOverrides = (
                 [CONFIG_OVERRIDE_PATHS.pairwiseMatchStyle]: adv.pairwise_match_style
               }
             : {}),
-          [CONFIG_OVERRIDE_PATHS.gcHeight]: optionalNumber(adv.gc_height),
-          [CONFIG_OVERRIDE_PATHS.depthHeight]: optionalNumber(adv.depth_height),
+          [CONFIG_OVERRIDE_PATHS.gcHeight]: leaf(CONFIG_OVERRIDE_PATHS.gcHeight, adv.gc_height),
+          [CONFIG_OVERRIDE_PATHS.depthHeight]: leaf(CONFIG_OVERRIDE_PATHS.depthHeight, adv.depth_height),
           [CONFIG_OVERRIDE_PATHS.scaleStyle]: form.scale_style,
           [CONFIG_OVERRIDE_PATHS.scaleStrokeColor]: adv.scale_stroke_color || null,
           [CONFIG_OVERRIDE_PATHS.scaleLabelColor]: adv.ruler_label_color || null,
           [CONFIG_OVERRIDE_PATHS.scaleStrokeWidth]:
-            optionalNumber(adv.scale_stroke_width),
+            leaf(CONFIG_OVERRIDE_PATHS.scaleStrokeWidth, adv.scale_stroke_width),
           [CONFIG_OVERRIDE_PATHS.normalizeLength]: Boolean(form.normalize_length)
         })
   };
   const sharedLengthValues = {
     [SHARED_LENGTH_CONFIG_OVERRIDE_PATHS.blockStrokeWidth]:
-      optionalNumber(adv.block_stroke_width),
+      sharedLeaf(SHARED_LENGTH_CONFIG_OVERRIDE_PATHS.blockStrokeWidth, adv.block_stroke_width),
     [SHARED_LENGTH_CONFIG_OVERRIDE_PATHS.lineStrokeWidth]:
-      optionalNumber(adv.line_stroke_width),
+      sharedLeaf(SHARED_LENGTH_CONFIG_OVERRIDE_PATHS.lineStrokeWidth, adv.line_stroke_width),
     [SHARED_LENGTH_CONFIG_OVERRIDE_PATHS.legendBoxSize]:
-      optionalNumber(adv.legend_box_size),
+      sharedLeaf(SHARED_LENGTH_CONFIG_OVERRIDE_PATHS.legendBoxSize, adv.legend_box_size),
     [SHARED_LENGTH_CONFIG_OVERRIDE_PATHS.legendFontSize]:
-      optionalNumber(adv.legend_font_size),
+      sharedLeaf(SHARED_LENGTH_CONFIG_OVERRIDE_PATHS.legendFontSize, adv.legend_font_size),
     ...(circular
       ? {
           [SHARED_LENGTH_CONFIG_OVERRIDE_PATHS.circularAxisStrokeWidth]:
-            optionalNumber(adv.axis_stroke_width),
-          'labels.font_size': optionalNumber(adv.label_font_size)
+            sharedLeaf(SHARED_LENGTH_CONFIG_OVERRIDE_PATHS.circularAxisStrokeWidth, adv.axis_stroke_width),
+          'labels.font_size': sharedLeaf('labels.font_size', adv.label_font_size)
         }
       : {
           [SHARED_LENGTH_CONFIG_OVERRIDE_PATHS.linearAxisStrokeWidth]:
-            optionalNumber(adv.axis_stroke_width),
+            sharedLeaf(SHARED_LENGTH_CONFIG_OVERRIDE_PATHS.linearAxisStrokeWidth, adv.axis_stroke_width),
           [SHARED_LENGTH_CONFIG_OVERRIDE_PATHS.linearDefinitionFontSize]:
-            optionalNumber(adv.def_font_size),
+            sharedLeaf(SHARED_LENGTH_CONFIG_OVERRIDE_PATHS.linearDefinitionFontSize, adv.def_font_size),
           [SHARED_LENGTH_CONFIG_OVERRIDE_PATHS.defaultCdsHeight]:
-            optionalNumber(adv.feature_height),
+            sharedLeaf(SHARED_LENGTH_CONFIG_OVERRIDE_PATHS.defaultCdsHeight, adv.feature_height),
           [SHARED_LENGTH_CONFIG_OVERRIDE_PATHS.scaleFontSize]:
-            optionalNumber(adv.scale_font_size),
+            sharedLeaf(SHARED_LENGTH_CONFIG_OVERRIDE_PATHS.scaleFontSize, adv.scale_font_size),
           [SHARED_LENGTH_CONFIG_OVERRIDE_PATHS.rulerLabelFontSize]:
-            optionalNumber(adv.ruler_label_font_size),
-          'labels.font_size.linear': optionalNumber(adv.label_font_size)
+            sharedLeaf(SHARED_LENGTH_CONFIG_OVERRIDE_PATHS.rulerLabelFontSize, adv.ruler_label_font_size),
+          'labels.font_size.linear': sharedLeaf('labels.font_size.linear', adv.label_font_size)
         })
   };
   for (const [path, value] of Object.entries(sharedLengthValues)) {
@@ -1436,23 +1431,11 @@ const buildDepthResources = ({ state, filesData, resources, diagramOptions, reco
       label: String(track.label || (logicalTrackCount === 1 ? 'Depth' : `Depth ${trackIndex + 1}`)),
       color: String(track.color || state.adv.depth_color || '#4A90E2'),
       height: state.mode.value === 'linear'
-        ? canonicalOptionalPositiveNumber(
-            track.height,
-            `depthTracks[${trackIndex}].height`
-          )
+        ? projectOptionalNumber(track.height, { field: 'height', seriesIndex: trackIndex })
         : null,
-      largeTickInterval: canonicalOptionalPositiveNumber(
-        track.large_tick_interval,
-        `depthTracks[${trackIndex}].largeTickInterval`
-      ),
-      smallTickInterval: canonicalOptionalPositiveNumber(
-        track.small_tick_interval,
-        `depthTracks[${trackIndex}].smallTickInterval`
-      ),
-      tickFontSize: canonicalOptionalPositiveNumber(
-        track.tick_font_size,
-        `depthTracks[${trackIndex}].tickFontSize`
-      )
+      largeTickInterval: projectOptionalNumber(track.large_tick_interval, { field: 'large_tick_interval', seriesIndex: trackIndex }),
+      smallTickInterval: projectOptionalNumber(track.small_tick_interval, { field: 'small_tick_interval', seriesIndex: trackIndex }),
+      tickFontSize: projectOptionalNumber(track.tick_font_size, { field: 'tick_font_size', seriesIndex: trackIndex })
     };
   });
 };
@@ -1527,8 +1510,8 @@ const conservationDiagramOptions = (conservation, entries, referenceDefault) => 
   conservationReference: String(conservation.reference || referenceDefault),
   conservationLabels: entries.map((entry) => entry.label),
   conservationColors: entries.map((entry) => entry.color),
-  conservationRingWidth: optionalNumber(conservation.ring_width),
-  conservationRingGap: optionalNumber(conservation.ring_gap)
+  conservationRingWidth: projectOptionalNumber(conservation.ring_width, { field: 'conservation_ring_width' }),
+  conservationRingGap: projectOptionalNumber(conservation.ring_gap, { field: 'conservation_ring_gap' })
 });
 
 const conservationSeriesForValidation = ({
@@ -1609,7 +1592,7 @@ const buildTrackPlan = ({
         circularTrackAxisIndex: validation.emittedAxisIndex,
         linearTrackSlots: null,
         linearTrackAxisIndex: null,
-        centerReservedRadius: optionalNumber(state.adv.center_reserved_radius)
+        centerReservedRadius: projectOptionalNumber(state.adv.center_reserved_radius, { field: 'center_reserved_radius' })
       }
     };
   }
@@ -1683,7 +1666,7 @@ const buildTrackPlan = ({
           circularTrackAxisIndex: validation.emittedAxisIndex,
           linearTrackSlots: null,
           linearTrackAxisIndex: null,
-          centerReservedRadius: optionalNumber(state.adv.center_reserved_radius)
+          centerReservedRadius: projectOptionalNumber(state.adv.center_reserved_radius, { field: 'center_reserved_radius' })
         }
       };
     }
@@ -1696,7 +1679,7 @@ const buildTrackPlan = ({
       circularTrackAxisIndex: null,
       linearTrackSlots: null,
       linearTrackAxisIndex: null,
-      centerReservedRadius: circular ? optionalNumber(state.adv.center_reserved_radius) : null
+      centerReservedRadius: circular ? projectOptionalNumber(state.adv.center_reserved_radius, { field: 'center_reserved_radius' }) : null
     }
   };
 };
@@ -1705,11 +1688,8 @@ const generatedProteinSettings = (state, baseline = {}) => {
   const { alignOrthogroupFeature: _legacyAlignment, ...currentBaseline } = baseline;
   const blastp = state.losat.blastp || {};
   const blastpMode = requireCurrentProteinBlastpMode(blastp.mode);
-  const positiveInteger = (value, fallback) => optionalPositiveInteger(value) ?? fallback;
-  const nonNegativeInteger = (value, fallback) => {
-    const numeric = optionalNumber(value);
-    return Number.isInteger(numeric) && numeric >= 0 ? numeric : fallback;
-  };
+  const positiveInteger = (value, fallback) => integerSettingOr(value, fallback, 1);
+  const nonNegativeInteger = (value, fallback) => integerSettingOr(value, fallback, 0);
   const rawCollinearityUnitMode = String(blastp.collinearUnitMode || '').trim().toLowerCase();
   const collinearityUnitMode = blastpMode === 'collinear'
     ? requireCurrentCollinearUnitMode(rawCollinearityUnitMode)
@@ -1776,7 +1756,7 @@ const generatedProteinSettings = (state, baseline = {}) => {
     collinearityColorMode,
     losatpBin: baseline.losatpBin || 'losat',
     ncbiBlastpBin: baseline.ncbiBlastpBin ?? null,
-    losatpThreads: optionalPositiveInteger(state.losat.threadsPerJob),
+    losatpThreads: integerSettingOr(state.losat.threadsPerJob, null, 1),
     proteinBlastpMaxHits: blastpMode === 'pairwise'
       ? requireCurrentProteinBlastpMaxHits(blastp.maxHits)
       : positiveInteger(blastp.maxHits, 5),
@@ -1788,7 +1768,7 @@ const generatedProteinSettings = (state, baseline = {}) => {
       : normalizeOrthogroupMembershipMode(blastp.orthogroupMembershipMode),
     orthogroupMemberMaxHits: ['orthogroup', 'collinear'].includes(blastpMode)
       ? requireCurrentOrthogroupMemberMaxHits(blastp.orthogroupMemberMaxHits)
-      : optionalPositiveInteger(blastp.orthogroupMemberMaxHits),
+      : integerSettingOr(blastp.orthogroupMemberMaxHits, null, 1),
     collinearMaxParalogLinksPerOrthogroup:
       blastpMode === 'collinear'
         ? requireCurrentCollinearMaxParalogLinks(
@@ -2200,9 +2180,10 @@ const buildLayout = (state, filesData, records = []) => {
     multiRecordSizeMode: requireCurrentCircularMultiRecordSizeMode(
       state.adv.multi_record_size_mode
     ),
-    multiRecordMinRadiusRatio: Number(state.adv.multi_record_min_radius_ratio) || 0.55,
-    multiRecordColumnGapRatio: Number(state.adv.multi_record_column_gap_ratio) || 0,
-    multiRecordRowGapRatio: Number(state.adv.multi_record_row_gap_ratio) || 0,
+    // Blank is the documented default (Python's); any number is sent literally.
+    multiRecordMinRadiusRatio: projectOptionalNumber(state.adv.multi_record_min_radius_ratio, { field: 'multi_record_min_radius_ratio' }) ?? 0.55,
+    multiRecordColumnGapRatio: projectOptionalNumber(state.adv.multi_record_column_gap_ratio, { field: 'multi_record_column_gap_ratio' }) ?? 0.10,
+    multiRecordRowGapRatio: projectOptionalNumber(state.adv.multi_record_row_gap_ratio, { field: 'multi_record_row_gap_ratio' }) ?? 0.05,
     multiRecordPositions: positions.length > 0 ? positions : null
   };
 };
@@ -2452,19 +2433,14 @@ const projectCanonicalRenderInput = ({
       ...normalizeFeatureRenderingMap(state.adv.feature_shapes || {})
     },
     dinucleotide: String(state.adv.nt || 'GC').toUpperCase(),
-    window: optionalPositiveInteger(state.adv.window_size),
-    step: optionalPositiveInteger(state.adv.step_size),
-    depthWindow: optionalPositiveInteger(state.adv.depth_window_size),
-    depthStep: optionalPositiveInteger(state.adv.depth_step_size),
+    window: projectOptionalNumber(state.adv.window_size, { field: 'window' }),
+    step: projectOptionalNumber(state.adv.step_size, { field: 'step' }),
+    depthWindow: projectOptionalNumber(state.adv.depth_window_size, { field: 'depth_window' }),
+    depthStep: projectOptionalNumber(state.adv.depth_step_size, { field: 'depth_step' }),
     plotTitle: String(state.form.plot_title || '').trim() || null,
-    plotTitleFontSize: optionalNumber(state.adv.plot_title_font_size),
+    plotTitleFontSize: projectOptionalNumber(state.adv.plot_title_font_size, { field: 'plot_title_font_size' }),
     ...(comparisonOptionsRequested
-      ? {
-          evalue: Number(state.adv.evalue),
-          bitscore: Number(state.adv.min_bitscore),
-          identity: Number(state.adv.identity),
-          alignmentLength: Number(state.adv.alignment_length) || 0
-        }
+      ? projectComparisonThresholds(resolveComparisonThresholds(state.adv, state.mode.value))
       : {})
   };
   if (Array.isArray(state.annotationSets) && state.annotationSets.length > 0) {
@@ -2610,7 +2586,7 @@ const projectCanonicalRenderInput = ({
     webFiles.linearRecordMetadata = sourceInputIndexes.map((sourceIndex, index) => {
       const entry = {
         recordKey: String(records[index]?.recordKey || filesData.linearSeqs[sourceIndex]?.uid || `record-${index + 1}`),
-        losatGencode: optionalPositiveInteger(filesData.linearSeqs[sourceIndex]?.losat_gencode) || 1
+        losatGencode: integerSettingOr(filesData.linearSeqs[sourceIndex]?.losat_gencode, 1, 1)
       };
       const fileDefinition = String(filesData.linearSeqs[sourceIndex]?.file_definition || '').trim();
       const fileSubtitle = String(filesData.linearSeqs[sourceIndex]?.file_subtitle || '').trim();
@@ -2911,7 +2887,7 @@ const applyWebFileBindings = (
       fasta: webBindingValueAsLegacyFile(resources, sequence?.fasta, resolveBinding, bindings.schema),
       depth: webBindingValueAsLegacyFile(resources, sequence?.depth, resolveBinding, bindings.schema),
       blast: webBindingValueAsLegacyFile(resources, sequence?.blast, resolveBinding, bindings.schema),
-      losat_gencode: optionalPositiveInteger(sequence?.losat_gencode) || 1,
+      losat_gencode: integerSettingOr(sequence?.losat_gencode, 1, 1),
       losat_filename: String(sequence?.losat_filename || ''),
       definition: String(sequence?.definition || ''),
       record_subtitle: String(sequence?.record_subtitle || ''),
@@ -3474,8 +3450,8 @@ const projectCircularConservationConfig = (options, files) => {
     reference: String(options.conservationReference || 'auto'),
     labels: series.map((entry) => entry.label).join(','),
     series,
-    ring_width: optionalNumber(options.conservationRingWidth),
-    ring_gap: optionalNumber(options.conservationRingGap)
+    ring_width: projectOptionalNumber(options.conservationRingWidth, { field: 'conservation_ring_width' }),
+    ring_gap: projectOptionalNumber(options.conservationRingGap, { field: 'conservation_ring_gap' })
   };
 };
 
@@ -3927,9 +3903,7 @@ export const projectCanonicalSessionRequest = ({
           : null,
         depth: null,
         blast: null,
-        losat_gencode: optionalPositiveInteger(
-          savedMetadata.losatGencode ?? savedMetadata.losat_gencode
-        ) || 1,
+        losat_gencode: integerSettingOr(savedMetadata.losatGencode ?? savedMetadata.losat_gencode, 1, 1),
         losat_filename: String(
           savedMetadata.losatFilename ?? savedMetadata.losat_filename ?? ''
         ),
@@ -4295,7 +4269,7 @@ export const projectCanonicalSessionRequest = ({
   const comparisonHeight = classifyOptionalPositiveNumber(overrides.comparison_height);
   if (renderRequest.mode === 'linear' && comparisonHeight.status === 'invalid') {
     if (!repairInvalidComparisonHeight) {
-      throw new Error('Pairwise Match Height must be Auto or a positive finite number.');
+      throw diagnosticError('INPUT_INVALID', { field: 'match_height', reason: 'POSITIVE_OR_AUTO' });
     }
   }
   const tracks = options.tracks || {};
@@ -4388,10 +4362,10 @@ export const projectCanonicalSessionRequest = ({
     (_, index) => ({
       label: String(options.depthTrackLabels?.[index] ?? (index === 0 ? 'Depth' : `Depth ${index + 1}`)),
       color: String(options.depthTrackColors?.[index] || (index === 0 ? overrides.depth_color : '') || '#4A90E2'),
-      height: optionalNumber(options.depthTrackHeights?.[index]),
-      large_tick_interval: optionalNumber(options.depthTrackLargeTickIntervals?.[index]),
-      small_tick_interval: optionalNumber(options.depthTrackSmallTickIntervals?.[index]),
-      tick_font_size: optionalNumber(options.depthTrackTickFontSizes?.[index])
+      height: projectOptionalNumber(options.depthTrackHeights?.[index], { field: 'height' }),
+      large_tick_interval: projectOptionalNumber(options.depthTrackLargeTickIntervals?.[index], { field: 'large_tick_interval' }),
+      small_tick_interval: projectOptionalNumber(options.depthTrackSmallTickIntervals?.[index], { field: 'small_tick_interval' }),
+      tick_font_size: projectOptionalNumber(options.depthTrackTickFontSizes?.[index], { field: 'tick_font_size' })
     })
   );
   const circularPresentationRecord = (

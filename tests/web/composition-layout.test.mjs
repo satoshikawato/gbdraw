@@ -784,17 +784,18 @@ const captureFixture = (fixture, canonical = continuityCanonical(), keys = ['a']
     c => { delete c.resources['source-a']; }
   ]) {
     const candidate = continuityCanonical(); mutate(candidate);
-    assert.throws(() => snapshot(candidate, { catalog: continuityCatalog(['a']) }), /previous Result is unchanged.*Reset/);
+    assert.throws(() => snapshot(candidate, { catalog: continuityCatalog(['a']) }), { code: 'DECORATION_CONTINUITY', context: { field: 'decorations', inputOrdinal: 1, reason: 'DECORATION_IDENTITY' } });
   }
-  assert.throws(() => captureFixture(decorationSvg(), null)(continuityCanonical(), { catalog: continuityCatalog(['a']) }), /unknown/);
+  assert.throws(() => captureFixture(decorationSvg(), null)(continuityCanonical(), { catalog: continuityCatalog(['a']) }), { code: 'DECORATION_CONTINUITY', context: { field: 'decorations', inputOrdinal: 1, reason: 'DECORATION_IDENTITY' } });
   const missing = decorationSvg([0, 0]);
   const metadata = parseCompositionMetadata(missing.svg);
   metadata.title = null; metadata.titleSide = 'none';
   missing.svg.setAttribute(COMPOSITION_METADATA_ATTRIBUTE, JSON.stringify(metadata));
   missing.svg.children = missing.svg.children.filter(child => child !== missing.title);
-  assert.throws(() => snapshot(continuityCanonical(), { catalog: continuityCatalog(['a']) })[0](missing.svg), /title target is missing/);
+  assert.throws(() => snapshot(continuityCanonical(), { catalog: continuityCatalog(['a']) })[0](missing.svg),
+    { code: 'DECORATION_CONTINUITY', context: { field: 'title', inputOrdinal: 1, reason: 'DECORATION_TARGET' } });
   const invalid = decorationSvg(); invalid.legend.setAttribute('transform', 'translate(NaN,20)');
-  assert.throws(() => captureFixture(invalid), /Cannot preserve/);
+  assert.throws(() => captureFixture(invalid), { code: 'DECORATION_CONTINUITY' });
 }
 {
   const a = decorationSvg([40, 20]), b = decorationSvg([-15, 5]);
@@ -810,13 +811,15 @@ const captureFixture = (fixture, canonical = continuityCanonical(), keys = ['a']
   transforms[0](nextB.svg); transforms[1](nextA.svg);
   assert.deepEqual(compositionUserDeltas(nextA.svg).legend, [40, 20]);
   assert.deepEqual(compositionUserDeltas(nextB.svg).legend, [-15, 5]);
-  assert.throws(() => snapshot(canonical, { catalog: continuityCatalog(['a', 'a']) }), /ambiguous/);
+  assert.throws(() => snapshot(canonical, { catalog: continuityCatalog(['a', 'a']) }),
+    { code: 'DECORATION_CONTINUITY', context: { field: 'decorations', inputOrdinal: 1, reason: 'DECORATION_IDENTITY' } });
   // A zero-offset duplicate old output must still make correspondence ambiguous.
   const zero = decorationSvg([0, 0]);
   class DuplicateParser { parseFromString() { return { documentElement: zero.svg }; } }
   const duplicate = captureDecorationContinuity({ projectRecordIdentity: projectCompositionRecordIdentity, canonical: continuityCanonical(), catalog: continuityCatalog(['a', 'a']),
     results: [{content:''}, {content:''}], mountedSvg: a.svg, parser: DuplicateParser });
-  assert.throws(() => duplicate(continuityCanonical(), { catalog: continuityCatalog(['a']) }), /ambiguous/);
+  assert.throws(() => duplicate(continuityCanonical(), { catalog: continuityCatalog(['a']) }),
+    { code: 'DECORATION_CONTINUITY', context: { field: 'decorations', inputOrdinal: 1, reason: 'DECORATION_IDENTITY' } });
 }
 
 {
@@ -837,13 +840,15 @@ const captureFixture = (fixture, canonical = continuityCanonical(), keys = ['a']
   const next = decorationSvg([0, 0]);
   snapshot(candidate, {catalog: continuityCatalog(['collection:1'])})[0](next.svg);
   assert.deepEqual(compositionUserDeltas(next.svg).legend, [40,20]);
-  assert.throws(() => snapshot(canonical, {catalog: continuityCatalog(['collection:1'])}), /region/);
+  assert.throws(() => snapshot(canonical, {catalog: continuityCatalog(['collection:1'])}),
+    { code: 'DECORATION_CONTINUITY', context: { field: 'decorations', inputOrdinal: 1, reason: 'DECORATION_IDENTITY' } });
   const huge = captureFixture(decorationSvg([1e308, 1e308]));
   const overflow = decorationSvg([0,0]);
   const metadata = parseCompositionMetadata(overflow.svg);
   metadata.legend.automaticTranslation = [1e308,1e308];
   overflow.svg.setAttribute(COMPOSITION_METADATA_ATTRIBUTE, JSON.stringify(metadata));
-  assert.throws(() => huge(continuityCanonical(), {catalog: continuityCatalog(['a'])})[0](overflow.svg), /non-finite placement/);
+  assert.throws(() => huge(continuityCanonical(), {catalog: continuityCatalog(['a'])})[0](overflow.svg),
+    { code: 'DECORATION_CONTINUITY', context: { field: 'legend', inputOrdinal: 1, reason: 'FINITE' } });
 }
 
 {
@@ -864,7 +869,8 @@ const captureFixture = (fixture, canonical = continuityCanonical(), keys = ['a']
   same.resources['source-a'] = setResourcePayloadOwner({size:3,encoding:'base64'},sourceFile);
   filesSnapshot(same, {catalog:continuityCatalog(['a'])})[0](decorationSvg([0,0]).svg);
   same.resources['source-a'] = setResourcePayloadOwner({size:3,encoding:'base64'}, {...sourceFile});
-  assert.throws(() => filesSnapshot(same, {catalog:continuityCatalog(['a'])}), /identity/);
+  assert.throws(() => filesSnapshot(same, {catalog:continuityCatalog(['a'])}),
+    { code: 'DECORATION_CONTINUITY', context: { field: 'decorations', inputOrdinal: 1, reason: 'DECORATION_IDENTITY' } });
 }
 
 {

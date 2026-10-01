@@ -209,7 +209,8 @@ test('failed session loading clears pending state and preserves the prior sessio
   expect(dialogs).toEqual([]);
   await expect(page.getByRole('alert', { name: 'Operation error' })).toContainText('Use valid JSON.');
   expect(await page.evaluate(() => window.__GBDRAW_APP__.errorLog)).toMatchObject({
-    code: 'INPUT_INVALID', stage: 'request-validation', context: { field: 'schema', reason: 'JSON_FORMAT' }
+    // The Session import Worker's actual stage (X-01, SE-09).
+    code: 'INPUT_INVALID', stage: 'parse', context: { field: 'schema', reason: 'JSON_FORMAT' }
   });
   expect(await importSnapshot(page)).toEqual(before);
 

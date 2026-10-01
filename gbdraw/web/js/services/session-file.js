@@ -1,3 +1,5 @@
+import { diagnosticError } from './error-normalization.js';
+
 const GZIP_MAGIC = Object.freeze([0x1f, 0x8b]);
 const MAX_SESSION_FILE_BYTES = 200 * 1024 * 1024;
 const MAX_EXPANDED_SESSION_BYTES = 512 * 1024 * 1024;
@@ -31,7 +33,7 @@ const readUtf8Stream = async (stream, maxBytes) => {
       if (done) break;
       byteCount += value.byteLength;
       if (byteCount > maxBytes) {
-        throw new Error('Expanded session file is too large.');
+        throw diagnosticError('SESSION_SIZE_LIMIT', {}, { stage: 'read' });
       }
       text += decoder.decode(value, { stream: true });
     }
@@ -291,7 +293,7 @@ const jsonByteStream = (data) => {
 
 export const compressSessionData = async (data) => {
   if (typeof CompressionStream !== 'function') {
-    throw new Error('This browser does not support gzip session export.');
+    throw diagnosticError('SESSION_BROWSER_UNSUPPORTED', {}, { stage: 'transport' });
   }
   const compressedStream = jsonByteStream(data)
     .pipeThrough(new CompressionStream('gzip'));
@@ -302,13 +304,13 @@ export const compressSessionData = async (data) => {
 
 export const readSessionText = async (file) => {
   if (file.size > MAX_SESSION_FILE_BYTES) {
-    throw new Error('Session file is too large.');
+    throw diagnosticError('SESSION_SIZE_LIMIT', {}, { stage: 'read' });
   }
   if (!(await isGzipFile(file))) {
     return readUtf8Stream(file.stream(), MAX_SESSION_FILE_BYTES);
   }
   if (typeof DecompressionStream !== 'function') {
-    throw new Error('This browser does not support gzip session import.');
+    throw diagnosticError('SESSION_BROWSER_UNSUPPORTED', {}, { stage: 'read' });
   }
   const expanded = file.stream().pipeThrough(new DecompressionStream('gzip'));
   return readUtf8Stream(expanded, MAX_EXPANDED_SESSION_BYTES);

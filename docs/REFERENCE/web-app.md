@@ -144,6 +144,13 @@ Workers and, for `.gz` files, gzip decompression. A rejected or failed Save or
 Load shows an **Operation error** and keeps the current Result, settings, and
 Undo history.
 
+Before the first **Generate Diagram**, Save needs every input of the active
+mode, the same check that Generate uses; an empty card or a missing FASTA is
+reported by its **Sequence** number. A Result loaded from a Session saved before
+Session 40 has no current feature metadata: a notice above the Result says so,
+and **Save Session** reports that one Generate is needed and offers **Generate**.
+After that Generate, Save writes the current Session format.
+
 A loaded Circular Session shows its saved Result without reading the embedded
 source again. **Source records** shows **Records not inspected**, and **Record**
 lists no records. Select **Inspect source records** to list them and show their
@@ -165,7 +172,11 @@ copying; the cause and recovery controls remain available.
 
 Diagnostics contain a bounded failure code, operation, actual known stage,
 permitted context such as field, table row or Python character position, and
-cleanup failure facts. Unknown failures retain a stable code and the observed
+cleanup failure facts. The summary names the location it knows: **Sequence N**,
+**Line N**, **Track row N**, **Depth series N**, the setting path, or the
+available radial band in px for a Circular track that does not fit. The panel
+offers only actions that work there: **Generate** when a fresh Result is the
+correction, and no **Save Session** when Save itself failed. Unknown failures retain a stable code and the observed
 stage without inventing a cause. Original patterns, sequences, file or record
 names, paths, SVG, raw exception text, traceback, stdout and stderr are excluded
 from diagnostics and automatic console output. A saved Session can contain
@@ -177,6 +188,16 @@ claim that the previous state was restored. Canceling an operation, replacing
 it with a newer operation, or receiving a stale completion does not create a
 new failure notification or apply the old result. Align failures retain the
 review choices and the last successful artifact for corrected **Apply** retry.
+
+### Numeric settings
+
+Generate sends every numeric setting as typed: an empty field means Auto or the
+documented default, and a number is passed unchanged, so the diagram engine
+accepts it or reports the field and the accepted range, as the command line
+does. Text that is not a number is rejected with the field name. Generate never
+rewrites a setting; after a failure the field still shows the rejected value.
+Comparison thresholds (**E-value**, **Bitscore**, **Identity**, **Alignment
+length**) are checked before LOSAT runs against the same accepted ranges.
 
 ### Circular track Width and Radius
 

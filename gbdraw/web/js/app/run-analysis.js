@@ -1,4 +1,5 @@
 import { validateAnnotationWarnings } from '../services/session-feature-metadata.js';
+import { resolveLinearRegionBounds } from './feature-metadata-extraction.js';
 import { buildSimilarityAlignmentResetReceipt, validateSimilarityAlignmentResetReceipt } from '../services/session-active-config-contract.js';
 import { prepareLosatRuntime, runLosatPairsParallel } from '../services/losat.js';
 import { prepareLosatSourceBatches, splitLosatSourceResult } from './linear-sources.js';
@@ -127,8 +128,8 @@ import {
   transitionLegacyProteinCandidate,
   validateDerivedProteinReferences
 } from './losat-cache.js';
-import { comparisonFiltersForMode } from '../mode-profiles.js';
-import { normalizeUserFacingError } from '../services/error-normalization.js';
+import { comparisonFiltersForMode, resolveComparisonThresholds } from '../mode-profiles.js';
+import { diagnosticError, normalizeUserFacingError } from '../services/error-normalization.js';
 import {
   cloneFileBytesForTransfer,
   readFileBytes,
@@ -151,9 +152,6 @@ import {
   inheritCommittedComparisonIntent
 } from '../services/imported-comparison-intent.js';
 
-const DEFAULT_CIRCULAR_CONSERVATION_BLAST_FILTERS = Object.freeze(
-  comparisonFiltersForMode('circular')
-);
 const DEFAULT_LINEAR_BLAST_FILTERS = Object.freeze(
   comparisonFiltersForMode('linear')
 );
@@ -870,29 +868,6 @@ const buildConservationSeries = (sourceFiles, circularConservation) => {
     color: entry.color
   }));
 };
-const normalizeMultiRecordMinRadiusRatio = (value) => {
-  const numeric = Number(value);
-  return Number.isFinite(numeric) && numeric > 0 && numeric <= 1 ? numeric : 0.55;
-};
-const normalizeMultiRecordColumnGapRatio = (value) => {
-  const numeric = Number(value);
-  return Number.isFinite(numeric) && numeric >= 0 ? numeric : 0.10;
-};
-const normalizeMultiRecordRowGapRatio = (value) => {
-  const numeric = Number(value);
-  return Number.isFinite(numeric) && numeric >= 0 ? numeric : 0.05;
-};
-const normalizeBlastThresholdNumber = (value, defaultValue, { integer = false } = {}) => {
-  if (value === null || value === undefined || value === '') return defaultValue;
-  const numeric = Number(value);
-  if (!Number.isFinite(numeric) || numeric < 0) return defaultValue;
-  if (integer && !Number.isInteger(numeric)) return defaultValue;
-  return numeric;
-};
-const normalizeBlastThresholdText = (value, defaultValue) => {
-  const normalized = String(value ?? '').trim();
-  return normalized === '' ? defaultValue : normalized;
-};
 const normalizeBlastpMode = (value) => {
   const normalized = String(value || '').trim().toLowerCase();
   return ['pairwise', 'orthogroup', 'collinear'].includes(normalized) ? normalized : 'orthogroup';
@@ -1098,6 +1073,8 @@ export const createRunAnalysis = ({
   resetPreviewViewport,
   validateAnnotationTargets = null,
   prepareLinearRecordCatalog = null,
+  // services/config.js owns the active-mode input check shared with Save.
+  assertActiveModeInputs = null,
   losatExecutor = runLosatPairsParallel,
   executeCanonicalCandidate = executeCanonicalRenderCandidate,
   prepareCandidateCommit = prepareCandidateRenderCommit,
@@ -1572,18 +1549,6 @@ export const createRunAnalysis = ({
   const normalizeLabelRendering = (value) => {
     const normalized = String(value || '').trim().toLowerCase();
     return ['embedded_only', 'external_only'].includes(normalized) ? normalized : 'auto';
-  };
-
-  const normalizePositiveNumberOrNull = (value) => {
-    if (value === null || value === undefined || value === '') return null;
-    const numeric = Number(value);
-    return Number.isFinite(numeric) && numeric > 0 ? numeric : null;
-  };
-
-  const normalizeNonNegativeNumberOrNull = (value) => {
-    if (value === null || value === undefined || value === '') return null;
-    const numeric = Number(value);
-    return Number.isFinite(numeric) && numeric >= 0 ? numeric : null;
   };
 
   const hydrateLosatDownloadText = async (cacheKey, cached) => {
@@ -2085,7 +2050,7 @@ export const createRunAnalysis = ({
             : { status: 'stale' };
         }
         if (!circularDiscoveryMatchesCurrentInput()) {
-          const message = circularRecordDiscovery.error || 'Could not read records from the circular input file(s).';
+          const message = circularRecordDiscovery.error || diagnosticError('INPUT_UNREADABLE');
           const outcome = await failOperation(message, { handle: committedArtifactHandle,
             restore: restoreCommittedArtifact, isCurrent: isCurrentAlert, isCurrentOperation });
           if (activeLosatAbortController === generationAbortController) {
@@ -2170,7 +2135,7 @@ export const createRunAnalysis = ({
         const annotationError = validateAnnotationTargets({
           loadComparison: annotationLoadComparison
         });
-        if (annotationError) throw new Error(annotationError);
+        if (annotationError) throw diagnosticError(annotationError.code, annotationError.context);
       }
       let regionSpecs = [];
       let recordSelectors = [];
@@ -2369,20 +2334,6 @@ export const createRunAnalysis = ({
           throw new Error('Depth minimum must be less than or equal to depth maximum.');
         }
         if (
-          adv.depth_window_size !== null &&
-          adv.depth_window_size !== undefined &&
-          adv.depth_window_size !== ''
-        ) {
-          if (Number(adv.depth_window_size) <= 0) throw new Error('Depth window must be greater than 0.');
-        }
-        if (
-          adv.depth_step_size !== null &&
-          adv.depth_step_size !== undefined &&
-          adv.depth_step_size !== ''
-        ) {
-          if (Number(adv.depth_step_size) <= 0) throw new Error('Depth step must be greater than 0.');
-        }
-        if (
           adv.depth_large_tick_interval !== null &&
           adv.depth_large_tick_interval !== undefined &&
           adv.depth_large_tick_interval !== ''
@@ -2578,26 +2529,13 @@ export const createRunAnalysis = ({
             circularTrackSlots.length
           );
         }
-        const hasPlotTitleFontSize =
-          adv.plot_title_font_size !== null &&
-          adv.plot_title_font_size !== undefined &&
-          adv.plot_title_font_size !== '';
-        const parsedPlotTitleFontSize = hasPlotTitleFontSize
-          ? Number(adv.plot_title_font_size)
-          : null;
-        const normalizedPlotTitleFontSize =
-          parsedPlotTitleFontSize !== null &&
-          Number.isFinite(parsedPlotTitleFontSize) &&
-          parsedPlotTitleFontSize > 0
-            ? parsedPlotTitleFontSize
-            : null;
+        // Numeric settings (plot title font size, center radius, label
+        // spacing, multi-record ratios, ring geometry) are projected literally
+        // by the request and validated by Python; Generate keeps the draft.
         const keepFullDefinitionWithPlotTitle = Boolean(adv.keep_full_definition_with_plot_title);
-        const normalizedCenterReservedRadius = normalizeNonNegativeNumberOrNull(adv.center_reserved_radius);
         form.plot_title = normalizedCircularPlotTitle;
         adv.plot_title_position = normalizedPlotTitlePosition;
-        adv.plot_title_font_size = normalizedPlotTitleFontSize;
         adv.keep_full_definition_with_plot_title = keepFullDefinitionWithPlotTitle;
-        adv.center_reserved_radius = normalizedCenterReservedRadius;
 
         const labelsModeRaw =
           typeof form.labels_mode === 'string'
@@ -2616,27 +2554,14 @@ export const createRunAnalysis = ({
             circularRecordList.value,
             adv.multi_record_positions
           );
-          const normalizedSizeMode = requireCurrentCircularMultiRecordSizeMode(
-            adv.multi_record_size_mode
-          );
-          const normalizedMinRatio = normalizeMultiRecordMinRadiusRatio(adv.multi_record_min_radius_ratio);
-          const normalizedColumnGapRatio = normalizeMultiRecordColumnGapRatio(adv.multi_record_column_gap_ratio);
-          const normalizedRowGapRatio = normalizeMultiRecordRowGapRatio(adv.multi_record_row_gap_ratio);
-          adv.multi_record_size_mode = normalizedSizeMode;
-          adv.multi_record_min_radius_ratio = normalizedMinRatio;
-          adv.multi_record_column_gap_ratio = normalizedColumnGapRatio;
-          adv.multi_record_row_gap_ratio = normalizedRowGapRatio;
+          requireCurrentCircularMultiRecordSizeMode(adv.multi_record_size_mode);
           adv.multi_record_positions.splice(
             0,
             adv.multi_record_positions.length,
             ...effectiveRecordPositions
           );
-          adv.plot_title_position = normalizedPlotTitlePosition;
-          adv.plot_title_font_size = normalizedPlotTitleFontSize;
         }
 
-        const normalizedCircularLabelSpacing = normalizePositiveNumberOrNull(adv.circular_label_spacing);
-        adv.circular_label_spacing = normalizedCircularLabelSpacing;
         const discoveredCircularRecordCount = (
           circularDiscoveryMatchesCurrentInput() &&
           Array.isArray(circularRecordList.value)
@@ -2689,11 +2614,7 @@ export const createRunAnalysis = ({
           validateDepthStyleSettings();
         }
 
-        if (cInputType.value === 'gb') {
-          if (!files.c_gb) throw new Error('Please upload a GenBank file.');
-        } else {
-          if (!files.c_gff || !files.c_fasta) throw new Error('GFF3 and FASTA are required.');
-        }
+        assertActiveModeInputs?.('circular', state);
 
         const sourceMode = String(circularConservation.source || '').trim().toLowerCase() === 'upload'
           ? 'upload'
@@ -2706,31 +2627,9 @@ export const createRunAnalysis = ({
 
         if (shouldDrawCircularPairwiseComparisons) {
           setProcessingStatus('Preparing conservation comparisons...');
-          circularConservation.ring_width = normalizePositiveNumberOrNull(
-            circularConservation.ring_width
-          );
-          circularConservation.ring_gap = normalizePositiveNumberOrNull(
-            circularConservation.ring_gap
-          );
-          const normalizeConservationState = () => {
-            adv.min_bitscore = normalizeBlastThresholdNumber(
-              adv.min_bitscore,
-              DEFAULT_CIRCULAR_CONSERVATION_BLAST_FILTERS.bitscore
-            );
-            adv.evalue = normalizeBlastThresholdText(
-              adv.evalue,
-              DEFAULT_CIRCULAR_CONSERVATION_BLAST_FILTERS.evalue
-            );
-            adv.identity = normalizeBlastThresholdNumber(
-              adv.identity,
-              DEFAULT_CIRCULAR_CONSERVATION_BLAST_FILTERS.identity
-            );
-            adv.alignment_length = normalizeBlastThresholdNumber(
-              adv.alignment_length,
-              DEFAULT_CIRCULAR_CONSERVATION_BLAST_FILTERS.alignment_length,
-              { integer: true }
-            );
-          };
+          // Thresholds are evaluated before conservation work; the request
+          // projects the same resolution, and the draft keeps what was typed.
+          resolveComparisonThresholds(adv, 'circular');
 
           const runCircularLosatConservation = async (comparisonEntries) => {
             const circularLosatProgram = normalizeCircularConservationLosatProgram(
@@ -2738,7 +2637,6 @@ export const createRunAnalysis = ({
             );
             circularConservation.losat_program = circularLosatProgram;
             const subjectGencode = normalizePositiveInteger(circularConservation.subject_gencode, 1);
-            circularConservation.subject_gencode = subjectGencode;
             const buildExtraArgs = (comparisonGencode) => {
               if (circularLosatProgram === 'tblastx') {
                 return [
@@ -2888,7 +2786,6 @@ export const createRunAnalysis = ({
             return resolved;
           };
 
-          normalizeConservationState();
           if (sourceMode === 'upload') {
             const blastFiles = circularConservationSourceFiles;
             if (blastFiles.length === 0) {
@@ -2994,21 +2891,11 @@ export const createRunAnalysis = ({
             adv.pairwise_match_style,
             'ribbon'
           );
-          adv.min_bitscore = normalizeBlastThresholdNumber(
-            adv.min_bitscore,
-            DEFAULT_LINEAR_BLAST_FILTERS.bitscore
-          );
-          adv.evalue = normalizeBlastThresholdText(adv.evalue, DEFAULT_LINEAR_BLAST_FILTERS.evalue);
-          adv.identity = normalizeBlastThresholdNumber(
-            adv.identity,
-            DEFAULT_LINEAR_BLAST_FILTERS.identity
-          );
-          adv.alignment_length = normalizeBlastThresholdNumber(
-            adv.alignment_length,
-            DEFAULT_LINEAR_BLAST_FILTERS.alignment_length,
-            { integer: true }
-          );
         }
+        // One resolution per Generate feeds LOSAT post-processing and caches.
+        const comparisonThresholds = hasComparisonIntent
+          ? resolveComparisonThresholds(adv, 'linear')
+          : null;
 
         const blastpMaxHits = usePairwiseBlastp
           ? requireCurrentProteinBlastpMaxHits(losat.blastp?.maxHits)
@@ -3077,10 +2964,7 @@ export const createRunAnalysis = ({
             active: {
               mode: blastpMode,
               candidateLimit: blastpCandidateLimit,
-              bitscore: adv.min_bitscore,
-              evalue: adv.evalue,
-              identity: adv.identity,
-              alignmentLength: adv.alignment_length,
+              ...comparisonThresholds,
               maxHits: blastpMaxHits,
               orthogroupMembershipMode,
               memberMaxHits: orthogroupMemberMaxHits,
@@ -3127,17 +3011,6 @@ export const createRunAnalysis = ({
 
         const normalizedPlotTitle = String(form.plot_title || '').trim();
         const normalizedPlotTitlePosition = normalizeLinearPlotTitlePosition(adv.plot_title_position);
-        const hasPlotTitleFontSize =
-          adv.plot_title_font_size !== null &&
-          adv.plot_title_font_size !== undefined &&
-          adv.plot_title_font_size !== '';
-        const parsedPlotTitleFontSize = hasPlotTitleFontSize ? Number(adv.plot_title_font_size) : null;
-        const normalizedPlotTitleFontSize =
-          parsedPlotTitleFontSize !== null &&
-          Number.isFinite(parsedPlotTitleFontSize) &&
-          parsedPlotTitleFontSize > 0
-            ? parsedPlotTitleFontSize
-            : null;
         adv.linear_show_replicon = adv.linear_show_replicon === true;
         adv.linear_accession_visibility = requireLinearLabelVisibilityMode(
           adv.linear_accession_visibility,
@@ -3150,7 +3023,6 @@ export const createRunAnalysis = ({
         adv.linear_definition_line_styles = normalizeDefinitionLineStyleState(adv.linear_definition_line_styles);
         form.plot_title = normalizedPlotTitle;
         adv.plot_title_position = normalizedPlotTitlePosition;
-        adv.plot_title_font_size = normalizedPlotTitleFontSize;
 
         const normalizedLabelPlacement = requireCurrentLinearLabelPlacement(
           adv.label_placement
@@ -3160,39 +3032,23 @@ export const createRunAnalysis = ({
           normalizedLabelRendering = 'auto';
         }
         adv.label_rendering = normalizedLabelRendering;
-        const normalizedLinearLabelSpacing = normalizePositiveNumberOrNull(adv.linear_label_spacing);
-        adv.linear_label_spacing = normalizedLinearLabelSpacing;
         if (hasComparisonIntent) {
           const comparisonHeight = classifyOptionalPositiveNumber(adv.comparison_height);
           if (comparisonHeight.status === 'invalid') {
-            throw new Error('Pairwise Match Height must be Auto or a positive finite number.');
+            throw diagnosticError('INPUT_INVALID', { field: 'match_height', reason: 'POSITIVE_OR_AUTO' });
           }
         }
 
         const viewTransformSpecs = [];
         const buildRegionSpec = (seq, idx) => {
-          const hasStart = seq.region_start !== null && seq.region_start !== undefined && seq.region_start !== '';
-          const hasEnd = seq.region_end !== null && seq.region_end !== undefined && seq.region_end !== '';
           const recordIdRaw = seq.region_record_id ? String(seq.region_record_id).trim() : '';
           const wantsReverse = Boolean(seq.region_reverse);
-          if (hasStart !== hasEnd) {
-            throw new Error(`Sequence #${idx + 1}: Provide both Region start and end, or leave both empty.`);
-          }
+          const bounds = resolveLinearRegionBounds(seq, idx);
 
           recordSelectors.push(recordIdRaw || '');
 
-          if (hasStart && hasEnd) {
-            const start = Number(seq.region_start);
-            const end = Number(seq.region_end);
-            if (!Number.isFinite(start) || !Number.isFinite(end)) {
-              throw new Error(`Sequence #${idx + 1}: Region start/end must be numbers.`);
-            }
-            if (!Number.isInteger(start) || !Number.isInteger(end)) {
-              throw new Error(`Sequence #${idx + 1}: Region start/end must be integers.`);
-            }
-            if (start < 1 || end < 1) {
-              throw new Error(`Sequence #${idx + 1}: Region start/end must be >= 1.`);
-            }
+          if (bounds) {
+            const { start, end } = bounds;
             const canonicalStart = Math.min(start, end);
             const canonicalEnd = Math.max(start, end);
             const coordinateReverse = start > end;
@@ -3670,10 +3526,10 @@ export const createRunAnalysis = ({
             : new Set(comparisonResolution.edges
                 .filter((edge) => edge.source === 'losat')
                 .flatMap((edge) => [edge.queryIndex, edge.subjectIndex]));
+          assertActiveModeInputs?.('linear', state);
           for (let i = 0; i < linearSeqs.length; i++) {
             const seq = linearSeqs[i];
             if (lInputType.value === 'gb') {
-              if (!seq.gb) throw new Error(`Sequence #${i + 1}: Missing GenBank file.`);
               if (useLosat && losatRecordIndexes.has(i)) {
                 await prepareLinearFile(seq.gb, `/seq_${i}.gb`, {
                   cacheText: true,
@@ -3681,7 +3537,6 @@ export const createRunAnalysis = ({
                 });
               }
             } else {
-              if (!seq.gff || !seq.fasta) throw new Error(`Sequence #${i + 1}: GFF3 and FASTA are required.`);
               if (useLosat && losatRecordIndexes.has(i)) {
                 await prepareLinearFile(seq.gff, `/seq_${i}.gff`, {
                   slot: `files.linearSeqs[${i}].gff`
@@ -4183,10 +4038,7 @@ export const createRunAnalysis = ({
               const derivedCachePayload = buildLosatDerivedPayloadCachePayload({
                 mode: blastpMode,
                 maxHits: blastpMaxHits,
-                bitscore: adv.min_bitscore,
-                evalue: adv.evalue,
-                identity: adv.identity,
-                alignmentLength: adv.alignment_length,
+                ...comparisonThresholds,
                 collinearMinAnchors,
                 collinearMaxUnitGap,
                 collinearUnitMode,
@@ -4243,10 +4095,7 @@ export const createRunAnalysis = ({
                   ],
                   mode: blastpMode,
                   maxHits: blastpMaxHits,
-                  bitscore: adv.min_bitscore,
-                  evalue: adv.evalue,
-                  identity: adv.identity,
-                  alignmentLength: adv.alignment_length,
+                  ...comparisonThresholds,
                   collinearMinAnchors,
                   collinearMaxUnitGap,
                   collinearUnitMode,
@@ -4532,7 +4381,6 @@ export const createRunAnalysis = ({
             }
           }
           validateDepthStyleSettings();
-          adv.depth_height = normalizePositiveNumberOrNull(adv.depth_height);
         }
       }
 

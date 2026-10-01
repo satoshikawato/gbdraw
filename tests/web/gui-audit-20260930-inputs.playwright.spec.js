@@ -129,7 +129,6 @@ test('each record of a multi-record Linear file keeps its own organism', async (
 });
 
 test('Save before the first Generate with an empty Linear card explains the missing input', async ({ page }) => {
-  test.fail(true, 'IN-08');
   test.setTimeout(300_000);
   await openLinear(page);
   await uploadLinear(page, 0, 'first.gb', FIRST_RECORD_TEXT);
@@ -139,10 +138,17 @@ test('Save before the first Generate with an empty Linear card explains the miss
   expect(outcome.downloads).toEqual([]);
   expect(outcome.error?.code).toBeTruthy();
   expect(outcome.error.code).not.toBe('UNKNOWN');
+  // Save and Generate share one input check and explain the same missing input.
+  expect(outcome.error.code).toBe('INPUT_REQUIRED');
+  expect(outcome.error.summary).toMatch(/Sequence 2\./);
+  await generateAndWaitForResult(page, { expectedStatus: 'error' });
+  expect(await page.evaluate(() => {
+    const { code, summary } = window.__GBDRAW_APP__.errorLog;
+    return { code, summary };
+  })).toEqual({ code: outcome.error.code, summary: outcome.error.summary });
 });
 
 test('a failed Save does not offer Save Session again', async ({ page }) => {
-  test.fail(true, 'N-12');
   test.setTimeout(300_000);
   await openLinear(page);
   await uploadLinear(page, 0, 'first.gb', FIRST_RECORD_TEXT);
@@ -155,12 +161,14 @@ test('a failed Save does not offer Save Session again', async ({ page }) => {
   await expect(alert.getByRole('button', { name: 'Save Session', exact: true })).toHaveCount(0);
 });
 
-test('Save after loading a v39 Session asks for Generate instead of failing with UNKNOWN', async ({ page }) => {
-  test.fail(true, 'SE-05');
+for (const [version, fixture] of [
+  ['v39', 'tests/fixtures/sessions/BGC0000708-BGC0000713.v39.gbdraw-session.json.gz'],
+  ['v33 (schema-v2)', 'tests/fixtures/sessions/BGC0000708-BGC0000713.schema-v2.gbdraw-session.json.gz']
+]) test(`Save after loading a ${version} Session asks for Generate instead of failing with UNKNOWN`, async ({ page }) => {
   test.setTimeout(300_000);
   await openFresh(page);
   await page.locator('input[accept^=".json,"]')
-    .setInputFiles('tests/fixtures/sessions/BGC0000708-BGC0000713.v39.gbdraw-session.json.gz');
+    .setInputFiles(fixture);
   await page.waitForFunction(() => !window.__GBDRAW_APP__.sessionImportPending, null, { timeout: 180_000 });
   await page.waitForFunction(() => window.__GBDRAW_APP__.sessionSaveAvailable, null, { timeout: 180_000 });
   await settle(page);
@@ -169,10 +177,22 @@ test('Save after loading a v39 Session asks for Generate instead of failing with
   expect(outcome.error?.code).toBeTruthy();
   expect(outcome.error.code).not.toBe('UNKNOWN');
   expect(outcome.error.summary).toMatch(/Generate/);
+  // D-25 Must preserve: the panel runs the needed Generate, then Save succeeds.
+  expect(outcome.error.code).toBe('SESSION_SAVE_REQUIRES_GENERATE');
+  await expect(page.locator('[data-session-save-needs-generate]')).toBeVisible();
+  const alert = page.locator('.border-l-red-500');
+  await expect(alert.getByRole('button', { name: 'Save Session', exact: true })).toHaveCount(0);
+  await alert.getByRole('button', { name: 'Generate', exact: true }).click();
+  await page.waitForFunction(() => !window.__GBDRAW_APP__.processing, null, { timeout: 300_000 });
+  await settle(page);
+  expect(await page.evaluate(() => window.__GBDRAW_APP__.errorLog?.code ?? null)).toBeNull();
+  await expect(page.locator('[data-session-save-needs-generate]')).toHaveCount(0);
+  const saved = await attemptSave(page);
+  expect(saved.error).toBeNull();
+  expect(saved.downloads).toHaveLength(1);
 });
 
 test('loading a JSON file that is not a Session reports a recognized diagnostic', async ({ page }) => {
-  test.fail(true, 'X-01');
   test.setTimeout(300_000);
   await openFresh(page);
   await page.locator('input[accept^=".json,"]').setInputFiles({

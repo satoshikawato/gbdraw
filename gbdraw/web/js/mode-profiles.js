@@ -1,4 +1,6 @@
 import { MODE_PROFILE_DATA } from './mode-profiles.generated.js';
+import { diagnosticError } from './services/error-normalization.js';
+import { DECIMAL_NUMBER_PATTERN } from './utils/optional-positive-number.js';
 
 const MODE_NAMES = Object.freeze(['circular', 'linear']);
 const COMPARISON_STATE_FIELDS = Object.freeze([
@@ -92,6 +94,45 @@ export const comparisonStateForMode = (mode) => {
     identity: filters.identity,
     alignment_length: filters.alignment_length
   };
+};
+
+// [draft key, generated domain key, diagnostic field]
+const COMPARISON_THRESHOLDS = Object.freeze([
+  ['min_bitscore', 'bitscore', 'bitscore'],
+  ['evalue', 'evalue', 'evalue'],
+  ['identity', 'identity', 'identity'],
+  ['alignment_length', 'alignmentLength', 'alignment_length']
+]);
+
+/**
+ * The comparison thresholds of one Generate: a blank field takes the mode
+ * default, and every value is evaluated on the Python-owned domains in
+ * mode-profiles.generated.js. A violation is a typed INPUT_INVALID with the
+ * same field and reason Python reports; the draft is never rewritten. The
+ * e-value keeps its trimmed text so derived cache keys keep their shape.
+ */
+export const resolveComparisonThresholds = (adv, mode) => {
+  const defaults = comparisonFiltersForMode(mode);
+  const resolved = {};
+  for (const [draftKey, domainKey, field] of COMPARISON_THRESHOLDS) {
+    const domain = MODE_PROFILE_DATA.comparisonDomains[domainKey];
+    const raw = adv?.[draftKey];
+    const blank = raw === null || raw === undefined || (typeof raw === 'string' && raw.trim() === '');
+    const value = blank ? defaults[field] : raw;
+    const text = typeof value === 'string' ? value.trim() : '';
+    const numeric = typeof value === 'number' ? value
+      : DECIMAL_NUMBER_PATTERN.test(text) ? Number(text) : NaN;
+    if (
+      !Number.isFinite(numeric)
+      || numeric < domain.minimum
+      || (domain.maximum !== null && numeric > domain.maximum)
+      || (domain.integer && !Number.isInteger(numeric))
+    ) {
+      throw diagnosticError('INPUT_INVALID', { field, reason: domain.reason });
+    }
+    resolved[domainKey] = field === 'evalue' ? (text || String(numeric)) : numeric;
+  }
+  return resolved;
 };
 
 export const comparisonProfileDefault = (mode, field) => {

@@ -1,4 +1,5 @@
 import { runFeatureExtraction } from '../services/diagram-generation.js';
+import { diagnosticError } from '../services/error-normalization.js';
 import { cloneJsonValue } from '../services/json-clone.js';
 import { cloneFileBytesForTransfer } from '../services/file-content-cache.js';
 
@@ -213,6 +214,21 @@ const biologicalFeaturesFromExtraction = (featData) => (
 
 const hasRegionValue = (value) => value !== null && value !== undefined && value !== '';
 
+/** Linear card region endpoints: null when unset, else validated numbers. */
+export const resolveLinearRegionBounds = (seq, idx) => {
+  const hasStart = hasRegionValue(seq.region_start);
+  const hasEnd = hasRegionValue(seq.region_end);
+  const invalid = (reason) => diagnosticError('REGION_INVALID', { inputOrdinal: idx + 1, reason });
+  if (hasStart !== hasEnd) throw invalid('BOTH_ENDPOINTS');
+  if (!hasStart) return null;
+  const start = Number(seq.region_start);
+  const end = Number(seq.region_end);
+  if (!Number.isFinite(start) || !Number.isFinite(end)) throw invalid('FINITE');
+  if (!Number.isInteger(start) || !Number.isInteger(end)) throw invalid('INTEGER');
+  if (start < 1 || end < 1) throw invalid('POSITIVE_INTEGER');
+  return { start, end };
+};
+
 export const buildLinearRegionExtractionContext = (linearSeqs = [], lInputType = 'gb') => {
   const regionSpecs = [];
   const recordSelectors = [];
@@ -220,29 +236,14 @@ export const buildLinearRegionExtractionContext = (linearSeqs = [], lInputType =
   const seqs = Array.isArray(linearSeqs) ? linearSeqs : [];
 
   seqs.forEach((seq = {}, idx) => {
-    const hasStart = hasRegionValue(seq.region_start);
-    const hasEnd = hasRegionValue(seq.region_end);
     const recordIdRaw = seq.region_record_id ? String(seq.region_record_id).trim() : '';
     const wantsReverse = Boolean(seq.region_reverse);
-
-    if (hasStart !== hasEnd) {
-      throw new Error(`Sequence #${idx + 1}: Provide both Region start and end, or leave both empty.`);
-    }
+    const bounds = resolveLinearRegionBounds(seq, idx);
 
     recordSelectors.push(recordIdRaw || '');
 
-    if (hasStart && hasEnd) {
-      const start = Number(seq.region_start);
-      const end = Number(seq.region_end);
-      if (!Number.isFinite(start) || !Number.isFinite(end)) {
-        throw new Error(`Sequence #${idx + 1}: Region start/end must be numbers.`);
-      }
-      if (!Number.isInteger(start) || !Number.isInteger(end)) {
-        throw new Error(`Sequence #${idx + 1}: Region start/end must be integers.`);
-      }
-      if (start < 1 || end < 1) {
-        throw new Error(`Sequence #${idx + 1}: Region start/end must be >= 1.`);
-      }
+    if (bounds) {
+      const { start, end } = bounds;
       const canonicalStart = Math.min(start, end);
       const canonicalEnd = Math.max(start, end);
       const specBody = `${start}-${end}${wantsReverse ? ':rc' : ''}`;

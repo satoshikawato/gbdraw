@@ -60,7 +60,8 @@ state.results.value = [{
 }];
 state.featureCatalog.value = null;
 
-const saveError = /Generate again before using Save Session\./;
+// D-25 (SE-05): a Result without current feature metadata asks for one Generate.
+const saveError = { code: 'SESSION_SAVE_REQUIRES_GENERATE', operation: 'session-save' };
 await assert.rejects(exportSession('legacy-session'), saveError);
 assert.equal(inputReads, 0);
 

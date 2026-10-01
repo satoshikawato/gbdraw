@@ -5,6 +5,7 @@ import { importSessionFile } from '../../gbdraw/web/js/services/session-import-c
 import { gzipSync } from 'node:zlib';
 import { readSessionText } from '../../gbdraw/web/js/services/session-file.js';
 import { assertSafeObjectKeys } from '../../gbdraw/web/js/services/safe-object-keys.js';
+import { normalizeUserFacingError } from '../../gbdraw/web/js/services/error-normalization.js';
 
 installSessionImportWorker();
 const decode = async blob => {
@@ -34,7 +35,10 @@ test('malformed JSON/gzip and fatal UTF-8 stay structured failures', async () =>
     const reply = await decode(new Blob([bytes]));
     assert.equal(reply.status, 'error');
     assert.equal(reply.error.stage, stage);
-    assert.match(reply.error.code, /^SESSION_IMPORT_/);
+    // X-01 (SE-09): the Worker's final diagnostic code reaches the normalizer.
+    assert.equal(reply.error.code, stage === 'parse' ? 'INPUT_INVALID' : 'INPUT_UNREADABLE');
+    assert.equal(normalizeUserFacingError(reply.error).code, reply.error.code);
+    assert.ok(!JSON.stringify(normalizeUserFacingError(reply.error)).includes('private broken data'));
     assert.ok(!reply.error.message.includes('private broken data'));
   }
 });
@@ -50,7 +54,7 @@ test('unsafe own keys remain untrusted after the production whole-object reply',
 
 test('codec rejects exact file and expanded caps before reading/decoding oversize data', async () => {
   await assert.rejects(readSessionText({ size: 200 * 1024 * 1024 + 1,
-    stream() { throw new Error('must not read'); } }), /Session file is too large/);
+    stream() { throw new Error('must not read'); } }), { code: 'SESSION_SIZE_LIMIT', stage: 'read' });
   const native = globalThis.DecompressionStream;
   globalThis.DecompressionStream = class {
     constructor() {
@@ -61,6 +65,6 @@ test('codec rejects exact file and expanded caps before reading/decoding oversiz
     }
   };
   try {
-    await assert.rejects(readSessionText(new Blob([new Uint8Array([0x1f, 0x8b])])), /Expanded session file is too large/);
+    await assert.rejects(readSessionText(new Blob([new Uint8Array([0x1f, 0x8b])])), { code: 'SESSION_SIZE_LIMIT', stage: 'read' });
   } finally { globalThis.DecompressionStream = native; }
 });

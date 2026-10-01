@@ -25,6 +25,15 @@ await Promise.all([
   cp(
     join(repoRoot, 'gbdraw', 'web', 'js', 'mode-profiles.generated.js'),
     join(tempRoot, 'js', 'mode-profiles.generated.js')
+  ),
+  // mode-profiles.js evaluates comparison thresholds with these dependency-free modules.
+  cp(
+    join(repoRoot, 'gbdraw', 'web', 'js', 'services', 'error-normalization.js'),
+    join(tempRoot, 'js', 'services', 'error-normalization.js')
+  ),
+  cp(
+    join(repoRoot, 'gbdraw', 'web', 'js', 'utils', 'optional-positive-number.js'),
+    join(tempRoot, 'js', 'utils', 'optional-positive-number.js')
   )
 ]);
 await writeFile(join(tempRoot, 'package.json'), '{"type":"module"}', 'utf8');

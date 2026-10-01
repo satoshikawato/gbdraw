@@ -1,4 +1,4 @@
-import { normalizeUserFacingError } from './error-normalization.js';
+import { diagnosticError, normalizeUserFacingError } from './error-normalization.js';
 import { state, sessionOperationAvailability, normalizeLinearSeqList, collapseEmptyLinearSeqList } from '../state.js';
 import { resolveColorToHex } from '../app/color-utils.js';
 import {
@@ -228,10 +228,17 @@ const SUPPORTED_SESSION_VERSIONS = new Set([
 ]);
 const CURRENT_ARTIFACT_SESSION_MIN_VERSION = 39;
 const LOSAT_DERIVED_CACHE_LIMIT = 16;
-const SESSION_FEATURE_CATALOG_SAVE_ERROR =
-  'Generate again before using Save Session. The current results are missing compatible feature metadata.';
-const SESSION_ACTIVE_CONFIG_SAVE_ERROR =
-  'Save Session could not validate the active configuration.';
+// D-25 (PD-OI-079): a Result without current feature metadata (a legacy
+// Session) is saved only after one Generate; the error offers that Generate.
+const sessionSaveRequiresGenerate = () => diagnosticError(
+  'SESSION_SAVE_REQUIRES_GENERATE', {}, { operation: 'session-save', stage: 'result-admission' }
+);
+// A Save wrapper keeps a recognized cause; otherwise it reports the bounded fallback.
+const recognizedCauseOr = (error, fallback) => {
+  const model = normalizeUserFacingError(error);
+  return model && !['UNKNOWN', 'VALIDATION_UNCLASSIFIED'].includes(model.code)
+    ? diagnosticError(model.code, model.context, { stage: model.stage }) : fallback;
+};
 const isPlainObject = (value) => Boolean(value) && typeof value === 'object' && !Array.isArray(value);
 
 const cloneColors = (colors) => ({ ...(colors || {}) });
@@ -1165,22 +1172,16 @@ export const applyEditorStateData = (
   }
 };
 
+const SESSION_FORMAT_ERROR = () => diagnosticError('INPUT_INVALID', { field: 'schema', reason: 'SESSION_FORMAT' });
 const validateSessionVersion = version => {
-  if (!Number.isInteger(version)) {
-    throw new Error('Session version is required and must be an integer.');
-  }
-  if (version > SESSION_VERSION) {
-    throw new Error(`Session version ${version} is newer than this gbdraw supports (${SESSION_VERSION}).`);
-  }
-  if (!SUPPORTED_SESSION_VERSIONS.has(version)) {
-    throw new Error(`Unsupported session version: ${version}.`);
+  if (!Number.isInteger(version)) throw SESSION_FORMAT_ERROR();
+  if (version > SESSION_VERSION || !SUPPORTED_SESSION_VERSIONS.has(version)) {
+    throw diagnosticError('INPUT_INVALID', { field: 'schema', reason: 'FIELDS' });
   }
 };
 
 const normalizeSessionData = (data) => {
-  if (!isPlainObject(data) || data.format !== 'gbdraw-session') {
-    throw new Error('Invalid session file.');
-  }
+  if (!isPlainObject(data) || data.format !== 'gbdraw-session') throw SESSION_FORMAT_ERROR();
   const version = data.version;
   validateSessionVersion(version);
   if (version >= CURRENT_AUTHORITY_SESSION_MIN_VERSION && Object.prototype.hasOwnProperty.call(data, 'files')) {
@@ -1577,9 +1578,7 @@ const preflightSessionImport = async (rawData) => {
   let normalizedData;
 
   if (currentSession) {
-    if (!isPlainObject(rawData) || rawData.format !== 'gbdraw-session') {
-      throw new Error('Invalid session file.');
-    }
+    if (!isPlainObject(rawData) || rawData.format !== 'gbdraw-session') throw SESSION_FORMAT_ERROR();
     recordSessionLifecycleEvent('session-authority-validation-start');
     adoptedSession = adoptCurrentSessionDocument(rawData, sourceSessionVersion);
     recordSessionLifecycleEvent('session-authority-validation-end');
@@ -2842,6 +2841,25 @@ const customDepthRequested = (mode, sourceState) => {
   );
 };
 
+/**
+ * The one check that the active mode has its biological inputs; Generate and
+ * Save from the draft both use it, so both explain the same missing input.
+ */
+export const assertActiveModeInputs = (mode = state.mode.value, sourceState = state) => {
+  const files = sourceState.files || {};
+  if (mode === 'circular') {
+    const gff = sourceState.cInputType?.value === 'gff';
+    if (!(gff ? files.c_gff : files.c_gb)) throw diagnosticError('INPUT_REQUIRED');
+    if (gff && !files.c_fasta) throw diagnosticError('FASTA_REQUIRED');
+    return;
+  }
+  const gff = sourceState.lInputType?.value === 'gff';
+  (Array.isArray(sourceState.linearSeqs) ? sourceState.linearSeqs : []).forEach((seq, index) => {
+    if (!(gff ? seq?.gff : seq?.gb)) throw diagnosticError('INPUT_REQUIRED', { inputOrdinal: index + 1 });
+    if (gff && !seq?.fasta) throw diagnosticError('FASTA_REQUIRED', { inputOrdinal: index + 1 });
+  });
+};
+
 export const materializeLinearRecordFiles = (
   sequences,
   catalog,
@@ -2850,13 +2868,12 @@ export const materializeLinearRecordFiles = (
   const sourceSequences = Array.isArray(sequences) ? sequences : [];
   if (catalog == null) return sourceSequences;
   if (catalog?.mode !== 'linear' || catalog?.status !== 'ready') {
-    const issue = Array.isArray(catalog?.issues) ? catalog.issues[0] : '';
-    throw new Error(issue || 'Linear record discovery is not ready.');
+    const issue = Array.isArray(catalog?.issues) ? catalog.issues[0] : null;
+    throw issue ? diagnosticError(issue.code, issue.context)
+      : diagnosticError('RECORD_SELECTION', { reason: 'DISCOVERY_PENDING' });
   }
   const records = Array.isArray(catalog.records) ? catalog.records : [];
-  if (records.length === 0) {
-    throw new Error('Linear record discovery did not find any records.');
-  }
+  if (records.length === 0) throw diagnosticError('NO_RECORDS');
   const recordCountBySource = new Map();
   records.forEach((record) => {
     const sourceIndex = Number(record?.sourceIndex);
@@ -2864,17 +2881,13 @@ export const materializeLinearRecordFiles = (
   });
   sourceSequences.forEach((source, sourceIndex) => {
     const count = recordCountBySource.get(sourceIndex) || 0;
-    if (count === 0) {
-      throw new Error(`Sequence #${sourceIndex + 1}: no records were found.`);
-    }
+    if (count === 0) throw diagnosticError('NO_RECORDS', { inputOrdinal: sourceIndex + 1 });
     if (count <= 1) return;
     const hasRegion = [source.region_start, source.region_end].some(
       (value) => value !== null && value !== undefined && value !== ''
     );
     if (hasRegion) {
-      throw new Error(
-        `Sequence #${sourceIndex + 1}: choose a Record before setting a region on a multi-record file.`
-      );
+      throw diagnosticError('REGION_INVALID', { inputOrdinal: sourceIndex + 1, reason: 'SELECT_RECORD_FOR_REGION' });
     }
   });
   return sourceSequences;
@@ -4008,9 +4021,7 @@ const exportSessionDocument = async (
   const logicalResults = serializeResults();
   const editorState = buildEditorStateData();
   if (logicalResults.length > 0) {
-    if (!editorState.featureCatalog) {
-      throw new Error(SESSION_FEATURE_CATALOG_SAVE_ERROR);
-    }
+    if (!editorState.featureCatalog) throw sessionSaveRequiresGenerate();
     try {
       editorState.featureCatalog = validateFeatureCatalog(
         editorState.featureCatalog,
@@ -4019,7 +4030,7 @@ const exportSessionDocument = async (
       );
     } catch (error) {
       console.warn('Session feature catalog validation failed.', normalizeUserFacingError(error));
-      throw new Error(SESSION_FEATURE_CATALOG_SAVE_ERROR);
+      throw sessionSaveRequiresGenerate();
     }
   } else {
     editorState.featureCatalog = null;
@@ -4064,7 +4075,7 @@ const exportSessionDocument = async (
       });
     } catch (error) {
       console.warn('Session active configuration validation failed.', normalizeUserFacingError(error));
-      throw new Error(SESSION_ACTIVE_CONFIG_SAVE_ERROR);
+      throw recognizedCauseOr(error, diagnosticError('INPUT_INVALID', { field: 'config', reason: 'FIELDS' }));
     }
   }
   if (!committed && !settingsOnly) {
@@ -4182,7 +4193,7 @@ const exportSessionDocument = async (
     validateSessionAuthorityInventory(sessionData, SESSION_VERSION);
   } catch (error) {
     console.error('Session writer validation failed.', normalizeUserFacingError(error));
-    throw new Error('Save Session could not validate the session data.');
+    throw recognizedCauseOr(error, diagnosticError('INPUT_INVALID', { field: 'schema' }));
   }
 
   recordSessionLifecycleEvent('session-save-projection-end');
@@ -4223,16 +4234,7 @@ const importSessionDocument = async (e, options = {}) => {
   const previousAlert = state.errorLog.value;
 
   try {
-    let candidate;
-    try {
-      candidate = await importSessionFile(file, { signal: options.signal });
-    } catch (error) {
-      if (error?.code === 'SESSION_IMPORT_PARSE_FAILED') Object.assign(error, {
-        code: 'INPUT_INVALID', stage: 'request-validation',
-        context: { field: 'schema', reason: 'JSON_FORMAT' }
-      });
-      throw error;
-    }
+    const candidate = await importSessionFile(file, { signal: options.signal });
     if (!options.isCurrent()) return { status: 'canceled' };
     recordSessionLifecycleEvent('session-import-codec-completed', candidate.timings);
     let data = candidate.data;
@@ -4784,6 +4786,10 @@ export const exportSession = (titleOverride = null, options = {}) => {
     // payloads, resources, catalogs, caches and Results retain their existing owner.
     const activeConfig = buildConfigData();
     validateCurrentWriterActiveConfig({ mode: state.mode.value, storedConfig: activeConfig });
+    if (!committedCanonicalSession
+      && hasBiologicalSessionInputs({ ...state.files, linearSeqs: state.linearSeqs })) {
+      assertActiveModeInputs();
+    }
     const storedConfig = cloneJsonData(activeConfig);
     const savedUi = {
       mode: state.mode.value,
@@ -4820,8 +4826,9 @@ export const exportSession = (titleOverride = null, options = {}) => {
       return { status: 'stale' };
     }
     if (typeof options.onError !== 'function') throw error;
-    options.onError(error);
-    return { status: 'error', error: normalizeUserFacingError(error) };
+    const model = normalizeUserFacingError(error, { operation: 'session-save' });
+    options.onError(model);
+    return { status: 'error', error: model };
   }).finally(() => {
     if (sessionSaveInFlight === operation) {
       state.sessionSavePending.value = false;

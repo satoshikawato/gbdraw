@@ -1,13 +1,21 @@
 import assert from 'node:assert/strict';
-import { readFile, writeFile, mkdtemp } from 'node:fs/promises';
+import { readFile, writeFile, mkdtemp, mkdir } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 
 const repoRoot = process.cwd();
 const sourceDir = join(repoRoot, 'gbdraw', 'web', 'js', 'app');
-const tempDir = await mkdtemp(join(tmpdir(), 'gbdraw-file-imports-'));
-await writeFile(join(tempDir, 'package.json'), '{"type":"module"}\n', 'utf8');
+const tempRoot = await mkdtemp(join(tmpdir(), 'gbdraw-file-imports-'));
+const tempDir = join(tempRoot, 'app');
+await mkdir(tempDir);
+await mkdir(join(tempRoot, 'services'));
+await writeFile(join(tempRoot, 'package.json'), '{"type":"module"}\n', 'utf8');
+await writeFile(
+  join(tempRoot, 'services', 'error-normalization.js'),
+  await readFile(join(repoRoot, 'gbdraw', 'web', 'js', 'services', 'error-normalization.js'), 'utf8'),
+  'utf8'
+);
 await writeFile(
   join(tempDir, 'file-imports.js'),
   await readFile(join(sourceDir, 'file-imports.js'), 'utf8'),
@@ -85,17 +93,17 @@ assert.deepEqual(
 
 assert.throws(
   () => parseSpecificRules('CDS\tgene\talpha\n'),
-  /line 1: expected 4 or 5 columns/
+  { code: 'TABLE_INVALID', context: { row: 1, reason: 'SPECIFIC_COLUMNS' } }
 );
 assert.throws(
   () => parseSpecificRules('feature_type\n'),
-  /line 1: expected 4 or 5 columns/
+  { code: 'TABLE_INVALID', context: { row: 1, reason: 'SPECIFIC_COLUMNS' } }
 );
 // The TSV codec preserves Python patterns; validation belongs to the Worker.
 assert.equal(parseSpecificRules('CDS\tgene\t(?i)alpha\t#112233\tAlpha\n').rules[0].val, '(?i)alpha');
 assert.throws(
   () => parseSpecificRules('CDS\tgene\talpha\tnot-a-color\tAlpha\n'),
-  /Invalid specific-color value at line 1/
+  { code: 'TABLE_INVALID', context: { row: 1, field: 'color', reason: 'COLOR' } }
 );
 assert.equal(
   parseSpecificRules(
@@ -156,7 +164,7 @@ assert.deepEqual(buildLegendIntents(canonicalRules).intents, [
   const parseColor = (value) => parseSpecificRules(`CDS\tproduct\tx\t${value}\tcap\n`).rules[0].color;
   const rejects = (value) => assert.throws(
     () => parseColor(value),
-    /Invalid specific-color value at line 1/,
+    { code: 'TABLE_INVALID', context: { row: 1, field: 'color', reason: 'COLOR' } },
     value
   );
   // DOM-free JavaScript cannot resolve a color name; Python validates it.

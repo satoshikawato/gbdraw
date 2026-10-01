@@ -124,6 +124,33 @@ def test_typed_request_accepts_vector(tmp_path, mode, vector):
     _decode_with_options(tmp_path, mode, vector["request"])
 
 
+def _web_cases(kind: str):
+    """Vectors whose Web projection sends a different representation."""
+
+    for vector in VECTORS[kind]:
+        web = vector.get("web") or {}
+        for mode in vector["modes"]:
+            request = (web.get("requestByMode") or {}).get(mode) or web.get("request")
+            if request is not None:
+                yield pytest.param(mode, vector, request, id=f"{vector['id']}-{mode}-web")
+
+
+@pytest.mark.parametrize(("mode", "vector", "web_request"), list(_web_cases("invalid")))
+def test_web_representation_is_rejected_with_shared_reason(tmp_path, mode, vector, web_request):
+    # tests/web/option-input-integrity.test.mjs proves the Web sends web_request.
+    with pytest.raises(CanonicalRequestDecodingError) as caught:
+        _decode_with_options(tmp_path, mode, web_request)
+    payload = serialize_web_error(caught.value, operation="generate", stage="request-validation")
+    assert payload["code"] == vector["code"]
+    assert payload["context"].get("reason") == vector["reason"]
+    assert payload["context"].get("field") == (vector["field"] if vector.get("field") in FIELDS else None)
+
+
+@pytest.mark.parametrize(("mode", "vector", "web_request"), list(_web_cases("accepted")))
+def test_web_representation_is_accepted(tmp_path, mode, vector, web_request):
+    _decode_with_options(tmp_path, mode, web_request)
+
+
 @pytest.mark.parametrize(("mode", "vector"), list(_cases("invalid", cli_only=True)))
 def test_cli_rejects_vector_without_traceback(monkeypatch, capsys, tmp_path, mode, vector):
     code, stderr = _run_cli(monkeypatch, capsys, tmp_path, mode, vector["cli"])

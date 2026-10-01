@@ -4648,13 +4648,13 @@
                                 <div>
                                     <span class="input-label text-[10px]">Window <help-tip id="help-gc-window" text="Window size for GC content/skew. Default: 1kb (<1Mb), 10kb (<10Mb), 100kb (>=10Mb)."></help-tip></span>
                                     <auto-value-field :visible="autoValueVisible(adv.window_size, 'dinucleotideWindow')" :text="autoValueText('dinucleotideWindow')">
-                                        <input type="number" v-model.number="adv.window_size" aria-label="Window" aria-describedby="help-gc-window" class="form-input form-input-compact auto-value-input" :disabled="!semanticMutationAvailable">
+                                        <input type="number" min="1" step="1" v-model.number="adv.window_size" aria-label="Window" aria-describedby="help-gc-window" class="form-input form-input-compact auto-value-input" :disabled="!semanticMutationAvailable">
                                     </auto-value-field>
                                 </div>
                                 <div>
                                     <span class="input-label text-[10px]">Step <help-tip id="help-gc-step" text="Step size for GC content/skew. Default: 100bp (<1Mb), 1kb (<10Mb), 10kb (>=10Mb)."></help-tip></span>
                                     <auto-value-field :visible="autoValueVisible(adv.step_size, 'dinucleotideStep')" :text="autoValueText('dinucleotideStep')">
-                                        <input type="number" v-model.number="adv.step_size" aria-label="Step" aria-describedby="help-gc-step" class="form-input form-input-compact auto-value-input" :disabled="!semanticMutationAvailable">
+                                        <input type="number" min="1" step="1" v-model.number="adv.step_size" aria-label="Step" aria-describedby="help-gc-step" class="form-input form-input-compact auto-value-input" :disabled="!semanticMutationAvailable">
                                     </auto-value-field>
                                 </div>
                                 <div>
@@ -4831,6 +4831,8 @@
         <div class="result-pane flex-1 space-y-4 flex flex-col h-full overflow-y-auto min-w-0">
             <p v-if="labelReflowProcessing || labelReflowLastError" data-live-application-feedback role="status" aria-live="polite" class="rounded border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800 shrink-0">{{ labelReflowProcessing ? 'Live edit applying: geometry is being updated. Direct edits already applied are kept.' : 'Live edit failed: direct edits already applied are kept; geometry may still need updating. Retry the live edit or use Generate.' }}</p>
 
+            <p v-if="sessionSaveNeedsGenerate && !processing" data-session-save-needs-generate role="status" aria-live="polite" class="rounded border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800 shrink-0">This Result comes from a Session saved by an older gbdraw. Generate once before Save Session.</p>
+
             <operation-error v-if="errorDisplay && !(errorDisplay.operation === 'align' && (similarityAlignmentDialogOpen || similarityAlignmentResetDialogOpen))"
                 :error="errorLog" :recovery="errorDisplay.operation === 'generate' || errorDisplay.operation === 'align' ? generationFailureRecovery : null"
                 class="card border-l-4 border-l-red-500 bg-red-50 mb-0 shrink-0">
@@ -4841,7 +4843,8 @@
                     <button v-if="canRetryLabelImportFailure" type="button" @click="editLabelImportFailure" class="btn-secondary text-xs">Reselect Label TSV</button>
                     <button v-if="canRetrySpecificRuleFailure" type="button" @click="retrySpecificRuleFailure" :disabled="!semanticMutationAvailable" class="btn-secondary text-xs">Retry rule operation</button>
                     <button v-if="canEditSpecificRuleFailure && errorDisplay.actions.includes('edit-pattern')" type="button" @click="editSpecificRuleFailure" class="btn-secondary text-xs">Edit pattern</button>
-                    <button v-if="errorDisplay.actions.includes('save-session') || generationFailureRecovery === 'restore-failed'" type="button" @click="saveSessionWithTitle" :disabled="sessionImportPending" class="btn-secondary text-xs">Save Session</button>
+                    <button v-if="errorDisplay.actions.includes('generate') && errorDisplay.operation !== 'generate'" type="button" @click="runAnalysis" :disabled="processing" class="btn-secondary text-xs">Generate</button>
+                    <button v-if="(errorDisplay.actions.includes('save-session') && errorDisplay.operation !== 'session-save') || generationFailureRecovery === 'restore-failed'" type="button" @click="saveSessionWithTitle" :disabled="sessionImportPending" class="btn-secondary text-xs">Save Session</button>
                     <button v-if="generationFailureRecovery === 'restore-failed' || errorDisplay.actions.includes('reload')" type="button" @click="reloadAfterOperationError" class="btn-secondary text-xs">Reload</button>
                     <button v-if="errorDisplay.operation.startsWith('export-') && errorDisplay.actions.includes('use-svg')" type="button" @click="downloadSVG" class="btn-secondary text-xs">Use SVG</button>
                     <button v-if="errorDisplay.operation === 'export-svg' && !canRetryInteractiveSvgExport && errorDisplay.actions.includes('retry')" type="button" @click="downloadSVG" class="btn-secondary text-xs">Retry SVG export</button>
