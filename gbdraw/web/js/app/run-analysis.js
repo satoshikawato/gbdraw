@@ -2,7 +2,7 @@ import { validateAnnotationWarnings } from '../services/session-feature-metadata
 import { resolveLinearRegionBounds } from './feature-metadata-extraction.js';
 import { buildSimilarityAlignmentResetReceipt, validateSimilarityAlignmentResetReceipt } from '../services/session-active-config-contract.js';
 import { prepareLosatRuntime, runLosatPairsParallel } from '../services/losat.js';
-import { prepareLosatSourceBatches, splitLosatSourceResult } from './linear-sources.js';
+import { losatRecordGencode, prepareLosatSourceBatches, splitLosatSourceResult } from './linear-sources.js';
 import {
   cancelDiagramGeneration,
   DIAGRAM_HELPER_OPERATIONS,
@@ -64,7 +64,7 @@ import {
 } from './losat-normalization.js';
 import { buildRunInfo, buildSourceRecipe } from './run-info.js';
 import {
-  buildPairwiseLosatJobSpecs,
+  buildLosatJobSpecs,
   resolveLinearComparisonPlan
 } from './linear-comparisons.js';
 import {
@@ -3453,14 +3453,6 @@ export const createRunAnalysis = ({
           }
         };
 
-        const getGencode = (idx) => {
-          const raw = linearSeqs[idx]?.losat_gencode;
-          if (raw === null || raw === undefined || raw === '') return null;
-          const num = Number(raw);
-          if (!Number.isFinite(num)) return null;
-          return num;
-        };
-
         const getBlastpCandidateLimit = () => {
           if (!useProteinBlastp) return null;
           return blastpCandidateLimit;
@@ -3471,8 +3463,8 @@ export const createRunAnalysis = ({
           if (losatProgram.value === 'blastn') {
             pushArg(args, '--task', losat.blastn.task);
           } else if (losatProgram.value === 'tblastx') {
-            pushArg(args, '--query-gencode', getGencode(queryIdx));
-            pushArg(args, '--db-gencode', getGencode(subjectIdx));
+            pushArg(args, '--query-gencode', losatRecordGencode(linearSeqs[queryIdx]));
+            pushArg(args, '--db-gencode', losatRecordGencode(linearSeqs[subjectIdx]));
           } else {
             if (!useOrthogroupBlastp && !useCollinearBlastp) {
               pushArg(args, '--max-hsps-per-subject', 1);
@@ -3593,62 +3585,15 @@ export const createRunAnalysis = ({
           const fastaExtractionBeforeJobBuild = losatTiming.fastaExtractionMs;
           const cacheHashBeforeJobBuild = losatTiming.cacheHashMs;
 
-          const jobSpecs = [];
-          const resolvedLosatEdges = comparisonResolution.edges.filter(
-            (edge) => edge.source === 'losat'
-          );
-          const edgeForOrdinal = (ordinal) => (
-            resolvedLosatEdges.find((edge) => edge.ordinal === ordinal) ||
-            resolvedLosatEdges[Math.max(0, Math.min(ordinal, resolvedLosatEdges.length - 1))]
-          );
-          const pushExpandedJobSpec = (queryIndex, subjectIndex, ordinal) => {
-            const edge = resolvedLosatEdges.find((candidate) => (
-              candidate.queryIndex === queryIndex && candidate.subjectIndex === subjectIndex
-            )) || edgeForOrdinal(ordinal);
-            jobSpecs.push({
-              edgeKey: edge?.edgeKey || '',
-              ordinal: edge?.ordinal ?? ordinal,
-              queryUid: linearSeqs[queryIndex].uid,
-              subjectUid: linearSeqs[subjectIndex].uid,
-              queryIndex,
-              subjectIndex,
-              program: losatProgram.value
-            });
-          };
-          if (useOrthogroupBlastp) {
-            for (let i = 0; i < linearSeqs.length; i++) {
-              pushExpandedJobSpec(i, i, Math.min(i, Math.max(0, resolvedLosatEdges.length - 1)));
-              for (let j = i + 1; j < linearSeqs.length; j++) {
-                pushExpandedJobSpec(i, j, Math.min(i, Math.max(0, resolvedLosatEdges.length - 1)));
-                pushExpandedJobSpec(j, i, Math.min(i, Math.max(0, resolvedLosatEdges.length - 1)));
-              }
-            }
-          } else if (useCollinearBlastp) {
-            if (collinearInferOrthogroups) {
-              for (let i = 0; i < linearSeqs.length; i++) {
-                pushExpandedJobSpec(i, i, Math.min(i, Math.max(0, resolvedLosatEdges.length - 1)));
-              }
-            }
-            if (collinearSearchScope === 'all') {
-              for (let i = 0; i < linearSeqs.length - 1; i++) {
-                for (let j = i + 1; j < linearSeqs.length; j++) {
-                  pushExpandedJobSpec(i, j, Math.min(i, Math.max(0, resolvedLosatEdges.length - 1)));
-                  pushExpandedJobSpec(j, i, Math.min(i, Math.max(0, resolvedLosatEdges.length - 1)));
-                }
-              }
-            } else {
-              resolvedLosatEdges.forEach((edge) => {
-                pushExpandedJobSpec(edge.queryIndex, edge.subjectIndex, edge.ordinal);
-                pushExpandedJobSpec(edge.subjectIndex, edge.queryIndex, edge.ordinal);
-              });
-            }
-          } else {
-            jobSpecs.push(...buildPairwiseLosatJobSpecs({
-              resolution: comparisonResolution,
-              program: losatProgram.value,
-              blastpMode
-            }));
-          }
+          const jobSpecs = buildLosatJobSpecs({
+            resolution: comparisonResolution,
+            recordCount: linearSeqs.length,
+            recordUids: linearSeqs.map((seq) => seq.uid),
+            program: losatProgram.value,
+            blastpMode,
+            collinearInferOrthogroups,
+            collinearSearchScope
+          });
 
           const sourcePlan = await prepareLosatSourceBatches({
             sequences: linearSeqs,
@@ -3656,8 +3601,7 @@ export const createRunAnalysis = ({
             getEntry: getSeqEntry,
             buildArgs: buildLosatArgs,
             hashText,
-            protein: useProteinBlastp,
-            excludeSelfComparisons: useCollinearBlastp && !collinearInferOrthogroups
+            protein: useProteinBlastp
           });
           const preparedJobs = [];
           for (const spec of jobSpecs) {
@@ -4564,7 +4508,8 @@ export const createRunAnalysis = ({
           fileMetadata: runInfoFileMap,
           elapsedMs: getNow() - manualRunStartedAt,
           resultCount: candidateCommit.results.length,
-          startedAtIso: manualRunStartedAtIso
+          startedAtIso: manualRunStartedAtIso,
+          losatComparisons: mode.value === 'linear' && activeComparisonPlanSnapshot?.hasLosatIntent === true
         });
         sourceRecipe.generatedFiles.forEach((file) => {
           recordGeneratedCliFile(

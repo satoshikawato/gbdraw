@@ -36,6 +36,7 @@ const source = await readFile(new URL('losat-settings.js', sourceRoot), 'utf8');
 await writeFile(
   tempModulePath,
   source.replace("./losat-normalization.js", "./losat-normalization.mjs")
+    .replace("./linear-comparisons.js", new URL("linear-comparisons.js", sourceRoot).href)
     .replace("./linear-sources.js", new URL("linear-sources.js", sourceRoot).href)
     .replace("../services/losat-thread-plan.js", new URL("../services/losat-thread-plan.js", sourceRoot).href)
 );
@@ -186,7 +187,9 @@ const sourceFiles = [{ name: 'upper.gb' }, { name: 'lower.gb' }];
 expansionState.linearComparisonResolution.value.valid = true;
 expansionState.linearSeqs.forEach((sequence, index) => { sequence.gb = sourceFiles[index < 2 ? 0 : 1]; });
 expansionState.losat.blastp.mode = 'orthogroup';
-assert.equal(expansionSettings.losatEstimatedJobCount.value, 4);
+// PD-OI-018 revision 4: two between-source jobs, plus one self job and one
+// within-source job (database without the query record) per record.
+assert.equal(expansionSettings.losatEstimatedJobCount.value, 2 + 2 * 5);
 expansionState.losat.blastp.mode = 'pairwise';
 expansionState.linearComparisonResolution = { value: {
   mode: 'adjacent', defaultSource: 'losat', valid: true, hasLosatIntent: true,
