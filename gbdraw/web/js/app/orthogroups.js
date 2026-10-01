@@ -298,6 +298,7 @@ export const createOrthogroupEditor = ({ state }) => {
     orthogroups,
     orthogroupNameOverrides,
     orthogroupDescriptionOverrides,
+    orthogroupDormantOverrides,
     selectedOrthogroupId,
     orthogroupSearch,
     orthogroupSortMode,
@@ -749,6 +750,15 @@ export const createOrthogroupEditor = ({ state }) => {
     delete orthogroupDescriptionOverrides[id];
   };
 
+  // Dormant names are listed and cleared here (D-21).
+  const orthogroupDormantNames = computed(() => Object.values(orthogroupDormantOverrides || {})
+    .map((entry) => normalizeText(entry?.name) || normalizeText(entry?.description)).filter(Boolean));
+  const clearOrthogroupDormantOverrides = () => {
+    const sessionBusy = state.sessionOperationAvailability?.();
+    if (sessionBusy) return sessionBusy;
+    Object.keys(orthogroupDormantOverrides || {}).forEach((key) => delete orthogroupDormantOverrides[key]);
+  };
+
   const clearOrthogroupHighlight = () => {
     if (!svgContainer.value) return;
     const svg = svgContainer.value.querySelector('svg');
@@ -812,6 +822,8 @@ export const createOrthogroupEditor = ({ state }) => {
     setOrthogroupNameOverride,
     setOrthogroupDescriptionOverride,
     resetOrthogroupRename,
+    orthogroupDormantNames,
+    clearOrthogroupDormantOverrides,
     highlightOrthogroupById,
     clearOrthogroupHighlight,
   };

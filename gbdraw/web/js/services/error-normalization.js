@@ -4,7 +4,7 @@ const OPERATIONS = new Set(['unknown', 'generate', 'align', 'feature-extraction'
   'promoteLegacyLosatpCache', 'resolveLegacyProteinReferences',
   'resolveSimilarityAlignment', 'validateConfigOverrides', 'session-save']);
 const STAGES = new Set(['unknown', 'initialization', 'resource-staging', 'request-validation',
-  'helper', 'rule-validation', 'render', 'result-admission', 'cleanup', 'export-capture', 'export-conversion', 'font-validation', 'transport', 'read', 'parse']);
+  'helper', 'rule-validation', 'losat', 'render', 'result-admission', 'cleanup', 'export-capture', 'export-conversion', 'font-validation', 'transport', 'read', 'parse']);
 const FIELDS = new Set(`legend title scale decorations pattern record_selector region start end sourceStart sourceEnd recordLength
 recordIndex queryIndex subjectIndex depth min_depth max_depth window step tick font_size plot_title_font_size height large_tick_interval small_tick_interval tick_font_size
 inner_gap_px outer_gap_px radius width spacing arrow_head_length_ratio arrow_shaft_width_ratio keep_definition_left_aligned color action feature_type qualifier value record_id label_text
@@ -20,6 +20,8 @@ gc_content_radius_circular gc_skew_width_circular gc_skew_radius_circular conser
 conservation_ring_gap center_reserved_radius multi_record_min_radius_ratio multi_record_column_gap_ratio
 multi_record_row_gap_ratio protein_blastp_mode protein_blastp_candidate_limit collinear_search_scope collinear_unit_mode collinear_anchor_mode collinear_merge_orientation collinear_color_mode orthogroup_membership_mode collinear_max_unit_gap collinear_max_conflicts collinear_max_paralog_links_per_orthogroup circular_multi_record_size_mode linear_track_layout linear_label_placement set_id anchor_slot side renderer lane_gap_px padding_px cover_anchor overflow layer z axis match_height source fasta gff annotations featurePlacements output_prefix`.split(/\s+/));
 const REASONS = Object.freeze({
+  CROSS_ORIGIN_ISOLATION: 'This page is not cross-origin isolated.', SHARED_MEMORY: 'This browser does not provide SharedArrayBuffer.',
+  WORKERS: 'This browser does not provide Web Workers.', THREADED_WASM: 'The threaded LOSAT runtime could not start.',
   DECORATION_IDENTITY: 'Source, region, mode, grouping or record identity changed, is unknown, or is ambiguous.',
   DECORATION_TARGET: 'The decoration target is missing or ambiguous.',
   DECORATION_METADATA: 'Composition metadata is invalid or unavailable.',
@@ -115,6 +117,7 @@ const DEFINITIONS = Object.freeze({
   DEPTH_INVALID: ['The depth input or settings are invalid.', ['edit-depth', 'disable-track', 'retry']],
   TABLE_INVALID: ['The table is invalid.', ['edit-table', 'retry']],
   COMPARISON_INPUT: ['The comparison input is invalid. Supply comparison FASTA or BLAST outfmt 6/7 as required.', ['edit-comparison', 'retry']],
+  LOSAT_THREADING_UNAVAILABLE: ['Threaded LOSAT execution is unavailable in this browser environment. Select Serial or Auto execution, then Generate again.', ['edit-comparison', 'retry']],
   COMPARISON_IDENTITY: ['Comparison endpoints disagree with the displayed features. Review the comparison inputs and display transforms; save a Session if it continues.', ['edit-comparison', 'retry', 'save-session']],
   ANNOTATION_TARGET: ['The region annotation target is invalid.', ['edit-annotation', 'retry']],
   TRACK_INVALID: ['The track settings are invalid.', ['edit-track', 'retry']],

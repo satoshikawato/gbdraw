@@ -1,8 +1,10 @@
 import { validateAnnotationWarnings } from '../services/session-feature-metadata.js';
+import { validateComparisonWarnings } from '../services/comparison-warnings.js';
+import { rekeyOrthogroupOverrides } from '../services/orthogroup-feature-metadata.js';
 import { resolveLinearRegionBounds } from './feature-metadata-extraction.js';
 import { buildSimilarityAlignmentResetReceipt, validateSimilarityAlignmentResetReceipt } from '../services/session-active-config-contract.js';
 import { prepareLosatRuntime, runLosatPairsParallel } from '../services/losat.js';
-import { prepareLosatSourceBatches, splitLosatSourceResult } from './linear-sources.js';
+import { losatRecordGencode, prepareLosatSourceBatches, splitLosatSourceResult } from './linear-sources.js';
 import {
   cancelDiagramGeneration,
   DIAGRAM_HELPER_OPERATIONS,
@@ -15,6 +17,7 @@ import {
   projectCompositionRecordIdentity,
   buildCanonicalRenderRequest,
   bindCanonicalTypedResource,
+  committedFeatureVisibilityMatches,
   projectCommittedEditorIntent,
   projectCommittedRecordTransform,
   projectCommittedSimilarityAlignment,
@@ -64,7 +67,7 @@ import {
 } from './losat-normalization.js';
 import { buildRunInfo, buildSourceRecipe } from './run-info.js';
 import {
-  buildPairwiseLosatJobSpecs,
+  buildLosatJobSpecs,
   resolveLinearComparisonPlan
 } from './linear-comparisons.js';
 import {
@@ -473,10 +476,11 @@ const sameNumber = (left, right) => Number(left) === Number(right);
 
 const canReuseResolvedProteinArtifacts = ({
   canonicalComparisons,
-  committedRequest,
+  committedSession,
   sequences,
   active
 }) => {
+  const committedRequest = committedSession?.renderRequest || null;
   const persisted = Array.isArray(canonicalComparisons) ? canonicalComparisons : [];
   const committed = Array.isArray(committedRequest?.comparisons)
     ? committedRequest.comparisons
@@ -488,6 +492,8 @@ const canReuseResolvedProteinArtifacts = ({
     comparison?.kind === 'generatedProteinComparison' && comparison.mode === 'none'
   ));
   if (!persistedMarker || !committedMarker || !active) return false;
+  // Selected proteins follow the Feature visibility rules (CO-02).
+  if (!committedFeatureVisibilityMatches(committedSession, active.featureVisibility)) return false;
 
   // Derived rows carry view coordinates and feature IDs. Raw LOSATP evidence
   // remains reusable, but a reversed view needs these rows to be projected again.
@@ -1018,6 +1024,7 @@ export const executeCanonicalRenderCandidate = async ({
     ? generationResponse.metadata
     : {};
   const annotationWarnings = validateAnnotationWarnings(metadata.annotationWarnings, results);
+  const comparisonWarnings = validateComparisonWarnings(metadata.comparisonWarnings, results);
   recordSessionLifecycleEvent('candidate-result-validation-start');
   const catalogState = catalogAdmission(metadata.featureCatalog, results, {
     adopt: true,
@@ -1046,6 +1053,7 @@ export const executeCanonicalRenderCandidate = async ({
     generationResponse,
     generationMetadata: metadata,
     annotationWarnings,
+    comparisonWarnings,
     results,
     catalogAdmission: catalogState,
     catalog: catalogState.catalog,
@@ -1061,7 +1069,6 @@ export const createRunAnalysis = ({
   serializeCanonicalFiles,
   canonicalSessionVersion,
   adoptCanonicalRenderArtifacts,
-  getCommittedCanonicalRenderRequest = null,
   getCommittedCanonicalSession = null,
   captureDecorationContinuity = () => null,
   captureGeneratedArtifactHandle,
@@ -1143,6 +1150,7 @@ export const createRunAnalysis = ({
     selectedOrthogroupAlignmentFeature,
     orthogroupNameOverrides,
     orthogroupDescriptionOverrides,
+    orthogroupDormantOverrides,
     selectedOrthogroupId,
     circularRecordList,
     circularRecordDiscovery,
@@ -1431,15 +1439,20 @@ export const createRunAnalysis = ({
     });
   };
 
-  const pruneOrthogroupOverrides = (groupIds, { clearAll = false } = {}) => {
-    const validIds = new Set(Array.isArray(groupIds) ? groupIds.map((id) => String(id || '').trim()).filter(Boolean) : []);
-    const pruneMap = (overrideMap) => {
-      Object.keys(overrideMap).forEach((id) => {
-        if (clearAll || !validIds.has(id)) delete overrideMap[id];
-      });
-    };
-    pruneMap(orthogroupNameOverrides);
-    pruneMap(orthogroupDescriptionOverrides);
+  // D-21: names follow the exact member set; the rest stay dormant.
+  const rekeyCommittedOrthogroupOverrides = (previousGroups, candidateGroups) => {
+    const next = rekeyOrthogroupOverrides({
+      previousGroups,
+      candidateGroups,
+      names: orthogroupNameOverrides,
+      descriptions: orthogroupDescriptionOverrides,
+      dormant: orthogroupDormantOverrides
+    });
+    [[orthogroupNameOverrides, next.names], [orthogroupDescriptionOverrides, next.descriptions],
+      [orthogroupDormantOverrides, next.dormant]].forEach(([target, values]) => {
+      Object.keys(target).forEach((key) => delete target[key]);
+      Object.assign(target, values);
+    });
   };
 
   const setFeatureEditorStatus = (updates = {}) => {
@@ -2921,10 +2934,11 @@ export const createRunAnalysis = ({
           && canReuseResolvedProteinArtifacts({
             canonicalComparisons: files.linearCanonicalComparisons,
             sequences: linearSeqs,
-            committedRequest: typeof getCommittedCanonicalRenderRequest === 'function'
-              ? getCommittedCanonicalRenderRequest()
+            committedSession: typeof getCommittedCanonicalSession === 'function'
+              ? getCommittedCanonicalSession()
               : null,
             active: {
+              featureVisibility: featureVisibilityCacheKey,
               mode: blastpMode,
               candidateLimit: blastpCandidateLimit,
               ...comparisonThresholds,
@@ -3453,14 +3467,6 @@ export const createRunAnalysis = ({
           }
         };
 
-        const getGencode = (idx) => {
-          const raw = linearSeqs[idx]?.losat_gencode;
-          if (raw === null || raw === undefined || raw === '') return null;
-          const num = Number(raw);
-          if (!Number.isFinite(num)) return null;
-          return num;
-        };
-
         const getBlastpCandidateLimit = () => {
           if (!useProteinBlastp) return null;
           return blastpCandidateLimit;
@@ -3471,8 +3477,8 @@ export const createRunAnalysis = ({
           if (losatProgram.value === 'blastn') {
             pushArg(args, '--task', losat.blastn.task);
           } else if (losatProgram.value === 'tblastx') {
-            pushArg(args, '--query-gencode', getGencode(queryIdx));
-            pushArg(args, '--db-gencode', getGencode(subjectIdx));
+            pushArg(args, '--query-gencode', losatRecordGencode(linearSeqs[queryIdx]));
+            pushArg(args, '--db-gencode', losatRecordGencode(linearSeqs[subjectIdx]));
           } else {
             if (!useOrthogroupBlastp && !useCollinearBlastp) {
               pushArg(args, '--max-hsps-per-subject', 1);
@@ -3593,62 +3599,15 @@ export const createRunAnalysis = ({
           const fastaExtractionBeforeJobBuild = losatTiming.fastaExtractionMs;
           const cacheHashBeforeJobBuild = losatTiming.cacheHashMs;
 
-          const jobSpecs = [];
-          const resolvedLosatEdges = comparisonResolution.edges.filter(
-            (edge) => edge.source === 'losat'
-          );
-          const edgeForOrdinal = (ordinal) => (
-            resolvedLosatEdges.find((edge) => edge.ordinal === ordinal) ||
-            resolvedLosatEdges[Math.max(0, Math.min(ordinal, resolvedLosatEdges.length - 1))]
-          );
-          const pushExpandedJobSpec = (queryIndex, subjectIndex, ordinal) => {
-            const edge = resolvedLosatEdges.find((candidate) => (
-              candidate.queryIndex === queryIndex && candidate.subjectIndex === subjectIndex
-            )) || edgeForOrdinal(ordinal);
-            jobSpecs.push({
-              edgeKey: edge?.edgeKey || '',
-              ordinal: edge?.ordinal ?? ordinal,
-              queryUid: linearSeqs[queryIndex].uid,
-              subjectUid: linearSeqs[subjectIndex].uid,
-              queryIndex,
-              subjectIndex,
-              program: losatProgram.value
-            });
-          };
-          if (useOrthogroupBlastp) {
-            for (let i = 0; i < linearSeqs.length; i++) {
-              pushExpandedJobSpec(i, i, Math.min(i, Math.max(0, resolvedLosatEdges.length - 1)));
-              for (let j = i + 1; j < linearSeqs.length; j++) {
-                pushExpandedJobSpec(i, j, Math.min(i, Math.max(0, resolvedLosatEdges.length - 1)));
-                pushExpandedJobSpec(j, i, Math.min(i, Math.max(0, resolvedLosatEdges.length - 1)));
-              }
-            }
-          } else if (useCollinearBlastp) {
-            if (collinearInferOrthogroups) {
-              for (let i = 0; i < linearSeqs.length; i++) {
-                pushExpandedJobSpec(i, i, Math.min(i, Math.max(0, resolvedLosatEdges.length - 1)));
-              }
-            }
-            if (collinearSearchScope === 'all') {
-              for (let i = 0; i < linearSeqs.length - 1; i++) {
-                for (let j = i + 1; j < linearSeqs.length; j++) {
-                  pushExpandedJobSpec(i, j, Math.min(i, Math.max(0, resolvedLosatEdges.length - 1)));
-                  pushExpandedJobSpec(j, i, Math.min(i, Math.max(0, resolvedLosatEdges.length - 1)));
-                }
-              }
-            } else {
-              resolvedLosatEdges.forEach((edge) => {
-                pushExpandedJobSpec(edge.queryIndex, edge.subjectIndex, edge.ordinal);
-                pushExpandedJobSpec(edge.subjectIndex, edge.queryIndex, edge.ordinal);
-              });
-            }
-          } else {
-            jobSpecs.push(...buildPairwiseLosatJobSpecs({
-              resolution: comparisonResolution,
-              program: losatProgram.value,
-              blastpMode
-            }));
-          }
+          const jobSpecs = buildLosatJobSpecs({
+            resolution: comparisonResolution,
+            recordCount: linearSeqs.length,
+            recordUids: linearSeqs.map((seq) => seq.uid),
+            program: losatProgram.value,
+            blastpMode,
+            collinearInferOrthogroups,
+            collinearSearchScope
+          });
 
           const sourcePlan = await prepareLosatSourceBatches({
             sequences: linearSeqs,
@@ -3656,8 +3615,7 @@ export const createRunAnalysis = ({
             getEntry: getSeqEntry,
             buildArgs: buildLosatArgs,
             hashText,
-            protein: useProteinBlastp,
-            excludeSelfComparisons: useCollinearBlastp && !collinearInferOrthogroups
+            protein: useProteinBlastp
           });
           const preparedJobs = [];
           for (const spec of jobSpecs) {
@@ -3868,6 +3826,8 @@ export const createRunAnalysis = ({
           losatTiming.jobBuildMs += Math.max(0, jobBuildWallMs - nestedFastaMs - nestedHashMs);
 
           if (sourceJobs.length > 0) {
+            // A failure while searching is reported as a LOSAT failure (CO-01).
+            failureStage = 'losat';
             setProcessingStatus('Preparing comparison search runtime...');
             const runtimeWaitStartedAt = getNow();
             await waitForCancelablePromise(losatRuntimeWarmup, generationAbortSignal);
@@ -3891,6 +3851,7 @@ export const createRunAnalysis = ({
               }
             });
             throwIfGenerationCanceled();
+            failureStage = 'request-validation';
             losatTiming.executionMs += getNow() - executionStartedAt;
             const losatResults = sourceResults.flatMap((result) => {
               const job = sourceJobs.find((item) => item.cacheKey === result.cacheKey);
@@ -4564,7 +4525,8 @@ export const createRunAnalysis = ({
           fileMetadata: runInfoFileMap,
           elapsedMs: getNow() - manualRunStartedAt,
           resultCount: candidateCommit.results.length,
-          startedAtIso: manualRunStartedAtIso
+          startedAtIso: manualRunStartedAtIso,
+          losatComparisons: mode.value === 'linear' && activeComparisonPlanSnapshot?.hasLosatIntent === true
         });
         sourceRecipe.generatedFiles.forEach((file) => {
           recordGeneratedCliFile(
@@ -4609,6 +4571,7 @@ export const createRunAnalysis = ({
           : [],
         trackSlotResolvedGeometry: generationMetadata.trackSlotGeometry || null,
         annotationWarnings: canonicalExecution.annotationWarnings,
+        comparisonWarnings: canonicalExecution.comparisonWarnings,
         specificRules: candidateRules,
         fileLegendCaptions: new Set(candidateRules.filter(rule => rule.fromFile && rule.cap).map(rule => rule.cap)),
         proteinIdentityManifest: workingProteinIdentityManifest,
@@ -4699,6 +4662,7 @@ export const createRunAnalysis = ({
         )
       });
       activatedGeneratedArtifactCandidate = generatedArtifactCandidate;
+      const previousOrthogroups = orthogroups.value;
       generatedArtifactTransactionOwner.activate(generatedArtifactCandidate, {
         selectedResultIndex: nextSelectedResultIndex
       });
@@ -4708,7 +4672,7 @@ export const createRunAnalysis = ({
       const candidateGroupIds = candidateGroups
         .map((group) => String(group?.id || '').trim())
         .filter(Boolean);
-      pruneOrthogroupOverrides(candidateGroupIds);
+      rekeyCommittedOrthogroupOverrides(previousOrthogroups, candidateGroups);
       if (
         !workingSelectedOrthogroupId
         || !candidateGroupIds.includes(String(workingSelectedOrthogroupId || '').trim())
@@ -5084,6 +5048,7 @@ export const createRunAnalysis = ({
         trackSlotResolvedGeometry:
           execution.generationMetadata.trackSlotGeometry || null,
         annotationWarnings: execution.annotationWarnings,
+        comparisonWarnings: execution.comparisonWarnings,
         matchSequenceOwner: matchSequenceRegistry?.buildTrustedOwner?.(
           candidateCommit.featureState.sequenceSources
         ) || currentOwnerSet.matchSequenceOwner,

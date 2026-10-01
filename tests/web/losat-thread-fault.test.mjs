@@ -205,3 +205,22 @@ test('automatic threaded LOSAT falls back to serial execution after its trap ret
   assert.deepEqual(workers.map((worker) => worker.threaded), [true, true, true, false]);
   assert.ok(workers.every((worker) => worker.terminated));
 });
+
+// CO-01 (PD-OI-018): threaded stays strict without cross-origin isolation and
+// fails with a recognized LOSAT diagnostic instead of UNKNOWN.
+test('explicit threaded LOSAT without cross-origin isolation reports a recognized diagnostic', async (t) => {
+  const { owner, workers } = await setupPage(t);
+  globalThis.crossOriginIsolated = false;
+  assert.deepEqual(
+    { state: owner.losatThreadingPrecondition().state, reason: owner.losatThreadingPrecondition().reason },
+    { state: 'unavailable', reason: 'CROSS_ORIGIN_ISOLATION' }
+  );
+  await assert.rejects(
+    owner.runLosatPairsParallel([job], { ...options, executionMode: 'threaded' }),
+    (error) => error.code === 'LOSAT_THREADING_UNAVAILABLE' && error.stage === 'losat'
+      && error.context.reason === 'CROSS_ORIGIN_ISOLATION'
+  );
+  assert.equal(workers.length, 0, 'no LOSAT job is dispatched');
+  assert.deepEqual(await owner.runLosatPairsParallel([], { ...options, executionMode: 'threaded' }), [],
+    'a fully cached rerun dispatches nothing and succeeds');
+});

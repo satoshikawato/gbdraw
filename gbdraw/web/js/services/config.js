@@ -126,7 +126,8 @@ import {
 import { migrateLegacyRecordDisplayDrafts } from '../app/record-display-options.js';
 import {
   buildOrthogroupFeatureIndex,
-  enrichFeaturesWithOrthogroups
+  enrichFeaturesWithOrthogroups,
+  normalizeOrthogroupDormantOverrides
 } from './orthogroup-feature-metadata.js';
 import {
   isResourceBackedCanonicalComparison,
@@ -998,7 +999,8 @@ export const buildConfigData = () => ({
   unmanagedConfigOverrides: cloneJsonData(state.unmanagedConfigOverrides || {}),
   webEdits: {
     orthogroupNameOverrides: cloneStringMap(state.orthogroupNameOverrides),
-    orthogroupDescriptionOverrides: cloneStringMap(state.orthogroupDescriptionOverrides)
+    orthogroupDescriptionOverrides: cloneStringMap(state.orthogroupDescriptionOverrides),
+    orthogroupDormantOverrides: normalizeOrthogroupDormantOverrides(state.orthogroupDormantOverrides)
   }
 });
 
@@ -2327,6 +2329,9 @@ export const applyConfigData = (data, { resolveTrackPlacements = true } = {}) =>
   if (Object.prototype.hasOwnProperty.call(webEdits, 'orthogroupDescriptionOverrides')) {
     replaceStringMap(state.orthogroupDescriptionOverrides, webEdits.orthogroupDescriptionOverrides);
   }
+  // Absent in older Sessions: no dormant names (D-21).
+  clearObject(state.orthogroupDormantOverrides);
+  Object.assign(state.orthogroupDormantOverrides, normalizeOrthogroupDormantOverrides(webEdits.orthogroupDormantOverrides));
   state.modeProfileStateManager?.importState?.(
     data.modeProfiles ?? null,
     state.mode.value,
@@ -2811,6 +2816,11 @@ export const applyOrthogroupStateData = (
   Object.keys(state.orthogroupDescriptionOverrides).forEach((id) => {
     if (!groupIdSet.has(id)) delete state.orthogroupDescriptionOverrides[id];
   });
+  if (Object.hasOwn(orthogroupState, 'orthogroupDormantOverrides')) {
+    clearObject(state.orthogroupDormantOverrides);
+    Object.assign(state.orthogroupDormantOverrides,
+      normalizeOrthogroupDormantOverrides(orthogroupState.orthogroupDormantOverrides));
+  }
 };
 
 const customDepthRequested = (mode, sourceState) => {
@@ -3674,6 +3684,7 @@ const resetSessionBaseline = () => {
   state.lastRunInfo.value = null;
   state.trackSlotResolvedGeometry.value = null;
   state.annotationWarnings.value = [];
+  state.comparisonWarnings.value = [];
   applyFiles(null);
   state.losatCache.value = new Map();
   state.losatDerivedCache.value = new Map();
@@ -3688,6 +3699,7 @@ const resetSessionBaseline = () => {
   state.selectedOrthogroupAlignmentFeature.value = '';
   clearObject(state.orthogroupNameOverrides);
   clearObject(state.orthogroupDescriptionOverrides);
+  clearObject(state.orthogroupDormantOverrides);
   state.extractedFeatures.value = [];
   if (state.biologicalFeatures) state.biologicalFeatures.value = [];
   state.featureSelectorSafetyScope.value = [];
@@ -3909,7 +3921,8 @@ export const buildOrthogroupStateData = () => ({
   groups: Array.isArray(state.orthogroups.value) ? cloneJsonData(state.orthogroups.value) : [],
   selectedOrthogroupId: String(state.selectedOrthogroupId.value || ''),
   orthogroupNameOverrides: cloneStringMap(state.orthogroupNameOverrides),
-  orthogroupDescriptionOverrides: cloneStringMap(state.orthogroupDescriptionOverrides)
+  orthogroupDescriptionOverrides: cloneStringMap(state.orthogroupDescriptionOverrides),
+  orthogroupDormantOverrides: normalizeOrthogroupDormantOverrides(state.orthogroupDormantOverrides)
 });
 
 export const buildRunStateData = () => ({
@@ -4135,7 +4148,9 @@ const exportSessionDocument = async (
     ...(!settingsOnly ? { runMetadata: {
       ...(state.trackSlotResolvedGeometry.value
         ? { trackSlotGeometry: cloneJsonData(state.trackSlotResolvedGeometry.value) } : {}),
-      annotationWarnings: cloneJsonData(state.annotationWarnings.value)
+      annotationWarnings: cloneJsonData(state.annotationWarnings.value),
+      ...(state.comparisonWarnings.value.length
+        ? { comparisonWarnings: cloneJsonData(state.comparisonWarnings.value) } : {})
     } } : {}),
     features: {
       selectedFeatureRecordIdx: state.selectedFeatureRecordIdx.value,
@@ -4649,6 +4664,9 @@ const importSessionDocument = async (e, options = {}) => {
     applyResultsData(committedImportedResults, ui);
     state.annotationWarnings.value = cloneJsonData(
       projectionResult?.artifactState?.runMetadata?.annotationWarnings || []
+    );
+    state.comparisonWarnings.value = cloneJsonData(
+      projectionResult?.artifactState?.runMetadata?.comparisonWarnings || []
     );
     state.trackSlotResolvedGeometry.value = cloneJsonData(
       projectionResult?.artifactState?.runMetadata?.trackSlotGeometry ?? null

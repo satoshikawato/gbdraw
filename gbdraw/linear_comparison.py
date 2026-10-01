@@ -203,20 +203,44 @@ def _rows_without_feature_binding(frame: DataFrame) -> DataFrame:
     return frame.loc[~present.any(axis=1)]
 
 
+COMPARISON_RECORD_ID_UNMATCHED = "comparison_record_id_unmatched"
+
+
+@dataclass(frozen=True)
+class ComparisonRecordIdWarning:
+    """Table rows whose sequence IDs name no displayed record (PD-OI-074).
+
+    The rows stay on the endpoint records assigned by position. The CLI logs
+    ``message``; the Web adapter carries it in the Run metadata because browser
+    execution discards logging.
+    """
+
+    query_record_index: int
+    subject_record_index: int
+    query_record_id: str
+    subject_record_id: str
+    row_count: int
+    example_ids: tuple[str, ...]
+    message: str
+    code: str = COMPARISON_RECORD_ID_UNMATCHED
+
+
 def validate_linear_comparison_record_ids(
     comparisons: Sequence[LinearComparison],
     records: Sequence[object],
-) -> None:
+) -> tuple[ComparisonRecordIdWarning, ...]:
     """Check table query/subject IDs against each comparison's endpoint records.
 
     A row that names the opposite endpoint or another displayed record raises
     ComparisonIdentityError. IDs that name no displayed record keep positional
-    placement with a warning. Version suffixes (``.1``) are tolerated. Rows
-    bound to source features are checked by feature identity instead. Every
-    Linear comparison input (``-b`` files, comparison tables, typed and Web
-    requests) reaches this check beside the topology check.
+    placement; each affected endpoint pair is logged and returned as a warning.
+    Version suffixes (``.1``) are tolerated. Rows bound to source features are
+    checked by feature identity instead. Every Linear comparison input (``-b``
+    files, comparison tables, typed and Web requests) reaches this check beside
+    the topology check.
     """
 
+    warnings: list[ComparisonRecordIdWarning] = []
     id_index = _record_id_index(records)
     for comparison in comparisons:
         frame = _rows_without_feature_binding(comparison.matches)
@@ -226,10 +250,13 @@ def validate_linear_comparison_record_ids(
             "query": comparison.query_record_index,
             "subject": comparison.subject_record_index,
         }
+        record_ids = {
+            role: str(getattr(records[endpoint], "id", "")).strip()
+            for role, endpoint in endpoints.items()
+        }
         pair = (
-            f"query record #{endpoints['query'] + 1} "
-            f"{str(getattr(records[endpoints['query']], 'id', '')).strip()!r} and subject record "
-            f"#{endpoints['subject'] + 1} {str(getattr(records[endpoints['subject']], 'id', '')).strip()!r}"
+            f"query record #{endpoints['query'] + 1} {record_ids['query']!r} and subject record "
+            f"#{endpoints['subject'] + 1} {record_ids['subject']!r}"
         )
         unknown_rows = pd.Series(False, index=frame.index)
         unknown_ids: list[str] = []
@@ -258,16 +285,31 @@ def validate_linear_comparison_record_ids(
             unknown_rows |= table_ids.isin(unknown_role_ids)
             unknown_ids.extend(value for value in unknown_role_ids if value not in unknown_ids)
         if unknown_ids:
-            logger.warning(
-                "WARNING: Comparison between %s: %d row(s) use sequence IDs that match no "
-                "displayed record (%s); these rows are drawn on the records assigned by position.",
-                pair,
-                int(unknown_rows.sum()),
-                ", ".join(repr(value) for value in unknown_ids[:3]),
+            row_count = int(unknown_rows.sum())
+            example_ids = tuple(unknown_ids[:3])
+            message = (
+                f"Comparison between {pair}: {row_count} row(s) use sequence IDs that match no "
+                f"displayed record ({', '.join(repr(value) for value in example_ids)}); "
+                "these rows are drawn on the records assigned by position."
             )
+            logger.warning("WARNING: %s", message)
+            warnings.append(
+                ComparisonRecordIdWarning(
+                    query_record_index=endpoints["query"],
+                    subject_record_index=endpoints["subject"],
+                    query_record_id=record_ids["query"],
+                    subject_record_id=record_ids["subject"],
+                    row_count=row_count,
+                    example_ids=example_ids,
+                    message=message,
+                )
+            )
+    return tuple(warnings)
 
 
 __all__ = [
+    "COMPARISON_RECORD_ID_UNMATCHED",
+    "ComparisonRecordIdWarning",
     "LinearComparison",
     "merge_linear_comparisons",
     "validate_linear_comparison_record_ids",

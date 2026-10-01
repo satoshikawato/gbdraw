@@ -1215,10 +1215,8 @@ test('structured comparison errors open and focus their owning disclosure', asyn
   await expect(page.getByRole('combobox', { name: 'LOSATP mode' })).toBeFocused();
 });
 
-test('uploaded BLAST IDs bind to endpoint records and malformed or contradictory tables keep the Result', async ({ page }) => {
-  // CO-06 (PD-OI-074): unknown IDs keep positional placement with endpoint
-  // metadata, so match FASTA resolves; a swapped table fails before drawing.
-  test.setTimeout(300000);
+// Two uploaded GenBank records joined by one uploaded-table comparison (CO-06).
+const prepareUploadedTablePair = async (page) => {
   await openLinear(page);
   await page.evaluate(async (records) => {
     const app = window.__GBDRAW_APP__;
@@ -1267,6 +1265,14 @@ test('uploaded BLAST IDs bind to endpoint records and malformed or contradictory
       ] : []
     };
   }, { text_: text, name_: name });
+  return { hit, generateWithTable };
+};
+
+test('uploaded BLAST IDs bind to endpoint records and malformed or contradictory tables keep the Result', async ({ page }) => {
+  // CO-06 (PD-OI-074): unknown IDs keep positional placement with endpoint
+  // metadata, so match FASTA resolves; a swapped table fails before drawing.
+  test.setTimeout(300000);
+  const { hit, generateWithTable } = await prepareUploadedTablePair(page);
 
   const unrelated = await generateWithTable(hit('contig_A', 'contig_B'), 'unrelated-ids.tsv');
   expect(unrelated.status, unrelated.errorCode).toBe('ok');
@@ -1311,6 +1317,50 @@ test('uploaded BLAST IDs bind to endpoint records and malformed or contradictory
   expect(swapped.content).toBe(unrelated.content);
   await expect(page.getByRole('alert', { name: 'Generation Error' }))
     .toContainText('Comparison endpoints disagree');
+});
+
+test('unmatched uploaded table IDs show a notice that follows the Result through Save and Load', async ({ page }) => {
+  // CO-06 carry-over (PD-OI-074): the CLI logs rows drawn by position; browser
+  // execution discards logging, so the Web states it beside the Result.
+  test.setTimeout(300000);
+  const { hit, generateWithTable } = await prepareUploadedTablePair(page);
+  const notice = page.getByTestId('comparison-id-notice');
+  const message = "Comparison between query record #1 'Co06A' and subject record #2 'Co06B': "
+    + "1 row(s) use sequence IDs that match no displayed record ('contig_A', 'contig_B'); "
+    + 'these rows are drawn on the records assigned by position.';
+
+  const matching = await generateWithTable(hit('Co06A', 'Co06B'), 'matching-ids.tsv');
+  expect(matching.status, matching.errorCode).toBe('ok');
+  await expect(notice).toHaveCount(0);
+
+  const unrelated = await generateWithTable(hit('contig_A', 'contig_B'), 'unrelated-ids.tsv');
+  expect(unrelated.status, unrelated.errorCode).toBe('ok');
+  await expect(notice).toBeVisible();
+  await expect(notice).toContainText('Comparison table rows were placed by position.');
+  await expect(notice).toContainText(message);
+
+  await page.evaluate(() => { window.__GBDRAW_APP__.sessionTitle = 'unmatched-table-ids'; });
+  const [saved] = await Promise.all([
+    page.waitForEvent('download'),
+    page.getByRole('banner').getByRole('button', { name: 'Save Session', exact: true }).click()
+  ]);
+  const savedSession = JSON.parse(gunzipSync(readFileSync(await saved.path())).toString('utf8'));
+  expect(savedSession.runMetadata.comparisonWarnings).toMatchObject([{
+    code: 'comparison_record_id_unmatched', queryRecordId: 'Co06A', subjectRecordId: 'Co06B',
+    rowCount: 1, exampleIds: ['contig_A', 'contig_B'], message
+  }]);
+
+  // A later Generate with matching IDs removes the notice from the new Result.
+  const rematched = await generateWithTable(hit('Co06A', 'Co06B'), 'matching-ids.tsv');
+  expect(rematched.status, rematched.errorCode).toBe('ok');
+  await expect(notice).toHaveCount(0);
+  expect(await page.evaluate(() => window.__GBDRAW_APP__.comparisonWarnings)).toEqual([]);
+
+  // Loading the saved Session restores the notice with its Result.
+  page.once('dialog', (dialog) => dialog.accept());
+  await page.locator('input[accept^=".json,"]').first().setInputFiles(await saved.path());
+  await expect(notice).toBeVisible();
+  await expect(notice).toContainText(message);
 });
 
 test('mobile layout has no overflow, fixed-action overlap, or semantic tab-order drift', async ({ page }) => {

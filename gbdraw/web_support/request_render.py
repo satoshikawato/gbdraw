@@ -233,6 +233,24 @@ def _render_canonical_web_request(
         for result_index, item in enumerate(items)
         for warning in item.annotation_warnings
     ]
+    # Browser execution discards logging, so table-ID warnings travel as metadata.
+    metadata["comparisonWarnings"] = [
+        {
+            "code": warning.code,
+            "queryRecordIndex": warning.query_record_index,
+            "subjectRecordIndex": warning.subject_record_index,
+            "queryRecordId": warning.query_record_id,
+            "subjectRecordId": warning.subject_record_id,
+            "rowCount": warning.row_count,
+            "exampleIds": list(warning.example_ids),
+            "message": warning.message,
+            "resultIndex": result_index,
+            "resultName": results[result_index]["name"],
+        }
+        for result_index, item in enumerate(items)
+        if item.linear_metadata is not None
+        for warning in item.linear_metadata.comparison_warnings
+    ]
     return {
         "results": results,
         "metadata": metadata,

@@ -3195,6 +3195,8 @@ const completeComparisonSnapshot = (page) => page.evaluate(() => {
   ].join('->'));
   return {
     error: app.errorLog,
+    // LOSAT rows carry the displayed record IDs, so they never raise the PD-OI-074 notice.
+    comparisonWarnings: app.comparisonWarnings,
     selectors: request.records.map((record) => record.selector.value),
     rows: request.records.map((record) => record.presentation.gridRow),
     pairs: request.comparisons.filter((comparison) => comparison.kind === 'nucleotideBlast')
@@ -3586,11 +3588,32 @@ test('@comparison-contract OIC-015: multi-record Adjacent searches all six pairs
   expect(restored.rows).toEqual([1, 1, 2, 2, 3]);
   expect(restored.pairs).toEqual([[0, 2], [0, 3], [1, 2], [1, 3], [2, 4], [3, 4]]);
   expect(restored.error).toBeNull();
+  expect(restored.comparisonWarnings).toEqual([]);
   expect(restored.sourceCount).toBe(2);
   await page.setViewportSize({ width: 390, height: 844 });
   await controls.last().scrollIntoViewIfNeeded();
   await page.screenshot({ path: testInfo.outputPath('per-record-layout-mobile.png') });
 });
+
+// PD-OI-018 revision 4 plan for the five-record, two-file fixture (records 0-1 | 2-4)
+// when every ordered record pair, self pairs included, is requested: the query
+// file searches the whole subject file (2 jobs), a within-file comparison
+// searches that file without the query record (5 jobs, one per query), and a
+// requested self comparison searches the record alone (5 jobs). No job searches
+// a database that holds its own query record unless it is the requested self job.
+const REVISION_4_ALL_PAIR_JOBS = (() => {
+  const job = (query, subject) => ({
+    query, subject, pairs: query.flatMap((q) => subject.map((s) => [q, s]))
+  });
+  return [
+    job([0, 1], [2, 3, 4]), job([2, 3, 4], [0, 1]),
+    ...[0, 1, 2, 3, 4].map((index) => job([index], [index])),
+    job([0], [1]), job([1], [0]), job([2], [3, 4]), job([3], [2, 4]), job([4], [2, 3])
+  ];
+})();
+const describeLosatJob = (job) => JSON.stringify([
+  job.query, job.subject, [...job.pairs].sort((a, b) => a[0] - b[0] || a[1] - b[1])
+]);
 
 for (const mode of ['orthogroup', 'collinear']) {
   test(`@comparison-contract OIC-015: ${mode} all-record evidence includes same-row and non-adjacent records`, async ({ page }) => {
@@ -3611,12 +3634,21 @@ for (const mode of ['orthogroup', 'collinear']) {
     const snapshot = await completeComparisonSnapshot(page);
     expect(snapshot.selectors).toHaveLength(5);
     expect(snapshot.jobs).toHaveLength(1);
-    expect(snapshot.jobs[0]).toHaveLength(4);
+    expect(snapshot.jobs[0]).toHaveLength(12);
+    expect(snapshot.jobs[0].map(describeLosatJob).sort())
+      .toEqual(REVISION_4_ALL_PAIR_JOBS.map(describeLosatJob).sort());
+    for (const job of snapshot.jobs[0]) {
+      const searchesQuery = job.query.some((index) => job.subject.includes(index));
+      expect(searchesQuery, JSON.stringify(job)).toBe(
+        job.query.length === 1 && job.subject.length === 1 && job.query[0] === job.subject[0]
+      );
+    }
     const pairs = snapshot.jobs.flat().flatMap((job) => job.pairs).map((pair) => pair.join('->')).sort();
     const allPairs = Array.from({ length: 5 }, (_, q) => Array.from({ length: 5 }, (_, s) => `${q}->${s}`)).flat().sort();
     expect(pairs).toEqual(allPairs);
     expect(snapshot.sourceCount).toBe(2);
     expect(snapshot.error).toBeNull();
+    expect(snapshot.comparisonWarnings).toEqual([]);
     if (mode === 'orthogroup') {
       expect(snapshot.svgPairs).toEqual(['0->2', '1->2', '2->3', '2->4']);
     }
@@ -3832,7 +3864,7 @@ test('@comparison-contract record rotation adds zero LOSATP source jobs and surv
   });
   const original = await run();
   expect(original.result).toEqual({ status: 'ok' });
-  expect(original.jobCount).toBe(4);
+  expect(original.jobCount).toBe(12);
   await page.evaluate(async () => {
     const app = window.__GBDRAW_APP__;
     const row = app.recordDisplayControls.rowsFor(app.linearSeqs[0].uid)[0];
@@ -3841,7 +3873,7 @@ test('@comparison-contract record rotation adds zero LOSATP source jobs and surv
   });
   const shifted = await run();
   expect(shifted.result).toEqual({ status: 'ok' });
-  expect(shifted.jobCount).toBe(4);
+  expect(shifted.jobCount).toBe(12);
   expect(shifted.firstRecord.display).toMatchObject({
     isCircular: true,
     startCoordinate: 31
@@ -3881,7 +3913,7 @@ test('@comparison-contract record rotation adds zero LOSATP source jobs and surv
         .map((path) => path.getAttribute('d')).join('\n')
     };
   });
-  expect(popup.jobCount).toBe(4);
+  expect(popup.jobCount).toBe(12);
   expect(popup.firstRecord.display.startCoordinate).toBe(popupStart);
   expect(popup.records.slice(1)).toEqual(beforePopupRequest.records.slice(1));
   expect(popup.comparisons).toEqual(beforePopupRequest.comparisons);
@@ -3907,7 +3939,7 @@ test('@comparison-contract record rotation adds zero LOSATP source jobs and surv
   });
   const reversed = await run();
   expect(reversed.result, JSON.stringify(reversed.error)).toEqual({ status: 'ok' });
-  expect(reversed.jobCount).toBe(4);
+  expect(reversed.jobCount).toBe(12);
   expect(reversed.geometry).not.toBe(shifted.geometry);
   const saved = page.waitForEvent('download');
   await evaluateWithRetainedPromise(page, async () => {
@@ -3930,7 +3962,9 @@ test('@comparison-contract record rotation adds zero LOSATP source jobs and surv
   }));
   const cropped = await run();
   expect(cropped.result, JSON.stringify(cropped.error)).toEqual({ status: 'ok' });
-  expect(cropped.jobCount).toBe(3);
+  // Cropping record 0 changes the database or query of every job that holds
+  // it: both between-file jobs, its self job, 0 against 1, and 1 against 0.
+  expect(cropped.jobCount).toBe(5);
   expect(cropped.firstRecord.region).toMatchObject({ start: 1, end: 210, reverseComplement: true });
 });
 
@@ -3979,15 +4013,21 @@ test('@comparison-contract Total threads reallocates Auto runs and threads in re
   const runs = settings.getByRole('combobox', { name: 'LOSAT parallel runs', exact: true });
   const threads = settings.getByRole('combobox', { name: 'LOSAT threads per run', exact: true });
   await settings.getByRole('combobox', { name: 'LOSAT execution', exact: true }).selectOption('threaded');
-  for (const [budget, parallel, perRun] of [['32', 4, 8], ['16', 4, 4], ['2', 2, 1], ['8', 4, 2]]) {
+  // The PD-OI-018 revision 4 plan has 12 source jobs for these two files (2
+  // between-file, 5 within-file, 5 requested self searches), so Auto runs are
+  // min(12, budget) and Auto threads are floor(budget / runs).
+  expect(await page.evaluate(() => window.__GBDRAW_APP__.losatEstimatedJobCount)).toBe(12);
+  for (const [budget, parallel, perRun] of [
+    ['32', 12, 2], ['16', 12, 1], ['2', 2, 1], ['8', 8, 1], ['24', 12, 2]
+  ]) {
     await total.selectOption(budget);
     await expect(runs.locator('option:checked')).toHaveText(`Auto (${parallel} runs)`);
     await expect(threads.locator('option:checked')).toHaveText(`Auto (${perRun})`);
   }
   expect(await page.evaluate(() => window.__GBDRAW_APP__.runAnalysis())).toEqual({ status: 'ok' });
-  expect(await page.evaluate(() => window.__THREAD_DISPATCHES__)).toEqual([2, 2, 2, 2]);
+  expect(await page.evaluate(() => window.__THREAD_DISPATCHES__)).toEqual(Array(12).fill(2));
   expect(await page.evaluate(() => window.__THREAD_STATUSES__.find(status => status.state === 'running')))
-    .toMatchObject({ mode: 'threaded', pairWorkers: 4, threadsPerJob: 2, totalBudget: 8 });
+    .toMatchObject({ mode: 'threaded', pairWorkers: 12, threadsPerJob: 2, totalBudget: 24 });
 
   await total.selectOption('32');
   await runs.selectOption('2');

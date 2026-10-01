@@ -1,4 +1,4 @@
-import { normalizeUserFacingError } from './error-normalization.js';
+import { diagnosticError, normalizeUserFacingError } from './error-normalization.js';
 import { LOSAT_THREADED_WASM_URL, WASI_SHIM_URL } from '../config.js';
 import { resolveLosatThreadPlan } from './losat-thread-plan.js';
 import {
@@ -95,18 +95,26 @@ const buildThreadingStatus = (state, message, details = {}) => ({
   ...details
 });
 
+// The synchronous browser preconditions of threaded LOSAT (PD-OI-018: threaded
+// stays strict; Settings and dispatch read the same answer).
+export const losatThreadingPrecondition = () => {
+  if (typeof Worker !== 'function') {
+    return buildThreadingStatus('unavailable', 'Web Workers are unavailable in this browser.', { reason: 'WORKERS' });
+  }
+  if (typeof SharedArrayBuffer !== 'function') {
+    return buildThreadingStatus('unavailable', 'SharedArrayBuffer is unavailable.', { reason: 'SHARED_MEMORY' });
+  }
+  if (globalThis.crossOriginIsolated !== true) {
+    return buildThreadingStatus('unavailable', 'Cross-origin isolation is not enabled.', { reason: 'CROSS_ORIGIN_ISOLATION' });
+  }
+  return buildThreadingStatus('available', 'Threaded LOSAT preconditions are met.');
+};
+
 export const getLosatThreadingSupport = async ({
   threadedWasmPath = DEFAULT_THREADED_WASM_PATH
 } = {}) => {
-  if (typeof Worker !== 'function') {
-    return buildThreadingStatus('unavailable', 'Web Workers are unavailable in this browser.');
-  }
-  if (typeof SharedArrayBuffer !== 'function') {
-    return buildThreadingStatus('unavailable', 'SharedArrayBuffer is unavailable.');
-  }
-  if (globalThis.crossOriginIsolated !== true) {
-    return buildThreadingStatus('unavailable', 'Cross-origin isolation is not enabled.');
-  }
+  const precondition = losatThreadingPrecondition();
+  if (precondition.state !== 'available') return precondition;
 
   const key = String(threadedWasmPath || DEFAULT_THREADED_WASM_PATH);
   if (!threadedSupportPromises.has(key)) {
@@ -116,7 +124,7 @@ export const getLosatThreadingSupport = async ({
         return buildThreadingStatus(
           'unavailable',
           'Threaded LOSAT wasm is missing WASI thread imports or exports.',
-          { wasmModule: null }
+          { wasmModule: null, reason: 'THREADED_WASM' }
         );
       }
       return buildThreadingStatus(
@@ -790,7 +798,8 @@ export const runLosatPairsParallel = async (jobs, options = {}) => {
         console.warn('Threaded LOSAT failed; falling back to serial browser execution.', diagnostic);
       }
     } else if (executionMode === 'threaded') {
-      throw new Error(support.message || 'Threaded LOSAT is unavailable.');
+      // Only uncached jobs reach dispatch, so a fully cached rerun still succeeds.
+      throw diagnosticError('LOSAT_THREADING_UNAVAILABLE', { reason: support.reason || 'THREADED_WASM' }, { stage: 'losat' });
     } else {
       threadedFallbackReason = support.state === 'available'
         ? 'Current LOSAT workload is below the threaded auto threshold.'

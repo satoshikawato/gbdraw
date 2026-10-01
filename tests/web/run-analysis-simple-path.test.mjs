@@ -467,6 +467,30 @@ test('superseded canonical execution stops before catalog and SVG admission', as
   assert.equal(commits, 0);
 });
 
+test('canonical execution carries the Worker comparison table ID warnings to the committed Result', async () => {
+  const warning = {
+    code: 'comparison_record_id_unmatched', queryRecordIndex: 0, subjectRecordIndex: 1,
+    queryRecordId: 'R2', subjectRecordId: 'R3', rowCount: 1, exampleIds: ['contig_A'],
+    message: 'Comparison between query record #1 \'R2\' and subject record #2 \'R3\': 1 row(s) use sequence IDs that match no displayed record (\'contig_A\'); these rows are drawn on the records assigned by position.',
+    resultIndex: 0, resultName: 'out.svg'
+  };
+  const run = (metadata) => executeCanonicalRenderCandidate({
+    canonical: { renderRequest: { schema: 7 }, resources: {} },
+    mode: 'linear',
+    generationExecutor: async () => ({ results: [{ name: 'out.svg', content: '<svg/>' }], metadata }),
+    catalogAdmission: () => ({ catalog: null }),
+    prepareCommit: () => ({})
+  });
+  const carried = await run({ comparisonWarnings: [warning] });
+  assert.equal(carried.status, 'ok');
+  assert.deepEqual(carried.comparisonWarnings, [warning]);
+  assert.deepEqual((await run({})).comparisonWarnings, []);
+  await assert.rejects(
+    run({ comparisonWarnings: [{ ...warning, resultName: 'stale.svg' }] }),
+    /Result metadata schema/
+  );
+});
+
 test('audit-5 owner: direct simple createRunAnalysis path is worker-only and catalog-transactional', async () => {
   const structuralMetrics = {};
   const lifecycleEvents = [];
@@ -1462,7 +1486,9 @@ test('neutral conservation replay delegates lazy resources to the shared reader'
       committedRenderRequest = canonical.renderRequest;
       committedCanonicalSession = canonical;
     },
-    getCommittedCanonicalRenderRequest: () => committedRenderRequest,
+    getCommittedCanonicalSession: () => (committedCanonicalSession
+      ? { ...committedCanonicalSession, renderRequest: committedRenderRequest }
+      : null),
     prepareLinearRecordCatalog: async () => ({
       catalog: { mode: 'linear', status: 'ready', records: [] },
       error: ''

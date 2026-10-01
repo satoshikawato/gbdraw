@@ -360,6 +360,59 @@ def test_embedded_web_request_preserves_in_memory_comparison_metadata(
     assert 'data-orthogroup-id="og-web"' in svg
 
 
+def test_web_request_carries_unmatched_comparison_table_id_warnings(tmp_path) -> None:
+    """PD-OI-074: browser execution discards logging, so the warning rides on metadata."""
+
+    from gbdraw.api import LinearComparison
+    from gbdraw.io.comparisons import COMPARISON_COLUMNS
+
+    def render(query: str, subject: str) -> dict:
+        records = [SeqRecord(Seq("ATGC" * 750), id=record_id) for record_id in ("R2", "R3")]
+        for record in records:
+            record.annotations["molecule_type"] = "DNA"
+        hits = pd.DataFrame(
+            [[query, subject, 99.0, 1000, 0, 0, 2001, 3000, 1, 1000, 1e-100, 1800.0]],
+            columns=COMPARISON_COLUMNS,
+        )
+        document = build_session_document(
+            LinearDiagramRequest(
+                records=tuple(
+                    RecordInput(source=InMemoryRecordSource(record)) for record in records
+                ),
+                options=LinearDiagramOptions(linear_comparisons=(LinearComparison(0, 1, hits),)),
+                output=RenderOutputRequest(output_prefix="web-ids", formats=("svg",)),
+            )
+        ).to_dict()
+        return render_embedded_canonical_web_request(
+            document["renderRequest"],
+            resources=document["resources"],
+            workspace=tmp_path / f"workspace-{query}",
+        )
+
+    unmatched = render("contig_A", "contig_B")
+    assert unmatched["metadata"]["comparisonWarnings"] == [
+        {
+            "code": "comparison_record_id_unmatched",
+            "queryRecordIndex": 0,
+            "subjectRecordIndex": 1,
+            "queryRecordId": "R2",
+            "subjectRecordId": "R3",
+            "rowCount": 1,
+            "exampleIds": ["contig_A", "contig_B"],
+            "message": (
+                "Comparison between query record #1 'R2' and subject record #2 'R3': "
+                "1 row(s) use sequence IDs that match no displayed record "
+                "('contig_A', 'contig_B'); these rows are drawn on the records "
+                "assigned by position."
+            ),
+            "resultIndex": 0,
+            "resultName": "web-ids.svg",
+        }
+    ]
+    assert 'data-query-record-id="R2"' in unmatched["results"][0]["content"]
+    assert render("R2", "R3")["metadata"]["comparisonWarnings"] == []
+
+
 @pytest.mark.parametrize(
     ("formats", "output_prefix"),
     [

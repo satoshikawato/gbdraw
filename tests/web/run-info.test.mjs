@@ -15,6 +15,7 @@ const modulePath = join(tempDir, 'js', 'app', 'run-info.js');
 
 const {
   buildRunInfo,
+  LOSAT_DATABASE_SCOPE_NOTE,
   buildSourceRecipe,
   isCliInvocationSessionExportable,
   quoteShellArg,
@@ -1146,4 +1147,15 @@ test('a Linear scale font without a ruler-label font is not a lossless recipe (G
   for (const flag of ['--scale_font_size', '--ruler_label_font_size']) {
     assert.equal(linked.args[linked.args.indexOf(flag) + 1], '10', JSON.stringify(linked.args));
   }
+});
+
+// PD-OI-018 revision 4 and D-40: Run Info states the LOSAT E-value database.
+test('Run Info states the LOSAT search database only when LOSAT comparisons are present', () => {
+  const recipe = { mode: 'linear', available: true, args: ['--gbk', '/a.gb'], fileMetadata: [] };
+  const withLosat = buildRunInfo({ mode: 'linear', sourceRecipe: recipe, losatComparisons: true });
+  assert(withLosat.reproducibility.notes.includes(LOSAT_DATABASE_SCOPE_NOTE));
+  assert.match(LOSAT_DATABASE_SCOPE_NOTE, /subject source file/);
+  assert.match(LOSAT_DATABASE_SCOPE_NOTE, /CLI searches each record pair separately/);
+  const without = buildRunInfo({ mode: 'linear', sourceRecipe: recipe });
+  assert(!without.reproducibility.notes.includes(LOSAT_DATABASE_SCOPE_NOTE));
 });

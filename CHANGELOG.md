@@ -193,7 +193,29 @@ decisions are in
 
 <!-- web-gui-audit-20260930 P13 -->
 
-<!-- web-gui-audit-20260930 P14 -->
+- Web LOSAT keeps one job per source file pair, but a record no longer
+  searches a database that contains itself unless that search was requested.
+  Two records in one file now give the same links as two separate files with
+  **Max target seqs** `1`, where self hits previously removed every link.
+  Comparisons within one file need more jobs. E-values for multi-record files
+  still differ from the CLI, which searches each record pair (CO-04, D-40).
+- The Settings LOSAT job count now comes from the plan that Generate runs
+  (N-10). Run Info states the E-value database.
+- A LOSATP Generate after a Feature visibility change searches again instead of
+  reusing comparisons that still included hidden proteins (CO-02).
+- Threaded LOSAT without cross-origin isolation fails with a LOSAT diagnostic
+  instead of UNKNOWN, and the option reads **Threaded (unavailable here)**
+  (CO-01).
+- Rotating a Linear record with **Orient feature forward** now sets the File
+  card's reverse-complement checkbox, so LOSATN ribbons stay on the homologous
+  region and the checkbox controls the orientation again (CO-03, N-09).
+- A renamed Similarity group keeps its name only on the same members after
+  regrouping; other names are saved until those members return (CO-08).
+- The web app now shows **Comparison table rows were placed by position.**
+  when an uploaded comparison table has sequence IDs that match no displayed
+  record. The CLI already logged this warning; the browser discarded it
+  (CO-06 carry-over, PD-OI-074). Sessions store the notice in
+  `runMetadata.comparisonWarnings`.
 
 <!-- web-gui-audit-20260930 P15 -->
 

@@ -1879,7 +1879,9 @@ def assemble_linear_diagram(
         )
     normalized_comparisons = list(merge_linear_comparisons(normalized_comparisons))
     validate_linear_comparison_topology(normalized_comparisons, rows_by_record)
-    validate_linear_comparison_record_ids(normalized_comparisons, records)
+    comparison_record_id_warnings = validate_linear_comparison_record_ids(
+        normalized_comparisons, records
+    )
     comparisons = [item.matches for item in normalized_comparisons]
     has_blast = bool(normalized_comparisons)
 
@@ -3088,6 +3090,7 @@ def assemble_linear_diagram(
     ))
     setattr(canvas, "_gbdraw_linear_source_content_bounds", source_primary_bounds)
     setattr(canvas, "_gbdraw_linear_composition_plan", composition_plan)
+    setattr(canvas, "_gbdraw_comparison_record_id_warnings", comparison_record_id_warnings)
 
     return canvas
 

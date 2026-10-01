@@ -371,7 +371,6 @@ test('Undo while a Generate is running is rejected as busy', async ({ page }) =>
 });
 
 test('default threaded LOSAT without cross-origin isolation reports a recognized diagnostic', async ({ page }) => {
-  test.fail(true, 'CO-01');
   test.setTimeout(300_000);
   await openFresh(page);
   await page.getByRole('button', { name: 'Linear', exact: true }).click();

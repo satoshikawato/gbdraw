@@ -61,8 +61,10 @@ another displayed record stops the run; in the web app, Generate reports a
 comparison-endpoint error and keeps the previous Result. IDs are compared with
 the record ID and name. A version suffix difference, such as `NC_000913` and `NC_000913.3`, is
 accepted. IDs that match no displayed record keep the positional assignment;
-the command line logs a warning. The SVG record-ID metadata always names the
-endpoint records.
+the command line logs a warning, and the web app shows **Comparison table rows
+were placed by position.** beside the Result. A Session file stores that notice
+as `runMetadata.comparisonWarnings` and restores it on Load. The SVG record-ID
+metadata always names the endpoint records.
 
 Depth input has `reference_name`, a 1-based positive `position`, and a
 non-negative `depth`. Files are normally headerless. One header line is

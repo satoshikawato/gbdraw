@@ -87,7 +87,7 @@ from gbdraw.api.options import (  # type: ignore[reportMissingImports]
     resolve_circular_diagram_options,
     resolve_linear_diagram_options,
 )
-from gbdraw.linear_comparison import LinearComparison
+from gbdraw.linear_comparison import ComparisonRecordIdWarning, LinearComparison
 from gbdraw.layout.linear_multi_record import record_pairs_between_adjacent_rows
 from gbdraw.layout.record_coordinates import RecordDisplayTransform
 from gbdraw.layout.similarity_alignment import SimilarityAlignmentPlan
@@ -178,6 +178,7 @@ class LinearDiagramMetadata:
     linear_comparisons: tuple[LinearComparison, ...] = ()
     orthogroups: OrthogroupResult | OrthogroupGraphResult | None = None
     collinearity_result: CollinearityResult | None = None
+    comparison_warnings: tuple[ComparisonRecordIdWarning, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -2127,6 +2128,7 @@ def assemble_linear_diagram_from_records(
             linear_comparisons=tuple(resolved_linear_comparisons),
             orthogroups=resolved_orthogroups,
             collinearity_result=resolved_collinearity_result,
+            comparison_warnings=getattr(canvas, "_gbdraw_comparison_record_id_warnings", ()),
         ),
     )
     return build_result if _return_build_result else canvas
