@@ -88,6 +88,24 @@ inference. Older Collinear Sessions that lack the checkbox setting retain ON
 for reproducibility. The Python and CLI omission defaults retain their previous
 behavior; typed requests can explicitly set `collinear_infer_orthogroups=False`.
 
+The Web app treats one source file as one genome when it runs LOSAT. Records
+from two different files are searched as one job per directed file pair, and
+the E-value database is the subject file. A comparison between two records of
+the same file searches that file without the query record, and a requested
+within-record search (Similarity groups, or Collinear with inference ON)
+searches the record alone, so a record never searches itself unless that search
+was requested. Run Info states this scope. The CLI and Python API search each
+record pair separately, so E-values for records packaged in a multi-record file
+can differ from the Web app. Settings shows the job count from the same plan
+that Generate runs.
+
+In the Web app, a Similarity group name or description stays with the exact set
+of member proteins. When regrouping changes the members, the name is kept as a
+saved name that waits for those members, returns when the same group forms
+again, and is listed with **Clear** in the Similarity group panel. Session files
+store saved names in `webEdits.orthogroupDormantOverrides`; older Sessions have
+none.
+
 Prepared rows retain `qseqid`, `sseqid`, `pident`, `length`, `mismatch`,
 `gapopen`, `qstart`, `qend`, `sstart`, `send`, `evalue`, and `bitscore` from
 the first 12 columns; extra columns are ignored. Query and subject are

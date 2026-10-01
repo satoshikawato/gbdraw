@@ -18,7 +18,9 @@ and generated diagrams are not analytics payloads.
 package. Its normal drawing workflow works without an internet connection once
 gbdraw is installed. Browser security policy still applies. Threaded LOSAT
 also requires a cross-origin-isolated page. Select **Serial** under
-**Execution** when that capability is unavailable. Where threaded execution is
+**Execution** when that capability is unavailable; the **Threaded** choice then
+reads **Threaded (unavailable here)**, and Generate with uncached LOSAT jobs
+reports `LOSAT_THREADING_UNAVAILABLE` at the `losat` stage. Where threaded execution is
 available, **Safe** is the conservative **Total threads** choice.
 
 A saved session embeds input resources and should be protected like those
