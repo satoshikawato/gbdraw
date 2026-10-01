@@ -111,7 +111,8 @@ Prepared rows retain `qseqid`, `sseqid`, `pident`, `length`, `mismatch`,
 the first 12 columns; extra columns are ignored. Query and subject are
 directional. In Linear mode, a row that names the other endpoint or another
 displayed record is rejected, a version suffix difference is accepted, and IDs
-that match no displayed record keep the positional pair with a warning. See
+that match no displayed record keep the positional pair with a warning (logged
+by the CLI, shown beside the Result in the web app). See
 [Comparison and numeric tables](input-formats-and-tsv-schemas.md#comparison-and-numeric-tables).
 A start greater than its end marks reverse orientation; it does not by itself
 mean that a hit crosses a Circular origin.

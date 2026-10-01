@@ -211,6 +211,11 @@ decisions are in
   region and the checkbox controls the orientation again (CO-03, N-09).
 - A renamed Similarity group keeps its name only on the same members after
   regrouping; other names are saved until those members return (CO-08).
+- The web app now shows **Comparison table rows were placed by position.**
+  when an uploaded comparison table has sequence IDs that match no displayed
+  record. The CLI already logged this warning; the browser discarded it
+  (CO-06 carry-over, PD-OI-074). Sessions store the notice in
+  `runMetadata.comparisonWarnings`.
 
 <!-- web-gui-audit-20260930 P15 -->
 
