@@ -70,6 +70,11 @@ for (const inputMethod of ['keyboard', 'pointer']) {
     await expect(select).toHaveValue('out');
     if (inputMethod === 'keyboard') {
       await summary.focus();
+      // The Labels and Label Mode help tips are tab stops before the select.
+      await page.keyboard.press('Tab');
+      await expect(summary.getByRole('button', { name: 'Help', exact: true })).toBeFocused();
+      await page.keyboard.press('Tab');
+      await expect(page.locator('button[aria-describedby="help-label-label-mode"]')).toBeFocused();
       await page.keyboard.press('Tab');
       await expect(select).toBeFocused();
       await page.keyboard.press('ArrowDown');
