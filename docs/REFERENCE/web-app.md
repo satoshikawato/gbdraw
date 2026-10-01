@@ -104,7 +104,9 @@ diagram, a manually moved legend, plot title, or Linear scale keeps its offset
 from the newly calculated position. The absolute position can change when
 settings change. Other manual positions have no new regeneration guarantee.
 **Undo** restores the previous Result. Failed, canceled, or superseded
-generation keeps the last successful Result.
+generation keeps the last successful Result. While a diagram is generating,
+**Undo** and **Redo** and their keyboard shortcuts are unavailable, and the
+header names the reason; settings edits remain available and are recorded.
 
 **Save Session** saves the current Result and supported settings draft together.
 **Load Session** displays that saved Result without applying a newer draft.
@@ -719,7 +721,12 @@ moved item, the previous Result remains available. Use that item's position
 reset or **Reset Layout**, or restore the matching settings, then Generate again.
 An offset near an edge may still clip or overlap another item; adjust canvas
 padding or reset its position. **Undo** and **Redo** traverse supported form and
-editor changes. **Reset Settings** is broader than undo and requires
+editor changes. Each change of a checkbox, radio button, select, or button is
+one step, whether it is made with the pointer, a click on its label text, or
+the keyboard, and also when a text field had focus; a text field's edit is its
+own step. Ctrl+Z undoes and Ctrl+Shift+Z or Ctrl+Y redoes (Cmd on macOS), also
+while a select has focus; in a text field these keys keep the browser's text
+undo. **Reset Settings** is broader than undo and requires
 confirmation. Generate when the exported figure should include draft settings.
 
 The export actions and session handoff rules are documented in [Output formats

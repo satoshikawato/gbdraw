@@ -602,17 +602,19 @@ export const runDiagramHelperOperation = (operation, payload = {}, { onProgress 
   });
 };
 
+// Cancel ends only Worker-side work. A Cancel during JS-side preparation keeps
+// the warm Worker; the caller's cancel check stops the pending dispatch.
 export const cancelDiagramGeneration = () => {
-  const error = new DiagramGenerationCanceledError();
   const request = activeRequest;
-  const hadActiveRequest = Boolean(
-    request || initState || activeFeatureRequests.size || activeHelperRequests.size
-  );
+  if (!request && !initState && !activeFeatureRequests.size && !activeHelperRequests.size) {
+    return false;
+  }
+  const error = new DiagramGenerationCanceledError();
   if (request) {
     settleActiveRequest(request, () => request.reject(error));
   }
   terminateWorker(error);
-  return hadActiveRequest;
+  return true;
 };
 
 export const disposeDiagramGenerationWorker = () => {

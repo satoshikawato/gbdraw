@@ -168,7 +168,6 @@ test('a preset reset honors Show Coordinate Scale off', async ({ page }) => {
 });
 
 test('clicking the text of a checkbox label records an Undo step', async ({ page }) => {
-  test.fail(true, 'SE-02');
   test.setTimeout(300_000);
   await openFresh(page);
   await loadSessionFile(page, HMMT_SESSION);
@@ -187,7 +186,6 @@ test('clicking the text of a checkbox label records an Undo step', async ({ page
 });
 
 test('a checkbox click while a text field has focus records its own Undo step', async ({ page }) => {
-  test.fail(true, 'SE-03');
   test.setTimeout(300_000);
   await openFresh(page);
   await loadSessionFile(page, HMMT_SESSION);
@@ -210,7 +208,6 @@ test('a checkbox click while a text field has focus records its own Undo step', 
 });
 
 test('Undo while a Generate is running is rejected as busy', async ({ page }) => {
-  test.fail(true, 'GE-06');
   test.setTimeout(300_000);
   await openWithGenBank(page, HMMT, () => { window.__GBDRAW_APP__.adv.scale_interval = 2000; });
   await generateAndWaitForResult(page);

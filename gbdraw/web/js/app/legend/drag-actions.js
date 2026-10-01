@@ -83,8 +83,9 @@ export const createLegendDragActions = ({ state, extractLegendEntries, history =
     cancelLegendDragFrame();
     pendingLegendPointer = null;
     legendDragContext = { binding, svg };
+    // The drag gesture owns its transaction and settles a focused control's (N-18).
     legendDragTxPromise = history?.begin
-      ? history.begin('Move legend', { source: 'legend-drag' })
+      ? history.begin('Move legend', { source: 'legend-drag', owner: Symbol('Move legend') })
       : null;
     legendDragging.value = true;
     legendDragStart.x = e.clientX;
