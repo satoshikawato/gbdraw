@@ -30,6 +30,8 @@ test('availability derives Session exclusivity and preparation from existing own
   state.processing.value = true;
   assert.match(sessionOperationAvailability('save').reason, /Generating/);
   assert.match(sessionOperationAvailability('load').reason, /Generating/);
+  // PD-OI-051 (D-37): draft edits stay available while Generate runs. Undo and
+  // Redo use History availability instead (D-28, next test).
   assert.equal(sessionOperationAvailability(), null);
   state.processing.value = false;
   state.labelReflowProcessing.value = true;
@@ -47,6 +49,109 @@ const historyFor = (options = {}) => createHistoryManager({
   buildIntent: async () => ({ value: 1 }), applyIntent: async () => {},
   buildCheckpoint: async () => ({ value: 1 }), applyCheckpoint: async () => {},
   mutationAvailability: sessionOperationAvailability, ...options
+});
+
+const trackedRefs = () => {
+  let reads = null;
+  const makeRef = (initial) => {
+    let current = initial;
+    const box = {
+      writes: 0,
+      get value() { reads?.add(box); return current; },
+      set value(next) { current = next; box.writes += 1; }
+    };
+    return box;
+  };
+  const dependencies = (read) => {
+    reads = new Set();
+    try { read(); return [...reads]; } finally { reads = null; }
+  };
+  return { makeRef, dependencies };
+};
+const writesOf = refs => refs.reduce((total, box) => total + box.writes, 0);
+const generating = { status: 'busy', reason: 'Generating diagram. Retry after generation finishes.' };
+const applying = { status: 'busy', reason: 'Applying an edit. Retry after the edit finishes.' };
+
+test('D-28: Undo and Redo are busy while Generate replaces the artifact; draft edits stay allowed', async (t) => {
+  let value = 1;
+  let fingerprint = 0;
+  const refs = trackedRefs();
+  const history = historyFor({
+    makeRef: refs.makeRef,
+    buildIntent: async () => ({ value }),
+    applyIntent: async (intent) => { value = intent.value; },
+    captureGeneratedArtifactHandle: () => ({
+      retainedBytes: 1, identity: { fingerprint: String(fingerprint), compactSignature: '' }
+    }),
+    restoreGeneratedArtifactHandle: async () => {}
+  });
+  await history.initializeIntentBaseline();
+  await history.runUndoable('first edit', () => { value = 2; });
+  await history.runUndoable('second edit', () => { value = 3; });
+  await history.undo();
+  assert.deepEqual([history.getUndoCount(), history.getRedoCount(), value], [1, 1, 2]);
+  const dependencies = refs.dependencies(() => [history.canUndo(), history.canRedo()]);
+  const writesBefore = writesOf(dependencies);
+
+  const render = gate();
+  let started = false;
+  state.processing.value = true;
+  t.after(() => { state.processing.value = false; });
+  const generate = history.runUndoableArtifactReplacement('Generate diagram', async () => {
+    started = true;
+    const result = await render.promise;
+    fingerprint += 1;
+    return result;
+  }, { shouldCommit: result => result?.status === 'ok' });
+  while (!started) await Promise.resolve();
+  assert.ok(writesOf(dependencies) > writesBefore, 'canUndo/canRedo must be reactive to the open replacement');
+  assert.equal(history.canUndo(), false);
+  assert.equal(history.canRedo(), false);
+  assert.deepEqual(await history.undo(), generating);
+  assert.deepEqual(await history.redo(), generating);
+  assert.deepEqual([history.getUndoCount(), history.getRedoCount(), value], [1, 1, 2]);
+  assert.equal(sessionOperationAvailability(), null);
+  await history.runUndoable('draft edit during Generate', () => { value = 4; });
+  assert.equal(value, 4);
+
+  const writesWhileOpen = writesOf(dependencies);
+  render.release({ status: 'ok' });
+  await generate;
+  state.processing.value = false;
+  assert.ok(writesOf(dependencies) > writesWhileOpen, 'closing the replacement must refresh availability');
+  assert.equal(history.getUndoCount(), 3);
+  assert.equal(history.canUndo(), true);
+  assert.equal(await history.undo(), true);
+  assert.equal(await history.undo(), true);
+  assert.equal(value, 2);
+});
+
+test('D-28: Undo and Redo are busy while a History checkpoint is open', async () => {
+  let value = 1;
+  const history = historyFor({
+    buildIntent: async () => ({ value }),
+    applyIntent: async (intent) => { value = intent.value; },
+    buildCheckpoint: () => ({ value }),
+    applyCheckpoint: async (checkpoint) => { value = checkpoint.value; }
+  });
+  await history.captureBaseline();
+  await history.runUndoable('edit', () => { value = 2; });
+  const work = gate();
+  let started = false;
+  const checkpoint = history.runUndoableCheckpoint('Reset settings', async () => {
+    started = true;
+    await work.promise;
+    value = 5;
+  });
+  while (!started) await Promise.resolve();
+  assert.equal(history.canUndo(), false);
+  assert.deepEqual(await history.undo(), applying);
+  assert.equal(value, 2);
+  work.release();
+  await checkpoint;
+  assert.equal(history.canUndo(), true);
+  assert.equal(await history.undo(), true);
+  assert.equal(value, 2);
 });
 
 test('History admits no late command or action after an awaited capture', async () => {

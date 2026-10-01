@@ -84,8 +84,9 @@ export const createDiagramDragActions = ({
   };
 
   const beginDragTransaction = (label) => {
+    // Each drag gesture owns its transaction and settles a focused control's (N-18).
     diagramDragTxPromise = history?.begin
-      ? history.begin(label, { source: 'diagram-drag' })
+      ? history.begin(label, { source: 'diagram-drag', owner: Symbol(label) })
       : null;
   };
 

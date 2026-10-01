@@ -73,7 +73,20 @@ decisions are in
 
 <!-- web-gui-audit-20260930 P08 -->
 
-<!-- web-gui-audit-20260930 P09 -->
+- History records one Undo step for each checkbox, radio button, or button
+  change, also when it is made with its label text or the keyboard, or while a
+  text field has focus. Such changes were previously dropped or merged into
+  another step, so edits can now produce more Undo steps (SE-02, SE-03, N-18).
+- Ctrl+Z, Ctrl+Shift+Z, and Ctrl+Y (Cmd on macOS) now work while a select has
+  focus; text fields keep the browser's text undo (SE-04).
+- **Undo** and **Redo** are unavailable while a diagram is generating, and the
+  header names the reason. They previously reverted the draft behind a running
+  Generate. Settings edits remain available (GE-06).
+- Undo or Redo of a step such as a feature color that adds a legend entry, or
+  **Reset Settings**, no longer empties the feature list after a mode switch;
+  these History steps no longer copy the feature metadata (SE-01, N-19, N-20).
+- Cancel during Generate preparation no longer stops the loaded diagram
+  engine, so the next Generate reuses it (GE-09).
 
 <!-- web-gui-audit-20260930 P10 -->
 

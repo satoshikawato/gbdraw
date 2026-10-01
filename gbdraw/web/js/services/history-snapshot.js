@@ -1179,10 +1179,7 @@ export const createHistorySnapshotService = ({
         featureCatalog: handle.ownerSet?.featureCatalog || null
       };
       if (typeof applyEditorStateData === 'function') {
-        applyEditorStateData(trustedEditorState, {
-          normalized: true,
-          adoptCatalog: true
-        });
+        applyEditorStateData(trustedEditorState, { normalized: true });
       } else {
         applyEditorIntentData(state, trustedEditorState);
         setGeneratedArtifactRef(state.featureCatalog, trustedEditorState.featureCatalog);
@@ -1260,9 +1257,9 @@ export const createHistorySnapshotService = ({
     && before.identity.compactSignature === after?.identity?.compactSignature
   );
 
-  const buildGeneratedArtifactSnapshot = ({ includePreviewNavigation = true } = {}) => {
+  const buildGeneratedArtifactSnapshot = () => {
     const ui = typeof buildUiStateData === 'function'
-      ? buildUiStateData({ includePreviewNavigation })
+      ? buildUiStateData({ includePreviewNavigation: false })
       : buildFallbackUiStateData(state);
     const features = typeof buildFeatureStateData === 'function'
       ? buildFeatureStateData()
@@ -1283,28 +1280,21 @@ export const createHistorySnapshotService = ({
           pairwiseMatchFactors: clonePlainObject(getRef(state.pairwiseMatchFactors, {}))
         };
 
-    return cloneJsonData({
-      ui,
-      results,
-      features,
-      editorState,
-      orthogroupState,
-      runState
-    });
+    return { ui, results, features, editorState, orthogroupState, runState };
   };
 
-  const applyArtifactDomains = (
-    snapshot,
-    { trusted = false, restoreResults = true } = {}
-  ) => {
+  // SE-01/N-20 (R11): a checkpoint never copies or signs the Generate-owned
+  // feature catalog. It keeps the admitted catalog by reference, and History
+  // retains each checkpoint object as captured.
+  const checkpointFeatureCatalogs = new WeakMap();
+
+  const applyArtifactDomains = (snapshot) => {
     const ui = snapshot?.ui || {};
-    if (restoreResults) {
-      if (typeof applyResultsData === 'function') {
-        applyResultsData(snapshot?.results || [], ui);
-      } else {
-        applyFallbackResultsData(state, snapshot?.results || []);
-        applyFallbackUiStateData(state, { selectedResultIndex: ui.selectedResultIndex });
-      }
+    if (typeof applyResultsData === 'function') {
+      applyResultsData(snapshot?.results || [], ui);
+    } else {
+      applyFallbackResultsData(state, snapshot?.results || []);
+      applyFallbackUiStateData(state, { selectedResultIndex: ui.selectedResultIndex });
     }
 
     if (typeof applyFeatureStateData === 'function') {
@@ -1320,7 +1310,10 @@ export const createHistorySnapshotService = ({
     }
 
     if (typeof applyEditorStateData === 'function') {
-      applyEditorStateData(snapshot?.editorState || {}, { trusted });
+      applyEditorStateData({
+        ...(snapshot?.editorState || {}),
+        featureCatalog: checkpointFeatureCatalogs.get(snapshot) ?? null
+      });
     }
 
     if (typeof applyRunStateData === 'function') {
@@ -1328,18 +1321,6 @@ export const createHistorySnapshotService = ({
     } else {
       setRef(state.lastRunInfo, cloneJsonData(snapshot?.runState?.lastRunInfo) || null);
       setRef(state.pairwiseMatchFactors, clonePlainObject(snapshot?.runState?.pairwiseMatchFactors));
-    }
-  };
-
-  const applyGeneratedArtifactSnapshot = (snapshot, { restoreResults = true } = {}) => {
-    if (!snapshot || typeof snapshot !== 'object') return;
-    if (state.skipCaptureBaseConfig) state.skipCaptureBaseConfig.value = true;
-    if (state.skipPositionReapply) state.skipPositionReapply.value = true;
-    applyArtifactDomains(snapshot, { trusted: true, restoreResults });
-    if (typeof applyUiStateData === 'function') {
-      applyUiStateData(snapshot.ui || {});
-    } else {
-      applyFallbackUiStateData(state, snapshot.ui || {});
     }
   };
 
@@ -1520,12 +1501,17 @@ export const createHistorySnapshotService = ({
           linearComparisonPlan: cloneLinearComparisonPlanMetadata(state.linearComparisonPlan)
         };
 
-    return cloneJsonData({
+    const generated = buildGeneratedArtifactSnapshot();
+    const { featureCatalog = null, ...editorState } = generated.editorState || {};
+    const checkpoint = cloneJsonData({
       config,
       files: buildFilesData(state, fileStore),
       drafts: buildDraftIntentData(state),
-      ...buildGeneratedArtifactSnapshot({ includePreviewNavigation: false })
+      ...generated,
+      editorState
     });
+    checkpointFeatureCatalogs.set(checkpoint, featureCatalog);
+    return checkpoint;
   };
 
   const applyArtifactCheckpoint = async (snapshot) => {
@@ -1585,7 +1571,6 @@ export const createHistorySnapshotService = ({
 
   return {
     applyArtifactCheckpoint,
-    applyGeneratedArtifactSnapshot,
     applyHistoryIntent,
     buildArtifactCheckpoint,
     captureGeneratedArtifactHandle,
@@ -1593,7 +1578,6 @@ export const createHistorySnapshotService = ({
     clearGeneratedArtifactIdentity,
     collectCurrentFileIds: () => collectCurrentFileIds(state, fileStore),
     compareGeneratedArtifactHandles,
-    buildGeneratedArtifactSnapshot,
     buildHistoryIntent,
     installGeneratedArtifactOwnerSet,
     restoreGeneratedArtifactHandle,

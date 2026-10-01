@@ -1017,7 +1017,9 @@ test('audit-5 owner: direct simple createRunAnalysis path is worker-only and cat
     metricsBeforePreviewCancel.generatedArtifactFinalizeCount
   );
 
-  assert.equal(activePrimaryReads, 2);
+  // GE-09: a Cancel with no Worker request keeps the warm Worker and its staged
+  // primary source, so later runs do not read the file again.
+  assert.equal(activePrimaryReads, 1);
   assert.equal(inactiveFileReads, 0);
   assert.equal(adoptedArtifacts, 2);
   assert.equal(workerMessages.filter(({ type }) => type === 'run').length, 12); // Includes the explicit failed-restoration attempt.
@@ -1036,7 +1038,7 @@ test('audit-5 owner: direct simple createRunAnalysis path is worker-only and cat
   workerResponses.push(response(readyResult, validCatalog(readyResult.name)));
   assert.deepEqual(await runner.runAnalysis(), { status: 'ok' });
   assert.equal(state.failedGeneratePreservedResult.value, false);
-  assert.equal(activePrimaryReads, 3);
+  assert.equal(activePrimaryReads, 1);
 
   // Cancel requested while preparation is pending ends before rendering.
   const runCount = () => workerMessages.filter(({ type }) => type === 'run').length;

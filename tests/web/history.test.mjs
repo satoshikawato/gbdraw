@@ -1873,7 +1873,6 @@ const createLayoutPreferences = () => ({
     },
     applyEditorStateData: (editorState, options) => {
       assert.equal(options.normalized, true);
-      assert.equal(options.adoptCatalog, true);
       state.legendEntries.value = editorState.legend.entries;
       state.featureCatalog.value = editorState.featureCatalog;
     },
