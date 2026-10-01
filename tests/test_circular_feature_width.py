@@ -617,7 +617,7 @@ def test_cli_labels_mode_maps_to_circular_scope(
     assert gc_warning_present is expect_gc_warning
 
 
-def test_cli_fractional_definition_font_size_forwards_derived_interval(
+def test_cli_fractional_definition_font_size_applies_derived_interval(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
     stub_typed_request_export,
@@ -638,7 +638,9 @@ def test_cli_fractional_definition_font_size_forwards_derived_interval(
         overrides: dict[str, object] | None = None,
     ) -> dict:
         captured.update(overrides or {})
-        return real_modify_config_dict(config_dict, overrides)
+        applied = real_modify_config_dict(config_dict, overrides)
+        captured["applied_interval"] = applied["objects"]["definition"]["circular"]["interval"]
+        return applied
 
     def fake_assemble(*args: Any, **kwargs: Any) -> Drawing:
         return Drawing(filename=str(tmp_path / "dummy.svg"))
@@ -668,7 +670,9 @@ def test_cli_fractional_definition_font_size_forwards_derived_interval(
     )
 
     assert captured["objects.definition.circular.font_size"] == pytest.approx(12.5)
-    assert captured["objects.definition.circular.interval"] == 14
+    # GE-03: the CLI forwards only the font; applying it derives the interval.
+    assert "objects.definition.circular.interval" not in captured
+    assert captured["applied_interval"] == 14
 
 
 def test_cli_feature_width_forwards_internal_feature_track_spec(

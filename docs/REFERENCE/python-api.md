@@ -52,8 +52,8 @@ The `gbdraw` package exports the four functions above, `__version__`, and these 
 | `TitleOptions.position` | `none`, `center`, `top`, `bottom`, or `None` | `None` |
 | `TitleOptions.font_size` | positive number or `None` | `None` |
 | `CircularOptions.legend`, `LinearOptions.legend` | legend position token | `right` |
-| `CircularOptions.dinucleotide`, `LinearOptions.dinucleotide` | two-base string | `GC` |
-| `window`, `step`, `depth_window`, `depth_step` | integer or `None` | `None` |
+| `CircularOptions.dinucleotide`, `LinearOptions.dinucleotide` | two letters from `A`, `C`, `G`, `T`, and `U` in any case; `U` counts as `T` | `GC` |
+| `window`, `step`, `depth_window`, `depth_step` | positive integer or `None` | `None` |
 | `annotations`, `config`, `config_overrides` | mode-appropriate value or `None` | `None` |
 | `depth_tracks` | sequence of `DepthTrackOptions` | empty |
 
@@ -65,6 +65,8 @@ Unset `Thresholds` values resolve through the mode profile:
 | Linear | `1e-2` | `50` | `0` | `0` | off / off |
 
 E-value, bitscore, and identity must be finite and non-negative; identity is limited to `0`–`100`. Alignment length must be a non-negative integer.
+
+In `config` and `config_overrides`, font sizes must be greater than zero and stroke widths zero or greater; offsets, spacing, `track_axis_gap`, and label rotation keep their current ranges. When `config_overrides` sets `objects.definition.circular.font_size` without `objects.definition.circular.interval`, the interval becomes the font size plus 2, truncated to an integer, as with the command-line `--definition_font_size`. An invalid value raises `ValidationError` before rendering.
 
 ## Layout and track options
 

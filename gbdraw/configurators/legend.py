@@ -24,6 +24,7 @@ from gbdraw.legend.metrics import (  # type: ignore[reportMissingImports]
     legend_line_height,
     legend_text_x_offset,
 )
+from gbdraw.exceptions import ValidationError
 from gbdraw.layout.spatial import Aabb, union_aabbs  # type: ignore[reportMissingImports]
 
 
@@ -69,10 +70,13 @@ def _legend_half_stroke_width(
         raw_width = properties.get("width", 0.0)
         try:
             width = float(raw_width or 0.0)
-        except (TypeError, ValueError) as exc:
-            raise ValueError("legend stroke widths must be finite non-negative numbers") from exc
+        except (TypeError, ValueError):
+            width = math.nan
         if not math.isfinite(width) or width < 0.0:
-            raise ValueError("legend stroke widths must be finite non-negative numbers")
+            raise ValidationError(
+                "legend stroke widths must be finite non-negative numbers",
+                diagnostic={"code": "INPUT_INVALID", "reason": "NONNEGATIVE"},
+            )
         max_width = max(max_width, width)
     return 0.5 * max_width
 

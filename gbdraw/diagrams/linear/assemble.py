@@ -121,6 +121,7 @@ from ...tracks import (
     normalize_linear_track_slots_with_axis,
     parse_nonnegative_integer,
 )
+from ...tracks.parsing import slot_dinucleotide
 from ...annotations import (
     AnnotationOptions,
     ResolvedAnnotationBundle,
@@ -391,11 +392,6 @@ def _apply_depth_track_heights_to_linear_slots(
     return out
 
 
-def _slot_nt(slot: LinearResolvedTrack, default_nt: str) -> str:
-    params = slot.params or {}
-    return str(params.get("nt", params.get("dinucleotide", default_nt)) or default_nt).upper()
-
-
 def _depth_slot_track_index(slot) -> int:
     params = getattr(slot, "params", {}) or {}
     return parse_nonnegative_integer(
@@ -454,7 +450,7 @@ def _sync_legend_table_for_linear_slots(
             continue
         if str(getattr(slot, "renderer", "")) != "dinucleotide_skew":
             continue
-        nt = _slot_nt(slot, default_nt)
+        nt = slot_dinucleotide(slot.params, default_nt)
         label = _slot_legend_label(slot, f"{nt} skew")
         slot_skew_config = _slot_skew_config(skew_config, slot, nt)
         if slot_skew_config.high_fill_color == slot_skew_config.low_fill_color:
@@ -2076,7 +2072,7 @@ def assemble_linear_diagram(
 
     normalize_length = cfg.canvas.linear.normalize_length
     needed_nts = {
-        _slot_nt(slot, str(gc_config.dinucleotide))
+        slot_dinucleotide(slot.params, str(gc_config.dinucleotide))
         for slot in linear_track_layout.slots
         if slot.renderer in {"dinucleotide_content", "dinucleotide_skew"}
     }
@@ -2826,7 +2822,7 @@ def assemble_linear_diagram(
                     continue
 
                 if slot.renderer == "dinucleotide_content":
-                    nt = _slot_nt(slot, str(gc_config.dinucleotide))
+                    nt = slot_dinucleotide(slot.params, str(gc_config.dinucleotide))
                     per_nt_gc_dfs = record_gc_dfs_by_nt.get(nt, record_gc_dfs)
                     shared_gc_df = per_nt_gc_dfs[record_index] if record_index < len(per_nt_gc_dfs) else None
                     primary_depth_track = depth_by_index.get(primary_depth_track_index)
@@ -2870,7 +2866,7 @@ def assemble_linear_diagram(
                     continue
 
                 if slot.renderer == "dinucleotide_skew":
-                    nt = _slot_nt(slot, str(skew_config.dinucleotide))
+                    nt = slot_dinucleotide(slot.params, str(skew_config.dinucleotide))
                     per_nt_gc_dfs = record_gc_dfs_by_nt.get(nt, record_gc_dfs)
                     shared_gc_df = per_nt_gc_dfs[record_index] if record_index < len(per_nt_gc_dfs) else None
                     canvas = add_gc_skew_group(

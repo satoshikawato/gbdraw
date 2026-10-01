@@ -9,6 +9,8 @@ import pandas as pd
 from pandas import DataFrame
 from Bio.SeqRecord import SeqRecord
 
+from gbdraw.mode_profiles import validate_dinucleotide
+
 
 def calculate_dinucleotide_skew(seq: str, base1: str, base2: str) -> float:
     """
@@ -78,14 +80,23 @@ def _window_count_from_prefix(
     return count
 
 
+def counted_dinucleotide(record: SeqRecord, nt: str) -> tuple[str, str, str, str]:
+    """Return the display pair, the two counted bases, and the counted sequence.
+
+    U is the same base as T (D-26): it is counted as T in both the pair and the
+    sequence, while the display name keeps the requested letters.
+    """
+
+    pair = validate_dinucleotide(nt)
+    counted = pair.replace("U", "T")
+    return pair, counted[0], counted[1], str(record.seq).upper().replace("U", "T")
+
+
 def skew_df(record: SeqRecord, window: int, step: int, nt: str) -> DataFrame:
     """
     Calculates dinucleotide skew and content in a DNA sequence, returning a DataFrame.
     """
-    nt_list = list(str(nt).upper())
-    nt_1: str = nt_list[0]
-    nt_2: str = nt_list[1]
-    seq_str = str(record.seq).upper()
+    nt, nt_1, nt_2, seq_str = counted_dinucleotide(record, nt)
     seq_length = len(seq_str)
     content_legend = f"{nt} content"
     skew_legend = f"{nt} skew"
@@ -153,6 +164,6 @@ def skew_df(record: SeqRecord, window: int, step: int, nt: str) -> DataFrame:
     return df
 
 
-__all__ = ["calculate_dinucleotide_skew", "skew_df", "sliding_window"]
+__all__ = ["calculate_dinucleotide_skew", "counted_dinucleotide", "skew_df", "sliding_window"]
 
 

@@ -11,7 +11,7 @@ import logging
 import re
 from typing import Iterator
 
-from gbdraw.exceptions import ComparisonIdentityError, InputFileError, ParseError, ValidationError
+from gbdraw.exceptions import ComparisonIdentityError, GbdrawError, InputFileError, ParseError, ValidationError
 
 OPERATIONS = frozenset("""unknown generate align feature-extraction export-svg export-png export-pdf evaluateRules readPdfFont
 buildProteinLosatCacheKeys convertLosatNucleotideToDisplayTsv convertLosatpPairsToGenomicPayload
@@ -38,15 +38,24 @@ min_gc max_gc gc_tick_interval gc_axis_font_size depth_tick_interval depth_axis_
 protein_blastp_mode protein_blastp_candidate_limit collinear_search_scope collinear_unit_mode collinear_anchor_mode collinear_merge_orientation collinear_color_mode orthogroup_membership_mode collinear_max_unit_gap collinear_max_conflicts collinear_max_paralog_links_per_orthogroup circular_multi_record_size_mode linear_track_layout linear_label_placement set_id anchor_slot side renderer lane_gap_px padding_px cover_anchor overflow layer z axis match_height source fasta gff annotations featurePlacements output_prefix
 """.split())
 
+# Producer ``diagnostic=`` vocabulary: bounded identifiers that the Web wording
+# owner (services/error-normalization.js) defines, never document values.
+# tests/test_web_error_producer_coverage.py keeps it aligned with producers.
+DIAGNOSTIC_CODES = frozenset("INPUT_INVALID INPUT_UNREADABLE DEPTH_INVALID TABLE_INVALID TRACK_LAYOUT".split())
+DIAGNOSTIC_REASONS = frozenset("""BOOLEAN INTEGER FINITE POSITIVE NONNEGATIVE POSITIVE_INTEGER
+POSITIVE_OR_AUTO POSITIVE_INTEGER_OR_AUTO NONNEGATIVE_INTEGER PERCENT UNKNOWN_CONFIG_PATH
+DINUCLEOTIDE CANNOT_FIT THREE_COLUMNS DEPTH_VALUES REFERENCE_REQUIRED REFERENCE_MISMATCH
+ADJACENT_ALL COLLINEAR_ANCHOR_MODE COLLINEAR_COLOR_MODE COLOR""".split())
+_DIAGNOSTIC_INTEGER_KEYS = frozenset("row seriesIndex slotIndex innerPx outerPx".split())
+
 # Native, fixed validation clauses -> bounded correction identifiers.
 _CONSTRAINTS = {
     "must be a boolean": "BOOLEAN", "must be an integer": "INTEGER",
     "must be non-negative": "NONNEGATIVE", "must be finite": "FINITE",
     "must be a positive integer": "POSITIVE_INTEGER",
-    "must be a positive integer or None": "POSITIVE_OR_AUTO",
+    "must be a positive integer or None": "POSITIVE_INTEGER_OR_AUTO",
     "must be a non-negative integer": "NONNEGATIVE_INTEGER",
     "must be a finite number >= 0": "NONNEGATIVE",
-    "must be a finite number > 0 or None": "POSITIVE_OR_AUTO",
     "must be a finite non-negative number": "NONNEGATIVE",
     "must be > 0": "POSITIVE", "must be >= 0": "NONNEGATIVE",
     "must be > 0 or None": "POSITIVE_OR_AUTO",
@@ -57,7 +66,7 @@ _CONSTRAINTS = {
     "must be non-empty text without NUL": "REQUIRED",
     "must be an integer greater than or equal to 0": "NONNEGATIVE_INTEGER",
     "must be an integer greater than or equal to 1": "POSITIVE_INTEGER",
-    "must be <= max_depth": "ORDER", "must be <= max_gc": "ORDER",
+    "must be <= max_depth": "ORDER",
 }
 
 _EXACT = {
@@ -72,18 +81,11 @@ _EXACT = {
     "GFF3 and FASTA path counts must match.": ("FASTA_REQUIRED", {}),
     "GFF3 protein extraction requires a FASTA path.": ("FASTA_REQUIRED", {}),
     "An explicit display start cannot be combined with a crop.": ("REGION_INVALID", {"reason": "CROP_START_CONFLICT"}),
-    "Depth table contains missing reference names.": ("DEPTH_INVALID", {"reason": "REFERENCE_REQUIRED"}),
-    "Depth positions must be 1-based positive integers.": ("DEPTH_INVALID", {"reason": "POSITIVE_INTEGER"}),
-    "Depth values must be non-negative.": ("DEPTH_INVALID", {"reason": "NONNEGATIVE"}),
-    "Depth table must contain at least 3 columns.": ("TABLE_INVALID", {"columnCount": 3}),
     "The canonical Web request did not produce an SVG.": ("RESULT_INVALID", {}),
     "The staged Web render workspace is incomplete.": ("RESOURCE_INVALID", {"reason": "WORKSPACE"}),
     "The temporary staged Web render workspace could not be cleaned up.": ("CLEANUP_FAILED", {}),
     "The temporary Web render workspace could not be cleaned up.": ("CLEANUP_FAILED", {}),
-    "collinear_anchor_mode must be one of: all, one_to_one, rbh": ("INPUT_INVALID", {"field": "collinear_anchor_mode", "reason": "COLLINEAR_ANCHOR_MODE"}),
-    "collinear_color_mode must be one of: average_identity, orientation, orientation_identity": ("INPUT_INVALID", {"field": "collinear_color_mode", "reason": "COLLINEAR_COLOR_MODE"}),
     "collinear_merge_orientation must be one of: strand, order, either": ("INPUT_INVALID", {"field": "collinear_merge_orientation", "reason": "COLLINEAR_MERGE_ORIENTATION"}),
-    "collinear_search_scope must be one of: adjacent, all": ("INPUT_INVALID", {"field": "collinear_search_scope", "reason": "ADJACENT_ALL"}),
     "Protein FASTA contains duplicate transport IDs.": ("COMPARISON_INPUT", {"reason": "UNIQUE_IDS"}),
     "Protein FASTA and protein map contain different transport IDs.": ("COMPARISON_INPUT", {"reason": "MATCH_IDS"}),
     "Reverse display transform requires a positive length.": ("REGION_INVALID", {"field": "recordLength", "reason": "POSITIVE_INTEGER"}),
@@ -98,7 +100,6 @@ _EXACT = {
 
 # Anchored producer templates; private interpolations are discarded, not shown.
 _TEMPLATES = (
-    (r"Unknown config override path: [\s\S]*\.", "INPUT_INVALID", "UNKNOWN_CONFIG_PATH"),
     (r"No matching FASTA record found for GFF record [\s\S]*\. Please ensure that all GFF records have corresponding FASTA entries\.", "FASTA_REQUIRED", "GFF_FASTA_MATCH"),
     (r"Unsupported LOSATP blastp mode: [\s\S]*", "INPUT_INVALID", "BLASTP_MODE"),
     (r"LOSATP (?:record|pair) payload #[0-9]+ (?:must be an object\.|is missing [\s\S]*|has an invalid raw TSV range\.|references missing [\s\S]*)", "HELPER_PROTOCOL", "FIELDS"),
@@ -115,11 +116,6 @@ _TEMPLATES = (
     (r"Invalid region spec: '[\s\S]*'\. Expected format:[\s\S]*", "REGION_INVALID", "REGION_FORMAT"),
     (r"Region coordinates must be >= 1: '[\s\S]*'\.", "REGION_INVALID", "POSITIVE_INTEGER"),
     (r"(?:Invalid record index|Record index must be >= 1) in region spec '[\s\S]*'\.[\s\S]*", "REGION_INVALID", "SELECTOR_FORMAT"),
-    (r"Circular track slot '[\s\S]*' cannot fit inside between [\s\S]*", "TRACK_LAYOUT", "CANNOT_FIT"),
-    (r"Preferred numeric group '[\s\S]*' cannot fit inside between [\s\S]*", "TRACK_LAYOUT", "CANNOT_FIT"),
-    (r"Depth file '[\s\S]*' must contain at least 3 tab-separated columns\.", "TABLE_INVALID", "THREE_COLUMNS"),
-    (r"Depth file references do not match record '[\s\S]*'\. Available references:[\s\S]*", "DEPTH_INVALID", "REFERENCE_MISMATCH"),
-    (r"(?:Unable to (?:read|parse) depth file|Depth file does not exist:|Depth path is not a file:)[\s\S]*", "INPUT_UNREADABLE", "READ"),
     (r"Unsupported format: [\s\S]*", "INPUT_INVALID", "FORMAT"),
     (r"No CDS proteins found in [\s\S]*", "COMPARISON_INPUT", "NO_PROTEINS"),
     (r"Record ID not found: [\s\S]*", "RECORD_SELECTION", "NO_MATCH"),
@@ -159,12 +155,38 @@ def _regex_reason(error: re.error) -> str:
     return "SYNTAX_ERROR"
 
 
+def _config_path(value: object) -> str | None:
+    if not isinstance(value, str) or len(value) > 80:
+        return None
+    from gbdraw.config.modify import canonical_config_override_paths
+
+    return value if value in canonical_config_override_paths() else None
+
+
+def _diagnostic(error: BaseException) -> tuple[str, dict] | None:
+    """Validate a producer-owned diagnostic; unknown identifiers are dropped."""
+
+    diagnostic = error.diagnostic if isinstance(error, GbdrawError) else None
+    if not isinstance(diagnostic, dict) or diagnostic.get("code") not in DIAGNOSTIC_CODES:
+        return None
+    context: dict = {}
+    if diagnostic.get("field") in FIELDS:
+        context["field"] = diagnostic["field"]
+    if diagnostic.get("reason") in DIAGNOSTIC_REASONS:
+        context["reason"] = diagnostic["reason"]
+    config_path = _config_path(diagnostic.get("configPath"))
+    if config_path is not None:
+        context["configPath"] = config_path
+    for key in sorted(_DIAGNOSTIC_INTEGER_KEYS & diagnostic.keys()):
+        value = diagnostic[key]
+        if type(value) is int and 0 <= value <= 10_000_000:
+            context[key] = value
+    return diagnostic["code"], context
+
+
 def _validation(error: BaseException) -> tuple[str, dict]:
     if not isinstance(error, (ValidationError, ParseError, ValueError, TypeError, KeyError)):
         return "VALIDATION_UNCLASSIFIED", {}
-    field = getattr(error, "_web_error_field", None)
-    if isinstance(field, str) and field in FIELDS:
-        return "INPUT_INVALID", {"field": field, "reason": "FINITE"}
     message = str(error)
     if message in _EXACT:
         code, context = _EXACT[message]
@@ -173,8 +195,6 @@ def _validation(error: BaseException) -> tuple[str, dict]:
         match = re.fullmatch(template, message)
         if match:
             context = {"reason": reason}
-            if reason == "UNKNOWN_CONFIG_PATH":
-                context["field"] = "configOverrides"
             if reason == "VISIBILITY_ACTION":
                 context.update(field="action", row=int(match[1]))
             if reason == "BLASTP_MODE":
@@ -211,19 +231,13 @@ def _validation(error: BaseException) -> tuple[str, dict]:
     return "VALIDATION_UNCLASSIFIED", {}
 
 
-def serialize_web_error(error: BaseException, *, operation: str, stage: str) -> dict:
-    """Produce identifiers only, without altering the native error or its cause."""
-    operation = operation if isinstance(operation, str) and operation in OPERATIONS else "unknown"
-    stage = stage if isinstance(stage, str) and stage in STAGES else "unknown"
-    chain = list(_chain(error))
-    context = {}
-    code = "UNKNOWN"
+def _classify_native(error: BaseException, chain: list[BaseException], stage: str) -> tuple[str, dict, str]:
+    """Fallback for producers without ``diagnostic=``; see the producer ratchet."""
+
     for cause in chain:
         if isinstance(cause, ComparisonIdentityError):
-            code, context, stage = "COMPARISON_IDENTITY", {"reason": cause.reason}, "render"
-            break
+            return "COMPARISON_IDENTITY", {"reason": cause.reason}, "render"
         if isinstance(cause, re.error):
-            code, stage = "REGEX_SYNTAX", "rule-validation"
             context = {"reason": _regex_reason(cause), "positionUnit": "python-character"}
             if isinstance(cause.pos, int) and not isinstance(cause.pos, bool) and 0 <= cause.pos <= 10_000_000:
                 context["position"] = cause.pos
@@ -233,18 +247,28 @@ def serialize_web_error(error: BaseException, *, operation: str, stage: str) -> 
                     if row:
                         context["row"] = int(row[1])
                         break
-            break
+            return "REGEX_SYNTAX", context, "rule-validation"
+    for cause in chain:
+        code, context = _validation(cause)
+        if code != "VALIDATION_UNCLASSIFIED":
+            return code, context, stage
+    if isinstance(error, (ValidationError, ParseError, ValueError, TypeError, KeyError, json.JSONDecodeError)):
+        return "VALIDATION_UNCLASSIFIED", {}, stage
+    if isinstance(error, (InputFileError, OSError, UnicodeError)):
+        return "INPUT_UNREADABLE", {}, stage
+    return "UNKNOWN", {}, stage
+
+
+def serialize_web_error(error: BaseException, *, operation: str, stage: str) -> dict:
+    """Produce identifiers only, without altering the native error or its cause."""
+    operation = operation if isinstance(operation, str) and operation in OPERATIONS else "unknown"
+    stage = stage if isinstance(stage, str) and stage in STAGES else "unknown"
+    chain = list(_chain(error))
+    diagnosed = next((found for found in map(_diagnostic, chain) if found is not None), None)
+    if diagnosed is not None:
+        code, context = diagnosed
     else:
-        for cause in chain:
-            candidate_code, candidate_context = _validation(cause)
-            if candidate_code != "VALIDATION_UNCLASSIFIED":
-                code, context = candidate_code, candidate_context
-                break
-        else:
-            if isinstance(error, (ValidationError, ParseError, ValueError, TypeError, KeyError, json.JSONDecodeError)):
-                code = "VALIDATION_UNCLASSIFIED"
-            elif isinstance(error, (InputFileError, OSError, UnicodeError)):
-                code = "INPUT_UNREADABLE"
+        code, context, stage = _classify_native(error, chain, stage)
     actual_stage = getattr(error, "_web_error_stage", None)
     if code not in {"REGEX_SYNTAX", "COMPARISON_IDENTITY"} and isinstance(actual_stage, str) and actual_stage in STAGES:
         stage = actual_stage

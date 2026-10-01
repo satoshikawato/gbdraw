@@ -5,6 +5,7 @@ from typing import Any, Literal, Mapping, Sequence
 
 from .parsing import (
     CircularTrackSlotParseError,
+    normalize_dinucleotide_params,
     normalize_dinucleotide_skew_color_params as _normalize_dinucleotide_skew_color_params,
     parse_bool,
     parse_nonnegative_integer,
@@ -350,7 +351,7 @@ def parse_circular_track_slot(
                             f"'{key}' is no longer supported; geometry and reservation are derived from side"
                         )
                 elif key in {"nt", "dinucleotide"}:
-                    params["nt"] = value.upper()
+                    params["nt"] = value
                 elif key.startswith("_"):
                     raise ValueError(
                         f"private circular track parameter '{raw_key}' is not supported"
@@ -364,6 +365,13 @@ def parse_circular_track_slot(
 
     if not slot_id:
         raise CircularTrackSlotParseError("missing circular track slot id", original)
+    if renderer in {"dinucleotide_content", "dinucleotide_skew"}:
+        try:
+            params = normalize_dinucleotide_params(params)
+        except Exception as exc:
+            raise CircularTrackSlotParseError(str(exc), original) from exc
+    elif "nt" in params:
+        params["nt"] = str(params["nt"]).upper()
     if renderer == "dinucleotide_skew":
         params = _normalize_dinucleotide_skew_color_params(params)
 
@@ -413,6 +421,11 @@ def parse_circular_track_slots(
                         if isinstance(legacy_spacing_raw, ScalarSpec)
                         else ScalarSpec.parse(legacy_spacing_raw)
                     )
+            if renderer in {"dinucleotide_content", "dinucleotide_skew"}:
+                try:
+                    params = normalize_dinucleotide_params(params)
+                except Exception as exc:
+                    raise CircularTrackSlotParseError(str(exc), str(item.id)) from exc
             if renderer == "dinucleotide_skew":
                 params = _normalize_dinucleotide_skew_color_params(params)
             slot = replace(item, renderer=renderer, params=params)
@@ -627,6 +640,8 @@ def _normalize_circular_track_slots(
                 raise ValueError("sequence_conservation slots cannot use side=overlay")
         elif renderer in NUMERIC_CIRCULAR_TRACK_RENDERERS:
             side = _normalize_side_value(slot.side) if slot.side is not None else "inside"
+            if renderer in {"dinucleotide_content", "dinucleotide_skew"}:
+                params = normalize_dinucleotide_params(params)
             if renderer == "dinucleotide_skew":
                 params = _normalize_dinucleotide_skew_color_params(params)
             elif renderer == "depth" and "track_index" in params:

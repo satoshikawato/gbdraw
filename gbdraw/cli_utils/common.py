@@ -427,7 +427,7 @@ def add_analysis_args(parser: argparse.ArgumentParser) -> None:
     parser.add_argument(
         '-n',
         '--nt',
-        help='dinucleotide (default: GC). ',
+        help='dinucleotide: two letters from A, C, G, T, and U; case-insensitive, U counts as T (default: GC).',
         type=str,
         default="GC")
     parser.add_argument(

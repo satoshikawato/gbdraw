@@ -1715,18 +1715,17 @@ def regenerate_definition_svgs(
             config_dict = tomllib.load(fh)
 
         # Override font sizes if provided
-        if not _is_blank_or_js_nullish(font_size):
+        from gbdraw.exceptions import ValidationError
+        for field_name, value in (("font_size", font_size), ("plot_title_font_size", plot_title_font_size)):
+            if _is_blank_or_js_nullish(value):
+                continue
             try:
-                config_dict["objects"]["definition"]["circular"]["font_size"] = float(font_size)
+                config_dict["objects"]["definition"]["circular"][field_name] = float(value)
             except (TypeError, ValueError) as error:
-                error._web_error_field = "font_size"
-                raise
-        if not _is_blank_or_js_nullish(plot_title_font_size):
-            try:
-                config_dict["objects"]["definition"]["circular"]["plot_title_font_size"] = float(plot_title_font_size)
-            except (TypeError, ValueError) as error:
-                error._web_error_field = "plot_title_font_size"
-                raise
+                raise ValidationError(
+                    f"{field_name} must be finite.",
+                    diagnostic={"code": "INPUT_INVALID", "field": field_name, "reason": "FINITE"},
+                ) from error
         cfg = GbdrawConfig.from_dict(config_dict)
         render_profile = CircularRenderProfile(cfg)
 

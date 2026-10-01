@@ -16,9 +16,13 @@ from typing import Any, Literal, Mapping, Union, get_args, get_origin, get_type_
 from gbdraw.exceptions import ValidationError
 
 from .models import GbdrawConfig  # type: ignore[reportMissingImports]
+from .models.objects import circular_definition_interval_for_font  # type: ignore[reportMissingImports]
+from .models.root import validate_style_leaf  # type: ignore[reportMissingImports]
 
 
 _UNSAFE_CONFIG_KEYS = frozenset({"__proto__", "constructor", "prototype"})
+_CIRCULAR_DEFINITION_FONT = "objects.definition.circular.font_size"
+_CIRCULAR_DEFINITION_INTERVAL = "objects.definition.circular.interval"
 
 
 def _assert_safe_config_value(value: object, *, path: str) -> None:
@@ -225,7 +229,39 @@ def _validate_override_path(path: object) -> tuple[str, object]:
     try:
         return path, leaves[path]
     except KeyError as exc:
-        raise ValidationError(f"Unknown config override path: {path!r}.") from exc
+        raise ValidationError(
+            f"Unknown config override path: {path!r}.",
+            diagnostic={
+                "code": "INPUT_INVALID",
+                "field": "configOverrides",
+                "reason": "UNKNOWN_CONFIG_PATH",
+            },
+        ) from exc
+
+
+def _annotation_reason(annotation: object) -> str | None:
+    """Return the correction for a scalar leaf type, ignoring ``None``."""
+
+    members = (
+        [member for member in get_args(annotation) if member is not type(None)]
+        if get_origin(annotation) in {Union, UnionType}
+        else [annotation]
+    )
+    if members == [bool]:
+        return "BOOLEAN"
+    if members == [int]:
+        return "INTEGER"
+    if members == [float]:
+        return "FINITE"
+    return None
+
+
+def _invalid_leaf(path: str, annotation: object) -> dict[str, str]:
+    diagnostic = {"code": "INPUT_INVALID", "configPath": path}
+    reason = _annotation_reason(annotation)
+    if reason is not None:
+        diagnostic["reason"] = reason
+    return diagnostic
 
 
 def _set_raw_config_path(
@@ -277,13 +313,16 @@ def validate_config_overrides(
             )
             raise ValidationError(
                 f"Invalid value for config override {path!r}; "
-                f"allowed literal values: {allowed}."
+                f"allowed literal values: {allowed}.",
+                diagnostic={"code": "INPUT_INVALID", "configPath": path},
             )
         if not _matches_annotation(annotation, value):
             raise ValidationError(
                 f"Invalid value for config override {path!r}; "
-                f"expected {annotation!r}."
+                f"expected {annotation!r}.",
+                diagnostic=_invalid_leaf(path, annotation),
             )
+        validate_style_leaf(path, value, prefix="Invalid value for config override")
         validated.append((path, value))
     return tuple(validated)
 
@@ -296,6 +335,22 @@ def _apply_validated_config_overrides(
 
     updated = deepcopy(dict(config_dict))
     validated = list(validate_config_overrides(overrides))
+    paths = {path for path, _ in validated}
+    # A Circular definition font set without an interval keeps the line
+    # interval that follows it (the CLI and 0.13.0 Web rule); an explicit
+    # interval always wins. Deriving here, not in a request reader, keeps
+    # every surface on one rule and decode/encode lossless.
+    if (
+        _CIRCULAR_DEFINITION_FONT in paths
+        and _CIRCULAR_DEFINITION_INTERVAL not in paths
+    ):
+        font_size = dict(validated)[_CIRCULAR_DEFINITION_FONT]
+        validated.append(
+            (
+                _CIRCULAR_DEFINITION_INTERVAL,
+                circular_definition_interval_for_font(font_size),
+            )
+        )
 
     # Replacing filtering.raw first makes typed sibling paths deterministic,
     # independent of the input mapping's insertion order.

@@ -51,6 +51,7 @@ from gbdraw.mode_profiles import (
     DiagramMode,
     get_mode_profile,
     resolve_mode_profile_overrides,
+    validate_dinucleotide,
 )
 from gbdraw.tracks import (  # type: ignore[reportMissingImports]
     CircularTrackSlot,
@@ -281,19 +282,28 @@ def _validate_center_reserved_radius(value: object, *, field_name: str) -> float
     return radius
 
 
+def _invalid_input(field_name: str, reason: str) -> dict[str, str]:
+    return {
+        "code": "INPUT_INVALID",
+        "field": field_name.rsplit(".", 1)[-1],
+        "reason": reason,
+    }
+
+
 def _validate_positive_real(value: object, *, field_name: str) -> float | None:
     if value is None:
         return None
-    if isinstance(value, bool) or not isinstance(value, Real):
-        raise ValidationError(f"{field_name} must be a finite number > 0 or None.")
-    try:
-        normalized = float(value)
-    except (OverflowError, TypeError, ValueError) as exc:
-        raise ValidationError(
-            f"{field_name} must be a finite number > 0 or None."
-        ) from exc
+    normalized = math.nan
+    if not isinstance(value, bool) and isinstance(value, Real):
+        try:
+            normalized = float(value)
+        except (OverflowError, TypeError, ValueError):
+            normalized = math.nan
     if not math.isfinite(normalized) or normalized <= 0:
-        raise ValidationError(f"{field_name} must be a finite number > 0 or None.")
+        raise ValidationError(
+            f"{field_name} must be a finite number > 0 or None.",
+            diagnostic=_invalid_input(field_name, "POSITIVE_OR_AUTO"),
+        )
     return normalized
 
 
@@ -307,7 +317,13 @@ def _validate_positive_int(
         return None
     if isinstance(value, bool) or not isinstance(value, Integral) or int(value) <= 0:
         suffix = " or None" if allow_none else ""
-        raise ValidationError(f"{field_name} must be a positive integer{suffix}.")
+        raise ValidationError(
+            f"{field_name} must be a positive integer{suffix}.",
+            diagnostic=_invalid_input(
+                field_name,
+                "POSITIVE_INTEGER_OR_AUTO" if allow_none else "POSITIVE_INTEGER",
+            ),
+        )
     return int(value)
 
 
@@ -803,6 +819,29 @@ class _ModeDiagramOptions:
             self.depth_track_files,
             field_name="depth_track_files",
             element_type=str,
+        )
+        object.__setattr__(
+            self,
+            "dinucleotide",
+            validate_dinucleotide(self.dinucleotide),
+        )
+        for field_name in ("window", "step", "depth_window", "depth_step"):
+            object.__setattr__(
+                self,
+                field_name,
+                _validate_positive_int(
+                    getattr(self, field_name),
+                    field_name=field_name,
+                    allow_none=True,
+                ),
+            )
+        object.__setattr__(
+            self,
+            "plot_title_font_size",
+            _validate_positive_real(
+                self.plot_title_font_size,
+                field_name="plot_title_font_size",
+            ),
         )
         thresholds = ComparisonThresholds(
             evalue=0.0 if self.evalue is None else self.evalue,

@@ -88,6 +88,20 @@ class _RadialSlotIntent:
     params: Mapping[str, Any]
 
 
+def _cannot_fit_diagnostic(intent: "_RadialSlotIntent | None", window: Any) -> dict[str, object]:
+    """Track row and usable band of a fit failure; the slot ID stays private."""
+
+    diagnostic: dict[str, object] = {
+        "code": "TRACK_LAYOUT",
+        "reason": "CANNOT_FIT",
+        "innerPx": max(0, round(float(window.inner_px))),
+        "outerPx": max(0, round(float(window.outer_px))),
+    }
+    if intent is not None:
+        diagnostic["slotIndex"] = int(intent.slot_index)
+    return diagnostic
+
+
 def _band_from_center_width(center_px: float, width_px: float) -> RadialBand:
     half = max(0.0, float(width_px) / 2.0)
     return RadialBand(float(center_px) - half, float(center_px) + half)
@@ -934,7 +948,8 @@ def _place_inside_auto(
     raise ValidationError(
         f"Circular track slot '{intent.slot_id}' cannot fit inside between "
         f"{placement_window.inner_px:.1f}px and {placement_window.outer_px:.1f}px. "
-        "Move the slot, reduce widths, disable conflicting labels, or use side=outside."
+        "Move the slot, reduce widths, disable conflicting labels, or use side=outside.",
+        diagnostic=_cannot_fit_diagnostic(intent, placement_window),
     )
 
 
@@ -1194,7 +1209,8 @@ def _place_inside_auto_stack_group(
         f"Circular track slot '{first_unplaced}' cannot fit inside between "
         f"{placement_window.inner_px:.1f}px and {placement_window.outer_px:.1f}px. "
         "Move the slot, reduce widths, disable conflicting labels, or use side=outside."
-        f"{_inside_stack_failure_hint(intents)}"
+        f"{_inside_stack_failure_hint(intents)}",
+        diagnostic=_cannot_fit_diagnostic(intents[-1] if intents else None, placement_window),
     )
 
 
@@ -1478,7 +1494,8 @@ def _place_preferred_numeric_group(
     group_name = ",".join(intent.slot_id for intent in intents) or "<empty>"
     raise ValidationError(
         f"Preferred numeric group '{group_name}' cannot fit inside between "
-        f"{placement_window.inner_px:.1f}px and {placement_window.outer_px:.1f}px."
+        f"{placement_window.inner_px:.1f}px and {placement_window.outer_px:.1f}px.",
+        diagnostic=_cannot_fit_diagnostic(intents[0] if intents else None, placement_window),
     )
 
 
