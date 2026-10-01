@@ -83,7 +83,7 @@ const loadSessionThroughUi = async (page, sessionPath) => {
 const openCustomTrackSlots = async (page) => {
   const layoutSummary = page.locator('summary[aria-label="Layout"]');
   if (!await layoutSummary.evaluate((summary) => summary.parentElement.open)) {
-    await layoutSummary.click();
+    await layoutSummary.press('Enter');
   }
   const panel = page.locator('#circular-custom-track-slots-panel');
   if (!await panel.isVisible()) {
