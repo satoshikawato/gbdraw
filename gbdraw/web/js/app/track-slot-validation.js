@@ -568,6 +568,7 @@ const collectCustomTrackIssues = ({
   axisIndex,
   trackType,
   depthTrackCount,
+  depthSourcedTrackIndexes,
   annotationSetIds,
   visibleFeatureUnderlays,
   conservationSeries
@@ -620,6 +621,10 @@ const collectCustomTrackIssues = ({
     !depthCountProvided ||
     (Number.isSafeInteger(depthTrackCount) && depthTrackCount >= 0)
   );
+  // A logical series inside the count may still have no source in any record.
+  const sourcedDepthIndexes = Array.isArray(depthSourcedTrackIndexes)
+    ? new Set(depthSourcedTrackIndexes)
+    : null;
   if (!validDepthCount) {
     globalIssues.push(globalIssue({
       code: 'depth_count_invalid',
@@ -882,19 +887,19 @@ const collectCustomTrackIssues = ({
         });
       }
       if (trackIndex !== null && validDepthCount && depthCountProvided) {
-        if (depthTrackCount === 0) {
-          addRowIssue(rowIssues, index, {
-            code: 'depth_source_missing',
-            field: 'params.track_index',
-            slotId: id || null,
-            message: `${modeLabel} Depth track ${slotLabel} has no logical Depth source.`
-          });
-        } else if (trackIndex >= depthTrackCount) {
+        if (trackIndex >= depthTrackCount && depthTrackCount > 0) {
           addRowIssue(rowIssues, index, {
             code: 'depth_track_index_range',
             field: 'params.track_index',
             slotId: id || null,
             message: `${modeLabel} Depth track ${slotLabel} references index ${trackIndex}; available indexes are 0..${depthTrackCount - 1}.`
+          });
+        } else if (depthTrackCount === 0 || (sourcedDepthIndexes && !sourcedDepthIndexes.has(trackIndex))) {
+          addRowIssue(rowIssues, index, {
+            code: 'depth_source_missing',
+            field: 'params.track_index',
+            slotId: id || null,
+            message: `${modeLabel} Depth track ${slotLabel} has no logical Depth source.`
           });
         }
       }
@@ -1173,6 +1178,7 @@ export const validateCustomTrackPlan = (options = {}) => collectCustomTrackIssue
   axisIndex: options.axisIndex,
   trackType: options.trackType,
   depthTrackCount: options.depthTrackCount,
+  depthSourcedTrackIndexes: options.depthSourcedTrackIndexes,
   annotationSetIds: options.annotationSetIds,
   visibleFeatureUnderlays: options.visibleFeatureUnderlays,
   conservationSeries: options.conservationSeries

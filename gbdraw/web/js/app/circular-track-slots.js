@@ -6,9 +6,9 @@ import {
   safeConservationSlotId
 } from './conservation-series.js';
 import {
-  dropInvalidManagedDepthSlots,
   isDefaultManagedDepthSlot,
   parseDepthTrackIndexIdentity,
+  reconcileManagedDepthSlots,
   representativeDepthFiles
 } from './depth-track-state.js';
 import { resolveColorToHex } from './color-utils.js';
@@ -447,6 +447,11 @@ const circularAvailableDepthTrackCountForState = (state) => {
   const files = representativeDepthFiles(state?.files?.c_depth);
   return files.some(Boolean) ? files.length : 0;
 };
+
+const circularSourcedDepthTrackIndexesForState = (state) => (
+  representativeDepthFiles(state?.files?.c_depth)
+    .flatMap((file, trackIndex) => (file ? [trackIndex] : []))
+);
 
 const circularDepthTrackCountForState = (state) => (
   Boolean(state?.form?.show_depth)
@@ -1242,19 +1247,24 @@ export const isCircularTrackRendererSuppressedByForm = (renderer, form = {}) => 
 export const circularTrackSlotHiddenBySuppressForm = (slot, form = {}) =>
   isCircularTrackRendererSuppressedByForm(slot?.renderer, form);
 
+// Hide GC Content / Hide GC Skew own the visibility of their rows. A hidden
+// renderer disables its enabled rows and marks them; once the form no longer
+// hides it, the marked rows are enabled again. Rows the user disabled carry no
+// mark and stay disabled. The projection depends only on the rows and the form.
 export const applyCircularSuppressControlsToSlots = (slots, form = {}) => (
   (Array.isArray(slots) ? slots : []).map((slot) => {
     if (!slot || typeof slot !== 'object' || Array.isArray(slot)) return slot;
-    if (!circularTrackSlotHiddenBySuppressForm(slot, form)) return slot;
-    if (slot.enabled === false) return slot;
     const token = SUPPRESS_KEY_BY_RENDERER[String(slot.renderer || '').trim()];
+    if (!token) return slot;
     const params = cloneParams(slot.params);
-    if (token) params[GLOBAL_SUPPRESS_PARAM] = token;
-    return {
-      ...slot,
-      enabled: false,
-      params
-    };
+    if (circularTrackSlotHiddenBySuppressForm(slot, form)) {
+      if (slot.enabled === false) return slot;
+      params[GLOBAL_SUPPRESS_PARAM] = token;
+      return { ...slot, enabled: false, params };
+    }
+    if (params[GLOBAL_SUPPRESS_PARAM] !== token) return slot;
+    delete params[GLOBAL_SUPPRESS_PARAM];
+    return { ...slot, enabled: true, params };
   })
 );
 
@@ -1440,6 +1450,7 @@ export const createCircularTrackSlotEditor = ({ state }) => {
     axisIndex: state.adv.circular_track_slots_axis_index,
     trackType: state.form.track_type,
     depthTrackCount: circularAvailableDepthTrackCountForState(state),
+    depthSourcedTrackIndexes: circularSourcedDepthTrackIndexesForState(state),
     annotationSetIds: annotationSetIds(),
     visibleFeatureUnderlays: visibleFeatureUnderlaysForState(state),
     conservationSeries: conservationEntriesForState(state)
@@ -1573,14 +1584,6 @@ export const createCircularTrackSlotEditor = ({ state }) => {
     else delete slot.params.cover_anchor;
   };
 
-  const depthTrackIndexForSlot = (slot, fallbackIndex = null) => {
-    const paramIndex = normalizeTrackIndex(slot?.params?.track_index);
-    if (paramIndex !== null) return paramIndex;
-    const idMatch = String(slot?.id || '').trim().match(/^depth_(\d+)$/);
-    if (idMatch) return Math.max(0, Number(idMatch[1]) - 1);
-    return normalizeTrackIndex(fallbackIndex);
-  };
-
   const makeDepthSlotForTrackIndex = (trackIndex, existingIds, desiredCount) => {
     const normalizedIndex = Math.max(0, Number(trackIndex) || 0);
     const preferredId = Number(desiredCount) > 1 ? `depth_${normalizedIndex + 1}` : 'depth';
@@ -1684,116 +1687,53 @@ export const createCircularTrackSlotEditor = ({ state }) => {
     normalizeSlotsInPlace();
   };
 
-  const resetCircularTrackSlotsFromSimpleControls = () => {
-    const slots = applyCircularGeometryShortcuts(createDefaultCircularTrackSlots({
-      nt: state.adv.nt,
-      showDepth: Boolean(state.form.show_depth),
-      depthTrackCount: desiredCircularDepthTrackCount(),
-      showGc: !state.form.suppress_gc,
-      showSkew: !state.form.suppress_skew,
-      showTicks: state.form.show_scale !== false,
-      preset: state.form.track_type
-    }), circularGeometryShortcutsForState(state));
-    state.adv.circular_track_slots_axis_index = inferLegacyAxisIndexFromFeature(
-      normalizeCircularTrackSlots(slots, state.adv.nt, state.form.track_type),
-      state.form.track_type
-    );
-    const normalized = applyCircularTrackOrderPlacements(
+  // Reset is the preset reset for the current Track layout.
+  const resetCircularTrackSlotsFromSimpleControls = () => (
+    resetCircularTrackSlotsToPreset(state.form.track_type)
+  );
+
+  // Managed Depth rows follow Depth sources (PD-OI-058). The saved stack is
+  // reconciled too, so a later Use custom stack shows the row; an empty saved
+  // stack is built by Reset when the stack is enabled.
+  const reconcileCircularDepthSlots = (previousSourced) => {
+    const slots = Array.isArray(state.adv.circular_track_slots) ? state.adv.circular_track_slots : [];
+    if (slots.length === 0 && !state.adv.circular_track_slots_enabled) return;
+    const { slots: nextSlots, additions } = reconcileManagedDepthSlots({
       slots,
-      state.adv.nt,
-      state.form.track_type,
-      state.adv.circular_track_slots_axis_index
-    );
-    state.adv.circular_track_slots.splice(0, state.adv.circular_track_slots.length, ...normalized);
-    syncCircularConservationSlots();
-  };
-
-  const ensureCircularTrackDepthSlot = () => {
-    normalizeSlotsInPlace();
-    const desiredCount = desiredCircularDepthTrackCount();
-    if (desiredCount <= 0) {
-      commitManagedSlotMutation({
-        nextSlots: dropInvalidManagedDepthSlots({
-          slots: state.adv.circular_track_slots,
-          activeCount: 0,
-          managedPredicate: isDefaultManagedDepthSlot
-        }),
-        managedPredicate: isDefaultManagedDepthSlot
-      });
-      return;
-    }
-
-    const slots = dropInvalidManagedDepthSlots({
-      slots: state.adv.circular_track_slots,
-      activeCount: desiredCount,
+      previousSourced,
+      sourced: circularSourcedDepthTrackIndexesForState(state),
       managedPredicate: isDefaultManagedDepthSlot
     });
-    const existingIds = new Set(
-      slots.map((slot) => String(slot?.id || '').trim()).filter(Boolean)
-    );
-    const depthEntries = slots
-      .map((slot, index) => ({ slot, index }))
-      .filter((entry) => entry.slot?.renderer === 'depth' && entry.slot.enabled !== false);
-    const claimedTrackIndexes = new Set();
-    const duplicateDepthEntries = [];
-
-    depthEntries.forEach((entry, depthOrdinal) => {
-      const trackIndex = depthTrackIndexForSlot(entry.slot, depthOrdinal);
-      if (
-        trackIndex !== null &&
-        trackIndex < desiredCount &&
-        !claimedTrackIndexes.has(trackIndex)
-      ) {
-        entry.slot.enabled = true;
-        entry.slot.params = cloneParams(entry.slot.params);
-        if (desiredCount > 1 || normalizeOptionalText(entry.slot.params.track_index) !== null) {
-          entry.slot.params.track_index = trackIndex;
-        }
-        claimedTrackIndexes.add(trackIndex);
-      } else {
-        if (isDefaultManagedDepthSlot(entry.slot)) {
-          duplicateDepthEntries.push(entry);
-        }
-      }
-    });
-
-    duplicateDepthEntries.forEach((entry) => {
-      for (let trackIndex = 0; trackIndex < desiredCount; trackIndex += 1) {
-        if (claimedTrackIndexes.has(trackIndex)) continue;
-        entry.slot.enabled = true;
-        entry.slot.params = cloneParams(entry.slot.params);
-        entry.slot.params.track_index = trackIndex;
-        claimedTrackIndexes.add(trackIndex);
-        return;
-      }
-    });
-
-    let missingSlots = [];
-    for (let trackIndex = 0; trackIndex < desiredCount; trackIndex += 1) {
-      if (claimedTrackIndexes.has(trackIndex)) continue;
-      missingSlots.push(makeDepthSlotForTrackIndex(trackIndex, existingIds, desiredCount));
-      claimedTrackIndexes.add(trackIndex);
-    }
-    missingSlots = applyCircularGeometryShortcuts(
-      missingSlots,
+    if (additions.length === 0 && nextSlots.length === slots.length) return;
+    const seriesCount = circularAvailableDepthTrackCountForState(state);
+    const existingIds = new Set(nextSlots.map((slot) => String(slot?.id || '').trim()).filter(Boolean));
+    const newSlots = applyCircularGeometryShortcuts(
+      additions.map((trackIndex) => makeDepthSlotForTrackIndex(trackIndex, existingIds, seriesCount)),
       circularGeometryShortcutsForState(state)
     );
     let preferredInsertIndex = -1;
-    slots.forEach((slot, index) => {
+    nextSlots.forEach((slot, index) => {
       if (slot?.renderer === 'depth') preferredInsertIndex = index;
     });
     if (preferredInsertIndex < 0) {
-      preferredInsertIndex = slots.findIndex((slot) => slot?.renderer === 'ticks');
+      preferredInsertIndex = nextSlots.findIndex((slot) => slot?.renderer === 'ticks');
     }
     if (preferredInsertIndex < 0) {
-      preferredInsertIndex = slots.findIndex((slot) => slot?.renderer === 'features');
+      preferredInsertIndex = nextSlots.findIndex((slot) => slot?.renderer === 'features');
     }
     commitManagedSlotMutation({
-      nextSlots: slots,
-      newSlots: missingSlots,
+      nextSlots,
+      newSlots,
       managedPredicate: isDefaultManagedDepthSlot,
       preferredInsertIndex: Math.max(0, preferredInsertIndex + 1)
     });
+  };
+
+  // The only entry for Depth source changes: run the change, then reconcile.
+  const changeCircularDepthSources = (mutate) => {
+    const previousSourced = circularSourcedDepthTrackIndexesForState(state);
+    mutate();
+    reconcileCircularDepthSlots(previousSourced);
   };
 
   const syncCircularConservationSlots = () => {
@@ -1853,6 +1793,7 @@ export const createCircularTrackSlotEditor = ({ state }) => {
       depthTrackCount: desiredCircularDepthTrackCount(),
       showGc: !state.form.suppress_gc,
       showSkew: !state.form.suppress_skew,
+      showTicks: state.form.show_scale !== false,
       preset: normalizedPreset
     }), circularGeometryShortcutsForState(state));
     state.adv.circular_track_slots_axis_index = inferLegacyAxisIndexFromFeature(
@@ -1904,7 +1845,6 @@ export const createCircularTrackSlotEditor = ({ state }) => {
       while (trackIndex < available && claimed.has(trackIndex)) trackIndex += 1;
       slot.params.track_index = trackIndex < available ? trackIndex : 0;
     }
-    applyGlobalSuppressToSlot(slot);
     state.adv.circular_track_slots.push(slot);
     normalizeSlotsInPlace();
   };
@@ -1926,7 +1866,6 @@ export const createCircularTrackSlotEditor = ({ state }) => {
     duplicate.side = source.side;
     duplicate.z = source.z;
     duplicate.params = cloneParams(source.params);
-    applyGlobalSuppressToSlot(duplicate);
     state.adv.circular_track_slots.splice(idx + 1, 0, duplicate);
     const axis = axisIndexForCurrentSlots(state.adv.circular_track_slots);
     if (idx < axis) state.adv.circular_track_slots_axis_index = axis + 1;
@@ -2131,16 +2070,7 @@ export const createCircularTrackSlotEditor = ({ state }) => {
       slot.params.show_labels = true;
       slot.params.layer = 'foreground';
     }
-    applyGlobalSuppressToSlot(slot);
     normalizeSlotsInPlace();
-  };
-
-  const applyGlobalSuppressToSlot = (slot) => {
-    if (!slot || !circularTrackSlotHiddenBySuppressForm(slot, state.form)) return;
-    const token = SUPPRESS_KEY_BY_RENDERER[String(slot.renderer || '').trim()];
-    slot.enabled = false;
-    slot.params = cloneParams(slot.params);
-    if (token) slot.params[GLOBAL_SUPPRESS_PARAM] = token;
   };
 
   const activeCircularTrackSlotsForRenderer = (renderer) => {
@@ -2168,36 +2098,6 @@ export const createCircularTrackSlotEditor = ({ state }) => {
     return globalThis.confirm ? globalThis.confirm(message) : true;
   };
 
-  const disableCircularTrackSlotsForSuppress = (renderer) => {
-    if (!state.adv.circular_track_slots_enabled) return;
-    let changed = false;
-    const token = SUPPRESS_KEY_BY_RENDERER[renderer];
-    state.adv.circular_track_slots.forEach((slot) => {
-      if (!slot || String(slot.renderer || '').trim() !== renderer || slot.enabled === false) return;
-      slot.enabled = false;
-      slot.params = cloneParams(slot.params);
-      if (token) slot.params[GLOBAL_SUPPRESS_PARAM] = token;
-      changed = true;
-    });
-    if (changed) normalizeSlotsInPlace();
-  };
-
-  const restoreCircularTrackSlotsForSuppress = (renderer) => {
-    if (!state.adv.circular_track_slots_enabled) return;
-    let changed = false;
-    const token = SUPPRESS_KEY_BY_RENDERER[renderer];
-    state.adv.circular_track_slots.forEach((slot) => {
-      if (!slot || String(slot.renderer || '').trim() !== renderer) return;
-      const params = cloneParams(slot.params);
-      if (params[GLOBAL_SUPPRESS_PARAM] !== token) return;
-      delete params[GLOBAL_SUPPRESS_PARAM];
-      slot.enabled = true;
-      slot.params = params;
-      changed = true;
-    });
-    if (changed) normalizeSlotsInPlace();
-  };
-
   const setCircularSuppressControl = (key, checked, event = null) => {
     const sessionBusy = state.sessionOperationAvailability?.();
     if (sessionBusy) return sessionBusy;
@@ -2212,17 +2112,12 @@ export const createCircularTrackSlotEditor = ({ state }) => {
       return;
     }
 
-    if (nextChecked) {
-      if (!confirmCircularSuppressOverride(renderer)) {
-        if (event?.target) event.target.checked = previousChecked;
-        return;
-      }
-      disableCircularTrackSlotsForSuppress(renderer);
-      state.form[formKey] = true;
-    } else {
-      state.form[formKey] = false;
-      restoreCircularTrackSlotsForSuppress(renderer);
+    if (nextChecked && !confirmCircularSuppressOverride(renderer)) {
+      if (event?.target) event.target.checked = previousChecked;
+      return;
     }
+    state.form[formKey] = nextChecked;
+    normalizeSlotsInPlace();
 
     if (event?.target) event.target.checked = nextChecked;
   };
@@ -2433,13 +2328,12 @@ export const createCircularTrackSlotEditor = ({ state }) => {
 
   const selectedResultIndexValue = () => Number(state?.selectedResultIndex?.value ?? 0) || 0;
 
-  const resolvedCircularSlotGeometry = (slotIndex, slotId) => findTrackSlotGeometry({
+  const resolvedCircularSlotGeometry = (slotId) => findTrackSlotGeometry({
     geometry: String(state?.trackSlotResolvedGeometry?.value?.mode || '') === 'circular'
       ? state.trackSlotResolvedGeometry.value
       : null,
     resultIndex: selectedResultIndexValue(),
     recordIndex: 0,
-    slotIndex,
     slotId
   });
 
@@ -2470,8 +2364,11 @@ export const createCircularTrackSlotEditor = ({ state }) => {
     };
   };
 
+  // Only a rendered row has resolved geometry; a disabled row shows the estimate.
   const circularTrackSlotDisplayGeometry = (slot, slotIndex) => {
-    const resolved = resolvedCircularSlotGeometry(slotIndex, slot?.id);
+    const resolved = circularTrackSlotEffectiveEnabled(slot)
+      ? resolvedCircularSlotGeometry(slot?.id)
+      : null;
     if (resolved) return { ...resolved, source: 'resolved' };
     return estimateCircularSlotGeometry(slot, slotIndex);
   };
@@ -2545,7 +2442,7 @@ export const createCircularTrackSlotEditor = ({ state }) => {
     normalizeCircularTrackSlots: normalizeSlotsInPlace,
     syncCircularConservationSlots,
     resetCircularTrackSlotsFromSimpleControls,
-    ensureCircularTrackDepthSlot,
+    changeCircularDepthSources,
     resetCircularTrackSlotsToPreset,
     applyCircularTrackPreset,
     setCircularTrackSlotsEnabled,

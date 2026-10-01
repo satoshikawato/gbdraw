@@ -252,7 +252,10 @@ export const reconcileDepthTracksToFiles = ({
   });
 };
 
-export const depthSlotTrackIndex = (slot, fallbackIndex = null) => {
+// The logical series a Depth row references: its track_index, else its
+// depth_<n> ID, else 0 (the Python default). A row's position in the stack
+// never selects a series. A row whose series was removed references none.
+export const depthSlotTrackIndex = (slot) => {
   const rawTrackIndex = slot?.params?.track_index;
   if (rawTrackIndex !== null && rawTrackIndex !== undefined && rawTrackIndex !== '') {
     const parsed = Number(rawTrackIndex);
@@ -261,11 +264,7 @@ export const depthSlotTrackIndex = (slot, fallbackIndex = null) => {
   if (slot?.depth_binding_error) return null;
   const idMatch = String(slot?.id || '').trim().match(/^depth_(\d+)$/);
   if (idMatch) return Math.max(0, Number(idMatch[1]) - 1);
-  if (fallbackIndex !== null && fallbackIndex !== undefined) {
-    const fallback = Number(fallbackIndex);
-    if (Number.isInteger(fallback) && fallback >= 0) return fallback;
-  }
-  return null;
+  return 0;
 };
 
 const referencedDepthTrackWidth = (slots) => {
@@ -341,12 +340,12 @@ export const reindexDepthSlots = ({
     return Array.isArray(slots) ? slots.map((slot) => cloneSlot(slot)) : [];
   }
   const nextSlots = [];
-  slots.forEach((slot, ordinal) => {
+  slots.forEach((slot) => {
     if (!slot || String(slot.renderer || '') !== 'depth') {
       nextSlots.push(cloneSlot(slot));
       return;
     }
-    const oldTrackIndex = depthSlotTrackIndex(slot, ordinal);
+    const oldTrackIndex = depthSlotTrackIndex(slot);
     const isManaged = managedPredicate(slot);
     if (oldTrackIndex === null || oldTrackIndex === idx) {
       if (!isManaged) nextSlots.push(disableInvalidManualDepthSlot(slot, oldTrackIndex ?? idx));
@@ -372,9 +371,9 @@ export const dropInvalidManagedDepthSlots = ({
   const count = Math.max(0, Number(activeCount) || 0);
   if (!Array.isArray(slots)) return [];
   return slots
-    .map((slot, ordinal) => {
+    .map((slot) => {
       if (!slot || String(slot.renderer || '') !== 'depth') return cloneSlot(slot);
-      const trackIndex = depthSlotTrackIndex(slot, ordinal);
+      const trackIndex = depthSlotTrackIndex(slot);
       if (trackIndex !== null && trackIndex >= 0 && trackIndex < count) {
         const next = cloneSlot(slot);
         next.params.track_index = trackIndex;
@@ -385,14 +384,46 @@ export const dropInvalidManagedDepthSlots = ({
     .filter(Boolean);
 };
 
+const isDepthSlot = (slot) => Boolean(slot) && String(slot.renderer || '') === 'depth';
+
+/**
+ * Managed Depth row lifecycle (PD-OI-058), shared by both modes. Only the
+ * transitions that change Depth sources call it, with the logical series
+ * indexes that had a source before and after the change:
+ * - a series that loses its last source loses its managed rows;
+ * - a series that gains its first source gets one managed row, returned in
+ *   `additions`, unless a row (enabled or disabled) already references it.
+ * Manual rows are never changed. A manual row left on a series without a
+ * source reports a row issue (PD-OI-083).
+ */
+export const reconcileManagedDepthSlots = ({
+  slots,
+  previousSourced = [],
+  sourced = [],
+  managedPredicate = isDefaultManagedDepthSlot
+} = {}) => {
+  const before = new Set(previousSourced);
+  const after = new Set(sourced);
+  const kept = (Array.isArray(slots) ? slots : []).filter((slot) => {
+    if (!isDepthSlot(slot) || !managedPredicate(slot)) return true;
+    const trackIndex = depthSlotTrackIndex(slot);
+    return !before.has(trackIndex) || after.has(trackIndex);
+  });
+  const referenced = new Set(kept.filter(isDepthSlot).map((slot) => depthSlotTrackIndex(slot)));
+  const additions = Array.from(after)
+    .filter((trackIndex) => !before.has(trackIndex) && !referenced.has(trackIndex))
+    .sort((left, right) => left - right);
+  return { slots: kept, additions };
+};
+
 export const syncDepthSlotLabels = ({ slots, depthTracks, activeCount = null } = {}) => {
   if (!Array.isArray(slots)) return;
   const count = activeCount === null || activeCount === undefined
     ? (Array.isArray(depthTracks) ? depthTracks.length : 0)
     : Math.max(0, Number(activeCount) || 0);
-  slots.forEach((slot, ordinal) => {
+  slots.forEach((slot) => {
     if (!slot || String(slot.renderer || '') !== 'depth') return;
-    const trackIndex = depthSlotTrackIndex(slot, ordinal);
+    const trackIndex = depthSlotTrackIndex(slot);
     if (trackIndex === null || trackIndex < 0 || trackIndex >= count) {
       return;
     }

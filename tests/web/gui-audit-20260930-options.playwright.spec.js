@@ -14,7 +14,8 @@ const {
   loadSessionFile,
   openFresh,
   openWithGenBank,
-  settle
+  settle,
+  switchMode
 } = require('./helpers/audit-browser.cjs');
 
 test.describe.configure({ retries: 0 });
@@ -119,8 +120,17 @@ const openCustomStackPanel = async (page) => {
 const slots = (page) => page.evaluate(() => window.__GBDRAW_APP__.adv.circular_track_slots
   .map((slot) => ({ id: slot.id, renderer: slot.renderer, enabled: Boolean(slot.enabled) })));
 
+const depthRows = (page, key = 'circular_track_slots') => page.evaluate((slotsKey) => (
+  window.__GBDRAW_APP__.adv[slotsKey].filter((slot) => slot.renderer === 'depth').map((slot) => ({
+    id: slot.id, enabled: slot.enabled !== false, trackIndex: slot.params?.track_index ?? null
+  }))
+), key);
+
+const uploaderRemove = (container) => container.locator('[role="group"][aria-label$="selection"] button', { hasText: 'Remove' }).first();
+
+// TR-03 / PD-OI-058: the uploader Remove is a Depth source change, so the
+// managed row goes with the file in the same History step.
 test('removing the Depth file with the uploader Remove leaves a Generate-ready stack', async ({ page }) => {
-  test.fail(true, 'TR-03');
   test.setTimeout(300_000);
   await openWithGenBank(page, HMMT);
   await page.evaluate((text) => window.__GBDRAW_APP__.setCircularDepthFile(
@@ -128,18 +138,139 @@ test('removing the Depth file with the uploader Remove leaves a Generate-ready s
   ), depthTsv());
   await (await openCustomStackPanel(page)).check();
   await settle(page);
+  expect(await depthRows(page)).toEqual([{ id: 'depth', enabled: true, trackIndex: 0 }]);
   const summary = page.locator('summary[aria-label="Depth TSV tracks"]');
   await reveal(summary);
   await summary.evaluate((element) => { element.parentElement.open = true; });
-  await summary.locator('xpath=..').locator('[role="group"][aria-label$="selection"] button', { hasText: 'Remove' })
-    .first().click();
+  await uploaderRemove(summary.locator('xpath=..')).click();
   await settle(page);
   expect((await slots(page)).filter(({ renderer, enabled }) => renderer === 'depth' && enabled)).toEqual([]);
+  await page.evaluate(() => window.__GBDRAW_HISTORY__.undo());
+  await settle(page);
+  expect(await page.evaluate(() => window.__GBDRAW_APP__.getCircularDepthFile(0)?.name)).toBe('sampleA.depth.tsv');
+  expect(await depthRows(page)).toEqual([{ id: 'depth', enabled: true, trackIndex: 0 }]);
+  await page.evaluate(() => window.__GBDRAW_HISTORY__.redo());
+  await settle(page);
+  expect(await depthRows(page)).toEqual([]);
   await generateAndWaitForResult(page);
 });
 
+const openLinearStack = async (page) => {
+  await openFresh(page);
+  await switchMode(page, 'linear');
+  await page.getByTestId('linear-genbank-1').setInputFiles(HMMT);
+  await expect.poll(() => page.evaluate(() => window.__GBDRAW_APP__.linearSeqs[0]?.gb?.name)).toBe('HmmtDNA.gbk');
+  const button = page.locator('button[aria-controls="linear-custom-track-slots-panel"]');
+  await reveal(button);
+  if (await button.getAttribute('aria-expanded') !== 'true') await button.click();
+  await page.getByText('Use custom stack', { exact: true }).locator('input').check();
+  await settle(page);
+  const source = page.locator('[data-linear-source-depth]').first();
+  await reveal(source.locator(':scope > summary'));
+  await source.evaluate((element) => { element.open = true; });
+  return source;
+};
+
+const setLinearDepthFromFile = async (page) => {
+  await page.getByTestId('linear-source-depth-1-1').setInputFiles({
+    name: 'sampleA.depth.tsv', mimeType: 'text/tab-separated-values', buffer: Buffer.from(depthTsv())
+  });
+  await settle(page);
+};
+
+// TR-02 / PD-OI-058: both modes add a managed row when a series gets its first
+// source, whether or not the custom stack is in use.
+test('a Linear Depth file adds one managed row to the custom stack', async ({ page }) => {
+  test.setTimeout(300_000);
+  await openLinearStack(page);
+  expect(await depthRows(page, 'linear_track_slots')).toEqual([]);
+  await setLinearDepthFromFile(page);
+  expect(await depthRows(page, 'linear_track_slots')).toEqual([{ id: 'depth', enabled: true, trackIndex: 0 }]);
+});
+
+test('deleting the Linear File that held a series source removes its managed row', async ({ page }) => {
+  test.setTimeout(300_000);
+  await openLinearStack(page);
+  await page.evaluate(() => window.__GBDRAW_APP__.addLinearSeq());
+  await page.getByTestId('linear-genbank-2').setInputFiles(HMMT);
+  await expect.poll(() => page.evaluate(() => window.__GBDRAW_APP__.linearSeqs[1]?.gb?.name)).toBe('HmmtDNA.gbk');
+  await page.evaluate((text) => {
+    const app = window.__GBDRAW_APP__;
+    app.setLinearDepthFile(app.linearSeqs[1], 0, new File([text], 'sampleB.depth.tsv', { type: 'text/tab-separated-values' }));
+  }, depthTsv());
+  await settle(page);
+  expect(await depthRows(page, 'linear_track_slots')).toEqual([{ id: 'depth', enabled: true, trackIndex: 0 }]);
+  await page.evaluate(async () => {
+    const app = window.__GBDRAW_APP__;
+    app.requestLinearSourceRemoval(app.linearSourceGroups[1]);
+    await app.applyLinearSourceRemoval('delete');
+  });
+  await settle(page);
+  expect(await page.evaluate(() => window.__GBDRAW_APP__.linearSeqs.length)).toBe(1);
+  expect(await depthRows(page, 'linear_track_slots')).toEqual([]);
+});
+
+const openLinearDepthStack = async (page) => {
+  const source = await openLinearStack(page);
+  await setLinearDepthFromFile(page);
+  await page.evaluate(() => window.__GBDRAW_APP__.resetLinearTrackSlotsFromSimpleControls());
+  await settle(page);
+  return source;
+};
+
+// TR-03 Linear / PD-OI-083: a File clear keeps the logical series (PD-OI-025);
+// an enabled manual row on it shows the row issue and stops Generate.
+test('a Linear File clear leaves a manual Depth row whose row issue stops Generate', async ({ page }) => {
+  test.setTimeout(300_000);
+  const source = await openLinearDepthStack(page);
+  expect(await depthRows(page, 'linear_track_slots')).toEqual([{ id: 'depth', enabled: true, trackIndex: 0 }]);
+  await page.evaluate(() => {
+    const app = window.__GBDRAW_APP__;
+    app.setLinearTrackSlotHeight(app.adv.linear_track_slots.find((slot) => slot.renderer === 'depth'), '30');
+  });
+  await uploaderRemove(source).click();
+  await settle(page);
+  const state = await page.evaluate(() => {
+    const app = window.__GBDRAW_APP__;
+    const index = app.adv.linear_track_slots.findIndex((slot) => slot.renderer === 'depth');
+    return {
+      index,
+      width: app.linearSeqs[0].depth.length,
+      issue: app.linearTrackSlotIssue(app.adv.linear_track_slots[index], index)
+    };
+  });
+  expect(state).toMatchObject({ width: 1, issue: "Linear Depth track 'depth' has no logical Depth source." });
+  expect(await depthRows(page, 'linear_track_slots')).toEqual([{ id: 'depth', enabled: true, trackIndex: 0 }]);
+  await generateAndWaitForResult(page, { expectedStatus: 'error' });
+  expect(await page.evaluate(() => {
+    const { code, context } = window.__GBDRAW_APP__.errorLog;
+    return { code, reason: context.reason, slotIndex: context.slotIndex };
+  })).toEqual({ code: 'TRACK_INVALID', reason: 'REQUIRED', slotIndex: state.index });
+  await page.evaluate(() => {
+    window.__GBDRAW_APP__.adv.linear_track_slots.find((slot) => slot.renderer === 'depth').enabled = false;
+  });
+  await settle(page);
+  await generateAndWaitForResult(page);
+});
+
+// TR-02 Linear / PD-OI-058 May retire: Add Depth TSV series adds a series
+// without a source, so it neither adds nor re-enables a row.
+test('Add Depth TSV series keeps a disabled Linear Depth row disabled', async ({ page }) => {
+  test.setTimeout(300_000);
+  await openLinearDepthStack(page);
+  await page.evaluate(() => {
+    const slot = window.__GBDRAW_APP__.adv.linear_track_slots.find((entry) => entry.renderer === 'depth');
+    slot.enabled = false;
+    slot.params = { ...slot.params, legend_label: 'Coverage A' };
+  });
+  const before = await page.evaluate(() => JSON.parse(JSON.stringify(window.__GBDRAW_APP__.adv.linear_track_slots)));
+  await page.getByRole('button', { name: 'Add Depth TSV series from file 1', exact: true }).click();
+  await settle(page);
+  expect(await page.evaluate(() => window.__GBDRAW_APP__.linearSeqs[0].depth.length)).toBe(2);
+  expect(await page.evaluate(() => JSON.parse(JSON.stringify(window.__GBDRAW_APP__.adv.linear_track_slots)))).toEqual(before);
+});
+
 test('un-hiding GC while the custom stack is inactive restores the GC content row', async ({ page }) => {
-  test.fail(true, 'TR-06');
   test.setTimeout(300_000);
   await openWithGenBank(page, HMMT);
   const useStack = await openCustomStackPanel(page);
@@ -154,7 +285,6 @@ test('un-hiding GC while the custom stack is inactive restores the GC content ro
 });
 
 test('a preset reset honors Show Coordinate Scale off', async ({ page }) => {
-  test.fail(true, 'TR-09');
   test.setTimeout(300_000);
   await openWithGenBank(page, HMMT, () => { window.__GBDRAW_APP__.form.show_scale = false; });
   await (await openCustomStackPanel(page)).check();

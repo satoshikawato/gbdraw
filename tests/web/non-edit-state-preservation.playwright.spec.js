@@ -194,7 +194,6 @@ const ROWS = [
   },
   {
     name: 'an unrelated toggle pair keeps a disabled Depth row disabled and in place',
-    knownDefect: 'TR-02',
     setup: async (page) => {
       await openWithGenBank(page, HMMT);
       await page.evaluate((text) => window.__GBDRAW_APP__.setCircularDepthFile(

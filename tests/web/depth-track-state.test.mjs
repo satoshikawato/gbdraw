@@ -20,6 +20,7 @@ const {
   depthSlotTrackIndex,
   depthTrackMatrixWidth,
   depthTrackSessionWidth,
+  dropInvalidManagedDepthSlots,
   isRecordMajorDepthFileMatrix,
   normalizeDepthTrackConfig,
   normalizeRecordMajorDepthFileRows,
@@ -27,6 +28,7 @@ const {
   representativeDepthFiles,
   reindexDepthSlots,
   reconcileDepthTracksToFiles,
+  reconcileManagedDepthSlots,
   removeDepthTrackColumnAt
 } = await import(pathToFileURL(tempModulePath));
 
@@ -117,10 +119,10 @@ const depthIndexes = (slots) => slots
   assert.equal(custom.enabled, false);
   assert.equal(Object.hasOwn(custom.params, 'track_index'), false);
   assert.match(custom.depth_binding_error, /logical track index 1/);
-  assert.equal(depthSlotTrackIndex(custom, 0), null, 'invalid manual slots must not regain an ordinal fallback');
+  assert.equal(depthSlotTrackIndex(custom), null, 'invalid manual slots must not regain an ordinal fallback');
   assert.deepEqual(depthIndexes(slots), [0, 1]);
   custom.params.track_index = 0;
-  assert.equal(depthSlotTrackIndex(custom, 1), 0, 'an explicit replacement selection must take precedence');
+  assert.equal(depthSlotTrackIndex(custom), 0, 'an explicit replacement selection must take precedence');
 }
 
 {
@@ -141,3 +143,30 @@ const depthIndexes = (slots) => slots
 }
 
 console.log(`depth-track-state tests passed (${fileURLToPath(sourceUrl)})`);
+
+{
+  // A row without track_index references series 0 (the Python default); its
+  // position in the stack never selects a series (TR-02).
+  const resetRow = { id: 'depth', renderer: 'depth', enabled: false, params: {} };
+  const stack = [
+    { id: 'features', renderer: 'features', params: {} },
+    { id: 'ticks', renderer: 'ticks', params: {} },
+    { id: 'gc_content', renderer: 'dinucleotide_content', params: {} },
+    resetRow
+  ];
+  assert.equal(depthSlotTrackIndex(resetRow), 0);
+  const loaded = dropInvalidManagedDepthSlots({ slots: stack, activeCount: 1 });
+  assert.deepEqual(loaded.map((slot) => slot.id), ['features', 'ticks', 'gc_content', 'depth']);
+  assert.equal(loaded[3].enabled, false);
+}
+
+{
+  const managed = { id: 'depth_1', renderer: 'depth', params: { track_index: 0 } };
+  const manual = { id: 'mine', renderer: 'depth', width: '10px', params: { track_index: 0 } };
+  const removed = { id: 'disabled_depth_2', renderer: 'depth', enabled: false, depth_binding_error: 'gone', params: {} };
+  const lost = reconcileManagedDepthSlots({ slots: [managed, manual, removed], previousSourced: [0], sourced: [] });
+  assert.deepEqual(lost, { slots: [manual, removed], additions: [] });
+  assert.equal(lost.slots[0], manual, 'kept rows keep their identity');
+  const gained = reconcileManagedDepthSlots({ slots: [manual, removed], previousSourced: [], sourced: [2, 0, 1] });
+  assert.deepEqual(gained.additions, [1, 2], 'a removed-series row references no series');
+}

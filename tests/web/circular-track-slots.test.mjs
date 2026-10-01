@@ -177,14 +177,15 @@ test('Circular placement actions preserve the Axis boundary and radial sides', (
   assert.equal(state.adv.circular_track_slots[1].params.lane_direction, 'outside');
 });
 
+const depthFile = (name) => ({ name, size: 1, lastModified: 0 });
+
 test('managed Depth insertion preserves the existing Axis sides', () => {
-  const state = createState({
-    showDepth: true,
-    depthFiles: [{ name: 'depth.tsv', size: 1, lastModified: 0 }]
-  });
+  const state = createState({ showDepth: true });
   const editor = createCircularTrackSlotEditor({ state });
 
-  editor.ensureCircularTrackDepthSlot();
+  editor.changeCircularDepthSources(() => {
+    state.files.c_depth = [depthFile('depth.tsv')];
+  });
 
   assert.deepEqual(
     state.adv.circular_track_slots.map((slot) => slot.id),
@@ -208,14 +209,13 @@ test('managed Depth insertion stays after an on-Axis Tick', () => {
     slots: [featureSlot(), existingDepth, tickSlot(), gcSlot()],
     axisIndex: 2,
     showDepth: true,
-    depthFiles: [
-      { name: 'depth-a.tsv', size: 1, lastModified: 0 },
-      { name: 'depth-b.tsv', size: 1, lastModified: 0 }
-    ]
+    depthFiles: [depthFile('depth-a.tsv')]
   });
   const editor = createCircularTrackSlotEditor({ state });
 
-  editor.ensureCircularTrackDepthSlot();
+  editor.changeCircularDepthSources(() => {
+    state.files.c_depth = [depthFile('depth-a.tsv'), depthFile('depth-b.tsv')];
+  });
 
   assert.deepEqual(
     state.adv.circular_track_slots.map((slot) => slot.id),
@@ -233,11 +233,15 @@ test('managed Depth insertion stays after an on-Axis Tick', () => {
 });
 
 test('managed Depth removal rebases the Axis only when the row is before it', () => {
+  const removeSource = (state) => createCircularTrackSlotEditor({ state }).changeCircularDepthSources(() => {
+    state.files.c_depth = [];
+  });
   const beforeState = createState({
     slots: [depthSlot('outside'), featureSlot(), spacerSlot(), gcSlot()],
-    axisIndex: 3
+    axisIndex: 3,
+    depthFiles: [depthFile('depth.tsv')]
   });
-  createCircularTrackSlotEditor({ state: beforeState }).ensureCircularTrackDepthSlot();
+  removeSource(beforeState);
   assert.equal(beforeState.adv.circular_track_slots_axis_index, 2);
   assert.deepEqual(slotSides(beforeState), {
     features: 'outside',
@@ -247,9 +251,10 @@ test('managed Depth removal rebases the Axis only when the row is before it', ()
 
   const afterState = createState({
     slots: [featureSlot(), spacerSlot(), gcSlot(), depthSlot()],
-    axisIndex: 2
+    axisIndex: 2,
+    depthFiles: [depthFile('depth.tsv')]
   });
-  createCircularTrackSlotEditor({ state: afterState }).ensureCircularTrackDepthSlot();
+  removeSource(afterState);
   assert.equal(afterState.adv.circular_track_slots_axis_index, 2);
   assert.deepEqual(slotSides(afterState), {
     features: 'outside',
@@ -378,4 +383,60 @@ test('Circular measure action refuses nonfinite numeric leaves before changing a
     editor.updateCircularTrackSlotMeasure(slot, 'width', scalar);
     assert.strictEqual(slot.width, scalar);
   }
+});
+
+const gcRows = (state) => state.adv.circular_track_slots
+  .filter((slot) => slot.renderer === 'dinucleotide_content')
+  .map((slot) => ({ id: slot.id, enabled: slot.enabled, marked: '_suppressed_by_global' in slot.params }));
+
+// TR-06: Hide GC Content owns the visibility of its rows whether or not the
+// custom stack is in use.
+test('un-hiding GC while the custom stack is off restores the row the hide disabled', () => {
+  const state = createState();
+  const editor = createCircularTrackSlotEditor({ state });
+
+  editor.setCircularGcSuppressed(true);
+  editor.setCircularTrackSlotsEnabled(false);
+  editor.setCircularGcSuppressed(false);
+  editor.setCircularTrackSlotsEnabled(true);
+
+  assert.deepEqual(gcRows(state), [{ id: 'gc_content', enabled: true, marked: false }]);
+});
+
+test('a GC row the user disabled stays disabled across Hide and un-hide', () => {
+  const state = createState({
+    slots: [featureSlot(), spacerSlot(), { ...gcSlot(), enabled: false }, { ...gcSlot(), id: 'gc_content_2' }]
+  });
+  const editor = createCircularTrackSlotEditor({ state });
+
+  editor.setCircularGcSuppressed(true);
+  assert.deepEqual(gcRows(state), [
+    { id: 'gc_content', enabled: false, marked: false },
+    { id: 'gc_content_2', enabled: false, marked: true }
+  ]);
+  editor.duplicateCircularTrackSlot(2);
+  editor.setCircularGcSuppressed(false);
+
+  assert.deepEqual(gcRows(state), [
+    { id: 'gc_content', enabled: false, marked: false },
+    { id: 'gc_content_3', enabled: false, marked: false },
+    { id: 'gc_content_2', enabled: true, marked: false }
+  ]);
+});
+
+// TR-09: every Reset honors Show Coordinate Scale; the first Use custom stack
+// still uses the saved stack (D-34).
+test('Reset and the preset resets omit Ticks while Show Coordinate Scale is off', () => {
+  for (const preset of ['tuckin', 'middle', 'spreadout']) {
+    const state = createState();
+    createCircularTrackSlotEditor({ state }).resetCircularTrackSlotsToPreset(preset);
+    assert.equal(state.adv.circular_track_slots.some((slot) => slot.renderer === 'ticks'), false, preset);
+  }
+
+  const plain = createState();
+  const preset = createState();
+  createCircularTrackSlotEditor({ state: plain }).resetCircularTrackSlotsFromSimpleControls();
+  createCircularTrackSlotEditor({ state: preset }).resetCircularTrackSlotsToPreset(preset.form.track_type);
+  assert.deepEqual(plain.adv.circular_track_slots, preset.adv.circular_track_slots);
+  assert.equal(plain.adv.circular_track_slots_axis_index, preset.adv.circular_track_slots_axis_index);
 });

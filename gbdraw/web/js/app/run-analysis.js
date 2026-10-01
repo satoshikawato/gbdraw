@@ -42,8 +42,8 @@ import {
 } from './linear-track-slots.js';
 import { getDepthTrackFallbackLabel } from './depth-tracks.js';
 import {
+  activeDepthTrackIndices,
   depthFileSlotsFromValue,
-  depthSlotTrackIndex,
   depthTrackCoverageCount,
   depthTrackMatrixWidth,
   isRecordMajorDepthFileMatrix,
@@ -52,6 +52,11 @@ import {
   syncDepthSlotLabels
 } from './depth-track-state.js';
 import { encodeAnnotationTable } from './annotations/table-codec.js';
+import {
+  CustomTrackPlanValidationError,
+  customTrackPlanIssues,
+  validateCustomTrackPlan
+} from './track-slot-validation.js';
 import {
   normalizeCollinearSearchScope
 } from './losat-normalization.js';
@@ -1640,21 +1645,19 @@ export const createRunAnalysis = ({
   );
 
   const validateDepthInputPresence = () => {
-    const customDepthRequested = mode.value === 'linear'
-      ? (
-          adv.linear_track_slots_enabled === true &&
-          (Array.isArray(adv.linear_track_slots) ? adv.linear_track_slots : []).some((slot) => (
-            slot?.enabled !== false && String(slot?.renderer || '') === 'depth'
-          ))
-        )
-      : (
-          adv.circular_track_slots_enabled === true &&
-          (Array.isArray(adv.circular_track_slots) ? adv.circular_track_slots : []).some((slot) => (
-            slot?.enabled !== false && String(slot?.renderer || '') === 'depth'
-          ))
+    const linear = mode.value === 'linear';
+    const slots = linear ? adv.linear_track_slots : adv.circular_track_slots;
+    const customDepthRequested = (
+      (linear ? adv.linear_track_slots_enabled : adv.circular_track_slots_enabled) === true &&
+      (Array.isArray(slots) ? slots : []).some((slot) => (
+        slot?.enabled !== false && String(slot?.renderer || '') === 'depth'
+      ))
     );
     if (!form.show_depth && !customDepthRequested) return '';
-    if (mode.value === 'circular') {
+    let rows;
+    if (linear) {
+      rows = linearSeqs.map((seq) => depthFileSlotsFromValue(seq.depth));
+    } else {
       const discoveredCount = (
         circularDiscoveryMatchesCurrentInput() &&
         Array.isArray(circularRecordList.value)
@@ -1668,30 +1671,31 @@ export const createRunAnalysis = ({
               ? Math.max(1, files.c_depth.length)
               : 1
           );
-      const rows = normalizeRecordMajorDepthFileRows(files.c_depth, recordCount);
       if (isRecordMajorDepthFileMatrix(files.c_depth) && files.c_depth.length !== recordCount) {
         return `Circular Depth matrix has ${files.c_depth.length} record rows; expected ${recordCount}.`;
       }
-      if (!rows.some((row) => row.some(Boolean))) {
-        return 'Please upload a Depth TSV file or disable Show depth track.';
-      }
-      const logicalWidth = depthTrackMatrixWidth(rows);
-      for (let trackIndex = 0; trackIndex < logicalWidth; trackIndex += 1) {
-        if (depthTrackCoverageCount(rows, trackIndex) > 0) continue;
-        return `Depth series #${trackIndex + 1} (logical track index ${trackIndex}) has no TSV source in any record. Add a TSV or remove the series.`;
-      }
-      return '';
+      rows = normalizeRecordMajorDepthFileRows(files.c_depth, recordCount);
     }
-
-    const depthFileSlots = (value) => (Array.isArray(value) ? value.slice() : (value ? [value] : []));
-    const perRecordDepthFiles = linearSeqs.map((seq) => depthFileSlots(seq.depth));
-    const depthCount = perRecordDepthFiles.reduce((sum, items) => sum + items.filter(Boolean).length, 0);
-    if (depthCount === 0) {
-      return 'Please upload at least one Depth TSV file or disable Show depth track.';
+    if (customDepthRequested) {
+      // An enabled Depth row must reference a logical series with a source in
+      // some record; Generate stops on the row issue the track editor shows
+      // (PD-OI-083).
+      const issues = customTrackPlanIssues(validateCustomTrackPlan({
+        mode: mode.value,
+        slots,
+        depthTrackCount: depthTrackMatrixWidth(rows),
+        depthSourcedTrackIndexes: activeDepthTrackIndices(rows)
+      })).filter((issue) => String(issue.code || '').startsWith('depth_'));
+      if (issues.length > 0) return new CustomTrackPlanValidationError(issues);
     }
-    const logicalWidth = depthTrackMatrixWidth(perRecordDepthFiles);
+    if (!rows.some((row) => row.some(Boolean))) {
+      return linear
+        ? 'Please upload at least one Depth TSV file or disable Show depth track.'
+        : 'Please upload a Depth TSV file or disable Show depth track.';
+    }
+    const logicalWidth = depthTrackMatrixWidth(rows);
     for (let trackIndex = 0; trackIndex < logicalWidth; trackIndex += 1) {
-      if (depthTrackCoverageCount(perRecordDepthFiles, trackIndex) > 0) continue;
+      if (depthTrackCoverageCount(rows, trackIndex) > 0) continue;
       return `Depth series #${trackIndex + 1} (logical track index ${trackIndex}) has no TSV source in any record. Add a TSV or remove the series.`;
     }
     return '';
@@ -2414,21 +2418,6 @@ export const createRunAnalysis = ({
           activeCount: trackCount
         });
       };
-      const validateEnabledDepthSlots = (slots, activeCount, kind) => {
-        const count = Math.max(0, Number(activeCount) || 0);
-        let fallbackIndex = 0;
-        (Array.isArray(slots) ? slots : []).forEach((slot) => {
-          if (!slot || slot.enabled === false || String(slot.renderer || '') !== 'depth') return;
-          const trackIndex = depthSlotTrackIndex(slot, fallbackIndex);
-          fallbackIndex += 1;
-          if (trackIndex !== null && trackIndex >= 0 && trackIndex < count) return;
-          const slotId = String(slot.id || 'depth').trim() || 'depth';
-          const indexText = trackIndex === null ? 'unknown' : String(trackIndex);
-          throw new Error(
-            `${kind} depth slot '${slotId}' references removed depth track index ${indexText}. Select an existing Depth TSV or remove the slot.`
-          );
-        });
-      };
       const linearDepthRepresentativeFiles = () => {
         const rows = linearSeqs.map((seq) => depthFileSlotsFromValue(seq.depth));
         const maxDepthTracks = depthTrackMatrixWidth(rows);
@@ -2597,7 +2586,6 @@ export const createRunAnalysis = ({
             circularTrackSlots,
             representativeDepthFiles(circularDepthRows)
           );
-          validateEnabledDepthSlots(circularTrackSlots, circularDepthEntries.length, 'Circular');
         }
         const hasCircularDepthFile = circularDepthEntries.length > 0;
         const circularSlotNeedsDepth = useCircularTrackSlots && hasEnabledCircularTrackRenderer(circularTrackSlots, 'depth');
@@ -2835,9 +2823,6 @@ export const createRunAnalysis = ({
           linearSlotNeedsDepth = linearTrackSlots.some(
             (slot) => slot.enabled !== false && slot.renderer === 'depth'
           );
-          const depthTrackCount = depthTrackMatrixWidth(
-            linearSeqs.map((seq) => depthFileSlotsFromValue(seq.depth))
-          );
           let nextDepthIndex = 0;
           linearTrackSlots.forEach((slot) => {
             if (slot.renderer !== 'depth') return;
@@ -2857,7 +2842,6 @@ export const createRunAnalysis = ({
             linearTrackSlots,
             linearDepthRepresentativeFiles()
           );
-          validateEnabledDepthSlots(linearTrackSlots, depthTrackCount, 'Linear');
           linearTrackSlotAxisIndex = clampLinearTrackAxisIndex(
             adv.linear_track_slots_axis_index,
             linearTrackSlots.length

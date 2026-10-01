@@ -551,6 +551,48 @@ test('validates Depth binding and allows disabling an invalid row', () => {
   assert.equal(disabled.rowIssues.size, 0);
 });
 
+// PD-OI-083: a logical series inside the count can still lack a source; the
+// row issue matches the one for a stack with no Depth series.
+test('reports an enabled Depth row on a series without a source in both modes', () => {
+  for (const mode of ['circular', 'linear']) {
+    const label = mode === 'circular' ? 'Circular' : 'Linear';
+    const side = mode === 'circular' ? 'inside' : 'below';
+    const plan = validate({
+      mode,
+      slots: [feature(), depth('depth', 0, { side }), depth('depth_2', 1, { side })],
+      depthTrackCount: 2,
+      depthSourcedTrackIndexes: [1]
+    });
+    assert.deepEqual(rowCodes(plan, 1), ['depth_source_missing']);
+    assert.deepEqual(rowCodes(plan, 2), []);
+    const empty = validate({ mode, slots: [feature(), depth('depth', 0, { side })], depthTrackCount: 0 });
+    assert.deepEqual(
+      plan.rowIssues.get(1).map((issue) => issue.message),
+      [`${label} Depth track 'depth' has no logical Depth source.`]
+    );
+    assert.deepEqual(
+      empty.rowIssues.get(1).map((issue) => issue.message),
+      plan.rowIssues.get(1).map((issue) => issue.message)
+    );
+  }
+  const withoutInventory = validate({ slots: [feature(), depth('depth', 0)], depthTrackCount: 2 });
+  assert.equal(withoutInventory.rowIssues.size, 0);
+});
+
+test('Linear editor shows the row issue after a File clear keeps the series', () => {
+  const slots = [feature(), depth('depth_1', 0, { custom: 'manual' }), depth('depth_2', 1)];
+  const editor = createLinearTrackSlotEditor({
+    state: {
+      form: { linear_track_layout: 'middle', show_depth: true },
+      adv: { linear_track_slots: slots, linear_track_slots_axis_index: 0, nt: 'GC', depth_tracks: [] },
+      linearSeqs: [{ depth: [null, { name: 'b.depth.tsv' }] }],
+      annotationSets: []
+    }
+  });
+  assert.equal(editor.linearTrackSlotIssue(slots[1], 1), "Linear Depth track 'depth_1' has no logical Depth source.");
+  assert.equal(editor.linearTrackSlotIssue(slots[2], 2), '');
+});
+
 test('validates Annotation set inventory and advanced params', () => {
   const plan = validate({
     slots: [

@@ -313,9 +313,6 @@ const nativeValidation = (message) => {
     [/^Record selector '[\s\S]*' did not match any record ID\.$/, 'NO_MATCH'],
     [/^Record selector '[\s\S]*' matched multiple records\. Use #index to disambiguate\.$/, 'AMBIGUOUS']
   ]) if (template.test(message)) return { code: 'RECORD_SELECTION', stage: 'request-validation', context: { reason } };
-  const slot = /^(?:Circular|Linear) depth slot '[\s\S]*' references removed depth track index (unknown|[0-9]+)\. Select an existing Depth TSV or remove the slot\.$/.exec(message);
-  if (slot) return { code: 'DEPTH_INVALID', stage: 'request-validation', context: {
-    ...(slot[1] === 'unknown' ? {} : { seriesIndex: Number(slot[1]) }), reason: 'DEPTH_SERIES' } };
   const emptyFasta = /^Pairwise comparison FASTA #([0-9]+) has no sequence data\.$/.exec(message);
   if (emptyFasta) return { code: 'COMPARISON_INPUT', stage: 'request-validation', context: { inputOrdinal: Number(emptyFasta[1]), reason: 'REQUIRED' } };
   const glyph = /^PDF fonts do not contain U\+([0-9A-F]{1,6})\. Use SVG to retain this text\.$/.exec(message);
