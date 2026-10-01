@@ -33,6 +33,7 @@ from flows.how_to.tracks import (
     _track_slot_snapshot,
 )
 from flows.web_capture import (
+    toggle_disclosure,
     assert_fixture_identity,
     assert_output_paths,
     capture_screenshot,
@@ -379,7 +380,7 @@ def capture_gui_feature_highlight(
         page.get_by_label("Separate Strands", exact=True).uncheck()
 
         colors = page.get_by_label("Colors", exact=True)
-        colors.click()
+        toggle_disclosure(colors)
         expect(page.get_by_label("Palette", exact=True)).to_have_value("default")
         page.get_by_label("Specific Table (-t)", exact=True).set_input_files(
             tables["colors"]
@@ -388,10 +389,10 @@ def capture_gui_feature_highlight(
             "() => window.__GBDRAW_APP__.manualSpecificRules.length === 5",
             timeout=ACTION_TIMEOUT_MS,
         )
-        colors.click()
+        toggle_disclosure(colors)
 
         features = page.get_by_label("Features", exact=True)
-        features.click()
+        toggle_disclosure(features)
         page.get_by_label("Rendering for CDS", exact=True).select_option("arrow")
         page.get_by_label("Rendering for rRNA", exact=True).select_option(
             "rectangle"
@@ -409,10 +410,10 @@ def capture_gui_feature_highlight(
         )
         page.get_by_label("Line stroke color", exact=True).fill("#9CA3AF")
         page.get_by_label("Line Stroke Width", exact=True).fill("1.5")
-        features.click()
+        toggle_disclosure(features)
 
         labels = page.get_by_label("Labels", exact=True)
-        labels.click()
+        toggle_disclosure(labels)
         page.get_by_label("Label Mode", exact=True).select_option("both")
         page.get_by_role("button", name="Whitelist", exact=True).click()
         page.get_by_label("Whitelist File", exact=True).set_input_files(
@@ -424,37 +425,37 @@ def capture_gui_feature_highlight(
         page.get_by_text("Label Rendering", exact=True).locator(
             "xpath=.."
         ).locator("select").select_option("auto")
-        labels.click()
+        toggle_disclosure(labels)
 
         annotations = page.get_by_label("Region Annotations", exact=True)
-        annotations.click()
+        toggle_disclosure(annotations)
         with page.expect_file_chooser() as chooser:
             open_ancestor_details(page.get_by_role("button", name="Import TSV", exact=True)).click()
         chooser.value.set_files(tables["regions"])
         expect(page.get_by_label("Annotation set id", exact=True)).to_have_value(
             "mitochondrial_regions"
         )
-        annotations.click()
+        toggle_disclosure(annotations)
         slots = _configure_slots(page)
 
         axis = page.locator("summary").filter(has_text="Axis & Scale")
-        axis.click()
+        toggle_disclosure(axis)
         page.get_by_label("Axis stroke color mode", exact=True).select_option(
             "color"
         )
         page.get_by_label("Axis stroke color", exact=True).fill("#374151")
         page.get_by_label("Axis Stroke Width", exact=True).fill("4")
-        axis.click()
+        toggle_disclosure(axis)
 
         title = page.get_by_label("Titles and Record Labels", exact=True)
-        title.click()
+        toggle_disclosure(title)
         page.get_by_role("textbox", name="Plot Title", exact=True).fill(TITLE)
         page.get_by_label("Plot Title Position", exact=True).select_option("top")
-        title.click()
+        toggle_disclosure(title)
         legend = page.get_by_label("Legend settings", exact=True)
-        legend.click()
+        toggle_disclosure(legend)
         page.get_by_label("Legend position", exact=True).select_option("right")
-        legend.click()
+        toggle_disclosure(legend)
 
         page.get_by_role(
             "group", name="Circular track slot mitochondrial_regions", exact=True
@@ -464,6 +465,10 @@ def capture_gui_feature_highlight(
               const children = Array.from(panel.children);
               for (const child of children.slice(0, 3)) child.style.display = 'none';
               panel.parentElement?.scrollIntoView({ block: 'start' });
+              // Rows put their buttons on a second line; start at the ticks
+              // row so the whole annotation row stays in view.
+              panel.querySelector("[data-capture='circular-track-slot-ticks']")
+                ?.scrollIntoView({ block: 'start' });
             }"""
         )
         screenshot_bytes[SCREENSHOT_NAMES[0]] = capture_screenshot(

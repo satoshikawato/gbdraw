@@ -39,6 +39,7 @@ from config import (
     PYTHON_OPERATION_TIMEOUT_MS,
 )
 from flows.web_capture import (
+    toggle_disclosure,
     assert_fixture_identity,
     assert_output_paths,
     capture_screenshot,
@@ -207,7 +208,7 @@ def capture_gui_circular_layout(
         expect(prefix).to_have_value("multi_record_circular")
         # Layout starts closed in Circular mode; open it before its controls.
         layout = page.get_by_label("Layout", exact=True)
-        layout.click()
+        toggle_disclosure(layout)
         multi_record = page.get_by_label("Multi-Record Canvas", exact=True)
         expect(multi_record).to_be_visible()
         multi_record.check()
@@ -244,7 +245,7 @@ def capture_gui_circular_layout(
         expect(row_gap).to_have_value("0.08")
 
         title_and_labels = page.get_by_label("Titles and Record Labels", exact=True)
-        title_and_labels.click()
+        toggle_disclosure(title_and_labels)
         plot_title = page.get_by_role("textbox", name="Plot Title", exact=True)
         plot_title.fill("Complete metazoan mitochondrial genomes")
         expect(plot_title).to_have_value("Complete metazoan mitochondrial genomes")
@@ -260,10 +261,10 @@ def capture_gui_circular_layout(
         )
         keep_definitions.check()
         expect(keep_definitions).to_be_checked()
-        title_and_labels.click()
+        toggle_disclosure(title_and_labels)
 
         labels = page.get_by_label("Labels", exact=True)
-        labels.click()
+        toggle_disclosure(labels)
         label_mode = page.get_by_label("Label Mode", exact=True)
         label_mode.select_option("out")
         expect(label_mode).to_have_value("out")
@@ -273,7 +274,7 @@ def capture_gui_circular_layout(
         label_font_size = page.get_by_label("Label Font Size", exact=True)
         label_font_size.fill("16")
         expect(label_font_size).to_have_value("16")
-        labels.click()
+        toggle_disclosure(labels)
 
         size_mode.scroll_into_view_if_needed()
         expect(row_controls[-1]).to_be_visible()
@@ -561,7 +562,7 @@ def capture_gui_linear_layout(
         track_layout = page.get_by_label("Track Layout", exact=True)
         track_layout.select_option("above")
         expect(track_layout).to_have_value("above")
-        page.get_by_label("Axis & Scale", exact=True).click()
+        toggle_disclosure(page.get_by_label("Axis & Scale", exact=True))
         show_scale = page.get_by_label(
             "Show Coordinate Scale (Linear)", exact=True
         )

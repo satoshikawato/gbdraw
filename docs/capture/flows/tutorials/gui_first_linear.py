@@ -28,6 +28,7 @@ from config import (
     FIRST_LINEAR_SCREENSHOT_NAMES,
 )
 from flows.web_capture import (
+    toggle_disclosure,
     assert_fixture_identity,
     assert_output_paths,
     capture_screenshot,
@@ -117,7 +118,7 @@ def capture_first_linear(
         expect(separate_strands).to_be_checked()
 
         labels_panel = page.get_by_label("Labels", exact=True)
-        labels_panel.click()
+        toggle_disclosure(labels_panel)
         show_labels = page.get_by_label("Show Labels", exact=True)
         show_labels.select_option("all")
         expect(show_labels).to_have_value("all")
@@ -128,17 +129,17 @@ def capture_first_linear(
             "group", name="Priority File (TSV) selection", exact=True
         )
         expect(selected_priority).to_contain_text("cds_gene_qualifier_priority.tsv")
-        labels_panel.click()
+        toggle_disclosure(labels_panel)
 
         legend_panel = page.get_by_label("Legend settings", exact=True)
-        legend_panel.click()
+        toggle_disclosure(legend_panel)
         legend_position = page.get_by_label("Legend position", exact=True)
         legend_position.select_option("left")
         expect(legend_position).to_have_value("left")
-        legend_panel.click()
+        toggle_disclosure(legend_panel)
 
         axis_panel = page.get_by_label("Axis & Scale", exact=True)
-        axis_panel.click()
+        toggle_disclosure(axis_panel)
         show_scale = page.get_by_label("Show Coordinate Scale (Linear)", exact=True)
         show_scale.check()
         expect(show_scale).to_be_checked()

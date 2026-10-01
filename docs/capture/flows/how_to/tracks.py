@@ -21,8 +21,10 @@ from flows.web_capture import (
     assert_output_paths,
     capture_screenshot,
     generate_and_inspect,
+    open_ancestor_details,
     open_browser_capture,
     set_feature_search_visible,
+    toggle_disclosure,
     wait_for_app_shell,
 )
 
@@ -549,7 +551,7 @@ def _fit_circular_preview(
 
 
 def _configure_title(page: Page, title: str) -> None:
-    page.get_by_label("Titles and Record Labels", exact=True).click()
+    toggle_disclosure(page.get_by_label("Titles and Record Labels", exact=True))
     plot_title = page.get_by_role("textbox", name="Plot Title", exact=True)
     plot_title.fill(title)
     expect(plot_title).to_have_value(title)
@@ -559,7 +561,7 @@ def _configure_title(page: Page, title: str) -> None:
     definition_size = page.get_by_label("Default font size", exact=True)
     definition_size.fill("17")
     expect(definition_size).to_have_value("17")
-    page.get_by_label("Legend settings", exact=True).click()
+    toggle_disclosure(page.get_by_label("Legend settings", exact=True))
     legend_position = page.get_by_label("Legend position", exact=True)
     legend_position.select_option("right")
     expect(legend_position).to_have_value("right")
@@ -673,7 +675,7 @@ def capture_gui_quantitative_tracks(
         expect(prefix).to_have_value("quantitative_tracks")
 
         depth_section = page.get_by_label("Depth TSV tracks", exact=True)
-        depth_section.click()
+        toggle_disclosure(depth_section)
         page.get_by_label("Depth TSV", exact=True).set_input_files(
             GUI_QUANTITATIVE_DEPTH_PATH
         )
@@ -714,7 +716,7 @@ def capture_gui_quantitative_tracks(
         dinucleotide_section = page.get_by_label(
             "Dinucleotide content/skew", exact=True
         )
-        dinucleotide_section.click()
+        toggle_disclosure(dinucleotide_section)
         gc_mode = page.get_by_role("combobox").filter(
             has=page.get_by_role("option", name="Percent", exact=True)
         )
@@ -723,10 +725,11 @@ def capture_gui_quantitative_tracks(
         page.get_by_role("checkbox", name="Percent Axis", exact=True).check()
         page.get_by_role("checkbox", name="Percent Ticks", exact=True).check()
 
-        custom_slots = page.get_by_role(
-            "button", name=re.compile(r"Custom Track Slots$"), exact=False
+        custom_slots = open_ancestor_details(
+            page.locator("button[aria-controls='circular-custom-track-slots-panel']")
         )
-        custom_slots.click()
+        if custom_slots.get_attribute("aria-expanded") != "true":
+            custom_slots.click()
         use_custom = page.get_by_role(
             "checkbox", name="Use custom stack", exact=True
         )
@@ -824,15 +827,17 @@ def capture_gui_annotation_tracks(
         prefix = page.get_by_label("Output Prefix", exact=True)
         prefix.fill("region_annotations_and_slots")
         expect(prefix).to_have_value("region_annotations_and_slots")
-        track_preset = page.get_by_label("Track Preset", exact=True)
+        track_preset = open_ancestor_details(
+            page.get_by_label("Track Preset", exact=True)
+        )
         track_preset.select_option("middle")
         expect(track_preset).to_have_value("middle")
 
         annotations_section = page.get_by_label("Region Annotations", exact=True)
-        annotations_section.click()
-        page.get_by_label("Import TSV", exact=True).set_input_files(
-            GUI_ANNOTATION_TABLE_PATH
-        )
+        toggle_disclosure(annotations_section)
+        with page.expect_file_chooser() as chooser:
+            page.get_by_role("button", name="Import TSV", exact=True).click()
+        chooser.value.set_files(GUI_ANNOTATION_TABLE_PATH)
         annotation_set_id = page.get_by_label("Annotation set id", exact=True)
         expect(annotation_set_id).to_have_value("plastome_regions")
         legend_label = page.get_by_placeholder("Set legend label (optional)")
@@ -858,10 +863,11 @@ def capture_gui_annotation_tracks(
                 f"Unexpected visible annotation-lane assignment: {rendered_lanes}"
             )
 
-        custom_slots = page.get_by_role(
-            "button", name=re.compile(r"Custom Track Slots$"), exact=False
+        custom_slots = open_ancestor_details(
+            page.locator("button[aria-controls='circular-custom-track-slots-panel']")
         )
-        custom_slots.click()
+        if custom_slots.get_attribute("aria-expanded") != "true":
+            custom_slots.click()
         use_custom = page.get_by_role(
             "checkbox", name="Use custom stack", exact=True
         )

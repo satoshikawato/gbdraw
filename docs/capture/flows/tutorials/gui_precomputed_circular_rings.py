@@ -34,6 +34,7 @@ from flows.how_to.nucleotide_comparisons import (
 )
 from flows.how_to.tracks import _fit_circular_preview
 from flows.web_capture import (
+    toggle_disclosure,
     assert_fixture_identity,
     assert_output_paths,
     capture_screenshot,
@@ -244,7 +245,7 @@ def capture_gui_precomputed_circular_rings(
             )
         )
 
-        page.get_by_label("Pairwise Comparisons", exact=True).click()
+        toggle_disclosure(page.get_by_label("Pairwise Comparisons", exact=True))
         upload = page.get_by_role("radio", name="Upload BLAST", exact=True)
         upload.check()
         expect(upload).to_be_checked()
@@ -286,16 +287,16 @@ def capture_gui_precomputed_circular_rings(
             control.press("Tab")
             expect(control).to_have_value(value)
 
-        page.get_by_label("Labels", exact=True).click()
+        toggle_disclosure(page.get_by_label("Labels", exact=True))
         page.get_by_label("Label Mode", exact=True).select_option("out")
         page.get_by_label("Priority File (TSV)", exact=True).set_input_files(
             FIRST_LINEAR_LABEL_RULE_PATH
         )
-        page.get_by_label("Titles and Record Labels", exact=True).click()
+        toggle_disclosure(page.get_by_label("Titles and Record Labels", exact=True))
         page.get_by_role("textbox", name="Plot Title", exact=True).fill(TITLE)
         page.get_by_label("Plot Title Position", exact=True).select_option("bottom")
         page.get_by_label("Default font size", exact=True).fill("18")
-        page.get_by_label("Legend settings", exact=True).click()
+        toggle_disclosure(page.get_by_label("Legend settings", exact=True))
         page.get_by_label("Legend position", exact=True).select_option("right")
 
         page.get_by_label(
