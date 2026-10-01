@@ -2232,7 +2232,7 @@
                                                 <select v-model="losat.executionMode" aria-label="LOSAT execution" aria-describedby="help-comparison-execution" class="form-input px-2 py-1.5 text-xs" :disabled="!semanticMutationAvailable">
                                                     <option value="auto">Auto ({{ losatEffectiveExecutionMode }})</option>
                                                     <option value="serial">Serial</option>
-                                                    <option value="threaded">Threaded</option>
+                                                    <option value="threaded">{{ losatThreadedOptionLabel }}</option>
                                                 </select>
                                             </div>
                                             <div>

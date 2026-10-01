@@ -2,6 +2,7 @@ import { normalizeCollinearSearchScope } from './losat-normalization.js';
 import { buildLosatJobSpecs } from './linear-comparisons.js';
 import { losatRecordGencode, planLosatSourceJobs } from './linear-sources.js';
 import { getLosatHardwareThreads, resolveLosatThreadPlan } from '../services/losat-thread-plan.js';
+import { losatThreadingPrecondition } from '../services/losat.js';
 
 const { computed, ref, watch, onMounted } = window.Vue;
 
@@ -123,6 +124,12 @@ export const createLosatSettings = ({ state }) => {
     return 'serial';
   });
 
+  // Threaded stays strict (PD-OI-018); the option says when this browser
+  // environment cannot run it.
+  const losatThreadedOptionLabel = computed(() => (
+    losatThreadingPrecondition().state === 'available' ? 'Threaded' : 'Threaded (unavailable here)'
+  ));
+
   const losatThreadingPlanSummary = computed(() =>
     'By default, LOSAT can use up to half the number of cores available.'
   );
@@ -157,6 +164,7 @@ export const createLosatSettings = ({ state }) => {
     losatThreadOptions,
     losatEffectiveThreadsPerJob,
     losatEffectiveExecutionMode,
+    losatThreadedOptionLabel,
     losatEstimatedJobCount,
     losatMaxPairWorkers,
     losatAutoPairWorkers,

@@ -39,6 +39,7 @@ await writeFile(
     .replace("./linear-comparisons.js", new URL("linear-comparisons.js", sourceRoot).href)
     .replace("./linear-sources.js", new URL("linear-sources.js", sourceRoot).href)
     .replace("../services/losat-thread-plan.js", new URL("../services/losat-thread-plan.js", sourceRoot).href)
+    .replace("../services/losat.js", new URL("../services/losat.js", sourceRoot).href)
 );
 await writeFile(
   tempNormalizationPath,
@@ -241,3 +242,7 @@ for (const mode of ['blastn', 'tblastx']) {
   assert.equal(budgetState.losat.threadsPerJob, '8');
 }
 console.log('losat total-budget allocation tests passed');
+
+// CO-01: Node has no cross-origin isolation, so the Threaded option says so.
+assert.equal(globalThis.crossOriginIsolated, undefined);
+assert.equal(budgetSettings.losatThreadedOptionLabel.value, 'Threaded (unavailable here)');

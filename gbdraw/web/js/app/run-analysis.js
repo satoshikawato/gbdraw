@@ -3816,6 +3816,8 @@ export const createRunAnalysis = ({
           losatTiming.jobBuildMs += Math.max(0, jobBuildWallMs - nestedFastaMs - nestedHashMs);
 
           if (sourceJobs.length > 0) {
+            // A failure while searching is reported as a LOSAT failure (CO-01).
+            failureStage = 'losat';
             setProcessingStatus('Preparing comparison search runtime...');
             const runtimeWaitStartedAt = getNow();
             await waitForCancelablePromise(losatRuntimeWarmup, generationAbortSignal);
@@ -3839,6 +3841,7 @@ export const createRunAnalysis = ({
               }
             });
             throwIfGenerationCanceled();
+            failureStage = 'request-validation';
             losatTiming.executionMs += getNow() - executionStartedAt;
             const losatResults = sourceResults.flatMap((result) => {
               const job = sourceJobs.find((item) => item.cacheKey === result.cacheKey);
