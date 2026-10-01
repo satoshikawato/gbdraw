@@ -63,6 +63,95 @@ const attemptSave = async (page) => {
   };
 };
 
+const RECORD_VECTORS = JSON.parse(readFileSync('tests/fixtures/record_metadata_inference_cases.json', 'utf8'))
+  .discovery;
+const vectorText = ({ lines }) => `${lines.join('\n')}\n`;
+const splitRecords = (file) => readFileSync(file, 'utf8').split(/^\/\/\s*$/m)
+  .map((chunk) => chunk.trim()).filter((chunk) => chunk.startsWith('LOCUS')).map((chunk) => `${chunk}\n//\n`);
+// Prokka writes empty ACCESSION and VERSION lines; Biopython then names the record by LOCUS.
+const prokkaStyle = (record) => record.replace(/^ACCESSION .*$/m, 'ACCESSION   ').replace(/^VERSION .*$/m, 'VERSION');
+// R2c 2001..3000 and R3c 1..1000 are one shared 1 kb block.
+const [PROKKA_R2C, PROKKA_R3C] = splitRecords('tests/fixtures/web_comparison_shared_block.gb').map(prokkaStyle);
+
+const resultRecordIds = (page) => page.evaluate(() => {
+  const content = window.__GBDRAW_APP__.results[0]?.content || '';
+  const document = new DOMParser().parseFromString(content, 'image/svg+xml');
+  return [...new Set([...document.querySelectorAll('[data-gbdraw-record-id]')]
+    .map((element) => element.getAttribute('data-gbdraw-record-id')))].sort();
+});
+
+test('Prokka-style GenBank records keep their LOCUS names through Circular Generate and Linear LOSAT', async ({ page }) => {
+  test.setTimeout(600_000);
+  await openFresh(page);
+  await page.getByLabel('GenBank/DDBJ File', { exact: true })
+    .setInputFiles({ name: 'R2c.gbk', mimeType: 'text/plain', buffer: Buffer.from(PROKKA_R2C) });
+  await expect.poll(() => page.evaluate(() => window.__GBDRAW_APP__.circularRecordList
+    .map((record) => record.record_id)), { timeout: 60_000 }).toEqual(['R2c']);
+  await settle(page);
+  await generateAndWaitForResult(page);
+  expect(await resultRecordIds(page)).toEqual(['R2c']);
+
+  await page.getByRole('button', { name: 'Linear', exact: true }).click();
+  await page.waitForFunction(() => window.__GBDRAW_APP__?.mode === 'linear');
+  await page.evaluate(async (texts) => {
+    const app = window.__GBDRAW_APP__;
+    Object.assign(app.form, { legend: 'none', show_gc: false, show_skew: false });
+    while (app.linearSeqs.length < texts.length) app.addLinearSeq();
+    texts.forEach((text, index) => app.setLinearSeqPrimaryFile(index, 'gb', new File(
+      [text], `prokka-${index + 1}.gbk`, { type: 'text/plain', lastModified: 1000 + index }
+    )));
+    await window.Vue.nextTick();
+    await app.setLinearComparisonGlobalAction('losat');
+    app.setLinearComparisonLosatMode('blastn');
+    // Serial LOSAT: the Playwright server does not send COOP/COEP.
+    app.losat.executionMode = 'serial';
+  }, [PROKKA_R2C, PROKKA_R3C]);
+  await settle(page);
+  await generateAndWaitForResult(page);
+  expect(await resultRecordIds(page)).toEqual(['R2c', 'R3c']);
+  expect(await page.evaluate(() => {
+    const content = window.__GBDRAW_APP__.results[0]?.content || '';
+    return new DOMParser().parseFromString(content, 'image/svg+xml')
+      .querySelectorAll('[data-gbdraw-pairwise-match-id]').length;
+  })).toBeGreaterThan(0);
+});
+
+test('GFF3+FASTA records without GFF3 lines are not offered and both modes generate the annotated records', async ({ page }) => {
+  test.setTimeout(300_000);
+  const pair = RECORD_VECTORS.find(({ name }) => name === 'GFF3+FASTA whose FASTA holds a sequence without GFF3 lines');
+  const annotated = pair.expected.records.map(({ recordId }) => recordId);
+  const pairFiles = (gff, fasta) => [
+    { name: gff.name, mimeType: 'text/plain', buffer: Buffer.from(vectorText(gff)) },
+    { name: fasta.name, mimeType: 'text/plain', buffer: Buffer.from(vectorText(fasta)) }
+  ];
+  const [gffFile, fastaFile] = pairFiles(pair.files.gff, pair.files.fasta);
+  await openFresh(page);
+  await page.locator('input[type=radio][value=gff]').first().check();
+  await page.getByLabel('GFF3 File', { exact: true }).setInputFiles(gffFile);
+  await page.getByLabel('FASTA File', { exact: true }).setInputFiles(fastaFile);
+  await expect.poll(() => page.evaluate(() => window.__GBDRAW_APP__.circularRecordList
+    .map((record) => record.record_id)), { timeout: 60_000 }).toEqual(annotated);
+  await settle(page);
+  await generateAndWaitForResult(page);
+  expect(await resultRecordIds(page)).toEqual(annotated);
+
+  await page.getByRole('button', { name: 'Linear', exact: true }).click();
+  await page.waitForFunction(() => window.__GBDRAW_APP__?.mode === 'linear');
+  await page.evaluate(async (files) => {
+    const app = window.__GBDRAW_APP__;
+    Object.assign(app.form, { legend: 'none', show_gc: false, show_skew: false });
+    app.setLinearInputType('gff');
+    app.setLinearSeqPrimaryFile(0, 'gff', new File([files.gff], 'pair.gff3', { type: 'text/plain' }));
+    app.setLinearSeqPrimaryFile(0, 'fasta', new File([files.fasta], 'pair.fasta', { type: 'text/plain' }));
+    await window.Vue.nextTick();
+  }, { gff: vectorText(pair.files.gff), fasta: vectorText(pair.files.fasta) });
+  await expect.poll(() => page.evaluate(() => window.__GBDRAW_APP__.linearSeqs
+    .map((sequence) => sequence.region_record_id)), { timeout: 60_000 }).toEqual(annotated);
+  await settle(page);
+  await generateAndWaitForResult(page);
+  expect(await resultRecordIds(page)).toEqual(annotated);
+});
+
 test('a Circular definition edit after Generate leaves the committed Result unchanged', async ({ page }) => {
   test.setTimeout(300_000);
   await openWithGenBank(page, HMMT, () => {

@@ -49,7 +49,12 @@ def test_collinearity_popup_uses_display_ids_and_hides_internal_rows(tmp_path: P
         .read_text(encoding="utf-8")
         .replace("./feature-sequence-fasta.js", "./feature-sequence-fasta.mjs")
         .replace("./conservation-series.js", "./conservation-series.mjs")
+        .replace("./genbank-header.js", "./genbank-header.mjs")
         .replace("../services/file-content-cache.js", "./file-content-cache.mjs"),
+        encoding="utf-8",
+    )
+    (tmp_path / "genbank-header.mjs").write_text(
+        (WEB_ROOT / "js" / "app" / "genbank-header.js").read_text(encoding="utf-8"),
         encoding="utf-8",
     )
     (tmp_path / "file-content-cache.mjs").write_text(

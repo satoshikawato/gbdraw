@@ -38,7 +38,6 @@ import { createHistoryManager } from '../services/history.js';
 import { createHistoryFileStore } from '../services/history-files.js';
 import { createHistorySnapshotService } from '../services/history-snapshot.js';
 import { cloneJsonData } from '../services/json-clone.js';
-import { readFileText } from '../services/file-content-cache.js';
 import {
   groupLinearSourceRecords,
   isPristineLinearSource,
@@ -1096,16 +1095,8 @@ export const createAppSetup = () => {
     onRecordsDiscovered: handleLinearRecordsDiscovered,
     recordReader: ({ inputType, primaryFile, pairedFile }) => (
       inputType === 'gff'
-        ? discoverGffFastaRecords({
-            gffFile: primaryFile,
-            fastaFile: pairedFile,
-            readText: readFileText
-          })
-        : discoverSequenceRecords({
-            file: primaryFile,
-            format: 'genbank',
-            readText: readFileText
-          })
+        ? discoverGffFastaRecords({ gffFile: primaryFile, fastaFile: pairedFile })
+        : discoverSequenceRecords({ file: primaryFile, format: 'genbank' })
     )
   });
   const getCircularRecordDiscoveryState = () => circularDiscoveryForInput(state);
@@ -2778,8 +2769,8 @@ export const createAppSetup = () => {
         const sourceKey = annotationSourceKey({ scope: 'linear', uid: seq.uid, inputType, primaryFile, pairedFile });
         try {
           const records = inputType === 'gff'
-            ? await discoverGffFastaRecords({ gffFile: primaryFile, fastaFile: pairedFile, readText: readFileText })
-            : await discoverSequenceRecords({ file: primaryFile, format: 'genbank', readText: readFileText });
+            ? await discoverGffFastaRecords({ gffFile: primaryFile, fastaFile: pairedFile })
+            : await discoverSequenceRecords({ file: primaryFile, format: 'genbank' });
           return { sourceKey, selector: seq.region_record_id, hasInput: Boolean(primaryFile), status: 'ready', records };
         } catch (error) {
           return { sourceKey, selector: seq.region_record_id, hasInput: Boolean(primaryFile), status: 'error', error: error.message, records: [] };

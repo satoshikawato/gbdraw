@@ -169,7 +169,6 @@ const ROWS = [
   },
   {
     name: 'a mode round trip keeps the Multi-Record Canvas record order',
-    knownDefect: 'IN-05',
     setup: async (page) => {
       await openWithGenBank(page, BATCH_FIXTURE, () => {
         Object.assign(window.__GBDRAW_APP__.form, { multi_record_canvas: true });

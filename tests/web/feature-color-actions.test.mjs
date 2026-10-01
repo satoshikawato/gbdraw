@@ -218,16 +218,8 @@ const actions = createFeatureColorActions({
     getDisplayedFeatureLabel: (feature) => feature.displayLabel || feature.product || '',
     getEffectiveLegendCaption: () => 'Core',
     getIndividualFeatureLabel: (feature) => feature.product || '',
-    getFeatureQualifier: (feature) => {
-      const generationHash = getFeatureGenerationHash(feature);
-      const collisionCount = extractedFeatures.value.filter(
-        (candidate) => candidate.type === feature.type && getFeatureGenerationHash(candidate) === generationHash
-      ).length;
-      return {
-        qual: 'hash',
-        val: collisionCount > 1 ? feature.svg_id : generationHash
-      };
-    },
+    // FE-09 (D-14): "This feature only" always writes the stable hash.
+    getFeatureQualifier: (feature) => ({ qual: 'hash', val: getFeatureGenerationHash(feature) }),
     getLabelSpecificRule: (feature, label) => {
       const selector = resolveFeatureLabelSelector(feature, label);
       return selector
@@ -523,8 +515,14 @@ manualSpecificRules.splice(0, manualSpecificRules.length, {
 extractedFeatures.value = [duplicateFeatureA, duplicateFeatureB];
 biologicalFeatures.value = [duplicateFeatureA, duplicateFeatureB];
 await actions.setFeatureColor(duplicateFeatureA, '#112233', 'one duplicate');
-assert.equal(manualSpecificRules[0].val, 'f44444444_record_1');
-assert.equal(manualSpecificRules[1].val, 'f44444444');
+// Duplicate records share the stable hash Python matches, so the edit replaces
+// the shared rule and colors both copies (D-14 accepted residual risk).
+assert.deepEqual(
+  manualSpecificRules.map(({ feat, qual, val, color, cap }) => ({ feat, qual, val, color, cap })),
+  [{ feat: 'CDS', qual: 'hash', val: 'f44444444', color: '#112233', cap: 'one duplicate' }]
+);
+await actions.setFeatureColorValue(duplicateFeatureB, null);
+assert.deepEqual(manualSpecificRules, []);
 
 const sharedHashCds = {
   ...labelFeatureA,

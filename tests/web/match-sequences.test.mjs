@@ -25,6 +25,11 @@ await writeFile(
   'utf8'
 );
 await writeFile(
+  join(tempDir, 'app', 'genbank-header.js'),
+  await readFile('gbdraw/web/js/app/genbank-header.js', 'utf8'),
+  'utf8'
+);
+await writeFile(
   join(tempDir, 'app', 'conservation-series.js'),
   await readFile('gbdraw/web/js/app/conservation-series.js', 'utf8'),
   'utf8'

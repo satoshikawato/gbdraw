@@ -1185,35 +1185,55 @@ test('audit-5 owner: direct simple createRunAnalysis path is worker-only and cat
   const identities = [{ selector: '#1', record_id: 'audit', recordKey: 'record-1' }];
   assert.deepEqual(state.circularRecordDiscovery.canonicalRecordIdentities, identities);
 
+  // IN-05 (OIPC-C06): an inactive Circular source keeps its records and the
+  // Multi-Record Canvas order through a mode round trip without rereading them.
+  state.adv.multi_record_positions.splice(
+    0,
+    state.adv.multi_record_positions.length,
+    { selector: '#1', row: 3 }
+  );
+  const circularStateBeforeRoundTrip = structuredClone({
+    records: state.circularRecordList.value,
+    positions: state.adv.multi_record_positions,
+    discovery: { ...state.circularRecordDiscovery }
+  });
+  const helperRequestsBeforeRoundTrip = workerMessages.filter(({ type }) => type === 'helper').length;
   state.mode.value = 'linear';
   await runner.refreshCircularRecordOrder();
-  assert.equal(state.files.c_gb, fallbackPrimary);
-  assert.deepEqual(state.circularRecordList.value, []);
-  assert.deepEqual(state.circularRecordDiscovery.canonicalRecordIdentities, identities);
+  await runner.refreshCircularRecordOrder({ automatic: true });
   state.mode.value = 'circular';
-  workerHelperResponses.push({ ok: true, result: {
-    records: [{ selector: '#1', record_id: 'audit', record_length: 10 }]
-  } });
-  await runner.refreshCircularRecordOrder();
+  await runner.refreshCircularRecordOrder({ automatic: true });
+  assert.deepEqual(structuredClone({
+    records: state.circularRecordList.value,
+    positions: state.adv.multi_record_positions,
+    discovery: { ...state.circularRecordDiscovery }
+  }), circularStateBeforeRoundTrip);
+  assert.equal(
+    workerMessages.filter(({ type }) => type === 'helper').length,
+    helperRequestsBeforeRoundTrip
+  );
   assert.equal(state.circularRecordList.value[0].recordKey, 'record-1');
   assert.deepEqual(state.circularRecordDiscovery.canonicalRecordIdentities, identities);
 
   // Equal biological names on a different source cannot inherit the retired key,
   // even if replacement/removal happens while Circular is inactive.
   state.mode.value = 'linear';
-  state.files.c_gb = new AuditFile(['LOCUS audit 10 bp DNA circular\n//\n'], 'replacement.gb');
+  state.files.c_gb = new AuditFile(['LOCUS       audit 10 bp DNA circular\n//\n'], 'replacement.gb');
   await runner.refreshCircularRecordOrder();
-  assert.deepEqual(state.circularRecordDiscovery.canonicalRecordIdentities, []);
   state.mode.value = 'circular';
-  await runner.refreshCircularRecordOrder();
+  await runner.refreshCircularRecordOrder({ automatic: true });
   assert.equal(state.circularRecordList.value[0].record_id, 'audit');
   assert.equal(state.circularRecordList.value[0].recordKey, undefined);
+  assert.deepEqual(state.circularRecordDiscovery.canonicalRecordIdentities, []);
   state.mode.value = 'linear';
   state.files.c_gb = null;
   await runner.refreshCircularRecordOrder();
-  assert.deepEqual(state.circularRecordList.value, []);
-  assert.deepEqual(state.circularRecordDiscovery.canonicalRecordIdentities, []);
+  assert.equal(state.circularRecordList.value[0].record_id, 'audit');
   state.mode.value = 'circular';
+  await runner.refreshCircularRecordOrder({ automatic: true });
+  assert.deepEqual(state.circularRecordList.value, []);
+  assert.deepEqual(state.adv.multi_record_positions, []);
+  assert.deepEqual(state.circularRecordDiscovery.canonicalRecordIdentities, []);
   state.files.c_gb = fallbackPrimary;
 
   state.form.multi_record_canvas = true;
