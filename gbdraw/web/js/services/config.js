@@ -59,7 +59,9 @@ import {
 } from '../app/plot-title-position.js';
 import {
   migrateLegacyLayoutPreferences,
-  replaceLayoutPreferences
+  normalizeLayoutPreferences,
+  replaceLayoutPreferences,
+  resolveActiveLayoutPreference
 } from '../app/layout-preferences.js';
 import { reconcileImportedLinearTypographyLink } from '../app/linear-typography.js';
 import {
@@ -1834,11 +1836,14 @@ const hasStoredLayoutPreferences = (ui) => (
   LEGACY_LAYOUT_PREFERENCE_FIELDS.some((field) => hasStoredLayoutValue(ui?.[field]))
 );
 
-const restoreLayoutPreferences = (ui = {}, { preserveActive = false } = {}) => {
-  const activeBeforeRestore = {
-    legend: state.form.legend,
-    plotTitlePosition: state.adv.plot_title_position
-  };
+// A saved layout owner (current or legacy ui fields) wins. Without one, a
+// canonical Session takes the layout preferences projected from its committed
+// request; other payloads migrate from the active values.
+const restoreLayoutPreferences = (ui = {}, { projected = null } = {}) => {
+  if (projected && !hasStoredLayoutPreferences(ui)) {
+    replaceLayoutPreferences(state.layoutPreferences, normalizeLayoutPreferences(projected));
+    return;
+  }
   const migrationUi = (
     !isPlainObject(ui.layoutPreferences) &&
     state.mode.value === 'linear' &&
@@ -1847,36 +1852,14 @@ const restoreLayoutPreferences = (ui = {}, { preserveActive = false } = {}) => {
   )
     ? { ...ui, linearLegendPosition: ui.legend }
     : ui;
-  const migrated = migrateLegacyLayoutPreferences(migrationUi, {
-    mode: state.mode.value,
-    multiRecord: Boolean(state.form.multi_record_canvas),
-    activeLegend: activeBeforeRestore.legend,
-    activePlotTitlePosition: activeBeforeRestore.plotTitlePosition
-  });
-  // Current-session render requests describe the last generated artifact, while
-  // stored layout preferences own the editor's active semantic position. Use the
-  // projected request only when neither the current nor legacy owner is present.
-  if (preserveActive && !hasStoredLayoutPreferences(ui)) {
-    if (state.mode.value === 'linear') {
-      migrated.linear = {
-        legend: normalizeLegendPosition(activeBeforeRestore.legend, 'bottom'),
-        plotTitlePosition: normalizeLinearPlotTitlePosition(
-          activeBeforeRestore.plotTitlePosition
-        )
-      };
-    } else {
-      const key = state.form.multi_record_canvas ? 'multi' : 'single';
-      migrated.circular[key] = {
-        legend: normalizeLegendPosition(activeBeforeRestore.legend, 'left'),
-        plotTitlePosition: normalizeCircularPlotTitlePosition(
-          activeBeforeRestore.plotTitlePosition
-        )
-      };
-    }
-  }
   replaceLayoutPreferences(
     state.layoutPreferences,
-    migrated
+    migrateLegacyLayoutPreferences(migrationUi, {
+      mode: state.mode.value,
+      multiRecord: Boolean(state.form.multi_record_canvas),
+      activeLegend: state.form.legend,
+      activePlotTitlePosition: state.adv.plot_title_position
+    })
   );
 };
 
@@ -4390,6 +4373,14 @@ const importSessionDocument = async (e, options = {}) => {
 
     recordSessionLifecycleEvent('session-candidate-sequences-end');
     const restoredFeatureState = currentCatalogFeatureState || features || {};
+    // A saved Result is laid out at its committed legend and title sides.
+    const committedLayout = canonicalProjection?.layoutPreferences
+      ? resolveActiveLayoutPreference(
+          canonicalProjection.layoutPreferences,
+          canonicalProjection.mode,
+          Boolean(canonicalProjection.config?.form?.multi_record_canvas)
+        )
+      : null;
     const transformRestoredSessionSvg = (svg, { applyStrokes = true } = {}) => {
       const legendGroupsChanged = normalizeLegacyLegendEntryGroups(svg);
       let compositionChanged = false;
@@ -4398,8 +4389,9 @@ const importSessionDocument = async (e, options = {}) => {
         && svg.getAttribute(COMPOSITION_METADATA_ATTRIBUTE) === null
       ) {
         normalizeLegacyComposition(svg, {
-          legendSide: restoredConfig?.form?.legend || 'none',
-          titleSide: restoredConfig?.adv?.plot_title_position || 'none',
+          legendSide: committedLayout?.legend || restoredConfig?.form?.legend || 'none',
+          titleSide: committedLayout?.plotTitlePosition
+            || restoredConfig?.adv?.plot_title_position || 'none',
           userDeltas: {
             primary: ui.diagramOffset ? [ui.diagramOffset.x, ui.diagramOffset.y] : null,
             legend: ui.legendCurrentOffset
@@ -4547,7 +4539,9 @@ const importSessionDocument = async (e, options = {}) => {
       ui
     });
     restorePaletteStateFromSession(ui);
-    restoreLayoutPreferences(ui, { preserveActive: Boolean(canonicalSession) });
+    restoreLayoutPreferences(ui, {
+      projected: canonicalSession ? canonicalProjection?.layoutPreferences : null
+    });
 
     restoreLiveFileState({
       files: candidateFiles.files,

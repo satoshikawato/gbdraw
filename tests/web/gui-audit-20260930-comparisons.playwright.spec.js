@@ -237,34 +237,47 @@ test('comparison filters outside their domain are rejected instead of replaced',
   }
 });
 
-test('a CLI Linear BLAST Session inherits its comparison and generates', async ({ page }, testInfo) => {
-  test.fail(true, 'SE-06');
-  test.setTimeout(600_000);
-  const directory = testInfo.outputDir;
-  mkdirSync(directory, { recursive: true });
-  writeFileSync(path.join(directory, 'R2c.gb'), R2C);
-  writeFileSync(path.join(directory, 'R3c.gb'), R3C);
-  writeFileSync(path.join(directory, 'R2c_R3c.tsv'), 'R2c\tR3c\t100.000\t1000\t0\t0\t2001\t3000\t1\t1000\t0.0\t1847\n');
-  const session = path.join(directory, 'cli-blast.gbdraw-session.json.gz');
-  await promisify(execFile)('python', [
-    '-m', 'gbdraw.cli', 'linear', '--gbk', 'R2c.gb', 'R3c.gb', '-b', 'R2c_R3c.tsv',
-    '-o', 'cli-blast', '--session_output', session
-  ], { cwd: directory, env: { ...process.env, PYTHONPATH: root }, timeout: 600_000, maxBuffer: 1_000_000 });
-  await openFresh(page);
-  await page.locator('input[accept^=".json,"]').setInputFiles(session);
-  await page.waitForFunction(() => !window.__GBDRAW_APP__.sessionImportPending
-    && window.__GBDRAW_APP__.results.length > 0, null, { timeout: 300_000 });
-  await settle(page);
-  const loaded = await committedRibbons(page);
-  expect(loaded).toHaveLength(1);
-  await evaluateWithRetainedPromise(page, async () => {
-    await window.__GBDRAW_APP__.inheritImportedComparison();
+// SE-06 (current CLI sidecar) and N-17 (schema-7 sidecar written by main; see
+// tests/fixtures/sessions/se06-main-linear-blast-cli.provenance.json).
+const cliBlastSessions = {
+  'current CLI': async (directory) => {
+    writeFileSync(path.join(directory, 'R2c.gb'), R2C);
+    writeFileSync(path.join(directory, 'R3c.gb'), R3C);
+    writeFileSync(path.join(directory, 'R2c_R3c.tsv'), 'R2c\tR3c\t100.000\t1000\t0\t0\t2001\t3000\t1\t1000\t0.0\t1847\n');
+    const session = path.join(directory, 'cli-blast.gbdraw-session.json.gz');
+    await promisify(execFile)('python', [
+      '-m', 'gbdraw.cli', 'linear', '--gbk', 'R2c.gb', 'R3c.gb', '-b', 'R2c_R3c.tsv',
+      '-o', 'cli-blast', '--session_output', session
+    ], { cwd: directory, env: { ...process.env, PYTHONPATH: root }, timeout: 600_000, maxBuffer: 1_000_000 });
+    return session;
+  },
+  'main v42 CLI': async () => path.join(root, 'tests/fixtures/sessions/se06-main-linear-blast-cli.v42.gbdraw-session.json.gz')
+};
+for (const [source, writeSession] of Object.entries(cliBlastSessions)) {
+  test(`a ${source} Linear BLAST Session inherits its comparison and generates`, async ({ page }, testInfo) => {
+    test.setTimeout(600_000);
+    const directory = testInfo.outputDir;
+    mkdirSync(directory, { recursive: true });
+    const session = await writeSession(directory);
+    await openFresh(page);
+    await page.locator('input[accept^=".json,"]').setInputFiles(session);
+    await page.waitForFunction(() => !window.__GBDRAW_APP__.sessionImportPending
+      && window.__GBDRAW_APP__.results.length > 0, null, { timeout: 300_000 });
+    await settle(page);
+    const loaded = await committedRibbons(page);
+    expect(loaded).toHaveLength(1);
+    // D-36: the CLI comparison stays read-only and is reused through Inherit.
+    expect(await page.evaluate(() => window.__GBDRAW_APP__.importedComparisonIntent.disposition))
+      .toBe('PRESERVED_READ_ONLY');
+    await evaluateWithRetainedPromise(page, async () => {
+      await window.__GBDRAW_APP__.inheritImportedComparison();
+    });
+    await settle(page);
+    await generateAndWaitForResult(page);
+    expect((await committedRibbons(page)).map(({ queryX, subjectX }) => ({ queryX, subjectX })))
+      .toEqual(loaded.map(({ queryX, subjectX }) => ({ queryX, subjectX })));
   });
-  await settle(page);
-  await generateAndWaitForResult(page);
-  expect((await committedRibbons(page)).map(({ queryX, subjectX }) => ({ queryX, subjectX })))
-    .toEqual(loaded.map(({ queryX, subjectX }) => ({ queryX, subjectX })));
-});
+}
 
 test('the match popup and its FASTA header report source coordinates of a cropped record', async ({ page }) => {
   test.fail(true, 'CO-10');
