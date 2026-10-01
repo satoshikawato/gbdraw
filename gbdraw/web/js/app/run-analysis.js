@@ -18,6 +18,7 @@ import {
   projectCommittedEditorIntent,
   projectCommittedRecordTransform,
   projectCommittedSimilarityAlignment,
+  promoteCanonicalRenderRequestToCurrent,
   readCanonicalResourceRecordCount
 } from '../services/session-request.js';
 import {
@@ -4395,9 +4396,20 @@ export const createRunAnalysis = ({
         if (typeof getCommittedCanonicalSession !== 'function') {
           throw new Error('The preserved comparison owner is unavailable.');
         }
+        // The candidate is a current-schema request; an older committed
+        // request (for example a v42 CLI sidecar) is promoted before reuse.
+        const committedSession = getCommittedCanonicalSession();
         inheritCommittedComparisonIntent({
           candidate: canonical,
-          committed: getCommittedCanonicalSession()
+          committed: committedSession?.renderRequest
+            ? {
+                ...committedSession,
+                renderRequest: promoteCanonicalRenderRequestToCurrent(
+                  committedSession.renderRequest,
+                  { featureCatalog: featureCatalog?.value || null }
+                )
+              }
+            : committedSession
         });
       }
       recordSessionLifecycleEvent('canonical-request-construction-end');

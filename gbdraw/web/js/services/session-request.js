@@ -89,6 +89,10 @@ import {
 } from '../mode-profiles.js';
 import { WEB_UX_PROFILE } from '../web-ux-profile.js';
 import {
+  createDefaultLayoutPreferences,
+  updateActiveLayoutPreference
+} from '../app/layout-preferences.js';
+import {
   migratePersistedCircularMultiRecordSizeMode,
   migratePersistedLinearLabelPlacement,
   migratePersistedLinearTrackLayout,
@@ -3783,6 +3787,23 @@ export const projectCanonicalSessionRequest = ({
       ([field, value]) => (hasOriginalInputs && originalInputFields.includes(field))
         || (value != null && (!Array.isArray(value) || value.length > 0))
     ));
+    // A CLI binding uid (`cli-seq-N`) is only an initial value. The committed
+    // request owns record identity, so each Linear file takes the file-level
+    // recordKey that Inherit matches against.
+    const fileRecordKeys = [...new Set(sourceRecords.map((record) => (
+      String(record.recordKey || '').replace(/:[1-9]\d*$/, '')
+    )))];
+    if (renderRequest.mode === 'linear' && Array.isArray(explicitBindings.linearSeqs)
+      && fileRecordKeys.every(Boolean)
+      && fileRecordKeys.length === explicitBindings.linearSeqs.length) {
+      explicitBindings = {
+        ...explicitBindings,
+        linearSeqs: explicitBindings.linearSeqs.map((sequence, index) => ({
+          ...sequence,
+          uid: fileRecordKeys[index]
+        }))
+      };
+    }
     webMetadata = { ...webMetadata, bindings: explicitBindings };
   }
   const storedResourceOriginalNames = webMetadata.resourceOriginalNames;
@@ -4393,7 +4414,6 @@ export const projectCanonicalSessionRequest = ({
       webMetadata.circularOutputPrefixExplicit
     ),
     plot_title: options.plotTitle || '',
-    legend: options.output?.legend || 'right',
     // A Linear request has no Circular grouping; keep the fresh default.
     multi_record_canvas: renderRequest.mode === 'circular'
       ? grouping === 'grid'
@@ -4480,7 +4500,6 @@ export const projectCanonicalSessionRequest = ({
     linear_label_spacing: renderRequest.mode === 'linear'
       ? (overrides.linear_label_spacing ?? null)
       : null,
-    plot_title_position: options.output?.plotTitlePosition || (renderRequest.mode === 'linear' ? 'bottom' : 'none'),
     plot_title_font_size: options.plotTitleFontSize ?? overrides.plot_title_font_size ?? null,
     def_font_size: renderRequest.mode === 'circular'
       ? (overrides.circular_definition_font_size ?? null)
@@ -4639,10 +4658,24 @@ export const projectCanonicalSessionRequest = ({
       : files.linearSeqs[0];
     if (!source?.gb && source?.gff && source?.fasta) inputType = 'gff';
   }
+  // Legend and plot-title positions are layout preferences, not form fields:
+  // the committed request sets the slot of its own mode and grouping.
+  const layoutPreferences = createDefaultLayoutPreferences();
+  updateActiveLayoutPreference(
+    layoutPreferences,
+    renderRequest.mode,
+    renderRequest.mode === 'circular' && grouping === 'grid',
+    {
+      legend: options.output?.legend || 'right',
+      plotTitlePosition: options.output?.plotTitlePosition
+        || (renderRequest.mode === 'linear' ? 'bottom' : 'none')
+    }
+  );
   return {
     mode: renderRequest.mode,
     inputType,
     files,
+    layoutPreferences,
     config: {
       form,
       adv,

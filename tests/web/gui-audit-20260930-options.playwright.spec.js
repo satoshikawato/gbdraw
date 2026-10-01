@@ -395,7 +395,6 @@ test('default threaded LOSAT without cross-origin isolation reports a recognized
 });
 
 test('a CLI Session keeps its legend position through load and the first Generate', async ({ page }, testInfo) => {
-  test.fail(true, 'SE-07');
   test.setTimeout(600_000);
   const prefix = testInfo.outputPath('cli-legend');
   const session = `${prefix}.gbdraw-session.json.gz`;

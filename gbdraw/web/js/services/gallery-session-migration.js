@@ -15,6 +15,7 @@ import {
   projectCanonicalSessionRequest
 } from './session-request.js';
 import { migrateLegacyLinearLabelVisibility } from '../app/linear-label-visibility.js';
+import { resolveActiveLayoutPreference } from '../app/layout-preferences.js';
 import {
   createLinearComparisonEdge,
   normalizeLinearComparisonPlan,
@@ -186,11 +187,20 @@ const mergedGuiConfig = (session, projection) => {
     isPlainObject(session.config) ? session.config : {}
   );
   const projected = isPlainObject(projection.config) ? projection.config : {};
+  const committedLayout = resolveActiveLayoutPreference(
+    projection.layoutPreferences,
+    projection.mode,
+    Boolean(projected.form?.multi_record_canvas)
+  );
   return {
     ...saved,
     ...projected,
-    form: { ...(saved.form || {}), ...(projected.form || {}) },
-    adv: { ...(saved.adv || {}), ...(projected.adv || {}) },
+    form: { ...(saved.form || {}), ...(projected.form || {}), legend: committedLayout.legend },
+    adv: {
+      ...(saved.adv || {}),
+      ...(projected.adv || {}),
+      plot_title_position: committedLayout.plotTitlePosition
+    },
     palette: String(projected.palette || 'default'),
     colors: cloneJson(isPlainObject(projected.colors) ? projected.colors : {}),
     annotationSets: Array.isArray(projected.annotationSets)
