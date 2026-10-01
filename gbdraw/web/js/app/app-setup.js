@@ -117,6 +117,7 @@ import { createLinearTypographyController } from './linear-typography.js';
 import {
   buildDisambiguatedRecordEntries,
   formatRecordLength,
+  resolveCircularRequestRecordSet,
   resolveDisambiguatedRecordSelection
 } from './record-options.js';
 import {
@@ -1114,7 +1115,6 @@ export const createAppSetup = () => {
       mode: mode.value,
       inputType,
       loadComparison,
-      multiRecordCanvas: form.multi_record_canvas,
       circularSource: {
         sourceKey: annotationSourceKey({
           scope: 'circular',
@@ -1125,7 +1125,12 @@ export const createAppSetup = () => {
         hasInput: circularDiscovery.hasInput,
         status: circularDiscovery.status,
         error: circularDiscovery.error,
-        records: circularDiscovery.records
+        records: resolveCircularRequestRecordSet({
+          records: circularDiscovery.records,
+          selector: form.circular_record_selector,
+          multiRecordCanvas: form.multi_record_canvas,
+          groupingIntent: adv.circular_grouping_intent
+        }).records
       },
       linearSources: linearSourcesOverride || linearSeqs.map((seq) => {
         const primaryFile = lInputType.value === 'gff' ? seq.gff : seq.gb;

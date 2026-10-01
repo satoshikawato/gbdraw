@@ -65,7 +65,7 @@ const REASONS = Object.freeze({
   ADJACENT_ALL: 'Choose adjacent or all.', BLASTP_MODE: 'Choose pairwise, orthogroup, or collinear.',
   UNIQUE_IDS: 'Use distinct record or protein identifiers.', MATCH_IDS: 'Use matching protein FASTA and metadata identifiers.',
   JSON_FORMAT: 'Use valid JSON.', VISIBILITY_ACTION: 'Use show, off, or exclude_matching; accepted aliases are on, hide, false, and 0.',
-  TARGET_RECORD: 'Choose an available target record.', TARGET_MODE: 'Clear the target record or enable Multi-record canvas.',
+  TARGET_RECORD: 'Choose an available target record.',
   DEPTH_SERIES: 'Select an existing Depth TSV or remove the slot.',
   BOTH_ENDPOINTS: 'Supply both region endpoints or leave both empty.', SPECIFIC_COLUMNS: 'Supply four or five tab-separated columns.',
   COLOR: 'Use none, a supported named color, or a hex color with 3 or 6 digits.',

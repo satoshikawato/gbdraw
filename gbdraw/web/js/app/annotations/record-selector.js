@@ -96,9 +96,7 @@ export const reconcileAnnotationRecordBindings = (sets, catalog) => {
 };
 
 export const annotationRecordOptions = (catalog, annotation) => {
-  const records = catalog?.allowExplicitSelectors === false
-    ? []
-    : (Array.isArray(catalog?.records) ? catalog.records : []);
+  const records = Array.isArray(catalog?.records) ? catalog.records : [];
   const currentValue = annotationRecordValue(catalog, annotation);
   const options = records.map((record) => ({
     value: record.key,
@@ -110,11 +108,9 @@ export const annotationRecordOptions = (catalog, annotation) => {
   return [
     {
       value: '',
-      label: catalog?.allowExplicitSelectors === false
-        ? 'Automatic (current output record)'
-        : (catalog?.status !== 'ready'
-            ? 'Record list unavailable'
-            : (records.length > 1 ? 'Select target record' : 'Automatic (single record)')),
+      label: catalog?.status !== 'ready'
+        ? 'Record list unavailable'
+        : (records.length > 1 ? 'Select target record' : 'Automatic (single record)'),
       synthetic: false
     },
     ...(selectedIsMissing
@@ -126,7 +122,7 @@ export const annotationRecordOptions = (catalog, annotation) => {
 
 export const createAnnotationRecordSelector = ({ getCatalog }) => {
   const catalog = () => getCatalog?.() || {
-    status: 'error', records: [], issues: [], requiresSelection: false, allowExplicitSelectors: true
+    status: 'error', records: [], issues: [], requiresSelection: false
   };
   const isMissing = (annotation) => {
     const current = catalog();
@@ -134,7 +130,6 @@ export const createAnnotationRecordSelector = ({ getCatalog }) => {
     const parsed = selectorFromTarget(annotation);
     if (parsed.error) return true;
     if (!parsed.selector) return Boolean(current.requiresSelection);
-    if (current.allowExplicitSelectors === false) return true;
     return !resolvedRecord(current, annotation);
   };
   return {
@@ -143,15 +138,7 @@ export const createAnnotationRecordSelector = ({ getCatalog }) => {
     setValue: (annotation, value) => setAnnotationRecordValue(catalog(), annotation, value),
     isRequired: () => Boolean(catalog().requiresSelection),
     isMissing,
-    isDisabled: (annotation) => {
-      const current = catalog();
-      if (current.status !== 'ready') return true;
-      return current.allowExplicitSelectors === false && annotation?.target?.record == null;
-    },
-    missingMessage: (annotation) => (
-      catalog().allowExplicitSelectors === false && selectorFromTarget(annotation).selector
-        ? 'Clear the target record or enable Multi-record canvas.'
-        : 'Choose the record that this annotation targets.'
-    )
+    isDisabled: () => catalog().status !== 'ready',
+    missingMessage: () => 'Choose the record that this annotation targets.'
   };
 };
