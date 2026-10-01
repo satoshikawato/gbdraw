@@ -8,6 +8,9 @@ const gffPath = 'gbdraw/web/tutorial-data/lambda-gff3/NC_001416.gff3';
 const fastaPath = 'gbdraw/web/tutorial-data/lambda-gff3/NC_001416.fna';
 // Exact retained SESSION 05A4 M23 rejected input (424 bytes).
 const mismatch = Buffer.from('>wrong_record_identity\n' + 'ATGC'.repeat(100) + '\n');
+// load_gff_fasta reads this entry as record NC_001416.1, so record discovery
+// lists it; the Python render rejects its empty sequence after staging.
+const emptySequence = Buffer.from('>NC_001416.1\n');
 const semantics = (page, content) => page.evaluate(content => {
   const root = new DOMParser().parseFromString(content, 'image/svg+xml').documentElement;
   return {
@@ -115,25 +118,46 @@ test('W1/W2/W4/W8/W9: retained M23 recovery succeeds once and resource ownership
     await fasta.setInputFiles({ name: 'mismatch.fasta', mimeType: 'text/plain', buffer: mismatch });
     await generate('error');
     expect(outcomes.at(-1).error).toMatchObject({
-      code: 'FASTA_REQUIRED', operation: 'generate', context: { reason: 'GFF_FASTA_MATCH' }
+      code: 'FASTA_REQUIRED', operation: 'generate', stage: 'helper', context: { reason: 'GFF_FASTA_MATCH' }
     });
     expect(outcomes.at(-1).error.summary).toContain('matching FASTA');
     expect(await agree('rejected-B')).toEqual(a);
+    // Record discovery reads the GFF3 + FASTA pair with load_gff_fasta, so the
+    // Worker helper rejects M23 before any render request and the render
+    // resource cache keeps A: the first recovery transfers no bytes.
     const rejectedEvidence = await inspect();
     expect(rejectedEvidence.workers).toHaveLength(1);
     expect(rejectedEvidence.workers[0].terminated).toBe(false);
-    expect(rejectedEvidence.workers[0].messages.find(m => m.requestId === rejectedEvidence.runs[1].requestId && m.type === 'run'))
-      .toMatchObject({ ok: true, error: { code: 'FASTA_REQUIRED', operation: 'generate' } });
+    expect(rejectedEvidence.runs).toHaveLength(1);
+    expect(rejectedEvidence.workers[0].messages.filter(m => m.type === 'helper').at(-1)).toMatchObject({
+      ok: false, error: { code: 'FASTA_REQUIRED', operation: 'listGffFastaRecords', context: { reason: 'GFF_FASTA_MATCH' } }
+    });
     await fasta.setInputFiles(fastaPath);
     await generate('ok'); // Mandatory first recovery: no retry in the test.
     expect(await agree('first-recovery-A')).toEqual(a);
+
+    // A render the Worker rejects after staging still owns its FASTA bytes, so
+    // the first restored A restages the FASTA.
+    await fasta.setInputFiles({ name: 'empty-sequence.fasta', mimeType: 'text/plain', buffer: emptySequence });
+    await generate('error');
+    expect(outcomes.at(-1).error).toMatchObject({ operation: 'generate', stage: 'render' });
+    expect(await agree('rejected-render')).toEqual(a);
+    const renderRejected = await inspect();
+    expect(renderRejected.workers).toHaveLength(1);
+    expect(renderRejected.workers[0].terminated).toBe(false);
+    expect(renderRejected.workers[0].messages.find(m => m.requestId === renderRejected.runs[2].requestId && m.type === 'run'))
+      .toMatchObject({ ok: true, error: { operation: 'generate', stage: 'render' } });
+    await fasta.setInputFiles(fastaPath);
+    await generate('ok'); // Mandatory first recovery: no retry in the test.
+    expect(await agree('render-recovery-A')).toEqual(a);
     const recovered = await inspect();
-    expect(recovered.runs).toHaveLength(3);
-    expect(recovered.runs[2].request).toEqual(a.request);
+    expect(recovered.runs).toHaveLength(4);
+    expect(recovered.runs[1].request).toEqual(a.request);
+    expect(recovered.runs[3].request).toEqual(a.request);
     expect(recovered.runs.map(run => run.staged.map(r => r.resourceId))).toEqual([
-      ['record-1-gff3', 'record-1-fasta'], ['record-1-fasta'], ['record-1-fasta']
+      ['record-1-gff3', 'record-1-fasta'], [], ['record-1-fasta'], ['record-1-fasta']
     ]);
-    expect(recovered.runs.map(run => run.staged.reduce((sum, r) => sum + r.bytes, 0))).toEqual([86047, 424, 49253]);
+    expect(recovered.runs.map(run => run.staged.reduce((sum, r) => sum + r.bytes, 0))).toEqual([86047, 0, 13, 49253]);
     await generate('ok');
     expect((await inspect()).runs.at(-1).staged).toEqual([]);
     expect(await agree('warm-A')).toEqual(a);
