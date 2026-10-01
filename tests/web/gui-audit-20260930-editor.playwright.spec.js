@@ -295,9 +295,116 @@ test('changing the Linear legend position after a legend-free Generate raises no
     await position.selectOption('left');
     await settle(page);
     expect(pageErrors).toEqual([]);
+    // Reset Settings also restores a legend side on the legend-free Result.
+    await page.evaluate(() => { window.confirm = () => true; });
+    await page.getByRole('button', { name: 'Reset Settings', exact: true }).click();
+    await settle(page);
+    expect(await page.evaluate(() => window.__GBDRAW_APP__.form.legend)).not.toBe('left');
+    expect(pageErrors).toEqual([]);
   } finally {
     await page.context().close();
   }
+});
+
+// D-30 (PD-OI-084): the in-place Linear side move could not match the
+// renderer (PV-10 measurement in docs/internal/web-gui-audit-20260930), so a
+// Linear legend side applies on Generate and the Result is unchanged until then.
+test('a Linear legend side change leaves the Result unchanged until Generate applies it', async ({ browser }) => {
+  test.setTimeout(600_000);
+  const page = await load(browser, 'gbdraw/web/gallery/sessions/lambda_basic_linear.gbdraw-session.json');
+  try {
+    await generate(page);
+    const read = () => page.evaluate(() => {
+      const app = window.__GBDRAW_APP__;
+      const mounted = app.svgContainer.querySelector('svg');
+      return {
+        result: app.results[app.selectedResultIndex].content,
+        mountedSide: JSON.parse(mounted.getAttribute('data-gbdraw-composition')).legendSide,
+        viewBox: mounted.getAttribute('viewBox')
+      };
+    });
+    const before = await read();
+    const position = page.getByLabel('Legend position', { exact: true });
+    for (const details of await position.locator('xpath=ancestor::details').all()) {
+      if (await details.getAttribute('open') === null) await details.locator(':scope > summary').press('Enter');
+    }
+    await expect(page.getByText('Applies on Generate: legend position, swatch size, and font size.')).toBeVisible();
+    await position.selectOption('top');
+    await settle(page);
+    expect(await read()).toEqual(before);
+    await generate(page);
+    const after = await read();
+    expect(after.mountedSide).toBe('top');
+    expect(after.viewBox).not.toBe(before.viewBox);
+  } finally {
+    await page.context().close();
+  }
+});
+
+// W1b PV-02/PV-03: a horizontal legend keeps a sort and a featureless rename
+// through Generate and a Session round trip.
+test('a horizontal legend keeps a sort and a featureless rename through Generate and Load', async ({ browser }, testInfo) => {
+  test.setTimeout(600_000);
+  const page = await load(browser, HMMT_SESSION);
+  try {
+    await page.evaluate(() => { window.__GBDRAW_APP__.form.legend = 'top'; });
+    await generate(page);
+    if (!await page.evaluate(() => window.__GBDRAW_APP__.showRightDrawer)) await page.locator('.drawer-toggle').click();
+    await page.locator('.right-drawer').getByRole('button', { name: 'Legend' }).click();
+    await page.locator('.right-drawer').getByTitle('Sort Z-A', { exact: true }).click();
+    await settle(page);
+    await page.evaluate(async () => {
+      const app = window.__GBDRAW_APP__;
+      await app.renameLegendEntry(app.legendEntries.findIndex((entry) => entry.caption === 'GC content'), 'GC percent');
+    });
+    await settle(page);
+    const edited = await legendCaptions(page);
+    expect(edited).toContain('GC percent');
+    expect(edited.filter((caption) => caption !== 'GC percent'))
+      .toEqual(edited.filter((caption) => caption !== 'GC percent').sort((left, right) => right.localeCompare(left)));
+    await generate(page);
+    expect(await legendCaptions(page, { source: 'result' })).toEqual(edited);
+    const sessionFile = testInfo.outputPath('legend-order.gbdraw-session.json.gz');
+    await download(page, 'Save Session', sessionFile);
+    const fresh = await load(browser, sessionFile);
+    try {
+      expect(await legendCaptions(fresh)).toEqual(edited);
+      await generate(fresh);
+      expect(await legendCaptions(fresh, { source: 'result' })).toEqual(edited);
+    } finally {
+      await fresh.context().close();
+    }
+  } finally {
+    await page.context().close();
+  }
+});
+
+// D-09 (PD-OI-064): one canvas padding reaches every batch Result, once.
+test('canvas padding reaches every batch Result through Generate and applies once', async ({ page }) => {
+  test.setTimeout(600_000);
+  await openBatch(page);
+  const canvases = () => page.evaluate(() => window.__GBDRAW_APP__.results.map((result) => {
+    const svg = new DOMParser().parseFromString(result.content, 'image/svg+xml').documentElement;
+    return svg.getAttribute('viewBox').trim().split(/[\s,]+/).map(Number);
+  }));
+  const base = await canvases();
+  await page.getByRole('button', { name: 'Toggle canvas padding controls' }).click();
+  const right = page.locator('.preview-canvas-padding input[type=number]').nth(2);
+  await right.fill('150');
+  await right.press('Tab');
+  await settle(page);
+  for (let run = 0; run < 2; run += 1) {
+    await generateAndWaitForResult(page);
+    await settle(page);
+    expect((await canvases()).map((box) => box[2])).toEqual(base.map((box) => box[2] + 150));
+  }
+  await selectResult(page, 1);
+  expect(await page.evaluate(() => Number(window.__GBDRAW_APP__.svgContainer.querySelector('svg')
+    .getAttribute('viewBox').trim().split(/[\s,]+/)[2]))).toBe(base[1][2] + 150);
+  await page.locator('.preview-canvas-padding').getByRole('button', { name: 'Reset', exact: true }).click();
+  await settle(page);
+  await selectResult(page, 0);
+  expect((await canvases()).map((box) => box[2])).toEqual(base.map((box) => box[2]));
 });
 
 test('Escape that closes the Editor returns focus to the Editor toggle', async ({ browser }) => {
