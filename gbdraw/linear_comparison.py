@@ -277,30 +277,32 @@ def reverse_unbound_endpoint_rows(
     return replace(comparison, matches=updated)
 
 
-def main_session_table_text_to_search_frame(
+def reverse_endpoint_table_text(
     text: str,
     query: tuple[int, bool],
     subject: tuple[int, bool],
 ) -> str:
-    """Rewrite one origin/main Web Session nucleotide table to the search frame.
+    """Rewrite one nucleotide table between a record's frame and its reverse complement.
 
-    Sessions up to version 42 stored the rows of a reverse-complemented
-    endpoint after the reverse complement. ``query`` and ``subject`` are
-    ``(L, reversed)`` of each endpoint record, and x -> L + 1 - x, the map of
-    :func:`project_search_frame_comparisons`, is its own inverse. The Web
-    Session reader applies it once at Load; the CLI reader projects the plan.
+    ``query`` and ``subject`` are ``(L, reversed)`` of each endpoint record;
+    rows of a reversed endpoint map x -> L + 1 - x, the map of
+    :func:`project_search_frame_comparisons`, which is its own inverse. The Web
+    Session reader converts origin/main Sessions (version 42 and older, rows
+    stored after the reverse complement) once at Load; the Session writer
+    converts rows into the frame of a reverse-complemented record it persists
+    as a sequence.
     """
 
     from io import StringIO
 
     from gbdraw.io.comparisons import read_comparison_table
 
-    frame = read_comparison_table(StringIO(str(text or "")), label="Session comparison table")
+    frame = read_comparison_table(StringIO(str(text or "")), label="comparison table")
     for (length, reverse), columns in ((query, ("qstart", "qend")), (subject, ("sstart", "send"))):
         values = frame.loc[:, list(columns)].astype(int)
         if reverse and not ((values >= 1) & (values <= int(length))).all(axis=None):
             raise ValidationError(
-                f"Session comparison rows lie outside 1..{int(length)} of their reversed record.",
+                f"Comparison rows lie outside 1..{int(length)} of their reverse-complemented record.",
                 diagnostic={"code": "COMPARISON_INPUT", "reason": "SEARCH_FRAME"},
             )
     converted = reverse_unbound_endpoint_rows(LinearComparison(0, 1, frame), query, subject).matches

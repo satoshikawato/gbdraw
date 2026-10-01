@@ -196,12 +196,35 @@ def test_main_web_session_with_a_reversed_record_draws_the_ribbons_main_drew(tmp
     assert _ribbon_spans((tmp_path / "resaved.svg").read_text(encoding="utf-8")) == expected
 
 
-def test_main_session_table_rewrite_maps_reversed_endpoints_only() -> None:
-    from gbdraw.linear_comparison import main_session_table_text_to_search_frame
+def test_table_text_rewrite_maps_reversed_endpoints_only() -> None:
+    from gbdraw.linear_comparison import reverse_endpoint_table_text
 
     row = "R2c\tR3c\t100.0\t1000\t0\t0\t2001\t3000\t3000\t2001\t0.0\t1847\n"
-    assert main_session_table_text_to_search_frame(row, (3000, False), (3000, True)) == (
+    assert reverse_endpoint_table_text(row, (3000, False), (3000, True)) == (
         "R2c\tR3c\t100.0\t1000\t0\t0\t2001\t3000\t1\t1000\t0.0\t1847\n"
     )
     with pytest.raises(GbdrawError, match="outside 1..2000"):
-        main_session_table_text_to_search_frame(row, (3000, False), (2000, True))
+        reverse_endpoint_table_text(row, (3000, False), (2000, True))
+
+
+@pytest.mark.linear
+def test_cli_session_output_with_a_reversed_record_replays_the_cli_ribbons(tmp_path: Path) -> None:
+    # The sidecar embeds the reverse-complemented record as a sequence, so the
+    # -b rows (search frame of the source record) are written in its frame.
+    r2 = _write_record(tmp_path, "R2", _X[:2000] + _Y)
+    r3 = _write_record(tmp_path, "R3", _Y + _Z)
+    sidecar = tmp_path / "fresh.gbdraw-session.json"
+    fresh = _render(
+        tmp_path, "fresh", [r2, r3], "R2\tR3\t100\t1000\t0\t0\t2001\t3000\t1\t1000\t0.0\t1847",
+        "--reverse_complement", "0", "--reverse_complement", "1", "--session_output", str(sidecar),
+    )
+    linear_cli.linear_main(["--session", str(sidecar), "-o", str(tmp_path / "replayed"), "-f", "svg"])
+    replayed = (tmp_path / "replayed.svg").read_text(encoding="utf-8")
+    assert len(fresh) == 1
+    assert _ribbon_spans(replayed) == fresh
+    # The replay draws the same SVG; only the record source attributes differ,
+    # because the embedded reversed sequence is the replay's own source (D-22).
+    source_attributes = re.compile(r' data-gbdraw-record-source-(?:start|end|step)="[^"]*"')
+    assert source_attributes.sub("", replayed) == source_attributes.sub(
+        "", (tmp_path / "fresh.svg").read_text(encoding="utf-8")
+    )

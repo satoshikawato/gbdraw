@@ -848,13 +848,13 @@ def build_protein_losat_cache_keys_json(
 
 def main_session_table_text_to_search_frame_json(table_text, query_frame_json, subject_frame_json):
     """Rewrite one origin/main Session nucleotide table to the search frame."""
-    from gbdraw.linear_comparison import main_session_table_text_to_search_frame
+    from gbdraw.linear_comparison import reverse_endpoint_table_text
 
     endpoints = []
     for frame_json in (query_frame_json, subject_frame_json):
         frame = json.loads(str(frame_json))
         endpoints.append((int(frame.get("length") or 0), frame.get("reverse") is True))
-    text = main_session_table_text_to_search_frame(str(table_text), endpoints[0], endpoints[1])
+    text = reverse_endpoint_table_text(str(table_text), endpoints[0], endpoints[1])
     return json.dumps({"tsv": text})
 
 def hydrate_protein_losat_tsv_json(entry_json, identity_manifest_json):

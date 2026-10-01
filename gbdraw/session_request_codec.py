@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping as MappingABC, Sequence as SequenceABC
 from copy import deepcopy
-from dataclasses import MISSING, asdict, dataclass, fields, is_dataclass, replace
+from dataclasses import MISSING, asdict, dataclass, fields, is_dataclass
 from io import StringIO
 import json
 import math
@@ -44,7 +44,11 @@ from gbdraw.io.record_select import RecordSelector
 from gbdraw.io.regions import RegionSpec
 from gbdraw.io.comparisons import read_comparison_table
 from gbdraw.core.record_metadata import _read_coord_map
-from gbdraw.linear_comparison import LinearComparison, reverse_unbound_endpoint_rows
+from gbdraw.linear_comparison import (
+    LinearComparison,
+    reverse_endpoint_table_text,
+    reverse_unbound_endpoint_rows,
+)
 from gbdraw.tracks import CircularTrackSlot, LinearTrackSlot, ScalarSpec
 from gbdraw.tracks.circular import (
     _InternalCircularTrackSlot,
@@ -661,7 +665,10 @@ def _encode_canonical_request(request: DiagramRequest) -> EncodedCanonicalReques
         ),
         "layout": _encode_layout(request),
         "comparisons": _encode_comparisons(
-            _persisted_record_frame_options(request), mode=mode, resources=resources
+            request.options,
+            mode=mode,
+            resources=resources,
+            frames=_persisted_record_frames(request),
         ),
         "output": (
             [_encode_output(output) for output in request.outputs]
@@ -3173,30 +3180,28 @@ def _decode_resource_matrix(
     return tuple(result)
 
 
-def _persisted_record_frame_options(request: Any) -> Any:
-    """Write comparison rows in the search frame of each persisted record (PD-OI-073).
+def _persisted_record_frames(request: Any) -> tuple[tuple[int, bool], ...]:
+    """Return ``(L, reversed)`` of each record as the Session persists it (PD-OI-073).
 
     A materialized reverse-complemented record is persisted as its reversed
-    sequence, whose search frame is the displayed one, so its unbound rows are
-    projected once here; a file source with ``reverseComplement`` keeps them.
+    sequence, whose search frame is the displayed one, so comparison rows that
+    touch it are written in that frame; a file source with
+    ``reverseComplement`` keeps its rows. Every other record is ``(0, False)``;
+    a Circular request has no comparisons.
     """
 
-    options = getattr(request, "options", None)
-    if not isinstance(options, LinearDiagramOptions) or not options.linear_comparisons:
-        return options
+    if not isinstance(getattr(request, "options", None), LinearDiagramOptions):
+        return ()
     frames = []
     for record_input in request.records:
         record = getattr(record_input.source, "record", None)
         reversed_record = isinstance(record_input.source, InMemoryRecordSource) and _read_coord_map(record)[1] == -1
         frames.append((len(record), True) if reversed_record else (0, False))
-    if not any(reverse for _length, reverse in frames):
-        return options
-    return replace(options, linear_comparisons=tuple(
-        reverse_unbound_endpoint_rows(
-            comparison, frames[comparison.query_record_index], frames[comparison.subject_record_index]
-        )
-        for comparison in options.linear_comparisons
-    ))
+    return tuple(frames)
+
+
+def _record_frame(frames: tuple[tuple[int, bool], ...], index: int) -> tuple[int, bool]:
+    return frames[index] if 0 <= index < len(frames) else (0, False)
 
 
 def _encode_comparisons(
@@ -3204,6 +3209,7 @@ def _encode_comparisons(
     *,
     mode: Literal["circular", "linear"],
     resources: _ResourceBuilder,
+    frames: tuple[tuple[int, bool], ...],
 ) -> list[dict[str, Any]]:
     if mode == "circular":
         return []
@@ -3213,6 +3219,11 @@ def _encode_comparisons(
         )
     result: list[dict[str, Any]] = []
     for index, comparison in enumerate(options.linear_comparisons or (), start=1):
+        comparison = reverse_unbound_endpoint_rows(
+            comparison,
+            _record_frame(frames, comparison.query_record_index),
+            _record_frame(frames, comparison.subject_record_index),
+        )
         ref = _table_ref(
             f"comparison-explicit-{index}", comparison.matches, resources=resources
         )
@@ -3226,8 +3237,11 @@ def _encode_comparisons(
             }
         )
     for index, path in enumerate(options.blast_files or (), start=1):
-        resource_id = resources.add_path(
-            f"comparison-nucleotide-{index}", kind="nucleotide-blast", value=path
+        resource_id = _nucleotide_blast_resource(
+            f"comparison-nucleotide-{index}",
+            path,
+            frames=(_record_frame(frames, index - 1), _record_frame(frames, index)),
+            resources=resources,
         )
         result.append(
             {
@@ -3311,6 +3325,34 @@ def _encode_comparisons(
             }
         )
     return result
+
+
+def _nucleotide_blast_resource(
+    resource_id: str,
+    path: object,
+    *,
+    frames: tuple[tuple[int, bool], tuple[int, bool]],
+    resources: _ResourceBuilder,
+) -> str:
+    """Persist one ``-b`` table, rewritten for a reverse-complemented record.
+
+    The table is in the search frame of the source records; a record persisted
+    as its reverse-complemented sequence needs its rows in that sequence.
+    """
+
+    if not (frames[0][1] or frames[1][1]):
+        return resources.add_path(resource_id, kind="nucleotide-blast", value=path)
+    source = Path(str(path))
+    try:
+        text = source.read_text(encoding="utf-8-sig")
+    except (OSError, UnicodeError) as exc:
+        raise CanonicalRequestEncodingError(
+            f"Could not read comparison table {source} for the Session."
+        ) from exc
+    content = reverse_endpoint_table_text(text, frames[0], frames[1])
+    return resources.add_bytes(
+        resource_id, kind="nucleotide-blast", name=source.name, content=content.encode("utf-8")
+    )
 
 
 def _decode_comparisons(
