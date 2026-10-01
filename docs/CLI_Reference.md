@@ -703,6 +703,8 @@ Use `--comparisons_table` in Linear mode when comparison endpoints are not impli
 
 Endpoints must be different records in adjacent rows. Any number of selected pairs may connect the same two rows, and repeated rows for the same pair are merged after the shared filters are applied. The table cannot be combined with legacy `-b/--blast`. Legacy BLAST arguments remain adjacency-based and are rejected when a Linear row contains more than one record.
 
+Both `--comparisons_table` and `-b/--blast` read the first 12 outfmt 6 columns and ignore extra columns. A missing, unreadable, or malformed BLAST file stops the run with a non-zero exit status; `-b` no longer skips it. A table whose `qseqid` or `sseqid` names the other endpoint or another displayed record is rejected. See [Comparison and numeric tables](REFERENCE/input-formats-and-tsv-schemas.md#comparison-and-numeric-tables).
+
 ```tsv
 blast	query	subject
 MjeNMV.MelaMJNV.tblastx.out	#1	#3

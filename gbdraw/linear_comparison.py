@@ -2,14 +2,18 @@
 
 from __future__ import annotations
 
+import logging
+import re
 from dataclasses import dataclass
-from typing import Sequence
+from typing import Literal, Sequence
 
 import pandas as pd
 from pandas import DataFrame  # type: ignore[reportMissingImports]
 
-from gbdraw.exceptions import ValidationError
+from gbdraw.exceptions import ComparisonIdentityError, ValidationError
 from gbdraw.layout.record_coordinates import RecordDisplayTransform, SourceInterval, alignment_cut_breakpoints
+
+logger = logging.getLogger(__name__)
 
 
 def project_match_endpoints(
@@ -147,8 +151,125 @@ def validate_linear_comparison_topology(
             )
 
 
+_VERSION_SUFFIX = re.compile(r"\.[0-9]+$")
+_FEATURE_BINDING_COLUMNS = frozenset(
+    f"{role}_{name}" for role in ("query", "subject") for name in ("feature_index", "feature_svg_id")
+)
+
+
+def _record_id_index(records: Sequence[object]) -> tuple[dict[str, list[int]], dict[str, list[int]]]:
+    """Index record IDs and names exactly and without a version suffix."""
+
+    exact: dict[str, list[int]] = {}
+    loose: dict[str, list[int]] = {}
+    for index, record in enumerate(records):
+        for attribute in ("id", "name"):
+            text = str(getattr(record, attribute, "") or "").strip()
+            if not text or text == "<unknown name>":
+                continue
+            for keys, key in ((exact, text), (loose, _VERSION_SUFFIX.sub("", text))):
+                if index not in keys.setdefault(key, []):
+                    keys[key].append(index)
+    return exact, loose
+
+
+def _resolve_table_id(
+    value: str,
+    endpoint: int,
+    index: tuple[dict[str, list[int]], dict[str, list[int]]],
+) -> tuple[Literal["match", "conflict", "unknown"], int | None]:
+    """Match exact IDs before version-tolerant IDs so distinct versions stay distinct."""
+
+    exact, loose = index
+    for named in (exact.get(value, []), loose.get(_VERSION_SUFFIX.sub("", value), [])):
+        if endpoint in named:
+            return "match", endpoint
+        if named:
+            return "conflict", named[0]
+    return "unknown", None
+
+
+def _rows_without_feature_binding(frame: DataFrame) -> DataFrame:
+    """Return the rows that carry no source-feature binding.
+
+    Sources for one endpoint pair are merged before this check, so uploaded
+    rows can share a frame with bound LOSATP or saved protein rows.
+    """
+
+    if not _FEATURE_BINDING_COLUMNS <= set(frame.columns):
+        return frame
+    binding = frame.loc[:, sorted(_FEATURE_BINDING_COLUMNS)]
+    present = binding.notna() & binding.astype(str).apply(lambda column: column.str.strip() != "")
+    return frame.loc[~present.any(axis=1)]
+
+
+def validate_linear_comparison_record_ids(
+    comparisons: Sequence[LinearComparison],
+    records: Sequence[object],
+) -> None:
+    """Check table query/subject IDs against each comparison's endpoint records.
+
+    A row that names the opposite endpoint or another displayed record raises
+    ComparisonIdentityError. IDs that name no displayed record keep positional
+    placement with a warning. Version suffixes (``.1``) are tolerated. Rows
+    bound to source features are checked by feature identity instead. Every
+    Linear comparison input (``-b`` files, comparison tables, typed and Web
+    requests) reaches this check beside the topology check.
+    """
+
+    id_index = _record_id_index(records)
+    for comparison in comparisons:
+        frame = _rows_without_feature_binding(comparison.matches)
+        if frame.empty:
+            continue
+        endpoints = {
+            "query": comparison.query_record_index,
+            "subject": comparison.subject_record_index,
+        }
+        pair = (
+            f"query record #{endpoints['query'] + 1} "
+            f"{str(getattr(records[endpoints['query']], 'id', '')).strip()!r} and subject record "
+            f"#{endpoints['subject'] + 1} {str(getattr(records[endpoints['subject']], 'id', '')).strip()!r}"
+        )
+        unknown_rows = pd.Series(False, index=frame.index)
+        unknown_ids: list[str] = []
+        for role, endpoint in endpoints.items():
+            if role not in frame.columns:
+                continue
+            table_ids = frame[role].astype(str).str.strip()
+            unknown_role_ids: list[str] = []
+            for value in table_ids.unique():
+                status, named = _resolve_table_id(str(value), endpoint, id_index)
+                if status == "unknown":
+                    unknown_role_ids.append(str(value))
+                elif status == "conflict" and named is not None:
+                    other = endpoints["subject" if role == "query" else "query"]
+                    target = (
+                        f"the {'subject' if role == 'query' else 'query'} record"
+                        if named == other
+                        else f"record #{named + 1} {str(getattr(records[named], 'id', '')).strip()!r}"
+                    )
+                    raise ComparisonIdentityError(
+                        f"Comparison between {pair}: the {role} column names {str(value)!r}, "
+                        f"which is {target}, not the {role} record. Swap the query and subject "
+                        "columns of the table or assign the table to the matching record pair.",
+                        reason="RECORD_ID",
+                    )
+            unknown_rows |= table_ids.isin(unknown_role_ids)
+            unknown_ids.extend(value for value in unknown_role_ids if value not in unknown_ids)
+        if unknown_ids:
+            logger.warning(
+                "WARNING: Comparison between %s: %d row(s) use sequence IDs that match no "
+                "displayed record (%s); these rows are drawn on the records assigned by position.",
+                pair,
+                int(unknown_rows.sum()),
+                ", ".join(repr(value) for value in unknown_ids[:3]),
+            )
+
+
 __all__ = [
     "LinearComparison",
     "merge_linear_comparisons",
+    "validate_linear_comparison_record_ids",
     "validate_linear_comparison_topology",
 ]

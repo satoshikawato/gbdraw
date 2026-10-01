@@ -41,12 +41,12 @@ protein_blastp_mode protein_blastp_candidate_limit collinear_search_scope collin
 # Producer ``diagnostic=`` vocabulary: bounded identifiers that the Web wording
 # owner (services/error-normalization.js) defines, never document values.
 # tests/test_web_error_producer_coverage.py keeps it aligned with producers.
-DIAGNOSTIC_CODES = frozenset("INPUT_INVALID INPUT_UNREADABLE DEPTH_INVALID TABLE_INVALID TRACK_LAYOUT".split())
-DIAGNOSTIC_REASONS = frozenset("""BOOLEAN INTEGER FINITE POSITIVE NONNEGATIVE POSITIVE_INTEGER
+DIAGNOSTIC_CODES = frozenset("INPUT_INVALID INPUT_UNREADABLE DEPTH_INVALID TABLE_INVALID COMPARISON_INPUT TRACK_LAYOUT".split())
+DIAGNOSTIC_REASONS = frozenset("""BOOLEAN INTEGER FINITE POSITIVE NONNEGATIVE POSITIVE_INTEGER REQUIRED FIELDS
 POSITIVE_OR_AUTO POSITIVE_INTEGER_OR_AUTO NONNEGATIVE_INTEGER PERCENT UNKNOWN_CONFIG_PATH
 DINUCLEOTIDE CANNOT_FIT THREE_COLUMNS DEPTH_VALUES REFERENCE_REQUIRED REFERENCE_MISMATCH
 ADJACENT_ALL COLLINEAR_ANCHOR_MODE COLLINEAR_COLOR_MODE COLOR""".split())
-_DIAGNOSTIC_INTEGER_KEYS = frozenset("row seriesIndex slotIndex innerPx outerPx".split())
+_DIAGNOSTIC_INTEGER_KEYS = frozenset("row column columnCount seriesIndex slotIndex innerPx outerPx".split())
 
 # Native, fixed validation clauses -> bounded correction identifiers.
 _CONSTRAINTS = {

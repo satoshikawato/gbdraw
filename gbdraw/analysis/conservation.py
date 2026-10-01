@@ -17,6 +17,8 @@ from gbdraw.io.colors import resolve_color_to_hex  # type: ignore[reportMissingI
 from gbdraw.io.comparisons import (  # type: ignore[reportMissingImports]
     COMPARISON_COLUMNS,
     filter_comparison_dataframe,
+    normalize_comparison_dataframe,
+    read_comparison_table,
 )
 
 
@@ -52,19 +54,6 @@ NORMALIZED_CONSERVATION_COLUMNS = (
     "bitscore",
     "orientation",
     "full_reference",
-)
-
-_NUMERIC_COMPARISON_COLUMNS = (
-    "identity",
-    "alignment_length",
-    "mismatches",
-    "gap_opens",
-    "qstart",
-    "qend",
-    "sstart",
-    "send",
-    "evalue",
-    "bitscore",
 )
 
 
@@ -136,32 +125,8 @@ def conservation_track_gradient_colors(
     return tint_color(normalized_track_color), normalized_track_color
 
 
-def _coerce_comparison_dataframe(dataframe: DataFrame) -> DataFrame:
-    """Return a BLAST outfmt 6/7 shaped dataframe or raise ValueError."""
-
-    if dataframe is None:
-        raise ValueError("dataframe is None")
-
-    if set(COMPARISON_COLUMNS).issubset(set(dataframe.columns)):
-        df = dataframe.loc[:, list(COMPARISON_COLUMNS)].copy()
-    elif len(dataframe.columns) >= len(COMPARISON_COLUMNS):
-        df = dataframe.iloc[:, : len(COMPARISON_COLUMNS)].copy()
-        df.columns = list(COMPARISON_COLUMNS)
-    else:
-        raise ValueError(
-            "comparison dataframe must contain BLAST outfmt 6 columns "
-            f"({', '.join(COMPARISON_COLUMNS)})"
-        )
-
-    for column in ("query", "subject"):
-        df[column] = df[column].astype(str)
-    for column in _NUMERIC_COMPARISON_COLUMNS:
-        df[column] = pd.to_numeric(df[column], errors="coerce")
-    return df
-
-
-def _filter_valid_dataframe(dataframe: DataFrame, blast_config: object) -> DataFrame:
-    df = _coerce_comparison_dataframe(dataframe)
+def _filter_normalized_dataframe(dataframe: DataFrame, blast_config: object) -> DataFrame:
+    df = dataframe.copy()
     # Keep the original source-row identity through filtering and paint-order sorting.
     df["source_hit_index"] = range(len(df))
     filtered = filter_comparison_dataframe(df, blast_config)  # type: ignore[arg-type]
@@ -169,21 +134,10 @@ def _filter_valid_dataframe(dataframe: DataFrame, blast_config: object) -> DataF
 
 
 def _load_conservation_file(path: str, blast_config: object) -> tuple[DataFrame | None, str | None]:
-    if not os.path.isfile(path):
-        return None, f"file does not exist or is not accessible: {path}"
     try:
-        raw_df = pd.read_csv(
-            path,
-            sep="\t",
-            comment="#",
-            names=COMPARISON_COLUMNS,
-        )
-        return _filter_valid_dataframe(raw_df, blast_config), None
-    except pd.errors.EmptyDataError:
-        raw_df = pd.DataFrame(columns=COMPARISON_COLUMNS)
-        return _filter_valid_dataframe(raw_df, blast_config), None
-    except Exception as exc:
-        return None, f"error parsing BLAST file for similarity ring {path}: {exc}"
+        return _filter_normalized_dataframe(read_comparison_table(path), blast_config), None
+    except ValidationError as exc:
+        return None, str(exc)
 
 
 def load_conservation_sources(
@@ -237,8 +191,13 @@ def load_conservation_sources(
 
         if source_index < len(dataframes):
             try:
-                valid_frames.append(_filter_valid_dataframe(dataframes[source_index], blast_config))
-            except Exception as exc:
+                valid_frames.append(
+                    _filter_normalized_dataframe(
+                        normalize_comparison_dataframe(dataframes[source_index]),
+                        blast_config,
+                    )
+                )
+            except ValidationError as exc:
                 reason = f"error parsing conservation dataframe {source_index}: {exc}"
                 logger.warning("WARNING: %s", reason)
                 skip_reasons.append(reason)
