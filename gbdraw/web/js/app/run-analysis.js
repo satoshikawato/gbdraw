@@ -15,6 +15,7 @@ import {
   projectCompositionRecordIdentity,
   buildCanonicalRenderRequest,
   bindCanonicalTypedResource,
+  projectCommittedEditorIntent,
   projectCommittedRecordTransform,
   projectCommittedSimilarityAlignment,
   readCanonicalResourceRecordCount
@@ -1853,8 +1854,6 @@ export const createRunAnalysis = ({
 
   const runAnalysisInternal = async ({
     decorationContinuity = null,
-    runMode = 'manual',
-    requestId = 0,
     comparisonPlanSnapshot = null,
     generatedArtifactHandle = null,
     comparisonExecution = null,
@@ -1865,12 +1864,9 @@ export const createRunAnalysis = ({
     const { linearSeqs } = runState;
     let colorCandidate = null;
     let candidateRules = manualSpecificRules;
-    const isReflow = runMode === 'reflow';
     let failureStage = 'request-validation';
-    if (!isReflow) {
-      recordSessionLifecycleEvent('generate-start');
-      recordSessionLifecycleEvent('generation-input-resolution-start');
-    }
+    recordSessionLifecycleEvent('generate-start');
+    recordSessionLifecycleEvent('generation-input-resolution-start');
     const useCommittedComparison = comparisonExecution?.mode === 'inherit';
     const forceEmptyComparison = useCommittedComparison || comparisonExecution?.mode === 'clear';
     const activeComparisonPlanSnapshot = mode.value === 'linear'
@@ -1898,9 +1894,7 @@ export const createRunAnalysis = ({
     let canceledAttemptOwnsPresentation = false;
     let generationAbortController = null;
     let generationAbortSignal = null;
-    const committedArtifactHandle = isReflow
-      ? null
-      : (generatedArtifactHandle || await captureGeneratedArtifactHandle());
+    const committedArtifactHandle = generatedArtifactHandle || await captureGeneratedArtifactHandle();
     let activatedGeneratedArtifactCandidate = null;
     let acceptedCandidateReadyReceipt = null;
     let workingProteinIdentityManifest = committedArtifactHandle?.ownerSet
@@ -1919,7 +1913,7 @@ export const createRunAnalysis = ({
       || Object.keys(labelTextFeatureOverrides).length > 0 || Object.keys(labelVisibilityOverrides).length > 0
       || Object.keys(legendColorOverrides).length > 0 || Object.keys(legendStrokeOverrides).length > 0
       || legendEntries.value.some(entry => entry.originalCaption && entry.originalCaption !== entry.caption);
-    const sourceReplaced = !isReflow && hasSourceBoundEditorIntent
+    const sourceReplaced = hasSourceBoundEditorIntent
       && [...new Map((workingBiologicalFeatures || []).map(feature => [feature.record_key, feature])).values()]
         .some(feature => !isCurrentFeature(feature));
     let workingLosatCacheInfo = committedArtifactHandle?.ownerSet?.losatCacheInfo
@@ -1963,7 +1957,7 @@ export const createRunAnalysis = ({
       return { status: 'canceled' };
     };
     const setProcessingStatus = (message) => {
-      if (!isReflow && generationToken === latestGenerationToken) {
+      if (generationToken === latestGenerationToken) {
         processingStatus.value = String(message || '');
       }
     };
@@ -1977,21 +1971,15 @@ export const createRunAnalysis = ({
       if (message) setProcessingStatus(message);
     };
     const throwIfGenerationCanceled = () => {
-      if (!isReflow && generationCancelRequested.value) {
+      if (generationCancelRequested.value) {
         throw new DiagramGenerationCanceledError();
       }
     };
-    if (isReflow && mode.value === 'circular' && shouldDeferCircularPreviewUpdates.value) {
-      return { status: 'skipped' };
-    }
-    generationAbortController =
-      !isReflow && typeof AbortController === 'function' ? new AbortController() : null;
+    generationAbortController = typeof AbortController === 'function' ? new AbortController() : null;
     generationAbortSignal = generationAbortController?.signal || null;
-    if (!isReflow) activeLosatAbortController = generationAbortController;
+    activeLosatAbortController = generationAbortController;
     if (mode.value === 'linear' && typeof prepareLinearRecordCatalog === 'function') {
-      if (!isReflow) {
-        processingStatus.value = 'Reading input records...';
-      }
+      processingStatus.value = 'Reading input records...';
       let prepared;
       try {
         prepared = await prepareLinearRecordCatalog(
@@ -2003,11 +1991,11 @@ export const createRunAnalysis = ({
           error
         };
       } finally {
-        if (!isReflow && generationToken === latestGenerationToken) {
+        if (generationToken === latestGenerationToken) {
           processingStatus.value = 'Preparing input files...';
         }
       }
-      if (!isReflow && generationToken !== latestGenerationToken) {
+      if (generationToken !== latestGenerationToken) {
         if (activeLosatAbortController === generationAbortController) {
           activeLosatAbortController = null;
         }
@@ -2017,16 +2005,15 @@ export const createRunAnalysis = ({
       }
       if (prepared?.error) {
         const error = formatError(prepared.error);
-        if (isReflow) labelReflowLastError.value = error.summary;
         if (activeLosatAbortController === generationAbortController) {
           activeLosatAbortController = null;
         }
-        return isReflow ? { status: 'error', error } : failOperation(error, { handle: committedArtifactHandle,
+        return failOperation(error, { handle: committedArtifactHandle,
           restore: restoreCommittedArtifact, isCurrent: isCurrentAlert, isCurrentOperation });
       }
       linearRecordCatalog = prepared?.catalog || null;
     }
-    if (!isReflow && mode.value === 'circular') {
+    if (mode.value === 'circular') {
       const inputType = cInputType.value;
       const primaryFile = inputType === 'gff' ? files.c_gff : files.c_gb;
       const pairedFile = inputType === 'gff' ? files.c_fasta : null;
@@ -2065,11 +2052,10 @@ export const createRunAnalysis = ({
     const depthInputError = validateDepthInputPresence();
     if (depthInputError) {
       const error = formatError(depthInputError);
-      if (isReflow) labelReflowLastError.value = error.summary;
       if (activeLosatAbortController === generationAbortController) {
         activeLosatAbortController = null;
       }
-      return isReflow ? { status: 'error', error } : failOperation(error, { handle: committedArtifactHandle,
+      return failOperation(error, { handle: committedArtifactHandle,
         restore: restoreCommittedArtifact, isCurrent: isCurrentAlert, isCurrentOperation });
     }
     const previousSelectedResultIndex = selectedResultIndex.value;
@@ -2088,30 +2074,24 @@ export const createRunAnalysis = ({
         String(modeValue || '')
       ])
     );
-    const activeRunColors = isReflow ? appliedPaletteColors.value : currentColors.value;
-    const manualRunStartedAt = isReflow ? null : getNow();
-    const manualRunStartedAtIso = isReflow ? null : new Date().toISOString();
+    const activeRunColors = currentColors.value;
+    const manualRunStartedAt = getNow();
+    const manualRunStartedAtIso = new Date().toISOString();
     let structuredLosatTelemetry = null;
     const legacyPromotionTransaction = [];
     let legacyPromotionCommitted = false;
     let commitProteinMigration = null;
     let pendingLosatCacheCommit = null;
 
-    if (isReflow) {
-      labelReflowLastError.value = null;
-      skipCaptureBaseConfig.value = true;
-      skipPositionReapply.value = true;
-    } else {
-      featureExtractionRequestId += 1;
-      processingStatus.value = 'Preparing input files...';
-      resultPanelTab.value = 'preview';
-      if (isCurrentAlert()) errorLog.value = null;
-      skipCaptureBaseConfig.value = false;
-      skipPositionReapply.value = false;
-      resetLabelScopeDialogState();
-      window._origPairwiseMin = activeRunColors.pairwise_match_min || '#FFE7E7';
-      window._origPairwiseMax = activeRunColors.pairwise_match_max || '#FF7272';
-    }
+    featureExtractionRequestId += 1;
+    processingStatus.value = 'Preparing input files...';
+    resultPanelTab.value = 'preview';
+    if (isCurrentAlert()) errorLog.value = null;
+    skipCaptureBaseConfig.value = false;
+    skipPositionReapply.value = false;
+    resetLabelScopeDialogState();
+    window._origPairwiseMin = activeRunColors.pairwise_match_min || '#FFE7E7';
+    window._origPairwiseMax = activeRunColors.pairwise_match_max || '#FF7272';
     labelOverrideBuildWarning.value = '';
 
     try {
@@ -2251,7 +2231,7 @@ export const createRunAnalysis = ({
       const normalizedOutputPrefix = String(form.prefix || '').trim();
 
       const activePaletteName = String(
-        isReflow ? appliedPaletteName.value : (selectedPalette?.value || appliedPaletteName.value || 'default')
+        selectedPalette?.value || appliedPaletteName.value || 'default'
       ).trim() || 'default';
       const paletteBaseColors = normalizePaletteColors(
         paletteDefinitions.value?.[activePaletteName] ||
@@ -4375,15 +4355,13 @@ export const createRunAnalysis = ({
 
       throwIfGenerationCanceled();
       setProcessingStatus('Preparing render inputs and session...');
-      if (!isReflow) {
-        await nextTick();
-        await waitForAfterPaint();
-        throwIfGenerationCanceled();
-      }
+      await nextTick();
+      await waitForAfterPaint();
+      throwIfGenerationCanceled();
       if (typeof serializeCanonicalFiles !== 'function') {
         throw new Error('Canonical input serialization is unavailable.');
       }
-      if (!isReflow) recordSessionLifecycleEvent('generation-input-resolution-end');
+      recordSessionLifecycleEvent('generation-input-resolution-end');
       recordSessionLifecycleEvent('serialize-canonical-files-start');
       const serializedFiles = await serializeCanonicalFiles(
         activeComparisonPlanSnapshot,
@@ -4482,7 +4460,7 @@ export const createRunAnalysis = ({
           + 65_536
       });
       let sourceRecipe = null;
-      if (!isReflow && manualRunStartedAt !== null) {
+      if (manualRunStartedAt !== null) {
         const generatedFileNameHints = new Map();
         generatedCliFileMap.forEach((file) => {
           const slot = String(file?.slot || '').trim();
@@ -4507,26 +4485,13 @@ export const createRunAnalysis = ({
         canonical,
         decorationContinuity,
         mode: mode.value,
-        kind: isReflow ? 'reflow' : 'generate',
+        kind: 'generate',
         shouldAdmit: () => (!colorCandidate || rulePreparation.isCurrent(colorCandidate.snapshot))
           && generationToken === latestGenerationToken
-          && (isReflow || !generationCancelRequested.value),
+          && !generationCancelRequested.value,
         onProgress: onDiagramProgress,
-        prepareCommit: isReflow ? prepareReflowCommit : prepareCandidateCommit,
-        prepareCommitInput: isReflow ? {
-          featureColorOverrides: colorCandidate?.featureColorOverrides || featureColorOverrides,
-          featureStrokeOverrides,
-          featureVisibilityOverrides,
-          labelTextFeatureOverrides,
-          labelVisibilityOverrides,
-          legendEntries: legendEntries.value,
-          deletedLegendEntries: deletedLegendEntries.value,
-          originalLegendOrder: originalLegendOrder.value,
-          addedLegendCaptions: addedLegendCaptions.value,
-          legendColorOverrides,
-          legendStrokeOverrides,
-          manualSpecificRules: candidateRules
-        } : {
+        prepareCommit: prepareCandidateCommit,
+        prepareCommitInput: {
           sourceReplaced,
           featureColorOverrides: colorCandidate?.featureColorOverrides || featureColorOverrides,
           featureStrokeOverrides,
@@ -4550,25 +4515,19 @@ export const createRunAnalysis = ({
       throwIfGenerationCanceled();
       if (canonicalExecution.status === 'superseded'
         || generationToken !== latestGenerationToken) {
-        if (!isReflow && generationAbortSignal?.aborted) {
+        if (generationAbortSignal?.aborted) {
           return finishCanceledManualRun();
         }
         return { status: 'stale' };
       }
       if (canonicalExecution.status === 'engine-error') {
         logPostGbdrawTimings(postGbdrawTimingEntries);
-        if (isReflow) {
-          const error = formatError(canonicalExecution.engineError, 'generate', 'render');
-          labelReflowLastError.value = error.summary;
-          return { status: 'error', error };
-        }
         return await failOperation(canonicalExecution.engineError, { handle: committedArtifactHandle,
           restore: restoreCommittedArtifact, isCurrent: isCurrentAlert, isCurrentOperation });
       }
       const {
         generationResponse,
         generationMetadata,
-        results: res,
         catalogAdmission: candidateCatalogAdmission,
         catalog: candidateCatalog,
         commit: candidateCommit
@@ -4576,32 +4535,16 @@ export const createRunAnalysis = ({
       publishedReplayArtifact.results = candidateCommit.results;
       publishedReplayArtifact.featureCatalog = candidateCatalog;
 
-      if (isReflow && requestId !== pendingReflowRequestId) {
-        return { status: 'stale' };
-      }
-
-      if (isReflow) {
-        skipCaptureBaseConfig.value = true;
-        skipPositionReapply.value = true;
-      }
-
       if (generationToken !== latestGenerationToken) {
-        if (!isReflow && generationAbortSignal?.aborted) {
+        if (generationAbortSignal?.aborted) {
           return finishCanceledManualRun();
         }
         return { status: 'stale' };
       }
 
-      if (isReflow && requestId !== pendingReflowRequestId) {
-        return { status: 'stale' };
-      }
-
-      measureTiming(postGbdrawTimingEntries, 'run-analysis assign results', () => {
-        if (isReflow) results.value = candidateCommit.results;
-      });
       let candidateRunInfo = null;
       let candidateCliHelpers = null;
-      if (!isReflow && manualRunStartedAt !== null) {
+      if (manualRunStartedAt !== null) {
         candidateRunInfo = buildRunInfo({
           mode: mode.value,
           sourceRecipe,
@@ -4628,232 +4571,223 @@ export const createRunAnalysis = ({
         );
       }
       logPostGbdrawTimings(postGbdrawTimingEntries);
-      if (isReflow) {
-        if (res.length > 0) {
-          const safeIndex = Math.max(0, Math.min(previousSelectedResultIndex, res.length - 1));
-          selectedResultIndex.value = safeIndex;
-        }
+      await validateSimilarityAlignmentResetReceipt(
+        state.similarityAlignmentResetReceipt?.value, canonical
+      );
+      recordSessionLifecycleEvent('preview-result-commit-start');
+      const candidateGroups = Array.isArray(candidateCommit.featureState.orthogroups)
+        ? candidateCommit.featureState.orthogroups
+        : [];
+      const candidateOrthogroupIndex = candidateCommit.featureState.featureOrthogroupIndex;
+      const candidateExtractedFeatures = candidateCommit.featureState.extractedFeatures;
+      const candidateBiologicalFeatures = candidateCommit.featureState.biologicalFeatures;
+      const currentOwnerSet = captureGeneratedArtifactOwnerSet();
+      let candidateOwnerSet = {
+        ...currentOwnerSet,
+        results: candidateCommit.results,
+        featureCatalog: candidateCatalog,
+        extractedFeatures: candidateExtractedFeatures,
+        biologicalFeatures: candidateBiologicalFeatures,
+        featureSelectorSafetyScope: candidateCommit.featureState.featureSelectorSafetyScope,
+        featureRecordIds: candidateCommit.featureState.featureRecordIds,
+        orthogroups: candidateGroups,
+        featureOrthogroupIndex: candidateOrthogroupIndex,
+        collinearGroups: Array.isArray(candidateCommit.featureState.collinearGroups)
+          ? candidateCommit.featureState.collinearGroups
+          : [],
+        trackSlotResolvedGeometry: generationMetadata.trackSlotGeometry || null,
+        annotationWarnings: canonicalExecution.annotationWarnings,
+        specificRules: candidateRules,
+        fileLegendCaptions: new Set(candidateRules.filter(rule => rule.fromFile && rule.cap).map(rule => rule.cap)),
+        proteinIdentityManifest: workingProteinIdentityManifest,
+        legacyProteinRawCandidates: workingLegacyProteinRawCandidates,
+        legacyProteinDerivedEvidence: workingLegacyProteinDerivedEvidence,
+        losatCache: pendingLosatCacheCommit?.cacheMap || losatCache.value,
+        losatDerivedCache:
+          pendingLosatCacheCommit?.derivedCacheMap || losatDerivedCache.value,
+        losatCacheInfo: pendingLosatCacheCommit?.cacheInfo || workingLosatCacheInfo,
+        matchSequenceOwner: matchSequenceRegistry?.buildTrustedOwner?.(
+          candidateCommit.featureState.sequenceSources
+        ) || currentOwnerSet.matchSequenceOwner,
+        lastRunInfo: candidateRunInfo,
+        pairwiseMatchFactors: { ...(pairwiseMatchFactors?.value || {}) },
+        editableLabels: [],
+        generatedLegendPosition: form.legend,
+        generatedMode: mode.value,
+        generatedMultiRecordCanvas:
+          mode.value === 'circular' ? Boolean(form.multi_record_canvas) : false,
+        generatedCircularPlotTitlePosition: mode.value === 'circular'
+          ? normalizeCircularPlotTitlePosition(adv.plot_title_position)
+          : currentOwnerSet.generatedCircularPlotTitlePosition,
+        appliedPaletteName: String(
+          selectedPalette?.value || appliedPaletteName.value || 'default'
+        ),
+        appliedPaletteColors: { ...currentColors.value },
+        pendingPaletteName: '',
+        pendingPaletteColors: {}
+      };
+      let migratedSelectedAlignmentFeature = workingSelectedOrthogroupAlignmentFeature;
+      if (commitProteinMigration) {
+        const migrated = commitProteinMigration(candidateOwnerSet);
+        candidateOwnerSet = migrated.ownerSet;
+        migratedSelectedAlignmentFeature = migrated.selectedOrthogroupAlignmentFeature;
       }
-
-      if (!isReflow) {
-        await validateSimilarityAlignmentResetReceipt(
-          state.similarityAlignmentResetReceipt?.value, canonical
-        );
-        recordSessionLifecycleEvent('preview-result-commit-start');
-        const candidateGroups = Array.isArray(candidateCommit.featureState.orthogroups)
-          ? candidateCommit.featureState.orthogroups
-          : [];
-        const candidateOrthogroupIndex = candidateCommit.featureState.featureOrthogroupIndex;
-        const candidateExtractedFeatures = candidateCommit.featureState.extractedFeatures;
-        const candidateBiologicalFeatures = candidateCommit.featureState.biologicalFeatures;
-        const currentOwnerSet = captureGeneratedArtifactOwnerSet();
-        let candidateOwnerSet = {
-          ...currentOwnerSet,
-          results: candidateCommit.results,
-          featureCatalog: candidateCatalog,
-          extractedFeatures: candidateExtractedFeatures,
-          biologicalFeatures: candidateBiologicalFeatures,
-          featureSelectorSafetyScope: candidateCommit.featureState.featureSelectorSafetyScope,
-          featureRecordIds: candidateCommit.featureState.featureRecordIds,
-          orthogroups: candidateGroups,
-          featureOrthogroupIndex: candidateOrthogroupIndex,
-          collinearGroups: Array.isArray(candidateCommit.featureState.collinearGroups)
-            ? candidateCommit.featureState.collinearGroups
-            : [],
-          trackSlotResolvedGeometry: generationMetadata.trackSlotGeometry || null,
-          annotationWarnings: canonicalExecution.annotationWarnings,
-          specificRules: candidateRules,
-          fileLegendCaptions: new Set(candidateRules.filter(rule => rule.fromFile && rule.cap).map(rule => rule.cap)),
-          proteinIdentityManifest: workingProteinIdentityManifest,
-          legacyProteinRawCandidates: workingLegacyProteinRawCandidates,
-          legacyProteinDerivedEvidence: workingLegacyProteinDerivedEvidence,
-          losatCache: pendingLosatCacheCommit?.cacheMap || losatCache.value,
-          losatDerivedCache:
-            pendingLosatCacheCommit?.derivedCacheMap || losatDerivedCache.value,
-          losatCacheInfo: pendingLosatCacheCommit?.cacheInfo || workingLosatCacheInfo,
-          matchSequenceOwner: matchSequenceRegistry?.buildTrustedOwner?.(
-            candidateCommit.featureState.sequenceSources
-          ) || currentOwnerSet.matchSequenceOwner,
-          lastRunInfo: candidateRunInfo,
-          pairwiseMatchFactors: { ...(pairwiseMatchFactors?.value || {}) },
-          editableLabels: [],
-          generatedLegendPosition: form.legend,
-          generatedMode: mode.value,
-          generatedMultiRecordCanvas:
-            mode.value === 'circular' ? Boolean(form.multi_record_canvas) : false,
-          generatedCircularPlotTitlePosition: mode.value === 'circular'
-            ? normalizeCircularPlotTitlePosition(adv.plot_title_position)
-            : currentOwnerSet.generatedCircularPlotTitlePosition,
-          appliedPaletteName: String(
-            selectedPalette?.value || appliedPaletteName.value || 'default'
-          ),
-          appliedPaletteColors: { ...currentColors.value },
-          pendingPaletteName: '',
-          pendingPaletteColors: {}
-        };
-        let migratedSelectedAlignmentFeature = workingSelectedOrthogroupAlignmentFeature;
-        if (commitProteinMigration) {
-          const migrated = commitProteinMigration(candidateOwnerSet);
-          candidateOwnerSet = migrated.ownerSet;
-          migratedSelectedAlignmentFeature = migrated.selectedOrthogroupAlignmentFeature;
-        }
-        const generatedArtifactCandidate = generatedArtifactTransactionOwner.build(
-          candidateOwnerSet,
-          {
-            runtimeState: {
-              files: candidateCliHelpers?.files,
-              archiveName: candidateCliHelpers?.archiveName,
-              losatTelemetry: cloneJsonData(structuredLosatTelemetry)
-            }
+      const generatedArtifactCandidate = generatedArtifactTransactionOwner.build(
+        candidateOwnerSet,
+        {
+          runtimeState: {
+            files: candidateCliHelpers?.files,
+            archiveName: candidateCliHelpers?.archiveName,
+            losatTelemetry: cloneJsonData(structuredLosatTelemetry)
           }
-        );
-        const nextSelectedResultIndex = Math.max(
-          0,
-          Math.min(previousSelectedResultIndex, Math.max(0, candidateCommit.results.length - 1))
-        );
-        const selectedCandidateResult = candidateCommit.results[nextSelectedResultIndex] || null;
-        if (!selectedCandidateResult) {
-          throw new Error('The generated artifact has no selected preview Result.');
         }
-        const selectedMutationOperations = (
-          candidateCommit.mutationPlan?.operationsByResult?.[nextSelectedResultIndex]
-          || null
-        );
-        const optionalLabelFeatureIds = new Set(
-          (selectedMutationOperations?.labelVisibility || [])
-            .filter((operation) => operation?.mode === 'off')
-            .map((operation) => String(operation?.renderedId || '').trim())
-            .filter(Boolean)
-        );
-        const requiredLabelFeatureIds = Object.freeze([
-          ...new Set([
-            ...(selectedMutationOperations?.labelText || []),
-            ...(selectedMutationOperations?.labelVisibility || [])
-          ].map((operation) => String(operation?.renderedId || '').trim()).filter(
-            (renderedId) => renderedId && !optionalLabelFeatureIds.has(renderedId)
-          ))
-        ]);
-        const candidatePreviewReadiness = previewRuntime.registerReadinessExpectation({
-          result: selectedCandidateResult,
-          resultIndex: nextSelectedResultIndex,
-          artifactIdentity: generationResponse.artifactIdentity,
-          generationToken: String(generationToken),
-          catalogState: candidateCatalogAdmission,
-          phase: 'generate',
-          bindingOptions: {
-            isIncrementalEdit: false,
-            requiredLabelFeatureIds,
-            optionalLabelFeatureIds: Object.freeze([...optionalLabelFeatureIds])
-          },
-          isCurrent: () => (
-            latestGenerationToken === generationToken
-            && !generationCancelRequested.value
-            && Number(selectedResultIndex.value) === nextSelectedResultIndex
-          )
-        });
-        activatedGeneratedArtifactCandidate = generatedArtifactCandidate;
-        generatedArtifactTransactionOwner.activate(generatedArtifactCandidate, {
-          selectedResultIndex: nextSelectedResultIndex
-        });
-        if (resultGenerationKey) resultGenerationKey.value += 1;
-        selectedFeatureRecordIdx.value = 0;
-        selectedOrthogroupAlignmentFeature.value = migratedSelectedAlignmentFeature;
-        const candidateGroupIds = candidateGroups
-          .map((group) => String(group?.id || '').trim())
-          .filter(Boolean);
-        pruneOrthogroupOverrides(candidateGroupIds);
-        if (
-          !workingSelectedOrthogroupId
-          || !candidateGroupIds.includes(String(workingSelectedOrthogroupId || '').trim())
-        ) {
-          workingSelectedOrthogroupId = candidateGroupIds[0] || '';
+      );
+      const nextSelectedResultIndex = Math.max(
+        0,
+        Math.min(previousSelectedResultIndex, Math.max(0, candidateCommit.results.length - 1))
+      );
+      const selectedCandidateResult = candidateCommit.results[nextSelectedResultIndex] || null;
+      if (!selectedCandidateResult) {
+        throw new Error('The generated artifact has no selected preview Result.');
+      }
+      const selectedMutationOperations = (
+        candidateCommit.mutationPlan?.operationsByResult?.[nextSelectedResultIndex]
+        || null
+      );
+      const optionalLabelFeatureIds = new Set(
+        (selectedMutationOperations?.labelVisibility || [])
+          .filter((operation) => operation?.mode === 'off')
+          .map((operation) => String(operation?.renderedId || '').trim())
+          .filter(Boolean)
+      );
+      const requiredLabelFeatureIds = Object.freeze([
+        ...new Set([
+          ...(selectedMutationOperations?.labelText || []),
+          ...(selectedMutationOperations?.labelVisibility || [])
+        ].map((operation) => String(operation?.renderedId || '').trim()).filter(
+          (renderedId) => renderedId && !optionalLabelFeatureIds.has(renderedId)
+        ))
+      ]);
+      const candidatePreviewReadiness = previewRuntime.registerReadinessExpectation({
+        result: selectedCandidateResult,
+        resultIndex: nextSelectedResultIndex,
+        artifactIdentity: generationResponse.artifactIdentity,
+        generationToken: String(generationToken),
+        catalogState: candidateCatalogAdmission,
+        phase: 'generate',
+        bindingOptions: {
+          isIncrementalEdit: false,
+          requiredLabelFeatureIds,
+          optionalLabelFeatureIds: Object.freeze([...optionalLabelFeatureIds])
+        },
+        isCurrent: () => (
+          latestGenerationToken === generationToken
+          && !generationCancelRequested.value
+          && Number(selectedResultIndex.value) === nextSelectedResultIndex
+        )
+      });
+      activatedGeneratedArtifactCandidate = generatedArtifactCandidate;
+      generatedArtifactTransactionOwner.activate(generatedArtifactCandidate, {
+        selectedResultIndex: nextSelectedResultIndex
+      });
+      if (resultGenerationKey) resultGenerationKey.value += 1;
+      selectedFeatureRecordIdx.value = 0;
+      selectedOrthogroupAlignmentFeature.value = migratedSelectedAlignmentFeature;
+      const candidateGroupIds = candidateGroups
+        .map((group) => String(group?.id || '').trim())
+        .filter(Boolean);
+      pruneOrthogroupOverrides(candidateGroupIds);
+      if (
+        !workingSelectedOrthogroupId
+        || !candidateGroupIds.includes(String(workingSelectedOrthogroupId || '').trim())
+      ) {
+        workingSelectedOrthogroupId = candidateGroupIds[0] || '';
+      }
+      selectedOrthogroupId.value = workingSelectedOrthogroupId;
+      featureExtractionPending.value = false;
+      featureExtractionError.value = null;
+      Object.keys(featureColorOverrides).forEach((key) => delete featureColorOverrides[key]);
+      Object.assign(
+        featureColorOverrides,
+        cloneJsonValue(candidateCommit.featureColorOverrides, {})
+      );
+      Object.keys(featureStrokeOverrides).forEach((key) => delete featureStrokeOverrides[key]);
+      Object.assign(
+        featureStrokeOverrides,
+        cloneJsonValue(candidateCommit.featureStrokeOverrides, {})
+      );
+      setFeatureEditorStatus({
+        status: candidateExtractedFeatures.length ? 'summary-ready' : 'idle',
+        generationId: featureExtractionRequestId,
+        error: null,
+        summaryCount: candidateExtractedFeatures.length,
+        detailsCacheSize: 0
+      });
+      resultPanelTab.value = 'preview';
+      if (typeof resetPreviewViewport === 'function') {
+        resetPreviewViewport({ resetZoom: true });
+      } else {
+        zoom.value = 1.0;
+      }
+      recordSessionLifecycleEvent('preview-result-commit-end');
+      acceptedCandidateReadyReceipt = await candidatePreviewReadiness.promise;
+      if (generationToken !== latestGenerationToken || generationCancelRequested.value) {
+        if (generationAbortSignal?.aborted || generationCancelRequested.value) {
+          return finishCanceledManualRun();
         }
-        selectedOrthogroupId.value = workingSelectedOrthogroupId;
-        featureExtractionPending.value = false;
-        featureExtractionError.value = null;
-        Object.keys(featureColorOverrides).forEach((key) => delete featureColorOverrides[key]);
-        Object.assign(
-          featureColorOverrides,
-          cloneJsonValue(candidateCommit.featureColorOverrides, {})
-        );
-        Object.keys(featureStrokeOverrides).forEach((key) => delete featureStrokeOverrides[key]);
-        Object.assign(
-          featureStrokeOverrides,
-          cloneJsonValue(candidateCommit.featureStrokeOverrides, {})
-        );
-        setFeatureEditorStatus({
-          status: candidateExtractedFeatures.length ? 'summary-ready' : 'idle',
-          generationId: featureExtractionRequestId,
-          error: null,
-          summaryCount: candidateExtractedFeatures.length,
-          detailsCacheSize: 0
-        });
-        resultPanelTab.value = 'preview';
-        if (typeof resetPreviewViewport === 'function') {
-          resetPreviewViewport({ resetZoom: true });
-        } else {
-          zoom.value = 1.0;
+        await restoreCommittedArtifact();
+        return { status: 'stale' };
+      }
+      await waitForPostBindFrame();
+      recordStructuralMetric('previewPostBindFrameCount', 1, { phase: 'generate' });
+      recordSessionLifecycleEvent('preview.post-bind-frame-completed', {
+        resultIndex: nextSelectedResultIndex,
+        rootGeneration: acceptedCandidateReadyReceipt.rootGeneration
+      });
+      if (generationToken !== latestGenerationToken || generationCancelRequested.value) {
+        if (generationAbortSignal?.aborted || generationCancelRequested.value) {
+          return finishCanceledManualRun();
         }
-        recordSessionLifecycleEvent('preview-result-commit-end');
-        acceptedCandidateReadyReceipt = await candidatePreviewReadiness.promise;
-        if (generationToken !== latestGenerationToken || generationCancelRequested.value) {
-          if (generationAbortSignal?.aborted || generationCancelRequested.value) {
-            return finishCanceledManualRun();
-          }
-          await restoreCommittedArtifact();
-          return { status: 'stale' };
-        }
-        await waitForPostBindFrame();
-        recordStructuralMetric('previewPostBindFrameCount', 1, { phase: 'generate' });
-        recordSessionLifecycleEvent('preview.post-bind-frame-completed', {
-          resultIndex: nextSelectedResultIndex,
-          rootGeneration: acceptedCandidateReadyReceipt.rootGeneration
-        });
-        if (generationToken !== latestGenerationToken || generationCancelRequested.value) {
-          if (generationAbortSignal?.aborted || generationCancelRequested.value) {
-            return finishCanceledManualRun();
-          }
-          await restoreCommittedArtifact();
-          return { status: 'stale' };
-        }
-        const removedVisibilityTargets = sourceReplaced && pruneUnmatchedFeatureOverrides(
-          featureVisibilityOverrides,
-          candidateBiologicalFeatures,
-          workingExtractedFeatures,
-          state.featureVisibilitySelectorCache
-        );
-        if (sourceReplaced) {
-          // D-10: drop only the label edits whose feature is gone; bulk label
-          // overrides stay as text matchers.
-          [labelTextFeatureOverrides, labelTextFeatureOverrideSources, labelVisibilityOverrides]
-            .forEach((overrides) => pruneUnmatchedFeatureOverrides(
-              overrides, candidateBiologicalFeatures, workingExtractedFeatures
-            ));
-        }
-        if (removedVisibilityTargets > 0) {
-          state.replaceFeatureVisibilitySelectorCacheOwner(preserveFeatureVisibilitySelectorCacheForOverrides(
-            buildFeatureVisibilitySelectorCache(candidateExtractedFeatures, candidateCommit.featureState.featureSelectorSafetyScope),
-            state.featureVisibilitySelectorCache,
-            featureVisibilityOverrides
+        await restoreCommittedArtifact();
+        return { status: 'stale' };
+      }
+      const removedVisibilityTargets = sourceReplaced && pruneUnmatchedFeatureOverrides(
+        featureVisibilityOverrides,
+        candidateBiologicalFeatures,
+        workingExtractedFeatures,
+        state.featureVisibilitySelectorCache
+      );
+      if (sourceReplaced) {
+        // D-10: drop only the label edits whose feature is gone; bulk label
+        // overrides stay as text matchers.
+        [labelTextFeatureOverrides, labelTextFeatureOverrideSources, labelVisibilityOverrides]
+          .forEach((overrides) => pruneUnmatchedFeatureOverrides(
+            overrides, candidateBiologicalFeatures, workingExtractedFeatures
           ));
-        }
-        if (typeof setGeneratedArtifactIdentity === 'function') {
-          setGeneratedArtifactIdentity(generationResponse.artifactIdentity, {
-            results: candidateCommit.results
-          });
-        }
-        if (typeof adoptCanonicalRenderArtifacts === 'function') {
-          // The committed request keeps the computed typed analysis resource, so
-          // target-only renders and Similarity alignment use it without LOSATP.
-          adoptCanonicalRenderArtifacts(canonical, { adoptOwnedRequest: true });
-        }
-        if (!useCommittedComparison && importedComparisonIntent) {
-          Object.assign(
-            importedComparisonIntent,
-            createImportedComparisonIntentState(),
-            { disposition: IMPORTED_COMPARISON_DISPOSITIONS.EDITABLE }
-          );
-        }
+      }
+      if (removedVisibilityTargets > 0) {
+        state.replaceFeatureVisibilitySelectorCacheOwner(preserveFeatureVisibilitySelectorCacheForOverrides(
+          buildFeatureVisibilitySelectorCache(candidateExtractedFeatures, candidateCommit.featureState.featureSelectorSafetyScope),
+          state.featureVisibilitySelectorCache,
+          featureVisibilityOverrides
+        ));
+      }
+      if (typeof setGeneratedArtifactIdentity === 'function') {
+        setGeneratedArtifactIdentity(generationResponse.artifactIdentity, {
+          results: candidateCommit.results
+        });
+      }
+      if (typeof adoptCanonicalRenderArtifacts === 'function') {
+        // The committed request keeps the computed typed analysis resource, so
+        // target-only renders and Similarity alignment use it without LOSATP.
+        adoptCanonicalRenderArtifacts(canonical, { adoptOwnedRequest: true });
+      }
+      if (!useCommittedComparison && importedComparisonIntent) {
+        Object.assign(
+          importedComparisonIntent,
+          createImportedComparisonIntentState(),
+          { disposition: IMPORTED_COMPARISON_DISPOSITIONS.EDITABLE }
+        );
       }
       if (colorCandidate) rulePreparation.notifyChanges(colorCandidate);
       return {
@@ -4867,32 +4801,20 @@ export const createRunAnalysis = ({
         });
       }
       if (isDiagramGenerationCanceled(e)) {
-        if (isReflow) {
-          labelReflowLastError.value = null;
-        } else {
-          return finishCanceledManualRun();
-        }
-        return { status: 'canceled' };
+        return finishCanceledManualRun();
       }
-      if (!isReflow && generationToken !== latestGenerationToken) {
+      if (generationToken !== latestGenerationToken) {
         await restoreCommittedArtifact();
         return { status: 'stale' };
-      }
-      if (isReflow) {
-        const error = formatError(e, 'generate', failureStage);
-        labelReflowLastError.value = error.summary;
-        return { status: 'error', error };
       }
       return await failOperation(e, { handle: committedArtifactHandle, stage: failureStage,
         restore: restoreCommittedArtifact, isCurrent: isCurrentAlert, isCurrentOperation });
     } finally {
-      if (!isReflow) {
-        if (activeLosatAbortController === generationAbortController) {
-          activeLosatAbortController = null;
-        }
-        if (generationToken === latestGenerationToken || canceledAttemptOwnsPresentation) {
-          generationCancelRequested.value = false;
-        }
+      if (activeLosatAbortController === generationAbortController) {
+        activeLosatAbortController = null;
+      }
+      if (generationToken === latestGenerationToken || canceledAttemptOwnsPresentation) {
+        generationCancelRequested.value = false;
       }
     }
   };
@@ -4945,7 +4867,7 @@ export const createRunAnalysis = ({
       const execute = (handle) => {
         beforeHandle = handle || generatedArtifactHandle;
         return runAnalysisInternal({
-          decorationContinuity, runMode: 'manual', comparisonPlanSnapshot, generatedArtifactHandle: beforeHandle,
+          decorationContinuity, comparisonPlanSnapshot, generatedArtifactHandle: beforeHandle,
           comparisonExecution, isCurrentOperation, isCurrentAlert
         });
       };
@@ -5344,6 +5266,118 @@ export const createRunAnalysis = ({
     return cancelDiagramGeneration();
   };
 
+  // A label reflow re-renders the committed Session with the current editor
+  // tables (R1(c), N-16): it never reads the settings draft. The Enable Labels
+  // choice also commits its label selection with the reflowed Result.
+  const runLabelReflowCandidate = async ({ requestId, reason, decorationContinuity }) => {
+    if (mode.value === 'circular' && shouldDeferCircularPreviewUpdates.value) {
+      return { status: 'skipped' };
+    }
+    const committed = getCommittedCanonicalSession?.();
+    if (!committed) {
+      labelReflowLastError.value = 'Generate the diagram to update its label placement.';
+      return { status: 'skipped' };
+    }
+    const generationToken = ++latestGenerationToken;
+    const labelSelection = reason === 'global-off-label-apply';
+    let colorCandidate = null;
+    labelReflowLastError.value = null;
+    labelOverrideBuildWarning.value = '';
+    skipCaptureBaseConfig.value = true;
+    skipPositionReapply.value = true;
+    const isCurrent = () => generationToken === latestGenerationToken && requestId === pendingReflowRequestId;
+    try {
+      let candidateRules = manualSpecificRules;
+      if (rulePreparation) {
+        colorCandidate = await rulePreparation.prepareCandidate(manualSpecificRules);
+        if (!colorCandidate || !isCurrent()) return { status: 'stale' };
+        candidateRules = colorCandidate.rules;
+      }
+      const canonicalLabelOverrideTsv = serializeLabelOverrideRows(canonicalLabelOverrideRows.value);
+      const labelOverride = canonicalLabelOverrideTsv
+        ? { tsv: canonicalLabelOverrideTsv, skippedMissingSourceCount: 0 }
+        : buildLabelOverrideTsv(labelTextFeatureOverrides, labelTextBulkOverrides, {
+          editableLabels: editableLabels.value || [],
+          extractedFeatures: extractedFeatures.value,
+          featureOverrideSources: labelTextFeatureOverrideSources,
+          visibilityOverrides: labelVisibilityOverrides
+        });
+      if (labelOverride.skippedMissingSourceCount > 0) {
+        labelOverrideBuildWarning.value = `${labelOverride.skippedMissingSourceCount} feature override row(s) were skipped due to missing source label context.`;
+      }
+      const canonical = projectCommittedEditorIntent({
+        committed,
+        labelSelection,
+        promotion: {
+          featureCatalog: featureCatalog?.value ?? null,
+          legacyOrthogroupState: { groups: cloneJsonData(orthogroups.value || []) }
+        },
+        state: {
+          ...state,
+          selectedPalette: appliedPaletteName,
+          currentColors: appliedPaletteColors,
+          manualSpecificRules: candidateRules,
+          generatedLabelOverrideTsv: labelOverride.tsv
+        }
+      });
+      const timingEntries = [];
+      const execution = await executeCanonicalCandidate({
+        canonical,
+        decorationContinuity,
+        mode: canonical.renderRequest.mode,
+        kind: 'reflow',
+        shouldAdmit: () => (!colorCandidate || rulePreparation.isCurrent(colorCandidate.snapshot)) && isCurrent(),
+        prepareCommit: prepareReflowCommit,
+        prepareCommitInput: {
+          featureColorOverrides: colorCandidate?.featureColorOverrides || featureColorOverrides,
+          featureStrokeOverrides,
+          featureVisibilityOverrides,
+          labelTextFeatureOverrides,
+          labelVisibilityOverrides,
+          legendEntries: legendEntries.value,
+          deletedLegendEntries: deletedLegendEntries.value,
+          originalLegendOrder: originalLegendOrder.value,
+          addedLegendCaptions: addedLegendCaptions.value,
+          legendColorOverrides,
+          legendStrokeOverrides,
+          manualSpecificRules: candidateRules
+        },
+        timingEntries
+      });
+      console.info(`gbdraw ${canonical.renderRequest.mode} typed request render: ${formatDuration(execution.elapsedMs)}.`);
+      if (execution.status === 'superseded' || !isCurrent()) return { status: 'stale' };
+      if (execution.status === 'engine-error') {
+        logPostGbdrawTimings(timingEntries);
+        const error = formatError(execution.engineError, 'generate', 'render');
+        labelReflowLastError.value = error.summary;
+        return { status: 'error', error };
+      }
+      const previousSelectedResultIndex = selectedResultIndex.value;
+      skipCaptureBaseConfig.value = true;
+      skipPositionReapply.value = true;
+      results.value = execution.commit.results;
+      if (execution.commit.results.length > 0) {
+        selectedResultIndex.value = Math.max(
+          0, Math.min(previousSelectedResultIndex, execution.commit.results.length - 1)
+        );
+      }
+      if (labelSelection && typeof adoptCanonicalRenderArtifacts === 'function') {
+        adoptCanonicalRenderArtifacts(canonical, { adoptOwnedRequest: true });
+      }
+      logPostGbdrawTimings(timingEntries);
+      if (colorCandidate) rulePreparation.notifyChanges(colorCandidate);
+      return { status: 'ok' };
+    } catch (e) {
+      if (isDiagramGenerationCanceled(e)) {
+        labelReflowLastError.value = null;
+        return { status: 'canceled' };
+      }
+      const error = formatError(e, 'generate', 'render');
+      labelReflowLastError.value = error.summary;
+      return { status: 'error', error };
+    }
+  };
+
   const runLabelReflow = async (reason = 'label-edit') => {
     const sessionBusy = state.sessionOperationAvailability?.();
     if (sessionBusy) return sessionBusy;
@@ -5362,9 +5396,10 @@ export const createRunAnalysis = ({
           labelReflowLastError.value = formatError(error).summary;
           return;
         }
-        await runAnalysisInternal({
+        await runLabelReflowCandidate({
           decorationContinuity,
-          runMode: 'reflow', requestId: activeReflowRequestId, reason: pendingReflowReason
+          requestId: activeReflowRequestId,
+          reason: pendingReflowReason
         });
       }
     } finally {

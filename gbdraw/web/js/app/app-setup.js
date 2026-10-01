@@ -1,4 +1,6 @@
 import { createRulePreparation } from './rule-matching.js';
+import { compileDirectEditorMutationPlan } from './candidate-render.js';
+import { admitFeatureCatalog } from '../services/feature-catalog.js';
 import { createDefaultLosatpHitLimits } from '../services/session-active-config-contract.js';
 import { createRecordDisplayControls } from './record-display-options.js';
 import {
@@ -196,6 +198,7 @@ import {
 } from './depth-track-state.js';
 
 const { onMounted, onUnmounted, watch, nextTick, computed, ref, reactive } = window.Vue;
+const toRaw = window.Vue.toRaw || ((value) => value);
 
 let exportServicePromise = null;
 
@@ -2203,7 +2206,12 @@ export const createAppSetup = () => {
     || Object.keys(labelVisibilityOverrides).length > 0
   );
   previewRuntime.configureMountedResultBinder({
-    adoptLegend(context) {
+    async adoptLegend(context) {
+      if (context.phase === 'result-selection' && !context.bindingOptions.trustedRestore) {
+        await projectEditorIntentOnDisplay(context);
+      } else {
+        rememberCommittedEditorState(context);
+      }
       if (
         context.bindingOptions.skipLegendExtraction
         || context.bindingOptions.trustedRestore
@@ -2600,32 +2608,150 @@ export const createAppSetup = () => {
     resetAllLabelTextOverrides
   } = featureActions;
 
+  // One projection of the canonical editor intent onto the mounted Result,
+  // shared by History apply and the display of another batch Result (D-07,
+  // R3). History restores the mounted Legend inventory; a newly displayed
+  // Result receives the diagram-wide Legend operations Generate applies.
+  const projectMountedEditorIntent = async ({
+    palette = false,
+    rules = false,
+    prepareRules = rules,
+    visibility = false,
+    legend = null,
+    strokes = null,
+    labels = false
+  } = {}) => {
+    if ((palette || rules) && prepareRules && !await rulePreparation.prepare()) return false;
+    if (palette) svgActions.applyPaletteToSvg();
+    if (rules) svgActions.applySpecificRulesToSvg();
+    if (visibility) reconcileFeatureVisibility();
+    if (legend) reconcileLegendEntries(legend);
+    if (strokes) reconcileStrokeOverrides(strokes);
+    if (labels) reconcileLabelOverrides();
+    return true;
+  };
+
   historySnapshots.setAfterApplyHistoryIntent(async (_intent, { domains, changes } = {}) => {
     if (!svgContainer.value?.querySelector?.('svg')) return;
     const changedDomains = domains instanceof Set ? domains : new Set();
     if (changedDomains.has('ui')) {
       legendLayout.reconcileCompositionUserDeltas(_intent?.ui?.compositionUserDeltas);
     }
-    if (changedDomains.has('config') || changedDomains.has('features')) {
-      const rulesChanged = Array.isArray(changes) && changes.some((change) => (
-        change?.path?.[0] === 'config' && change.path[1] === 'rules'
-      ));
-      if ((changedDomains.has('features') || rulesChanged || !rulePreparation.isPrepared())
-        && !await rulePreparation.prepare()) return;
-      svgActions.applyPaletteToSvg();
-      svgActions.applySpecificRulesToSvg();
-    }
-    if (changedDomains.has('features')) {
-      reconcileFeatureVisibility();
-      reconcileLabelOverrides();
-    }
-    if (changedDomains.has('editorState')) {
-      reconcileLegendEntries({ restoreColorState: true, entryOwners: _intent.editorState.legend.entryOwners });
-      reconcileStrokeOverrides({ changes });
-      reconcileLabelOverrides();
-    }
+    const colors = changedDomains.has('config') || changedDomains.has('features');
+    const rulesChanged = Array.isArray(changes) && changes.some((change) => (
+      change?.path?.[0] === 'config' && change.path[1] === 'rules'
+    ));
+    const editorState = changedDomains.has('editorState');
+    const projected = await projectMountedEditorIntent({
+      palette: colors,
+      rules: colors,
+      prepareRules: changedDomains.has('features') || rulesChanged || !rulePreparation.isPrepared(),
+      visibility: changedDomains.has('features'),
+      legend: editorState
+        ? { restoreColorState: true, entryOwners: _intent.editorState.legend.entryOwners }
+        : null,
+      strokes: editorState ? { changes } : null,
+      labels: changedDomains.has('features') || editorState
+    });
+    if (!projected) return;
     await nextTick();
   });
+
+  // Each Result's bytes reflect the editor state it was committed or last
+  // shown with. A displayed Result receives a domain only when that state
+  // changed since, so a Result without new edits gets no projection work and
+  // an Undo reaches a Result that is displayed again.
+  const projectedEditorStateByResult = new Map();
+  let lastBoundResultIdentity = '';
+  const currentEditorProjectionState = () => ({
+    colors: [
+      toRaw(appliedPaletteColors.value),
+      JSON.stringify([manualSpecificRules, featureColorOverrides, legendColorOverrides])
+    ],
+    visibility: JSON.stringify([featureVisibilityOverrides, featureVisibilityManualRules])
+  });
+  const sameColors = (left, right) => left[0] === right[0] && left[1] === right[1];
+  const rememberCommittedEditorState = (context) => {
+    const current = currentEditorProjectionState();
+    const identities = new Set(results.value.map(previewRuntime.getResultIdentity).filter(Boolean));
+    identities.forEach((identity) => {
+      if (!projectedEditorStateByResult.has(identity)) projectedEditorStateByResult.set(identity, current);
+    });
+    [...projectedEditorStateByResult.keys()].forEach((identity) => {
+      if (!identities.has(identity)) projectedEditorStateByResult.delete(identity);
+    });
+    lastBoundResultIdentity = context.resultIdentity;
+  };
+  const compileDisplayedResultOperations = (resultIndex) => {
+    const catalog = toRaw(state.featureCatalog.value);
+    if (!catalog) return null;
+    const plan = compileDirectEditorMutationPlan({
+      catalogAdmission: admitFeatureCatalog(catalog, toRaw(results.value), { mode: state.generatedMode.value }),
+      featureColorOverrides,
+      featureStrokeOverrides,
+      featureVisibilityOverrides,
+      labelTextFeatureOverrides,
+      labelVisibilityOverrides,
+      legendEntries: legendEntries.value,
+      deletedLegendEntries: deletedLegendEntries.value,
+      originalLegendOrder: originalLegendOrder.value,
+      addedLegendCaptions: addedLegendCaptions.value,
+      legendColorOverrides,
+      legendStrokeOverrides,
+      manualSpecificRules
+    });
+    return plan.operationsByResult[resultIndex] || null;
+  };
+  const DISPLAY_PROJECTED_DOMAINS = Object.freeze([
+    'featureFills', 'featureStrokes', 'featureVisibility',
+    'legendFills', 'legendStrokes', 'legendRenames', 'legendDeletes', 'legendAdds'
+  ]);
+  // D-07 (PD-OI-062): a batch Result shows the canonical color, visibility,
+  // Legend, and label edits when it is displayed. Labels follow in the
+  // binder's label step.
+  const projectEditorIntentOnDisplay = async (context) => {
+    const identity = context.resultIdentity;
+    const current = currentEditorProjectionState();
+    // The Result shown until now followed every live edit.
+    if (lastBoundResultIdentity && lastBoundResultIdentity !== identity
+      && projectedEditorStateByResult.has(lastBoundResultIdentity)) {
+      projectedEditorStateByResult.set(lastBoundResultIdentity, current);
+    }
+    lastBoundResultIdentity = identity;
+    const previous = projectedEditorStateByResult.get(identity) || current;
+    const colors = !sameColors(previous.colors, current.colors);
+    const visibility = previous.visibility !== current.visibility;
+    let operations = null;
+    try {
+      operations = compileDisplayedResultOperations(context.resultIndex);
+    } catch (error) {
+      console.error('Editor edits could not be compiled for the displayed Result.', normalizeUserFacingError(error));
+    }
+    const hasOperations = Boolean(operations)
+      && DISPLAY_PROJECTED_DOMAINS.some((domain) => operations[domain].length > 0);
+    const legend = {
+      resultIdentity: identity,
+      liveResultIdentities: results.value.map(previewRuntime.getResultIdentity),
+      deletedCaptions: (operations?.legendDeletes || []).map(({ caption }) => caption)
+    };
+    const restoresLegend = legendActions.hasRetiredResultLegend(legend);
+    const projects = colors || visibility || hasOperations || restoresLegend;
+    recordStructuralMetric('displayedResultEditorProjectionCount', projects ? 1 : 0, {
+      phase: context.phase,
+      rootGeneration: context.rootGeneration
+    });
+    if (!projects) return;
+    try {
+      await projectMountedEditorIntent({ palette: colors, rules: colors, visibility });
+      const legendChanged = legendActions.prepareDisplayedResultLegend(context.root, legend);
+      previewRuntime.applyEditorOperations(hasOperations ? operations : null, {
+        afterApply: (root) => { if (legendChanged) legendActions.compactLegendEntries(root); }
+      });
+      projectedEditorStateByResult.set(identity, current);
+    } catch (error) {
+      console.error('Editor edits could not be shown on the displayed Result.', normalizeUserFacingError(error));
+    }
+  };
 
   const { updatePalette, resetColors } = resultsManager;
   const undoableAction = (label, fn) => (...args) => history.runUndoable(label, () => fn(...args));

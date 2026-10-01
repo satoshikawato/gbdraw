@@ -747,9 +747,12 @@ assert.equal(updateLegendEntryColorOptions.length, 0);
 // canceled or completed Reset dialog of another feature type must not leave a
 // color behind for a later Reset that has no dialog.
 {
-  const trnaA = { id: 'trna-a', svg_id: 'trna-a', type: 'tRNA', product: 'tRNA-Leu', start: 1, end: 70 };
-  const trnaB = { id: 'trna-b', svg_id: 'trna-b', type: 'tRNA', product: 'tRNA-Leu', start: 80, end: 150 };
-  const rrna = { id: 'rrna-s', svg_id: 'rrna-s', type: 'rRNA', product: 's-rRNA', start: 200, end: 900 };
+  const feature = (svgId, type, product, start, end) => ({
+    id: svgId, svg_id: svgId, type, product, qualifiers: { product: [product] }, start, end
+  });
+  const trnaA = feature('trna-a', 'tRNA', 'tRNA-Leu', 1, 70);
+  const trnaB = feature('trna-b', 'tRNA', 'tRNA-Leu', 80, 150);
+  const rrna = feature('rrna-s', 'rRNA', 's-rRNA', 200, 900);
   const resetRules = [{ feat: 'rRNA', qual: 'product', val: '^s-rRNA$', color: '#ff00ff', cap: 'small rRNA' }];
   const committed = [];
   const resetDialog = { show: false, caption: '', siblingCount: 0 };

@@ -14,7 +14,8 @@ const {
   settle,
   switchMode
 } = require('./helpers/audit-browser.cjs');
-const { generate, load } = require('./helpers/mode-transition.cjs');
+const fs = require('node:fs/promises');
+const { download, generate, load } = require('./helpers/mode-transition.cjs');
 
 test.describe.configure({ retries: 0 });
 
@@ -28,7 +29,7 @@ test('batch drawer lists and edits the features of the displayed Result', async 
   expect([...new Set(rows)]).toEqual(['TESTB']);
   await page.locator('.right-drawer').getByRole('button', { name: 'Edit', exact: true }).first().click();
   await expect(page.locator('.feature-popup')).toBeVisible();
-  expect(await page.evaluate(() => window.__GBDRAW_APP__.clickedFeature?.record_id)).toBe('TESTB');
+  expect(await page.evaluate(() => window.__GBDRAW_APP__.clickedFeature?.feat?.record_id)).toBe('TESTB');
 });
 
 test('batch record-wide color and visibility scopes reach the other Result when it is displayed', async ({ page }) => {
@@ -69,6 +70,77 @@ test('batch live legend deletion reaches the other Result when it is displayed',
   expect(await legendCaptions(page)).not.toContain('GC content');
   await selectResult(page, 1);
   expect(await legendCaptions(page)).not.toContain('GC content');
+});
+
+// D-07 (PD-OI-062) Must preserve: the displayed Result's export, Save -> Load
+// -> Result selection, and Undo reaching every Result.
+test('batch edits shown on another Result reach its export, its Session, and Undo', async ({ page, browser }, testInfo) => {
+  test.setTimeout(600_000);
+  await openBatch(page);
+  const undoCountBefore = await page.evaluate(() => window.__GBDRAW_HISTORY__.getUndoCount());
+  const original = await featurePresentation(page, ['TESTA_0001', 'TESTA_0004', 'TESTB_0001', 'TESTB_0004']);
+  await page.evaluate(async () => {
+    const app = window.__GBDRAW_APP__;
+    const colored = app.extractedFeatures.find((feature) => feature.locus_tag === 'TESTA_0001');
+    await app.openFeatureEditorFromList(colored, null);
+    await app.requestFeatureColorChange(colored, '#ff0000');
+    await app.handleFeatureStyleScopeChoice('annotationLabel');
+    const hidden = app.extractedFeatures.find((feature) => feature.locus_tag === 'TESTA_0004');
+    await app.openFeatureEditorFromList(hidden, null);
+    await app.updateClickedFeatureVisibility('off');
+    await app.handleFeatureVisibilityScopeChoice('product');
+    app.clickedFeature = null;
+    await app.deleteLegendEntry(app.legendEntries.findIndex((entry) => entry.caption === 'GC content'));
+  });
+  await settle(page);
+  await selectResult(page, 1);
+  const shown = await featurePresentation(page, ['TESTB_0001', 'TESTB_0004']);
+  expect(shown.TESTB_0001.results[1]).toBe('#ff0000|shown');
+  expect(shown.TESTB_0004.results[1]).toMatch(/\|hidden$/);
+  expect(await legendCaptions(page, { source: 'result' })).not.toContain('GC content');
+
+  const [exportDownload] = await Promise.all([
+    page.waitForEvent('download'),
+    page.evaluate(() => window.__GBDRAW_APP__.downloadSVG())
+  ]);
+  const exported = await fs.readFile(await exportDownload.path(), 'utf8');
+  expect(exported).not.toContain('data-legend-key="GC content"');
+  expect(exported).toContain('#ff0000');
+
+  await page.evaluate(() => { window.__GBDRAW_APP__.sessionTitle = 'batch-edits'; });
+  const sessionFile = testInfo.outputPath('batch-edits.gbdraw-session.json.gz');
+  await download(page, 'Save Session', sessionFile);
+  const fresh = await load(browser, sessionFile);
+  try {
+    await fresh.locator('h2 select').selectOption({ index: 1 });
+    await expect.poll(async () => (await featurePresentation(fresh, ['TESTB_0001'])).TESTB_0001.mounted, {
+      timeout: 60_000
+    }).toBe('#ff0000|shown');
+    await settle(fresh);
+    expect((await featurePresentation(fresh, ['TESTB_0004'])).TESTB_0004.mounted).toMatch(/\|hidden$/);
+    expect(await legendCaptions(fresh)).not.toContain('GC content');
+  } finally {
+    await fresh.context().close();
+  }
+
+  // Undo back to the Generate also restores the Result selection of that
+  // step; each Result then shows its original look when displayed.
+  while (await page.evaluate(() => window.__GBDRAW_HISTORY__.getUndoCount()) > undoCountBefore) {
+    await page.evaluate(() => window.__GBDRAW_HISTORY__.undo());
+    await settle(page);
+  }
+  const displayed = await page.evaluate(() => window.__GBDRAW_APP__.selectedResultIndex);
+  for (const index of [displayed, 1 - displayed]) {
+    if (index !== displayed) await selectResult(page, index);
+    const tags = index === 0 ? ['TESTA_0001', 'TESTA_0004'] : ['TESTB_0001', 'TESTB_0004'];
+    const undone = await featurePresentation(page, tags);
+    tags.forEach((tag) => {
+      expect(undone[tag].mounted, `${tag} on Result ${index + 1}`).toBe(original[tag].results[index]);
+      expect(undone[tag].results[index], `${tag} in Result ${index + 1}`).toBe(original[tag].results[index]);
+    });
+    expect(await legendCaptions(page)).toContain('GC content');
+    expect(await legendCaptions(page, { source: 'result' })).toContain('GC content');
+  }
 });
 
 test('Selected features annotations generate for a Circular multi-record batch', async ({ page }) => {
@@ -268,6 +340,119 @@ test('an Undo of a checkpoint edit keeps the feature catalog across a mode round
     await switchMode(page, 'circular');
     expect(pageErrors).toEqual([]);
     expect(await page.evaluate(() => window.__GBDRAW_APP__.extractedFeatures.length)).toBe(featureCount);
+  } finally {
+    await page.context().close();
+  }
+});
+
+// N-16 (D-11, PD-OI-066): a label reflow renders the committed Session with
+// the current editor edits. Draft settings that apply on Generate must not
+// reach the Result through it.
+test('a label reflow leaves Applies on Generate draft settings out of the Result', async ({ browser }) => {
+  test.setTimeout(600_000);
+  const page = await load(browser, HMMT_SESSION);
+  const resultFacts = () => page.evaluate(async () => {
+    const { state } = await import('./js/state.js');
+    const ingestion = await import('./js/services/svg-result-ingestion.js');
+    const { getCommittedCanonicalRenderRequest } = await import('./js/services/config.js');
+    const result = state.results.value[state.selectedResultIndex.value];
+    const root = new DOMParser().parseFromString(result.content, 'image/svg+xml').documentElement;
+    return {
+      identity: ingestion.getCommittedSvgResultRuntimeIdentity(result),
+      processing: state.labelReflowProcessing.value,
+      error: state.labelReflowLastError.value,
+      definition: [...root.querySelectorAll('g[data-gbdraw-role="record-definition"] text')]
+        .map((node) => `${Number(node.getAttribute('font-size'))}|${node.textContent}`),
+      blockStrokeWidths: [...new Set([...root.querySelectorAll('[data-gbdraw-feature-part="block"]')]
+        .map((node) => Number(node.getAttribute('stroke-width'))))],
+      labels: [...root.querySelectorAll('text')].map((node) => node.textContent),
+      request: JSON.stringify(getCommittedCanonicalRenderRequest())
+    };
+  });
+  try {
+    await generate(page);
+    const before = await resultFacts();
+    expect(before.definition.join(' ')).toContain('Homo sapiens');
+    await page.evaluate(async () => {
+      const app = window.__GBDRAW_APP__;
+      Object.assign(app.form, { species: 'Leaked species' });
+      Object.assign(app.adv, { def_font_size: 31, block_stroke_width: 7 });
+      app.autoLabelReflowEnabled = true;
+      await window.Vue.nextTick();
+      const feature = app.extractedFeatures.find((item) => item.type === 'CDS');
+      await app.openFeatureEditorFromList(feature, null);
+      app.clickedFeature.labelText = 'REFLOWED_LABEL';
+      await app.updateClickedFeatureLabelText();
+      app.clickedFeature = null;
+    });
+    await expect.poll(async () => {
+      const facts = await resultFacts();
+      return facts.identity !== before.identity && !facts.processing && facts.labels.includes('REFLOWED_LABEL');
+    }, { timeout: 300_000 }).toBe(true);
+    const after = await resultFacts();
+    expect(after.error).toBeNull();
+    expect(after.labels).toContain('REFLOWED_LABEL');
+    expect(after.definition).toEqual(before.definition);
+    expect(after.blockStrokeWidths).toEqual(before.blockStrokeWidths);
+    expect(after.request).toBe(before.request);
+  } finally {
+    await page.context().close();
+  }
+});
+
+// N-16 Owner-delegated: Enable Labels keeps its documented live effect. Its
+// label selection is committed with the reflowed Result, so the next label
+// reflow (from the committed Session) keeps the labels.
+test('Enable Labels applies its label selection through the reflow and keeps it', async ({ browser }) => {
+  test.setTimeout(600_000);
+  const page = await load(browser, HMMT_SESSION);
+  const labelState = () => page.evaluate(async () => {
+    const { state } = await import('./js/state.js');
+    const { getCommittedCanonicalRenderRequest } = await import('./js/services/config.js');
+    const result = state.results.value[state.selectedResultIndex.value];
+    const root = new DOMParser().parseFromString(result.content, 'image/svg+xml').documentElement;
+    return {
+      processing: state.labelReflowProcessing.value,
+      error: state.labelReflowLastError.value,
+      labels: [...root.querySelectorAll('text[data-label-feature-id]')].map((node) => node.textContent),
+      scope: getCommittedCanonicalRenderRequest()?.diagramOptions?.configOverrides?.['labels.circular.scope']
+    };
+  });
+  const editLabel = (text) => page.evaluate(async (label) => {
+    const app = window.__GBDRAW_APP__;
+    const feature = app.extractedFeatures.find((item) => item.type === 'CDS');
+    await app.openFeatureEditorFromList(feature, null);
+    app.clickedFeature.labelText = label;
+    const update = app.updateClickedFeatureLabelText();
+    for (let attempt = 0; attempt < 100 && !app.globalLabelModeDialog.show; attempt += 1) {
+      await new Promise((resolve) => setTimeout(resolve, 20));
+    }
+    if (app.globalLabelModeDialog.show) app.handleGlobalLabelModeChoice('show_all');
+    await update;
+    app.clickedFeature = null;
+  }, text);
+  try {
+    await page.evaluate(() => { window.__GBDRAW_APP__.form.labels_mode = 'none'; });
+    await generate(page);
+    expect((await labelState()).labels).toEqual([]);
+    expect((await labelState()).scope).toBe('none');
+    await editLabel('ENABLED_LABEL');
+    await expect.poll(async () => {
+      const state = await labelState();
+      return !state.processing && state.labels.includes('ENABLED_LABEL');
+    }, { timeout: 300_000 }).toBe(true);
+    expect((await labelState()).scope).toBe('outer');
+    const enabledCount = (await labelState()).labels.length;
+    expect(enabledCount).toBeGreaterThan(1);
+    await page.evaluate(() => { window.__GBDRAW_APP__.autoLabelReflowEnabled = true; });
+    await editLabel('SECOND_LABEL');
+    await expect.poll(async () => {
+      const state = await labelState();
+      return !state.processing && state.labels.includes('SECOND_LABEL');
+    }, { timeout: 300_000 }).toBe(true);
+    const after = await labelState();
+    expect(after.error).toBeNull();
+    expect(after.labels.length).toBe(enabledCount);
   } finally {
     await page.context().close();
   }

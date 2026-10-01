@@ -714,9 +714,10 @@ const fileLegendCaptions = ref(new Set());
 // A batch Result shows one record, so the record picker appears only when the
 // displayed Result shows several records (FE-03).
 const displayedResultFeatures = computed(() => {
+  const features = extractedFeatures.value;
+  if (results.value.length < 2) return features;
   const renderedIds = getCommittedSvgResultMetadata(toRaw(results.value[selectedResultIndex.value]))
     ?.renderedFeatureIdentities?.renderedIds;
-  const features = extractedFeatures.value;
   return renderedIds instanceof Set
     ? features.filter((feature) => renderedIds.has(feature.svg_id))
     : features;

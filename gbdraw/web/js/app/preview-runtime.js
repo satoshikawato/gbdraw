@@ -6,6 +6,7 @@ import {
   normalizeFeatureIdentity
 } from './feature-dom.js';
 import {
+  applyEditorOperationsToMountedSvg,
   getCommittedSvgResultMetadata,
   getCommittedSvgResultRuntimeIdentity,
   markCommittedSvgResultMounted,
@@ -785,8 +786,10 @@ export const createPreviewRuntime = ({ state, serializeSvg }) => {
           generationToken: `result-selection:${nextBindSequence}`,
           catalogState: state.featureCatalog?.value || null,
           phase: 'result-selection',
+          // Editor intent projected while binding replaces the Result content,
+          // never its committed identity (D-07).
           isCurrent: () => (
-            state.results.value[nextIndex] === nextResult
+            resultRuntimeIdentity(state.results.value[nextIndex]) === resultRuntimeIdentity(nextResult)
             && Number(state.selectedResultIndex.value) === nextIndex
           )
         })
@@ -856,9 +859,26 @@ export const createPreviewRuntime = ({ state, serializeSvg }) => {
     });
 
     if (updated === 0) return false;
-    markActiveResultDirty(reason);
-    flushActiveResult();
+    commitActiveResultEdit(reason);
     return true;
+  };
+
+  const commitActiveResultEdit = (reason) => {
+    if (!markActiveResultDirty(reason)) return false;
+    return flushActiveResult();
+  };
+
+  // D-07: show the canonical editor operations on the displayed Result with
+  // the executor that Generate admission uses, then persist the Result once.
+  const applyEditorOperations = (operations, { afterApply = null } = {}) => {
+    const runtime = activeRuntime || ensureRuntimeForCurrentSvg();
+    if (!runtime?.svg) return false;
+    if (operations) {
+      applyEditorOperationsToMountedSvg(runtime.svg, operations, { resultIndex: runtime.resultIndex });
+    }
+    afterApply?.(runtime.svg);
+    invalidatePreviewIndexes('editor-intent-display');
+    return commitActiveResultEdit('editor-intent-display');
   };
 
   const applyFeatureStrokeChanges = (changes, { reason = 'feature-stroke' } = {}) => {
@@ -895,6 +915,7 @@ export const createPreviewRuntime = ({ state, serializeSvg }) => {
     acceptReadyReceipt,
     applyFeatureFillChanges,
     applyFeatureStrokeChanges,
+    applyEditorOperations,
     applyFeatureVisibilityChanges,
     applyLegendChanges,
     bindMountedResult,
@@ -904,6 +925,7 @@ export const createPreviewRuntime = ({ state, serializeSvg }) => {
     flushActiveResult,
     getActiveRuntime,
     getFeatureElements,
+    getResultIdentity: resultRuntimeIdentity,
     invalidateReadinessExpectation,
     invalidateReadyReceipt,
     invalidatePreviewIndexes,
