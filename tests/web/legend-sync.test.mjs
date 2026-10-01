@@ -408,3 +408,67 @@ const mockLegendEntry = (caption, color, x) => {
   assert.deepEqual(state.originalLegendOrder.value, ['Beta', 'Deleted']);
   assert.deepEqual(state.legendEntries.value.map(e => e.caption), ['Beta', 'Manual']);
 }
+
+{
+  // D-08 (PD-OI-063): without an order edit, Generate shows the renderer's
+  // order, including a category it adds between existing ones, and the next
+  // Generate replays no order. An edited order keeps being replayed.
+  const { compileDirectEditorMutationPlan } = await import(
+    pathToFileURL(join(tempRoot, 'app', 'candidate-render.js'))
+  );
+  const ref = (value) => ({ value });
+  const svg = new MockElement('svg');
+  const legend = new MockElement('g', { id: 'legend' });
+  const featureLegend = new MockElement('g', { id: 'feature_legend' });
+  legend.appendChild(featureLegend);
+  svg.appendChild(legend);
+  const render = (...captions) => {
+    featureLegend.children.forEach(entry => { entry.parentElement = null; });
+    featureLegend.children = [];
+    captions.forEach((caption, index) => featureLegend.appendChild(mockLegendEntry(caption, '#112233', index * 70)));
+  };
+  const state = {
+    results: ref([{ name: 'diagram.svg', content: 'unchanged' }]),
+    selectedResultIndex: ref(0),
+    svgContainer: ref({ querySelector: () => svg }),
+    adv: {},
+    legendEntries: ref([]),
+    deletedLegendEntries: ref([]),
+    originalLegendOrder: ref([]),
+    originalLegendColors: ref({}),
+    newLegendCaption: ref(''),
+    newLegendColor: ref('#808080'),
+    legendStrokeOverrides: {},
+    legendColorOverrides: {},
+    manualSpecificRules: [],
+    skipCaptureBaseConfig: ref(false)
+  };
+  const actions = createLegendEntryActions({
+    state,
+    layoutActions: { compactLegendEntries: () => {}, reflowDualLegendLayout: () => {}, updatePairwiseLegendPositions: () => {} },
+    previewRuntime: { applyLegendChanges: () => true }
+  });
+  const generate = (...rendered) => {
+    const replayed = compileDirectEditorMutationPlan({
+      catalogAdmission: { resultNames: ['diagram.svg'], renderedTargetsByOverrideKey: new Map(), resultIndexesByRenderedId: new Map() },
+      legendEntries: state.legendEntries.value,
+      originalLegendOrder: state.originalLegendOrder.value
+    }).operationsByResult[0].legendOrder.map(({ captions }) => [...captions]);
+    render(...rendered);
+    actions.extractLegendEntries({ replaceGeneratedInventory: true });
+    return replayed;
+  };
+
+  assert.deepEqual(generate('Core', 'Other'), []);
+  assert.deepEqual(state.originalLegendOrder.value, ['Core', 'Other']);
+  assert.deepEqual(generate('Core', 'Added', 'Other'), []);
+  assert.deepEqual(state.originalLegendOrder.value, ['Core', 'Added', 'Other']);
+  assert.deepEqual(generate('Core', 'Added', 'Other'), [], 'an unedited Legend order replays no order');
+
+  // Sort Z-A, then Generate replays it; a new category follows the edited order.
+  render('Other', 'Core', 'Added');
+  actions.extractLegendEntries();
+  assert.deepEqual(generate('Other', 'Core', 'Added', 'Late'), [['Other', 'Core', 'Added']]);
+  assert.deepEqual(state.originalLegendOrder.value, ['Core', 'Added', 'Other', 'Late']);
+  assert.deepEqual(generate('Other', 'Core', 'Added', 'Late'), [['Other', 'Core', 'Added', 'Late']]);
+}

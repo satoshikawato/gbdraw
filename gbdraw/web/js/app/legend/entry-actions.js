@@ -3,6 +3,7 @@ import { resolveColorToHex, toNativeColorInputValue } from '../color-utils.js';
 import {
   getAllFeatureLegendGroups,
   getVisibleFeatureLegendGroup,
+  isLegendOrderEdited,
   parseTransformXY
 } from './utils.js';
 import { serializeCleanSvg } from '../../services/svg-serialization.js';
@@ -943,19 +944,27 @@ export const createLegendEntryActions = ({
       return yDelta;
     });
 
+    // The entries shown before this extraction decide, as in Generate, whether
+    // the displayed Result replays an edited order (D-08).
+    const orderEdited = isLegendOrderEdited(legendEntries.value, originalLegendOrder.value);
     legendEntries.value = visuallySortedEntries;
 
     if (replaceGeneratedInventory || originalLegendOrder.value.length === 0) {
-      // Keep default order and deletion intent; live editor extraction alone
-      // must not advance the accepted generated inventory.
+      // Keep deletion intent; live editor extraction alone must not advance
+      // the accepted generated inventory. While an edited order is replayed,
+      // the surviving categories keep their default order and new ones follow
+      // it; otherwise the Result shows the renderer's order, which becomes the
+      // default order.
       const retainedCaptions = new Set([
         ...generatedCaptions,
         ...deletedLegendEntries.value.map(entry => entry.originalCaption || entry.caption)
       ]);
-      originalLegendOrder.value = [...new Set([
-        ...originalLegendOrder.value.filter(caption => retainedCaptions.has(caption)),
-        ...visuallySortedEntries.map(entry => entry.originalCaption).filter(caption => generatedCaptions.has(caption))
-      ])];
+      const surviving = originalLegendOrder.value.filter(caption => retainedCaptions.has(caption));
+      const rendered = visuallySortedEntries.map(entry => entry.originalCaption)
+        .filter(caption => generatedCaptions.has(caption));
+      originalLegendOrder.value = [...new Set(orderEdited
+        ? [...surviving, ...rendered]
+        : [...rendered, ...surviving])];
     }
 
     if (Object.keys(originalLegendColors.value).length === 0 && visuallySortedEntries.length > 0) {
