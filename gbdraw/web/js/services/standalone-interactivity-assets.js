@@ -5217,7 +5217,13 @@ export const STANDALONE_INTERACTIVE_SCRIPT = `
     var sequence = sourceSequence.slice(low - 1, high);
     if (orientation === '-') sequence = reverseComplementMatchSequence(sequence);
     var matchId = safeMatchFilenamePart(match && match.id, 'match');
-    var header = matchId + '_' + role + '|record=' + recordId + '|coords=' + start + '..' + end + '|strand=' + orientation;
+    var sourceStart = Number(match && match[prefix + 'source_start']);
+    var sourceEnd = Number(match && match[prefix + 'source_end']);
+    var hasSource = Number.isInteger(sourceStart) && Number.isInteger(sourceEnd) && sourceStart >= 1 && sourceEnd >= 1;
+    var coordStart = hasSource ? sourceStart : start;
+    var coordEnd = hasSource ? sourceEnd : end;
+    var strand = hasSource ? (sourceStart <= sourceEnd ? '+' : '-') : orientation;
+    var header = matchId + '_' + role + '|record=' + recordId + '|coords=' + coordStart + '..' + coordEnd + '|strand=' + strand;
     var fasta = '>' + header + '\\n' + wrapMatchFasta(sequence) + '\\n';
     return {
       role: role,
@@ -5225,12 +5231,12 @@ export const STANDALONE_INTERACTIVE_SCRIPT = `
       recordId: recordId,
       start: start,
       end: end,
-      orientation: orientation,
+      orientation: strand,
       length: high - low + 1,
       available: true,
       reason: '',
       fasta: fasta,
-      filename: matchId + '_' + role + '_' + safeMatchFilenamePart(recordId, 'record') + '_' + start + '-' + end + '.fna'
+      filename: matchId + '_' + role + '_' + safeMatchFilenamePart(recordId, 'record') + '_' + coordStart + '-' + coordEnd + '.fna'
     };
   }
 
@@ -5259,13 +5265,18 @@ export const STANDALONE_INTERACTIVE_SCRIPT = `
     var orthogroupId = orthogroupIds[0] || '';
     var group = orthogroupsById.get(orthogroupId) || null;
     var displayName = firstDisplayText(group && (group.display_name || group.displayName || group.name), orthogroupId);
-    var qInterval = [match.qstart, match.qend].filter(function (value) { return String(value || '').trim(); }).join('..');
-    var sInterval = [match.sstart, match.send].filter(function (value) { return String(value || '').trim(); }).join('..');
+    var intervalOf = function (start, end) {
+      return [start, end].filter(function (value) { return String(value || '').trim(); }).join('..');
+    };
+    var qInterval = intervalOf(match.qsource_start, match.qsource_end) || intervalOf(match.qstart, match.qend);
+    var sInterval = intervalOf(match.ssource_start, match.ssource_end) || intervalOf(match.sstart, match.send);
     var summaryRows = [];
     addMaterializedMatchRow(summaryRows, 'Query record', match.query_record_id);
     addMaterializedMatchRow(summaryRows, 'Subject record', match.subject_record_id);
     addMaterializedMatchRow(summaryRows, 'Query interval', qInterval);
+    addMaterializedMatchRow(summaryRows, 'Query table interval', match.qtable_interval);
     addMaterializedMatchRow(summaryRows, 'Subject interval', sInterval);
+    addMaterializedMatchRow(summaryRows, 'Subject table interval', match.stable_interval);
     addMaterializedMatchRow(summaryRows, 'Orientation', match.orientation);
     if (kind === 'homology') {
       addMaterializedMatchRow(summaryRows, 'Ring label', match.track_label);

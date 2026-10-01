@@ -5,6 +5,7 @@ import {
 } from './feature-utils.js';
 import { buildFeatureSequenceFastas } from './feature-sequence-fasta.js';
 import { buildMatchSequenceBundle } from './match-sequences.js';
+import { readRecordSourceSpan, recordSourceInterval } from './record-source-coordinates.js';
 import {
   groupMetadataScopeLabel,
   normalizeGroupMetadataScope
@@ -269,6 +270,21 @@ const matchEndpointReferences = (element, role) => {
   };
 };
 
+// Source coordinates first; the table (search-frame) interval only when it
+// differs (PD-OI-076). Circular homology matches have no Linear record span.
+const matchIntervals = (element, matchKind, role, start, end) => {
+  const source = matchKind === 'homology'
+    ? null
+    : recordSourceInterval(
+      readRecordSourceSpan(element, attr(element, `data-${role}-record-index`)),
+      start,
+      end
+    );
+  return source
+    ? { interval: intervalText(source.start, source.end), table: source.table ? intervalText(source.table.start, source.table.end) : '' }
+    : { interval: intervalText(start, end), table: '' };
+};
+
 const readPairwiseMatchDescriptor = (element) => {
   const matchKind = normalizeMatchKind(attr(element, 'data-match-kind'), element);
   const orthogroupId = attr(element, 'data-orthogroup-id');
@@ -283,6 +299,8 @@ const readPairwiseMatchDescriptor = (element) => {
   const queryEnd = attr(element, 'data-qend');
   const subjectStart = attr(element, 'data-sstart');
   const subjectEnd = attr(element, 'data-send');
+  const queryIntervals = matchIntervals(element, matchKind, 'query', queryStart, queryEnd);
+  const subjectIntervals = matchIntervals(element, matchKind, 'subject', subjectStart, subjectEnd);
   const matchId = firstText(
     attr(element, 'data-gbdraw-match-id'),
     attr(element, 'data-gbdraw-pairwise-match-id'),
@@ -301,8 +319,10 @@ const readPairwiseMatchDescriptor = (element) => {
     subjectFeatureSvgId,
     queryRecordId: attr(element, 'data-query-record-id'),
     subjectRecordId: attr(element, 'data-subject-record-id'),
-    queryInterval: intervalText(queryStart, queryEnd),
-    subjectInterval: intervalText(subjectStart, subjectEnd),
+    queryInterval: queryIntervals.interval,
+    subjectInterval: subjectIntervals.interval,
+    queryTableInterval: queryIntervals.table,
+    subjectTableInterval: subjectIntervals.table,
     identity: attr(element, 'data-identity'),
     orientation: firstText(
       attr(element, 'data-collinearity-orientation'),
@@ -1270,6 +1290,7 @@ const buildMatchSpans = (element, matchKind) => {
       recordId: firstText(attr(element, 'data-query-record-id'), attr(element, 'data-query')),
       start: attr(element, 'data-qstart'),
       end: attr(element, 'data-qend'),
+      sourceSpan: matchKind === 'homology' ? null : readRecordSourceSpan(element, queryRecordIndex.value),
       displayRole: matchKind === 'homology' ? homologyDisplayRole('query') : 'Query',
       sourceIndex: sourceIndex.value,
       recordIndex: queryRecordIndex.value,
@@ -1284,6 +1305,7 @@ const buildMatchSpans = (element, matchKind) => {
       recordId: firstText(attr(element, 'data-subject-record-id'), attr(element, 'data-subject')),
       start: attr(element, 'data-sstart'),
       end: attr(element, 'data-send'),
+      sourceSpan: matchKind === 'homology' ? null : readRecordSourceSpan(element, subjectRecordIndex.value),
       displayRole: matchKind === 'homology' ? homologyDisplayRole('subject') : 'Subject',
       sourceIndex: sourceIndex.value,
       recordIndex: subjectRecordIndex.value,
@@ -1398,7 +1420,9 @@ export const buildMatchPopupPayload = (
   addRow(summaryRows, 'Query record', descriptor.queryRecordId);
   addRow(summaryRows, 'Subject record', descriptor.subjectRecordId);
   addRow(summaryRows, 'Query interval', qInterval);
+  addRow(summaryRows, 'Query table interval', descriptor.queryTableInterval);
   addRow(summaryRows, 'Subject interval', sInterval);
+  addRow(summaryRows, 'Subject table interval', descriptor.subjectTableInterval);
   addRow(summaryRows, 'Orientation', descriptor.orientation);
   if (matchKind === 'homology') {
     addRow(summaryRows, 'Ring label', attr(element, 'data-track-label'));

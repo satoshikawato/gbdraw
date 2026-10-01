@@ -160,7 +160,6 @@ test('Rotate with Orient feature forward keeps LOSATN ribbons on the homologous 
 });
 
 test('Save Raw LOSAT TSV of a reversed record re-uploads to the same ribbons', async ({ page }) => {
-  test.fail(true, 'CO-07');
   test.setTimeout(600_000);
   await openLinearWith(page, [{ name: 'R2c.gb', text: R2C }, { name: 'R3c.gb', text: R3C }]);
   await useLosat(page, {
@@ -277,7 +276,6 @@ for (const [source, writeSession] of Object.entries(cliBlastSessions)) {
 }
 
 test('the match popup and its FASTA header report source coordinates of a cropped record', async ({ page }) => {
-  test.fail(true, 'CO-10');
   test.setTimeout(600_000);
   await openLinearWith(page, [{ name: 'R2c.gb', text: R2C }, { name: 'R3c.gb', text: R3C }]);
   await useLosat(page, {

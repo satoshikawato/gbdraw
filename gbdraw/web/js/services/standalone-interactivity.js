@@ -1,4 +1,5 @@
 import { normalizeStringArray } from '../app/feature-utils.js';
+import { readRecordSourceSpan, recordSourceInterval } from '../app/record-source-coordinates.js';
 import { FEATURE_CATALOG_SCHEMA } from './feature-catalog.js';
 import { STANDALONE_INTERACTIVE_SCRIPT, STANDALONE_INTERACTIVE_STYLE } from './standalone-interactivity-assets.js';
 import { ensureSvgDefs } from './svg-serialization.js';
@@ -1338,9 +1339,19 @@ const buildStandaloneMatchPayloads = (svg) => {
       element.setAttribute('data-gbdraw-match-id', id);
       element.setAttribute('data-gbdraw-pairwise-match-id', id);
     }
+    const matchKind = standaloneMatchKind(element);
+    // Source coordinates for the embedded popup and FASTA header (PD-OI-076).
+    const source = (role, start, end) => (matchKind === 'homology' ? null : recordSourceInterval(
+      readRecordSourceSpan(element, standaloneAttr(element, `data-${role}-record-index`)),
+      standaloneAttr(element, start),
+      standaloneAttr(element, end)
+    ));
+    const querySource = source('query', 'data-qstart', 'data-qend');
+    const subjectSource = source('subject', 'data-sstart', 'data-send');
+    const tableInterval = (interval) => (interval?.table ? `${interval.table.start}..${interval.table.end}` : '');
     return compactWireValue({
       id,
-      match_kind: standaloneMatchKind(element),
+      match_kind: matchKind,
       orthogroup_ids: uniqueStandaloneMetadataValues(standaloneAttr(element, 'data-orthogroup-id')),
       collinearity_block_id: standaloneAttr(element, 'data-collinearity-block-id'),
       fill: firstStandaloneText(element.getAttribute('fill'), '#94a3b8'),
@@ -1363,6 +1374,12 @@ const buildStandaloneMatchPayloads = (svg) => {
       qend: standaloneAttr(element, 'data-qend'),
       sstart: standaloneAttr(element, 'data-sstart'),
       send: standaloneAttr(element, 'data-send'),
+      qsource_start: querySource ? String(querySource.start) : '',
+      qsource_end: querySource ? String(querySource.end) : '',
+      ssource_start: subjectSource ? String(subjectSource.start) : '',
+      ssource_end: subjectSource ? String(subjectSource.end) : '',
+      qtable_interval: tableInterval(querySource),
+      stable_interval: tableInterval(subjectSource),
       orientation: firstStandaloneText(
         standaloneAttr(element, 'data-collinearity-orientation'),
         standaloneAttr(element, 'data-orientation')

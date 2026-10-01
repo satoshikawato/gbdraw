@@ -10,6 +10,7 @@ from svgwrite.shapes import Line
 from svgwrite.text import Text
 
 from ....canvas import LinearCanvasConfigurator
+from ....core.record_metadata import _read_coord_map
 from ...drawers.linear.features import FeatureDrawer
 from ...drawers.linear.labels import LabelDrawer
 from ....labels.linear import prepare_label_list_linear
@@ -390,6 +391,14 @@ class SeqRecordGroup:
         record_group.attribs["data-gbdraw-record-index"] = str(self.record_index)
 
         record_length: int = len(self.gb_record.seq)
+        # Input-file span of a cropped or reverse-complemented record (PD-OI-076):
+        # match popups and FASTA headers report source coordinates through it.
+        source_base, source_step = _read_coord_map(self.gb_record)
+        if record_length and (source_base, source_step) != (1, 1):
+            source_low = source_base if source_step == 1 else source_base - record_length + 1
+            record_group.attribs["data-gbdraw-record-source-start"] = str(source_low)
+            record_group.attribs["data-gbdraw-record-source-end"] = str(source_low + record_length - 1)
+            record_group.attribs["data-gbdraw-record-source-step"] = str(source_step)
 
         if self.sequence_width is not None:
             genome_size_normalization_factor = 1.0
