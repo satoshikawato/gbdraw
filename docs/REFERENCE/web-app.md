@@ -327,6 +327,11 @@ record appears exactly once. A top or bottom plot title can use **Keep Full
 Definition with Plot Title** to keep each record definition inside its own
 circle.
 
+The canvas decides record placement only. Track slots and the shared legend
+follow the same rules as a single-record Circular diagram, so a one-record
+canvas matches the single-record figure. Without depth input, no depth slot is
+reserved.
+
 ## Record selection and layout
 
 Each Linear input card owns its record selector, inclusive **Start** and

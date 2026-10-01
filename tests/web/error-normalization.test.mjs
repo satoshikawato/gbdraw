@@ -293,3 +293,18 @@ test('the operation error panel offers the Generate action (N-12 known defect)',
     assert.match(indexHtml, /errorDisplay\.actions\.includes\('generate'\)/);
   });
 });
+
+test('a Circular placement limited by the center reservation names that cause', () => {
+  for (const [reason, pattern] of [
+    ['CANNOT_FIT', /Move the track, reduce widths/],
+    ['DEFINITION_RESERVED', /center definition text limits the inside tracks\. Shorten Species or Strain, reduce Default font size, set a smaller Center Reserved Radius/],
+    ['CENTER_RESERVED', /The Center Reserved Radius limits the inside tracks\. Set a smaller Center Reserved Radius or place tracks outside\./]
+  ]) {
+    const layout = roundtrip({ code: 'TRACK_LAYOUT', operation: 'generate', stage: 'render', context: { reason } });
+    assert.equal(layout.code, 'TRACK_LAYOUT');
+    assert.equal(layout.context.reason, reason);
+    assert.match(layout.summary, /^A circular track does not fit inside\./);
+    assert.match(layout.summary, pattern);
+    assert.deepEqual(layout.actions, ['edit-track', 'retry']);
+  }
+});
