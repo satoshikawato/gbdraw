@@ -1,4 +1,5 @@
 import { normalizeUserFacingError } from '../services/error-normalization.js';
+import { discoveryErrorIsFinal } from './record-discovery.js';
 import { buildDisambiguatedRecordEntries, formatRecordLength } from './record-options.js';
 
 export const AUTOMATIC_RECORD_OPTION_LABEL = 'Automatic (no explicit selector)';
@@ -102,6 +103,14 @@ export const createLinearRecordSelector = ({
     };
   };
 
+  // The settled read of these exact source files on any row: its records, or
+  // an error the reader reported for those bytes. A refresh reuses it.
+  const settledStateFor = (inputType, primaryFile, pairedFile) => Object.values(selectorStateByUid)
+    .find((stored) => (
+      stored.inputType === inputType && stored.primaryFile === primaryFile && stored.pairedFile === pairedFile
+      && (stored.status === 'ready' || (stored.status === 'error' && discoveryErrorIsFinal(stored.error)))
+    )) || null;
+
   const purgeInactiveState = () => {
     const activeUids = new Set(state.linearSeqs.map(uidFor).filter(Boolean));
     Object.keys(selectorStateByUid).forEach((uid) => {
@@ -152,14 +161,21 @@ export const createLinearRecordSelector = ({
         replaceState(uid, { ...emptySelectorState(), inputType, primaryFile, pairedFile });
         continue;
       }
-      replaceState(uid, {
-        status: 'loading', records: [], error: '', inputType, primaryFile, pairedFile
-      });
+      if (!settledStateFor(inputType, primaryFile, pairedFile)) {
+        replaceState(uid, {
+          status: 'loading', records: [], error: '', inputType, primaryFile, pairedFile
+        });
+      }
       targets.push({ uid, primaryFile, pairedFile });
     }
     for (const { uid, primaryFile, pairedFile } of targets) {
+      const settled = settledStateFor(inputType, primaryFile, pairedFile);
+      if (settled?.status === 'error') {
+        replaceState(uid, settled);
+        continue;
+      }
       try {
-        const records = await recordReader({
+        const records = settled ? settled.records : await recordReader({
           inputType,
           primaryFile,
           pairedFile,

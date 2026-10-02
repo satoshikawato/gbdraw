@@ -11,6 +11,13 @@ import {
   readFileText
 } from '../services/file-content-cache.js';
 
+// A discovery error the reader reported for the source bytes is final for that
+// exact source instance: reading the same files again returns it again, so a
+// refresh or Generate reuses it. A Worker start-up, staging, transport, Cancel,
+// or unclassified (UNKNOWN) failure is not a property of the bytes and reads again.
+export const discoveryErrorIsFinal = (error) => Boolean(error?.code)
+  && error.code !== 'UNKNOWN' && error.stage === 'helper';
+
 // A catalog is current only for the exact active source instance and input type.
 export const circularDiscoveryForInput = (state) => {
   const inputType = state.cInputType.value;

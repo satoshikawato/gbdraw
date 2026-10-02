@@ -10,7 +10,8 @@ const tempRoot = await mkdtemp(join(tmpdir(), 'gbdraw-record-selector-'));
 await writeFile(join(tempRoot, 'package.json'), '{"type":"module"}', 'utf8');
 await cp(join(sourceRoot, 'linear-record-selector.js'), join(tempRoot, 'linear-record-selector.js'));
 await writeFile(join(tempRoot, 'linear-record-selector.js'), (await readFile(join(sourceRoot, 'linear-record-selector.js'), 'utf8'))
-  .replace('../services/error-normalization.js', pathToFileURL(join(sourceRoot, '../services/error-normalization.js')).href), 'utf8');
+  .replace('../services/error-normalization.js', pathToFileURL(join(sourceRoot, '../services/error-normalization.js')).href)
+  .replace('./record-discovery.js', pathToFileURL(join(sourceRoot, 'record-discovery.js')).href), 'utf8');
 await cp(join(sourceRoot, 'record-options.js'), join(tempRoot, 'record-options.js'));
 
 const {
@@ -288,5 +289,71 @@ assert.deepEqual(
   selectorStateBeforeRollback
 );
 rollbackState.semanticFileWatchersSuppressed.value = false;
+
+// B4: a settled read of the same source files is reused by every later
+// refresh (upload, Generate preparation, catalog check). A new File instance
+// reads again, and so does a failure that is not a property of the bytes.
+const reuseFiles = { gff: { name: 'm23.gff3' }, fasta: { name: 'mismatch.fasta' } };
+const reuseState = {
+  mode: ref('linear'),
+  lInputType: ref('gff'),
+  linearSeqs: [{ uid: 'reuse-a', gff: reuseFiles.gff, fasta: reuseFiles.fasta, region_record_id: '' }]
+};
+const reuseReads = [];
+let reuseOutcome = () => {
+  throw { code: 'FASTA_REQUIRED', operation: 'listGffFastaRecords', stage: 'helper', context: { reason: 'GFF_FASTA_MATCH' } };
+};
+const reuseController = createLinearRecordSelector({
+  state: reuseState,
+  reactive: (value) => value,
+  recordReader: async ({ primaryFile, pairedFile }) => {
+    reuseReads.push([primaryFile, pairedFile]);
+    return reuseOutcome();
+  },
+  logger: { warn: () => {} }
+});
+for (let refresh = 0; refresh < 3; refresh += 1) await reuseController.refresh();
+assert.equal(reuseReads.length, 1);
+assert.deepEqual(
+  (({ code, operation, stage, context }) => ({ code, operation, stage, context }))(
+    reuseController.errorModelFor(reuseState.linearSeqs[0])
+  ),
+  { code: 'FASTA_REQUIRED', operation: 'listGffFastaRecords', stage: 'helper', context: { reason: 'GFF_FASTA_MATCH' } }
+);
+assert.match(reuseController.errorFor(reuseState.linearSeqs[0]), /matching FASTA/);
+
+reuseState.linearSeqs[0].fasta = { name: 'mismatch.fasta' };
+await reuseController.refresh();
+assert.equal(reuseReads.length, 2);
+
+reuseOutcome = () => { throw { code: 'WORKER_INIT', operation: 'listGffFastaRecords', stage: 'initialization' }; };
+reuseState.linearSeqs[0].fasta = { name: 'retry.fasta' };
+await reuseController.refresh();
+await reuseController.refresh();
+assert.equal(reuseReads.length, 4);
+reuseOutcome = () => { throw new Error('Diagram generation worker failed.'); };
+await reuseController.refresh();
+await reuseController.refresh();
+assert.equal(reuseReads.length, 6);
+
+const discoveredRows = [];
+const readyController = createLinearRecordSelector({
+  state: reuseState,
+  reactive: (value) => value,
+  recordReader: async ({ primaryFile, pairedFile }) => {
+    reuseReads.push([primaryFile, pairedFile]);
+    return [{ selector: '#1', recordId: 'NC_001416.1', recordLength: 48502 }];
+  },
+  onRecordsDiscovered: ({ uid, records }) => { discoveredRows.push([uid, records[0].recordId]); }
+});
+reuseState.linearSeqs.push({ uid: 'reuse-b', gff: reuseState.linearSeqs[0].gff, fasta: reuseState.linearSeqs[0].fasta, region_record_id: '' });
+await readyController.refresh();
+await readyController.refresh();
+assert.equal(reuseReads.length, 7);
+assert.deepEqual(discoveredRows, [
+  ['reuse-a', 'NC_001416.1'], ['reuse-b', 'NC_001416.1'],
+  ['reuse-a', 'NC_001416.1'], ['reuse-b', 'NC_001416.1']
+]);
+assert.equal(readyController.optionsFor(reuseState.linearSeqs[1])[1].value, 'NC_001416.1');
 
 console.log('record selector tests passed');
