@@ -190,7 +190,10 @@ cleanup failure facts. The summary names the location it knows: **Sequence N**,
 available radial band in px for a Circular track that does not fit. The panel
 offers only actions that work there: **Generate** when a fresh Result is the
 correction, and no **Save Session** when Save itself failed. Unknown failures retain a stable code and the observed
-stage without inventing a cause. Original patterns, sequences, file or record
+stage without inventing a cause. A failure in the diagram engine's drawing stage
+that no validation classifies names the Python exception class (for example
+`ValueError`) and offers **Save Session** instead of **Retry Generate**, because
+the same inputs fail the same way. Original patterns, sequences, file or record
 names, paths, SVG, raw exception text, traceback, stdout and stderr are excluded
 from diagnostics and automatic console output. A saved Session can contain
 private inputs, so share one only deliberately.

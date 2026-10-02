@@ -195,8 +195,10 @@ def test_track_fit_failure_reports_row_and_band_without_slot_id(
     if cause is not None:  # a pinned slot can leave no band at all (inner > outer)
         assert context["innerPx"] < context["outerPx"]
     assert "PRIVATE" not in json.dumps(payload)
-    # A message that merely looks like a layout failure is not classified.
-    assert _web(ValidationError(message))["code"] == "VALIDATION_UNCLASSIFIED"
+    # A message that merely looks like a layout failure is not classified (B9:
+    # in the render stage it is a render failure that names only its class).
+    assert _web(ValidationError(message))["code"] == "RENDER_FAILED"
+    assert _web(ValidationError(message))["context"] == {"exceptionType": "ValidationError"}
 
 
 @pytest.mark.parametrize("surface", ["logical", "record-major"])

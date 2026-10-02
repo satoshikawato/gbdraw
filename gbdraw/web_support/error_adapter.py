@@ -11,7 +11,9 @@ import logging
 import re
 from typing import Iterator
 
-from gbdraw.exceptions import ComparisonIdentityError, GbdrawError, InputFileError, ParseError, ValidationError
+from gbdraw.exceptions import (
+    ComparisonIdentityError, ConfigError, ExportError, GbdrawError, InputFileError, ParseError, ValidationError,
+)
 
 OPERATIONS = frozenset("""unknown generate align feature-extraction export-svg export-png export-pdf evaluateRules readPdfFont
 buildProteinLosatCacheKeys convertLosatpPairsToGenomicPayload convertMainSessionComparisonFrame
@@ -49,6 +51,19 @@ POSITIVE_OR_AUTO POSITIVE_INTEGER_OR_AUTO NONNEGATIVE_INTEGER PERCENT UNKNOWN_CO
 DINUCLEOTIDE CANNOT_FIT DEFINITION_RESERVED CENTER_RESERVED THREE_COLUMNS DEPTH_VALUES
 REFERENCE_REQUIRED REFERENCE_MISMATCH ADJACENT_ALL COLLINEAR_ANCHOR_MODE COLLINEAR_COLOR_MODE COLOR SEARCH_FRAME""".split())
 _DIAGNOSTIC_INTEGER_KEYS = frozenset("row column columnCount seriesIndex slotIndex innerPx outerPx".split())
+
+# The engine computes a Result from the request alone, so an unclassified failure
+# in these stages repeats for the same inputs (RENDER_FAILED offers no Retry).
+# MemoryError depends on the runtime, not the inputs, and stays UNKNOWN.
+RENDER_FAILURE_STAGES = frozenset({"render", "result-admission"})
+# Bounded exception-class context: the most specific listed class in the MRO.
+EXCEPTION_TYPES = (
+    ValidationError, ParseError, ConfigError, ExportError, GbdrawError,
+    ZeroDivisionError, FloatingPointError, OverflowError, ArithmeticError, AssertionError,
+    AttributeError, IndexError, KeyError, LookupError, NotImplementedError, RecursionError,
+    RuntimeError, TypeError, UnboundLocalError, NameError, ValueError, Exception,
+)
+EXCEPTION_TYPE_NAMES = frozenset(cls.__name__ for cls in EXCEPTION_TYPES)
 
 # Native, fixed validation clauses -> bounded correction identifiers.
 _CONSTRAINTS = {
@@ -254,30 +269,32 @@ def _classify_native(error: BaseException, chain: list[BaseException], stage: st
         code, context = _validation(cause)
         if code != "VALIDATION_UNCLASSIFIED":
             return code, context, stage
-    if isinstance(error, (ValidationError, ParseError, ValueError, TypeError, KeyError, json.JSONDecodeError)):
-        return "VALIDATION_UNCLASSIFIED", {}, stage
-    if isinstance(error, (InputFileError, OSError, UnicodeError)):
+    validation = isinstance(error, (ValidationError, ParseError, ValueError, TypeError, KeyError, json.JSONDecodeError))
+    if not validation and isinstance(error, (InputFileError, OSError, UnicodeError)):
         return "INPUT_UNREADABLE", {}, stage
-    return "UNKNOWN", {}, stage
+    if stage in RENDER_FAILURE_STAGES and not isinstance(error, MemoryError):
+        name = next((cls.__name__ for cls in type(error).__mro__ if cls in EXCEPTION_TYPES), None)
+        return "RENDER_FAILED", {"exceptionType": name} if name else {}, stage
+    return "VALIDATION_UNCLASSIFIED" if validation else "UNKNOWN", {}, stage
 
 
 def serialize_web_error(error: BaseException, *, operation: str, stage: str) -> dict:
     """Produce identifiers only, without altering the native error or its cause."""
     operation = operation if isinstance(operation, str) and operation in OPERATIONS else "unknown"
     stage = stage if isinstance(stage, str) and stage in STAGES else "unknown"
+    actual_stage = getattr(error, "_web_error_stage", None)
+    if isinstance(actual_stage, str) and actual_stage in STAGES:
+        stage = actual_stage
     chain = list(_chain(error))
     diagnosed = next((found for found in map(_diagnostic, chain) if found is not None), None)
     if diagnosed is not None:
         code, context = diagnosed
     else:
         code, context, stage = _classify_native(error, chain, stage)
-    actual_stage = getattr(error, "_web_error_stage", None)
-    if code not in {"REGEX_SYNTAX", "COMPARISON_IDENTITY"} and isinstance(actual_stage, str) and actual_stage in STAGES:
-        stage = actual_stage
     if isinstance(error, json.JSONDecodeError):
         code, context = "HELPER_PROTOCOL", {"reason": "JSON_FORMAT"}
     if isinstance(error, StopIteration):
-        code = "NO_RECORDS"
+        code, context = "NO_RECORDS", {}
     context = {key: value for key, value in context.items()
                if (isinstance(value, str) and len(value) <= 80 and
                    (key != "reason" or value in {"EMPTY_ENDPOINT", "INDEX_ALIGNMENT", "SOURCE_INDEX", "SOURCE_VIEW_CONFLICT"} or code != "COMPARISON_IDENTITY"))

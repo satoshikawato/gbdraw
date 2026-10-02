@@ -102,9 +102,16 @@ def test_unknown_and_unmapped_validation_are_distinct_and_private(helpers, capsy
     error = RuntimeError('unknown extension ' + sentinel)
     error.__cause__ = RuntimeError(sentinel)
     error._web_error_secondary = [{'code': 'CLEANUP_FAILED', 'stage': 'cleanup', 'message': sentinel}]
+    assert serialize_web_error(error, operation='generate', stage='request-validation') == {
+        'code': 'UNKNOWN', 'operation': 'generate', 'stage': 'request-validation', 'context': {}, 'secondary': []}
+    assert serialize_web_error(ValidationError(sentinel), operation='generate', stage='request-validation')['code'] == 'VALIDATION_UNCLASSIFIED'
+    # B9: in the engine stages the same inputs fail again, so both are a render
+    # failure that names only the exception class.
     assert serialize_web_error(error, operation='generate', stage='render') == {
-        'code': 'UNKNOWN', 'operation': 'generate', 'stage': 'render', 'context': {}, 'secondary': []}
-    assert serialize_web_error(ValidationError(sentinel), operation='generate', stage='render')['code'] == 'VALIDATION_UNCLASSIFIED'
+        'code': 'RENDER_FAILED', 'operation': 'generate', 'stage': 'render',
+        'context': {'exceptionType': 'RuntimeError'}, 'secondary': []}
+    assert serialize_web_error(ValidationError(sentinel), operation='generate', stage='result-admission')['context'] == {
+        'exceptionType': 'ValidationError'}
     def fail():
         print(sentinel)
         logging.error(sentinel)
