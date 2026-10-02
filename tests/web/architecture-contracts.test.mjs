@@ -255,6 +255,23 @@ const assertMetadataImportOwners = (sources) => {
   ]);
 };
 
+// The Result replacement ceilings below count Result writes and SVG serialization
+// together, as the single Mounted SVG/Result replacement capability did before G-J(1).
+const RESULT_REPLACEMENT_CAPABILITIES = Object.freeze([
+  'Result content commit',
+  'SVG serialization'
+]);
+const resultReplacementCount = (detected, path, capability) => (
+  detected.operatorMatchesByCapability[capability]
+    .find((entry) => entry.path === path)?.count || 0
+);
+const resultReplacementOperators = (detected, path, capability) => {
+  const count = resultReplacementCount(detected, path, capability);
+  return count ? [{ path, count }] : [];
+};
+const totalResultReplacementCount = (detected, path) => RESULT_REPLACEMENT_CAPABILITIES
+  .reduce((total, capability) => total + resultReplacementCount(detected, path, capability), 0);
+
 // IN-01 and GE-02 (Web GUI audit 2026-09-30, D-04 and D-05) retire the live
 // definition and stroke rewrites. Their operators and imports may shrink or
 // disappear without editing this guard; they may not grow, and no owner is added.
@@ -263,14 +280,11 @@ const RETIRING_REPLACEMENT_CEILINGS = Object.freeze({
   'app/results.js': 4,
   'app/svg-styles.js': 2
 });
-const retiringReplacementOperators = (detected, path) => {
+const retiringReplacementOperators = (detected, path, capability) => {
   const ceiling = RETIRING_REPLACEMENT_CEILINGS[path];
-  const match = detected.operatorMatchesByCapability['Mounted SVG/Result replacement']
-    .find((entry) => entry.path === path);
-  if (!match) return [];
-  assert.ok(match.count > 0 && match.count <= ceiling,
+  assert.ok(totalResultReplacementCount(detected, path) <= ceiling,
     `${path}: retiring Result replacement may only contract (ceiling ${ceiling})`);
-  return [{ path, count: match.count }];
+  return resultReplacementOperators(detected, path, capability);
 };
 const importersWithRetiringOwners = (target, required, retiring) => {
   const actual = importersOf(target);
@@ -282,12 +296,12 @@ const importersWithRetiringOwners = (target, required, retiring) => {
 
 // A removed replacement is a contraction, not a missing canonical owner.
 // Keep the required operator location and the existing five-operator ceiling.
-const legendReplacementCount = (detected) => {
-  const match = detected.operatorMatchesByCapability['Mounted SVG/Result replacement']
-    .find(({ path }) => path === 'app/legend/entry-actions.js');
-  assert.ok(match && match.count > 0 && match.count <= 5,
+const legendReplacementOperators = (detected, capability) => {
+  const path = 'app/legend/entry-actions.js';
+  const total = totalResultReplacementCount(detected, path);
+  assert.ok(total > 0 && total <= 5,
     'legend replacement owner must remain present without operator growth');
-  return match.count;
+  return resultReplacementOperators(detected, path, capability);
 };
 
 test('the main application import graph excludes Worker-only modules', () => {
@@ -519,10 +533,10 @@ test('right drawer availability and transitions have one production owner', () =
 
 // Capability keys that the policy holds while no detector reports them, during a
 // split ("Splitting a capability" in docs/internal/WEB_CHANGE_POLICY.md).
-// G-J(1) splits Mounted SVG/Result replacement; the new keys come before the detector.
+// G-J(1) split Mounted SVG/Result replacement; the retired key waits for an
+// authority-only removal.
 const UNDETECTED_POLICY_CAPABILITY_KEYS = Object.freeze([
-  'Result content commit',
-  'SVG serialization'
+  'Mounted SVG/Result replacement'
 ]);
 const policyCapabilityKeysMatchDetectors = (policy) => assert.deepEqual(
   Object.keys(policy.allowedPrivilegedOwners).sort(),
@@ -550,12 +564,7 @@ test('privileged capability owners and importers stay within their allowlists', 
   });
 });
 
-test('the Result write split starts from every current Mounted SVG/Result replacement owner', () => {
-  const owners = WEB_CHANGE_POLICY.allowedPrivilegedOwners;
-  UNDETECTED_POLICY_CAPABILITY_KEYS.forEach((key) => {
-    assert.deepEqual(owners[key], owners['Mounted SVG/Result replacement'], key);
-  });
-
+test('the policy capability key set is exact', () => {
   const withPolicyKeys = (keys) => ({
     allowedPrivilegedOwners: Object.fromEntries(keys.map((key) => [key, []]))
   });
@@ -565,11 +574,63 @@ test('the Result write split starts from every current Mounted SVG/Result replac
     withPolicyKeys([...expectedKeys, 'Unregistered capability'])
   ));
   assert.throws(() => policyCapabilityKeysMatchDetectors(
-    withPolicyKeys(expectedKeys.filter((key) => key !== 'SVG serialization'))
+    withPolicyKeys(expectedKeys.filter((key) => key !== 'Result content commit'))
   ));
   assert.throws(() => policyCapabilityKeysMatchDetectors(
     withPolicyKeys(expectedKeys.filter((key) => key !== 'Mounted SVG/Result replacement'))
   ));
+});
+
+const privilegedOwnerViolations = (sources) => {
+  const detected = detectPrivilegedWebCapabilities(sources);
+  return Object.entries(detected.operatorMatchesByCapability).flatMap(([capability, matches_]) => {
+    const allowed = new Set(WEB_CHANGE_POLICY.allowedPrivilegedOwners[capability]);
+    return matches_.filter(({ path }) => !allowed.has(path))
+      .map(({ path }) => `${capability}: owner ${path}`);
+  });
+};
+const withSeededLine = (path, line) => new Map([
+  ...productionSources,
+  [path, `${productionSources.get(path) ?? ''}\n${line}\n`]
+]);
+
+test('Result content commit and SVG serialization detect different operators', () => {
+  const detected = detectPrivilegedWebCapabilities(new Map([
+    ['app/seeded-result-writer.js', [
+      'results.value = next;',
+      'state.results.value[index] = next;',
+      'previewRuntime.flushActiveResult();',
+      'if (results.value === next) previous = results.value;',
+      '// results.value = comment;',
+      'const text = "serializeCleanSvg(svg)";'
+    ].join('\n')],
+    ['app/seeded-serializer.js', 'const content = serializeCleanSvg(svg);\n']
+  ]));
+  assert.deepEqual(detected.operatorMatchesByCapability['Result content commit'],
+    [{ path: 'app/seeded-result-writer.js', count: 3 }]);
+  assert.deepEqual(detected.operatorMatchesByCapability['SVG serialization'],
+    [{ path: 'app/seeded-serializer.js', count: 1 }]);
+});
+
+test('a Result writer or SVG serializer outside its allowlist fails the policy', () => {
+  assert.deepEqual(privilegedOwnerViolations(productionSources), []);
+  const unlisted = 'app/feature-search/preview-svg.js';
+  assert.ok(productionSources.has(unlisted), unlisted);
+  for (const [line, capability] of [
+    ['results.value = nextResults;', 'Result content commit'],
+    ['state.results.value[0] = nextResult;', 'Result content commit'],
+    ['previewRuntime.flushActiveResult();', 'Result content commit'],
+    ['const content = serializeCleanSvg(svg);', 'SVG serialization']
+  ]) {
+    assert.deepEqual(privilegedOwnerViolations(withSeededLine(unlisted, line)),
+      [`${capability}: owner ${unlisted}`], line);
+  }
+  assert.deepEqual(privilegedOwnerViolations(
+    withSeededLine('app/preview-runtime.js', 'state.results.value = nextResults;')
+  ), []);
+  assert.deepEqual(privilegedOwnerViolations(
+    withSeededLine('services/svg-result-ingestion.js', 'const content = serializeCleanSvg(svg);')
+  ), []);
 });
 
 test('shared privileged detectors preserve the characterized current-source facts', () => {
@@ -577,10 +638,11 @@ test('shared privileged detectors preserve the characterized current-source fact
     'Canonical editor state',
     'Diagram Worker',
     'History',
-    'Mounted SVG/Result replacement',
     'Python helper',
     'Render request',
     'Resource staging',
+    'Result content commit',
+    'SVG serialization',
     'SVG/Result admission',
     'Session'
   ]);
@@ -636,23 +698,41 @@ test('shared privileged detectors preserve the characterized current-source fact
       { path: 'services/history-snapshot.js', count: 2 },
       { path: 'services/history.js', count: 7 }
     ],
-    'Mounted SVG/Result replacement': [
+    'Result content commit': [
       { path: 'app/app-setup.js', count: 1 },
       { path: 'app/feature-editor/color-actions.js', count: 1 },
-      { path: 'app/feature-editor/label-actions.js', count: 2 },
-      { path: 'app/feature-editor/svg-actions.js', count: 4 },
-      { path: 'app/legend-layout/canvas-actions.js', count: 2 },
-      { path: 'app/legend-layout/diagram-drag.js', count: 2 },
-      ...retiringReplacementOperators(detected, 'app/legend-layout/reposition-actions.js'),
-      { path: 'app/legend/drag-actions.js', count: 4 },
-      { path: 'app/legend/entry-actions.js', count: legendReplacementCount(detected) },
-      { path: 'app/legend/sort-actions.js', count: 2 },
-      { path: 'app/legend/stroke-actions.js', count: 2 },
+      { path: 'app/feature-editor/label-actions.js', count: 1 },
+      { path: 'app/feature-editor/svg-actions.js', count: 2 },
+      { path: 'app/legend-layout/canvas-actions.js', count: 1 },
+      { path: 'app/legend-layout/diagram-drag.js', count: 1 },
+      ...retiringReplacementOperators(
+        detected, 'app/legend-layout/reposition-actions.js', 'Result content commit'
+      ),
+      { path: 'app/legend/drag-actions.js', count: 2 },
+      ...legendReplacementOperators(detected, 'Result content commit'),
+      { path: 'app/legend/sort-actions.js', count: 1 },
+      { path: 'app/legend/stroke-actions.js', count: 1 },
       { path: 'app/preview-runtime.js', count: 4 },
-      ...retiringReplacementOperators(detected, 'app/results.js'),
+      ...retiringReplacementOperators(detected, 'app/results.js', 'Result content commit'),
       { path: 'app/run-analysis.js', count: 2 },
-      ...retiringReplacementOperators(detected, 'app/svg-styles.js'),
-      { path: 'services/config.js', count: 5 },
+      ...retiringReplacementOperators(detected, 'app/svg-styles.js', 'Result content commit'),
+      { path: 'services/config.js', count: 4 }
+    ],
+    'SVG serialization': [
+      { path: 'app/feature-editor/label-actions.js', count: 1 },
+      { path: 'app/feature-editor/svg-actions.js', count: 2 },
+      { path: 'app/legend-layout/canvas-actions.js', count: 1 },
+      { path: 'app/legend-layout/diagram-drag.js', count: 1 },
+      ...retiringReplacementOperators(
+        detected, 'app/legend-layout/reposition-actions.js', 'SVG serialization'
+      ),
+      { path: 'app/legend/drag-actions.js', count: 2 },
+      ...legendReplacementOperators(detected, 'SVG serialization'),
+      { path: 'app/legend/sort-actions.js', count: 1 },
+      { path: 'app/legend/stroke-actions.js', count: 1 },
+      ...retiringReplacementOperators(detected, 'app/results.js', 'SVG serialization'),
+      ...retiringReplacementOperators(detected, 'app/svg-styles.js', 'SVG serialization'),
+      { path: 'services/config.js', count: 1 },
       { path: 'services/history-snapshot.js', count: 1 },
       { path: 'services/svg-result-ingestion.js', count: 1 }
     ],
@@ -713,14 +793,23 @@ test('metadata validation callers cannot acquire identity or namespace access', 
 });
 
 test('legend replacement characterization permits contraction but rejects growth or lost ownership', () => {
-  for (const count of [4, 5, 6, 0]) {
-    const code = 'results.value = candidate;\n'.repeat(count)
+  const path = 'app/legend/entry-actions.js';
+  for (const [commits, serializations] of [[4, 0], [5, 0], [2, 2], [3, 2], [6, 0], [3, 3], [0, 0]]) {
+    const code = 'results.value = candidate;\n'.repeat(commits)
+      + 'serializeCleanSvg(svg);\n'.repeat(serializations)
       + '// results.value = comment;\nconst text = "results.value = string;";';
-    const detected = detectPrivilegedWebCapabilities(new Map([['app/legend/entry-actions.js', code]]));
-    assert.deepEqual(detected.operatorMatchesByCapability['Mounted SVG/Result replacement'],
-      count ? [{ path: 'app/legend/entry-actions.js', count }] : []);
-    if (count === 4 || count === 5) assert.equal(legendReplacementCount(detected), count);
-    else assert.throws(() => legendReplacementCount(detected));
+    const detected = detectPrivilegedWebCapabilities(new Map([[path, code]]));
+    assert.deepEqual(detected.operatorMatchesByCapability['Result content commit'],
+      commits ? [{ path, count: commits }] : []);
+    assert.deepEqual(detected.operatorMatchesByCapability['SVG serialization'],
+      serializations ? [{ path, count: serializations }] : []);
+    const total = commits + serializations;
+    if (total > 0 && total <= 5) {
+      assert.deepEqual(legendReplacementOperators(detected, 'Result content commit'),
+        commits ? [{ path, count: commits }] : []);
+    } else {
+      assert.throws(() => legendReplacementOperators(detected, 'Result content commit'));
+    }
   }
 });
 
@@ -730,11 +819,21 @@ test('retiring Result replacement owners may contract or disappear but never gro
       const code = 'results.value = candidate;\n'.repeat(count);
       const detected = detectPrivilegedWebCapabilities(new Map([[path, code]]));
       if (count <= ceiling) {
-        assert.deepEqual(retiringReplacementOperators(detected, path), count ? [{ path, count }] : []);
+        assert.deepEqual(retiringReplacementOperators(detected, path, 'Result content commit'),
+          count ? [{ path, count }] : []);
       } else {
-        assert.throws(() => retiringReplacementOperators(detected, path), /may only contract/);
+        assert.throws(
+          () => retiringReplacementOperators(detected, path, 'Result content commit'),
+          /may only contract/
+        );
       }
     }
+    const split = detectPrivilegedWebCapabilities(new Map([[
+      path,
+      'results.value = candidate;\n'.repeat(ceiling) + 'serializeCleanSvg(svg);\n'
+    ]]));
+    assert.throws(() => retiringReplacementOperators(split, path, 'SVG serialization'),
+      /may only contract/);
   }
   const required = importersOf('services/diagram-generation.js').filter((path) => path !== 'app/results.js');
   assert.throws(
@@ -4873,6 +4972,59 @@ test('base privileged allowlist keys cannot disappear', () => {
     assertNonWaivableRevisionFailure(execute, base, head, [
       /allowedPrivilegedImporters\.workers\/diagram-generation-worker\.js/,
       /proposed privileged capability policy is missing base allowlist keys/
+    ]);
+  });
+});
+
+const withRetiredCapabilityBase = (runCase) => withChangeBudgetRepository((repository) => {
+  assert.ok(!WEB_PRIVILEGED_CAPABILITY_KEYS.includes('Retired capability'));
+  const policy = cloneBudgetPolicy();
+  policy.allowedPrivilegedOwners['Retired capability'] = ['app/editor.js', 'app/run-analysis.js'];
+  writeBudgetPolicy(repository.write, policy);
+  const base = repository.commit('hold a capability key that no detector defines');
+  delete policy.allowedPrivilegedOwners['Retired capability'];
+  return runCase({ ...repository, base, policy });
+});
+
+test('an authority-only change removes a capability key that no detector defines', () => {
+  withRetiredCapabilityBase(({ base, commit, execute, policy, write }) => {
+    writeBudgetPolicy(write, policy);
+    const head = commit('remove retired capability key');
+    for (const environment of [{}, { WEB_ARCHITECTURE_CHANGE: 'true' }]) {
+      const result = execute({ base, head, environment });
+      assert.equal(result.status, 0, result.output);
+      assert.match(result.output, /Gate: \*\*PASS\*\*/);
+      assert.match(result.output, /Review: \*\*REQUIRED\*\*/);
+      assert.match(result.output,
+        /## Removed retired privileged allowlist keys\n\n- allowedPrivilegedOwners\.Retired capability\n/);
+      assert.match(result.output, /allowedPrivilegedOwners\.Retired capability: app\/editor\.js/);
+      assert.doesNotMatch(result.output,
+        /proposed privileged capability policy is missing base allowlist keys/);
+    }
+  });
+});
+
+test('a capability key that a detector defines still cannot be removed', () => {
+  withRetiredCapabilityBase(({ base, commit, execute, policy, write }) => {
+    delete policy.allowedPrivilegedOwners['Render request'];
+    writeBudgetPolicy(write, policy);
+    const head = commit('remove retired and detected capability keys');
+    assertNonWaivableRevisionFailure(execute, base, head, [
+      /## Missing base privileged allowlist keys\n\n- allowedPrivilegedOwners\.Render request\n/,
+      /proposed privileged capability policy is missing base allowlist keys/
+    ]);
+  });
+});
+
+test('a runtime contraction cannot also remove a retired capability key', () => {
+  withRetiredCapabilityBase(({ base, commit, execute, policy, write }) => {
+    removePolicyPath(policy, 'allowedPrivilegedOwners', 'Diagram Worker', 'app/editor.js');
+    writeBudgetPolicy(write, policy);
+    removeEditorOwnerUse(write);
+    const head = commit('remove runtime owner, its permission, and a retired key');
+    assertNonWaivableRevisionFailure(execute, base, head, [
+      /production runtime files and Web guard\/CI files changed together/,
+      /## Removed retired privileged allowlist keys\n\n- allowedPrivilegedOwners\.Retired capability\n/
     ]);
   });
 });
