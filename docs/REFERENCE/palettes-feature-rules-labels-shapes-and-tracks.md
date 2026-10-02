@@ -156,7 +156,7 @@ unsafe.
 
 Feature visibility actions are `show`, `off`, and `exclude_matching`.
 `exclude_matching` keeps the feature visible but removes it from protein-search
-input; `off` removes the glyph and the search input. The first matching
+input; `off` removes the glyph, its label, and the search input. The first matching
 visibility rule wins.
 
 Supported feature renderings include directional `arrow`, nondirectional
