@@ -182,21 +182,12 @@ def save_figure_to(
                 max_size=8 * 1024 * 1024,
                 mode="w+b",
             ) as staged_output:
-                if fmt == "png":
-                    cairosvg_module.svg2png(
-                        bytestring=svg_bytes,
-                        write_to=staged_output,
-                    )
-                elif fmt == "pdf":
-                    cairosvg_module.svg2pdf(
-                        bytestring=svg_bytes,
-                        write_to=staged_output,
-                    )
-                elif fmt in {"ps", "eps"}:
-                    cairosvg_module.svg2ps(
-                        bytestring=svg_bytes,
-                        write_to=staged_output,
-                    )
+                _export.convert_svg_with_cairosvg(
+                    svg_bytes,
+                    fmt,
+                    write_to=staged_output,
+                    cairosvg_module=cairosvg_module,
+                )
                 staged_output.seek(0)
                 with open(out_file, "xb") as output_file:
                     shutil.copyfileobj(staged_output, output_file)
@@ -253,14 +244,11 @@ def render_to_bytes(
 
     svg_string = canvas.tostring().encode("utf-8")
     try:
-        if fmt_norm == "png":
-            rendered = cairosvg_module.svg2png(bytestring=svg_string)
-        elif fmt_norm == "pdf":
-            rendered = cairosvg_module.svg2pdf(bytestring=svg_string)
-        elif fmt_norm in {"ps", "eps"}:
-            rendered = cairosvg_module.svg2ps(bytestring=svg_string)
-        else:
-            raise ValidationError(f"Unsupported format: {fmt}")
+        rendered = _export.convert_svg_with_cairosvg(
+            svg_string,
+            fmt_norm,
+            cairosvg_module=cairosvg_module,
+        )
     except GbdrawError:
         raise
     except Exception as exc:
