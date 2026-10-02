@@ -9,12 +9,13 @@ classification rules.
 
 | Tier | Trigger | Required coverage |
 | --- | --- | --- |
-| PR | Every PR into `dev` | Changed subsystem, cross-layer smoke, architecture/Product policy; Python 3.11 primary |
-| Integrated dev | Every push to `dev`; `Tests` dispatch with `tier=dev` | Core on Python 3.10/3.11/3.12; recipes, Gallery, browser/package integration, offline GUI, LOSAT cache, all functional Playwright in four shards, performance smoke on 3.11 |
+| PR | Every PR into `dev` | Changed subsystem, cross-layer smoke, architecture/Product policy; all functional Playwright in eight shards for Web runtime, session, Gallery, LOSAT, shared-test, and unknown changes; Python 3.11 primary |
+| Integrated dev | Every push to `dev`; `Tests` dispatch with `tier=dev` | Core on Python 3.10/3.11/3.12; recipes, Gallery, browser/package integration, offline GUI, LOSAT cache, all functional Playwright in eight shards, performance smoke on 3.11 |
 | Release / S11 | Explicit `Tests` dispatch on `dev` with `tier=release` | Every dev functional job, additional recipe/Gallery/browser acceptance on 3.10/3.12, exhaustive non-browser slow tests on all three versions, exact-candidate Gallery readiness |
 
-PR feedback targets 5–8 minutes. Integrated functional validation targets 15–20
-minutes where practical. S11 remains intentionally expensive. The separate
+PR feedback targets 5–8 minutes without functional Playwright and 15–20 minutes
+with it. Integrated functional validation targets 15–20 minutes where practical.
+S11 remains intentionally expensive. The separate
 `Gallery publication` workflow retains common-nine browser parity and its
 three-trial performance projection, with the complete-refresh budget available
 through its existing explicit dispatch. Deployment stress checks also remain.
@@ -53,14 +54,14 @@ registry unions their contributions, then emits unique jobs in registry order.
 | `policy-documentation` | Architecture, Web, Product Impact, Option Integrity, and selective CI policy documents | Web change budget |
 | `python-core` | Known Python core/API/config/I/O owners and data | Architecture, core, lint, Web contracts, browser smoke |
 | `renderer` | Render/SVG/diagram/canvas/features/labels/layout owners | Architecture, core, lint, Web contracts, browser smoke |
-| `web-runtime` | `gbdraw/web/index.html`, first-party JS | Architecture, Web contracts, browser smoke |
-| `session-persistence` | Python session codecs; JS session/config/history owners | Architecture, core, recipes, lint, Web contracts, browser smoke |
-| `gallery` | Gallery inputs and their generator owners | Architecture, Gallery, Web contracts, browser smoke |
-| `losat-integration` | Comparison owners, LOSAT JS/workers/Wasm | Architecture, core, lint, Web contracts, browser smoke |
-| `tests-only` | Shared fixtures/harness and unclassified tests | Full PR tier |
+| `web-runtime` | `gbdraw/web/index.html`, first-party JS | Architecture, Web contracts, browser smoke, functional Playwright |
+| `session-persistence` | Python session codecs; JS session/config/history owners | Architecture, core, recipes, lint, Web contracts, browser smoke, functional Playwright |
+| `gallery` | Gallery inputs and their generator owners | Architecture, Gallery, Web contracts, browser smoke, functional Playwright |
+| `losat-integration` | Comparison owners, LOSAT JS/workers/Wasm | Architecture, core, lint, Web contracts, browser smoke, functional Playwright |
+| `tests-only` | Shared fixtures/harness and unclassified tests | Full PR tier, functional Playwright |
 | `packaging` | Dependencies, manifests, vendored runtime, packaging tools | Full PR tier |
 | `ci-only` | Workflows, planner/tests, and Playwright configuration | Full PR tier |
-| `full` | Unknown or invalid paths | Full PR tier |
+| `full` | Unknown or invalid paths | Full PR tier, functional Playwright |
 
 The `policy-documentation` paths are exactly `docs/internal/ARCHITECTURE_FITNESS_FUNCTION_RATCHET.md`,
 `docs/internal/OPTION_INTEGRITY_PRODUCT_CONTRACT.md`,
@@ -68,8 +69,17 @@ The `policy-documentation` paths are exactly `docs/internal/ARCHITECTURE_FITNESS
 and `docs/internal/WEB_CHANGE_POLICY.md`. Other `docs/` paths remain ordinary
 documentation, including working templates and acceptance reports.
 
-The full PR job IDs are `web-change-budget`, `core-pr`, `recipes-standard`,
-`gallery`, `lint`, `web-contracts-pr`, and `web-pr-smoke`.
+The full PR tier job IDs are `web-change-budget`, `core-pr`, `recipes-standard`,
+`gallery`, `lint`, `web-contracts-pr`, and `web-pr-smoke`. `playwright-functional`
+is the eighth PR job. The `web-runtime`, `session-persistence`, `gallery`,
+`losat-integration`, `tests-only`, and `full` capabilities add it under both the
+selective and the full decision, so an evidence fallback or the
+`architecture-change` label keeps it whenever one of those capabilities is
+present. Other full-tier routes do not run it before merge: `ci-only`,
+`packaging`, and fallbacks of `metadata`, `python-core`, or `renderer` plans.
+Integrated `dev` staging runs it on every push that does not inherit parent
+evidence. On pull requests it is the same job, shard matrix, and command
+as in `dev` staging.
 
 `web-contracts-pr` groups the existing fast JS contracts and non-slow Python
 browser suite, which together took approximately 65–70 seconds historically.
@@ -111,10 +121,21 @@ unclassified/shared test inputs, and explicit dispatches require the full tier.
 Every runtime/subsystem change runs complete integrated dev and Gallery coverage.
 Metadata, documentation, and policy-documentation can inherit direct-parent
 staging evidence. Metadata runs no test jobs; ordinary documentation runs recipes;
-policy documentation runs Web change budget in `Tests`. Documentation-only Gallery
+policy documentation runs Web change budget in `Tests`. When the direct parent has
+no successful `Dev staging / gate` (missing, failed, cancelled, or unfinished), such
+a `dev` push runs the complete dev tier with basis `INHERITED_EVIDENCE_UNAVAILABLE`
+instead of failing its plan. Documentation-only Gallery
 publication skips browser and performance when direct-parent Gallery readiness is
 successful. A missing or unfinished direct-parent result still fails
 documentation-only Gallery planning rather than running the full tier.
+
+A later `dev` push does not cancel a running `Tests` run. One run executes, the
+newest later push waits, and GitHub cancels an older waiting run when a newer
+push replaces it. Every started staging run therefore finishes with exact-SHA
+evidence. A SHA whose waiting run was replaced has no evidence of its own; the
+newer run tests a tree that contains it, and a documentation-only push on top of
+it runs the complete dev tier. Pull request runs and manual dispatches still
+cancel the run they supersede.
 
 ## Smoke inventory and regression retention
 
@@ -136,8 +157,19 @@ collects 19 cases, so a new `@pr-smoke` case requires raising that bound.
 The smoke config retains one worker and zero retries. Three local two-worker
 repetitions passed, but these are not repeated GitHub runner evidence. One worker
 already meets the projected target, so CI does not adopt unverified parallelism.
-Full functional CI retains four shards and two retries, and runs two workers
-per shard. The job limit is 45 minutes; case timeouts are unchanged. Hosted
+Full functional CI runs eight shards with two retries and two workers per shard,
+on pull requests and in `dev` staging alike. Playwright 1.61 splits shards by
+case count in spec file order; it cannot split by duration. With equal counts,
+four hosted shards took 13 to 34 minutes on `52be34a7` and `a5deed4a`, because
+the heaviest composite and Session cases sit in a few files. The workflow
+therefore sets `PWTEST_SHARD_WEIGHTS`, which gives each shard its share of the
+ordered cases. The shares come from measured case durations, so each shard
+holds about 12 minutes of work (9 to 15 minutes in the two measured runs).
+Playwright does not document this variable. If a Playwright release stops
+applying it, the shards fall back to equal counts: they lose balance but no
+cases, and the inventory check fails. Refresh the weights from the
+`functional-report.json` artifacts of a green run when shard times drift apart.
+The job limit is 45 minutes; case timeouts are unchanged. Hosted
 shard 1 still exceeded 30 minutes with two workers on `9dd6359c`: its composite
 placement took 7.2 minutes, a composite Session round trip took 4.4 minutes,
 and a Definition completion wait and retries consumed the remaining budget.
@@ -146,8 +178,8 @@ for the measured composite workload, setup and existing retries. The line
 reporter names the running case, and the JSON report records durations,
 retries and final results alongside traces on every completed job. A job killed
 at its limit may not reach upload; its last running case remains in the log.
-The inventory check proves that the matrix partitions the full suite without
-omissions or duplicate execution.
+The inventory check proves that the weighted matrix partitions the full suite
+without omissions or duplicate execution.
 
 ## Trust and aggregate checks
 
@@ -162,6 +194,13 @@ The redesign PR therefore receives the old base's complete PR route. New selecti
 routing can take effect only after reviewed integration into protected `dev`.
 Additional contract failures also block the old gate's unknown-job validation.
 No branch protection or required external status name changes.
+
+Pull request functional Playwright is introduced the same way. The workflow
+change that lets `playwright-functional` run on pull requests and adds it to
+`PR / gate` merges first. The base planner does not select the job yet, so the
+job is skipped and the gate accepts it as a skipped unknown job. The planner
+change that selects it merges next and applies to pull requests based on that
+commit.
 
 `PR / gate`, `Dev staging / gate`, `Gallery readiness / gate`, and `Promotion / gate`
 remain stable. `Release / gate` is separate and requires every release-profile
