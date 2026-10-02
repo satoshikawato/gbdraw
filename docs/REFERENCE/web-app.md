@@ -792,7 +792,8 @@ displayed Result; the record picker appears only when the displayed Result
 shows more than one record. Color, visibility, legend, and label edits made on
 one Result apply to every Result: another Result shows them in its preview,
 export, and saved Session once it is displayed, and **Undo** and **Redo**
-reach it the same way. A Result that was never displayed keeps its earlier
+reach it the same way. **Load Label TSV** matches its rows against the labels
+of every Result and records the import as one **Undo** step. A Result that was never displayed keeps its earlier
 SVG in a saved Session until it is displayed or Generate runs. An undone legend
 rename or legend color reaches another Result at the next Generate.
 
