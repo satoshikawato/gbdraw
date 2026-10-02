@@ -95,3 +95,17 @@ export const genbankHeaderIds = (chunk) => {
   const { locus, accession, version, recordId } = header;
   return { locus, accession, version, recordId };
 };
+
+// The number of records the loader reads from GenBank text: one per line that
+// starts with "LOCUS" and seven spaces (GENBANK_RECORD_START).
+export const countGenBankRecords = (text) => {
+  const source = String(text || '');
+  let count = 0;
+  let lineStart = 0;
+  while (lineStart >= 0 && lineStart < source.length) {
+    if (source.startsWith(GENBANK_RECORD_START, lineStart)) count += 1;
+    const newline = source.indexOf('\n', lineStart);
+    lineStart = newline < 0 ? -1 : newline + 1;
+  }
+  return count;
+};

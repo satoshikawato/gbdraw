@@ -345,10 +345,14 @@ test('source recipe counts survive transfer and follow same-name source replacem
       }
     }
   }
-  const resources = { source: resource('genbank', 'mutable.gb', 'LOCUS one\n//\n') };
+  const locus = (id) => `LOCUS       ${id}                    10 bp    DNA     linear   UNK 01-JAN-2000\n//\n`;
+  const resources = { source: resource('genbank', 'mutable.gb', locus('one')) };
   assert.equal(await readCanonicalResourceRecordCount(resources, 'source', 'genbank'), 1);
-  Object.assign(resources.source, resource('genbank', 'mutable.gb', 'LOCUS one\n//\nLOCUS two\n//\n'));
+  Object.assign(resources.source, resource('genbank', 'mutable.gb', `${locus('one')}${locus('two')}`));
   assert.equal(await readCanonicalResourceRecordCount(resources, 'source', 'genbank'), 2);
+  // Biopython starts a record only at "LOCUS" plus seven spaces, so this malformed line is not one.
+  Object.assign(resources.source, resource('genbank', 'mutable.gb', `${locus('one')}LOCUS AB1 100 bp DNA\n//\n`));
+  assert.equal(await readCanonicalResourceRecordCount(resources, 'source', 'genbank'), 1);
 });
 
 test('source recipe preserves selectedFeaturesSet empty, invalid, and non-empty semantics', async () => {
