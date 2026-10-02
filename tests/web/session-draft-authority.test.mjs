@@ -1041,7 +1041,6 @@ Object.assign(state.featureSelectionDrag, {
 });
 state.labelReflowLastError.value = { summary: 'keep reflow error' };
 state.labelOverrideBuildWarning.value = 'keep override warning';
-state.labelLayoutDirtyReason.value = 'keep dirty reason';
 const clickedFeature = { id: 'keep-feature' };
 const clickedPairwiseMatch = { id: 'keep-match' };
 const clickedLabel = { key: 'keep-label' };
@@ -1162,7 +1161,6 @@ const rollbackState = () => ({
   featureSelectionDrag: structuredClone(state.featureSelectionDrag),
   labelReflowLastError: state.labelReflowLastError.value,
   labelOverrideBuildWarning: state.labelOverrideBuildWarning.value,
-  labelLayoutDirtyReason: state.labelLayoutDirtyReason.value,
   clickedFeature: state.clickedFeature.value,
   clickedPairwiseMatch: state.clickedPairwiseMatch.value,
   clickedLabel: state.clickedLabel.value,

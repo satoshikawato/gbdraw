@@ -119,7 +119,6 @@ export const setupWatchers = ({
     labelReflowRequestReason,
     labelReflowForceRequestSeq,
     labelReflowForceRequestReason,
-    labelLayoutDirtyReason,
     errorLog
   } = state;
 
@@ -393,7 +392,6 @@ export const setupWatchers = ({
       selectedOrthogroupId.value = '';
       orthogroupSearch.value = '';
       labelOverrideBuildWarning.value = '';
-      labelLayoutDirtyReason.value = '';
       labelSearch.value = '';
       featurePanelTab.value = 'colors';
       clickedPairwiseMatch.value = null;

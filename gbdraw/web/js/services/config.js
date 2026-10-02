@@ -3477,7 +3477,6 @@ const captureSessionImportTransientState = () => ({
   featureSelectionDrag: cloneJsonData(state.featureSelectionDrag),
   labelReflowLastError: state.labelReflowLastError.value,
   labelOverrideBuildWarning: state.labelOverrideBuildWarning.value,
-  labelLayoutDirtyReason: state.labelLayoutDirtyReason.value,
   clickedFeature: state.clickedFeature.value,
   clickedPairwiseMatch: state.clickedPairwiseMatch.value,
   clickedLabel: state.clickedLabel.value,
@@ -3549,7 +3548,6 @@ const restoreSessionImportTransientState = (snapshot) => {
   );
   state.labelReflowLastError.value = snapshot.labelReflowLastError;
   state.labelOverrideBuildWarning.value = snapshot.labelOverrideBuildWarning;
-  state.labelLayoutDirtyReason.value = snapshot.labelLayoutDirtyReason;
   state.clickedFeature.value = snapshot.clickedFeature;
   state.clickedPairwiseMatch.value = snapshot.clickedPairwiseMatch;
   state.clickedLabel.value = snapshot.clickedLabel;
@@ -3727,7 +3725,6 @@ const resetSessionBaseline = () => {
   clearObject(state.labelTextFeatureOverrideSources);
   clearObject(state.labelVisibilityOverrides);
   state.labelOverrideBuildWarning.value = '';
-  state.labelLayoutDirtyReason.value = '';
   state.generatedMode.value = 'circular';
   state.generatedLegendPosition.value = 'left';
   state.generatedMultiRecordCanvas.value = false;
@@ -4513,7 +4510,6 @@ const importSessionDocument = async (e, options = {}) => {
     state.autoLabelReflowEnabled.value = Boolean(ui.autoLabelReflow);
     state.paletteInstantPreviewEnabled.value = Boolean(ui.paletteInstantPreviewEnabled);
     state.labelOverrideBuildWarning.value = '';
-    state.labelLayoutDirtyReason.value = '';
     if (ui.featurePanelTab === 'labels' || ui.featurePanelTab === 'colors') {
       state.featurePanelTab.value = ui.featurePanelTab;
     } else {
