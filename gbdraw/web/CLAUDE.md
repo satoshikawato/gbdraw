@@ -194,7 +194,7 @@ Guards:
 - the single `app/candidate-render.js` to `services/svg-result-ingestion.js`
   edge (`canonical-path.current-result-admission` in
   `tools/web-architecture-rules.json`);
-- the `Mounted SVG/Result replacement` owner list in `tools/web-change-policy.json`:
+- the `Result content commit` owner list in `tools/web-change-policy.json`:
   an unlisted Result writer fails `node tools/check-web-change-budget.mjs`, and a
   production change may only remove entries;
 - `tests/web/history-generated-authority.playwright.spec.js` and the label-reflow
