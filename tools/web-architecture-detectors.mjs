@@ -55,12 +55,14 @@ const PRIVILEGED_CAPABILITY_SPECS = Object.freeze([
     operatorPattern: /\b(?:sanitizeSvgContent|ingestSvgResult|markCommitted)\b/g
   }),
   Object.freeze({
-    name: 'Mounted SVG/Result replacement',
-    importTargets: Object.freeze([
-      'services/svg-serialization.js',
-      'app/preview-runtime.js'
-    ]),
-    operatorPattern: /\b(?:serializeCleanSvg|flushActiveResult)\s*\(|\b(?:results|state\.results)\.value(?:\[[^\]]+\])?\s*=(?!=)/g
+    name: 'Result content commit',
+    importTargets: Object.freeze(['app/preview-runtime.js']),
+    operatorPattern: /\bflushActiveResult\s*\(|\b(?:results|state\.results)\.value(?:\[[^\]]+\])?\s*=(?!=)/g
+  }),
+  Object.freeze({
+    name: 'SVG serialization',
+    importTargets: Object.freeze(['services/svg-serialization.js']),
+    operatorPattern: /\bserializeCleanSvg\s*\(/g
   }),
   Object.freeze({
     name: 'History',

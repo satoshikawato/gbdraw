@@ -698,6 +698,12 @@ const policyContractions = [];
 const policyExpansions = [];
 const missingPolicyKeys = [];
 const addedPolicyKeys = [];
+// A capability key that this (trusted) detector does not define authorizes nothing.
+const retiredPolicyKeys = [];
+const detectedCapabilityKeys = new Set(WEB_PRIVILEGED_CAPABILITY_KEYS);
+const isRetiredPolicyKey = (section, name) => (
+  section === 'allowedPrivilegedOwners' && !detectedCapabilityKeys.has(name)
+);
 let policyTopLevelKeysMatch = true;
 if (basePolicySource !== null && changed.has(policyPath)) {
   proposedPolicy = parsePolicy(readHeadFile(policyPath), head || 'working tree');
@@ -710,7 +716,8 @@ if (basePolicySource !== null && changed.has(policyPath)) {
     });
     Object.entries(policy[section]).forEach(([name, allowedPaths]) => {
       if (!Object.hasOwn(proposedPolicy[section], name)) {
-        missingPolicyKeys.push(`${section}.${name}`);
+        (isRetiredPolicyKey(section, name) ? retiredPolicyKeys : missingPolicyKeys)
+          .push(`${section}.${name}`);
       }
       const proposedPaths = new Set(proposedPolicy[section][name] || []);
       allowedPaths.forEach((path) => {
@@ -1305,6 +1312,7 @@ const pureSafePolicyContraction = Boolean(
   && policyContractions.length
   && !policyExpansions.length
   && !missingPolicyKeys.length
+  && !retiredPolicyKeys.length
   && !addedPolicyKeys.length
   && policyTopLevelKeysMatch
   && !unapprovedCapabilities.length
@@ -2105,6 +2113,10 @@ const report = [
   '## Missing base privileged allowlist keys',
   '',
   ...list(missingPolicyKeys),
+  '',
+  '## Removed retired privileged allowlist keys',
+  '',
+  ...list(retiredPolicyKeys),
   '',
   '## Added privileged allowlist keys',
   '',
