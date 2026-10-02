@@ -68,6 +68,13 @@ at 0.75 pt per px, the same physical size as the CLI (CairoSVG) PDF; a
 the spaces in curved and tick labels, so text such as `1 kbp` can be searched
 and copied.
 
+CairoSVG ignores `dominant-baseline` on curved text, such as circular tick
+labels, and places `hanging` and `middle` text on other baselines than
+browsers. Before conversion, gbdraw gives that text the browser baseline
+offset, computed from the packaged font metrics, so command-line and Python
+PNG, PDF, EPS, and PS text sits where browsers draw the SVG. The SVG file is
+not changed.
+
 Mixed inline text formatting, such as italic markup inside a species label,
 does not reliably survive conversion to PNG, PDF, EPS, or PS. Keep SVG when
 that formatting must remain exact.

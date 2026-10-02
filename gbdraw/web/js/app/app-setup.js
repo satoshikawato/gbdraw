@@ -2265,7 +2265,9 @@ export const createAppSetup = () => {
       });
     },
     synchronizeLabelEditor(context) {
-      if (!context.bindingOptions.trustedRestore && shouldSyncMountedLabelEditor()) {
+      const labelsChanged = labelProjectionResultIdentity === context.resultIdentity;
+      labelProjectionResultIdentity = '';
+      if (!context.bindingOptions.trustedRestore && (labelsChanged || shouldSyncMountedLabelEditor())) {
         featureActions.syncLabelEditor({
           requiredFeatureIds: context.bindingOptions.requiredLabelFeatureIds,
           optionalFeatureIds: context.bindingOptions.optionalLabelFeatureIds
@@ -2668,12 +2670,19 @@ export const createAppSetup = () => {
   // an Undo reaches a Result that is displayed again.
   const projectedEditorStateByResult = new Map();
   let lastBoundResultIdentity = '';
+  // A displayed Result whose label intent changed since it was last shown
+  // receives the label projection in the binder's label step, also when no
+  // label intent remains (an undone or replaced Label TSV import).
+  let labelProjectionResultIdentity = '';
   const currentEditorProjectionState = () => ({
     colors: [
       toRaw(appliedPaletteColors.value),
       JSON.stringify([manualSpecificRules, featureColorOverrides, legendColorOverrides])
     ],
-    visibility: JSON.stringify([featureVisibilityOverrides, featureVisibilityManualRules])
+    visibility: JSON.stringify([featureVisibilityOverrides, featureVisibilityManualRules]),
+    labels: JSON.stringify([
+      labelTextFeatureOverrides, labelTextBulkOverrides, labelTextFeatureOverrideSources, labelVisibilityOverrides
+    ])
   });
   const sameColors = (left, right) => left[0] === right[0] && left[1] === right[1];
   const rememberCommittedEditorState = (context) => {
@@ -2726,6 +2735,7 @@ export const createAppSetup = () => {
     const previous = projectedEditorStateByResult.get(identity) || current;
     const colors = !sameColors(previous.colors, current.colors);
     const visibility = previous.visibility !== current.visibility;
+    labelProjectionResultIdentity = previous.labels !== current.labels ? identity : '';
     let operations = null;
     try {
       operations = compileDisplayedResultOperations(context.resultIndex);

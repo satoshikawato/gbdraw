@@ -81,20 +81,22 @@ const resolveDefaultLabelText = (metadata, editableLabelEntry = null) => {
   return '';
 };
 
-const buildFeatureIdsBySourceText = (editableLabels) => {
+// The features whose label shows each source text: the displayed labels, and
+// the recorded source of a feature in any Result, so that a bulk label edit
+// reaches every Result of a batch (B6).
+const buildFeatureIdsBySourceText = (editableLabels, featureOverrideSources) => {
   const featureIdsBySourceText = new Map();
-  if (!Array.isArray(editableLabels)) return featureIdsBySourceText;
-
-  editableLabels.forEach((entry) => {
-    const sourceText = String(entry?.sourceText || '');
-    const featureIdKey = normalizeFeatureIdKey(entry?.featureId);
+  const add = (sourceTextRaw, featureIdRaw) => {
+    const sourceText = String(sourceTextRaw || '');
+    const featureIdKey = normalizeFeatureIdKey(featureIdRaw);
     if (!sourceText || !featureIdKey) return;
     if (!featureIdsBySourceText.has(sourceText)) {
       featureIdsBySourceText.set(sourceText, new Set());
     }
     featureIdsBySourceText.get(sourceText).add(featureIdKey);
-  });
-
+  };
+  (Array.isArray(editableLabels) ? editableLabels : []).forEach((entry) => add(entry?.sourceText, entry?.featureId));
+  Object.entries(featureOverrideSources || {}).forEach(([featureId, sourceText]) => add(sourceText, featureId));
   return featureIdsBySourceText;
 };
 
@@ -126,7 +128,7 @@ export const buildLabelOverrideRows = (featureOverrides, bulkOverrides, options 
   });
   const featureMetadataById = buildFeatureMetadataMap(options.extractedFeatures);
   const editableLabelByFeatureId = buildEditableLabelByFeatureId(options.editableLabels);
-  const featureIdsBySourceText = buildFeatureIdsBySourceText(options.editableLabels);
+  const featureIdsBySourceText = buildFeatureIdsBySourceText(options.editableLabels, options.featureOverrideSources);
   const featureUniquenessIndex = buildFeatureUniquenessIndexFromMetadata(featureMetadataById);
   const featureOverrideKeyById = new Map();
   toSortedKeys(featureOverrides).forEach((featureIdRaw) => {

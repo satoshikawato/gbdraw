@@ -137,44 +137,44 @@
       "sha256": "b781d65863040613a07d16b556afd480abf72f5c2afab99e2a8f51f699f162d3"
     },
     "gallery/thumbnails/BGC0000708-BGC0000713.webp": {
-      "bytes": 17830,
-      "sha256": "4503c9c4754f8b694cfce5ddce49ba6d6742a21fd1bd00f7a9dc2f585bc3da90"
+      "bytes": 17878,
+      "sha256": "b335189dcf42e16259805215ce5f6ec70370a77139ab271d9db7883c71e7c400"
     },
     "gallery/thumbnails/HmmtDNA_ATskew.webp": {
-      "bytes": 22428,
-      "sha256": "bc4cca2231e747550c6fa8f6fd093b67d5214356b3735cbf7323f2143cb44dfe"
+      "bytes": 22334,
+      "sha256": "4c0ed9d2ea243f78426f543ead39a71664984b2916a94c12f7cbc2c853e25fe3"
     },
     "gallery/thumbnails/HmmtDNA_basic_circular.webp": {
-      "bytes": 18818,
-      "sha256": "e5a4b2a92ed39f819780584fbd1aa945e04164a9999485379a3406e34ef6efad"
+      "bytes": 18782,
+      "sha256": "b4b0eb809ed82cce99f6f4c80052a02e122588bdd7a3fdbdc9982417b6c262be"
     },
     "gallery/thumbnails/Vnig_TUMSAT-TG-2018.webp": {
-      "bytes": 27748,
-      "sha256": "3a8e1a02474ac90e7f535d32e15f5eec8f7796de25b2169a33823c1b94b36aaf"
+      "bytes": 28024,
+      "sha256": "d815f6a226a5ff2a95d6e1c5e18121400d5b98d9db706106973eaf5defce75bb"
     },
     "gallery/thumbnails/hepatoplasmataceae_collinear.webp": {
-      "bytes": 20402,
-      "sha256": "590421107d04feb8f753c47a5e2c16d900879fdc547c93cfd7f06c20fa6f5616"
+      "bytes": 20468,
+      "sha256": "44a272742cc8d6cfbadf19097331cb6edba81ceb6eb47b12adb1aa59195e2eba"
     },
     "gallery/thumbnails/hepatoplasmataceae_orthogroup.webp": {
-      "bytes": 22384,
-      "sha256": "e6b4fced24656fe968a308ae761ca12ee2094014c45792fa1bf3d5aaaef68d72"
+      "bytes": 22378,
+      "sha256": "3dc267f7eb289a91e309457cb5c3dca176007145baffcff2e8007c73b6a1ec7a"
     },
     "gallery/thumbnails/lambda_basic_linear.webp": {
-      "bytes": 22414,
-      "sha256": "9ffeaa8a41c181d02fd950f99960f5c948a17e7d3364b13cd5429a8f83277b51"
+      "bytes": 22354,
+      "sha256": "a5b0744bbbe96f51df541ba9cc985d2f8be822774f271d8b167e2d5a4f1f2f78"
     },
     "gallery/thumbnails/majanivirus_orthogroup.webp": {
-      "bytes": 15862,
-      "sha256": "66087be6333a4ada41c6a9785c8a9ad2e785fb32f66f00b88c624d128e7d3f50"
+      "bytes": 15854,
+      "sha256": "d4f5f591d6810da018b61f50d5c8ee6bbf16cccd35d72ba057f341bcedce26d4"
     },
     "gallery/thumbnails/tobacco-chloroplast.webp": {
-      "bytes": 19562,
-      "sha256": "b3f651b8615d7a8ad9e1ff626bc50f2c2a1cbb8a4ea0cf1a93c2f44b519d344e"
+      "bytes": 19504,
+      "sha256": "f6183e463a20c7dd2327df999a5c6a5839c889e4b6dc6afded16adf01ec279fc"
     },
     "gallery/thumbnails/vibrio-harveyi-group-collinear.webp": {
-      "bytes": 8554,
-      "sha256": "db4d325de35e1d42ad9192b3096e4f2f8551aef58e76e79e6630238516d86a6e"
+      "bytes": 8436,
+      "sha256": "d1409761a57c7c0a9973bea7e9f9cd8f1b18fc2cb8e8ba4975239fd9878d53aa"
     }
   },
   "inventory": "tools.prepare_interactive_gallery_assets.EXAMPLES",
