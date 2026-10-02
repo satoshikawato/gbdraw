@@ -111,7 +111,6 @@ const resetEditorDraftState = (state) => {
   state.labelOverrideBuildWarning.value = '';
   state.autoLabelReflowEnabled.value = false;
   state.labelReflowLastError.value = null;
-  state.labelLayoutDirtyReason.value = '';
 
   state.featureSearch.value = '';
   state.labelSearch.value = '';

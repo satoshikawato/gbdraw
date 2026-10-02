@@ -475,7 +475,6 @@ const labelReflowRequestReason = ref('');
 const labelReflowForceRequestSeq = ref(0);
 const labelReflowForceRequestReason = ref('');
 const labelReflowLastError = ref(null);
-const labelLayoutDirtyReason = ref('');
 
 // SVG Feature Click state
 const svgContainer = ref(null);
@@ -997,7 +996,6 @@ export const state = {
   labelReflowForceRequestSeq,
   labelReflowForceRequestReason,
   labelReflowLastError,
-  labelLayoutDirtyReason,
   svgContainer,
   clickedFeature,
   clickedFeaturePos,

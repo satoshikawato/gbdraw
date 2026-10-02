@@ -304,7 +304,6 @@ assert.equal(appliedPreviewChanges.length, previewChangeCountBeforeStaleApply);
       featureVisibilityOverrides: overrides,
       featureVisibilitySelectorCache: {},
       featureVisibilityScopeDialog: scopeDialog,
-      labelLayoutDirtyReason: ref(''),
       resultGenerationKey: ref('generation-1'),
       results: ref([{ name: 'one.svg', content: '<svg></svg>' }]),
       selectedResultIndex: ref(0),
