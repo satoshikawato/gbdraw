@@ -13,11 +13,11 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-import cairosvg
 from PIL import Image, ImageDraw, ImageFont
 
 from gbdraw.exceptions import GbdrawError
 from gbdraw.features.ids import compute_feature_hash_from_parts
+from gbdraw.render.export import convert_svg_with_cairosvg, get_cairosvg
 from gbdraw.render.interactive_svg import InteractiveSvgContext, enrich_svg
 from gbdraw.session_io import load_session, write_session_json
 from gbdraw.web_support.feature_catalog import (
@@ -1368,8 +1368,12 @@ def _render_thumbnail(
     allow_placeholder: bool = True,
 ) -> None:
     source_path = example.source_svg_path if example.source_svg_path.exists() else example.output_svg_path
+    cairosvg_module = get_cairosvg()
     try:
-        png_bytes = cairosvg.svg2png(
+        png_bytes = convert_svg_with_cairosvg(
+            source_path.read_bytes(),
+            "png",
+            cairosvg_module=cairosvg_module,
             url=str(source_path),
             output_width=720,
             background_color="white",
