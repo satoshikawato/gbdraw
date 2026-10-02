@@ -514,18 +514,20 @@ export const createFeatureLabelActions = ({ state, previewRuntime = null, rulePr
     return changed;
   };
 
-  const applyStoredOverridesToSvg = (svg) => {
+  // The label text intent on one SVG: each editable label shows its feature
+  // override, else the bulk override of its source text, else that source
+  // text. A label edited, imported, undone, or reset while another Result was
+  // displayed therefore shows the current intent here (R3).
+  const projectLabelTextIntent = (svg) => {
     let changed = false;
-    const labelElements = svg.querySelectorAll(EDITABLE_LABEL_SELECTOR);
-    labelElements.forEach((textEl) => {
-      const sourceText = textEl.getAttribute('data-label-source-text') || getLabelText(textEl);
-      const featureId = textEl.getAttribute('data-label-feature-id');
-      const currentText = getLabelText(textEl);
-      const desiredText =
-        (featureId ? labelTextFeatureOverrides[featureId] : undefined) ??
-        labelTextBulkOverrides[sourceText];
-      if (desiredText === undefined) return;
-      if (currentText === desiredText) return;
+    svg.querySelectorAll(EDITABLE_LABEL_SELECTOR).forEach((textEl) => {
+      const featureId = textEl.getAttribute(LABEL_FEATURE_ID_ATTRIBUTE);
+      const sourceText = (featureId ? labelTextFeatureOverrideSources[featureId] : undefined)
+        ?? textEl.getAttribute('data-label-source-text') ?? getLabelText(textEl);
+      textEl.setAttribute('data-label-source-text', sourceText);
+      const desiredText = (featureId ? labelTextFeatureOverrides[featureId] : undefined)
+        ?? labelTextBulkOverrides[sourceText] ?? sourceText;
+      if (getLabelText(textEl) === desiredText) return;
       setLabelText(textEl, desiredText);
       changed = true;
     });
@@ -709,31 +711,27 @@ export const createFeatureLabelActions = ({ state, previewRuntime = null, rulePr
       { allowMissing: true }
     );
 
-    const textChanged = applyStoredOverridesToSvg(svg);
+    projectLabelIntent(svg, { queueIncompleteVisibility });
+  };
+
+  // One projection of the label intent onto the mounted Result, shared by a
+  // live edit, a Label TSV import, History apply, and the display of a Result.
+  const projectLabelIntent = (svg, { queueIncompleteVisibility = true } = {}) => {
+    const textChanged = projectLabelTextIntent(svg);
     const visibilityProjection = applyStoredVisibilityOverridesToSvg(svg);
     refreshEditableList(svg);
     syncClickedFeatureLabelState();
-    if (textChanged || visibilityProjection.changed) {
-      serializeCurrentSvg(svg);
-    }
+    const changed = textChanged || visibilityProjection.changed;
+    if (changed) serializeCurrentSvg(svg);
     if (queueIncompleteVisibility && visibilityProjection.unavailableOverride) {
       queueLabelReflow('label-visibility-binding-refresh', true);
     }
+    return changed;
   };
 
   const reconcileLabelOverrides = () => {
     const svg = svgContainer.value?.querySelector?.('svg');
-    if (!svg) return false;
-    const resetChanged = resetLabelsToSourceText(svg);
-    const overrideChanged = applyStoredOverridesToSvg(svg);
-    const visibilityProjection = applyStoredVisibilityOverridesToSvg(svg);
-    refreshEditableList(svg);
-    syncClickedFeatureLabelState();
-    if (resetChanged || overrideChanged || visibilityProjection.changed) serializeCurrentSvg(svg);
-    if (visibilityProjection.unavailableOverride) {
-      queueLabelReflow('label-visibility-binding-refresh', true);
-    }
-    return resetChanged || overrideChanged || visibilityProjection.changed;
+    return svg ? projectLabelIntent(svg) : false;
   };
 
   // A feature visibility edit shows or hides the feature's label in the same
@@ -993,6 +991,34 @@ export const createFeatureLabelActions = ({ state, previewRuntime = null, rulePr
     queueLabelReflow('reset');
   };
 
+  // A Label TSV row selects labels in every Result of a batch. The displayed
+  // Result binds its labels as the editor does; the committed content of
+  // another Result carries the renderer's label bindings (B6).
+  const labelSourceText = (element, featureId) => (
+    (featureId ? labelTextFeatureOverrideSources[featureId] : undefined)
+    ?? element.getAttribute('data-label-source-text') ?? getLabelText(element)
+  );
+  const labelImportTargets = (svg) => {
+    const elements = collectEditableLabelElements(svg, mode.value);
+    const assignments = assignFeatureIdsToLabels(svg, elements, collectFeatureGeometry(svg), mode.value);
+    const targets = elements.map((element) => {
+      const featureId = assignments.get(element) || '';
+      return { featureId, sourceText: labelSourceText(element, featureId) };
+    });
+    const seen = new Set(targets.map(({ featureId }) => featureId).filter(Boolean));
+    results.value.forEach((result, index) => {
+      if (index === selectedResultIndex.value || typeof result?.content !== 'string') return;
+      const root = new DOMParser().parseFromString(result.content, 'image/svg+xml').documentElement;
+      root.querySelectorAll(`text[${LABEL_FEATURE_ID_ATTRIBUTE}]`).forEach((element) => {
+        const featureId = String(element.getAttribute(LABEL_FEATURE_ID_ATTRIBUTE) || '').trim();
+        if (!featureId || seen.has(featureId)) return;
+        seen.add(featureId);
+        targets.push({ featureId, sourceText: labelSourceText(element, featureId) });
+      });
+    });
+    return targets;
+  };
+
   let labelImportRevision = 0;
   const labelImportFailure = ref(null);
   const canRetryLabelImportFailure = computed(() => Boolean(labelImportFailure.value
@@ -1026,14 +1052,7 @@ export const createFeatureLabelActions = ({ state, previewRuntime = null, rulePr
       const rows = parseLabelOverrideTsv(text);
 
       const svg = sourceSvg;
-      const elements = svg ? collectEditableLabelElements(svg, mode.value) : [];
-      const assignments = svg ? assignFeatureIdsToLabels(svg, elements, collectFeatureGeometry(svg), mode.value) : new Map();
-      const labels = elements.map((element, index) => ({
-        key: `label-${index + 1}`,
-        featureId: assignments.get(element) || '',
-        sourceText: labelTextFeatureOverrideSources[assignments.get(element)]
-          ?? element.getAttribute('data-label-source-text') ?? getLabelText(element)
-      }));
+      const labels = svg ? labelImportTargets(svg) : [];
       const byId = new Map(extractedFeatures.value.map((feature) => [normalizeKeyToken(feature.svg_id), feature]));
       const evaluation = await rulePreparation.evaluate({
         kind: 'label', rules: rows,
@@ -1049,69 +1068,37 @@ export const createFeatureLabelActions = ({ state, previewRuntime = null, rulePr
         window.alert(`Loaded ${rows.length} row(s). No diagram is currently displayed.`);
         return;
       }
-      syncLabelEditor();
-      const operations = [];
+
+      // The import replaces the label intent once; the displayed Result shows
+      // it now and every other Result when it is displayed (B6, R3).
+      clearOverrides();
+      let appliedCount = 0;
+      let skippedNonTrackableCount = 0;
       labels.forEach((entry, index) => {
         const matchedRow = rows[evaluation.winners[index]];
         if (!matchedRow) return;
-        operations.push({
-          key: String(entry.key || ''), featureId: String(entry.featureId || ''),
-          sourceText: String(entry.sourceText || ''), nextText: String(matchedRow.labelText ?? ''),
-          isGlobalLabelRule: Boolean(matchedRow.isGlobalLabelRule)
-        });
-      });
-
-      const resetChanged = resetLabelsToSourceText(svg);
-      clearOverrides();
-
-      let appliedCount = 0;
-      let skippedNonTrackableCount = 0;
-      const nextFeatureOverrides = {};
-      const nextBulkOverrides = {};
-
-      operations.forEach((operation) => {
-        if (!operation.key) return;
-        const target = svg.querySelector(`text[data-label-key="${CSS.escape(operation.key)}"]`);
-        if (!target) return;
-        setLabelText(target, operation.nextText);
-        appliedCount += 1;
-
-        if (operation.isGlobalLabelRule) {
-          if (operation.sourceText) {
-            nextBulkOverrides[operation.sourceText] = operation.nextText;
-          }
+        // A global `label` row follows the source text; any other row its feature.
+        const key = matchedRow.isGlobalLabelRule ? entry.sourceText : entry.featureId;
+        if (!key) {
+          skippedNonTrackableCount += 1;
           return;
         }
-        if (operation.featureId) {
-          nextFeatureOverrides[operation.featureId] = operation.nextText;
-        } else {
-          skippedNonTrackableCount += 1;
+        const overrides = matchedRow.isGlobalLabelRule ? labelTextBulkOverrides : labelTextFeatureOverrides;
+        overrides[key] = String(matchedRow.labelText ?? '');
+        if (entry.featureId && entry.sourceText) {
+          labelTextFeatureOverrideSources[entry.featureId] = entry.sourceText;
         }
-      });
-
-      Object.entries(nextFeatureOverrides).forEach(([featureId, labelText]) => {
-        labelTextFeatureOverrides[featureId] = labelText;
-      });
-      operations.forEach((operation) => {
-        if (!operation.featureId || !operation.sourceText) return;
-        labelTextFeatureOverrideSources[operation.featureId] = operation.sourceText;
-      });
-      Object.entries(nextBulkOverrides).forEach(([sourceText, labelText]) => {
-        if (!sourceText) return;
-        labelTextBulkOverrides[sourceText] = labelText;
+        appliedCount += 1;
       });
 
       closeLabelTextScopeDialog();
       closeGlobalLabelModeDialog();
-      if (resetChanged || appliedCount > 0) {
-        serializeCurrentSvg(svg);
-      }
       syncLabelEditor();
       queueLabelReflow('load');
 
       let message = `Loaded ${rows.length} row(s). Applied to ${appliedCount} label(s).`;
       if (skippedNonTrackableCount > 0) {
-        message += ` ${skippedNonTrackableCount} match(es) lacked a feature key and were not tracked for re-export.`;
+        message += ` ${skippedNonTrackableCount} match(es) lacked a feature key and were not applied.`;
       }
       if (state.errorLog?.value === labelImportFailure.value?.error) state.errorLog.value = null;
       labelImportFailure.value = null;

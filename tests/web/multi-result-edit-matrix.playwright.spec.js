@@ -4,9 +4,10 @@
 // export and Session source): after a Result 1 -> 2 round trip, after Generate,
 // and after Save, a fresh Load and Generate. The drawer lists the displayed
 // Result's record (FE-05). Scoped color and visibility reach Result 1; label
-// edits stay with their feature (FE-01 to FE-03, PV-09). The grid and Linear
-// topologies are in live-edit-generate-equivalence (G-A). Batch Label TSV import
-// is a known residual (P12 follow-up) and is not covered.
+// edits stay with their feature (FE-01 to FE-03, PV-09). A Label TSV imported on
+// Result 1 reaches Result 2 the same way, and Undo and Redo reach both Results
+// as one step (B6, R3). The grid and Linear topologies are in
+// live-edit-generate-equivalence (G-A).
 const { test, expect } = require('@playwright/test');
 const { generateAndWaitForResult } = require('./helpers/app-lifecycle.cjs');
 const { editFeature, openBatch, settle } = require('./helpers/audit-browser.cjs');
@@ -174,4 +175,68 @@ test('Circular batch: edits made on Result 2 reach both Results through selectio
   } finally {
     await reloaded.context().close();
   }
+});
+
+// B6 (R2, R3): one Label TSV import while Result 1 is displayed. The rows select
+// a Result 2 feature, a feature label on both Results, and (global `label` row)
+// one source text on both Results.
+const LABEL_TSV = [
+  '*\tCDS\tlocus_tag\t^TESTB_0003$\tIMPORTED_B3',
+  '*\tCDS\tlabel\t^codon start two$\tIMPORTED_CST',
+  '*\t*\tlabel\t^gtg start$\tIMPORTED_GTG'
+].join('\n') + '\n';
+const ORIGINAL_LABELS = [
+  [['TESTA_0003', 'origin spanning protein'], ['TESTA_0005', 'codon start two'], ['TESTA_0006', 'gtg start']],
+  [['TESTB_0003', 'origin spanning protein'], ['TESTB_0005', 'codon start two'], ['TESTB_0006', 'gtg start']]
+];
+const IMPORTED_LABELS = [
+  [['TESTA_0003', 'origin spanning protein'], ['TESTA_0005', 'IMPORTED_CST'], ['TESTA_0006', 'IMPORTED_GTG']],
+  [['TESTB_0003', 'IMPORTED_B3'], ['TESTB_0005', 'IMPORTED_CST'], ['TESTB_0006', 'IMPORTED_GTG']]
+];
+
+// Labels that differ from the expected ones, displaying each Result in turn.
+const labelViolations = async (page, stage, ids, expected) => {
+  const failed = [];
+  for (const [index, labels] of expected.entries()) {
+    await show(page, index);
+    const state = await resultState(page, ids);
+    for (const source of ['mounted', 'content']) {
+      for (const [tag, text] of labels) {
+        const value = state[source].labels[tag];
+        if (value !== text) failed.push(`${stage} Result ${index + 1} ${source}: ${tag} (got ${JSON.stringify(value)})`);
+      }
+    }
+  }
+  return failed;
+};
+
+test('Circular batch: a Label TSV imported on Result 1 reaches Result 2 live, through Undo and Redo, and after Generate', async ({ page }) => {
+  test.setTimeout(600_000);
+  await openBatch(page);
+  const ids = await featureIds(page);
+  expect(await labelViolations(page, 'before import', ids, ORIGINAL_LABELS)).toEqual([]);
+
+  await show(page, 0);
+  const undoCount = () => page.evaluate(() => window.__GBDRAW_HISTORY__.getUndoCount());
+  const before = await undoCount();
+  await page.evaluate((tsv) => window.__GBDRAW_APP__.loadLabelOverrideTable({
+    target: { files: [new File([tsv], 'labels.tsv')], value: 'labels.tsv' }
+  }), LABEL_TSV);
+  await settle(page);
+  expect(await undoCount()).toBe(before + 1);
+  expect.soft(await labelViolations(page, 'import', ids, IMPORTED_LABELS)).toEqual([]);
+
+  // Undo and Redo run while Result 2 is displayed; Result 1 follows when shown.
+  await page.evaluate(() => window.__GBDRAW_HISTORY__.undo());
+  await settle(page);
+  expect(await undoCount()).toBe(before);
+  expect.soft(await labelViolations(page, 'Undo', ids, ORIGINAL_LABELS)).toEqual([]);
+
+  await page.evaluate(() => window.__GBDRAW_HISTORY__.redo());
+  await settle(page);
+  expect.soft(await labelViolations(page, 'Redo', ids, IMPORTED_LABELS)).toEqual([]);
+
+  await generateAndWaitForResult(page);
+  await settle(page);
+  expect.soft(await labelViolations(page, 'Generate', ids, IMPORTED_LABELS)).toEqual([]);
 });
