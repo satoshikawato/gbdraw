@@ -247,8 +247,25 @@ const cliBlastSessions = {
     ], { cwd: directory, env: { ...process.env, PYTHONPATH: root }, timeout: 600_000, maxBuffer: 1_000_000 });
     return session;
   },
-  'main v42 CLI': async () => path.join(root, 'tests/fixtures/sessions/se06-main-linear-blast-cli.v42.gbdraw-session.json.gz')
+  'main v42 CLI': async () => path.join(root, 'tests/fixtures/sessions/se06-main-linear-blast-cli.v42.gbdraw-session.json.gz'),
+  // B3: one multi-record file gives records `record-1:1` and `record-1:2`.
+  'current CLI multi-record': async (directory) => {
+    writeFileSync(path.join(directory, 'R2c_R3c.tsv'), 'R2c\tR3c\t100.000\t1000\t0\t0\t2001\t3000\t1\t1000\t0.0\t1847\n');
+    const session = path.join(directory, 'cli-multi-record.gbdraw-session.json.gz');
+    await promisify(execFile)('python', [
+      '-m', 'gbdraw.cli', 'linear', '--gbk', path.join(root, 'tests/fixtures/web_comparison_shared_block.gb'),
+      '-b', 'R2c_R3c.tsv', '-o', 'cli-multi-record', '--session_output', session
+    ], { cwd: directory, env: { ...process.env, PYTHONPATH: root }, timeout: 600_000, maxBuffer: 1_000_000 });
+    return session;
+  }
 };
+// Same pairs and orientation: endpoint records, coordinates, and x spans.
+const ribbonGeometry = (ribbons) => ribbons.map(({ data, queryX, subjectX }) => ({
+  query: [data['query-record-id'], data.qstart, data.qend],
+  subject: [data['subject-record-id'], data.sstart, data.send],
+  queryX,
+  subjectX
+}));
 for (const [source, writeSession] of Object.entries(cliBlastSessions)) {
   test(`a ${source} Linear BLAST Session inherits its comparison and generates`, async ({ page }, testInfo) => {
     test.setTimeout(600_000);
@@ -270,8 +287,7 @@ for (const [source, writeSession] of Object.entries(cliBlastSessions)) {
     });
     await settle(page);
     await generateAndWaitForResult(page);
-    expect((await committedRibbons(page)).map(({ queryX, subjectX }) => ({ queryX, subjectX })))
-      .toEqual(loaded.map(({ queryX, subjectX }) => ({ queryX, subjectX })));
+    expect(ribbonGeometry(await committedRibbons(page))).toEqual(ribbonGeometry(loaded));
   });
 }
 

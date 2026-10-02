@@ -36,7 +36,8 @@ const buildHarness = ({
   svg = labelSvg(),
   featureId = 'feature:one/[a]',
   labelKey = 'label-1',
-  visibilityOverrides = {}
+  visibilityOverrides = {},
+  rulePreparation = {}
 } = {}) => {
   const mutations = { dirty: 0, flush: 0 };
   const state = {
@@ -90,7 +91,7 @@ const buildHarness = ({
         mutations.flush += 1;
       }
     },
-    rulePreparation: {}
+    rulePreparation
   });
   return { actions, mutations, state, svg };
 };
@@ -291,4 +292,66 @@ test('a feature visibility edit commits its label once and queues the label refl
     assert.equal(part.getAttribute('display'), null);
   });
   assert.equal(harness.state.labelReflowRequestSeq.value, 1, 'a declined reflow is not queued');
+});
+
+// B6 (R2, R3): a Label TSV import writes the label intent of every batch Result
+// once. The displayed Result binds its labels as the editor does; another
+// Result's committed content carries the renderer's label bindings.
+const batchLabel = (featureId, source, extra = '') => [
+  `<path data-gbdraw-feature-id="${featureId}" d="M0 0" />`,
+  `<text ${extra}data-label-feature-id="${featureId}" data-gbdraw-label-binding-schema="1" `,
+  `data-label-source-text="${source}"></text>`
+].join('');
+
+test('a Label TSV import writes the label intent of every batch Result once (B6)', async () => {
+  const displayed = new DOMParser().parseFromString(
+    `<svg>${batchLabel('fa', 'alpha', 'dominant-baseline="central" ')}</svg>`, 'image/svg+xml'
+  ).documentElement;
+  displayed.querySelector('text').textContent = 'alpha';
+  const evaluated = [];
+  const harness = buildHarness({
+    svg: displayed,
+    featureId: 'fa',
+    rulePreparation: {
+      snapshot: () => ({}),
+      isCurrent: () => true,
+      async evaluate({ features, rules }) {
+        evaluated.push(features.map((feature) => feature.label));
+        return { winners: features.map((feature) => rules.findIndex((rule) => (
+          new RegExp(rule.valueRegex).test(feature.label)
+        ))) };
+      }
+    }
+  });
+  const { state, actions } = harness;
+  state.errorLog = ref(null);
+  state.results.value = [{ content: '<svg></svg>' }, { content: `<svg>${batchLabel('fb', 'beta')}</svg>` }];
+  const messages = [];
+  globalThis.window = { alert: (message) => messages.push(message) };
+  try {
+    const tsv = '*\tCDS\tlabel\t^beta$\tIMPORTED_B\n*\t*\tlabel\t^alpha$\tBULK_A\n';
+    await actions.loadLabelOverrideTable({ target: { files: [{ text: async () => tsv }], value: 'labels.tsv' } });
+  } finally {
+    delete globalThis.window;
+  }
+  assert.deepEqual(evaluated, [['alpha', 'beta']], 'one evaluation covers the labels of both Results');
+  assert.deepEqual(state.labelTextFeatureOverrides, { fb: 'IMPORTED_B' });
+  assert.deepEqual(state.labelTextBulkOverrides, { alpha: 'BULK_A' });
+  assert.deepEqual(state.labelTextFeatureOverrideSources, { fa: 'alpha', fb: 'beta' });
+  assert.equal(displayed.querySelector('text').textContent, 'BULK_A');
+  assert.deepEqual(harness.mutations, { dirty: 1, flush: 1 });
+  assert.deepEqual(messages, ['Loaded 2 row(s). Applied to 2 label(s).']);
+});
+
+// The display of a Result projects the current label intent, also when an
+// Undo or another import removed the intent it was last shown with.
+test('displaying a Result shows the current label intent when none remains (B6, R3)', () => {
+  const svg = new DOMParser().parseFromString(
+    `<svg>${batchLabel('fb', 'beta', 'dominant-baseline="central" ')}</svg>`, 'image/svg+xml'
+  ).documentElement;
+  svg.querySelector('text').textContent = 'IMPORTED_B';
+  const harness = buildHarness({ svg, featureId: 'fb' });
+  harness.actions.syncLabelEditor();
+  assert.equal(svg.querySelector('text').textContent, 'beta');
+  assert.deepEqual(harness.mutations, { dirty: 1, flush: 1 });
 });

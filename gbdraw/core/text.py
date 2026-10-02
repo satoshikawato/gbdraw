@@ -7,6 +7,7 @@ import os
 import shutil
 import subprocess
 import xml.etree.ElementTree as ET
+from dataclasses import dataclass
 from importlib import resources
 from typing import Dict, List, Mapping, Optional, Union
 
@@ -524,6 +525,85 @@ def calculate_svg_bbox_dimensions(
     return estimated_width, f_size
 
 
+@dataclass(frozen=True)
+class FontVerticalMetrics:
+    """Vertical font metrics as fractions of the font size (em units)."""
+
+    ascent: float
+    descent: float
+    x_height: float
+
+
+@functools.lru_cache(maxsize=64)
+def get_font_vertical_metrics(
+    font_family: str,
+    font_weight: str | int | float | None = "normal",
+    font_style: str | None = "normal",
+) -> Optional[FontVerticalMetrics]:
+    """Return the ascent, descent, and x-height of the font used for layout.
+
+    The font is resolved like :func:`calculate_bbox_dimensions`. Ascent and
+    descent follow FreeType, which browsers on Linux use: the OS/2 typo
+    metrics when USE_TYPO_METRICS is set, otherwise the hhea metrics.
+    """
+    font_path = _resolve_font_path(
+        font_family,
+        font_weight=font_weight,
+        font_style=font_style,
+    )
+    font = _get_cached_font(font_path) if font_path else None
+    if font is None:
+        return None
+    units_per_em = float(font["head"].unitsPerEm)
+    os2 = font["OS/2"] if "OS/2" in font else None
+    hhea = font["hhea"] if "hhea" in font else None
+    if os2 is not None and os2.fsSelection & (1 << 7):
+        ascent, descent = os2.sTypoAscender, -os2.sTypoDescender
+    elif hhea is not None and (hhea.ascent or hhea.descent):
+        ascent, descent = hhea.ascent, -hhea.descent
+    elif os2 is not None:
+        ascent, descent = os2.sTypoAscender, -os2.sTypoDescender
+    else:
+        ascent, descent = font["head"].yMax, -font["head"].yMin
+    x_height = float(getattr(os2, "sxHeight", 0) or 0)
+    if x_height <= 0 and "glyf" in font:
+        glyph_name = font.getBestCmap().get(ord("x"))
+        if glyph_name is not None:
+            x_height = float(getattr(font["glyf"][glyph_name], "yMax", 0) or 0)
+    if x_height <= 0:
+        x_height = ascent / 2.0
+    return FontVerticalMetrics(
+        ascent=ascent / units_per_em,
+        descent=descent / units_per_em,
+        x_height=x_height / units_per_em,
+    )
+
+
+def dominant_baseline_shift_em(dominant_baseline: str, metrics: FontVerticalMetrics) -> Optional[float]:
+    """Return how far browsers move horizontal glyphs down for ``dominant-baseline``.
+
+    The result is in em units, relative to the alphabetic baseline; positive
+    values move glyphs down (toward the glyph bottom). Values follow Chromium
+    for fonts without a BASE table. Unknown values return ``None``.
+    """
+    value = str(dominant_baseline or "").strip().lower()
+    if value in {"auto", "alphabetic"}:
+        return 0.0
+    if value == "middle":
+        return metrics.x_height / 2.0
+    if value == "central":
+        return (metrics.ascent - metrics.descent) / 2.0
+    if value == "hanging":
+        return 0.8 * metrics.ascent
+    if value == "mathematical":
+        return metrics.ascent / 2.0
+    if value == "text-before-edge":
+        return metrics.ascent
+    if value in {"text-after-edge", "ideographic"}:
+        return -metrics.descent
+    return None
+
+
 def create_text_element(
     text: str,
     x: float,
@@ -578,9 +658,12 @@ def parse_mixed_content_text(input_text: str) -> List[Dict[str, Union[str, bool,
 
 
 __all__ = [
+    "FontVerticalMetrics",
     "calculate_bbox_dimensions",
     "calculate_svg_bbox_dimensions",
     "create_text_element",
+    "dominant_baseline_shift_em",
+    "get_font_vertical_metrics",
     "get_text_bbox_size_pixels",
     "parse_mixed_content_text",
 ]
