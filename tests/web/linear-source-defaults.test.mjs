@@ -255,3 +255,23 @@ test('an explicit override equal to the file default survives a save and reload'
   assert.equal(projected.files.linearSeqs[1].definition, shared);
   assert.equal(projected.files.linearSeqs[1].record_subtitle, 'Chromosome 1');
 });
+
+test('a blank record Definition placeholder previews the inherited definition Generate draws', async () => {
+  const { readFileSync } = await import('node:fs');
+  const html = readFileSync(new URL('../../gbdraw/web/index.html', import.meta.url), 'utf8');
+  const input = html.split('\n').find((line) => line.includes('`Definition for sequence ${idx + 1}`'));
+  assert.ok(input, 'record Definition input not found');
+  // One rule: the placeholder uses the function that resolves the drawn text,
+  // so File default, then the inferred definition, then the example text.
+  assert.match(
+    input,
+    /:placeholder="resolveLinearRecordEffectiveDefinition\(seq, source\) \|\| 'e\.g\., Escherichia coli O157:H7 Sakai'"/
+  );
+
+  const inferredOnly = createLinearSeq({ inferred_definition: '<i>Vibrio</i> sp.' });
+  const source = { records: [{ sequence: inferredOnly }], sequence: inferredOnly };
+  assert.equal(resolveLinearRecordEffectiveDefinition(inferredOnly, source), '<i>Vibrio</i> sp.');
+  inferredOnly.file_definition = 'File default';
+  assert.equal(resolveLinearRecordEffectiveDefinition(inferredOnly, source), 'File default');
+  assert.equal(resolveLinearRecordEffectiveDefinition(createLinearSeq(), { records: [] }), '');
+});

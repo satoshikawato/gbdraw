@@ -343,6 +343,9 @@ decisions are in
 - The feature popup **Location** line reads only the location the popup click
   builds with the shared 1-based INSDC formatter; the unreachable fallback that
   rebuilt `start+1..end` from the feature envelope is removed (B7).
+- A blank Linear record **Definition** field now shows the text Generate draws
+  for it as its placeholder: the File default, else the definition inferred
+  from the record, else the example text (B5).
 
 <!-- web-gui-audit-20260930 P19 -->
 

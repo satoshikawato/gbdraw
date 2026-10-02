@@ -4257,4 +4257,7 @@ FEATURES             Location/Qualifiers
   await expect(page.getByLabel('Default definition for file 1')).toHaveValue('');
   await expect(page.getByLabel('Default subtitle for file 1')).toHaveValue('');
   await expect(page.getByText('Using file default')).toHaveCount(0);
+  // A blank record Definition previews what Generate draws: the inferred value.
+  await expect(page.getByLabel('Definition for sequence 1'))
+    .toHaveAttribute('placeholder', '<i>Escherichia coli</i> O157:H7 str. Sakai');
 });
