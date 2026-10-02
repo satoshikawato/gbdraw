@@ -43,6 +43,7 @@ INTERACTIVE_SVG_NAME = f"{OUTPUT_PREFIX}.interactive.svg"
 PNG_NAME = f"{OUTPUT_PREFIX}.png"
 PDF_NAME = f"{OUTPUT_PREFIX}.pdf"
 PNG_DPI = 300
+PDF_PT_PER_PX = 0.75
 PNG_MAGIC = b"\x89PNG\r\n\x1a\n"
 INTERACTIVE_ASSET_IDS = {
     "gbdraw-interactive-feature-metadata",
@@ -242,14 +243,16 @@ def _validate_pdf(
         raise AssertionError("PDF does not contain a readable MediaBox")
     values = tuple(float(value) for value in media_box.groups())
     page_dimensions = (values[2] - values[0], values[3] - values[1])
+    # D-17 (PD-OI-072): SVG lengths are CSS px (96 per inch) and the Web PDF
+    # page is the canvas at 0.75 pt per px, like the CLI (CairoSVG) PDF.
+    expected_page = tuple(length * PDF_PT_PER_PX for length in svg_dimensions)
     if any(
         not math.isclose(actual, expected, abs_tol=1.0)
-        for actual, expected in zip(
-            sorted(page_dimensions), sorted(svg_dimensions), strict=True
-        )
+        for actual, expected in zip(page_dimensions, expected_page, strict=True)
     ):
         raise AssertionError(
-            f"PDF page {page_dimensions} does not match SVG {svg_dimensions}"
+            f"PDF page {page_dimensions} pt does not match the SVG canvas "
+            f"{svg_dimensions} px at {PDF_PT_PER_PX} pt per px"
         )
     return {
         "filename": path.name,
