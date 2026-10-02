@@ -7,7 +7,6 @@ import argparse
 import gzip
 import json
 import math
-import os
 import re
 import shlex
 import shutil
@@ -29,6 +28,7 @@ if __package__:
         RecipeContractError,
         assert_gallery_bgc_definitions,
         assert_exact_workdir_files,
+        checkout_subprocess_environment,
         copy_declared_inputs,
         extract_executable_block,
         inspect_standard_svg,
@@ -45,6 +45,7 @@ else:
         RecipeContractError,
         assert_gallery_bgc_definitions,
         assert_exact_workdir_files,
+        checkout_subprocess_environment,
         copy_declared_inputs,
         extract_executable_block,
         inspect_standard_svg,
@@ -2485,7 +2486,7 @@ def run_scenario(
             workdir=workdir,
         )
         copied_inputs.update(_materialize_generated_tables(scenario_id, workdir))
-        environment = os.environ.copy()
+        environment = checkout_subprocess_environment()
         environment.update({"LC_ALL": "C.UTF-8", "PYTHONHASHSEED": "0", "TZ": "UTC"})
         if fontconfig_runtime is not None:
             environment = _hcli13_export_environment(
