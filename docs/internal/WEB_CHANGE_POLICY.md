@@ -429,6 +429,38 @@ Every capability and import-target key in the base policy must remain, including
 keys whose arrays become empty. The candidate runtime must remain covered by
 base authority, the proposed policy must cover head runtime, and all unrelated
 dependency, vendor, binary, integrity, and architecture gates remain blocking.
+The only exception is a retired capability key, defined below.
+
+### Splitting a capability
+
+A capability key is split, or renamed, in three pull requests in this order:
+
+1. Authority only: add each new key to `allowedPrivilegedOwners` with every
+   owner of the key it replaces. Do not change runtime, detectors, or the
+   checker.
+2. Checker only: after step 1 merges, replace the old detector entry in
+   `tools/web-architecture-detectors.mjs` with one entry per new key and
+   update the characterization in `tests/web/architecture-contracts.test.mjs`.
+   The old policy key is then retired: no trusted detector reports it, so it
+   authorizes nothing.
+3. Authority only: after step 2 merges, remove the retired key and reduce each
+   new key to the owners that its detector reports.
+
+A retired key may be removed only when the trusted base detector no longer
+defines it. Removing a key that the base detector still defines remains a
+blocking failure.
+
+The `Mounted SVG/Result replacement` capability is split this way into:
+
+- `Result content commit`: code that replaces the current Result, that is an
+  assignment to `results.value` or `state.results.value`, or a call to
+  `flushActiveResult(`; and
+- `SVG serialization`: code that serializes a mounted SVG with
+  `serializeCleanSvg(`.
+
+Web design rule R1 in `gbdraw/web/CLAUDE.md` limits which code may write the
+Result, so the `Result content commit` list only contracts. Do not preauthorize
+a new owner for it; route the write through an existing owner instead.
 
 ## Architecture evidence and authority
 
