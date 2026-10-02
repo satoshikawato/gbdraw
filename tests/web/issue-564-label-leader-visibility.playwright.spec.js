@@ -1,6 +1,6 @@
 const { test, expect } = require('@playwright/test');
 const { join } = require('node:path');
-const { openApp } = require('./helpers/app-lifecycle.cjs');
+const { openApp, evaluateWithRetainedPromise } = require('./helpers/app-lifecycle.cjs');
 const {
   seeds,
   load,
@@ -435,7 +435,7 @@ test('same label text in two Linear records changes only the selected exact iden
       first: sameLabelGenbank('Issue564A', 'atg'),
       second: sameLabelGenbank('Issue564B', 'gct')
     });
-    expect(await page.evaluate(() => window.__GBDRAW_APP__.runAnalysis())).toEqual({ status: 'ok' });
+    expect(await evaluateWithRetainedPromise(page, () => window.__GBDRAW_APP__.runAnalysis())).toEqual({ status: 'ok' });
     await page.evaluate(() => window.__GBDRAW_APP__.syncLabelEditor());
     const targets = await page.evaluate(() => {
       const app = window.__GBDRAW_APP__;

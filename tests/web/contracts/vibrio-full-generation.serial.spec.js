@@ -5,7 +5,8 @@ const { writeFileSync } = require('node:fs');
 const { join, resolve } = require('node:path');
 const {
   getDiagramWorkerActivity,
-  openApp
+  openApp,
+  evaluateWithRetainedPromise
 } = require('../helpers/app-lifecycle.cjs');
 
 const repoRoot = resolve(process.env.GBDRAW_REPO || process.cwd());
@@ -676,7 +677,7 @@ const classifyGeneration = (diagnostic) => {
 const invokeGeneration = async (page, terminal, runnerEvidence, terminalSignal) => {
   let outcome = null;
   let evaluationError = '';
-  const evaluation = page.evaluate(async () => {
+  const evaluation = evaluateWithRetainedPromise(page, async () => {
       const app = window.__GBDRAW_APP__;
       const history = window.__GBDRAW_HISTORY__;
       const diagnosticFields = [

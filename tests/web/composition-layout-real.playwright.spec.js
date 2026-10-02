@@ -37,7 +37,7 @@ const renderRealDiagram = async (
   genbankText,
   { legendSide = 'right' } = {}
 ) => {
-  const outcome = await page.evaluate(async ({ diagramMode, source, requestedLegendSide }) => {
+  const outcome = await evaluateWithRetainedPromise(page, async ({ diagramMode, source, requestedLegendSide }) => {
     const app = window.__GBDRAW_APP__;
     app.mode = diagramMode;
     await window.Vue.nextTick();

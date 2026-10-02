@@ -2,7 +2,7 @@ const { test, expect } = require('@playwright/test');
 const { spawnSync } = require('node:child_process');
 const { readFileSync, writeFileSync } = require('node:fs');
 const { basename, resolve } = require('node:path');
-const { openApp } = require('../helpers/app-lifecycle.cjs');
+const { openApp, evaluateWithRetainedPromise } = require('../helpers/app-lifecycle.cjs');
 
 const repoRoot = resolve(process.env.GBDRAW_REPO || process.cwd());
 const examples = JSON.parse(readFileSync(
@@ -56,7 +56,7 @@ for (const example of commonExamples) {
 
     try {
       await openApp(page, { waitForPalette: false });
-      const loaded = await page.evaluate(async ({ session, id }) => {
+      const loaded = await evaluateWithRetainedPromise(page, async ({ session, id }) => {
         const response = await fetch(`/gbdraw/web/gallery/${session.replace(/^\.\//, '')}`);
         if (!response.ok) throw new Error(`Could not load ${id}: ${response.status}`);
         const bytes = await response.arrayBuffer();
@@ -102,7 +102,7 @@ for (const example of commonExamples) {
         expect(loaded.ruleCaptions).toHaveLength(3);
       }
 
-      const generated = await page.evaluate(async () => {
+      const generated = await evaluateWithRetainedPromise(page, async () => {
         const app = window.__GBDRAW_APP__;
         const result = await app.runAnalysis();
         const { state } = await import('/gbdraw/web/js/state.js');
