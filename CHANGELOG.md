@@ -336,6 +336,9 @@ decisions are in
   own line in both modes, so the slot id and renderer stay readable (TR-11).
 - The Vibrio harveyi group Gallery tutorial links to the current Linear record
   layout reference, and a packaging test checks every tutorial link (TR-12).
+- The feature popup **Location** line reads only the location the popup click
+  builds with the shared 1-based INSDC formatter; the unreachable fallback that
+  rebuilt `start+1..end` from the feature envelope is removed (B7).
 
 <!-- web-gui-audit-20260930 P19 -->
 
