@@ -1,10 +1,12 @@
 """Circular center-definition fit (PV-08, D-24 / PD-OI-078).
 
 Only a placement that fails because of the center definition band wraps the
-species line at word boundaries and places the tracks again. Explicit
-``center_reserved_radius`` or definition font size disables the wrap, earlier
-successful outputs keep a single species line, and a failure that the wrap
-cannot fix names the definition band as the cause.
+species line at word boundaries and places the tracks again. An explicit
+``center_reserved_radius`` disables the wrap. ``definition_font_size`` 18 is
+the default, so 18 counts as not explicit and may wrap; any other value is
+explicit and never wraps. Earlier successful outputs keep a single species
+line, and a failure that the wrap cannot fix names the definition band as the
+cause.
 """
 
 from __future__ import annotations

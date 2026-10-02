@@ -42,8 +42,18 @@ from gbdraw.analysis.depth_tracks import (
 )
 from gbdraw.exceptions import ValidationError
 from gbdraw.layout.record_coordinates import RecordDisplayTransform
+from gbdraw.layout.similarity_alignment import (
+    SimilarityAlignmentCandidate,
+    SimilarityAlignmentPlan,
+    SimilarityAlignmentReference,
+    SimilarityAlignmentReferenceError,
+    resolve_similarity_alignment,
+)
 from gbdraw.analysis.protein_colinearity import (
     LosatpCacheManager,
+    OrthogroupGraphResult,
+    OrthogroupMember,
+    OrthogroupResult,
     ProteinExtractionResult,
     extract_web_stable_cds_proteins,
     is_protein_losat_cache_entry,
@@ -88,6 +98,7 @@ from .options import (
     CircularMultiRecordOptions,
     LinearDiagramOptions,
     LinearMultiRecordOptions,
+    LinearRecordTranslation,
 )
 from gbdraw.features.placement import ResolvedPlacementInputs, resolve_placement_inputs
 from gbdraw.features.source import build_source_feature_catalog
@@ -119,6 +130,8 @@ from .record_planning import (
     resolve_linear_options,
     resolve_record_inputs,
     project_similarity_alignment_centers,
+    similarity_alignment_evidence_edges,
+    _similarity_candidate_from_orthogroup_member,
 )
 from .render import preflight_output_paths, save_figure_to
 from .requests import (
@@ -1546,10 +1559,18 @@ def plan_circular_batch_request(
 def plan_linear_request(
     request: LinearDiagramRequest,
 ) -> LinearRequestPlan:
-    """Normalize a Linear request into one explicit builder plan."""
+    """Normalize a Linear request into one explicit builder plan.
+
+    A :class:`SimilarityAlignmentReference` is resolved first: the requested
+    orthogroup analysis runs once and the plan's request carries its result
+    and the resolved alignment plan. Use :func:`render_request` or
+    :func:`build_request_diagram` to keep that analysis's LOSATP artifacts.
+    """
 
     if not isinstance(request, LinearDiagramRequest):
         raise ValidationError("request must be LinearDiagramRequest.")
+    if isinstance(request.similarity_alignment, SimilarityAlignmentReference):
+        request, _artifacts = _resolve_similarity_alignment_reference(request, None)
     with _request_render_diagnostic_phase("preparation"):
         unresolved_request = replace(
             request,
@@ -1602,6 +1623,205 @@ def plan_linear_request(
         displays=collection.displays,
         transforms=collection.transforms,
         alignment_anchor_centers=alignment_anchor_centers,
+    )
+
+
+def resolve_similarity_alignment_plan(
+    plan: LinearRequestPlan,
+    orthogroups: OrthogroupResult | OrthogroupGraphResult | None,
+    reference: SimilarityAlignmentReference,
+) -> SimilarityAlignmentPlan:
+    """Resolve an exact feature/protein reference into one complete plan.
+
+    ``orthogroups`` is the Similarity group result of the orthogroup analysis
+    run on ``plan``'s records (``linear_metadata.orthogroups`` of the built
+    plan). The reference names one member by its exact protein ID or feature
+    SVG ID; a Similarity Group ID is rejected. Each other record aligns on its
+    sole usable member or its sole direct reciprocal-best-hit member, and a
+    record without a candidate keeps its position. A record that still has
+    several candidates raises :class:`SimilarityAlignmentReferenceError`
+    naming the record and its exact candidate IDs; nothing prompts.
+    """
+
+    if not isinstance(plan, LinearRequestPlan):
+        raise ValidationError(
+            "plan must be LinearRequestPlan.",
+            diagnostic={"code": "INPUT_INVALID"},
+        )
+    if not isinstance(reference, SimilarityAlignmentReference):
+        raise ValidationError(
+            "reference must be SimilarityAlignmentReference.",
+            diagnostic={"code": "INPUT_INVALID"},
+        )
+    if orthogroups is None:
+        raise SimilarityAlignmentReferenceError(
+            reference,
+            "requires orthogroup metadata from the requested analysis.",
+        )
+    target = reference.feature_id
+    if target in orthogroups.orthogroups:
+        raise SimilarityAlignmentReferenceError(
+            reference,
+            "accepts an exact feature/protein ID, not "
+            f"Similarity Group ID {target!r}.",
+        )
+    collection = ResolvedRecordCollection(plan.records, plan.provenance)
+    record_keys = tuple(item.record_key for item in collection.provenance)
+    candidate_rows: list[tuple[OrthogroupMember, SimilarityAlignmentCandidate]] = []
+    exact_matches: list[tuple[OrthogroupMember, SimilarityAlignmentCandidate]] = []
+    for members in orthogroups.orthogroups.values():
+        for member in members:
+            if member.record_index < 0 or member.record_index >= len(collection.records):
+                continue
+            candidate = _similarity_candidate_from_orthogroup_member(
+                collection,
+                member,
+            )
+            candidate_rows.append((member, candidate))
+            aliases = {
+                str(value)
+                for value in (
+                    member.protein_id,
+                    member.source_protein_id,
+                    member.feature_svg_id,
+                    candidate.anchor.biological_feature_id,
+                    candidate.anchor.stable_feature_svg_id,
+                )
+                if value
+            }
+            if target in aliases:
+                exact_matches.append((member, candidate))
+    if not exact_matches:
+        raise SimilarityAlignmentReferenceError(
+            reference,
+            "did not match an exact feature/protein ID.",
+        )
+    if len(exact_matches) != 1:
+        matches = ", ".join(
+            sorted(
+                f"{candidate.anchor.record_key}:{member.protein_id}"
+                for member, candidate in exact_matches
+            )
+        )
+        raise SimilarityAlignmentReferenceError(
+            reference,
+            f"is ambiguous; use one exact candidate ID from: {matches}.",
+        )
+    reference_member, reference_candidate = exact_matches[0]
+    group_id = reference_member.orthogroup_id
+    resolution = resolve_similarity_alignment(
+        record_keys=record_keys,
+        group_id=group_id,
+        reference=reference_candidate.anchor,
+        candidates=tuple(
+            candidate
+            for member, candidate in candidate_rows
+            if member.orthogroup_id == group_id
+        ),
+        edges=similarity_alignment_evidence_edges(collection, orthogroups, group_id),
+    )
+    if resolution.ambiguities:
+        protein_by_key = {
+            candidate.anchor.canonical_key: member.protein_id
+            for member, candidate in candidate_rows
+        }
+        details = "; ".join(
+            f"record {ambiguity.record_key!r} candidates ["
+            + ", ".join(
+                protein_by_key.get(
+                    candidate.anchor.canonical_key,
+                    candidate.anchor.biological_feature_id,
+                )
+                for candidate in ambiguity.candidates
+            )
+            + "]"
+            for ambiguity in resolution.ambiguities
+        )
+        raise SimilarityAlignmentReferenceError(
+            reference,
+            "cannot choose among multiple candidates; select an exact candidate "
+            f"for each record: {details}.",
+        )
+    return resolution.require_plan()
+
+
+def _reference_record_inputs(
+    request: LinearDiagramRequest,
+    plan: LinearRequestPlan,
+    reference: SimilarityAlignmentReference,
+) -> tuple[RecordInput, ...]:
+    """Key each input by its one displayed record, as the plan names them."""
+
+    keys_by_input: dict[int, list[str]] = {}
+    for item in plan.provenance:
+        keys_by_input.setdefault(item.input_index, []).append(item.record_key)
+    records: list[RecordInput] = []
+    for index, record in enumerate(request.records):
+        keys = keys_by_input.get(index, [])
+        if len(keys) != 1:
+            raise SimilarityAlignmentReferenceError(
+                reference,
+                "requires every RecordInput to resolve to exactly one displayed record.",
+            )
+        records.append(
+            record if record.record_key == keys[0] else replace(record, record_key=keys[0])
+        )
+    return tuple(records)
+
+
+def _resolve_similarity_alignment_reference(
+    request: DiagramRequest,
+    artifacts: CurrentRequestArtifacts | None,
+) -> tuple[DiagramRequest, CurrentRequestArtifacts | None]:
+    """Run the requested analysis once and replace a reference with its plan.
+
+    The resolved request carries that analysis as precomputed comparisons, so
+    rendering it starts no second search, and the returned artifacts carry
+    its LOSATP entries. Any other request passes through unchanged.
+    """
+
+    if not isinstance(request, LinearDiagramRequest) or not isinstance(
+        request.similarity_alignment,
+        SimilarityAlignmentReference,
+    ):
+        return request, artifacts
+    reference = request.similarity_alignment
+    analysis_plan = plan_linear_request(replace(request, similarity_alignment=None))
+    analysis = build_request_plan_diagram(analysis_plan, artifacts=artifacts)
+    metadata = analysis.linear_metadata
+    alignment = resolve_similarity_alignment_plan(
+        analysis_plan,
+        metadata.orthogroups if metadata is not None else None,
+        reference,
+    )
+    assert metadata is not None  # a missing result has no orthogroups
+    records = _reference_record_inputs(request, analysis_plan, reference)
+    layout = request.layout or LinearMultiRecordOptions()
+    resolved = replace(
+        request,
+        records=records,
+        options=replace(
+            request.options,
+            protein_blastp_mode="none",
+            protein_comparisons=metadata.protein_comparisons,
+            linear_comparisons=metadata.linear_comparisons,
+            orthogroups=metadata.orthogroups,
+            collinearity_blocks=metadata.collinearity_result,
+        ),
+        layout=replace(
+            layout,
+            record_translations=layout.record_translations or tuple(
+                LinearRecordTranslation(record_key=str(record.record_key))
+                for record in records
+            ),
+        ),
+        similarity_alignment=alignment,
+    )
+    return resolved, CurrentRequestArtifacts(
+        losat_cache_entries=analysis.losat_cache_entries,
+        losat_derived_cache_entries=analysis.losat_derived_cache_entries,
+        protein_identity_manifest=analysis.protein_identity_manifest,
+        protein_source_mode="orthogroup",
     )
 
 
@@ -2147,6 +2367,7 @@ def build_request_diagram(
 ) -> PreparedDiagramRequest | PreparedCircularBatchRequest:
     """Normalize inputs and build a drawing from current typed artifacts."""
 
+    request, artifacts = _resolve_similarity_alignment_reference(request, artifacts)
     return build_request_plan_diagram(
         plan_request(request),
         artifacts=artifacts,
@@ -2479,6 +2700,12 @@ def render_request(
 ) -> RequestRenderResult | CircularBatchRenderResult:
     """Build and save one typed request from current typed artifacts."""
 
+    if isinstance(request, LinearDiagramRequest) and isinstance(
+        request.similarity_alignment,
+        SimilarityAlignmentReference,
+    ):
+        _preflight_render_output(request.output)  # before the analysis runs
+    request, artifacts = _resolve_similarity_alignment_reference(request, artifacts)
     plan = plan_request(request)
     batch_outputs_preflighted = isinstance(plan, CircularBatchRequestPlan)
     plan.preflight_outputs()
@@ -2696,4 +2923,5 @@ __all__ = [
     "render_request",
     "render_prepared_request",
     "resolve_request",
+    "resolve_similarity_alignment_plan",
 ]

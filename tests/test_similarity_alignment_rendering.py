@@ -3,7 +3,6 @@ from __future__ import annotations
 from dataclasses import replace
 import math
 import re
-from types import SimpleNamespace
 from xml.etree import ElementTree
 
 import pandas as pd
@@ -11,11 +10,8 @@ import pytest
 from Bio.Seq import Seq
 from Bio.SeqFeature import SeqFeature, SimpleLocation
 from Bio.SeqRecord import SeqRecord
-from svgwrite import Drawing
 
 import gbdraw.api.diagram as api_diagram_module
-import gbdraw.api.request_render as request_render_module
-import gbdraw.linear as linear_cli_module
 from gbdraw.api import (
     AnnotationOptions,
     AnnotationSet,
@@ -33,11 +29,13 @@ from gbdraw.api.options import (
 )
 from gbdraw.api.record_planning import (
     ResolvedRecordCollection,
-    resolve_cli_similarity_alignment_plan,
     similarity_alignment_evidence_edges,
 )
-from gbdraw.api.diagram import LinearDiagramMetadata
-from gbdraw.api.request_render import build_request_diagram, plan_linear_request
+from gbdraw.api.request_render import (
+    build_request_diagram,
+    plan_linear_request,
+    resolve_similarity_alignment_plan,
+)
 from gbdraw.api.session_compat import _replace_plan_request
 from gbdraw.api.requests import (
     InMemoryRecordSource,
@@ -56,6 +54,8 @@ from gbdraw.layout.similarity_alignment import (
     AlignmentRecordDecision,
     AlignmentResolutionRationale,
     SimilarityAlignmentPlan,
+    SimilarityAlignmentReference,
+    SimilarityAlignmentReferenceError,
 )
 from gbdraw.io.regions import parse_region_spec
 from gbdraw.io.comparisons import COMPARISON_COLUMNS
@@ -757,7 +757,7 @@ def _orthogroups_for_collection(
     )
 
 
-def test_cli_adapter_is_exact_noninteractive_and_reports_record_candidates(
+def test_shared_resolver_is_exact_noninteractive_and_reports_record_candidates(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     first = _record("first", 100, 10, 20, protein_id="ref-protein")
@@ -780,28 +780,26 @@ def test_cli_adapter_is_exact_noninteractive_and_reports_record_candidates(
     orthogroups = _orthogroups_for_collection(collection, ambiguous_second=True)
     monkeypatch.setattr(
         "builtins.input",
-        lambda *_args, **_kwargs: pytest.fail("CLI alignment must not prompt"),
+        lambda *_args, **_kwargs: pytest.fail("Alignment must not prompt"),
     )
+    reference = SimilarityAlignmentReference("ref-protein")
 
-    with pytest.raises(ValidationError, match="not Similarity Group ID"):
-        resolve_cli_similarity_alignment_plan(
-            collection,
+    with pytest.raises(SimilarityAlignmentReferenceError, match="not Similarity Group ID"):
+        resolve_similarity_alignment_plan(
+            planned,
             orthogroups,
-            exact_reference="og-1",
+            SimilarityAlignmentReference("og-1"),
         )
-    with pytest.raises(ValidationError, match="record 'second'.*target-[ab].*target-[ab]"):
-        resolve_cli_similarity_alignment_plan(
-            collection,
-            orthogroups,
-            exact_reference="ref-protein",
-        )
+    with pytest.raises(
+        SimilarityAlignmentReferenceError,
+        match="record 'second'.*target-[ab].*target-[ab]",
+    ):
+        resolve_similarity_alignment_plan(planned, orthogroups, reference)
+    with pytest.raises(SimilarityAlignmentReferenceError, match="orthogroup metadata"):
+        resolve_similarity_alignment_plan(planned, None, reference)
 
     unique = _orthogroups_for_collection(collection)
-    resolved = resolve_cli_similarity_alignment_plan(
-        collection,
-        unique,
-        exact_reference="ref-protein",
-    )
+    resolved = resolve_similarity_alignment_plan(planned, unique, reference)
     assert resolved.reference.record_key == "first"
     assert [decision.status for decision in resolved.records] == [
         AlignmentDecisionStatus.REFERENCE,
@@ -812,11 +810,7 @@ def test_cli_adapter_is_exact_noninteractive_and_reports_record_candidates(
         orthogroups={"og-1": unique.orthogroups["og-1"][:1]},
         member_by_protein_id={"ref-protein": unique.orthogroups["og-1"][0]},
     )
-    missing = resolve_cli_similarity_alignment_plan(
-        collection,
-        reference_only,
-        exact_reference="ref-protein",
-    )
+    missing = resolve_similarity_alignment_plan(planned, reference_only, reference)
     assert missing.records[1].status is AlignmentDecisionStatus.SKIPPED
     assert missing.records[1].rationale is (
         AlignmentResolutionRationale.SKIPPED_NO_CANDIDATE
@@ -877,93 +871,6 @@ def test_supplied_plan_does_not_invoke_protein_analysis(
     )
 
     build_request_diagram(request)
-
-
-def test_cli_materializes_typed_plan_and_reuses_completed_analysis(
-    monkeypatch: pytest.MonkeyPatch,
-    tmp_path,
-) -> None:
-    records = (
-        _record("first", 100, 10, 20, protein_id="ref-protein"),
-        _record("second", 100, 30, 40, protein_id="target-a"),
-    )
-    captured: dict[str, object] = {"analysis_builds": 0}
-    monkeypatch.setattr(
-        request_render_module,
-        "load_gbks",
-        lambda *args, **_kwargs: [
-            records[1] if "b.gb" in str(args[0]) else records[0]
-        ],
-    )
-    monkeypatch.setattr(
-        request_render_module,
-        "read_color_table",
-        lambda _path: None,
-    )
-    monkeypatch.setattr(
-        request_render_module,
-        "read_feature_visibility_file",
-        lambda _path: None,
-    )
-    monkeypatch.setattr(
-        "builtins.input",
-        lambda *_args, **_kwargs: pytest.fail("CLI alignment must not prompt"),
-    )
-
-    def fake_analysis_build(plan, *, artifacts):
-        captured["analysis_builds"] = int(captured["analysis_builds"]) + 1
-        collection = ResolvedRecordCollection(plan.records, plan.provenance)
-        return SimpleNamespace(
-            linear_metadata=LinearDiagramMetadata(
-                protein_comparisons=(),
-                linear_comparisons=(),
-                orthogroups=_orthogroups_for_collection(collection),
-            ),
-            losat_cache_entries=(),
-            losat_derived_cache_entries=(),
-            protein_identity_manifest=None,
-        )
-
-    def fake_render(request, *, artifacts, **_kwargs):
-        captured["request"] = request
-        captured["artifacts"] = artifacts
-        planned = plan_linear_request(request)
-        return SimpleNamespace(
-            drawing=Drawing(filename=str(tmp_path / "dummy.svg")),
-            interactive_context=None,
-            records=planned.records,
-            losat_cache_entries=(),
-            losat_derived_cache_entries=(),
-            protein_identity_manifest=None,
-            request=planned.request,
-            annotation_warnings=(),
-        )
-
-    monkeypatch.setattr(linear_cli_module, "build_request_plan_diagram", fake_analysis_build)
-    monkeypatch.setattr(linear_cli_module, "render_request", fake_render)
-
-    linear_cli_module.linear_main(
-        [
-            "--gbk",
-            "a.gb",
-            "b.gb",
-            "--protein_blastp_mode",
-            "orthogroup",
-            "--align_orthogroup_feature",
-            "ref-protein",
-            "--format",
-            "svg",
-            "-o",
-            str(tmp_path / "aligned"),
-        ]
-    )
-
-    request = captured["request"]
-    assert isinstance(request, LinearDiagramRequest)
-    assert request.similarity_alignment is not None
-    assert request.options.protein_blastp_mode == "none"
-    assert not hasattr(request.options, "align_orthogroup_feature")
-    assert captured["analysis_builds"] == 1
 
 
 def test_real_render_keeps_unknown_and_skipped_record_directions_and_positions() -> None:

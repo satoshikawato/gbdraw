@@ -33,7 +33,8 @@ Selectors and selector-qualified regions identify one record and therefore requi
 
 For Linear Similarity Group alignment, `similarity_alignment` stores the exact
 reference and each record's anchor or Skip decision. It has no orientation
-field. Each `RecordInput` owns its orientation through
+field. A `SimilarityAlignmentReference` input is replaced by that plan when the
+planner resolves it. Each `RecordInput` owns its orientation through
 `RecordPresentation.reverse_complement` or its region setting. The planner
 projects anchor centers after resolving those record transforms.
 
@@ -50,7 +51,7 @@ projects anchor centers after resolving those record transforms.
 
 Each plan exposes `preflight_outputs()`. A single Circular or Linear plan validates its materialized output set; a Circular batch validates all resolved targets together before diagram construction. Format generation is sequential, not transactional: a later conversion failure does not remove formats already written.
 
-`resolve_request()` returns one in-memory, `EXACTLY_ONE` input per displayed record, resolved table-backed options and outputs, and no collection-level record transforms. `render_request()` accepts unresolved or already materialized requests through the same planning boundary.
+`resolve_request()` returns one in-memory, `EXACTLY_ONE` input per displayed record, resolved table-backed options and outputs, and no collection-level record transforms. `render_request()` accepts unresolved or already materialized requests through the same planning boundary. A request with a `SimilarityAlignmentReference` is the one exception to "no drawing": planning it runs the requested orthogroup analysis once, in memory, and the planned request carries the resolved plan and that analysis as precomputed comparisons.
 
 ## Output rules
 
@@ -91,7 +92,8 @@ rounding. Typed analysis resource schema 3 is required to read newly saved data.
 
 A Linear request may carry `similarity_alignment=SimilarityAlignmentPlan(...)`
 and a complete `LinearMultiRecordOptions.record_translations` sequence keyed by
-stable `recordKey`. The schema-2 plan records the exact reference, one
+stable `recordKey`, or `similarity_alignment=SimilarityAlignmentReference(...)`,
+which the planner resolves to such a plan after the orthogroup analysis. The schema-2 plan records the exact reference, one
 anchor or Skip decision per record, and rationale. Record presentation or region
 state owns orientation; the plan does not store direction settings. It must be
 fully resolved; a group-ID string, partial record coverage, or schema-1 plan

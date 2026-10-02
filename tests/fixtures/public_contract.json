@@ -19,6 +19,7 @@
       "LinearOptions",
       "LinearTrackOptions",
       "RecordDisplayOptions",
+      "SimilarityAlignmentReference",
       "Thresholds",
       "TitleOptions",
       "__version__",
@@ -27,7 +28,7 @@
       "read_genbank",
       "read_gff"
     ],
-    "contract_sha256": "64f0b8b01f3e630c507bfcbadba61b0c5c5f1d4e43ede238ee30e9ec24dc29bc"
+    "contract_sha256": "21fe7589f19f7d5e852072c9174df427d54f7685cde8906ec45fb3157835e8f4"
   },
   "circular_cli": {
     "actions_sha256": "9cc23885d31bcbb59920f5f7a2d88a27b515803da8b19241351c1caefb9fba2d",

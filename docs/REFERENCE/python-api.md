@@ -29,7 +29,7 @@ The `gbdraw` package exports the four functions above, `__version__`, and these 
 | Record display / placement | `RecordDisplayOptions`, `FeaturePlacementOverride`, `FeaturePlacementTarget` |
 | Shared presentation | `FeatureOptions`, `LabelOptions`, `TitleOptions`, `Thresholds`, `DepthTrackOptions` |
 | Circular | `CircularOptions`, `CircularLayout`, `CircularTrackOptions`, `ComparisonRingOptions`, `ComparisonRingTrackOptions` |
-| Linear | `LinearOptions`, `LinearLayout`, `LinearTrackOptions`, `LinearComparisonOptions` |
+| Linear | `LinearOptions`, `LinearLayout`, `LinearTrackOptions`, `LinearComparisonOptions`, `SimilarityAlignmentReference` |
 | Compatibility aliases | `ConservationOptions`, `ConservationTrackOptions` |
 
 `ConservationOptions` and `ConservationTrackOptions` are identity aliases for `ComparisonRingOptions` and `ComparisonRingTrackOptions`. New code should use the comparison-ring names.
@@ -115,6 +115,13 @@ Important `LinearComparisonOptions` defaults are:
 
 `protein_mode` accepts `none`, `pairwise`, `orthogroup`, or `collinear`. The `orthogroup` token means gbdraw Similarity groups; it does not claim phylogenetic orthology.
 
+`similarity_alignment` defaults to `None`. With `protein_mode="orthogroup"`,
+`SimilarityAlignmentReference(feature_id="CAG38695.1")` aligns the records on
+the Similarity group of that exact protein ID or feature SVG ID, like the CLI
+`--align_orthogroup_feature`; a resolved `SimilarityAlignmentPlan` is also
+accepted. See [Typed Linear Similarity Group
+alignment](#typed-linear-similarity-group-alignment).
+
 `LinearComparisonOptions(blast_files=...)` consumes prepared comparison TSV
 files. Supplying those files does not start a nucleotide or protein search.
 
@@ -195,10 +202,33 @@ example](command-line.md#rotate-a-plastome-and-place-a-multipart-feature) and th
 
 ## Typed Linear Similarity Group alignment
 
-`gbdraw.api.LinearDiagramRequest.similarity_alignment` accepts a complete
-`SimilarityAlignmentPlan`; `LinearMultiRecordOptions.record_translations` supplies
+`gbdraw.api.LinearDiagramRequest.similarity_alignment` and
+`LinearComparisonOptions.similarity_alignment` accept one of two typed values.
+A string, including a group ID, is rejected.
+
+`SimilarityAlignmentReference(feature_id=...)` names one exact protein ID or
+feature SVG ID. It requires the orthogroup analysis (`protein_blastp_mode` or
+`protein_mode` `"orthogroup"`). The planner runs that analysis once, resolves
+the reference with the resolver that `--align_orthogroup_feature` uses, and
+renders the resolved request with the analysis result as precomputed
+comparisons, so nothing searches twice. The resolved request and every saved
+Session store the plan, never the reference. A record without a candidate
+keeps its position. A Similarity Group ID, an ID that matches no member or
+several members, or a record left with several candidates raises
+`ValidationError`; an ambiguous record is named with its exact candidate IDs,
+and nothing prompts. Records without `record_key` take the planner's keys
+(`record-1`, ...). `render_request()` and `build_request_diagram()` also keep
+the analysis's LOSATP artifacts in their result.
+
+To inspect the plan first, build a `LinearRequestPlan` that requests the
+orthogroup analysis with `build_request_plan_diagram()`, then call
+`resolve_similarity_alignment_plan(plan, prepared.linear_metadata.orthogroups,
+reference)` and pass the returned plan.
+
+A complete `SimilarityAlignmentPlan` is the second value;
+`LinearMultiRecordOptions.record_translations` supplies
 one finite base X/Y translation for each stable record key. The typed API rejects
-a group-ID string or an incomplete plan. The shared Python resolver applies
+an incomplete plan. The shared Python resolver applies
 explicit choice → sole usable member → sole distinct direct RBH → Select/Skip.
 When multiple candidates remain, it returns a transient recommendation: the
 unique representative, or candidate 1 in stable identity order. A recommendation

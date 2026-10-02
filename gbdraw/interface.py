@@ -62,7 +62,10 @@ from gbdraw.api.render import render_to_bytes
 from gbdraw.exceptions import ExportError, ValidationError
 from gbdraw.features.placement import FeaturePlacementOverride
 from gbdraw.linear_comparison import LinearComparison
-from gbdraw.layout.similarity_alignment import SimilarityAlignmentPlan
+from gbdraw.layout.similarity_alignment import (
+    SimilarityAlignmentPlan,
+    SimilarityAlignmentReference,
+)
 from gbdraw.config.models import GbdrawConfig
 from gbdraw.mode_profiles import (
     CIRCULAR_MODE_PROFILE,
@@ -329,7 +332,12 @@ _LINEAR_DIAGRAM_DEFAULTS = _LinearDiagramOptions()
 
 @dataclass(frozen=True)
 class LinearComparisonOptions:
-    """Precomputed or in-process comparison inputs for a linear diagram."""
+    """Precomputed or in-process comparison inputs for a linear diagram.
+
+    ``similarity_alignment`` takes a resolved ``SimilarityAlignmentPlan`` or a
+    ``SimilarityAlignmentReference``, which ``protein_mode="orthogroup"``
+    resolves once after its analysis.
+    """
 
     blast_files: Sequence[str] | None = None
     comparisons: Sequence[LinearComparison] | None = None
@@ -370,7 +378,9 @@ class LinearComparisonOptions:
     max_paralog_links: int = (
         _LINEAR_DIAGRAM_DEFAULTS.collinear_max_paralog_links_per_orthogroup
     )
-    similarity_alignment: SimilarityAlignmentPlan | None = None
+    similarity_alignment: (
+        SimilarityAlignmentPlan | SimilarityAlignmentReference | None
+    ) = None
 
 
 @dataclass(frozen=True)

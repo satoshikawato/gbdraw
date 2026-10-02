@@ -77,6 +77,7 @@ from gbdraw.layout.similarity_alignment import (
     AlignmentRecordDecision,
     AlignmentResolutionRationale,
     SimilarityAlignmentPlan,
+    SimilarityAlignmentReference,
 )
 from gbdraw.annotations import (
     AnnotationSet,
@@ -117,6 +118,7 @@ from .request_render import (
     render_prepared_request,
     render_request,
     resolve_request,
+    resolve_similarity_alignment_plan,
 )
 from .prepared import ResolvedFeatureInputs
 from .requests import (
@@ -264,6 +266,7 @@ __all__ = [
     "AlignmentRecordDecision",
     "AlignmentResolutionRationale",
     "SimilarityAlignmentPlan",
+    "SimilarityAlignmentReference",
     "LinearDiagramOptions",
     "LinearDiagramMetadata",
     "LinearOutputOptions",
@@ -319,6 +322,7 @@ __all__ = [
     "render_prepared_request",
     "render_request",
     "resolve_request",
+    "resolve_similarity_alignment_plan",
     # Web runtime capabilities
     "WEB_RENDER_OPTIONS_SCHEMA",
     "WEB_RENDER_PROTOCOL",

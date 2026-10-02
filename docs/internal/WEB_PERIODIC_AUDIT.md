@@ -92,7 +92,9 @@ Check each one on the promotion head and link the evidence:
 
 - [ ] PV-08 and N-01 (D-24): Web-default Circular output changes. Long species
   lines wrap at word boundaries, and the wrap width uses an approximate glyph
-  size. Check the Gallery and the tutorial images.
+  size. `definition_font_size` 18 is the default, so 18 counts as not explicit
+  and may wrap; any other value is explicit and never wraps. Check the Gallery
+  and the tutorial images.
 - [ ] CO-05 (D-23): outfmt 6 tables with more than 12 columns (for example
   `-outfmt "6 std qlen slen"`) are read by their first 12 columns, which must
   have the right types. Columns 13 and later are dropped with an INFO log;
