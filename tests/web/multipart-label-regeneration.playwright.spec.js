@@ -1,6 +1,6 @@
 const { test, expect } = require('@playwright/test');
 const fs = require('node:fs/promises');
-const { openApp } = require('./helpers/app-lifecycle.cjs');
+const { openApp, evaluateWithRetainedPromise } = require('./helpers/app-lifecycle.cjs');
 
 const seed = 'gbdraw/web/gallery/sessions/tobacco-chloroplast.gbdraw-session.json';
 const cases = [
@@ -44,7 +44,7 @@ for (const [name, gene, action] of cases) {
         && window.__GBDRAW_APP__.extractedFeatures.length > 0), { timeout: 180000 }).toBe(true);
     };
     const generate = async () => {
-      expect(await page.evaluate(() => window.__GBDRAW_APP__.runAnalysis())).toEqual({ status: 'ok' });
+      expect(await evaluateWithRetainedPromise(page, () => window.__GBDRAW_APP__.runAnalysis())).toEqual({ status: 'ok' });
       await expect.poll(() => page.evaluate(async () => {
         const { state } = await import('./js/state.js');
         const { isCommittedSvgResultMounted } = await import('./js/services/svg-result-ingestion.js');

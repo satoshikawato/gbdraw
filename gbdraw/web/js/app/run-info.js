@@ -7,6 +7,7 @@ import {
   buildLinearTrackSlotSpec,
   parseLinearTrackSlotSpec
 } from './linear-track-slots.js';
+import { countGenBankRecords } from './genbank-header.js';
 import { encodeAnnotationTable } from './annotations/table-codec.js';
 import { base64ToBytes } from '../services/byte-utils.js';
 
@@ -302,7 +303,7 @@ const createRecipeFiles = (resources, webFiles, generatedFileNameHints, readReso
       const bytes = resourceBytes(descriptors[resourceId]);
       const text = bytes ? new TextDecoder().decode(bytes) : '';
       count = kind === 'genbank'
-        ? (text.match(/^LOCUS\s+/gm) || []).length
+        ? countGenBankRecords(text)
         : (text.match(/^>/gm) || []).length;
     }
     recordCountCache.set(cacheKey, count);

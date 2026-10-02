@@ -504,7 +504,7 @@ test('audit-5 owner: direct simple createRunAnalysis path is worker-only and cat
       lifecycleEvents.push(name);
     }
   };
-  const primary = new AuditFile(['LOCUS audit\nORIGIN\n//\n'], 'active.gb', {
+  const primary = new AuditFile(['LOCUS       audit\nORIGIN\n//\n'], 'active.gb', {
     type: 'text/plain',
     lastModified: 7
   });

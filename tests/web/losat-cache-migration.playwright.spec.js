@@ -326,7 +326,7 @@ const assertCurrentProteinArtifacts = (session) => {
 
 };
 
-const generateWithTelemetry = async (page) => page.evaluate(async () => {
+const generateWithTelemetry = async (page) => evaluateWithRetainedPromise(page, async () => {
   const app = window.__GBDRAW_APP__;
   const result = await app.runAnalysis();
   return {
@@ -356,12 +356,12 @@ const migrationUiSnapshot = async (page) => page.evaluate(async () => {
   }));
 });
 
-const cancelDuringRender = async (page) => page.evaluate(async () => {
+const cancelDuringRender = async (page) => evaluateWithRetainedPromise(page, async () => {
   const contract = await import('/tests/web/helpers/losat-cache-render-boundary.mjs');
   return contract.cancelDuringRender();
 });
 
-const failRendererAfterMigration = async (page) => page.evaluate(async () => {
+const failRendererAfterMigration = async (page) => evaluateWithRetainedPromise(page, async () => {
   const contract = await import('/tests/web/helpers/losat-cache-render-boundary.mjs');
   return contract.failRendererAfterMigration();
 });

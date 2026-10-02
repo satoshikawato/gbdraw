@@ -3,7 +3,7 @@ const fs = require('node:fs/promises');
 const path = require('node:path');
 const { createHash } = require('node:crypto');
 const { gunzipSync } = require('node:zlib');
-const { openApp, getDiagramWorkerActivity } = require('./helpers/app-lifecycle.cjs');
+const { openApp, getDiagramWorkerActivity, evaluateWithRetainedPromise } = require('./helpers/app-lifecycle.cjs');
 
 const fixture = path.join(process.cwd(), 'gbdraw/web/gallery/sessions/tobacco-chloroplast.gbdraw-session.json');
 const digest = bytes => createHash('sha256').update(bytes).digest('hex');
@@ -228,7 +228,7 @@ test('failed multi-record Generate retains a validated binding to the selected s
   }, genbankRecord('RecA') + genbankRecord('RecB'));
   await expect.poll(() => page.evaluate(() => window.__GBDRAW_APP__.circularRecordList.length),
     { timeout: 60_000 }).toBe(2);
-  expect(await page.evaluate(() => window.__GBDRAW_APP__.runAnalysis())).toEqual({ status: 'ok' });
+  expect(await evaluateWithRetainedPromise(page, () => window.__GBDRAW_APP__.runAnalysis())).toEqual({ status: 'ok' });
   await page.evaluate(() => {
     delete window.__GBDRAW_APP__.annotationSets[0].annotations[0].metadata._gbdraw_web_target_record_key;
   });

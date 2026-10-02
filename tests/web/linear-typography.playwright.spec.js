@@ -8,7 +8,7 @@ const repoRoot = resolve(process.env.GBDRAW_REPO || process.cwd());
 const genbankPath = join(repoRoot, 'tests/test_inputs/HmmtDNA.gbk');
 const sessionInputSelector = 'input[accept^=".json,"]';
 
-const runDiagram = async (page) => page.evaluate(async () => {
+const runDiagram = async (page) => evaluateWithRetainedPromise(page, async () => {
   const app = window.__GBDRAW_APP__;
   const result = await app.runAnalysis();
   return {

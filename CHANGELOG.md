@@ -336,6 +336,10 @@ decisions are in
   own line in both modes, so the slot id and renderer stay readable (TR-11).
 - The Vibrio harveyi group Gallery tutorial links to the current Linear record
   layout reference, and a packaging test checks every tutorial link (TR-12).
+- Web Run Info and Session request GenBank record counts now use the shared
+  reader's record-start rule (a line that starts with `LOCUS` and seven spaces),
+  so a malformed `LOCUS` line no longer adds a record the Python loader does
+  not read.
 - A blank Linear record **Definition** field now shows the text Generate draws
   for it as its placeholder: the File default, else the definition inferred
   from the record, else the example text (B5).

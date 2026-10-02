@@ -2,7 +2,7 @@ const { test, expect } = require('@playwright/test');
 const { join } = require('node:path');
 const { readFileSync } = require('node:fs');
 const { readPdfText } = require('./helpers/pdf-text.cjs');
-const { openApp, generateAndWaitForResult, reveal } = require('./helpers/app-lifecycle.cjs');
+const { openApp, generateAndWaitForResult, reveal, evaluateWithRetainedPromise } = require('./helpers/app-lifecycle.cjs');
 
 const session = async (page, name = 'HmmtDNA_basic_circular.gbdraw-session.json') => {
   page.on('dialog', (dialog) => dialog.dismiss());
@@ -338,7 +338,7 @@ test('invalid annotation coordinates preserve the draft and the last successful 
   const oldResult = await page.evaluate(() => window.__GBDRAW_APP__.results[0].content);
   await panel.getByPlaceholder('Start (1-based)', { exact: true }).fill('1.5');
   await panel.getByPlaceholder('Start (1-based)', { exact: true }).press('Tab');
-  expect((await page.evaluate(() => window.__GBDRAW_APP__.runAnalysis())).status).toBe('error');
+  expect((await evaluateWithRetainedPromise(page, () => window.__GBDRAW_APP__.runAnalysis())).status).toBe('error');
   expect(await page.evaluate(() => window.__GBDRAW_APP__.errorLog)).toMatchObject({ code: 'ANNOTATION_TARGET', context: { reason: 'POSITIVE_INTEGER' },
     summary: expect.stringContaining('integer greater than zero') });
   expect(await page.evaluate(() => window.__GBDRAW_APP__.results[0].content)).toBe(oldResult);
