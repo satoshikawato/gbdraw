@@ -50,6 +50,7 @@ def test_root_namespace_is_the_small_beginner_facing_api() -> None:
         "LinearOptions",
         "LinearTrackOptions",
         "RecordDisplayOptions",
+        "SimilarityAlignmentReference",
         "Thresholds",
         "TitleOptions",
         "__version__",

@@ -508,6 +508,42 @@ class SimilarityAlignmentPlan:
             )
 
 
+@dataclass(frozen=True)
+class SimilarityAlignmentReference:
+    """Align the displayed Linear records on one exact feature or protein ID.
+
+    ``feature_id`` is the exact protein ID or feature SVG ID of one member of
+    the requested Similarity group analysis. gbdraw resolves it into a
+    :class:`SimilarityAlignmentPlan` once, after that analysis; a Similarity
+    Group ID is rejected. Requests and Sessions store only the resolved plan.
+    """
+
+    feature_id: str
+
+    def __post_init__(self) -> None:
+        object.__setattr__(
+            self,
+            "feature_id",
+            _required_text(self.feature_id, "feature_id"),
+        )
+
+
+class SimilarityAlignmentReferenceError(ValidationError):
+    """A :class:`SimilarityAlignmentReference` did not resolve to one plan.
+
+    ``detail`` states the failure without naming the input, so a surface
+    adapter can name its own spelling of the reference.
+    """
+
+    def __init__(self, reference: SimilarityAlignmentReference, detail: str) -> None:
+        super().__init__(
+            f"{reference!r} {detail}",
+            diagnostic={"code": "INPUT_INVALID"},
+        )
+        self.reference = reference
+        self.detail = detail
+
+
 AlignmentResolutionRecord = AlignmentRecordDecision | AmbiguousAlignmentRecord
 
 
@@ -995,6 +1031,8 @@ __all__ = [
     "SIMILARITY_ALIGNMENT_PLAN_SCHEMA",
     "SimilarityAlignmentCandidate",
     "SimilarityAlignmentPlan",
+    "SimilarityAlignmentReference",
+    "SimilarityAlignmentReferenceError",
     "SimilarityAlignmentResolution",
     "resolve_similarity_alignment",
 ]

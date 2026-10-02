@@ -90,7 +90,9 @@ the canonical request remains schema 8.
 
 Current writers never emit `align_orthogroup_feature`,
 `alignOrthogroupFeature`, or the former Session-only
-`selectedOrthogroupAlignmentFeature` copy. Supported request schemas 1, 2, 5,
+`selectedOrthogroupAlignmentFeature` copy. A Python
+`SimilarityAlignmentReference` is resolved before saving; the Session stores
+only its resolved plan. Supported request schemas 1, 2, 5,
 6, and 7 retain a version-bounded reader for the old string. The reader keeps
 that value private
 until the historical selection can be materialized from saved stable feature and

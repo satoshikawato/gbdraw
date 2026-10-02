@@ -32,6 +32,17 @@ decisions are in
   the web app reports a comparison-endpoint error and keeps the previous
   Result. Unknown IDs keep the positional pair (the CLI logs a warning), and
   SVG record-ID metadata always names the endpoint records (CO-06).
+- Python API: `SimilarityAlignmentReference(feature_id="CAG38695.1")` in
+  `LinearDiagramRequest.similarity_alignment` or
+  `LinearComparisonOptions.similarity_alignment` aligns the Linear records on
+  that exact protein ID or feature SVG ID after the requested orthogroup
+  analysis, as `--align_orthogroup_feature` does. Python and the CLI share one
+  resolver, `gbdraw.api.resolve_similarity_alignment_plan()`, with the same
+  errors for a Similarity Group ID, an unmatched ID, or an ambiguous record, and
+  Sessions store only the resolved plan. The Python LOSATP tutorial, which still
+  passed the removed `align_orthogroup_feature` option, uses it and draws the
+  same SVG as the CLI tutorial. `gbdraw linear --align_orthogroup_feature` now
+  checks its output paths before the search (OD-2).
 
 - Circular Multi-Record Canvas output (the Web default) no longer reserves an
   empty depth slot when there is no depth input; a one-record canvas now has the

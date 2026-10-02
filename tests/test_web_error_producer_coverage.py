@@ -65,7 +65,7 @@ UNPROVEN_BASELINE: dict[str, tuple[int, str]] = {
     "gbdraw/api/io.py": (7, _TYPED_API),
     "gbdraw/api/options.py": (62, _TYPED_API),
     "gbdraw/api/prepared.py": (3, _TYPED_API),
-    "gbdraw/api/record_planning.py": (45, _TYPED_API),
+    "gbdraw/api/record_planning.py": (39, _TYPED_API),
     "gbdraw/api/render.py": (10, _TYPED_API),
     "gbdraw/api/request_render.py": (47, _TYPED_API),
     "gbdraw/api/requests.py": (93, _TYPED_API),
