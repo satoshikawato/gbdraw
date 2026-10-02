@@ -30,6 +30,7 @@ import {
   normalizeCircularTrackSlot,
   parseCircularTrackSlotSpecs
 } from '../app/circular-track-slots.js';
+import { countGenBankRecords } from '../app/genbank-header.js';
 import { projectCircularMeasureDraft } from '../app/circular-track-slots/measure-editor.js';
 import {
   buildLinearTrackSlotPayload,
@@ -3262,7 +3263,7 @@ export const readCanonicalResourceRecordCount = async (resources, resourceId, ki
       ? await readFileText(owner)
       : decodeCanonicalResourceText(resources, resourceId);
     counts = {
-      genbank: (text.match(/^LOCUS\s+/gm) || []).length,
+      genbank: countGenBankRecords(text),
       fasta: (text.match(/^>/gm) || []).length
     };
     // Immutable File/view identity outlives transferred bytes. Retain only counts;
