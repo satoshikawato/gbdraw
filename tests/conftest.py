@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 import subprocess
 import sys
 from collections.abc import Callable
@@ -18,6 +19,29 @@ from gbdraw.session_io import load_session
 PROJECT_ROOT = Path(__file__).parent.parent
 EXAMPLES_DIR = PROJECT_ROOT / "examples"
 TEST_INPUTS_DIR = PROJECT_ROOT / "tests" / "test_inputs"
+
+
+def _prepend_project_root_to_subprocess_pythonpath() -> None:
+    """Make every subprocess started by the tests import this checkout.
+
+    Subprocesses inherit ``os.environ``. Without this, a test run from a git
+    worktree whose subprocess does not start in the repository root imports the
+    editable install, which may point at a different checkout. Tests that
+    check an installed wheel strip ``PYTHONPATH`` explicitly and keep their
+    isolation.
+    """
+
+    root = str(PROJECT_ROOT)
+    entries = [
+        entry
+        for entry in os.environ.get("PYTHONPATH", "").split(os.pathsep)
+        if entry and entry != root
+    ]
+    os.environ["PYTHONPATH"] = os.pathsep.join([root, *entries])
+
+
+_prepend_project_root_to_subprocess_pythonpath()
+
 INPUT_SEARCH_DIRS = (
     TEST_INPUTS_DIR,
     EXAMPLES_DIR,
