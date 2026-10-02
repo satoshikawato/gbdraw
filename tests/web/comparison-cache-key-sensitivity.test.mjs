@@ -2,10 +2,7 @@
 // reused only when every scientific input of its identity is unchanged
 // (CO-02, CO-03). Each row changes one input and must change the cache key;
 // display-only changes must keep it. A builder that drops an input from its
-// identity fails the table (see the last test). A shrink-only `knownGaps` list
-// records an input that reaches the converter but not the key yet; the table
-// fails when such a row starts changing the key, so the row moves to
-// `scientific`.
+// identity fails the table (see the last test).
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import { mkdtemp, readFile, writeFile } from 'node:fs/promises';
@@ -21,7 +18,7 @@ const keyOf = (identity) => createHash('sha256').update(JSON.stringify(identity)
 
 // Problems of `build` against the table: a row that must change the key and
 // does not, or a display-only row that changes it.
-export const keySensitivityProblems = (build, baseline, { scientific, displayOnly, knownGaps = [] }) => {
+export const keySensitivityProblems = (build, baseline, { scientific, displayOnly }) => {
   const baselineKey = keyOf(build(baseline));
   const problems = [];
   for (const [name, change] of scientific) {
@@ -29,9 +26,6 @@ export const keySensitivityProblems = (build, baseline, { scientific, displayOnl
   }
   for (const [name, change] of displayOnly) {
     if (keyOf(build(change(baseline))) !== baselineKey) problems.push(`not reused after display-only ${name}`);
-  }
-  for (const [name, change] of knownGaps) {
-    if (keyOf(build(change(baseline))) !== baselineKey) problems.push(`${name} now changes the key; move its row from knownGaps to scientific`);
   }
   return problems;
 };
@@ -81,6 +75,7 @@ const DERIVED_TABLE = {
     ['the record index of a payload', withRecord(1, () => ({ recordIndex: 2 }))],
     ['a pair endpoint', withPair(() => ({ queryIndex: 1, subjectIndex: 0 }))],
     ['a pair raw search', withPair(() => ({ cacheKey: 'pair-a-b-rerun' }))],
+    ['the displayed direction of a pair (displayPair)', withPair(() => ({ displayPair: false }))],
     ['the bit score threshold', set({ bitscore: 60 })],
     ['the E-value threshold', set({ evalue: '1e-6' })],
     ['the identity threshold', set({ identity: 71 })],
@@ -92,14 +87,6 @@ const DERIVED_TABLE = {
   displayOnly: [
     ...DISPLAY_ONLY,
     ['record payload order', (input) => ({ ...input, recordPayloads: [...input.recordPayloads].reverse() })]
-  ],
-  // The converter selects the output pairs from displayPair and explicitDisplayPairs
-  // (python-helpers.js display_pair / explicit_display_pairs), but the identity
-  // builder reads neither: a plan change that only flips which direction of a pair
-  // is displayed reuses the derived payload.
-  knownGaps: [
-    ['the displayed direction of a pair (displayPair)', withPair(() => ({ displayPair: false }))],
-    ['explicit display pairs (CLI grid row layout)', set({ explicitDisplayPairs: true })]
   ]
 };
 
@@ -132,10 +119,12 @@ const COLLINEAR_TABLE = {
     ['the maximum conflicts in a merge gap', set({ collinearMaxConflictsInMergeGap: 2 })],
     ['the maximum paralog links per orthogroup', set({ collinearMaxParalogLinksPerOrthogroup: 3 })],
     ['orthogroup inference', set({ collinearInferOrthogroups: false })],
-    ['the search scope', set({ collinearSearchScope: 'all' })]
+    ['the search scope', set({ collinearSearchScope: 'all' })],
+    // Only the Collinear converter reads it: with the search scope 'all' it limits the
+    // output to the displayed pairs of a CLI grid row layout.
+    ['explicit display pairs (CLI grid row layout)', set({ explicitDisplayPairs: true })]
   ],
-  displayOnly: DERIVED_TABLE.displayOnly,
-  knownGaps: DERIVED_TABLE.knownGaps
+  displayOnly: DERIVED_TABLE.displayOnly
 };
 
 // The raw search identity builder is module-private; load a copy that exports it.
@@ -248,13 +237,13 @@ test('the sensitivity table flags a builder that drops an input or keys on displ
   const keysOnHeight = (input) => ({ ...buildLosatDerivedPayloadCachePayload(input), height: input.comparisonHeight });
   assert.deepEqual(keySensitivityProblems(keysOnHeight, derivedBaseline, DERIVED_TABLE),
     ['not reused after display-only comparison height']);
-  const keysOnDisplayPairs = (input) => ({
-    ...buildLosatDerivedPayloadCachePayload(input),
-    displayPairs: input.pairPayloads.map(({ displayPair }) => displayPair === true),
-    explicitDisplayPairs: input.explicitDisplayPairs === true
+  const dropsDisplayDirection = (input) => buildLosatDerivedPayloadCachePayload({
+    ...input,
+    pairPayloads: input.pairPayloads.map(({ displayPair, ...pair }) => pair)
   });
-  assert.deepEqual(keySensitivityProblems(keysOnDisplayPairs, derivedBaseline, DERIVED_TABLE), [
-    'the displayed direction of a pair (displayPair) now changes the key; move its row from knownGaps to scientific',
-    'explicit display pairs (CLI grid row layout) now changes the key; move its row from knownGaps to scientific'
-  ]);
+  assert.deepEqual(keySensitivityProblems(dropsDisplayDirection, derivedBaseline, DERIVED_TABLE),
+    ['reused after a change of the displayed direction of a pair (displayPair)']);
+  const dropsExplicitDisplayPairs = (input) => buildLosatDerivedPayloadCachePayload({ ...input, explicitDisplayPairs: undefined });
+  assert.deepEqual(keySensitivityProblems(dropsExplicitDisplayPairs, collinearBaseline, COLLINEAR_TABLE),
+    ['reused after a change of explicit display pairs (CLI grid row layout)']);
 });
