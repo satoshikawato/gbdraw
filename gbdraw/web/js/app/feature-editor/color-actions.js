@@ -56,7 +56,8 @@ export const createFeatureColorActions = ({
     getEffectiveLegendCaption,
     getIndividualFeatureLabel,
     getFeatureQualifier,
-    getLabelSpecificRule
+    getLabelSpecificRule,
+    getLegendRowRules
   } = ruleActions;
   const { getFeatureElements, getFeatureFillElements } = featureSvgActions;
   const normalizeCaption = (value) => String(value || '').trim();
@@ -683,10 +684,10 @@ export const createFeatureColorActions = ({
     const color = resolveColorToHex(request.finalColor || request.currentColor) || '#cccccc';
     if (!caption) return false;
     const features = (request.features || []).filter(Boolean);
-    const sourceRules = manualSpecificRules.filter(rule => rule.cap === oldCaption);
+    const sourceRules = getLegendRowRules(oldCaption);
     if (sourceRules.length || features.length) {
       const rules = request.sourceScope === 'group' && sourceRules.length
-        ? manualSpecificRules.map(rule => rule.cap === oldCaption ? { ...rule, cap: caption, color } : { ...rule })
+        ? manualSpecificRules.map(rule => sourceRules.includes(rule) ? { ...rule, cap: caption, color } : { ...rule })
         : featureRuleCandidate(features, color, caption);
       const selected = new Set(features.map(feature => feature.svg_id));
       const retireOld = features.length > 0 && getFeaturesForLegendCaption(oldCaption)
@@ -784,9 +785,8 @@ export const createFeatureColorActions = ({
     // specific-color rule keeps the PD-OI-042 caption disambiguation instead.
     const targetEntry = findLegendEntryByCaption(newCaption);
     const isDistinctTargetEntry = targetEntry && !captionsMatch(targetEntry.caption, oldCaption);
-    const ruleOwnedTarget = isDistinctTargetEntry
-      && manualSpecificRules.some(rule => captionsMatch(rule.cap, targetEntry.caption));
-    const featureOrRuleRename = features.length > 0 || manualSpecificRules.some(rule => rule.cap === oldCaption);
+    const ruleOwnedTarget = isDistinctTargetEntry && getLegendRowRules(targetEntry.caption).length > 0;
+    const featureOrRuleRename = features.length > 0 || getLegendRowRules(oldCaption).length > 0;
 
     if (featureOrRuleRename && (!isDistinctTargetEntry || ruleOwnedTarget || colorsMatch(targetEntry.color, currentColor))) {
       await applyLegendRenameRequest({ ...request, currentColor, features,
@@ -872,12 +872,13 @@ export const createFeatureColorActions = ({
   };
 
   const applyColorToLegendSpecificRules = async (caption, color) => {
-    const specificRules = manualSpecificRules.filter(rule => rule.cap === caption && !isHashSpecificRule(rule));
+    const rowRules = getLegendRowRules(caption);
+    const specificRules = rowRules.filter(rule => !isHashSpecificRule(rule));
     if (!specificRules.length) return false;
     const covered = extractedFeatures.value.filter(feature => specificRules.some(rule => ruleMatchesFeature(feature, rule)));
-    const rules = manualSpecificRules.filter(rule => !(rule.cap === caption && isHashSpecificRule(rule)
+    const rules = manualSpecificRules.filter(rule => !(rowRules.includes(rule) && isHashSpecificRule(rule)
       && covered.some(feature => hashRuleTargetsFeatureExactly(rule, feature))))
-      .map(rule => rule.cap === caption ? { ...rule, color } : { ...rule });
+      .map(rule => rowRules.includes(rule) ? { ...rule, color } : { ...rule });
     return ruleActions.commitSpecificRules(rules, 'Change legend color');
   };
 

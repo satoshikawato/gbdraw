@@ -42,16 +42,103 @@ export const applySpecificRuleProvenance = (canonicalRules, storedRules) => {
   });
 };
 
-// Captions reaching this projection have already been allocated by Python.
-export const buildLegendIntents = (rules) => {
+// N-06 (PD-OI-042): Python keeps a rule's caption, but draws a rule whose
+// caption names a renderer row of another color (a feature type, "other ...",
+// or a numeric track) as "<caption> [<hex>]", made unique like a legend key
+// (gbdraw/legend/table.py). The renderer rows are the Generate rows of the
+// current legend that no rule draws. The live legend and the Legend editor use
+// this one allocation to address the row Generate draws for a rule.
+
+// Python's _legend_fill_identity: lower-case #rrggbb, or none.
+const fillIdentity = (value) => {
+  const color = normalizeColor(value);
+  return /^#[0-9a-f]{3}$/.test(color) ? `#${[...color.slice(1)].map((char) => char + char).join('')}` : color;
+};
+const allocatedRowBase = (rule) => `${rule.cap} [${fillIdentity(rule.color)}]`;
+const isAllocatedRow = (caption, rule) => {
+  const base = allocatedRowBase(rule);
+  return caption === base || (caption.startsWith(`${base} (`) && /^\d+\)$/.test(caption.slice(base.length + 2)));
+};
+const drawsRow = (row, rule) => row.color === fillIdentity(rule.color)
+  && (row.caption === rule.cap || isAllocatedRow(row.caption, rule));
+
+export const rendererLegendRows = ({ legendEntries = [], originalLegendOrder = [], rules = [] } = {}) => {
+  const generated = new Set((originalLegendOrder || []).map(normalizeText).filter(Boolean));
+  const normalizedRules = (rules || []).map((rule) => normalizeSpecificRule(rule)).filter((rule) => rule.cap);
+  return (legendEntries || [])
+    .map((entry) => ({
+      caption: normalizeText(entry?.caption),
+      origin: normalizeText(entry?.originalCaption || entry?.caption),
+      color: fillIdentity(entry?.color)
+    }))
+    .filter((row) => row.caption && generated.has(row.origin)
+      && !normalizedRules.some((rule) => drawsRow(row, rule)))
+    .map(({ caption, color }) => ({ caption, color }));
+};
+
+const uniqueLegendKey = (reserved, preferred) => {
+  if (!reserved.has(preferred)) return preferred;
+  let suffix = 2;
+  while (reserved.has(`${preferred} (${suffix})`)) suffix += 1;
+  return `${preferred} (${suffix})`;
+};
+
+// Returns rule -> the legend caption Generate draws for that rule.
+export const createRuleLegendCaptions = (rules = [], rendererRows = []) => {
+  const rowColors = new Map((rendererRows || []).map((row) => [row.caption, row.color]));
+  const normalizedRules = (rules || []).map((rule) => normalizeSpecificRule(rule));
+  const reserved = new Set([...rowColors.keys(), ...normalizedRules.map((rule) => rule.cap).filter(Boolean)]);
+  const allocated = new Map();
+  const keyOf = (rule) => JSON.stringify([rule.cap, fillIdentity(rule.color)]);
+  normalizedRules
+    .filter((rule) => rule.cap && rowColors.has(rule.cap) && rowColors.get(rule.cap) !== fillIdentity(rule.color))
+    .sort((left, right) => keyOf(left).localeCompare(keyOf(right)))
+    .forEach((rule) => {
+      if (allocated.has(keyOf(rule))) return;
+      const caption = uniqueLegendKey(reserved, allocatedRowBase(rule));
+      reserved.add(caption);
+      allocated.set(keyOf(rule), caption);
+    });
+  return (rule) => {
+    const normalized = normalizeSpecificRule(rule);
+    return allocated.get(keyOf(normalized)) || normalized.cap;
+  };
+};
+
+// Only a caption that names a current row of another color can be allocated.
+const mayBeAllocated = (rule, legendEntries) => Boolean(rule.cap) && (legendEntries || []).some((entry) => (
+  normalizeText(entry?.caption) === rule.cap && fillIdentity(entry?.color) !== fillIdentity(rule.color)
+));
+
+// The legend caption Generate draws for one rule of `context.rules`.
+export const ruleLegendCaption = (rule, { rules = [], legendEntries = [], originalLegendOrder = [] } = {}) => {
+  const normalized = normalizeSpecificRule(rule);
+  if (!mayBeAllocated(normalized, legendEntries)) return normalized.cap;
+  return createRuleLegendCaptions(rules, rendererLegendRows({ legendEntries, originalLegendOrder, rules }))(normalized);
+};
+
+export const buildLegendIntents = (rules, rendererRows = []) => {
+  const legendCaption = createRuleLegendCaptions(rules, rendererRows);
   const byCaption = new Map();
   for (const rule of rules || []) {
     const normalized = normalizeSpecificRule(rule);
-    if (normalized.cap && !byCaption.has(normalized.cap)) {
-      byCaption.set(normalized.cap, { caption: normalized.cap, color: normalized.color });
+    const caption = legendCaption(normalized);
+    if (caption && !byCaption.has(caption)) {
+      byCaption.set(caption, { caption, color: normalized.color });
     }
   }
   return { intents: [...byCaption.values()] };
+};
+
+// The rules a legend row draws, by the allocation above (never by reading a
+// suffix back): editing that row edits these rules.
+export const legendRowRules = (caption, { rules = [], legendEntries = [], originalLegendOrder = [] } = {}) => {
+  const target = normalizeText(caption);
+  if (!target) return [];
+  const legendCaption = createRuleLegendCaptions(
+    rules, rendererLegendRows({ legendEntries, originalLegendOrder, rules })
+  );
+  return (rules || []).filter((rule) => legendCaption(rule) === target);
 };
 
 export const diffLegendIntents = (currentEntries, desiredIntents) => {
