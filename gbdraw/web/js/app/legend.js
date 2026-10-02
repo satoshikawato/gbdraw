@@ -25,7 +25,11 @@ export const createLegendManager = ({
     previewRuntime,
     getCommittedRequest
   });
-  const sortActions = createLegendSortActions({ state, extractLegendEntries: entryActions.extractLegendEntries });
+  const sortActions = createLegendSortActions({
+    state,
+    extractLegendEntries: entryActions.extractLegendEntries,
+    previewRuntime
+  });
   const strokeActions = createLegendStrokeActions({ state, previewRuntime });
   const rowRulesAt = (index) => legendRowRules(state.legendEntries.value[index]?.caption, {
     rules: state.manualSpecificRules,
@@ -35,7 +39,8 @@ export const createLegendManager = ({
   const dragActions = createLegendDragActions({
     state,
     extractLegendEntries: entryActions.extractLegendEntries,
-    history
+    history,
+    previewRuntime
   });
 
   return {

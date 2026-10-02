@@ -1,27 +1,15 @@
 import { getAllFeatureLegendGroups, orderLegendEntries } from './utils.js';
-import { serializeCleanSvg } from '../../services/svg-serialization.js';
 
-export const createLegendSortActions = ({ state, extractLegendEntries }) => {
-  const { svgContainer, legendEntries, originalLegendOrder, selectedResultIndex, results, skipCaptureBaseConfig } =
-    state;
+export const createLegendSortActions = ({ state, extractLegendEntries, previewRuntime = null }) => {
+  const { svgContainer, legendEntries, originalLegendOrder } = state;
 
   const getCurrentSvg = () => {
     if (!svgContainer.value) return null;
     return svgContainer.value.querySelector('svg');
   };
 
-  const persistLegendSvg = (svg) => {
-    skipCaptureBaseConfig.value = true;
-    const resultIdx = selectedResultIndex.value;
-    if (resultIdx >= 0 && results.value.length > resultIdx) {
-      const nextResults = [...results.value];
-      nextResults[resultIdx] = {
-        ...results.value[resultIdx],
-        content: serializeCleanSvg(svg)
-      };
-      results.value = nextResults;
-    }
-
+  const persistLegendOrder = () => {
+    previewRuntime?.commitActiveResultEdit('legend-order');
     extractLegendEntries();
   };
 
@@ -50,7 +38,7 @@ export const createLegendSortActions = ({ state, extractLegendEntries }) => {
       }
     }
 
-    persistLegendSvg(svg);
+    persistLegendOrder();
   };
 
   const getVisibleLegendOrder = () => legendEntries.value.map((entry) => entry.caption).filter(Boolean);

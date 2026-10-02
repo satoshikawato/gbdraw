@@ -221,7 +221,7 @@ const mockLegendEntry = (caption, color, x) => {
       updatePairwiseLegendPositions: () => { layoutRefreshes += 1; }
     },
     previewRuntime: {
-      applyLegendChanges: () => {
+      commitActiveResultEdit: () => {
         dirtyMarks += 1;
         return true;
       }
@@ -315,7 +315,7 @@ const mockLegendEntry = (caption, color, x) => {
   const strokeActions = createLegendStrokeActions({
     state,
     previewRuntime: {
-      markActiveResultDirty: () => {
+      commitActiveResultEdit: () => {
         dirtyMarks += 1;
         return true;
       }
@@ -446,7 +446,7 @@ const mockLegendEntry = (caption, color, x) => {
   const actions = createLegendEntryActions({
     state,
     layoutActions: { compactLegendEntries: () => {}, reflowDualLegendLayout: () => {}, updatePairwiseLegendPositions: () => {} },
-    previewRuntime: { applyLegendChanges: () => true }
+    previewRuntime: { commitActiveResultEdit: () => true }
   });
   const generate = (...rendered) => {
     const replayed = compileDirectEditorMutationPlan({

@@ -863,6 +863,8 @@ export const createPreviewRuntime = ({ state, serializeSvg }) => {
     return true;
   };
 
+  // R1: the one commit for an editor's edit of the displayed Result's SVG.
+  // Serializes the mounted root into its Result; unchanged content is not written.
   const commitActiveResultEdit = (reason) => {
     if (!markActiveResultDirty(reason)) return false;
     return flushActiveResult();
@@ -909,17 +911,15 @@ export const createPreviewRuntime = ({ state, serializeSvg }) => {
     return updated > 0;
   };
 
-  const applyLegendChanges = (_changes, { reason = 'legend' } = {}) => markActiveResultDirty(reason);
-
   return {
     acceptReadyReceipt,
     applyFeatureFillChanges,
     applyFeatureStrokeChanges,
     applyEditorOperations,
     applyFeatureVisibilityChanges,
-    applyLegendChanges,
     bindMountedResult,
     clearActiveRuntime,
+    commitActiveResultEdit,
     configureMountedResultBinder,
     createMountedResultContext,
     flushActiveResult,
