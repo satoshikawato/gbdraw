@@ -42,8 +42,9 @@ decisions are in
   and depth slot `legend_label` values now appear (TR-01, N-04).
 - When the center definition blocks the inside tracks, the species line is
   wrapped at word boundaries and the tracks are placed again. An explicit
-  `center_reserved_radius` or a non-default definition font size keeps one
-  line. The remaining failure names the slot and the reserved definition
+  `center_reserved_radius` keeps one line. `definition_font_size` 18 is the
+  default, so 18 counts as not explicit and may wrap; any other value is
+  explicit and never wraps. The remaining failure names the slot and the reserved definition
   radius, and the Web shows it as `TRACK_LAYOUT` / `DEFINITION_RESERVED`; a
   failure caused by an explicit `center_reserved_radius` names that radius
   instead (`CENTER_RESERVED`) (PV-08, PD-OI-078).
