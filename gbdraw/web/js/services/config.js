@@ -53,10 +53,7 @@ import {
 } from '../app/linear-label-visibility.js';
 import { isCliInvocationSessionExportable } from '../app/run-info.js';
 import { migrateLegacyOrthogroupMembers } from './legacy-similarity-alignment.js';
-import {
-  normalizeCircularPlotTitlePosition,
-  normalizeLinearPlotTitlePosition
-} from '../app/plot-title-position.js';
+import { normalizeCircularPlotTitlePosition } from '../app/plot-title-position.js';
 import {
   migrateLegacyLayoutPreferences,
   normalizeLayoutPreferences,
@@ -1871,6 +1868,10 @@ const restoreLayoutPreferences = (ui = {}, { projected = null } = {}) => {
   );
 };
 
+// Captured or stored settings (History Undo and Redo, the failed Session Load
+// rollback, a settings-only Session) pass `resolveTrackPlacements: false`: the
+// track stacks are installed as given, so unset slot sides, lane directions,
+// and axis indexes stay unset (R11).
 export const applyConfigData = (data, { resolveTrackPlacements = true } = {}) => {
   requireCurrentWebStateFieldNames(data);
   if (isPlainObject(data.form) && Object.prototype.hasOwnProperty.call(data.form, 'linear_track_layout')) {
@@ -1982,7 +1983,10 @@ export const applyConfigData = (data, { resolveTrackPlacements = true } = {}) =>
     state.form.linear_track_layout
   );
   state.form.plot_title = String(state.form.plot_title || '');
-  state.form.legend = normalizeLegendPosition(state.form.legend, state.mode.value === 'linear' ? 'bottom' : 'left');
+  // `form.legend` and `adv.plot_title_position` are accessors over
+  // `layoutPreferences` (state.js) whose setters normalize a merged value.
+  // Writing the resolved value back would only pin an unset Circular
+  // multi-record preference, so neither is rewritten here.
   state.adv.feature_shapes = normalizeFeatureRenderingMap(state.adv.feature_shapes);
   Object.assign(state.adv, normalizedPersistedArrowGeometryState(data.adv));
   state.adv.multi_record_size_mode = requireCurrentCircularMultiRecordSizeMode(
@@ -2024,11 +2028,6 @@ export const applyConfigData = (data, { resolveTrackPlacements = true } = {}) =>
       return left.__index - right.__index;
     })
     .map(({ __index, ...entry }) => entry);
-  if (state.mode.value === 'linear') {
-    state.adv.plot_title_position = normalizeLinearPlotTitlePosition(state.adv.plot_title_position);
-  } else {
-    state.adv.plot_title_position = normalizeCircularPlotTitlePosition(state.adv.plot_title_position);
-  }
   const rawPlotTitleFontSize = state.adv.plot_title_font_size;
   if (
     rawPlotTitleFontSize === null ||
@@ -2106,6 +2105,12 @@ export const applyConfigData = (data, { resolveTrackPlacements = true } = {}) =>
         )
       );
     }
+  } else {
+    // The merge installs the caller's slot objects; copy them so a later edit
+    // never writes into a History entry or another caller-owned snapshot.
+    ['circular_track_slots', 'linear_track_slots'].forEach((key) => {
+      state.adv[key].splice(0, state.adv[key].length, ...cloneJsonData(state.adv[key]));
+    });
   }
   state.adv.depth_window_size = normalizePositiveNumberOrNull(state.adv.depth_window_size);
   state.adv.depth_step_size = normalizePositiveNumberOrNull(state.adv.depth_step_size);
@@ -3613,7 +3618,7 @@ const restoreSessionImportSnapshot = async (snapshot) => {
     state.semanticFileWatchersSuppressed.value = true;
     resetSessionBaseline();
     state.mode.value = snapshot.ui.mode === 'linear' ? 'linear' : 'circular';
-    applyConfigData(snapshot.config);
+    applyConfigData(snapshot.config, { resolveTrackPlacements: false });
     applyUiStateData(snapshot.ui);
     restoreLiveFileState(snapshot.files);
     state.losatCache.value = snapshot.losatCache;
@@ -3640,7 +3645,7 @@ const restoreSessionImportSnapshot = async (snapshot) => {
     applyFeatureStateData(snapshot.features);
     applyOrthogroupStateData(snapshot.orthogroupState);
     state.collinearGroups.value = snapshot.collinearGroups;
-    applyEditorStateData(snapshot.editorState);
+    applyEditorStateData(snapshot.editorState, { normalized: true });
     applyRunStateData(snapshot.runState);
     state.errorLog.value = snapshot.errorLog;
     state.resultPanelTab.value = snapshot.resultPanelTab;

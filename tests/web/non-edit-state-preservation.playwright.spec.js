@@ -84,6 +84,10 @@ const generateAgain = async (page) => {
   await settle(page);
 };
 
+const historyCounts = (page) => page.evaluate(() => [
+  window.__GBDRAW_HISTORY__.getUndoCount(), window.__GBDRAW_HISTORY__.getRedoCount()
+]);
+
 // Returning to Circular refreshes the record list; wait until it holds the
 // records it held before, so the snapshot does not race the refresh.
 const modeRoundTrip = async (page) => {
@@ -204,6 +208,56 @@ const ROWS = [
       await settle(page);
     },
     operation: toggleHideGcContent
+  },
+  {
+    // G-H (R11): Undo^n then Redo^n through edits of three kinds returns to
+    // the edited state and History position, and a mode round trip keeps it.
+    name: 'Undo and Redo through mixed edits, then a mode round trip, restore the edited state',
+    setup: async (page) => {
+      await openWithGenBank(page, HMMT, labelsOut);
+      await generateAndWaitForResult(page);
+      const start = await page.evaluate(() => window.__GBDRAW_HISTORY__.getUndoCount());
+      await editFirstCdsLabel(page, 'UNDO_REDO_CHAIN');
+      const rich = await reveal(page.locator('label.option-label', { hasText: 'Rich Feature Popup' }).first());
+      await rich.locator('input[type="checkbox"]').click();
+      const labelMode = await reveal(page.locator('#circular-label-mode'));
+      await labelMode.focus();
+      await page.keyboard.press('ArrowDown');
+      await expect(labelMode).toHaveValue('both');
+      await settle(page);
+      const steps = await page.evaluate((base) => window.__GBDRAW_HISTORY__.getUndoCount() - base, start);
+      expect(steps, 'one Undo step per edit').toBe(3);
+    },
+    operation: async (page) => {
+      const [undo, redo] = await historyCounts(page);
+      for (const action of ['undo', 'undo', 'undo', 'redo', 'redo', 'redo']) {
+        await page.evaluate((name) => window.__GBDRAW_HISTORY__[name](), action);
+        await settle(page);
+      }
+      expect(await historyCounts(page), 'Redo returns to the last History position').toEqual([undo, redo]);
+      await modeRoundTrip(page);
+    }
+  },
+  {
+    // G-H (R11): the Reset Settings checkpoint restores the reset state,
+    // whose track stack and multi-record layout are unset, exactly.
+    name: 'an Undo and Redo pair of Reset Settings restores the reset state exactly',
+    setup: async (page) => {
+      await openWithGenBank(page, HMMT, labelsOut);
+      await generateAndWaitForResult(page);
+      await editFirstCdsLabel(page, 'RESET_LABEL');
+      // openWithGenBank accepts the confirmation dialog.
+      await page.getByRole('button', { name: 'Reset Settings', exact: true }).click();
+      await settle(page);
+    },
+    operation: async (page) => {
+      const counts = await historyCounts(page);
+      for (const action of ['undo', 'redo']) {
+        await page.evaluate((name) => window.__GBDRAW_HISTORY__[name](), action);
+        await settle(page);
+      }
+      expect(await historyCounts(page), 'Redo returns to the Reset step').toEqual(counts);
+    }
   }
 ];
 

@@ -1227,6 +1227,16 @@ assert.deepEqual(
   recordDiscoveryDerivedState,
   expectedRecordDiscoveryDerivedState
 );
+// F-1 (R11): the rollback installs the captured state as it was, so unset
+// slot sides, lane directions, and axis indexes stay unset and the Result's
+// named stroke color stays named.
+state.adv.circular_track_slots.forEach((slot) => {
+  slot.side = null;
+  delete slot.params.lane_direction;
+});
+state.adv.circular_track_slots_axis_index = null;
+state.adv.linear_track_slots_axis_index = null;
+state.originalSvgStroke.value = { color: 'gray', width: 1 };
 const stateBeforeFailedImport = rollbackState();
 
 const malformedCompositionSvg = {
