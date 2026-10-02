@@ -178,7 +178,9 @@ If a record still has multiple candidates, the command reports that record
 and its exact candidate IDs as an error. It never prompts or silently accepts
 a recommendation. Supply an unambiguous input or use Web **Select**/**Skip**.
 The same completed protein analysis supplies both resolution and rendering;
-Align does not start another LOSATP search. Collinear alignment controls,
+Align does not start another LOSATP search. The Python API takes the same input
+as `SimilarityAlignmentReference(feature_id=...)` and resolves it with the same
+rules ([Python API reference](python-api.md#typed-linear-similarity-group-alignment)). Collinear alignment controls,
 anchor TSV, scored inference, support-count ranking, and multi-hop automatic
 selection are unsupported.
 

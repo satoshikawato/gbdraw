@@ -211,7 +211,8 @@ Select or Skip outcome and rationale. Record presentation or region state
 owns the orientation used to project each anchor center. Current readers reject
 partial, malformed, mismatched, or unsupported plans. Schema 1 of the nested
 plan was never released and has no reader. There is no Circular form or generic
-transform matrix.
+transform matrix. A Python `SimilarityAlignmentReference` is not a persisted
+form: writers store the plan it resolves to.
 
 Web **Align…** and **Review alignment options…** take the direct ortholog
 evidence for the selected Similarity Group from the orthogroup result in the

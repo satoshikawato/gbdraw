@@ -728,7 +728,7 @@
       "capabilities": ["entry.simple-python", "program.comparisons-tracks", "comparison.losatp-groups", "output.static-svg"],
       "fixtures": ["aminoglycoside-bgc-five"],
       "settings": {"mode": "linear", "working_directory": "empty", "protein_mode": "orthogroup", "threads": 1, "alignment_group": "og_1", "separate_strands": false, "lock_definition_column": true, "definition_name": {"font_size": 20, "font_weight": "bold"}, "definition_other_lines": {"font_size": 20, "font_weight": "normal"}},
-      "execution": {"kind": "python-recipe", "path": "docs/recipes/run_python_scenarios.py", "tier": "extended", "expected_outputs": ["python_bgc_losatp_groups.svg"], "assertions": ["first_result_step=2", "snippet_executes=true", "return_type=Diagram", "definition_column=left", "definition_font_size=20", "definition_name_weight=bold", "group_count=23", "svg.group_links=77", "parity=T-GUI-04,T-CLI-08"]},
+      "execution": {"kind": "python-recipe", "path": "docs/recipes/run_python_scenarios.py", "tier": "extended", "expected_outputs": ["python_bgc_losatp_groups.svg"], "assertions": ["first_result_step=2", "snippet_executes=true", "return_type=Diagram", "definition_column=left", "definition_font_size=20", "definition_name_weight=bold", "group_count=23", "svg.group_links=77", "alignment_group=og_1", "parity=T-GUI-04,T-CLI-08"]},
       "screenshots": [],
       "sources": ["docs/TUTORIALS/GUI/compare-proteins-losatp.md", "docs/REFERENCE/python-api.md"],
       "destination": "docs/TUTORIALS/PYTHON/compare-proteins-losatp.md",

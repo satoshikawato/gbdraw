@@ -26,6 +26,7 @@ from .interface import (
 from .version import __version__
 from .api.requests import RecordDisplayOptions
 from .features.placement import FeaturePlacementOverride, FeaturePlacementTarget
+from .layout.similarity_alignment import SimilarityAlignmentReference
 
 __all__ = [
     "CircularLayout",
@@ -46,6 +47,7 @@ __all__ = [
     "LinearOptions",
     "LinearTrackOptions",
     "RecordDisplayOptions",
+    "SimilarityAlignmentReference",
     "Thresholds",
     "TitleOptions",
     "__version__",

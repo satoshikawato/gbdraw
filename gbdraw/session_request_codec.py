@@ -102,6 +102,7 @@ from .layout.similarity_alignment import (
     AlignmentRecordDecision,
     AlignmentResolutionRationale,
     SimilarityAlignmentPlan,
+    SimilarityAlignmentReference,
 )
 
 
@@ -615,6 +616,8 @@ def _encode_canonical_request(request: DiagramRequest) -> EncodedCanonicalReques
             unresolved_reasons.append("record-derived output prefix")
         if request.options.comparison_table_file is not None:
             unresolved_reasons.append("Linear comparison table")
+        if isinstance(request.similarity_alignment, SimilarityAlignmentReference):
+            unresolved_reasons.append("similarity alignment reference")
         if request._legacy_similarity_alignment is not None:
             raise CanonicalRequestEncodingError(
                 "A legacy similarity alignment must be materialized before current encoding."

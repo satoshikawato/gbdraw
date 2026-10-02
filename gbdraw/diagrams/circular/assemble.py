@@ -1265,9 +1265,10 @@ def _resolve_radial_layout_fitting_definition(
     Returns the layout, the reserved definition radius and the species line
     count. Only a placement that fails because of the definition band wraps
     the species line at word boundaries and places again, with the fewest
-    lines that fit. An explicit ``center_reserved_radius`` or a definition font
-    size other than the packaged default keeps the single line; a failure the
-    wrap cannot fix raises the original definition-band error.
+    lines that fit. An explicit ``center_reserved_radius`` keeps the single
+    line. ``definition_font_size`` 18 is the packaged default, so 18 counts as
+    not explicit and may wrap; any other value is explicit and never wraps. A
+    failure the wrap cannot fix raises the original definition-band error.
     """
 
     if center_reserved_radius is not None:

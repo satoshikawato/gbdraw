@@ -37,10 +37,8 @@ from gbdraw.layout.similarity_alignment import (
     AlignmentAnchorIdentity,
     AlignmentDecisionStatus,
     AlignmentEvidenceEdge,
-    AmbiguousAlignmentRecord,
     SimilarityAlignmentCandidate,
     SimilarityAlignmentPlan,
-    resolve_similarity_alignment,
 )
 from gbdraw.linear_comparison import LinearComparison
 
@@ -441,96 +439,6 @@ def project_similarity_alignment_anchor_fact(
         strand, None if strand is None else strand * collection.transforms[index].source_step, center,
     )
 
-def resolve_cli_similarity_alignment_plan(
-    collection: ResolvedRecordCollection,
-    orthogroups: OrthogroupResult | OrthogroupGraphResult | None,
-    *,
-    exact_reference: str,
-) -> SimilarityAlignmentPlan:
-    """Resolve the strict non-interactive CLI adapter through the shared resolver."""
-
-    target = str(exact_reference).strip()
-    if not target or "\0" in target:
-        raise ValidationError(
-            "--align_orthogroup_feature requires a non-empty exact feature/protein ID."
-        )
-    if orthogroups is None:
-        raise ValidationError(
-            "--align_orthogroup_feature requires orthogroup metadata from the requested analysis."
-        )
-    if target in orthogroups.orthogroups:
-        raise ValidationError(
-            "--align_orthogroup_feature accepts an exact feature/protein ID, not "
-            f"Similarity Group ID {target!r}."
-        )
-    record_keys = tuple(item.record_key for item in collection.provenance)
-    candidate_rows: list[tuple[OrthogroupMember, SimilarityAlignmentCandidate]] = []
-    exact_matches: list[tuple[OrthogroupMember, SimilarityAlignmentCandidate]] = []
-    for members in orthogroups.orthogroups.values():
-        for member in members:
-            if member.record_index < 0 or member.record_index >= len(collection.records):
-                continue
-            candidate = _similarity_candidate_from_orthogroup_member(
-                collection,
-                member,
-            )
-            candidate_rows.append((member, candidate))
-            catalog_alias = candidate.anchor.biological_feature_id
-            aliases = {
-                str(value)
-                for value in (
-                    member.protein_id,
-                    member.source_protein_id,
-                    member.feature_svg_id,
-                    catalog_alias,
-                    candidate.anchor.stable_feature_svg_id,
-                )
-                if value
-            }
-            if target in aliases:
-                exact_matches.append((member, candidate))
-    if not exact_matches:
-        raise ValidationError(
-            "--align_orthogroup_feature did not match an exact feature/protein ID."
-        )
-    if len(exact_matches) != 1:
-        matches = ", ".join(
-            sorted(
-                f"{candidate.anchor.record_key}:{member.protein_id}"
-                for member, candidate in exact_matches
-            )
-        )
-        raise ValidationError(
-            "--align_orthogroup_feature is ambiguous; use one exact candidate ID "
-            f"from: {matches}."
-        )
-    reference_member, reference = exact_matches[0]
-    group_id = reference_member.orthogroup_id
-    group_candidates = tuple(
-        candidate
-        for member, candidate in candidate_rows
-        if member.orthogroup_id == group_id
-    )
-    edges = similarity_alignment_evidence_edges(collection, orthogroups, group_id)
-    resolution = resolve_similarity_alignment(
-        record_keys=record_keys,
-        group_id=group_id,
-        reference=reference.anchor,
-        candidates=group_candidates,
-        edges=edges,
-    )
-    if resolution.ambiguities:
-        details = "; ".join(
-            _cli_ambiguity_message(ambiguity, candidate_rows)
-            for ambiguity in resolution.ambiguities
-        )
-        raise ValidationError(
-            "--align_orthogroup_feature cannot choose among multiple candidates; "
-            f"select an exact candidate for each record: {details}."
-        )
-    return resolution.require_plan()
-
-
 def similarity_alignment_evidence_edges(
     collection: ResolvedRecordCollection,
     orthogroups: OrthogroupResult | OrthogroupGraphResult | None,
@@ -629,21 +537,6 @@ def _similarity_candidate_from_orthogroup_member(
         source_end=member.end,
         display_name=member.gene or member.product or member.label or member.protein_id,
     )
-
-
-def _cli_ambiguity_message(
-    ambiguity: AmbiguousAlignmentRecord,
-    rows: Sequence[tuple[OrthogroupMember, SimilarityAlignmentCandidate]],
-) -> str:
-    protein_by_key = {
-        candidate.anchor.canonical_key: member.protein_id
-        for member, candidate in rows
-    }
-    candidate_ids = ", ".join(
-        protein_by_key.get(candidate.anchor.canonical_key, candidate.anchor.biological_feature_id)
-        for candidate in ambiguity.candidates
-    )
-    return f"record {ambiguity.record_key!r} candidates [{candidate_ids}]"
 
 
 def _detected_topology(record: SeqRecord, source_kind: str):

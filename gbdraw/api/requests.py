@@ -17,7 +17,11 @@ from gbdraw.exceptions import ValidationError
 from gbdraw.features.source import SourceFeatureIdentity
 from gbdraw.io.record_select import RecordSelector
 from gbdraw.io.regions import RegionSpec
-from gbdraw.layout.similarity_alignment import SimilarityAlignmentPlan
+from gbdraw.layout.similarity_alignment import (
+    SimilarityAlignmentPlan,
+    SimilarityAlignmentReference,
+    SimilarityAlignmentReferenceError,
+)
 from gbdraw.render.formats import ACCEPTED_FORMATS, normalize_format_token
 from gbdraw.render.output_paths import is_windows_reserved_filename_component
 
@@ -707,7 +711,9 @@ class LinearDiagramRequest:
     records: Sequence[RecordInput]
     options: LinearDiagramOptions = field(default_factory=LinearDiagramOptions)
     layout: LinearMultiRecordOptions | None = None
-    similarity_alignment: SimilarityAlignmentPlan | None = None
+    similarity_alignment: (
+        SimilarityAlignmentPlan | SimilarityAlignmentReference | None
+    ) = None
     output: RenderOutputRequest = field(default_factory=RenderOutputRequest)
     record_options: RecordCollectionOptions = field(
         default_factory=RecordCollectionOptions
@@ -734,10 +740,19 @@ class LinearDiagramRequest:
             raise ValidationError("Linear request layout has an unsupported type.")
         if self.similarity_alignment is not None and not isinstance(
             self.similarity_alignment,
-            SimilarityAlignmentPlan,
+            (SimilarityAlignmentPlan, SimilarityAlignmentReference),
         ):
             raise ValidationError(
                 "Linear request similarity_alignment has an unsupported type."
+            )
+        if (
+            isinstance(self.similarity_alignment, SimilarityAlignmentReference)
+            and self.options.protein_blastp_mode != "orthogroup"
+        ):
+            raise SimilarityAlignmentReferenceError(
+                self.similarity_alignment,
+                "requires the orthogroup analysis that resolves it "
+                "(protein_blastp_mode 'orthogroup').",
             )
         if not isinstance(self.output, RenderOutputRequest):
             raise ValidationError("Linear request output has an unsupported type.")
@@ -754,7 +769,12 @@ class LinearDiagramRequest:
         translations = (
             self.layout.record_translations if self.layout is not None else ()
         )
-        if translations or self.similarity_alignment is not None:
+        plan = (
+            self.similarity_alignment
+            if isinstance(self.similarity_alignment, SimilarityAlignmentPlan)
+            else None
+        )
+        if translations or plan is not None:
             record_keys = tuple(record.record_key for record in records)
             if any(record_key is None for record_key in record_keys):
                 raise ValidationError(
@@ -769,12 +789,12 @@ class LinearDiagramRequest:
                     "Linear record translation coverage differs from the displayed "
                     f"records (missing={missing}, unknown={unknown})."
                 )
-            if self.similarity_alignment is not None:
+            if plan is not None:
                 if not translations:
                     raise ValidationError(
                         "A similarity alignment plan requires one base translation per record."
                     )
-                self.similarity_alignment.validate_record_coverage(record_keys)
+                plan.validate_record_coverage(record_keys)
 
 
 DiagramRequest: TypeAlias = (

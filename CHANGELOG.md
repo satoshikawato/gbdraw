@@ -32,6 +32,17 @@ decisions are in
   the web app reports a comparison-endpoint error and keeps the previous
   Result. Unknown IDs keep the positional pair (the CLI logs a warning), and
   SVG record-ID metadata always names the endpoint records (CO-06).
+- Python API: `SimilarityAlignmentReference(feature_id="CAG38695.1")` in
+  `LinearDiagramRequest.similarity_alignment` or
+  `LinearComparisonOptions.similarity_alignment` aligns the Linear records on
+  that exact protein ID or feature SVG ID after the requested orthogroup
+  analysis, as `--align_orthogroup_feature` does. Python and the CLI share one
+  resolver, `gbdraw.api.resolve_similarity_alignment_plan()`, with the same
+  errors for a Similarity Group ID, an unmatched ID, or an ambiguous record, and
+  Sessions store only the resolved plan. The Python LOSATP tutorial, which still
+  passed the removed `align_orthogroup_feature` option, uses it and draws the
+  same SVG as the CLI tutorial. `gbdraw linear --align_orthogroup_feature` now
+  checks its output paths before the search (OD-2).
 
 - Circular Multi-Record Canvas output (the Web default) no longer reserves an
   empty depth slot when there is no depth input; a one-record canvas now has the
@@ -42,8 +53,9 @@ decisions are in
   and depth slot `legend_label` values now appear (TR-01, N-04).
 - When the center definition blocks the inside tracks, the species line is
   wrapped at word boundaries and the tracks are placed again. An explicit
-  `center_reserved_radius` or a non-default definition font size keeps one
-  line. The remaining failure names the slot and the reserved definition
+  `center_reserved_radius` keeps one line. `definition_font_size` 18 is the
+  default, so 18 counts as not explicit and may wrap; any other value is
+  explicit and never wraps. The remaining failure names the slot and the reserved definition
   radius, and the Web shows it as `TRACK_LAYOUT` / `DEFINITION_RESERVED`; a
   failure caused by an explicit `center_reserved_radius` names that radius
   instead (`CENTER_RESERVED`) (PV-08, PD-OI-078).

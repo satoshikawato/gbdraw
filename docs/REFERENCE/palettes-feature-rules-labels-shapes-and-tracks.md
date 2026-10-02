@@ -75,8 +75,9 @@ Circular inside tracks stack outward from the center definition. If they do not
 fit only because of the definition, the species line is wrapped at word
 boundaries into the fewest lines that let them fit, and the tracks are placed
 again; the text is unchanged. The wrap is not applied to a figure that already
-fits, to an explicit **Center Reserved Radius** (`--center_reserved_radius`),
-or to a definition font size other than the default 18. If the tracks still do
+fits or to an explicit **Center Reserved Radius** (`--center_reserved_radius`).
+`definition_font_size` 18 is the default, so 18 counts as not explicit and may
+wrap; any other value is explicit and never wraps. If the tracks still do
 not fit, the error names the slot that could not be placed and the reserved
 definition radius. Shorten the species or strain text, reduce the definition
 font size, set a smaller center reserved radius, or place tracks outside. When

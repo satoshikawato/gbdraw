@@ -33,6 +33,7 @@ from gbdraw.api import (
     PreparedDiagramRequest,
     RequestRenderResult,
     ScalarSpec,
+    SimilarityAlignmentPlan,
     SessionDocument,
     load_session_document,
 )
@@ -301,6 +302,15 @@ def _validate_migrated_tutorial(
         ):
             raise RecipeContractError(
                 "T-PY-05 changed the Similarity-group link set."
+            )
+        plan = namespace["diagram"].request.similarity_alignment
+        if (
+            not isinstance(plan, SimilarityAlignmentPlan)
+            or plan.group_id != "og_1"
+            or any(decision.status.value == "skipped" for decision in plan.records)
+        ):
+            raise RecipeContractError(
+                "T-PY-05 must align every record on og_1."
             )
     elif scenario_id == "T-PY-06":
         options = namespace.get("options")
