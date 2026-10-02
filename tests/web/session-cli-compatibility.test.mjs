@@ -1,7 +1,7 @@
 import { installSessionImportWorker } from './helpers/session-import-node.mjs';
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
-import { mkdtemp, readFile, rm } from 'node:fs/promises';
+import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { gunzipSync } from 'node:zlib';
@@ -29,7 +29,13 @@ globalThis.alert = () => {};
 
 installSessionImportWorker();
 
-const { importSession, getCommittedCanonicalRenderRequest, setUnmanagedConfigOverrideValidator } = await import('../../gbdraw/web/js/services/config.js');
+const {
+  importSession, getCommittedCanonicalRenderRequest, getCommittedCanonicalSession,
+  serializeActiveRenderFiles, setUnmanagedConfigOverrideValidator
+} = await import('../../gbdraw/web/js/services/config.js');
+const { buildCanonicalRenderRequest } = await import('../../gbdraw/web/js/services/session-request.js');
+const { inheritCommittedComparisonIntent } = await import('../../gbdraw/web/js/services/imported-comparison-intent.js');
+const { resolveLinearComparisonPlan } = await import('../../gbdraw/web/js/app/linear-comparisons.js');
 const { state } = await import('../../gbdraw/web/js/state.js');
 const { getSessionResourceSource, readFileBytes } = await import('../../gbdraw/web/js/services/file-content-cache.js');
 const root = process.cwd();
@@ -144,4 +150,53 @@ await test('a main v42 CLI Linear BLAST sidecar keeps a read-only comparison wit
   assert.equal(state.importedComparisonIntent.disposition, 'PRESERVED_READ_ONLY');
   assert.deepEqual(state.linearSeqs.map(seq => seq.uid), ['record-1', 'record-2']);
   assert.deepEqual(fileRecordKeys(getCommittedCanonicalRenderRequest()), ['record-1', 'record-2']);
+});
+
+// B3: one multi-record GenBank file with -b gives records `record-1:1` and
+// `record-1:2`. Each record becomes its own Linear row keyed by that recordKey
+// with its `#n` selector, so Inherit binds the comparison to the named records.
+await test('a multi-record CLI Linear BLAST Session inherits its comparison onto the named records', async () => {
+  const directory = await mkdtemp(path.join(tmpdir(), 'gbdraw-cli-web-'));
+  try {
+    const blast = path.join(directory, 'R2c_R3c.tsv');
+    await writeFile(blast, 'R2c\tR3c\t100.000\t1000\t0\t0\t2001\t3000\t1\t1000\t0.0\t1847\n');
+    const file = path.join(directory, 'multi.gbdraw-session.json.gz');
+    execFileSync('python', ['-m', 'gbdraw.cli', 'linear',
+      '--gbk', path.join(root, 'tests/fixtures/web_comparison_shared_block.gb'), '-b', blast,
+      '-o', path.join(directory, 'multi'), '--session_output', file], {
+      cwd: directory, env: { ...process.env, PYTHONPATH: root }, stdio: 'pipe', timeout: 1_800_000
+    });
+    const bytes = gunzipSync(await readFile(file));
+    const session = JSON.parse(bytes);
+    assert.deepEqual(session.renderRequest.records.map(record => record.recordKey), ['record-1:1', 'record-1:2']);
+    assert.equal(session.webFiles.bindings.linearSeqs.length, 1);
+    const result = await load(bytes);
+    assert.equal(result.status, 'ok', result.error?.stack);
+    assert.equal(state.importedComparisonIntent.disposition, 'PRESERVED_READ_ONLY');
+    // The candidate Generate builds after Inherit (run-analysis.js: empty plan, committed comparison).
+    const filesData = await serializeActiveRenderFiles('linear', state);
+    const candidate = buildCanonicalRenderRequest({
+      state,
+      filesData: { ...filesData, linearCanonicalComparisons: [] },
+      comparisonPlanSnapshot: resolveLinearComparisonPlan({
+        plan: { mode: 'none', defaultSource: 'losat', edges: [] },
+        sequences: filesData.linearSeqs, layout: [], losatProgram: 'blastn', blastpMode: 'orthogroup'
+      })
+    });
+    inheritCommittedComparisonIntent({ candidate, committed: getCommittedCanonicalSession() });
+    const records = candidate.renderRequest.records;
+    const [comparison] = candidate.renderRequest.comparisons.filter(item => item.kind === 'nucleotideBlast');
+    assert.deepEqual([records[comparison.queryRecordIndex].recordKey, records[comparison.subjectRecordIndex].recordKey],
+      ['record-1:1', 'record-1:2']);
+    assert.deepEqual(records.map(record => [record.cardinality, record.selector]), [
+      ['exactly_one', { kind: 'recordIndex', index: 0 }], ['exactly_one', { kind: 'recordIndex', index: 1 }]
+    ]);
+    assert.deepEqual(state.linearSeqs.map(seq => [seq.uid, seq.region_record_id]), [['record-1:1', '#1'], ['record-1:2', '#2']]);
+    const [first, second] = state.linearSeqs.map(seq => getSessionResourceSource(seq.gb));
+    assert.equal(first.resourceId, second.resourceId);
+    assert.equal(hash(Buffer.from(first.descriptor.data, 'base64')),
+      hash(await readFile(path.join(root, 'tests/fixtures/web_comparison_shared_block.gb'))));
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
 });

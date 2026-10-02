@@ -3804,20 +3804,30 @@ export const projectCanonicalSessionRequest = ({
         || (value != null && (!Array.isArray(value) || value.length > 0))
     ));
     // A CLI binding uid (`cli-seq-N`) is only an initial value. The committed
-    // request owns record identity, so each Linear file takes the file-level
-    // recordKey that Inherit matches against.
-    const fileRecordKeys = [...new Set(sourceRecords.map((record) => (
-      String(record.recordKey || '').replace(/:[1-9]\d*$/, '')
-    )))];
+    // request owns record identity, so each Linear file takes the recordKey
+    // that Inherit matches against. A multi-record file, which Python expands
+    // as `<fileKey>:<n>`, becomes one row per record with the `#n` selector.
+    const recordKeysByFile = new Map();
+    sourceRecords.forEach((record) => {
+      const key = String(record.recordKey || '');
+      const fileKey = key.replace(/:[1-9]\d*$/, '');
+      recordKeysByFile.set(fileKey, [...(recordKeysByFile.get(fileKey) || []), key]);
+    });
+    const fileRecordKeys = [...recordKeysByFile.keys()];
     if (renderRequest.mode === 'linear' && Array.isArray(explicitBindings.linearSeqs)
       && fileRecordKeys.every(Boolean)
       && fileRecordKeys.length === explicitBindings.linearSeqs.length) {
       explicitBindings = {
         ...explicitBindings,
-        linearSeqs: explicitBindings.linearSeqs.map((sequence, index) => ({
-          ...sequence,
-          uid: fileRecordKeys[index]
-        }))
+        linearSeqs: explicitBindings.linearSeqs.flatMap((sequence, index) => (
+          recordKeysByFile.get(fileRecordKeys[index]).map((uid) => ({
+            ...sequence,
+            uid,
+            ...(uid === fileRecordKeys[index] ? {} : {
+              region_record_id: `#${uid.slice(fileRecordKeys[index].length + 1)}`
+            })
+          }))
+        ))
       };
     }
     webMetadata = { ...webMetadata, bindings: explicitBindings };

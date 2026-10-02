@@ -58,7 +58,10 @@ Web initializes their settings from `renderRequest` and restores original input
 files from their bindings. A present `config` must contain valid `form` and `adv`
 objects; a partial draft is rejected. CLI replay preserves a supplied Web draft.
 A CLI binding uid such as `cli-seq-1` is only an initial value: each Linear
-file takes the record identity of `renderRequest.records[].recordKey`. A CLI
+file takes the record identity of `renderRequest.records[].recordKey`. A
+multi-record file, whose records are `record-1:1`, `record-1:2`, and so on,
+becomes one Linear row per record with that recordKey and the `#n` record
+selector, so **Inherit saved comparison** finds every record it names. A CLI
 comparison stays read-only in Web; **Inherit saved comparison** reuses it after
 promoting an older committed request, such as a version 42 sidecar, to the
 current schema. Without saved `ui.layoutPreferences`, the legend and plot-title
