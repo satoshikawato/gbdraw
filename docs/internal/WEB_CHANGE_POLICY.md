@@ -450,7 +450,7 @@ A retired key may be removed only when the trusted base detector no longer
 defines it. Removing a key that the base detector still defines remains a
 blocking failure.
 
-The `Mounted SVG/Result replacement` capability is split this way into:
+The former `Mounted SVG/Result replacement` capability was split this way into:
 
 - `Result content commit`: code that replaces the current Result, that is an
   assignment to `results.value` or `state.results.value`, or a call to

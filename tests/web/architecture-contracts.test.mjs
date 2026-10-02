@@ -533,11 +533,8 @@ test('right drawer availability and transitions have one production owner', () =
 
 // Capability keys that the policy holds while no detector reports them, during a
 // split ("Splitting a capability" in docs/internal/WEB_CHANGE_POLICY.md).
-// G-J(1) split Mounted SVG/Result replacement; the retired key waits for an
-// authority-only removal.
-const UNDETECTED_POLICY_CAPABILITY_KEYS = Object.freeze([
-  'Mounted SVG/Result replacement'
-]);
+// None is pending: the G-J(1) split of Mounted SVG/Result replacement is complete.
+const UNDETECTED_POLICY_CAPABILITY_KEYS = Object.freeze([]);
 const policyCapabilityKeysMatchDetectors = (policy) => assert.deepEqual(
   Object.keys(policy.allowedPrivilegedOwners).sort(),
   [...WEB_PRIVILEGED_CAPABILITY_KEYS, ...UNDETECTED_POLICY_CAPABILITY_KEYS].sort()
@@ -577,7 +574,7 @@ test('the policy capability key set is exact', () => {
     withPolicyKeys(expectedKeys.filter((key) => key !== 'Result content commit'))
   ));
   assert.throws(() => policyCapabilityKeysMatchDetectors(
-    withPolicyKeys(expectedKeys.filter((key) => key !== 'Mounted SVG/Result replacement'))
+    withPolicyKeys([...expectedKeys, 'Mounted SVG/Result replacement'])
   ));
 });
 
@@ -631,6 +628,72 @@ test('a Result writer or SVG serializer outside its allowlist fails the policy',
   assert.deepEqual(privilegedOwnerViolations(
     withSeededLine('services/svg-result-ingestion.js', 'const content = serializeCleanSvg(svg);')
   ), []);
+});
+
+// R1 (gbdraw/web/CLAUDE.md): the Result content commit list only contracts.
+// Removing an owner needs no edit here; adding one fails.
+const RESULT_CONTENT_COMMIT_OWNER_CEILING = Object.freeze([
+  'app/app-setup.js',
+  'app/feature-editor/color-actions.js',
+  'app/feature-editor/label-actions.js',
+  'app/feature-editor/svg-actions.js',
+  'app/legend-layout/canvas-actions.js',
+  'app/legend-layout/diagram-drag.js',
+  'app/legend-layout/reposition-actions.js',
+  'app/legend/drag-actions.js',
+  'app/legend/entry-actions.js',
+  'app/legend/sort-actions.js',
+  'app/legend/stroke-actions.js',
+  'app/preview-runtime.js',
+  'app/run-analysis.js',
+  'app/svg-styles.js',
+  'services/config.js'
+]);
+const assertResultCommitOwnersOnlyContract = (owners) => assert.deepEqual(
+  owners.filter((path) => !RESULT_CONTENT_COMMIT_OWNER_CEILING.includes(path)),
+  [],
+  'Result content commit owners may only be removed (R1)'
+);
+
+test('the Result content commit allowlist can only contract', () => {
+  assertResultCommitOwnersOnlyContract(
+    WEB_CHANGE_POLICY.allowedPrivilegedOwners['Result content commit']
+  );
+  assertResultCommitOwnersOnlyContract(RESULT_CONTENT_COMMIT_OWNER_CEILING.slice(1));
+  assertResultCommitOwnersOnlyContract([]);
+  for (const added of ['services/history-snapshot.js', 'app/feature-search/preview-svg.js']) {
+    assert.throws(() => assertResultCommitOwnersOnlyContract(
+      [...RESULT_CONTENT_COMMIT_OWNER_CEILING, added]
+    ), /only be removed/, added);
+  }
+});
+
+test('each Result write allowlist admits only its own kind of operator', () => {
+  const owners = WEB_CHANGE_POLICY.allowedPrivilegedOwners;
+  const commitOwners = owners['Result content commit'];
+  const serializationOwners = owners['SVG serialization'];
+  const seededViolations = (path, line) => privilegedOwnerViolations(
+    new Map([[path, `${productionSources.get(path) ?? ''}\n${line}\n`]])
+  );
+  const commitLine = 'state.results.value = nextResults;';
+  const serializationLine = 'const content = serializeCleanSvg(svg);';
+
+  // The shared Mounted SVG/Result replacement list let all of these owners do both.
+  const crossKindCases = [
+    ...serializationOwners.filter((path) => !commitOwners.includes(path))
+      .map((path) => [path, commitLine, 'Result content commit']),
+    ...commitOwners.filter((path) => !serializationOwners.includes(path))
+      .map((path) => [path, serializationLine, 'SVG serialization'])
+  ];
+  assert.ok(crossKindCases.length > 0);
+  for (const [path, line, capability] of crossKindCases) {
+    assert.deepEqual(seededViolations(path, line), [`${capability}: owner ${path}`],
+      `${path}: ${line}`);
+  }
+  commitOwners.forEach((path) => assert.deepEqual(seededViolations(path, commitLine), [], path));
+  serializationOwners.forEach((path) => (
+    assert.deepEqual(seededViolations(path, serializationLine), [], path)
+  ));
 });
 
 test('shared privileged detectors preserve the characterized current-source facts', () => {
