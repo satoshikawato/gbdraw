@@ -585,6 +585,31 @@ def set_feature_search_visible(page: Page, *, visible: bool) -> None:
         )
 
 
+def release_pointer_and_focus(page: Page) -> None:
+    """Clear the hover and focus ring left on a clicked preview control.
+
+    A click on Zoom out leaves the pointer over the button (hover background),
+    and a later key press such as Escape makes its focus ring visible. Blur the
+    focused control and park the pointer on the header's blank top edge so the
+    screenshot shows the controls at rest.
+    """
+
+    page.evaluate(
+        """
+        () => {
+          const active = document.activeElement;
+          if (active && active !== document.body) active.blur();
+        }
+        """
+    )
+    page.mouse.move(640, 4)
+    page.wait_for_timeout(250)
+    if page.evaluate(
+        "() => document.activeElement && document.activeElement !== document.body"
+    ):
+        raise AssertionError("A control kept keyboard focus after release")
+
+
 def capture_screenshot(page: Page, path: Path, mode_name: str) -> int:
     """Write one pinned full-viewport PNG and enforce its size contract."""
 

@@ -42,6 +42,7 @@ from flows.web_capture import (
     capture_screenshot,
     expect_circular_source_status,
     open_browser_capture,
+    release_pointer_and_focus,
     set_feature_search_visible,
     wait_for_app_shell,
 )
@@ -149,6 +150,7 @@ def capture_gui_interactive_handoff(
         source_report = generate_finished_human_diagram(page)
         _reset_finished_preview_viewport(page, target_zoom=50)
         set_feature_search_visible(page, visible=False)
+        release_pointer_and_focus(page)
         screenshot_bytes[GUI_INTERACTIVE_HANDOFF_SCREENSHOT_NAMES[1]] = (
             capture_screenshot(
                 page,
@@ -162,6 +164,7 @@ def capture_gui_interactive_handoff(
             "button", name=re.compile(r"Interactive SVG$")
         )
         interactive_button.scroll_into_view_if_needed()
+        release_pointer_and_focus(page)
         screenshot_bytes[GUI_INTERACTIVE_HANDOFF_SCREENSHOT_NAMES[2]] = (
             capture_screenshot(
                 page,
