@@ -517,6 +517,18 @@ test('right drawer availability and transitions have one production owner', () =
   assert.doesNotMatch(INDEX_HTML, /rightDrawerTab\s*\|\|/);
 });
 
+// Capability keys that the policy holds while no detector reports them, during a
+// split ("Splitting a capability" in docs/internal/WEB_CHANGE_POLICY.md).
+// G-J(1) splits Mounted SVG/Result replacement; the new keys come before the detector.
+const UNDETECTED_POLICY_CAPABILITY_KEYS = Object.freeze([
+  'Result content commit',
+  'SVG serialization'
+]);
+const policyCapabilityKeysMatchDetectors = (policy) => assert.deepEqual(
+  Object.keys(policy.allowedPrivilegedOwners).sort(),
+  [...WEB_PRIVILEGED_CAPABILITY_KEYS, ...UNDETECTED_POLICY_CAPABILITY_KEYS].sort()
+);
+
 test('privileged capability owners and importers stay within their allowlists', () => {
   const detected = detectPrivilegedWebCapabilities(productionSources);
   const assertSubset = (actual, allowed, label) => {
@@ -527,10 +539,7 @@ test('privileged capability owners and importers stay within their allowlists', 
   Object.entries(WEB_CHANGE_POLICY.allowedPrivilegedImporters).forEach(([target, allowed]) => {
     assertSubset(detected.importersByTarget[target], allowed, `${target} importers`);
   });
-  assert.deepEqual(
-    Object.keys(WEB_CHANGE_POLICY.allowedPrivilegedOwners).sort(),
-    WEB_PRIVILEGED_CAPABILITY_KEYS
-  );
+  policyCapabilityKeysMatchDetectors(WEB_CHANGE_POLICY);
   assert.deepEqual(
     Object.keys(WEB_CHANGE_POLICY.allowedPrivilegedImporters).sort(),
     WEB_PRIVILEGED_IMPORT_TARGETS
@@ -539,6 +548,28 @@ test('privileged capability owners and importers stay within their allowlists', 
     const actual = matches_.map(({ path }) => path);
     assertSubset(actual, WEB_CHANGE_POLICY.allowedPrivilegedOwners[capability], capability);
   });
+});
+
+test('the Result write split starts from every current Mounted SVG/Result replacement owner', () => {
+  const owners = WEB_CHANGE_POLICY.allowedPrivilegedOwners;
+  UNDETECTED_POLICY_CAPABILITY_KEYS.forEach((key) => {
+    assert.deepEqual(owners[key], owners['Mounted SVG/Result replacement'], key);
+  });
+
+  const withPolicyKeys = (keys) => ({
+    allowedPrivilegedOwners: Object.fromEntries(keys.map((key) => [key, []]))
+  });
+  const expectedKeys = [...WEB_PRIVILEGED_CAPABILITY_KEYS, ...UNDETECTED_POLICY_CAPABILITY_KEYS];
+  policyCapabilityKeysMatchDetectors(withPolicyKeys(expectedKeys));
+  assert.throws(() => policyCapabilityKeysMatchDetectors(
+    withPolicyKeys([...expectedKeys, 'Unregistered capability'])
+  ));
+  assert.throws(() => policyCapabilityKeysMatchDetectors(
+    withPolicyKeys(expectedKeys.filter((key) => key !== 'SVG serialization'))
+  ));
+  assert.throws(() => policyCapabilityKeysMatchDetectors(
+    withPolicyKeys(expectedKeys.filter((key) => key !== 'Mounted SVG/Result replacement'))
+  ));
 });
 
 test('shared privileged detectors preserve the characterized current-source facts', () => {
