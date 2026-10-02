@@ -33,9 +33,13 @@ push to main exact SHA
 ```
 
 A pull request to `dev` answers whether one candidate is safe to integrate. Its
-required path is intentionally fast. Heavy jobs may still run on the pull
-request during the transition, but complete supported-version, slow, browser,
-and Gallery evidence belongs to the exact integrated `dev` SHA.
+required path runs only the jobs the change needs, as defined in
+[selective CI](./SELECTIVE_CI.md). A change to Web runtime, session, Gallery,
+LOSAT, shared test, or unclassified paths also runs the full functional
+Playwright suite before merge, because existing functional cases are the
+checks that runtime changes break most often. Complete supported-version,
+slow, browser, and Gallery evidence still belongs to the exact integrated
+`dev` SHA.
 
 A `dev` to `main` pull request is a `PROMOTION`, not an ordinary combined
 architecture implementation pull request. It contains no implementation
@@ -82,6 +86,34 @@ PR / gate
 succeeds. `Web base policy (trusted base)` evaluates untrusted candidate data
 with trusted base code. Legacy leaf jobs may continue to run, but they are not
 part of the final required set.
+
+### Merging pull requests into `dev`
+
+Branch protection on `dev` requires the two checks above. It does not require
+a pull request branch to be up to date with `dev`, so a pull request that
+passed on an older base can merge without another CI cycle. Two rules replace
+the up-to-date requirement:
+
+- After a pull request that changes a governance, policy, checker, or
+  authority file merges into `dev`, update every other open pull request to
+  `dev` with `gh pr update-branch <number>`, and merge it only after its
+  required checks pass again. These files are the
+  [current guard scope](#current-guard-scope),
+  `docs/internal/SELECTIVE_CI.md`, `tools/ci-impact.mjs`, and
+  `tools/ci-impact-policy.mjs`. Both required checks run trusted code from the
+  pull request base, so a result computed on the older base applied the old
+  rules.
+- Integrated `dev` staging is the safety net after merge. It runs on each
+  exact merged SHA and finds conflicts between pull requests that passed on
+  different bases.
+
+A maintainer may queue a merge with
+`gh pr merge <number> --auto --merge --match-head-commit <sha>`, where
+`<sha>` is the reviewed head commit. GitHub refuses the request unless the
+pull request head is exactly `<sha>`, and merges once the required checks
+pass. This needs repository auto-merge to be enabled. The two rules above
+still apply: update the branch first when a governance, policy, checker, or
+authority change merged after the pull request's last run.
 
 ## Gate and Review are independent
 
