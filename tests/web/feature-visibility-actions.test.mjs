@@ -44,6 +44,8 @@ const featureVisibilityScopeDialog = {};
 const selectedResultIndex = ref(0);
 const resultGenerationKey = ref('generation-1');
 const appliedPreviewChanges = [];
+// F-3: each visibility edit hands the feature's label to the label owner.
+const labelVisibilityCalls = [];
 
 const actions = createFeatureVisibilityActions({
   state: {
@@ -55,7 +57,6 @@ const actions = createFeatureVisibilityActions({
     featureVisibilityOverrides,
     featureVisibilitySelectorCache: {},
     featureVisibilityScopeDialog,
-    labelLayoutDirtyReason: ref(''),
     resultGenerationKey,
     results: ref([{ name: 'one.svg', content: '<svg></svg>' }]),
     selectedResultIndex,
@@ -66,6 +67,12 @@ const actions = createFeatureVisibilityActions({
   featureSvgActions: {
     applyVisibilityPreviewChanges: (changes, options = {}) => {
       appliedPreviewChanges.push({ changes, reason: options.reason });
+      return true;
+    }
+  },
+  labelActions: {
+    applyFeatureVisibilityToLabels: (reason, options = {}) => {
+      labelVisibilityCalls.push([reason, options.reflow !== false]);
       return true;
     }
   },
@@ -94,6 +101,10 @@ assert.deepEqual(
 assert.equal(await command.revert(), true);
 assert.deepEqual(featureVisibilityOverrides, {});
 assert.equal(appliedPreviewChanges.length, 2);
+assert.deepEqual(labelVisibilityCalls, [
+  ['bulk-feature-visibility-apply', true],
+  ['bulk-feature-visibility-undo', true]
+]);
 assert.deepEqual(
   appliedPreviewChanges[1].changes.map((change) => [change.featureId, change.mode]),
   [['feature-a', 'on'], ['feature-b', 'on']]
@@ -105,6 +116,8 @@ assert.equal(actions.setFeatureVisibility(featureA, 'off', {
 }), true);
 assert.equal(featureVisibilityOverrides['feature-a'], 'off');
 assert.equal(appliedPreviewChanges.length, 3);
+assert.deepEqual(labelVisibilityCalls.at(-1), ['feature-visibility', false],
+  'the label follows the feature even when the caller declines the reflow');
 assert.deepEqual(
   appliedPreviewChanges[2].changes.map((change) => [change.featureId, change.mode]),
   [['feature-a', 'off']]

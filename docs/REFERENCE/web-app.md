@@ -768,11 +768,15 @@ stroke edits. Use the visible **Apply** action to make an edit part of the
 editor state. Renaming a legend entry, with or without features, to the caption
 of another entry of a different color asks **Merge**, **Suffix**, or **Cancel**;
 a caption that a specific color rule already uses is distinguished as that rule
-describes instead. **Apply to all label** and **Apply to all source label** become
+describes instead. A legend row that a rule draws with a hex suffix, such as
+`rRNA [#ff0000]`, belongs to that rule: renaming it or changing its color edits
+the rule, and the generated `rRNA` row stays a legend-only row. **Apply to all label** and **Apply to all source label** become
 one anchored qualifier rule only when the selected features share one feature
 type, qualifier, and value and that rule matches exactly the intended loaded
 features. Otherwise the editor keeps one exact `hash` rule per biological
-feature, also when two records share a record ID. Identical duplicate records can
+feature, also when two records share a record ID. On a cropped or
+reverse-complemented Linear record that hash names the drawn feature, so the
+rule stops matching when the region or orientation changes. Identical duplicate records can
 share the same hash, so a regenerated diagram cannot preserve a one-instance-only
 rule for indistinguishable duplicates: a **This feature only** color then
 applies to both copies. A one-feature rule uses a qualifier value only when no other
@@ -790,7 +794,9 @@ SVG in a saved Session until it is displayed or Generate runs. An undone legend
 rename or legend color reaches another Result at the next Generate.
 
 Label text and label visibility edits stay with their feature when the
-displayed Result, record, or visibility changes. After Generate replaces a
+displayed Result, record, or visibility changes. Hiding a feature hides its
+label in the current Result, as Generate does; with **Auto Reflow** on, the
+remaining labels are placed again. After Generate replaces a
 source file, only the edits of features that no longer exist are removed; an
 edit that replaces every label with the same text stays. When labels are off,
 **Whitelist only** or **Show all labels** in **Enable Labels** applies that label

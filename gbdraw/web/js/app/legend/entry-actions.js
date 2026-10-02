@@ -96,7 +96,6 @@ export const createLegendEntryActions = ({
     newLegendColor,
     legendStrokeOverrides,
     legendColorOverrides,
-    manualSpecificRules,
     skipCaptureBaseConfig
   } = state;
 
@@ -1053,11 +1052,6 @@ export const createLegendEntryActions = ({
     if (legendStrokeOverrides[oldCaption]) {
       legendStrokeOverrides[caption] = legendStrokeOverrides[oldCaption];
       delete legendStrokeOverrides[oldCaption];
-    }
-
-    const ruleMatches = manualSpecificRules.filter((r) => r.cap === oldCaption);
-    for (const rule of ruleMatches) {
-      rule.cap = caption;
     }
 
     entry.caption = caption;

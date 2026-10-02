@@ -8,6 +8,7 @@ import {
   getVisibleFeatureLegendGroup,
   isCurrentLegendHorizontal
 } from './legend/utils.js';
+import { legendRowRules } from './specific-color-rules.js';
 
 export const createLegendManager = ({
   state,
@@ -24,6 +25,11 @@ export const createLegendManager = ({
   });
   const sortActions = createLegendSortActions({ state, extractLegendEntries: entryActions.extractLegendEntries });
   const strokeActions = createLegendStrokeActions({ state, previewRuntime });
+  const rowRulesAt = (index) => legendRowRules(state.legendEntries.value[index]?.caption, {
+    rules: state.manualSpecificRules,
+    legendEntries: state.legendEntries.value,
+    originalLegendOrder: state.originalLegendOrder?.value || []
+  });
   const dragActions = createLegendDragActions({
     state,
     extractLegendEntries: entryActions.extractLegendEntries,
@@ -32,17 +38,19 @@ export const createLegendManager = ({
 
   return {
     ...entryActions,
+    // A row a rule draws, including its N-06 "<caption> [<hex>]" row, edits
+    // that rule; any other row is a legend-only edit.
     updateLegendEntryColor: (index, color) => {
-      const caption = state.legendEntries.value[index]?.caption;
-      if (caption && state.manualSpecificRules.some(rule => rule.cap === caption)) {
-        return commitSpecificRules(state.manualSpecificRules.map(rule => rule.cap === caption ? { ...rule, color } : { ...rule }), 'Change legend color');
+      const rowRules = rowRulesAt(index);
+      if (rowRules.length) {
+        return commitSpecificRules(state.manualSpecificRules.map(rule => rowRules.includes(rule) ? { ...rule, color } : { ...rule }), 'Change legend color');
       }
       return entryActions.updateLegendEntryColor(index, color);
     },
     updateLegendEntryCaption: (index, caption) => {
-      const previous = state.legendEntries.value[index]?.caption;
-      if (previous && state.manualSpecificRules.some(rule => rule.cap === previous)) {
-        return commitSpecificRules(state.manualSpecificRules.map(rule => rule.cap === previous ? { ...rule, cap: caption } : { ...rule }), 'Rename legend item');
+      const rowRules = rowRulesAt(index);
+      if (rowRules.length) {
+        return commitSpecificRules(state.manualSpecificRules.map(rule => rowRules.includes(rule) ? { ...rule, cap: caption } : { ...rule }), 'Rename legend item');
       }
       return entryActions.updateLegendEntryCaption(index, caption);
     },

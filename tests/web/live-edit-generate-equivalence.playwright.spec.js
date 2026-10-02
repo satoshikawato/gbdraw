@@ -52,33 +52,21 @@ const MODES = [
   }
 ];
 
-// Rows held from a topology reproduce a live-edit defect that no receipt covers;
-// the runtime follow-up that fixes it removes the hold.
-const HELD = {
-  linearSingleFill: 'Linear: a This feature only fill on a cropped record writes the rendered-coordinate hash '
-    + '(rule-actions getFeatureQualifier) that the live rule matching (rule-matching ruleFeaturePayload, stable hash) '
-    + 'does not match; the live Result keeps the old fill and Generate draws the new one.',
-  linearLegendRename: 'Linear: renaming a feature legend entry whose features lie on a cropped or '
-    + 'reverse-complemented record drops the entry from the live legend; Generate draws the new caption.',
-  circularHiddenLabel: 'Circular: hiding a feature hides its glyph but not its label in the live Result; '
-    + 'Generate removes the label.'
-};
 const legendCaption = (page, caption) => page.evaluate((wanted) => {
   const index = window.__GBDRAW_APP__.legendEntries.findIndex((entry) => entry.caption === wanted);
   if (index < 0) throw new Error(`no legend entry ${wanted}`);
   return index;
 }, caption);
 
-// [name, apply, { legend, held: { [mode]: reason } }]
+// [name, apply, { legend }]
 const EDITS = [
   // Generate turns a This feature only color into a specific rule and renames the
   // default caption (docs/REFERENCE/palettes-feature-rules-labels-shapes-and-tracks.md).
   ['feature fill, this feature only', (page) => editFeature(page, 'TESTA_0001', { fill: '#c83366' }),
-    { legend: false, held: { [LINEAR]: HELD.linearSingleFill } }],
+    { legend: false }],
   ['label text', (page) => editFeature(page, 'TESTB_0002', { labelText: 'LIVE_EDIT_LABEL' })],
   ['label hidden', (page) => editFeature(page, 'TESTA_0005', { labelVisibility: 'off' })],
-  ['feature hidden', (page) => editFeature(page, 'TESTB_0006', { visibility: 'off' }),
-    { held: { [CIRCULAR]: HELD.circularHiddenLabel } }],
+  ['feature hidden', (page) => editFeature(page, 'TESTB_0006', { visibility: 'off' })],
   ['legend entry color', (page) => page.evaluate(() => {
     const app = window.__GBDRAW_APP__;
     const index = app.legendEntries.findIndex((entry) => entry.caption);
@@ -88,11 +76,24 @@ const EDITS = [
   ['legend rename', async (page) => {
     const index = await legendCaption(page, 'tRNA');
     await page.evaluate((entry) => window.__GBDRAW_APP__.renameLegendEntry(entry, 'transfer RNA'), index);
-  }, { held: { [LINEAR]: HELD.linearLegendRename } }],
+  }],
   ['legend order', async (page) => {
     if (!await page.evaluate(() => window.__GBDRAW_APP__.showRightDrawer)) await page.locator('.drawer-toggle').click();
     await page.locator('.right-drawer').getByRole('button', { name: 'Legend' }).click();
     await page.locator('.right-drawer').getByTitle('Sort Z-A', { exact: true }).click();
+  }],
+  // N-06 (PD-OI-042): a rule captioned like the generated `other proteins` row
+  // draws its own `other proteins [#hex]` row; that row then edits the rule.
+  ['rule caption naming a generated row', (page) => page.evaluate(() => {
+    const app = window.__GBDRAW_APP__;
+    Object.assign(app.newSpecRule, {
+      feat: 'CDS', qual: 'locus_tag', val: '^TESTA_0006$', color: '#e63946', cap: 'other proteins'
+    });
+    return app.addSpecificRule();
+  })],
+  ['suffixed legend row color', async (page) => {
+    const index = await legendCaption(page, 'other proteins [#e63946]');
+    await page.evaluate((entry) => window.__GBDRAW_APP__.updateLegendEntryColor(entry, '#7b2cbf'), index);
   }]
 ];
 
@@ -152,11 +153,7 @@ for (const mode of MODES) {
     await generateAndWaitForResult(page);
     await settle(page);
     let previous = await editProjection(page);
-    for (const [name, apply, { legend = true, held = {} } = {}] of EDITS) {
-      if (held[mode.name]) {
-        testInfo.annotations.push({ type: 'held', description: `${name}: ${held[mode.name]}` });
-        continue;
-      }
+    for (const [name, apply, { legend = true } = {}] of EDITS) {
       await test.step(name, async () => {
         await apply(page);
         await settle(page);

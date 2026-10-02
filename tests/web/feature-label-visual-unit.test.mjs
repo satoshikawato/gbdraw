@@ -250,3 +250,45 @@ test('mounting Results with disjoint features keeps every label override (FE-01)
     ]), before);
   }
 });
+
+// F-3: Generate draws no label for a hidden feature. The label projection that
+// live edits, History, and Result display share hides it with the feature.
+test('a hidden feature hides its label through the stored visibility projection', () => {
+  const featureId = 'feature:one/[a]';
+  const harness = buildHarness();
+  harness.state.featureVisibilityOverrides = { [featureId]: 'off' };
+  harness.state.featureVisibilityManualRules = [];
+  harness.actions.reconcileLabelOverrides();
+  exactParts(harness.svg, featureId).forEach((part) => {
+    assert.equal(part.getAttribute('display'), 'none');
+  });
+  assert.equal(harness.svg.querySelector('[data-part="unrelated"]').getAttribute('display'), null);
+
+  delete harness.state.featureVisibilityOverrides[featureId];
+  harness.actions.reconcileLabelOverrides();
+  exactParts(harness.svg, featureId).forEach((part) => {
+    assert.equal(part.getAttribute('display'), null);
+  });
+});
+
+test('a feature visibility edit commits its label once and queues the label reflow', () => {
+  const featureId = 'feature:one/[a]';
+  const harness = buildHarness();
+  harness.state.autoLabelReflowEnabled.value = true;
+  harness.state.featureVisibilityOverrides = { [featureId]: 'off' };
+  assert.equal(harness.actions.applyFeatureVisibilityToLabels('feature-visibility'), true);
+  exactParts(harness.svg, featureId).forEach((part) => {
+    assert.equal(part.getAttribute('display'), 'none');
+  });
+  assert.deepEqual(harness.mutations, { dirty: 1, flush: 1 });
+  assert.equal(harness.state.labelReflowRequestSeq.value, 1);
+  assert.equal(harness.state.labelReflowRequestReason.value, 'feature-visibility');
+  assert.equal(harness.state.labelReflowForceRequestSeq.value, 0);
+
+  harness.state.featureVisibilityOverrides = {};
+  assert.equal(harness.actions.applyFeatureVisibilityToLabels('feature-visibility', { reflow: false }), true);
+  exactParts(harness.svg, featureId).forEach((part) => {
+    assert.equal(part.getAttribute('display'), null);
+  });
+  assert.equal(harness.state.labelReflowRequestSeq.value, 1, 'a declined reflow is not queued');
+});

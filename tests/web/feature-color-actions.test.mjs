@@ -17,6 +17,7 @@ const { createFeatureColorActions } = await import(
 );
 const { getFeatureGenerationHash } = await import(pathToFileURL(join(tempDir, 'app', 'feature-utils.js')));
 const { resolveFeatureLabelSelector } = await import(pathToFileURL(join(tempDir, 'app', 'feature-selector.js')));
+const { legendRowRules } = await import(pathToFileURL(join(tempDir, 'app', 'specific-color-rules.js')));
 
 assert.doesNotMatch(colorActionsSource, /serializeCleanSvg|results\.value\[[^\]]+\]\s*=/);
 
@@ -217,6 +218,7 @@ const actions = createFeatureColorActions({
     findMatchingRegexRule: () => specificRule,
     getDisplayedFeatureLabel: (feature) => feature.displayLabel || feature.product || '',
     getEffectiveLegendCaption: () => 'Core',
+    getLegendRowRules: (caption) => legendRowRules(caption, { rules: manualSpecificRules, legendEntries: legendEntries.value }),
     getIndividualFeatureLabel: (feature) => feature.product || '',
     // FE-09 (D-14): "This feature only" always writes the stable hash.
     getFeatureQualifier: (feature) => ({ qual: 'hash', val: getFeatureGenerationHash(feature) }),
@@ -797,6 +799,7 @@ assert.equal(updateLegendEntryColorOptions.length, 0);
         return true;
       },
       getEffectiveLegendCaption: (feature) => feature.type,
+      getLegendRowRules: (caption) => legendRowRules(caption, { rules: resetRules }),
       getFeatureQualifier: (feature) => ({ qual: 'hash', val: feature.svg_id }),
       findFeaturesWithSameLegendItem: () => [],
       findFeaturesWithSameDisplayedLabel: () => [],
@@ -871,6 +874,9 @@ assert.equal(updateLegendEntryColorOptions.length, 0);
       ruleActions: {
         commitSpecificRules: async (nextRules) => { committed.push(nextRules.map((rule) => ({ ...rule }))); return true; },
         getEffectiveLegendCaption: (feature) => rules.find((rule) => rule.feat === feature.type)?.cap || feature.type,
+        getLegendRowRules: (caption) => legendRowRules(caption, {
+          rules, legendEntries: stateLegendEntries.value, originalLegendOrder: originalOrder.value
+        }),
         getFeatureQualifier: (feature) => ({ qual: 'hash', val: feature.svg_id }),
         findFeaturesWithSameLegendItem: () => [], findFeaturesWithSameDisplayedLabel: () => [],
         findFeaturesWithSameIndividualLabel: () => [], getDisplayedFeatureLabel: (feature) => feature.product,

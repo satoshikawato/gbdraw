@@ -146,6 +146,17 @@ decisions are in
 - **This feature only** always writes the stable feature hash, also when two
   records share a record ID; before, it wrote a rendered ID Python could not
   match. For identical duplicate features the color applies to both (FE-09, D-14).
+- On a cropped or reverse-complemented Linear record, a **This feature only**
+  color and a legend rename now show in the current Result as Generate draws
+  them. Before, the live preview matched the rule against the source feature
+  instead of the drawn one, so it kept the old color or dropped the renamed
+  legend row until Generate (D-14).
+- Hiding a feature also hides its label in the current Result, as Generate
+  does; with **Auto Reflow** on, the remaining labels are placed again.
+- A legend row that a specific-color rule draws with a hex suffix, such as
+  `rRNA [#ff0000]`, now edits that rule in the Legend editor, and a live rule
+  edit keeps that row instead of recoloring or failing on the generated `rRNA`
+  row (N-06).
 
 - History records one Undo step for each checkbox, radio button, or button
   change, also when it is made with its label text or the keyboard, or while a

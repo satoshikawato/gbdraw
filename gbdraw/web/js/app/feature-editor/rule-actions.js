@@ -4,6 +4,7 @@ import { ruleMatchesFeature, firstMatchingRule, ruleMatchesReady } from '../rule
 import { resolveColorToHex } from '../color-utils.js';
 import { parseSpecificRules, serializeSpecificRules } from '../file-imports.js';
 import { getFeatureGenerationHash } from '../feature-utils.js';
+import { legendRowRules, ruleLegendCaption } from '../specific-color-rules.js';
 import { resolveFeatureLabelSelector } from '../feature-selector.js';
 import { downloadTextFile } from '../../services/text-download.js';
 import {
@@ -68,13 +69,12 @@ export const createFeatureRuleActions = ({ state, nextTick, legendActions, ruleP
     const busy = state.sessionOperationAvailability?.();
     if (busy) return busy;
     const revision = ++preparationRevision;
-    const candidate = await rulePreparation.prepareCandidate(rules);
+    const candidate = await rulePreparation.prepareCandidate(rules, {}, { retiredLegendIntents: previousLegendIntents });
     if (!candidate) return false;
     const current = () => revision === preparationRevision && !state.sessionOperationAvailability?.() && isCurrent()
       && rulePreparation.isCurrent(candidate.snapshot);
     if (!current()) return false;
-    const previousIntents = [...manualSpecificRules.filter(rule => rule.cap)
-      .map(rule => ({ caption: rule.cap, color: rule.color })), ...previousLegendIntents];
+    const previousIntents = [...candidate.previousIntents, ...previousLegendIntents];
     const previousCaptions = new Set(previousIntents.map(intent => intent.caption));
     let applied = false;
     await legendActions.syncFileLegendEntries(candidate.intents.filter(intent => !(state.deletedLegendEntries?.value || [])
@@ -250,12 +250,21 @@ export const createFeatureRuleActions = ({ state, nextTick, legendActions, ruleP
     return normalizeCaption(getIndividualFeatureLabel(feat));
   };
 
-  // Resolve the effective legend item label used by current SVG coloring priority.
+  const legendRowContext = () => ({
+    rules: manualSpecificRules,
+    legendEntries: state.legendEntries?.value || [],
+    originalLegendOrder: state.originalLegendOrder?.value || []
+  });
+  // The rules a legend row draws; editing the row edits them (N-06).
+  const getLegendRowRules = (caption) => legendRowRules(caption, legendRowContext());
+
+  // Resolve the effective legend item label used by current SVG coloring
+  // priority: a rule's feature belongs to the row Generate draws for it (N-06).
   const getEffectiveLegendCaption = (feat) => {
     if (!feat) return '';
 
     const rule = firstMatchingRule(feat, manualSpecificRules);
-    if (rule && normalizeCaption(rule.cap)) return normalizeCaption(rule.cap);
+    if (rule && normalizeCaption(rule.cap)) return ruleLegendCaption(rule, legendRowContext());
 
     const overrideCaption = normalizeCaption(
       getFeatureOverride(featureColorOverrides, feat)?.caption
@@ -585,6 +594,7 @@ export const createFeatureRuleActions = ({ state, nextTick, legendActions, ruleP
     getIndividualFeatureLabel,
     getFeatureQualifier,
     getLabelSpecificRule,
+    getLegendRowRules,
     moveSpecificRuleDown: (index) => moveSpecificRule(index, 1),
     moveSpecificRuleUp: (index) => moveSpecificRule(index, -1),
     refreshFeatureOverrides,
