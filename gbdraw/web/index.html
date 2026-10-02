@@ -1880,7 +1880,7 @@
                                     <span v-if="!seq.definition && getLinearSourceDefaultDefinition(source)" class="text-[9px] font-normal text-blue-600 bg-blue-50 px-1 rounded">Using file default</span>
                                     <button v-if="seq.definition && getLinearSourceDefaultDefinition(source)" type="button" @click="resetLinearRecordDefinition(seq)" class="text-[9px] font-normal text-slate-400 hover:text-slate-600" :disabled="!semanticMutationAvailable">Reset to default</button>
                                 </div>
-                                <input type="text" v-model="seq.definition" :aria-label="`Definition for sequence ${idx + 1}`" :placeholder="getLinearSourceDefaultDefinition(source) || 'e.g., Escherichia coli O157:H7 Sakai'" class="form-input px-1 py-0.5 text-xs" :disabled="!semanticMutationAvailable">
+                                <input type="text" v-model="seq.definition" :aria-label="`Definition for sequence ${idx + 1}`" :placeholder="resolveLinearRecordEffectiveDefinition(seq, source) || 'e.g., Escherichia coli O157:H7 Sakai'" class="form-input px-1 py-0.5 text-xs" :disabled="!semanticMutationAvailable">
                             </div>
                             <div class="mt-2">
                                 <div class="flex items-center justify-between text-[10px] text-slate-500 font-bold mb-1">

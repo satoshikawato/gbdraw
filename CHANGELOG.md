@@ -336,6 +336,9 @@ decisions are in
   own line in both modes, so the slot id and renderer stay readable (TR-11).
 - The Vibrio harveyi group Gallery tutorial links to the current Linear record
   layout reference, and a packaging test checks every tutorial link (TR-12).
+- A blank Linear record **Definition** field now shows the text Generate draws
+  for it as its placeholder: the File default, else the definition inferred
+  from the record, else the example text (B5).
 
 <!-- web-gui-audit-20260930 P19 -->
 
