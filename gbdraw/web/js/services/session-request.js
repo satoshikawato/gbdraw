@@ -144,7 +144,10 @@ import {
   createSessionResourceFileView,
   validateWebFileBindings
 } from './session-resource-backing.js';
-import { normalizeLinearComparisonPlan } from '../app/linear-comparisons.js';
+import {
+  createDefaultLinearComparisonPlan,
+  normalizeLinearComparisonPlan
+} from '../app/linear-comparisons.js';
 import {
   getResourcePayloadOwner,
   setResourcePayloadOwner
@@ -3894,6 +3897,20 @@ export const projectCanonicalSessionRequest = ({
   const comparisonsContainGeneratedProteinPipeline = (
     renderRequest.comparisons || []
   ).some((comparison) => comparison?.kind === 'generatedProteinComparison');
+  // A CLI sidecar has no Web comparison draft. Without -b or a protein mode the
+  // CLI still writes its protein settings as a disabled pipeline (mode `none`,
+  // no pairs), so such a draft starts with no comparison and no LOSATP program.
+  // A read-only comparison (-b) reaches this projection as an empty list.
+  const committedComparisons = renderRequest.comparisons || [];
+  const cliDraftWithoutComparison = initializeCliInputs && storedConfig == null
+    && renderRequest.mode === 'linear' && committedComparisons.length > 0
+    && committedComparisons.every((comparison) => (
+      comparison?.kind === 'generatedProteinComparison' && comparison.mode === 'none'
+      && !comparison.pairs?.length
+    ));
+  const {
+    blastSource: _cliBlastSource, losatProgram: _cliLosatProgram, ...cliProteinSettings
+  } = projectedProteinPipeline?.config || {};
   const files = { linearSeqs: [] };
   if (renderRequest.mode === 'circular') {
     files.circularRecords = records.map((record) => {
@@ -4705,7 +4722,9 @@ export const projectCanonicalSessionRequest = ({
     config: {
       form,
       adv,
-      ...(projectedProteinPipeline?.config || {}),
+      ...(cliDraftWithoutComparison
+        ? { ...cliProteinSettings, linearComparisonPlan: createDefaultLinearComparisonPlan() }
+        : projectedProteinPipeline?.config || {}),
       colors: projectedDefaultColors,
       colorsAreOverrides: true,
       palette: options.colors?.defaultColorsPalette || 'default',

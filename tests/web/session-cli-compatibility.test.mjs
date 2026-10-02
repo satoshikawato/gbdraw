@@ -97,6 +97,22 @@ for (const [label, mode, args, sourcePaths, legend] of cases) {
         assert.equal(state.form.legend, legend);
         if (mode === 'linear') {
           assert.deepEqual(state.linearSeqs.map(seq => seq.uid), fileRecordKeys(session.renderRequest));
+          // B13: without -b the CLI commits only a disabled protein pipeline
+          // (mode `none`, no pairs). The Web draft has no comparison, so the
+          // request Generate builds has no comparison and starts no LOSAT run.
+          assert.ok(session.renderRequest.comparisons.every(item => (
+            item.kind === 'generatedProteinComparison' && item.mode === 'none' && item.pairs.length === 0
+          )));
+          assert.deepEqual(state.linearComparisonPlan, { mode: 'none', defaultSource: 'losat', edges: [] });
+          assert.notEqual(state.losatProgram.value, 'blastp');
+          const filesData = await serializeActiveRenderFiles('linear', state);
+          const comparisonPlanSnapshot = resolveLinearComparisonPlan({
+            plan: state.linearComparisonPlan, sequences: filesData.linearSeqs, layout: [],
+            losatProgram: state.losatProgram.value, blastpMode: state.losat.blastp.mode
+          });
+          assert.equal(comparisonPlanSnapshot.hasLosatIntent, false);
+          const candidate = buildCanonicalRenderRequest({ state, filesData, comparisonPlanSnapshot });
+          assert.deepEqual(candidate.renderRequest.comparisons, []);
         }
         const projectedFiles = mode === 'linear' ? state.linearSeqs.map(seq => seq.gb)
           : label === 'gff' ? [] : [state.files.c_gb];
