@@ -1,6 +1,7 @@
 const { test, expect } = require('@playwright/test');
+const { evaluateWithRetainedPromise } = require('./helpers/app-lifecycle.cjs');
 
-const loadGallerySession = async (page, filename) => page.evaluate(async (name) => {
+const loadGallerySession = async (page, filename) => evaluateWithRetainedPromise(page, async (name) => {
   const response = await fetch(`/gbdraw/web/gallery/sessions/${name}`);
   if (!response.ok) throw new Error(`Could not load ${name}: ${response.status}`);
   const bytes = await response.arrayBuffer();

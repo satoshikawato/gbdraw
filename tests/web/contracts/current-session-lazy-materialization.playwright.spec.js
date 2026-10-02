@@ -207,7 +207,7 @@ const probeSnapshot = (page) => page.evaluate(() => ({
   resultCount: window.__GBDRAW_APP__?.results?.length || 0
 }));
 
-const loadSyntheticSession = (page, variant = 'normal') => page.evaluate(
+const loadSyntheticSession = (page, variant = 'normal') => evaluateWithRetainedPromise(page,
   async ({ filename, requestedVariant }) => {
     const response = await fetch(`/gbdraw/web/gallery/sessions/${filename}`);
     if (!response.ok) throw new Error(`Could not load ${filename}: ${response.status}`);
@@ -358,7 +358,7 @@ test('neutral cached conservation session regenerates three ordered rings offlin
     });
     await openInstrumentedApp(page);
 
-    const imported = await page.evaluate(async (sessionText) => {
+    const imported = await evaluateWithRetainedPromise(page, async (sessionText) => {
       const file = new File(
         [sessionText],
         'synthetic_conservation.gbdraw-session.json',
@@ -421,7 +421,7 @@ test('neutral cached conservation session regenerates three ordered rings offlin
       runs: 0
     });
 
-    const generated = await page.evaluate(async () => {
+    const generated = await evaluateWithRetainedPromise(page, async () => {
       const app = window.__GBDRAW_APP__;
       const result = await app.runAnalysis();
       const selected = app.results[app.selectedResultIndex];
@@ -512,7 +512,7 @@ test('Generate materializes only required resources and reuses one Worker', asyn
   expect(preview.structural).toEqual(ZERO_PREVIEW_METRICS);
   expect(preview.historyBaseline).toEqual(ZERO_ARTIFACT_HISTORY_BASELINE);
 
-  const generated = await page.evaluate(async () => {
+  const generated = await evaluateWithRetainedPromise(page, async () => {
     const app = window.__GBDRAW_APP__;
     const history = window.__GBDRAW_HISTORY__;
     const svgIdentity = (content) => {
@@ -735,7 +735,7 @@ test('render-only Generate reuses preparation and remains undoable', async ({ pa
     degradedRecovery: false
   });
 
-  const first = await page.evaluate(async () => {
+  const first = await evaluateWithRetainedPromise(page, async () => {
     const app = window.__GBDRAW_APP__;
     const history = window.__GBDRAW_HISTORY__;
     window.__GBDRAW_LAZY_SESSION_PROBE__.reset();
@@ -769,7 +769,7 @@ test('render-only Generate reuses preparation and remains undoable', async ({ pa
     app.form.show_scale = !Boolean(app.form.show_scale);
     window.__GBDRAW_LAZY_SESSION_PROBE__.reset();
   });
-  const second = await page.evaluate(async () => {
+  const second = await evaluateWithRetainedPromise(page, async () => {
     const app = window.__GBDRAW_APP__;
     const history = window.__GBDRAW_HISTORY__;
     const before = history.getDiagnostics();
@@ -906,7 +906,7 @@ test('the real Cancel control restores the committed artifact and leaves no Hist
     { timeout: 240_000 }
   );
   await page.getByRole('button', { name: /Cancel$/ }).click();
-  const canceled = await page.evaluate(async () => {
+  const canceled = await evaluateWithRetainedPromise(page, async () => {
     const result = await window.__GBDRAW_CANCEL_RUN__;
     window.__GBDRAW_RELEASE_CANCEL_RESPONSE__?.();
     delete window.__GBDRAW_TEST_HOOKS__.beforeDiagramGenerationResponse;
@@ -985,7 +985,7 @@ test('the real Cancel control restores the committed artifact and leaves no Hist
   expect(canceledWorker.instances[0].terminated).toBe(true);
 
   await page.evaluate(() => window.__GBDRAW_LAZY_SESSION_PROBE__.reset());
-  const retry = await page.evaluate(async () => ({
+  const retry = await evaluateWithRetainedPromise(page, async () => ({
     result: await window.__GBDRAW_APP__.runAnalysis(),
     undoCount: window.__GBDRAW_HISTORY__.getUndoCount(),
     redoCount: window.__GBDRAW_HISTORY__.getRedoCount(),
@@ -1097,7 +1097,7 @@ test('preflight and lazy-access failures preserve the committed preview', async 
   expect(afterAccess.structural.workerConstructionCount).toBe(0);
   expect(afterAccess.structural.workerInitializationCount).toBe(0);
 
-  const failedGenerate = await page.evaluate(async () => {
+  const failedGenerate = await evaluateWithRetainedPromise(page, async () => {
     const app = window.__GBDRAW_APP__;
     const history = window.__GBDRAW_HISTORY__;
     const loadedContent = app.results[app.selectedResultIndex]?.content || '';
@@ -1139,7 +1139,7 @@ test('a frozen v39 session round-trips through the legacy migration path', async
   await page.evaluate(() => {
     window.__GBDRAW_APP__.sessionTitle = 'legacy-lazy-round-trip';
   });
-  const regenerated = await page.evaluate(async () => ({
+  const regenerated = await evaluateWithRetainedPromise(page, async () => ({
     result: await window.__GBDRAW_APP__.runAnalysis(),
     errorLog: window.__GBDRAW_APP__.errorLog
   }));

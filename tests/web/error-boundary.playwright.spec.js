@@ -1,5 +1,5 @@
 const { test, expect } = require('@playwright/test');
-const { openApp, getDiagramWorkerActivity } = require('./helpers/app-lifecycle.cjs');
+const { openApp, getDiagramWorkerActivity, evaluateWithRetainedPromise } = require('./helpers/app-lifecycle.cjs');
 
 test('real Python adapters retain causes through one lazy Worker and successful retry', async ({ page }) => {
   test.setTimeout(180000);
@@ -83,7 +83,7 @@ for (const mode of ['circular', 'linear']) {
       await page.setViewportSize({ width, height: 900 });
       await openApp(page);
       if (mode === 'circular') {
-        const first = await page.evaluate(() => window.__GBDRAW_APP__.runAnalysis());
+        const first = await evaluateWithRetainedPromise(page, () => window.__GBDRAW_APP__.runAnalysis());
         expect(first).toMatchObject({status:'error',error:{code:'INPUT_REQUIRED',operation:'generate'},recovery:'no-result'});
         await expect(page.getByRole('alert', {name:'Generation Error'})).toContainText('No successful Result is available yet');
       }
@@ -98,7 +98,7 @@ for (const mode of ['circular', 'linear']) {
       });
       const before = await snapshot();
       await failNextNativeRender(page);
-      const failed = await page.evaluate(() => window.__GBDRAW_APP__.runAnalysis());
+      const failed = await evaluateWithRetainedPromise(page, () => window.__GBDRAW_APP__.runAnalysis());
       expect(failed).toMatchObject({status:'error',error:{code:'REGEX_SYNTAX',operation:'generate',stage:'rule-validation',
         context:{position:1,positionUnit:'python-character',reason:'UNTERMINATED_SET'}},recovery:'preserved'});
       expect(await snapshot()).toEqual(before);

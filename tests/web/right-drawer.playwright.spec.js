@@ -12,7 +12,7 @@ const snapshot = async (page) => {
   return { ...artifact, mounted: await svgSemantics(page, mounted) };
 };
 
-const loadGallerySession = async (page, filename) => page.evaluate(async (name) => {
+const loadGallerySession = async (page, filename) => evaluateWithRetainedPromise(page, async (name) => {
   const response = await fetch(`/gbdraw/web/gallery/sessions/${name}`);
   if (!response.ok) throw new Error(`Could not load ${name}: ${response.status}`);
   const bytes = await response.arrayBuffer();
@@ -708,7 +708,7 @@ test(`individual Feature, Label, and Legend edits update the mounted SVG: ${live
   expect(imported.status).toBe('ok');
   await page.locator('.drawer-toggle').click();
   await expect(page.locator('.right-drawer').getByText(/^Features \(\d+\)$/)).toBeVisible();
-  expect(await page.evaluate(() => window.__GBDRAW_APP__.runAnalysis())).toEqual({ status: 'ok' });
+  expect(await evaluateWithRetainedPromise(page, () => window.__GBDRAW_APP__.runAnalysis())).toEqual({ status: 'ok' });
 
   await page.evaluate(() => window.__GBDRAW_APP__.openRightDrawerTab('features'));
   if (liveCase.viewport) {
@@ -836,7 +836,7 @@ test(`individual Feature, Label, and Legend edits update the mounted SVG: ${live
     // Isolate retry recovery from the preceding Legend override scenario.
     // Reuse a fresh Gallery request as in the existing S04 failure contract.
     expect((await loadGallerySession(page, liveCase.session)).status).toBe('ok');
-    expect(await page.evaluate(() => window.__GBDRAW_APP__.runAnalysis())).toEqual({ status: 'ok' });
+    expect(await evaluateWithRetainedPromise(page, () => window.__GBDRAW_APP__.runAnalysis())).toEqual({ status: 'ok' });
     await page.evaluate(() => window.__GBDRAW_APP__.openRightDrawerTab('features'));
     await expect.poll(() => page.evaluate(() => window.__GBDRAW_APP__.labelReflowProcessing)).toBe(false);
     const target = await page.evaluate(async () => {
@@ -912,7 +912,7 @@ test('adjacent Collinear mixed groups remain selectable after current-session sa
     document.config.linearComparisonPlan = { mode: 'none', defaultSource: 'losat', edges: [] };
     return JSON.stringify(document);
   }, typedSession));
-  const importSession = async (bytes, name) => page.evaluate(async ({ bytes, name }) => {
+  const importSession = async (bytes, name) => evaluateWithRetainedPromise(page, async ({ bytes, name }) => {
     const file = new File([new Uint8Array(bytes)], name);
     const result = await window.__GBDRAW_APP__.importSession({ target: { files: [file], value: 'selected' } });
     if (result.status !== 'ok') throw new Error(result.error?.stack || result.status);

@@ -240,7 +240,7 @@ const inspectCircularSparseDepthResult = async (page) => page.evaluate(() => {
   };
 });
 
-const runDiagramWithDiagnostics = async (page) => page.evaluate(async () => {
+const runDiagramWithDiagnostics = async (page) => evaluateWithRetainedPromise(page, async () => {
   const app = window.__GBDRAW_APP__;
   const result = await app.runAnalysis();
   return {
@@ -316,7 +316,7 @@ test('Linear Depth above Features generates with repeat_region underlays', async
   const genbank = readFileSync(repeatRegionGenbankPath, 'utf8');
   await openApp(page);
 
-  const outcome = await page.evaluate(async (genbankText) => {
+  const outcome = await evaluateWithRetainedPromise(page, async (genbankText) => {
     const app = window.__GBDRAW_APP__;
     const { state } = await import('./js/state.js');
     app.mode = 'linear';
@@ -1231,7 +1231,7 @@ test('Invalid Annotation slot is rejected before worker startup and preserves co
   const svgExport = page.getByRole('button', { name: 'SVG', exact: true });
   await expect(svgExport).toBeEnabled();
 
-  const outcome = await page.evaluate(async () => {
+  const outcome = await evaluateWithRetainedPromise(page, async () => {
     const app = window.__GBDRAW_APP__;
     const featureId = String(app.extractedFeatures?.[0]?.svg_id || 'transaction-feature');
     app.selectedFeatureIds = new Set([featureId]);
@@ -1396,7 +1396,7 @@ test('Invalid Annotation slot is rejected before worker startup and preserves co
     .toBeVisible();
   await expect(svgExport).toBeEnabled();
 
-  const successfulRetry = await page.evaluate(async () => {
+  const successfulRetry = await evaluateWithRetainedPromise(page, async () => {
     const app = window.__GBDRAW_APP__;
     const { state } = await import('./js/state.js');
     const committedContentBefore = app.results[app.selectedResultIndex]?.content || '';
@@ -1434,7 +1434,7 @@ test('Invalid Annotation slot is rejected before worker startup and preserves co
 test('preserved Result presentation ignores no-Result Generate failures and non-Generate errors', async ({ page }) => {
   await openApp(page, { waitForPalette: false });
 
-  const noResultFailure = await page.evaluate(async () => {
+  const noResultFailure = await evaluateWithRetainedPromise(page, async () => {
     const app = window.__GBDRAW_APP__;
     const result = await app.runAnalysis();
     return {

@@ -1076,7 +1076,7 @@ const capturePageEvidence = (page, savedSvg = null) => page.evaluate(async (save
 }, savedSvg);
 
 const runGenerate = async (page) => {
-  const result = await page.evaluate(async () => {
+  const result = await evaluateWithRetainedPromise(page, async () => {
     const app = window.__GBDRAW_APP__;
     const outcome = await app.runAnalysis();
     return {
@@ -2126,7 +2126,7 @@ test('bare legacy configuration drives the next canonical request and SVG', asyn
   await openIntentApp(page);
   await loadCurrentSession(page, sourceSessionPath, sourceSession);
   const baseline = await capturePageEvidence(page);
-  const legacyImport = await page.evaluate(async () => {
+  const legacyImport = await evaluateWithRetainedPromise(page, async () => {
     const legacyConfig = {
       form: {
         plot_title: 'Legacy JSON Generate',

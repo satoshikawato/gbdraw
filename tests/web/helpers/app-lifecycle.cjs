@@ -301,8 +301,11 @@ const assertSessionLoadLeftWorkerIdle = (page) => assertDiagramWorkerIdle(
   'Loading a saved preview must not initialize the diagram Worker'
 );
 
-// A pending protocol evaluation can be collected during asynchronous rollback.
-// Start once, retain its outcome, and read it only after browser-side settlement.
+// Chromium can collect a protocol promise that page.evaluate awaits for a long
+// time (Playwright then reports "Execution context was destroyed"). Start the
+// operation once, retain its outcome in the page, poll for settlement, and
+// rethrow a rejection. tests/web/playwright-long-app-promises.test.mjs keeps
+// long app operations (Generate, Session import and save) on this path.
 let retainedEvaluationIndex = 0;
 const evaluateWithRetainedPromise = async (page, callback, argument) => {
   const key = `__GBDRAW_TEST_EVALUATION_${++retainedEvaluationIndex}`;
@@ -327,7 +330,8 @@ const evaluateWithRetainedPromise = async (page, callback, argument) => {
       return entry.value;
     }, key);
   } finally {
-    if (!page.isClosed()) await page.evaluate(key => { delete window[key]; }, key);
+    // Best-effort cleanup must not replace the operation's own failure.
+    if (!page.isClosed()) await page.evaluate(key => { delete window[key]; }, key).catch(() => {});
   }
 };
 

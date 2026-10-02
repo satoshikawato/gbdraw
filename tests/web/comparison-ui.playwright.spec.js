@@ -592,7 +592,7 @@ test('preserved imported comparison generates only after explicit inheritance', 
   expect(imported.undoCount).toBe(0);
 
   await resolution.getByRole('button', { name: 'Inherit saved comparison' }).click();
-  const generated = await page.evaluate(async () => {
+  const generated = await evaluateWithRetainedPromise(page, async () => {
     const app = window.__GBDRAW_APP__;
     const { getCommittedCanonicalSession } = await import('./js/services/config.js');
     const outcome = await app.runAnalysis();
@@ -1002,7 +1002,7 @@ test('comparison controls drive appearance and current Session round trips', { t
   await expect(candidate).toHaveCount(0);
   await expect(matchStyle).toBeVisible();
 
-  const renderAppearance = async (style, height) => page.evaluate(async ({ style_, height_ }) => {
+  const renderAppearance = async (style, height) => evaluateWithRetainedPromise(page, async ({ style_, height_ }) => {
     const app = window.__GBDRAW_APP__;
     app.adv.pairwise_match_style = style_;
     app.adv.comparison_height = height_;
@@ -1165,7 +1165,7 @@ test('structured comparison errors open and focus their owning disclosure', asyn
   }, [makeGenbank('ErrorA'), makeGenbank('ErrorB', 'gct')]);
 
   await configureRecords();
-  const missingUpload = await page.evaluate(async () => {
+  const missingUpload = await evaluateWithRetainedPromise(page, async () => {
     const app = window.__GBDRAW_APP__;
     await app.setLinearComparisonGlobalAction('losat');
     const edgeKey = app.linearComparisonResolution.edges[0].edgeKey;
@@ -1195,7 +1195,7 @@ test('structured comparison errors open and focus their owning disclosure', asyn
   await page.waitForFunction(() => window.__GBDRAW_APP__);
   await page.getByRole('button', { name: 'Linear', exact: true }).click();
   await configureRecords();
-  const selectedCollinear = await page.evaluate(async () => {
+  const selectedCollinear = await evaluateWithRetainedPromise(page, async () => {
     const app = window.__GBDRAW_APP__;
     await app.setLinearComparisonGlobalAction('losat');
     app.setLinearComparisonLosatMode('blastp');
@@ -1244,7 +1244,7 @@ const prepareUploadedTablePair = async (page) => {
   const hit = (query, subject) => (
     `${query}\t${subject}\t95\t80\t4\t0\t1\t80\t5\t84\t1e-40\t160\n`
   );
-  const generateWithTable = (text, name) => page.evaluate(async ({ text_, name_ }) => {
+  const generateWithTable = (text, name) => evaluateWithRetainedPromise(page, async ({ text_, name_ }) => {
     const app = window.__GBDRAW_APP__;
     const edge = app.linearComparisonResolution.edges[0];
     app.setLinearComparisonCardFile(edge.edgeKey, new File([text_], name_, {

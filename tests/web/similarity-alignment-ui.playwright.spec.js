@@ -677,7 +677,7 @@ test('Similarity alignment UI completes exact-reference, ambiguity, focus, summa
   const freshInspector = freshPage.locator('[data-similarity-alignment-plan-inspector]');
   await expect(freshInspector).toBeVisible();
   await expect(freshInspector).toContainText('Selected by user');
-  const regenerate = await freshPage.evaluate(async () => {
+  const regenerate = await evaluateWithRetainedPromise(freshPage, async () => {
     const app = window.__GBDRAW_APP__;
     const historyBefore = window.__GBDRAW_HISTORY__.getUndoCount();
     const result = await app.runAnalysis();
