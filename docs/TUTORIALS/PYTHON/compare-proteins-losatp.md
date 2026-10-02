@@ -9,7 +9,8 @@
 | [Web app](../GUI/compare-proteins-losatp.md) | [Command line](../CLI/compare-proteins-losatp.md) | **Python API** |
 
 This program loads five complete BGC records, reverses the fifth display,
-runs gbdraw's one-thread LOSATP workflow, and aligns every row to `og_1`.
+runs gbdraw's one-thread LOSATP workflow, and aligns the records to the group
+containing `CAG38695.1` (`og_1`).
 
 ## What you'll need
 
@@ -60,6 +61,7 @@ from gbdraw.api import (
     RecordInput,
     RecordPresentation,
     RenderOutputRequest,
+    SimilarityAlignmentReference,
     load_gbks,
     render_request,
 )
@@ -108,7 +110,6 @@ request = LinearDiagramRequest(
         ),
         protein_blastp_mode="orthogroup",
         losatp_threads=1,
-        align_orthogroup_feature="CAG38695.1",
         pairwise_match_style="curve",
         bitscore=50,
         evalue=0.01,
@@ -142,6 +143,7 @@ request = LinearDiagramRequest(
             "canvas.strandedness": False,
         },
     ),
+    similarity_alignment=SimilarityAlignmentReference(feature_id="CAG38695.1"),
     output=RenderOutputRequest(
         output_prefix="python_bgc_losatp_groups",
         formats=("svg",),
@@ -177,6 +179,12 @@ python bgc_losatp_groups.py
 Expected output: gbdraw's LOSAT runtime performs four adjacent searches.
 The program then prints `Saved python_bgc_losatp_groups.svg` and writes the
 Generated SVG in the current directory.
+
+`SimilarityAlignmentReference(feature_id="CAG38695.1")` names the first
+record's `livE` protein. After the search, gbdraw resolves it into the
+`og_1` alignment plan with the same rules as the command line
+`--align_orthogroup_feature` and the web app's **Align**; it does not search
+again.
 
 ## Step 3: Inspect the comparison
 
