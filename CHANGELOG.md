@@ -245,6 +245,12 @@ decisions are in
   (N-10). Run Info states the E-value database.
 - A LOSATP Generate after a Feature visibility change searches again instead of
   reusing comparisons that still included hidden proteins (CO-02).
+- A saved Similarity groups or Collinear conversion is reused only for the same
+  displayed record pairs in the same direction. A plan change that only flips
+  which direction of a record pair is displayed, or a Collinear run with search
+  scope **All** and a CLI grid row layout, now converts again instead of
+  reusing the previous result. Conversions saved before this change are not
+  reused (F-4).
 - Threaded LOSAT without cross-origin isolation fails with a LOSAT diagnostic
   instead of UNKNOWN, and the option reads **Threaded (unavailable here)**
   (CO-01).

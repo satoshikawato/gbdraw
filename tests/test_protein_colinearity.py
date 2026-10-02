@@ -4041,6 +4041,156 @@ def test_web_losatp_blastp_payload_helper_rejects_legacy_list_payload(
     result = json.loads(str(raw_result))
 
     assert "error" in result
+def _directed_display_payload(
+    record_count: int,
+    displayed: set[tuple[int, int]],
+) -> dict[str, object]:
+    """One hit in every direction of every record pair; `displayed` flags the display pairs."""
+    records = []
+    for index in range(record_count):
+        protein_id = f"p{index}"
+        records.append(
+            {
+                "recordIndex": index,
+                "recordId": f"record_{index}",
+                "proteinMap": {
+                    protein_id: _web_protein_entry(
+                        protein_id,
+                        record_index=index,
+                        record_id=f"record_{index}",
+                        end=90,
+                    )
+                },
+                "proteinCacheKey": f"record-{index}-cache",
+                "viewTransform": {"length": 200, "reverse": False},
+            }
+        )
+    pairs = []
+    for query in range(record_count):
+        for subject in range(record_count):
+            if query == subject:
+                continue
+            pairs.append(
+                {
+                    "pairIndex": 0 if {query, subject} == {0, 1} else 1,
+                    "queryIndex": query,
+                    "subjectIndex": subject,
+                    "displayPair": (query, subject) in displayed,
+                    "cacheKey": f"pair-{query}-{subject}",
+                    "blastText": pd.DataFrame.from_records(
+                        [_hit_row(f"p{query}", f"p{subject}")],
+                        columns=COMPARISON_COLUMNS,
+                    ).to_csv(sep="\t", header=False, index=False, lineterminator="\n"),
+                }
+            )
+    return {"records": records, "pairs": pairs}
+
+
+@pytest.mark.linear
+def test_web_losatp_payload_helper_output_follows_the_displayed_pair_direction(
+    tmp_path: Path,
+    stage_web_losatp_transport,
+) -> None:
+    """The converter output depends on `displayPair`, so the derived cache key must too (F-4)."""
+    namespace = _load_web_helper_namespace()
+
+    def convert(displayed: set[tuple[int, int]]) -> dict[str, object]:
+        pairs_path, raw_tsv_path = stage_web_losatp_transport(
+            tmp_path,
+            _directed_display_payload(2, displayed),
+            f"directed-{sorted(displayed)[0][0]}{sorted(displayed)[0][1]}",
+        )
+        result = json.loads(
+            str(
+                namespace["convert_losatp_blastp_pairs_to_genomic_payload"](
+                    str(pairs_path),
+                    str(raw_tsv_path),
+                    "orthogroup",
+                    5,
+                    50,
+                    "1e-5",
+                    0,
+                    0,
+                    orthogroup_membership_mode="anchor_core_v1",
+                    orthogroup_member_max_hits=5,
+                )
+            )
+        )
+        assert "error" not in result
+        return result
+
+    forward = convert({(0, 1)})
+    reverse = convert({(1, 0)})
+
+    def displayed_rows(result: dict[str, object]) -> list[tuple[str, str]]:
+        return [
+            (row["query_protein_id"], row["subject_protein_id"])
+            for pair in result["pairs"]
+            for row in pair["rows"]
+        ]
+
+    assert displayed_rows(forward) == [("p0", "p1")]
+    assert displayed_rows(reverse) == [("p1", "p0")]
+    assert forward["pairs"] != reverse["pairs"]
+    # Nothing else differs between the two plans: both search the same raw pairs.
+    assert reverse["cache"]["convertedPayloadHit"] is False
+
+
+@pytest.mark.linear
+def test_web_losatp_payload_helper_output_follows_explicit_display_pairs(
+    tmp_path: Path,
+    stage_web_losatp_transport,
+) -> None:
+    """`explicit_display_pairs` selects the Collinear output pairs, so no cache may ignore it (F-4)."""
+    namespace = _load_web_helper_namespace()
+    pairs_path, raw_tsv_path = stage_web_losatp_transport(
+        tmp_path,
+        _directed_display_payload(3, {(0, 2)}),
+        "explicit-display-pairs",
+    )
+
+    def convert(explicit_display_pairs: bool) -> dict[str, object]:
+        result = json.loads(
+            str(
+                namespace["convert_losatp_blastp_pairs_to_genomic_payload"](
+                    str(pairs_path),
+                    str(raw_tsv_path),
+                    "collinear",
+                    5,
+                    50,
+                    "1e-5",
+                    0,
+                    0,
+                    1,
+                    0,
+                    "cds",
+                    "orientation",
+                    "rbh",
+                    0,
+                    1,
+                    2,
+                    "all",
+                    "anchor_core_v1",
+                    5,
+                    "either",
+                    True,
+                    None,
+                    explicit_display_pairs,
+                )
+            )
+        )
+        assert "error" not in result
+        return result
+
+    # The same namespace shares the in-process converted-payload cache.
+    all_pairs = convert(False)
+    displayed_only = convert(True)
+
+    assert [pair["pair_index"] for pair in all_pairs["pairs"]] == [0, 1]
+    assert [pair["pair_index"] for pair in displayed_only["pairs"]] == [1]
+    assert displayed_only["cache"]["convertedPayloadHit"] is False
+
+
 def test_pairwise_match_group_applies_record_specific_alignment_offsets() -> None:
     records = [
         _record("record_a", sequence="A" * 1000),

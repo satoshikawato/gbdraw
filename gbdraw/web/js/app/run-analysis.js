@@ -354,6 +354,7 @@ export const buildLosatDerivedPayloadCachePayload = ({
   collinearInferOrthogroups = true,
   orthogroupMembershipMode,
   orthogroupMemberMaxHits,
+  explicitDisplayPairs = false,
   recordPayloads,
   pairPayloads
 }) => {
@@ -388,7 +389,9 @@ export const buildLosatDerivedPayloadCachePayload = ({
         pairIndex: Number(pair?.pairIndex),
         queryIndex: Number(pair?.queryIndex),
         subjectIndex: Number(pair?.subjectIndex),
-        cacheKey: String(pair?.cacheKey || '')
+        cacheKey: String(pair?.cacheKey || ''),
+        // The converter returns the pairs flagged here, in this direction.
+        displayPair: pair?.displayPair === true
       }))
   };
   if (normalizedMode === 'pairwise') {
@@ -414,7 +417,9 @@ export const buildLosatDerivedPayloadCachePayload = ({
       maxConflictsInMergeGap: String(collinearMaxConflictsInMergeGap),
       maxParalogLinksPerOrthogroup: String(collinearMaxParalogLinksPerOrthogroup),
       inferOrthogroups: requireCurrentCollinearInferOrthogroups(collinearInferOrthogroups),
-      searchScope: String(collinearSearchScope || 'adjacent')
+      searchScope: String(collinearSearchScope || 'adjacent'),
+      // With the search scope 'all' the CLI grid row layout limits the output to the displayed pairs.
+      explicitDisplayPairs: explicitDisplayPairs === true
     };
   }
   return payload;

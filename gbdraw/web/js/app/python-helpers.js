@@ -1230,6 +1230,7 @@ def convert_losatp_blastp_pairs_to_genomic_payload(
                 int(normalized_max_paralog_links),
                 normalized_collinear_search_scope,
                 collinear_infer_orthogroups,
+                bool(explicit_display_pairs),
             ) if normalized_mode == "collinear" else None,
             tuple(
                 (
