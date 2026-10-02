@@ -340,6 +340,9 @@ decisions are in
   reader's record-start rule (a line that starts with `LOCUS` and seven spaces),
   so a malformed `LOCUS` line no longer adds a record the Python loader does
   not read.
+- The feature popup **Location** line reads only the location the popup click
+  builds with the shared 1-based INSDC formatter; the unreachable fallback that
+  rebuilt `start+1..end` from the feature envelope is removed (B7).
 
 <!-- web-gui-audit-20260930 P19 -->
 

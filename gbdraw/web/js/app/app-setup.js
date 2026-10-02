@@ -3700,20 +3700,7 @@ export const createAppSetup = () => {
     )
   );
 
-  const clickedFeatureLocation = computed(() => {
-    const cf = clickedFeature.value;
-    if (!cf) return '';
-    if (cf.location) return cf.location;
-    const feat = cf.feat;
-    if (!feat) return '';
-    const startVal = Number(feat.start);
-    const endVal = Number(feat.end);
-    const startPos = Number.isFinite(startVal) ? startVal + 1 : feat.start;
-    const endPos = Number.isFinite(endVal) ? endVal : feat.end;
-    if (startPos === undefined || endPos === undefined || startPos === null || endPos === null) return '';
-    const strand = feat.strand ? ` (${feat.strand})` : '';
-    return `${startPos}..${endPos}${strand}`;
-  });
+  const clickedFeatureLocation = computed(() => clickedFeature.value?.location || '');
 
   const downloadText = (filename, text, type = 'text/plain;charset=utf-8') => {
     const value = String(text ?? '');
