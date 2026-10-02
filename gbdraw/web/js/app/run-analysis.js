@@ -119,7 +119,8 @@ import {
 import {
   circularDiscoveryForInput,
   discoverGffFastaRecords,
-  discoverSequenceRecords
+  discoverSequenceRecords,
+  discoveryErrorIsFinal
 } from './record-discovery.js';
 import { genbankHeaderIds } from './genbank-header.js';
 import {
@@ -1719,7 +1720,7 @@ export const createRunAnalysis = ({
     return '';
   };
 
-  const runCircularRecordRefresh = async ({ suppress = false, automatic = false } = {}) => {
+  const runCircularRecordRefresh = async ({ suppress = false, automatic = false, reuseFinalError = false } = {}) => {
     // An inactive Circular source keeps its records and Multi-Record Canvas
     // order; only a read still running for it is superseded.
     if (mode.value !== 'circular') {
@@ -1731,6 +1732,10 @@ export const createRunAnalysis = ({
     }
     if (automatic && circularDiscoveryTargetsCurrentInput()
       && ['deferred', 'ready', 'error'].includes(circularRecordDiscovery.status)) return;
+    // Generate reports a final error of these exact files without reading them
+    // again; Retry source inspection still reads.
+    if (reuseFinalError && circularDiscoveryTargetsCurrentInput()
+      && circularRecordDiscovery.status === 'error' && discoveryErrorIsFinal(circularRecordDiscovery.error)) return;
     const refreshGeneration = ++circularRecordRefreshGeneration;
     if (suppress || recordDiscoverySuppressed()) return;
     if (!Array.isArray(adv.multi_record_positions)) {
@@ -2043,7 +2048,7 @@ export const createRunAnalysis = ({
       ) {
         processingStatus.value = 'Reading input records...';
         try {
-          await refreshCircularRecordOrder();
+          await refreshCircularRecordOrder({ reuseFinalError: true });
         } finally {
           if (generationToken === latestGenerationToken) {
             processingStatus.value = 'Preparing input files...';
