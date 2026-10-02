@@ -81,7 +81,8 @@ const setLegendEntryColor = (entryGroup, color) => {
 export const createLegendEntryActions = ({
   state,
   layoutActions,
-  previewRuntime = null
+  previewRuntime = null,
+  getCommittedRequest = () => null
 }) => {
   const {
     results,
@@ -340,9 +341,18 @@ export const createLegendEntryActions = ({
     try {
       const parser = new DOMParser();
 
+      // Python lays the legend out at the DPI its config resolves to, so the
+      // measurement uses the committed request the displayed Result came from.
+      const committedOptions = getCommittedRequest()?.diagramOptions || {};
       const widthResponse = await runDiagramHelperOperation(
         DIAGRAM_HELPER_OPERATIONS.MEASURE_LEGEND_TEXT,
-        { caption, fontFamily, fontSize }
+        {
+          caption,
+          fontFamily,
+          fontSize,
+          config: committedOptions.config ?? null,
+          configOverrides: committedOptions.configOverrides ?? {}
+        }
       );
       if (widthResponse.result?.error) throw widthResponse.result.error;
       const measuredWidth = Number(widthResponse.result?.width);

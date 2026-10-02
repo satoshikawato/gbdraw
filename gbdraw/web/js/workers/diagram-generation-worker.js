@@ -767,12 +767,18 @@ const HELPER_OPERATION_SPECS = Object.freeze({
     )
   },
   [DIAGRAM_HELPER_OPERATIONS.MEASURE_LEGEND_TEXT]: {
-    keys: ['caption', 'fontFamily', 'fontSize'],
+    keys: ['caption', 'fontFamily', 'fontSize', 'config', 'configOverrides'],
     fileRoles: [],
     run: (pyodide, payload) => callJsonHelper(
       pyodide,
       'measure_legend_text_json',
-      [String(payload.caption || ''), String(payload.fontFamily || 'Arial'), payload.fontSize ?? 14]
+      [
+        String(payload.caption || ''),
+        String(payload.fontFamily || 'Arial'),
+        payload.fontSize ?? 14,
+        jsonArgument(payload.config, null),
+        jsonArgument(payload.configOverrides, {})
+      ]
     )
   },
   [DIAGRAM_HELPER_OPERATIONS.GENERATE_LEGEND_ENTRY_SVG]: {
