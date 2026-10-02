@@ -1,5 +1,6 @@
 import { normalizeUserFacingError } from '../../services/error-normalization.js';
 import { ruleFeaturePayload } from '../rule-matching.js';
+import { resolveEffectiveFeatureVisibility } from '../feature-visibility.js';
 import {
   buildFeatureMetadataMap,
   buildFeatureUniquenessIndex,
@@ -573,16 +574,30 @@ export const createFeatureLabelActions = ({ state, previewRuntime = null, rulePr
     return { available: true, changed };
   };
 
+  // Generate draws no label for a feature it does not draw, so a hidden feature
+  // hides its label through this projection too (F-3). The feature visibility
+  // owner's resolver decides, also for exact-qualifier rules.
+  const featureHidesLabel = (featureId, featuresById) => resolveEffectiveFeatureVisibility(
+    featureId,
+    state.featureVisibilityOverrides || {},
+    null,
+    state.featureVisibilityManualRules || [],
+    featuresById.get(featureId) || null
+  ) === 'off';
+
   const applyStoredVisibilityOverridesToSvg = (svg) => {
     let changed = false;
     let unavailableOverride = false;
+    const featuresById = new Map((extractedFeatures.value || []).map((feature) => [
+      String(feature?.svg_id || '').trim(), feature
+    ]));
     svg.querySelectorAll(EDITABLE_LABEL_SELECTOR).forEach((textEl) => {
       const featureId = String(
         textEl.getAttribute(LABEL_FEATURE_ID_ATTRIBUTE) || ''
       ).trim();
-      const visibilityMode = featureId
-        ? labelVisibilityOverrides[featureId]
-        : 'default';
+      const visibilityMode = !featureId
+        ? 'default'
+        : (featureHidesLabel(featureId, featuresById) ? 'off' : labelVisibilityOverrides[featureId]);
       const projection = applyLabelVisibilityPreview(svg, textEl, visibilityMode);
       changed = projection.changed || changed;
       if (normalizeVisibilityMode(visibilityMode) !== 'default' && !projection.available) {
@@ -719,6 +734,18 @@ export const createFeatureLabelActions = ({ state, previewRuntime = null, rulePr
       queueLabelReflow('label-visibility-binding-refresh', true);
     }
     return resetChanged || overrideChanged || visibilityProjection.changed;
+  };
+
+  // A feature visibility edit shows or hides the feature's label in the same
+  // action, then Auto Reflow places the labels as Generate does (F-3).
+  const applyFeatureVisibilityToLabels = (reason = 'feature-visibility', { reflow = true } = {}) => {
+    if (generatedMode.value !== mode.value) return false;
+    const svg = svgContainer.value?.querySelector?.('svg');
+    if (!svg) return false;
+    const projection = applyStoredVisibilityOverridesToSvg(svg);
+    if (projection.changed) serializeCurrentSvg(svg);
+    if (reflow) queueLabelReflow(reason, projection.unavailableOverride);
+    return projection.changed;
   };
 
   const requestLabelTextChangeByKey = (labelKey, nextTextRaw) => {
@@ -1153,6 +1180,7 @@ export const createFeatureLabelActions = ({ state, previewRuntime = null, rulePr
   };
 
   return {
+    applyFeatureVisibilityToLabels,
     downloadLabelOverrideTable,
     loadLabelOverrideTable, canRetryLabelImportFailure, retryLabelImportFailure, editLabelImportFailure,
     getEditableLabelByFeatureId,

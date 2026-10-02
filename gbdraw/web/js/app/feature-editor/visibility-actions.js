@@ -22,7 +22,7 @@ import {
 import { downloadTextFile } from '../../services/text-download.js';
 import { resolveUniqueOrthogroupMemberForFeature } from '../../services/feature-identity.js';
 
-export const createFeatureVisibilityActions = ({ state, featureSvgActions, previewRuntime = null }) => {
+export const createFeatureVisibilityActions = ({ state, featureSvgActions, labelActions = null, previewRuntime = null }) => {
   const {
     clickedFeature,
     extractedFeatures,
@@ -31,7 +31,6 @@ export const createFeatureVisibilityActions = ({ state, featureSvgActions, previ
     featureVisibilityRules,
     featureVisibilityOverrides,
     featureVisibilityScopeDialog,
-    labelLayoutDirtyReason,
     resultGenerationKey,
     results,
     selectedResultIndex,
@@ -177,9 +176,11 @@ export const createFeatureVisibilityActions = ({ state, featureSvgActions, previ
     return scopes;
   };
 
-  const markFeatureVisibilityLabelLayoutDirty = (reason = 'feature-visibility') => {
-    if (labelLayoutDirtyReason) labelLayoutDirtyReason.value = String(reason || 'feature-visibility');
-  };
+  // The label owner hides a hidden feature's label with it, as Generate does,
+  // and queues the label reflow unless the caller declines it (F-3).
+  const applyFeatureVisibilityToLabels = (reason = 'feature-visibility', options = {}) => (
+    labelActions?.applyFeatureVisibilityToLabels?.(reason, options) ?? false
+  );
 
   const boundaryFeatureVisibilityRules = () => (
     Array.isArray(featureVisibilityRules?.value)
@@ -303,7 +304,7 @@ export const createFeatureVisibilityActions = ({ state, featureSvgActions, previ
       );
       if (!updated && !overrideChanged) return false;
       updateClickedFeatureVisibilityFromRules(affectedFeatureIds);
-      markFeatureVisibilityLabelLayoutDirty(reason);
+      applyFeatureVisibilityToLabels(reason);
       return true;
     };
 
@@ -377,8 +378,8 @@ export const createFeatureVisibilityActions = ({ state, featureSvgActions, previ
 
     applyFeatureVisibilityScope(feat, nextMode, scope);
 
-    if (triggerReflow && previousMode !== nextMode) {
-      markFeatureVisibilityLabelLayoutDirty();
+    if (previousMode !== nextMode) {
+      applyFeatureVisibilityToLabels('feature-visibility', { reflow: triggerReflow });
     }
 
     return previousMode !== nextMode;
@@ -428,7 +429,7 @@ export const createFeatureVisibilityActions = ({ state, featureSvgActions, previ
     const previousMode = featureVisibilityScopeDialog.previousMode;
     applyFeatureVisibilityScope(feat, nextMode, scope);
     clearFeatureVisibilityScopeDialog();
-    if (previousMode !== nextMode) markFeatureVisibilityLabelLayoutDirty();
+    if (previousMode !== nextMode) applyFeatureVisibilityToLabels();
     return previousMode !== nextMode;
   };
 

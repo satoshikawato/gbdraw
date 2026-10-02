@@ -45,6 +45,7 @@ export const createFeatureEditor = ({
   const visibilityActions = createFeatureVisibilityActions({
     state,
     featureSvgActions,
+    labelActions,
     previewRuntime
   });
   const openFeatureEditorForFeature = (feat, eventLike = null) => {
