@@ -5143,6 +5143,37 @@ test('comments, strings, and local session object keys are not hard failures', (
   assert.match(result.output, /Review: \*\*REQUIRED\*\*/);
 });
 
+test('in-memory Session-import snapshot keys are not Session object keys', () => {
+  const configSource = (snapshotKeys, sessionKeys) => (
+    'const captureSessionImportSnapshot = () => ({\n'
+      + snapshotKeys.map((key) => `  ${key}: state.${key}.value,\n`).join('')
+      + '  transients: captureTransientState()\n'
+      + '});\n'
+      + 'const captureTransientState = () => ({ pan: state.pan.value });\n'
+      + 'export const buildRunStateData = () => ({\n'
+      + sessionKeys.map((key) => `  ${key}: 1,\n`).join('')
+      + '  version: 1\n'
+      + '});\n'
+  );
+  const signalLine = /Architecture-bearing signals: .*session schema fields/;
+  withChangeBudgetRepository(({ commit, execute, write }) => {
+    write('gbdraw/web/js/services/config.js', configSource(['errorLog'], ['runId']));
+    const base = commit('config baseline');
+
+    write('gbdraw/web/js/services/config.js', configSource(['errorLog', 'newSnapshotField'], ['runId']));
+    const snapshotOnly = execute({ base, head: commit('snapshot key only') });
+    assert.equal(snapshotOnly.status, 0, snapshotOnly.output);
+    assert.doesNotMatch(snapshotOnly.output, signalLine);
+    assert.doesNotMatch(snapshotOnly.output, /newSnapshotField/);
+
+    write('gbdraw/web/js/services/config.js', configSource(['errorLog'], ['runId', 'newSessionField']));
+    const realKey = execute({ base, head: commit('real Session key') });
+    assert.equal(realKey.status, 0, realKey.output);
+    assert.match(realKey.output, signalLine);
+    assert.match(realKey.output, /services\/config\.js: newSessionField/);
+  });
+});
+
 test('index.html growth counts toward the net-addition review threshold', () => {
   const result = runChangeBudgetCase((write) => {
     const additions = Array.from({ length: 110 }, (_, index) => `<div>${index}</div>`);
