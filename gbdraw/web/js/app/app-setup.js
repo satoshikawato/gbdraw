@@ -1295,7 +1295,8 @@ export const createAppSetup = () => {
     commitSpecificRules: (...args) => featureActions.commitSpecificRules(...args),
     rulePreparation,
     history,
-    previewRuntime
+    previewRuntime,
+    getCommittedRequest: getCommittedCanonicalRenderRequest
   });
   const svgActions = createSvgStyles({
     state,

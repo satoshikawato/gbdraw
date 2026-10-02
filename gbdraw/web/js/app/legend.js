@@ -15,13 +15,15 @@ export const createLegendManager = ({
   rulePreparation,
   commitSpecificRules,
   history = null,
-  previewRuntime = null
+  previewRuntime = null,
+  getCommittedRequest = () => null
 }) => {
   const layoutActions = createLegendLayoutActions({ state });
   const entryActions = createLegendEntryActions({
     state,
     layoutActions,
-    previewRuntime
+    previewRuntime,
+    getCommittedRequest
   });
   const sortActions = createLegendSortActions({ state, extractLegendEntries: entryActions.extractLegendEntries });
   const strokeActions = createLegendStrokeActions({ state, previewRuntime });

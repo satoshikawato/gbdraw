@@ -1624,15 +1624,17 @@ def list_gff_fasta_records(gff_path, fasta_path):
     except Exception as error:
         return json.dumps({'error': serialize_web_error(error, operation='listGffFastaRecords', stage="helper")})
 
-def measure_legend_text_json(caption, font_family="Arial", font_size=14):
-    """Measure one legend caption with the packaged gbdraw font metrics."""
+def measure_legend_text_json(caption, font_family="Arial", font_size=14, config_json="null", overrides_json="{}"):
+    """Measure one legend caption at the DPI the renderer resolves from the request config."""
     try:
+        from gbdraw.api.config import apply_config_overrides
         from gbdraw.core.text import calculate_bbox_dimensions
+        cfg = apply_config_overrides(json.loads(str(config_json)), json.loads(str(overrides_json)))
         width, _ = calculate_bbox_dimensions(
             str(caption),
             str(font_family or "Arial"),
             float(font_size or 14),
-            72,
+            int(cfg.canvas.dpi),
         )
         return json.dumps({"width": width})
     except Exception as error:
