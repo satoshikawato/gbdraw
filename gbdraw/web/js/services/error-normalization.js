@@ -79,7 +79,7 @@ const REASONS = Object.freeze({
   ARRAY: 'Use a list.', OBJECT: 'Use an object.', FIELDS: 'Check the required fields.', REQUIRED: 'Supply the required value.',
   STRICT_ORDER: 'The start must be less than the end.',
   ORDER: 'The start or minimum must not exceed the end or maximum.', RECORD_BOUNDS: 'Keep the region within the record length.',
-  STRAND: 'Use -1, 1, or no strand.', CROP_START_CONFLICT: 'Choose a crop or an explicit display start.',
+  STRAND: 'Use -1, 1, or no strand.', DISPLAY_START_BOUNDS: 'Use a display start between 1 and the record length.', CROP_START_CONFLICT: 'Choose a crop or an explicit display start.',
   REFERENCE_REQUIRED: 'Supply the depth reference column.', REFERENCE_MISMATCH: 'Match depth references to the selected record.',
   WORKSPACE: 'Retry the operation.', OUT_OF_RANGE: 'Choose a record within the loaded range.',
   NO_MATCH: 'Choose an available record.', AMBIGUOUS: 'Use #index to distinguish records with the same ID.',

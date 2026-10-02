@@ -18,6 +18,9 @@ from gbdraw.features.source import SourceFeatureIdentity, build_source_feature_c
 
 logger = logging.getLogger(__name__)
 
+# A file that cannot be parsed is a user-fixable input: the Web asks to replace it.
+_UNREADABLE_INPUT = {"code": "INPUT_UNREADABLE"}
+
 
 def _attach_source_annotations(record: SeqRecord, source_file: str) -> None:
     if getattr(record, "annotations", None) is None:
@@ -81,7 +84,8 @@ def load_gbks(
                 f"ERROR: error parsing GenBank file {gbk_file}. It may be corrupt or in the wrong format. Error: {e}"
             )
             raise ParseError(
-                f"Error parsing GenBank file {gbk_file}. It may be corrupt or in the wrong format."
+                f"Error parsing GenBank file {gbk_file}. It may be corrupt or in the wrong format.",
+                diagnostic=_UNREADABLE_INPUT,
             ) from e
         except Exception as e:  # A more generic catch-all for other unexpected issues
             logger.error(
@@ -372,7 +376,8 @@ def load_gff_fasta(
                 f"ERROR: error parsing GFF3/FASTA files ({gff_file}, {fasta_file}). Error: {e}"
             )
             raise ParseError(
-                f"Error parsing GFF3/FASTA files ({gff_file}, {fasta_file})."
+                f"Error parsing GFF3/FASTA files ({gff_file}, {fasta_file}).",
+                diagnostic=_UNREADABLE_INPUT,
             ) from e
         except Exception as e:
             logger.error(
