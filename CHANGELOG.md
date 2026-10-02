@@ -149,6 +149,11 @@ decisions are in
   these History steps no longer copy the feature metadata (SE-01, N-19, N-20).
 - Cancel during Generate preparation no longer stops the loaded diagram
   engine, so the next Generate reuses it (GE-09).
+- Undo, Redo, and the rollback of a failed Session Load restore settings
+  exactly. Before, a round trip set unset track slot sides, the Features lane
+  direction, and both track axis indexes, pinned an unset Circular
+  multi-record legend position, and rewrote the Result's named stroke color as
+  hex (F-1).
 
 - A CLI Linear BLAST Session keeps its comparison read-only, and **Inherit
   saved comparison** then Generate succeeds: each Linear file takes the record

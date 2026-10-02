@@ -125,3 +125,90 @@ console.log('History restores nullable config values and preserves key guards.')
   state.legendEntries.value = [];
   console.log('History and Session rollback keep the admitted feature catalog by reference.');
 }
+
+// F-1 (G-H, R11): an Undo or Redo installs the captured state exactly. Unset
+// slot sides, the Features lane direction, both axis indexes, and the Circular
+// multi-record layout stay unset, and the Result's named stroke color stays
+// named, so the next Generate and Session Save see the same state as before.
+{
+  const {
+    buildEditorStateData, applyEditorStateData, buildUiStateData, applyUiStateData
+  } = await import('../../gbdraw/web/js/services/config.js');
+  state.mode.value = 'circular';
+  state.adv.circular_track_slots.forEach((slot) => {
+    slot.side = null;
+    delete slot.params.lane_direction;
+  });
+  state.adv.circular_track_slots_axis_index = null;
+  state.adv.linear_track_slots_axis_index = null;
+  Object.assign(state.layoutPreferences.circular.multi, { legend: null, plotTitlePosition: null });
+  state.originalSvgStroke.value = { color: 'gray', width: 1 };
+  const unsetValues = () => ({
+    sides: state.adv.circular_track_slots.map((slot) => slot.side),
+    laneDirection: state.adv.circular_track_slots.map((slot) => slot.params.lane_direction ?? '<unset>'),
+    circularAxis: state.adv.circular_track_slots_axis_index,
+    linearAxis: state.adv.linear_track_slots_axis_index,
+    multiLayout: { ...state.layoutPreferences.circular.multi },
+    originalSvgStroke: { ...state.originalSvgStroke.value }
+  });
+  const unset = unsetValues();
+  assert.deepEqual(unset, {
+    sides: [null, null, null, null],
+    laneDirection: ['<unset>', '<unset>', '<unset>', '<unset>'],
+    circularAxis: null,
+    linearAxis: null,
+    multiLayout: { legend: null, plotTitlePosition: null },
+    originalSvgStroke: { color: 'gray', width: 1 }
+  });
+  const settings = () => JSON.stringify({
+    config: buildConfigData(), layoutPreferences: buildUiStateData().layoutPreferences
+  });
+  const restoreSnapshots = createHistorySnapshotService({
+    state, fileStore: createHistoryFileStore(), buildConfigData, applyConfigData,
+    buildUiStateData, applyUiStateData, buildEditorStateData, applyEditorStateData
+  });
+  const restoreHistory = createHistoryManager({
+    buildIntent: restoreSnapshots.buildHistoryIntent,
+    applyIntent: restoreSnapshots.applyHistoryIntent,
+    buildCheckpoint: restoreSnapshots.buildArtifactCheckpoint,
+    applyCheckpoint: restoreSnapshots.applyArtifactCheckpoint,
+    signatureFor: restoreSnapshots.snapshotSignature
+  });
+  await restoreHistory.captureBaseline();
+  await restoreHistory.initializeIntentBaseline();
+  await restoreHistory.runUndoable('Rich Feature Popup', () => {
+    state.adv.rich_feature_popup = !state.adv.rich_feature_popup;
+  });
+  await restoreHistory.runUndoable('Label Mode', () => { state.form.labels_mode = 'both'; });
+  const edited = settings();
+  for (const direction of ['undo', 'redo', 'undo', 'undo', 'redo', 'redo']) {
+    await restoreHistory[direction]();
+    assert.deepEqual(unsetValues(), unset, `intent ${direction} keeps unset values unset`);
+  }
+  assert.equal(settings(), edited, 'Undo and Redo return to the edited settings');
+
+  await restoreHistory.runUndoableCheckpoint('Change legend', () => {
+    state.legendEntries.value = [{ caption: 'F-1', color: '#123456' }];
+  });
+  const checkpointed = settings();
+  for (const direction of ['undo', 'redo']) {
+    await restoreHistory[direction]();
+    assert.deepEqual(unsetValues(), unset, `checkpoint ${direction} keeps unset values unset`);
+  }
+  assert.equal(settings(), checkpointed, 'checkpoint Undo and Redo return to the same settings');
+
+  // A restored stack belongs to state: an edit after the checkpoint Redo is
+  // its own step and never writes into the checkpoint it was restored from.
+  const steps = restoreHistory.getUndoCount();
+  await restoreHistory.runUndoable('Move features outside', () => {
+    state.adv.circular_track_slots[0].side = 'outside';
+  });
+  assert.equal(restoreHistory.getUndoCount(), steps + 1, 'an edit after a restore adds one step');
+  for (const direction of ['undo', 'undo', 'redo']) {
+    await restoreHistory[direction]();
+    assert.deepEqual(unsetValues(), unset, `${direction} after a later edit keeps the checkpoint unset`);
+  }
+  state.legendEntries.value = [];
+  state.originalSvgStroke.value = { color: null, width: null };
+  console.log('History Undo and Redo keep unset settings unset.');
+}

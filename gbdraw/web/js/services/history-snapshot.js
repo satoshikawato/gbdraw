@@ -1337,10 +1337,12 @@ export const createHistorySnapshotService = ({
     }
 
     if (typeof applyEditorStateData === 'function') {
+      // The checkpoint holds the editor state as captured: install a copy as
+      // is, so a value such as the Result's named stroke color stays unchanged.
       applyEditorStateData({
-        ...(snapshot?.editorState || {}),
+        ...cloneJsonData(snapshot?.editorState || {}),
         featureCatalog: checkpointFeatureCatalogs.get(snapshot) ?? null
-      });
+      }, { normalized: true });
     }
 
     if (typeof applyRunStateData === 'function') {
@@ -1454,7 +1456,7 @@ export const createHistorySnapshotService = ({
 
       if (domains.has('config')) {
         if (typeof applyConfigData === 'function' && intent.config) {
-          applyConfigData(intent.config);
+          applyConfigData(intent.config, { resolveTrackPlacements: false });
         } else if (intent.config?.linearComparisonPlan) {
           replaceLinearComparisonPlan(state.linearComparisonPlan, intent.config.linearComparisonPlan);
         }
@@ -1544,7 +1546,7 @@ export const createHistorySnapshotService = ({
       await nextTick();
 
       if (typeof applyConfigData === 'function' && snapshot.config) {
-        applyConfigData(snapshot.config);
+        applyConfigData(snapshot.config, { resolveTrackPlacements: false });
       } else if (snapshot.config?.linearComparisonPlan) {
         replaceLinearComparisonPlan(
           state.linearComparisonPlan,

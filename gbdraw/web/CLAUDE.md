@@ -354,6 +354,10 @@ Circular and Linear editors), `tests/web/circular-track-slots.test.mjs`, and
   `state.featureCatalog` is null or an admitted catalog (`admittedFeatureCatalog`
   in `services/config.js`). The two paragraphs under Module ownership govern
   artifact transactions.
+- A restore (Undo, Redo, the failed Session Load rollback) installs a copy of
+  the captured state as is: `applyConfigData(..., { resolveTrackPlacements: false })`
+  and `applyEditorStateData(..., { normalized: true })`. Unset values stay unset;
+  resolving them belongs to the request builder, not to the restore.
 
 Guards:
 
@@ -363,7 +367,12 @@ Guards:
 - `tests/web/history-generated-authority.playwright.spec.js`: checkpoint Undo and
   Redo, a mode round trip, and Undo while Generate runs.
 - `tests/web/history-config-restore.test.mjs`: catalog identity through Undo,
-  Redo, and Session rollback.
+  Redo, and Session rollback, and unset settings that stay unset through intent
+  and checkpoint Undo and Redo (also `session-draft-authority.test.mjs` for the
+  rollback).
+- `tests/web/non-edit-state-preservation.playwright.spec.js` (G-H rows): Undo^n
+  Redo^n through mixed edits and a mode round trip, and Reset Settings Undo and
+  Redo, leave user-owned state unchanged.
 - `tests/web/session-operation-consistency.test.mjs`: Undo availability during
   Generate.
 
