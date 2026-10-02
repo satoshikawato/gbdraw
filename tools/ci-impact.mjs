@@ -335,7 +335,9 @@ export const buildImpactPlan = async ({
     });
   } catch (error) {
     if (!(error instanceof PromotionReadinessError)) throw error;
-    if (isDocumentationOnly(classification.capabilities)
+    // A dev push falls back to the full dev tier; Gallery publication keeps failing closed.
+    if (configuration.profile === 'gallery'
+        && isDocumentationOnly(classification.capabilities)
         && !classification.capabilities.includes('metadata')) {
       fail('DOCUMENTATION_BASE_EVIDENCE_UNAVAILABLE',
         'Documentation-only changes cannot inherit the required baseline CI evidence.',

@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import test from 'node:test';
 import { fileURLToPath } from 'node:url';
-import { classifyPath } from '../../tools/ci-impact-policy.mjs';
+import { classifyPath, knownJobsFor } from '../../tools/ci-impact-policy.mjs';
 import { PromotionReadinessError } from '../../tools/check-promotion-readiness.mjs';
 import {
   buildImpactPlan,
@@ -326,19 +326,32 @@ test('documentation-only PRs stay selective without querying any base staging st
   }
 });
 
-test('documentation-only dev pushes fail closed without a successful direct parent', async () => {
-  for (const code of ['NO_MATCHING_RUN', 'RUN_NOT_SUCCESSFUL']) {
-    await assert.rejects(buildImpactPlan({
-      configuration: configuration({
-        CI_IMPACT_PROFILE: 'dev',
-        CI_IMPACT_EVENT_NAME: 'push'
-      }),
-      token: 'test-token',
-      runGitImpl: () => gitResult('M', 'docs/FAQ.md'),
-      verifyWorkflowEvidenceImpl: async () => {
-        throw new PromotionReadinessError(code, `Direct parent staging unavailable: ${code}`);
-      }
-    }), { code: 'DOCUMENTATION_BASE_EVIDENCE_UNAVAILABLE' }, code);
+test('documentation-only dev pushes without a successful direct parent run the full dev tier', async () => {
+  for (const code of [
+    'NO_MATCHING_RUN', 'RUN_NOT_SUCCESSFUL', 'AGGREGATE_JOB_NOT_SUCCESSFUL', 'API_REQUEST_FAILED'
+  ]) {
+    for (const [path, impact] of [
+      ['docs/FAQ.md', 'documentation'],
+      ['docs/internal/SELECTIVE_CI.md', 'policy-documentation']
+    ]) {
+      const outcome = await buildImpactPlan({
+        configuration: configuration({
+          CI_IMPACT_PROFILE: 'dev',
+          CI_IMPACT_EVENT_NAME: 'push'
+        }),
+        token: 'test-token',
+        runGitImpl: () => gitResult('M', path),
+        verifyWorkflowEvidenceImpl: async () => {
+          throw new PromotionReadinessError(code, `Direct parent staging unavailable: ${code}`);
+        }
+      });
+      assert.equal(outcome.plan.impact, impact, code);
+      assert.equal(outcome.plan.decision, 'full', code);
+      assert.equal(outcome.plan.basis, 'INHERITED_EVIDENCE_UNAVAILABLE', code);
+      assert.equal(outcome.plan.inheritedEvidence, null, code);
+      assert.deepEqual(outcome.plan.requiredJobs, knownJobsFor('dev'), code);
+      assert.equal(outcome.evidenceFailure.code, code);
+    }
   }
 });
 
@@ -728,6 +741,23 @@ test('workflow keeps trusted PR routing and activates protected dev routing', ()
   assert.doesNotMatch(devGate, /test "\$\{\{ needs\./);
 });
 
+test('every planned job is a gate dependency that can run for its profile', () => {
+  const workflow = readFileSync(resolve(REPOSITORY_ROOT, '.github/workflows/test.yml'), 'utf8');
+  const job = (id) => workflow.match(new RegExp(`\\n  ${id}:\\n[\\s\\S]*?(?=\\n  [a-z0-9-]+:\\n|$)`))?.[0] || '';
+  const needs = (id) => job(id).match(/\n    needs:\n((?:      - [a-z0-9-]+\n)+)/)?.[1]
+    .trim().split('\n').map((line) => line.replace('- ', '').trim()) || [];
+  for (const [profile, gate, event] of [
+    ['pr', 'pr-gate', /github\.event_name == 'pull_request' && github\.base_ref == 'dev'/],
+    ['dev', 'dev-staging-gate', /github\.event_name == 'push' && github\.ref == 'refs\/heads\/dev'/]
+  ]) {
+    for (const jobId of knownJobsFor(profile)) {
+      assert.ok(needs(gate).includes(jobId), `${gate} must need ${jobId}`);
+      assert.match(job(jobId), new RegExp(`requiredJobs, '${jobId}'`), jobId);
+      assert.match(job(jobId), event, `${jobId} must run for the ${profile} profile`);
+    }
+  }
+});
+
 test('web PR route inherits only exact base evidence and falls back to full on API failure', async () => {
   for (const available of [true, false]) {
     const outcome = await buildImpactPlan({
@@ -744,6 +774,7 @@ test('web PR route inherits only exact base evidence and falls back to full on A
     assert.ok(outcome.plan.requiredJobs.includes('web-contracts-pr'));
     assert.ok(outcome.plan.requiredJobs.includes('web-pr-smoke'));
     assert.ok(outcome.plan.requiredJobs.includes('gallery'));
+    assert.ok(outcome.plan.requiredJobs.includes('playwright-functional'));
   }
 });
 

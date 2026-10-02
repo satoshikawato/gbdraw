@@ -89,7 +89,8 @@ test('gate accepts metadata, documentation, and full PR routes', () => {
       'gallery',
       'lint',
       'web-contracts-pr',
-      'web-pr-smoke'
+      'web-pr-smoke',
+      'playwright-functional'
     ]
   ]);
   routes.forEach((impactPlan) => {
@@ -435,5 +436,37 @@ test('PR gate requires Gallery parity for full and every selective smoke route',
     const missing = needsFor(impactPlan);
     delete missing.gallery;
     assert.throws(() => validate(impactPlan, missing), /result is missing or invalid/);
+  }
+});
+
+test('PR gate requires functional Playwright exactly when the plan selects it', () => {
+  const selected = [
+    plan({ impact: 'web-runtime' }),
+    plan({ impact: 'full', decision: 'full', basis: 'FULL_CHANGE', inheritedEvidence: null }),
+    plan({ impact: 'gallery', capabilities: ['renderer', 'gallery'], decision: 'full', basis: 'INHERITED_EVIDENCE_UNAVAILABLE', inheritedEvidence: null })
+  ];
+  for (const impactPlan of selected) {
+    assert.ok(impactPlan.requiredJobs.includes('playwright-functional'), impactPlan.impact);
+    assert.equal(validate(impactPlan, needsFor(impactPlan)).ok, true);
+    for (const result of ['skipped', 'failure', 'cancelled']) {
+      const needs = needsFor(impactPlan);
+      needs['playwright-functional'].result = result;
+      assert.throws(() => validate(impactPlan, needs), { code: 'REQUIRED_JOB_NOT_SUCCESSFUL' }, result);
+    }
+    const missing = needsFor(impactPlan);
+    delete missing['playwright-functional'];
+    assert.throws(() => validate(impactPlan, missing), { code: 'MISSING_OR_INVALID_JOB' });
+  }
+  const notSelected = [
+    plan({ impact: 'python-core' }),
+    plan({ impact: 'ci-only', decision: 'full', basis: 'FULL_CHANGE', inheritedEvidence: null })
+  ];
+  for (const impactPlan of notSelected) {
+    assert.ok(!impactPlan.requiredJobs.includes('playwright-functional'), impactPlan.impact);
+    const needs = needsFor(impactPlan);
+    assert.equal(needs['playwright-functional'].result, 'skipped');
+    assert.equal(validate(impactPlan, needs).ok, true);
+    needs['playwright-functional'].result = 'failure';
+    assert.throws(() => validate(impactPlan, needs), { code: 'UNREQUIRED_JOB_FAILED' });
   }
 });
