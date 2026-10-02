@@ -21,6 +21,7 @@ from flows.web_capture import (
     generate_and_inspect,
     open_ancestor_details,
     open_browser_capture,
+    release_pointer_and_focus,
     wait_for_app_shell,
 )
 
@@ -710,6 +711,7 @@ def _pan_preview_left(page: Page, distance_ratio: float = 0.27) -> None:
     page.evaluate("() => window.getSelection()?.removeAllRanges()")
     if page.evaluate("() => window.getSelection()?.rangeCount ?? 0") != 0:
         raise AssertionError("Circular preview retained a text selection after panning")
+    release_pointer_and_focus(page)
 
 
 def _wait_for_preview_transform(page: Page) -> None:
