@@ -42,6 +42,40 @@ an integer, as the definition line interval. This restores the 0.13.0 Web and
 CLI spacing. The rule is applied when the overrides are applied, so the stored
 request is unchanged and replay writes the same overrides back.
 
+## Unreleased: comparison rows in the search frame
+
+Session version 44 and request schema 8 are unchanged. Comparison rows stored
+in a Session (`nucleotideBlast` resources, uploaded tables, generated LOSATN
+text, and `linear_comparisons`) use the search frame of each record as the
+Session persists it: the selected and cropped record, 1-based, on its source
+strand. A record saved with `presentation.reverseComplement` or a reversed
+region keeps its rows in the search frame, and the planner projects the
+orientation when it draws. A stored row outside 1..L of its record stops the
+replay with a `COMPARISON_INPUT` error whose reason is `SEARCH_FRAME`.
+
+Sessions saved from `main` (version 42 and older) stored the rows of a
+reverse-complemented Linear record after the reverse complement. Both readers
+convert them once at Load with `x -> L + 1 - x`, where L is the length of the
+selected and cropped record:
+
+- CLI replay (`--session`) converts the rows of the adapted request.
+- The Web app rewrites the stored table bytes, both uploaded tables and
+  generated LOSATN text, so a Session saved after Load is current. A table
+  downloaded from that Session therefore differs from the file first uploaded
+  to `main`. Saved LOSAT raw cache entries were already in the search frame
+  and are unchanged.
+
+A CLI sidecar of `-b` with `--reverse_complement` or a reversed region embeds
+the reversed record as a sequence without `reverseComplement`, so the writer
+stores the `-b` table rewritten into that sequence's coordinates; replay draws
+the ribbons of the original run. CLI sidecars written by `main` already stored
+the rows that way and replay unchanged.
+
+Linear Sessions saved by the `main` Web app write
+`orthogroupState.selectedOrthogroupAlignmentFeature: ""` when no alignment
+target is selected. Readers now treat the empty string as no target instead of
+rejecting the Session.
+
 ## Session 44: typed Similarity alignment display state
 
 The current Session 44 writer uses canonical request schema 8 to move

@@ -720,16 +720,16 @@ const HELPER_OPERATION_SPECS = Object.freeze({
       return result;
     }
   },
-  [DIAGRAM_HELPER_OPERATIONS.CONVERT_LOSAT_NUCLEOTIDE_TO_DISPLAY_TSV]: {
-    keys: ['blastText', 'queryViewTransform', 'subjectViewTransform'],
+  [DIAGRAM_HELPER_OPERATIONS.CONVERT_MAIN_SESSION_COMPARISON_FRAME]: {
+    keys: ['tableText', 'queryFrame', 'subjectFrame'],
     fileRoles: [],
     run: (pyodide, payload) => callJsonHelper(
       pyodide,
-      'convert_losat_nucleotide_to_display_tsv',
+      'main_session_table_text_to_search_frame_json',
       [
-        String(payload.blastText || ''),
-        jsonArgument(payload.queryViewTransform, {}),
-        jsonArgument(payload.subjectViewTransform, {})
+        String(payload.tableText || ''),
+        jsonArgument(payload.queryFrame, {}),
+        jsonArgument(payload.subjectFrame, {})
       ]
     )
   },

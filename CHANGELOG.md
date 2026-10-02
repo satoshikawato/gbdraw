@@ -231,7 +231,31 @@ decisions are in
   (CO-06 carry-over, PD-OI-074). Sessions store the notice in
   `runMetadata.comparisonWarnings`.
 
-<!-- web-gui-audit-20260930 P15 -->
+- **Changed (command line and Python API):** comparison tables (`-b/--blast`,
+  `--comparisons_table`, `linear_comparisons`) are now read in the search
+  frame, the selected and cropped record on its source strand. Before, a table
+  was read after `--reverse_complement` or a reversed region was applied, so a
+  forward BLAST table drew the wrong region on a reversed record. A table
+  written for the reversed display needs its coordinates of that record
+  converted (`L + 1 - x`). Output changes only for comparisons that touch a
+  reverse-complemented record (N-08, CO-07, PD-OI-073).
+- A comparison row outside its cropped record stops the run with a
+  comparison-input error instead of being drawn beyond the record (N-07).
+- **Save Raw LOSAT TSV** of a reverse-complemented record uploads again to the
+  same ribbons; the web app no longer converts LOSAT rows to the displayed
+  orientation (CO-07).
+- Linear match popups and match FASTA headers report input-file coordinates,
+  as feature popups do, with the table interval added for a cropped record. The
+  SVG record group of a cropped or reverse-complemented Linear record carries
+  `data-gbdraw-record-source-start`, `-end`, and `-step` (CO-10, PD-OI-076).
+- Sessions saved from `main` with a reverse-complemented Linear record load
+  with the same ribbons: the CLI and the web app convert their stored
+  comparison rows to the search frame once at Load, and the web app rewrites
+  the stored table bytes. A CLI sidecar of `-b` with `--reverse_complement`
+  replays the ribbons of the original run. An empty Similarity alignment
+  target (`""`) in a `main` Web Session is read as no target. A comparison row
+  outside its record reports the new `SEARCH_FRAME` reason of
+  `COMPARISON_INPUT` (CO-07, PD-OI-073).
 
 - Web Custom Track Slots: a Depth row is added only when a logical Depth series
   gets its first file and removed when the series loses its last file, in both

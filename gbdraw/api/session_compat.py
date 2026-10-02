@@ -62,6 +62,7 @@ from .requests import (
     _LegacySimilarityAlignment,
     _with_legacy_similarity_alignment,
 )
+from ..linear_comparison import project_search_frame_comparisons
 
 _LEGACY_LINEAR_TRACK_SLOT_SESSION_VERSION = 32
 _LEGACY_MULTILINE_CONSERVATION_LABEL_SESSION_VERSION = 39
@@ -821,6 +822,9 @@ def promote_legacy_session_similarity_alignment_request(
         if isinstance(orthogroup_state, Mapping)
         else None
     )
+    if session_target == "":
+        # origin/main's Web Save writes "" when no alignment target is selected.
+        session_target = None
     if session_target is not None and (
         not isinstance(session_target, str)
         or not session_target.strip()
@@ -1034,6 +1038,41 @@ def _replace_plan_request(
     )
 
 
+_MAIN_DISPLAY_FRAME_SESSION_VERSION = 42
+
+
+def _main_display_frame_rows_to_search_frame(
+    plan: DiagramRequestPlan,
+    request: DiagramRequest,
+    session_artifacts: Mapping[str, Any],
+) -> DiagramRequest:
+    """Convert main Session comparison rows to the search frame once (PD-OI-073).
+
+    Sessions up to version 42 (origin/main 4556e04e) stored nucleotide rows
+    after the reverse complement of their endpoint records. The x -> L + 1 - x
+    map is its own inverse, so the projection that draws search-frame rows also
+    converts these rows; the adapted request and any re-saved Session then use
+    the search frame.
+    """
+
+    version = session_artifacts.get("version")
+    if (
+        not isinstance(plan, LinearRequestPlan)
+        or not isinstance(request, LinearDiagramRequest)
+        or not isinstance(version, int)
+        or version > _MAIN_DISPLAY_FRAME_SESSION_VERSION
+        or not request.options.linear_comparisons
+    ):
+        return request
+    converted = project_search_frame_comparisons(request.options.linear_comparisons, plan.records)
+    if all(
+        before.matches.equals(after.matches)
+        for before, after in zip(request.options.linear_comparisons, converted, strict=True)
+    ):
+        return request
+    return replace(request, options=replace(request.options, linear_comparisons=converted))
+
+
 def _adapt_session_plan(
     plan: DiagramRequestPlan,
     session_artifacts: Mapping[str, Any],
@@ -1043,6 +1082,7 @@ def _adapt_session_plan(
         plan.request,
         session_artifacts,
     )
+    request = _main_display_frame_rows_to_search_frame(plan, request, session_artifacts)
     if request is not plan.request:
         plan = _replace_plan_request(plan, request)
     current_raw = source.current_raw_entries

@@ -258,13 +258,6 @@ def _normalize_web_view_transform(view_transform):
         raise ValueError("Reverse display transform requires a positive length.")
     return {"length": max(0, length), "reverse": reverse}
 
-def _web_transform_blast_pos(position, view_transform):
-    normalized = _normalize_web_view_transform(view_transform)
-    pos = int(position)
-    if not normalized["reverse"]:
-        return pos
-    return int(normalized["length"]) + 1 - pos
-
 def _web_transform_cds_span(start, end, strand, view_transform):
     normalized = _normalize_web_view_transform(view_transform)
     start = int(start)
@@ -431,43 +424,6 @@ def _web_feature_view_hash_parts(record, source_feature_position):
         int(source_feature_position),
         (),
     )
-
-def convert_losat_nucleotide_to_display_tsv(blast_text, query_view_transform=None, subject_view_transform=None):
-    """Transform cached raw LOSAT nucleotide outfmt 6 rows into display coordinates."""
-    try:
-        from io import StringIO
-        import pandas as pd
-        from gbdraw.io.comparisons import COMPARISON_COLUMNS
-
-        data_lines = [
-            line
-            for line in str(blast_text or "").splitlines()
-            if line.strip() and not line.lstrip().startswith("#")
-        ]
-        if not data_lines:
-            return json.dumps({"tsv": "", "rows": []})
-        df = pd.read_csv(
-            StringIO(chr(10).join(data_lines)),
-            sep=chr(9),
-            names=COMPARISON_COLUMNS,
-        )
-        query_transform = _normalize_web_view_transform(query_view_transform)
-        subject_transform = _normalize_web_view_transform(subject_view_transform)
-        for column in ("qstart", "qend"):
-            df[column] = df[column].map(lambda value: _web_transform_blast_pos(value, query_transform))
-        for column in ("sstart", "send"):
-            df[column] = df[column].map(lambda value: _web_transform_blast_pos(value, subject_transform))
-        handle = StringIO()
-        df.loc[:, list(COMPARISON_COLUMNS)].to_csv(
-            handle,
-            sep=chr(9),
-            header=False,
-            index=False,
-            lineterminator=chr(10),
-        )
-        return json.dumps({"tsv": handle.getvalue(), "rows": _dataframe_json_rows(df)})
-    except Exception as error:
-        return json.dumps({'error': serialize_web_error(error, operation='convertLosatNucleotideToDisplayTsv', stage="helper")})
 
 def _load_single_linear_record_for_proteins(path, fmt, fasta_path=None, region_spec=None, record_selector=None, reverse_flag=None):
     from Bio import SeqIO
@@ -889,6 +845,17 @@ def build_protein_losat_cache_keys_json(
         return json.dumps({"keys": keys})
     except Exception as error:
         return json.dumps({'error': serialize_web_error(error, operation='buildProteinLosatCacheKeys', stage="helper")})
+
+def main_session_table_text_to_search_frame_json(table_text, query_frame_json, subject_frame_json):
+    """Rewrite one origin/main Session nucleotide table to the search frame."""
+    from gbdraw.linear_comparison import reverse_endpoint_table_text
+
+    endpoints = []
+    for frame_json in (query_frame_json, subject_frame_json):
+        frame = json.loads(str(frame_json))
+        endpoints.append((int(frame.get("length") or 0), frame.get("reverse") is True))
+    text = reverse_endpoint_table_text(str(table_text), endpoints[0], endpoints[1])
+    return json.dumps({"tsv": text})
 
 def hydrate_protein_losat_tsv_json(entry_json, identity_manifest_json):
     """Hydrate one internal schema-4 protein TSV for user download."""
@@ -1723,7 +1690,7 @@ _WEB_JSON_HELPERS = {
     "promote_legacy_losatp_cache_candidates": (promote_legacy_losatp_cache_candidates, "promoteLegacyLosatpCache"),
     "resolve_legacy_protein_reference_map_json": (resolve_legacy_protein_reference_map_json, "resolveLegacyProteinReferences"),
     "convert_losatp_blastp_pairs_to_genomic_payload": (convert_losatp_blastp_pairs_to_genomic_payload, "convertLosatpPairsToGenomicPayload"),
-    "convert_losat_nucleotide_to_display_tsv": (convert_losat_nucleotide_to_display_tsv, "convertLosatNucleotideToDisplayTsv"),
+    "main_session_table_text_to_search_frame_json": (main_session_table_text_to_search_frame_json, "convertMainSessionComparisonFrame"),
     "hydrate_protein_losat_tsv_json": (hydrate_protein_losat_tsv_json, "hydrateProteinLosatTsv"),
     "list_sequence_records": (list_sequence_records, "listSequenceRecords"),
     "list_gff_fasta_records": (list_gff_fasta_records, "listGffFastaRecords"),

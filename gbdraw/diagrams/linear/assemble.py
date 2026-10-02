@@ -104,6 +104,7 @@ from ...layout.similarity_alignment import (
 from ...linear_comparison import (
     LinearComparison,
     merge_linear_comparisons,
+    project_search_frame_comparisons,
     validate_linear_comparison_record_ids,
     validate_linear_comparison_topology,
 )
@@ -1882,6 +1883,7 @@ def assemble_linear_diagram(
     comparison_record_id_warnings = validate_linear_comparison_record_ids(
         normalized_comparisons, records
     )
+    normalized_comparisons = list(project_search_frame_comparisons(normalized_comparisons, records))
     comparisons = [item.matches for item in normalized_comparisons]
     has_blast = bool(normalized_comparisons)
 

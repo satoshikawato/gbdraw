@@ -1383,8 +1383,8 @@ def run_linear_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
     record_manifest = apply_record_display_cli_options(record_manifest, args)
     if record_manifest.record_options.regions and blast_files:
         logger.warning(
-            "WARNING: Region cropping is enabled; ensure BLAST coordinates "
-            "match the cropped regions (and reverse complements if specified)."
+            "WARNING: Region cropping is enabled; BLAST coordinates must refer "
+            "to the cropped regions, counted on the source strand."
         )
     has_table_placement = any(
         record.presentation.grid_row is not None

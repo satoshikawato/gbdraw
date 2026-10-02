@@ -294,13 +294,6 @@ def test_web_generate_reports_a_malformed_blast_table_line_as_a_comparison_diagn
 
 
 _COLUMN_MAPPING = re.compile(r"names\s*=\s*(?:list\(|tuple\()?\s*COMPARISON_COLUMNS")
-# Python embedded in Web JavaScript still reading outfmt 6 on its own. Remove an
-# entry when its reader goes; this list may only shrink.
-_PENDING_EMBEDDED_READERS = {
-    # Internal 12-column LOSAT output; P15 (CO-07) deletes
-    # convert_losat_nucleotide_to_display_tsv.
-    "web/js/app/python-helpers.js": 1,
-}
 
 
 def test_outfmt_table_columns_have_one_reader() -> None:
@@ -314,7 +307,7 @@ def test_outfmt_table_columns_have_one_reader() -> None:
         if count:
             readers[path.relative_to(package_root).as_posix()] = count
 
-    assert readers == {"io/comparisons.py": 1, **_PENDING_EMBEDDED_READERS}
+    assert readers == {"io/comparisons.py": 1}
 
 
 # --- CO-06: record-ID binding --------------------------------------------------

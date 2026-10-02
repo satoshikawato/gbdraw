@@ -2,10 +2,8 @@
 
 A comparison table is read in the search frame: the selected and cropped
 sequence, 1-based, in the source strand. The planner projects a record's
-reverse complement, and a row outside the cropped record is rejected or
-dropped instead of drawn beyond the record. These strict xfail tests record
-the current display-frame reading (N-07, N-08); the Q-FRAME fix removes the
-marks.
+reverse complement, and a row outside the cropped record is rejected
+instead of drawn beyond the record (N-07, N-08).
 """
 from __future__ import annotations
 
@@ -59,7 +57,6 @@ def _render(directory: Path, prefix: str, records: list[Path], row: str, *extra:
 
 
 @pytest.mark.linear
-@pytest.mark.xfail(strict=True, reason="N-08")
 def test_reverse_complement_flag_matches_a_physically_reversed_record(tmp_path: Path) -> None:
     # R2 2001..3000 and R3 1..1000 are one shared block (search frame).
     r2 = _write_record(tmp_path, "R2", _X[:2000] + _Y)
@@ -77,7 +74,6 @@ def test_reverse_complement_flag_matches_a_physically_reversed_record(tmp_path: 
 
 
 @pytest.mark.linear
-@pytest.mark.xfail(strict=True, reason="N-07")
 def test_row_outside_a_cropped_record_is_not_drawn_beyond_the_record(tmp_path: Path) -> None:
     sa = _write_record(tmp_path, "SA", _X)
     sb = _write_record(tmp_path, "SB", _X)
@@ -90,3 +86,145 @@ def test_row_outside_a_cropped_record_is_not_drawn_beyond_the_record(tmp_path: P
     except (GbdrawError, SystemExit):
         return
     assert drawn == []
+
+
+def _frame(*rows: tuple[int, int, int, int], bound: bool = False):
+    import pandas as pd
+
+    frame = pd.DataFrame(
+        [("Q", "S", 99.0, 10, 0, 0, *row, 1e-20, 50.0) for row in rows],
+        columns=["query", "subject", "identity", "alignment_length", "mismatches", "gap_opens",
+                 "qstart", "qend", "sstart", "send", "evalue", "bitscore"],
+    )
+    if bound:
+        for role in ("query", "subject"):
+            frame[f"{role}_feature_index"] = "0"
+            frame[f"{role}_feature_svg_id"] = f"{role}-feature"
+    return frame
+
+
+def _records(reverse_subject: bool) -> list[SeqRecord]:
+    from gbdraw.core.record_metadata import _write_coord_map
+
+    query = SeqRecord(Seq(_X[:100]), id="Q")
+    subject = SeqRecord(Seq(_Y[:80]), id="S")
+    if reverse_subject:
+        _write_coord_map(subject, base=80, step=-1)
+    return [query, subject]
+
+
+@pytest.mark.linear
+def test_planner_projects_unbound_rows_and_keeps_bound_rows() -> None:
+    from gbdraw.linear_comparison import LinearComparison, project_search_frame_comparisons
+
+    (unbound,) = project_search_frame_comparisons(
+        [LinearComparison(0, 1, _frame((1, 10, 5, 15)))], _records(reverse_subject=True)
+    )
+    assert unbound.matches.loc[0, ["qstart", "qend", "sstart", "send"]].tolist() == [1, 10, 76, 66]
+    (bound,) = project_search_frame_comparisons(
+        [LinearComparison(0, 1, _frame((1, 10, 5, 15), bound=True))], _records(reverse_subject=True)
+    )
+    assert bound.matches.loc[0, ["sstart", "send"]].tolist() == [5, 15]
+
+
+@pytest.mark.linear
+def test_row_outside_its_record_reports_a_comparison_diagnostic() -> None:
+    from gbdraw.exceptions import ValidationError
+    from gbdraw.linear_comparison import LinearComparison, project_search_frame_comparisons
+    from gbdraw.web_support.error_adapter import serialize_web_error
+
+    with pytest.raises(ValidationError, match=r"subject coordinates outside 1\.\.80") as caught:
+        project_search_frame_comparisons(
+            [LinearComparison(0, 1, _frame((1, 10, 70, 90)))], _records(reverse_subject=False)
+        )
+    error = serialize_web_error(caught.value, operation="generate", stage="render")
+    assert (error["code"], error["context"]) == ("COMPARISON_INPUT", {"reason": "SEARCH_FRAME"})
+
+
+_SESSIONS = Path(__file__).parent / "fixtures" / "sessions"
+
+
+@pytest.mark.linear
+def test_main_cli_session_with_a_reversed_record_draws_the_ribbons_main_drew(tmp_path: Path) -> None:
+    # origin/main read the -b table after --reverse_complement, and its CLI
+    # sidecar embeds that reverse-complemented record as the source, so the
+    # stored rows already use the search frame of the embedded record.
+    import gzip
+    import json
+
+    from gbdraw.session_io import load_session
+
+    provenance = json.loads((_SESSIONS / "q-frame-main-linear-reverse.provenance.json").read_text(encoding="utf-8"))
+    session = tmp_path / "main.gbdraw-session.json"
+    session.write_bytes(gzip.decompress((_SESSIONS / "q-frame-main-linear-reverse.v42.gbdraw-session.json.gz").read_bytes()))
+    sidecar = tmp_path / "resaved.gbdraw-session.json"
+    linear_cli.linear_main([
+        "--session", str(session), "-o", str(tmp_path / "replayed"), "-f", "svg", "--session_output", str(sidecar),
+    ])
+    expected = [tuple(tuple(side) for side in ribbon) for ribbon in provenance["mainRibbonSpans"]]
+    assert _ribbon_spans((tmp_path / "replayed.svg").read_text(encoding="utf-8")) == expected
+    # The re-saved Session is in the search frame and replays unchanged.
+    assert load_session(sidecar)["version"] > 42
+    linear_cli.linear_main(["--session", str(sidecar), "-o", str(tmp_path / "resaved"), "-f", "svg"])
+    assert _ribbon_spans((tmp_path / "resaved.svg").read_text(encoding="utf-8")) == expected
+
+
+@pytest.mark.linear
+@pytest.mark.parametrize("scenario", ["upload", "losatn"])
+def test_main_web_session_with_a_reversed_record_draws_the_ribbons_main_drew(tmp_path: Path, scenario: str) -> None:
+    # origin/main's Web Save kept the source records with
+    # presentation.reverseComplement and stored the reversed endpoint's rows
+    # after the reverse complement; the reader converts them once (D-18).
+    import gzip
+    import json
+
+    from gbdraw.session_io import load_session
+
+    provenance = json.loads((_SESSIONS / "q-frame-main-web.provenance.json").read_text(encoding="utf-8"))
+    session = tmp_path / "main.gbdraw-session.json"
+    session.write_bytes(
+        gzip.decompress((_SESSIONS / f"q-frame-main-web-{scenario}.v42.gbdraw-session.json.gz").read_bytes())
+    )
+    sidecar = tmp_path / "resaved.gbdraw-session.json"
+    linear_cli.linear_main([
+        "--session", str(session), "-o", str(tmp_path / "replayed"), "-f", "svg", "--session_output", str(sidecar),
+    ])
+    expected = [tuple(tuple(side) for side in ribbon) for ribbon in provenance["mainRibbonSpans"]]
+    assert _ribbon_spans((tmp_path / "replayed.svg").read_text(encoding="utf-8")) == expected
+    assert load_session(sidecar)["version"] > 42
+    linear_cli.linear_main(["--session", str(sidecar), "-o", str(tmp_path / "resaved"), "-f", "svg"])
+    assert _ribbon_spans((tmp_path / "resaved.svg").read_text(encoding="utf-8")) == expected
+
+
+def test_table_text_rewrite_maps_reversed_endpoints_only() -> None:
+    from gbdraw.linear_comparison import reverse_endpoint_table_text
+
+    row = "R2c\tR3c\t100.0\t1000\t0\t0\t2001\t3000\t3000\t2001\t0.0\t1847\n"
+    assert reverse_endpoint_table_text(row, (3000, False), (3000, True)) == (
+        "R2c\tR3c\t100.0\t1000\t0\t0\t2001\t3000\t1\t1000\t0.0\t1847\n"
+    )
+    with pytest.raises(GbdrawError, match="outside 1..2000"):
+        reverse_endpoint_table_text(row, (3000, False), (2000, True))
+
+
+@pytest.mark.linear
+def test_cli_session_output_with_a_reversed_record_replays_the_cli_ribbons(tmp_path: Path) -> None:
+    # The sidecar embeds the reverse-complemented record as a sequence, so the
+    # -b rows (search frame of the source record) are written in its frame.
+    r2 = _write_record(tmp_path, "R2", _X[:2000] + _Y)
+    r3 = _write_record(tmp_path, "R3", _Y + _Z)
+    sidecar = tmp_path / "fresh.gbdraw-session.json"
+    fresh = _render(
+        tmp_path, "fresh", [r2, r3], "R2\tR3\t100\t1000\t0\t0\t2001\t3000\t1\t1000\t0.0\t1847",
+        "--reverse_complement", "0", "--reverse_complement", "1", "--session_output", str(sidecar),
+    )
+    linear_cli.linear_main(["--session", str(sidecar), "-o", str(tmp_path / "replayed"), "-f", "svg"])
+    replayed = (tmp_path / "replayed.svg").read_text(encoding="utf-8")
+    assert len(fresh) == 1
+    assert _ribbon_spans(replayed) == fresh
+    # The replay draws the same SVG; only the record source attributes differ,
+    # because the embedded reversed sequence is the replay's own source (D-22).
+    source_attributes = re.compile(r' data-gbdraw-record-source-(?:start|end|step)="[^"]*"')
+    assert source_attributes.sub("", replayed) == source_attributes.sub(
+        "", (tmp_path / "fresh.svg").read_text(encoding="utf-8")
+    )

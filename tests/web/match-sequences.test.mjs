@@ -40,6 +40,11 @@ await writeFile(
   'utf8'
 );
 await writeFile(
+  join(tempDir, 'app', 'record-source-coordinates.js'),
+  await readFile('gbdraw/web/js/app/record-source-coordinates.js', 'utf8'),
+  'utf8'
+);
+await writeFile(
   join(tempDir, 'services', 'file-content-cache.js'),
   'export const readFileText = (file) => file.text();\n',
   'utf8'
@@ -54,6 +59,9 @@ const {
   resolveCircularComparisonSequenceAvailability,
   reverseComplementNucleotide
 } = await import(pathToFileURL(join(tempDir, 'app', 'match-sequences.js')));
+const { readRecordSourceSpan, recordSourceInterval } = await import(
+  pathToFileURL(join(tempDir, 'app', 'record-source-coordinates.js'))
+);
 
 const textFile = (value) => ({ text: async () => value });
 const namedTextFile = (name, value) => ({ name, text: async () => value });
@@ -395,7 +403,7 @@ test('builds deterministic single and combined FASTA in query-subject order', ()
   assert.equal(bundle.combinedFilename, 'pairwise_comparison1_match3_both.fna');
 });
 
-test('restores transformed linear record sources for pairwise session popups', async () => {
+test('a match on a restored cropped reverse record reports source coordinates (CO-10)', async () => {
   const sources = await buildRestoredMatchSequenceSources({
     mode: 'linear',
     lInputType: 'gb',
@@ -412,28 +420,47 @@ test('restores transformed linear record sources for pairwise session popups', a
       }
     ]
   });
-
+  // The registry holds the displayed record: source 2..5 reverse-complemented.
   assert.deepEqual(
     sources.map(({ key, recordId, sequence, origin, recordIndex }) => ({
       key, recordId, sequence, origin, recordIndex
     })),
     [
-      {
-        key: 'linear:record:0',
-        recordId: 'QUERY.1',
-        sequence: 'CGGT',
-        origin: 'linear-record',
-        recordIndex: 0
-      },
-      {
-        key: 'linear:record:1',
-        recordId: 'SUBJECT.1',
-        sequence: 'TTGGCCAA',
-        origin: 'linear-record',
-        recordIndex: 1
-      }
+      { key: 'linear:record:0', recordId: 'QUERY.1', sequence: 'CGGT', origin: 'linear-record', recordIndex: 0 },
+      { key: 'linear:record:1', recordId: 'SUBJECT.1', sequence: 'TTGGCCAA', origin: 'linear-record', recordIndex: 1 }
     ]
   );
+
+  // The renderer marks the cropped reverse record with its input-file span.
+  const group = {
+    getAttribute: (name) => ({
+      'data-gbdraw-record-source-start': '2',
+      'data-gbdraw-record-source-end': '5',
+      'data-gbdraw-record-source-step': '-1'
+    })[name] ?? null
+  };
+  const svg = {
+    querySelector: (selector) => (
+      selector === '[data-gbdraw-record-index="0"][data-gbdraw-record-source-step]' ? group : null
+    )
+  };
+  const match = { ownerSVGElement: svg };
+  const sourceSpan = readRecordSourceSpan(match, 0);
+  assert.deepEqual(sourceSpan, { start: 2, end: 5, step: -1 });
+  assert.equal(readRecordSourceSpan(match, 1), null);
+  // Displayed bases 1..2 are source 5..4; the table (search frame) gives 4..3.
+  assert.deepEqual(recordSourceInterval(sourceSpan, 1, 2), { start: 5, end: 4, table: { start: 4, end: 3 } });
+  assert.deepEqual(recordSourceInterval({ start: 1, end: 8, step: -1 }, 1, 2), { start: 8, end: 7, table: null });
+
+  const registry = createSequenceSourceRegistry(sources);
+  const bundle = buildMatchSequenceBundle([
+    { role: 'query', sourceKey: 'linear:record:0', recordId: 'QUERY.1', start: 1, end: 2, sourceSpan },
+    { role: 'subject', sourceKey: 'linear:record:1', recordId: 'SUBJECT.1', start: 3, end: 4, sourceSpan: null }
+  ], { matchId: 'pairwise_comparison1_match1', resolveSequenceSource: registry.resolve });
+  // The sequence is unchanged; only the header coordinates are source based.
+  assert.equal(bundle.entries[0].fasta, '>pairwise_comparison1_match1_query|record=QUERY.1|coords=5..4|strand=-\nCG\n');
+  assert.equal(bundle.entries[0].filename, 'pairwise_comparison1_match1_query_QUERY.1_5-4.fna');
+  assert.equal(bundle.entries[1].fasta, '>pairwise_comparison1_match1_subject|record=SUBJECT.1|coords=3..4|strand=+\nGG\n');
 });
 
 test('restores circular reference and display-ordered conservation sources', async () => {

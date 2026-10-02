@@ -4117,17 +4117,8 @@ export const createRunAnalysis = ({
             for (const pair of losatPairs) {
               throwIfGenerationCanceled();
               const cached = cacheMap.get(pair.cacheKey);
-              const blastText = isCurrentRawLosatCacheEntry(cached) ? cached.text : '';
-              const response = await runDiagramHelperOperation(
-                DIAGRAM_HELPER_OPERATIONS.CONVERT_LOSAT_NUCLEOTIDE_TO_DISPLAY_TSV,
-                {
-                  blastText,
-                  queryViewTransform: await getViewTransform(pair.queryIndex),
-                  subjectViewTransform: await getViewTransform(pair.subjectIndex)
-                }
-              );
-              const converted = response.result;
-              if (converted.error) throw converted.error;
+              // Raw search-frame rows; the Python planner projects orientation (PD-OI-073).
+              const blastText = isCurrentRawLosatCacheEntry(cached) ? String(cached.text || '') : '';
               const blastPath = `/blast_${pair.pairIndex}.txt`;
               const blastName = pair.filename || getPayloadName(blastPath);
               const blastSlot = `generatedFiles.losat_blasts[${pair.pairIndex}]`;
@@ -4136,7 +4127,7 @@ export const createRunAnalysis = ({
                 slot: blastSlot,
                 kind: 'generated'
               });
-              recordGeneratedCliFile(blastPath, converted.tsv || '', {
+              recordGeneratedCliFile(blastPath, blastText, {
                 name: blastName,
                 slot: blastSlot
               });
@@ -4146,7 +4137,7 @@ export const createRunAnalysis = ({
                 ordinal: pair.ordinal,
                 queryRecordIndex: pair.queryIndex,
                 subjectRecordIndex: pair.subjectIndex,
-                text: converted.tsv || '',
+                text: blastText,
               });
             }
           }

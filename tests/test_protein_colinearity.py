@@ -3592,62 +3592,6 @@ def test_convert_protein_hits_to_genomic_links_only_sets_matching_orthogroup_id(
 
 
 @pytest.mark.linear
-def test_web_losat_nucleotide_display_transform_keeps_orientation() -> None:
-    namespace = _load_web_helper_namespace()
-    raw_tsv = "\n".join(
-        [
-            "\t".join(
-                [
-                    "query",
-                    "subject",
-                    "99.0",
-                    "40",
-                    "0",
-                    "0",
-                    "10",
-                    "20",
-                    "5",
-                    "15",
-                    "1e-20",
-                    "120",
-                ]
-            ),
-            "\t".join(
-                [
-                    "query",
-                    "subject",
-                    "98.0",
-                    "35",
-                    "0",
-                    "0",
-                    "30",
-                    "25",
-                    "40",
-                    "35",
-                    "1e-10",
-                    "100",
-                ]
-            ),
-        ]
-    )
-
-    raw_result = namespace["convert_losat_nucleotide_to_display_tsv"](
-        raw_tsv,
-        json.dumps({"length": 100, "reverse": True}),
-        json.dumps({"length": 80, "reverse": False}),
-    )
-    result = json.loads(str(raw_result))
-
-    assert "error" not in result
-    row = result["rows"][0]
-    assert row["qstart"] == 91
-    assert row["qend"] == 81
-    assert row["sstart"] == 5
-    assert row["send"] == 15
-    assert len(result["rows"]) == 2
-
-
-@pytest.mark.linear
 def test_web_cds_span_transform_maps_reverse_display_span_and_strand() -> None:
     namespace = _load_web_helper_namespace()
 

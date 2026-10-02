@@ -14,7 +14,7 @@ from typing import Iterator
 from gbdraw.exceptions import ComparisonIdentityError, GbdrawError, InputFileError, ParseError, ValidationError
 
 OPERATIONS = frozenset("""unknown generate align feature-extraction export-svg export-png export-pdf evaluateRules readPdfFont
-buildProteinLosatCacheKeys convertLosatNucleotideToDisplayTsv convertLosatpPairsToGenomicPayload
+buildProteinLosatCacheKeys convertLosatpPairsToGenomicPayload convertMainSessionComparisonFrame
 extractCdsProteinFasta extractFirstFasta generateLegendEntrySvg hydrateProteinLosatTsv
 listGffFastaRecords listSequenceRecords measureLegendText promoteLegacyLosatpCache
 resolveLegacyProteinReferences resolveSimilarityAlignment validateConfigOverrides""".split())
@@ -47,7 +47,7 @@ DIAGNOSTIC_CODES = frozenset("INPUT_INVALID INPUT_UNREADABLE DEPTH_INVALID TABLE
 DIAGNOSTIC_REASONS = frozenset("""BOOLEAN INTEGER FINITE POSITIVE NONNEGATIVE POSITIVE_INTEGER REQUIRED FIELDS POSITIVE_UNIT_INTERVAL
 POSITIVE_OR_AUTO POSITIVE_INTEGER_OR_AUTO NONNEGATIVE_INTEGER PERCENT UNKNOWN_CONFIG_PATH
 DINUCLEOTIDE CANNOT_FIT DEFINITION_RESERVED CENTER_RESERVED THREE_COLUMNS DEPTH_VALUES
-REFERENCE_REQUIRED REFERENCE_MISMATCH ADJACENT_ALL COLLINEAR_ANCHOR_MODE COLLINEAR_COLOR_MODE COLOR""".split())
+REFERENCE_REQUIRED REFERENCE_MISMATCH ADJACENT_ALL COLLINEAR_ANCHOR_MODE COLLINEAR_COLOR_MODE COLOR SEARCH_FRAME""".split())
 _DIAGNOSTIC_INTEGER_KEYS = frozenset("row column columnCount seriesIndex slotIndex innerPx outerPx".split())
 
 # Native, fixed validation clauses -> bounded correction identifiers.

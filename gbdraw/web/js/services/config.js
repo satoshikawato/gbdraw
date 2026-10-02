@@ -142,6 +142,7 @@ import {
   confirmLargeSessionBlob
 } from './session-file.js';
 import { importSessionFile } from './session-import-client.js';
+import { convertMainSessionComparisonFrames } from './main-session-comparison-frame.js';
 import { downloadBlob } from './text-download.js';
 import { normalizeAnnotationSets } from '../app/annotations/state.js';
 import { applySpecificRuleProvenance } from '../app/specific-color-rules.js';
@@ -1571,9 +1572,10 @@ const validateCurrentWriterFeatureCatalog = async (data, { adopt = false } = {})
   });
 };
 
-const preflightSessionImport = async (rawData) => {
-  const sourceSessionVersion = rawData?.version;
+const preflightSessionImport = async (sessionData) => {
+  const sourceSessionVersion = sessionData?.version;
   validateSessionVersion(sourceSessionVersion);
+  const rawData = await convertMainSessionComparisonFrames(sessionData);
   const currentSession = sourceSessionVersion >= CURRENT_AUTHORITY_SESSION_MIN_VERSION;
   let adoptedSession = null;
   let currentResourceTable = null;
