@@ -291,6 +291,32 @@ for (const [source, writeSession] of Object.entries(cliBlastSessions)) {
   });
 }
 
+// B13: a CLI Linear Session written without -b loads with no comparison, so
+// Generate redraws the CLI figure without starting a LOSAT run.
+test('a current CLI Linear Session without a comparison generates without a LOSAT run', async ({ page }, testInfo) => {
+  test.setTimeout(600_000);
+  const directory = testInfo.outputDir;
+  mkdirSync(directory, { recursive: true });
+  writeFileSync(path.join(directory, 'R2c.gb'), R2C);
+  writeFileSync(path.join(directory, 'R3c.gb'), R3C);
+  const session = path.join(directory, 'cli-none.gbdraw-session.json.gz');
+  await promisify(execFile)('python', [
+    '-m', 'gbdraw.cli', 'linear', '--gbk', 'R2c.gb', 'R3c.gb', '-o', 'cli-none', '--session_output', session
+  ], { cwd: directory, env: { ...process.env, PYTHONPATH: root }, timeout: 600_000, maxBuffer: 1_000_000 });
+  await openFresh(page);
+  await page.locator('input[accept^=".json,"]').setInputFiles(session);
+  await page.waitForFunction(() => !window.__GBDRAW_APP__.sessionImportPending
+    && window.__GBDRAW_APP__.results.length > 0, null, { timeout: 300_000 });
+  await settle(page);
+  expect(await committedRibbons(page)).toEqual([]);
+  expect(await page.evaluate(() => [
+    window.__GBDRAW_APP__.linearComparisonGlobalAction, window.__GBDRAW_APP__.losatProgram
+  ])).toEqual(['none', 'blastn']);
+  await generateAndWaitForResult(page);
+  expect(await committedRibbons(page)).toEqual([]);
+  expect(await page.evaluate(() => window.__GBDRAW_APP__.losatCacheInfo.length)).toBe(0);
+});
+
 test('the match popup and its FASTA header report source coordinates of a cropped record', async ({ page }) => {
   test.setTimeout(600_000);
   await openLinearWith(page, [{ name: 'R2c.gb', text: R2C }, { name: 'R3c.gb', text: R3C }]);
