@@ -123,10 +123,38 @@ const legendCaptions = (page, { source = 'mounted' } = {}) => page.evaluate(asyn
     .map(({ caption }) => caption);
 }, source);
 
+// One feature edit through the editor actions the drawer controls call. A
+// color or visibility edit with a scope dialog takes `scope`/`visibilityScope`
+// (default: This feature only / the first scope, This feature).
+const editFeature = (page, locusTag, edit) => page.evaluate(async ({ tag, change }) => {
+  const app = window.__GBDRAW_APP__;
+  const feature = app.extractedFeatures.find((item) => item.locus_tag === tag);
+  if (!feature) throw new Error(`no feature ${tag}`);
+  await app.openFeatureEditorFromList(feature, null);
+  if (change.fill) {
+    await app.updateClickedFeatureColor(change.fill);
+    if (app.featureStyleScopeDialog.show) await app.handleFeatureStyleScopeChoice(change.scope || 'single');
+  }
+  if (change.labelText !== undefined || change.labelVisibility) {
+    if (change.labelText !== undefined) app.clickedFeature.labelText = change.labelText;
+    if (change.labelVisibility) app.clickedFeature.labelVisibility = change.labelVisibility;
+    await app.updateClickedFeatureLabelText();
+  }
+  if (change.visibility) {
+    app.clickedFeature.featureVisibility = change.visibility;
+    await app.updateClickedFeatureVisibility(change.visibility);
+    if (app.featureVisibilityScopeDialog.show) {
+      await app.handleFeatureVisibilityScopeChoice(change.visibilityScope || app.featureVisibilityScopeDialog.scopes[0].id);
+    }
+  }
+  app.clickedFeature = null;
+}, { tag: locusTag, change: edit });
+
 module.exports = {
   BATCH_FIXTURE,
   HMMT,
   HMMT_SESSION,
+  editFeature,
   featurePresentation,
   legendCaptions,
   loadSessionFile,
