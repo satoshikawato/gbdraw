@@ -15,10 +15,12 @@ export const IMPACT_PLAN_BASES = freeze([
   'LIGHT_CHANGE_WITH_DIRECT_PARENT_EVIDENCE', 'INHERITED_EVIDENCE_UNAVAILABLE'
 ]);
 
-const PR_JOBS = freeze([
+// The full PR tier. Functional Playwright joins it only through the capabilities below.
+const PR_FULL_TIER_JOBS = freeze([
   'web-change-budget', 'core-pr', 'recipes-standard', 'gallery', 'lint',
   'web-contracts-pr', 'web-pr-smoke'
 ]);
+const PR_JOBS = freeze([...PR_FULL_TIER_JOBS, 'playwright-functional']);
 const DEV_JOBS = freeze([
   'web-change-budget', 'core', 'recipes-standard', 'gallery', 'browser',
   'playwright-functional', 'playwright-performance', 'lint',
@@ -37,12 +39,12 @@ const PR_CAPABILITY_JOBS = freeze({
   'tests-only': PR_JOBS,
   'python-core': freeze(['web-change-budget', 'core-pr', 'gallery', 'lint', 'web-contracts-pr', 'web-pr-smoke']),
   renderer: freeze(['web-change-budget', 'core-pr', 'gallery', 'lint', 'web-contracts-pr', 'web-pr-smoke']),
-  'web-runtime': freeze(['web-change-budget', 'gallery', 'web-contracts-pr', 'web-pr-smoke']),
-  'session-persistence': freeze(['web-change-budget', 'core-pr', 'recipes-standard', 'gallery', 'lint', 'web-contracts-pr', 'web-pr-smoke']),
-  gallery: freeze(['web-change-budget', 'gallery', 'web-contracts-pr', 'web-pr-smoke']),
-  'losat-integration': freeze(['web-change-budget', 'core-pr', 'gallery', 'lint', 'web-contracts-pr', 'web-pr-smoke']),
-  packaging: PR_JOBS,
-  'ci-only': PR_JOBS,
+  'web-runtime': freeze(['web-change-budget', 'gallery', 'web-contracts-pr', 'web-pr-smoke', 'playwright-functional']),
+  'session-persistence': freeze(['web-change-budget', 'core-pr', 'recipes-standard', 'gallery', 'lint', 'web-contracts-pr', 'web-pr-smoke', 'playwright-functional']),
+  gallery: freeze(['web-change-budget', 'gallery', 'web-contracts-pr', 'web-pr-smoke', 'playwright-functional']),
+  'losat-integration': freeze(['web-change-budget', 'core-pr', 'gallery', 'lint', 'web-contracts-pr', 'web-pr-smoke', 'playwright-functional']),
+  packaging: PR_FULL_TIER_JOBS,
+  'ci-only': PR_FULL_TIER_JOBS,
   full: PR_JOBS
 });
 
@@ -270,9 +272,12 @@ export const requiredJobsFor = ({ profile, impact, decision, capabilities = [imp
     fail('INVALID_SELECTIVE_PLAN', 'This impact requires full coverage.');
   }
   const all = PROFILE_REQUIRED_JOBS[profile];
-  if (decision === 'full') return freeze([...all]);
+  if (decision === 'full' && profile !== 'pr') return freeze([...all]);
   const selected = profile === 'pr'
-    ? capabilities.flatMap((capability) => PR_CAPABILITY_JOBS[capability])
+    ? [
+      ...(decision === 'full' ? PR_FULL_TIER_JOBS : []),
+      ...capabilities.flatMap((capability) => PR_CAPABILITY_JOBS[capability])
+    ]
     : profile === 'dev'
       ? capabilities.flatMap((capability) => PR_CAPABILITY_JOBS[capability] || [])
       : [];
