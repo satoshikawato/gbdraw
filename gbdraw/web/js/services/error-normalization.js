@@ -107,6 +107,8 @@ const DEFINITIONS = Object.freeze({
   GENERATION_BUSY: ['A diagram generation request is already running. Wait for it to finish before retrying.', ['retry', 'save-session']],
   UNKNOWN: ['The operation failed without recognized diagnostic information. Retry; if it continues, save a Session for investigation.', ['retry', 'save-session']],
   VALIDATION_UNCLASSIFIED: ['Input validation failed. Review the inputs before retrying.', ['review-input', 'retry']],
+  // The engine output depends only on the request, so Retry would fail the same way.
+  RENDER_FAILED: ['The diagram engine failed while drawing this diagram. Generating again with the same inputs and settings fails the same way. Change the inputs or settings, or save a Session for investigation.', ['save-session']],
   INPUT_INVALID: ['An input value is invalid.', ['edit-input', 'retry']],
   INPUT_REQUIRED: ['Supply GenBank input or matching GFF3 and FASTA inputs.', ['select-input', 'retry']],
   FASTA_REQUIRED: ['Supply a matching FASTA input for each GFF3 input.', ['select-input', 'retry']],
@@ -152,6 +154,10 @@ const FIELD_LABELS = Object.freeze({ protein_blastp_max_hits: 'Protein BLASTP Pa
   center_reserved_radius: 'Center Reserved Radius', multi_record_min_radius_ratio: 'Minimum radius ratio',
   multi_record_column_gap_ratio: 'Column gap ratio', multi_record_row_gap_ratio: 'Row gap ratio' });
 const CODES = new Set(Object.keys(DEFINITIONS));
+// Python exception classes the adapter may name for RENDER_FAILED (class names, never messages).
+const EXCEPTION_TYPES = new Set(`ValidationError ParseError ConfigError ExportError GbdrawError ZeroDivisionError
+FloatingPointError OverflowError ArithmeticError AssertionError AttributeError IndexError KeyError LookupError
+NotImplementedError RecursionError RuntimeError TypeError UnboundLocalError NameError ValueError Exception`.split(/\s+/));
 // Locators shown in the summary; indexes are zero-based, ordinals one-based.
 const ORDINAL_LABELS = Object.freeze({ DECORATION_CONTINUITY: 'Result', COMPARISON_INPUT: 'Comparison FASTA' });
 const CONFIG_PATH = /^[a-z][a-z0-9_]*(?:\.[a-z0-9_]+)+$/;
@@ -372,6 +378,7 @@ const contextFor = (value) => {
   if (typeof value.reason === 'string' && Object.hasOwn(REASONS, value.reason)) context.reason = value.reason;
   if (value.positionUnit === 'python-character') context.positionUnit = value.positionUnit;
   if (typeof value.configPath === 'string' && value.configPath.length <= 80 && CONFIG_PATH.test(value.configPath)) context.configPath = value.configPath;
+  if (typeof value.exceptionType === 'string' && EXCEPTION_TYPES.has(value.exceptionType)) context.exceptionType = value.exceptionType;
   for (const key of ['position', 'row', 'column', 'inputOrdinal', 'recordIndex', 'seriesIndex', 'slotIndex', 'recordCount', 'columnCount', 'codepoint', 'innerPx', 'outerPx']) {
     if (Number.isSafeInteger(value[key]) && value[key] >= 0 && value[key] <= (key === 'codepoint' ? 0x10ffff : 10000000)) {
       if (key !== 'position' || context.positionUnit === 'python-character') context[key] = value[key];
@@ -414,11 +421,12 @@ export const normalizeUserFacingError = (value, {
   const position = result.context.position !== undefined ? ` Python character position ${result.context.position} (zero-based).` : '';
   const columns = result.context.columnCount !== undefined ? ` Required columns: ${result.context.columnCount}.` : '';
   const count = result.context.recordCount !== undefined ? ` Loaded records: ${result.context.recordCount}.` : '';
+  const exception = result.context.exceptionType ? ` Python exception: ${result.context.exceptionType}.` : '';
   const schemaGuidance = result.code === 'INPUT_INVALID' && result.context.field === 'schema'
     ? ' Load a supported Session file or recreate it with the current writer.' : '';
   const continuation = result.operation === 'align' && result.context.field === 'direction'
     && result.context.reason === 'SOURCE_VIEW_CONFLICT' ? ' Review the updated preview and Apply again.' : '';
-  result.summary = `${message}${locators}${field}${guidance ? ` ${guidance}` : ''}${band}${position}${columns}${count}${continuation}${schemaGuidance}`
+  result.summary = `${message}${locators}${field}${guidance ? ` ${guidance}` : ''}${band}${position}${columns}${count}${exception}${continuation}${schemaGuidance}`
     .slice(0, Number.isSafeInteger(summaryLimit) ? Math.max(0, Math.min(summaryLimit, 1000)) : 1000);
   const detail = [`Code: ${result.code}`, `Operation: ${result.operation}`, `Stage: ${result.stage}`,
     ...Object.entries(result.context).map(([key, item]) => `${key}: ${item}`),

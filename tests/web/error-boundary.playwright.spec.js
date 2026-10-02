@@ -119,6 +119,37 @@ for (const mode of ['circular', 'linear']) {
   }
 }
 
+// B9 (P07: offer only working actions): a render-stage failure that no
+// producer classifies repeats for the same inputs, so the panel names the
+// render failure and its exception class and offers Save Session, not Retry.
+test('an unclassified render failure offers Save Session and no Retry Generate', async ({ page }) => {
+  test.setTimeout(180000);
+  await openApp(page);
+  await page.locator('input[accept^=".json,"]').setInputFiles(join(process.cwd(), 'gbdraw/web/gallery/sessions/HmmtDNA_basic_circular.gbdraw-session.json'));
+  await page.waitForFunction(() => !window.__GBDRAW_APP__.sessionImportPending && window.__GBDRAW_APP__.results.length);
+  // A display start beyond the record reaches the engine; its native check has no diagnostic.
+  await page.evaluate(() => {
+    const send = Worker.prototype.postMessage;
+    Worker.prototype.postMessage = function (message, ...args) {
+      if (message.type !== 'run') return send.call(this, message, ...args);
+      Worker.prototype.postMessage = send;
+      const request = structuredClone(message.payload.request);
+      request.records[0].display.startCoordinate = 99999999;
+      return send.call(this, { ...message, payload: { ...message.payload, request } }, ...args);
+    };
+  });
+  const failed = await evaluateWithRetainedPromise(page, () => window.__GBDRAW_APP__.runAnalysis());
+  expect(failed).toMatchObject({ status: 'error', recovery: 'preserved', error: { code: 'RENDER_FAILED',
+    operation: 'generate', stage: 'render', context: { exceptionType: 'ValidationError' }, actions: ['save-session'] } });
+  const alert = page.getByRole('alert', { name: 'Generation Error' });
+  await expect(alert).toContainText('The diagram engine failed while drawing this diagram.');
+  await expect(alert).toContainText('Python exception: ValidationError.');
+  await expect(alert).not.toContainText('Input validation failed');
+  await expect(alert.getByRole('button', { name: 'Retry Generate', exact: true })).toHaveCount(0);
+  await expect(alert.getByRole('button', { name: 'Save Session', exact: true })).toBeVisible();
+  await inspectSafeDetails(page, alert, failed.error);
+});
+
 test('@pr-smoke live and downloaded standalone search retain JavaScript regex and word targets', async ({page}, info) => {
   test.setTimeout(180000);
   page.on('dialog', dialog=>dialog.accept());

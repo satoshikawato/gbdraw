@@ -163,7 +163,8 @@ print(json.dumps(dict(
     codes=sorted(a.DIAGNOSTIC_CODES | {code for code, _ in exact} | {row[1] for row in a._TEMPLATES}),
     reasons=sorted(a.DIAGNOSTIC_REASONS | {ctx["reason"] for _, ctx in exact if "reason" in ctx}
         | {row[2] for row in a._TEMPLATES} | set(a._CONSTRAINTS.values())),
-    contextKeys=sorted(a._DIAGNOSTIC_INTEGER_KEYS | {"configPath"}))))
+    contextKeys=sorted(a._DIAGNOSTIC_INTEGER_KEYS | {"configPath"}),
+    exceptionTypes=sorted(a.EXCEPTION_TYPE_NAMES))))
 `], { encoding: 'utf8' }));
 for (const code of pythonContract.codes) assert.equal(roundtrip({ code }).code, code, code);
 for (const reason of pythonContract.reasons) {
@@ -180,6 +181,12 @@ assert.deepEqual(pythonContract.operations, ['unknown', 'generate', 'align', 'fe
 for (const operation of pythonContract.operations) assert.equal(roundtrip({ code: 'UNKNOWN', operation }).operation, operation);
 for (const stage of pythonContract.stages) assert.equal(roundtrip({ code: 'UNKNOWN', stage }).stage, stage);
 for (const field of pythonContract.fields) assert.equal(roundtrip({ code: 'INPUT_INVALID', context: { field } }).context.field, field);
+for (const exceptionType of pythonContract.exceptionTypes) {
+  assert.equal(roundtrip({ code: 'RENDER_FAILED', context: { exceptionType } }).context.exceptionType, exceptionType, exceptionType);
+}
+for (const exceptionType of ['PRIVATE_Error', 'valueerror', 7]) {
+  assert.equal(roundtrip({ code: 'RENDER_FAILED', context: { exceptionType } }).context.exceptionType, undefined);
+}
 
 const { validateCustomTrackPlan, assertValidCustomTrackPlan, CustomTrackPlanValidationError } =
   await import('../../gbdraw/web/js/app/track-slot-validation.js');
@@ -358,4 +365,30 @@ test('a Circular placement limited by the center reservation names that cause', 
     assert.match(layout.summary, pattern);
     assert.deepEqual(layout.actions, ['edit-track', 'retry']);
   }
+});
+
+// B9 (P07: offer only working actions): an unclassified failure inside the
+// engine's render or result stage repeats for the same inputs. It is reported as
+// a render failure naming the Python exception class, with Save Session and no
+// Retry, instead of the input-validation text.
+test('an unclassified engine failure is a render failure with its exception class and no Retry (B9)', () => {
+  const validation = normalizeUserFacingError({ code: 'VALIDATION_UNCLASSIFIED' }).summary;
+  const cases = [['ValidationError', 'render'], ['ParseError', 'render'], ['ValueError', 'render'],
+    ['IndexError', 'render'], ['ZeroDivisionError', 'render'], ['KeyError', 'result-admission'], ['MemoryError', 'render']];
+  const models = invoke({ raise: cases }).map(({ error }) => roundtrip(error));
+  const memory = models.pop();
+  for (const [index, model] of models.entries()) {
+    const [exceptionType, stage] = cases[index];
+    assert.deepEqual([model.code, model.operation, model.stage], ['RENDER_FAILED', 'generate', stage], exceptionType);
+    assert.deepEqual(model.context, { exceptionType });
+    assert.notEqual(model.summary, validation);
+    assert.doesNotMatch(model.summary, /Input validation failed/);
+    assert.match(model.summary, new RegExp(`^The diagram engine failed while drawing this diagram\\. .* Python exception: ${exceptionType}\\.$`));
+    assert.match(model.details[0].text, new RegExp(`\\nexceptionType: ${exceptionType}$`));
+    assert.equal(model.actions.includes('retry'), false, exceptionType);
+    assert.deepEqual(model.actions, ['save-session']);
+    assert.doesNotMatch(JSON.stringify(model), /PRIVATE_/);
+  }
+  // Memory depends on the runtime, not the inputs: that failure keeps Retry.
+  assert.deepEqual([memory.code, memory.actions], ['UNKNOWN', ['retry', 'save-session']]);
 });

@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import base64
+import builtins
 import json
 from pathlib import Path
 import sys
@@ -15,7 +16,12 @@ from pandas import DataFrame
 sys.path.insert(0, str(Path(__file__).resolve().parents[3]))
 
 from gbdraw.api import CircularDiagramOptions, CircularDiagramRequest, ColorOptions, InMemoryRecordSource, RecordInput
+from gbdraw import exceptions
 from gbdraw.session import build_session_document
+from gbdraw.web_support import request_render
+
+# A native failure inside a real engine phase: the phase function it replaces.
+ENGINE_PHASES = {'render': 'render_request', 'result-admission': 'build_feature_catalog_item'}
 
 
 def python_helpers():
@@ -53,10 +59,27 @@ def render_failure(namespace, pattern):
         return result
 
 
+def engine_phase_failure(namespace, name, stage):
+    exception = getattr(exceptions, name, None) or getattr(builtins, name)
+
+    def fail(*_args, **_kwargs):
+        raise exception('PRIVATE_EXCEPTION_SENTINEL')
+
+    phase = ENGINE_PHASES[stage]
+    original = getattr(request_render, phase)
+    setattr(request_render, phase, fail)
+    try:
+        return render_failure(namespace, 'VALID_PLACEHOLDER')
+    finally:
+        setattr(request_render, phase, original)
+
+
 def main():
     payload = json.load(sys.stdin)
     namespace = python_helpers()
-    if payload.get('render'):
+    if payload.get('raise'):
+        result = [engine_phase_failure(namespace, name, stage) for name, stage in payload['raise']]
+    elif payload.get('render'):
         result = render_failure(namespace, payload['pattern'])
     else:
         result = json.loads(namespace['call_web_json_helper'](payload['helper'], *payload['args']))
