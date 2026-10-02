@@ -158,17 +158,39 @@ The smoke config retains one worker and zero retries. Three local two-worker
 repetitions passed, but these are not repeated GitHub runner evidence. One worker
 already meets the projected target, so CI does not adopt unverified parallelism.
 Full functional CI runs eight shards with two retries and two workers per shard,
-on pull requests and in `dev` staging alike. Playwright 1.61 splits shards by
+on pull requests and in `dev` staging alike. Playwright's `--shard` splits by
 case count in spec file order; it cannot split by duration. With equal counts,
 four hosted shards took 13 to 34 minutes on `52be34a7` and `a5deed4a`, because
-the heaviest composite and Session cases sit in a few files. The workflow
-therefore sets `PWTEST_SHARD_WEIGHTS`, which gives each shard its share of the
-ordered cases. The shares come from measured case durations, so each shard
-holds about 12 minutes of work (9 to 15 minutes in the two measured runs).
-Playwright does not document this variable. If a Playwright release stops
-applying it, the shards fall back to equal counts: they lose balance but no
-cases, and the inventory check fails. Refresh the weights from the
-`functional-report.json` artifacts of a green run when shard times drift apart.
+the heaviest composite and Session cases sit in a few files. Each matrix entry
+therefore runs its own list of spec files, passed as Playwright CLI file
+filters, from `tests/ci/functional-shards.json`. The file records the measured
+minutes of each spec file and the eight lists.
+`tools/balance-functional-shards.mjs` fills the lists longest file first into
+the shard with the least work; within a shard, the two workers split the cases.
+
+The lists replaced Playwright's undocumented `PWTEST_SHARD_WEIGHTS` case-count
+weights. In the green runs 37010713759, 37025041812, 37026343792, 37027373572
+and 37028524962 (512 cases in 80 files), the slowest weighted shard ran its
+cases in 14.9 to 16.5 minutes (mean 15.7) and the fastest in 8.7 to 12.1
+minutes. Over 20 green `dev` and pull request runs, the slowest shard job took
+15.7 to 17.8 minutes, including about 1.5 minutes of setup. Replaying each
+run's case durations on two workers, the file lists give a slowest shard of
+13.2 to 14.3 minutes (13.7 to 15.1 when the replayed run is left out of the
+measurement that builds the lists); equal case counts give 19.7 to 21.0
+minutes. The largest file, `linear-multi-record.playwright.spec.js` (about 17.5
+minutes on one worker), fits in one shard because its two workers share its
+cases.
+
+Rebalance when shard times drift apart, or when the inventory check reports a
+new spec file. Download the shard artifacts of a green run with
+`gh run download <run-id> -p 'playwright-functional-shard-*' -D <dir>`, then run
+`node tools/balance-functional-shards.mjs <dir>/*/functional-report.json`.
+Without arguments, the tool keeps the recorded minutes and estimates a new file
+from its case count. The inventory check fails when a spec file is unassigned,
+assigned twice, or no longer exists. It also lists every shard with its file
+filters to prove that the matrix partitions the full suite without omissions or
+duplicate execution.
+
 The job limit is 45 minutes; case timeouts are unchanged. Hosted
 shard 1 still exceeded 30 minutes with two workers on `9dd6359c`: its composite
 placement took 7.2 minutes, a composite Session round trip took 4.4 minutes,
@@ -178,8 +200,6 @@ for the measured composite workload, setup and existing retries. The line
 reporter names the running case, and the JSON report records durations,
 retries and final results alongside traces on every completed job. A job killed
 at its limit may not reach upload; its last running case remains in the log.
-The inventory check proves that the weighted matrix partitions the full suite
-without omissions or duplicate execution.
 
 ## Trust and aggregate checks
 

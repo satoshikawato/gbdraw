@@ -686,11 +686,11 @@ jobs:
       - name: Run Playwright functional tests
         env:
           PLAYWRIGHT_JSON_OUTPUT_NAME: test-results/functional-report.json
-          # Playwright splits shards by case count in file order. These per-shard
-          # case counts (505 cases) give each shard about 12 minutes of measured
-          # work (runs 36965859931, 36957033319); equal counts gave 5-20 minutes.
-          PWTEST_SHARD_WEIGHTS: "54:33:78:83:56:46:75:80"
-        run: npm run test:web:functional-full -- --shard=${{ matrix.shard }}/8 --reporter=line,github,json
+        # Each shard runs the spec files that tests/ci/functional-shards.json assigns
+        # to it by measured duration; docs/internal/SELECTIVE_CI.md explains rebalancing.
+        run: |
+          files="$(node -p "require('./tests/ci/functional-shards.json').shards[${{ matrix.shard }} - 1].join(' ')")"
+          npm run test:web:functional-full -- --reporter=line,github,json $files
 
       - name: Upload Playwright functional traces and report
         if: always()
