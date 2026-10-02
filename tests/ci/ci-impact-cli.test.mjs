@@ -785,7 +785,7 @@ test('Gallery alone owns PR parity without expanding dev or release execution', 
   const gallery = job('gallery');
   const smoke = job('web-pr-smoke');
   assert.equal((workflow.match(/run: npm run test:web:gallery-publication/g) || []).length, 1);
-  assert.match(gallery, /timeout-minutes: 15/);
+  assert.match(gallery, /\n    timeout-minutes: 25\n/);
   assert.match(gallery, /GBDRAW_GALLERY_PR_PARITY: \$\{\{ github\.event_name == 'pull_request' && github\.base_ref == 'dev' && contains\(fromJSON\(needs\.ci-impact\.outputs\.plan\)\.requiredJobs, 'web-pr-smoke'\) \}\}/);
   assert.match(gallery, /python -m pytest tests\/[\s\S]*-m "gallery and not slow"/);
   for (const name of ['Set up Node.js for Gallery parity', 'Install Gallery parity dependencies', 'Prepare Gallery browser wheel', 'Verify Gallery first-Generate parity']) {
@@ -797,9 +797,114 @@ test('Gallery alone owns PR parity without expanding dev or release execution', 
   assert.equal((gallery.match(/run: python tools\/prepare_browser_wheel\.py/g) || []).length, 1);
   assert.match(gallery, /if: failure\(\) && env\.GBDRAW_GALLERY_PR_PARITY == 'true'/);
   assert.match(gallery, /path: test-results\//);
-  assert.match(smoke, /timeout-minutes: 10/);
+  assert.match(smoke, /\n    timeout-minutes: 20\n/);
   assert.match(smoke, /run: npm run test:web:pr-smoke/);
   assert.doesNotMatch(smoke, /test:web:gallery-publication/);
   assert.equal((smoke.match(/run: python tools\/prepare_browser_wheel\.py/g) || []).length, 1);
   assert.match(smoke, /Upload Playwright PR smoke traces/);
+});
+
+test('browser jobs seed apt from one verified cache and bound their test steps', () => {
+  const workflow = readFileSync(resolve(REPOSITORY_ROOT, '.github/workflows/test.yml'), 'utf8');
+  const job = (id) => workflow.match(new RegExp(`\\n  ${id}:\\n[\\s\\S]*?(?=\\n  [a-z0-9-]+:\\n|$)`))?.[0] || '';
+  const step = (source, name) => source.match(
+    new RegExp(`\\n      - name: ${name}\\n[\\s\\S]*?(?=\\n      - |$)`)
+  )?.[0] || '';
+  const jobIds = [...workflow.slice(workflow.indexOf('\njobs:\n')).matchAll(/\n  ([a-z0-9-]+):\n/g)]
+    .map(([, id]) => id);
+  const browserJobs = jobIds.filter((id) => job(id).includes('playwright install --with-deps chromium'));
+  assert.deepEqual(browserJobs, [
+    'gallery',
+    'browser',
+    'web-contracts-pr',
+    'web-pr-smoke',
+    'playwright-functional',
+    'playwright-performance',
+    'acceptance-supported-main',
+    'losat-cache-browser-acceptance'
+  ]);
+
+  const cacheSteps = [
+    'Restore Playwright system packages',
+    'Install Playwright Chromium and system packages',
+    'Save Playwright system packages'
+  ];
+  const prefix = 'playwright-apt-v1-${{ runner.os }}-${{ runner.arch }}-';
+  const copies = new Set();
+  for (const id of browserJobs) {
+    const source = job(id);
+    const [restore, install, save] = cacheSteps.map((name) => step(source, name));
+    assert.ok(restore && install && save, `${id} must restore, install, and save`);
+    assert.ok(source.indexOf(restore) < source.indexOf(install), id);
+    assert.ok(source.indexOf(install) < source.indexOf(save), id);
+    assert.equal((source.match(/playwright install --with-deps chromium/g) || []).length, 1, id);
+    assert.match(restore, /id: playwright-apt\n[\s\S]*uses: actions\/cache\/restore@v4/);
+    assert.ok(restore.includes(`key: ${prefix}\n`), id);
+    assert.ok(restore.includes(`restore-keys: ${prefix}`), id);
+    // apt only receives cached files; the install command and its exit status are unchanged.
+    assert.match(
+      install,
+      /id: playwright-install\n[\s\S]*sudo cp -t \/var\/cache\/apt\/archives\/ ~\/\.cache\/playwright-apt\/\*\.deb [^\n]*\n {10}(?:npx|python -m) playwright install --with-deps chromium\n/
+    );
+    assert.doesNotMatch(install, /playwright install[^\n]*(?:\|\||continue-on-error)/);
+    assert.doesNotMatch(source, /continue-on-error/);
+    assert.match(install, /sudo apt-get autoclean/);
+    assert.match(install, /sha256sum -- \*\.deb \| LC_ALL=C sort \| sha256sum/);
+    assert.match(
+      install,
+      /echo "apt-cache-key=playwright-apt-v1-\$\{RUNNER_OS\}-\$\{RUNNER_ARCH\}-\$\{sum\}" >> "\$GITHUB_OUTPUT"/
+    );
+    assert.match(save, /uses: actions\/cache\/save@v4/);
+    assert.match(save, /steps\.playwright-install\.outputs\.apt-cache-key != ''/);
+    assert.match(
+      save,
+      /steps\.playwright-install\.outputs\.apt-cache-key != steps\.playwright-apt\.outputs\.cache-matched-key/
+    );
+    assert.match(save, /key: \$\{\{ steps\.playwright-install\.outputs\.apt-cache-key \}\}/);
+    copies.add([restore, install, save].join('')
+      .replace(/\n {8}if: (?:env\.GBDRAW_GALLERY_PR_PARITY == 'true'|matrix\.surface == 'browser')(?=\n)/g, '')
+      .replace('python -m playwright', 'npx playwright'));
+  }
+  assert.equal(copies.size, 1, 'every browser job must use the same cache steps');
+
+  const jobTimeouts = Object.fromEntries(browserJobs.map((id) => [
+    id,
+    Number(job(id).match(/\n    timeout-minutes: (\d+)\n/)?.[1])
+  ]));
+  assert.deepEqual(jobTimeouts, {
+    gallery: 25,
+    browser: 20,
+    'web-contracts-pr': 20,
+    'web-pr-smoke': 20,
+    'playwright-functional': 45,
+    'playwright-performance': 25,
+    'acceptance-supported-main': 20,
+    'losat-cache-browser-acceptance': 20
+  });
+  const stepTimeouts = {
+    gallery: { 'Run Gallery tests': 10, 'Verify Gallery first-Generate parity': 10 },
+    browser: {
+      'Run Web JavaScript tests': 5,
+      'Run Python browser tests': 10,
+      'Run package build integration': 5,
+      'Run offline GUI browser contracts': 5
+    },
+    'web-contracts-pr': { 'Run fast Web JavaScript contracts': 5, 'Run non-slow Python browser tests': 10 },
+    'web-pr-smoke': { 'Run Playwright PR smoke': 10 },
+    'playwright-performance': { 'Run Playwright performance tests': 10 }
+  };
+  for (const [id, limits] of Object.entries(stepTimeouts)) {
+    for (const [name, minutes] of Object.entries(limits)) {
+      assert.match(step(job(id), name), new RegExp(`\\n {8}timeout-minutes: ${minutes}\\n`), `${id}: ${name}`);
+    }
+  }
+
+  for (const id of ['ci-impact', 'web-change-budget']) {
+    assert.match(
+      job(id),
+      /uses: actions\/checkout@v4\n {8}with:\n {10}fetch-depth: 0\n(?: {10}#[^\n]*\n)? {10}filter: blob:none\n/,
+      id
+    );
+  }
+  assert.match(job('ci-impact'), /node-version: "20"\n {10}cache: npm\n[\s\S]*run: npm ci/);
 });
