@@ -1317,7 +1317,8 @@ test('workflow triggers separate dev admission, dev staging, promotion, and depl
     TEST_WORKFLOW,
     /group: tests-\$\{\{ github\.event_name \}\}-\$\{\{ github\.event\.pull_request\.number \|\| github\.ref \}\}/
   );
-  assert.match(TEST_WORKFLOW, /cancel-in-progress: true/);
+  // Pull request and dispatch runs replace older runs; dev push staging runs finish.
+  assert.match(TEST_WORKFLOW, /\n  cancel-in-progress: \$\{\{ github\.event_name != 'push' \}\}\n/);
 
   assert.match(BASE_POLICY_WORKFLOW, /\n  pull_request_target:\n/);
   assert.deepEqual(
@@ -1415,7 +1416,8 @@ test('PR-to-dev jobs and aggregate use the trusted selective plan', () => {
     'gallery',
     'lint',
     'web-contracts-pr',
-    'web-pr-smoke'
+    'web-pr-smoke',
+    'playwright-functional'
   ]);
   assert.match(
     gate,
@@ -1458,10 +1460,14 @@ test('PR-to-dev jobs and aggregate use the trusted selective plan', () => {
       );
     }
   }
+  // The trusted plan selects functional Playwright on pull requests; the job is shared with dev.
+  assert.match(
+    workflowJob('playwright-functional'),
+    /\(\(github\.event_name == 'pull_request' && github\.base_ref == 'dev'\) \|\|/
+  );
   for (const jobId of [
     'core',
     'browser',
-    'playwright-functional',
     'playwright-performance',
     'acceptance-supported-main',
     'slow-main',
@@ -1535,11 +1541,11 @@ test('exact dev staging routes every job through the protected-branch plan', () 
   }
 
   const fullPlaywright = workflowJob('playwright-functional');
-  assert.match(fullPlaywright, /\n    name: Playwright functional \(shard \$\{\{ matrix\.shard \}\}\/4\)\n/);
-  assert.match(fullPlaywright, /shard: \[1, 2, 3, 4\]/);
+  assert.match(fullPlaywright, /\n    name: Playwright functional \(shard \$\{\{ matrix\.shard \}\}\/8\)\n/);
+  assert.match(fullPlaywright, /shard: \[1, 2, 3, 4, 5, 6, 7, 8\]/);
   assert.match(
     fullPlaywright,
-    /npm run test:web:functional-full -- --shard=\$\{\{ matrix\.shard \}\}\/4/
+    /npm run test:web:functional-full -- --shard=\$\{\{ matrix\.shard \}\}\/8/
   );
   assert.match(fullPlaywright, /playwright-functional-shard-\$\{\{ matrix\.shard \}\}-traces-/);
   assert.match(BASE_PLAYWRIGHT_CONFIG, /retries: process\.env\.CI \? 2 : 0/);

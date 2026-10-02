@@ -20,9 +20,11 @@ on:
         required: true
 
 concurrency:
-  # Promotion accepts only the current remote dev tip, so older dev staging can be canceled.
+  # A newer pull request run replaces the older one. A dev push run is never
+  # canceled once started, so every started staging run leaves exact-SHA
+  # evidence: the newest later push waits, and GitHub cancels older waiting runs.
   group: tests-${{ github.event_name }}-${{ github.event.pull_request.number || github.ref }}-${{ inputs.tier || 'dev' }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.event_name != 'push' }}
 
 jobs:
   ci-impact:
@@ -609,20 +611,22 @@ jobs:
           retention-days: 7
 
   playwright-functional:
-    name: Playwright functional (shard ${{ matrix.shard }}/4)
+    name: Playwright functional (shard ${{ matrix.shard }}/8)
     needs: ci-impact
+    # Runs on a pull request only when the trusted base plan selects it.
     if: >-
       !cancelled() &&
       needs.ci-impact.result == 'success' &&
       contains(fromJSON(needs.ci-impact.outputs.plan).requiredJobs, 'playwright-functional') &&
-      ((github.event_name == 'push' && github.ref == 'refs/heads/dev') ||
+      ((github.event_name == 'pull_request' && github.base_ref == 'dev') ||
+      (github.event_name == 'push' && github.ref == 'refs/heads/dev') ||
       (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/dev'))
     runs-on: ubuntu-latest
     timeout-minutes: 45
     strategy:
       fail-fast: false
       matrix:
-        shard: [1, 2, 3, 4]
+        shard: [1, 2, 3, 4, 5, 6, 7, 8]
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -682,7 +686,11 @@ jobs:
       - name: Run Playwright functional tests
         env:
           PLAYWRIGHT_JSON_OUTPUT_NAME: test-results/functional-report.json
-        run: npm run test:web:functional-full -- --shard=${{ matrix.shard }}/4 --reporter=line,github,json
+          # Playwright splits shards by case count in file order. These per-shard
+          # case counts (505 cases) give each shard about 12 minutes of measured
+          # work (runs 36965859931, 36957033319); equal counts gave 5-20 minutes.
+          PWTEST_SHARD_WEIGHTS: "54:33:78:83:56:46:75:80"
+        run: npm run test:web:functional-full -- --shard=${{ matrix.shard }}/8 --reporter=line,github,json
 
       - name: Upload Playwright functional traces and report
         if: always()
@@ -1009,6 +1017,7 @@ jobs:
       - lint
       - web-contracts-pr
       - web-pr-smoke
+      - playwright-functional
     if: >-
       always() &&
       github.event_name == 'pull_request' &&
