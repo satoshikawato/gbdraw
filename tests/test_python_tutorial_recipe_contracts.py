@@ -139,4 +139,4 @@ def test_t_py_05_program_aligns_on_its_protein_id_without_losatp(
         AlignmentDecisionStatus.REFERENCE,
         *([AlignmentDecisionStatus.SKIPPED] * 4),
     ]
-    assert result.request.options.protein_blastp_mode == "none"
+    assert result.request.options.losat_search.losatp_mode == "none"

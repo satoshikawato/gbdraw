@@ -4,6 +4,7 @@ from __future__ import annotations
 import argparse
 import base64
 import binascii
+import dataclasses
 import gc
 import gzip
 import hashlib
@@ -30,6 +31,8 @@ from gbdraw.session_io import (  # noqa: E402
     CURRENT_SESSION_VERSION,
     LOSAT_DERIVED_CACHE_SCHEMA,
     PROTEIN_IDENTITY_MANIFEST_SCHEMA,
+    SessionFileBinding,
+    canonicalize_cli_invocation,
     classify_raw_losat_cache_entry,
     load_session,
     session_mode,
@@ -1001,6 +1004,39 @@ def _canonicalize_orthogroup_resources(session: dict[str, Any]) -> int:
     return rewritten
 
 
+def _canonicalize_recorded_cli_invocation(
+    session_path: Path,
+    *,
+    mode: str,
+) -> None:
+    """Rewrite retired flags in the recorded ``cliInvocation`` of a staged session.
+
+    The recorded argv is provenance for Gallery commands. Current sessions do not
+    replay it, so the refresh moves it to the current flag names here.
+    """
+
+    payload = session_path.read_bytes()
+    compressed = payload[:2] == b"\x1f\x8b"
+    session = json.loads(gzip.decompress(payload) if compressed else payload)
+    invocation = session.get("cliInvocation")
+    if not isinstance(invocation, dict) or not isinstance(invocation.get("args"), list):
+        return
+    args, bindings = canonicalize_cli_invocation(
+        [str(arg) for arg in invocation["args"]],
+        [
+            SessionFileBinding(**binding)
+            for binding in invocation.get("fileBindings") or []
+        ],
+        mode=mode,
+    )
+    invocation["args"] = args
+    invocation["fileBindings"] = [dataclasses.asdict(binding) for binding in bindings]
+    text = json.dumps(session, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
+    session_path.write_bytes(
+        gzip.compress(text, compresslevel=6, mtime=0) if compressed else text
+    )
+
+
 def _refresh_one_session(
     session_path: Path,
     *,
@@ -1036,6 +1072,7 @@ def _refresh_one_session(
             prepared_path,
             env=env,
         )
+        _canonicalize_recorded_cli_invocation(prepared_path, mode=mode)
         subprocess.run(
             [
                 sys.executable,

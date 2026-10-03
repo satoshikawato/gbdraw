@@ -3209,6 +3209,35 @@ def _migrate_legacy_circular_slot_cli_value(value: str) -> str:
     return head if not migrated else f"{head}@{','.join(migrated)}"
 
 
+def canonicalize_cli_invocation(
+    args: Sequence[str],
+    file_bindings: Sequence[SessionFileBinding],
+    *,
+    mode: Literal["circular", "linear"],
+) -> tuple[list[str], list[SessionFileBinding]]:
+    """Rewrite retired CLI flags in a recorded invocation and remap its bindings.
+
+    Legacy session replay and the Gallery session refresh both use this, so a
+    recorded ``cliInvocation`` reaches the current flag names the same way.
+    """
+
+    canonical_args, index_map = _canonicalize_legacy_session_cli_args(args, mode=mode)
+    remapped: list[SessionFileBinding] = []
+    for binding in file_bindings:
+        if binding.argIndex not in index_map:
+            raise ValidationError(
+                "cliInvocation.fileBindings cannot reference a removed legacy CLI flag."
+            )
+        remapped.append(
+            SessionFileBinding(
+                argIndex=index_map[binding.argIndex],
+                slot=binding.slot,
+                name=binding.name,
+            )
+        )
+    return canonical_args, remapped
+
+
 def _session_cli_invocation_to_args(
     session: Mapping[str, Any],
     *,
@@ -3256,24 +3285,11 @@ def _session_cli_invocation_to_args(
 
     if migrate_legacy_cli:
         run_args, _ = _canonicalize_legacy_session_cli_args(run_args, mode=mode)
-        invocation_args, invocation_index_map = _canonicalize_legacy_session_cli_args(
+        invocation_args, file_bindings = canonicalize_cli_invocation(
             invocation_args,
+            file_bindings,
             mode=mode,
         )
-        remapped_bindings: list[SessionFileBinding] = []
-        for binding in file_bindings:
-            if binding.argIndex not in invocation_index_map:
-                raise ValidationError(
-                    "cliInvocation.fileBindings cannot reference a removed legacy CLI flag."
-                )
-            remapped_bindings.append(
-                SessionFileBinding(
-                    argIndex=invocation_index_map[binding.argIndex],
-                    slot=binding.slot,
-                    name=binding.name,
-                )
-            )
-        file_bindings = remapped_bindings
 
     run_args = _apply_option_override(run_args, "-o", "--output", output_override)
     run_args = _apply_option_override(run_args, "-f", "--format", format_override)
@@ -4507,6 +4523,7 @@ __all__ = [
     "SessionFileBinding",
     "SessionRunSpec",
     "build_session_json",
+    "canonicalize_cli_invocation",
     "classify_raw_losat_cache_entry",
     "compact_session_feature_catalog",
     "decode_depth_payload",

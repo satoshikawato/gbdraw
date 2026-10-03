@@ -98,27 +98,28 @@ Important `LinearComparisonOptions` defaults are:
 
 | Field | Default |
 |---|---|
-| `protein_mode` | `none` |
+| `losat` | `None` |
+| `losatp_mode` | `similarity_groups` (used when `losat="losatp"`) |
 | `match_style` | `ribbon` |
 | `collinearity_unit` | `auto` |
 | `collinearity_anchor` | `rbh` |
 | `collinearity_scope` | `adjacent` |
 | `collinearity_color` | `orientation` |
-| `losat_executable` | `losat` |
-| `blastp_executable` | `None` |
+| `losat_executable` | `None` |
+| `ncbi_blast_executable` | `None` |
 | `threads` | `None` |
 | `max_hits` | `5` |
-| `candidate_limit` | `None` |
+| `max_target_seqs` | `None` |
 | `orthogroup_membership` | `anchor_core_v1` |
-| `orthogroup_member_max_hits` | `None` (unbounded) |
+| `member_max_hits` | `None` (unbounded) |
 | `max_paralog_links` | `2` |
 
-`protein_mode` accepts `none`, `pairwise`, `orthogroup`, or `collinear`. The `orthogroup` token means gbdraw Similarity groups; it does not claim phylogenetic orthology.
+`losat="losatp"` runs a LOSATP protein comparison; `losat=None` runs no search. `losatp_mode` accepts `similarity_groups`, `collinear`, or `pairwise`. `similarity_groups` means gbdraw Similarity groups; it does not claim phylogenetic orthology. `losat_executable` and `ncbi_blast_executable` are mutually exclusive; `None` selects the runtime automatically.
 
-`similarity_alignment` defaults to `None`. With `protein_mode="orthogroup"`,
+`similarity_alignment` defaults to `None`. With `losat="losatp"` and `losatp_mode="similarity_groups"`,
 `SimilarityAlignmentReference(feature_id="CAG38695.1")` aligns the records on
 the Similarity group of that exact protein ID or feature SVG ID, like the CLI
-`--align_orthogroup_feature`; a resolved `SimilarityAlignmentPlan` is also
+`--similarity_alignment_feature`; a resolved `SimilarityAlignmentPlan` is also
 accepted. See [Typed Linear Similarity Group
 alignment](#typed-linear-similarity-group-alignment).
 
@@ -207,9 +208,11 @@ example](command-line.md#rotate-a-plastome-and-place-a-multipart-feature) and th
 A string, including a group ID, is rejected.
 
 `SimilarityAlignmentReference(feature_id=...)` names one exact protein ID or
-feature SVG ID. It requires the orthogroup analysis (`protein_blastp_mode` or
-`protein_mode` `"orthogroup"`). The planner runs that analysis once, resolves
-the reference with the resolver that `--align_orthogroup_feature` uses, and
+feature SVG ID. It requires `LosatSearchOptions(program="losatp", losatp_mode="similarity_groups")`
+on `LinearDiagramOptions.losat_search` (`losat="losatp"` with
+`losatp_mode="similarity_groups"` in `LinearComparisonOptions`). The planner runs
+that analysis once, resolves the reference with the resolver that
+`--similarity_alignment_feature` uses, and
 renders the resolved request with the analysis result as precomputed
 comparisons, so nothing searches twice. The resolved request and every saved
 Session store the plan, never the reference. A record without a candidate

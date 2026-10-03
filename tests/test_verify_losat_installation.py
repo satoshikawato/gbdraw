@@ -164,7 +164,8 @@ def test_python_api_smoke_uses_public_package_root(
     report = acceptance.run_python_api_smoke(records, tmp_path)
 
     assert captured["records"] is records
-    assert captured["options"].comparisons.protein_mode == "pairwise"
+    assert captured["options"].comparisons.losat == "losatp"
+    assert captured["options"].comparisons.losatp_mode == "pairwise"
     assert captured["options"].comparisons.threads == 1
     assert report["entrypoint"] == "gbdraw.draw_linear"
     assert Path(report["svg"]).read_text(encoding="utf-8") == "<svg/>"
@@ -181,7 +182,9 @@ def test_cli_smoke_runs_installed_cli_in_process_for_native_argv_capture(
         records.append(record)
 
     def fake_main() -> None:
-        raw_output = Path(sys.argv[sys.argv.index("--protein_blastp_output") + 1])
+        raw_output = (
+            Path(sys.argv[sys.argv.index("--losat_output_dir") + 1]) / "losatp.raw.tsv"
+        )
         output_prefix = Path(sys.argv[sys.argv.index("--output") + 1])
         raw_output.write_text("query\tsubject\n", encoding="utf-8")
         output_prefix.with_suffix(".svg").write_text("<svg/>", encoding="utf-8")

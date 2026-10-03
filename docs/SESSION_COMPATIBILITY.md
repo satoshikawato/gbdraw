@@ -231,7 +231,7 @@ explicit list becomes `selected`, and an authoritative empty explicit list
 becomes `none`. Legacy per-record uploads and custom filenames are attached to
 their original positional gap by stable record UID. CLI-only replay sessions
 do not gain a synthetic Web comparison draft: they load with **No comparison**.
-A CLI-only session written with `--protein_blastp_mode` keeps the adjacent
+A CLI-only session written with `--losat` keeps the adjacent
 LOSATP comparison its CLI drew. The accepted session versions remain 27–33,
 39–42, and 44.
 
@@ -239,6 +239,9 @@ LOSATP comparison its CLI drew. The accepted session versions remain 27–33,
 
 Fresh CLI and Python requests reject these retired names or values. Supported
 older sessions and canonical request schemas 1–2 migrate them before replay.
+Retired CLI flags exit with status 2 and name their replacement. Retired Python
+fields raise `TypeError`; no alias is accepted. Persisted Session names do not
+change.
 
 | Retired input | Current input |
 |---|---|
@@ -250,6 +253,26 @@ older sessions and canonical request schemas 1–2 migrate them before replay.
 | `--collinear_max_gene_gap` | `--collinear_max_unit_gap` |
 | Circular slot `spacing` | `inner_gap_px` and `outer_gap_px` |
 | Circular slot `strict`, `compress`, or `reserve` | No direct replacement; geometry and reservation are derived from `side` |
+| Linear `--protein_blastp_mode pairwise` / `orthogroup` / `collinear` | `--losat losatp --losatp_mode pairwise` / `similarity_groups` / `collinear` |
+| Linear `--protein_blastp_mode none` | Omit it; without `--losat` no protein comparison runs |
+| Linear `--losatp_bin` (`--losatp-bin`) | `--losat_bin` |
+| Linear `--ncbi_blastp_bin` (`--ncbi-blastp-bin`) | `--ncbi_blast_bin` |
+| Linear `--losatp_threads` (`--losatp-threads`) | `--losat_threads` |
+| Linear `--protein_blastp_max_hits` | `--losatp_max_hits` |
+| Linear `--protein_blastp_candidate_limit` | `--losatp_max_target_seqs` |
+| Linear `--align_orthogroup_feature` | `--similarity_alignment_feature` |
+| Linear `--protein_blastp_output FILE` | `--losat_output_dir DIR`, which writes `DIR/losatp.raw.tsv` |
+| `LinearComparisonOptions(protein_mode=...)` | `losat="losatp"` with `losatp_mode="similarity_groups"` / `"collinear"` / `"pairwise"`; `"none"` becomes `losat=None` |
+| `LinearComparisonOptions(blastp_executable=...)` | `ncbi_blast_executable` |
+| `LinearComparisonOptions(candidate_limit=...)` | `max_target_seqs` |
+| `LinearComparisonOptions(orthogroup_member_max_hits=...)` | `member_max_hits` |
+| `LinearComparisonOptions(losat_executable="losat")` | `losat_executable=None` (the new default) |
+| `LinearDiagramOptions(protein_blastp_mode=...)` | `losat_search=LosatSearchOptions(program="losatp", losatp_mode=...)`; `"orthogroup"` becomes `"similarity_groups"` |
+| `LinearDiagramOptions(protein_comparison_pairs=...)` | `LosatSearchOptions(pairs=...)` |
+| `LinearDiagramOptions(losatp_bin=...)` / `ncbi_blastp_bin` / `losatp_threads` | `LosatSearchOptions(runtime=LosatRuntimeOptions(losat_executable=..., ncbi_blast_executable=..., threads=...))` |
+| `LinearDiagramOptions(protein_blastp_max_hits=...)` | `LosatSearchOptions(losatp_max_hits=...)` |
+| `LinearDiagramOptions(protein_blastp_candidate_limit=...)` | `LosatSearchOptions(losatp_max_target_seqs=...)` |
+| `LinearDiagramOptions(orthogroup_member_max_hits=...)` | `LosatSearchOptions(losatp_member_max_hits=...)` |
 
 Current multiword long options use underscore spelling except for the documented
 active aliases. `--annotation-table` remains an alias for

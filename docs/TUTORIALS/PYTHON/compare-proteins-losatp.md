@@ -58,6 +58,8 @@ from gbdraw.api import (
     LinearDiagramOptions,
     LinearDiagramRequest,
     LinearOutputOptions,
+    LosatRuntimeOptions,
+    LosatSearchOptions,
     RecordInput,
     RecordPresentation,
     RenderOutputRequest,
@@ -108,8 +110,11 @@ request = LinearDiagramRequest(
             legend="bottom",
             plot_title_position="bottom",
         ),
-        protein_blastp_mode="orthogroup",
-        losatp_threads=1,
+        losat_search=LosatSearchOptions(
+            program="losatp",
+            losatp_mode="similarity_groups",
+            runtime=LosatRuntimeOptions(threads=1),
+        ),
         pairwise_match_style="curve",
         bitscore=50,
         evalue=0.01,
@@ -183,7 +188,7 @@ Generated SVG in the current directory.
 `SimilarityAlignmentReference(feature_id="CAG38695.1")` names the first
 record's `livE` protein. After the search, gbdraw resolves it into the
 `og_1` alignment plan with the same rules as the command line
-`--align_orthogroup_feature` and the web app's **Align**; it does not search
+`--similarity_alignment_feature` and the web app's **Align**; it does not search
 again.
 
 ## Step 3: Inspect the comparison

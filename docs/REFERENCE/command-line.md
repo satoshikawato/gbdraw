@@ -38,7 +38,7 @@ and `--version`, then atomically installs it. It preserves `LOSAT`
 
 Searches never download. Automatic native selection uses this order:
 
-1. a non-default `--losatp_bin` or an explicit `--ncbi_blastp_bin`;
+1. `--losat_bin` or an explicit `--ncbi_blast_bin`;
 2. lowercase `bin/losat` in the running Python's conda prefix;
 3. the verified managed cache;
 4. a source-checkout bundled binary;
@@ -53,7 +53,7 @@ not executable fails with its path; gbdraw does not modify it or silently use a
 different backend. If the candidate is absent, normal fallback continues.
 
 The string `losat` remains the automatic-selection token for compatibility.
-Use an absolute path such as `--losatp_bin /absolute/path/LOSAT` to force a
+Use an absolute path such as `--losat_bin /absolute/path/LOSAT` to force a
 specific executable. A corrupt managed cache still stops with its directory and
 cause when fallback reaches it; remove that version/target directory and rerun
 setup to repair it. A concurrent installer fails clearly and can be retried.
@@ -140,9 +140,9 @@ layout](palettes-feature-rules-labels-shapes-and-tracks.md).
 
 ## Comparison boundary
 
-`--protein_blastp_mode` can run Pairwise, Similarity-group (`orthogroup`
-compatibility token), or Collinear protein comparisons through LOSATP or a
-compatible BLASTP runtime. LOSATN and TLOSATX are not command-line search
+`--losat losatp` with `--losatp_mode` (`similarity_groups`, `collinear`, or
+`pairwise`; default `similarity_groups`) runs Pairwise, Similarity-group, or
+Collinear protein comparisons through LOSATP or a compatible BLASTP runtime. LOSATN and TLOSATX are not command-line search
 modes. Read their prepared evidence with `--blast`, `--comparisons_table`, or
 `--conservation_blast`. Each `--blast` file belongs to one adjacent pair, so a
 missing, unreadable, or malformed file stops the run instead of being skipped.
@@ -152,10 +152,11 @@ tables](input-formats-and-tsv-schemas.md#comparison-and-numeric-tables).
 Default LOSATP Pairwise mode searches each adjacent input pair. With three or
 more records, it does not add an implicit first-to-last comparison.
 
-`--protein_blastp_output PATH.tsv` writes the raw protein-search rows from the
-same Linear run as one deterministic, commented outfmt 6 file. The writer
-resolves session-internal runtime handles to stable percent-encoded protein IDs
-and refuses an existing file unless `--overwrite` is present. Display filters
+`--losat_output_dir DIR` writes the raw protein-search rows from the same
+Linear run to `DIR/losatp.raw.tsv` as one deterministic, commented outfmt 6
+file. The writer creates `DIR`, resolves session-internal runtime handles to
+stable percent-encoded protein IDs, and refuses an existing `losatp.raw.tsv`
+unless `--overwrite` is present. Display filters
 and hit caps can make the number of drawn links smaller than the raw row count.
 
 See [Comparison programs, thresholds, and result
@@ -164,8 +165,8 @@ filtering, cache identity, and the limits of each result type.
 
 ### Strict Similarity Group alignment
 
-In `gbdraw linear`, select `--protein_blastp_mode orthogroup` and pass
-`--align_orthogroup_feature` an exact feature SVG hash or protein ID from the
+In `gbdraw linear`, select `--losat losatp --losatp_mode similarity_groups` and
+pass `--similarity_alignment_feature` an exact feature SVG hash or protein ID from the
 chosen reference record. A Similarity Group ID is rejected. The CLI uses the
 shared resolver: the sole usable member wins; with multiple members, only one
 distinct direct reciprocal-best-hit (RBH) member connected to that exact

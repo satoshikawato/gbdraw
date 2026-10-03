@@ -15,8 +15,8 @@
 
 SVG is the base render. Static SVG uses `<prefix>.svg`; Interactive SVG uses
 `<prefix>.interactive.svg`. A session uses `.gbdraw-session.json` or
-`.gbdraw-session.json.gz`. Command-line protein evidence uses the path supplied
-to `--protein_blastp_output`.
+`.gbdraw-session.json.gz`. Command-line protein evidence is written to
+`losatp.raw.tsv` inside the directory supplied to `--losat_output_dir`.
 
 Command-line `-f` or `--format` and Python format arguments use `svg`,
 `interactive_svg`, `png`, `pdf`, `eps`, or `ps`.

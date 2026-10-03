@@ -165,17 +165,19 @@ def run_cli_smoke(records: list[SeqRecord], output_dir: Path) -> dict:
         SeqIO.write(record, path, "genbank")
         inputs.append(path)
     output_prefix = cli_dir / "diagram"
-    raw_output = cli_dir / "protein-search.tsv"
+    raw_output = cli_dir / "losatp.raw.tsv"
     cli_args = [
         "linear",
         "--gbk",
         *(str(path) for path in inputs),
-        "--protein_blastp_mode",
+        "--losat",
+        "losatp",
+        "--losatp_mode",
         "pairwise",
-        "--losatp_threads",
+        "--losat_threads",
         "1",
-        "--protein_blastp_output",
-        str(raw_output),
+        "--losat_output_dir",
+        str(cli_dir),
         "--format",
         "svg",
         "--output",
@@ -225,7 +227,8 @@ def run_python_api_smoke(records: list[SeqRecord], output_dir: Path) -> dict:
         records,
         options=gbdraw.LinearOptions(
             comparisons=gbdraw.LinearComparisonOptions(
-                protein_mode="pairwise",
+                losat="losatp",
+                losatp_mode="pairwise",
                 threads=1,
             )
         ),
