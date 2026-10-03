@@ -426,10 +426,10 @@ decisions are in
   choosing an uploaded BLAST row's **Comparison sequence (optional)**, is now
   one **Undo** step. Before, these hidden file inputs recorded no step, so
   **Undo** could not remove the added file (B21).
-
-<!-- web-gui-audit-20260930 P19 -->
-
-<!-- web-gui-audit-20260930 P20 -->
+- In a Session whose Circular rings replay saved LOSAT rows, **Undo** and
+  **Redo** of **Remove series** or **Add Seq** now restore those rows with the
+  ring rows. Before, with **Use custom stack**, the next Generate silently drew
+  one ring fewer or failed with a track-settings error (B23).
 
 LOSAT CLI/API: the CLI and Python API run LOSATN, TLOSATX, and LOSATP directly
 and share the Web app's raw search keys. The design and the approved decisions
