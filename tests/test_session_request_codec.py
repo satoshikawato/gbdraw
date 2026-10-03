@@ -2773,3 +2773,52 @@ def test_collinear_inference_choice_round_trips_and_omission_preserves_old_sessi
     del settings["collinearInferOrthogroups"]
     legacy = decode_canonical_request(encoded.payload, resource_paths=resource_paths, output_directory=tmp_path / "legacy")
     assert legacy.options.collinear_infer_orthogroups is True
+
+
+def test_in_memory_records_of_one_source_file_share_one_genbank_resource(
+    tmp_path: Path,
+) -> None:
+    """PR5-B1: the Web shape, so a replay keeps one file as one LOSAT source."""
+
+    def record(record_id: str, source: str | None) -> SeqRecord:
+        annotations: dict[str, Any] = {"molecule_type": "DNA"}
+        if source is not None:
+            annotations["gbdraw_source_paths"] = (source,)
+        return SeqRecord(Seq("ATGC"), id=record_id, annotations=annotations)
+
+    records = (
+        record("A1", "a.gbk"), record("B1", "b.gbk"), record("A2", "a.gbk"), record("M1", None)
+    )
+    encoded = encode_canonical_request(
+        LinearDiagramRequest(
+            records=tuple(RecordInput(source=InMemoryRecordSource(item)) for item in records)
+        )
+    )
+
+    assert [
+        (item["source"]["resourceId"], item["selector"]) for item in encoded.payload["records"]
+    ] == [
+        ("record-1-genbank", {"kind": "recordIndex", "index": 0}),
+        ("record-2-genbank", None),
+        ("record-1-genbank", {"kind": "recordIndex", "index": 1}),
+        ("record-4-genbank", None),
+    ]
+    resources = {resource.resource_id: resource for resource in encoded.resources}
+    assert sorted(resources) == ["record-1-genbank", "record-2-genbank", "record-4-genbank"]
+    assert resources["record-1-genbank"].name == "record-1.gbk"
+    assert [
+        line.split()[1]
+        for line in (resources["record-1-genbank"].content or b"").decode().splitlines()
+        if line.startswith("LOCUS")
+    ] == ["A1", "A2"]
+
+    decoded = decode_canonical_request(
+        encoded.payload,
+        resource_paths=_materialize_resources(encoded, tmp_path / "materialized"),
+        output_directory=tmp_path / "output",
+    )
+    assert decoded.records[0].source == decoded.records[2].source
+    assert [
+        item.selector.record_index if item.selector is not None else None
+        for item in decoded.records
+    ] == [0, None, 1, None]
