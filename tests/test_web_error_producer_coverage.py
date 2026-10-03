@@ -95,7 +95,7 @@ UNPROVEN_BASELINE: dict[str, tuple[int, str]] = {
     "gbdraw/labels/circular_types.py": (2, _LAYOUT),
     "gbdraw/labels/policy.py": (2, _LAYOUT),
     "gbdraw/layout/linear_multi_record.py": (20, _LAYOUT),
-    "gbdraw/layout/record_coordinates.py": (14, _LAYOUT),
+    "gbdraw/layout/record_coordinates.py": (13, _LAYOUT),
     "gbdraw/layout/record_placement.py": (19, _LAYOUT),
     "gbdraw/layout/similarity_alignment.py": (58, _COMPARISON),
     "gbdraw/linear.py": (6, _CLI),

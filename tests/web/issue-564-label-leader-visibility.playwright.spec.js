@@ -342,7 +342,7 @@ test('metadata-free refresh failure retains the old visual and canonical overrid
     await page.evaluate(() => window.__GBDRAW_APP__.updateClickedFeatureLabelText());
     await expect.poll(() => page.evaluate(() => ({
       processing: window.__GBDRAW_APP__.labelReflowProcessing,
-      error: window.__GBDRAW_APP__.labelReflowLastError
+      error: window.__GBDRAW_APP__.labelReflowLastError?.summary ?? null
     })), { timeout: 180000 }).toEqual({
       processing: false,
       error: 'The operation failed without recognized diagnostic information. Retry; if it continues, save a Session for investigation.'

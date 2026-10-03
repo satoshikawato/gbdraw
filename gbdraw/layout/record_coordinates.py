@@ -10,7 +10,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field, replace
 from math import isfinite
-from typing import Literal, Sequence, TypeVar
+from typing import Literal, Mapping, Sequence, TypeVar
 
 from gbdraw.exceptions import ValidationError
 
@@ -18,13 +18,28 @@ from gbdraw.exceptions import ValidationError
 _Coordinate = TypeVar("_Coordinate", int, float)
 
 
-def _integer(value: int, name: str, lower: int, upper: int) -> None:
+_DISPLAY_START_DIAGNOSTIC = {
+    "code": "INPUT_INVALID",
+    "field": "start",
+    "reason": "DISPLAY_START_BOUNDS",
+}
+
+
+def _integer(
+    value: int,
+    name: str,
+    lower: int,
+    upper: int,
+    diagnostic: Mapping[str, object] | None = None,
+) -> None:
     if (
         isinstance(value, bool)
         or not isinstance(value, int)
         or not lower <= value <= upper
     ):
-        raise ValidationError(f"{name} must be an integer in {lower}..{upper}.")
+        raise ValidationError(
+            f"{name} must be an integer in {lower}..{upper}.", diagnostic=diagnostic
+        )
 
 
 def _step(value: int) -> None:
@@ -146,7 +161,13 @@ class RecordDisplayTransform:
             raise ValidationError("Effective circular topology must be a boolean.")
         anchor = self.source_base
         if self.start_coordinate is not None:
-            _integer(self.start_coordinate, "Display start", 1, self.length)
+            _integer(
+                self.start_coordinate,
+                "Display start",
+                1,
+                self.length,
+                _DISPLAY_START_DIAGNOSTIC,
+            )
             if not self.is_circular:
                 raise ValidationError(
                     "An explicit display start requires a circular record."

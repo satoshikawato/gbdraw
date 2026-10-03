@@ -1278,6 +1278,14 @@ def resolve_linear_options(
             "-b/--blast is ambiguous when a Linear row contains multiple records; "
             "use a comparison table with explicit query and subject selectors."
         )
+    adjacent_pairs = max(len(records) - 1, 0)
+    if options.blast_files and len(options.blast_files) > adjacent_pairs:
+        # A file past the last pair would name a record that is not loaded.
+        raise ValidationError(
+            f"Too many -b/--blast files (expected at most {adjacent_pairs}): each file "
+            f"belongs to one adjacent pair of the {len(records)} loaded record(s).",
+            diagnostic={"code": "COMPARISON_INPUT"},
+        )
     if options.comparison_table_file is None:
         return options
     table = read_comparisons_table(options.comparison_table_file)

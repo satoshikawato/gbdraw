@@ -64,9 +64,18 @@ becomes one Linear row per record with that recordKey and the `#n` record
 selector, so **Inherit saved comparison** finds every record it names. A CLI
 comparison stays read-only in Web; **Inherit saved comparison** reuses it after
 promoting an older committed request, such as a version 42 sidecar, to the
-current schema. Without saved `ui.layoutPreferences`, the legend and plot-title
-positions come from the committed `diagramOptions.output` for its mode and
-grouping, so a CLI `--legend` survives loading and the first Generate.
+current schema. A Linear Session without a stored comparison plan loads with
+**No comparison**. A CLI Session written with `-b` therefore offers
+**Replace with current controls** only after a comparison is set up, and starts
+no LOSAT run before that. A CLI Linear Session written without `-b` or
+`--protein_blastp_mode` commits only a disabled protein pipeline (mode `none`,
+no pairs). It loads with **No comparison** and without selecting LOSATP, so
+Generate draws no ribbons and starts no LOSAT run. A CLI Session written with
+`--protein_blastp_mode` and an editable protein pipeline loads with the
+adjacent LOSATP comparison it drew. Without saved
+`ui.layoutPreferences`, the legend and plot-title positions come from the
+committed `diagramOptions.output` for its mode and grouping, so a CLI
+`--legend` survives loading and the first Generate.
 
 The Web file inventory uses binding schema 2. An explicit composite `c_gb`
 restores one editable GenBank File from ordered component resource bindings.

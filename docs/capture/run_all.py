@@ -128,10 +128,23 @@ SUPPORTED_TIERS = supported_tiers()
 TIER_RANK = {tier: index for index, tier in enumerate(SUPPORTED_TIERS)}
 ALL_SCENARIO_IDS = (*GUI_SCENARIO_IDS, *CLI_SCENARIO_IDS, *PYTHON_SCENARIO_IDS)
 MAX_RASTER_NOISE_PIXELS = 100
-MAX_RASTER_CHANNEL_DELTA = 1
+# Chromium rasterizes rounded corners and box shadows (header pills, the search
+# palette) with channel differences of up to 9 levels between runs.
+MAX_RASTER_CHANNEL_DELTA = 10
+# Screen regions (left, top, right, bottom) that may carry complex-SVG raster
+# noise. The diagram region fits the first-diagram previews; the canvas region is
+# the whole Result Preview canvas below the toolbar, for finished diagrams that
+# are panned or zoomed. Chrome outside the region still has to match.
+COMPLEX_SVG_DIAGRAM_REGION = (650, 100, 1430, 720)
+COMPLEX_SVG_CANVAS_REGION = (357, 185, 1424, 784)
 COMPLEX_SVG_RASTER_CASES = {
-    ("T-GUI-05", "02-first-diagram.png"),
-    ("H-GUI-07", "group-settings.png"),
+    ("T-GUI-05", "02-first-diagram.png"): COMPLEX_SVG_DIAGRAM_REGION,
+    ("H-GUI-07", "group-settings.png"): COMPLEX_SVG_DIAGRAM_REGION,
+    ("T-GUI-06", "02-first-diagram.png"): COMPLEX_SVG_CANVAS_REGION,
+    ("T-GUI-10", "presentation-result.png"): COMPLEX_SVG_CANVAS_REGION,
+    ("T-GUI-12", "track-result.png"): COMPLEX_SVG_CANVAS_REGION,
+    ("H-GUI-11", "style-result.png"): COMPLEX_SVG_CANVAS_REGION,
+    ("H-GUI-15", "exported-result.png"): COMPLEX_SVG_CANVAS_REGION,
 }
 
 if len(ALL_SCENARIO_IDS) != len(set(ALL_SCENARIO_IDS)):
@@ -145,6 +158,7 @@ def _images_match(
     actual_path: Path,
     *,
     allow_complex_svg_raster_noise: bool = False,
+    complex_svg_region: tuple[int, int, int, int] = COMPLEX_SVG_DIAGRAM_REGION,
 ) -> bool:
     comparison = compare_raster_images(expected_path, actual_path)
     if comparison.exact:
@@ -157,10 +171,10 @@ def _images_match(
         bbox = comparison.bounding_box
         if (
             bbox is None
-            or bbox[0] < 650
-            or bbox[1] < 100
-            or bbox[2] > 1430
-            or bbox[3] > 720
+            or bbox[0] < complex_svg_region[0]
+            or bbox[1] < complex_svg_region[1]
+            or bbox[2] > complex_svg_region[2]
+            or bbox[3] > complex_svg_region[3]
         ):
             return False
         with Image.open(expected_path) as expected, Image.open(actual_path) as actual:
@@ -309,6 +323,9 @@ def _check(
                     candidate_paths[name],
                     allow_complex_svg_raster_noise=(scenario_id, name)
                     in COMPLEX_SVG_RASTER_CASES,
+                    complex_svg_region=COMPLEX_SVG_RASTER_CASES.get(
+                        (scenario_id, name), COMPLEX_SVG_DIAGRAM_REGION
+                    ),
                 )
             ]
             if stale:

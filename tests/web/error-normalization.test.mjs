@@ -392,3 +392,65 @@ test('an unclassified engine failure is a render failure with its exception clas
   // Memory depends on the runtime, not the inputs: that failure keeps Retry.
   assert.deepEqual([memory.code, memory.actions], ['UNKNOWN', ['retry', 'save-session']]);
 });
+
+// B10: two user-fixable engine failures carry a producer diagnostic through the
+// real render wrapper, so they are input errors with a working action, not a
+// RENDER_FAILED that offers only Save Session.
+test('a display start beyond the record and an unparsable GenBank file are input errors (B10)', () => {
+  const [display, genbank] = [invoke({ displayStart: 99999 }).error, invoke({ genbankText: 'LOCUS       PRIVATE_BROKEN\n     CDS  PRIVATE\n' }).error]
+    .map((error) => roundtrip(error));
+  assert.deepEqual([display.code, display.operation, display.stage], ['INPUT_INVALID', 'generate', 'render']);
+  assert.deepEqual(display.context, { field: 'start', reason: 'DISPLAY_START_BOUNDS' });
+  assert.match(display.summary, /Use a display start between 1 and the record length\./);
+  assert.deepEqual(display.actions, ['edit-input', 'retry']);
+  assert.deepEqual([genbank.code, genbank.operation, genbank.stage], ['INPUT_UNREADABLE', 'generate', 'render']);
+  assert.deepEqual(genbank.context, {});
+  assert.deepEqual(genbank.actions, ['select-input', 'retry']);
+  for (const model of [display, genbank]) {
+    assert.doesNotMatch(JSON.stringify(model), /PRIVATE_|RENDER_FAILED/);
+  }
+});
+
+// B11 (R6: an offered action must be one that can work): a live edit rerenders
+// the committed Session with the current editor tables, so repeating the edit
+// sends the same request. The note above the Result comes from the failure's
+// normalized model and offers Retry only for a failure that changes no input.
+test('a live edit failure note offers Retry only when the same request can succeed (B11)', async () => {
+  const html = readFileSync(new URL('../../gbdraw/web/index.html', import.meta.url), 'utf8');
+  const note = html.match(/<p v-if="labelReflowProcessing \|\| labelReflowLastError"[^>]*>([^<]*)<\/p>/)[1];
+  assert.doesNotMatch(note, /Retry the live edit/, 'the failure note is not fixed text');
+  assert.match(note, /: labelReflowLastError\.note \}\}/);
+  const { liveEditFailure } = await import('../../gbdraw/web/js/services/error-normalization.js');
+  assert.equal(liveEditFailure(null), null);
+  const prefix = /^Live edit failed: direct edits already applied are kept; geometry may still need updating\. /;
+  const repeating = [
+    roundtrip({ code: 'RENDER_FAILED', operation: 'generate', stage: 'render', context: { exceptionType: 'ValidationError' } }),
+    roundtrip({ code: 'INPUT_INVALID', operation: 'generate', stage: 'render', context: { field: 'start', reason: 'DISPLAY_START_BOUNDS' } }),
+    roundtrip({ code: 'TRACK_LAYOUT', operation: 'generate', stage: 'render', context: { reason: 'CANNOT_FIT' } }),
+    normalizeUserFacingError({ code: 'DECORATION_CONTINUITY', stage: 'result-admission', context: { field: 'title' } })
+  ];
+  for (const error of repeating) {
+    const model = liveEditFailure(error);
+    assert.deepEqual([model.code, model.actions], [error.code, ['generate']], error.code);
+    assert.match(model.note, prefix);
+    assert.ok(model.note.includes(error.summary), error.code);
+    assert.doesNotMatch(model.note, /Retry the live edit/, error.code);
+    assert.match(model.note, / Change the edit, or change the settings and use Generate\.$/);
+  }
+  const transient = [
+    normalizeUserFacingError(new Error('PRIVATE_ worker transport failure'), { operation: 'generate', stage: 'render' }),
+    normalizeUserFacingError({ code: 'WORKER_INIT', stage: 'initialization' }),
+    normalizeUserFacingError({ code: 'GENERATION_BUSY' })
+  ];
+  for (const error of transient) {
+    const model = liveEditFailure(error);
+    assert.deepEqual([model.code, model.actions], [error.code, ['retry', 'generate']], error.code);
+    assert.match(model.note, prefix);
+    assert.match(model.note, new RegExp(` Retry the live edit or use Generate\\.$`));
+    assert.doesNotMatch(JSON.stringify(model), /PRIVATE_/);
+  }
+  assert.equal(transient[0].code, 'UNKNOWN');
+  const generate = liveEditFailure(normalizeUserFacingError(diagnosticError('LIVE_EDIT_REQUIRES_GENERATE')));
+  assert.deepEqual(generate.actions, ['generate']);
+  assert.equal(generate.note, 'Live edit failed: direct edits already applied are kept; geometry may still need updating. Generate the diagram to update its label placement.');
+});

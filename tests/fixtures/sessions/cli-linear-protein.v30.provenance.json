@@ -1,0 +1,13 @@
+{
+  "sourceCommit": "8be9e3a5a2e1bc4cd983b502716ae44330396f28",
+  "history": "release tag 0.13.0",
+  "writer": "gbdraw/linear.py --session_output (CLI sidecar) of tag 0.13.0, run from `git archive 0.13.0 gbdraw`",
+  "command": "python -m gbdraw.cli linear --gbk P1.gb P2.gb --protein_blastp_mode orthogroup -o legacy-protein --session_output legacy-protein.gbdraw-session.json",
+  "records": "P1.gb and P2.gb are the first LOCUS entry (R2c) of tests/fixtures/web_comparison_shared_block.gb (sha256 d869dd7d849540646125c3eed4ae2a95d84b8a0355563c0f8df546f619e94d0c) with R2c renamed to P1 or P2 and R2_ locus tags renamed to P1_ or P2_, then written by Biopython SeqIO with a /translation (translate(to_stop=True)) on each CDS, because the 0.13.0 CLI protein mode needs CDS proteins (sha256 e8a2add54380ca36a08b57a6a20c867c90de437a5b7d97de6362812db47b962c and 4ffe7ebc2d9453d801cb526d2fb28f44084d2dbbe654c41be6d667479e8deb63)",
+  "sha256": "3d12460d767477efcff8171a38c45b9981659fb544f8b823146ecbb6c7f41cbc",
+  "compression": "gzip -n -9",
+  "sessionVersion": 30,
+  "renderRequest": "absent (non-canonical legacy CLI sidecar)",
+  "cliConfig": "config.cliOptions.rawArgs carries --protein_blastp_mode orthogroup; config.blastSource losat; config.losatProgram blastp",
+  "cliResult": "results[0] is the CLI SVG with 2 pairwise matches between P1 and P2"
+}

@@ -125,7 +125,7 @@ const applyOrthogroupIntentData = (state, orthogroupState = {}) => {
 };
 
 const cloneLinearComparisonPlanMetadata = (plan = {}) => ({
-  mode: String(plan?.mode || 'adjacent'),
+  mode: String(plan?.mode || 'none'),
   defaultSource: String(plan?.defaultSource || 'losat'),
   edges: (Array.isArray(plan?.edges) ? plan.edges : []).map((edge) => ({
     id: String(edge?.id || ''),

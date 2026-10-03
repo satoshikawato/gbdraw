@@ -2271,7 +2271,7 @@ export const buildCanonicalRequestState = ({ session, projection, config,
     labelTextFeatureOverrides: publicationClone(features.labelTextFeatureOverrides || {}), labelTextBulkOverrides: publicationClone(features.labelTextBulkOverrides || {}),
     labelTextFeatureOverrideSources: publicationClone(features.labelTextFeatureOverrideSources || {}), labelVisibilityOverrides: publicationClone(features.labelVisibilityOverrides || {}),
     circularConservation: conservation, losat: publicationClone(config.losat || { blastp: {} }),
-    linearRecordRows: publicationClone(layout.rows || []), linearComparisonPlan: normalizeLinearComparisonPlan(config.linearComparisonPlan || { mode: 'none', defaultSource: 'losat', edges: [] }),
+    linearRecordRows: publicationClone(layout.rows || []), linearComparisonPlan: normalizeLinearComparisonPlan(config.linearComparisonPlan),
     annotationSets: publicationClone(config.annotationSets || []),
     recordDisplayDrafts: publicationClone(config.recordDisplayDrafts || []),
     featurePlacementOverrides: publicationClone(config.featurePlacementOverrides || {}), canonicalPublicationFiles
@@ -3894,6 +3894,26 @@ export const projectCanonicalSessionRequest = ({
   const comparisonsContainGeneratedProteinPipeline = (
     renderRequest.comparisons || []
   ).some((comparison) => comparison?.kind === 'generatedProteinComparison');
+  // A CLI sidecar has no Web comparison draft, so its plan is the Web default
+  // (No comparison) unless the projection states one. Its editable protein
+  // pipeline is the adjacent LOSATP comparison the CLI drew. Without -b or a
+  // protein mode the CLI still writes its protein settings as a disabled
+  // pipeline (mode `none`, no pairs): that draft selects no LOSATP program. A
+  // read-only comparison (-b) reaches this projection as an empty list.
+  const committedComparisons = renderRequest.comparisons || [];
+  const cliLinearSidecar = initializeCliInputs && storedConfig == null
+    && renderRequest.mode === 'linear';
+  const cliDraftWithoutComparison = cliLinearSidecar && committedComparisons.length > 0
+    && committedComparisons.every((comparison) => (
+      comparison?.kind === 'generatedProteinComparison' && comparison.mode === 'none'
+      && !comparison.pairs?.length
+    ));
+  const cliProteinPlan = cliLinearSidecar && projectedProteinPipeline && !cliDraftWithoutComparison
+    ? { linearComparisonPlan: normalizeLinearComparisonPlan({ mode: 'adjacent' }) }
+    : {};
+  const {
+    blastSource: _cliBlastSource, losatProgram: _cliLosatProgram, ...cliProteinSettings
+  } = projectedProteinPipeline?.config || {};
   const files = { linearSeqs: [] };
   if (renderRequest.mode === 'circular') {
     files.circularRecords = records.map((record) => {
@@ -4705,7 +4725,8 @@ export const projectCanonicalSessionRequest = ({
     config: {
       form,
       adv,
-      ...(projectedProteinPipeline?.config || {}),
+      ...(cliDraftWithoutComparison ? cliProteinSettings : projectedProteinPipeline?.config || {}),
+      ...cliProteinPlan,
       colors: projectedDefaultColors,
       colorsAreOverrides: true,
       palette: options.colors?.defaultColorsPalette || 'default',

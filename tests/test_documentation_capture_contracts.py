@@ -767,6 +767,7 @@ def test_screenshot_comparison_allows_only_bounded_raster_noise(tmp_path: Path) 
     tolerated_path = tmp_path / "tolerated.png"
     excessive_count_path = tmp_path / "excessive-count.png"
     excessive_delta_path = tmp_path / "excessive-delta.png"
+    edge_noise_path = tmp_path / "edge-noise.png"
     expected = Image.new("RGB", (120, 1), (100, 100, 100))
     expected.save(expected_path)
     assert run_all._images_match(expected_path, expected_path)
@@ -785,8 +786,18 @@ def test_screenshot_comparison_allows_only_bounded_raster_noise(tmp_path: Path) 
     excessive_count.save(excessive_count_path)
     assert not run_all._images_match(expected_path, excessive_count_path)
 
+    # Anti-aliased rounded corners and shadows differ by up to 9 levels.
+    edge_noise = expected.copy()
+    for x in range(run_all.MAX_RASTER_NOISE_PIXELS):
+        edge_noise.putpixel((x, 0), (109, 100, 100))
+    edge_noise.save(edge_noise_path)
+    assert run_all.MAX_RASTER_CHANNEL_DELTA >= 9
+    assert run_all._images_match(expected_path, edge_noise_path)
+
     excessive_delta = expected.copy()
-    excessive_delta.putpixel((0, 0), (102, 100, 100))
+    excessive_delta.putpixel(
+        (0, 0), (100 + run_all.MAX_RASTER_CHANNEL_DELTA + 1, 100, 100)
+    )
     excessive_delta.save(excessive_delta_path)
     assert not run_all._images_match(expected_path, excessive_delta_path)
 
@@ -847,6 +858,64 @@ def test_complex_svg_screenshot_comparison_is_bounded_to_the_preview(
         expected_path,
         diagram_change_path,
         allow_complex_svg_raster_noise=True,
+    )
+
+
+def test_complex_svg_raster_cases_cover_the_documented_noisy_images() -> None:
+    from docs.capture import run_all
+
+    assert set(run_all.COMPLEX_SVG_RASTER_CASES) == {
+        ("T-GUI-05", "02-first-diagram.png"),
+        ("T-GUI-06", "02-first-diagram.png"),
+        ("T-GUI-10", "presentation-result.png"),
+        ("T-GUI-12", "track-result.png"),
+        ("H-GUI-07", "group-settings.png"),
+        ("H-GUI-11", "style-result.png"),
+        ("H-GUI-15", "exported-result.png"),
+    }
+    for scenario_id, name in run_all.COMPLEX_SVG_RASTER_CASES:
+        assert name in run_all.screenshot_paths_for(scenario_id)
+
+
+def test_complex_svg_canvas_region_allows_panned_diagrams_only(
+    tmp_path: Path,
+) -> None:
+    from docs.capture import run_all
+
+    expected_path = tmp_path / "expected.png"
+    panned_path = tmp_path / "panned.png"
+    chrome_path = tmp_path / "chrome.png"
+    expected = Image.new("RGB", (1440, 900), "white")
+    expected.save(expected_path)
+
+    panned = expected.copy()
+    for x in range(400, 408):
+        panned.putpixel((x, 700), (0, 0, 0))
+    panned.save(panned_path)
+    canvas_region = run_all.COMPLEX_SVG_RASTER_CASES[
+        ("H-GUI-15", "exported-result.png")
+    ]
+    assert not run_all._images_match(
+        expected_path,
+        panned_path,
+        allow_complex_svg_raster_noise=True,
+    )
+    assert run_all._images_match(
+        expected_path,
+        panned_path,
+        allow_complex_svg_raster_noise=True,
+        complex_svg_region=canvas_region,
+    )
+
+    chrome = expected.copy()
+    for x in range(400, 408):
+        chrome.putpixel((x, 150), (0, 0, 0))
+    chrome.save(chrome_path)
+    assert not run_all._images_match(
+        expected_path,
+        chrome_path,
+        allow_complex_svg_raster_noise=True,
+        complex_svg_region=canvas_region,
     )
 
 
@@ -1225,3 +1294,32 @@ def test_capture_readme_records_versions_regeneration_and_download_checks() -> N
         assert f"--scenario {scenario_id}" in readme
     assert "--tier extended" in readme
     assert "--check" in readme
+
+
+def test_recipe_subprocesses_import_the_checkout_that_runs_the_tool() -> None:
+    import os
+    import re
+
+    from docs.recipes import _scenario_support, run_cli_scenarios
+
+    root = str(Path(__file__).resolve().parents[1])
+    assert str(_scenario_support.REPO_ROOT) == root
+
+    # Existing entries stay, in order, after the repository root (no duplicates).
+    other = os.pathsep.join(["/elsewhere/a", root, "/elsewhere/b"])
+    environment = _scenario_support.checkout_subprocess_environment(
+        {"PYTHONPATH": other, "KEEP": "1"}
+    )
+    assert environment["PYTHONPATH"].split(os.pathsep) == [root, "/elsewhere/a", "/elsewhere/b"]
+    assert environment["KEEP"] == "1"
+    assert _scenario_support.checkout_subprocess_environment({})["PYTHONPATH"] == root
+
+    # The default base is the process environment, which is not modified.
+    before = os.environ.get("PYTHONPATH")
+    assert _scenario_support.checkout_subprocess_environment()["PYTHONPATH"].split(os.pathsep)[0] == root
+    assert os.environ.get("PYTHONPATH") == before
+
+    # The CLI recipe runner builds its subprocess environment through the helper.
+    source = Path(run_cli_scenarios.__file__).read_text(encoding="utf-8")
+    assert source.count("environment = checkout_subprocess_environment()") == 1
+    assert not re.search(r"os\.environ", source)

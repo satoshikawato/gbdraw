@@ -1545,7 +1545,7 @@ test('exact dev staging routes every job through the protected-branch plan', () 
   assert.match(fullPlaywright, /shard: \[1, 2, 3, 4, 5, 6, 7, 8\]/);
   assert.match(
     fullPlaywright,
-    /npm run test:web:functional-full -- --shard=\$\{\{ matrix\.shard \}\}\/8/
+    /npm run test:web:functional-full -- --reporter=line,github,json \$files\n/
   );
   assert.match(fullPlaywright, /playwright-functional-shard-\$\{\{ matrix\.shard \}\}-traces-/);
   assert.match(BASE_PLAYWRIGHT_CONFIG, /retries: process\.env\.CI \? 2 : 0/);

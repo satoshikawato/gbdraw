@@ -141,7 +141,7 @@ import {
   validateDerivedProteinReferences
 } from './losat-cache.js';
 import { comparisonFiltersForMode, resolveComparisonThresholds } from '../mode-profiles.js';
-import { diagnosticError, normalizeUserFacingError } from '../services/error-normalization.js';
+import { diagnosticError, liveEditFailure, normalizeUserFacingError } from '../services/error-normalization.js';
 import {
   cloneFileBytesForTransfer,
   readFileBytes,
@@ -5253,7 +5253,7 @@ export const createRunAnalysis = ({
     }
     const committed = getCommittedCanonicalSession?.();
     if (!committed) {
-      labelReflowLastError.value = 'Generate the diagram to update its label placement.';
+      labelReflowLastError.value = liveEditFailure(formatError(diagnosticError('LIVE_EDIT_REQUIRES_GENERATE')));
       return { status: 'skipped' };
     }
     const generationToken = ++latestGenerationToken;
@@ -5327,7 +5327,7 @@ export const createRunAnalysis = ({
       if (execution.status === 'engine-error') {
         logPostGbdrawTimings(timingEntries);
         const error = formatError(execution.engineError, 'generate', 'render');
-        labelReflowLastError.value = error.summary;
+        labelReflowLastError.value = liveEditFailure(error);
         return { status: 'error', error };
       }
       const previousSelectedResultIndex = selectedResultIndex.value;
@@ -5351,7 +5351,7 @@ export const createRunAnalysis = ({
         return { status: 'canceled' };
       }
       const error = formatError(e, 'generate', 'render');
-      labelReflowLastError.value = error.summary;
+      labelReflowLastError.value = liveEditFailure(error);
       return { status: 'error', error };
     }
   };
@@ -5371,7 +5371,7 @@ export const createRunAnalysis = ({
         try {
           decorationContinuity = captureDecorationContinuity(getCommittedCanonicalSession?.(), projectCompositionRecordIdentity);
         } catch (error) {
-          labelReflowLastError.value = formatError(error).summary;
+          labelReflowLastError.value = liveEditFailure(formatError(error));
           return;
         }
         await runLabelReflowCandidate({

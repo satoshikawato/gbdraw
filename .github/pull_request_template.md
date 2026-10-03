@@ -134,3 +134,4 @@ implementation changes.
 - Source-coverage and result-tree identity proof:
 - Required-check/protection notes:
 - Release verification and deploy notes:
+- Periodic audit checklist (`docs/internal/WEB_PERIODIC_AUDIT.md`, sections "Promotion PR checklist" and "First promotion after the 2026-09-30 audit"):

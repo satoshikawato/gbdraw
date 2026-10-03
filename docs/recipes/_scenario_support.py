@@ -2,9 +2,10 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import re
 import shutil
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -20,6 +21,28 @@ _TRANSLATE_COMPONENT_RE = re.compile(
     r"translate\(\s*(?P<x>-?(?:[0-9]+(?:\.[0-9]*)?|\.[0-9]+))"
     r"(?:[\s,]+(?P<y>-?(?:[0-9]+(?:\.[0-9]*)?|\.[0-9]+)))?\s*\)"
 )
+
+
+def checkout_subprocess_environment(
+    base: Mapping[str, str] | None = None,
+) -> dict[str, str]:
+    """Return an environment whose subprocesses import this checkout.
+
+    A recipe subprocess (the ``gbdraw`` console script) otherwise imports the
+    editable install, which can point at another checkout when the runner is
+    started from a git worktree. The repository root of this script goes first on
+    ``PYTHONPATH``; existing entries are kept.
+    """
+
+    environment = dict(os.environ if base is None else base)
+    root = str(REPO_ROOT)
+    entries = [
+        entry
+        for entry in environment.get("PYTHONPATH", "").split(os.pathsep)
+        if entry and entry != root
+    ]
+    environment["PYTHONPATH"] = os.pathsep.join([root, *entries])
+    return environment
 
 
 class RecipeContractError(RuntimeError):
