@@ -392,3 +392,21 @@ test('an unclassified engine failure is a render failure with its exception clas
   // Memory depends on the runtime, not the inputs: that failure keeps Retry.
   assert.deepEqual([memory.code, memory.actions], ['UNKNOWN', ['retry', 'save-session']]);
 });
+
+// B10: two user-fixable engine failures carry a producer diagnostic through the
+// real render wrapper, so they are input errors with a working action, not a
+// RENDER_FAILED that offers only Save Session.
+test('a display start beyond the record and an unparsable GenBank file are input errors (B10)', () => {
+  const [display, genbank] = [invoke({ displayStart: 99999 }).error, invoke({ genbankText: 'LOCUS       PRIVATE_BROKEN\n     CDS  PRIVATE\n' }).error]
+    .map((error) => roundtrip(error));
+  assert.deepEqual([display.code, display.operation, display.stage], ['INPUT_INVALID', 'generate', 'render']);
+  assert.deepEqual(display.context, { field: 'start', reason: 'DISPLAY_START_BOUNDS' });
+  assert.match(display.summary, /Use a display start between 1 and the record length\./);
+  assert.deepEqual(display.actions, ['edit-input', 'retry']);
+  assert.deepEqual([genbank.code, genbank.operation, genbank.stage], ['INPUT_UNREADABLE', 'generate', 'render']);
+  assert.deepEqual(genbank.context, {});
+  assert.deepEqual(genbank.actions, ['select-input', 'retry']);
+  for (const model of [display, genbank]) {
+    assert.doesNotMatch(JSON.stringify(model), /PRIVATE_|RENDER_FAILED/);
+  }
+});

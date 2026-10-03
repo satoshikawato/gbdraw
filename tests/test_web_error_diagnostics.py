@@ -302,3 +302,36 @@ def test_specific_color_table_failure_reports_row_without_value(tmp_path: Path):
     assert payload["code"] == "TABLE_INVALID"
     assert payload["context"] == {"field": "color", "reason": "COLOR", "row": 2}
     assert "PRIVATE" not in json.dumps(payload)
+
+
+def test_display_start_beyond_the_record_is_a_typed_input_failure():
+    from gbdraw.api.record_planning import resolve_record_display
+    from gbdraw.api.requests import RecordDisplayOptions
+
+    with pytest.raises(ValidationError) as caught:
+        resolve_record_display(
+            RecordDisplayOptions(start_coordinate=500),
+            source_length=100,
+            detected_topology="circular",
+            source_base=1,
+            source_step=1,
+            has_input_region=False,
+            has_collection_region=False,
+            is_cropped=False,
+        )
+    payload = _web(caught.value)
+    assert payload["code"] == "INPUT_INVALID"
+    assert payload["context"] == {"field": "start", "reason": "DISPLAY_START_BOUNDS"}
+
+
+def test_unparsable_genbank_is_unreadable_input_not_a_render_failure(tmp_path: Path):
+    from gbdraw.io.genome import load_gbks
+
+    broken = tmp_path / "PRIVATE_broken.gb"
+    broken.write_text("LOCUS       PRIVATE_BROKEN\nFEATURES             Location/Qualifiers\n     CDS  PRIVATE\n", encoding="utf-8")
+    with pytest.raises(ParseError) as caught:
+        load_gbks([str(broken)])
+    payload = _web(caught.value)
+    assert payload["code"] == "INPUT_UNREADABLE"
+    assert payload["context"] == {}
+    assert "PRIVATE" not in json.dumps(payload)

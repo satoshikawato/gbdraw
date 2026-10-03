@@ -119,25 +119,31 @@ for (const mode of ['circular', 'linear']) {
   }
 }
 
+// Replace the next Worker run's first record display start (an engine-side check).
+const setNextDisplayStart = (page, startCoordinate) => page.evaluate((start) => {
+  const send = Worker.prototype.postMessage;
+  Worker.prototype.postMessage = function (message, ...args) {
+    if (message.type !== 'run') return send.call(this, message, ...args);
+    Worker.prototype.postMessage = send;
+    const request = structuredClone(message.payload.request);
+    request.records[0].display.startCoordinate = start;
+    return send.call(this, { ...message, payload: { ...message.payload, request } }, ...args);
+  };
+}, startCoordinate);
+const loadSession = async (page, name) => {
+  await page.locator('input[accept^=".json,"]').setInputFiles(join(process.cwd(), `gbdraw/web/gallery/sessions/${name}.gbdraw-session.json`));
+  await page.waitForFunction(() => !window.__GBDRAW_APP__.sessionImportPending && window.__GBDRAW_APP__.results.length);
+};
+
 // B9 (P07: offer only working actions): a render-stage failure that no
 // producer classifies repeats for the same inputs, so the panel names the
 // render failure and its exception class and offers Save Session, not Retry.
 test('an unclassified render failure offers Save Session and no Retry Generate', async ({ page }) => {
   test.setTimeout(180000);
   await openApp(page);
-  await page.locator('input[accept^=".json,"]').setInputFiles(join(process.cwd(), 'gbdraw/web/gallery/sessions/HmmtDNA_basic_circular.gbdraw-session.json'));
-  await page.waitForFunction(() => !window.__GBDRAW_APP__.sessionImportPending && window.__GBDRAW_APP__.results.length);
-  // A display start beyond the record reaches the engine; its native check has no diagnostic.
-  await page.evaluate(() => {
-    const send = Worker.prototype.postMessage;
-    Worker.prototype.postMessage = function (message, ...args) {
-      if (message.type !== 'run') return send.call(this, message, ...args);
-      Worker.prototype.postMessage = send;
-      const request = structuredClone(message.payload.request);
-      request.records[0].display.startCoordinate = 99999999;
-      return send.call(this, { ...message, payload: { ...message.payload, request } }, ...args);
-    };
-  });
+  await loadSession(page, 'BGC0000708-BGC0000713');
+  // A display start on a Linear record reaches the engine; its native check has no diagnostic.
+  await setNextDisplayStart(page, 1);
   const failed = await evaluateWithRetainedPromise(page, () => window.__GBDRAW_APP__.runAnalysis());
   expect(failed).toMatchObject({ status: 'error', recovery: 'preserved', error: { code: 'RENDER_FAILED',
     operation: 'generate', stage: 'render', context: { exceptionType: 'ValidationError' }, actions: ['save-session'] } });
@@ -147,6 +153,22 @@ test('an unclassified render failure offers Save Session and no Retry Generate',
   await expect(alert).not.toContainText('Input validation failed');
   await expect(alert.getByRole('button', { name: 'Retry Generate', exact: true })).toHaveCount(0);
   await expect(alert.getByRole('button', { name: 'Save Session', exact: true })).toBeVisible();
+  await inspectSafeDetails(page, alert, failed.error);
+});
+
+// B10: the engine's display-start range check is a user-fixable input error.
+test('a display start beyond the record is an input error with a working action', async ({ page }) => {
+  test.setTimeout(180000);
+  await openApp(page);
+  await loadSession(page, 'HmmtDNA_basic_circular');
+  await setNextDisplayStart(page, 99999999);
+  const failed = await evaluateWithRetainedPromise(page, () => window.__GBDRAW_APP__.runAnalysis());
+  expect(failed).toMatchObject({ status: 'error', recovery: 'preserved', error: { code: 'INPUT_INVALID',
+    operation: 'generate', stage: 'render', context: { field: 'start', reason: 'DISPLAY_START_BOUNDS' } } });
+  expect(failed.error.actions).toContain('retry');
+  const alert = page.getByRole('alert', { name: 'Generation Error' });
+  await expect(alert).toContainText('Use a display start between 1 and the record length.');
+  await expect(alert).not.toContainText('The diagram engine failed while drawing');
   await inspectSafeDetails(page, alert, failed.error);
 });
 

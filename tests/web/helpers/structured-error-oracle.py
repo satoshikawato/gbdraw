@@ -31,7 +31,7 @@ def python_helpers():
     return namespace
 
 
-def render_failure(namespace, pattern):
+def render_failure(namespace, pattern, display_start=None, genbank_text=None):
     record = SeqRecord(Seq('ATGC' * 25), id='PRIVATE_RECORD_SENTINEL')
     record.annotations['molecule_type'] = 'DNA'
     document = build_session_document(CircularDiagramRequest(
@@ -40,6 +40,8 @@ def render_failure(namespace, pattern):
             dict(feature_type='CDS', qualifier_key='product', value='VALID_PLACEHOLDER', color='#ff0000', caption='')
         ]))),
     )).to_dict()
+    if display_start is not None:
+        document['renderRequest']['records'][0]['display']['startCoordinate'] = display_start
     with TemporaryDirectory(prefix='structured-error-') as root:
         workspace = Path(root) / 'gbdraw-web-render-1'
         resources = workspace / 'resources'
@@ -51,6 +53,8 @@ def render_failure(namespace, pattern):
             data = base64.b64decode(entry['data'])
             if resource_id == 'colors-color-table':
                 data = data.replace(b'VALID_PLACEHOLDER', pattern.encode('utf-8'))
+            if genbank_text is not None and resource_id.endswith('-genbank'):
+                data = genbank_text.encode('utf-8')
             path.write_bytes(data)
             paths[resource_id] = str(path)
         result = namespace['run_canonical_request_wrapper'](
@@ -79,6 +83,8 @@ def main():
     namespace = python_helpers()
     if payload.get('raise'):
         result = [engine_phase_failure(namespace, name, stage) for name, stage in payload['raise']]
+    elif payload.get('displayStart') is not None or payload.get('genbankText') is not None:
+        result = render_failure(namespace, 'VALID_PLACEHOLDER', payload.get('displayStart'), payload.get('genbankText'))
     elif payload.get('render'):
         result = render_failure(namespace, payload['pattern'])
     else:
