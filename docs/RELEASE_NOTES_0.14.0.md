@@ -163,6 +163,24 @@ and `--feature_overlap_tolerance_bp`. Use a records table for multiple display
 targets. The [command-line reference](./REFERENCE/command-line.md) includes a
 reproducible rotation/placement example and links to the generated option inventory.
 
+The CLI and Python API run LOSAT directly. `gbdraw linear --losat
+losatn|tlosatx|losatp` and `gbdraw circular --losat losatn|tlosatx` search
+nucleotide, translated, and protein comparisons without BLAST+ or the Web app.
+Python uses `LosatSearchOptions` (`LinearComparisonOptions(losat=...)`,
+`LinearDiagramOptions.losat_search`) for Linear and `ComparisonRingOptions(losat=...)`
+with `CircularDiagramOptions.losat_search` for Circular rings. New controls are
+`--losatn_task`, `--losat_gencode` (and the records-table `losat_gencode`
+column), the comparisons-table `source` column that mixes searched and uploaded
+edges, and `--losat_output_dir` for raw TSVs and a reusable `comparisons.tsv`.
+Circular comparison genomes may be FASTA, GenBank, or DDBJ
+(`--conservation_sequence`). CLI, Python, and Web searches share raw cache keys,
+so a saved Session replays without LOSAT. LOSATP now uses the Web source-file
+database scope: one file is one genome, and a record never searches itself
+unless requested; E-values change only for records from a multi-record file.
+CLI Sessions record the native runtime (kind, version, source, path, program,
+CLI dialect), and Run Info lists the search runtime of each displayed result.
+See the [command-line reference](./REFERENCE/command-line.md) for the options.
+
 Explicit output prefixes retain dots; Circular batch output uses numbered
 suffixes for multiple records. Output targets are checked before rendering,
 and existing files require explicit overwrite permission. Python export failures
@@ -206,6 +224,16 @@ Supported saved documents use the dedicated compatibility readers instead.
 | `gbdraw.api` shared `DiagramOptions`, `TrackOptions`, `OutputOptions` | Root mode-specific options or typed mode-specific request options |
 | Low-level canvas/configurator/assembler re-exports and `plot_*_diagram` save wrappers | Root `draw_circular()` / `draw_linear()`, or typed request/render helpers |
 | `OutputOptions.output_prefix` | `RenderOutputRequest.output_prefix` in typed integrations |
+| `--protein_blastp_mode pairwise` / `orthogroup` / `collinear` | `--losat losatp --losatp_mode pairwise` / `similarity_groups` / `collinear`; `none` is omitted |
+| `--losatp_bin`, `--ncbi_blastp_bin`, `--losatp_threads` | `--losat_bin`, `--ncbi_blast_bin`, `--losat_threads` |
+| `--protein_blastp_max_hits`, `--protein_blastp_candidate_limit` | `--losatp_max_hits`, `--losatp_max_target_seqs` |
+| `--align_orthogroup_feature` | `--similarity_alignment_feature` |
+| `--protein_blastp_output FILE` | `--losat_output_dir DIR` (writes `DIR/losatp.raw.tsv`) |
+| `LinearComparisonOptions(protein_mode=..., blastp_executable=..., candidate_limit=..., orthogroup_member_max_hits=...)` | `losat=` with `losatp_mode=`, `ncbi_blast_executable=`, `max_target_seqs=`, `member_max_hits=` |
+| `LinearDiagramOptions` LOSATP fields (`protein_blastp_mode`, `protein_comparison_pairs`, `losatp_bin`, ...) | `losat_search=LosatSearchOptions(...)` with `LosatRuntimeOptions` |
+| Circular `--conservation_fasta` | `--conservation_sequence` (FASTA, GenBank, or DDBJ) |
+| `--conservation_table` column `comparison_fasta` | `comparison_sequence` |
+| `CircularDiagramOptions(conservation_fasta_files=...)` | `conservation_sequence_files` |
 
 The thin `gbdraw.api.canvas`, `gbdraw.api.configurators`, and
 `gbdraw.circular_diagram_components` modules are removed. Undocumented SVG ID
@@ -230,6 +258,26 @@ The internal `gbdraw.render.export.save_figure` compatibility function emits
 4. Use Exact replay for a successful generation with its saved analysis artifacts,
    and Save Session to resume editable work. Keep the same gbdraw version when
    comparing output; SVG bytes and text metrics can differ across versions.
+5. For LOSAT, rename the flags and fields in the table above; a retired CLI flag
+   exits with status 2 and names its replacement, and a retired Python field
+   raises `TypeError` (no alias). Recorded 0.12/0.13 Session arguments are
+   rewritten on replay; the complete list is under
+   [Retired inputs](./SESSION_COMPATIBILITY.md#retired-inputs).
+
+| Earlier input | Replacement |
+| --- | --- |
+| `--protein_blastp_mode orthogroup` | `--losat losatp --losatp_mode similarity_groups` |
+| `--protein_blastp_mode collinear` / `pairwise` | `--losat losatp --losatp_mode collinear` / `pairwise` |
+| `--losatp_bin X` | `--losat_bin X` |
+| `--ncbi_blastp_bin X` | `--ncbi_blast_bin X` |
+| `--losatp_threads N` | `--losat_threads N` |
+| `--protein_blastp_max_hits N` | `--losatp_max_hits N` |
+| `--protein_blastp_candidate_limit N` | `--losatp_max_target_seqs N` |
+| `--align_orthogroup_feature ID` | `--similarity_alignment_feature ID` |
+| `--protein_blastp_output FILE` | `--losat_output_dir DIR` |
+| `--conservation_fasta` | `--conservation_sequence` |
+| `comparison_fasta` column | `comparison_sequence` |
+| `conservation_fasta_files` | `conservation_sequence_files` |
 
 Two layout/identity corrections can affect older results: overlapping
 undefined- and negative-strand Auto features share the negative pool when

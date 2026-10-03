@@ -36,12 +36,12 @@ decisions are in
   `LinearDiagramRequest.similarity_alignment` or
   `LinearComparisonOptions.similarity_alignment` aligns the Linear records on
   that exact protein ID or feature SVG ID after the requested orthogroup
-  analysis, as `--align_orthogroup_feature` does. Python and the CLI share one
+  analysis, as `--similarity_alignment_feature` does. Python and the CLI share one
   resolver, `gbdraw.api.resolve_similarity_alignment_plan()`, with the same
   errors for a Similarity Group ID, an unmatched ID, or an ambiguous record, and
   Sessions store only the resolved plan. The Python LOSATP tutorial, which still
   passed the removed `align_orthogroup_feature` option, uses it and draws the
-  same SVG as the CLI tutorial. `gbdraw linear --align_orthogroup_feature` now
+  same SVG as the CLI tutorial. `gbdraw linear --similarity_alignment_feature` now
   checks its output paths before the search (OD-2).
 
 - Circular Multi-Record Canvas output (the Web default) no longer reserves an
@@ -412,6 +412,87 @@ decisions are in
 <!-- web-gui-audit-20260930 P19 -->
 
 <!-- web-gui-audit-20260930 P20 -->
+
+LOSAT CLI/API: the CLI and Python API run LOSATN, TLOSATX, and LOSATP directly
+and share the Web app's raw search keys. The design and the approved decisions
+are in
+[`docs/internal/LOSAT_CLI_API_DESIGN_PROPOSAL_2026-10-03.md`](./docs/internal/LOSAT_CLI_API_DESIGN_PROPOSAL_2026-10-03.md).
+Retired names and their replacements are listed under
+[Retired inputs](./docs/SESSION_COMPATIBILITY.md#retired-inputs).
+
+- **Breaking:** LOSATP CLI flags and Python fields were renamed. Use
+  `--losat losatp` with `--losatp_mode similarity_groups|collinear|pairwise`
+  (replaces `--protein_blastp_mode`), `--losat_bin`, `--ncbi_blast_bin`,
+  `--losat_threads`, `--losatp_max_hits`, `--losatp_max_target_seqs`,
+  `--similarity_alignment_feature` (replaces `--align_orthogroup_feature`), and
+  `--losat_output_dir` (replaces `--protein_blastp_output`); `--losatp_member_max_hits`
+  and `--collinear_infer_orthogroups` are new. Retired flags exit with status 2
+  and name the replacement, 0.13.0 Session argv is rewritten on replay, and the
+  typed LOSATP settings move to `LosatSearchOptions` and `LosatRuntimeOptions`
+  (`protein_mode`, `blastp_executable`, `candidate_limit`, and
+  `orthogroup_member_max_hits` are replaced as listed under Retired inputs).
+  Persisted Session names are unchanged. Docs and Gallery commands use the new
+  names (#730).
+- Added: `gbdraw linear --losat losatn|tlosatx` and the Python
+  `LosatSearchOptions(program="losatn"|"tlosatx")` /
+  `LinearComparisonOptions(losat=...)` run LOSATN and TLOSATX directly, with
+  `--losatn_task`, `--losat_gencode`, the records-table `losat_gencode` column,
+  the comparisons-table `source` column (mix searched and uploaded edges), and
+  `--losat_output_dir` raw TSVs plus a reusable `comparisons.tsv`. Results match
+  the web app's search and raw cache keys, and saved Sessions replay without
+  LOSAT (#731).
+- Added: Circular similarity rings can run LOSATN or TLOSATX from the CLI
+  (`gbdraw circular --losat losatn|tlosatx --conservation_sequence ...`) and the
+  Python API (`ComparisonRingOptions(losat=...)`,
+  `CircularDiagramOptions.losat_search`). Comparison genomes may be FASTA,
+  GenBank, or DDBJ (#732).
+- **Breaking:** `--conservation_sequence` replaces `--conservation_fasta`, the
+  `--conservation_table` column `comparison_sequence` replaces `comparison_fasta`,
+  and `CircularDiagramOptions(conservation_sequence_files=...)` replaces
+  `conservation_fasta_files`. The retired flag and column are rejected with the
+  replacement named, and the Python field has no alias (#732).
+- Added: native LOSAT runtime handling for LOSATN, TLOSATX, and LOSATP lives in
+  one owner (`gbdraw.comparisons.losat_runtime`). CLI Sessions record the runtime
+  (kind, version, source, path, program, CLI dialect) in each new `losatCache`
+  entry (#726).
+- Changed: CLI and Python LOSATP searches use the Web source-file database scope
+  (one file is one genome; a record never searches itself unless requested), so
+  raw cache keys equal the Web keys. LOSATP E-values change only for records that
+  come from a multi-record file (#733).
+- Fixed: CLI and Python Sessions store the records of one multi-record source
+  file in one GenBank resource with record-index selectors (the Web layout), so
+  replay and the Web app reuse their LOSATP raw searches. Rendered output is
+  unchanged (#733).
+- Fixed: `gbdraw linear --session` replays the 0.13.0 Gallery Session for
+  BGC0000708-BGC0000713 again; similarity alignment members saved for
+  reverse-complemented records now bind to their source features (#734).
+- Added: Web Circular similarity rings accept GenBank and DDBJ comparison files.
+  The diagram worker reads them with the Python reader of
+  `--conservation_sequence`, so a Web ring has the CLI raw cache key for every
+  format and FASTA layout. The ring row's "Subject gencode" is now "Comparison
+  gencode" (#736).
+- Added: Web LOSAT raw cache entries record the search runtime (`wasm`), and Run
+  Info lists the search runtime of each displayed result, including the path that
+  a CLI Session recorded (#736).
+- Fixed: default Web Linear raw LOSAT TSV names replaced the letter "s" instead
+  of whitespace; they now follow the CLI naming rule (#736).
+- Fixed: `gbdraw ... --session ... --save_session` keeps nucleotide BLAST and
+  LOSATN/TLOSATX comparisons as `nucleotideBlast` items with their table bytes
+  instead of re-saving them as protein comparison tables. It also no longer fails
+  when two input files share a name: ring files with one stem (`X.fna` and
+  `X.gb`) or files with one basename in different directories
+  (`--conservation_sequence a/X.fna b/X.fna`, `--conservation_blast`, `-b`). The
+  later file is saved as `X.2.fna` or `X.circular_conservation.<program>.2.tsv`,
+  the numbering `--losat_output_dir` already uses (#738).
+- Fixed: Web Circular similarity ring rows added from a GenBank or DDBJ file
+  without a typed label are labelled with the first record's DEFINITION, or the
+  organism when the DEFINITION is empty, like `gbdraw circular
+  --conservation_sequence` and the Python API. FASTA rows keep the file name
+  without its extension (#740).
+- Fixed: a Web Session with two Circular LOSAT rings of one sequence now loads.
+  The Session stores one LOSAT cache entry per raw key, as the CLI does; a Session
+  that repeats a key reports a Session diagnostic instead of an unknown error
+  (#743).
 
 ## [0.14.0](./docs/RELEASE_NOTES_0.14.0.md)
 
