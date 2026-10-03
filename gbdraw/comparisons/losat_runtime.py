@@ -154,7 +154,8 @@ def losat_program(program: str | LosatProgram) -> LosatProgram:
     if spec is None:
         raise ValidationError(
             f"Unknown LOSAT program {program!r}; expected one of: "
-            + ", ".join(LOSAT_PROGRAMS)
+            + ", ".join(LOSAT_PROGRAMS),
+            diagnostic={"code": "COMPARISON_INPUT"},
         )
     return spec
 
@@ -162,13 +163,19 @@ def losat_program(program: str | LosatProgram) -> LosatProgram:
 def _option_values(spec: LosatProgram, options: LosatSearchOptions) -> list[tuple[str, str]]:
     for name in LOSAT_OPTION_FLAGS:
         if name not in spec.options and getattr(options, name) is not None:
-            raise ValidationError(f"LOSAT option {name} does not apply to {spec.name}.")
+            raise ValidationError(
+                f"LOSAT option {name} does not apply to {spec.name}.",
+                diagnostic={"code": "COMPARISON_INPUT"},
+            )
     values: list[tuple[str, str]] = []
     for name in spec.options:
         value = getattr(options, name)
         if value is None:
             if name in spec.required_options:
-                raise ValidationError(f"{spec.name} requires the LOSAT option {name}.")
+                raise ValidationError(
+                    f"{spec.name} requires the LOSAT option {name}.",
+                    diagnostic={"code": "COMPARISON_INPUT", "reason": "REQUIRED"},
+                )
             continue
         values.append((name, str(value) if name == "task" else str(int(value))))
     return values
@@ -511,8 +518,6 @@ def build_losat_command(
             for name, _value in values
         ):
             dialect = detect_losat_cli_dialect(runtime.executable)
-        if dialect not in {None, "v1", "v2"}:
-            raise ValidationError(f"Unknown LOSAT CLI dialect: {dialect!r}")
         spelling = "losat_v1" if dialect == "v1" else "losat_v2"
     command.extend(
         [

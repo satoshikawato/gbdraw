@@ -42,6 +42,7 @@ _LAYOUT = "layout and placement planner conflicts on typed plans"
 _FEATURES = "feature model and feature placement override checks"
 _TABLES = "CLI and Web table readers whose messages carry private cell values"
 _INTERNAL = "internal protocol or renderer state checks; not user-correctable input"
+_LOSAT_RUNTIME = "native LOSAT / NCBI BLAST+ resolution and execution checks, moved from protein_colinearity.py"
 
 # Shrink-only: path -> (unproven ValidationError sites, what they check).
 # None of these sites is migrated to diagnostic= yet; lower a count when one is.
@@ -53,7 +54,7 @@ UNPROVEN_BASELINE: dict[str, tuple[int, str]] = {
     "gbdraw/analysis/gc.py": (2, _CONFIG),
     "gbdraw/analysis/ortholog_paths.py": (25, _COMPARISON),
     "gbdraw/analysis/protein_artifacts.py": (4, _COMPARISON),
-    "gbdraw/analysis/protein_colinearity.py": (124, _COMPARISON),
+    "gbdraw/analysis/protein_colinearity.py": (115, _COMPARISON),
     "gbdraw/annotations/feature_underlays.py": (3, _ANNOTATIONS),
     "gbdraw/annotations/io.py": (7, _ANNOTATIONS),
     "gbdraw/annotations/layout.py": (5, _ANNOTATIONS),
@@ -73,6 +74,7 @@ UNPROVEN_BASELINE: dict[str, tuple[int, str]] = {
     "gbdraw/circular.py": (3, _CLI),
     "gbdraw/cli_utils/common.py": (3, _CLI),
     "gbdraw/cli_utils/session.py": (13, _SESSION),
+    "gbdraw/comparisons/losat_runtime.py": (9, _LOSAT_RUNTIME),
     "gbdraw/config/models/canvas.py": (10, _CONFIG),
     "gbdraw/config/models/labels.py": (6, _CONFIG),
     "gbdraw/config/models/objects.py": (19, _CONFIG),
