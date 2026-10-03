@@ -164,7 +164,7 @@ assert.equal(state.skipCaptureBaseConfig.value, false);
 // An editor commit writes at once: the runtime is never left dirty, so a
 // Result switch has nothing left to persist.
 assert.equal(runtime.getActiveRuntime().dirty, false);
-assert.equal(runtime.flushActiveResult(), false);
+assert.equal(runtime.flushActiveResult, undefined);
 assert.equal(serializeCount, 2);
 assert.equal(state.skipCaptureBaseConfig.value, false);
 

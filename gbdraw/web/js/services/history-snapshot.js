@@ -1158,7 +1158,6 @@ export const createHistorySnapshotService = ({
       await nextTick();
 
       if (state.skipCaptureBaseConfig) state.skipCaptureBaseConfig.value = true;
-      if (state.skipPositionReapply) state.skipPositionReapply.value = true;
       installGeneratedArtifactOwnerSet(handle.ownerSet, {
         selectedResultIndex: ui.selectedResultIndex
       });
@@ -1562,7 +1561,6 @@ export const createHistorySnapshotService = ({
       installAlignmentState(snapshot.alignmentState);
 
       if (state.skipCaptureBaseConfig) state.skipCaptureBaseConfig.value = true;
-      if (state.skipPositionReapply) state.skipPositionReapply.value = true;
       if (state.skipExtractOnSvgChange) state.skipExtractOnSvgChange.value = false;
 
       applyArtifactDomains(snapshot);

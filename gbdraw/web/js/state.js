@@ -640,10 +640,6 @@ const shouldDeferCircularPreviewUpdates = computed(
 // This prevents base config from being overwritten during incremental edits
 const skipCaptureBaseConfig = ref(false);
 
-// Flag to skip position reapply after repositionForLegendChange is called
-// This prevents infinite loop when repositionForLegendChange triggers watch(svgContent)
-const skipPositionReapply = ref(false);
-
 // Flag to skip extractLegendEntries in watch(svgContent) when setFeatureColor is handling it
 // This prevents race condition where watcher overwrites correct legend state
 const skipExtractOnSvgChange = ref(false);
@@ -1055,7 +1051,6 @@ export const state = {
   generatedCircularPlotTitlePosition,
   shouldDeferCircularPreviewUpdates,
   skipCaptureBaseConfig,
-  skipPositionReapply,
   skipExtractOnSvgChange,
   trustedArtifactRestoreInProgress,
   normalizePaletteColors,

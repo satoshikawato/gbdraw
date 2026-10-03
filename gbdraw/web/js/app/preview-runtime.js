@@ -737,10 +737,11 @@ export const createPreviewRuntime = ({ state, serializeSvg }) => {
     state.results.value = nextResults;
   };
 
-  const flushActiveResult = ({ force = false, markIncremental = true } = {}) => {
-    const runtime = activeRuntime || (force ? ensureRuntimeForCurrentSvg() : null);
+  // Only commitActiveResultEdit marks the runtime dirty, and it flushes at once.
+  const flushActiveResult = () => {
+    const runtime = activeRuntime;
     if (!runtime?.svg) return false;
-    if (!force && !runtime.dirty) return false;
+    if (!runtime.dirty) return false;
 
     const resultIndex = Number(runtime.resultIndex);
     if (!Number.isInteger(resultIndex) || resultIndex < 0 || resultIndex >= state.results.value.length) {
@@ -755,7 +756,7 @@ export const createPreviewRuntime = ({ state, serializeSvg }) => {
       runtime.dirtyReasons.clear();
       return false;
     }
-    if (markIncremental && state.skipCaptureBaseConfig) state.skipCaptureBaseConfig.value = true;
+    if (state.skipCaptureBaseConfig) state.skipCaptureBaseConfig.value = true;
     writeResultContent(resultIndex, content);
     runtime.dirty = false;
     runtime.dirtyReasons.clear();
@@ -768,11 +769,7 @@ export const createPreviewRuntime = ({ state, serializeSvg }) => {
     const count = Array.isArray(state.results.value) ? state.results.value.length : 0;
     const numeric = Number(index);
     const nextIndex = Number.isInteger(numeric) ? Math.max(0, Math.min(numeric, Math.max(0, count - 1))) : 0;
-    if (state.selectedResultIndex.value === nextIndex) {
-      flushActiveResult();
-      return false;
-    }
-    flushActiveResult({ markIncremental: false });
+    if (state.selectedResultIndex.value === nextIndex) return false;
     const nextResult = state.results.value[nextIndex];
     const expectation = nextResult
       ? registerReadinessExpectation({
@@ -896,7 +893,6 @@ export const createPreviewRuntime = ({ state, serializeSvg }) => {
     commitResultEdit,
     configureMountedResultBinder,
     createMountedResultContext,
-    flushActiveResult,
     getActiveRuntime,
     getFeatureElements,
     getResultIdentity: resultRuntimeIdentity,

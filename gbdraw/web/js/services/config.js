@@ -2491,8 +2491,7 @@ export const setPreviewRuntime = (runtime) => {
 };
 
 export const serializeResults = () => {
-  if (activePreviewRuntime?.flushActiveResult) {
-    activePreviewRuntime.flushActiveResult();
+  if (activePreviewRuntime) {
     return normalizeLogicalResults(state.results.value.map((res, idx) => ({
       name: res.name || `Result ${idx + 1}`,
       content: res.content
@@ -3445,7 +3444,6 @@ const captureSessionImportTransientState = () => ({
     state.semanticFileWatchersSuppressed.value
   ),
   skipCaptureBaseConfig: Boolean(state.skipCaptureBaseConfig.value),
-  skipPositionReapply: Boolean(state.skipPositionReapply.value),
   suppressCircularMultiRecordDefaults: Boolean(
     state.suppressCircularMultiRecordDefaults.value
   ),
@@ -3577,7 +3575,6 @@ const restoreSessionImportTransientState = (snapshot) => {
   state.semanticFileWatchersSuppressed.value =
     snapshot.semanticFileWatchersSuppressed;
   state.skipCaptureBaseConfig.value = snapshot.skipCaptureBaseConfig;
-  state.skipPositionReapply.value = snapshot.skipPositionReapply;
 };
 
 const captureSessionImportSnapshot = () => ({
@@ -3638,7 +3635,6 @@ const restoreSessionImportSnapshot = async (snapshot) => {
       cloneJsonData(snapshot.importedComparisonIntent)
     );
     state.skipCaptureBaseConfig.value = true;
-    state.skipPositionReapply.value = true;
     applyResultsData(snapshot.results, snapshot.ui);
     applyFeatureStateData(snapshot.features);
     applyOrthogroupStateData(snapshot.orthogroupState);
@@ -4609,7 +4605,6 @@ const importSessionDocument = async (e, options = {}) => {
     }
 
     state.skipCaptureBaseConfig.value = false;
-    state.skipPositionReapply.value = false;
 
     applyFeatureStateData(features);
     if (currentSchemaSession && currentCatalogFeatureState) {
@@ -4661,7 +4656,6 @@ const importSessionDocument = async (e, options = {}) => {
       : 0;
     if (!options.isCurrent()) throw new Error('Session loading was canceled.');
     state.skipCaptureBaseConfig.value = true;
-    state.skipPositionReapply.value = true;
     recordSessionLifecycleEvent('session-candidate-adopted');
     recordSessionLifecycleEvent('preview-mount-start');
     applyResultsData(committedImportedResults, ui);

@@ -1000,7 +1000,6 @@ Object.assign(state.canvasPadding, { top: 7, right: 8, bottom: 9, left: 10 });
 Object.assign(state.canvasPan, { x: 27, y: 28 });
 state.zoom.value = 1.25;
 state.skipCaptureBaseConfig.value = false;
-state.skipPositionReapply.value = false;
 state.suppressCircularMultiRecordDefaults.value = true;
 state.linearReorderNotice.value = 'keep reorder notice';
 state.showRightDrawer.value = true;
@@ -1132,7 +1131,6 @@ const rollbackState = () => ({
   semanticFileWatchersSuppressed: state.semanticFileWatchersSuppressed.value,
   sessionImportRollbackInProgress: state.sessionImportRollbackInProgress.value,
   skipCaptureBaseConfig: state.skipCaptureBaseConfig.value,
-  skipPositionReapply: state.skipPositionReapply.value,
   suppressCircularMultiRecordDefaults: state.suppressCircularMultiRecordDefaults.value,
   linearReorderNotice: state.linearReorderNotice.value,
   showRightDrawer: state.showRightDrawer.value,

@@ -80,8 +80,7 @@ const actions = createFeatureVisibilityActions({
     selectResult: (index) => {
       selectedResultIndex.value = index;
       return true;
-    },
-    flushActiveResult: () => assert.fail('visibility actions must not flush Results directly')
+    }
   }
 });
 

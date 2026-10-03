@@ -79,7 +79,7 @@ assert.match(
   /bindComposition\(context\)[\s\S]+captureBaseConfig\(\)/
 );
 assert.doesNotMatch(watchersSource, /captureBaseConfig/);
-assert.match(configSource, /skipCaptureBaseConfig\.value = true;\s+state\.skipPositionReapply\.value = true;\s+applyResultsData/);
+assert.match(configSource, /skipCaptureBaseConfig\.value = true;\s+applyResultsData/);
 const sessionLegendSyncSource = appSetupSource.match(
   /adoptLegend\(context\)[\s\S]*?\n    bindComposition/
 )?.[0] || '';
