@@ -1383,12 +1383,13 @@ logical index used by labels, colors, shared axes, and custom track slots. In
 Linear mode the missing cell reserves no vertical geometry, so later numeric
 tracks compact without renumbering the logical series.
 
-For `--protein_blastp_mode`, gbdraw first uses a bundled native LOSAT binary
-when one is available. The current package bundles LOSAT for Linux x86_64.
-macOS and Windows packages do not currently include bundled LOSAT binaries; if
-no native LOSAT executable is available, install NCBI BLAST+ and make `blastp`
-available on `PATH`, or pass it explicitly with `--ncbi_blastp_bin`. You can
-still force a native LOSAT executable on any platform with `--losatp_bin`.
+For `--protein_blastp_mode`, gbdraw uses a native LOSAT executable when one is
+available. The PyPI package does not bundle native LOSAT: install the pinned
+release with `gbdraw setup-losat`, or place `losat` on `PATH`. The resolution
+order is in [Command-line reference](./REFERENCE/command-line.md). If no native
+LOSAT executable is available, install NCBI BLAST+ and make `blastp` available
+on `PATH`, or pass it explicitly with `--ncbi_blastp_bin`. You can force a
+native LOSAT executable on any platform with `--losatp_bin`.
 NCBI BLAST+ fallback produces compatible outfmt 6 protein comparisons, but its
 hit set is not guaranteed to be identical to LOSAT.
 

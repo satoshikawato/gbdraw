@@ -346,6 +346,68 @@ decisions are in
 - A blank Linear record **Definition** field now shows the text Generate draws
   for it as its placeholder: the File default, else the definition inferred
   from the record, else the example text (B5).
+- Web record discovery reuses the settled result for the same source files.
+  Generate reports an error the reader already returned for those files without
+  a new Worker read, so one upload and one Generate of a rejected GFF3 + FASTA
+  pair read it once instead of three times (Linear) or twice (Circular). A new
+  upload reads again, and so does a Worker start-up or transfer failure.
+- The Web Legend editor's **Add entry** measures the new caption at the DPI the
+  displayed Result was rendered with (the committed request's configuration, 96
+  by default) instead of 72, so a new entry's width and wrapping match what
+  **Generate** draws.
+- A Generate or Similarity alignment Apply that fails inside the diagram engine
+  without a classified cause is reported as a render failure (`RENDER_FAILED`)
+  naming the Python exception class, and offers **Save Session** instead of
+  **Retry Generate**, because the same inputs fail the same way. It no longer
+  says "Input validation failed".
+- PNG, PDF, EPS, and PS exports from the CLI and Python API now place text where
+  browsers draw the SVG. CairoSVG ignored `dominant-baseline` on circular tick
+  labels, so lower-half tick labels sat about one font height closer to the
+  center than in the SVG, and upper-half labels one font descent closer.
+  `hanging` and `middle` text (Linear scale and legend labels, record
+  definitions, feature labels) also sat slightly off. SVG output is unchanged.
+  Gallery thumbnails and the published export examples are regenerated (B8).
+- **Load Label TSV** in a Circular batch now applies its rows to the labels of
+  every Result, live when each Result is displayed and after Generate, and
+  **Undo**/**Redo** treat the import as one step for every Result (B6).
+- **Inherit saved comparison** then **Generate Diagram** now works for a CLI
+  Linear Session made from one multi-record GenBank file. Each record of that
+  file loads as its own Linear row (keyed by its committed record key, selected
+  by `#n`), so the saved BLAST ribbons are drawn between the same records again;
+  single-record CLI Sessions are unchanged (B3).
+- A CLI Linear Session written without `-b` or `--protein_blastp_mode` now loads
+  with **No comparison** and without selecting LOSATP, so **Generate Diagram**
+  redraws the CLI figure without ribbons instead of starting a LOSATP run (which
+  failed with `COMPARISON_INPUT` on records without CDS). CLI Sessions with `-b`
+  or a protein mode and Web Sessions are unchanged (B13).
+- A display start beyond the record length and a GenBank or GFF3/FASTA file that
+  cannot be parsed at render time now show an input error with the actions that
+  fix it, instead of the render-failure panel that offers only Save Session
+  (B10).
+- CLI and Python PNG, PDF, EPS, and PS exports and Gallery thumbnails draw the
+  italic and roman parts of a centered or right-aligned caption (for example the
+  plot title "*Vibrio nigripulchritudo* TUMSAT-TG-2018, complete genome") side
+  by side where browsers draw them; CairoSVG had aligned each part on its own
+  width, so the parts overlapped. SVG output is unchanged (B12).
+- CLI: `gbdraw linear` with more `-b` files than adjacent pairs of loaded
+  records now stops before drawing with `Too many -b/--blast files (expected at
+  most N)`. Before, the extra file was silently ignored in the figure and
+  written into the Session as a comparison with a record that was not loaded, so
+  the Session could not be replayed. With `-b` and two or more input files each
+  file contributes one record, so `--gbk multi.gb other.gb -b a.tsv b.tsv` now
+  reports the extra table (B14).
+- The **Live edit failed** note above the Result names the cause and suggests
+  retrying the live edit only when the same request can succeed, such as after a
+  Worker failure. A failure that repeats for the same edit, such as
+  `RENDER_FAILED` or `INPUT_INVALID`, asks to change the edit, or change the
+  settings and use Generate.
+- A Linear Session without a stored comparison plan loads with **No
+  comparison**. A CLI Session written with `-b` no longer loads with a **Run
+  LOSAT for all adjacent pairs** replacement draft, so **Replace with current
+  controls** waits until a comparison is set up; **Inherit saved comparison**
+  still reuses the CLI ribbons. A CLI Session written with
+  `--protein_blastp_mode`, including a 0.12 or 0.13 sidecar, keeps the adjacent
+  LOSATP comparison it drew.
 
 <!-- web-gui-audit-20260930 P19 -->
 
