@@ -220,10 +220,12 @@ A live action, a History apply, and a Result display call the same projection:
 `projectMountedEditorIntent` (palette, rules, visibility, labels),
 `orderLegendEntries` in `app/legend/utils.js` (legend order), and
 `featureMatchesExactQualifier` in `app/feature-visibility.js` (exact-qualifier
-rules). The displayed population comes from the mounted Result's committed
-metadata (`renderedFeatureIdentities`), not from a second selection ref. A
-dialog's reactive object holds display values only, never a copy of an owner's
-data.
+rules). A displayed batch Result whose shared legend entries already follow
+the legend order keeps its order (`orderLegendEntries` with `keepFollowed`),
+so the entries only that Result draws keep their places. The displayed
+population comes from the mounted Result's committed metadata
+(`renderedFeatureIdentities`), not from a second selection ref. A dialog's
+reactive object holds display values only, never a copy of an owner's data.
 
 Guards: `tests/web/gui-audit-20260930-editor.playwright.spec.js` (a Result shows
 the edits made on another Result, also after Undo, Save, and Load),
@@ -365,6 +367,9 @@ Circular and Linear editors), `tests/web/circular-track-slots.test.mjs`, and
   and Undo and Redo restore the Result a step was made on through
   `commitResultEdit` in `app/preview-runtime.js`, also while another Result is
   displayed.
+- The Result picker is navigation (`data-history-ignore`), so a Result switch
+  records no step, although the extracted legend entries follow the displayed
+  Result.
 
 Guards:
 
@@ -374,7 +379,8 @@ Guards:
 - `tests/web/history-generated-authority.playwright.spec.js`: checkpoint Undo and
   Redo, a mode round trip, and Undo while Generate runs.
 - `tests/web/multi-result-edit-matrix.playwright.spec.js`: Undo and Redo of
-  drags on one batch Result while another Result is displayed (B17).
+  drags on one batch Result while another Result is displayed (B17), and a
+  Result switch after a legend sort that records no step (B18).
 - `tests/web/history-config-restore.test.mjs`: catalog identity through Undo,
   Redo, and Session rollback, and unset settings that stay unset through intent
   and checkpoint Undo and Redo (also `session-draft-authority.test.mjs` for the

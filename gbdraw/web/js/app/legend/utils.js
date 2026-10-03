@@ -179,14 +179,37 @@ const legendEntryGroups = (targetGroup) => {
     : Array.from(targetGroup?.querySelectorAll?.('g[data-legend-key]') || []);
 };
 
+const legendEntryCaption = (entryGroup) => String(entryGroup.getAttribute('data-legend-key') || '').trim();
+
+// One Legend group's entries in slot order (row-major anchor order).
+const legendEntriesInSlotOrder = (targetGroup) => legendEntryGroups(targetGroup)
+  .map((entryGroup, index) => ({ entryGroup, index, anchor: legendEntryAnchor(entryGroup) }))
+  .sort((left, right) => {
+    const yDelta = left.anchor.y - right.anchor.y;
+    if (Math.abs(yDelta) >= 1) return yDelta;
+    return left.anchor.x - right.anchor.x || left.index - right.index;
+  });
+
+// Whether the group's entries listed in the order already follow it.
+const followsOrder = (positioned, rank) => {
+  const listed = positioned
+    .map(({ entryGroup }) => rank.get(legendEntryCaption(entryGroup)))
+    .filter((value) => value !== undefined);
+  return listed.every((value, index) => index === 0 || listed[index - 1] < value);
+};
+
 /**
  * Put one Legend group's entries in the requested caption order. Entries keep
  * the group's current slots (row-major anchor order) and receive them in the
  * new order; captions missing from the order follow in their current order.
  * Live Sort and Move and the Generate replay of the order (D-08) share this.
+ * With `keepFollowed`, a group whose listed entries already follow the order
+ * keeps its order, so the entries the order does not list keep their places:
+ * a displayed batch Result draws entries that the order, read from another
+ * Result, does not list (D-07, B18).
  * Returns whether any entry moved or changed document order.
  */
-export const orderLegendEntries = (targetGroup, captionOrder) => {
+export const orderLegendEntries = (targetGroup, captionOrder, { keepFollowed = false } = {}) => {
   const entryGroups = legendEntryGroups(targetGroup);
   if (entryGroups.length < 2) return false;
   const rank = new Map();
@@ -194,14 +217,9 @@ export const orderLegendEntries = (targetGroup, captionOrder) => {
     const key = String(caption ?? '').trim();
     if (key && !rank.has(key)) rank.set(key, rank.size);
   });
-  const caption = (entryGroup) => String(entryGroup.getAttribute('data-legend-key') || '').trim();
-  const positioned = entryGroups
-    .map((entryGroup, index) => ({ entryGroup, index, anchor: legendEntryAnchor(entryGroup) }))
-    .sort((left, right) => {
-      const yDelta = left.anchor.y - right.anchor.y;
-      if (Math.abs(yDelta) >= 1) return yDelta;
-      return left.anchor.x - right.anchor.x || left.index - right.index;
-    });
+  const caption = legendEntryCaption;
+  const positioned = legendEntriesInSlotOrder(targetGroup);
+  if (keepFollowed && followsOrder(positioned, rank)) return false;
   const ordered = positioned
     .map((item, slot) => ({ ...item, slot }))
     .sort((left, right) => {
