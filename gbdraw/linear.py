@@ -114,6 +114,7 @@ from .cli_utils.losat_output import (
     parse_positive_int as _parse_positive_int,
     write_losat_output_files,
 )
+from .comparisons.losat_jobs import unique_losat_filenames
 
 
 # ``--losat`` choices (design 3.2).
@@ -1121,15 +1122,9 @@ def _nucleotide_output_files(run_result: DiagramRunResult) -> list[tuple[str, st
             diagnostic={"code": "LOSAT_RUNTIME", "reason": "OUTPUT"},
         )
     files: list[tuple[str, str]] = []
-    used: set[str] = {LOSAT_COMPARISONS_OUTPUT_NAME}
     rows = ["blast\tquery\tsubject"]
-    for comparison, name in zip(comparisons, names):
-        stem = name[:-4] if name.endswith(".tsv") else name or "losat"
-        candidate, ordinal = f"{stem}.tsv", 1
-        while candidate in used:
-            ordinal += 1
-            candidate = f"{stem}.{ordinal}.tsv"
-        used.add(candidate)
+    unique_names = unique_losat_filenames(names, reserved=(LOSAT_COMPARISONS_OUTPUT_NAME,))
+    for comparison, candidate in zip(comparisons, unique_names):
         files.append((candidate, str(comparison.search_frame_text)))
         rows.append(
             f"{candidate}\t#{comparison.query_record_index + 1}"

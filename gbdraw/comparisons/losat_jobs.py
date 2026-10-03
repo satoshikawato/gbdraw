@@ -52,6 +52,28 @@ def sha256_text(text: str) -> str:
     return hashlib.sha256(str(text).encode("utf-8")).hexdigest()
 
 
+def unique_losat_filenames(
+    names: Sequence[str], *, reserved: Sequence[str] = ()
+) -> tuple[str, ...]:
+    """Raw TSV file names of LOSAT edges or rings, unique in name order.
+
+    A repeated ``<stem>.tsv`` becomes ``<stem>.2.tsv``, ``<stem>.3.tsv``, ...
+    The Session resources and ``--losat_output_dir`` files use the same names.
+    """
+
+    used = set(reserved)
+    result = []
+    for name in names:
+        stem = name[:-4] if name.endswith(".tsv") else name or "losat"
+        candidate, ordinal = f"{stem}.tsv", 1
+        while candidate in used:
+            ordinal += 1
+            candidate = f"{stem}.{ordinal}.tsv"
+        used.add(candidate)
+        result.append(candidate)
+    return tuple(result)
+
+
 def _json_text(value: object) -> str:
     """``JSON.stringify`` of plain strings, numbers, lists and dicts."""
 
@@ -433,4 +455,5 @@ __all__ = [
     "prepare_losat_batches",
     "sha256_text",
     "split_losat_batch_result",
+    "unique_losat_filenames",
 ]

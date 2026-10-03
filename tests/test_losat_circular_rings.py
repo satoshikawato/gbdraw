@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import base64
 from contextlib import ExitStack
 import json
 from pathlib import Path
@@ -200,6 +201,44 @@ def test_saved_session_replays_without_losat(tmp_path: Path, monkeypatch: pytest
     labels = session["renderRequest"]["diagramOptions"]["conservationLabels"]
     # Default labels: FASTA file name; GenBank DEFINITION.
     assert labels == ["NC_002333.2.fna", "Drosophila melanogaster mitochondrion, complete genome"]
+
+    def no_runtime(*_args, **_kwargs):
+        raise AssertionError("Session replay resolved a LOSAT runtime.")
+
+    monkeypatch.setattr(runtime_module, "resolve_losat_runtime", no_runtime)
+    replay = tmp_path / "replay"
+    circular_main([
+        "--session", str(prefix.with_suffix(".gbdraw-session.json")),
+        "-o", str(replay), "-f", "svg",
+    ])
+    assert replay.with_suffix(".svg").read_bytes() == prefix.with_suffix(".svg").read_bytes()
+
+
+@pytest.mark.circular
+def test_rings_whose_files_share_a_stem_save_and_replay(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # PR6-B1: X.fna and X.gb gave both ring TSVs one Session resource name.
+    losat, _log = _fake_losat(tmp_path)
+    prefix, raw = tmp_path / "saved", tmp_path / "raw"
+    circular_main([
+        "--gbk", str(HUMAN), "--losat", "losatn", "--losat_bin", losat,
+        "--conservation_sequence", str(FASTAS[0]), str(FOUR / "NC_002333.2.gb"),
+        "--losat_output_dir", str(raw), "--save_session", "-o", str(prefix), "-f", "svg",
+    ])
+    names = [
+        "NC_002333.2.circular_conservation.losatn.tsv",
+        "NC_002333.2.circular_conservation.losatn.2.tsv",
+    ]
+    manifest = (raw / "conservation.tsv").read_text(encoding="utf-8").splitlines()
+    assert [row.split("\t")[0] for row in manifest[1:]] == names
+    session = _session(prefix)
+    rings = session["renderRequest"]["diagramOptions"]["conservationBlastFiles"]
+    assert [session["resources"][ring["resourceId"]]["name"] for ring in rings] == names
+    assert [(raw / name).read_text(encoding="utf-8") for name in names] == [
+        base64.b64decode(session["resources"][ring["resourceId"]]["data"]).decode("utf-8")
+        for ring in rings
+    ]
 
     def no_runtime(*_args, **_kwargs):
         raise AssertionError("Session replay resolved a LOSAT runtime.")

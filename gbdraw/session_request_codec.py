@@ -39,7 +39,7 @@ from gbdraw.analysis.protein_colinearity import (  # type: ignore[reportMissingI
     normalize_protein_blastp_mode,
 )
 from gbdraw.config.models import GbdrawConfig  # type: ignore[reportMissingImports]
-from gbdraw.comparisons.losat_jobs import record_source_paths
+from gbdraw.comparisons.losat_jobs import record_source_paths, unique_losat_filenames
 from gbdraw.exceptions import ValidationError
 from gbdraw.features.placement import FeaturePlacementOverride
 from gbdraw.io.record_select import RecordSelector
@@ -1513,19 +1513,22 @@ def _encode_diagram_options(
         if name in _COMPARISON_FIELDS or name in _ALL_DEPTH_INPUT_FIELDS or name in _PLACEMENT_INPUT_FIELDS:
             continue
         if name == "conservation_search_results":
-            if getattr(options, name):
-                # Planner-resolved ring rows are stored as the Web stores them.
+            rings = getattr(options, name)
+            if rings:
+                # Planner-resolved ring rows are stored as the Web stores them,
+                # under the --losat_output_dir file names (unique per Session).
+                filenames = unique_losat_filenames([ring.name for ring in rings])
                 result["conservationBlastFiles"] = [
                     {
                         "resourceId": resources.add_bytes(
                             f"conservation-blast-files-{index}",
                             kind=f"conservation-blast-files-{index}",
-                            name=ring.name,
+                            name=filename,
                             content=ring.text.encode("utf-8"),
                         ),
                         "representation": "file",
                     }
-                    for index, ring in enumerate(options.conservation_search_results, start=1)
+                    for index, (ring, filename) in enumerate(zip(rings, filenames), start=1)
                 ]
             continue
         value = getattr(options, name)
