@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping as MappingABC, Sequence as SequenceABC
 from copy import deepcopy
-from dataclasses import MISSING, asdict, dataclass, fields, is_dataclass
+from dataclasses import MISSING, asdict, dataclass, fields, is_dataclass, replace
 from io import StringIO
 import json
 import math
@@ -27,6 +27,7 @@ from gbdraw.analysis.collinearity import (  # type: ignore[reportMissingImports]
     CollinearityResult,
     LosslessCollinearityParameters,
 )
+from gbdraw.analysis.conservation import _default_label as _default_conservation_label
 from gbdraw.analysis.ortholog_paths import OrthologPathCollection
 from gbdraw.analysis.protein_colinearity import (  # type: ignore[reportMissingImports]
     OrthogroupMember,
@@ -39,12 +40,13 @@ from gbdraw.analysis.protein_colinearity import (  # type: ignore[reportMissingI
     normalize_protein_blastp_mode,
 )
 from gbdraw.config.models import GbdrawConfig  # type: ignore[reportMissingImports]
-from gbdraw.comparisons.losat_jobs import record_source_paths, unique_losat_filenames
+from gbdraw.comparisons.losat_jobs import record_source_paths
 from gbdraw.exceptions import ValidationError
 from gbdraw.features.placement import FeaturePlacementOverride
 from gbdraw.io.record_select import RecordSelector
 from gbdraw.io.regions import RegionSpec
 from gbdraw.io.comparisons import read_comparison_table
+from gbdraw.io.filenames import safe_embedded_filename, unique_filename
 from gbdraw.core.record_metadata import _read_coord_map
 from gbdraw.linear_comparison import (
     LinearComparison,
@@ -557,9 +559,18 @@ class EncodedCanonicalRequest:
 
 
 class _ResourceBuilder:
+    """Collect resources; each gets a file name no other resource uses.
+
+    A Session materializes its resources side by side by sanitized name, so a
+    name used before (``a/X.fna`` and ``b/X.fna``) takes the next number,
+    ``X.2.fna``, the ``--losat_output_dir`` rule. Other names stay unchanged.
+    """
+
     def __init__(self) -> None:
         self._resources: list[CanonicalRequestResource] = []
         self._ids: set[str] = set()
+        self._names: set[str] = set()
+        self._renamed: set[str] = set()
 
     def add_path(self, resource_id: str, *, kind: str, value: object) -> str:
         if not isinstance(value, (str, Path)) or not str(value).strip():
@@ -599,11 +610,21 @@ class _ResourceBuilder:
         )
         return resource_id
 
+    def renamed(self, resource_id: str) -> bool:
+        """Whether the resource's file name was numbered to stay unique."""
+
+        return resource_id in self._renamed
+
     def _add(self, resource: CanonicalRequestResource) -> None:
         if resource.resource_id in self._ids:
             raise CanonicalRequestEncodingError(
                 f"Duplicate canonical resource ID: {resource.resource_id}."
             )
+        name = unique_filename(resource.name, self._names, key=safe_embedded_filename)
+        if name != resource.name:
+            resource = replace(resource, name=name)
+            self._renamed.add(resource.resource_id)
+        self._names.add(safe_embedded_filename(name))
         self._ids.add(resource.resource_id)
         self._resources.append(resource)
 
@@ -1513,22 +1534,19 @@ def _encode_diagram_options(
         if name in _COMPARISON_FIELDS or name in _ALL_DEPTH_INPUT_FIELDS or name in _PLACEMENT_INPUT_FIELDS:
             continue
         if name == "conservation_search_results":
-            rings = getattr(options, name)
-            if rings:
-                # Planner-resolved ring rows are stored as the Web stores them,
-                # under the --losat_output_dir file names (unique per Session).
-                filenames = unique_losat_filenames([ring.name for ring in rings])
+            if getattr(options, name):
+                # Planner-resolved ring rows are stored as the Web stores them.
                 result["conservationBlastFiles"] = [
                     {
                         "resourceId": resources.add_bytes(
                             f"conservation-blast-files-{index}",
                             kind=f"conservation-blast-files-{index}",
-                            name=filename,
+                            name=ring.name,
                             content=ring.text.encode("utf-8"),
                         ),
                         "representation": "file",
                     }
-                    for index, (ring, filename) in enumerate(zip(rings, filenames), start=1)
+                    for index, ring in enumerate(options.conservation_search_results, start=1)
                 ]
             continue
         value = getattr(options, name)
@@ -1536,12 +1554,43 @@ def _encode_diagram_options(
         if _same_default(value, default):
             continue
         result[_option_wire_key(name)] = _encode_option_value(name, value, resources=resources)
+    labels = _ring_labels_of_renamed_files(options, result.get("conservationBlastFiles"), resources)
+    if labels is not None:
+        result["conservationLabels"] = _encode_option_value(
+            "conservation_labels", labels, resources=resources
+        )
     if depth_tracks is not None:
         result["depthTracks"] = _encode_depth_tracks(
             depth_tracks,
             resources=resources,
         )
     return result
+
+
+def _ring_labels_of_renamed_files(
+    options: CircularDiagramOptions | LinearDiagramOptions,
+    refs: object,
+    resources: _ResourceBuilder,
+) -> tuple[str, ...] | None:
+    """Ring labels to store when a ring file without a label was renamed.
+
+    A ring without a label is labelled with its file name, which a replay reads
+    from the resource name; storing the labels keeps the drawn labels.
+    """
+
+    files = tuple(getattr(options, "conservation_blast_files", None) or ())
+    if not files or not isinstance(refs, list) or not any(
+        resources.renamed(ref["resourceId"]) for ref in refs if isinstance(ref, Mapping)
+    ):
+        return None
+    given = getattr(options, "conservation_labels", None)
+    count = max(len(files), len(getattr(options, "conservation_dataframes", None) or ()))
+    labels = []
+    for index in range(count):
+        label = str(given[index]) if given is not None and index < len(given) else ""
+        path = files[index] if index < len(files) else None
+        labels.append(label if label.strip() else _default_conservation_label(index, path))
+    return tuple(labels)
 
 
 def _decode_diagram_options(

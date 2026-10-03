@@ -35,6 +35,7 @@ from Bio.SeqRecord import SeqRecord
 
 from gbdraw.core.record_metadata import _read_coord_map
 from gbdraw.exceptions import ValidationError
+from gbdraw.io.filenames import unique_filenames
 
 NUCLEOTIDE_LOSAT_CACHE_SCHEMA = 2
 LOSAT_OUTFMT = "6"
@@ -55,23 +56,16 @@ def sha256_text(text: str) -> str:
 def unique_losat_filenames(
     names: Sequence[str], *, reserved: Sequence[str] = ()
 ) -> tuple[str, ...]:
-    """Raw TSV file names of LOSAT edges or rings, unique in name order.
+    """``--losat_output_dir`` TSV names of LOSAT edges or rings, unique in order.
 
     A repeated ``<stem>.tsv`` becomes ``<stem>.2.tsv``, ``<stem>.3.tsv``, ...
-    The Session resources and ``--losat_output_dir`` files use the same names.
+    (:func:`gbdraw.io.filenames.unique_filenames`, the Session resource rule).
     """
 
-    used = set(reserved)
-    result = []
-    for name in names:
-        stem = name[:-4] if name.endswith(".tsv") else name or "losat"
-        candidate, ordinal = f"{stem}.tsv", 1
-        while candidate in used:
-            ordinal += 1
-            candidate = f"{stem}.{ordinal}.tsv"
-        used.add(candidate)
-        result.append(candidate)
-    return tuple(result)
+    return unique_filenames(
+        [name if name.endswith(".tsv") else f"{name or 'losat'}.tsv" for name in names],
+        reserved=reserved,
+    )
 
 
 def _json_text(value: object) -> str:

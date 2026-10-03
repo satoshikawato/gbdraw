@@ -239,6 +239,38 @@ def test_resaved_session_keeps_nucleotide_blast_comparisons(tmp_path: Path, fixt
     assert (tmp_path / "third.svg").read_bytes() == (tmp_path / "second.svg").read_bytes()
 
 
+@pytest.mark.linear
+def test_comparison_tables_with_one_basename_in_two_directories_save_and_replay(tmp_path: Path) -> None:
+    # FIX-B2-N1: -b a/e.tsv b/e.tsv gave both Session resources the name e.tsv.
+    import json
+
+    r2 = _write_record(tmp_path, "R2", _X[:2000] + _Y)
+    r3 = _write_record(tmp_path, "R3", _Y + _Z)
+    tables = []
+    for directory, row in (("a", "R2\tR3\t100\t1000\t0\t0\t2001\t3000\t1\t1000\t0.0\t1847"),
+                           ("b", "R3\tR2\t100\t1000\t0\t0\t1\t1000\t2001\t3000\t0.0\t1847")):
+        (tmp_path / directory).mkdir()
+        tables.append(tmp_path / directory / "e.tsv")
+        tables[-1].write_text(row + "\n", encoding="utf-8")
+    sidecar = tmp_path / "fresh.gbdraw-session.json"
+    linear_cli.linear_main([
+        "--gbk", str(r2), str(r3), str(r2), "-b", *map(str, tables),
+        "-o", str(tmp_path / "fresh"), "-f", "svg", "--session_output", str(sidecar),
+    ])
+    session = json.loads(sidecar.read_text(encoding="utf-8"))
+    names = [session["resources"][item["resourceId"]]["name"] for item in session["renderRequest"]["comparisons"]
+             if item["kind"] == "nucleotideBlast"]
+    assert names == ["e.tsv", "e.2.tsv"]
+    linear_cli.linear_main(["--session", str(sidecar), "-o", str(tmp_path / "replayed"), "-f", "svg"])
+    replayed = (tmp_path / "replayed.svg").read_text(encoding="utf-8")
+    assert len(_ribbon_spans(replayed)) == 2
+    # Only the record source attributes differ: the replay reads the embedded records (D-22).
+    source_attributes = re.compile(r' data-gbdraw-record-source-(?:start|end|step)="[^"]*"')
+    assert source_attributes.sub("", replayed) == source_attributes.sub(
+        "", (tmp_path / "fresh.svg").read_text(encoding="utf-8")
+    )
+
+
 def test_table_text_rewrite_maps_reversed_endpoints_only() -> None:
     from gbdraw.linear_comparison import reverse_endpoint_table_text
 

@@ -253,6 +253,47 @@ def test_rings_whose_files_share_a_stem_save_and_replay(
 
 
 @pytest.mark.circular
+@pytest.mark.parametrize("losat", [True, False], ids=["losatn", "precomputed"])
+def test_ring_files_with_one_basename_in_two_directories_save_and_replay(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, losat: bool
+) -> None:
+    # FIX-B2-N1: Session resources were named by basename, so a/X.fna and
+    # b/X.fna (or a/ring.tsv and b/ring.tsv) stopped --save_session.
+    for directory, fasta, frozen in (("a", FASTAS[0], FROZEN_TSVS[0]), ("b", FASTAS[1], FROZEN_TSVS[1])):
+        (tmp_path / directory).mkdir()
+        (tmp_path / directory / "X.fna").write_bytes(fasta.read_bytes())
+        (tmp_path / directory / "ring.tsv").write_bytes(frozen.read_bytes())
+    sequences = ["--conservation_sequence", str(tmp_path / "a" / "X.fna"), str(tmp_path / "b" / "X.fna")]
+    if losat:
+        rings = ["--losat", "losatn", "--losat_bin", _fake_losat(tmp_path)[0]]
+        expected = {"X.fna", "X.2.fna"}
+    else:
+        # No --conservation_labels: each ring is labelled with its file name.
+        rings = ["--conservation_blast", str(tmp_path / "a" / "ring.tsv"), str(tmp_path / "b" / "ring.tsv")]
+        expected = {"X.fna", "X.2.fna", "ring.tsv", "ring.2.tsv"}
+    prefix = tmp_path / "saved"
+    circular_main([
+        "--gbk", str(HUMAN), *rings, *sequences, "--save_session", "-o", str(prefix), "-f", "svg",
+    ])
+    session = _session(prefix)
+    assert expected <= {resource["name"] for resource in session["resources"].values()}
+    if not losat:
+        # The replay reads ring.2.tsv, so the file-name labels are stored.
+        assert session["renderRequest"]["diagramOptions"]["conservationLabels"] == ["ring.tsv", "ring.tsv"]
+
+    def no_runtime(*_args, **_kwargs):
+        raise AssertionError("Session replay resolved a LOSAT runtime.")
+
+    monkeypatch.setattr(runtime_module, "resolve_losat_runtime", no_runtime)
+    replay = tmp_path / "replay"
+    circular_main([
+        "--session", str(prefix.with_suffix(".gbdraw-session.json")),
+        "-o", str(replay), "-f", "svg",
+    ])
+    assert replay.with_suffix(".svg").read_bytes() == prefix.with_suffix(".svg").read_bytes()
+
+
+@pytest.mark.circular
 def test_conservation_table_drives_ring_searches(tmp_path: Path) -> None:
     losat, log = _fake_losat(tmp_path)
     table = tmp_path / "rings.tsv"
