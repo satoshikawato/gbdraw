@@ -303,7 +303,9 @@ falling back to a display label.
 Comparison cache reuse requires the same sequence content, selected proteins,
 record and feature bindings, query/subject direction, program, and meaningful
 search arguments. Filenames and display labels do not define cache identity.
-Only affected record pairs rerun when one valid cache key changes.
+Only affected record pairs rerun when one valid cache key changes. A Session
+stores each raw result once: rows that share a cache key, such as two ring
+files with one sequence, share one entry named by the first row.
 
 Pairwise hit limits, Similarity-group member limits, and Collinear block
 settings are derived options. Changing one recomputes the affected derived

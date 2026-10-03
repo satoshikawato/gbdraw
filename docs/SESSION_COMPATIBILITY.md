@@ -54,6 +54,15 @@ record. Entries that the web app searches carry `runtime` too, as
 intent, so replay needs no LOSAT runtime. A request that still carries the
 search intent cannot be encoded; resolve or render it first.
 
+## Unreleased: one LOSAT cache entry per raw key
+
+Session version 44 is unchanged. The Web app saved a raw key once per row, so a
+Session with two Circular rings of one sequence repeated the key and could not
+be loaded. It now saves one `losatCache` entry per raw key, named by the first
+row, as the CLI does. After a load, the cache list shows one row per raw key
+until the next Generate. A version 39 or later Session that repeats a raw key
+is rejected with an `INPUT_INVALID` Session diagnostic.
+
 ## Unreleased: comparison rows in the search frame
 
 Session version 44 and request schema 8 are unchanged. Comparison rows stored
