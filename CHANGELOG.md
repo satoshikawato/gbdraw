@@ -511,6 +511,10 @@ Retired names and their replacements are listed under
   The Session stores one LOSAT cache entry per raw key, as the CLI does; a Session
   that repeats a key reports a Session diagnostic instead of an unknown error
   (#743).
+- Fixed: Redo of a Web Circular similarity ring row added with **Add Seq** from
+  a GenBank or DDBJ file restores its DEFINITION or organism label instead of
+  the file name. The label read is part of the add's one History step; Undo,
+  Redo, and Session save and load are unavailable until it answers (#747).
 
 ## [0.14.0](./docs/RELEASE_NOTES_0.14.0.md)
 
