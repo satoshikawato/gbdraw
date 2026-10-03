@@ -1,4 +1,4 @@
-"""CairoSVG exports keep text where browsers draw the SVG (B8)."""
+"""CairoSVG exports keep text where browsers draw the SVG (B8, B12)."""
 
 from __future__ import annotations
 
@@ -14,11 +14,13 @@ from svgwrite.container import Group
 
 from gbdraw.api import render as api_render
 from gbdraw.render import export as export_module
+from gbdraw.core.text import parse_mixed_content_text
 from gbdraw.render.export import has_cairosvg
 from gbdraw.svg.circular_ticks import (
     generate_circular_tick_labels,
     resolve_circular_tick_label_geometry,
 )
+from gbdraw.svg.text_path import generate_name_path
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 FONT_FAMILY = "'Liberation Sans', 'Arial', 'Helvetica', 'Nimbus Sans L', sans-serif"
@@ -137,6 +139,73 @@ def test_png_export_places_circular_tick_labels_on_browser_baselines() -> None:
     expected_baseline = path_y - descent * font_size
     assert top_row == pytest.approx(expected_baseline - ink_top * font_size, abs=tolerance)
     assert bottom_row == pytest.approx(expected_baseline - ink_bottom * font_size, abs=tolerance)
+
+
+MIXED_CAPTION = "<i>Vibrio nigripulchritudo</i> TUMSAT-TG-2018, complete genome"
+ITALIC_FILL = "#ff0000"
+ROMAN_FILL = "#0000ff"
+
+
+def _mixed_caption_drawing(anchor: str, anchor_x: float) -> Drawing:
+    """Draw the Gallery Vnig plot title with the runs in two colors."""
+    drawing = Drawing(size=("1400px", "100px"), viewBox="0 0 1400 100")
+    drawing.add(drawing.rect(insert=(0, 0), size=(1400, 100), fill="white"))
+    caption = generate_name_path(
+        parse_mixed_content_text(MIXED_CAPTION), anchor_x, 30.0, 20.0, "32.0", "normal", FONT_FAMILY
+    )
+    caption.attribs["text-anchor"] = anchor
+    italic, roman = caption.elements
+    italic.attribs["fill"] = ITALIC_FILL
+    roman.attribs["fill"] = ROMAN_FILL
+    drawing.add(caption)
+    return drawing
+
+
+def _run_ink_columns(png_bytes: bytes) -> tuple[tuple[int, int], tuple[int, int]]:
+    from PIL import Image
+
+    image = Image.open(io.BytesIO(png_bytes)).convert("RGB")
+    width, height = image.size
+    pixels = image.load()
+
+    def columns(channel: int) -> tuple[int, int]:
+        other = 2 - channel
+        found = [
+            x
+            for x in range(width)
+            if any(pixels[x, y][channel] > 150 and pixels[x, y][other] < 120 for y in range(height))
+        ]
+        assert found, "a caption run left no ink in the raster"
+        return found[0], found[-1]
+
+    return columns(0), columns(2)
+
+
+@requires_cairosvg
+@pytest.mark.parametrize(
+    ("anchor", "anchor_x", "browser_italic", "browser_roman"),
+    (
+        # Ink columns that Chromium draws for the same SVG (Python Playwright).
+        ("middle", 700.0, (277, 579), (591, 1124)),
+        ("end", 1300.0, (451, 753), (765, 1298)),
+    ),
+)
+def test_png_export_keeps_mixed_style_caption_runs_where_browsers_draw_them(
+    anchor: str,
+    anchor_x: float,
+    browser_italic: tuple[int, int],
+    browser_roman: tuple[int, int],
+) -> None:
+    pytest.importorskip("PIL")
+    tolerance = 3
+
+    png_bytes = api_render.render_to_bytes(_mixed_caption_drawing(anchor, anchor_x), "png")
+
+    italic, roman = _run_ink_columns(png_bytes)
+    assert italic[1] < roman[0], f"italic run {italic} overlaps roman run {roman}"
+    assert italic[0] == pytest.approx(browser_italic[0], abs=tolerance)
+    assert italic[1] == pytest.approx(browser_italic[1], abs=tolerance)
+    assert roman[0] == pytest.approx(browser_roman[0], abs=tolerance)
 
 
 def _svg(body: str) -> bytes:

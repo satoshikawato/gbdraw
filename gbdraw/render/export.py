@@ -16,7 +16,7 @@ from typing import Any, List
 
 from svgwrite import Drawing
 
-from gbdraw.core.text import dominant_baseline_shift_em, get_font_vertical_metrics
+from gbdraw.core.text import calculate_svg_bbox_dimensions, dominant_baseline_shift_em, get_font_vertical_metrics
 from gbdraw.exceptions import GbdrawError
 from gbdraw.render.formats import (
     CAIROSVG_FORMATS,
@@ -62,6 +62,12 @@ _CAIROSVG_CONVERTERS = {"png": "svg2png", "pdf": "svg2pdf", "ps": "svg2ps", "eps
 # text-before-edge and central formulas; the others are ignored).
 _CAIROSVG_MISPLACED_TEXT_BASELINES = frozenset({"hanging", "middle", "mathematical", "ideographic"})
 _TEXT_POSITION_ATTRIBUTES = ("y", "dy", "dominant-baseline")
+# CairoSVG 2.x anchors each tspan on its own width and continues from the
+# unanchored end, so the italic and roman runs of a mixed-style caption
+# overlap. Browsers anchor the whole text. Runs that set none of these
+# attributes get their browser x position.
+_TEXT_ANCHOR_SHIFT = {"middle": 0.5, "end": 1.0}
+_RUN_LAYOUT_ATTRIBUTES = ("x", "dx", "rotate", "textLength", "lengthAdjust", "letter-spacing", "word-spacing", "style")
 _NUMBER_RE = re.compile(r"^\s*([+-]?(?:\d+\.?\d*|\.\d+)(?:[eE][+-]?\d+)?)\s*(px|pt)?\s*$")
 
 
@@ -104,7 +110,71 @@ def _apply_baseline_shift(element: ET.Element, baseline: str, style: dict[str, A
     return True
 
 
-def _rewrite_text_baselines(
+def _position_text_runs(element: ET.Element, style: dict[str, Any]) -> bool:
+    """Give each tspan of a middle- or end-anchored text its browser x position.
+
+    The runs are measured with the packaged font metrics, like layout, and the
+    text is drawn from the start. Text with its own characters, tails, nested
+    runs, or run-level positioning is left unchanged.
+    """
+    shift = _TEXT_ANCHOR_SHIFT.get(str(style["text_anchor"] or "start").strip().lower())
+    runs = list(element)
+    if shift is None or len(runs) < 2 or element.text or style["font_size"] is None:
+        return False
+    if any(element.get(name) is not None for name in _RUN_LAYOUT_ATTRIBUTES[1:]):
+        return False
+    x_values = (element.get("x") or "0").replace(",", " ").split()
+    x_match = _NUMBER_RE.match(x_values[0]) if len(x_values) == 1 else None
+    if x_match is None or x_match.group(2) == "pt":
+        return False
+    texts: list[str] = []
+    after_space = True
+    for run in runs:
+        text = run.text or ""
+        if (
+            _local_name(run.tag) != "tspan"
+            or len(run)
+            or run.tail
+            or any(run.get(name) is not None for name in (*_RUN_LAYOUT_ATTRIBUTES, "text-anchor"))
+            or any(char in text for char in "\t\r\n")
+            or _font_size_px(run.get("font-size"), style["font_size"]) is None
+        ):
+            return False
+        # Browsers and CairoSVG collapse spaces across runs the same way.
+        text = re.sub(" +", " ", text)
+        if after_space:
+            text = text.lstrip(" ")
+        if text:
+            after_space = text.endswith(" ")
+        texts.append(text)
+    drawn = [index for index, text in enumerate(texts) if text]
+    if len(drawn) < 2:
+        return False
+    # A trailing space does not count toward the anchored width.
+    texts[drawn[-1]] = texts[drawn[-1]].rstrip(" ")
+    widths = [
+        calculate_svg_bbox_dimensions(
+            text,
+            run.get("font-family") or style["font_family"],
+            _font_size_px(run.get("font-size"), style["font_size"]),
+            96,
+            run.get("font-weight") or style["font_weight"],
+            run.get("font-style") or style["font_style"],
+        )[0]
+        if text
+        else 0.0
+        for run, text in zip(runs, texts)
+    ]
+    total = sum(widths)
+    cursor = float(x_match.group(1)) - shift * total
+    for run, width in zip(runs, widths):
+        run.set("x", f"{cursor:.4f}")
+        cursor += width
+    element.set("text-anchor", "start")
+    return True
+
+
+def _rewrite_text_for_cairosvg(
     element: ET.Element,
     inherited: dict[str, Any],
     *,
@@ -113,7 +183,7 @@ def _rewrite_text_baselines(
     if "dominant-baseline" in (element.get("style") or ""):
         return False
     style = dict(inherited)
-    for attribute in ("dominant-baseline", "font-family", "font-weight", "font-style"):
+    for attribute in ("dominant-baseline", "text-anchor", "font-family", "font-weight", "font-style"):
         if element.get(attribute) is not None:
             style[attribute.replace("-", "_")] = element.get(attribute)
     style["font_size"] = _font_size_px(element.get("font-size"), style["font_size"])
@@ -121,16 +191,19 @@ def _rewrite_text_baselines(
     baseline = str(style["dominant_baseline"] or "auto").strip().lower()
     if tag == "textPath":
         return _apply_baseline_shift(element, baseline, style)
-    if tag == "text" and not in_text and baseline in _CAIROSVG_MISPLACED_TEXT_BASELINES:
-        descendants = list(element.iter())[1:]
-        if not any(
-            _local_name(child.tag) == "textPath" or any(child.get(name) is not None for name in _TEXT_POSITION_ATTRIBUTES)
-            for child in descendants
-        ):
-            return _apply_baseline_shift(element, baseline, style)
     changed = False
+    if tag == "text" and not in_text:
+        changed = _position_text_runs(element, style)
+        if baseline in _CAIROSVG_MISPLACED_TEXT_BASELINES:
+            descendants = list(element.iter())[1:]
+            if not any(
+                _local_name(child.tag) == "textPath"
+                or any(child.get(name) is not None for name in _TEXT_POSITION_ATTRIBUTES)
+                for child in descendants
+            ):
+                return _apply_baseline_shift(element, baseline, style) or changed
     for child in element:
-        changed = _rewrite_text_baselines(child, style, in_text=in_text or tag == "text") or changed
+        changed = _rewrite_text_for_cairosvg(child, style, in_text=in_text or tag == "text") or changed
     return changed
 
 
@@ -142,10 +215,12 @@ def prepare_svg_for_cairosvg(svg_bytes: bytes) -> bytes:
     labels) and uses other metrics than browsers for some values on plain
     text. Those elements get the browser baseline offset as ``dy``, computed
     from the packaged font metrics, and ``dominant-baseline="alphabetic"``.
-    Values CairoSVG already places like browsers are left unchanged, and the
-    input is returned unchanged when nothing needs rewriting.
+    CairoSVG also anchors each tspan of a middle- or end-anchored text on its
+    own width; those runs get their browser ``x`` and the text is drawn from
+    the start. Text CairoSVG already places like browsers is left unchanged,
+    and the input is returned unchanged when nothing needs rewriting.
     """
-    if b"dominant-baseline" not in svg_bytes:
+    if b"dominant-baseline" not in svg_bytes and not (b"text-anchor" in svg_bytes and b"tspan" in svg_bytes):
         return svg_bytes
     try:
         root = ET.fromstring(svg_bytes)
@@ -157,8 +232,9 @@ def prepare_svg_for_cairosvg(svg_bytes: bytes) -> bytes:
         "font_weight": "normal",
         "font_style": "normal",
         "font_size": 16.0,
+        "text_anchor": "start",
     }
-    if not _rewrite_text_baselines(root, inherited):
+    if not _rewrite_text_for_cairosvg(root, inherited):
         return svg_bytes
     try:
         return ET.tostring(root, encoding="utf-8", xml_declaration=True, default_namespace=_SVG_NAMESPACE)
