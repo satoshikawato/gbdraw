@@ -108,8 +108,12 @@ from .render.track_slot_metadata import (
     build_track_slot_geometry_run_metadata,
     collect_track_slot_geometry_records,
 )
-from .render.output_paths import commit_staged_output_file, preflight_output_paths
+from .render.output_paths import preflight_output_paths
 from .session_io import load_session, session_to_cli_args
+from .cli_utils.losat_output import (
+    parse_positive_int as _parse_positive_int,
+    write_losat_output_files,
+)
 
 
 # ``--losat`` choices (design 3.2).
@@ -129,16 +133,6 @@ _CLI_LOSAT_FIELD_FLAGS = {
     "losatp_max_target_seqs": "--losatp_max_target_seqs",
     "losatp_member_max_hits": "--losatp_member_max_hits",
 }
-
-
-def _parse_positive_int(value: str) -> int:
-    try:
-        parsed = int(str(value).strip())
-    except ValueError as exc:
-        raise argparse.ArgumentTypeError("must be a positive integer") from exc
-    if parsed <= 0:
-        raise argparse.ArgumentTypeError("must be a positive integer")
-    return parsed
 
 
 def _parse_optional_positive_int(value: str) -> int | None:
@@ -1169,14 +1163,7 @@ def _write_losat_output_dir(
         if program == "losatp"
         else _nucleotide_output_files(run_result)
     )
-    output_path.parent.mkdir(parents=True, exist_ok=True)
-    for name, text in files:
-        target = output_path.parent / name
-        with TemporaryDirectory(prefix=f".{name}.", dir=target.parent) as temp_name:
-            staged_path = Path(temp_name) / name
-            with staged_path.open("w", encoding="utf-8", newline="\n") as handle:
-                handle.write(text)
-            commit_staged_output_file(staged_path, target, overwrite=overwrite)
+    write_losat_output_files(output_path.parent, files, overwrite=overwrite)
     return output_path
 
 

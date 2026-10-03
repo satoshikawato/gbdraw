@@ -1019,7 +1019,11 @@ def collect_embedded_files_from_cli_args(
                     "slot": table_slot,
                     "dependencies": [],
                 }
-                for dependency in _read_cli_table_dependencies(token, cli_args[value_index]):
+                for dependency in _read_cli_table_dependencies(
+                    token,
+                    cli_args[value_index],
+                    ring_losat=mode == "circular" and _has_cli_losat(cli_args),
+                ):
                     if not _is_embeddable_path(dependency.path):
                         continue
                     dependency_slot = _append_cli_input(files, dependency.path, depth=False)
@@ -1150,11 +1154,17 @@ def _cli_table_kind(token: str) -> str:
     return "unknown"
 
 
-def _read_cli_table_dependencies(token: str, path: object):
+def _has_cli_losat(cli_args) -> bool:
+    return any(
+        str(token) == "--losat" or str(token).startswith("--losat=") for token in cli_args
+    )
+
+
+def _read_cli_table_dependencies(token: str, path: object, *, ring_losat: bool = False):
     if token == "--records_table":
         return read_records_table(str(path)).path_dependencies
     if token == "--conservation_table":
-        return read_conservation_table(str(path)).path_dependencies
+        return read_conservation_table(str(path), losat=ring_losat).path_dependencies
     if token == "--circular_track_table":
         return read_circular_track_table(str(path)).path_dependencies
     if token == "--comparisons_table":

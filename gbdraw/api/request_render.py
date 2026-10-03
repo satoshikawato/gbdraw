@@ -41,7 +41,8 @@ from gbdraw.analysis.depth_tracks import (
 )
 from gbdraw.exceptions import ValidationError
 from gbdraw.comparisons.linear_losat import resolve_linear_nucleotide_losat
-from gbdraw.io.comparison_sequences import read_comparison_sequence_records
+from gbdraw.comparisons.circular_losat import resolve_circular_conservation_losat
+from gbdraw.io.comparison_sequences import ComparisonSequenceFile, read_comparison_sequence_file
 from gbdraw.layout.record_coordinates import RecordDisplayTransform
 from gbdraw.layout.record_placement import resolve_record_row_positions
 from gbdraw.layout.similarity_alignment import (
@@ -331,6 +332,7 @@ class _ComparisonSequenceSources:
     """Memoized Circular comparison-genome records shared by a request batch."""
 
     paths: tuple[str | None, ...]
+    _files: tuple[ComparisonSequenceFile | None, ...] | None = None
     _records: tuple[tuple[SeqRecord, ...], ...] | None = None
 
     def cache_specs(
@@ -359,18 +361,27 @@ class _ComparisonSequenceSources:
 
     def load(self) -> tuple[tuple[SeqRecord, ...], ...]:
         if self._records is None:
-            loaded: list[tuple[SeqRecord, ...]] = []
+            self._records = tuple(
+                file.records if file is not None else () for file in self.files()
+            )
+        return self._records
+
+    def files(self) -> tuple[ComparisonSequenceFile | None, ...]:
+        """Each comparison genome read once by the one reader (design D12)."""
+
+        if self._files is None:
+            loaded: list[ComparisonSequenceFile | None] = []
             for path, cache_spec in zip(
                 self.paths,
                 self.cache_specs(),
                 strict=True,
             ):
                 if not path:
-                    loaded.append(())
+                    loaded.append(None)
                     continue
 
-                def parse(path: str = path) -> tuple[SeqRecord, ...]:
-                    return read_comparison_sequence_records(path)
+                def parse(path: str = path) -> ComparisonSequenceFile:
+                    return read_comparison_sequence_file(path)
 
                 if cache_spec is None:
                     loaded.append(parse())
@@ -381,11 +392,11 @@ class _ComparisonSequenceSources:
                         key,
                         identities,
                         parse,
-                        publish=lambda value: bool(value),
+                        publish=lambda value: bool(value.records),
                     )
                 )
-            self._records = tuple(loaded)
-        return self._records
+            self._files = tuple(loaded)
+        return self._files
 
 
 @dataclass(frozen=True)
@@ -593,6 +604,7 @@ class PreparedCircularBatchRequest:
     records: tuple[SeqRecord, ...]
     items: tuple[PreparedDiagramRequest, ...]
     inputs: PreparedDiagramInputs | None = None
+    losat_cache_entries: tuple[Mapping[str, Any], ...] = ()
 
     @property
     def mode(self) -> Literal["circular"]:
@@ -606,6 +618,7 @@ class CircularBatchRenderResult:
     request: CircularBatchRequest
     records: tuple[SeqRecord, ...]
     items: tuple[RequestRenderResult, ...]
+    losat_cache_entries: tuple[Mapping[str, Any], ...] = ()
 
     @property
     def mode(self) -> Literal["circular"]:
@@ -686,6 +699,7 @@ class CircularRequestPlan:
     displays: tuple[ResolvedRecordDisplay, ...] = ()
     transforms: tuple[RecordDisplayTransform, ...] = ()
     resolved_annotations: ResolvedAnnotationBundle | None = None
+    losat_cache_entries: tuple[Mapping[str, Any], ...] = ()
 
     def __post_init__(self) -> None:
         if not isinstance(self.request, CircularDiagramRequest):
@@ -789,6 +803,7 @@ class CircularBatchRequestPlan:
     displays: tuple[ResolvedRecordDisplay, ...] = ()
     transforms: tuple[RecordDisplayTransform, ...] = ()
     resolved_annotations: ResolvedAnnotationBundle | None = None
+    losat_cache_entries: tuple[Mapping[str, Any], ...] = ()
 
     def __post_init__(self) -> None:
         if not isinstance(self.request, CircularBatchRequest):
@@ -1446,6 +1461,31 @@ def _materialize_placement_inputs(
     return request, replace(inputs, placements=placements if exact else ())
 
 
+def _resolve_ring_losat(
+    options: CircularDiagramOptions,
+    records: Sequence[SeqRecord],
+    inputs: PreparedDiagramInputs,
+) -> tuple[CircularDiagramOptions, tuple[Mapping[str, Any], ...]]:
+    """Replace ring LOSATN / TLOSATX intent with ring rows (design 3.3).
+
+    The subject database is every displayed record; each comparison genome is
+    read once through the request's memoized reader.
+    """
+
+    if options.losat_search is None:
+        return options, ()
+    sources = inputs.comparison_sequences or _ComparisonSequenceSources(
+        tuple(options.conservation_sequence_files or ())
+    )
+
+    def load_sequences() -> tuple[ComparisonSequenceFile, ...]:
+        return tuple(file for file in sources.files() if file is not None)
+
+    return resolve_circular_conservation_losat(
+        options, records=records, load_sequences=load_sequences
+    )
+
+
 def plan_circular_request(
     request: CircularDiagramRequest,
 ) -> CircularRequestPlan:
@@ -1491,6 +1531,11 @@ def plan_circular_request(
             and resolved_layout == unresolved_request.layout
             else projected_request
         )
+        ring_options, losat_cache_entries = _resolve_ring_losat(
+            materialized_request.options, records, inputs
+        )
+        if ring_options is not materialized_request.options:
+            materialized_request = replace(materialized_request, options=ring_options)
         _warn_circular_topologies(records)
     return CircularRequestPlan(
         request=materialized_request,
@@ -1500,6 +1545,7 @@ def plan_circular_request(
         provenance=collection.provenance,
         displays=collection.displays,
         transforms=collection.transforms,
+        losat_cache_entries=losat_cache_entries,
     )
 
 
@@ -1551,6 +1597,11 @@ def plan_circular_batch_request(
                 record_options=RecordCollectionOptions(),
             )
         )
+        ring_options, losat_cache_entries = _resolve_ring_losat(
+            materialized_request.options, records, inputs
+        )
+        if ring_options is not materialized_request.options:
+            materialized_request = replace(materialized_request, options=ring_options)
         _warn_circular_topologies(records)
     return CircularBatchRequestPlan(
         request=materialized_request,
@@ -1559,6 +1610,7 @@ def plan_circular_batch_request(
         provenance=collection.provenance,
         displays=collection.displays,
         transforms=collection.transforms,
+        losat_cache_entries=losat_cache_entries,
     )
 
 
@@ -2316,6 +2368,16 @@ def _build_current_derived_entries(
     return (entry,)
 
 
+def _merged_losat_entries(
+    loaded: Sequence[Mapping[str, Any]],
+    searched: Sequence[Mapping[str, Any]],
+) -> tuple[Mapping[str, Any], ...]:
+    """Session entries first, then entries this run searched (one per key)."""
+
+    keys = {entry.get("key") for entry in loaded}
+    return (*loaded, *(entry for entry in searched if entry.get("key") not in keys))
+
+
 def build_request_plan_diagram(
     plan: DiagramRequestPlan,
     *,
@@ -2354,6 +2416,9 @@ def build_request_plan_diagram(
             records=plan.records,
             items=items,
             inputs=plan.inputs,
+            losat_cache_entries=_merged_losat_entries(
+                current_artifacts.losat_cache_entries, plan.losat_cache_entries
+            ),
         )
     request = plan.request
     records = plan.records
@@ -2364,7 +2429,9 @@ def build_request_plan_diagram(
     if isinstance(plan, CircularRequestPlan):
         with _request_render_diagnostic_phase("drawing"):
             drawing = plan.build()
-        losat_cache_entries = current_artifacts.losat_cache_entries
+        losat_cache_entries = _merged_losat_entries(
+            current_artifacts.losat_cache_entries, plan.losat_cache_entries
+        )
         losat_derived_cache_entries = current_artifacts.losat_derived_cache_entries
         protein_identity_manifest = current_artifacts.protein_identity_manifest
     else:
@@ -2831,6 +2898,7 @@ def _render_request_diagram(
                 )
                 for item in prepared.items
             ),
+            losat_cache_entries=prepared.losat_cache_entries,
         )
     return _render_prepared_request(
         prepared,
@@ -2867,7 +2935,7 @@ def _comparison_sequence_records(
 
     def load_unprepared() -> tuple[tuple[SeqRecord, ...], ...]:
         return tuple(
-            read_comparison_sequence_records(path) if path else ()
+            read_comparison_sequence_file(path).records if path else ()
             for path in options.conservation_sequence_files or ()
         )
 

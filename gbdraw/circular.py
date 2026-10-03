@@ -6,6 +6,7 @@ import argparse
 import copy
 import logging
 import math
+import os
 from pathlib import Path
 from dataclasses import replace
 from tempfile import TemporaryDirectory
@@ -16,8 +17,11 @@ from .io.cli_tables import (
 from .config.toml import load_config_toml
 from .render.export import parse_formats
 from .api.options import (
+    LOSATN_TASKS,
     AnnotationOptions,
     CircularDiagramOptions,
+    LosatRuntimeOptions,
+    LosatSearchOptions,
     CircularMultiRecordOptions,
     CircularOutputOptions,
     CircularRequestTrackOptions,
@@ -57,6 +61,8 @@ from .tracks import (  # type: ignore[reportMissingImports]
     parse_circular_track_slots,
 )
 
+from .cli_utils.losat_output import parse_positive_int, write_losat_output_files
+from .render.output_paths import preflight_output_paths
 from .cli_utils.common import (
     _add_arrow_geometry_args,
     _add_block_stroke_args,
@@ -103,6 +109,24 @@ from .session_io import load_session, session_to_cli_args
 
 # Setup for the logging system
 logger = logging.getLogger()
+
+# ``--losat`` for similarity rings (design 3.3). losatp is accepted so that it
+# reports COMPARISON_INPUT / RING_LOSAT_PROGRAM rather than a usage error.
+_CLI_RING_LOSAT_PROGRAMS = ("losatn", "tlosatx", "losatp")
+# ``--losat_output_dir`` manifest of the rings; it is a valid --conservation_table.
+LOSAT_CONSERVATION_OUTPUT_NAME = "conservation.tsv"
+# CLI spelling of typed ring fields named in ring diagnostics (mapping only).
+_CLI_RING_FIELD_FLAGS = {
+    "conservation_blast_files": "--conservation_blast",
+    "conservation_dataframes": "--conservation_blast",
+    "conservation_reference": "--conservation_reference",
+    "conservation_sequence_files": "--conservation_sequence",
+    "conservation_labels": "--conservation_labels",
+    "conservation_colors": "--conservation_colors",
+    "conservation_losat_gencodes": "--conservation_losat_gencode",
+    "record_gencodes": "--losat_gencode",
+    "losatn_task": "--losatn_task",
+}
 setup_logging()
 
 
@@ -268,7 +292,8 @@ def _get_args(
         metavar='FILE',
         help=(
             'Comparison genome sequence file(s) (FASTA, GenBank, or DDBJ; one file is one '
-            'genome), one per --conservation_blast for interactive span export.'
+            'genome): the ring queries with --losat, otherwise one per --conservation_blast '
+            'for interactive span export.'
         ),
         type=str,
         nargs='+')
@@ -299,6 +324,78 @@ def _get_args(
         '--conservation_ring_gap',
         help='Similarity ring gap for circular mode (in px; must be > 0).',
         type=float)
+    parser.add_argument(
+        '--losat',
+        choices=_CLI_RING_LOSAT_PROGRAMS,
+        default=None,
+        help=(
+            'Build the similarity rings with LOSAT: losatn compares nucleotide '
+            'sequences (LOSAT blastn) and tlosatx their translations (LOSAT tblastx). '
+            'Each --conservation_sequence genome is the query and the displayed '
+            'records are the subject. Cannot be combined with --conservation_blast '
+            '(default: no LOSAT search).'
+        ),
+    )
+    parser.add_argument(
+        '--losatn_task',
+        choices=LOSATN_TASKS,
+        default=None,
+        help=(
+            'LOSATN search task with --losat losatn. A native runtime that does not '
+            'support the task stops before searching (default: megablast).'
+        ),
+    )
+    parser.add_argument(
+        '--losat_gencode',
+        metavar='CODE',
+        type=parse_positive_int,
+        default=None,
+        help='TLOSATX genetic code of the displayed (reference) records with --losat tlosatx (default: 1).',
+    )
+    parser.add_argument(
+        '--conservation_losat_gencode',
+        metavar='CODE',
+        type=parse_positive_int,
+        nargs='+',
+        default=None,
+        help=(
+            'TLOSATX genetic code of each comparison genome with --losat tlosatx: one '
+            'for every ring or one per --conservation_sequence, in the same order; the '
+            '--conservation_table losat_gencode column sets it per row (default: 1).'
+        ),
+    )
+    runtime_group = parser.add_mutually_exclusive_group()
+    runtime_group.add_argument(
+        '--losat_bin',
+        metavar='PATH',
+        default=None,
+        help='Native LOSAT executable for --losat (default: automatic runtime resolution).',
+    )
+    runtime_group.add_argument(
+        '--ncbi_blast_bin',
+        metavar='PATH',
+        default=None,
+        help=(
+            'NCBI BLAST+ executable of the selected --losat program (blastn or tblastx) '
+            '(default: automatic runtime resolution).'
+        ),
+    )
+    parser.add_argument(
+        '--losat_threads',
+        metavar='N',
+        type=parse_positive_int,
+        default=None,
+        help='Threads passed to each LOSAT or NCBI BLAST+ job (default: runtime default).',
+    )
+    parser.add_argument(
+        '--losat_output_dir',
+        metavar='DIR',
+        default=None,
+        help=(
+            'Write the raw LOSAT evidence to DIR; requires --losat. One TSV per ring '
+            'and conservation.tsv, which --conservation_table accepts unchanged.'
+        ),
+    )
     _add_comparison_filter_args(parser)
     parser.add_argument(
         '--depth_color',
@@ -529,14 +626,30 @@ def _get_args(
         )
     except ValidationError as exc:
         parser.error(str(exc))
-    if args.conservation_labels and not args.conservation_blast:
-        parser.error("--conservation_labels requires --conservation_blast")
-    if args.conservation_colors and not args.conservation_blast:
-        parser.error("--conservation_colors requires --conservation_blast")
-    if args.conservation_sequence and not args.conservation_blast:
-        parser.error("--conservation_sequence requires --conservation_blast")
-    if args.conservation_sequence and len(args.conservation_sequence) != len(args.conservation_blast):
-        parser.error("--conservation_sequence must provide one source per --conservation_blast")
+    if args.losat == "losatp":
+        raise ValidationError(
+            "Circular similarity rings run --losat losatn or --losat tlosatx; "
+            "losatp is not available for rings.",
+            diagnostic={
+                "code": "COMPARISON_INPUT",
+                "reason": "RING_LOSAT_PROGRAM",
+                "field": "losat",
+                "program": "losatp",
+            },
+        )
+    if args.losat_output_dir and not args.losat:
+        parser.error("--losat_output_dir requires --losat")
+    ring_sources = args.conservation_blast if not args.losat else args.conservation_sequence
+    ring_source_flag = "--conservation_blast" if not args.losat else "--conservation_sequence"
+    if args.conservation_labels and not ring_sources and not args.conservation_table:
+        parser.error(f"--conservation_labels requires {ring_source_flag}")
+    if args.conservation_colors and not ring_sources and not args.conservation_table:
+        parser.error(f"--conservation_colors requires {ring_source_flag}")
+    if not args.losat:
+        if args.conservation_sequence and not args.conservation_blast:
+            parser.error("--conservation_sequence requires --conservation_blast or --losat")
+        if args.conservation_sequence and len(args.conservation_sequence) != len(args.conservation_blast):
+            parser.error("--conservation_sequence must provide one source per --conservation_blast")
     if args.depth_min is not None and args.depth_min < 0:
         parser.error("--depth_min must be >= 0")
     if args.depth_max is not None and args.depth_max < 0:
@@ -668,7 +781,18 @@ def circular_main(cmd_args) -> None:
         return
 
     args: argparse.Namespace = _get_args(cmd_args)
+    if args.losat_output_dir:
+        preflight_output_paths(
+            (Path(args.losat_output_dir) / LOSAT_CONSERVATION_OUTPUT_NAME,),
+            overwrite=bool(args.overwrite),
+        )
     run_result = run_circular_from_namespace(args)
+    if args.losat_output_dir:
+        write_losat_output_files(
+            Path(args.losat_output_dir),
+            _ring_output_files(run_result, Path(args.losat_output_dir)),
+            overwrite=bool(args.overwrite),
+        )
     save_session_sidecar_if_requested(
         save_session=bool(args.save_session or args.session_output),
         session_output=args.session_output,
@@ -677,6 +801,107 @@ def circular_main(cmd_args) -> None:
         cmd_args=cmd_args,
         overwrite=bool(args.overwrite),
     )
+
+
+def _cli_ring_losat_search(args: argparse.Namespace) -> LosatSearchOptions | None:
+    if not args.losat:
+        return None
+    try:
+        return LosatSearchOptions(
+            program=args.losat,
+            losatn_task=args.losatn_task,
+            record_gencodes=(args.losat_gencode,) if args.losat_gencode else (),
+            runtime=LosatRuntimeOptions(
+                losat_executable=args.losat_bin,
+                ncbi_blast_executable=args.ncbi_blast_bin,
+                threads=args.losat_threads,
+            ),
+        )
+    except ValidationError as exc:
+        raise _cli_ring_error(exc, args) from exc
+
+
+def _cli_ring_error(exc: ValidationError, args: argparse.Namespace) -> ValidationError:
+    """Name the CLI flag in a typed ring diagnostic (the typed layer validates)."""
+
+    diagnostic = dict(exc.diagnostic or {})
+    flag = _CLI_RING_FIELD_FLAGS.get(str(diagnostic.get("field")))
+    reason = diagnostic.get("reason")
+    if flag is None or reason not in {"LOSAT_OPTION_PROGRAM", "RING_LOSAT_INPUT"}:
+        return exc
+    if reason == "LOSAT_OPTION_PROGRAM":
+        program = f"--losat {args.losat}" if args.losat else "no --losat"
+        message = f"{flag} does not apply to {program}."
+    elif flag == "--conservation_blast":
+        message = (
+            "--conservation_blast cannot be combined with --losat; the search "
+            "builds the rings from --conservation_sequence."
+        )
+    elif flag == "--conservation_reference":
+        message = (
+            "--losat uses the displayed records as the subject; "
+            "--conservation_reference must be auto or subject."
+        )
+    else:
+        message = str(exc)
+        for typed_name, cli_flag in _CLI_RING_FIELD_FLAGS.items():
+            message = message.replace(typed_name, cli_flag)
+    return ValidationError(message, diagnostic=diagnostic)
+
+
+def _cli_ring_options(*, _args: argparse.Namespace, **values) -> CircularDiagramOptions:
+    try:
+        return CircularDiagramOptions(**values)
+    except ValidationError as exc:
+        raise _cli_ring_error(exc, _args) from exc
+
+
+def _ring_output_files(run_result: DiagramRunResult, output_dir: Path) -> list[tuple[str, str]]:
+    """Per-ring raw TSVs and a ``--conservation_table`` manifest (design 3.7)."""
+
+    options = run_result.canonical_request.options
+    rings = tuple(getattr(options, "conservation_search_results", None) or ())
+    if not rings:
+        raise ValidationError(
+            "LOSAT output requested, but no raw ring evidence was produced.",
+            diagnostic={"code": "LOSAT_RUNTIME", "reason": "OUTPUT"},
+        )
+    sequences = tuple(options.conservation_sequence_files or ())
+    labels = tuple(options.conservation_labels or ())
+    colors = tuple(options.conservation_colors or ())
+    files: list[tuple[str, str]] = []
+    used: set[str] = {LOSAT_CONSERVATION_OUTPUT_NAME}
+    rows = ["blast\tcomparison_sequence\tlabel\tcolor"]
+    resolved_dir = output_dir.resolve()
+    for index, ring in enumerate(rings):
+        stem = ring.name[:-4] if ring.name.endswith(".tsv") else ring.name
+        candidate, ordinal = f"{stem}.tsv", 1
+        while candidate in used:
+            ordinal += 1
+            candidate = f"{stem}.{ordinal}.tsv"
+        used.add(candidate)
+        files.append((candidate, ring.text))
+        sequence = str(sequences[index]) if index < len(sequences) else ""
+        if sequence:
+            # Relative when next to the output directory, so both can move together.
+            absolute = str(Path(sequence).resolve())
+            try:
+                relative = os.path.relpath(absolute, resolved_dir)
+            except ValueError:
+                relative = absolute
+            sequence = relative if relative.split(os.sep).count("..") <= 1 else absolute
+        rows.append(
+            "\t".join(
+                (
+                    candidate,
+                    sequence,
+                    labels[index] if index < len(labels) else "",
+                    colors[index] if index < len(colors) else "",
+                )
+            )
+        )
+    files.append((LOSAT_CONSERVATION_OUTPUT_NAME, "\n".join(rows) + "\n"))
+    return files
 
 
 def run_circular_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
@@ -1039,7 +1264,7 @@ def run_circular_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
 
     canonical_config = copy.deepcopy(config_dict)
 
-    request_options = CircularDiagramOptions(
+    request_options = _cli_ring_options(
         config=canonical_config,
         colors=ColorOptions(
             color_table_file=color_table_path or None,
@@ -1077,6 +1302,13 @@ def run_circular_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
         conservation_colors=conservation_colors,
         conservation_ring_width=conservation_ring_width,
         conservation_ring_gap=conservation_ring_gap,
+        losat_search=_cli_ring_losat_search(args),
+        conservation_losat_gencodes=(
+            tuple(args.conservation_losat_gencode)
+            if args.conservation_losat_gencode
+            else None
+        ),
+        _args=args,
         plot_title=plot_title or None,
         plot_title_font_size=plot_title_font_size,
         keep_full_definition_with_plot_title=keep_full_definition_with_plot_title,
@@ -1215,6 +1447,7 @@ def run_circular_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
             records=track_slot_geometry_records,
         ),
         canonical_request=materialized_request,
+        losat_cache_entries=tuple(getattr(rendered, "losat_cache_entries", ()) or ()),
     )
 
 if __name__ == "__main__":

@@ -1591,13 +1591,13 @@ def test_render_request_circular_batch_loads_needed_comparison_fasta_once(
     comparison_fasta = tmp_path / "comparison.fna"
     comparison_fasta.write_text(">comparison\nAACCGG\n", encoding="utf-8")
     parse_calls: list[object] = []
-    parse = request_render_module.read_comparison_sequence_records
+    parse = request_render_module.read_comparison_sequence_file
 
     def counting_parse(source):
         parse_calls.append(source)
         return parse(source)
 
-    monkeypatch.setattr(request_render_module, "read_comparison_sequence_records", counting_parse)
+    monkeypatch.setattr(request_render_module, "read_comparison_sequence_file", counting_parse)
     request = CircularBatchRequest(
         records=(_memory_input("batch-a"), _memory_input("batch-b")),
         options=CircularDiagramOptions(
@@ -1637,13 +1637,13 @@ def test_prepared_request_memoizes_comparison_fasta_records(
     comparison_fasta = tmp_path / "comparison.fna"
     comparison_fasta.write_text(">comparison\nAACCGG\n", encoding="utf-8")
     parse_calls: list[object] = []
-    parse = request_render_module.read_comparison_sequence_records
+    parse = request_render_module.read_comparison_sequence_file
 
     def counting_parse(source):
         parse_calls.append(source)
         return parse(source)
 
-    monkeypatch.setattr(request_render_module, "read_comparison_sequence_records", counting_parse)
+    monkeypatch.setattr(request_render_module, "read_comparison_sequence_file", counting_parse)
     request = CircularDiagramRequest(
         records=(_memory_input("record"),),
         options=CircularDiagramOptions(

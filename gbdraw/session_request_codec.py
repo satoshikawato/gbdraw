@@ -424,6 +424,9 @@ _OPTIONAL_PROTEIN_SETTINGS = frozenset({"collinearInferOrthogroups"})
 _WIRE_LOSATP_MODES = {wire: typed for typed, wire in LOSATP_MODE_WIRE.items()}
 # Settings of a LOSATP search that has not been configured.
 _UNSET_LOSAT_SEARCH = LosatSearchOptions(program="losatp", losatp_mode="none")
+# Circular ring LOSAT intent (encoded only after the planner resolves it) and
+# its resolved rows (encoded as conservationBlastFiles).
+_RING_SEARCH_FIELDS = frozenset({"conservation_losat_gencodes", "conservation_search_results"})
 _COMPARISON_FIELDS = _COMPARISON_SOURCE_FIELDS | frozenset(
     {"losat_search"}
     | {name for _key, owner, name in _PROTEIN_SETTINGS_WIRE if owner == "options"}
@@ -642,6 +645,10 @@ def _encode_canonical_request(request: DiagramRequest) -> EncodedCanonicalReques
             unresolved_reasons.append("record-derived output prefix")
         if request.options.conservation_table_file is not None:
             unresolved_reasons.append("Circular comparison table")
+    if isinstance(request, (CircularDiagramRequest, CircularBatchRequest)):
+        ring_search = request.options.losat_search
+        if ring_search is not None:
+            unresolved_reasons.append(f"{ring_search.program} ring search")
     if isinstance(request, LinearDiagramRequest):
         if request.output.resolve_prefix_from_first_record:
             unresolved_reasons.append("record-derived output prefix")
@@ -1443,6 +1450,22 @@ def _encode_diagram_options(
         name = item.name
         if name in _COMPARISON_FIELDS or name in _ALL_DEPTH_INPUT_FIELDS or name in _PLACEMENT_INPUT_FIELDS:
             continue
+        if name == "conservation_search_results":
+            if getattr(options, name):
+                # Planner-resolved ring rows are stored as the Web stores them.
+                result["conservationBlastFiles"] = [
+                    {
+                        "resourceId": resources.add_bytes(
+                            f"conservation-blast-files-{index}",
+                            kind=f"conservation-blast-files-{index}",
+                            name=ring.name,
+                            content=ring.text.encode("utf-8"),
+                        ),
+                        "representation": "file",
+                    }
+                    for index, ring in enumerate(options.conservation_search_results, start=1)
+                ]
+            continue
         value = getattr(options, name)
         default = getattr(default_options, name)
         if _same_default(value, default):
@@ -1485,7 +1508,9 @@ def _decode_diagram_options(
     known = {
         _option_wire_key(item.name): item.name
         for item in fields(options_type)
-        if item.name not in _COMPARISON_FIELDS and item.name not in _PLACEMENT_INPUT_FIELDS
+        if item.name not in _COMPARISON_FIELDS
+        and item.name not in _PLACEMENT_INPUT_FIELDS
+        and item.name not in _RING_SEARCH_FIELDS
     }
     unknown = set(payload) - set(known)
     if unknown:
