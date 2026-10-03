@@ -1294,3 +1294,32 @@ def test_capture_readme_records_versions_regeneration_and_download_checks() -> N
         assert f"--scenario {scenario_id}" in readme
     assert "--tier extended" in readme
     assert "--check" in readme
+
+
+def test_recipe_subprocesses_import_the_checkout_that_runs_the_tool() -> None:
+    import os
+    import re
+
+    from docs.recipes import _scenario_support, run_cli_scenarios
+
+    root = str(Path(__file__).resolve().parents[1])
+    assert str(_scenario_support.REPO_ROOT) == root
+
+    # Existing entries stay, in order, after the repository root (no duplicates).
+    other = os.pathsep.join(["/elsewhere/a", root, "/elsewhere/b"])
+    environment = _scenario_support.checkout_subprocess_environment(
+        {"PYTHONPATH": other, "KEEP": "1"}
+    )
+    assert environment["PYTHONPATH"].split(os.pathsep) == [root, "/elsewhere/a", "/elsewhere/b"]
+    assert environment["KEEP"] == "1"
+    assert _scenario_support.checkout_subprocess_environment({})["PYTHONPATH"] == root
+
+    # The default base is the process environment, which is not modified.
+    before = os.environ.get("PYTHONPATH")
+    assert _scenario_support.checkout_subprocess_environment()["PYTHONPATH"].split(os.pathsep)[0] == root
+    assert os.environ.get("PYTHONPATH") == before
+
+    # The CLI recipe runner builds its subprocess environment through the helper.
+    source = Path(run_cli_scenarios.__file__).read_text(encoding="utf-8")
+    assert source.count("environment = checkout_subprocess_environment()") == 1
+    assert not re.search(r"os\.environ", source)
