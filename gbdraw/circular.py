@@ -62,6 +62,7 @@ from .tracks import (  # type: ignore[reportMissingImports]
 )
 
 from .cli_utils.losat_output import parse_positive_int, write_losat_output_files
+from .comparisons.losat_jobs import unique_losat_filenames
 from .render.output_paths import preflight_output_paths
 from .cli_utils.common import (
     _add_arrow_geometry_args,
@@ -870,16 +871,12 @@ def _ring_output_files(run_result: DiagramRunResult, output_dir: Path) -> list[t
     labels = tuple(options.conservation_labels or ())
     colors = tuple(options.conservation_colors or ())
     files: list[tuple[str, str]] = []
-    used: set[str] = {LOSAT_CONSERVATION_OUTPUT_NAME}
     rows = ["blast\tcomparison_sequence\tlabel\tcolor"]
     resolved_dir = output_dir.resolve()
-    for index, ring in enumerate(rings):
-        stem = ring.name[:-4] if ring.name.endswith(".tsv") else ring.name
-        candidate, ordinal = f"{stem}.tsv", 1
-        while candidate in used:
-            ordinal += 1
-            candidate = f"{stem}.{ordinal}.tsv"
-        used.add(candidate)
+    names = unique_losat_filenames(
+        [ring.name for ring in rings], reserved=(LOSAT_CONSERVATION_OUTPUT_NAME,)
+    )
+    for index, (ring, candidate) in enumerate(zip(rings, names)):
         files.append((candidate, ring.text))
         sequence = str(sequences[index]) if index < len(sequences) else ""
         if sequence:

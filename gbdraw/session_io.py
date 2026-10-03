@@ -29,6 +29,7 @@ from .analysis.protein_artifacts import (
 )
 from .definition_line_styles import DEFINITION_LINE_KINDS
 from .exceptions import GbdrawError, ValidationError
+from .io.filenames import _SAFE_FILENAME_RE, safe_embedded_filename
 from .render.formats import normalize_format_token
 from .render.output_paths import commit_staged_output_file
 
@@ -91,7 +92,6 @@ DEPTH_FILE_SCHEMA = 1
 JS_MAX_SAFE_INTEGER = 9_007_199_254_740_991
 
 _DEPTH_COLUMNS = ("reference_name", "position", "depth")
-_SAFE_FILENAME_RE = re.compile(r"[^A-Za-z0-9._-]+")
 _SLOT_PART_RE = re.compile(r"([^\[\]]+)|\[(\d+)\]")
 
 
@@ -1817,14 +1817,6 @@ def _reject_duplicate_json_keys(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
             raise ValidationError(f"Session JSON contains a duplicate object key: {key!r}.")
         result[key] = value
     return result
-
-
-def safe_embedded_filename(name: object, *, fallback: str = "embedded-file") -> str:
-    """Return a basename-only filename safe for materializing embedded content."""
-
-    raw_name = str(name or "").replace("\\", "/").split("/")[-1].strip()
-    cleaned = _SAFE_FILENAME_RE.sub("_", raw_name).strip("._")
-    return cleaned or fallback
 
 
 def encode_depth_text(text: str) -> dict[str, Any] | None:

@@ -196,6 +196,81 @@ def test_main_web_session_with_a_reversed_record_draws_the_ribbons_main_drew(tmp
     assert _ribbon_spans((tmp_path / "resaved.svg").read_text(encoding="utf-8")) == expected
 
 
+@pytest.mark.linear
+@pytest.mark.parametrize(
+    ("fixture", "stored_row"),
+    [
+        # Web Save with reversed R3c: the re-saved Session embeds R3c as its
+        # reverse complement, so the converted rows are written in its frame.
+        ("q-frame-main-web-upload.v42", "R2c\tR3c\t100.0\t1000\t0\t0\t2001\t3000\t3000\t2001\t0.0\t1847\n"),
+        ("q-frame-main-web-losatn.v42", "R2c\tR3c\t100.0\t1000\t0\t0\t2001\t3000\t3000\t2001\t0.0\t1847\n"),
+        # CLI -b sidecar without a reversed record: the table bytes are kept.
+        ("se06-main-linear-blast-cli.v42", "R2c\tR3c\t100.000\t1000\t0\t0\t2001\t3000\t1\t1000\t0.0\t1847\n"),
+    ],
+)
+def test_resaved_session_keeps_nucleotide_blast_comparisons(tmp_path: Path, fixture: str, stored_row: str) -> None:
+    # PR3-B2: a replayed Session re-saved nucleotideBlast items as
+    # precomputedProteinComparison canonical TSV.
+    import base64
+    import gzip
+
+    from gbdraw.session_io import load_session
+
+    def comparison(session: Path) -> tuple[dict, bytes]:
+        payload = load_session(session)
+        item = payload["renderRequest"]["comparisons"][0]
+        return item, base64.b64decode(payload["resources"][item["resourceId"]]["data"])
+
+    def replay(session: Path, name: str) -> Path:
+        linear_cli.linear_main(["--session", str(session), "-o", str(tmp_path / name), "-f", "svg",
+                                "--session_output", str(tmp_path / f"{name}.gbdraw-session.json")])
+        return tmp_path / f"{name}.gbdraw-session.json"
+
+    main = tmp_path / "main.gbdraw-session.json"
+    main.write_bytes(gzip.decompress((_SESSIONS / f"{fixture}.gbdraw-session.json.gz").read_bytes()))
+    first = replay(main, "first")
+    item, content = comparison(first)
+    assert (item["kind"], item["queryRecordIndex"], item["subjectRecordIndex"]) == ("nucleotideBlast", 0, 1)
+    assert content.decode("utf-8") == stored_row
+    # The re-saved Session re-saves the same item and bytes and draws the same SVG.
+    second = replay(first, "second")
+    assert comparison(second) == (item, content)
+    replay(second, "third")
+    assert (tmp_path / "third.svg").read_bytes() == (tmp_path / "second.svg").read_bytes()
+
+
+@pytest.mark.linear
+def test_comparison_tables_with_one_basename_in_two_directories_save_and_replay(tmp_path: Path) -> None:
+    # FIX-B2-N1: -b a/e.tsv b/e.tsv gave both Session resources the name e.tsv.
+    import json
+
+    r2 = _write_record(tmp_path, "R2", _X[:2000] + _Y)
+    r3 = _write_record(tmp_path, "R3", _Y + _Z)
+    tables = []
+    for directory, row in (("a", "R2\tR3\t100\t1000\t0\t0\t2001\t3000\t1\t1000\t0.0\t1847"),
+                           ("b", "R3\tR2\t100\t1000\t0\t0\t1\t1000\t2001\t3000\t0.0\t1847")):
+        (tmp_path / directory).mkdir()
+        tables.append(tmp_path / directory / "e.tsv")
+        tables[-1].write_text(row + "\n", encoding="utf-8")
+    sidecar = tmp_path / "fresh.gbdraw-session.json"
+    linear_cli.linear_main([
+        "--gbk", str(r2), str(r3), str(r2), "-b", *map(str, tables),
+        "-o", str(tmp_path / "fresh"), "-f", "svg", "--session_output", str(sidecar),
+    ])
+    session = json.loads(sidecar.read_text(encoding="utf-8"))
+    names = [session["resources"][item["resourceId"]]["name"] for item in session["renderRequest"]["comparisons"]
+             if item["kind"] == "nucleotideBlast"]
+    assert names == ["e.tsv", "e.2.tsv"]
+    linear_cli.linear_main(["--session", str(sidecar), "-o", str(tmp_path / "replayed"), "-f", "svg"])
+    replayed = (tmp_path / "replayed.svg").read_text(encoding="utf-8")
+    assert len(_ribbon_spans(replayed)) == 2
+    # Only the record source attributes differ: the replay reads the embedded records (D-22).
+    source_attributes = re.compile(r' data-gbdraw-record-source-(?:start|end|step)="[^"]*"')
+    assert source_attributes.sub("", replayed) == source_attributes.sub(
+        "", (tmp_path / "fresh.svg").read_text(encoding="utf-8")
+    )
+
+
 def test_table_text_rewrite_maps_reversed_endpoints_only() -> None:
     from gbdraw.linear_comparison import reverse_endpoint_table_text
 

@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping as MappingABC, Sequence as SequenceABC
 from copy import deepcopy
-from dataclasses import MISSING, asdict, dataclass, fields, is_dataclass
+from dataclasses import MISSING, asdict, dataclass, fields, is_dataclass, replace
 from io import StringIO
 import json
 import math
@@ -27,6 +27,7 @@ from gbdraw.analysis.collinearity import (  # type: ignore[reportMissingImports]
     CollinearityResult,
     LosslessCollinearityParameters,
 )
+from gbdraw.analysis.conservation import _default_label as _default_conservation_label
 from gbdraw.analysis.ortholog_paths import OrthologPathCollection
 from gbdraw.analysis.protein_colinearity import (  # type: ignore[reportMissingImports]
     OrthogroupMember,
@@ -45,6 +46,7 @@ from gbdraw.features.placement import FeaturePlacementOverride
 from gbdraw.io.record_select import RecordSelector
 from gbdraw.io.regions import RegionSpec
 from gbdraw.io.comparisons import read_comparison_table
+from gbdraw.io.filenames import safe_embedded_filename, unique_filename
 from gbdraw.core.record_metadata import _read_coord_map
 from gbdraw.linear_comparison import (
     LinearComparison,
@@ -557,9 +559,18 @@ class EncodedCanonicalRequest:
 
 
 class _ResourceBuilder:
+    """Collect resources; each gets a file name no other resource uses.
+
+    A Session materializes its resources side by side by sanitized name, so a
+    name used before (``a/X.fna`` and ``b/X.fna``) takes the next number,
+    ``X.2.fna``, the ``--losat_output_dir`` rule. Other names stay unchanged.
+    """
+
     def __init__(self) -> None:
         self._resources: list[CanonicalRequestResource] = []
         self._ids: set[str] = set()
+        self._names: set[str] = set()
+        self._renamed: set[str] = set()
 
     def add_path(self, resource_id: str, *, kind: str, value: object) -> str:
         if not isinstance(value, (str, Path)) or not str(value).strip():
@@ -599,11 +610,21 @@ class _ResourceBuilder:
         )
         return resource_id
 
+    def renamed(self, resource_id: str) -> bool:
+        """Whether the resource's file name was numbered to stay unique."""
+
+        return resource_id in self._renamed
+
     def _add(self, resource: CanonicalRequestResource) -> None:
         if resource.resource_id in self._ids:
             raise CanonicalRequestEncodingError(
                 f"Duplicate canonical resource ID: {resource.resource_id}."
             )
+        name = unique_filename(resource.name, self._names, key=safe_embedded_filename)
+        if name != resource.name:
+            resource = replace(resource, name=name)
+            self._renamed.add(resource.resource_id)
+        self._names.add(safe_embedded_filename(name))
         self._ids.add(resource.resource_id)
         self._resources.append(resource)
 
@@ -1533,12 +1554,43 @@ def _encode_diagram_options(
         if _same_default(value, default):
             continue
         result[_option_wire_key(name)] = _encode_option_value(name, value, resources=resources)
+    labels = _ring_labels_of_renamed_files(options, result.get("conservationBlastFiles"), resources)
+    if labels is not None:
+        result["conservationLabels"] = _encode_option_value(
+            "conservation_labels", labels, resources=resources
+        )
     if depth_tracks is not None:
         result["depthTracks"] = _encode_depth_tracks(
             depth_tracks,
             resources=resources,
         )
     return result
+
+
+def _ring_labels_of_renamed_files(
+    options: CircularDiagramOptions | LinearDiagramOptions,
+    refs: object,
+    resources: _ResourceBuilder,
+) -> tuple[str, ...] | None:
+    """Ring labels to store when a ring file without a label was renamed.
+
+    A ring without a label is labelled with its file name, which a replay reads
+    from the resource name; storing the labels keeps the drawn labels.
+    """
+
+    files = tuple(getattr(options, "conservation_blast_files", None) or ())
+    if not files or not isinstance(refs, list) or not any(
+        resources.renamed(ref["resourceId"]) for ref in refs if isinstance(ref, Mapping)
+    ):
+        return None
+    given = getattr(options, "conservation_labels", None)
+    count = max(len(files), len(getattr(options, "conservation_dataframes", None) or ()))
+    labels = []
+    for index in range(count):
+        label = str(given[index]) if given is not None and index < len(given) else ""
+        path = files[index] if index < len(files) else None
+        labels.append(label if label.strip() else _default_conservation_label(index, path))
+    return tuple(labels)
 
 
 def _decode_diagram_options(
@@ -3348,11 +3400,12 @@ def _encode_comparisons(
             _record_frame(frames, comparison.subject_record_index),
         )
         if comparison.search_frame_text is not None:
-            # A planner-resolved LOSAT edge keeps its raw search-frame rows, as
-            # the Web writes them (design 3.7).
-            content = reverse_endpoint_table_text(
-                comparison.search_frame_text, *endpoint_frames
-            )
+            # A planner-resolved LOSAT edge or a decoded nucleotideBlast item
+            # keeps its raw search-frame rows, as the Web writes them (design
+            # 3.7); only a reversed persisted endpoint rewrites them.
+            content = comparison.search_frame_text
+            if endpoint_frames[0][1] or endpoint_frames[1][1]:
+                content = reverse_endpoint_table_text(content, *endpoint_frames)
             resource_id = resources.add_bytes(
                 _resource_id(f"comparison-losat-{index}"),
                 kind="nucleotide-blast",
@@ -3541,11 +3594,14 @@ def _decode_comparisons(
                 resource_paths=resource_paths,
             )
             if schema >= 2:
+                # The resource text stays on the edge, so a re-saved Session
+                # writes the same nucleotideBlast resource.
                 try:
+                    text = resource_path.read_bytes().decode("utf-8")
                     table = read_comparison_table(
-                        resource_path, label=f"BLAST resource {item['resourceId']!r}"
+                        StringIO(text), label=f"BLAST resource {item['resourceId']!r}"
                     )
-                except ValidationError as exc:
+                except (OSError, UnicodeError, ValidationError) as exc:
                     raise CanonicalRequestDecodingError(
                         f"Could not decode {path}: {exc}"
                     ) from exc
@@ -3556,7 +3612,7 @@ def _decode_comparisons(
                     item["subjectRecordIndex"], f"{path}.subjectRecordIndex"
                 )
                 explicit_comparisons.append(
-                    LinearComparison(query_index, subject_index, table)
+                    LinearComparison(query_index, subject_index, table, search_frame_text=text)
                 )
             else:
                 blast_files.append(str(resource_path))
