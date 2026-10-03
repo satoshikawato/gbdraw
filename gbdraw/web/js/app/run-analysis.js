@@ -1093,6 +1093,8 @@ export const createRunAnalysis = ({
   resetPreviewViewport,
   validateAnnotationTargets = null,
   prepareLinearRecordCatalog = null,
+  // D12: ring rows added just before Generate are named before it reads them.
+  settleComparisonRecordLabels = async () => {},
   // services/config.js owns the active-mode input check shared with Save.
   assertActiveModeInputs = null,
   losatExecutor = runLosatPairsParallel,
@@ -4834,6 +4836,9 @@ export const createRunAnalysis = ({
         failedGeneratePreservedResult.value = results.value.length > 0;
         return outcome;
       };
+      if (cancelBeforeRender()) return outcome;
+      await settleComparisonRecordLabels();
+      if (!isCurrentOperation()) return { status: 'stale' };
       if (cancelBeforeRender()) return outcome;
       if (prepareGenerate) {
         const prepared = await prepareGenerate();

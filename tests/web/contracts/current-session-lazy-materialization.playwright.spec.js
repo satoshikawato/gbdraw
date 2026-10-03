@@ -689,6 +689,159 @@ test('a GenBank ring file reuses the FASTA ring search, records the Web runtime,
   }
 });
 
+// D12: a ring row added from a GenBank or DDBJ file without a typed label is
+// named like the CLI names it (first record's DEFINITION, then organism); a
+// FASTA row keeps the Web file-name default, a typed label wins, and the
+// labels survive Session save and restore.
+test('GenBank and DDBJ ring rows added without a label take the CLI default label', async ({
+  browser
+}, testInfo) => {
+  test.setTimeout(240_000);
+  const context = await browser.newContext();
+  const page = await context.newPage();
+  try {
+    await page.addInitScript(() => {
+      window.__GBDRAW_LOSAT_EXECUTOR__ = async () => {
+        throw new Error('The cached ring replay must not execute LOSAT.');
+      };
+    });
+    await openInstrumentedApp(page);
+    const loaded = await evaluateWithRetainedPromise(page, async (sessionText) => {
+      const file = new File([sessionText], 'synthetic_conservation.gbdraw-session.json', {
+        type: 'application/json', lastModified: 0
+      });
+      window.__GBDRAW_LAZY_SESSION_PROBE__.ignoreFile(file);
+      const result = await window.__GBDRAW_APP__.importSession({ target: { files: [file], value: '' } });
+      const { state } = await import('/gbdraw/web/js/state.js');
+      const { readFileText } = await import('/gbdraw/web/js/services/file-content-cache.js');
+      return { status: result?.status, fasta: await readFileText(state.files.c_conservation_fastas[1]) };
+    }, neutralConservationSessionText);
+    expect(loaded.status).toBe('ok');
+
+    // Flat files of comparison c's sequence: one raw key, so Generate reuses the
+    // Session's cached rows and LOSAT does not run.
+    const [header, ...body] = loaded.fasta.trim().split(/\r?\n/);
+    const recordId = header.slice(1).split(/\s+/)[0];
+    const sequence = body.join('').toLowerCase();
+    const origin = [];
+    for (let start = 0; start < sequence.length; start += 60) {
+      const chunk = sequence.slice(start, start + 60).match(/.{1,10}/g).join(' ');
+      origin.push(`${String(start + 1).padStart(9)} ${chunk}`);
+    }
+    const flatFile = ({ definition, division }) => [
+      `LOCUS       ${recordId.padEnd(16)} ${String(sequence.length).padStart(11)} bp    DNA     linear   ${division} 01-JAN-1980`,
+      `DEFINITION  ${definition}`,
+      `ACCESSION   ${recordId}`,
+      `VERSION     ${recordId}`,
+      'KEYWORDS    .',
+      'SOURCE      Synthetic organism c',
+      '  ORGANISM  Synthetic organism c',
+      '            Unclassified.',
+      'FEATURES             Location/Qualifiers',
+      'ORIGIN',
+      ...origin,
+      '//',
+      ''
+    ].join('\n');
+    const ringFiles = [
+      { name: 'ring-genbank.gbk', text: flatFile({ definition: 'synthetic comparison c.', division: 'UNK' }) },
+      { name: 'ring-ddbj.ddbj', text: flatFile({ definition: '.', division: 'SYN' }) },
+      { name: 'ring-typed.gbk', text: flatFile({ definition: 'synthetic comparison c.', division: 'UNK' }), typed: 'Typed ring' },
+      { name: 'ring-fasta.fa', text: loaded.fasta }
+    ];
+
+    // The CLI default for the same files (gbdraw.io comparison reader).
+    const cliDir = testInfo.outputPath('ring-files');
+    require('node:fs').mkdirSync(cliDir, { recursive: true });
+    ringFiles.forEach(({ name, text }) => writeFileSync(join(cliDir, name), text, 'utf8'));
+    const cli = spawnSync(process.env.GBDRAW_PYTHON || 'python', ['-c', [
+      'import json, sys',
+      'from gbdraw.io.comparison_sequences import read_comparison_sequence_file',
+      'print(json.dumps([read_comparison_sequence_file(path).label for path in sys.argv[1:]]))'
+    ].join(';'), ...ringFiles.map(({ name }) => join(cliDir, name))], {
+      cwd: repoRoot, encoding: 'utf8', env: { ...process.env, PYTHONPATH: repoRoot }
+    });
+    expect(cli.status, cli.stderr).toBe(0);
+    const cliLabels = JSON.parse(cli.stdout);
+    expect(cliLabels).toEqual([
+      'synthetic comparison c', 'Synthetic organism c', 'synthetic comparison c', 'ring-fasta.fa'
+    ]);
+
+    const run = await evaluateWithRetainedPromise(page, async (inputs) => {
+      const { state } = await import('/gbdraw/web/js/state.js');
+      const app = window.__GBDRAW_APP__;
+      for (const { name, text, typed } of inputs) {
+        const file = new File([text], name, { type: 'text/plain', lastModified: 0 });
+        app.addCircularConservationComparisonFile({ target: { files: [file], value: '' } });
+        // Typed before the reader answers: the typed label wins.
+        if (typed) state.circularConservation.series[state.circularConservation.series.length - 1].label = typed;
+      }
+      // Generate waits for the pending reads, then draws the rows' labels.
+      const result = await app.runAnalysis();
+      return {
+        result,
+        errorLog: app.errorLog,
+        labels: state.circularConservation.series.map(({ label }) => label)
+      };
+    }, ringFiles);
+    expect(run.result, JSON.stringify(run.errorLog)).toEqual({ status: 'ok' });
+    const expectedLabels = [
+      'comparison-b', 'comparison-c', 'comparison-d',
+      cliLabels[0], cliLabels[1], 'Typed ring', 'ring-fasta'
+    ];
+    expect(run.labels).toEqual(expectedLabels);
+
+    // Session save and restore keep the labels. Only one ring per sequence is
+    // kept: a Session with two rings of one sequence does not restore (bug
+    // FIX-WEB-LABEL-B1, pre-existing).
+    const downloadPromise = page.waitForEvent('download', { timeout: 120_000 });
+    const saved = await evaluateWithRetainedPromise(page, async () => {
+      const app = window.__GBDRAW_APP__;
+      [6, 5, 4, 1].forEach((index) => app.removeCircularConservationSource(index));
+      const result = await app.runAnalysis();
+      if (result?.status !== 'ok') return { result, errorLog: app.errorLog };
+      app.sessionTitle = 'ring-default-labels';
+      return {
+        result: await app.saveSessionWithTitle(),
+        errorLog: app.errorLog
+      };
+    });
+    const savedLabels = ['comparison-b', 'comparison-d', cliLabels[0]];
+    expect(saved.result.status, JSON.stringify(saved.errorLog)).toBe('saved');
+    const savedPath = await (await downloadPromise).path();
+    const savedBytes = readFileSync(savedPath);
+    const savedText = savedBytes[0] === 0x1f ? gunzipSync(savedBytes).toString('utf8') : savedBytes.toString('utf8');
+    const findLabels = (value) => {
+      if (!value || typeof value !== 'object') return null;
+      if (Array.isArray(value.conservationLabels)) return value.conservationLabels;
+      for (const child of Object.values(value)) {
+        const found = findLabels(child);
+        if (found) return found;
+      }
+      return null;
+    };
+    expect(findLabels(JSON.parse(savedText))).toEqual(savedLabels);
+    const restored = await evaluateWithRetainedPromise(page, async (sessionText) => {
+      const file = new File([sessionText], 'ring-default-labels.gbdraw-session.json', {
+        type: 'application/json', lastModified: 0
+      });
+      window.__GBDRAW_LAZY_SESSION_PROBE__.ignoreFile(file);
+      const result = await window.__GBDRAW_APP__.importSession({ target: { files: [file], value: '' } });
+      const { state } = await import('/gbdraw/web/js/state.js');
+      return {
+        status: result?.status,
+        message: result?.message,
+        errorLog: window.__GBDRAW_APP__.errorLog,
+        labels: state.circularConservation.series.map(({ label }) => label)
+      };
+    }, savedText);
+    expect(restored.status, `${restored.message} ${JSON.stringify(restored.errorLog)}`).toBe('ok');
+    expect(restored.labels).toEqual(savedLabels);
+  } finally {
+    await context.close();
+  }
+});
+
 test('Generate materializes only required resources and reuses one Worker', async ({ page }) => {
   test.setTimeout(300_000);
   await openInstrumentedApp(page);

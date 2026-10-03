@@ -289,6 +289,21 @@ export const discoverSequenceRecords = async ({
   return normalizeSequenceRecords(response.result);
 };
 
+// D12: the label a ring comparison file names itself (GenBank / DDBJ: first
+// record's DEFINITION, then organism), or null (FASTA). Only the Python ring
+// reader reads the file; there is no fast path.
+export const discoverComparisonSequenceRecordLabel = async ({
+  file,
+  runHelperOperation = runDiagramHelperOperation
+}) => {
+  const response = await runHelperOperation(
+    DIAGRAM_HELPER_OPERATIONS.READ_COMPARISON_SEQUENCE,
+    { files: [{ role: 'source', bytes: await cloneFileBytesForTransfer(file) }] }
+  );
+  if (response.result?.error) throw response.result.error;
+  return response.result?.recordLabel ?? null;
+};
+
 export const discoverGffFastaRecords = async ({
   gffFile,
   fastaFile,

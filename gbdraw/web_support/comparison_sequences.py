@@ -18,10 +18,13 @@ from gbdraw.io.comparison_sequences import read_comparison_sequence_file
 
 
 def read_comparison_sequence_json(path: str) -> str:
-    """Return the LOSAT query FASTA, format, default label and record IDs as JSON.
+    """Return the LOSAT query FASTA, format, record label and record IDs as JSON.
 
-    Raises ``INPUT_UNREADABLE`` (``SEQUENCE_MISSING`` for a file or record
-    without sequence) like the CLI ring search.
+    ``recordLabel`` is the CLI default ring label when the file names one
+    (GenBank / DDBJ: the first record's DEFINITION, else its organism), else
+    ``null``: the Worker stages the file under a fixed name, so the Web applies
+    its own file-name rule. Raises ``INPUT_UNREADABLE`` (``SEQUENCE_MISSING``
+    for a file or record without sequence) like the CLI ring search.
     """
 
     comparison = read_comparison_sequence_file(path)
@@ -30,7 +33,7 @@ def read_comparison_sequence_json(path: str) -> str:
         {
             "fasta": fasta,
             "format": comparison.format,
-            "label": comparison.label,
+            "recordLabel": comparison.record_label,
             "recordIds": [str(record.id) for record in comparison.records],
         },
         separators=(",", ":"),

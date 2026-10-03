@@ -35,12 +35,18 @@ _FIELD = "comparison_sequence"
 
 @dataclass(frozen=True)
 class ComparisonSequenceFile:
-    """The records of one comparison genome and its default ring label."""
+    """The records of one comparison genome and its default ring label.
+
+    ``record_label`` is the label the file names itself (GenBank / DDBJ: the
+    first record's DEFINITION, else its organism), or ``None``; ``label`` falls
+    back to the file name when it is ``None``.
+    """
 
     path: str
     format: ComparisonSequenceFormat
     records: tuple[SeqRecord, ...]
     label: str
+    record_label: str | None = None
 
 
 def _unreadable(message: str, *, reason: str | None = None) -> ValidationError:
@@ -74,17 +80,12 @@ def _sequence_text(record: SeqRecord) -> str:
         return ""
 
 
-def _default_label(
-    path: str,
+def _record_label(
     file_format: ComparisonSequenceFormat,
     records: tuple[SeqRecord, ...],
-) -> str:
-    """GenBank / DDBJ: the DEFINITION, else the organism; FASTA: the file name.
+) -> str | None:
+    """GenBank / DDBJ: the first record's DEFINITION, else its organism."""
 
-    The file name is the precomputed-ring rule (the BLAST file basename).
-    """
-
-    basename = os.path.basename(str(path))
     if file_format == "genbank" and records:
         first = records[0]
         definition = str(first.description or "").strip()
@@ -93,7 +94,7 @@ def _default_label(
         organism = str(first.annotations.get("organism") or "").strip()
         if organism and organism != ".":
             return organism
-    return basename
+    return None
 
 
 def read_comparison_sequence_file(path: str | os.PathLike[str]) -> ComparisonSequenceFile:
@@ -143,11 +144,14 @@ def read_comparison_sequence_file(path: str | os.PathLike[str]) -> ComparisonSeq
             )
         )
     normalized = tuple(records)
+    record_label = _record_label(file_format, tuple(parsed))
+    # Without a record label, the precomputed-ring rule: the file name.
     return ComparisonSequenceFile(
         path=text_path,
         format=file_format,
         records=normalized,
-        label=_default_label(text_path, file_format, tuple(parsed)),
+        label=record_label or name,
+        record_label=record_label,
     )
 
 
