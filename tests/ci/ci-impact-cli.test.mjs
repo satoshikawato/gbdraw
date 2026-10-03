@@ -939,3 +939,28 @@ test('browser jobs seed apt from one verified cache and bound their test steps',
   }
   assert.match(job('ci-impact'), /node-version: "20"\n {10}cache: npm\n[\s\S]*run: npm ci/);
 });
+
+test('aggregate gates and the Gallery planner tolerate a slow checkout', () => {
+  const read = (path) => readFileSync(resolve(REPOSITORY_ROOT, path), 'utf8');
+  const jobIn = (workflow, id) => workflow.match(
+    new RegExp(`\\n  ${id}:\\n[\\s\\S]*?(?=\\n  [a-z0-9-]+:\\n|$)`)
+  )?.[0] || '';
+  const tests = read('.github/workflows/test.yml');
+  const gallery = read('.github/workflows/gallery-publication.yml');
+  // A checkout alone has taken 63 s, so a 1-minute gate can cancel a run whose jobs all passed.
+  for (const [workflow, id] of [
+    [tests, 'pr-gate'],
+    [tests, 'dev-staging-gate'],
+    [tests, 'release-gate'],
+    [gallery, 'readiness-gate']
+  ]) {
+    assert.match(jobIn(workflow, id), /\n    timeout-minutes: 5\n/, id);
+  }
+  // A full-history checkout with blobs has taken 4 min 53 s of this 5-minute job.
+  const planner = jobIn(gallery, 'ci-impact');
+  assert.match(planner, /\n    timeout-minutes: 5\n/);
+  assert.match(
+    planner,
+    /uses: actions\/checkout@v4\n {8}with:\n {10}ref: \$\{\{ github\.sha \}\}\n {10}fetch-depth: 0\n(?: {10}#[^\n]*\n)? {10}filter: blob:none\n/
+  );
+});

@@ -1023,7 +1023,7 @@ jobs:
       github.event_name == 'pull_request' &&
       github.base_ref == 'dev'
     runs-on: ubuntu-latest
-    timeout-minutes: 1
+    timeout-minutes: 5
     steps:
       - name: Checkout trusted CI policy
         uses: actions/checkout@v4
@@ -1062,7 +1062,7 @@ jobs:
       ((github.event_name == 'push' && github.ref == 'refs/heads/dev') ||
       (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/dev'))
     runs-on: ubuntu-latest
-    timeout-minutes: 1
+    timeout-minutes: 5
     steps:
       - name: Checkout protected dev CI policy
         uses: actions/checkout@v4
