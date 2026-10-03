@@ -3,7 +3,7 @@
 A reference names one exact feature/protein ID. The typed core runs the
 requested orthogroup analysis once, resolves the reference with
 ``resolve_similarity_alignment_plan`` and renders the resolved plan, so the
-Python API, ``--align_orthogroup_feature`` and an equivalent hand-built plan
+Python API, ``--similarity_alignment_feature`` and an equivalent hand-built plan
 draw the same SVG. Fixed Similarity groups replace LOSATP.
 """
 
@@ -37,6 +37,7 @@ from gbdraw.api import (
     LinearDiagramRequest,
     LinearMultiRecordOptions,
     LinearRecordTranslation,
+    LosatSearchOptions,
     RecordInput,
     RenderOutputRequest,
     SimilarityAlignmentPlan,
@@ -46,6 +47,7 @@ from gbdraw.api import (
     render_request,
     resolve_similarity_alignment_plan,
 )
+from gbdraw.api.options import losatp_analysis_mode
 from gbdraw.exceptions import ValidationError
 from gbdraw.io.comparisons import COMPARISON_COLUMNS
 from gbdraw.layout.similarity_alignment import SimilarityAlignmentReferenceError
@@ -58,6 +60,10 @@ from gbdraw.session_request_codec import (
 # Each record carries dnaA and gyrB at different positions, so alignment moves
 # every row; the groups stand in for a completed LOSATP orthogroup analysis.
 LAYOUT = {"a": (50, 300), "b": (200, 400), "c": (380, 100)}
+SIMILARITY_GROUPS = LosatSearchOptions(
+    program="losatp",
+    losatp_mode="similarity_groups",
+)
 GROUPS = {
     f"{name}-{gene}": group
     for name in LAYOUT
@@ -165,8 +171,9 @@ def _cli_request(
     linear_cli_module.linear_main(
         [
             "--gbk", *map(str, paths),
-            "--protein_blastp_mode", "orthogroup",
-            "--align_orthogroup_feature", feature_id,
+            "--losat", "losatp",
+            "--losatp_mode", "similarity_groups",
+            "--similarity_alignment_feature", feature_id,
             "-f", "svg",
             "-o", str(output),
         ]
@@ -220,17 +227,24 @@ def test_reference_is_typed_and_requires_the_orthogroup_analysis(genbank_paths) 
     with pytest.raises(ValidationError, match="unsupported type"):
         LinearDiagramRequest(
             records=records,
-            options=LinearDiagramOptions(protein_blastp_mode="orthogroup"),
+            options=LinearDiagramOptions(losat_search=SIMILARITY_GROUPS),
             similarity_alignment="a-dnaA",  # type: ignore[arg-type]
         )
-    for mode in ("none", "pairwise", "collinear"):
+    for search in (
+        None,
+        LosatSearchOptions(program="losatp", losatp_mode="pairwise"),
+        LosatSearchOptions(program="losatp", losatp_mode="collinear"),
+    ):
         with pytest.raises(
             SimilarityAlignmentReferenceError,
-            match=r"requires the orthogroup analysis .*protein_blastp_mode 'orthogroup'",
+            match=(
+                r"requires the Similarity groups analysis .*losat_search program "
+                r"'losatp' with losatp_mode 'similarity_groups'"
+            ),
         ):
             LinearDiagramRequest(
                 records=records,
-                options=LinearDiagramOptions(protein_blastp_mode=mode),
+                options=LinearDiagramOptions(losat_search=search),
                 similarity_alignment=SimilarityAlignmentReference("a-dnaA"),
             )
 
@@ -243,8 +257,11 @@ def test_python_reference_renders_like_the_cli_flag_and_a_hand_built_plan(
 ) -> None:
     cli_request = _cli_request(monkeypatch, genbank_paths, tmp_path / "cli", "a-dnaA")
     assert cli_request.similarity_alignment == SimilarityAlignmentReference("a-dnaA")
-    assert cli_request.options.protein_blastp_mode == "orthogroup"
+    assert cli_request.options.losat_search is not None
+    assert cli_request.options.losat_search.program == "losatp"
+    assert cli_request.options.losat_search.losatp_mode == "similarity_groups"
     assert not hasattr(cli_request.options, "align_orthogroup_feature")
+    assert not hasattr(cli_request.options, "similarity_alignment_feature")
     assert analysis_calls == [3]
 
     # Records without record_key take the planner's keys, as the CLI's do.
@@ -263,7 +280,7 @@ def test_python_reference_renders_like_the_cli_flag_and_a_hand_built_plan(
     hand_plan = _hand_built_plan(cli_request)
     resolved = python_result.request
     assert resolved.similarity_alignment == hand_plan
-    assert resolved.options.protein_blastp_mode == "none"
+    assert losatp_analysis_mode(resolved.options.losat_search) == "none"
     assert resolved.layout.record_translations == tuple(
         LinearRecordTranslation(key) for key in ("record-1", "record-2", "record-3")
     )
@@ -306,7 +323,7 @@ def test_beginner_reference_matches_the_beginner_plan(
             records,
             options=gbdraw.LinearOptions(
                 comparisons=gbdraw.LinearComparisonOptions(
-                    protein_mode="orthogroup",
+                    losat="losatp",
                     similarity_alignment=alignment,
                 )
             ),
@@ -318,7 +335,7 @@ def test_beginner_reference_matches_the_beginner_plan(
             RecordInput(GenBankInputSource(path), record_key=f"record-{index}")
             for index, path in enumerate(genbank_paths, start=1)
         ),
-        options=LinearDiagramOptions(protein_blastp_mode="orthogroup"),
+        options=LinearDiagramOptions(losat_search=SIMILARITY_GROUPS),
     )
     plan = plan_request(typed)
     prepared = build_request_plan_diagram(plan)
@@ -342,7 +359,7 @@ def test_reference_errors_are_neutral_and_the_cli_names_its_flag(
         render_request(
             LinearDiagramRequest(
                 records=tuple(RecordInput(GenBankInputSource(path)) for path in genbank_paths),
-                options=LinearDiagramOptions(protein_blastp_mode="orthogroup"),
+                options=LinearDiagramOptions(losat_search=SIMILARITY_GROUPS),
                 similarity_alignment=SimilarityAlignmentReference(feature_id),
                 output=RenderOutputRequest(output_prefix="py", output_directory=tmp_path),
             )
@@ -358,10 +375,10 @@ def test_reference_errors_are_neutral_and_the_cli_names_its_flag(
         assert str(python_error.value) == (
             f"SimilarityAlignmentReference(feature_id={feature_id!r}) {detail}"
         )
-        assert "--align_orthogroup_feature" not in str(python_error.value)
+        assert "--similarity_alignment_feature" not in str(python_error.value)
         with pytest.raises(ValidationError) as cli_error:
             _cli_request(monkeypatch, genbank_paths, tmp_path / "cli", feature_id)
-        assert str(cli_error.value) == f"--align_orthogroup_feature {detail}"
+        assert str(cli_error.value) == f"--similarity_alignment_feature {detail}"
     assert not list(tmp_path.glob("*.svg"))
 
     # Two og_1 members in record 3 and no direct evidence: never prompt or guess.
@@ -383,7 +400,7 @@ def test_saved_requests_store_the_resolved_plan_never_the_reference(
 ) -> None:
     request = LinearDiagramRequest(
         records=tuple(RecordInput(GenBankInputSource(path)) for path in genbank_paths),
-        options=LinearDiagramOptions(protein_blastp_mode="orthogroup"),
+        options=LinearDiagramOptions(losat_search=SIMILARITY_GROUPS),
         similarity_alignment=SimilarityAlignmentReference("a-dnaA"),
         output=RenderOutputRequest(output_prefix="saved", output_directory=tmp_path),
     )
@@ -408,7 +425,7 @@ def test_saved_requests_store_the_resolved_plan_never_the_reference(
             ),
         )
     )
-    assert saved.options.protein_blastp_mode == "none"
+    assert losatp_analysis_mode(saved.options.losat_search) == "none"
 
 
 def test_existing_output_stops_the_render_before_the_analysis(
@@ -421,7 +438,7 @@ def test_existing_output_stops_the_render_before_the_analysis(
         render_request(
             LinearDiagramRequest(
                 records=tuple(RecordInput(GenBankInputSource(path)) for path in genbank_paths),
-                options=LinearDiagramOptions(protein_blastp_mode="orthogroup"),
+                options=LinearDiagramOptions(losat_search=SIMILARITY_GROUPS),
                 similarity_alignment=SimilarityAlignmentReference("a-dnaA"),
                 output=RenderOutputRequest(output_prefix="taken", output_directory=tmp_path),
             )

@@ -29,6 +29,8 @@ from .api.options import (
     LinearMultiRecordOptions,
     LinearOutputOptions,
     LinearRequestTrackOptions,
+    LosatRuntimeOptions,
+    LosatSearchOptions,
 )
 from .layout.similarity_alignment import (
     SimilarityAlignmentReference,
@@ -52,7 +54,6 @@ from .analysis.collinearity import (
     normalize_collinearity_search_scope,
 )
 from .analysis.protein_colinearity import (
-    PROTEIN_BLASTP_MODES,
     hydrate_protein_losat_tsv,
     is_protein_losat_cache_entry,
 )
@@ -79,6 +80,7 @@ from .cli_utils.common import (
     _add_format_arg,
     _add_overwrite_arg,
     _add_gc_skew_toggle_args,
+    _add_retired_option_args,
     _add_gc_content_axis_args,
     _add_legend_size_args,
     _add_window_step_args,
@@ -107,6 +109,23 @@ from .render.track_slot_metadata import (
 )
 from .render.output_paths import commit_staged_output_file, preflight_output_paths
 from .session_io import load_session, session_to_cli_args
+
+
+# ``--losat`` choices this release can run (design 3.2; losatn and tlosatx follow).
+_CLI_LOSAT_PROGRAMS = ("losatp",)
+_LOSATP_MODES = ("similarity_groups", "collinear", "pairwise")
+# ``--losat_output_dir`` file for LOSATP raw evidence (design 3.7, D13).
+LOSATP_RAW_OUTPUT_NAME = "losatp.raw.tsv"
+
+
+def _parse_positive_int(value: str) -> int:
+    try:
+        parsed = int(str(value).strip())
+    except ValueError as exc:
+        raise argparse.ArgumentTypeError("must be a positive integer") from exc
+    if parsed <= 0:
+        raise argparse.ArgumentTypeError("must be a positive integer")
+    return parsed
 
 
 def _parse_optional_positive_int(value: str) -> int | None:
@@ -269,60 +288,92 @@ def _get_args(args) -> argparse.Namespace:
         type=str,
         nargs='*')
     parser.add_argument(
-        '--losatp_bin',
-        dest='losatp_bin',
-        help='Native LOSAT executable for --protein_blastp_mode pairwise/orthogroup/collinear (default: losat).',
-        type=str,
-        default=_LINEAR_OPTION_DEFAULTS.losatp_bin)
-    parser.add_argument(
-        '--ncbi_blastp_bin',
-        dest='ncbi_blastp_bin',
-        help='NCBI BLAST+ blastp executable for --protein_blastp_mode pairwise/orthogroup/collinear (default: use automatic runtime resolution).',
-        type=str,
-        default=_LINEAR_OPTION_DEFAULTS.ncbi_blastp_bin)
-    parser.add_argument(
-        '--losatp_threads',
-        dest='losatp_threads',
-        help='Threads passed to the selected protein blastp runtime for --protein_blastp_mode pairwise/orthogroup/collinear (default: runtime default).',
-        type=int,
-        default=_LINEAR_OPTION_DEFAULTS.losatp_threads)
-    parser.add_argument(
-        '--protein_blastp_mode',
-        dest='protein_blastp_mode',
-        help='Protein blastp comparison mode: none, pairwise adjacent ribbons, all-record similarity groups (orthogroup), or collinear blocks (default: none).',
-        choices=PROTEIN_BLASTP_MODES,
-        default=_LINEAR_OPTION_DEFAULTS.protein_blastp_mode)
-    parser.add_argument(
-        '--protein_blastp_max_hits',
-        dest='protein_blastp_max_hits',
-        help='Maximum distinct subject protein hits per query protein for pairwise protein blastp display links (default: 5).',
-        type=int,
-        default=_LINEAR_OPTION_DEFAULTS.protein_blastp_max_hits)
-    parser.add_argument(
-        '--protein_blastp_candidate_limit',
-        dest='protein_blastp_candidate_limit',
-        help="Optional protein blastp candidate cap per query; use 'none' for no cap (default: none).",
-        type=_parse_optional_positive_int,
-        default=_LINEAR_OPTION_DEFAULTS.protein_blastp_candidate_limit)
-    parser.add_argument(
-        '--protein_blastp_output',
-        metavar='TSV',
+        '--losat',
+        choices=_CLI_LOSAT_PROGRAMS,
+        default=None,
         help=(
-            'Write the raw protein-search evidence to one deterministic TSV. '
-            'Runtime handles are replaced with user-visible protein IDs; requires '
-            '--protein_blastp_mode.'
+            'Run a LOSAT comparison between the records: losatp compares the '
+            'CDS proteins (LOSAT blastp). Cannot be combined with -b/--blast '
+            '(default: no LOSAT comparison).'
         ),
-        type=str,
-        default=None)
+    )
     parser.add_argument(
-        '--align_orthogroup_feature',
-        dest='align_orthogroup_feature',
+        '--losatp_mode',
+        choices=_LOSATP_MODES,
+        default=None,
+        help=(
+            'LOSATP display with --losat losatp: similarity_groups (Similarity groups '
+            'across all records), collinear (Collinear blocks), or pairwise '
+            '(adjacent-record ribbons) (default: similarity_groups).'
+        ),
+    )
+    runtime_group = parser.add_mutually_exclusive_group()
+    runtime_group.add_argument(
+        '--losat_bin',
+        metavar='PATH',
+        default=None,
+        help='Native LOSAT executable for --losat (default: automatic runtime resolution).',
+    )
+    runtime_group.add_argument(
+        '--ncbi_blast_bin',
+        metavar='PATH',
+        default=None,
+        help=(
+            'NCBI BLAST+ executable of the selected --losat program (blastp for losatp) '
+            '(default: automatic runtime resolution).'
+        ),
+    )
+    parser.add_argument(
+        '--losat_threads',
+        metavar='N',
+        type=_parse_positive_int,
+        default=None,
+        help='Threads passed to each LOSAT or NCBI BLAST+ job (default: runtime default).',
+    )
+    parser.add_argument(
+        '--losatp_max_hits',
+        metavar='N',
+        type=_parse_positive_int,
+        default=5,
+        help='Maximum distinct subject proteins per query protein in --losatp_mode pairwise links (default: 5).',
+    )
+    parser.add_argument(
+        '--losatp_max_target_seqs',
+        metavar='N',
+        type=_parse_optional_positive_int,
+        default=None,
+        help="LOSATP -max_target_seqs per query; 'none' for no cap (default: none).",
+    )
+    parser.add_argument(
+        '--losatp_member_max_hits',
+        metavar='N',
+        type=_parse_optional_positive_int,
+        default=None,
+        help=(
+            "Maximum hits per protein used for Similarity group and Collinear membership; "
+            "'none' for no cap (default: none)."
+        ),
+    )
+    parser.add_argument(
+        '--losat_output_dir',
+        metavar='DIR',
+        default=None,
+        help=(
+            'Write the raw LOSAT evidence to DIR (LOSATP: losatp.raw.tsv). Runtime '
+            'handles are replaced with user-visible protein IDs; requires --losat.'
+        ),
+    )
+    parser.add_argument(
+        '--similarity_alignment_feature',
+        metavar='ID',
+        default="",
         help=(
             'Align linear records using this exact feature SVG hash or protein ID; '
-            'Similarity Group IDs are not accepted.'
+            'Similarity Group IDs are not accepted. Requires --losat losatp with '
+            '--losatp_mode similarity_groups.'
         ),
-        type=str,
-        default="")
+    )
+    _add_retired_option_args(parser, mode="linear")
     parser.add_argument(
         '--collinear_unit_mode',
         dest='collinear_unit_mode',
@@ -342,6 +393,15 @@ def _get_args(args) -> argparse.Namespace:
         type=_parse_collinear_search_scope,
         choices=["adjacent", "all"],
         default=_LINEAR_OPTION_DEFAULTS.collinearity_search_scope)
+    parser.add_argument(
+        '--collinear_infer_orthogroups',
+        choices=["on", "off"],
+        default="on" if _LINEAR_OPTION_DEFAULTS.collinear_infer_orthogroups else "off",
+        help=(
+            'Infer Similarity groups from the Collinear evidence and color blocks by group '
+            '(default: on).'
+        ),
+    )
     parser.add_argument(
         '--collinear_min_anchors',
         dest='collinear_min_anchors',
@@ -771,21 +831,21 @@ def _get_args(args) -> argparse.Namespace:
         not math.isfinite(args.comparison_height) or args.comparison_height <= 0
     ):
         parser.error("--comparison_height must be a positive finite number")
-    if args.protein_blastp_mode != "none" and args.blast:
-        parser.error("--protein_blastp_mode cannot be used with -b/--blast")
-    if args.protein_blastp_max_hits <= 0:
-        parser.error("--protein_blastp_max_hits must be > 0")
-    if args.protein_blastp_output:
-        if args.protein_blastp_mode == "none":
-            parser.error(
-                "--protein_blastp_output requires --protein_blastp_mode"
-            )
-        if Path(args.protein_blastp_output).suffix.lower() != ".tsv":
-            parser.error("--protein_blastp_output must use a .tsv suffix")
-    if args.losatp_threads is not None and args.losatp_threads <= 0:
-        parser.error("--losatp_threads must be > 0")
-    if args.align_orthogroup_feature and args.protein_blastp_mode != "orthogroup":
-        parser.error("--align_orthogroup_feature requires --protein_blastp_mode orthogroup")
+    if args.losat and args.blast:
+        parser.error("--losat cannot be used with -b/--blast")
+    if args.losatp_mode is not None and args.losat != "losatp":
+        parser.error("--losatp_mode requires --losat losatp")
+    if args.losat == "losatp" and args.losatp_mode is None:
+        args.losatp_mode = "similarity_groups"
+    if args.losat_output_dir and not args.losat:
+        parser.error("--losat_output_dir requires --losat")
+    if args.similarity_alignment_feature and (
+        args.losat != "losatp" or args.losatp_mode != "similarity_groups"
+    ):
+        parser.error(
+            "--similarity_alignment_feature requires --losat losatp with "
+            "--losatp_mode similarity_groups"
+        )
     if args.depth_height is not None and args.depth_height <= 0:
         parser.error("--depth_height must be > 0")
     if args.depth_min is not None and args.depth_min < 0:
@@ -946,8 +1006,8 @@ def linear_main(cmd_args) -> None:
 
     args: argparse.Namespace = _get_args(cmd_args)
     run_result = run_linear_from_namespace(args)
-    _write_protein_blastp_output(
-        args.protein_blastp_output,
+    _write_losat_output_dir(
+        args.losat_output_dir,
         run_result=run_result,
         overwrite=bool(args.overwrite),
     )
@@ -961,7 +1021,7 @@ def linear_main(cmd_args) -> None:
     )
 
 
-def _protein_blastp_output_text(run_result: DiagramRunResult) -> str:
+def _losatp_raw_output_text(run_result: DiagramRunResult) -> str:
     entries = tuple(
         entry
         for entry in (run_result.losat_cache_entries or ())
@@ -986,15 +1046,19 @@ def _protein_blastp_output_text(run_result: DiagramRunResult) -> str:
     return "\n".join(sections) + "\n"
 
 
-def _write_protein_blastp_output(
-    output: str | None,
+def _losatp_raw_output_path(output_dir: str | None) -> Path | None:
+    return Path(output_dir) / LOSATP_RAW_OUTPUT_NAME if output_dir else None
+
+
+def _write_losat_output_dir(
+    output_dir: str | None,
     *,
     run_result: DiagramRunResult,
     overwrite: bool,
 ) -> Path | None:
-    if not output:
+    output_path = _losatp_raw_output_path(output_dir)
+    if output_path is None:
         return None
-    output_path = Path(output)
     output_path.parent.mkdir(parents=True, exist_ok=True)
     with TemporaryDirectory(
         prefix=f".{output_path.name}.",
@@ -1002,7 +1066,7 @@ def _write_protein_blastp_output(
     ) as temp_name:
         staged_path = Path(temp_name) / output_path.name
         with staged_path.open("w", encoding="utf-8", newline="\n") as handle:
-            handle.write(_protein_blastp_output_text(run_result))
+            handle.write(_losatp_raw_output_text(run_result))
         commit_staged_output_file(
             staged_path,
             output_path,
@@ -1011,16 +1075,16 @@ def _write_protein_blastp_output(
     return output_path
 
 
-def _preflight_protein_blastp_output(
-    output: str | None,
+def _preflight_losat_output_dir(
+    output_dir: str | None,
     *,
     diagram_output_paths: Sequence[Path],
     session_output_path: Path | None,
     overwrite: bool,
 ) -> None:
-    if not output:
+    output_path = _losatp_raw_output_path(output_dir)
+    if output_path is None:
         return
-    output_path = Path(output)
     preflight_output_paths((output_path,), overwrite=overwrite)
     try:
         output_identity = output_path.resolve(strict=False)
@@ -1049,21 +1113,28 @@ def run_linear_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
         source_session = None
     out_file_prefix: str = args.output
     blast_files: list[str] | None = args.blast
-    protein_blastp_mode: str = str(
-        args.protein_blastp_mode or _LINEAR_OPTION_DEFAULTS.protein_blastp_mode
+    losat_search: LosatSearchOptions | None = (
+        LosatSearchOptions(
+            program=args.losat,
+            losatp_mode=args.losatp_mode if args.losat == "losatp" else None,
+            losatp_max_hits=args.losatp_max_hits,
+            losatp_max_target_seqs=args.losatp_max_target_seqs,
+            losatp_member_max_hits=args.losatp_member_max_hits,
+            runtime=LosatRuntimeOptions(
+                losat_executable=args.losat_bin,
+                ncbi_blast_executable=args.ncbi_blast_bin,
+                threads=args.losat_threads,
+            ),
+        )
+        if args.losat
+        else None
     )
-    losatp_bin: str = args.losatp_bin
-    ncbi_blastp_bin: str | None = getattr(args, "ncbi_blastp_bin", None)
-    losatp_threads: int | None = args.losatp_threads
-    protein_blastp_max_hits: int = args.protein_blastp_max_hits
-    protein_blastp_candidate_limit: int | None = args.protein_blastp_candidate_limit
     orthogroup_membership_mode: str = str(
         _LINEAR_OPTION_DEFAULTS.orthogroup_membership_mode
     )
-    orthogroup_member_max_hits: int | None = (
-        _LINEAR_OPTION_DEFAULTS.orthogroup_member_max_hits
-    )
-    align_orthogroup_feature: str = str(args.align_orthogroup_feature or "").strip()
+    similarity_alignment_feature: str = str(
+        args.similarity_alignment_feature or ""
+    ).strip()
     collinear_unit_mode: str = str(
         args.collinear_unit_mode or _LINEAR_OPTION_DEFAULTS.collinearity_unit_mode
     )
@@ -1162,7 +1233,7 @@ def run_linear_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
     normalize_length = args.normalize_length
     if alignment_length < 0:
         raise ValidationError("alignment_length must be >= 0")
-    if blast_files or args.comparisons_table or protein_blastp_mode != "none":
+    if blast_files or args.comparisons_table or losat_search is not None:
         load_comparison = True
     else:
         load_comparison = False
@@ -1445,20 +1516,15 @@ def run_linear_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
             plot_title_font_size=plot_title_font_size,
             blast_files=tuple(blast_files) if blast_files else None,
             comparison_table_file=args.comparisons_table,
-            protein_blastp_mode=protein_blastp_mode,
+            losat_search=losat_search,
             pairwise_match_style=pairwise_match_style,
             collinearity_params=collinearity_params,
             collinearity_unit_mode=collinear_unit_mode,
             collinearity_anchor_mode=collinear_anchor_mode,
             collinearity_search_scope=collinear_search_scope,
             collinearity_color_mode=collinear_color_mode,
-            losatp_bin=losatp_bin,
-            ncbi_blastp_bin=ncbi_blastp_bin,
-            losatp_threads=losatp_threads,
-            protein_blastp_max_hits=protein_blastp_max_hits,
-            protein_blastp_candidate_limit=protein_blastp_candidate_limit,
             orthogroup_membership_mode=orthogroup_membership_mode,
-            orthogroup_member_max_hits=orthogroup_member_max_hits,
+            collinear_infer_orthogroups=args.collinear_infer_orthogroups == "on",
             collinear_max_paralog_links_per_orthogroup=args.collinear_max_paralog_links_per_orthogroup,
             evalue=evalue,
             bitscore=bitscore,
@@ -1467,8 +1533,8 @@ def run_linear_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
         ),
         layout=linear_layout,
         similarity_alignment=(
-            SimilarityAlignmentReference(feature_id=align_orthogroup_feature)
-            if align_orthogroup_feature and source_session is None
+            SimilarityAlignmentReference(feature_id=similarity_alignment_feature)
+            if similarity_alignment_feature and source_session is None
             else None
         ),
         record_options=record_manifest.record_options,
@@ -1489,8 +1555,8 @@ def run_linear_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
         diagram_output_paths=diagram_output_paths,
         overwrite=bool(args.overwrite),
     )
-    _preflight_protein_blastp_output(
-        args.protein_blastp_output,
+    _preflight_losat_output_dir(
+        args.losat_output_dir,
         diagram_output_paths=diagram_output_paths,
         session_output_path=session_output_path,
         overwrite=bool(args.overwrite),
@@ -1518,7 +1584,7 @@ def run_linear_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
                 include_feature_catalog=include_feature_catalog,
             )
         except SimilarityAlignmentReferenceError as exc:
-            raise ValidationError(f"--align_orthogroup_feature {exc.detail}") from exc
+            raise ValidationError(f"--similarity_alignment_feature {exc.detail}") from exc
     for warning in render_result.annotation_warnings:
         logger.warning("%s: %s/%s record #%s (%s): %s", warning.code,
             warning.set_id, warning.annotation_id, warning.record_index + 1,

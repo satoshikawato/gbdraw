@@ -747,12 +747,16 @@ class LinearDiagramRequest:
             )
         if (
             isinstance(self.similarity_alignment, SimilarityAlignmentReference)
-            and self.options.protein_blastp_mode != "orthogroup"
+            and (
+                self.options.losat_search is None
+                or self.options.losat_search.program != "losatp"
+                or self.options.losat_search.losatp_mode != "similarity_groups"
+            )
         ):
             raise SimilarityAlignmentReferenceError(
                 self.similarity_alignment,
-                "requires the orthogroup analysis that resolves it "
-                "(protein_blastp_mode 'orthogroup').",
+                "requires the Similarity groups analysis that resolves it "
+                "(losat_search program 'losatp' with losatp_mode 'similarity_groups').",
             )
         if not isinstance(self.output, RenderOutputRequest):
             raise ValidationError("Linear request output has an unsupported type.")

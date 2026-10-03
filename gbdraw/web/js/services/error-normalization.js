@@ -10,6 +10,7 @@ recordIndex queryIndex subjectIndex depth min_depth max_depth window step tick f
 inner_gap_px outer_gap_px radius width spacing arrow_head_length_ratio arrow_shaft_width_ratio keep_definition_left_aligned color action feature_type qualifier value record_id label_text
 config configOverrides records anchors schema recordKey groupId direction sourceStrand role blast files
 input comparison protein_blastp_max_hits orthogroup_member_max_hits bitscore evalue identity
+losatp_max_hits losatp_max_target_seqs losatp_member_max_hits
 alignment_length collinear_min_anchors collinear_max_gene_gap collinear_block_merge_gap
 collinear_singleton_merge_gap collinear_max_diagonal_drift collinear_gap_penalty
 collinear_nearby_duplicate_window collinear_constant_anchor_score collinear_infer_orthogroups
@@ -143,6 +144,8 @@ const DEFINITIONS = Object.freeze({
 });
 
 const FIELD_LABELS = Object.freeze({ protein_blastp_max_hits: 'Protein BLASTP Pairwise max hits',
+  losatp_max_hits: 'Protein BLASTP Pairwise max hits', losatp_max_target_seqs: 'Protein BLASTP Max target seqs',
+  losatp_member_max_hits: 'Protein BLASTP member hits per protein',
   arrow_head_length_ratio: 'Arrow head length ratio', arrow_shaft_width_ratio: 'Arrow shaft width ratio',
   keep_definition_left_aligned: 'Lock Definition Column', window: 'Window', step: 'Step',
   depth_window: 'Depth Window', depth_step: 'Depth Step', dinucleotide: 'Dinucleotide',

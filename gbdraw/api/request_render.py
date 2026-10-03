@@ -99,6 +99,8 @@ from .options import (
     LinearDiagramOptions,
     LinearMultiRecordOptions,
     LinearRecordTranslation,
+    LosatSearchOptions,
+    losatp_analysis_mode,
 )
 from gbdraw.features.placement import ResolvedPlacementInputs, resolve_placement_inputs
 from gbdraw.features.source import build_source_feature_catalog
@@ -1022,7 +1024,7 @@ def _linear_request_uses_comparisons(request: LinearDiagramRequest) -> bool:
         or options.comparison_table_file
         or options.protein_comparisons
         or options.collinearity_blocks
-        or options.protein_blastp_mode != "none"
+        or losatp_analysis_mode(options.losat_search) != "none"
     )
 
 
@@ -1769,6 +1771,16 @@ def _reference_record_inputs(
     return tuple(records)
 
 
+def _resolved_losat_search(
+    search: LosatSearchOptions | None,
+) -> LosatSearchOptions | None:
+    """Keep the search settings of evidence that the request now carries."""
+
+    if search is None:
+        return None
+    return replace(search, losatp_mode="none", pairs=None)
+
+
 def _resolve_similarity_alignment_reference(
     request: DiagramRequest,
     artifacts: CurrentRequestArtifacts | None,
@@ -1802,7 +1814,7 @@ def _resolve_similarity_alignment_reference(
         records=records,
         options=replace(
             request.options,
-            protein_blastp_mode="none",
+            losat_search=_resolved_losat_search(request.options.losat_search),
             protein_comparisons=metadata.protein_comparisons,
             linear_comparisons=metadata.linear_comparisons,
             orthogroups=metadata.orthogroups,
@@ -1847,7 +1859,7 @@ def _source_protein_mode(
     request: LinearDiagramRequest,
     artifacts: CurrentRequestArtifacts,
 ) -> str:
-    requested = str(request.options.protein_blastp_mode or "none")
+    requested = losatp_analysis_mode(request.options.losat_search)
     if requested != "none":
         return requested
     if artifacts.protein_source_mode in {"pairwise", "orthogroup", "collinear"}:
@@ -1905,7 +1917,7 @@ def _prepare_linear_artifacts(
     )
     needs_protein_identity = bool(
         current_protein
-        or request.options.protein_blastp_mode != "none"
+        or losatp_analysis_mode(request.options.losat_search) != "none"
         or request.options.protein_comparisons is not None
         or request.options.orthogroups is not None
         or request.options.collinearity_blocks is not None
@@ -1934,7 +1946,12 @@ def _prepare_linear_artifacts(
     cache = LosatpCacheManager(
         reusable_current,
         identity_manifest=manifest,
-        threads_per_job=request.options.losatp_threads or "auto",
+        threads_per_job=(
+            request.options.losat_search.runtime.threads
+            if request.options.losat_search is not None
+            else None
+        )
+        or "auto",
     )
     return _PreparedLinearArtifacts(
         cache=cache,
@@ -2128,7 +2145,11 @@ def _build_current_derived_entries(
         },
         "orthogroup": {
             "membershipMode": str(request.options.orthogroup_membership_mode),
-            "memberMaxHits": request.options.orthogroup_member_max_hits,
+            "memberMaxHits": (
+                request.options.losat_search.losatp_member_max_hits
+                if request.options.losat_search is not None
+                else None
+            ),
         },
         "records": [
             {

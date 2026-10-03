@@ -776,6 +776,17 @@ def _project_web_file_inventory(
     return files
 
 
+# Similarity-alignment flags a projected source session drops from its argv:
+# the current flag and the spellings that legacy sessions carry.
+_SIMILARITY_ALIGNMENT_FLAGS = frozenset(
+    {
+        "--similarity_alignment_feature",
+        "--align_orthogroup_feature",
+        "--align-orthogroup-feature",
+    }
+)
+
+
 def _project_session_adjunct_for_current_write(
     session: Mapping[str, Any],
     *,
@@ -815,14 +826,11 @@ def _project_session_adjunct_for_current_write(
             index = 0
             while index < len(args):
                 token = str(args[index])
-                if token in {
-                    "--align_orthogroup_feature",
-                    "--align-orthogroup-feature",
-                }:
+                if token in _SIMILARITY_ALIGNMENT_FLAGS:
                     index += 2
                     continue
                 if token.startswith(
-                    ("--align_orthogroup_feature=", "--align-orthogroup-feature=")
+                    tuple(f"{flag}=" for flag in _SIMILARITY_ALIGNMENT_FLAGS)
                 ):
                     index += 1
                     continue

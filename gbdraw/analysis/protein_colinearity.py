@@ -27,7 +27,7 @@ from gbdraw.analysis.ortholog_paths import OrthologPath, OrthologPathCollection,
 from gbdraw.comparisons.losat_runtime import (
     LosatRawCache,
     LosatRuntimeCallback,
-    LosatSearchOptions,
+    LosatSearchArgs,
     losat_cache_args,
     run_losat_search,
 )
@@ -5644,7 +5644,7 @@ def run_losatp_blastp(
         "losatp",
         query_fasta,
         subject_fasta,
-        options=LosatSearchOptions(
+        options=LosatSearchArgs(
             max_hsps=max_hsps_per_subject,
             max_target_seqs=max_hits,
         ),
@@ -5705,7 +5705,7 @@ def _execute_losatp_search(
             max_hsps_per_subject=max_hsps_per_subject,
             args=losat_cache_args(
                 "losatp",
-                LosatSearchOptions(
+                LosatSearchArgs(
                     max_hsps=max_hsps_per_subject,
                     max_target_seqs=candidate_limit,
                 ),

@@ -37,7 +37,7 @@ from gbdraw.analysis.collinearity import (
 )
 from gbdraw.api.config import apply_config_overrides
 from gbdraw.api.diagram import assemble_linear_diagram_from_records
-from gbdraw.api.options import LinearDiagramOptions
+from gbdraw.api.options import LinearDiagramOptions, LosatSearchOptions
 from gbdraw.api.requests import (
     InMemoryRecordSource,
     LinearDiagramRequest,
@@ -909,7 +909,10 @@ def test_typed_request_max_conflicts_reaches_real_collinearity_consumer(
                 RecordInput(source=InMemoryRecordSource(record)) for record in records
             ),
             options=LinearDiagramOptions(
-                protein_blastp_mode="collinear",
+                losat_search=LosatSearchOptions(
+                    program="losatp",
+                    losatp_mode="collinear",
+                ),
                 collinearity_unit_mode=unit_mode,
                 collinearity_params=params,
             ),
@@ -2091,7 +2094,9 @@ def test_linear_cli_forwards_collinearity_options(
             "--gbk",
             "a.gb",
             "b.gb",
-            "--protein_blastp_mode",
+            "--losat",
+            "losatp",
+            "--losatp_mode",
             "collinear",
             "--collinear_min_anchors",
             "1",
@@ -2121,9 +2126,11 @@ def test_linear_cli_forwards_collinearity_options(
     assert options.collinearity_anchor_mode == "rbh"
     assert options.collinearity_search_scope == "all"
     assert options.orthogroup_membership_mode == "anchor_core_v1"
-    assert options.orthogroup_member_max_hits is None
+    assert options.losat_search is not None
+    assert options.losat_search.losatp_member_max_hits is None
     assert options.collinear_max_paralog_links_per_orthogroup == 2
-    assert options.protein_blastp_mode == "collinear"
+    assert options.losat_search.program == "losatp"
+    assert options.losat_search.losatp_mode == "collinear"
     assert options.protein_comparisons is None
     assert options.collinearity_color_mode == "orientation"
 
@@ -2177,9 +2184,9 @@ def test_linear_cli_help_uses_underscore_option_aliases(capsys: pytest.CaptureFi
     assert exc_info.value.code == 0
     help_text = capsys.readouterr().out
     visible_option_names = [
-        "losatp_bin",
-        "losatp_threads",
-        "protein_blastp_mode",
+        "losat_bin",
+        "losat_threads",
+        "losatp_mode",
         "collinear_min_anchors",
         "collinear_max_unit_gap",
         "collinear_color_mode",
@@ -2189,9 +2196,9 @@ def test_linear_cli_help_uses_underscore_option_aliases(capsys: pytest.CaptureFi
         "session_output",
     ]
     hidden_option_names = [
-        "losatp-bin",
-        "losatp-threads",
-        "protein-blastp-mode",
+        "losat-bin",
+        "losat-threads",
+        "losatp-mode",
         "collinear-min-anchors",
         "collinear-max-unit-gap",
         "collinear-color-mode",
@@ -2210,9 +2217,9 @@ def test_linear_cli_help_uses_underscore_option_aliases(capsys: pytest.CaptureFi
 @pytest.mark.parametrize(
     "option_args",
     [
-        ["--losatp-bin", "losatp"],
-        ["--losatp-threads", "2"],
-        ["--protein-blastp-mode", "pairwise"],
+        ["--losat-bin", "losatp"],
+        ["--losat-threads", "2"],
+        ["--losatp-mode", "pairwise"],
         ["--collinear-min-anchors", "1"],
         ["--collinear-max-unit-gap", "0"],
         ["--collinear-color-mode", "orientation"],
@@ -2270,7 +2277,9 @@ def test_linear_cli_accepts_orientation_identity_collinear_color_mode() -> None:
             "--gbk",
             "a.gb",
             "b.gb",
-            "--protein_blastp_mode",
+            "--losat",
+            "losatp",
+            "--losatp_mode",
             "collinear",
             "--collinear_color_mode",
             "orientation_identity",

@@ -2735,9 +2735,9 @@ def test_gui_only_linear_session_restores_losatp_blastp_args(tmp_path: Path) -> 
         format_override=None,
     )
 
-    assert "--protein_blastp_mode" in spec.args
-    assert spec.args[spec.args.index("--protein_blastp_mode") + 1] == "collinear"
-    assert spec.args[spec.args.index("--losatp_threads") + 1] == "2"
+    assert spec.args[spec.args.index("--losat") + 1] == "losatp"
+    assert spec.args[spec.args.index("--losatp_mode") + 1] == "collinear"
+    assert spec.args[spec.args.index("--losat_threads") + 1] == "2"
     assert spec.args[spec.args.index("--collinear_max_unit_gap") + 1] == "3"
     assert spec.args[spec.args.index("--collinear_max_diagonal_drift") + 1] == "4"
     assert spec.args[spec.args.index("--collinear_max_conflicts_in_merge_gap") + 1] == "6"
@@ -2844,8 +2844,12 @@ def test_gui_only_linear_session_restores_orthogroup_alignment_target(tmp_path: 
         format_override=None,
     )
 
-    assert spec.args[spec.args.index("--protein_blastp_mode") + 1] == "orthogroup"
-    assert spec.args[spec.args.index("--align_orthogroup_feature") + 1] == "target_feature"
+    assert spec.args[spec.args.index("--losat") + 1] == "losatp"
+    assert spec.args[spec.args.index("--losatp_mode") + 1] == "similarity_groups"
+    assert (
+        spec.args[spec.args.index("--similarity_alignment_feature") + 1]
+        == "target_feature"
+    )
 
 
 def test_gui_only_linear_session_restores_top_level_losatp_keys(tmp_path: Path) -> None:
@@ -2873,9 +2877,9 @@ def test_gui_only_linear_session_restores_top_level_losatp_keys(tmp_path: Path) 
         format_override=None,
     )
 
-    assert "--protein_blastp_mode" in spec.args
-    assert spec.args[spec.args.index("--protein_blastp_mode") + 1] == "orthogroup"
-    assert spec.args[spec.args.index("--losatp_threads") + 1] == "4"
+    assert spec.args[spec.args.index("--losat") + 1] == "losatp"
+    assert spec.args[spec.args.index("--losatp_mode") + 1] == "similarity_groups"
+    assert spec.args[spec.args.index("--losat_threads") + 1] == "4"
 
 
 @pytest.mark.parametrize("mode", ["circular", "linear"])
@@ -2927,9 +2931,11 @@ def test_cli_session_keeps_lossless_cli_provenance_out_of_web_config() -> None:
         "AP027133.gb",
         "AP027132.gb",
         "NZ_CP006932.gb",
-        "--protein_blastp_mode",
-        "orthogroup",
-        "--losatp_threads",
+        "--losat",
+        "losatp",
+        "--losatp_mode",
+        "similarity_groups",
+        "--losat_threads",
         "32",
         "--align_center",
         "--separate_strands",
@@ -2996,9 +3002,11 @@ def test_current_cli_session_writer_uses_canonical_linear_inventory() -> None:
         "Beta subtitle",
         "--region",
         "RecB:10-20:rc",
-        "--protein_blastp_mode",
-        "orthogroup",
-        "--align_orthogroup_feature",
+        "--losat",
+        "losatp",
+        "--losatp_mode",
+        "similarity_groups",
+        "--similarity_alignment_feature",
         "target_feature",
     )
     payload = build_session_json(

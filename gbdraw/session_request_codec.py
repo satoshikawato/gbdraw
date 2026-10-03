@@ -36,6 +36,7 @@ from gbdraw.analysis.protein_colinearity import (  # type: ignore[reportMissingI
     compact_ortholog_paths,
     OrthologEdge,
     OrthologPath,
+    normalize_protein_blastp_mode,
 )
 from gbdraw.config.models import GbdrawConfig  # type: ignore[reportMissingImports]
 from gbdraw.exceptions import ValidationError
@@ -78,7 +79,12 @@ from .api.options import (
     LinearRecordTranslation,
     LinearOutputOptions,
     LinearRequestTrackOptions,
+    LOSATP_MODE_WIRE,
+    LosatRuntimeOptions,
+    LosatSearchOptions,
+    losatp_analysis_mode,
 )
+from .comparisons.losat_runtime import AUTOMATIC_LOSAT_BIN
 from .api.requests import (
     CircularBatchRequest,
     CircularDiagramRequest,
@@ -384,30 +390,44 @@ _COMPARISON_SOURCE_FIELDS = frozenset(
         "blast_files",
         "linear_comparisons",
         "protein_comparisons",
-        "protein_comparison_pairs",
         "orthogroups",
         "collinearity_blocks",
     }
 )
-_PIPELINE_FIELDS = (
-    "protein_blastp_mode",
-    "collinearity_params",
-    "collinearity_unit_mode",
-    "collinearity_anchor_mode",
-    "collinearity_search_scope",
-    "collinearity_color_mode",
-    "losatp_bin",
-    "ncbi_blastp_bin",
-    "losatp_threads",
-    "protein_blastp_max_hits",
-    "protein_blastp_candidate_limit",
-    "orthogroup_membership_mode",
-    "orthogroup_member_max_hits",
-    "collinear_infer_orthogroups",
-    "collinear_max_paralog_links_per_orthogroup",
+# ``generatedProteinComparison.settings``: persisted wire key -> typed owner
+# and field (design D6). Wire keys never change with typed names. "options"
+# is LinearDiagramOptions, "search" LosatSearchOptions, "runtime" its
+# LosatRuntimeOptions. The order is the persisted key order.
+_PROTEIN_SETTINGS_WIRE: tuple[tuple[str, str, str], ...] = (
+    ("collinearityParams", "options", "collinearity_params"),
+    ("collinearityUnitMode", "options", "collinearity_unit_mode"),
+    ("collinearityAnchorMode", "options", "collinearity_anchor_mode"),
+    ("collinearitySearchScope", "options", "collinearity_search_scope"),
+    ("collinearityColorMode", "options", "collinearity_color_mode"),
+    ("losatpBin", "runtime", "losat_executable"),
+    ("ncbiBlastpBin", "runtime", "ncbi_blast_executable"),
+    ("losatpThreads", "runtime", "threads"),
+    ("proteinBlastpMaxHits", "search", "losatp_max_hits"),
+    ("proteinBlastpCandidateLimit", "search", "losatp_max_target_seqs"),
+    ("orthogroupMembershipMode", "options", "orthogroup_membership_mode"),
+    ("orthogroupMemberMaxHits", "search", "losatp_member_max_hits"),
+    ("collinearInferOrthogroups", "options", "collinear_infer_orthogroups"),
+    (
+        "collinearMaxParalogLinksPerOrthogroup",
+        "options",
+        "collinear_max_paralog_links_per_orthogroup",
+    ),
 )
-_LEGACY_PIPELINE_FIELDS = (*_PIPELINE_FIELDS, "align_orthogroup_feature")
-_COMPARISON_FIELDS = _COMPARISON_SOURCE_FIELDS | frozenset(_LEGACY_PIPELINE_FIELDS)
+# Schemas 1-7 also stored the retired alignment target in the settings.
+_LEGACY_ALIGNMENT_SETTING = "alignOrthogroupFeature"
+_OPTIONAL_PROTEIN_SETTINGS = frozenset({"collinearInferOrthogroups"})
+_WIRE_LOSATP_MODES = {wire: typed for typed, wire in LOSATP_MODE_WIRE.items()}
+# Settings of a LOSATP search that has not been configured.
+_UNSET_LOSAT_SEARCH = LosatSearchOptions(program="losatp", losatp_mode="none")
+_COMPARISON_FIELDS = _COMPARISON_SOURCE_FIELDS | frozenset(
+    {"losat_search"}
+    | {name for _key, owner, name in _PROTEIN_SETTINGS_WIRE if owner == "options"}
+)
 
 _TABLE_FIELDS = frozenset(
     {
@@ -3301,33 +3321,42 @@ def _encode_comparisons(
                 "valueKind": value_kind,
             }
         )
-    if any(
-        not _same_default(
-            getattr(options, name),
-            getattr(_DEFAULT_LINEAR_OPTIONS, name),
-        )
-        for name in _PIPELINE_FIELDS
-    ) or options.protein_comparison_pairs is not None:
-        settings = {
-            _camel(name): _encode_pipeline_value(name, getattr(options, name))
-            for name in _PIPELINE_FIELDS
-            if name != "protein_blastp_mode"
-        }
+    search = options.losat_search
+    pairs = search.pairs if search is not None else None
+    mode = losatp_analysis_mode(search)
+    settings = _encode_protein_settings(options)
+    if (
+        mode != "none"
+        or pairs is not None
+        or settings != _encode_protein_settings(_DEFAULT_LINEAR_OPTIONS)
+    ):
         result.append(
             {
                 "kind": "generatedProteinComparison",
-                "mode": options.protein_blastp_mode,
+                "mode": mode,
                 "pairs": [
                     {
                         "queryRecordIndex": int(pair[0]),
                         "subjectRecordIndex": int(pair[1]),
                     }
-                    for pair in (options.protein_comparison_pairs or ())
+                    for pair in (pairs or ())
                 ],
                 "settings": settings,
             }
         )
     return result
+
+
+def _encode_protein_settings(options: LinearDiagramOptions) -> dict[str, Any]:
+    search = options.losat_search or _UNSET_LOSAT_SEARCH
+    owners = {"options": options, "search": search, "runtime": search.runtime}
+    settings: dict[str, Any] = {}
+    for key, owner, name in _PROTEIN_SETTINGS_WIRE:
+        value = getattr(owners[owner], name)
+        if key == "losatpBin" and value is None:
+            value = AUTOMATIC_LOSAT_BIN
+        settings[key] = _encode_pipeline_value(key, name, value)
+    return settings
 
 
 def _nucleotide_blast_resource(
@@ -3496,7 +3525,7 @@ def _decode_comparisons(
     return result
 
 
-def _encode_pipeline_value(name: str, value: object) -> Any:
+def _encode_pipeline_value(key: str, name: str, value: object) -> Any:
     if name == "collinearity_params":
         if value is None:
             return None
@@ -3514,7 +3543,7 @@ def _encode_pipeline_value(name: str, value: object) -> Any:
                 for item in fields(value)
             },
         }
-    return _json_value(value, path=f"comparisons.settings.{_camel(name)}")
+    return _json_value(value, path=f"comparisons.settings.{key}")
 
 
 def _decode_pipeline(
@@ -3525,22 +3554,22 @@ def _decode_pipeline(
         required.add("pairs")
     _require_exact_fields(item, path=path, required=required)
     settings = _object(item["settings"], path=f"{path}.settings")
-    pipeline_fields = _PIPELINE_FIELDS if schema >= 8 else _LEGACY_PIPELINE_FIELDS
-    setting_fields = tuple(
-        name for name in pipeline_fields if name != "protein_blastp_mode"
-    )
-    field_map = {_camel(name): name for name in setting_fields}
+    setting_keys = {key for key, _owner, _name in _PROTEIN_SETTINGS_WIRE}
+    if schema < 8:
+        setting_keys.add(_LEGACY_ALIGNMENT_SETTING)
     _require_exact_fields(
         settings, path=f"{path}.settings",
-        required=set(field_map) - {"collinearInferOrthogroups"},
-        optional={"collinearInferOrthogroups"},
+        required=setting_keys - _OPTIONAL_PROTEIN_SETTINGS,
+        optional=set(_OPTIONAL_PROTEIN_SETTINGS),
     )
-    mode = item["mode"]
-    result = {"protein_blastp_mode": mode}
+    mode = normalize_protein_blastp_mode(item["mode"])
+    result: dict[str, Any] = {}
+    search_values: dict[str, Any] = {}
+    runtime_values: dict[str, Any] = {}
+    decoded_pairs: list[tuple[int, int]] = []
     legacy_max_paralog_links: int | None = None
     if schema >= 2:
         pairs = _array(item["pairs"], path=f"{path}.pairs")
-        decoded_pairs: list[tuple[int, int]] = []
         for index, raw_pair in enumerate(pairs):
             pair_path = f"{path}.pairs[{index}]"
             pair = _object(
@@ -3558,14 +3587,21 @@ def _decode_pipeline(
                     ),
                 )
             )
-        # Early schema-2 writers also stored the derived row-adjacent search pairs
-        # used by collinear mode here.  The public option is pairwise-only; current
-        # collinear rendering derives those pairs from the saved layout instead.
-        result["protein_comparison_pairs"] = (
-            tuple(decoded_pairs) if decoded_pairs and mode == "pairwise" else None
-        )
-    for key, name in field_map.items():
+    # Early schema-2 writers also stored the derived row-adjacent search pairs
+    # used by collinear mode here.  The public option is pairwise-only; current
+    # collinear rendering derives those pairs from the saved layout instead.
+    search_pairs = tuple(decoded_pairs) if decoded_pairs and mode == "pairwise" else None
+    owned_settings = [(key, owner, name) for key, owner, name in _PROTEIN_SETTINGS_WIRE]
+    if schema < 8:
+        owned_settings.append((_LEGACY_ALIGNMENT_SETTING, "legacy", "align_orthogroup_feature"))
+    for key, owner, name in owned_settings:
         raw = settings.get(key, True) if name == "collinear_infer_orthogroups" else settings[key]
+        if owner == "search":
+            search_values[name] = raw
+            continue
+        if owner == "runtime":
+            runtime_values[name] = raw
+            continue
         if name == "align_orthogroup_feature":
             if raw is None:
                 continue
@@ -3587,6 +3623,14 @@ def _decode_pipeline(
             result[name] = decoded
         else:
             result[name] = raw
+    search = LosatSearchOptions(
+        program="losatp",
+        losatp_mode=_WIRE_LOSATP_MODES[mode],
+        pairs=search_pairs,
+        runtime=LosatRuntimeOptions(**runtime_values),
+        **search_values,
+    )
+    result["losat_search"] = None if search == _UNSET_LOSAT_SEARCH else search
     if (
         mode == "collinear"
         and legacy_max_paralog_links is not None

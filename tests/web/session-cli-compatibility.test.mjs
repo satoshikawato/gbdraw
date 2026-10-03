@@ -241,7 +241,7 @@ await test('a CLI Linear protein Session keeps the adjacent LOSATP plan it drew'
   try {
     const file = path.join(directory, 'protein.gbdraw-session.json.gz');
     execFileSync('python', ['-m', 'gbdraw.cli', 'linear', '--gbk', mito, lambda,
-      '--protein_blastp_mode', 'orthogroup', '-o', path.join(directory, 'protein'), '--session_output', file], {
+      '--losat', 'losatp', '--losatp_mode', 'similarity_groups', '-o', path.join(directory, 'protein'), '--session_output', file], {
       cwd: directory, env: { ...process.env, PYTHONPATH: root }, stdio: 'pipe', timeout: 1_800_000
     });
     const bytes = gunzipSync(await readFile(file));

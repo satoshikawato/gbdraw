@@ -36,7 +36,7 @@ from gbdraw.analysis.protein_colinearity import (
 from gbdraw.comparisons.losat_runtime import (
     LOSAT_PROGRAMS,
     LosatRuntime,
-    LosatSearchOptions,
+    LosatSearchArgs,
     build_losat_command,
     detect_losat_cli_dialect,
     losat_cache_args,
@@ -52,9 +52,9 @@ TUTORIAL_DATA = REPO_ROOT / "gbdraw" / "web" / "tutorial-data"
 PROGRAMS = ("losatn", "tlosatx", "losatp")
 NCBI_EXECUTABLES = {"losatn": "blastn", "tlosatx": "tblastx", "losatp": "blastp"}
 OPTIONS = {
-    "losatn": LosatSearchOptions(task="megablast"),
-    "tlosatx": LosatSearchOptions(query_gencode=5, db_gencode=2),
-    "losatp": LosatSearchOptions(max_hsps=1, max_target_seqs=5),
+    "losatn": LosatSearchArgs(task="megablast"),
+    "tlosatx": LosatSearchArgs(query_gencode=5, db_gencode=2),
+    "losatp": LosatSearchArgs(max_hsps=1, max_target_seqs=5),
 }
 
 _FAKE_RUNTIME = """#!{python}
@@ -240,7 +240,7 @@ def test_unavailable_runtime_names_the_program_specific_ncbi_fallback(
     assert "needs LOSAT or NCBI BLAST+" in message
     assert "`losat` was not found on PATH" in message
     assert f"`{NCBI_EXECUTABLES[program]}` was not found on PATH" in message
-    assert "--losatp_bin" in message and "--ncbi_blastp_bin" in message
+    assert "--losat_bin" in message and "--ncbi_blast_bin" in message
 
 
 # Argv goldens. LOSATP argv is byte-identical to the pre-owner builders for
@@ -300,7 +300,7 @@ def test_argv_goldens_for_losat_dialects_and_ncbi(program: str, dialect: str) ->
 def test_losatp_argv_omits_unset_options_like_the_previous_builder() -> None:
     losat = LosatRuntime("losat", "losat", "explicit")
     ncbi = LosatRuntime("ncbi-blast", "blastp", "explicit")
-    options = LosatSearchOptions(max_hsps=None, max_target_seqs=None)
+    options = LosatSearchArgs(max_hsps=None, max_target_seqs=None)
 
     assert build_losat_command(
         losat, "losatp", query_path=_Q, subject_path=_S, options=options, dialect="v1"
@@ -343,36 +343,36 @@ def test_cli_dialect_is_probed_once_per_executable_and_only_when_flags_differ(
 
 
 CACHE_ARG_GOLDENS = {
-    ("losatn", LosatSearchOptions(task="megablast")): ["--task", "megablast"],
-    ("losatn", LosatSearchOptions(task="dc-megablast")): ["--task", "dc-megablast"],
-    ("tlosatx", LosatSearchOptions(query_gencode=5, db_gencode=2)): [
+    ("losatn", LosatSearchArgs(task="megablast")): ["--task", "megablast"],
+    ("losatn", LosatSearchArgs(task="dc-megablast")): ["--task", "dc-megablast"],
+    ("tlosatx", LosatSearchArgs(query_gencode=5, db_gencode=2)): [
         "--query-gencode", "5", "--db-gencode", "2",
     ],
-    ("losatp", LosatSearchOptions(max_hsps=1, max_target_seqs=5)): [
+    ("losatp", LosatSearchArgs(max_hsps=1, max_target_seqs=5)): [
         "--max-hsps-per-subject", "1", "--max-target-seqs", "5",
     ],
-    ("losatp", LosatSearchOptions(max_target_seqs=5)): ["--max-target-seqs", "5"],
-    ("losatp", LosatSearchOptions()): [],
+    ("losatp", LosatSearchArgs(max_target_seqs=5)): ["--max-target-seqs", "5"],
+    ("losatp", LosatSearchArgs()): [],
 }
 
 
 @pytest.mark.parametrize(("program", "options"), list(CACHE_ARG_GOLDENS))
-def test_cache_args_keep_the_web_v1_form(program: str, options: LosatSearchOptions) -> None:
+def test_cache_args_keep_the_web_v1_form(program: str, options: LosatSearchArgs) -> None:
     assert losat_cache_args(program, options) == CACHE_ARG_GOLDENS[(program, options)]
 
 
 @pytest.mark.parametrize(
     ("program", "options", "message"),
     [
-        ("losatn", LosatSearchOptions(), "requires"),
-        ("tlosatx", LosatSearchOptions(query_gencode=1), "requires"),
-        ("losatp", LosatSearchOptions(task="megablast"), "does not apply"),
-        ("losatn", LosatSearchOptions(task="megablast", query_gencode=1), "does not apply"),
+        ("losatn", LosatSearchArgs(), "requires"),
+        ("tlosatx", LosatSearchArgs(query_gencode=1), "requires"),
+        ("losatp", LosatSearchArgs(task="megablast"), "does not apply"),
+        ("losatn", LosatSearchArgs(task="megablast", query_gencode=1), "does not apply"),
     ],
 )
 def test_program_options_are_validated_as_data(
     program: str,
-    options: LosatSearchOptions,
+    options: LosatSearchArgs,
     message: str,
 ) -> None:
     with pytest.raises(ValidationError, match=message):
@@ -410,7 +410,7 @@ def test_tlosatx_search_runs_in_the_detected_dialect_and_records_the_runtime(
         "tlosatx",
         ">query_a\nATGAAA\n",
         ">subject_b\nATGAAA\n",
-        options=LosatSearchOptions(query_gencode=11, db_gencode=4),
+        options=LosatSearchArgs(query_gencode=11, db_gencode=4),
         losat_bin=str(binary),
         threads=2,
         runtime_callback=records.append,
@@ -440,7 +440,7 @@ def test_ncbi_runtime_record_has_version_and_no_losat_dialect(tmp_path: Path) ->
         "losatn",
         ">q\nACGT\n",
         ">s\nACGT\n",
-        options=LosatSearchOptions(task="megablast"),
+        options=LosatSearchArgs(task="megablast"),
         ncbi_blast_bin=str(binary),
         runtime_callback=records.append,
     )
@@ -523,7 +523,7 @@ def test_losatp_cache_records_runtime_outside_the_key_and_round_trips(
     assert entry["runtime"] == runtime_record
     assert entry["key"] == build_protein_losat_cache_key(
         pair_identity,
-        args=losat_cache_args("losatp", LosatSearchOptions(max_hsps=1)),
+        args=losat_cache_args("losatp", LosatSearchArgs(max_hsps=1)),
     )
     assert validate_protein_raw_entry_references(entry, extraction.identity_manifest)
 
@@ -607,13 +607,13 @@ def test_native_losatn_reproduces_lambda_de3_bytes(native_losat) -> None:
         encoding="utf-8"
     )
 
-    assert _native_search("losatn", query, subject, LosatSearchOptions(task="megablast")) == expected
+    assert _native_search("losatn", query, subject, LosatSearchArgs(task="megablast")) == expected
 
 
 @pytest.mark.linear
 def test_native_tlosatx_reproduces_lambda_de3_rows_for_any_thread_count(native_losat) -> None:
     query, subject = _lambda_de3()
-    options = LosatSearchOptions(query_gencode=1, db_gencode=1)
+    options = LosatSearchArgs(query_gencode=1, db_gencode=1)
     expected = (TUTORIAL_DATA / "lambda-de3-comparison" / "lambda-de3.tlosatx.tsv").read_text(
         encoding="utf-8"
     )
@@ -644,7 +644,7 @@ def test_native_tlosatx_reproduces_metazoan_mtdna_bytes(
     fixture = TUTORIAL_DATA / "metazoan-mitochondria-comparison"
     query = (fixture / query_fasta).read_text(encoding="utf-8")
     subject = _fasta(TUTORIAL_DATA / "human-mitochondrion" / "HmmtDNA.gbk", width=60)
-    options = LosatSearchOptions(query_gencode=query_gencode, db_gencode=2)
+    options = LosatSearchArgs(query_gencode=query_gencode, db_gencode=2)
 
     assert _native_search("tlosatx", query, subject, options) == (
         fixture / expected_name

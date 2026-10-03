@@ -55,7 +55,6 @@ from gbdraw.analysis.protein_colinearity import (  # type: ignore[reportMissingI
     build_pairwise_protein_blastp_comparisons,
     build_rbh_orthogroup_protein_blastp_comparisons,
     normalize_orthogroup_membership_mode,
-    normalize_protein_blastp_mode,
 )
 from gbdraw.analysis.collinearity import (  # type: ignore[reportMissingImports]
     CollinearityBlock,
@@ -84,9 +83,13 @@ from gbdraw.api.options import (  # type: ignore[reportMissingImports]
     DepthTrackInput,
     LinearDiagramOptions,
     LinearMultiRecordOptions,
+    LosatRuntimeOptions,
+    LosatSearchOptions,
+    losatp_analysis_mode,
     resolve_circular_diagram_options,
     resolve_linear_diagram_options,
 )
+from gbdraw.comparisons.losat_runtime import AUTOMATIC_LOSAT_BIN
 from gbdraw.linear_comparison import ComparisonRecordIdWarning, LinearComparison
 from gbdraw.layout.linear_multi_record import record_pairs_between_adjacent_rows
 from gbdraw.layout.record_coordinates import RecordDisplayTransform
@@ -1579,8 +1582,7 @@ def assemble_linear_diagram_from_records(
     layout: LinearMultiRecordOptions | None = None,
     protein_comparisons: Sequence[DataFrame] | None = None,
     orthogroups: OrthogroupResult | OrthogroupGraphResult | None = None,
-    protein_blastp_mode: ProteinBlastpMode | str = "none",
-    protein_comparison_pairs: Sequence[tuple[int, int]] | None = None,
+    losat_search: LosatSearchOptions | None = None,
     pairwise_match_style: Literal["ribbon", "curve"] | str = "ribbon",
     collinearity_blocks: CollinearityResult | Sequence[CollinearityBlock] | None = None,
     collinearity_params: LosslessCollinearityParameters | None = None,
@@ -1588,15 +1590,9 @@ def assemble_linear_diagram_from_records(
     collinearity_anchor_mode: CollinearityAnchorMode | str = "rbh",
     collinearity_search_scope: CollinearitySearchScope | str = "adjacent",
     collinearity_color_mode: CollinearityColorMode | str = "orientation",
-    losatp_bin: str = "losat",
-    ncbi_blastp_bin: str | None = None,
-    losatp_threads: int | None = None,
-    protein_blastp_max_hits: int = 5,
-    protein_blastp_candidate_limit: int | None = None,
     losatp_cache: LosatpCacheManager | None = None,
     protein_extraction: ProteinExtractionResult | None = None,
     orthogroup_membership_mode: OrthogroupMembershipMode | str = "anchor_core_v1",
-    orthogroup_member_max_hits: int | None = None,
     collinear_infer_orthogroups: bool = True,
     collinear_max_paralog_links_per_orthogroup: int = 2,
     similarity_alignment: SimilarityAlignmentPlan | None = None,
@@ -1674,24 +1670,21 @@ def assemble_linear_diagram_from_records(
         isinstance(item, LinearComparison) for item in linear_comparisons
     ):
         raise ValidationError("linear_comparisons must contain LinearComparison values")
+    if losat_search is not None and not isinstance(losat_search, LosatSearchOptions):
+        raise ValidationError("losat_search must be LosatSearchOptions or None")
+    normalized_protein_blastp_mode = losatp_analysis_mode(losat_search)
+    runtime = losat_search.runtime if losat_search is not None else LosatRuntimeOptions()
     normalized_protein_pairs: tuple[tuple[int, int], ...] | None = None
-    if protein_comparison_pairs is not None:
+    if losat_search is not None and losat_search.pairs is not None:
         normalized_pairs: list[tuple[int, int]] = []
-        for pair in protein_comparison_pairs:
-            if (
-                not isinstance(pair, Sequence)
-                or len(pair) != 2
-                or not all(isinstance(index, int) and not isinstance(index, bool) for index in pair)
-            ):
-                raise ValidationError("protein_comparison_pairs must contain integer index pairs")
-            query_index, subject_index = int(pair[0]), int(pair[1])
-            if query_index < 0 or subject_index < 0 or query_index >= len(records) or subject_index >= len(records):
-                raise ValidationError("protein_comparison_pairs contains an out-of-range record index")
+        for query_index, subject_index in losat_search.pairs:
+            if query_index >= len(records) or subject_index >= len(records):
+                raise ValidationError("pairs contains an out-of-range record index")
             if query_index == subject_index:
-                raise ValidationError("protein_comparison_pairs cannot compare a record to itself")
+                raise ValidationError("pairs cannot compare a record to itself")
             normalized_pairs.append((query_index, subject_index))
         if len(set(normalized_pairs)) != len(normalized_pairs):
-            raise ValidationError("protein_comparison_pairs must not contain duplicates")
+            raise ValidationError("pairs must not contain duplicates")
         normalized_protein_pairs = tuple(normalized_pairs)
         _ordered_indices, pair_rows = resolve_record_row_positions(
             records,
@@ -1700,15 +1693,12 @@ def assemble_linear_diagram_from_records(
         for query_index, subject_index in normalized_protein_pairs:
             if abs(pair_rows[query_index] - pair_rows[subject_index]) != 1:
                 raise ValidationError(
-                    "protein_comparison_pairs must connect records in adjacent rows: "
+                    "pairs must connect records in adjacent rows: "
                     f"query=#{query_index + 1} row={pair_rows[query_index] + 1}, "
                     f"subject=#{subject_index + 1} row={pair_rows[subject_index] + 1}."
                 )
-    normalized_protein_blastp_mode = normalize_protein_blastp_mode(protein_blastp_mode)
-    if normalized_protein_pairs is not None and normalized_protein_blastp_mode != "pairwise":
-        raise ValidationError("protein_comparison_pairs requires protein_blastp_mode='pairwise'")
     if normalized_protein_pairs is not None and linear_comparisons:
-        raise ValidationError("Pass either protein_comparison_pairs or linear_comparisons, not both")
+        raise ValidationError("Pass either losat_search pairs or linear_comparisons, not both")
     normalized_pairwise_match_style = normalize_pairwise_match_style(pairwise_match_style)
     normalized_collinearity_anchor_mode = normalize_collinearity_anchor_mode(
         str(collinearity_anchor_mode)
@@ -1727,28 +1717,20 @@ def assemble_linear_diagram_from_records(
         )
         if len(set(collinearity_rows)) < len(records):
             collinearity_comparison_pairs = record_pairs_between_adjacent_rows(collinearity_rows)
-    if int(protein_blastp_max_hits) <= 0:
-        raise ValidationError("protein_blastp_max_hits must be > 0")
-    if orthogroup_member_max_hits is not None and int(orthogroup_member_max_hits) <= 0:
-        raise ValidationError("orthogroup_member_max_hits must be > 0 or None")
     if int(collinear_max_paralog_links_per_orthogroup) <= 0:
         raise ValidationError("collinear_max_paralog_links_per_orthogroup must be > 0")
-    if losatp_threads is not None and int(losatp_threads) <= 0:
-        raise ValidationError("losatp_threads must be > 0 or None")
-    if protein_blastp_candidate_limit is not None and int(protein_blastp_candidate_limit) <= 0:
-        raise ValidationError("protein_blastp_candidate_limit must be > 0 or None")
     if normalized_protein_blastp_mode != "none" and protein_comparisons is not None:
-        raise ValidationError("Pass either protein_blastp_mode or protein_comparisons, not both.")
+        raise ValidationError("Pass either a LOSATP losat_search or protein_comparisons, not both.")
     if collinearity_blocks is not None and (
         normalized_protein_blastp_mode != "none" or protein_comparisons is not None or blast_files
     ):
         raise ValidationError(
-            "Pass collinearity_blocks without protein_blastp_mode, protein_comparisons, or blast_files."
+            "Pass collinearity_blocks without a LOSATP losat_search, protein_comparisons, or blast_files."
         )
     if normalized_protein_blastp_mode != "none" and blast_files:
-        raise ValidationError("protein_blastp_mode cannot be used with blast_files.")
+        raise ValidationError("A LOSATP losat_search cannot be used with blast_files.")
     if normalized_protein_blastp_mode != "none" and len(records) < 2:
-        raise ValidationError("protein_blastp_mode requires at least two records")
+        raise ValidationError("A LOSATP losat_search requires at least two records")
     if similarity_alignment is not None and not isinstance(
         similarity_alignment, SimilarityAlignmentPlan
     ):
@@ -1889,13 +1871,19 @@ def assemble_linear_diagram_from_records(
         return _invoke_protein_analysis_helper(
             mode,
             analysis_records,
-            losatp_bin=losatp_bin,
-            ncbi_blastp_bin=ncbi_blastp_bin,
-            losatp_threads=losatp_threads,
-            pairwise_max_hits=int(protein_blastp_max_hits),
-            candidate_limit=protein_blastp_candidate_limit,
+            losatp_bin=runtime.losat_executable or AUTOMATIC_LOSAT_BIN,
+            ncbi_blastp_bin=runtime.ncbi_blast_executable,
+            losatp_threads=runtime.threads,
+            pairwise_max_hits=(
+                losat_search.losatp_max_hits if losat_search is not None else 5
+            ),
+            candidate_limit=(
+                losat_search.losatp_max_target_seqs if losat_search is not None else None
+            ),
             orthogroup_membership_mode=normalized_orthogroup_membership_mode,
-            orthogroup_member_max_hits=orthogroup_member_max_hits,
+            orthogroup_member_max_hits=(
+                losat_search.losatp_member_max_hits if losat_search is not None else None
+            ),
             max_paralog_links_per_orthogroup=int(
                 collinear_max_paralog_links_per_orthogroup
             ),
@@ -3425,8 +3413,7 @@ def _build_linear_diagram(
         layout=layout,
         protein_comparisons=options.protein_comparisons,
         orthogroups=options.orthogroups,
-        protein_blastp_mode=options.protein_blastp_mode,
-        protein_comparison_pairs=options.protein_comparison_pairs,
+        losat_search=options.losat_search,
         pairwise_match_style=options.pairwise_match_style,
         collinearity_blocks=options.collinearity_blocks,
         collinearity_params=options.collinearity_params,
@@ -3434,15 +3421,9 @@ def _build_linear_diagram(
         collinearity_anchor_mode=normalized_collinearity_anchor_mode,
         collinearity_search_scope=options.collinearity_search_scope,
         collinearity_color_mode=options.collinearity_color_mode,
-        losatp_bin=options.losatp_bin,
-        ncbi_blastp_bin=options.ncbi_blastp_bin,
-        losatp_threads=options.losatp_threads,
-        protein_blastp_max_hits=options.protein_blastp_max_hits,
-        protein_blastp_candidate_limit=options.protein_blastp_candidate_limit,
         losatp_cache=losatp_cache,
         protein_extraction=protein_extraction,
         orthogroup_membership_mode=options.orthogroup_membership_mode,
-        orthogroup_member_max_hits=options.orthogroup_member_max_hits,
         collinear_infer_orthogroups=options.collinear_infer_orthogroups,
         collinear_max_paralog_links_per_orthogroup=options.collinear_max_paralog_links_per_orthogroup,
         similarity_alignment=similarity_alignment,

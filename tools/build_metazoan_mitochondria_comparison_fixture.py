@@ -17,7 +17,7 @@ from Bio import SeqIO
 
 from gbdraw.comparisons.losat_runtime import (
     LosatRuntime,
-    LosatSearchOptions,
+    LosatSearchArgs,
     bundled_losat_runtime,
     losat_runtime_record,
     run_losat_search,
@@ -195,7 +195,7 @@ def _run_once(spec: ComparisonSpec, runtime: LosatRuntime) -> bytes:
         "tlosatx",
         _render_fasta(spec.query).decode("ascii"),
         _render_fasta(HUMAN).decode("ascii"),
-        options=LosatSearchOptions(
+        options=LosatSearchArgs(
             query_gencode=spec.query.genetic_code,
             db_gencode=HUMAN.genetic_code,
         ),
