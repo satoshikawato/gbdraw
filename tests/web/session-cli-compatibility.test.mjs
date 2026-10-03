@@ -265,3 +265,44 @@ await test('a CLI Linear protein Session keeps the adjacent LOSATP plan it drew'
     await rm(directory, { recursive: true, force: true });
   }
 });
+
+// B15: a 0.13.0 CLI protein sidecar (version 30, no renderRequest; provenance in
+// tests/fixtures/sessions/cli-linear-protein.v30.provenance.json) is a CLI-only
+// draft. The legacy migrator states the adjacent LOSATP comparison its CLI drew,
+// so Generate rebuilds it; without --protein_blastp_mode the same sidecar has
+// no Web comparison draft (No comparison).
+await test('a 0.13.0 CLI Linear protein sidecar keeps the adjacent LOSATP plan it drew', async () => {
+  const bytes = gunzipSync(await readFile(path.join(
+    root, 'tests/fixtures/sessions/cli-linear-protein.v30.gbdraw-session.json.gz'
+  )));
+  const session = JSON.parse(bytes);
+  assert.equal(session.version, 30);
+  assert.equal(Object.hasOwn(session, 'renderRequest'), false);
+  const loadDraft = async (document) => {
+    const result = await load(JSON.stringify(document));
+    assert.equal(result.status, 'ok', result.error?.stack);
+    const filesData = await serializeActiveRenderFiles('linear', state);
+    const comparisonPlanSnapshot = resolveLinearComparisonPlan({
+      plan: state.linearComparisonPlan, sequences: filesData.linearSeqs, layout: [],
+      losatProgram: state.losatProgram.value, blastpMode: state.losat.blastp.mode
+    });
+    const candidate = buildCanonicalRenderRequest({ state, filesData, comparisonPlanSnapshot });
+    return {
+      plan: structuredClone(state.linearComparisonPlan),
+      program: state.losatProgram.value,
+      comparisons: candidate.renderRequest.comparisons.map(item => [item.kind, item.mode])
+    };
+  };
+  assert.deepEqual(await loadDraft(session), {
+    plan: { ...DEFAULT_PLAN, mode: 'adjacent' }, program: 'blastp',
+    comparisons: [['generatedProteinComparison', 'orthogroup']]
+  });
+  // The 0.13.0 writer without a protein mode stores LOSAT program blastn.
+  const withoutProtein = structuredClone(session);
+  withoutProtein.config.cliOptions.rawArgs = ['--gbk', 'P1.gb', 'P2.gb', '-o', 'legacy-protein'];
+  withoutProtein.cliInvocation.args = withoutProtein.config.cliOptions.rawArgs;
+  withoutProtein.config.losatProgram = 'blastn';
+  withoutProtein.config.adv.losatProgram = 'blastn';
+  const none = await loadDraft(withoutProtein);
+  assert.deepEqual([none.plan, none.comparisons], [DEFAULT_PLAN, []]);
+});
