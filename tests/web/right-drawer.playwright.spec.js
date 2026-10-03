@@ -853,11 +853,13 @@ test(`individual Feature, Label, and Legend edits update the mounted SVG: ${live
     const input = page.locator('.feature-popup input[placeholder="Edit label text"]');
     await input.fill('S05 direct label retained');
     await page.getByRole('button', { name: 'Apply Label', exact: true }).click();
-    await expect.poll(() => page.evaluate(() => window.__GBDRAW_APP__.labelReflowLastError), { timeout: 180000 })
+    await expect.poll(() => page.evaluate(() => window.__GBDRAW_APP__.labelReflowLastError?.summary), { timeout: 180000 })
       .toContain('without recognized diagnostic information');
-    expect(await page.evaluate(() => window.__GBDRAW_APP__.labelReflowLastError))
+    expect(await page.evaluate(() => JSON.stringify(window.__GBDRAW_APP__.labelReflowLastError)))
       .not.toContain('S05 forced live rerender failure');
     await expect(page.locator('[data-live-application-feedback]')).toContainText('Live edit failed');
+    // B11: a Worker failure that changes no input keeps Retry.
+    await expect(page.locator('[data-live-application-feedback]')).toContainText('Retry the live edit or use Generate.');
     expect(await page.evaluate((id) => window.__GBDRAW_APP__.labelTextFeatureOverrides[id], target)).toBe('S05 direct label retained');
     const retained = await snapshot(page);
     expect(retained.result).toContain('S05 direct label retained');

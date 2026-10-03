@@ -172,6 +172,34 @@ test('a display start beyond the record is an input error with a working action'
   await inspectSafeDetails(page, alert, failed.error);
 });
 
+// B11: a live edit rerenders the committed Session with the current editor
+// tables, so a failure that repeats for that request offers no Retry of the
+// live edit; the note above the Result shows the cause and Generate.
+test('a live edit that fails the same way for the same request offers no Retry', async ({ page }) => {
+  test.setTimeout(180000);
+  await openApp(page);
+  await loadSession(page, 'BGC0000708-BGC0000713');
+  const before = await page.evaluate(() => window.__GBDRAW_APP__.results[0].content);
+  await setNextDisplayStart(page, 1);
+  // The forced reflow request is the path a label visibility edit uses.
+  await page.evaluate(async () => {
+    const { state } = await import('/gbdraw/web/js/state.js');
+    state.labelReflowForceRequestReason.value = 'label-edit';
+    state.labelReflowForceRequestSeq.value += 1;
+  });
+  await expect.poll(() => page.evaluate(() => window.__GBDRAW_APP__.labelReflowLastError?.code ?? null),
+    { timeout: 120000 }).toBe('RENDER_FAILED');
+  const failed = await page.evaluate(() => JSON.parse(JSON.stringify(window.__GBDRAW_APP__.labelReflowLastError)));
+  expect(failed).toMatchObject({ code: 'RENDER_FAILED', stage: 'render', context: { exceptionType: 'ValidationError' },
+    actions: ['generate'] });
+  const note = page.locator('[data-live-application-feedback]');
+  await expect(note).toContainText('Live edit failed: direct edits already applied are kept');
+  await expect(note).toContainText('The diagram engine failed while drawing this diagram.');
+  await expect(note).toContainText('Change the edit, or change the settings and use Generate.');
+  await expect(note).not.toContainText('Retry the live edit');
+  expect(await page.evaluate(() => window.__GBDRAW_APP__.results[0].content)).toBe(before);
+});
+
 test('@pr-smoke live and downloaded standalone search retain JavaScript regex and word targets', async ({page}, info) => {
   test.setTimeout(180000);
   page.on('dialog', dialog=>dialog.accept());
