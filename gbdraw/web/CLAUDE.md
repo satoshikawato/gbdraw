@@ -361,6 +361,11 @@ Circular and Linear editors), `tests/web/circular-track-slots.test.mjs`, and
 - Undo, Redo, and the header buttons share one reactive availability
   (`historyAvailability`), busy while an artifact replacement or checkpoint is
   open or an action owns the open intent.
+- The History intent holds every file binding by reference
+  (`buildIntentFilesData` in `services/history-snapshot.js`), the BLAST rows and
+  comparison sequences of a LOSAT-cache replay included: its ring rows and the
+  managed track slots' `series_key` name those rows. Only the generated Linear
+  comparisons stay in artifact checkpoints.
 - The Generate-owned feature catalog is held by reference in checkpoints, history
   entries, and Session rollback, and is never cloned through JSON.
   `state.featureCatalog` is null or an admitted catalog (`admittedFeatureCatalog`

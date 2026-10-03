@@ -864,7 +864,10 @@ one step, whether it is made with the pointer, a click on its label text, or
 the keyboard, and also when a text field had focus; a text field's edit is its
 own step. A file chosen for an input is one step, also when a button or label
 opens the picker, such as **Add Seq** or an uploaded BLAST row's **Comparison
-sequence (optional)**. Ctrl+Z undoes and Ctrl+Shift+Z or Ctrl+Y redoes (Cmd on macOS), also
+sequence (optional)**. In a Session whose Circular rings replay saved LOSAT
+rows, Undo and Redo of a ring change, such as **Remove series** or **Add Seq**,
+also restore those rows, so a custom stack keeps its ring rows and the next
+Generate gives the loaded diagram. Ctrl+Z undoes and Ctrl+Shift+Z or Ctrl+Y redoes (Cmd on macOS), also
 while a select has focus; in a text field these keys keep the browser's text
 undo. Undo and Redo, like a failed Session Load, restore each setting exactly as
 it was: a setting that was not set, such as a track slot side or the Circular
