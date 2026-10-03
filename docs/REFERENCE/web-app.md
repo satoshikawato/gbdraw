@@ -859,7 +859,9 @@ the renderer's text measurements; Generate applies it. **Undo** and **Redo** tra
 editor changes. Each change of a checkbox, radio button, select, or button is
 one step, whether it is made with the pointer, a click on its label text, or
 the keyboard, and also when a text field had focus; a text field's edit is its
-own step. Ctrl+Z undoes and Ctrl+Shift+Z or Ctrl+Y redoes (Cmd on macOS), also
+own step. A file chosen for an input is one step, also when a button or label
+opens the picker, such as **Add Seq** or an uploaded BLAST row's **Comparison
+sequence (optional)**. Ctrl+Z undoes and Ctrl+Shift+Z or Ctrl+Y redoes (Cmd on macOS), also
 while a select has focus; in a text field these keys keep the browser's text
 undo. Undo and Redo, like a failed Session Load, restore each setting exactly as
 it was: a setting that was not set, such as a track slot side or the Circular
