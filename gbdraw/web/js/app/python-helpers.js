@@ -16,6 +16,7 @@ from gbdraw.web_support.error_adapter import private_web_execution, serialize_we
 from gbdraw.web_support.rule_matching import evaluate_rules_json
 from gbdraw.web_support.config_overrides import validate_web_config_overrides_json
 from gbdraw.web_support.similarity_alignment import resolve_similarity_alignment_json
+from gbdraw.web_support.comparison_sequences import read_comparison_sequence_json
 
 _WEB_LOSATP_FILTERED_HIT_CACHE = {}
 _WEB_LOSATP_CONVERTED_PAYLOAD_CACHE = {}
@@ -1697,6 +1698,7 @@ _WEB_JSON_HELPERS = {
     "hydrate_protein_losat_tsv_json": (hydrate_protein_losat_tsv_json, "hydrateProteinLosatTsv"),
     "list_sequence_records": (list_sequence_records, "listSequenceRecords"),
     "list_gff_fasta_records": (list_gff_fasta_records, "listGffFastaRecords"),
+    "read_comparison_sequence_json": (read_comparison_sequence_json, "readComparisonSequence"),
     "measure_legend_text_json": (measure_legend_text_json, "measureLegendText"),
     "generate_legend_entry_svg": (generate_legend_entry_svg, "generateLegendEntrySvg"),
     "extract_features_from_genbank": (extract_features_from_genbank, "feature-extraction"),

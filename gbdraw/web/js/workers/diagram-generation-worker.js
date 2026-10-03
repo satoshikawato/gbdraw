@@ -754,6 +754,15 @@ const HELPER_OPERATION_SPECS = Object.freeze({
       ]
     )
   },
+  [DIAGRAM_HELPER_OPERATIONS.READ_COMPARISON_SEQUENCE]: {
+    keys: ['files'],
+    fileRoles: ['source'],
+    run: (pyodide, _payload, paths, operation) => callJsonHelper(
+      pyodide,
+      'read_comparison_sequence_json',
+      [requireHelperFile(paths, 'source', operation)]
+    )
+  },
   [DIAGRAM_HELPER_OPERATIONS.LIST_GFF_FASTA_RECORDS]: {
     keys: ['files'],
     fileRoles: ['gff', 'fasta'],

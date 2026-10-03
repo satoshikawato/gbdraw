@@ -2660,10 +2660,14 @@ export const createRunAnalysis = ({
               throwIfGenerationCanceled();
               const comparisonEntry = comparisonEntries[index];
               const fileObj = comparisonEntry?.file || comparisonEntry;
-              const queryFasta = await readFileText(fileObj);
-              if (getFastaSequenceLength(queryFasta) <= 0) {
-                throw new Error(`Pairwise comparison FASTA #${index + 1} has no sequence data.`);
-              }
+              // One sequence reader (D12): the Python helper reads FASTA, GenBank
+              // or DDBJ and returns the query FASTA that the CLI ring hashes.
+              const sequenceResponse = await runDiagramHelperOperation(
+                DIAGRAM_HELPER_OPERATIONS.READ_COMPARISON_SEQUENCE,
+                { files: [{ role: 'source', bytes: await cloneFileBytesForTransfer(fileObj) }] }
+              );
+              if (sequenceResponse.result?.error) throw sequenceResponse.result.error;
+              const queryFasta = String(sequenceResponse.result?.fasta || '');
               const queryHash = await hashText(queryFasta);
               const querySequenceKey = `circular-query:${queryHash}`;
               sequenceEntriesByKey.set(querySequenceKey, queryFasta);

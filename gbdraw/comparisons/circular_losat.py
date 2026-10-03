@@ -86,6 +86,29 @@ def _validated_rows(text: str, *, query_ids: set[str], subject_ids: set[str]) ->
     return text
 
 
+def comparison_query_fasta(comparison: ComparisonSequenceFile, *, ordinal: int) -> str:
+    """LOSAT query FASTA of one comparison genome: every record, Web FASTA layout.
+
+    The CLI ring search and the Web worker helper
+    (``gbdraw.web_support.comparison_sequences``) hash this text, so one
+    sequence has one raw key whatever its file format or FASTA layout.
+    """
+
+    if not comparison.records:
+        raise ValidationError(
+            f"Comparison sequence file #{ordinal} "
+            f"({os.path.basename(comparison.path)}) has no sequence record.",
+            diagnostic={
+                "code": "INPUT_UNREADABLE",
+                "reason": "SEQUENCE_MISSING",
+                "field": "comparison_sequence",
+            },
+        )
+    return "".join(
+        losat_fasta_text(record.id, str(record.seq)) for record in comparison.records
+    )
+
+
 def _ring_gencodes(options: CircularDiagramOptions, count: int) -> list[int]:
     gencodes = tuple(options.conservation_losat_gencodes or ())
     if not gencodes:
@@ -114,17 +137,10 @@ def resolve_circular_conservation_losat(
     runtime = search.runtime
     comparison_files = tuple(load_sequences())
     paths = tuple(options.conservation_sequence_files or ())
-    for index, comparison in enumerate(comparison_files, start=1):
-        if not comparison.records:
-            raise ValidationError(
-                f"Comparison sequence file #{index} "
-                f"({os.path.basename(comparison.path)}) has no sequence record.",
-                diagnostic={
-                    "code": "INPUT_UNREADABLE",
-                    "reason": "SEQUENCE_MISSING",
-                    "field": "comparison_sequence",
-                },
-            )
+    query_fastas = [
+        comparison_query_fasta(comparison, ordinal=index)
+        for index, comparison in enumerate(comparison_files, start=1)
+    ]
     if search.program == "losatn" and search.losatn_task != "megablast":
         require_losat_task_support(
             str(search.losatn_task),
@@ -153,9 +169,7 @@ def resolve_circular_conservation_losat(
     cache = LosatRawCache()
     results: list[ConservationSearchResult] = []
     for index, comparison in enumerate(comparison_files):
-        query_fasta = "".join(
-            losat_fasta_text(record.id, str(record.seq)) for record in comparison.records
-        )
+        query_fasta = query_fastas[index]
         query_hash = sha256_text(query_fasta)
         args = search_args(index)
         cache_args = losat_cache_args(spec, args)
@@ -230,6 +244,7 @@ def resolve_circular_conservation_losat(
 
 __all__ = [
     "CIRCULAR_CONSERVATION_FLOW",
+    "comparison_query_fasta",
     "resolve_circular_conservation_losat",
     "ring_losat_filename",
 ]

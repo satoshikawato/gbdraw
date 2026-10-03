@@ -1354,27 +1354,42 @@ test('neutral conservation replay delegates lazy resources to the shared reader'
     ''
   ].join('\n');
   const referenceFasta = '>reference-a\nACGTACGT\n';
+  // The LOSAT query of each ring: the shared Python reader's canonical FASTA.
   const comparisonTexts = [
     '>comparison-b\nTTTTAAAA\n',
     '>comparison-c\nAAAATTTT\n',
     '>comparison-d\nCCCCGGGG\n'
+  ];
+  // Ring files as uploaded: a non-canonical FASTA, a GenBank flat file and a
+  // canonical FASTA. Each gives the same raw key as its canonical FASTA (D12).
+  const comparisonFileTexts = [
+    '>comparison-b first ring\r\nttttaaaa\r\n',
+    [
+      'LOCUS       comparison-c 8 bp DNA',
+      'DEFINITION  comparison c.',
+      'ORIGIN',
+      '        1 aaaatttt',
+      '//',
+      ''
+    ].join('\n'),
+    comparisonTexts[2]
   ];
   const resourceTable = adoptCurrentSessionResources({
     'reference-a': encodedResource('genbank', 'reference-a.gb', referenceText),
     'comparison-b': encodedResource(
       'conservation-fasta-file',
       'comparison-b.fasta',
-      comparisonTexts[0]
+      comparisonFileTexts[0]
     ),
     'comparison-c': encodedResource(
       'conservation-fasta-file',
-      'comparison-c.fasta',
-      comparisonTexts[1]
+      'comparison-c.gbk',
+      comparisonFileTexts[1]
     ),
     'comparison-d': encodedResource(
       'conservation-fasta-file',
       'comparison-d.fasta',
-      comparisonTexts[2]
+      comparisonFileTexts[2]
     )
   });
   const referenceView = createSessionResourceFileView(resourceTable, 'reference-a');
@@ -1521,6 +1536,16 @@ test('neutral conservation replay delegates lazy resources to the shared reader'
 
   try {
     const circularResult = result('lazy-circular.svg', 'lazy-circular');
+    const helperMessageCount = workerMessages.filter(({ type }) => type === 'helper').length;
+    comparisonTexts.forEach((fasta, index) => workerHelperResponses.push({
+      ok: true,
+      result: {
+        fasta,
+        format: index === 1 ? 'genbank' : 'fasta',
+        label: '',
+        recordIds: [fasta.slice(1).split('\n')[0]]
+      }
+    }));
     workerResponses.push(response(circularResult, validCatalog(circularResult.name)));
     assert.deepEqual(
       await runner.runAnalysis(),
@@ -1528,10 +1553,23 @@ test('neutral conservation replay delegates lazy resources to the shared reader'
       JSON.stringify(state.errorLog.value)
     );
     assert.equal(losatCalls, 0, 'verified circular cache entries must prevent LOSAT execution');
+    // Every ring file goes through the one Python reader (no JavaScript reader).
+    assert.deepEqual(
+      workerMessages.filter(({ type }) => type === 'helper').slice(helperMessageCount)
+        .map(({ operation }) => operation),
+      ['readComparisonSequence', 'readComparisonSequence', 'readComparisonSequence']
+    );
+    assert.equal(workerHelperResponses.length, 0);
     assert.deepEqual(
       resourceMetrics.filter(({ name }) => name === 'resourceTextReadCount')
         .map(({ resourceId }) => resourceId),
-      ['reference-a', 'comparison-b', 'comparison-c', 'comparison-d']
+      ['reference-a']
+    );
+    assert.deepEqual(
+      resourceMetrics.filter(({ name }) => name === 'resourceByteReadCount')
+        .map(({ resourceId }) => resourceId)
+        .filter((resourceId) => resourceId.startsWith('comparison-')),
+      ['comparison-b', 'comparison-c', 'comparison-d']
     );
     assert.deepEqual(
       workerMessages.filter(({ type }) => type === 'run').at(-1)
