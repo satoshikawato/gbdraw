@@ -85,8 +85,7 @@ import { formatElapsedMs, reproducibilityLabel } from './run-info.js';
 import { createLegendLayout } from './legend-layout.js';
 import {
   COMPOSITION_METADATA_ATTRIBUTE,
-  COMPOSITION_SCHEMA_ATTRIBUTE,
-  compositionUserDeltas
+  COMPOSITION_SCHEMA_ATTRIBUTE
 } from './legend-layout/composition-actions.js';
 import { createResultsManager } from './results.js';
 import { setupWatchers } from './watchers.js';
@@ -1178,15 +1177,7 @@ export const createAppSetup = () => {
     buildUiStateData,
     applyUiStateData,
     buildLegendEntryOwners: () => legendActions.captureLegendEntryOwners(),
-    buildCompositionIntent: () => {
-      const svg = svgContainer.value?.querySelector?.('svg') || null;
-      if (!svg) return null;
-      try {
-        return compositionUserDeltas(svg);
-      } catch (_error) {
-        return null;
-      }
-    },
+    buildCompositionIntent: () => legendLayout.captureCompositionIntent(),
     buildFeatureStateData,
     applyFeatureStateData,
     buildEditorStateData,
@@ -2642,8 +2633,15 @@ export const createAppSetup = () => {
   historySnapshots.setAfterApplyHistoryIntent(async (_intent, { domains, changes } = {}) => {
     if (!svgContainer.value?.querySelector?.('svg')) return;
     const changedDomains = domains instanceof Set ? domains : new Set();
-    if (changedDomains.has('ui')) {
-      legendLayout.reconcileCompositionUserDeltas(_intent?.ui?.compositionUserDeltas);
+    // B17: restore the offsets of each Result whose composition this step changed.
+    const compositionResults = new Set();
+    (Array.isArray(changes) ? changes : []).forEach(({ path, before, after } = {}) => {
+      if (path?.[0] !== 'ui' || path[1] !== 'compositionUserDeltas') return;
+      if (path.length > 2) compositionResults.add(path[2]);
+      else [before, after].forEach((record) => Object.keys(record || {}).forEach((key) => compositionResults.add(key)));
+    });
+    if (compositionResults.size > 0) {
+      legendLayout.reconcileCompositionUserDeltas(_intent?.ui?.compositionUserDeltas, compositionResults);
     }
     const colors = changedDomains.has('config') || changedDomains.has('features');
     const rulesChanged = Array.isArray(changes) && changes.some((change) => (

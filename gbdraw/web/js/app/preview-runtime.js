@@ -726,6 +726,17 @@ export const createPreviewRuntime = ({ state, serializeSvg }) => {
     runtime.lastInvalidationReason = String(reason || 'unknown');
   };
 
+  // The one write of a Result's committed content; the Result keeps its
+  // committed identity.
+  const writeResultContent = (resultIndex, content) => {
+    const nextResults = [...state.results.value];
+    nextResults[resultIndex] = {
+      ...state.results.value[resultIndex],
+      content
+    };
+    state.results.value = nextResults;
+  };
+
   const flushActiveResult = ({ force = false, markIncremental = true } = {}) => {
     const runtime = activeRuntime || (force ? ensureRuntimeForCurrentSvg() : null);
     if (!runtime?.svg) return false;
@@ -745,12 +756,7 @@ export const createPreviewRuntime = ({ state, serializeSvg }) => {
       return false;
     }
     if (markIncremental && state.skipCaptureBaseConfig) state.skipCaptureBaseConfig.value = true;
-    const nextResults = [...state.results.value];
-    nextResults[resultIndex] = {
-      ...state.results.value[resultIndex],
-      content
-    };
-    state.results.value = nextResults;
+    writeResultContent(resultIndex, content);
     runtime.dirty = false;
     runtime.dirtyReasons.clear();
     return true;
@@ -845,6 +851,28 @@ export const createPreviewRuntime = ({ state, serializeSvg }) => {
     return flushActiveResult();
   };
 
+  // B17 (R1, R11): an edit of one Result's SVG. The displayed Result is
+  // edited in place and committed like an editor edit. Another Result's
+  // committed content is parsed, edited, and written once, so History restores
+  // the Result a step was made on while a different Result is displayed.
+  const commitResultEdit = (resultIndex, edit, reason = 'result-edit') => {
+    const index = Number(resultIndex);
+    const result = state.results.value[index];
+    if (!result || typeof edit !== 'function') return false;
+    const runtime = activeRuntime || ensureRuntimeForCurrentSvg();
+    if (runtime?.svg && runtime.resultIndex === index) {
+      return edit(runtime.svg, { mounted: true }) ? commitActiveResultEdit(reason) : false;
+    }
+    const Parser = globalThis.DOMParser;
+    if (typeof Parser !== 'function' || typeof result.content !== 'string') return false;
+    const svg = new Parser().parseFromString(result.content, 'image/svg+xml').documentElement;
+    if (String(svg?.localName || '').toLowerCase() !== 'svg' || !edit(svg, { mounted: false })) return false;
+    const content = serializeSvg(svg);
+    if (content === result.content) return false;
+    writeResultContent(index, content);
+    return true;
+  };
+
   // D-07: show the canonical editor operations on the displayed Result with
   // the executor that Generate admission uses, then persist the Result once.
   const applyEditorOperations = (operations, { afterApply = null } = {}) => {
@@ -865,6 +893,7 @@ export const createPreviewRuntime = ({ state, serializeSvg }) => {
     bindMountedResult,
     clearActiveRuntime,
     commitActiveResultEdit,
+    commitResultEdit,
     configureMountedResultBinder,
     createMountedResultContext,
     flushActiveResult,

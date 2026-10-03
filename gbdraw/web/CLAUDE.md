@@ -358,6 +358,13 @@ Circular and Linear editors), `tests/web/circular-track-slots.test.mjs`, and
   the captured state as is: `applyConfigData(..., { resolveTrackPlacements: false })`
   and `applyEditorStateData(..., { normalized: true })`. Unset values stay unset;
   resolving them belongs to the request builder, not to the restore.
+- The History intent holds neither the selected Result nor the offsets read
+  from the mounted root (`buildUiIntentData` in
+  `services/history-snapshot.js`). Composition offsets are recorded per Result
+  by committed identity (`captureCompositionIntent` in `app/legend-layout.js`),
+  and Undo and Redo restore the Result a step was made on through
+  `commitResultEdit` in `app/preview-runtime.js`, also while another Result is
+  displayed.
 
 Guards:
 
@@ -366,6 +373,8 @@ Guards:
   state, and last-in-first-out Undo; each changed control adds exactly one step.
 - `tests/web/history-generated-authority.playwright.spec.js`: checkpoint Undo and
   Redo, a mode round trip, and Undo while Generate runs.
+- `tests/web/multi-result-edit-matrix.playwright.spec.js`: Undo and Redo of
+  drags on one batch Result while another Result is displayed (B17).
 - `tests/web/history-config-restore.test.mjs`: catalog identity through Undo,
   Redo, and Session rollback, and unset settings that stay unset through intent
   and checkpoint Undo and Redo (also `session-draft-authority.test.mjs` for the
