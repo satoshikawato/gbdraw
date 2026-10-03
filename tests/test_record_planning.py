@@ -35,7 +35,7 @@ from gbdraw.circular import _circular_cli_record_cardinality
 from gbdraw.exceptions import ValidationError
 from gbdraw.io.record_select import parse_record_selector
 from gbdraw.io.regions import parse_region_spec
-from gbdraw.linear import _linear_cli_record_cardinality
+from gbdraw.linear import _linear_cli_record_cardinality, linear_main
 from gbdraw.session import (
     build_session_document,
     materialize_session,
@@ -449,6 +449,41 @@ def test_cli_legacy_cardinality_is_explicit(
         load_comparison=comparisons,
     ) is expected
     assert _circular_cli_record_cardinality() is RecordCardinality.ALL
+
+
+@pytest.mark.linear
+def test_cli_rejects_more_blast_files_than_adjacent_record_pairs(tmp_path: Path) -> None:
+    # With -b and two files, the CLI loads the first record of each file, so
+    # two records have one adjacent pair and the second table has none.
+    fixtures = Path(__file__).parent / "fixtures"
+    tables = []
+    for name, query, subject in (("a", "R2c", "LOCTEST"), ("b", "LOCTEST", "R3c")):
+        table = tmp_path / f"{name}.tsv"
+        table.write_text(f"{query}\t{subject}\t90.0\t100\t0\t0\t1\t100\t1\t100\t1e-20\t180\n", encoding="utf-8")
+        tables.append(str(table))
+    prefix = tmp_path / "out"
+    session = tmp_path / "out.gbdraw-session.json"
+
+    with pytest.raises(ValidationError, match=r"Too many -b/--blast files \(expected at most 1\)") as raised:
+        linear_main(
+            [
+                "--gbk",
+                str(fixtures / "web_comparison_shared_block.gb"),
+                str(fixtures / "feature_location_search.gb"),
+                "-b",
+                *tables,
+                "-o",
+                str(prefix),
+                "-f",
+                "svg",
+                "--session_output",
+                str(session),
+            ]
+        )
+
+    assert raised.value.diagnostic == {"code": "COMPARISON_INPUT"}
+    assert "2 loaded record(s)" in str(raised.value)
+    assert sorted(path.name for path in tmp_path.iterdir()) == ["a.tsv", "b.tsv"]
 
 
 def test_record_collection_labels_are_strict_strings() -> None:
