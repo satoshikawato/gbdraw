@@ -491,7 +491,8 @@ Retired names and their replacements are listed under
   without its extension (#740).
 - Fixed: a Web Session with two Circular LOSAT rings of one sequence now loads.
   The Session stores one LOSAT cache entry per raw key, as the CLI does; a Session
-  that repeats a key reports a Session diagnostic instead of an unknown error.
+  that repeats a key reports a Session diagnostic instead of an unknown error
+  (#743).
 
 ## [0.14.0](./docs/RELEASE_NOTES_0.14.0.md)
 
