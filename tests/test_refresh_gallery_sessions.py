@@ -1635,3 +1635,51 @@ def test_orthogroup_gallery_preserves_session_members_and_rendered_ids(
     assert all(
         str(feature["svgId"]) in dom_ids for feature in features
     )
+
+
+@pytest.mark.parametrize("compressed", [False, True])
+def test_refresh_rewrites_retired_flags_in_the_recorded_cli_invocation(
+    tmp_path: Path,
+    compressed: bool,
+) -> None:
+    invocation = {
+        "schema": 1,
+        "mode": "linear",
+        "args": [
+            "--protein_blastp_mode",
+            "orthogroup",
+            "--gbk",
+            "A.gb",
+            "--align_orthogroup_feature",
+            "P1",
+            "--losatp_threads",
+            "2",
+        ],
+        "fileBindings": [{"argIndex": 3, "slot": "files.linearSeqs[0].gb", "name": "A.gb"}],
+    }
+    payload = json.dumps({"keep": [1, 2], "cliInvocation": invocation}).encode()
+    path = tmp_path / ("s.json.gz" if compressed else "s.json")
+    path.write_bytes(gzip.compress(payload) if compressed else payload)
+
+    refresh_gallery_sessions_module._canonicalize_recorded_cli_invocation(
+        path, mode="linear"
+    )
+
+    raw = path.read_bytes()
+    session = json.loads(gzip.decompress(raw) if compressed else raw)
+    assert session["keep"] == [1, 2]
+    args = session["cliInvocation"]["args"]
+    assert args == [
+        "--losat",
+        "losatp",
+        "--losatp_mode",
+        "similarity_groups",
+        "--gbk",
+        "A.gb",
+        "--similarity_alignment_feature",
+        "P1",
+        "--losat_threads",
+        "2",
+    ]
+    (binding,) = session["cliInvocation"]["fileBindings"]
+    assert args[binding["argIndex"]] == "A.gb"
