@@ -39,7 +39,7 @@ const buildHarness = ({
   visibilityOverrides = {},
   rulePreparation = {}
 } = {}) => {
-  const mutations = { dirty: 0, flush: 0 };
+  const mutations = { commit: 0 };
   const state = {
     mode: ref('linear'),
     generatedMode: ref('linear'),
@@ -83,12 +83,10 @@ const buildHarness = ({
     ref, computed: get => ({ get value() { return get(); } }),
     state,
     previewRuntime: {
-      markActiveResultDirty() {
-        mutations.dirty += 1;
+      commitActiveResultEdit(reason) {
+        assert.equal(reason, 'feature-label');
+        mutations.commit += 1;
         return true;
-      },
-      flushActiveResult() {
-        mutations.flush += 1;
       }
     },
     rulePreparation
@@ -114,7 +112,7 @@ for (const leaderCount of [0, 1, 2]) {
     });
     assert.equal(harness.svg.querySelector('[data-part="similar"]').getAttribute('display'), null);
     assert.equal(harness.svg.querySelector('[data-part="unrelated"]').getAttribute('display'), null);
-    assert.deepEqual(harness.mutations, { dirty: 1, flush: 1 });
+    assert.deepEqual(harness.mutations, { commit: 1 });
     assert.equal(harness.state.labelReflowForceRequestSeq.value, 0);
 
     harness.state.clickedFeature.value.labelVisibility = 'on';
@@ -123,7 +121,7 @@ for (const leaderCount of [0, 1, 2]) {
       assert.equal(part.getAttribute('display'), null);
       assert.equal(part.getAttribute('data-gbdraw-label-visibility-preview'), null);
     });
-    assert.deepEqual(harness.mutations, { dirty: 2, flush: 2 });
+    assert.deepEqual(harness.mutations, { commit: 2 });
     assert.equal(harness.state.labelReflowForceRequestSeq.value, 0);
   });
 }
@@ -145,7 +143,7 @@ test('Default restores only display values owned by the visibility preview', asy
   authoredHidden.state.clickedFeature.value.labelVisibility = 'on';
   await authoredHidden.actions.updateClickedFeatureLabelText();
   assert.equal(leader.getAttribute('display'), 'none');
-  assert.deepEqual(authoredHidden.mutations, { dirty: 0, flush: 0 });
+  assert.deepEqual(authoredHidden.mutations, { commit: 0 });
 });
 
 test('stored visibility projection uses the same complete visual-unit mutation', () => {
@@ -156,7 +154,7 @@ test('stored visibility projection uses the same complete visual-unit mutation',
     assert.equal(part.getAttribute('display'), 'none');
     assert.equal(part.getAttribute('data-gbdraw-label-visibility-preview'), 'off');
   });
-  assert.deepEqual(harness.mutations, { dirty: 1, flush: 1 });
+  assert.deepEqual(harness.mutations, { commit: 1 });
   assert.equal(harness.state.labelReflowForceRequestSeq.value, 0);
 });
 
@@ -176,7 +174,7 @@ test('one action serializes combined text and visual-unit visibility changes onc
   exactParts(harness.svg, harness.state.clickedFeature.value.svg_id).forEach((part) => {
     assert.equal(part.getAttribute('display'), 'none');
   });
-  assert.deepEqual(harness.mutations, { dirty: 1, flush: 1 });
+  assert.deepEqual(harness.mutations, { commit: 1 });
 });
 
 for (const [name, options, labelKey] of [
@@ -195,7 +193,7 @@ for (const [name, options, labelKey] of [
       assert.equal(part.getAttribute('display'), null);
       assert.equal(part.getAttribute('data-gbdraw-label-visibility-preview'), null);
     });
-    assert.deepEqual(harness.mutations, { dirty: 0, flush: 0 });
+    assert.deepEqual(harness.mutations, { commit: 0 });
     assert.equal(harness.state.labelReflowForceRequestSeq.value, 1);
     assert.equal(harness.state.labelReflowForceRequestReason.value, 'label-visibility-apply');
   });
@@ -212,7 +210,7 @@ test('stored override on a metadata-free Result fails closed without partial mut
     assert.equal(part.getAttribute('display'), null);
     assert.equal(part.getAttribute('data-gbdraw-label-visibility-preview'), null);
   });
-  assert.deepEqual(harness.mutations, { dirty: 0, flush: 0 });
+  assert.deepEqual(harness.mutations, { commit: 0 });
   assert.equal(harness.state.labelReflowForceRequestSeq.value, 1);
   assert.equal(
     harness.state.labelReflowForceRequestReason.value,
@@ -281,7 +279,7 @@ test('a feature visibility edit commits its label once and queues the label refl
   exactParts(harness.svg, featureId).forEach((part) => {
     assert.equal(part.getAttribute('display'), 'none');
   });
-  assert.deepEqual(harness.mutations, { dirty: 1, flush: 1 });
+  assert.deepEqual(harness.mutations, { commit: 1 });
   assert.equal(harness.state.labelReflowRequestSeq.value, 1);
   assert.equal(harness.state.labelReflowRequestReason.value, 'feature-visibility');
   assert.equal(harness.state.labelReflowForceRequestSeq.value, 0);
@@ -339,7 +337,7 @@ test('a Label TSV import writes the label intent of every batch Result once (B6)
   assert.deepEqual(state.labelTextBulkOverrides, { alpha: 'BULK_A' });
   assert.deepEqual(state.labelTextFeatureOverrideSources, { fa: 'alpha', fb: 'beta' });
   assert.equal(displayed.querySelector('text').textContent, 'BULK_A');
-  assert.deepEqual(harness.mutations, { dirty: 1, flush: 1 });
+  assert.deepEqual(harness.mutations, { commit: 1 });
   assert.deepEqual(messages, ['Loaded 2 row(s). Applied to 2 label(s).']);
 });
 
@@ -353,5 +351,5 @@ test('displaying a Result shows the current label intent when none remains (B6, 
   const harness = buildHarness({ svg, featureId: 'fb' });
   harness.actions.syncLabelEditor();
   assert.equal(svg.querySelector('text').textContent, 'beta');
-  assert.deepEqual(harness.mutations, { dirty: 1, flush: 1 });
+  assert.deepEqual(harness.mutations, { commit: 1 });
 });
