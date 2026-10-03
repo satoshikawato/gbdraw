@@ -1,6 +1,6 @@
 const { test, expect } = require('@playwright/test');
 const { execFileSync } = require('node:child_process');
-const { writeFileSync } = require('node:fs');
+const { readFileSync, writeFileSync } = require('node:fs');
 const { openApp } = require('./helpers/app-lifecycle.cjs');
 
 // F-4 (OD-3, #694): a LOSAT derived payload holds the displayed direction of
@@ -247,3 +247,80 @@ test('Turning off a CLI grid reconverts LOSATP Collinear blocks and draws the fr
   expect(rows.links).toEqual(fresh.links);
   expect(rows.paths).toEqual(fresh.paths);
 });
+
+// PR5-B1: a CLI Session stores the records of one file in one resource with
+// index selectors, so the Web plans the same source-file searches and every
+// raw CLI search (same protein FASTA, same searchContext keys) is a cache hit.
+const FAKE_CLI_LOSAT = `#!/usr/bin/env python3
+import sys
+args = sys.argv[1:]
+if args in (["--version"], ["-version"]):
+    print("losat 0.1.0")
+    sys.exit(0)
+if len(args) == 2 and args[1] == "--help":
+    sys.exit(0)
+def proteins(path):
+    entries, current = {}, None
+    with open(path, encoding="utf-8") as handle:
+        for line in handle:
+            line = line.strip()
+            if line.startswith(">"):
+                current = line[1:].split()[0]
+                entries[current] = ""
+            elif current:
+                entries[current] += line
+    return entries
+query = proteins(args[args.index("-query") + 1])
+subject = proteins(args[args.index("-subject") + 1])
+for query_id, query_sequence in query.items():
+    for subject_id, subject_sequence in subject.items():
+        if query_sequence == subject_sequence:
+            print("\\t".join([query_id, subject_id, "100", "10", "0", "0", "1", "10", "1", "10",
+                             "1e-30", "200"]))
+`;
+
+const saveCliMultiRecordSession = (testInfo) => {
+  const multi = testInfo.outputPath('two-records.gbk');
+  writeFileSync(multi, makeGenbank('FileA1', [1, 121, 241]) + makeGenbank('FileA2', [31, 151, 271]));
+  const single = testInfo.outputPath('FileB.gbk');
+  writeFileSync(single, makeGenbank('FileB', [61, 181, 271]));
+  const losat = testInfo.outputPath('losat');
+  writeFileSync(losat, FAKE_CLI_LOSAT, { mode: 0o755 });
+  const tablePath = testInfo.outputPath('records.tsv');
+  writeFileSync(tablePath, `gbk\trecord_id\n${multi}\tFileA1\n${multi}\tFileA2\n${single}\tFileB\n`);
+  const prefix = testInfo.outputPath('cli-multi-record');
+  execFileSync('python', ['-m', 'gbdraw.cli', 'linear', '--records_table', tablePath,
+    '--losat', 'losatp', '--losatp_mode', 'similarity_groups', '--losat_bin', losat,
+    '--losat_threads', '1', '--output', prefix, '--format', 'svg', '--save_session'], {
+    env: { ...process.env, PYTHONPATH: process.cwd() }
+  });
+  return `${prefix}.gbdraw-session.json`;
+};
+
+test('The Web reuses every raw LOSATP search of a CLI Session over a multi-record file', async ({ page }, testInfo) => {
+  test.setTimeout(420000);
+  const sessionPath = saveCliMultiRecordSession(testInfo);
+  await installProteinExecutor(page);
+  await openApp(page);
+  page.once('dialog', (dialog) => dialog.accept());
+  await page.locator('input[accept^=".json,"]').first().setInputFiles(sessionPath);
+  await expect.poll(() => page.evaluate(() => window.__GBDRAW_APP__.linearSeqs.length), { timeout: 60000 })
+    .toBe(3);
+  const run = await generate(page);
+  // Nine record-pair results, all from the CLI raw entries; nothing is searched.
+  expect({ hits: run.cache.cacheHits, misses: run.cache.cacheMisses }).toEqual({ hits: 9, misses: 0 });
+  expect(run.executorCalls).toBe(0);
+  expect(run.links.length).toBeGreaterThan(0);
+
+  const session = JSON.parse(readFileSync(sessionPath, 'utf8'));
+  expect(session.renderRequest.records.map((record) => [record.source.resourceId, record.selector]))
+    .toEqual([
+      ['record-1-genbank', { kind: 'recordIndex', index: 0 }],
+      ['record-1-genbank', { kind: 'recordIndex', index: 1 }],
+      ['record-3-genbank', null]
+    ]);
+  // Nine record-pair entries; the four between the files carry the file database.
+  expect(session.losatCache.entries).toHaveLength(9);
+  expect(session.losatCache.entries.filter((entry) => entry.searchContext)).toHaveLength(4);
+});
+
