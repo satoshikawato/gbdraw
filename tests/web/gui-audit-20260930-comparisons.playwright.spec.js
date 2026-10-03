@@ -282,6 +282,10 @@ for (const [source, writeSession] of Object.entries(cliBlastSessions)) {
     // D-36: the CLI comparison stays read-only and is reused through Inherit.
     expect(await page.evaluate(() => window.__GBDRAW_APP__.importedComparisonIntent.disposition))
       .toBe('PRESERVED_READ_ONLY');
+    // B15: the replacement draft is the Web default (No comparison), so Replace
+    // with current controls waits until the user sets up a comparison.
+    expect(await page.evaluate(() => [window.__GBDRAW_APP__.linearComparisonGlobalAction,
+      window.__GBDRAW_APP__.importedComparisonCanReplace])).toEqual(['none', false]);
     await evaluateWithRetainedPromise(page, async () => {
       await window.__GBDRAW_APP__.inheritImportedComparison();
     });
