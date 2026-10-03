@@ -1510,8 +1510,12 @@ const createLayoutPreferences = () => ({
   assert.equal(Object.prototype.hasOwnProperty.call(intent.editorState, 'featureCatalog'), false);
   assert.equal(Object.prototype.hasOwnProperty.call(intent.orthogroupState, 'groups'), false);
   assert.equal(Object.prototype.hasOwnProperty.call(intent.files, 'linearCanonicalComparisons'), false);
-  assert.equal(Object.prototype.hasOwnProperty.call(intent.files, 'c_conservation_sequence_sources'), false);
-  assert.equal(Object.prototype.hasOwnProperty.call(intent.files, 'c_conservation_blasts'), false);
+  // B23: a LOSAT-cache replay's comparison sequences are held by reference only.
+  assert.deepEqual(intent.files.c_conservation_blasts, []);
+  assert.deepEqual(
+    Object.keys(intent.files.c_conservation_sequence_sources[0]).sort(),
+    ['fileId', 'lastModified', 'name', 'size', 'type']
+  );
 
   // B21: with uploaded BLAST rows, the optional comparison sequence is a user
   // choice, so the intent holds it and Undo restores it.
@@ -1521,6 +1525,50 @@ const createLayoutPreferences = () => ({
   state.files.c_conservation_sequence_sources = [];
   await snapshots.applyHistoryIntent(uploadIntent, { changes: [{ path: ['files'] }] });
   assert.deepEqual(state.files.c_conservation_sequence_sources.map((file) => file?.name), ['generated-source.fa']);
+
+  // B23: in a LOSAT-cache replay the ring rows and managed track slots name the
+  // derived BLAST rows, so Undo and Redo of a ring removal restore those rows
+  // and their comparison sequences with the ring files.
+  const derivedBlasts = ['b', 'c', 'd'].map((id) => makeFile(`comparison-${id}.losatn.tsv`, 60));
+  const derivedSources = ['b', 'c', 'd'].map((id) => makeFile(`comparison-${id}.fasta`, 1234));
+  const ringFastas = ['b', 'c', 'd'].map((id) => makeFile(`comparison-${id}.fasta`, 1234));
+  Object.assign(state.files, {
+    c_conservation_blasts: [...derivedBlasts],
+    c_conservation_blasts_source: 'losat-cache',
+    c_conservation_fastas: [...ringFastas],
+    c_conservation_sequence_sources: [...derivedSources]
+  });
+  const replayHistory = createHistoryManager({
+    fileStore,
+    collectCurrentFileIds: snapshots.collectCurrentFileIds,
+    buildIntent: snapshots.buildHistoryIntent,
+    applyIntent: snapshots.applyHistoryIntent,
+    buildCheckpoint: () => {
+      throw new Error('a ring removal must not build an artifact checkpoint');
+    },
+    applyCheckpoint: snapshots.applyArtifactCheckpoint
+  });
+  await replayHistory.initializeIntentBaseline('Loaded session');
+  const replayRows = () => ({
+    blasts: [...state.files.c_conservation_blasts],
+    source: state.files.c_conservation_blasts_source,
+    fastas: [...state.files.c_conservation_fastas],
+    sequenceSources: [...state.files.c_conservation_sequence_sources]
+  });
+  const loadedRows = replayRows();
+  await replayHistory.runUndoable('Remove series', () => {
+    state.files.c_conservation_blasts = derivedBlasts.slice(1);
+    state.files.c_conservation_fastas = ringFastas.slice(1);
+    state.files.c_conservation_sequence_sources = derivedSources.slice(1);
+  });
+  const removedRows = replayRows();
+  await replayHistory.undo();
+  assert.deepEqual(replayRows(), loadedRows);
+  replayRows().blasts.forEach((file, index) => assert.equal(file, derivedBlasts[index]));
+  await replayHistory.redo();
+  assert.deepEqual(replayRows(), removedRows);
+  await replayHistory.undo();
+  assert.deepEqual(replayRows(), loadedRows);
 }
 
 {

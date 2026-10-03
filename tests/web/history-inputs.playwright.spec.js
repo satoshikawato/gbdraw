@@ -539,3 +539,51 @@ test('a GenBank or DDBJ ring added through Add Seq keeps its record label throug
     await expectState(states[index], index, states.length - 1 - index, `Redo to state ${index}`);
   }
 });
+
+const replayState = (page) => page.evaluate(() => {
+  const app = window.__GBDRAW_APP__;
+  const names = (files) => (files || []).map((file) => file?.name || null);
+  return {
+    source: app.files.c_conservation_blasts_source,
+    blasts: names(app.files.c_conservation_blasts),
+    fastas: names(app.files.c_conservation_fastas),
+    sequenceSources: names(app.files.c_conservation_sequence_sources),
+    rows: app.circularConservation.series.map((entry) => [entry.label, entry.fileName]),
+    slots: (app.adv.circular_track_slots || [])
+      .filter((slot) => slot?.renderer === 'sequence_conservation')
+      .map((slot) => [slot.id, slot.params?.series_key, slot.params?.label])
+  };
+});
+
+// B23: the custom stack's ring slots name the LOSAT-cache replay's BLAST rows,
+// so Undo restores those rows with the ring rows and the next Generate matches.
+test('Undo of a ring change in a LOSAT-cache replay restores its rows and Generate result', async ({ page }, testInfo) => {
+  test.setTimeout(300_000);
+  await preparePage(page);
+  await loadSession(page, conservationSession);
+  const customStack = page.locator('label', { hasText: 'Use custom stack' }).locator('input[type="checkbox"]');
+  await reveal(customStack);
+  await customStack.check();
+  const baseline = await generate(page);
+  const loaded = await replayState(page);
+  expect(loaded.source).toBe('losat-cache');
+  expect(loaded.blasts).toHaveLength(3);
+  expect(loaded.slots).toHaveLength(3);
+  const [steps] = await historyCounts(page);
+  const undo = page.getByRole('button', { name: 'Undo', exact: true });
+  const removeSeries = page.locator('button[title="Remove series"]');
+  await reveal(removeSeries.first());
+  for (const index of [0, 2]) {
+    await removeSeries.nth(index).click();
+    await expect.poll(async () => (await replayState(page)).rows.length).toBe(2);
+    await expectHistory(page, steps + 1, 0, 'Change setting');
+    await undo.click();
+    await expect.poll(() => replayState(page), { message: `Undo Remove series ${index}` }).toEqual(loaded);
+  }
+  await page.locator('input[type="file"][accept^=".fa,.fas,.fasta,.fna,.ffn,.gb"]')
+    .setInputFiles(fastaFile(testInfo, 'ring-e.fasta'));
+  await expectHistory(page, steps + 1, 0, 'Change uploaded file', ringReadTimeout);
+  await undo.click();
+  await expect.poll(() => replayState(page), { message: 'Undo Add Seq' }).toEqual(loaded);
+  expect(await generate(page)).toBe(baseline);
+});
