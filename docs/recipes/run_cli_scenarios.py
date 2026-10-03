@@ -1190,12 +1190,10 @@ def _assert_pinned_losat(command: list[str], *, scenario_id: str) -> None:
             f"{scenario_id} must exercise automatic bundled-runtime selection."
         )
 
-    from gbdraw.analysis.protein_colinearity import (  # noqa: PLC2701
-        _resolve_protein_blastp_runtime,
-    )
+    from gbdraw.comparisons.losat_runtime import resolve_losat_runtime
 
     with ExitStack() as stack:
-        runtime = _resolve_protein_blastp_runtime("losat", None, stack)
+        runtime = resolve_losat_runtime("losatp", stack=stack)
         if runtime.kind != "losat" or runtime.source != "bundled":
             raise RecipeContractError(
                 f"{scenario_id} did not resolve the bundled LOSAT runtime."

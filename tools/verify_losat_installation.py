@@ -27,6 +27,7 @@ import gbdraw
 from gbdraw import cli as gbdraw_cli
 from gbdraw import losat_setup as setup
 from gbdraw.analysis import collinearity, protein_colinearity as protein
+from gbdraw.comparisons import losat_runtime
 
 
 def runtime_identity(expected_mode: str) -> dict:
@@ -102,14 +103,14 @@ def conda_subdir() -> str:
     raise ValueError(f"Unsupported initial conda target: {system} / {machine}")
 
 
-def prepare_runtime(installation_mode: str, launcher: list[str]) -> protein.ProteinBlastpRuntime:
+def prepare_runtime(installation_mode: str, launcher: list[str]) -> losat_runtime.LosatRuntime:
     if installation_mode == "managed":
         if setup.managed_losat() is not None:
             raise ValueError("Acceptance requires a fresh target cache for the first download")
         subprocess.run([*launcher, "-m", "gbdraw.cli", "setup-losat"], check=True)
 
     with ExitStack() as stack:
-        runtime = protein._resolve_protein_blastp_runtime("losat", None, stack)
+        runtime = losat_runtime.resolve_losat_runtime("losatp", stack=stack)
 
     if installation_mode == "managed":
         installed = setup.managed_losat()
@@ -306,7 +307,7 @@ def main() -> None:
     if args.installation_mode == "managed":
         report["installation"] = json.loads((installed.parent / "INSTALL.json").read_text())
     searches = []
-    original_search = protein._run_protein_blastp_subprocess
+    original_search = losat_runtime._run_losat_subprocess
 
     def recorded_search(command, **kwargs):
         folder = args.output.parent / f"search-{len(searches) + 1:03d}"
@@ -326,7 +327,7 @@ def main() -> None:
     records = fixture_records(query_path)
     with patch.object(setup, "urlopen", side_effect=AssertionError("offline download attempted")), patch.object(
         socket, "create_connection", side_effect=AssertionError("offline connection attempted")
-    ), patch.object(protein, "_run_protein_blastp_subprocess", side_effect=recorded_search):
+    ), patch.object(losat_runtime, "_run_losat_subprocess", side_effect=recorded_search):
         if args.installation_mode == "managed":
             if setup.setup_losat() != installed:
                 raise ValueError("Managed setup did not preserve the selected LOSAT executable")

@@ -137,10 +137,10 @@ def test_cache_corruption_does_not_fall_back(distribution, monkeypatch):
     monkeypatch.setattr(setup, "urlopen", Mock(side_effect=AssertionError("network forbidden")))
     with pytest.raises(ValidationError, match="binary checksum mismatch"):
         setup.setup_losat()
-    from gbdraw.analysis import protein_colinearity as protein
-    monkeypatch.setattr(protein, "_conda_losatp_runtime", lambda: None)
+    from gbdraw.comparisons import losat_runtime
+    monkeypatch.setattr(losat_runtime, "_conda_losat_runtime", lambda: None)
     with ExitStack() as stack, pytest.raises(ValidationError, match="binary checksum mismatch"):
-        protein._resolve_protein_blastp_runtime("losat", None, stack)
+        losat_runtime.resolve_losat_runtime("losatp", stack=stack)
 
 
 def test_interrupted_download_can_be_retried(distribution, monkeypatch):
@@ -174,15 +174,15 @@ def test_version_failure_never_installs(distribution, monkeypatch):
 
 
 def test_managed_resolver_precedes_bundled_and_explicit_precedes_managed(distribution, monkeypatch):
-    from gbdraw.analysis import protein_colinearity as protein
+    from gbdraw.comparisons import losat_runtime
     distribution()
     binary = setup.setup_losat()
-    monkeypatch.setattr(protein, "_conda_losatp_runtime", lambda: None)
-    monkeypatch.setattr(protein, "_bundled_losatp_resource", Mock(side_effect=AssertionError("bundled discovery")))
+    monkeypatch.setattr(losat_runtime, "_conda_losat_runtime", lambda: None)
+    monkeypatch.setattr(losat_runtime, "_bundled_losat_resource", Mock(side_effect=AssertionError("bundled discovery")))
     with ExitStack() as stack:
-        assert protein._resolve_protein_blastp_runtime("losat", None, stack).executable == str(binary)
-        assert protein._resolve_protein_blastp_runtime("custom", None, stack).executable == "custom"
-        assert protein._resolve_protein_blastp_runtime("losat", "blastp", stack).executable == "blastp"
+        assert losat_runtime.resolve_losat_runtime("losatp", stack=stack).executable == str(binary)
+        assert losat_runtime.resolve_losat_runtime("losatp", losat_bin="custom", stack=stack).executable == "custom"
+        assert losat_runtime.resolve_losat_runtime("losatp", ncbi_blast_bin="blastp", stack=stack).executable == "blastp"
 
 
 def test_unpublished_lock_never_downloads(tmp_path, monkeypatch):
