@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import base64
+import gzip
 import json
+import re
 from dataclasses import replace
 from pathlib import Path
 
@@ -69,6 +71,23 @@ _VERSION_40_LEGACY_ALIGNMENT_SESSION = (
     / "fixtures"
     / "sessions"
     / "BGC0000708-BGC0000713.v40-schema5.json"
+)
+_RELEASE_0_13_0_SESSION = (
+    Path(__file__).parent
+    / "fixtures"
+    / "sessions"
+    / "BGC0000708-BGC0000713.v30.gbdraw-session.json.gz"
+)
+# Record group x translations in the SVG that release 0.13.0 wrote for
+# `gbdraw linear --session <_RELEASE_0_13_0_SESSION> -o replay -f svg`
+# (`git archive 0.13.0 gbdraw`, run with PYTHONPATH). Record 5 is reverse
+# complemented and aligned on its og_1 member like records 2-4.
+_RELEASE_0_13_0_RECORD_X = (
+    895.3450243728452,
+    677.0,
+    1015.6834700590497,
+    687.4823049181628,
+    907.333293702691,
 )
 _SYNTHETIC_CONSERVATION_SESSION = (
     Path(__file__).parent
@@ -317,6 +336,65 @@ def test_released_legacy_alignment_cli_writes_current_typed_sidecar(
         rerendered_prefix.with_suffix(".svg").read_bytes()
         == output_prefix.with_suffix(".svg").read_bytes()
     )
+
+
+def test_release_0_13_0_session_replays_its_reverse_complemented_alignment(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    session_path = tmp_path / "bgc.gbdraw-session.json"
+    with gzip.open(_RELEASE_0_13_0_SESSION, "rt", encoding="utf-8") as handle:
+        session_path.write_text(handle.read(), encoding="utf-8")
+    monkeypatch.chdir(tmp_path)
+
+    linear_main(
+        ["--session", str(session_path), "-o", "replay", "-f", "svg", "--save_session"]
+    )
+
+    svg = (tmp_path / "replay.svg").read_text(encoding="utf-8")
+    record_groups = re.findall(
+        r'<g [^>]*data-gbdraw-record-index="(\d+)"[^>]*'
+        r'data-record-translation-x="[^"]*"[^>]*transform="([^"]*)"',
+        svg,
+    )
+    assert [int(index) for index, _ in record_groups] == [0, 1, 2, 3, 4]
+    record_x = [
+        float(re.findall(r"translate\(([-0-9.e]+),", transform)[-1])
+        for _, transform in record_groups
+    ]
+    # Renderer changes since 0.13.0 move the canvas and scale, so compare the
+    # offsets between records as fractions of one offset (scale free).
+    def relative(values) -> list[float]:
+        return [(value - values[0]) / (values[1] - values[0]) for value in values]
+
+    assert relative(record_x) == pytest.approx(
+        relative(_RELEASE_0_13_0_RECORD_X), abs=1e-9
+    )
+
+    def anchors(request: LinearDiagramRequest) -> list[tuple[object, ...]]:
+        assert request.similarity_alignment is not None
+        assert request.similarity_alignment.group_id == "og_1"
+        return [
+            (
+                decision.status,
+                decision.anchor.biological_feature_id,
+                decision.anchor.source_feature_index,
+                decision.anchor.stable_feature_svg_id,
+            )
+            for decision in request.similarity_alignment.records
+        ]
+
+    saved = load_session_document(tmp_path / "replay.gbdraw-session.json")
+    with materialize_session(saved, output_directory=tmp_path) as materialized:
+        replayed = session_to_request(materialized)
+    with materialize_session(
+        load_session_document(_VERSION_39_SESSION), output_directory=tmp_path
+    ) as materialized:
+        version_39 = session_to_request(materialized)
+    # The 0.13.0 display-frame ID of record 5 binds to the same source feature
+    # the version 39 Session of this Gallery diagram names.
+    assert anchors(replayed) == anchors(version_39)
+    assert anchors(replayed)[4][1] == "f20e4885e"
 
 
 def test_released_legacy_alignment_session_rejects_ambiguous_group_metadata(
