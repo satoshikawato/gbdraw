@@ -280,10 +280,16 @@ def test_protein_helpers_have_no_parallel_invocation_builder() -> None:
         assert _production_call_owners(diagram_path, helper_name) == [
             "_invoke_protein_analysis_helper"
         ]
+    # One LOSAT job plan answers every LOSATP mode (design 3.8, D7): the
+    # record-pair walkers and the per-pair cache runner are gone.
     assert _production_call_owners(protein_path, "run_losatp_blastp") == [
-        "_execute_losatp_search"
+        "_search_losatp_record_pairs"
     ]
-    assert "_cache_runner_for_search" not in protein_path.read_text(encoding="utf-8")
+    collinearity_path = root / "gbdraw" / "analysis" / "collinearity.py"
+    for path in (protein_path, collinearity_path, diagram_path):
+        text = path.read_text(encoding="utf-8")
+        for retired in ("_cache_runner_for_search", "_execute_losatp_search", "runner_for_search"):
+            assert retired not in text, (path.name, retired)
 
 
 def test_typed_config_override_preserves_label_filtering_dataframes() -> None:

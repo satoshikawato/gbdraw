@@ -1461,22 +1461,28 @@ def _web_normalize_cache_label(label: object, fallback: str) -> str:
 
 def _linear_losat_cache_filenames(
     records: Sequence[SeqRecord],
+    pairs: Sequence[tuple[int, int]] | None = None,
 ) -> tuple[str, ...]:
-    def label(record: SeqRecord, fallback: str) -> str:
+    """Raw TSV names of the displayed pairs (consecutive records by default)."""
+
+    def label(index: int) -> str:
+        record = records[index]
         annotations = getattr(record, "annotations", {}) or {}
-        return (
+        fallback = f"seq_{index + 1}"
+        return _web_normalize_cache_label(
             str(annotations.get("gbdraw_record_label") or "").strip()
             or str(record.id or "").strip()
-            or fallback
+            or fallback,
+            fallback,
         )
 
+    displayed = (
+        pairs
+        if pairs is not None
+        else tuple((index, index + 1) for index in range(max(0, len(records) - 1)))
+    )
     return tuple(
-        (
-            f"{_web_normalize_cache_label(label(records[index], f'seq_{index + 1}'), f'seq_{index + 1}')}"
-            f".{_web_normalize_cache_label(label(records[index + 1], f'seq_{index + 2}'), f'seq_{index + 2}')}"
-            ".losatp.tsv"
-        )
-        for index in range(max(0, len(records) - 1))
+        f"{label(query)}.{label(subject)}.losatp.tsv" for query, subject in displayed
     )
 
 
@@ -1506,12 +1512,14 @@ def _invoke_protein_analysis_helper(
     protein_extraction: ProteinExtractionResult | None,
     feature_visibility_rules: list[dict[str, object]] | None,
     cache_filenames: Sequence[str] | None,
+    pairwise_pairs: Sequence[tuple[int, int]] | None = None,
 ) -> ProteinBlastpResult | CollinearityResult:
     """Translate resolved typed values into one real analysis-helper call."""
 
     if mode == "pairwise":
         return build_pairwise_protein_blastp_comparisons(
             records,
+            pairs=pairwise_pairs,
             losatp_bin=losatp_bin,
             ncbi_blastp_bin=ncbi_blastp_bin,
             losatp_threads=losatp_threads,
@@ -1871,12 +1879,13 @@ def assemble_linear_diagram_from_records(
         mode: ProteinBlastpMode,
         analysis_records: Sequence[SeqRecord],
         *,
-        analysis_extraction: ProteinExtractionResult | None = protein_extraction,
         analysis_cache_filenames: Sequence[str] | None = losat_cache_filenames,
+        pairwise_pairs: Sequence[tuple[int, int]] | None = None,
     ) -> ProteinBlastpResult | CollinearityResult:
         return _invoke_protein_analysis_helper(
             mode,
             analysis_records,
+            pairwise_pairs=pairwise_pairs,
             losatp_bin=runtime.losat_executable or AUTOMATIC_LOSAT_BIN,
             ncbi_blastp_bin=runtime.ncbi_blast_executable,
             losatp_threads=runtime.threads,
@@ -1904,7 +1913,7 @@ def assemble_linear_diagram_from_records(
             collinear_infer_orthogroups=collinear_infer_orthogroups,
             collinearity_comparison_pairs=collinearity_comparison_pairs,
             losatp_cache=losatp_cache,
-            protein_extraction=analysis_extraction,
+            protein_extraction=protein_extraction,
             feature_visibility_rules=feature_visibility_rules,
             cache_filenames=analysis_cache_filenames,
         )
@@ -1925,36 +1934,24 @@ def assemble_linear_diagram_from_records(
     elif normalized_protein_blastp_mode == "pairwise":
         pair_inputs = normalized_protein_pairs
         if pair_inputs is not None:
-            for query_index, subject_index in pair_inputs:
-                pair_extraction = (
-                    replace(
-                        protein_extraction,
-                        proteins_by_record=[
-                            protein_extraction.proteins_by_record[query_index],
-                            protein_extraction.proteins_by_record[subject_index],
-                        ],
-                    )
-                    if protein_extraction is not None
-                    else None
-                )
-                protein_blastp_result = cast(
-                    ProteinBlastpResult,
-                    invoke_protein_analysis(
-                        "pairwise",
-                        (records[query_index], records[subject_index]),
-                        analysis_extraction=pair_extraction,
-                        analysis_cache_filenames=_linear_losat_cache_filenames(
-                            (records[query_index], records[subject_index])
-                        ),
+            # One plan for every pair, so records of one file share a database.
+            protein_blastp_result = cast(
+                ProteinBlastpResult,
+                invoke_protein_analysis(
+                    "pairwise",
+                    records,
+                    analysis_cache_filenames=_linear_losat_cache_filenames(
+                        records, pair_inputs
                     ),
+                    pairwise_pairs=pair_inputs,
+                ),
+            )
+            resolved_linear_comparisons.extend(
+                LinearComparison(query_index, subject_index, matches)
+                for (query_index, subject_index), matches in zip(
+                    pair_inputs, protein_blastp_result.comparisons, strict=True
                 )
-                resolved_linear_comparisons.append(
-                    LinearComparison(
-                        query_index,
-                        subject_index,
-                        protein_blastp_result.comparisons[0],
-                    )
-                )
+            )
         else:
             protein_blastp_result = cast(
                 ProteinBlastpResult,

@@ -24,6 +24,16 @@ from Bio.SeqFeature import SeqFeature  # type: ignore[reportMissingImports]
 from pandas import DataFrame  # type: ignore[reportMissingImports]
 
 from gbdraw.analysis.ortholog_paths import OrthologPath, OrthologPathCollection, ortholog_edge_id
+from gbdraw.comparisons.losat_jobs import (
+    LosatBatch,
+    RecordPair,
+    losat_record_uids,
+    losat_source_ids,
+    losatp_job_specs,
+    plan_losat_jobs,
+    prepare_losat_batches,
+    split_losat_batch_result,
+)
 from gbdraw.comparisons.losat_runtime import (
     LosatRawCache,
     LosatRuntimeCallback,
@@ -2411,121 +2421,129 @@ class LosatpCacheManager(LosatRawCache):
             return None
         return cached
 
-    def runner_for_search(
+    def cached_text(
         self,
+        query_fasta: str,
+        subject_fasta: str,
         *,
-        losatp_bin: str,
-        ncbi_blastp_bin: str | None = None,
-        losatp_threads: int | None,
-        candidate_limit: int | None,
-        max_hsps_per_subject: int | None,
         args: Sequence[str],
-        filename: str = "",
+        search_context: str | None,
         display: bool = False,
-    ) -> LosatpRunner:
-        def _runner(query_fasta: str, subject_fasta: str) -> DataFrame:
-            pair_identity = self._pair_identity_from_fasta(query_fasta, subject_fasta)
-            cache_key = build_protein_losat_cache_key(
+        filename: str = "",
+    ) -> str | None:
+        """Raw TSV of one record pair from a current or promoted entry, if any."""
+
+        pair_identity = self._pair_identity_from_fasta(query_fasta, subject_fasta)
+        cache_key = build_protein_losat_cache_key(
+            pair_identity,
+            args=args,
+            program="blastp",
+            outfmt="6",
+            search_context=search_context,
+        )
+        cached = self._find_cached_entry(
+            cache_key=cache_key,
+            pair_identity=pair_identity,
+            program="blastp",
+            outfmt="6",
+            args=args,
+        )
+        if cached is not None:
+            if display:
+                self._mark_display(cache_key, filename)
+            return str(cached.get("text") or "")
+        # Legacy entries predate source batches; they answer only a search
+        # whose sides are the two records themselves (as in the Web).
+        if search_context is not None or not self._legacy_entries:
+            return None
+        query_proteins = self._proteins_by_instance.get(
+            pair_identity.query_record_instance_key
+        )
+        subject_proteins = self._proteins_by_instance.get(
+            pair_identity.subject_record_instance_key
+        )
+        if query_proteins is None or subject_proteins is None:
+            return None
+        scan = promote_legacy_protein_raw_cache_entries(
+            self._legacy_entries,
+            query_proteins=query_proteins,
+            subject_proteins=subject_proteins,
+            query_fasta=query_fasta,
+            subject_fasta=subject_fasta,
+            identity_manifest=self.identity_manifest,  # type: ignore[arg-type]
+            expected_args=args,
+            expected_program="blastp",
+            expected_outfmt="6",
+        )
+        if scan.promotion is None:
+            return None
+        promotion = scan.promotion
+        self.add_promoted_entry(promotion.entry)
+        del self._legacy_entries[promotion.candidate_index]
+        if display:
+            self._mark_display(cache_key, filename)
+        return promotion.rewritten_tsv
+
+    def store_search(
+        self,
+        query_fasta: str,
+        subject_fasta: str,
+        *,
+        args: Sequence[str],
+        search_context: str | None,
+        text: str,
+        runtime: Mapping[str, object] | None,
+        display: bool = False,
+        filename: str = "",
+    ) -> None:
+        """Store the raw TSV that a source job produced for one record pair."""
+
+        pair_identity = self._pair_identity_from_fasta(query_fasta, subject_fasta)
+        entry: dict[str, object] = {
+            "schema": PROTEIN_LOSAT_CACHE_SCHEMA,
+            "kind": "raw-losat",
+            "identityKind": "protein",
+            "idEncoding": "runtime-handle-v1",
+            "key": build_protein_losat_cache_key(
                 pair_identity,
                 args=args,
                 program="blastp",
                 outfmt="6",
-            )
-            cached = self._find_cached_entry(
-                cache_key=cache_key,
-                pair_identity=pair_identity,
-                program="blastp",
-                outfmt="6",
-                args=args,
-            )
-            if cached is not None:
-                if display:
-                    self._mark_display(cache_key, filename)
-                return parse_losatp_outfmt6(str(cached.get("text") or ""))
-
-            query_proteins = self._proteins_by_instance.get(
-                pair_identity.query_record_instance_key
-            )
-            subject_proteins = self._proteins_by_instance.get(
-                pair_identity.subject_record_instance_key
-            )
-            if self._legacy_entries and query_proteins is not None and subject_proteins is not None:
-                scan = promote_legacy_protein_raw_cache_entries(
-                    self._legacy_entries,
-                    query_proteins=query_proteins,
-                    subject_proteins=subject_proteins,
-                    query_fasta=query_fasta,
-                    subject_fasta=subject_fasta,
-                    identity_manifest=self.identity_manifest,  # type: ignore[arg-type]
-                    expected_args=args,
-                    expected_program="blastp",
-                    expected_outfmt="6",
-                )
-                if scan.promotion is not None:
-                    promotion = scan.promotion
-                    promoted_result = parse_losatp_outfmt6(promotion.rewritten_tsv)
-                    self.add_promoted_entry(promotion.entry)
-                    del self._legacy_entries[promotion.candidate_index]
-                    if display:
-                        self._mark_display(cache_key, filename)
-                    return promoted_result
-
-            raw_text_holder: dict[str, str] = {}
-            runtime_holder: dict[str, dict[str, object]] = {}
-            result = _execute_losatp_search(
-                query_fasta,
-                subject_fasta,
-                losatp_bin=losatp_bin,
-                ncbi_blastp_bin=ncbi_blastp_bin,
-                candidate_limit=candidate_limit,
-                max_hsps_per_subject=max_hsps_per_subject,
-                losatp_threads=losatp_threads,
-                runner=None,
-                losatp_cache=None,
-                raw_output_callback=lambda text: raw_text_holder.__setitem__("text", text),
-                runtime_callback=lambda record: runtime_holder.__setitem__("runtime", record),
-            )
-            entry: dict[str, object] = {
-                "schema": PROTEIN_LOSAT_CACHE_SCHEMA,
-                "kind": "raw-losat",
-                "identityKind": "protein",
-                "idEncoding": "runtime-handle-v1",
-                "key": cache_key,
-                "filename": filename if display else "",
-                "display": bool(display),
-                "text": raw_text_holder.get("text", ""),
-                "program": "blastp",
-                "outfmt": "6",
-                "args": [str(arg) for arg in args],
-                "queryProteinSetHash": pair_identity.query_protein_set_hash,
-                "subjectProteinSetHash": pair_identity.subject_protein_set_hash,
-                "queryRuntimeBindingHash": pair_identity.query_runtime_binding_hash,
-                "subjectRuntimeBindingHash": pair_identity.subject_runtime_binding_hash,
-                "queryRecordInstanceKey": pair_identity.query_record_instance_key,
-                "subjectRecordInstanceKey": pair_identity.subject_record_instance_key,
-            }
-            if not raw_protein_tsv_matches_bindings(
-                str(entry["text"]),
-                query_ids=_binding_runtime_ids(
-                    self.identity_manifest,  # type: ignore[arg-type]
-                    pair_identity.query_record_instance_key,
-                ),
-                subject_ids=_binding_runtime_ids(
-                    self.identity_manifest,  # type: ignore[arg-type]
-                    pair_identity.subject_record_instance_key,
-                ),
-            ):
-                raise ValidationError("LOSAT output references IDs outside the current protein bindings.")
-            self._add_search_entry(
-                cache_key,
-                entry,
-                runtime=runtime_holder.get("runtime"),
-                display=display,
-                filename=filename,
-            )
-            return result
-
-        return _runner
+                search_context=search_context,
+            ),
+            "filename": filename if display else "",
+            "display": bool(display),
+            "text": str(text),
+            "program": "blastp",
+            "outfmt": "6",
+            "args": [str(arg) for arg in args],
+            **({"searchContext": search_context} if search_context else {}),
+            "queryProteinSetHash": pair_identity.query_protein_set_hash,
+            "subjectProteinSetHash": pair_identity.subject_protein_set_hash,
+            "queryRuntimeBindingHash": pair_identity.query_runtime_binding_hash,
+            "subjectRuntimeBindingHash": pair_identity.subject_runtime_binding_hash,
+            "queryRecordInstanceKey": pair_identity.query_record_instance_key,
+            "subjectRecordInstanceKey": pair_identity.subject_record_instance_key,
+        }
+        if not raw_protein_tsv_matches_bindings(
+            str(entry["text"]),
+            query_ids=_binding_runtime_ids(
+                self.identity_manifest,  # type: ignore[arg-type]
+                pair_identity.query_record_instance_key,
+            ),
+            subject_ids=_binding_runtime_ids(
+                self.identity_manifest,  # type: ignore[arg-type]
+                pair_identity.subject_record_instance_key,
+            ),
+        ):
+            raise ValidationError("LOSAT output references IDs outside the current protein bindings.")
+        self._add_search_entry(
+            str(entry["key"]),
+            entry,
+            runtime=runtime,
+            display=display,
+            filename=filename,
+        )
 
 
 def _first_qualifier(feature: SeqFeature, key: str) -> str | None:
@@ -5677,9 +5695,53 @@ def _validate_extraction_has_proteins(
         )
 
 
-def _execute_losatp_search(
-    query_fasta: str,
-    subject_fasta: str,
+def _split_protein_hits(
+    hits: DataFrame,
+    batch: LosatBatch,
+    pairs: Sequence[RecordPair],
+) -> dict[RecordPair, DataFrame]:
+    """Split the hits of one source job into record-pair hits, in runtime order."""
+
+    query_records = [batch.query.ids.get(str(value), (None, ""))[0] for value in hits["query"]]
+    subject_records = [
+        batch.subject.ids.get(str(value), (None, ""))[0] for value in hits["subject"]
+    ]
+    if None in query_records or None in subject_records:
+        raise ValidationError(
+            "LOSAT output references IDs outside the current protein bindings.",
+            diagnostic={"code": "LOSAT_RUNTIME", "reason": "OUTPUT"},
+        )
+    return {
+        pair: hits.loc[
+            [
+                query == pair[0] and subject == pair[1]
+                for query, subject in zip(query_records, subject_records)
+            ]
+        ].reset_index(drop=True)
+        for pair in pairs
+    }
+
+
+def _consecutive_display_filenames(
+    record_count: int,
+    cache_filenames: Sequence[str] | None,
+) -> dict[RecordPair, str]:
+    """Displayed pairs are the consecutive records; ``cache_filenames[i]`` names (i, i+1)."""
+
+    return {
+        (index, index + 1): (
+            str(cache_filenames[index])
+            if cache_filenames is not None and index < len(cache_filenames)
+            else ""
+        )
+        for index in range(max(0, record_count - 1))
+    }
+
+
+def _search_losatp_record_pairs(
+    records: Sequence[SeqRecord],
+    extraction: ProteinExtractionResult,
+    specs: Sequence[RecordPair],
     *,
     losatp_bin: str,
     ncbi_blastp_bin: str | None,
@@ -5688,44 +5750,93 @@ def _execute_losatp_search(
     max_hsps_per_subject: int | None,
     runner: LosatpRunner | None,
     losatp_cache: LosatpCacheManager | None,
-    filename: str = "",
-    display: bool = False,
-    raw_output_callback: Callable[[str], None] | None = None,
-    runtime_callback: LosatRuntimeCallback | None = None,
-) -> DataFrame:
-    """Build one raw-search invocation from already resolved values."""
+    display_filenames: Mapping[RecordPair, str] | None = None,
+) -> dict[RecordPair, DataFrame]:
+    """Answer directed record-pair searches with the LOSAT job plan (design D7).
 
-    resolved_runner = runner
-    if resolved_runner is None and losatp_cache is not None:
-        resolved_runner = losatp_cache.runner_for_search(
-            losatp_bin=losatp_bin,
-            ncbi_blastp_bin=ncbi_blastp_bin,
-            losatp_threads=losatp_threads,
-            candidate_limit=candidate_limit,
-            max_hsps_per_subject=max_hsps_per_subject,
-            args=losat_cache_args(
-                "losatp",
-                LosatSearchArgs(
-                    max_hsps=max_hsps_per_subject,
-                    max_target_seqs=candidate_limit,
-                ),
-            ),
-            filename=filename,
-            display=display,
+    A source file is one database: each source job of
+    :func:`gbdraw.comparisons.losat_jobs.plan_losat_jobs` runs once, and its
+    result is split into record-pair hits and raw cache entries under the Web
+    raw keys. ``display_filenames`` names the displayed pairs.
+    """
+
+    args = tuple(
+        losat_cache_args(
+            "losatp",
+            LosatSearchArgs(max_hsps=max_hsps_per_subject, max_target_seqs=candidate_limit),
         )
-    if resolved_runner is not None:
-        return resolved_runner(query_fasta, subject_fasta)
-    return run_losatp_blastp(
-        query_fasta,
-        subject_fasta,
-        losatp_bin=losatp_bin,
-        ncbi_blastp_bin=ncbi_blastp_bin,
-        max_hits=candidate_limit,
-        max_hsps_per_subject=max_hsps_per_subject,
-        threads=losatp_threads,
-        raw_output_callback=raw_output_callback,
-        runtime_callback=runtime_callback,
     )
+    fasta_by_record: dict[int, str] = {}
+
+    def record_fasta(index: int) -> str:
+        if index not in fasta_by_record:
+            fasta_by_record[index] = proteins_to_fasta(extraction.proteins_by_record[index])
+        return fasta_by_record[index]
+
+    batches = prepare_losat_batches(
+        plan_losat_jobs(
+            source_ids=losat_source_ids(records),
+            specs=specs,
+            build_args=lambda _query, _subject: args,
+        ),
+        uids=losat_record_uids(records),
+        record_fasta=record_fasta,
+        protein=True,
+    )
+    displayed = dict(display_filenames or {})
+    cache = losatp_cache if runner is None else None
+    hits: dict[RecordPair, DataFrame] = {}
+    for batch in batches:
+        texts: dict[RecordPair, str] = {}
+        if cache is not None:
+            for pair in batch.job.specs:
+                text = cache.cached_text(
+                    record_fasta(pair[0]),
+                    record_fasta(pair[1]),
+                    args=args,
+                    search_context=batch.search_context,
+                    display=pair in displayed,
+                    filename=displayed.get(pair, ""),
+                )
+                if text is not None:
+                    texts[pair] = text
+        for pair, text in texts.items():
+            hits[pair] = parse_losatp_outfmt6(text)
+        missing = [pair for pair in batch.job.specs if pair not in texts]
+        if not missing:
+            continue
+        raw_text: list[str] = []
+        runtime_records: list[dict[str, object]] = []
+        if runner is not None:
+            batch_hits = runner(batch.query.fasta, batch.subject.fasta)
+        else:
+            batch_hits = run_losatp_blastp(
+                batch.query.fasta,
+                batch.subject.fasta,
+                losatp_bin=losatp_bin,
+                ncbi_blastp_bin=ncbi_blastp_bin,
+                max_hits=candidate_limit,
+                max_hsps_per_subject=max_hsps_per_subject,
+                threads=losatp_threads,
+                raw_output_callback=raw_text.append,
+                runtime_callback=runtime_records.append,
+            )
+        hits.update(_split_protein_hits(batch_hits, batch, missing))
+        if cache is None:
+            continue
+        split = split_losat_batch_result("".join(raw_text), batch, missing)
+        for pair in missing:
+            cache.store_search(
+                record_fasta(pair[0]),
+                record_fasta(pair[1]),
+                args=args,
+                search_context=batch.search_context,
+                text=split[pair],
+                runtime=runtime_records[0] if runtime_records else None,
+                display=pair in displayed,
+                filename=displayed.get(pair, ""),
+            )
+    return hits
 
 
 def _empty_comparison_hits() -> DataFrame:
@@ -6183,8 +6294,14 @@ def build_pairwise_protein_blastp_comparisons(
     protein_extraction: ProteinExtractionResult | None = None,
     feature_visibility_rules: list[dict[str, object]] | None = None,
     cache_filenames: Sequence[str] | None = None,
+    pairs: Sequence[RecordPair] | None = None,
 ) -> ProteinBlastpResult:
-    """Generate adjacent-record LOSATP blastp display comparisons."""
+    """Generate LOSATP blastp display comparisons for record pairs.
+
+    ``pairs`` are directed (query, subject) record indexes; omitted, they are
+    the consecutive records. ``comparisons`` follows ``pairs`` and
+    ``cache_filenames`` names the raw TSV of each pair.
+    """
 
     if len(records) < 2:
         raise ValidationError("protein_blastp_mode='pairwise' requires at least two records")
@@ -6198,35 +6315,38 @@ def build_pairwise_protein_blastp_comparisons(
         records,
         feature_visibility_rules=feature_visibility_rules,
     )
+    specs = losatp_job_specs("pairwise", record_count=len(records), pairs=pairs)
+    searched = sorted({index for pair in specs for index in pair})
     _validate_extraction_has_proteins(
-        records,
-        extraction,
+        [records[index] for index in searched],
+        replace(
+            extraction,
+            proteins_by_record=[extraction.proteins_by_record[index] for index in searched],
+        ),
         option_name="protein_blastp_mode='pairwise'",
     )
-
+    hits_by_pair = _search_losatp_record_pairs(
+        records,
+        extraction,
+        specs,
+        losatp_bin=losatp_bin,
+        ncbi_blastp_bin=ncbi_blastp_bin,
+        losatp_threads=losatp_threads,
+        candidate_limit=candidate_limit,
+        max_hsps_per_subject=1,
+        runner=runner,
+        losatp_cache=losatp_cache,
+        display_filenames={
+            pair: str(cache_filenames[index])
+            if cache_filenames is not None and index < len(cache_filenames)
+            else ""
+            for index, pair in enumerate(specs)
+        },
+    )
     comparisons: list[DataFrame] = []
-    for record_index in range(len(records) - 1):
-        query_fasta = proteins_to_fasta(extraction.proteins_by_record[record_index])
-        subject_fasta = proteins_to_fasta(extraction.proteins_by_record[record_index + 1])
-        protein_hits = _execute_losatp_search(
-            query_fasta,
-            subject_fasta,
-            losatp_bin=losatp_bin,
-            ncbi_blastp_bin=ncbi_blastp_bin,
-            losatp_threads=losatp_threads,
-            candidate_limit=candidate_limit,
-            max_hsps_per_subject=1,
-            runner=runner,
-            losatp_cache=losatp_cache,
-            filename=(
-                str(cache_filenames[record_index])
-                if cache_filenames is not None and record_index < len(cache_filenames)
-                else ""
-            ),
-            display=True,
-        )
+    for pair in specs:
         filtered_hits = filter_protein_hits_by_thresholds(
-            protein_hits,
+            hits_by_pair[pair],
             evalue=evalue,
             bitscore=bitscore,
             identity=identity,
@@ -6290,60 +6410,30 @@ def build_rbh_orthogroup_protein_blastp_comparisons(
         option_name="protein_blastp_mode='orthogroup'",
     )
 
-    search_candidate_limit = candidate_limit
-    directional_hits_by_pair: dict[tuple[int, int], DataFrame] = {}
-    for query_index in range(len(records)):
-        for subject_index in range(query_index, len(records)):
-            query_fasta = proteins_to_fasta(extraction.proteins_by_record[query_index])
-            subject_fasta = proteins_to_fasta(extraction.proteins_by_record[subject_index])
-
-            forward_hits = _execute_losatp_search(
-                query_fasta,
-                subject_fasta,
-                losatp_bin=losatp_bin,
-                ncbi_blastp_bin=ncbi_blastp_bin,
-                losatp_threads=losatp_threads,
-                candidate_limit=search_candidate_limit,
-                max_hsps_per_subject=None,
-                runner=runner,
-                losatp_cache=losatp_cache,
-                filename=(
-                    str(cache_filenames[query_index])
-                    if cache_filenames is not None and query_index < len(cache_filenames)
-                    else ""
-                ),
-                display=subject_index == query_index + 1,
-            )
-            filtered_forward_hits = filter_protein_hits_by_thresholds(
-                forward_hits,
-                evalue=evalue,
-                bitscore=bitscore,
-                identity=identity,
-                alignment_length=alignment_length,
-            )
-            directional_hits_by_pair[(query_index, subject_index)] = filtered_forward_hits
-            if query_index == subject_index:
-                continue
-            reverse_hits = _execute_losatp_search(
-                subject_fasta,
-                query_fasta,
-                losatp_bin=losatp_bin,
-                ncbi_blastp_bin=ncbi_blastp_bin,
-                losatp_threads=losatp_threads,
-                candidate_limit=search_candidate_limit,
-                max_hsps_per_subject=None,
-                runner=runner,
-                losatp_cache=losatp_cache,
-                display=False,
-            )
-            filtered_reverse_hits = filter_protein_hits_by_thresholds(
-                reverse_hits,
-                evalue=evalue,
-                bitscore=bitscore,
-                identity=identity,
-                alignment_length=alignment_length,
-            )
-            directional_hits_by_pair[(subject_index, query_index)] = filtered_reverse_hits
+    specs = losatp_job_specs("orthogroup", record_count=len(records))
+    hits_by_pair = _search_losatp_record_pairs(
+        records,
+        extraction,
+        specs,
+        losatp_bin=losatp_bin,
+        ncbi_blastp_bin=ncbi_blastp_bin,
+        losatp_threads=losatp_threads,
+        candidate_limit=candidate_limit,
+        max_hsps_per_subject=None,
+        runner=runner,
+        losatp_cache=losatp_cache,
+        display_filenames=_consecutive_display_filenames(len(records), cache_filenames),
+    )
+    directional_hits_by_pair: dict[tuple[int, int], DataFrame] = {
+        pair: filter_protein_hits_by_thresholds(
+            hits_by_pair[pair],
+            evalue=evalue,
+            bitscore=bitscore,
+            identity=identity,
+            alignment_length=alignment_length,
+        )
+        for pair in specs
+    }
 
     edge_selection = select_rbh_orthogroup_edges_from_directional_hits(
         directional_hits_by_pair,

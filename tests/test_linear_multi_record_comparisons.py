@@ -324,12 +324,14 @@ def test_reversed_explicit_endpoints_work_with_legacy_one_record_rows() -> None:
 
 
 def test_selected_generated_protein_pairs_keep_explicit_endpoints(monkeypatch) -> None:
-    calls: list[tuple[str, str]] = []
+    calls: list[tuple[tuple[str, ...], tuple[tuple[int, int], ...]]] = []
 
-    def fake_pairwise(records, **_kwargs):
-        calls.append((records[0].id, records[1].id))
-        query, subject = (int(record.id[1:]) - 1 for record in records)
-        return SimpleNamespace(comparisons=[_comparison(query, subject).matches])
+    def fake_pairwise(records, **kwargs):
+        # One plan for every selected pair (records of one file share a database).
+        calls.append((tuple(record.id for record in records), tuple(kwargs["pairs"])))
+        return SimpleNamespace(
+            comparisons=[_comparison(*pair).matches for pair in kwargs["pairs"]]
+        )
 
     monkeypatch.setattr(
         "gbdraw.api.diagram.build_pairwise_protein_blastp_comparisons",
@@ -355,7 +357,7 @@ def test_selected_generated_protein_pairs_keep_explicit_endpoints(monkeypatch) -
         ),
         legend="none",
     )
-    assert calls == [("r1", "r3"), ("r2", "r4")]
+    assert calls == [(("r1", "r2", "r3", "r4"), ((0, 2), (1, 3)))]
     svg = canvas.tostring()
     assert 'data-query-record-index="0"' in svg
     assert 'data-subject-record-index="2"' in svg

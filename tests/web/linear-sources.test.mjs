@@ -13,6 +13,7 @@ import {
   splitLosatSourceResult
 } from '../../gbdraw/web/js/app/linear-sources.js';
 import { readFileSync } from 'node:fs';
+import { buildLosatJobSpecs } from '../../gbdraw/web/js/app/linear-comparisons.js';
 import {
   buildLosatCachePayload,
   extractLosatFastaFast
@@ -371,5 +372,56 @@ test('shared LOSAT job plan and nucleotide raw-key vectors', async () => {
       rawKeys.push([spec.queryIndex, spec.subjectIndex, await hashText(JSON.stringify(payload))]);
     }
     assert.deepEqual(rawKeys, vector.expected.rawKeys, vector.name);
+  }
+});
+
+// LOSATP uses the same plan (design D7): tests/test_losat_job_plan.py runs
+// these cases against losatp_job_specs and prepare_losat_batches(protein=True).
+// The Web protein raw key comes from build_protein_losat_cache_key through
+// the Python helper, so equal args and searchContext give equal keys.
+test('shared LOSATP specs and job plan vectors', async () => {
+  const cases = JSON.parse(
+    readFileSync(new URL('../fixtures/losat_job_plan_cases.json', import.meta.url), 'utf8')
+  ).proteinCases;
+  assert.ok(cases.length > 0);
+  for (const vector of cases) {
+    const files = new Map();
+    const sequences = vector.records.map((record) => {
+      if (!files.has(record.source)) files.set(record.source, { name: record.source });
+      return { uid: record.uid, gb: files.get(record.source), gff: null, fasta: null };
+    });
+    const resolution = {
+      mode: 'adjacent',
+      edges: vector.edges.map(([queryIndex, subjectIndex], ordinal) => ({
+        source: 'losat', queryIndex, subjectIndex, ordinal, edgeKey: `edge-${ordinal}`,
+        queryUid: vector.records[queryIndex].uid, subjectUid: vector.records[subjectIndex].uid
+      }))
+    };
+    const specs = buildLosatJobSpecs({
+      resolution,
+      recordCount: vector.records.length,
+      recordUids: vector.records.map((record) => record.uid),
+      program: 'blastp',
+      blastpMode: vector.mode,
+      collinearInferOrthogroups: vector.inferOrthogroups,
+      collinearSearchScope: vector.searchScope
+    });
+    assert.deepEqual(specs.map((spec) => [spec.queryIndex, spec.subjectIndex]), vector.specs, vector.name);
+    const plan = await prepareLosatSourceBatches({
+      sequences, specs, getEntry: async (index) => ({ fasta: vector.records[index].fasta }),
+      buildArgs: () => vector.args, hashText, protein: true
+    });
+    assert.deepEqual(plan.batches.map((batch) => ({
+      scope: batch.scope,
+      args: batch.args,
+      specs: batch.specs.map((spec) => [spec.queryIndex, spec.subjectIndex]),
+      queryIndexes: batch.query.indexes,
+      subjectIndexes: batch.subject.indexes,
+      queryIds: Object.fromEntries([...batch.query.ids].map(([id, value]) => [id, [value.index, value.originalId]])),
+      subjectIds: Object.fromEntries([...batch.subject.ids].map(([id, value]) => [id, [value.index, value.originalId]])),
+      queryHash: batch.query.hash,
+      subjectHash: batch.subject.hash,
+      searchContext: batch.searchContext
+    })), vector.expected.jobs, vector.name);
   }
 });

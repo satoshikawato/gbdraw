@@ -153,3 +153,87 @@ def test_split_restores_record_ids_and_rejects_unknown_endpoints() -> None:
     with pytest.raises(ValidationError) as excinfo:
         split_losat_batch_result("unknown\tunknown\n", batch, batch.job.specs)
     assert excinfo.value.diagnostic == {"code": "LOSAT_RUNTIME", "reason": "OUTPUT", "row": 1}
+
+
+# LOSATP uses the same plan (design D7, PR-5).
+
+
+def _protein_cases() -> list[dict]:
+    return json.loads((FIXTURES / "losat_job_plan_cases.json").read_text(encoding="utf-8"))[
+        "proteinCases"
+    ]
+
+
+@pytest.mark.parametrize("case", _protein_cases(), ids=_case_id)
+def test_losatp_specs_match_web(case: dict) -> None:
+    from gbdraw.comparisons.losat_jobs import losatp_job_specs
+
+    specs = losatp_job_specs(
+        case["mode"],
+        record_count=len(case["records"]),
+        pairs=[tuple(pair) for pair in case["edges"]],
+        infer_orthogroups=case["inferOrthogroups"],
+        search_scope=case["searchScope"],
+    )
+    assert [list(spec) for spec in specs] == case["specs"]
+
+
+@pytest.mark.parametrize("case", _protein_cases(), ids=_case_id)
+def test_losatp_jobs_and_raw_keys_match_web(case: dict) -> None:
+    from gbdraw.analysis.protein_colinearity import (
+        ProteinLosatPairIdentity,
+        build_protein_losat_cache_key,
+    )
+    from gbdraw.comparisons.losat_jobs import losatp_job_specs
+
+    records = case["records"]
+    specs = losatp_job_specs(
+        case["mode"],
+        record_count=len(records),
+        pairs=[tuple(pair) for pair in case["edges"]],
+        infer_orthogroups=case["inferOrthogroups"],
+        search_scope=case["searchScope"],
+    )
+    batches = prepare_losat_batches(
+        plan_losat_jobs(
+            source_ids=[record["source"] for record in records],
+            specs=specs,
+            build_args=lambda _query, _subject: case["args"],
+        ),
+        uids=[record["uid"] for record in records],
+        record_fasta=lambda index: records[index]["fasta"],
+        protein=True,
+    )
+    assert [
+        {
+            "scope": batch.job.scope,
+            "args": list(batch.job.args),
+            "specs": [list(spec) for spec in batch.job.specs],
+            "queryIndexes": list(batch.query.indexes),
+            "subjectIndexes": list(batch.subject.indexes),
+            "queryIds": {key: list(value) for key, value in batch.query.ids.items()},
+            "subjectIds": {key: list(value) for key, value in batch.subject.ids.items()},
+            "queryHash": batch.query.hash,
+            "subjectHash": batch.subject.hash,
+            "searchContext": batch.search_context,
+        }
+        for batch in batches
+    ] == case["expected"]["jobs"]
+
+    def identity(query: int, subject: int) -> ProteinLosatPairIdentity:
+        return ProteinLosatPairIdentity(
+            query_protein_set_hash=records[query]["identity"]["proteinSetHash"],
+            subject_protein_set_hash=records[subject]["identity"]["proteinSetHash"],
+            query_runtime_binding_hash=records[query]["identity"]["runtimeBindingHash"],
+            subject_runtime_binding_hash=records[subject]["identity"]["runtimeBindingHash"],
+            query_record_instance_key=records[query]["uid"],
+            subject_record_instance_key=records[subject]["uid"],
+        )
+
+    context = {spec: batch.search_context for batch in batches for spec in batch.job.specs}
+    assert [
+        [query, subject, build_protein_losat_cache_key(
+            identity(query, subject), args=case["args"], search_context=context[(query, subject)]
+        )]
+        for query, subject in specs
+    ] == case["expected"]["rawKeys"]
