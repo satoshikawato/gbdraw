@@ -76,8 +76,9 @@ class LinearComparison:
     """A comparison result with explicit input-record endpoints.
 
     ``search_frame_text`` is the raw BLAST outfmt 6 text in the search frame
-    when the planner produced ``matches`` from a LOSAT search; the Session
-    persists it as a ``nucleotideBlast`` resource, as the Web does.
+    when the planner produced ``matches`` from a LOSAT search or the Session
+    decoder read them from a ``nucleotideBlast`` resource; the Session persists
+    it as a ``nucleotideBlast`` resource, as the Web does.
     """
 
     query_record_index: int

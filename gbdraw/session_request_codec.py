@@ -3348,11 +3348,12 @@ def _encode_comparisons(
             _record_frame(frames, comparison.subject_record_index),
         )
         if comparison.search_frame_text is not None:
-            # A planner-resolved LOSAT edge keeps its raw search-frame rows, as
-            # the Web writes them (design 3.7).
-            content = reverse_endpoint_table_text(
-                comparison.search_frame_text, *endpoint_frames
-            )
+            # A planner-resolved LOSAT edge or a decoded nucleotideBlast item
+            # keeps its raw search-frame rows, as the Web writes them (design
+            # 3.7); only a reversed persisted endpoint rewrites them.
+            content = comparison.search_frame_text
+            if endpoint_frames[0][1] or endpoint_frames[1][1]:
+                content = reverse_endpoint_table_text(content, *endpoint_frames)
             resource_id = resources.add_bytes(
                 _resource_id(f"comparison-losat-{index}"),
                 kind="nucleotide-blast",
@@ -3541,11 +3542,14 @@ def _decode_comparisons(
                 resource_paths=resource_paths,
             )
             if schema >= 2:
+                # The resource text stays on the edge, so a re-saved Session
+                # writes the same nucleotideBlast resource.
                 try:
+                    text = resource_path.read_bytes().decode("utf-8")
                     table = read_comparison_table(
-                        resource_path, label=f"BLAST resource {item['resourceId']!r}"
+                        StringIO(text), label=f"BLAST resource {item['resourceId']!r}"
                     )
-                except ValidationError as exc:
+                except (OSError, UnicodeError, ValidationError) as exc:
                     raise CanonicalRequestDecodingError(
                         f"Could not decode {path}: {exc}"
                     ) from exc
@@ -3556,7 +3560,7 @@ def _decode_comparisons(
                     item["subjectRecordIndex"], f"{path}.subjectRecordIndex"
                 )
                 explicit_comparisons.append(
-                    LinearComparison(query_index, subject_index, table)
+                    LinearComparison(query_index, subject_index, table, search_frame_text=text)
                 )
             else:
                 blast_files.append(str(resource_path))

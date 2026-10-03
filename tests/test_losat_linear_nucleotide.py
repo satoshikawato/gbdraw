@@ -169,6 +169,33 @@ def test_saved_session_replays_without_losat(tmp_path: Path, monkeypatch: pytest
     assert replay.with_suffix(".svg").read_bytes() == prefix.with_suffix(".svg").read_bytes()
 
 
+@pytest.mark.linear
+def test_replayed_session_resaves_losatn_edges_as_nucleotide_blast(tmp_path: Path) -> None:
+    # PR3-B2: re-saving a replayed Session wrote the LOSATN edge as a
+    # precomputedProteinComparison canonical TSV.
+    losat, _log = _fake_losat(tmp_path)
+    prefix = tmp_path / "saved"
+    linear_main([
+        "--gbk", str(LAMBDA), str(DE3), *T_CLI_07_OPTIONS,
+        "--losat", "losatn", "--losat_bin", losat, "--save_session", "-o", str(prefix),
+    ])
+    replay = tmp_path / "replay"
+    linear_main([
+        "--session", str(prefix.with_suffix(".gbdraw-session.json")),
+        "--save_session", "-o", str(replay), "-f", "svg",
+    ])
+    saved, resaved = _session(prefix), _session(replay)
+    assert [item["kind"] for item in resaved["renderRequest"]["comparisons"]] == [
+        "nucleotideBlast", "generatedProteinComparison",
+    ]
+    for request in (saved["renderRequest"], resaved["renderRequest"]):
+        assert request.pop("output")["prefix"] in {"saved", "replay"}
+    assert resaved["renderRequest"] == saved["renderRequest"]
+    assert resaved["resources"] == saved["resources"]
+    assert resaved["losatCache"] == saved["losatCache"]
+    assert replay.with_suffix(".svg").read_bytes() == prefix.with_suffix(".svg").read_bytes()
+
+
 # TLOSATX translation tables.
 
 

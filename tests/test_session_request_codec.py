@@ -1093,6 +1093,43 @@ def test_linear_comparison_kinds_and_payload_round_trip(tmp_path: Path) -> None:
     )).payload == canonical.payload
 
 
+def test_decoded_comparisons_re_encode_with_their_kind_and_bytes(tmp_path: Path) -> None:
+    # PR3-B2: a decoded nucleotideBlast item was re-encoded as a
+    # precomputedProteinComparison canonical TSV.
+    nucleotide_bytes = b"record-a\trecord-b\t90.000\t30\t0\t0\t10\t40\t20\t50\t1e-20\t100\r\n"
+    nucleotide = tmp_path / "nucleotide.tsv"
+    nucleotide.write_bytes(nucleotide_bytes)
+    request = LinearDiagramRequest(
+        records=(
+            RecordInput(source=GenBankInputSource(_source_file(tmp_path / "a.gbk"))),
+            RecordInput(source=GenBankInputSource(_source_file(tmp_path / "b.gbk"))),
+        ),
+        options=LinearDiagramOptions(blast_files=(str(nucleotide),), protein_comparisons=(_table(),)),
+        output=RenderOutputRequest(output_prefix="canonical-linear"),
+    )
+    encoded = encode_canonical_request(request)
+    decoded = decode_canonical_request(
+        encoded.payload,
+        resource_paths=_materialize_resources(encoded, tmp_path / "materialized"),
+        output_directory=tmp_path / "replay",
+    )
+    canonical = encode_canonical_request(decoded)
+
+    def comparisons(value: EncodedCanonicalRequest) -> list[tuple[str, int, int, bytes]]:
+        paths = _materialize_resources(value, tmp_path / f"read-{id(value)}")
+        return [
+            (item["kind"], item["queryRecordIndex"], item["subjectRecordIndex"],
+             paths[item["resourceId"]].read_bytes())
+            for item in value.payload["comparisons"]
+        ]
+
+    assert [kind for kind, *_ in comparisons(canonical)] == [
+        "nucleotideBlast", "precomputedProteinComparison",
+    ]
+    assert comparisons(canonical) == comparisons(encoded)
+    assert comparisons(canonical)[0][3] == nucleotide_bytes
+
+
 @pytest.mark.parametrize("schema", (1, 2))
 def test_supported_schemas_privately_migrate_standard_collinearity_parameters(
     tmp_path: Path,

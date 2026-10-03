@@ -64,7 +64,11 @@ from .requests import (
     _LegacySimilarityAlignment,
     _with_legacy_similarity_alignment,
 )
-from ..linear_comparison import project_search_frame_comparisons
+from ..linear_comparison import (
+    _endpoint_frame,
+    project_search_frame_comparisons,
+    reverse_endpoint_table_text,
+)
 
 _LEGACY_LINEAR_TRACK_SLOT_SESSION_VERSION = 32
 _LEGACY_MULTILINE_CONSERVATION_LABEL_SESSION_VERSION = 39
@@ -1106,7 +1110,8 @@ def _main_display_frame_rows_to_search_frame(
     after the reverse complement of their endpoint records. The x -> L + 1 - x
     map is its own inverse, so the projection that draws search-frame rows also
     converts these rows; the adapted request and any re-saved Session then use
-    the search frame.
+    the search frame. The decoded resource text of a ``nucleotideBlast`` item
+    is converted with its rows.
     """
 
     version = session_artifacts.get("version")
@@ -1118,12 +1123,28 @@ def _main_display_frame_rows_to_search_frame(
         or not request.options.linear_comparisons
     ):
         return request
-    converted = project_search_frame_comparisons(request.options.linear_comparisons, plan.records)
+    originals = request.options.linear_comparisons
+    projected = project_search_frame_comparisons(originals, plan.records)
     if all(
         before.matches.equals(after.matches)
-        for before, after in zip(request.options.linear_comparisons, converted, strict=True)
+        for before, after in zip(originals, projected, strict=True)
     ):
         return request
+    converted = tuple(
+        after
+        if before.search_frame_text is None or before.matches.equals(after.matches)
+        else replace(
+            after,
+            search_frame_text=reverse_endpoint_table_text(
+                before.search_frame_text,
+                *(
+                    _endpoint_frame(plan.records[index])
+                    for index in (before.query_record_index, before.subject_record_index)
+                ),
+            ),
+        )
+        for before, after in zip(originals, projected, strict=True)
+    )
     return replace(request, options=replace(request.options, linear_comparisons=converted))
 
 
