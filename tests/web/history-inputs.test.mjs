@@ -143,7 +143,9 @@ const indexHtml = await readFile(indexPath, 'utf8');
   '@click="resetSettings"',
   '@click="runAnalysis"',
   '@click="$refs.sessionInput.click()"',
-  '@change="importSession"'
+  '@change="importSession"',
+  // B22: the Add Seq step commits after the ring record label read.
+  '@change="addCircularConservationComparisonFile"'
 ].forEach((handler) => {
   const escapedHandler = handler.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   assert.match(

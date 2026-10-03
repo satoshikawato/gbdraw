@@ -2855,11 +2855,12 @@
                                     v-if="circularConservation.source === 'losat'"
                                     type="file"
                                     ref="circularConservationFastaInput"
+                                    data-history-managed
                                     accept=".fa,.fas,.fasta,.fna,.ffn,.gb,.gbk,.gbff,.genbank,.ddbj,.txt,text/plain,text/*"
                                     @change="addCircularConservationComparisonFile"
                                     class="hidden"
                                  :disabled="!semanticMutationAvailable">
-                                <button v-if="circularConservation.source === 'losat'" type="button" class="btn btn-secondary text-xs w-full" @click="openCircularConservationComparisonFilePicker">
+                                <button v-if="circularConservation.source === 'losat'" type="button" data-history-ignore class="btn btn-secondary text-xs w-full" @click="openCircularConservationComparisonFilePicker">
                                     <i class="ph ph-plus"></i> Add Seq
                                 </button>
                             </div>

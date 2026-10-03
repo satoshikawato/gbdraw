@@ -598,9 +598,12 @@ reads it with the reader of `--conservation_sequence`, so a ring has the CLI raw
 cache key for every format and FASTA layout. A row added from a GenBank or DDBJ
 file is labelled like the CLI ring without `--conservation_labels`: the first
 record's DEFINITION, or its organism when the DEFINITION is empty. The worker
-reads the label after the row appears, Generate waits for it, and a typed label
-is kept. A FASTA row, or a flat file with neither field, is labelled with its
-file name without the extension; the CLI keeps the extension. A cleared label
+reads the label after the row appears, and a typed label is kept. The **Add
+Seq** History step ends when the read answers, so Undo and Redo restore the
+label. Until it answers, Undo, Redo, and Session save and load are unavailable
+and Generate waits; the first read takes longer because it starts the worker.
+A FASTA row, or a flat file with neither field, is labelled with its file name
+without the extension; the CLI keeps the extension. A cleared label
 field uses the file name shown as its placeholder. The Source recipe passes the
 Web labels explicitly. **Ring Width** and **Ring Gap** control the ordered
 evidence tracks. **Save Raw LOSAT TSV** exports generated search rows.

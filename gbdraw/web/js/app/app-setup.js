@@ -2088,17 +2088,18 @@ export const createAppSetup = () => {
     circularConservationFastaInput.value?.click();
   };
   const pendingComparisonRecordLabels = new Set();
+  // Also waits for a read that starts meanwhile (another Add Seq).
+  const settleComparisonRecordLabels = async () => {
+    while (pendingComparisonRecordLabels.size > 0) {
+      await Promise.allSettled([...pendingComparisonRecordLabels]);
+    }
+  };
   const addCircularConservationComparisonFile = (event) => {
     const sessionBusy = sessionOperationAvailability();
     if (sessionBusy) return sessionBusy;
     const target = event?.target || null;
     const selectedFile = Array.from(target?.files || []).filter(Boolean)[0] || null;
     if (!selectedFile) return;
-    clearDerivedCircularConservationBlasts();
-    files.c_conservation_fastas = [...normalizeFileList(files.c_conservation_fastas), selectedFile];
-    losatCacheInfo.value = [];
-    syncCircularConservationSeries();
-    if (target) target.value = '';
     // D12: the Python ring reader names a GenBank or DDBJ row after it is added
     // (a read failure keeps the file-name default; Generate reports it).
     // Generate waits for these reads before it reads the row labels.
@@ -2112,6 +2113,16 @@ export const createAppSetup = () => {
       .catch(() => false)
       .finally(() => pendingComparisonRecordLabels.delete(pending));
     pendingComparisonRecordLabels.add(pending);
+    // B22 (R11): the input is data-history-managed. This one Add Seq step
+    // captures its before now, the row appears at once, and the step commits
+    // after the label read, so Undo and Redo restore the label.
+    const step = history.runUndoable('Change uploaded file', settleComparisonRecordLabels);
+    clearDerivedCircularConservationBlasts();
+    files.c_conservation_fastas = [...normalizeFileList(files.c_conservation_fastas), selectedFile];
+    losatCacheInfo.value = [];
+    syncCircularConservationSeries();
+    if (target) target.value = '';
+    return step;
   };
   const setCircularConservationCompanionFile = (sourceIndex, event) => {
     const sessionBusy = sessionOperationAvailability();
@@ -2327,7 +2338,7 @@ export const createAppSetup = () => {
   } = createRunAnalysis({
     state,
     rulePreparation,
-    settleComparisonRecordLabels: () => Promise.allSettled([...pendingComparisonRecordLabels]),
+    settleComparisonRecordLabels,
     isCurrentFeature: recordDisplayControls.isCurrentFeature,
     serializeCanonicalFiles: (comparisonPlanSnapshot, linearRecordCatalog, runState) => (
       serializeActiveRenderFiles(runState.mode.value, runState, {
