@@ -7,12 +7,12 @@
 | Evidence or mode | Web app | Command line and Python | Result shown |
 |---|---|---|---|
 | Uploaded BLAST outfmt 6/7 | **Upload BLAST TSV** | Prepared table input | One retained row per Linear link or Circular span |
-| LOSATN | Browser nucleotide search | Read its exported table as prepared input | Local nucleotide-alignment spans |
-| TLOSATX | Browser six-frame translated-nucleotide search | Read its exported table as prepared input | Translated query and subject spans |
+| LOSATN | Browser nucleotide search | Linear: `--losat losatn` (Python `losat="losatn"`); Circular rings: exported table | Local nucleotide-alignment spans |
+| TLOSATX | Browser six-frame translated-nucleotide search | Linear: `--losat tlosatx` (Python `losat="tlosatx"`); Circular rings: exported table | Translated query and subject spans |
 | LOSATP Pairwise | Browser protein search | `pairwise` protein-search mode | Retained individual protein matches |
 | LOSATP **Similarity groups** | Browser protein search | `orthogroup` compatibility token | Search-derived group membership and links |
 | LOSATP **Collinear blocks** | Browser protein search | `collinear` protein-search mode | Ordered blocks built from compatible anchors |
-| Selected mixed edges | Per-edge browser plan | Explicit prepared-table endpoints | Only the selected record pairs |
+| Selected mixed edges | Per-edge browser plan | `--comparisons_table` rows with `source` `losat` or `table` | Only the selected record pairs |
 | Circular similarity rings | Uploaded or browser-generated evidence | Prepared conservation inputs | Ordered evidence tracks around one reference |
 
 LOSATN compares nucleotide sequence directly. TLOSATX translates both sides
@@ -22,10 +22,14 @@ as described in [Input formats](input-formats-and-tsv-schemas.md#sequence-and-an
 A CDS whose protein is unusable, such as one with an internal stop codon,
 cannot contribute protein matches.
 
-The command line can run LOSATP or a compatible BLASTP runtime. It does not run
-LOSATN or TLOSATX; use `--blast`, `--comparisons_table`, or
-`--conservation_blast` for their exported rows. The web app can run all three
-LOSAT program families. Threaded browser search requires cross-origin
+The command line and Python API run LOSATN, TLOSATX, and LOSATP for Linear
+diagrams, with native LOSAT or the matching NCBI BLAST+ program. They search
+the same source-file databases as the web app and write the same raw-cache
+keys, so a Session saved from either reuses its LOSAT results in the other.
+Circular similarity rings still read exported rows (`--conservation_blast`).
+The web app can run all three LOSAT program families. The web app offers the
+LOSATN task `dc-megablast`; a native runtime that does not list that task (the
+released LOSAT 0.1.0) stops before searching. Threaded browser search requires cross-origin
 isolation.
 
 For Linear browser searches, the three **LOSAT Mode** buttons select
