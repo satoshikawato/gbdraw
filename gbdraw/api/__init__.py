@@ -72,6 +72,7 @@ from .options import (
     LinearTrackOptions,
 )
 from gbdraw.linear_comparison import LinearComparison
+from gbdraw.analysis.conservation import ConservationSearchResult
 from gbdraw.layout.linear_multi_record import LinearLayoutPlan, LinearRecordPlacement, RecordKey
 from gbdraw.layout.similarity_alignment import (
     AlignmentAnchorIdentity,
@@ -277,6 +278,7 @@ __all__ = [
     "LinearRequestTrackOptions",
     "LinearTrackOptions",
     "LinearComparison",
+    "ConservationSearchResult",
     "LinearLayoutPlan",
     "LinearRecordPlacement",
     "RecordKey",

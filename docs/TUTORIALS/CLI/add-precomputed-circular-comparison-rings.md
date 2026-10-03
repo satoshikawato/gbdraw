@@ -88,7 +88,7 @@ gbdraw-cli-precomputed-rings/
 gbdraw circular \
   --gbk HmmtDNA.gbk \
   --conservation_blast danio-human.tlosatx.tsv drosophila-human.tlosatx.tsv caenorhabditis-human.tlosatx.tsv \
-  --conservation_fasta NC_002333.2.fna NC_024511.2.fna NC_001328.1.fna \
+  --conservation_sequence NC_002333.2.fna NC_024511.2.fna NC_001328.1.fna \
   --conservation_reference subject \
   --conservation_labels 'Danio rerio (NC_002333.2)' 'Drosophila melanogaster (NC_024511.2)' 'Caenorhabditis elegans (NC_001328.1)' \
   --conservation_colors '#4E79A7' '#F28E2B' '#59A14F' \
@@ -122,6 +122,56 @@ with the image below.
 The image above is the Reference result. Verify the subject-reference
 direction, the documented ring order and labels, and the comparison FASTA
 identities. The finished SVG should retain 106 HSPs across the three rings.
+
+`--conservation_sequence` also accepts GenBank or DDBJ flat files of the
+comparison genomes. It supplies the sequences for the comparison-span FASTA
+actions of an `interactive_svg`; it does not change the static rings.
+
+## Step 3: Run the TLOSATX searches directly
+
+With a LOSAT runtime, gbdraw can run the three searches itself instead of
+reading the frozen tables. `--losat tlosatx` searches each
+`--conservation_sequence` genome (the query) against the displayed human
+record (the subject), so every ring uses the reference genome as its E-value
+database. `--losat_gencode` sets the human table and
+`--conservation_losat_gencode` sets one table per comparison genome, in the
+same order; both default to 1. Drop `--conservation_blast` and
+`--conservation_reference`:
+
+```bash
+gbdraw circular \
+  --gbk HmmtDNA.gbk \
+  --losat tlosatx \
+  --losat_gencode 2 \
+  --conservation_sequence NC_002333.2.fna NC_024511.2.fna NC_001328.1.fna \
+  --conservation_losat_gencode 2 5 5 \
+  --conservation_labels 'Danio rerio (NC_002333.2)' 'Drosophila melanogaster (NC_024511.2)' 'Caenorhabditis elegans (NC_001328.1)' \
+  --conservation_colors '#4E79A7' '#F28E2B' '#59A14F' \
+  --bitscore 50 \
+  --evalue 1e-5 \
+  --identity 40 \
+  --alignment_length 50 \
+  --conservation_ring_width 18 \
+  --conservation_ring_gap 4 \
+  --species '<i>Homo sapiens</i>' \
+  --qualifier_priority cds_gene_qualifier_priority.tsv \
+  --track_type middle \
+  --labels out \
+  --definition_font_size 18 \
+  --plot_title 'Precomputed TLOSATX rings around Homo sapiens mtDNA' \
+  --plot_title_position bottom \
+  --legend right \
+  --losat_output_dir tlosatx-results \
+  -o precomputed_circular_rings \
+  -f svg
+```
+
+With the LOSAT runtime that produced the frozen tables, the SVG is
+byte-identical to Step 2. Another LOSAT version or NCBI BLAST+ can report
+different rows. `tlosatx-results/` receives one TSV per ring and
+`conservation.tsv`, which `--conservation_table` accepts unchanged; add
+`--save_session` to keep the search results in a Session that replays without
+LOSAT.
 
 ## Next steps
 

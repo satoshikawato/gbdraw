@@ -36,3 +36,13 @@ compressed with `gzip -n -9`. Its decompressed SHA-256 is
 `gbdraw linear --session ... -o replay -f svg` before the LOSATP option rename. The
 rename must not change it. SHA-256:
 `0ae2dedeb8dbb426dc1dc5fa8d66d5c9c0a3b1945deca39eb7a71db5a4560b1b`.
+
+`conservation-fasta.v39.gbdraw-session.json.gz` is a version 39 Circular CLI
+session written by first-parent `main` commit
+`cdd31013` (`git archive cdd31013 gbdraw`) for
+`gbdraw circular --gbk HmmtDNA.gbk --conservation_blast danio-human.tlosatx.tsv
+--conservation_fasta NC_002333.2.fna --conservation_reference subject
+--conservation_labels Danio --identity 40 -o argv-v39 -f svg --save_session`,
+compressed with `gzip -n -9`. Its decompressed SHA-256 is
+`a885bdad7bf8778c0836c686710111f85871ffecbdd7da3e460b971f8701884a`. It is the
+positive fixture for the retired `--conservation_fasta` flag (design D18).

@@ -64,7 +64,7 @@ Options (examples):
   --comparisons_table  Linear BLAST manifest with explicit query/subject endpoints
   --conservation_blast BLAST result file(s) for circular similarity rings (-outfmt 6 or 7)
   --conservation_table TSV manifest for circular BLAST similarity rings
-  --conservation_fasta Optional comparison FASTA source(s) for interactive matched-span export
+  --conservation_sequence Comparison genome FASTA, GenBank, or DDBJ file(s) for LOSAT rings or interactive span export
   --circular_track_table TSV manifest for circular track slots
   --annotation_table    TSV table for coordinate- or feature-targeted region annotations
 
@@ -112,14 +112,19 @@ usage: gbdraw circular [-h] [--feature_placement_table TSV]
               [--depth_track_tick_font_size VALUE [VALUE ...]]
               [--conservation_blast BLAST [BLAST ...]]
               [--conservation_table TSV]
-              [--conservation_fasta FASTA [FASTA ...]]
+              [--conservation_sequence FILE [FILE ...]]
               [--conservation_reference {query,subject,auto}]
               [--conservation_labels LABEL [LABEL ...]]
               [--conservation_colors COLOR [COLOR ...]]
               [--conservation_ring_width CONSERVATION_RING_WIDTH]
               [--conservation_ring_gap CONSERVATION_RING_GAP]
-              [--evalue EVALUE] [--bitscore BITSCORE] [--identity IDENTITY]
-              [--alignment_length ALIGNMENT_LENGTH]
+              [--losat {losatn,tlosatx,losatp}]
+              [--losatn_task {megablast,blastn,dc-megablast}]
+              [--losat_gencode CODE]
+              [--conservation_losat_gencode CODE [CODE ...]]
+              [--losat_bin PATH | --ncbi_blast_bin PATH] [--losat_threads N]
+              [--losat_output_dir DIR] [--evalue EVALUE] [--bitscore BITSCORE]
+              [--identity IDENTITY] [--alignment_length ALIGNMENT_LENGTH]
               [--depth_color DEPTH_COLOR] [--depth_width DEPTH_WIDTH]
               [--depth_window DEPTH_WINDOW] [--depth_step DEPTH_STEP]
               [--share_depth_axis] [--depth_min DEPTH_MIN]
@@ -294,9 +299,11 @@ options:
   --conservation_table TSV
                         TSV manifest with BLAST files for similarity rings,
                         labels, and colors.
-  --conservation_fasta FASTA [FASTA ...]
-                        Optional comparison FASTA source(s), aligned with
-                        --conservation_blast for interactive span export.
+  --conservation_sequence FILE [FILE ...]
+                        Comparison genome sequence file(s) (FASTA, GenBank, or
+                        DDBJ; one file is one genome): the ring queries with
+                        --losat, otherwise one per --conservation_blast for
+                        interactive span export.
   --conservation_reference {query,subject,auto}
                         BLAST side containing displayed circular reference
                         coordinates.
@@ -312,6 +319,37 @@ options:
   --conservation_ring_gap CONSERVATION_RING_GAP
                         Similarity ring gap for circular mode (in px; must be
                         > 0).
+  --losat {losatn,tlosatx,losatp}
+                        Build the similarity rings with LOSAT: losatn compares
+                        nucleotide sequences (LOSAT blastn) and tlosatx their
+                        translations (LOSAT tblastx). Each
+                        --conservation_sequence genome is the query and the
+                        displayed records are the subject. Cannot be combined
+                        with --conservation_blast (default: no LOSAT search).
+  --losatn_task {megablast,blastn,dc-megablast}
+                        LOSATN search task with --losat losatn. A native
+                        runtime that does not support the task stops before
+                        searching (default: megablast).
+  --losat_gencode CODE  TLOSATX genetic code of the displayed (reference)
+                        records with --losat tlosatx (default: 1).
+  --conservation_losat_gencode CODE [CODE ...]
+                        TLOSATX genetic code of each comparison genome with
+                        --losat tlosatx: one for every ring or one per
+                        --conservation_sequence, in the same order; the
+                        --conservation_table losat_gencode column sets it per
+                        row (default: 1).
+  --losat_bin PATH      Native LOSAT executable for --losat (default:
+                        automatic runtime resolution).
+  --ncbi_blast_bin PATH
+                        NCBI BLAST+ executable of the selected --losat program
+                        (blastn or tblastx) (default: automatic runtime
+                        resolution).
+  --losat_threads N     Threads passed to each LOSAT or NCBI BLAST+ job
+                        (default: runtime default).
+  --losat_output_dir DIR
+                        Write the raw LOSAT evidence to DIR; requires --losat.
+                        One TSV per ring and conservation.tsv, which
+                        --conservation_table accepts unchanged.
   --evalue EVALUE       Maximum BLAST e-value retained for similarity rings
                         (default: 1e-5).
   --bitscore BITSCORE   Minimum BLAST bitscore retained for similarity rings
@@ -540,9 +578,11 @@ and Windows-reserved device, stream, or wildcard names are rejected. Pass an
 explicit `--output` path or prefix for such records.
 Session replay keeps its saved prefix unless an output override is supplied.
 
-Circular BLAST similarity rings use one ring per `--conservation_blast` source and a shared identity gradient legend. The rings display raw HSPs rather than an inferred measure of evolutionary conservation. BLAST tables must be outfmt 6 or 7. Coordinates on the selected reference side are normalized from BLAST 1-based inclusive coordinates to drawing spans; `start > end` marks reverse orientation and is not interpreted as a circular-origin-spanning hit. The CLI does not run LOSAT for these rings, so provide precomputed BLAST output.
+Circular BLAST similarity rings use one ring per `--conservation_blast` source and a shared identity gradient legend. The rings display raw HSPs rather than an inferred measure of evolutionary conservation. BLAST tables must be outfmt 6 or 7. Coordinates on the selected reference side are normalized from BLAST 1-based inclusive coordinates to drawing spans; `start > end` marks reverse orientation and is not interpreted as a circular-origin-spanning hit.
 
-For `interactive_svg`, add one `--conservation_fasta` value per `--conservation_blast` value to enable Reference span, Comparison span, and Both spans FASTA actions in the HSP popup. Without it, the reference span remains available and the comparison action explains that no comparison sequence was supplied. These actions export ungapped genomic spans. A reversed coordinate pair is sliced from the lower to the higher coordinate and reverse-complemented.
+To run the searches instead, use `--losat losatn` or `--losat tlosatx` with one `--conservation_sequence` file per ring (`losatp` is not available for rings). Each comparison genome file (FASTA, GenBank, or DDBJ; all records of one file are one genome) is the LOSAT query, and all displayed records are the subject, so every ring uses the reference genome as its E-value database and `--conservation_reference` resolves to `subject` (`query` is rejected). `--conservation_blast` cannot be combined with `--losat`. Ring order, labels, and colors follow `--conservation_sequence`; without `--conservation_labels`, a GenBank or DDBJ ring is labelled with its DEFINITION (or organism) and a FASTA ring with its file name. `--losatn_task` applies to LOSATN. For TLOSATX, `--losat_gencode` sets the reference genetic code and `--conservation_losat_gencode` one code for all rings or one per ring; both default to 1 and are never read from `/transl_table`. `--losat_bin`, `--ncbi_blast_bin`, and `--losat_threads` choose the runtime as in Linear mode. `--losat_output_dir DIR` writes one raw TSV per ring and `conservation.tsv`, which `--conservation_table` accepts unchanged. A saved Session stores the search results, so it replays without LOSAT. Thresholds, ring geometry, and `--circular_track_slot` work as for precomputed rings.
+
+For `interactive_svg`, add one `--conservation_sequence` value (FASTA, GenBank, or DDBJ) per `--conservation_blast` value to enable Reference span, Comparison span, and Both spans FASTA actions in the HSP popup. Without it, the reference span remains available and the comparison action explains that no comparison sequence was supplied. These actions export ungapped genomic spans. A reversed coordinate pair is sliced from the lower to the higher coordinate and reverse-complemented.
 
 ## Feature rendering
 
@@ -713,20 +753,21 @@ PemoMJNVA.PeseMJNV.tblastx.out	#2	#4
 
 ### `--conservation_table`
 
-Use `--conservation_table` in circular mode to keep BLAST paths, optional comparison FASTA paths, ring labels, and colors together. It cannot be combined with `--conservation_blast`, `--conservation_fasta`, `--conservation_labels`, or `--conservation_colors`.
+Use `--conservation_table` in circular mode to keep BLAST paths, optional comparison sequence paths, ring labels, and colors together. It cannot be combined with `--conservation_blast`, `--conservation_sequence`, `--conservation_labels`, `--conservation_colors`, or `--conservation_losat_gencode`.
 
 Allowed columns:
 
 | Column | Required | Meaning |
 | --- | --- | --- |
-| `blast` | yes | Path to a precomputed BLAST outfmt 6 or 7 file. |
-| `comparison_fasta` | optional | Comparison FASTA used only for interactive comparison-span export. |
+| `blast` | yes; rejected with `--losat` | Path to a precomputed BLAST outfmt 6 or 7 file. |
+| `comparison_sequence` | optional; required with `--losat` | Comparison genome (FASTA, GenBank, or DDBJ): the ring query with `--losat`, otherwise used only for interactive comparison-span export. |
+| `losat_gencode` | optional | TLOSATX genetic code of the ring with `--losat tlosatx` (empty cells use 1); rejected with `--losat losatn`, unused without `--losat`. |
 | `label` | optional | Similarity ring label. If the column is present, row order supplies the label list. |
 | `color` | optional | SVG color name or `#RRGGBB`. If the column is present, row order supplies the color list. |
 
 The row order defines the ring order. Thresholds and geometry still stay on the CLI, for example `--conservation_reference`, `--bitscore`, `--evalue`, `--identity`, `--alignment_length`, `--conservation_ring_width`, and `--conservation_ring_gap`.
 
-`comparison_fasta` does not change static ring geometry or filtering. Omit it when only the reference span should be available in an interactive SVG.
+Without `--losat`, `comparison_sequence` does not change static ring geometry or filtering. Omit it when only the reference span should be available in an interactive SVG. The retired `comparison_fasta` column is rejected with a message naming `comparison_sequence`.
 
 ```tsv
 blast	label	color

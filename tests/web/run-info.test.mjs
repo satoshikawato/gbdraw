@@ -571,6 +571,23 @@ const circularCanonical = canonical({
   }
 });
 
+test('circular source recipe names comparison genomes with --conservation_sequence', async () => {
+  const session = structuredClone(circularCanonical);
+  session.renderRequest.diagramOptions.conservationBlastFiles = [
+    { resourceId: 'conservation-blast-files-1', representation: 'file' }
+  ];
+  session.renderRequest.diagramOptions.conservationFastaFiles = [
+    { resourceId: 'conservation-fasta-files-1', representation: 'file' }
+  ];
+  session.resources['conservation-blast-files-1'] = resource('conservation-blast-file', 'ring.tsv', '');
+  session.resources['conservation-fasta-files-1'] = resource('conservation-fasta-file', 'ring.gb', 'LOCUS       ring\n//\n');
+  const sourceRecipe = await buildSourceRecipe(session);
+  assert.equal(sourceRecipe.available, true, sourceRecipe.unavailableReason);
+  assert.ok(sourceRecipe.args.includes('--conservation_sequence'));
+  assert.ok(!sourceRecipe.args.includes('--conservation_fasta'));
+  assertCliParserAccepts(sourceRecipe);
+});
+
 {
   const sourceRecipe = await buildSourceRecipe(circularCanonical);
   assert.equal(sourceRecipe.available, true);

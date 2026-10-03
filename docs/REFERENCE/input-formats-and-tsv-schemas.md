@@ -37,6 +37,17 @@ index, or explicitly expand all records. Use Circular presentation for a
 complete record whose biological topology is circular. Cropping a region or
 splitting a sequence does not make it circular.
 
+A Circular comparison genome (`--conservation_sequence`, the
+`comparison_sequence` table column, or `comparison_sequence_source` in Python)
+is read by content: a file whose first line starts with `>` is FASTA, and one
+that starts with `LOCUS` is a GenBank or DDBJ flat file. One file is one
+genome; all of its records form the LOSAT query. Only record IDs and sequences
+are used, so the same sequence gives the same ring in any of the three formats.
+A flat-file record without sequence (an empty `ORIGIN` or `CONTIG` only) stops
+the run with `INPUT_UNREADABLE` (`SEQUENCE_MISSING`). The TLOSATX genetic code
+comes from `--conservation_losat_gencode` (default 1), never from
+`/transl_table`.
+
 ## Comparison and numeric tables
 
 BLAST-compatible input is tab-separated UTF-8 text. gbdraw reads the first 12
@@ -92,7 +103,7 @@ containing the table.
 |---|---|---|
 | Records | One of `gbk`, or both `gff` and `fasta` | `record_label`, `record_subtitle`, `record_id`, `region`, `reverse_complement`, `topology`, `display_start`, `order`, `row`, `column`, `losat_gencode` |
 | Linear comparisons | `query`, `subject`; `blast` for `source=table` rows | `source` |
-| Circular conservation | `blast` | `label`, `color`, `comparison_fasta` |
+| Circular conservation | `blast`; `comparison_sequence` with `--losat` (then `blast` is rejected) | `label`, `color`, `comparison_sequence`, `losat_gencode` |
 | Circular tracks | `id`, `renderer` | `side`, `r`, `w`, `inner_gap_px`, `outer_gap_px`, `z`, `params` |
 | Annotations | `set_id`, `id`, `mark` | Target and presentation fields listed below |
 

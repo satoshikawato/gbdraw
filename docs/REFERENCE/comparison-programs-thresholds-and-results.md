@@ -7,8 +7,8 @@
 | Evidence or mode | Web app | Command line and Python | Result shown |
 |---|---|---|---|
 | Uploaded BLAST outfmt 6/7 | **Upload BLAST TSV** | Prepared table input | One retained row per Linear link or Circular span |
-| LOSATN | Browser nucleotide search | Linear: `--losat losatn` (Python `losat="losatn"`); Circular rings: exported table | Local nucleotide-alignment spans |
-| TLOSATX | Browser six-frame translated-nucleotide search | Linear: `--losat tlosatx` (Python `losat="tlosatx"`); Circular rings: exported table | Translated query and subject spans |
+| LOSATN | Browser nucleotide search | Linear and Circular rings: `--losat losatn` (Python `losat="losatn"`) | Local nucleotide-alignment spans |
+| TLOSATX | Browser six-frame translated-nucleotide search | Linear and Circular rings: `--losat tlosatx` (Python `losat="tlosatx"`) | Translated query and subject spans |
 | LOSATP Pairwise | Browser protein search | `pairwise` protein-search mode | Retained individual protein matches |
 | LOSATP **Similarity groups** | Browser protein search | `orthogroup` compatibility token | Search-derived group membership and links |
 | LOSATP **Collinear blocks** | Browser protein search | `collinear` protein-search mode | Ordered blocks built from compatible anchors |
@@ -26,7 +26,13 @@ The command line and Python API run LOSATN, TLOSATX, and LOSATP for Linear
 diagrams, with native LOSAT or the matching NCBI BLAST+ program. They search
 the same source-file databases as the web app and write the same raw-cache
 keys, so a Session saved from either reuses its LOSAT results in the other.
-Circular similarity rings still read exported rows (`--conservation_blast`).
+For Circular similarity rings they run LOSATN or TLOSATX: each comparison
+genome (`--conservation_sequence`, one file per ring) is the query and the
+displayed records are the subject database, as in the web app. A comparison
+FASTA with ID-only headers and 60-column uppercase lines, like the tutorial
+files, gets the web app's raw-cache key; other FASTA layouts and GenBank or
+DDBJ files give the same rows under a different key. Precomputed rings read
+exported rows (`--conservation_blast`).
 The web app can run all three LOSAT program families. The web app offers the
 LOSATN task `dc-megablast`; a native runtime that does not list that task (the
 released LOSAT 0.1.0) stops before searching. Threaded browser search requires cross-origin

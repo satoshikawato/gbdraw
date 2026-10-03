@@ -51,7 +51,9 @@ retained evidence around one reference. Linear comparisons connect selected
 query and subject record endpoints. On the command line, `gbdraw linear
 --losat losatn`, `--losat tlosatx`, or `--losat losatp` runs the same Linear
 searches; `--comparisons_table` rows with `source` `losat` or `table` mix
-searched and uploaded edges.
+searched and uploaded edges. `gbdraw circular --losat losatn` or
+`--losat tlosatx` with `--conservation_sequence` (FASTA, GenBank, or DDBJ)
+runs the ring searches against the displayed reference.
 
 The [comparison capability
 matrix](./REFERENCE/comparison-programs-thresholds-and-results.md#capability-matrix)
