@@ -67,6 +67,20 @@ const fileRecordKeys = request => [...new Set(request.records.map(
 const load = bytes => importSession({ target: {
   files: [new File([bytes], 'current.json', { type: 'application/json' })], value: 'selected'
 } });
+const DEFAULT_PLAN = { mode: 'none', defaultSource: 'losat', edges: [] };
+// B15: a read-only CLI comparison (-b) is not a Web draft. The replacement draft
+// is the Web default (No comparison), so Replace with current controls
+// (app-setup.js: a valid plan with comparison intent) waits until the user sets
+// up a comparison, and no LOSAT run starts from the draft.
+const assertNoReplacementDraft = () => {
+  assert.deepEqual(state.linearComparisonPlan, DEFAULT_PLAN);
+  const draft = resolveLinearComparisonPlan({
+    plan: state.linearComparisonPlan, sequences: state.linearSeqs, layout: [],
+    losatProgram: state.losatProgram.value, blastpMode: state.losat.blastp.mode
+  });
+  assert.equal(draft.valid && draft.hasComparisonIntent, false);
+  assert.equal(draft.hasLosatIntent, false);
+};
 
 for (const [label, mode, args, sourcePaths, legend] of cases) {
   await test(`current CLI ${label} and CLI replay initialize Web from the canonical request`, async () => {
@@ -166,6 +180,7 @@ await test('a main v42 CLI Linear BLAST sidecar keeps a read-only comparison wit
   assert.equal(state.importedComparisonIntent.disposition, 'PRESERVED_READ_ONLY');
   assert.deepEqual(state.linearSeqs.map(seq => seq.uid), ['record-1', 'record-2']);
   assert.deepEqual(fileRecordKeys(getCommittedCanonicalRenderRequest()), ['record-1', 'record-2']);
+  assertNoReplacementDraft();
 });
 
 // B3: one multi-record GenBank file with -b gives records `record-1:1` and
@@ -189,6 +204,7 @@ await test('a multi-record CLI Linear BLAST Session inherits its comparison onto
     const result = await load(bytes);
     assert.equal(result.status, 'ok', result.error?.stack);
     assert.equal(state.importedComparisonIntent.disposition, 'PRESERVED_READ_ONLY');
+    assertNoReplacementDraft();
     // The candidate Generate builds after Inherit (run-analysis.js: empty plan, committed comparison).
     const filesData = await serializeActiveRenderFiles('linear', state);
     const candidate = buildCanonicalRenderRequest({
@@ -212,6 +228,39 @@ await test('a multi-record CLI Linear BLAST Session inherits its comparison onto
     assert.equal(first.resourceId, second.resourceId);
     assert.equal(hash(Buffer.from(first.descriptor.data, 'base64')),
       hash(await readFile(path.join(root, 'tests/fixtures/web_comparison_shared_block.gb'))));
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+// B15: an editable CLI protein pipeline is the adjacent LOSATP comparison the
+// CLI drew. The projection states that plan (the plan normalizer no longer
+// falls back to adjacent), so Generate rebuilds the same pipeline.
+await test('a CLI Linear protein Session keeps the adjacent LOSATP plan it drew', async () => {
+  const directory = await mkdtemp(path.join(tmpdir(), 'gbdraw-cli-web-'));
+  try {
+    const file = path.join(directory, 'protein.gbdraw-session.json.gz');
+    execFileSync('python', ['-m', 'gbdraw.cli', 'linear', '--gbk', mito, lambda,
+      '--protein_blastp_mode', 'orthogroup', '-o', path.join(directory, 'protein'), '--session_output', file], {
+      cwd: directory, env: { ...process.env, PYTHONPATH: root }, stdio: 'pipe', timeout: 1_800_000
+    });
+    const bytes = gunzipSync(await readFile(file));
+    const session = JSON.parse(bytes);
+    assert.deepEqual(session.renderRequest.comparisons.map(item => [item.kind, item.mode]),
+      [['generatedProteinComparison', 'orthogroup']]);
+    const result = await load(bytes);
+    assert.equal(result.status, 'ok', result.error?.stack);
+    assert.equal(state.importedComparisonIntent.disposition, 'EDITABLE');
+    assert.deepEqual(state.linearComparisonPlan, { ...DEFAULT_PLAN, mode: 'adjacent' });
+    assert.equal(state.losatProgram.value, 'blastp');
+    const filesData = await serializeActiveRenderFiles('linear', state);
+    const comparisonPlanSnapshot = resolveLinearComparisonPlan({
+      plan: state.linearComparisonPlan, sequences: filesData.linearSeqs, layout: [],
+      losatProgram: state.losatProgram.value, blastpMode: state.losat.blastp.mode
+    });
+    const candidate = buildCanonicalRenderRequest({ state, filesData, comparisonPlanSnapshot });
+    assert.deepEqual(candidate.renderRequest.comparisons.map(item => [item.kind, item.mode]),
+      [['generatedProteinComparison', 'orthogroup']]);
   } finally {
     await rm(directory, { recursive: true, force: true });
   }
