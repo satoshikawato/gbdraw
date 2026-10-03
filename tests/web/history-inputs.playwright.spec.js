@@ -38,11 +38,11 @@ const generate = async (page) => {
   return page.evaluate(() => window.__GBDRAW_APP__.results[0].content);
 };
 
-const expectHistory = async (page, undo, redo, label) => {
+const expectHistory = async (page, undo, redo, label, options = {}) => {
   await expect.poll(() => page.evaluate(() => {
     const history = window.__GBDRAW_HISTORY__;
     return [history.getUndoCount(), history.getRedoCount(), history.undoLabel()];
-  })).toEqual([undo, redo, label]);
+  }), options).toEqual([undo, redo, label]);
 };
 
 for (const inputMethod of ['keyboard', 'pointer']) {
@@ -378,6 +378,9 @@ test('History shortcuts work on a focused select, and a text field keeps native 
 
 // B21 (R11): a file chosen in a hidden input that a button or a label opens
 // records one step, whether the picker, the input, or a script sets the file.
+// An Add Seq step commits after the ring reader answers (B22); the first read
+// starts the diagram worker.
+const ringReadTimeout = { timeout: 120_000 };
 const ringRows = (page) => page.evaluate(() => ({
   files: (window.__GBDRAW_APP__.files.c_conservation_fastas || []).map((file) => file?.name || null),
   rows: window.__GBDRAW_APP__.circularConservation.series.map((entry) => entry.label)
@@ -401,7 +404,7 @@ test('each Circular LOSAT ring file added through Add Seq is one Undo step', asy
   const expectAdded = async (name) => {
     states.push({ files: [...states.at(-1).files, name], rows: [...states.at(-1).rows, name.replace(/\.fasta$/, '')] });
     await expect.poll(() => ringRows(page), { message: name }).toEqual(states.at(-1));
-    await expectHistory(page, baseline + states.length - 1, 0, 'Change uploaded file');
+    await expectHistory(page, baseline + states.length - 1, 0, 'Change uploaded file', ringReadTimeout);
   };
 
   const [chooser] = await Promise.all([page.waitForEvent('filechooser'), addSeq.click()]);
@@ -452,4 +455,87 @@ test('an uploaded BLAST row comparison sequence chosen through its label is one 
   await page.getByRole('button', { name: 'Redo', exact: true }).click();
   await expect.poll(sequenceSources).toEqual(['ring-subject.fasta']);
   await expectHistory(page, baseline + 1, 0, 'Change uploaded file');
+});
+
+// B22 (R11, D12): the Python ring reader names a GenBank or DDBJ ring row after
+// the file is chosen. That label belongs to the row's Add Seq step, so Redo
+// restores it and the add is still one step.
+const ringFlatFile = ({ definition }) => {
+  const sequence = 'ACGTTGCAAC'.repeat(12);
+  const origin = [];
+  for (let start = 0; start < sequence.length; start += 60) {
+    const chunk = sequence.slice(start, start + 60).match(/.{1,10}/g).join(' ');
+    origin.push(`${String(start + 1).padStart(9)} ${chunk}`);
+  }
+  return [
+    `LOCUS       RING1            ${String(sequence.length).padStart(11)} bp    DNA     linear   UNK 01-JAN-1980`,
+    `DEFINITION  ${definition}`,
+    'ACCESSION   RING1',
+    'VERSION     RING1',
+    'KEYWORDS    .',
+    'SOURCE      Synthetic ring organism',
+    '  ORGANISM  Synthetic ring organism',
+    '            Unclassified.',
+    'FEATURES             Location/Qualifiers',
+    'ORIGIN',
+    ...origin,
+    '//',
+    ''
+  ].join('\n');
+};
+
+test('a GenBank or DDBJ ring added through Add Seq keeps its record label through Undo and Redo', async ({ page }, testInfo) => {
+  test.setTimeout(180_000);
+  await preparePage(page);
+  await loadSession(page, conservationSession);
+  const [baseline] = await historyCounts(page);
+  const initial = await ringRows(page);
+  await reveal(page.locator('button', { hasText: 'Add Seq' }));
+  const ringInput = page.locator('input[type="file"][accept^=".fa,.fas,.fasta,.fna,.ffn,.gb"]');
+  const added = (state, name, label) => ({ files: [...state.files, name], rows: [...state.rows, label] });
+  const expectState = async (state, undo, redo, message) => {
+    await expect.poll(() => ringRows(page), { message, ...ringReadTimeout }).toEqual(state);
+    await expect.poll(() => historyCounts(page), { message, ...ringReadTimeout }).toEqual([baseline + undo, redo]);
+  };
+
+  // GenBank through the input: the DEFINITION label is part of the one step.
+  const genbankPath = testInfo.outputPath('ring-genbank.gbk');
+  writeFileSync(genbankPath, ringFlatFile({ definition: 'synthetic ring genbank.' }));
+  const genbank = added(initial, 'ring-genbank.gbk', 'synthetic ring genbank');
+  await ringInput.setInputFiles(genbankPath);
+  await expectState(genbank, 1, 0, 'GenBank added');
+  await expectHistory(page, baseline + 1, 0, 'Change uploaded file');
+  await page.getByRole('button', { name: 'Undo', exact: true }).click();
+  await expectState(initial, 0, 1, 'GenBank add undone');
+  await page.getByRole('button', { name: 'Redo', exact: true }).click();
+  await expectState(genbank, 1, 0, 'GenBank add redone with its DEFINITION');
+
+  // DDBJ set by a script (buffer): an empty DEFINITION falls back to the organism.
+  const ddbj = added(genbank, 'ring-ddbj.ddbj', 'Synthetic ring organism');
+  await ringInput.setInputFiles({
+    name: 'ring-ddbj.ddbj', mimeType: 'text/plain', buffer: Buffer.from(ringFlatFile({ definition: '.' }))
+  });
+  await expectState(ddbj, 2, 0, 'DDBJ added');
+  await expectHistory(page, baseline + 2, 0, 'Change uploaded file');
+
+  // A label typed before the reader answers wins, in the same step.
+  const typed = added(ddbj, 'ring-typed.gbk', 'Typed ring');
+  await page.evaluate(async (text) => {
+    const { state } = await import('/gbdraw/web/js/state.js');
+    const file = new File([text], 'ring-typed.gbk', { type: 'text/plain', lastModified: 0 });
+    window.__GBDRAW_APP__.addCircularConservationComparisonFile({ target: { files: [file], value: '' } });
+    state.circularConservation.series[state.circularConservation.series.length - 1].label = 'Typed ring';
+  }, ringFlatFile({ definition: 'synthetic ring typed.' }));
+  await expectState(typed, 3, 0, 'typed ring added');
+  await expectHistory(page, baseline + 3, 0, 'Change uploaded file');
+
+  const states = [initial, genbank, ddbj, typed];
+  for (let index = states.length - 2; index >= 0; index -= 1) {
+    await page.getByRole('button', { name: 'Undo', exact: true }).click();
+    await expectState(states[index], index, states.length - 1 - index, `Undo to state ${index}`);
+  }
+  for (let index = 1; index < states.length; index += 1) {
+    await page.getByRole('button', { name: 'Redo', exact: true }).click();
+    await expectState(states[index], index, states.length - 1 - index, `Redo to state ${index}`);
+  }
 });

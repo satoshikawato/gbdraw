@@ -353,6 +353,11 @@ Circular and Linear editors), `tests/web/circular-track-slots.test.mjs`, and
   text control begins on focus. The pointer, the label, the keyboard, and a file
   picker opened by another button record the same one step
   (`app/history-inputs.js`).
+- A file input whose change ends with asynchronous work is
+  `data-history-managed` and owns one `runUndoable` step that commits after
+  that work: a `file-uploader` `afterChange` import, and **Add Seq**
+  (`addCircularConservationComparisonFile`), whose step holds the ring record
+  label read by the Python reader.
 - Undo, Redo, and the header buttons share one reactive availability
   (`historyAvailability`), busy while an artifact replacement or checkpoint is
   open or an action owns the open intent.
