@@ -8,6 +8,31 @@
 
 ---
 
+## 0. Owner の決定（2026-10-03）
+
+この節は本文より優先する。ここに無い D1〜D3、D5、D6、D8、D10、D13〜D17 は推奨のまま採る（Owner-delegated、§5）。
+
+| # | 決定 | 本文への影響 |
+|---|---|---|
+| D4 | **拒否する。** 旧 CLI flag は fresh run で置き換え先を示して拒否し、legacy session（version 27–30）の argv は書き換える | 推奨どおり |
+| D7 | **Web に合わせる。** CLI / API の LOSATP も source-file batching の E-value scope にする | PR-5 を実施する。複数 record の file では CLI の LOSATP の E-value が変わる。Gallery の差分を review する |
+| D9 | **固定しない。** track している `gbdraw/bin` の binary を v0.1.0 に置き換えない | PR-1 から binary の置き換えを外す。runtime の解決順は今のまま。結果の同等性は版の一致に依存するので、使った runtime の識別（path、版、program）を Session と Run Info に記録する（D10）。CLI Reference の「Linux x86_64 用に同梱」という誤記は B16 として別に直した |
+| D11 | **固定しない。** Web の WASM を v0.1.0 から作り直さない | PR-6 から WASM の pin を外す。`dc-megablast` は Web に残す。CLI で native の runtime が task に対応しないときは、`COMPARISON_INPUT` の診断付きの error にする |
+| D12 | **ring は LOSATN と TLOSATX。比較する genome の入力は FASTA に加えて GenBank / DDBJ の flat file も受け付け、parse して配列を取り出す。CLI、Python API、Web のすべてで同じ。** | 下の「D12 の追加の設計」を見る |
+
+### D12 の追加の設計
+
+- **読み手は 1 つ。** 比較する genome の file から配列を取り出す処理は Python の `gbdraw.io` に 1 つだけ置き、CLI、Python API、Web（Worker の Python helper）が同じものを使う。形式は内容で判定する（`>` で始まれば FASTA、`LOCUS` で始まれば GenBank / DDBJ の flat file）。DDBJ の flat file は GenBank と同じ形式なので、同じ parser（Biopython）で読む。JavaScript に 2 つ目の配列の reader を作らない（R9、G-J(2) と同じ考え方）。
+- **1 file = 1 genome。** multi-record の file は全 record を 1 つの genome（LOSAT の query の集合）として扱う。E-value の scope も file 単位で、D7 と同じ規則にする。
+- **配列の無い record は拒否する。** `ORIGIN` が空、または `CONTIG` だけの GenBank は `INPUT_UNREADABLE`（reason は新設、例 `SEQUENCE_MISSING`）で止める。
+- **TLOSATX の gencode。** GenBank / DDBJ から読んだ場合も既定値は 1（D17）。`/transl_table` からは推定しない。`--conservation_losat_gencode` で指定する。
+- **ring の label の既定値。** GenBank / DDBJ では record の definition か organism、FASTA では file 名（今の precomputed の規則に合わせる。実装時に今の既定値を確かめる）。
+- **Web。** ring の行に GenBank / DDBJ の file を置けるようにする（今の FASTA の入力欄と同じ場所）。Session には今の FASTA と同じく resource として保存する。
+- **option の名前（新しい判断 D18）。** 入力が FASTA に限られなくなるので、`--conservation_fasta` の名前は内容に合わない。**推奨: `--conservation_sequence FILE [FILE ...]`（FASTA、GenBank、DDBJ を受け付ける）を新設し、`--conservation_fasta` は D4 の規則で退役させる**（fresh run では置き換え先を示して拒否し、legacy session の argv は書き換える）。precomputed の ring（`--conservation_blast` と組み合わせる場合）も同じ名前にする。Python API の `conservation_fasta_files` も `conservation_sequence_files` に改名する（D5 と同じく alias なし）。D16 の「`--conservation_*` は今回変えない」はこの 1 つについて上書きする。Owner が別の名前を選ぶ場合は、実装の前に決める。
+- **影響する PR。** PR-4 に含める（CLI、Python API、共通の reader、test）。Web の入力欄は PR-6 に含める。先に失敗させる test: GenBank と DDBJ の file を比較する genome にした LOSATN の ring が、同じ配列の FASTA から作った ring と byte 一致すること。配列の無い GenBank を拒否すること。
+
+---
+
 ## 1. 目的と結論（推奨案の要約）
 
 ### 目的
