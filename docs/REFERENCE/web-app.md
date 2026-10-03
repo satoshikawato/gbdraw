@@ -105,7 +105,10 @@ settings. The app does not show a separate always-on application status.
 A live edit can succeed while other settings stay in the draft. **Live edit
 applying** and **Live edit failed** appear above the Result while a live
 rerender runs or after it fails. A rerender failure retains any direct edit already applied and keeps
-the previous diagram geometry; correct the edit and retry. An unapplied alignment
+the previous diagram geometry. **Live edit failed** names the cause and suggests
+retrying the live edit only when the same request can succeed, such as after a
+Worker failure; otherwise change the edit, or change the settings and use
+**Generate Diagram**. An unapplied alignment
 review is a local selection, not an applied Result or a generation-setting change.
 
 **Generate Diagram** recalculates placement and resets zoom. Supported color,

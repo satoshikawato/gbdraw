@@ -114,6 +114,7 @@ const DEFINITIONS = Object.freeze({
   FASTA_REQUIRED: ['Supply a matching FASTA input for each GFF3 input.', ['select-input', 'retry']],
   INPUT_UNREADABLE: ['An input could not be read. Replace or reselect it.', ['select-input', 'retry']],
   SESSION_SAVE_REQUIRES_GENERATE: ['Save Session needs current feature metadata for the loaded Result. Generate once, then Save Session.', ['generate']],
+  LIVE_EDIT_REQUIRES_GENERATE: ['Generate the diagram to update its label placement.', ['generate']],
   NO_RECORDS: ['No records were found. Choose input containing records.', ['select-input', 'retry']],
   RECORD_SELECTION: ['The record selection is invalid.', ['select-record', 'retry']],
   REGION_INVALID: ['The region is invalid.', ['edit-region', 'retry']],
@@ -435,6 +436,20 @@ export const normalizeUserFacingError = (value, {
     Number.isSafeInteger(detailLimit) ? Math.max(0, Math.min(detailLimit, 4000)) : 4000) }].slice(0, 8);
   result.actions = [...actions];
   return result;
+};
+
+// A live edit rerenders the committed Session with the current editor tables, so
+// repeating the edit sends the same request. Retry is offered only when the
+// failure's own recovery changes no input (B11, R6); otherwise the edit or the
+// settings must change, and settings apply on Generate.
+const PLAIN_RETRY_ACTIONS = new Set(['retry', 'reload', 'save-session']);
+export const liveEditFailure = (error) => {
+  if (!error) return null;
+  const retry = error.actions.includes('retry') && error.actions.every((action) => PLAIN_RETRY_ACTIONS.has(action));
+  const next = error.actions.includes('generate') ? ''
+    : retry ? ' Retry the live edit or use Generate.' : ' Change the edit, or change the settings and use Generate.';
+  return { ...error, actions: retry ? ['retry', 'generate'] : ['generate'],
+    note: `Live edit failed: direct edits already applied are kept; geometry may still need updating. ${error.summary}${next}` };
 };
 
 // Presentation of finite operation and transaction facts stays with public wording.
