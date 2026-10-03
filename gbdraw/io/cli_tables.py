@@ -80,9 +80,11 @@ class ConservationTable:
 class ComparisonTableRow:
     row_index: int
     row_number: int
+    # Empty for a ``source=losat`` row.
     blast: str
     query: str
     subject: str
+    source: str = "table"
 
 
 @dataclass(frozen=True)
@@ -121,6 +123,7 @@ class RecordsTableRow:
     column: int | None
     topology: str | None = None
     display_start: int | None = None
+    losat_gencode: int | None = None
 
 
 @dataclass(frozen=True)
@@ -210,7 +213,8 @@ class _TrackRow:
 
 
 _CONSERVATION_COLUMNS = frozenset({"blast", "label", "color", "comparison_fasta"})
-_COMPARISON_COLUMNS = frozenset({"blast", "query", "subject"})
+_COMPARISON_COLUMNS = frozenset({"blast", "query", "subject", "source"})
+_COMPARISON_SOURCES = frozenset({"table", "losat"})
 _CIRCULAR_TRACK_COLUMNS = frozenset(
     {
         "id",
@@ -239,6 +243,7 @@ _RECORDS_COLUMNS = frozenset(
         "order",
         "row",
         "column",
+        "losat_gencode",
     }
 )
 _BOOLEAN_TRUE = {"1", "true", "yes", "y", "on"}
@@ -537,6 +542,7 @@ def read_records_table(path: str) -> RecordsTable:
                 column=column,
                 topology=topology if topology in {"circular", "linear"} else None,
                 display_start=display_start,
+                losat_gencode=_parse_optional_positive_int(table_path, row, "losat_gencode"),
             )
         )
 
@@ -588,13 +594,30 @@ def read_comparisons_table(path: str) -> ComparisonTable:
         blast_raw = values.get("blast", "").strip()
         query = values.get("query", "").strip()
         subject = values.get("subject", "").strip()
-        for column, value in (("blast", blast_raw), ("query", query), ("subject", subject)):
+        source = values.get("source", "").strip().lower() or "table"
+        if source not in _COMPARISON_SOURCES:
+            raise ValidationError(
+                _cell_error(table_path, row.row_number, "source", "expected table or losat"),
+                diagnostic={"code": "TABLE_INVALID", "field": "source", "row": row.row_number},
+            )
+        required_cells = (("query", query), ("subject", subject))
+        if source == "table":
+            required_cells = (("blast", blast_raw), *required_cells)
+        elif blast_raw:
+            raise ValidationError(
+                _cell_error(
+                    table_path, row.row_number, "blast",
+                    "must be empty in a source=losat row; gbdraw runs the search",
+                ),
+                diagnostic={"code": "COMPARISON_INPUT", "reason": "LOSAT_PLAN", "row": row.row_number},
+            )
+        for column, value in required_cells:
             if not value:
                 raise ValidationError(
                     _cell_error(table_path, row.row_number, column, "value is required")
                 )
-        blast = _resolve_table_path(table_path, blast_raw)
-        if not Path(blast).is_file():
+        blast = _resolve_table_path(table_path, blast_raw) if blast_raw else ""
+        if blast and not Path(blast).is_file():
             raise ValidationError(
                 _cell_error(table_path, row.row_number, "blast", f"file does not exist: {blast}")
             )
@@ -607,14 +630,15 @@ def read_comparisons_table(path: str) -> ComparisonTable:
                     "query and subject must identify different records",
                 )
             )
-        dependencies.append(
-            TablePathDependency(
-                row_index=row.row_index,
-                row_number=row.row_number,
-                column="blast",
-                path=blast,
+        if blast:
+            dependencies.append(
+                TablePathDependency(
+                    row_index=row.row_index,
+                    row_number=row.row_number,
+                    column="blast",
+                    path=blast,
+                )
             )
-        )
         parsed.append(
             ComparisonTableRow(
                 row_index=row.row_index,
@@ -622,6 +646,7 @@ def read_comparisons_table(path: str) -> ComparisonTable:
                 blast=blast,
                 query=query,
                 subject=subject,
+                source=source,
             )
         )
     return ComparisonTable(

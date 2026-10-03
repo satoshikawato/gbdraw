@@ -1,0 +1,720 @@
+{
+  "schema": 1,
+  "description": "Shared LOSAT job plan and nucleotide raw-key vectors. tests/test_losat_job_plan.py and tests/web/linear-sources.test.mjs run every case; Python gbdraw.comparisons.losat_jobs and Web planLosatSourceJobs/prepareLosatSourceBatches/buildLosatCachePayload must give the same jobs, batch FASTA hashes, searchContext, and raw keys. Batch sides order records by record key (Web sequence uid); keys are ASCII so code-point and localeCompare order agree.",
+  "cases": [
+    {
+      "name": "two single-record files, LOSATN megablast (lambda/DE3 shape)",
+      "program": "blastn",
+      "task": "megablast",
+      "records": [
+        {
+          "uid": "record-1",
+          "source": "a.gb",
+          "fasta": ">A1\nGACATTTAATTTCACCCATAAACCAGCGTAAAGCTGCAAGTGGCTCCATGAACTTAGCTGCTAGTGTCAGACTCGCCTCG\n",
+          "gencode": null
+        },
+        {
+          "uid": "record-2",
+          "source": "b.gb",
+          "fasta": ">B1\nGATCCTTACTACACTAACTTGAACGCCTAGTGGTCAAAGAGTACTGGTAATCGTCGGTATCTATATAAGCAGGGGAGGGGAAACATTTGT\n",
+          "gencode": null
+        }
+      ],
+      "specs": [
+        [
+          0,
+          1
+        ]
+      ],
+      "expected": {
+        "jobs": [
+          {
+            "scope": "between-sources",
+            "args": [
+              "--task",
+              "megablast"
+            ],
+            "specs": [
+              [
+                0,
+                1
+              ]
+            ],
+            "queryIndexes": [
+              0
+            ],
+            "subjectIndexes": [
+              1
+            ],
+            "queryIds": {
+              "A1": [
+                0,
+                "A1"
+              ]
+            },
+            "subjectIds": {
+              "B1": [
+                1,
+                "B1"
+              ]
+            },
+            "queryHash": "0b9bb32c830e20cac4763a2d3886494b5ae331cd45b8c4bfde9992dff4063280",
+            "subjectHash": "c58f625c025e7dd597c5a0e241e85e693b20a7dbb4f31bab5312e74b3324dce2",
+            "searchContext": null
+          }
+        ],
+        "rawKeys": [
+          [
+            0,
+            1,
+            "b1dbee4fa475b9eca86c2bee326d9d629dc3efcee7641518b3fa71c539a5372e"
+          ]
+        ]
+      }
+    },
+    {
+      "name": "two records of one file in row 1 against one file in row 2",
+      "program": "blastn",
+      "task": "blastn",
+      "records": [
+        {
+          "uid": "record-1",
+          "source": "a.gb",
+          "fasta": ">A1\nTCTCAGCCGGTGACTCCTAATGCTAAGACATTTCCCTTCAGGGGGGGCTCCCCCGCGATGCCATAAATCT\n",
+          "gencode": null
+        },
+        {
+          "uid": "record-2",
+          "source": "a.gb",
+          "fasta": ">A2\nGAGCAACCAGCTGAAGCAGGCACGACAGTGCGACATTATATCACTGTGGTAGGTTAGCTTCATCTAATGTCCAAC\n",
+          "gencode": null
+        },
+        {
+          "uid": "record-3",
+          "source": "b.gb",
+          "fasta": ">B1\nTAGCCGGCCAATTCGCATGATACCTCTCCATCTGACCCAAGATTGTGCTTGTTCAATTCTTCTT\n",
+          "gencode": null
+        }
+      ],
+      "specs": [
+        [
+          0,
+          2
+        ],
+        [
+          1,
+          2
+        ]
+      ],
+      "expected": {
+        "jobs": [
+          {
+            "scope": "between-sources",
+            "args": [
+              "--task",
+              "blastn"
+            ],
+            "specs": [
+              [
+                0,
+                2
+              ],
+              [
+                1,
+                2
+              ]
+            ],
+            "queryIndexes": [
+              0,
+              1
+            ],
+            "subjectIndexes": [
+              2
+            ],
+            "queryIds": {
+              "n_b7462d6ced2c15add3dbe47755277fa9618aceb17c68f507128896d622d4c5ee_0": [
+                0,
+                "A1"
+              ],
+              "n_7bd87ca67f07e7904cc69653a6b4b41af5951dff5eabece3ef3553a034c592a4_0": [
+                1,
+                "A2"
+              ]
+            },
+            "subjectIds": {
+              "B1": [
+                2,
+                "B1"
+              ]
+            },
+            "queryHash": "7737b28f230fa28482abba23fae48b4dec259ad4c9be2144fc14691a565e5d33",
+            "subjectHash": "f5fdb299a6a256bc38b5c00041c50f104e47a8ec569afbf611f7877d6d2e8700",
+            "searchContext": "bda43a1a077858e772acfbbf1a0249a597aca2cb0d1a298f93d5d34dd0a89bb9"
+          }
+        ],
+        "rawKeys": [
+          [
+            0,
+            2,
+            "ffb05dc8e18afa01c6ae4d872a741c30d3a9fbac2463aa2aeda5037568640c3e"
+          ],
+          [
+            1,
+            2,
+            "43013e6f4098850ff3b0a36b96f722fd33994015c5167be1ffe31dea86d1bf0e"
+          ]
+        ]
+      }
+    },
+    {
+      "name": "records of one file in adjacent rows search within the source",
+      "program": "blastn",
+      "task": "megablast",
+      "records": [
+        {
+          "uid": "record-1",
+          "source": "a.gb",
+          "fasta": ">A1\nAACGTGATAACAGAATCAAACCTGCCAGGCGGTCGTCGCGGACCTCGGTCGAAGTAGTGGTGCGGATCCA\n",
+          "gencode": null
+        },
+        {
+          "uid": "record-2",
+          "source": "a.gb",
+          "fasta": ">A2\nGGGGAACCGTTGACTCAAAAGGAGCTGCCGTCCACCTAACGTGAAGTTCCAAAATCCCAAACCTCTCGAGATATT\n",
+          "gencode": null
+        },
+        {
+          "uid": "record-3",
+          "source": "a.gb",
+          "fasta": ">A3\nTATCCAGCAAGGAGTGGCAACGCCCGCTGCTTTAATCGCTACCAAAACGCAAACAAAAGCATACCC\n",
+          "gencode": null
+        }
+      ],
+      "specs": [
+        [
+          0,
+          1
+        ],
+        [
+          1,
+          2
+        ]
+      ],
+      "expected": {
+        "jobs": [
+          {
+            "scope": "within-source",
+            "args": [
+              "--task",
+              "megablast"
+            ],
+            "specs": [
+              [
+                0,
+                1
+              ]
+            ],
+            "queryIndexes": [
+              0
+            ],
+            "subjectIndexes": [
+              1,
+              2
+            ],
+            "queryIds": {
+              "A1": [
+                0,
+                "A1"
+              ]
+            },
+            "subjectIds": {
+              "n_7bd87ca67f07e7904cc69653a6b4b41af5951dff5eabece3ef3553a034c592a4_0": [
+                1,
+                "A2"
+              ],
+              "n_22dc2e6404475362e139e594e3486a24676dfe64609fca46511d4149ea9e7488_0": [
+                2,
+                "A3"
+              ]
+            },
+            "queryHash": "712e0180bc88772dbbc39c81f26f0fa5b4971d02d82e7edab40c586552ab81d4",
+            "subjectHash": "73a9131de807b60528bd7c0957a816e40b302906b571da5658d2e06467fe1916",
+            "searchContext": "06fd39757908196186b008883d17739ac31ec77fa330f2933596beb87778cc24"
+          },
+          {
+            "scope": "within-source",
+            "args": [
+              "--task",
+              "megablast"
+            ],
+            "specs": [
+              [
+                1,
+                2
+              ]
+            ],
+            "queryIndexes": [
+              1
+            ],
+            "subjectIndexes": [
+              0,
+              2
+            ],
+            "queryIds": {
+              "A2": [
+                1,
+                "A2"
+              ]
+            },
+            "subjectIds": {
+              "n_b7462d6ced2c15add3dbe47755277fa9618aceb17c68f507128896d622d4c5ee_0": [
+                0,
+                "A1"
+              ],
+              "n_22dc2e6404475362e139e594e3486a24676dfe64609fca46511d4149ea9e7488_0": [
+                2,
+                "A3"
+              ]
+            },
+            "queryHash": "04656d28a8b2611dbc3b8052fc5468bd6233f2911811cbb5734113d173e4719d",
+            "subjectHash": "7a78c906e04b406274674196983e4dae4180aab6185d5059a4450b306fb570ec",
+            "searchContext": "ca1d8b1c53726639801ce6f05653d44713ee8084d78756630efce63cd7903989"
+          }
+        ],
+        "rawKeys": [
+          [
+            0,
+            1,
+            "5a4d1d4dbf0b81f7733ab0c59a75f204992e6cdcbe9e9d42679c0453cecf8714"
+          ],
+          [
+            1,
+            2,
+            "ae78795fc23995eceaed6cd696cefef0fafca74f76fa0b47793efa191dbffc05"
+          ]
+        ]
+      }
+    },
+    {
+      "name": "TLOSATX default translation tables pass no gencode",
+      "program": "tblastx",
+      "task": null,
+      "records": [
+        {
+          "uid": "record-1",
+          "source": "a.gb",
+          "fasta": ">A1\nAAAAGTACACGGGTGAGGGAGGTGATATAGTACAGCTACGAAGTATCTGGCGCCTCAATAGGATTATAGCGGTCTCTCAGGCTGCTTGCC\n",
+          "gencode": null
+        },
+        {
+          "uid": "record-2",
+          "source": "b.gb",
+          "fasta": ">B1\nGTCCGGCCCGGCCGCGACACTCCGGTGCAAGCTTAATTCGTACGTACTTCCCATTGGATCTCGTTTATCGATTAAGCCCGATCTAGGTTCCTA\n",
+          "gencode": null
+        }
+      ],
+      "specs": [
+        [
+          0,
+          1
+        ]
+      ],
+      "expected": {
+        "jobs": [
+          {
+            "scope": "between-sources",
+            "args": [],
+            "specs": [
+              [
+                0,
+                1
+              ]
+            ],
+            "queryIndexes": [
+              0
+            ],
+            "subjectIndexes": [
+              1
+            ],
+            "queryIds": {
+              "A1": [
+                0,
+                "A1"
+              ]
+            },
+            "subjectIds": {
+              "B1": [
+                1,
+                "B1"
+              ]
+            },
+            "queryHash": "4169cd185f5a72ec743c82c7a3840d4d0641be8efde89d54427e4a72b2ea52c4",
+            "subjectHash": "9cc970f6e6c006e9a1b3d33472e2779a5922e907a488b98ed61391c203e7639f",
+            "searchContext": null
+          }
+        ],
+        "rawKeys": [
+          [
+            0,
+            1,
+            "57b8157f44b16ad442d01f6b16c3e13668063a158b42b20a97351a70eedfbcce"
+          ]
+        ]
+      }
+    },
+    {
+      "name": "TLOSATX explicit per-record tables split incompatible batches",
+      "program": "tblastx",
+      "task": null,
+      "records": [
+        {
+          "uid": "record-1",
+          "source": "a.gb",
+          "fasta": ">A1\nGAGGTTAAATTGGACGTCTTCCCACTCCGTTGCTGCGTGTCTAGGCGGTTTAGCGTAAGCGAACAGGACCCTGCCTCAGCTCATAAGTCC\n",
+          "gencode": 4
+        },
+        {
+          "uid": "record-2",
+          "source": "a.gb",
+          "fasta": ">A2\nTTATTCTCTCACGTTGTGTTACGAAAGATTCACTCGAGGTCGTGTGAGGGTTGGGCTAGC\n",
+          "gencode": 11
+        },
+        {
+          "uid": "record-3",
+          "source": "a.gb",
+          "fasta": ">A3\nGGCAATTATGAAACTATCACATCACATAAGCGGGCTAGATATAATTTAATCTTAATCCAT\n",
+          "gencode": 11
+        },
+        {
+          "uid": "record-4",
+          "source": "b.gb",
+          "fasta": ">B1\nAAAACACTAGCTCAGCAGTTGAAAAAATGGCTAGGTTCCAGCTTTTGGGGAGACGTCTTTCTGAGGGTCAGCCGTGATTCCGATTCGATTAGA\n",
+          "gencode": 11
+        }
+      ],
+      "specs": [
+        [
+          0,
+          3
+        ],
+        [
+          1,
+          3
+        ],
+        [
+          2,
+          3
+        ]
+      ],
+      "expected": {
+        "jobs": [
+          {
+            "scope": "between-sources",
+            "args": [
+              "--query-gencode",
+              "4",
+              "--db-gencode",
+              "11"
+            ],
+            "specs": [
+              [
+                0,
+                3
+              ]
+            ],
+            "queryIndexes": [
+              0
+            ],
+            "subjectIndexes": [
+              3
+            ],
+            "queryIds": {
+              "A1": [
+                0,
+                "A1"
+              ]
+            },
+            "subjectIds": {
+              "B1": [
+                3,
+                "B1"
+              ]
+            },
+            "queryHash": "09365c4c5b7ffbb9a0dc71d47facc297dfa514bbe681a096e200164eec7de477",
+            "subjectHash": "9016857b54211e5c0a24efb295149d245d5f82d081bda0fa3667159b82182071",
+            "searchContext": null
+          },
+          {
+            "scope": "between-sources",
+            "args": [
+              "--query-gencode",
+              "11",
+              "--db-gencode",
+              "11"
+            ],
+            "specs": [
+              [
+                1,
+                3
+              ],
+              [
+                2,
+                3
+              ]
+            ],
+            "queryIndexes": [
+              1,
+              2
+            ],
+            "subjectIndexes": [
+              3
+            ],
+            "queryIds": {
+              "n_7bd87ca67f07e7904cc69653a6b4b41af5951dff5eabece3ef3553a034c592a4_0": [
+                1,
+                "A2"
+              ],
+              "n_22dc2e6404475362e139e594e3486a24676dfe64609fca46511d4149ea9e7488_0": [
+                2,
+                "A3"
+              ]
+            },
+            "subjectIds": {
+              "B1": [
+                3,
+                "B1"
+              ]
+            },
+            "queryHash": "1d47182627f3be98678ca5465949a7a72a47d28ddd69eb7eecf8dc4acc28d88d",
+            "subjectHash": "9016857b54211e5c0a24efb295149d245d5f82d081bda0fa3667159b82182071",
+            "searchContext": "b1ffec18e34a7d7d8110370ed33e31eecfb8d69ccbe23e2c17d4d0b9c0d68861"
+          }
+        ],
+        "rawKeys": [
+          [
+            0,
+            3,
+            "9b8cab0ea69dea8d192f3445333741a3779ac406ea818d83a787a09f1a605410"
+          ],
+          [
+            1,
+            3,
+            "b2f6067ac213886de9b56f987609d6bc1de140e7c95620cb418a4ca9a41ea8bd"
+          ],
+          [
+            2,
+            3,
+            "64bf306a52ddcf1d2ea16b4c90e77d0052e42f4155bf1ec4534826d94b43dead"
+          ]
+        ]
+      }
+    },
+    {
+      "name": "requested self search uses the record alone",
+      "program": "blastn",
+      "task": "megablast",
+      "records": [
+        {
+          "uid": "record-1",
+          "source": "a.gb",
+          "fasta": ">A1\nCTGGTCCCCACGGGTCCATGAGTACGAGGAAACTCGGTATCGAGCCTAAAAGTTATAAGGCATCTCGCCC\n",
+          "gencode": null
+        },
+        {
+          "uid": "record-2",
+          "source": "a.gb",
+          "fasta": ">A2\nAGGAAAGTAACGACGTATGGGTAGTTCTCCATCACCAGCTATAATGGCTAGCGCACTCTCGTTCCAGGGCGTAGT\n",
+          "gencode": null
+        }
+      ],
+      "specs": [
+        [
+          0,
+          0
+        ],
+        [
+          0,
+          1
+        ]
+      ],
+      "expected": {
+        "jobs": [
+          {
+            "scope": "self",
+            "args": [
+              "--task",
+              "megablast"
+            ],
+            "specs": [
+              [
+                0,
+                0
+              ]
+            ],
+            "queryIndexes": [
+              0
+            ],
+            "subjectIndexes": [
+              0
+            ],
+            "queryIds": {
+              "A1": [
+                0,
+                "A1"
+              ]
+            },
+            "subjectIds": {
+              "A1": [
+                0,
+                "A1"
+              ]
+            },
+            "queryHash": "b3071131da2e74bb88a5b2639230a21aa91d36c5b6a9fcc3aaf679fa92b08ad2",
+            "subjectHash": "b3071131da2e74bb88a5b2639230a21aa91d36c5b6a9fcc3aaf679fa92b08ad2",
+            "searchContext": null
+          },
+          {
+            "scope": "within-source",
+            "args": [
+              "--task",
+              "megablast"
+            ],
+            "specs": [
+              [
+                0,
+                1
+              ]
+            ],
+            "queryIndexes": [
+              0
+            ],
+            "subjectIndexes": [
+              1
+            ],
+            "queryIds": {
+              "A1": [
+                0,
+                "A1"
+              ]
+            },
+            "subjectIds": {
+              "A2": [
+                1,
+                "A2"
+              ]
+            },
+            "queryHash": "b3071131da2e74bb88a5b2639230a21aa91d36c5b6a9fcc3aaf679fa92b08ad2",
+            "subjectHash": "d9cdea3f8a419ca0f31d7bb1b25d850aff8b2bbe562b79b24d5a0ab61a766db9",
+            "searchContext": null
+          }
+        ],
+        "rawKeys": [
+          [
+            0,
+            0,
+            "a6c24b359336176f161054dba984f26652e93a54184577b7612840dfafdde15e"
+          ],
+          [
+            0,
+            1,
+            "129d8991c021a45462d953b1bfd8ef7ee0e41a9f16c0e04e96690efc328df7db"
+          ]
+        ]
+      }
+    },
+    {
+      "name": "side order follows record keys, not input order",
+      "program": "blastn",
+      "task": "megablast",
+      "records": [
+        {
+          "uid": "record-10",
+          "source": "a.gb",
+          "fasta": ">A10\nTACACTGAGCGTGCCATGTCAGCATGCTAGCGTATCGCCCCCCAATGCCCCGCAATAGGGTAATTCGCCG\n",
+          "gencode": null
+        },
+        {
+          "uid": "record-2",
+          "source": "a.gb",
+          "fasta": ">A2\nACGAGTAAGCGTAGATTACACACCCAGGAAACGATCTAGACAGATTGAAATCCCCTTCATTATAGGTCGTGTAGC\n",
+          "gencode": null
+        },
+        {
+          "uid": "record-3",
+          "source": "b.gb",
+          "fasta": ">B1\nGCTAGACAGTCACCTTTAAAGGAAGAATCAGAGGCAAGATCTACGTGGCAGTCTCGTGTTGACG\n",
+          "gencode": null
+        }
+      ],
+      "specs": [
+        [
+          0,
+          2
+        ],
+        [
+          1,
+          2
+        ]
+      ],
+      "expected": {
+        "jobs": [
+          {
+            "scope": "between-sources",
+            "args": [
+              "--task",
+              "megablast"
+            ],
+            "specs": [
+              [
+                0,
+                2
+              ],
+              [
+                1,
+                2
+              ]
+            ],
+            "queryIndexes": [
+              0,
+              1
+            ],
+            "subjectIndexes": [
+              2
+            ],
+            "queryIds": {
+              "n_043e842ffb2a20568883044bac36eb8c48acab176fa49fcbe4b6b2b679398363_0": [
+                0,
+                "A10"
+              ],
+              "n_7bd87ca67f07e7904cc69653a6b4b41af5951dff5eabece3ef3553a034c592a4_0": [
+                1,
+                "A2"
+              ]
+            },
+            "subjectIds": {
+              "B1": [
+                2,
+                "B1"
+              ]
+            },
+            "queryHash": "8a4237f09c49f00de1cdf0e6bfeafa57f36754306cff2746f89da47c32a47bbc",
+            "subjectHash": "66e1459b7aeeb8eb93567ed926230cdbbc9d3e3b0dafe1e9a82a560bc069eba3",
+            "searchContext": "67dd0e245db56234bfb77eb2029fcc1c63b4c0c710f69c59a6b4eef8f0f44cfc"
+          }
+        ],
+        "rawKeys": [
+          [
+            0,
+            2,
+            "8351e46d6157de4618091be361778662c4f7c0f7659810282cabaf261fbf35c8"
+          ],
+          [
+            1,
+            2,
+            "69b7fe883d398c5fe4867aaa3e0d923cae2a35d7457c5f12589f221abdd16310"
+          ]
+        ]
+      }
+    }
+  ]
+}

@@ -365,6 +365,7 @@ def test_linear_comparison_reader_does_not_hide_unexpected_errors(
                 subject="#2",
                 blast=str(blast),
                 row_number=2,
+                source="table",
             ),
         ),
     )

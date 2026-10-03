@@ -8,9 +8,10 @@
 | --- | --- | --- |
 | [Web app](../GUI/compare-genomes-losatn.md) | **Command line** | [Python API](../PYTHON/compare-genomes-losatn.md) |
 
-This variant uses the six-row LOSATN result produced by the browser Tutorial.
-It draws both complete phage records in the same order and keeps the 120 px
-comparison band used by the GUI.
+This variant runs LOSATN from the command line and draws the figure of the
+browser Tutorial: both complete phage records in the same order, the same six
+matches, and the 120 px comparison band used by the GUI. Step 3 draws the same
+figure from a saved LOSATN table instead.
 
 ## Files used in this Tutorial
 
@@ -18,7 +19,7 @@ comparison band used by the GUI.
 | --- | --- | --- |
 | Download | [`NC_001416.gb`](https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi?db=nuccore&id=NC_001416.1&rettype=gbwithparts&retmode=text) | Download NCBI accession [`NC_001416.1`](https://www.ncbi.nlm.nih.gov/nuccore/NC_001416.1) in full GenBank format and save it as `NC_001416.gb`. |
 | Download | [`NC_042057.1.gb`](https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi?db=nuccore&id=NC_042057.1&rettype=gbwithparts&retmode=text) | Download NCBI accession [`NC_042057.1`](https://www.ncbi.nlm.nih.gov/nuccore/NC_042057.1) in full GenBank format and save it as `NC_042057.1.gb`. |
-| Download | [`lambda-de3.losatn.tsv`](../../../gbdraw/web/tutorial-data/lambda-de3-comparison/lambda-de3.losatn.tsv) | Save this repository-hosted LOSATN result as `lambda-de3.losatn.tsv`. |
+| Download | [`lambda-de3.losatn.tsv`](../../../gbdraw/web/tutorial-data/lambda-de3-comparison/lambda-de3.losatn.tsv) | Step 3 only: save this repository-hosted LOSATN result as `lambda-de3.losatn.tsv`. |
 | Generated | `lambda-de3-losatn.svg` | The command writes this comparison SVG. |
 | Reference result | [`lambda-de3-losatn.svg`](../../images/t-cli-07/lambda-de3-losatn.svg) | Compare your generated SVG with this versioned result. |
 
@@ -65,7 +66,13 @@ gbdraw-cli-losatn/
 └── lambda-de3.losatn.tsv
 ```
 
-## Step 2: Draw the finished comparison
+## Step 2: Run LOSATN and draw the comparison
+
+`--losat losatn` compares the records with LOSAT `blastn` (default task
+`megablast`) before drawing. gbdraw uses the LOSAT runtime it resolves, or NCBI
+BLAST+ `blastn`; see the
+[command-line reference](../../REFERENCE/command-line.md) for the resolution
+order and `gbdraw setup-losat`.
 
 <!-- executable:T-CLI-07:start -->
 ```bash
@@ -73,7 +80,7 @@ gbdraw linear \
   --gbk NC_001416.gb NC_042057.1.gb \
   --record_id NC_001416.1 \
   --record_id NC_042057.1 \
-  --blast lambda-de3.losatn.tsv \
+  --losat losatn \
   --bitscore 50 \
   --evalue 0.01 \
   --identity 0 \
@@ -94,7 +101,36 @@ DE3 records.
 
 The image above is the Reference result. Verify that both accessions and all
 six endpoint pairs match the TSV and that the ribbons use the 120 px comparison
-band set above.
+band set above. The pinned LOSAT runtime gives the same six rows as the browser;
+another runtime or version can report different rows.
+
+To keep the search result, add `--losat_output_dir losatn-results`. gbdraw
+writes `NC_001416.1.NC_042057.1.losatn.tsv` (BLAST outfmt 6) and
+`comparisons.tsv`, which you can pass back with `--comparisons_table` to draw
+again without searching. `--save_session` stores the result in the Session, so
+the Session replays without LOSAT.
+
+## Step 3: Draw from a saved LOSATN table
+
+If LOSAT is not available, draw the same figure from the LOSATN table that the
+browser Tutorial produced:
+
+```bash
+gbdraw linear \
+  --gbk NC_001416.gb NC_042057.1.gb \
+  --record_id NC_001416.1 \
+  --record_id NC_042057.1 \
+  --blast lambda-de3.losatn.tsv \
+  --bitscore 50 \
+  --evalue 0.01 \
+  --identity 0 \
+  --alignment_length 0 \
+  --comparison_height 120 \
+  -o lambda-de3-losatn \
+  -f svg
+```
+
+The result is byte-identical to Step 2.
 
 ## Next steps
 

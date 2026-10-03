@@ -40,6 +40,9 @@ LOSAT_BIN_OPTION = "--losat_bin"
 NCBI_BLAST_BIN_OPTION = "--ncbi_blast_bin"
 _BUNDLED_LOSAT_DIR = "bin"
 _PROBE_TIMEOUT_SECONDS = 30
+_UNAVAILABLE: Mapping[str, str] = MappingProxyType(
+    {"code": "LOSAT_RUNTIME", "reason": "UNAVAILABLE"}
+)
 
 LosatProgramName = Literal["losatn", "tlosatx", "losatp"]
 LosatRuntimeKind = Literal["losat", "ncbi-blast"]
@@ -111,7 +114,8 @@ LOSAT_PROGRAMS: Mapping[str, LosatProgram] = MappingProxyType(
             "translated TBLASTX",
             "translated nucleotide comparison",
             ("query_gencode", "db_gencode"),
-            frozenset({"query_gencode", "db_gencode"}),
+            # An unset table is the runtime default (1), as in the Web (D17).
+            frozenset(),
             ".fna",
         ),
         "losatp": LosatProgram(
@@ -291,21 +295,25 @@ def _conda_losat_runtime() -> LosatRuntime | None:
     except FileNotFoundError:
         if candidate.is_symlink():
             raise ValidationError(
-                f"Conda LOSAT candidate is a broken symbolic link: {candidate}"
+                f"Conda LOSAT candidate is a broken symbolic link: {candidate}",
+                diagnostic=_UNAVAILABLE,
             )
         return None
     except OSError as exc:
         raise ValidationError(
-            f"Could not inspect the conda LOSAT candidate at {candidate}: {exc}"
+            f"Could not inspect the conda LOSAT candidate at {candidate}: {exc}",
+            diagnostic=_UNAVAILABLE,
         ) from exc
 
     if not stat.S_ISREG(mode):
         raise ValidationError(
-            f"Conda LOSAT candidate is not a regular file: {candidate}"
+            f"Conda LOSAT candidate is not a regular file: {candidate}",
+            diagnostic=_UNAVAILABLE,
         )
     if not os.access(candidate, os.X_OK):
         raise ValidationError(
-            f"Conda LOSAT candidate is not executable: {candidate}"
+            f"Conda LOSAT candidate is not executable: {candidate}",
+            diagnostic=_UNAVAILABLE,
         )
 
     runtime = LosatRuntime("losat", str(candidate), "conda")
@@ -336,7 +344,8 @@ def _runtime_unavailable_error(spec: LosatProgram, *, platform_dir: str | None) 
         f"{platform_note} "
         f"Install NCBI BLAST+ and make `{spec.search}` available on PATH, or pass a "
         f"native LOSAT executable with {LOSAT_BIN_OPTION}, or pass an NCBI BLAST+ "
-        f"executable with {NCBI_BLAST_BIN_OPTION}."
+        f"executable with {NCBI_BLAST_BIN_OPTION}.",
+        diagnostic={**_UNAVAILABLE, "program": spec.name},
     )
 
 
@@ -359,7 +368,8 @@ def resolve_losat_runtime(
     if requested_bin != AUTOMATIC_LOSAT_BIN and requested_ncbi_bin is not None:
         raise ValidationError(
             f"Pass either {LOSAT_BIN_OPTION} or {NCBI_BLAST_BIN_OPTION} for "
-            f"{spec.description} comparisons, not both."
+            f"{spec.description} comparisons, not both.",
+            diagnostic={"code": "COMPARISON_INPUT"},
         )
     if requested_bin != AUTOMATIC_LOSAT_BIN:
         runtime = LosatRuntime("losat", requested_bin, "explicit")
@@ -437,6 +447,74 @@ def detect_losat_cli_dialect(executable: str) -> LosatCliDialect:
     )
     _CLI_DIALECTS[key] = dialect
     return dialect
+
+
+_TASK_VALUES: dict[str, frozenset[str] | None] = {}
+_POSSIBLE_VALUES = re.compile(r"\[possible values:\s*([^\]]+)\]")
+
+
+def losat_task_values(executable: str) -> frozenset[str] | None:
+    """Return the ``blastn`` task values a LOSAT runtime lists, or ``None``.
+
+    Released LOSAT v0.1.0 lists ``[possible values: megablast, blastn]`` under
+    its task option; the tracked development build lists none and accepts any
+    task name. Probed once per executable.
+    """
+
+    key = str(executable)
+    if key in _TASK_VALUES:
+        return _TASK_VALUES[key]
+    completed = _probe([key, "blastn", "--help"])
+    values: frozenset[str] | None = None
+    if completed is not None:
+        lines = f"{completed.stdout}\n{completed.stderr}".splitlines()
+        for index, line in enumerate(lines):
+            if re.match(r"^\s*-{1,2}task\b", line):
+                block = "\n".join(lines[index:index + 8])
+                match = _POSSIBLE_VALUES.search(block)
+                if match:
+                    values = frozenset(
+                        item.strip() for item in match.group(1).split(",") if item.strip()
+                    )
+                break
+    _TASK_VALUES[key] = values
+    return values
+
+
+def require_losat_task_support(
+    task: str,
+    *,
+    losat_bin: str | None = None,
+    ncbi_blast_bin: str | None = None,
+) -> None:
+    """Fail before searching when the resolved LOSAT runtime lacks ``task`` (D11).
+
+    NCBI BLAST+ ``blastn`` accepts every LOSATN task.
+    """
+
+    spec = losat_program("losatn")
+    with ExitStack() as stack:
+        runtime = resolve_losat_runtime(
+            spec, losat_bin=losat_bin, ncbi_blast_bin=ncbi_blast_bin, stack=stack
+        )
+        if runtime.kind != "losat":
+            return
+        values = losat_task_values(runtime.executable)
+        if values is None or task in values:
+            return
+        version = _runtime_version(runtime) or "unknown version"
+        raise ValidationError(
+            f"LOSATN task {task!r} is not supported by the LOSAT runtime at "
+            f"{_recorded_runtime_path(runtime)} ({version}; supported: "
+            f"{', '.join(sorted(values))}). Choose another --losatn_task, or pass a "
+            f"runtime that supports it with {LOSAT_BIN_OPTION} or {NCBI_BLAST_BIN_OPTION}.",
+            diagnostic={
+                "code": "COMPARISON_INPUT",
+                "reason": "LOSAT_TASK",
+                "field": "losatn_task",
+                "program": spec.name,
+            },
+        )
 
 
 def _runtime_version(runtime: LosatRuntime) -> str | None:
@@ -549,12 +627,19 @@ def _run_losat_subprocess(
             text=True,
         )
     except FileNotFoundError as exc:
-        raise ValidationError(f"{runtime_label} executable not found: {command[0]}") from exc
+        raise ValidationError(
+            f"{runtime_label} executable not found: {command[0]}",
+            diagnostic=_UNAVAILABLE,
+        ) from exc
     except PermissionError as exc:
-        raise ValidationError(f"{runtime_label} executable is not executable: {command[0]}") from exc
+        raise ValidationError(
+            f"{runtime_label} executable is not executable: {command[0]}",
+            diagnostic=_UNAVAILABLE,
+        ) from exc
     except OSError as exc:
         raise ValidationError(
-            f"{runtime_label} executable could not be started at {command[0]}: {exc}"
+            f"{runtime_label} executable could not be started at {command[0]}: {exc}",
+            diagnostic={"code": "LOSAT_RUNTIME", "reason": "FAILED"},
         ) from exc
 
 
@@ -609,7 +694,13 @@ def run_losat_search(
         detail = f": {stderr}" if stderr else ""
         raise ValidationError(
             f"{runtime_label} failed at {runtime.executable} "
-            f"with exit code {completed.returncode}{detail}"
+            f"with exit code {completed.returncode}{detail}",
+            diagnostic={
+                "code": "LOSAT_RUNTIME",
+                "reason": "FAILED",
+                "program": spec.name,
+                "exitCode": completed.returncode,
+            },
         )
     if runtime_callback is not None and runtime_record is not None:
         runtime_callback(runtime_record)
@@ -637,6 +728,23 @@ class LosatRawCache:
 
     def _cached_entry(self, key: str) -> dict[str, object] | None:
         return self._entries_by_key.get(key)
+
+    def cached_entry(self, key: str) -> dict[str, object] | None:
+        """The entry stored under a raw key, if any."""
+
+        return self._cached_entry(key)
+
+    def store_search_entry(
+        self,
+        key: str,
+        entry: dict[str, object],
+        *,
+        runtime: Mapping[str, object] | None,
+        filename: str,
+    ) -> None:
+        """Store a displayed entry that a search produced in this run."""
+
+        self._add_search_entry(key, entry, runtime=runtime, display=True, filename=filename)
 
     def _add_loaded_entry(
         self,
@@ -729,6 +837,8 @@ __all__ = [
     "losat_cache_args",
     "losat_program",
     "losat_runtime_record",
+    "losat_task_values",
+    "require_losat_task_support",
     "resolve_losat_runtime",
     "run_losat_search",
 ]

@@ -822,12 +822,14 @@ usage: gbdraw linear [-h] [--feature_placement_table TSV]
               [--gbk [GBK_FILE ...]] [--gff [GFF3_FILE ...]]
               [--fasta [FASTA_FILE ...]] [--records_table TSV]
               [--multi_record_position SELECTOR@ROW] [--linear_record_gap PX]
-              [--comparisons_table TSV] [-b [BLAST ...]] [--losat {losatp}]
+              [--comparisons_table TSV] [-b [BLAST ...]]
+              [--losat {losatn,tlosatx,losatp}]
               [--losatp_mode {similarity_groups,collinear,pairwise}]
-              [--losat_bin PATH | --ncbi_blast_bin PATH] [--losat_threads N]
-              [--losatp_max_hits N] [--losatp_max_target_seqs N]
-              [--losatp_member_max_hits N] [--losat_output_dir DIR]
-              [--similarity_alignment_feature ID]
+              [--losatn_task {megablast,blastn,dc-megablast}]
+              [--losat_gencode CODE [CODE ...]] [--losat_bin PATH |
+              --ncbi_blast_bin PATH] [--losat_threads N] [--losatp_max_hits N]
+              [--losatp_max_target_seqs N] [--losatp_member_max_hits N]
+              [--losat_output_dir DIR] [--similarity_alignment_feature ID]
               [--collinear_search_scope {adjacent,all}]
               [--collinear_infer_orthogroups {on,off}]
               [--collinear_min_anchors COLLINEAR_MIN_ANCHORS]
@@ -949,8 +951,13 @@ options:
   -b, --blast [BLAST ...]
                         input BLAST result file in tab-separated format
                         (-outfmt 6 or 7) (optional)
-  --losat {losatp}      Run a LOSAT comparison between the records: losatp
-                        compares the CDS proteins (LOSAT blastp). Cannot be
+  --losat {losatn,tlosatx,losatp}
+                        Run a LOSAT comparison between the records: losatn
+                        compares the nucleotide sequences (LOSAT blastn),
+                        tlosatx compares their translations (LOSAT tblastx),
+                        and losatp compares the CDS proteins (LOSAT blastp).
+                        Records in adjacent rows are compared unless
+                        --comparisons_table lists source=losat rows. Cannot be
                         combined with -b/--blast (default: no LOSAT
                         comparison).
   --losatp_mode {similarity_groups,collinear,pairwise}
@@ -958,12 +965,21 @@ options:
                         (Similarity groups across all records), collinear
                         (Collinear blocks), or pairwise (adjacent-record
                         ribbons) (default: similarity_groups).
+  --losatn_task {megablast,blastn,dc-megablast}
+                        LOSATN search task with --losat losatn. A native
+                        runtime that does not support the task stops before
+                        searching (default: megablast).
+  --losat_gencode CODE [CODE ...]
+                        TLOSATX genetic code with --losat tlosatx: one for
+                        every record or one per record input; the records
+                        table losat_gencode column sets it per row (default:
+                        the runtime default, 1).
   --losat_bin PATH      Native LOSAT executable for --losat (default:
                         automatic runtime resolution).
   --ncbi_blast_bin PATH
                         NCBI BLAST+ executable of the selected --losat program
-                        (blastp for losatp) (default: automatic runtime
-                        resolution).
+                        (blastn, tblastx, or blastp) (default: automatic
+                        runtime resolution).
   --losat_threads N     Threads passed to each LOSAT or NCBI BLAST+ job
                         (default: runtime default).
   --losatp_max_hits N   Maximum distinct subject proteins per query protein in
@@ -976,9 +992,11 @@ options:
                         Collinear membership; 'none' for no cap (default:
                         none).
   --losat_output_dir DIR
-                        Write the raw LOSAT evidence to DIR (LOSATP:
-                        losatp.raw.tsv). Runtime handles are replaced with
-                        user-visible protein IDs; requires --losat.
+                        Write the raw LOSAT evidence to DIR; requires --losat.
+                        LOSATN and TLOSATX: one TSV per compared record pair
+                        and comparisons.tsv, which --comparisons_table accepts
+                        unchanged. LOSATP: losatp.raw.tsv with user-visible
+                        protein IDs.
   --similarity_alignment_feature ID
                         Align linear records using this exact feature SVG hash
                         or protein ID; Similarity Group IDs are not accepted.
@@ -1389,15 +1407,25 @@ logical index used by labels, colors, shared axes, and custom track slots. In
 Linear mode the missing cell reserves no vertical geometry, so later numeric
 tracks compact without renumbering the logical series.
 
-For `--losat losatp`, gbdraw uses a native LOSAT executable when one is
-available. The PyPI package does not bundle native LOSAT: install the pinned
-release with `gbdraw setup-losat`, or place `losat` on `PATH`. The resolution
-order is in [Command-line reference](./REFERENCE/command-line.md). If no native
-LOSAT executable is available, install NCBI BLAST+ and make `blastp` available
-on `PATH`, or pass it explicitly with `--ncbi_blast_bin`. You can force a
-native LOSAT executable on any platform with `--losat_bin`.
-NCBI BLAST+ fallback produces compatible outfmt 6 protein comparisons, but its
-hit set is not guaranteed to be identical to LOSAT.
+`gbdraw linear --losat {losatn,tlosatx,losatp}` runs the comparison before
+drawing: LOSATN (`blastn`) and TLOSATX (`tblastx`) compare the records in
+adjacent rows, or the `source=losat` rows of `--comparisons_table`; LOSATP
+(`blastp`) compares CDS proteins. `--losatn_task` selects the LOSATN task and
+`--losat_gencode` (or the records table `losat_gencode` column) sets the
+TLOSATX genetic codes. A native runtime that does not list the requested
+LOSATN task (released LOSAT 0.1.0 has no `dc-megablast`) stops before
+searching. `--losat_output_dir DIR` writes one raw TSV per compared record pair
+and a `comparisons.tsv` that `--comparisons_table` accepts unchanged.
+
+gbdraw uses a native LOSAT executable when one is available. The PyPI package
+does not bundle native LOSAT: install the pinned release with
+`gbdraw setup-losat`, or place `losat` on `PATH`. The resolution order is in
+[Command-line reference](./REFERENCE/command-line.md). If no native LOSAT
+executable is available, install NCBI BLAST+ and make the program executable
+(`blastn`, `tblastx`, or `blastp`) available on `PATH`, or pass it explicitly
+with `--ncbi_blast_bin`. You can force a native LOSAT executable on any
+platform with `--losat_bin`. NCBI BLAST+ fallback produces compatible outfmt 6
+comparisons, but its hit set is not guaranteed to be identical to LOSAT.
 
 ## Related documentation
 

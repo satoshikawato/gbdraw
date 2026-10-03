@@ -1672,6 +1672,12 @@ def assemble_linear_diagram_from_records(
         raise ValidationError("linear_comparisons must contain LinearComparison values")
     if losat_search is not None and not isinstance(losat_search, LosatSearchOptions):
         raise ValidationError("losat_search must be LosatSearchOptions or None")
+    if losat_search is not None and losat_search.program != "losatp":
+        raise ValidationError(
+            f"A {losat_search.program} search is resolved by the request planner; "
+            "render it with gbdraw.api.render_request().",
+            diagnostic={"code": "COMPARISON_INPUT", "reason": "LOSAT_PLAN"},
+        )
     normalized_protein_blastp_mode = losatp_analysis_mode(losat_search)
     runtime = losat_search.runtime if losat_search is not None else LosatRuntimeOptions()
     normalized_protein_pairs: tuple[tuple[int, int], ...] | None = None

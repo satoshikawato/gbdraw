@@ -10,7 +10,7 @@ recordIndex queryIndex subjectIndex depth min_depth max_depth window step tick f
 inner_gap_px outer_gap_px radius width spacing arrow_head_length_ratio arrow_shaft_width_ratio keep_definition_left_aligned color action feature_type qualifier value record_id label_text
 config configOverrides records anchors schema recordKey groupId direction sourceStrand role blast files
 input comparison protein_blastp_max_hits orthogroup_member_max_hits bitscore evalue identity
-losatp_max_hits losatp_max_target_seqs losatp_member_max_hits
+losatp_max_hits losatp_max_target_seqs losatp_member_max_hits losatp_mode losatn_task record_gencodes
 alignment_length collinear_min_anchors collinear_max_gene_gap collinear_block_merge_gap
 collinear_singleton_merge_gap collinear_max_diagonal_drift collinear_gap_penalty
 collinear_nearby_duplicate_window collinear_constant_anchor_score collinear_infer_orthogroups
@@ -68,6 +68,12 @@ const REASONS = Object.freeze({
   ADJACENT_ALL: 'Choose adjacent or all.', BLASTP_MODE: 'Choose pairwise, orthogroup, or collinear.',
   UNIQUE_IDS: 'Use distinct record or protein identifiers.', MATCH_IDS: 'Use matching protein FASTA and metadata identifiers.',
   SEARCH_FRAME: 'Use comparison coordinates within the selected and cropped record, counted on its source strand.',
+  LOSAT_OPTION_PROGRAM: 'Use only the options of the selected LOSAT program.',
+  LOSAT_PLAN: 'Choose record pairs that the LOSAT search can run: two or more records, LOSAT rows only with a LOSAT program, and LOSATP Pairwise for selected pairs.',
+  LOSAT_TASK: 'Choose a LOSATN task that the selected LOSAT runtime supports.',
+  UNAVAILABLE: 'Install LOSAT or NCBI BLAST+, or select a runtime executable.',
+  FAILED: 'The search runtime exited with an error; check its message and inputs.',
+  OUTPUT: 'The search output was not BLAST outfmt 6 rows for the searched records.',
   JSON_FORMAT: 'Use valid JSON.', VISIBILITY_ACTION: 'Use show, off, or exclude_matching; accepted aliases are on, hide, false, and 0.',
   TARGET_RECORD: 'Choose an available target record.',
   DEPTH_SERIES: 'Select an existing Depth TSV or remove the slot.',
@@ -122,6 +128,7 @@ const DEFINITIONS = Object.freeze({
   DEPTH_INVALID: ['The depth input or settings are invalid.', ['edit-depth', 'disable-track', 'retry']],
   TABLE_INVALID: ['The table is invalid.', ['edit-table', 'retry']],
   COMPARISON_INPUT: ['The comparison input is invalid. Supply comparison FASTA or BLAST outfmt 6/7 as required.', ['edit-comparison', 'retry']],
+  LOSAT_RUNTIME: ['The comparison search could not run or returned unusable output. Check the LOSAT or NCBI BLAST+ runtime, then Generate again.', ['edit-comparison', 'retry']],
   LOSAT_THREADING_UNAVAILABLE: ['Threaded LOSAT execution is unavailable in this browser environment. Select Serial or Auto execution, then Generate again.', ['edit-comparison', 'retry']],
   COMPARISON_IDENTITY: ['Comparison endpoints disagree with the displayed features. Review the comparison inputs and display transforms; save a Session if it continues.', ['edit-comparison', 'retry', 'save-session']],
   ANNOTATION_TARGET: ['The region annotation target is invalid.', ['edit-annotation', 'retry']],

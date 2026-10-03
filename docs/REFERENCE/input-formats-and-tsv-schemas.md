@@ -90,8 +90,8 @@ containing the table.
 
 | Table | Required columns | Optional columns |
 |---|---|---|
-| Records | One of `gbk`, or both `gff` and `fasta` | `record_label`, `record_subtitle`, `record_id`, `region`, `reverse_complement`, `topology`, `display_start`, `order`, `row`, `column` |
-| Linear comparisons | `blast`, `query`, `subject` | None |
+| Records | One of `gbk`, or both `gff` and `fasta` | `record_label`, `record_subtitle`, `record_id`, `region`, `reverse_complement`, `topology`, `display_start`, `order`, `row`, `column`, `losat_gencode` |
+| Linear comparisons | `query`, `subject`; `blast` for `source=table` rows | `source` |
 | Circular conservation | `blast` | `label`, `color`, `comparison_fasta` |
 | Circular tracks | `id`, `renderer` | `side`, `r`, `w`, `inner_gap_px`, `outer_gap_px`, `z`, `params` |
 | Annotations | `set_id`, `id`, `mark` | Target and presentation fields listed below |
@@ -107,9 +107,22 @@ present, every row needs a `row`. `column` controls left-to-right order, and
 duplicate row/column cells are rejected. Use table placement instead of
 repeated surface-specific position options.
 
+`losat_gencode` is a positive genetic code for `--losat tlosatx`; a blank cell
+uses the runtime default (1). gbdraw does not infer it from `/transl_table`.
+It cannot be combined with `--losat_gencode`, and another `--losat` program
+rejects it.
+
 Linear comparison `query` and `subject` values accept a displayed `#index` or
-unique record ID. The endpoints must be different. A comparisons table cannot
-be combined with the positional `--blast` form.
+unique record ID. The endpoints must be different and in adjacent rows. A
+comparisons table cannot be combined with the positional `--blast` form.
+
+`source` is `table` (the default for a blank cell or a table without the
+column) or `losat`. A `table` row reads its `blast` file. A `losat` row leaves
+`blast` empty; `--losat losatn`, `--losat tlosatx`, or `--losat losatp
+--losatp_mode pairwise` searches that record pair. One table can mix both
+sources. A `losat` row without `--losat`, or `--losat` without a `losat` row,
+is an error. The `comparisons.tsv` that `--losat_output_dir` writes uses this
+format.
 
 Circular track-table row order is slot order. A row with `side=axis` must use
 the `features` renderer and establishes the track-axis boundary. Structural

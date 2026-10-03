@@ -29,6 +29,7 @@ from .api.options import (
     LinearMultiRecordOptions,
     LinearOutputOptions,
     LinearRequestTrackOptions,
+    LOSATN_TASKS,
     LosatRuntimeOptions,
     LosatSearchOptions,
 )
@@ -111,11 +112,23 @@ from .render.output_paths import commit_staged_output_file, preflight_output_pat
 from .session_io import load_session, session_to_cli_args
 
 
-# ``--losat`` choices this release can run (design 3.2; losatn and tlosatx follow).
-_CLI_LOSAT_PROGRAMS = ("losatp",)
+# ``--losat`` choices (design 3.2).
+_CLI_LOSAT_PROGRAMS = ("losatn", "tlosatx", "losatp")
 _LOSATP_MODES = ("similarity_groups", "collinear", "pairwise")
 # ``--losat_output_dir`` file for LOSATP raw evidence (design 3.7, D13).
 LOSATP_RAW_OUTPUT_NAME = "losatp.raw.tsv"
+# ``--losat_output_dir`` manifest of LOSATN / TLOSATX edges; it is a valid
+# ``--comparisons_table`` (design 3.7).
+LOSAT_COMPARISONS_OUTPUT_NAME = "comparisons.tsv"
+# CLI spelling of the typed LOSAT fields named in option/program diagnostics.
+_CLI_LOSAT_FIELD_FLAGS = {
+    "losatp_mode": "--losatp_mode",
+    "losatn_task": "--losatn_task",
+    "record_gencodes": "--losat_gencode (or the records table losat_gencode column)",
+    "losatp_max_hits": "--losatp_max_hits",
+    "losatp_max_target_seqs": "--losatp_max_target_seqs",
+    "losatp_member_max_hits": "--losatp_member_max_hits",
+}
 
 
 def _parse_positive_int(value: str) -> int:
@@ -292,9 +305,12 @@ def _get_args(args) -> argparse.Namespace:
         choices=_CLI_LOSAT_PROGRAMS,
         default=None,
         help=(
-            'Run a LOSAT comparison between the records: losatp compares the '
-            'CDS proteins (LOSAT blastp). Cannot be combined with -b/--blast '
-            '(default: no LOSAT comparison).'
+            'Run a LOSAT comparison between the records: losatn compares the '
+            'nucleotide sequences (LOSAT blastn), tlosatx compares their '
+            'translations (LOSAT tblastx), and losatp compares the CDS proteins '
+            '(LOSAT blastp). Records in adjacent rows are compared unless '
+            '--comparisons_table lists source=losat rows. Cannot be combined with '
+            '-b/--blast (default: no LOSAT comparison).'
         ),
     )
     parser.add_argument(
@@ -305,6 +321,27 @@ def _get_args(args) -> argparse.Namespace:
             'LOSATP display with --losat losatp: similarity_groups (Similarity groups '
             'across all records), collinear (Collinear blocks), or pairwise '
             '(adjacent-record ribbons) (default: similarity_groups).'
+        ),
+    )
+    parser.add_argument(
+        '--losatn_task',
+        choices=LOSATN_TASKS,
+        default=None,
+        help=(
+            'LOSATN search task with --losat losatn. A native runtime that does not '
+            'support the task stops before searching (default: megablast).'
+        ),
+    )
+    parser.add_argument(
+        '--losat_gencode',
+        metavar='CODE',
+        type=_parse_positive_int,
+        nargs='+',
+        default=None,
+        help=(
+            'TLOSATX genetic code with --losat tlosatx: one for every record or one '
+            'per record input; the records table losat_gencode column sets it per '
+            'row (default: the runtime default, 1).'
         ),
     )
     runtime_group = parser.add_mutually_exclusive_group()
@@ -319,7 +356,8 @@ def _get_args(args) -> argparse.Namespace:
         metavar='PATH',
         default=None,
         help=(
-            'NCBI BLAST+ executable of the selected --losat program (blastp for losatp) '
+            'NCBI BLAST+ executable of the selected --losat program (blastn, tblastx, '
+            'or blastp) '
             '(default: automatic runtime resolution).'
         ),
     )
@@ -334,7 +372,7 @@ def _get_args(args) -> argparse.Namespace:
         '--losatp_max_hits',
         metavar='N',
         type=_parse_positive_int,
-        default=5,
+        default=None,
         help='Maximum distinct subject proteins per query protein in --losatp_mode pairwise links (default: 5).',
     )
     parser.add_argument(
@@ -359,8 +397,10 @@ def _get_args(args) -> argparse.Namespace:
         metavar='DIR',
         default=None,
         help=(
-            'Write the raw LOSAT evidence to DIR (LOSATP: losatp.raw.tsv). Runtime '
-            'handles are replaced with user-visible protein IDs; requires --losat.'
+            'Write the raw LOSAT evidence to DIR; requires --losat. LOSATN and '
+            'TLOSATX: one TSV per compared record pair and comparisons.tsv, which '
+            '--comparisons_table accepts unchanged. LOSATP: losatp.raw.tsv with '
+            'user-visible protein IDs.'
         ),
     )
     parser.add_argument(
@@ -802,6 +842,7 @@ def _get_args(args) -> argparse.Namespace:
         default=[])
     add_session_args(parser)
 
+    args_list = [str(token) for token in (args or [])]
     args = parser.parse_args(args)
     validate_input_args(parser, args)
     validate_label_args(parser, args)
@@ -833,8 +874,27 @@ def _get_args(args) -> argparse.Namespace:
         parser.error("--comparison_height must be a positive finite number")
     if args.losat and args.blast:
         parser.error("--losat cannot be used with -b/--blast")
-    if args.losatp_mode is not None and args.losat != "losatp":
+    if args.losatp_mode is not None and not args.losat:
         parser.error("--losatp_mode requires --losat losatp")
+    if args.losat in {"losatn", "tlosatx"}:
+        collinear_flags = sorted(
+            {
+                str(token).split("=", 1)[0]
+                for token in args_list
+                if str(token).startswith("--collinear_")
+            }
+        )
+        if collinear_flags:
+            raise ValidationError(
+                f"{collinear_flags[0]} applies to --losat losatp --losatp_mode "
+                f"collinear, not --losat {args.losat}.",
+                diagnostic={
+                    "code": "COMPARISON_INPUT",
+                    "reason": "LOSAT_OPTION_PROGRAM",
+                    "field": collinear_flags[0].lstrip("-"),
+                    "program": args.losat,
+                },
+            )
     if args.losat == "losatp" and args.losatp_mode is None:
         args.losatp_mode = "similarity_groups"
     if args.losat_output_dir and not args.losat:
@@ -1008,6 +1068,7 @@ def linear_main(cmd_args) -> None:
     run_result = run_linear_from_namespace(args)
     _write_losat_output_dir(
         args.losat_output_dir,
+        program=args.losat,
         run_result=run_result,
         overwrite=bool(args.overwrite),
     )
@@ -1046,43 +1107,88 @@ def _losatp_raw_output_text(run_result: DiagramRunResult) -> str:
     return "\n".join(sections) + "\n"
 
 
-def _losatp_raw_output_path(output_dir: str | None) -> Path | None:
-    return Path(output_dir) / LOSATP_RAW_OUTPUT_NAME if output_dir else None
+def _nucleotide_output_files(run_result: DiagramRunResult) -> list[tuple[str, str]]:
+    """Per-edge raw TSVs and a ``--comparisons_table`` manifest (design 3.7)."""
+
+    request = run_result.canonical_request
+    comparisons = [
+        comparison
+        for comparison in getattr(request.options, "linear_comparisons", None) or ()
+        if comparison.search_frame_text is not None
+    ]
+    names = [
+        str(entry.get("filename") or "")
+        for entry in run_result.losat_cache_entries or ()
+        if entry.get("identityKind") == "nucleotide" and entry.get("display") is not False
+    ]
+    if not comparisons or len(names) != len(comparisons):
+        raise ValidationError(
+            "LOSAT output requested, but no raw nucleotide evidence was produced.",
+            diagnostic={"code": "LOSAT_RUNTIME", "reason": "OUTPUT"},
+        )
+    files: list[tuple[str, str]] = []
+    used: set[str] = {LOSAT_COMPARISONS_OUTPUT_NAME}
+    rows = ["blast\tquery\tsubject"]
+    for comparison, name in zip(comparisons, names):
+        stem = name[:-4] if name.endswith(".tsv") else name or "losat"
+        candidate, ordinal = f"{stem}.tsv", 1
+        while candidate in used:
+            ordinal += 1
+            candidate = f"{stem}.{ordinal}.tsv"
+        used.add(candidate)
+        files.append((candidate, str(comparison.search_frame_text)))
+        rows.append(
+            f"{candidate}\t#{comparison.query_record_index + 1}"
+            f"\t#{comparison.subject_record_index + 1}"
+        )
+    files.append((LOSAT_COMPARISONS_OUTPUT_NAME, "\n".join(rows) + "\n"))
+    return files
+
+
+def _losat_output_path(output_dir: str | None, program: str | None) -> Path | None:
+    """The fixed file of ``--losat_output_dir`` (edge TSV names depend on records)."""
+
+    if not output_dir:
+        return None
+    name = LOSATP_RAW_OUTPUT_NAME if program == "losatp" else LOSAT_COMPARISONS_OUTPUT_NAME
+    return Path(output_dir) / name
 
 
 def _write_losat_output_dir(
     output_dir: str | None,
     *,
+    program: str | None,
     run_result: DiagramRunResult,
     overwrite: bool,
 ) -> Path | None:
-    output_path = _losatp_raw_output_path(output_dir)
+    output_path = _losat_output_path(output_dir, program)
     if output_path is None:
         return None
+    files = (
+        [(LOSATP_RAW_OUTPUT_NAME, _losatp_raw_output_text(run_result))]
+        if program == "losatp"
+        else _nucleotide_output_files(run_result)
+    )
     output_path.parent.mkdir(parents=True, exist_ok=True)
-    with TemporaryDirectory(
-        prefix=f".{output_path.name}.",
-        dir=output_path.parent,
-    ) as temp_name:
-        staged_path = Path(temp_name) / output_path.name
-        with staged_path.open("w", encoding="utf-8", newline="\n") as handle:
-            handle.write(_losatp_raw_output_text(run_result))
-        commit_staged_output_file(
-            staged_path,
-            output_path,
-            overwrite=overwrite,
-        )
+    for name, text in files:
+        target = output_path.parent / name
+        with TemporaryDirectory(prefix=f".{name}.", dir=target.parent) as temp_name:
+            staged_path = Path(temp_name) / name
+            with staged_path.open("w", encoding="utf-8", newline="\n") as handle:
+                handle.write(text)
+            commit_staged_output_file(staged_path, target, overwrite=overwrite)
     return output_path
 
 
 def _preflight_losat_output_dir(
     output_dir: str | None,
     *,
+    program: str | None,
     diagram_output_paths: Sequence[Path],
     session_output_path: Path | None,
     overwrite: bool,
 ) -> None:
-    output_path = _losatp_raw_output_path(output_dir)
+    output_path = _losat_output_path(output_dir, program)
     if output_path is None:
         return
     preflight_output_paths((output_path,), overwrite=overwrite)
@@ -1105,19 +1211,21 @@ def _preflight_losat_output_dir(
         )
 
 
-def run_linear_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
-    """Run linear rendering from an already parsed argparse namespace."""
+def _cli_losat_search(
+    args: argparse.Namespace,
+    record_gencodes: Sequence[int | None] = (),
+) -> LosatSearchOptions | None:
+    """Map the CLI LOSAT options; the typed options validate them."""
 
-    source_session = getattr(args, "_gbdraw_source_session", None)
-    if not isinstance(source_session, Mapping):
-        source_session = None
-    out_file_prefix: str = args.output
-    blast_files: list[str] | None = args.blast
-    losat_search: LosatSearchOptions | None = (
-        LosatSearchOptions(
+    if not args.losat:
+        return None
+    try:
+        return LosatSearchOptions(
             program=args.losat,
-            losatp_mode=args.losatp_mode if args.losat == "losatp" else None,
-            losatp_max_hits=args.losatp_max_hits,
+            losatp_mode=args.losatp_mode,
+            losatn_task=args.losatn_task,
+            record_gencodes=tuple(args.losat_gencode or record_gencodes),
+            losatp_max_hits=5 if args.losatp_max_hits is None else args.losatp_max_hits,
             losatp_max_target_seqs=args.losatp_max_target_seqs,
             losatp_member_max_hits=args.losatp_member_max_hits,
             runtime=LosatRuntimeOptions(
@@ -1126,9 +1234,26 @@ def run_linear_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
                 threads=args.losat_threads,
             ),
         )
-        if args.losat
-        else None
-    )
+    except ValidationError as exc:
+        diagnostic = exc.diagnostic or {}
+        flag = _CLI_LOSAT_FIELD_FLAGS.get(str(diagnostic.get("field")))
+        if diagnostic.get("reason") != "LOSAT_OPTION_PROGRAM" or flag is None:
+            raise
+        raise ValidationError(
+            f"{flag} does not apply to --losat {args.losat}.",
+            diagnostic=diagnostic,
+        ) from exc
+
+
+def run_linear_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
+    """Run linear rendering from an already parsed argparse namespace."""
+
+    source_session = getattr(args, "_gbdraw_source_session", None)
+    if not isinstance(source_session, Mapping):
+        source_session = None
+    out_file_prefix: str = args.output
+    blast_files: list[str] | None = args.blast
+    losat_search = _cli_losat_search(args)
     orthogroup_membership_mode: str = str(
         _LINEAR_OPTION_DEFAULTS.orthogroup_membership_mode
     )
@@ -1450,6 +1575,13 @@ def run_linear_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
         )
         linear_positions = list(args.multi_record_position or [])
     record_manifest = apply_record_display_cli_options(record_manifest, args)
+    if record_manifest.losat_gencodes and args.losat:
+        if args.losat_gencode:
+            raise ValidationError(
+                "Pass --losat_gencode or the records table losat_gencode column, not both.",
+                diagnostic={"code": "COMPARISON_INPUT", "field": "record_gencodes"},
+            )
+        losat_search = _cli_losat_search(args, record_manifest.losat_gencodes)
     if record_manifest.record_options.regions and blast_files:
         logger.warning(
             "WARNING: Region cropping is enabled; BLAST coordinates must refer "
@@ -1557,6 +1689,7 @@ def run_linear_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
     )
     _preflight_losat_output_dir(
         args.losat_output_dir,
+        program=args.losat,
         diagram_output_paths=diagram_output_paths,
         session_output_path=session_output_path,
         overwrite=bool(args.overwrite),

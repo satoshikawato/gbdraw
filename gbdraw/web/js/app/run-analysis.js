@@ -232,7 +232,7 @@ export const confirmHydratedLosatExport = (
   ))
 );
 
-const buildLosatCachePayload = ({
+export const buildLosatCachePayload = ({
   identityKind,
   flow,
   program,
@@ -858,7 +858,7 @@ const logPostGbdrawTimings = (entries) => {
   });
   console.groupEnd();
 };
-const extractLosatFastaFast = async ({ file, text, fmt, regionSpec, recordSelector, reverseFlag }) => {
+export const extractLosatFastaFast = async ({ file, text, fmt, regionSpec, recordSelector, reverseFlag }) => {
   const sourceText = typeof text === 'string' ? text : await readFileText(file);
   const records = fmt === 'genbank' ? parseGenbankRecordsFast(sourceText) : parseFastaRecordsFast(sourceText);
   const selected = selectParsedRecord(records, recordSelector);

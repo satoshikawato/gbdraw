@@ -42,6 +42,17 @@ an integer, as the definition line interval. This restores the 0.13.0 Web and
 CLI spacing. The rule is applied when the overrides are applied, so the stored
 request is unchanged and replay writes the same overrides back.
 
+## Unreleased: CLI and Python LOSATN / TLOSATX results
+
+Session version 44 and request schema 8 are unchanged. A Linear run with
+`--losat losatn` or `--losat tlosatx` (Python `losat_search` with those
+programs) saves what the web app saves: one `nucleotideBlast` resource per
+compared record pair with the raw search-frame rows, and one schema 2
+`losatCache` entry per pair with the web raw key and the non-key `runtime`
+record. The saved request carries the resolved comparisons, not the search
+intent, so replay needs no LOSAT runtime. A request that still carries the
+search intent cannot be encoded; resolve or render it first.
+
 ## Unreleased: comparison rows in the search frame
 
 Session version 44 and request schema 8 are unchanged. Comparison rows stored

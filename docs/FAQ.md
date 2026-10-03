@@ -48,7 +48,10 @@ ordered anchors. Similarity groups always searches all loaded record pairs.
 Fresh Collinear settings and **Reset Settings** default to **Adjacent pairs**,
 while a saved **All records** scope remains explicit. Circular rings place
 retained evidence around one reference. Linear comparisons connect selected
-query and subject record endpoints.
+query and subject record endpoints. On the command line, `gbdraw linear
+--losat losatn`, `--losat tlosatx`, or `--losat losatp` runs the same Linear
+searches; `--comparisons_table` rows with `source` `losat` or `table` mix
+searched and uploaded edges.
 
 The [comparison capability
 matrix](./REFERENCE/comparison-programs-thresholds-and-results.md#capability-matrix)

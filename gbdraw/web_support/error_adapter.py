@@ -31,7 +31,7 @@ font_size plot_title_font_size height large_tick_interval small_tick_interval ti
 qualifier value record_id label_text config configOverrides records anchors schema
 recordKey groupId direction sourceStrand role blast files input comparison
 protein_blastp_max_hits orthogroup_member_max_hits bitscore evalue identity
-losatp_max_hits losatp_max_target_seqs losatp_member_max_hits
+losatp_max_hits losatp_max_target_seqs losatp_member_max_hits losatp_mode losatn_task record_gencodes
 alignment_length collinear_min_anchors collinear_max_gene_gap collinear_block_merge_gap
 collinear_singleton_merge_gap collinear_max_diagonal_drift collinear_gap_penalty
 collinear_nearby_duplicate_window collinear_constant_anchor_score
@@ -46,11 +46,12 @@ protein_blastp_mode protein_blastp_candidate_limit collinear_search_scope collin
 # Producer ``diagnostic=`` vocabulary: bounded identifiers that the Web wording
 # owner (services/error-normalization.js) defines, never document values.
 # tests/test_web_error_producer_coverage.py keeps it aligned with producers.
-DIAGNOSTIC_CODES = frozenset("INPUT_INVALID INPUT_UNREADABLE DEPTH_INVALID TABLE_INVALID COMPARISON_INPUT TRACK_LAYOUT".split())
+DIAGNOSTIC_CODES = frozenset("INPUT_INVALID INPUT_UNREADABLE DEPTH_INVALID TABLE_INVALID COMPARISON_INPUT TRACK_LAYOUT LOSAT_RUNTIME".split())
 DIAGNOSTIC_REASONS = frozenset("""BOOLEAN INTEGER FINITE POSITIVE NONNEGATIVE POSITIVE_INTEGER REQUIRED FIELDS POSITIVE_UNIT_INTERVAL
 POSITIVE_OR_AUTO POSITIVE_INTEGER_OR_AUTO NONNEGATIVE_INTEGER PERCENT UNKNOWN_CONFIG_PATH
 DINUCLEOTIDE CANNOT_FIT DEFINITION_RESERVED CENTER_RESERVED THREE_COLUMNS DEPTH_VALUES
-REFERENCE_REQUIRED REFERENCE_MISMATCH DISPLAY_START_BOUNDS ADJACENT_ALL COLLINEAR_ANCHOR_MODE COLLINEAR_COLOR_MODE COLOR SEARCH_FRAME""".split())
+REFERENCE_REQUIRED REFERENCE_MISMATCH DISPLAY_START_BOUNDS ADJACENT_ALL COLLINEAR_ANCHOR_MODE COLLINEAR_COLOR_MODE COLOR SEARCH_FRAME
+LOSAT_OPTION_PROGRAM LOSAT_PLAN LOSAT_TASK UNAVAILABLE FAILED OUTPUT""".split())
 _DIAGNOSTIC_INTEGER_KEYS = frozenset("row column columnCount seriesIndex slotIndex innerPx outerPx".split())
 
 # The engine computes a Result from the request alone, so an unclassified failure

@@ -127,12 +127,11 @@ const COLLINEAR_TABLE = {
   displayOnly: DERIVED_TABLE.displayOnly
 };
 
-// The raw search identity builder is module-private; load a copy that exports it.
+// Load a copy of the module so the probe does not share module state.
 const loadRawIdentityBuilder = async () => {
   const runAnalysisPath = resolve('gbdraw/web/js/app/run-analysis.js');
   const runAnalysisUrl = pathToFileURL(runAnalysisPath);
   const source = (await readFile(runAnalysisPath, 'utf8'))
-    .replace('const buildLosatCachePayload = ({', 'export const buildLosatCachePayload = ({')
     .replace(/from '(\.\.?\/[^']+)'/g, (_match, specifier) => `from '${new URL(specifier, runAnalysisUrl).href}'`);
   assert.match(source, /export const buildLosatCachePayload = \(\{/, 'the raw identity builder is still named buildLosatCachePayload');
   const probePath = join(await mkdtemp(join(tmpdir(), 'gbdraw-key-sensitivity-')), 'run-analysis-probe.mjs');

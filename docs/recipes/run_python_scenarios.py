@@ -1314,6 +1314,12 @@ def _assert_losatn_matches(
     chapter: dict[str, object], *, output_path: Path
 ) -> None:
     expected_source = output_path.parent / "lambda-de3.losatn.tsv"
+    if not expected_source.is_file() and chapter.get("id") == "T-PY-04":
+        # T-PY-04 runs LOSATN itself; its result must reproduce the GUI table.
+        expected_source = (
+            Path(__file__).resolve().parents[2] / "gbdraw" / "web" / "tutorial-data"
+            / "lambda-de3-comparison" / "lambda-de3.losatn.tsv"
+        )
     if not expected_source.is_file():
         raise RecipeContractError("H-PY-02 lost its copied LOSATN evidence.")
     expected_matches = {
