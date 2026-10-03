@@ -41,6 +41,7 @@ from gbdraw.analysis.depth_tracks import (
 )
 from gbdraw.exceptions import ValidationError
 from gbdraw.comparisons.linear_losat import resolve_linear_nucleotide_losat
+from gbdraw.comparisons.losat_jobs import losat_record_uids, losat_source_ids
 from gbdraw.comparisons.circular_losat import resolve_circular_conservation_losat
 from gbdraw.io.comparison_sequences import ComparisonSequenceFile, read_comparison_sequence_file
 from gbdraw.layout.record_coordinates import RecordDisplayTransform
@@ -1695,7 +1696,8 @@ def _resolve_nucleotide_losat(
 ) -> tuple[LinearDiagramOptions, tuple[Mapping[str, Any], ...]]:
     """Replace LOSATN / TLOSATX intent with comparisons (design 3.4).
 
-    A source file is one genome; an in-memory record is its own source.
+    A source file is one genome; an in-memory record is its own source
+    (:func:`gbdraw.comparisons.losat_jobs.losat_source_ids`, as for LOSATP).
     """
 
     if options.losat_search is None or options.losat_search.program == "losatp":
@@ -1709,10 +1711,8 @@ def _resolve_nucleotide_losat(
         options,
         records=collection.records,
         rows_by_record=rows_by_record,
-        source_ids=[
-            item.source_paths or ("memory", item.input_index) for item in provenance
-        ],
-        record_keys=[item.record_key for item in provenance],
+        source_ids=losat_source_ids(collection.records),
+        record_keys=losat_record_uids(collection.records),
         record_labels=[
             item.presentation.label or str(record.id)
             for item, record in zip(provenance, collection.records, strict=True)

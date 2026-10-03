@@ -39,6 +39,7 @@ from gbdraw.analysis.protein_colinearity import (  # type: ignore[reportMissingI
     normalize_protein_blastp_mode,
 )
 from gbdraw.config.models import GbdrawConfig  # type: ignore[reportMissingImports]
+from gbdraw.comparisons.losat_jobs import record_source_paths
 from gbdraw.exceptions import ValidationError
 from gbdraw.features.placement import FeaturePlacementOverride
 from gbdraw.io.record_select import RecordSelector
@@ -698,10 +699,7 @@ def _encode_canonical_request(request: DiagramRequest) -> EncodedCanonicalReques
         "schema": CANONICAL_REQUEST_SCHEMA,
         "mode": mode,
         "grouping": grouping,
-        "records": [
-            _encode_record(record, index=index, resources=resources)
-            for index, record in enumerate(request.records, start=1)
-        ],
+        "records": _encode_records(request.records, resources=resources),
         "diagramOptions": _encode_diagram_options(
             request.options,
             record_count=len(request.records),
@@ -885,14 +883,87 @@ def _decode_canonical_request(
     )
 
 
+def _genbank_bytes(records: Sequence[Any], *, index: int) -> bytes:
+    stream = StringIO()
+    try:
+        serializable = [deepcopy(record) for record in records]
+        for record in serializable:
+            record.annotations.setdefault("molecule_type", "DNA")
+        SeqIO.write(serializable, stream, "genbank")
+    except Exception as exc:
+        raise CanonicalRequestEncodingError(
+            f"Could not serialize in-memory record {index} as GenBank."
+        ) from exc
+    return stream.getvalue().encode("utf-8")
+
+
+def _encode_records(
+    records: Sequence[RecordInput],
+    *,
+    resources: _ResourceBuilder,
+) -> list[dict[str, Any]]:
+    """Encode records; the in-memory records of one source file share a resource.
+
+    The planner projects each displayed record to an in-memory record. Records
+    whose provenance names one source file are written to one GenBank resource
+    and selected by index, the shape the Web writes for one uploaded
+    multi-record file, so a replay keeps one file as one LOSAT source
+    (:func:`gbdraw.comparisons.losat_jobs.losat_source_ids`). Any other
+    in-memory record is its own source and keeps its own resource.
+    """
+
+    groups: dict[tuple[str, ...], list[int]] = {}
+    for position, record in enumerate(records):
+        if isinstance(record.source, InMemoryRecordSource):
+            paths = record_source_paths(record.source.record)
+            if paths:
+                groups.setdefault(paths, []).append(position)
+    shared: dict[int, tuple[dict[str, Any], RecordSelector]] = {}
+    for members in groups.values():
+        if len(members) < 2:
+            continue
+        first = members[0] + 1
+        resource_id = resources.add_bytes(
+            f"record-{first}-genbank",
+            kind="genbank",
+            name=f"record-{first}.gbk",
+            content=_genbank_bytes(
+                [records[position].source.record for position in members],  # type: ignore[union-attr]
+                index=first,
+            ),
+        )
+        for record_index, position in enumerate(members):
+            shared[position] = (
+                {"kind": "genbank", "resourceId": resource_id},
+                RecordSelector(
+                    raw=f"#{record_index + 1}",
+                    record_id=None,
+                    record_index=record_index,
+                ),
+            )
+    return [
+        _encode_record(
+            record,
+            index=position + 1,
+            resources=resources,
+            shared_source=shared.get(position),
+        )
+        for position, record in enumerate(records)
+    ]
+
+
 def _encode_record(
     record: RecordInput,
     *,
     index: int,
     resources: _ResourceBuilder,
+    shared_source: tuple[dict[str, Any], RecordSelector] | None = None,
 ) -> dict[str, Any]:
     source = record.source
-    if isinstance(source, GenBankInputSource):
+    selector = record.selector
+    if shared_source is not None:
+        source_payload, selector = shared_source
+    elif isinstance(source, GenBankInputSource):
         resource_id = resources.add_path(
             f"record-{index}-genbank", kind="genbank", value=source.path
         )
@@ -910,20 +981,11 @@ def _encode_record(
             "fastaResourceId": fasta_id,
         }
     elif isinstance(source, InMemoryRecordSource):
-        stream = StringIO()
-        try:
-            serializable_record = deepcopy(source.record)
-            serializable_record.annotations.setdefault("molecule_type", "DNA")
-            SeqIO.write((serializable_record,), stream, "genbank")
-        except Exception as exc:
-            raise CanonicalRequestEncodingError(
-                f"Could not serialize in-memory record {index} as GenBank."
-            ) from exc
         resource_id = resources.add_bytes(
             f"record-{index}-genbank",
             kind="genbank",
             name=f"record-{index}.gbk",
-            content=stream.getvalue().encode("utf-8"),
+            content=_genbank_bytes((source.record,), index=index),
         )
         source_payload = {"kind": "genbank", "resourceId": resource_id}
     else:  # pragma: no cover - RecordInput validates its source union.
@@ -938,7 +1000,7 @@ def _encode_record(
             "startCoordinate": record.display.start_coordinate,
         },
         "source": source_payload,
-        "selector": _encode_selector(record.selector),
+        "selector": _encode_selector(selector),
         "region": _encode_region(record.region),
         "presentation": {
             "label": presentation.label,

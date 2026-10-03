@@ -1688,8 +1688,7 @@ const finalizeGeneratedRecipeFiles = (generatedFiles, allocatedMetadata) => {
 
 // PD-OI-018 revision 4 and D-40: the Web search database differs from the CLI.
 export const LOSAT_DATABASE_SCOPE_NOTE = 'LOSAT E-values use the subject source file as the search database, '
-  + 'without the query record when both records come from the same file. '
-  + 'The CLI searches each record pair separately, so E-values for multi-record files can differ.';
+  + 'without the query record when both records come from the same file.';
 
 export const buildRunInfo = ({
   mode,

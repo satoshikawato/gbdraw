@@ -1176,7 +1176,8 @@ test('Run Info states the LOSAT search database only when LOSAT comparisons are 
   const withLosat = buildRunInfo({ mode: 'linear', sourceRecipe: recipe, losatComparisons: true });
   assert(withLosat.reproducibility.notes.includes(LOSAT_DATABASE_SCOPE_NOTE));
   assert.match(LOSAT_DATABASE_SCOPE_NOTE, /subject source file/);
-  assert.match(LOSAT_DATABASE_SCOPE_NOTE, /CLI searches each record pair separately/);
+  // The CLI and Python API search the same databases (design D7).
+  assert.doesNotMatch(LOSAT_DATABASE_SCOPE_NOTE, /CLI/);
   const without = buildRunInfo({ mode: 'linear', sourceRecipe: recipe });
   assert(!without.reproducibility.notes.includes(LOSAT_DATABASE_SCOPE_NOTE));
 });

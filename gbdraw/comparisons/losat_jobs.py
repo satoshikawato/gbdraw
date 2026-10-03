@@ -7,8 +7,10 @@ which raw-cache key.
 This is the Python owner of the rules that the Web keeps in
 ``planLosatSourceJobs``, ``prepareLosatSourceBatches`` and
 ``splitLosatSourceResult`` (``gbdraw/web/js/app/linear-sources.js``), the
-nucleotide FASTA text of ``extractLosatFastaFast`` and the nucleotide raw key
-of ``buildLosatCachePayload`` (``gbdraw/web/js/app/run-analysis.js``). The Web
+LOSATP record-pair searches of ``buildLosatJobSpecs``
+(``gbdraw/web/js/app/linear-comparisons.js``), the nucleotide FASTA text of
+``extractLosatFastaFast`` and the nucleotide raw key of
+``buildLosatCachePayload`` (``gbdraw/web/js/app/run-analysis.js``). The Web
 needs its own copy for the Settings job estimate without Python (CW-01, design
 D15); the shared vectors ``tests/fixtures/losat_job_plan_cases.json`` and
 ``tests/fixtures/losat_fasta_extraction_cases.json`` hold both copies to the
@@ -18,9 +20,7 @@ Rules: a source file is one genome. Between two sources the query source
 searches the whole subject source; within one source a query searches the
 source without itself; a record searches itself only when that self search is
 requested. Records whose explicit search args differ never share a batch.
-
-LOSATP keeps its per-record-pair walker in ``gbdraw.analysis`` until it adopts
-these source batches (design D7, PR-5).
+LOSATN, TLOSATX and LOSATP all search these source batches (design D7).
 """
 
 from __future__ import annotations
@@ -82,6 +82,94 @@ def losat_search_frame_fasta(record: SeqRecord) -> str:
     _base, step = _read_coord_map(record)
     sequence = record.seq if step == 1 else record.seq.reverse_complement()
     return losat_fasta_text(str(record.id), str(sequence))
+
+
+# Record sources and the LOSATP record-pair searches.
+
+
+def record_source_paths(record: SeqRecord) -> tuple[str, ...]:
+    """The source file paths the request planner recorded; empty for any other record."""
+
+    paths = (getattr(record, "annotations", None) or {}).get("gbdraw_source_paths")
+    return tuple(str(path) for path in paths) if paths else ()
+
+
+def losat_source_ids(records: Sequence[SeqRecord]) -> tuple[Hashable, ...]:
+    """The source file of each record: one file is one genome.
+
+    Records read by the request planner carry their source paths; any other
+    record is its own source.
+    """
+
+    return tuple(
+        record_source_paths(record)
+        or ("memory", (getattr(record, "annotations", None) or {}).get("gbdraw_input_index", index))
+        for index, record in enumerate(records)
+    )
+
+
+def losat_record_uids(records: Sequence[SeqRecord]) -> tuple[str, ...]:
+    """The record keys that order multi-record batch sides (Web sequence uids)."""
+
+    return tuple(
+        str((getattr(record, "annotations", None) or {}).get("gbdraw_record_key") or f"record-{index + 1}")
+        for index, record in enumerate(records)
+    )
+
+
+LosatpSpecMode = Literal["pairwise", "orthogroup", "collinear"]
+
+
+def losatp_job_specs(
+    mode: LosatpSpecMode | str,
+    *,
+    record_count: int,
+    pairs: Sequence[RecordPair] | None = None,
+    infer_orthogroups: bool = True,
+    search_scope: str = "adjacent",
+) -> tuple[RecordPair, ...]:
+    """The directed record-pair searches of one LOSATP run (Web ``buildLosatJobSpecs``).
+
+    ``pairs`` are the displayed comparison edges; omitted, they are the
+    consecutive records. Pairwise searches each edge. Similarity groups search
+    every record against every record, itself included. Collinear searches
+    each edge in both directions (every record pair with ``search_scope="all"``)
+    and adds the within-record searches when inference is on.
+    """
+
+    count = max(0, int(record_count))
+    edges = (
+        tuple((int(query), int(subject)) for query, subject in pairs)
+        if pairs is not None
+        else tuple((index, index + 1) for index in range(max(0, count - 1)))
+    )
+    if mode == "pairwise":
+        return edges
+    specs: list[RecordPair] = []
+
+    def every_pair(with_self: bool) -> None:
+        for query in range(count):
+            if with_self:
+                specs.append((query, query))
+            for subject in range(query + 1, count):
+                specs.extend(((query, subject), (subject, query)))
+
+    if mode == "orthogroup":
+        every_pair(True)
+        return tuple(specs)
+    if mode != "collinear":
+        raise ValidationError(
+            f"Unsupported LOSATP mode: {mode!r}.",
+            diagnostic={"code": "COMPARISON_INPUT", "reason": "LOSAT_PLAN"},
+        )
+    if infer_orthogroups:
+        specs.extend((index, index) for index in range(count))
+    if str(search_scope) == "all":
+        every_pair(False)
+    else:
+        for query, subject in edges:
+            specs.extend(((query, subject), (subject, query)))
+    return tuple(specs)
 
 
 # Job plan.
@@ -333,9 +421,13 @@ __all__ = [
     "LosatBatch",
     "LosatBatchSide",
     "LosatJob",
+    "LosatpSpecMode",
     "NUCLEOTIDE_LOSAT_CACHE_SCHEMA",
     "losat_fasta_text",
+    "losat_record_uids",
     "losat_search_frame_fasta",
+    "losat_source_ids",
+    "losatp_job_specs",
     "nucleotide_losat_cache_key",
     "plan_losat_jobs",
     "prepare_losat_batches",

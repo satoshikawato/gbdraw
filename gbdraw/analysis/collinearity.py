@@ -32,16 +32,17 @@ from gbdraw.analysis.protein_colinearity import (
     _edge_metadata_for_protein_pair,
     _orthogroup_member_counts,
     ProteinExtractionResult,
-    _execute_losatp_search,
+    _consecutive_display_filenames,
+    _search_losatp_record_pairs,
     _select_member_candidate_hits_per_query,
     extract_cds_proteins,
     filter_protein_hits_by_thresholds,
     normalize_orthogroup_membership_mode,
-    proteins_to_fasta,
     select_reciprocal_best_hit_edges,
     select_reciprocal_best_hits,
     select_rbh_orthogroup_edges_from_directional_hits,
 )
+from gbdraw.comparisons.losat_jobs import losatp_job_specs
 from gbdraw.exceptions import ParseError, ValidationError
 from gbdraw.io.comparisons import COMPARISON_COLUMNS
 
@@ -238,17 +239,19 @@ def iter_collinearity_search_pairs(
     *,
     scope: CollinearitySearchScope | str,
 ) -> tuple[tuple[int, int], ...]:
-    """Return unordered record pairs searched for Collinear evidence."""
+    """Return unordered record pairs searched for Collinear evidence.
 
-    normalized_scope = normalize_collinearity_search_scope(str(scope))
-    count = max(0, int(record_count))
-    if normalized_scope == "adjacent":
-        return tuple((index, index + 1) for index in range(max(0, count - 1)))
-    return tuple(
-        (query_index, subject_index)
-        for query_index in range(count)
-        for subject_index in range(query_index + 1, count)
+    A view of the LOSAT job plan (:func:`gbdraw.comparisons.losat_jobs.losatp_job_specs`)
+    for consecutive records.
+    """
+
+    specs = losatp_job_specs(
+        "collinear",
+        record_count=record_count,
+        infer_orthogroups=False,
+        search_scope=normalize_collinearity_search_scope(str(scope)),
     )
+    return tuple(dict.fromkeys(tuple(sorted(pair)) for pair in specs))
 
 
 def _float_from_row(row: object, column: str, default: float = 0.0) -> float:
@@ -1407,84 +1410,49 @@ def build_orthogroup_collinearity_blocks(
     )
     _validate_collinearity_extraction(records, extraction)
 
-    search_candidate_limit = candidate_limit
-    directional_tables: dict[tuple[int, int], DataFrame] = {}
-    if infer_orthogroups:
-        for record_index in range(len(records)):
-            record_fasta = proteins_to_fasta(extraction.proteins_by_record[record_index])
-            same_record_hits = _execute_losatp_search(
-                record_fasta,
-                record_fasta,
-                losatp_bin=losatp_bin,
-                ncbi_blastp_bin=ncbi_blastp_bin,
-                losatp_threads=losatp_threads,
-                candidate_limit=search_candidate_limit,
-                max_hsps_per_subject=None,
-                runner=runner,
-                losatp_cache=losatp_cache,
-                display=False,
+    specs = losatp_job_specs(
+        "collinear",
+        record_count=len(records),
+        pairs=(
+            tuple(
+                tuple(sorted((int(query_index), int(subject_index))))
+                for query_index, subject_index in comparison_pairs
             )
-            directional_tables[(record_index, record_index)] = filter_protein_hits_by_thresholds(
-                same_record_hits,
-                evalue=evalue,
-                bitscore=bitscore,
-                identity=identity,
-                alignment_length=alignment_length,
-            )
-    search_pairs = (
-        tuple(
-            tuple(sorted((int(query_index), int(subject_index))))
-            for query_index, subject_index in comparison_pairs
-        )
-        if normalized_search_scope == "adjacent" and comparison_pairs is not None
-        else iter_collinearity_search_pairs(len(records), scope=normalized_search_scope)
+            if comparison_pairs is not None
+            else None
+        ),
+        infer_orthogroups=infer_orthogroups,
+        search_scope=normalized_search_scope,
     )
-    for query_index, subject_index in search_pairs:
-        query_fasta = proteins_to_fasta(extraction.proteins_by_record[query_index])
-        subject_fasta = proteins_to_fasta(extraction.proteins_by_record[subject_index])
-        forward_hits = _execute_losatp_search(
-            query_fasta,
-            subject_fasta,
-            losatp_bin=losatp_bin,
-            ncbi_blastp_bin=ncbi_blastp_bin,
-            losatp_threads=losatp_threads,
-            candidate_limit=search_candidate_limit,
-            max_hsps_per_subject=None,
-            runner=runner,
-            losatp_cache=losatp_cache,
-            filename=(
-                str(cache_filenames[query_index])
-                if cache_filenames is not None and query_index < len(cache_filenames)
-                else ""
-            ),
-            display=subject_index == query_index + 1,
-        )
-        directional_tables[(query_index, subject_index)] = filter_protein_hits_by_thresholds(
-            forward_hits,
+    hits_by_pair = _search_losatp_record_pairs(
+        records,
+        extraction,
+        specs,
+        losatp_bin=losatp_bin,
+        ncbi_blastp_bin=ncbi_blastp_bin,
+        losatp_threads=losatp_threads,
+        candidate_limit=candidate_limit,
+        max_hsps_per_subject=None,
+        runner=runner,
+        losatp_cache=losatp_cache,
+        display_filenames={
+            pair: filename
+            for pair, filename in _consecutive_display_filenames(
+                len(records), cache_filenames
+            ).items()
+            if pair in specs
+        },
+    )
+    directional_tables: dict[tuple[int, int], DataFrame] = {
+        pair: filter_protein_hits_by_thresholds(
+            hits_by_pair[pair],
             evalue=evalue,
             bitscore=bitscore,
             identity=identity,
             alignment_length=alignment_length,
         )
-        reverse_hits = _execute_losatp_search(
-            subject_fasta,
-            query_fasta,
-            losatp_bin=losatp_bin,
-            ncbi_blastp_bin=ncbi_blastp_bin,
-            losatp_threads=losatp_threads,
-            candidate_limit=search_candidate_limit,
-            max_hsps_per_subject=None,
-            runner=runner,
-            losatp_cache=losatp_cache,
-            display=False,
-        )
-        directional_tables[(subject_index, query_index)] = filter_protein_hits_by_thresholds(
-            reverse_hits,
-            evalue=evalue,
-            bitscore=bitscore,
-            identity=identity,
-            alignment_length=alignment_length,
-        )
+        for pair in specs
+    }
 
     return build_orthogroup_collinearity_blocks_from_hits(
         directional_tables,

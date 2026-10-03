@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "description": "Shared LOSAT job plan and nucleotide raw-key vectors. tests/test_losat_job_plan.py and tests/web/linear-sources.test.mjs run every case; Python gbdraw.comparisons.losat_jobs and Web planLosatSourceJobs/prepareLosatSourceBatches/buildLosatCachePayload must give the same jobs, batch FASTA hashes, searchContext, and raw keys. Batch sides order records by record key (Web sequence uid); keys are ASCII so code-point and localeCompare order agree.",
+  "description": "Shared LOSAT job plan and nucleotide raw-key vectors. tests/test_losat_job_plan.py and tests/web/linear-sources.test.mjs run every case; Python gbdraw.comparisons.losat_jobs and Web planLosatSourceJobs/prepareLosatSourceBatches/buildLosatCachePayload must give the same jobs, batch FASTA hashes, searchContext, and raw keys. proteinCases are LOSATP plans (D7): Python losatp_job_specs and Web buildLosatJobSpecs give the same specs, prepare_losat_batches(protein=True) and prepareLosatSourceBatches({protein: true}) the same jobs, and build_protein_losat_cache_key (which the Web calls through its Python helper) the raw keys. Batch sides order records by record key (Web sequence uid); keys are ASCII so code-point and localeCompare order agree.",
   "cases": [
     {
       "name": "two single-record files, LOSATN megablast (lambda/DE3 shape)",
@@ -712,6 +712,1296 @@
             1,
             2,
             "69b7fe883d398c5fe4867aaa3e0d923cae2a35d7457c5f12589f221abdd16310"
+          ]
+        ]
+      }
+    }
+  ],
+  "proteinCases": [
+    {
+      "name": "LOSATP Similarity groups, two records of one file and one single-record file",
+      "program": "blastp",
+      "mode": "orthogroup",
+      "inferOrthogroups": true,
+      "searchScope": "adjacent",
+      "args": [
+        "--max-target-seqs",
+        "5"
+      ],
+      "edges": [
+        [
+          0,
+          1
+        ],
+        [
+          1,
+          2
+        ]
+      ],
+      "records": [
+        {
+          "uid": "record-1",
+          "source": "a.gbk",
+          "fasta": ">p_1a\nMKTAYIAKQRQISFVKSHFSRQ1LEERLGLIEVQ\n>p_1b\nKTAYIAKQRQISFVKSHFSRQ1LEERLGLIEVQ\n",
+          "identity": {
+            "proteinSetHash": "sha256:8f5bc4cbf15c1d7f9d3e4f7f50acfdb7ddcebb2d955ba3a737272093bbfa3346",
+            "runtimeBindingHash": "sha256:6c127732fb7197db58e1c1c3ee45b5c0b4badf8c41c2e6a1c4cba245f6d87f22"
+          }
+        },
+        {
+          "uid": "record-2",
+          "source": "a.gbk",
+          "fasta": ">p_2a\nMKTAYIAKQRQISFVKSHFSRQ2LEERLGLIEVQ\n",
+          "identity": {
+            "proteinSetHash": "sha256:7801f2b3a6fc7b6b268e53ef2d076d399553eedcd188592bcc34823e23097c81",
+            "runtimeBindingHash": "sha256:b36a05a9c62f6adb883f8849dc75c1d0baf5251519ce10ffa458278bb07d3954"
+          }
+        },
+        {
+          "uid": "record-3",
+          "source": "b.gbk",
+          "fasta": ">p_3a\nMKTAYIAKQRQISFVKSHFSRQ3LEERLGLIEVQ\n>p_3b\nKTAYIAKQRQISFVKSHFSRQ3LEERLGLIEVQ\n",
+          "identity": {
+            "proteinSetHash": "sha256:3dbc19c021269b0f7c073d119002e68087c350f53a3af4c8ddc6a24a222f422c",
+            "runtimeBindingHash": "sha256:7664680353a5c6c00dcb48bc77971b0004ef2ff6c739b53d009f23d15187bcc1"
+          }
+        }
+      ],
+      "specs": [
+        [
+          0,
+          0
+        ],
+        [
+          0,
+          1
+        ],
+        [
+          1,
+          0
+        ],
+        [
+          0,
+          2
+        ],
+        [
+          2,
+          0
+        ],
+        [
+          1,
+          1
+        ],
+        [
+          1,
+          2
+        ],
+        [
+          2,
+          1
+        ],
+        [
+          2,
+          2
+        ]
+      ],
+      "expected": {
+        "jobs": [
+          {
+            "scope": "self",
+            "args": [
+              "--max-target-seqs",
+              "5"
+            ],
+            "specs": [
+              [
+                0,
+                0
+              ]
+            ],
+            "queryIndexes": [
+              0
+            ],
+            "subjectIndexes": [
+              0
+            ],
+            "queryIds": {
+              "p_1a": [
+                0,
+                "p_1a"
+              ],
+              "p_1b": [
+                0,
+                "p_1b"
+              ]
+            },
+            "subjectIds": {
+              "p_1a": [
+                0,
+                "p_1a"
+              ],
+              "p_1b": [
+                0,
+                "p_1b"
+              ]
+            },
+            "queryHash": "deb07b6b65be8131b105d40f8e8bc430a9d6b0afb03367038afa0f2af516d117",
+            "subjectHash": "deb07b6b65be8131b105d40f8e8bc430a9d6b0afb03367038afa0f2af516d117",
+            "searchContext": null
+          },
+          {
+            "scope": "within-source",
+            "args": [
+              "--max-target-seqs",
+              "5"
+            ],
+            "specs": [
+              [
+                0,
+                1
+              ]
+            ],
+            "queryIndexes": [
+              0
+            ],
+            "subjectIndexes": [
+              1
+            ],
+            "queryIds": {
+              "p_1a": [
+                0,
+                "p_1a"
+              ],
+              "p_1b": [
+                0,
+                "p_1b"
+              ]
+            },
+            "subjectIds": {
+              "p_2a": [
+                1,
+                "p_2a"
+              ]
+            },
+            "queryHash": "deb07b6b65be8131b105d40f8e8bc430a9d6b0afb03367038afa0f2af516d117",
+            "subjectHash": "172ad97b9b5c802f4748e831d24465bcf6a4a80b6741f5d5b3497f69c56d0b34",
+            "searchContext": null
+          },
+          {
+            "scope": "within-source",
+            "args": [
+              "--max-target-seqs",
+              "5"
+            ],
+            "specs": [
+              [
+                1,
+                0
+              ]
+            ],
+            "queryIndexes": [
+              1
+            ],
+            "subjectIndexes": [
+              0
+            ],
+            "queryIds": {
+              "p_2a": [
+                1,
+                "p_2a"
+              ]
+            },
+            "subjectIds": {
+              "p_1a": [
+                0,
+                "p_1a"
+              ],
+              "p_1b": [
+                0,
+                "p_1b"
+              ]
+            },
+            "queryHash": "172ad97b9b5c802f4748e831d24465bcf6a4a80b6741f5d5b3497f69c56d0b34",
+            "subjectHash": "deb07b6b65be8131b105d40f8e8bc430a9d6b0afb03367038afa0f2af516d117",
+            "searchContext": null
+          },
+          {
+            "scope": "between-sources",
+            "args": [
+              "--max-target-seqs",
+              "5"
+            ],
+            "specs": [
+              [
+                0,
+                2
+              ],
+              [
+                1,
+                2
+              ]
+            ],
+            "queryIndexes": [
+              0,
+              1
+            ],
+            "subjectIndexes": [
+              2
+            ],
+            "queryIds": {
+              "p_1a": [
+                0,
+                "p_1a"
+              ],
+              "p_1b": [
+                0,
+                "p_1b"
+              ],
+              "p_2a": [
+                1,
+                "p_2a"
+              ]
+            },
+            "subjectIds": {
+              "p_3a": [
+                2,
+                "p_3a"
+              ],
+              "p_3b": [
+                2,
+                "p_3b"
+              ]
+            },
+            "queryHash": "37901c851ee68c477ae50987b3b028f17b707cb5c0be093f77ea195b5ef9ca49",
+            "subjectHash": "b7e2ea959a1617c939a45514d2d8d877026cda2f57b0e58ffa2f85bcf0c127e0",
+            "searchContext": "6901cde441c0b9c989a688b2233d2118b3dca8378da34c958ec477f3167b3df4"
+          },
+          {
+            "scope": "between-sources",
+            "args": [
+              "--max-target-seqs",
+              "5"
+            ],
+            "specs": [
+              [
+                2,
+                0
+              ],
+              [
+                2,
+                1
+              ]
+            ],
+            "queryIndexes": [
+              2
+            ],
+            "subjectIndexes": [
+              0,
+              1
+            ],
+            "queryIds": {
+              "p_3a": [
+                2,
+                "p_3a"
+              ],
+              "p_3b": [
+                2,
+                "p_3b"
+              ]
+            },
+            "subjectIds": {
+              "p_1a": [
+                0,
+                "p_1a"
+              ],
+              "p_1b": [
+                0,
+                "p_1b"
+              ],
+              "p_2a": [
+                1,
+                "p_2a"
+              ]
+            },
+            "queryHash": "b7e2ea959a1617c939a45514d2d8d877026cda2f57b0e58ffa2f85bcf0c127e0",
+            "subjectHash": "37901c851ee68c477ae50987b3b028f17b707cb5c0be093f77ea195b5ef9ca49",
+            "searchContext": "b61bf174bb80c8f6f57f19adb66cfd840ed87d91224cb46c49f54202412f2da2"
+          },
+          {
+            "scope": "self",
+            "args": [
+              "--max-target-seqs",
+              "5"
+            ],
+            "specs": [
+              [
+                1,
+                1
+              ]
+            ],
+            "queryIndexes": [
+              1
+            ],
+            "subjectIndexes": [
+              1
+            ],
+            "queryIds": {
+              "p_2a": [
+                1,
+                "p_2a"
+              ]
+            },
+            "subjectIds": {
+              "p_2a": [
+                1,
+                "p_2a"
+              ]
+            },
+            "queryHash": "172ad97b9b5c802f4748e831d24465bcf6a4a80b6741f5d5b3497f69c56d0b34",
+            "subjectHash": "172ad97b9b5c802f4748e831d24465bcf6a4a80b6741f5d5b3497f69c56d0b34",
+            "searchContext": null
+          },
+          {
+            "scope": "self",
+            "args": [
+              "--max-target-seqs",
+              "5"
+            ],
+            "specs": [
+              [
+                2,
+                2
+              ]
+            ],
+            "queryIndexes": [
+              2
+            ],
+            "subjectIndexes": [
+              2
+            ],
+            "queryIds": {
+              "p_3a": [
+                2,
+                "p_3a"
+              ],
+              "p_3b": [
+                2,
+                "p_3b"
+              ]
+            },
+            "subjectIds": {
+              "p_3a": [
+                2,
+                "p_3a"
+              ],
+              "p_3b": [
+                2,
+                "p_3b"
+              ]
+            },
+            "queryHash": "b7e2ea959a1617c939a45514d2d8d877026cda2f57b0e58ffa2f85bcf0c127e0",
+            "subjectHash": "b7e2ea959a1617c939a45514d2d8d877026cda2f57b0e58ffa2f85bcf0c127e0",
+            "searchContext": null
+          }
+        ],
+        "rawKeys": [
+          [
+            0,
+            0,
+            "c7780bb69a75639acc47226f5cd6ea787523dd1400062cf43b364dbdd17ce920"
+          ],
+          [
+            0,
+            1,
+            "a786b67d4068150860690f3bf7d18684ab1566c1f4c08dd26087b7215bc99638"
+          ],
+          [
+            1,
+            0,
+            "07550d2b4e209d7a885b3d999fce4b3432fb8462f9887daacecf4470b4aeef2b"
+          ],
+          [
+            0,
+            2,
+            "3680dcd29736c68b234ded3c82187ed48458b83251b86711eda16f3f31293388"
+          ],
+          [
+            2,
+            0,
+            "029831053b033d6be00864584ea636330a9497c898585f0209f8b38684d4f7cf"
+          ],
+          [
+            1,
+            1,
+            "0e6bfaaacdca0afec2ca375d4b3d968babfca54ae1f3337e03f90868f3717c49"
+          ],
+          [
+            1,
+            2,
+            "79ae06a0e10933066c1f1d17be4a58d0ef0eb06c3bf28e301fff4e53a0a17b38"
+          ],
+          [
+            2,
+            1,
+            "a9360f0aa1792b847eed810492f9b8eb262aa7fbe0c15867ff901276605076f2"
+          ],
+          [
+            2,
+            2,
+            "937157a67fc204ea1df9f44dbd09c7a57678b95d947a4a027bc068d52af0ca2b"
+          ]
+        ]
+      }
+    },
+    {
+      "name": "LOSATP Pairwise, records of one file against one file",
+      "program": "blastp",
+      "mode": "pairwise",
+      "inferOrthogroups": true,
+      "searchScope": "adjacent",
+      "args": [
+        "--max-hsps-per-subject",
+        "1",
+        "--max-target-seqs",
+        "5"
+      ],
+      "edges": [
+        [
+          0,
+          2
+        ],
+        [
+          1,
+          2
+        ]
+      ],
+      "records": [
+        {
+          "uid": "record-1",
+          "source": "a.gbk",
+          "fasta": ">p_1a\nMKTAYIAKQRQISFVKSHFSRQ1LEERLGLIEVQ\n",
+          "identity": {
+            "proteinSetHash": "sha256:8f5bc4cbf15c1d7f9d3e4f7f50acfdb7ddcebb2d955ba3a737272093bbfa3346",
+            "runtimeBindingHash": "sha256:6c127732fb7197db58e1c1c3ee45b5c0b4badf8c41c2e6a1c4cba245f6d87f22"
+          }
+        },
+        {
+          "uid": "record-2",
+          "source": "a.gbk",
+          "fasta": ">p_2a\nMKTAYIAKQRQISFVKSHFSRQ2LEERLGLIEVQ\n>p_2b\nKTAYIAKQRQISFVKSHFSRQ2LEERLGLIEVQ\n",
+          "identity": {
+            "proteinSetHash": "sha256:7801f2b3a6fc7b6b268e53ef2d076d399553eedcd188592bcc34823e23097c81",
+            "runtimeBindingHash": "sha256:b36a05a9c62f6adb883f8849dc75c1d0baf5251519ce10ffa458278bb07d3954"
+          }
+        },
+        {
+          "uid": "record-3",
+          "source": "b.gbk",
+          "fasta": ">p_3a\nMKTAYIAKQRQISFVKSHFSRQ3LEERLGLIEVQ\n",
+          "identity": {
+            "proteinSetHash": "sha256:3dbc19c021269b0f7c073d119002e68087c350f53a3af4c8ddc6a24a222f422c",
+            "runtimeBindingHash": "sha256:7664680353a5c6c00dcb48bc77971b0004ef2ff6c739b53d009f23d15187bcc1"
+          }
+        }
+      ],
+      "specs": [
+        [
+          0,
+          2
+        ],
+        [
+          1,
+          2
+        ]
+      ],
+      "expected": {
+        "jobs": [
+          {
+            "scope": "between-sources",
+            "args": [
+              "--max-hsps-per-subject",
+              "1",
+              "--max-target-seqs",
+              "5"
+            ],
+            "specs": [
+              [
+                0,
+                2
+              ],
+              [
+                1,
+                2
+              ]
+            ],
+            "queryIndexes": [
+              0,
+              1
+            ],
+            "subjectIndexes": [
+              2
+            ],
+            "queryIds": {
+              "p_1a": [
+                0,
+                "p_1a"
+              ],
+              "p_2a": [
+                1,
+                "p_2a"
+              ],
+              "p_2b": [
+                1,
+                "p_2b"
+              ]
+            },
+            "subjectIds": {
+              "p_3a": [
+                2,
+                "p_3a"
+              ]
+            },
+            "queryHash": "2681416c941133c5b65bb4453313e7589c178600e042c283d847018ba4093ff7",
+            "subjectHash": "9ff0a300436db0e3885f45eea414a6c287f86d6932a94b88de14bc57eec728c6",
+            "searchContext": "35d4a1602664bff0ec94671dbfc6bf70c1f879c1ec38fede0a6949bb5f0d7715"
+          }
+        ],
+        "rawKeys": [
+          [
+            0,
+            2,
+            "a0d7fd1f37adc017b9c4847e9c8a993ea63f59fa1c3888206d1d94dbd150c954"
+          ],
+          [
+            1,
+            2,
+            "6ad23b1e74d1793b16d2845a6733838a6869a059dcd819e4b26c39dc52d8174d"
+          ]
+        ]
+      }
+    },
+    {
+      "name": "LOSATP Collinear with inference, two two-record files in adjacent rows",
+      "program": "blastp",
+      "mode": "collinear",
+      "inferOrthogroups": true,
+      "searchScope": "adjacent",
+      "args": [
+        "--max-target-seqs",
+        "5"
+      ],
+      "edges": [
+        [
+          0,
+          2
+        ],
+        [
+          0,
+          3
+        ],
+        [
+          1,
+          2
+        ],
+        [
+          1,
+          3
+        ]
+      ],
+      "records": [
+        {
+          "uid": "record-1",
+          "source": "a.gbk",
+          "fasta": ">p_1a\nMKTAYIAKQRQISFVKSHFSRQ1LEERLGLIEVQ\n",
+          "identity": {
+            "proteinSetHash": "sha256:8f5bc4cbf15c1d7f9d3e4f7f50acfdb7ddcebb2d955ba3a737272093bbfa3346",
+            "runtimeBindingHash": "sha256:6c127732fb7197db58e1c1c3ee45b5c0b4badf8c41c2e6a1c4cba245f6d87f22"
+          }
+        },
+        {
+          "uid": "record-2",
+          "source": "a.gbk",
+          "fasta": ">p_2a\nMKTAYIAKQRQISFVKSHFSRQ2LEERLGLIEVQ\n",
+          "identity": {
+            "proteinSetHash": "sha256:7801f2b3a6fc7b6b268e53ef2d076d399553eedcd188592bcc34823e23097c81",
+            "runtimeBindingHash": "sha256:b36a05a9c62f6adb883f8849dc75c1d0baf5251519ce10ffa458278bb07d3954"
+          }
+        },
+        {
+          "uid": "record-3",
+          "source": "b.gbk",
+          "fasta": ">p_3a\nMKTAYIAKQRQISFVKSHFSRQ3LEERLGLIEVQ\n",
+          "identity": {
+            "proteinSetHash": "sha256:3dbc19c021269b0f7c073d119002e68087c350f53a3af4c8ddc6a24a222f422c",
+            "runtimeBindingHash": "sha256:7664680353a5c6c00dcb48bc77971b0004ef2ff6c739b53d009f23d15187bcc1"
+          }
+        },
+        {
+          "uid": "record-4",
+          "source": "b.gbk",
+          "fasta": ">p_4a\nMKTAYIAKQRQISFVKSHFSRQ4LEERLGLIEVQ\n",
+          "identity": {
+            "proteinSetHash": "sha256:7116c129ad91637781d9479428094b68265cdc2360ebf6d538507c9096b33f8c",
+            "runtimeBindingHash": "sha256:b85bb3308cc1709cfb175d620142e7bbc70ad3972ce26c4a2a9f7683af7a5374"
+          }
+        }
+      ],
+      "specs": [
+        [
+          0,
+          0
+        ],
+        [
+          1,
+          1
+        ],
+        [
+          2,
+          2
+        ],
+        [
+          3,
+          3
+        ],
+        [
+          0,
+          2
+        ],
+        [
+          2,
+          0
+        ],
+        [
+          0,
+          3
+        ],
+        [
+          3,
+          0
+        ],
+        [
+          1,
+          2
+        ],
+        [
+          2,
+          1
+        ],
+        [
+          1,
+          3
+        ],
+        [
+          3,
+          1
+        ]
+      ],
+      "expected": {
+        "jobs": [
+          {
+            "scope": "self",
+            "args": [
+              "--max-target-seqs",
+              "5"
+            ],
+            "specs": [
+              [
+                0,
+                0
+              ]
+            ],
+            "queryIndexes": [
+              0
+            ],
+            "subjectIndexes": [
+              0
+            ],
+            "queryIds": {
+              "p_1a": [
+                0,
+                "p_1a"
+              ]
+            },
+            "subjectIds": {
+              "p_1a": [
+                0,
+                "p_1a"
+              ]
+            },
+            "queryHash": "73c6cf6990f018d56948c210107e565ccfd7e4659de114ccf46d8ee370454e79",
+            "subjectHash": "73c6cf6990f018d56948c210107e565ccfd7e4659de114ccf46d8ee370454e79",
+            "searchContext": null
+          },
+          {
+            "scope": "self",
+            "args": [
+              "--max-target-seqs",
+              "5"
+            ],
+            "specs": [
+              [
+                1,
+                1
+              ]
+            ],
+            "queryIndexes": [
+              1
+            ],
+            "subjectIndexes": [
+              1
+            ],
+            "queryIds": {
+              "p_2a": [
+                1,
+                "p_2a"
+              ]
+            },
+            "subjectIds": {
+              "p_2a": [
+                1,
+                "p_2a"
+              ]
+            },
+            "queryHash": "172ad97b9b5c802f4748e831d24465bcf6a4a80b6741f5d5b3497f69c56d0b34",
+            "subjectHash": "172ad97b9b5c802f4748e831d24465bcf6a4a80b6741f5d5b3497f69c56d0b34",
+            "searchContext": null
+          },
+          {
+            "scope": "self",
+            "args": [
+              "--max-target-seqs",
+              "5"
+            ],
+            "specs": [
+              [
+                2,
+                2
+              ]
+            ],
+            "queryIndexes": [
+              2
+            ],
+            "subjectIndexes": [
+              2
+            ],
+            "queryIds": {
+              "p_3a": [
+                2,
+                "p_3a"
+              ]
+            },
+            "subjectIds": {
+              "p_3a": [
+                2,
+                "p_3a"
+              ]
+            },
+            "queryHash": "9ff0a300436db0e3885f45eea414a6c287f86d6932a94b88de14bc57eec728c6",
+            "subjectHash": "9ff0a300436db0e3885f45eea414a6c287f86d6932a94b88de14bc57eec728c6",
+            "searchContext": null
+          },
+          {
+            "scope": "self",
+            "args": [
+              "--max-target-seqs",
+              "5"
+            ],
+            "specs": [
+              [
+                3,
+                3
+              ]
+            ],
+            "queryIndexes": [
+              3
+            ],
+            "subjectIndexes": [
+              3
+            ],
+            "queryIds": {
+              "p_4a": [
+                3,
+                "p_4a"
+              ]
+            },
+            "subjectIds": {
+              "p_4a": [
+                3,
+                "p_4a"
+              ]
+            },
+            "queryHash": "d3cbb5ce3d039ed2fe68abd70e45d6b10c0e7604554771bbc15cb353270af1a8",
+            "subjectHash": "d3cbb5ce3d039ed2fe68abd70e45d6b10c0e7604554771bbc15cb353270af1a8",
+            "searchContext": null
+          },
+          {
+            "scope": "between-sources",
+            "args": [
+              "--max-target-seqs",
+              "5"
+            ],
+            "specs": [
+              [
+                0,
+                2
+              ],
+              [
+                0,
+                3
+              ],
+              [
+                1,
+                2
+              ],
+              [
+                1,
+                3
+              ]
+            ],
+            "queryIndexes": [
+              0,
+              1
+            ],
+            "subjectIndexes": [
+              2,
+              3
+            ],
+            "queryIds": {
+              "p_1a": [
+                0,
+                "p_1a"
+              ],
+              "p_2a": [
+                1,
+                "p_2a"
+              ]
+            },
+            "subjectIds": {
+              "p_3a": [
+                2,
+                "p_3a"
+              ],
+              "p_4a": [
+                3,
+                "p_4a"
+              ]
+            },
+            "queryHash": "32a85537485cdbfbc4a0c61daeb1ffd39603046ba79f150041d7434066f9f56e",
+            "subjectHash": "bcb926f0aa73d440821e07745926715c08def1f50ca51f0d8ae4bc2a83bd6472",
+            "searchContext": "fb5f6b5e3e26735288e7e6d51a5972c8fa13d1ee8abf01e03a8c98ae2258b4bb"
+          },
+          {
+            "scope": "between-sources",
+            "args": [
+              "--max-target-seqs",
+              "5"
+            ],
+            "specs": [
+              [
+                2,
+                0
+              ],
+              [
+                3,
+                0
+              ],
+              [
+                2,
+                1
+              ],
+              [
+                3,
+                1
+              ]
+            ],
+            "queryIndexes": [
+              2,
+              3
+            ],
+            "subjectIndexes": [
+              0,
+              1
+            ],
+            "queryIds": {
+              "p_3a": [
+                2,
+                "p_3a"
+              ],
+              "p_4a": [
+                3,
+                "p_4a"
+              ]
+            },
+            "subjectIds": {
+              "p_1a": [
+                0,
+                "p_1a"
+              ],
+              "p_2a": [
+                1,
+                "p_2a"
+              ]
+            },
+            "queryHash": "bcb926f0aa73d440821e07745926715c08def1f50ca51f0d8ae4bc2a83bd6472",
+            "subjectHash": "32a85537485cdbfbc4a0c61daeb1ffd39603046ba79f150041d7434066f9f56e",
+            "searchContext": "c9f51742bd9eddd21343f7eafabfaf3e539f7859254d3adbaf8bb1a1b163a254"
+          }
+        ],
+        "rawKeys": [
+          [
+            0,
+            0,
+            "c7780bb69a75639acc47226f5cd6ea787523dd1400062cf43b364dbdd17ce920"
+          ],
+          [
+            1,
+            1,
+            "0e6bfaaacdca0afec2ca375d4b3d968babfca54ae1f3337e03f90868f3717c49"
+          ],
+          [
+            2,
+            2,
+            "937157a67fc204ea1df9f44dbd09c7a57678b95d947a4a027bc068d52af0ca2b"
+          ],
+          [
+            3,
+            3,
+            "d51cc6269ff2cb1e2fefe21f7958535b20f7921fb6f7fe02a836dee3be8ba35e"
+          ],
+          [
+            0,
+            2,
+            "58a0c21e17644ee6a227610e157a0ee94e5d516847465c80adc446da4b2d3ec7"
+          ],
+          [
+            2,
+            0,
+            "46d3df00fe6cb20c863e7c66bc7a2cf8c693a4ec13e8102824b5377ff5e6140a"
+          ],
+          [
+            0,
+            3,
+            "d260cf2dd55a4183264283f0b0bf909008ee5fbc4b254b30f54486de478b5ed2"
+          ],
+          [
+            3,
+            0,
+            "a7ca5cda09ec60e4ccb55b388e441ed85251b9f4aff05e423ab77e255bb9de39"
+          ],
+          [
+            1,
+            2,
+            "30b2109efa85a185a875823fb0a34f13b58e7de0ad97a0e719cb69bc70784e5a"
+          ],
+          [
+            2,
+            1,
+            "0f6008a0707d063e02e5520807cf7ac5af7f346195e4bb6254d09cc5f557ad0e"
+          ],
+          [
+            1,
+            3,
+            "e6f1a0f447ed0b4fdafeeb9382974193e6bf166853b0dcd970984ad53dce01a2"
+          ],
+          [
+            3,
+            1,
+            "214041ed16f92007da44d1e21c377d3ef87913013f7c0471c0e7ab452b363b42"
+          ]
+        ]
+      }
+    },
+    {
+      "name": "LOSATP Collinear all pairs without inference, single-record files",
+      "program": "blastp",
+      "mode": "collinear",
+      "inferOrthogroups": false,
+      "searchScope": "all",
+      "args": [],
+      "edges": [
+        [
+          0,
+          1
+        ],
+        [
+          1,
+          2
+        ]
+      ],
+      "records": [
+        {
+          "uid": "record-1",
+          "source": "a.gbk",
+          "fasta": ">p_1a\nMKTAYIAKQRQISFVKSHFSRQ1LEERLGLIEVQ\n",
+          "identity": {
+            "proteinSetHash": "sha256:8f5bc4cbf15c1d7f9d3e4f7f50acfdb7ddcebb2d955ba3a737272093bbfa3346",
+            "runtimeBindingHash": "sha256:6c127732fb7197db58e1c1c3ee45b5c0b4badf8c41c2e6a1c4cba245f6d87f22"
+          }
+        },
+        {
+          "uid": "record-2",
+          "source": "b.gbk",
+          "fasta": ">p_2a\nMKTAYIAKQRQISFVKSHFSRQ2LEERLGLIEVQ\n",
+          "identity": {
+            "proteinSetHash": "sha256:7801f2b3a6fc7b6b268e53ef2d076d399553eedcd188592bcc34823e23097c81",
+            "runtimeBindingHash": "sha256:b36a05a9c62f6adb883f8849dc75c1d0baf5251519ce10ffa458278bb07d3954"
+          }
+        },
+        {
+          "uid": "record-3",
+          "source": "c.gbk",
+          "fasta": ">p_3a\nMKTAYIAKQRQISFVKSHFSRQ3LEERLGLIEVQ\n",
+          "identity": {
+            "proteinSetHash": "sha256:3dbc19c021269b0f7c073d119002e68087c350f53a3af4c8ddc6a24a222f422c",
+            "runtimeBindingHash": "sha256:7664680353a5c6c00dcb48bc77971b0004ef2ff6c739b53d009f23d15187bcc1"
+          }
+        }
+      ],
+      "specs": [
+        [
+          0,
+          1
+        ],
+        [
+          1,
+          0
+        ],
+        [
+          0,
+          2
+        ],
+        [
+          2,
+          0
+        ],
+        [
+          1,
+          2
+        ],
+        [
+          2,
+          1
+        ]
+      ],
+      "expected": {
+        "jobs": [
+          {
+            "scope": "between-sources",
+            "args": [],
+            "specs": [
+              [
+                0,
+                1
+              ]
+            ],
+            "queryIndexes": [
+              0
+            ],
+            "subjectIndexes": [
+              1
+            ],
+            "queryIds": {
+              "p_1a": [
+                0,
+                "p_1a"
+              ]
+            },
+            "subjectIds": {
+              "p_2a": [
+                1,
+                "p_2a"
+              ]
+            },
+            "queryHash": "73c6cf6990f018d56948c210107e565ccfd7e4659de114ccf46d8ee370454e79",
+            "subjectHash": "172ad97b9b5c802f4748e831d24465bcf6a4a80b6741f5d5b3497f69c56d0b34",
+            "searchContext": null
+          },
+          {
+            "scope": "between-sources",
+            "args": [],
+            "specs": [
+              [
+                1,
+                0
+              ]
+            ],
+            "queryIndexes": [
+              1
+            ],
+            "subjectIndexes": [
+              0
+            ],
+            "queryIds": {
+              "p_2a": [
+                1,
+                "p_2a"
+              ]
+            },
+            "subjectIds": {
+              "p_1a": [
+                0,
+                "p_1a"
+              ]
+            },
+            "queryHash": "172ad97b9b5c802f4748e831d24465bcf6a4a80b6741f5d5b3497f69c56d0b34",
+            "subjectHash": "73c6cf6990f018d56948c210107e565ccfd7e4659de114ccf46d8ee370454e79",
+            "searchContext": null
+          },
+          {
+            "scope": "between-sources",
+            "args": [],
+            "specs": [
+              [
+                0,
+                2
+              ]
+            ],
+            "queryIndexes": [
+              0
+            ],
+            "subjectIndexes": [
+              2
+            ],
+            "queryIds": {
+              "p_1a": [
+                0,
+                "p_1a"
+              ]
+            },
+            "subjectIds": {
+              "p_3a": [
+                2,
+                "p_3a"
+              ]
+            },
+            "queryHash": "73c6cf6990f018d56948c210107e565ccfd7e4659de114ccf46d8ee370454e79",
+            "subjectHash": "9ff0a300436db0e3885f45eea414a6c287f86d6932a94b88de14bc57eec728c6",
+            "searchContext": null
+          },
+          {
+            "scope": "between-sources",
+            "args": [],
+            "specs": [
+              [
+                2,
+                0
+              ]
+            ],
+            "queryIndexes": [
+              2
+            ],
+            "subjectIndexes": [
+              0
+            ],
+            "queryIds": {
+              "p_3a": [
+                2,
+                "p_3a"
+              ]
+            },
+            "subjectIds": {
+              "p_1a": [
+                0,
+                "p_1a"
+              ]
+            },
+            "queryHash": "9ff0a300436db0e3885f45eea414a6c287f86d6932a94b88de14bc57eec728c6",
+            "subjectHash": "73c6cf6990f018d56948c210107e565ccfd7e4659de114ccf46d8ee370454e79",
+            "searchContext": null
+          },
+          {
+            "scope": "between-sources",
+            "args": [],
+            "specs": [
+              [
+                1,
+                2
+              ]
+            ],
+            "queryIndexes": [
+              1
+            ],
+            "subjectIndexes": [
+              2
+            ],
+            "queryIds": {
+              "p_2a": [
+                1,
+                "p_2a"
+              ]
+            },
+            "subjectIds": {
+              "p_3a": [
+                2,
+                "p_3a"
+              ]
+            },
+            "queryHash": "172ad97b9b5c802f4748e831d24465bcf6a4a80b6741f5d5b3497f69c56d0b34",
+            "subjectHash": "9ff0a300436db0e3885f45eea414a6c287f86d6932a94b88de14bc57eec728c6",
+            "searchContext": null
+          },
+          {
+            "scope": "between-sources",
+            "args": [],
+            "specs": [
+              [
+                2,
+                1
+              ]
+            ],
+            "queryIndexes": [
+              2
+            ],
+            "subjectIndexes": [
+              1
+            ],
+            "queryIds": {
+              "p_3a": [
+                2,
+                "p_3a"
+              ]
+            },
+            "subjectIds": {
+              "p_2a": [
+                1,
+                "p_2a"
+              ]
+            },
+            "queryHash": "9ff0a300436db0e3885f45eea414a6c287f86d6932a94b88de14bc57eec728c6",
+            "subjectHash": "172ad97b9b5c802f4748e831d24465bcf6a4a80b6741f5d5b3497f69c56d0b34",
+            "searchContext": null
+          }
+        ],
+        "rawKeys": [
+          [
+            0,
+            1,
+            "e34e4223b14135388fcfdae7bc68ec4d6a3094c17362599ffdd95ffecba8278d"
+          ],
+          [
+            1,
+            0,
+            "dbc21fe29e1ec79ef1e817ccda0d2b2dd25315b7ffa76ce2a7dfe982e2fadc5a"
+          ],
+          [
+            0,
+            2,
+            "36e4796735209af17db3ee6e0fa1b1bacdd3c7cefe78e5548a32bfc977fee8b9"
+          ],
+          [
+            2,
+            0,
+            "9cde933b788ee52fc176bf40655ffaa1d12c8e985e6d4f80cab166cac6362da0"
+          ],
+          [
+            1,
+            2,
+            "31635841754d3986a7802a95233f2df68786e5b93fa1b86d830b7f827c29cbde"
+          ],
+          [
+            2,
+            1,
+            "2d9bab028692c1fc95f35e68ab84711cedc3b5c1d4ca9d9a82fe29422e733ce0"
           ]
         ]
       }
