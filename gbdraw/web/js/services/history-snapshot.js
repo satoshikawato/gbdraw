@@ -436,7 +436,10 @@ const applyFallbackResultsData = (state, results = []) => {
   );
 };
 
-const buildFilesData = (state, fileStore) => ({
+// The History intent holds every file binding by reference, including the
+// BLAST rows and comparison sequences of a LOSAT-cache replay: its ring rows and
+// managed track slots name those rows, so Undo restores them together (B23).
+const buildIntentFilesData = (state, fileStore) => ({
   c_gb: fileStore.describeValue(state.files?.c_gb),
   c_gff: fileStore.describeValue(state.files?.c_gff),
   c_fasta: fileStore.describeValue(state.files?.c_fasta),
@@ -447,18 +450,6 @@ const buildFilesData = (state, fileStore) => ({
     : null,
   c_conservation_fastas: fileStore.describeValue(state.files?.c_conservation_fastas || []),
   c_conservation_sequence_sources: fileStore.describeValue(state.files?.c_conservation_sequence_sources || []),
-  linearCanonicalComparisons: (
-    Array.isArray(state.files?.linearCanonicalComparisons)
-      ? state.files.linearCanonicalComparisons
-      : []
-  ).map((comparison) => (
-    isResourceBackedCanonicalComparison(comparison)
-      ? {
-          ...mapResourceBackedCanonicalComparison(comparison),
-          file: fileStore.describeValue(comparison.file)
-        }
-      : cloneJsonData(comparison)
-  )),
   d_color: fileStore.describeValue(state.files?.d_color),
   t_color: fileStore.describeValue(state.files?.t_color),
   blacklist: fileStore.describeValue(state.files?.blacklist),
@@ -487,53 +478,22 @@ const buildFilesData = (state, fileStore) => ({
   }))
 });
 
-const buildIntentFilesData = (state, fileStore) => {
-  const files = {
-    c_gb: fileStore.describeValue(state.files?.c_gb),
-    c_gff: fileStore.describeValue(state.files?.c_gff),
-    c_fasta: fileStore.describeValue(state.files?.c_fasta),
-    c_depth: fileStore.describeValue(state.files?.c_depth),
-    c_conservation_blasts_source: state.files?.c_conservation_blasts_source === 'losat-cache'
-      ? 'losat-cache'
-      : null,
-    c_conservation_fastas: fileStore.describeValue(state.files?.c_conservation_fastas || []),
-    d_color: fileStore.describeValue(state.files?.d_color),
-    t_color: fileStore.describeValue(state.files?.t_color),
-    blacklist: fileStore.describeValue(state.files?.blacklist),
-    whitelist: fileStore.describeValue(state.files?.whitelist),
-    qualifier_priority: fileStore.describeValue(state.files?.qualifier_priority),
-    linearSeqs: Array.from(state.linearSeqs || []).map((seq) => ({
-      uid: seq.uid,
-      gb: fileStore.describeValue(seq.gb),
-      gff: fileStore.describeValue(seq.gff),
-      fasta: fileStore.describeValue(seq.fasta),
-      depth: fileStore.describeValue(seq.depth),
-      losat_gencode: seq.losat_gencode ?? 1,
-      definition: seq.definition ?? '',
-      record_subtitle: seq.record_subtitle ?? '',
-      file_definition: seq.file_definition ?? '',
-      file_subtitle: seq.file_subtitle ?? '',
-      inferred_definition: seq.inferred_definition ?? '',
-      region_record_id: seq.region_record_id ?? '',
-      region_start: seq.region_start ?? null,
-      region_end: seq.region_end ?? null,
-      region_reverse: Boolean(seq.region_reverse)
-    })),
-    linearComparisons: Array.from(state.linearComparisonPlan?.edges || []).map((edge) => ({
-      id: String(edge?.id || ''),
-      file: fileStore.describeValue(edge?.file)
-    }))
-  };
-  // Uploaded BLAST rows and their optional comparison sequences are user
-  // choices; a LOSAT-cache replay holds them as generated artifacts.
-  if (state.files?.c_conservation_blasts_source !== 'losat-cache') {
-    files.c_conservation_blasts = fileStore.describeValue(state.files?.c_conservation_blasts || []);
-    files.c_conservation_sequence_sources = fileStore.describeValue(
-      state.files?.c_conservation_sequence_sources || []
-    );
-  }
-  return files;
-};
+// An artifact checkpoint adds the generated Linear comparisons.
+const buildFilesData = (state, fileStore) => ({
+  ...buildIntentFilesData(state, fileStore),
+  linearCanonicalComparisons: (
+    Array.isArray(state.files?.linearCanonicalComparisons)
+      ? state.files.linearCanonicalComparisons
+      : []
+  ).map((comparison) => (
+    isResourceBackedCanonicalComparison(comparison)
+      ? {
+          ...mapResourceBackedCanonicalComparison(comparison),
+          file: fileStore.describeValue(comparison.file)
+        }
+      : cloneJsonData(comparison)
+  ))
+});
 
 const collectCurrentFileIds = (state, fileStore) => {
   const fileIds = new Set();
@@ -584,24 +544,18 @@ const applyFilesData = (state, filesData, fileStore, normalizeLinearSeqList = nu
   state.files.c_gff = restore(filesData?.c_gff);
   state.files.c_fasta = restore(filesData?.c_fasta);
   state.files.c_depth = restore(filesData?.c_depth);
-  if (Object.prototype.hasOwnProperty.call(filesData || {}, 'c_conservation_blasts')) {
-    state.files.c_conservation_blasts = Array.isArray(filesData?.c_conservation_blasts)
-      ? restore(filesData.c_conservation_blasts).filter(Boolean)
-      : [];
-  }
-  if (Object.prototype.hasOwnProperty.call(filesData || {}, 'c_conservation_blasts_source')) {
-    state.files.c_conservation_blasts_source = filesData?.c_conservation_blasts_source === 'losat-cache'
-      ? 'losat-cache'
-      : null;
-  }
+  state.files.c_conservation_blasts = Array.isArray(filesData?.c_conservation_blasts)
+    ? restore(filesData.c_conservation_blasts).filter(Boolean)
+    : [];
+  state.files.c_conservation_blasts_source = filesData?.c_conservation_blasts_source === 'losat-cache'
+    ? 'losat-cache'
+    : null;
   state.files.c_conservation_fastas = Array.isArray(filesData?.c_conservation_fastas)
     ? restore(filesData.c_conservation_fastas)
     : [];
-  if (Object.prototype.hasOwnProperty.call(filesData || {}, 'c_conservation_sequence_sources')) {
-    state.files.c_conservation_sequence_sources = Array.isArray(filesData?.c_conservation_sequence_sources)
-      ? restore(filesData.c_conservation_sequence_sources)
-      : [];
-  }
+  state.files.c_conservation_sequence_sources = Array.isArray(filesData?.c_conservation_sequence_sources)
+    ? restore(filesData.c_conservation_sequence_sources)
+    : [];
   if (Object.prototype.hasOwnProperty.call(filesData || {}, 'linearCanonicalComparisons')) {
     state.files.linearCanonicalComparisons = Array.isArray(filesData?.linearCanonicalComparisons)
       ? filesData.linearCanonicalComparisons.map((comparison) => (
