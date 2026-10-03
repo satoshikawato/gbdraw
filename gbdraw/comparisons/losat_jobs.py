@@ -87,6 +87,13 @@ def losat_search_frame_fasta(record: SeqRecord) -> str:
 # Record sources and the LOSATP record-pair searches.
 
 
+def record_source_paths(record: SeqRecord) -> tuple[str, ...]:
+    """The source file paths the request planner recorded; empty for any other record."""
+
+    paths = (getattr(record, "annotations", None) or {}).get("gbdraw_source_paths")
+    return tuple(str(path) for path in paths) if paths else ()
+
+
 def losat_source_ids(records: Sequence[SeqRecord]) -> tuple[Hashable, ...]:
     """The source file of each record: one file is one genome.
 
@@ -94,16 +101,11 @@ def losat_source_ids(records: Sequence[SeqRecord]) -> tuple[Hashable, ...]:
     record is its own source.
     """
 
-    sources: list[Hashable] = []
-    for index, record in enumerate(records):
-        annotations = getattr(record, "annotations", None) or {}
-        paths = annotations.get("gbdraw_source_paths")
-        sources.append(
-            tuple(str(path) for path in paths)
-            if paths
-            else ("memory", annotations.get("gbdraw_input_index", index))
-        )
-    return tuple(sources)
+    return tuple(
+        record_source_paths(record)
+        or ("memory", (getattr(record, "annotations", None) or {}).get("gbdraw_input_index", index))
+        for index, record in enumerate(records)
+    )
 
 
 def losat_record_uids(records: Sequence[SeqRecord]) -> tuple[str, ...]:

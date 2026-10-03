@@ -39,7 +39,7 @@ from gbdraw.analysis.protein_colinearity import (  # type: ignore[reportMissingI
     normalize_protein_blastp_mode,
 )
 from gbdraw.config.models import GbdrawConfig  # type: ignore[reportMissingImports]
-from gbdraw.comparisons.losat_jobs import losat_source_ids
+from gbdraw.comparisons.losat_jobs import record_source_paths
 from gbdraw.exceptions import ValidationError
 from gbdraw.features.placement import FeaturePlacementOverride
 from gbdraw.io.record_select import RecordSelector
@@ -907,23 +907,17 @@ def _encode_records(
     The planner projects each displayed record to an in-memory record. Records
     whose provenance names one source file are written to one GenBank resource
     and selected by index, the shape the Web writes for one uploaded
-    multi-record file, so a replay keeps one file as one LOSAT source.
+    multi-record file, so a replay keeps one file as one LOSAT source
+    (:func:`gbdraw.comparisons.losat_jobs.losat_source_ids`). Any other
+    in-memory record is its own source and keeps its own resource.
     """
 
-    in_memory = [
-        position
-        for position, record in enumerate(records)
-        if isinstance(record.source, InMemoryRecordSource)
-    ]
-    groups: dict[Any, list[int]] = {}
-    for position, source_id in zip(
-        in_memory,
-        losat_source_ids(
-            [records[position].source.record for position in in_memory]  # type: ignore[union-attr]
-        ),
-        strict=True,
-    ):
-        groups.setdefault(source_id, []).append(position)
+    groups: dict[tuple[str, ...], list[int]] = {}
+    for position, record in enumerate(records):
+        if isinstance(record.source, InMemoryRecordSource):
+            paths = record_source_paths(record.source.record)
+            if paths:
+                groups.setdefault(paths, []).append(position)
     shared: dict[int, tuple[dict[str, Any], RecordSelector]] = {}
     for members in groups.values():
         if len(members) < 2:
