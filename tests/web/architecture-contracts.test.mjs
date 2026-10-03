@@ -303,6 +303,19 @@ const retiringOperatorsBefore = (detected, boundary, capability) => Object.keys(
   RETIRING_REPLACEMENT_CEILINGS
 ).filter((path) => path < boundary)
   .flatMap((path) => retiringReplacementOperators(detected, path, capability));
+// After A1, the Result switch and Save flushes of the remaining owners never
+// write (T6 of the post-audit follow-ups). Their Result content commit counts
+// may shrink without editing this guard; they may not grow.
+const RESULT_COMMIT_KEEPER_CEILINGS = Object.freeze({
+  'app/preview-runtime.js': 4,
+  'services/config.js': 4
+});
+const keeperCommitOperators = (detected, path) => {
+  const ceiling = RESULT_COMMIT_KEEPER_CEILINGS[path];
+  assert.ok(resultReplacementCount(detected, path, 'Result content commit') <= ceiling,
+    `${path}: Result content commit may only contract (ceiling ${ceiling})`);
+  return resultReplacementOperators(detected, path, 'Result content commit');
+};
 const importersWithRetiringOwners = (target, required, retiring) => {
   const actual = importersOf(target);
   const allowed = new Set([...required, ...retiring]);
@@ -770,11 +783,11 @@ test('shared privileged detectors preserve the characterized current-source fact
     ],
     'Result content commit': [
       ...retiringOperatorsBefore(detected, 'app/preview-runtime.js', 'Result content commit'),
-      { path: 'app/preview-runtime.js', count: 4 },
+      ...keeperCommitOperators(detected, 'app/preview-runtime.js'),
       ...retiringReplacementOperators(detected, 'app/results.js', 'Result content commit'),
       { path: 'app/run-analysis.js', count: 2 },
       ...retiringReplacementOperators(detected, 'app/svg-styles.js', 'Result content commit'),
-      { path: 'services/config.js', count: 4 }
+      ...keeperCommitOperators(detected, 'services/config.js')
     ],
     'SVG serialization': [
       ...retiringOperatorsBefore(detected, 'services/config.js', 'SVG serialization'),
@@ -887,6 +900,20 @@ test('retiring Result replacement owners may contract or disappear but never gro
     () => importersWithRetiringOwners('services/diagram-generation.js', required.slice(1), ['app/results.js']),
     /no importer may be added/
   );
+});
+
+test('kept Result content commit owners may contract but never grow', () => {
+  for (const [path, ceiling] of Object.entries(RESULT_COMMIT_KEEPER_CEILINGS)) {
+    for (const count of [0, 1, ceiling, ceiling + 1]) {
+      const code = 'results.value = candidate;\n'.repeat(count) + 'serializeCleanSvg(svg);\n';
+      const detected = detectPrivilegedWebCapabilities(new Map([[path, code]]));
+      if (count <= ceiling) {
+        assert.deepEqual(keeperCommitOperators(detected, path), count ? [{ path, count }] : []);
+      } else {
+        assert.throws(() => keeperCommitOperators(detected, path), /may only contract/);
+      }
+    }
+  }
 });
 
 test('versioned architecture detectors expose stable normalized subjects', () => {
