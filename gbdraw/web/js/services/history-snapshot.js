@@ -68,12 +68,19 @@ const buildOrthogroupIntentData = (orthogroupState = {}) => ({
   orthogroupDormantOverrides: clonePlainObject(orthogroupState.orthogroupDormantOverrides)
 });
 
+// Neither the selected Result nor the offsets read from its mounted root is
+// an edit, so neither is intent; composition offsets are recorded per Result
+// in `compositionUserDeltas` (B17).
 const buildUiIntentData = (ui = {}) => {
   const intent = clonePlainObject(ui);
   delete intent.generatedLegendPosition;
   delete intent.generatedMode;
   delete intent.generatedMultiRecordCanvas;
   delete intent.generatedCircularPlotTitlePosition;
+  delete intent.selectedResultIndex;
+  delete intent.legendCurrentOffset;
+  delete intent.diagramOffset;
+  delete intent.plotTitleUserOffset;
   return intent;
 };
 
@@ -1475,17 +1482,6 @@ export const createHistorySnapshotService = ({
           applyUiStateData(intent.ui || {}, { restorePreviewNavigation: false });
         } else {
           applyFallbackUiStateData(state, intent.ui || {});
-        }
-        if (Number.isInteger(intent.ui?.selectedResultIndex)) {
-          const resultCount = Array.isArray(getRef(state.results, []))
-            ? getRef(state.results, []).length
-            : 0;
-          setRef(
-            state.selectedResultIndex,
-            resultCount > 0
-              ? Math.max(0, Math.min(intent.ui.selectedResultIndex, resultCount - 1))
-              : 0
-          );
         }
       }
 

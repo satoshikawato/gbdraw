@@ -7,8 +7,9 @@
 // edits stay with their feature (FE-01 to FE-03, PV-09). A Label TSV imported on
 // Result 1 reaches Result 2 the same way, and Undo and Redo reach both Results
 // as one step (B6, R3). Every editor edit kind commits the displayed Result at
-// once, so none waits for a Result switch (R1). The grid and Linear topologies
-// are in live-edit-generate-equivalence (G-A).
+// once, so none waits for a Result switch (R1), and Undo and Redo of a drag
+// restore the Result it was made on while another Result is shown (B17). The
+// grid and Linear topologies are in live-edit-generate-equivalence (G-A).
 const { test, expect } = require('@playwright/test');
 const { generateAndWaitForResult } = require('./helpers/app-lifecycle.cjs');
 const { editFeature, openBatch, settle } = require('./helpers/audit-browser.cjs');
@@ -256,6 +257,17 @@ const committed = (page) => page.evaluate(async () => {
   const mounted = serializeCleanSvg(app.svgContainer.querySelector('svg'));
   return { index, content, mounted, matchesMounted: mounted === content };
 });
+// Composition offsets of every Result's committed content.
+const offsets = (page) => page.evaluate(async () => {
+  const { compositionUserDeltas } = await import('/gbdraw/web/js/app/legend-layout/composition-actions.js');
+  return window.__GBDRAW_APP__.results.map((result) => compositionUserDeltas(
+    new DOMParser().parseFromString(result.content, 'image/svg+xml').documentElement
+  ));
+});
+const mountedOffsets = (page) => page.evaluate(async () => {
+  const { compositionUserDeltas } = await import('/gbdraw/web/js/app/legend-layout/composition-actions.js');
+  return compositionUserDeltas(window.__GBDRAW_APP__.svgContainer.querySelector('svg'));
+});
 // Where the committed content and the mounted SVG first differ.
 const firstDiff = ({ content, mounted }) => {
   let at = 0;
@@ -359,4 +371,51 @@ test('Circular batch: each editor edit kind is committed when made, not by the R
     const state = await committed(page);
     expect.soft(state.matchesMounted, `after Undo, Result ${index + 1}: ${firstDiff(state)}`).toBe(true);
   }
+});
+
+// B17 (D-07, R11): History restores a drag on the Result it was made on. A
+// Result switch records no step. Undo made while Result 1 is shown keeps
+// Result 1 shown and unmoved and restores Result 2's committed content (the
+// Session and export source) at once; Redo drags Result 2 again. Each Result
+// keeps matching its mounted SVG. (After the legend edits of the test above, a
+// Result switch still records a legend-entries step, B18.)
+test('Circular batch: Undo and Redo of drags on Result 2 restore Result 2 while Result 1 is shown', async ({ page }) => {
+  test.setTimeout(300_000);
+  await openBatch(page);
+  await show(page, 1);
+  const undoCount = () => page.evaluate(() => window.__GBDRAW_HISTORY__.getUndoCount());
+  const undragged = await offsets(page);
+  await dragRole('primary', -20, 10)(page);
+  await settle(page);
+  await dragRole('legend', 30, 20)(page);
+  await settle(page);
+  const dragged = await committed(page);
+  const draggedOffsets = await offsets(page);
+  expect(draggedOffsets[0]).toEqual(undragged[0]);
+  expect(draggedOffsets[1].primary).not.toEqual(undragged[1].primary);
+  expect(draggedOffsets[1].legend).not.toEqual(undragged[1].legend);
+  const steps = await undoCount();
+  expect(steps).toBeLessThan(30);
+  await show(page, 0);
+  expect.soft(await undoCount(), 'a Result switch records no Undo step').toBe(steps);
+
+  for (const _drag of ['legend', 'primary']) await page.evaluate(() => window.__GBDRAW_HISTORY__.undo());
+  await settle(page);
+  expect.soft(await page.evaluate(() => window.__GBDRAW_APP__.selectedResultIndex), 'Undo keeps Result 1 shown').toBe(0);
+  expect.soft(await offsets(page), 'Undo restores Result 2 and leaves Result 1').toEqual(undragged);
+  await show(page, 1);
+  const undone = await committed(page);
+  expect.soft(undone.content, 'Undo reverts the Result 2 drag').not.toBe(dragged.content);
+  expect.soft(undone.matchesMounted, `after Undo, Result 2: ${firstDiff(undone)}`).toBe(true);
+  // Result 1 has no edit, so its content keeps the admitted bytes (zero fast
+  // path); its mounted root shows the offsets of that content.
+  await show(page, 0);
+  expect.soft(await mountedOffsets(page), 'after Undo, Result 1 is shown unmoved').toEqual(undragged[0]);
+
+  for (const _drag of ['primary', 'legend']) await page.evaluate(() => window.__GBDRAW_HISTORY__.redo());
+  await settle(page);
+  expect.soft(await offsets(page), 'Redo drags Result 2 again and leaves Result 1').toEqual(draggedOffsets);
+  await show(page, 1);
+  const redone = await committed(page);
+  expect.soft(redone.matchesMounted, `after Redo, Result 2: ${firstDiff(redone)}`).toBe(true);
 });
