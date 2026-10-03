@@ -1,5 +1,5 @@
 import { resolveColorToHex } from './color-utils.js';
-import { isLegendOrderEdited } from './legend/utils.js';
+import { defaultLegendEntryOrder, isLegendOrderEdited } from './legend/utils.js';
 import { cloneJsonValue } from '../services/json-clone.js';
 import {
   admitCurrentGeneratedResults
@@ -117,6 +117,7 @@ const compilePlanBundle = ({
   legendColorOverrides = {},
   legendStrokeOverrides = {},
   manualSpecificRules = [],
+  replayDefaultLegendOrder = false,
   resultTransforms = [],
   transformSvg = null
 }) => {
@@ -230,11 +231,16 @@ const compilePlanBundle = ({
   // D-08 (PD-OI-063): an edited Legend order is replayed over the renderer's
   // slots. The renderer places generated entries in their generated order and
   // direct additions after them; only a different order emits an operation,
-  // and a renamed entry then takes its slot from that order.
+  // and a renamed entry then takes its slot from that order. A displayed batch
+  // Result that may still show an earlier edited order also receives the
+  // default order (D-07, B20).
   const legendOrderChanged = isLegendOrderEdited(currentEntries, [...originalCaptions]);
-  if (legendOrderChanged) {
+  const replayedLegendOrder = legendOrderChanged
+    ? currentEntries
+    : (replayDefaultLegendOrder ? defaultLegendEntryOrder(currentEntries, [...originalCaptions]) : null);
+  if (replayedLegendOrder) {
     addToResults(operationsByResult, allResultIndexes, 'legendOrder', {
-      captions: Object.freeze(currentEntries.map((entry) => entry.caption))
+      captions: Object.freeze(replayedLegendOrder.map((entry) => entry.caption))
     });
   }
 

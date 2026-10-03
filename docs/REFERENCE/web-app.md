@@ -805,10 +805,14 @@ displayed Result; the record picker appears only when the displayed Result
 shows more than one record. Color, visibility, legend, and label edits made on
 one Result apply to every Result: another Result shows them in its preview,
 export, and saved Session once it is displayed, and **Undo** and **Redo**
-reach it the same way. A legend order made on one Result orders the entries
-another Result shares with it; a legend entry that only the other Result draws
-keeps its place there while the shared entries stay in that order. Showing
-another Result records no **Undo** step. A **Layout edit** drag or a position
+reach it the same way. A legend order made on one Result, also **Sort by
+default**, orders the entries another Result shares with it; a legend entry that
+only the other Result draws keeps its place there while the shared entries stay
+in that order. **Undo** and **Redo** of a legend step made on another Result
+change only the entries the displayed Result shares with it: a legend entry that
+only one Result draws is never copied to another Result or removed from it, and
+follows the shared entries when they move. Showing another Result records no
+**Undo** step. A **Layout edit** drag or a position
 reset moves only the displayed Result; **Undo** and **Redo** restore the Result
 it was made on, also while another Result is displayed, and keep the displayed Result. **Load Label TSV** matches its rows against the labels
 of every Result and records the import as one **Undo** step. A Result that was never displayed keeps its earlier

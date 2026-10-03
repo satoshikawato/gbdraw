@@ -471,4 +471,85 @@ const mockLegendEntry = (caption, color, x) => {
   assert.deepEqual(generate('Other', 'Core', 'Added', 'Late'), [['Other', 'Core', 'Added']]);
   assert.deepEqual(state.originalLegendOrder.value, ['Core', 'Added', 'Other', 'Late']);
   assert.deepEqual(generate('Other', 'Core', 'Added', 'Late'), [['Other', 'Core', 'Added', 'Late']]);
+
+  // B20 (D-07): a displayed batch Result that may still show an earlier edited
+  // order receives the default order; Generate still replays none.
+  render('Core', 'Added', 'Other', 'Late');
+  actions.extractLegendEntries();
+  const compile = (options) => compileDirectEditorMutationPlan({
+    catalogAdmission: { resultNames: ['diagram.svg'], renderedTargetsByOverrideKey: new Map(), resultIndexesByRenderedId: new Map() },
+    legendEntries: state.legendEntries.value,
+    originalLegendOrder: ['Core', 'Added', 'Other', 'Late'],
+    ...options
+  }).operationsByResult[0].legendOrder.map(({ captions }) => [...captions]);
+  assert.deepEqual(compile({}), []);
+  assert.deepEqual(compile({ replayDefaultLegendOrder: true }), [['Core', 'Added', 'Other', 'Late']]);
+}
+
+{
+  // B19 (D-07, D-08): a History step made on another batch Result projects its
+  // shared Legend intent onto the displayed Result, which never gains an entry
+  // only the other Result draws and keeps its own entries.
+  const ref = (value) => ({ value });
+  const svg = new MockElement('svg');
+  const legend = new MockElement('g', { id: 'legend' });
+  const featureLegend = new MockElement('g', { id: 'feature_legend' });
+  legend.appendChild(featureLegend);
+  svg.appendChild(legend);
+  const render = (...captions) => {
+    featureLegend.children.forEach(entry => { entry.parentElement = null; });
+    featureLegend.children = [];
+    captions.forEach((caption, index) => featureLegend.appendChild(mockLegendEntry(caption, '#112233', index * 70)));
+  };
+  const drawn = () => featureLegend.children.map((entry) => entry.getAttribute('data-legend-key'));
+  const listed = () => state.legendEntries.value.map((entry) => entry.caption);
+  const list = (...captions) => captions.map((caption) => ({ caption, originalCaption: caption, color: '#112233' }));
+  const state = {
+    results: ref([{ name: 'r1.svg', content: 'unchanged' }, { name: 'r2.svg', content: 'unchanged' }]),
+    selectedResultIndex: ref(0),
+    svgContainer: ref({ querySelector: () => svg }),
+    adv: {},
+    legendEntries: ref([]),
+    deletedLegendEntries: ref([]),
+    originalLegendOrder: ref(['Alpha', 'Beta']),
+    originalLegendColors: ref({}),
+    newLegendCaption: ref(''),
+    newLegendColor: ref('#808080'),
+    legendStrokeOverrides: {},
+    legendColorOverrides: {},
+    manualSpecificRules: [],
+    skipCaptureBaseConfig: ref(false)
+  };
+  let commits = 0;
+  const actions = createLegendEntryActions({
+    state,
+    layoutActions: { compactLegendEntries: () => {}, reflowDualLegendLayout: () => {}, updatePairwiseLegendPositions: () => {} },
+    previewRuntime: {
+      commitActiveResultEdit: () => { commits += 1; return true; },
+      getActiveRuntime: () => ({ resultIdentity: 'result-1' })
+    }
+  });
+  // Result 1 draws Own1; Result 2 drew Only2 and was sorted Z-A, which Result 1
+  // shows. Undo restores Result 2's list from before the sort.
+  render('Beta', 'Alpha', 'Own1');
+  state.legendEntries.value = list('Alpha', 'Beta', 'Only2');
+  assert.equal(actions.reconcileLegendEntries({ restoreColorState: true, from: list('Only2', 'Beta', 'Alpha') }), true);
+  assert.deepEqual(drawn(), ['Alpha', 'Beta', 'Own1'], 'Undo orders Result 1 without the Result 2 entry');
+  assert.deepEqual(listed(), ['Alpha', 'Beta', 'Own1'], 'the Legend panel lists Result 1');
+  assert.equal(commits, 1);
+
+  // Redo of a deletion made on Result 2 removes the entry here too, and its
+  // Undo returns this Result's entry; Only2 never appears.
+  state.legendEntries.value = list('Alpha', 'Only2');
+  actions.reconcileLegendEntries({ restoreColorState: true, from: list('Alpha', 'Beta', 'Only2') });
+  assert.deepEqual(drawn(), ['Alpha', 'Own1']);
+  state.legendEntries.value = list('Alpha', 'Beta', 'Only2');
+  actions.reconcileLegendEntries({ restoreColorState: true, from: list('Alpha', 'Only2') });
+  assert.deepEqual(drawn(), ['Alpha', 'Beta', 'Own1'], 'Undo returns the deleted entry to Result 1');
+  assert.deepEqual(listed(), ['Alpha', 'Beta', 'Own1']);
+
+  // A list that describes the displayed Result installs as is.
+  state.legendEntries.value = list('Own1', 'Beta', 'Alpha');
+  actions.reconcileLegendEntries({ restoreColorState: true, from: list('Alpha', 'Beta', 'Own1') });
+  assert.deepEqual(drawn(), ['Own1', 'Beta', 'Alpha']);
 }
