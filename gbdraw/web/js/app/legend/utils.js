@@ -147,27 +147,35 @@ export const moveLegendEntryToAnchor = (entryGroup, xPos, yPos) => {
 };
 
 /**
- * Whether Legend entries are in an edited order (D-08). The default order is
- * the generated entries ranked by the generated order (a renamed entry ranks
- * by its generated caption), followed by the other entries in their current
- * order. Generate replays an edited order; the extraction of a Generate keeps
- * the generated order only while an edited order is replayed.
+ * Legend entries in the default order (D-08): the generated entries ranked by
+ * the generated order (a renamed entry ranks by its generated caption),
+ * followed by the other entries in their current order. Without a generated
+ * order, null.
  */
-export const isLegendOrderEdited = (entries, generatedOrder) => {
+export const defaultLegendEntryOrder = (entries, generatedOrder) => {
   const rank = new Map();
   (Array.isArray(generatedOrder) ? generatedOrder : []).forEach((caption) => {
     const key = String(caption ?? '').trim();
     if (key && !rank.has(key)) rank.set(key, rank.size);
   });
-  if (rank.size === 0) return false;
+  if (rank.size === 0) return null;
   const list = Array.isArray(entries) ? entries : [];
   const generated = (entry) => String(entry?.originalCaption || entry?.caption || '').trim();
-  const defaultOrder = [
+  return [
     ...list.filter((entry) => rank.has(generated(entry)))
       .sort((left, right) => rank.get(generated(left)) - rank.get(generated(right))),
     ...list.filter((entry) => !rank.has(generated(entry)))
   ];
-  return list.some((entry, index) => entry !== defaultOrder[index]);
+};
+
+/**
+ * Whether Legend entries are in an edited order, not the default order (D-08).
+ * Generate replays an edited order; the extraction of a Generate keeps the
+ * generated order only while an edited order is replayed.
+ */
+export const isLegendOrderEdited = (entries, generatedOrder) => {
+  const defaultOrder = defaultLegendEntryOrder(entries, generatedOrder);
+  return Boolean(defaultOrder) && defaultOrder.some((entry, index) => entry !== entries[index]);
 };
 
 const legendEntryGroups = (targetGroup) => {

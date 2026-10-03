@@ -1,5 +1,6 @@
 import { createRulePreparation } from './rule-matching.js';
 import { compileDirectEditorMutationPlan } from './candidate-render.js';
+import { isLegendOrderEdited } from './legend/utils.js';
 import { admitFeatureCatalog } from '../services/feature-catalog.js';
 import { createDefaultLosatpHitLimits } from '../services/session-active-config-contract.js';
 import { createRecordDisplayControls } from './record-display-options.js';
@@ -440,7 +441,6 @@ export const createAppSetup = () => {
     showCanvasControls,
     generatedLegendPosition,
     skipCaptureBaseConfig,
-    skipPositionReapply,
     skipExtractOnSvgChange,
     featureKeys,
     defaultColorKeys,
@@ -2651,7 +2651,7 @@ export const createAppSetup = () => {
     return true;
   };
 
-  historySnapshots.setAfterApplyHistoryIntent(async (_intent, { domains, changes } = {}) => {
+  historySnapshots.setAfterApplyHistoryIntent(async (_intent, { domains, changes, direction } = {}) => {
     if (!svgContainer.value?.querySelector?.('svg')) return;
     const changedDomains = domains instanceof Set ? domains : new Set();
     // B17: restore the offsets of each Result whose composition this step changed.
@@ -2669,13 +2669,25 @@ export const createAppSetup = () => {
       change?.path?.[0] === 'config' && change.path[1] === 'rules'
     ));
     const editorState = changedDomains.has('editorState');
+    // B19: in a batch, the Legend list this step leaves tells whether the
+    // restored list describes the displayed Result or another Result.
+    const legendChange = (Array.isArray(changes) ? changes : []).find(({ path } = {}) => (
+      path?.length === 3 && path[0] === 'editorState' && path[1] === 'legend' && path[2] === 'entries'
+    ));
+    const legendFrom = results.value.length > 1
+      ? (legendChange ? legendChange[direction === 'undo' ? 'after' : 'before'] : _intent?.editorState?.legend?.entries)
+      : null;
     const projected = await projectMountedEditorIntent({
       palette: colors,
       rules: colors,
       prepareRules: changedDomains.has('features') || rulesChanged || !rulePreparation.isPrepared(),
       visibility: changedDomains.has('features'),
       legend: editorState
-        ? { restoreColorState: true, entryOwners: _intent.editorState.legend.entryOwners }
+        ? {
+            restoreColorState: true,
+            entryOwners: _intent.editorState.legend.entryOwners,
+            from: Array.isArray(legendFrom) ? legendFrom : null
+          }
         : null,
       strokes: editorState ? { changes } : null,
       labels: changedDomains.has('features') || editorState
@@ -2702,7 +2714,11 @@ export const createAppSetup = () => {
     visibility: JSON.stringify([featureVisibilityOverrides, featureVisibilityManualRules]),
     labels: JSON.stringify([
       labelTextFeatureOverrides, labelTextBulkOverrides, labelTextFeatureOverrideSources, labelVisibilityOverrides
-    ])
+    ]),
+    // An edited Legend order, or '' for the default order (D-08).
+    legendOrder: isLegendOrderEdited(legendEntries.value, originalLegendOrder.value)
+      ? JSON.stringify(legendEntries.value.map((entry) => entry.caption))
+      : ''
   });
   const sameColors = (left, right) => left[0] === right[0] && left[1] === right[1];
   const rememberCommittedEditorState = (context) => {
@@ -2716,7 +2732,7 @@ export const createAppSetup = () => {
     });
     lastBoundResultIdentity = context.resultIdentity;
   };
-  const compileDisplayedResultOperations = (resultIndex) => {
+  const compileDisplayedResultOperations = (resultIndex, { replayDefaultLegendOrder = false } = {}) => {
     const catalog = toRaw(state.featureCatalog.value);
     if (!catalog) return null;
     const plan = compileDirectEditorMutationPlan({
@@ -2732,7 +2748,8 @@ export const createAppSetup = () => {
       addedLegendCaptions: addedLegendCaptions.value,
       legendColorOverrides,
       legendStrokeOverrides,
-      manualSpecificRules
+      manualSpecificRules,
+      replayDefaultLegendOrder
     });
     return plan.operationsByResult[resultIndex] || null;
   };
@@ -2756,9 +2773,12 @@ export const createAppSetup = () => {
     const colors = !sameColors(previous.colors, current.colors);
     const visibility = previous.visibility !== current.visibility;
     labelProjectionResultIdentity = previous.labels !== current.labels ? identity : '';
+    // B20: a Result last shown with another Legend order receives the current
+    // order, also the default order.
+    const replayDefaultLegendOrder = previous.legendOrder !== current.legendOrder;
     let operations = null;
     try {
-      operations = compileDisplayedResultOperations(context.resultIndex);
+      operations = compileDisplayedResultOperations(context.resultIndex, { replayDefaultLegendOrder });
     } catch (error) {
       console.error('Editor edits could not be compiled for the displayed Result.', normalizeUserFacingError(error));
     }

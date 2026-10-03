@@ -7,7 +7,9 @@
 // edits stay with their feature (FE-01 to FE-03, PV-09). A Label TSV imported on
 // Result 1 reaches Result 2 the same way, and Undo and Redo reach both Results
 // as one step (B6, R3). A Legend sort keeps the entries only one Result draws
-// in place through a Result switch, which records no Undo step (B18). Every
+// in place through a Result switch, which records no Undo step (B18); Undo and
+// Redo of that sort and Sort by default reach each Result without copying
+// those entries to another Result (B19, B20). Every
 // editor edit kind commits the displayed Result at once, so none waits for a
 // Result switch (R1), and Undo and Redo of a drag restore the Result it was
 // made on while another Result is shown (B17). The grid and Linear topologies
@@ -284,6 +286,80 @@ test('Circular batch: a Legend sort on Result 2 keeps its order through a Result
   await show(page, 1);
   expect.soft(await legendCaptions(page), 'Generate keeps the sorted order on Result 2')
     .toEqual(sorted.filter((caption) => caption !== 'CDS').concat('other proteins'));
+});
+
+// The displayed Result's Legend: mounted, committed (export and Session
+// source), and listed in the Legend panel.
+const legendView = async (page) => ({
+  mounted: await legendCaptions(page),
+  content: await legendCaptions(page, { source: 'content' }),
+  listed: await page.evaluate(() => window.__GBDRAW_APP__.legendEntries.map((entry) => entry.caption))
+});
+const sameView = (captions) => ({ mounted: captions, content: captions, listed: captions });
+
+// Result 2 gets an entry Result 1 does not draw (the "This feature only" color
+// entry of TESTB_0001) and a Legend Sort Z-A.
+const sortResult2Descending = async (page) => {
+  await openBatch(page);
+  await show(page, 0);
+  const result1 = await legendCaptions(page);
+  await show(page, 1);
+  await editFeature(page, 'TESTB_0001', { fill: RED });
+  await settle(page);
+  const result2 = await legendCaptions(page);
+  expect(result2.filter((caption) => !result1.includes(caption))).toEqual(['duplicate protein']);
+  await openDrawer(page);
+  await page.locator('.right-drawer').getByRole('button', { name: 'Legend' }).click();
+  await page.locator('.right-drawer').getByTitle('Sort Z-A', { exact: true }).click();
+  await settle(page);
+  const sorted = await legendCaptions(page);
+  expect(sorted).not.toEqual(result2);
+  return { result1, result2, sorted, shared: (captions) => captions.filter((caption) => caption !== 'duplicate protein') };
+};
+
+// B19 (D-07, D-08, R3, R11): Undo and Redo of a Legend sort made on Result 2
+// while Result 1 is displayed restore the order on Result 1 and never give it
+// the entry only Result 2 draws; Result 2 shows the restored order once it is
+// displayed, its own entry following the shared entries.
+test('Circular batch: Undo and Redo of a Legend sort on Result 2 keep each Result\'s own entries while Result 1 is shown', async ({ page }) => {
+  test.setTimeout(300_000);
+  const { result1, result2, sorted, shared } = await sortResult2Descending(page);
+  await show(page, 0);
+  expect(await legendCaptions(page)).toEqual(shared(sorted));
+
+  await page.evaluate(() => window.__GBDRAW_HISTORY__.undo());
+  await settle(page);
+  expect.soft(await legendView(page), 'Undo on Result 1 gives its order before the sort, without the Result 2 entry')
+    .toEqual(sameView(result1));
+  await show(page, 1);
+  expect.soft(await legendView(page), 'after Undo, Result 2 shows its order before the sort').toEqual(sameView(result2));
+
+  await show(page, 0);
+  await page.evaluate(() => window.__GBDRAW_HISTORY__.redo());
+  await settle(page);
+  expect.soft(await legendView(page), 'Redo on Result 1 sorts it again, without the Result 2 entry')
+    .toEqual(sameView(shared(sorted)));
+  await show(page, 1);
+  const redone = await legendView(page);
+  expect.soft(shared(redone.mounted), 'after Redo, Result 2 shows the sort').toEqual(shared(sorted));
+  expect.soft(redone.mounted.filter((caption) => caption === 'duplicate protein'), 'Result 2 keeps its own entry')
+    .toEqual(['duplicate protein']);
+  expect.soft(redone.content, 'Result 2 content matches its preview').toEqual(redone.mounted);
+  expect.soft(redone.listed, 'the Legend panel lists Result 2').toEqual(redone.mounted);
+});
+
+// B20 (D-07, D-08): Sort by default made on Result 1 reaches Result 2, which
+// shows the Sort Z-A made on it, once Result 2 is displayed.
+test('Circular batch: Sort by default on Result 1 reaches Result 2 shown in a sorted order', async ({ page }) => {
+  test.setTimeout(300_000);
+  const { result1, result2 } = await sortResult2Descending(page);
+  await show(page, 0);
+  await openDrawer(page);
+  await page.locator('.right-drawer').getByTitle('Sort by default', { exact: true }).click();
+  await settle(page);
+  expect(await legendCaptions(page)).toEqual(result1);
+  await show(page, 1);
+  expect.soft(await legendView(page), 'Result 2 shows the default order').toEqual(sameView(result2));
 });
 
 // R1 (A1): each editor edit kind writes the displayed Result when it is made,

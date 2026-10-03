@@ -222,7 +222,11 @@ A live action, a History apply, and a Result display call the same projection:
 `featureMatchesExactQualifier` in `app/feature-visibility.js` (exact-qualifier
 rules). A displayed batch Result whose shared legend entries already follow
 the legend order keeps its order (`orderLegendEntries` with `keepFollowed`),
-so the entries only that Result draws keep their places. The displayed
+so the entries only that Result draws keep their places; a Result last shown
+with another order also receives the default order. A History legend step made
+on another batch Result projects only its shared legend intent onto the
+displayed Result (`reconcileLegendEntries` with the step's other side, B19), so
+no Result gains or loses an entry that only one Result draws. The displayed
 population comes from the mounted Result's committed metadata
 (`renderedFeatureIdentities`), not from a second selection ref. A dialog's
 reactive object holds display values only, never a copy of an owner's data.
@@ -379,8 +383,10 @@ Guards:
 - `tests/web/history-generated-authority.playwright.spec.js`: checkpoint Undo and
   Redo, a mode round trip, and Undo while Generate runs.
 - `tests/web/multi-result-edit-matrix.playwright.spec.js`: Undo and Redo of
-  drags on one batch Result while another Result is displayed (B17), and a
-  Result switch after a legend sort that records no step (B18).
+  drags on one batch Result while another Result is displayed (B17), a
+  Result switch after a legend sort that records no step (B18), Undo and Redo
+  of a legend sort made on another Result (B19), and Sort by default reaching
+  another Result (B20).
 - `tests/web/history-config-restore.test.mjs`: catalog identity through Undo,
   Redo, and Session rollback, and unset settings that stay unset through intent
   and checkpoint Undo and Redo (also `session-draft-authority.test.mjs` for the
