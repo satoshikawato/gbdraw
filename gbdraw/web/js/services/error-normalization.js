@@ -11,6 +11,9 @@ inner_gap_px outer_gap_px radius width spacing arrow_head_length_ratio arrow_sha
 config configOverrides records anchors schema recordKey groupId direction sourceStrand role blast files
 input comparison protein_blastp_max_hits orthogroup_member_max_hits bitscore evalue identity
 losatp_max_hits losatp_max_target_seqs losatp_member_max_hits losatp_mode losatn_task record_gencodes
+losat losat_search program pairs source losat_gencode comparison_sequence comparison_sequence_source comparison_fasta
+conservation_blast_files conservation_dataframes conservation_reference conservation_sequence_files
+conservation_labels conservation_colors conservation_losat_gencodes conservation_search_results
 alignment_length collinear_min_anchors collinear_max_gene_gap collinear_block_merge_gap
 collinear_singleton_merge_gap collinear_max_diagonal_drift collinear_gap_penalty
 collinear_nearby_duplicate_window collinear_constant_anchor_score collinear_infer_orthogroups
@@ -71,6 +74,9 @@ const REASONS = Object.freeze({
   LOSAT_OPTION_PROGRAM: 'Use only the options of the selected LOSAT program.',
   LOSAT_PLAN: 'Choose record pairs that the LOSAT search can run: two or more records, LOSAT rows only with a LOSAT program, and LOSATP Pairwise for selected pairs.',
   LOSAT_TASK: 'Choose a LOSATN task that the selected LOSAT runtime supports.',
+  RING_LOSAT_PROGRAM: 'Choose LOSATN or TLOSATX for similarity rings.',
+  RING_LOSAT_INPUT: 'Give one comparison sequence file per ring, without BLAST tables, and use the displayed records as the subject.',
+  SEQUENCE_MISSING: 'Use a comparison file that contains the sequence (FASTA, or GenBank or DDBJ with an ORIGIN sequence).',
   UNAVAILABLE: 'Install LOSAT or NCBI BLAST+, or select a runtime executable.',
   FAILED: 'The search runtime exited with an error; check its message and inputs.',
   OUTPUT: 'The search output was not BLAST outfmt 6 rows for the searched records.',

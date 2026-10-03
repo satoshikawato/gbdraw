@@ -11,7 +11,6 @@ from pathlib import Path
 from typing import Literal, Mapping, Sequence, TypeAlias
 
 from Bio.SeqRecord import SeqRecord  # type: ignore[reportMissingImports]
-from Bio import SeqIO  # type: ignore[reportMissingImports]
 from pandas import DataFrame  # type: ignore[reportMissingImports]
 from svgwrite import Drawing  # type: ignore[reportMissingImports]
 
@@ -31,6 +30,7 @@ from gbdraw.analysis.protein_colinearity import (
 )
 from gbdraw.annotations import AnnotationOptions, ResolutionWarning
 from gbdraw.api.io import load_gbks as _load_gbks, load_gff_fasta as _load_gff_fasta
+from gbdraw.io.comparison_sequences import read_comparison_sequence_records
 from gbdraw.api.options import (
     CircularDiagramOptions as _CircularDiagramOptions,
     CircularMultiRecordOptions as _CircularLayout,
@@ -309,22 +309,42 @@ class LinearLayout:
 
 @dataclass(frozen=True)
 class ComparisonRingTrackOptions:
-    """One circular comparison ring drawn from sequence-similarity hits."""
+    """One circular comparison ring drawn from sequence-similarity hits.
 
-    source: TableSource
+    Precomputed rings read ``source`` (a BLAST table). With
+    ``ComparisonRingOptions.losat`` the search builds the ring instead:
+    ``source`` stays ``None`` and ``comparison_sequence_source`` names the
+    comparison genome file (FASTA, GenBank, or DDBJ). ``losat_gencode`` is the
+    genome's TLOSATX translation table.
+    """
+
+    source: TableSource | None = None
     label: str | None = None
     color: str | None = None
     comparison_sequence_source: RecordCollection | str | PathLike[str] | None = None
+    losat_gencode: int = 1
 
 
 @dataclass(frozen=True)
 class ComparisonRingOptions:
-    """Circular sequence-similarity comparison rings and their shared geometry."""
+    """Circular sequence-similarity comparison rings and their shared geometry.
+
+    ``losat`` (``"losatn"`` or ``"tlosatx"``) searches each track's comparison
+    genome (query) against the displayed records (subject). ``losatn_task``
+    applies to LOSATN and ``reference_gencode`` to TLOSATX. The runtime fields
+    choose the executable; ``None`` resolves one automatically.
+    """
 
     tracks: Sequence[ComparisonRingTrackOptions] = ()
     reference: Literal["query", "subject", "auto"] = "auto"
     ring_width: float | None = None
     ring_gap: float | None = None
+    losat: Literal["losatn", "tlosatx"] | None = None
+    losatn_task: str = "megablast"
+    reference_gencode: int = 1
+    losat_executable: str | None = None
+    ncbi_blast_executable: str | None = None
+    threads: int | None = None
 
 
 # Compatibility aliases for the original package-root names.
@@ -856,7 +876,15 @@ def _circular_options(
     )
     comparison_rings = options.comparison_rings
     assert comparison_rings is not None
-    if comparison_rings.tracks:
+    if comparison_rings.losat is not None:
+        values.update(_ring_losat_values(comparison_rings))
+    elif comparison_rings.tracks:
+        if any(track.source is None for track in comparison_rings.tracks):
+            raise ValidationError(
+                "Set source on every comparison ring, or set ComparisonRingOptions.losat "
+                "to build the rings from comparison_sequence_source.",
+                diagnostic={"code": "COMPARISON_INPUT", "field": "source"},
+            )
         kinds = {
             "table" if isinstance(track.source, DataFrame) else "file"
             for track in comparison_rings.tracks
@@ -894,6 +922,68 @@ def _circular_options(
         keep_full_definition_with_plot_title=options.keep_full_definition_with_title,
     )
     return _CircularDiagramOptions(**values)
+
+
+def _ring_losat_values(comparison_rings: ComparisonRingOptions) -> dict[str, object]:
+    """Typed ring LOSAT intent of the introductory options (design 3.4)."""
+
+    tracks = tuple(comparison_rings.tracks)
+    program = comparison_rings.losat
+    sequences: list[str] = []
+    for index, track in enumerate(tracks, start=1):
+        if track.source is not None:
+            raise ValidationError(
+                f"Comparison ring {index} sets source; with losat the search builds "
+                "the ring from comparison_sequence_source.",
+                diagnostic={"code": "COMPARISON_INPUT", "reason": "RING_LOSAT_INPUT", "field": "source"},
+            )
+        sequence = track.comparison_sequence_source
+        if not isinstance(sequence, (str, PathLike)):
+            raise ValidationError(
+                f"Comparison ring {index} needs comparison_sequence_source as a FASTA, "
+                "GenBank, or DDBJ file path when losat is set.",
+                diagnostic={
+                    "code": "COMPARISON_INPUT",
+                    "reason": "RING_LOSAT_INPUT",
+                    "field": "comparison_sequence_source",
+                },
+            )
+        sequences.append(str(sequence))
+    gencodes = tuple(track.losat_gencode for track in tracks)
+    if program != "tlosatx" and (
+        comparison_rings.reference_gencode != 1 or any(code != 1 for code in gencodes)
+    ):
+        raise ValidationError(
+            "reference_gencode and losat_gencode apply to losat='tlosatx' only.",
+            diagnostic={"code": "COMPARISON_INPUT", "reason": "LOSAT_OPTION_PROGRAM", "field": "conservation_losat_gencodes"},
+        )
+    labels = [track.label for track in tracks]
+    colors = [track.color for track in tracks]
+    values: dict[str, object] = {
+        "losat_search": _LosatSearchOptions(
+            program=program,  # type: ignore[arg-type]
+            losatn_task=comparison_rings.losatn_task if program == "losatn" else None,
+            record_gencodes=(
+                (comparison_rings.reference_gencode,) if program == "tlosatx" else ()
+            ),
+            runtime=_LosatRuntimeOptions(
+                losat_executable=comparison_rings.losat_executable,
+                ncbi_blast_executable=comparison_rings.ncbi_blast_executable,
+                threads=comparison_rings.threads,
+            ),
+        ),
+        "conservation_sequence_files": sequences,
+        "conservation_losat_gencodes": gencodes if program == "tlosatx" else None,
+    }
+    for field_name, entries in (("conservation_labels", labels), ("conservation_colors", colors)):
+        if any(entry is not None for entry in entries):
+            if any(entry is None for entry in entries):
+                raise ValidationError(
+                    f"Set {field_name.split('_')[1]} for every comparison ring or for none of them.",
+                    diagnostic={"code": "COMPARISON_INPUT", "field": field_name},
+                )
+            values[field_name] = entries
+    return values
 
 
 def _linear_losat_search(
@@ -983,7 +1073,7 @@ def _interactive_context(
             elif isinstance(source, Sequence) and not isinstance(source, (str, bytes, PathLike)):
                 comparison_sequence_records.append(list(source))
             else:
-                comparison_sequence_records.append(list(SeqIO.parse(str(source), "fasta")))
+                comparison_sequence_records.append(list(read_comparison_sequence_records(source)))
     context = _build_prepared_interactive_context(
         prepared,
         comparison_sequence_records=comparison_sequence_records,

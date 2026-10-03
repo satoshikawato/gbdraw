@@ -78,7 +78,7 @@ def test_conservation_table_resolves_relative_paths(tmp_path: Path) -> None:
     table_dir.mkdir()
     table = table_dir / "conservation.tsv"
     table.write_text(
-        "blast\tlabel\tcolor\tcomparison_fasta\n"
+        "blast\tlabel\tcolor\tcomparison_sequence\n"
         "../blast.tsv\tReference A\t#E15759\t../comparison.fna\n",
         encoding="utf-8",
     )
@@ -88,10 +88,10 @@ def test_conservation_table_resolves_relative_paths(tmp_path: Path) -> None:
     assert parsed.conservation_blast_files == [str(blast.resolve())]
     assert parsed.labels == ["Reference A"]
     assert parsed.colors == ["#E15759"]
-    assert parsed.comparison_fasta_files == [str(comparison_fasta.resolve())]
+    assert parsed.comparison_sequence_files == [str(comparison_fasta.resolve())]
     assert parsed.path_dependencies[0].column == "blast"
     assert parsed.path_dependencies[0].row_index == 0
-    assert parsed.path_dependencies[1].column == "comparison_fasta"
+    assert parsed.path_dependencies[1].column == "comparison_sequence"
 
 
 def test_conservation_table_rejects_unknown_columns(tmp_path: Path) -> None:

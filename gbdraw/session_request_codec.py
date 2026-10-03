@@ -198,7 +198,7 @@ _SHARED_OPTION_WRONG_MODE_DEFAULTS = {
     },
     "linear": {
         "conservation_blast_files": None,
-        "conservation_fasta_files": None,
+        "conservation_sequence_files": None,
         "conservation_dataframes": None,
         "conservation_reference": "auto",
         "conservation_labels": None,
@@ -424,6 +424,9 @@ _OPTIONAL_PROTEIN_SETTINGS = frozenset({"collinearInferOrthogroups"})
 _WIRE_LOSATP_MODES = {wire: typed for typed, wire in LOSATP_MODE_WIRE.items()}
 # Settings of a LOSATP search that has not been configured.
 _UNSET_LOSAT_SEARCH = LosatSearchOptions(program="losatp", losatp_mode="none")
+# Circular ring LOSAT intent (encoded only after the planner resolves it) and
+# its resolved rows (encoded as conservationBlastFiles).
+_RING_SEARCH_FIELDS = frozenset({"conservation_losat_gencodes", "conservation_search_results"})
 _COMPARISON_FIELDS = _COMPARISON_SOURCE_FIELDS | frozenset(
     {"losat_search"}
     | {name for _key, owner, name in _PROTEIN_SETTINGS_WIRE if owner == "options"}
@@ -449,7 +452,18 @@ _FILE_FIELDS = frozenset(
 )
 _TABLE_SEQUENCE_FIELDS = frozenset({"depth_tables", "conservation_dataframes"})
 _FILE_SEQUENCE_FIELDS = frozenset({"depth_files", "conservation_blast_files"})
-_OPTIONAL_FILE_SEQUENCE_FIELDS = frozenset({"conservation_fasta_files"})
+_OPTIONAL_FILE_SEQUENCE_FIELDS = frozenset({"conservation_sequence_files"})
+# Typed option -> persisted snake name, where the typed name changed and the
+# wire name did not (design D6, D18). Keys and resource IDs use the wire name.
+_OPTION_WIRE_NAMES = {"conservation_sequence_files": "conservation_fasta_files"}
+
+
+def _option_wire_name(name: str) -> str:
+    return _OPTION_WIRE_NAMES.get(name, name)
+
+
+def _option_wire_key(name: str) -> str:
+    return _camel(_option_wire_name(name))
 _TABLE_MATRIX_FIELDS = frozenset({"depth_track_tables"})
 _FILE_MATRIX_FIELDS = frozenset({"depth_track_files"})
 _DEPTH_COMPATIBILITY_FIELDS = frozenset(
@@ -631,6 +645,10 @@ def _encode_canonical_request(request: DiagramRequest) -> EncodedCanonicalReques
             unresolved_reasons.append("record-derived output prefix")
         if request.options.conservation_table_file is not None:
             unresolved_reasons.append("Circular comparison table")
+    if isinstance(request, (CircularDiagramRequest, CircularBatchRequest)):
+        ring_search = request.options.losat_search
+        if ring_search is not None:
+            unresolved_reasons.append(f"{ring_search.program} ring search")
     if isinstance(request, LinearDiagramRequest):
         if request.output.resolve_prefix_from_first_record:
             unresolved_reasons.append("record-derived output prefix")
@@ -1432,11 +1450,27 @@ def _encode_diagram_options(
         name = item.name
         if name in _COMPARISON_FIELDS or name in _ALL_DEPTH_INPUT_FIELDS or name in _PLACEMENT_INPUT_FIELDS:
             continue
+        if name == "conservation_search_results":
+            if getattr(options, name):
+                # Planner-resolved ring rows are stored as the Web stores them.
+                result["conservationBlastFiles"] = [
+                    {
+                        "resourceId": resources.add_bytes(
+                            f"conservation-blast-files-{index}",
+                            kind=f"conservation-blast-files-{index}",
+                            name=ring.name,
+                            content=ring.text.encode("utf-8"),
+                        ),
+                        "representation": "file",
+                    }
+                    for index, ring in enumerate(options.conservation_search_results, start=1)
+                ]
+            continue
         value = getattr(options, name)
         default = getattr(default_options, name)
         if _same_default(value, default):
             continue
-        result[_camel(name)] = _encode_option_value(name, value, resources=resources)
+        result[_option_wire_key(name)] = _encode_option_value(name, value, resources=resources)
     if depth_tracks is not None:
         result["depthTracks"] = _encode_depth_tracks(
             depth_tracks,
@@ -1465,16 +1499,18 @@ def _decode_diagram_options(
         for row in placements:
             row.target.validate_mode(mode)
     for name, default in _SHARED_OPTION_WRONG_MODE_DEFAULTS[mode].items():
-        key = _camel(name)
+        key = _option_wire_key(name)
         if key in payload and payload[key] == default:
             payload.pop(key)
     options_type = (
         CircularDiagramOptions if mode == "circular" else LinearDiagramOptions
     )
     known = {
-        _camel(item.name): item.name
+        _option_wire_key(item.name): item.name
         for item in fields(options_type)
-        if item.name not in _COMPARISON_FIELDS and item.name not in _PLACEMENT_INPUT_FIELDS
+        if item.name not in _COMPARISON_FIELDS
+        and item.name not in _PLACEMENT_INPUT_FIELDS
+        and item.name not in _RING_SEARCH_FIELDS
     }
     unknown = set(payload) - set(known)
     if unknown:
@@ -2303,7 +2339,7 @@ def _encode_option_value(
     if name in _OPTIONAL_FILE_SEQUENCE_FIELDS:
         return [
             (
-                _file_ref(f"{name}-{index}", item, resources=resources)
+                _file_ref(f"{_option_wire_name(name)}-{index}", item, resources=resources)
                 if item is not None
                 else None
             )
@@ -2363,13 +2399,13 @@ def _decode_option_value(
             for index, item in enumerate(raw, start=1)
         )
     if name in _OPTIONAL_FILE_SEQUENCE_FIELDS:
-        raw = _array(value, path=f"renderRequest.diagramOptions.{_camel(name)}")
+        raw = _array(value, path=f"renderRequest.diagramOptions.{_option_wire_key(name)}")
         return tuple(
             (
                 str(
                     _decode_file_ref(
                         item,
-                        name=f"{name}-{index}",
+                        name=f"{_option_wire_name(name)}-{index}",
                         resource_paths=resource_paths,
                     )
                 )

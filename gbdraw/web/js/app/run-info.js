@@ -1333,7 +1333,7 @@ const appendComparisonOptions = (args, request, files) => {
     );
     if (fastas.some(Boolean)) {
       args.push(
-        '--conservation_fasta',
+        '--conservation_sequence',
         ...fastas.map((ref, index) => {
         const resourceId = referencedResourceId(ref);
           return resourceId

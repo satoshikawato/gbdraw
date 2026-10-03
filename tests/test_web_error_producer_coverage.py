@@ -88,7 +88,7 @@ UNPROVEN_BASELINE: dict[str, tuple[int, str]] = {
     "gbdraw/features/source.py": (1, _FEATURES),
     "gbdraw/features/tracks.py": (4, _FEATURES),
     "gbdraw/interface.py": (34, _TYPED_API),
-    "gbdraw/io/cli_tables.py": (41, _TABLES),
+    "gbdraw/io/cli_tables.py": (40, _TABLES),
     "gbdraw/io/colors.py": (2, _TABLES),
     "gbdraw/io/genome.py": (5, _TABLES),
     "gbdraw/labels/circular_radial.py": (5, _LAYOUT),

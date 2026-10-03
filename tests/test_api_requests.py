@@ -118,7 +118,13 @@ def test_new_request_fields_preserve_released_positional_arguments() -> None:
 
     assert request.grouping == "single"
     assert request.record_options == RecordCollectionOptions()
-    assert fields(CircularDiagramOptions)[-1].name == "conservation_table_file"
+    # Ring LOSAT fields (PR-4) follow the released fields.
+    assert [item.name for item in fields(CircularDiagramOptions)][-4:] == [
+        "conservation_table_file",
+        "losat_search",
+        "conservation_losat_gencodes",
+        "conservation_search_results",
+    ]
     assert fields(LinearDiagramOptions)[-1].name == "comparison_table_file"
 
 
@@ -287,10 +293,12 @@ def test_mode_specific_option_fields_do_not_overlap_other_mode_features() -> Non
     circular_fields = {item.name for item in fields(CircularDiagramOptions)}
     linear_fields = {item.name for item in fields(LinearDiagramOptions)}
 
-    assert {"blast_files", "losat_search"}.isdisjoint(circular_fields)
+    assert {"blast_files", "linear_comparisons"}.isdisjoint(circular_fields)
+    # LOSAT search intent is shared: Linear edges and Circular rings (design 3.4).
+    assert "losat_search" in circular_fields and "losat_search" in linear_fields
     assert {
         "conservation_blast_files",
-        "conservation_fasta_files",
+        "conservation_sequence_files",
         "conservation_reference",
     }.isdisjoint(linear_fields)
 

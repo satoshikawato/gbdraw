@@ -32,6 +32,9 @@ qualifier value record_id label_text config configOverrides records anchors sche
 recordKey groupId direction sourceStrand role blast files input comparison
 protein_blastp_max_hits orthogroup_member_max_hits bitscore evalue identity
 losatp_max_hits losatp_max_target_seqs losatp_member_max_hits losatp_mode losatn_task record_gencodes
+losat losat_search program pairs source losat_gencode comparison_sequence comparison_sequence_source comparison_fasta
+conservation_blast_files conservation_dataframes conservation_reference conservation_sequence_files
+conservation_labels conservation_colors conservation_losat_gencodes conservation_search_results
 alignment_length collinear_min_anchors collinear_max_gene_gap collinear_block_merge_gap
 collinear_singleton_merge_gap collinear_max_diagonal_drift collinear_gap_penalty
 collinear_nearby_duplicate_window collinear_constant_anchor_score
@@ -51,7 +54,8 @@ DIAGNOSTIC_REASONS = frozenset("""BOOLEAN INTEGER FINITE POSITIVE NONNEGATIVE PO
 POSITIVE_OR_AUTO POSITIVE_INTEGER_OR_AUTO NONNEGATIVE_INTEGER PERCENT UNKNOWN_CONFIG_PATH
 DINUCLEOTIDE CANNOT_FIT DEFINITION_RESERVED CENTER_RESERVED THREE_COLUMNS DEPTH_VALUES
 REFERENCE_REQUIRED REFERENCE_MISMATCH DISPLAY_START_BOUNDS ADJACENT_ALL COLLINEAR_ANCHOR_MODE COLLINEAR_COLOR_MODE COLOR SEARCH_FRAME
-LOSAT_OPTION_PROGRAM LOSAT_PLAN LOSAT_TASK UNAVAILABLE FAILED OUTPUT""".split())
+LOSAT_OPTION_PROGRAM LOSAT_PLAN LOSAT_TASK UNAVAILABLE FAILED OUTPUT
+RING_LOSAT_PROGRAM RING_LOSAT_INPUT SEQUENCE_MISSING""".split())
 _DIAGNOSTIC_INTEGER_KEYS = frozenset("row column columnCount seriesIndex slotIndex innerPx outerPx".split())
 
 # The engine computes a Result from the request alone, so an unclassified failure

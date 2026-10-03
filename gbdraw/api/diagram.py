@@ -3351,7 +3351,9 @@ def build_circular_diagram(
         depth_track_large_tick_intervals=options.depth_track_large_tick_intervals,
         depth_track_small_tick_intervals=options.depth_track_small_tick_intervals,
         depth_track_tick_font_sizes=options.depth_track_tick_font_sizes,
-        conservation_blast_files=options.conservation_blast_files,
+        conservation_blast_files=(
+            options.conservation_search_results or options.conservation_blast_files
+        ),
         conservation_dataframes=options.conservation_dataframes,
         conservation_reference=options.conservation_reference,
         conservation_labels=options.conservation_labels,
@@ -3578,7 +3580,9 @@ def build_circular_multi_diagram(
     return assemble_circular_diagram_from_records(
         records,
         cfg=cfg,
-        conservation_blast_files=options.conservation_blast_files,
+        conservation_blast_files=(
+            options.conservation_search_results or options.conservation_blast_files
+        ),
         conservation_dataframes=options.conservation_dataframes,
         conservation_reference=options.conservation_reference,
         conservation_labels=options.conservation_labels,

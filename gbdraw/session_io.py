@@ -2976,6 +2976,9 @@ class RetiredCliOption:
     replacement: str
     renamed_to: str | None = None
     value_rewrites: Mapping[str, tuple[str, ...]] | None = None
+    # argparse nargs of the retired flag, so a fresh run reports the flag
+    # itself rather than its extra values. A rename keeps every value.
+    nargs: str | None = None
 
     def rewrite(self, value: str) -> tuple[str, ...] | None:
         if self.renamed_to is not None:
@@ -3047,6 +3050,13 @@ RETIRED_CLI_OPTIONS: Mapping[str, RetiredCliOption] = {
             "--protein_blastp_output",
             ("linear",),
             "use --losat_output_dir DIR, which writes DIR/losatp.raw.tsv",
+        ),
+        RetiredCliOption(
+            "--conservation_fasta",
+            ("circular",),
+            "use --conservation_sequence (FASTA, GenBank, or DDBJ)",
+            "--conservation_sequence",
+            nargs="+",
         ),
     )
 }

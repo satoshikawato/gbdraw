@@ -1213,14 +1213,20 @@ def resolve_circular_options(
 
     if options.conservation_table_file is None:
         return options
-    table = read_conservation_table(options.conservation_table_file)
+    losat = options.losat_search is not None
+    table = read_conservation_table(options.conservation_table_file, losat=losat)
     return replace(
         options,
         conservation_table_file=None,
-        conservation_blast_files=tuple(table.conservation_blast_files),
-        conservation_fasta_files=(
-            tuple(table.comparison_fasta_files)
-            if table.comparison_fasta_files is not None
+        conservation_blast_files=None if losat else tuple(table.conservation_blast_files),
+        conservation_losat_gencodes=(
+            tuple(table.losat_gencodes)
+            if losat and table.losat_gencodes is not None
+            else None
+        ),
+        conservation_sequence_files=(
+            tuple(table.comparison_sequence_files)
+            if table.comparison_sequence_files is not None
             else None
         ),
         conservation_labels=(

@@ -29,6 +29,7 @@ from gbdraw.analysis.collinearity_units import (  # type: ignore[reportMissingIm
     normalize_collinearity_unit_mode,
 )
 from gbdraw.analysis.conservation import (  # type: ignore[reportMissingImports]
+    ConservationSearchResult,
     normalize_conservation_reference,
 )
 from gbdraw.analysis.protein_colinearity import (  # type: ignore[reportMissingImports]
@@ -1095,7 +1096,7 @@ class CircularDiagramOptions(_ModeDiagramOptions):
     tracks: CircularRequestTrackOptions | None = None
     output: CircularOutputOptions | None = None
     conservation_blast_files: Sequence[str] | None = None
-    conservation_fasta_files: Sequence[str | None] | None = None
+    conservation_sequence_files: Sequence[str | None] | None = None
     conservation_dataframes: Sequence[DataFrame] | None = None
     conservation_reference: Literal["query", "subject", "auto"] = "auto"
     conservation_labels: Sequence[str] | None = None
@@ -1106,6 +1107,9 @@ class CircularDiagramOptions(_ModeDiagramOptions):
     species: str | None = None
     strain: str | None = None
     conservation_table_file: str | None = None
+    losat_search: LosatSearchOptions | None = None
+    conservation_losat_gencodes: Sequence[int] | None = None
+    conservation_search_results: Sequence[ConservationSearchResult] | None = None
 
     def __post_init__(self) -> None:
         super().__post_init__()
@@ -1146,8 +1150,8 @@ class CircularDiagramOptions(_ModeDiagramOptions):
             element_type=str,
         )
         _validate_sequence_elements(
-            self.conservation_fasta_files,
-            field_name="conservation_fasta_files",
+            self.conservation_sequence_files,
+            field_name="conservation_sequence_files",
             element_type=str,
             allow_none=True,
         )
@@ -1173,10 +1177,12 @@ class CircularDiagramOptions(_ModeDiagramOptions):
                 value is not None
                 for value in (
                     self.conservation_blast_files,
-                    self.conservation_fasta_files,
+                    self.conservation_sequence_files,
                     self.conservation_dataframes,
                     self.conservation_labels,
                     self.conservation_colors,
+                    self.conservation_losat_gencodes,
+                    self.conservation_search_results,
                 )
             ):
                 raise ValidationError(
@@ -1201,6 +1207,144 @@ class CircularDiagramOptions(_ModeDiagramOptions):
                     getattr(self, field_name),
                     field_name=field_name,
                 ),
+            )
+
+        _validate_sequence_elements(
+            self.conservation_search_results,
+            field_name="conservation_search_results",
+            element_type=ConservationSearchResult,
+        )
+        if self.conservation_search_results is not None and any(
+            value is not None
+            for value in (self.conservation_blast_files, self.conservation_dataframes)
+        ):
+            raise ValidationError(
+                "conservation_search_results cannot be combined with "
+                "conservation_blast_files or conservation_dataframes.",
+                diagnostic={"code": "COMPARISON_INPUT", "field": "conservation_search_results"},
+            )
+        self._validate_ring_losat()
+
+    def _validate_ring_losat(self) -> None:
+        """Circular LOSATN / TLOSATX ring intent (design 3.3, 3.4)."""
+
+        search = self.losat_search
+        gencodes = self.conservation_losat_gencodes
+        if gencodes is not None:
+            if isinstance(gencodes, (str, bytes)) or not isinstance(gencodes, Sequence):
+                raise ValidationError(
+                    "conservation_losat_gencodes must be a sequence of positive integers.",
+                    diagnostic={"code": "COMPARISON_INPUT", "field": "conservation_losat_gencodes"},
+                )
+            object.__setattr__(
+                self,
+                "conservation_losat_gencodes",
+                tuple(
+                    _validate_positive_int(value, field_name="conservation_losat_gencodes")
+                    for value in gencodes
+                ),
+            )
+            gencodes = self.conservation_losat_gencodes
+        if search is None:
+            if gencodes is not None:
+                raise ValidationError(
+                    "conservation_losat_gencodes requires losat_search with program 'tlosatx'.",
+                    diagnostic={
+                        "code": "COMPARISON_INPUT",
+                        "reason": "LOSAT_OPTION_PROGRAM",
+                        "field": "conservation_losat_gencodes",
+                    },
+                )
+            return
+        if not isinstance(search, LosatSearchOptions):
+            raise ValidationError(
+                "losat_search must be LosatSearchOptions or None.",
+                diagnostic={"code": "COMPARISON_INPUT", "field": "losat_search"},
+            )
+        if search.program not in {"losatn", "tlosatx"}:
+            raise ValidationError(
+                "Circular similarity rings run LOSATN or TLOSATX; "
+                f"{search.program} is not available for rings.",
+                diagnostic={
+                    "code": "COMPARISON_INPUT",
+                    "reason": "RING_LOSAT_PROGRAM",
+                    "field": "program",
+                    "program": search.program,
+                },
+            )
+        if search.pairs is not None:
+            raise ValidationError(
+                "Circular rings compare each comparison genome with the displayed "
+                "records; losat_search.pairs applies to Linear diagrams only.",
+                diagnostic={"code": "COMPARISON_INPUT", "reason": "RING_LOSAT_INPUT", "field": "pairs"},
+            )
+        if len(tuple(search.record_gencodes)) > 1:
+            raise ValidationError(
+                "A Circular ring search takes one reference translation table "
+                f"(losat_search.record_gencodes); got {len(tuple(search.record_gencodes))}.",
+                diagnostic={"code": "COMPARISON_INPUT", "field": "record_gencodes"},
+            )
+        if gencodes is not None and search.program != "tlosatx":
+            raise ValidationError(
+                "conservation_losat_gencodes applies to TLOSATX rings only.",
+                diagnostic={
+                    "code": "COMPARISON_INPUT",
+                    "reason": "LOSAT_OPTION_PROGRAM",
+                    "field": "conservation_losat_gencodes",
+                    "program": search.program,
+                },
+            )
+
+        def ring_input_error(message: str, field_name: str) -> ValidationError:
+            return ValidationError(
+                message,
+                diagnostic={
+                    "code": "COMPARISON_INPUT",
+                    "reason": "RING_LOSAT_INPUT",
+                    "field": field_name,
+                },
+            )
+
+        for field_name in (
+            "conservation_blast_files",
+            "conservation_dataframes",
+            "conservation_search_results",
+        ):
+            if getattr(self, field_name) is not None:
+                raise ring_input_error(
+                    f"{field_name} cannot be combined with a ring LOSAT search; the "
+                    "search produces the ring rows from conservation_sequence_files.",
+                    field_name,
+                )
+        if self.conservation_reference == "query":
+            raise ring_input_error(
+                "A ring LOSAT search uses the displayed records as the subject; "
+                "conservation_reference must be 'auto' or 'subject'.",
+                "conservation_reference",
+            )
+        if self.conservation_table_file is not None:
+            return
+        sequences = tuple(self.conservation_sequence_files or ())
+        if not sequences or any(not value for value in sequences):
+            raise ring_input_error(
+                "A ring LOSAT search needs one comparison sequence file per ring "
+                "(conservation_sequence_files).",
+                "conservation_sequence_files",
+            )
+        for field_name in ("conservation_labels", "conservation_colors"):
+            values = getattr(self, field_name)
+            if values is not None and len(tuple(values)) != len(sequences):
+                raise ring_input_error(
+                    f"{field_name} must give one value per comparison sequence file "
+                    f"({len(sequences)}); got {len(tuple(values))}.",
+                    field_name,
+                )
+        if gencodes is not None and len(gencodes) not in {1, len(sequences)}:
+            raise ring_input_error(
+                "conservation_losat_gencodes must give one translation table for all "
+                f"rings or one per comparison sequence file ({len(sequences)}); got "
+                f"{len(gencodes)}.",
+                "conservation_losat_gencodes",
             )
 
 
