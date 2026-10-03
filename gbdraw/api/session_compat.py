@@ -21,7 +21,9 @@ from gbdraw.analysis.protein_colinearity import (
     validate_legacy_protein_raw_candidate_envelope,
     validate_protein_raw_entry_references,
 )
+from gbdraw.core.record_metadata import _iter_source_features, _source_feature_index
 from gbdraw.exceptions import ValidationError
+from gbdraw.features.ids import compute_feature_hash
 from gbdraw.layout.similarity_alignment import (
     AlignmentAnchorIdentity,
     AlignmentDecisionStatus,
@@ -589,9 +591,43 @@ def _mapping_items(value: object) -> tuple[Mapping[str, Any], ...]:
     return tuple(item for item in value if isinstance(item, Mapping))
 
 
+def _legacy_display_frame_feature_id(
+    plan: LinearRequestPlan | None,
+    record_key: str,
+    feature_id: str,
+) -> str:
+    """Bind a release-0.13.0 display-frame feature ID to its source-frame ID.
+
+    0.13.0 hashed the displayed feature, so a reverse-complemented record saved
+    IDs of its displayed coordinates; the source feature catalog hashes source
+    coordinates. An ID that already names a catalog feature is returned as is.
+    """
+
+    if plan is None:
+        return feature_id
+    for record, provenance in zip(plan.records, plan.provenance, strict=True):
+        if provenance.record_key != record_key:
+            continue
+        catalog = {
+            entry.source_feature_index: entry
+            for entry in provenance.source_feature_catalog or ()
+        }
+        if any(entry.stable_feature_id == feature_id for entry in catalog.values()):
+            return feature_id
+        matches = {
+            catalog[index].stable_feature_id
+            for feature in _iter_source_features(record.features)
+            if (index := _source_feature_index(feature)) in catalog
+            and compute_feature_hash(feature, record_id=record.id) == feature_id
+        }
+        return matches.pop() if len(matches) == 1 else feature_id
+    return feature_id
+
+
 def _legacy_alignment_groups(
     request: LinearDiagramRequest,
     session_artifacts: Mapping[str, Any],
+    plan: LinearRequestPlan | None = None,
 ) -> tuple[tuple[str, tuple[_LegacyAlignmentMember, ...]], ...]:
     record_keys = tuple(record.record_key for record in request.records)
     if any(record_key is None for record_key in record_keys):
@@ -663,6 +699,7 @@ def _legacy_alignment_groups(
                     raise ValidationError(
                         "Legacy similarity alignment member lacks stable feature metadata."
                     )
+                stable_id = _legacy_display_frame_feature_id(plan, record_key, stable_id)
                 anchor = AlignmentAnchorIdentity(
                     record_key,
                     stable_id,
@@ -742,8 +779,9 @@ def _legacy_similarity_alignment_plan(
     session_artifacts: Mapping[str, Any],
     *,
     target: str,
+    plan: LinearRequestPlan | None = None,
 ) -> SimilarityAlignmentPlan:
-    groups = _legacy_alignment_groups(request, session_artifacts)
+    groups = _legacy_alignment_groups(request, session_artifacts, plan)
     group_matches = [group for group in groups if group[0] == target]
     selected_member: _LegacyAlignmentMember | None = None
     if len(group_matches) > 1:
@@ -811,8 +849,14 @@ def _legacy_similarity_alignment_plan(
 def promote_legacy_session_similarity_alignment_request(
     request: DiagramRequest,
     session_artifacts: Mapping[str, Any],
+    *,
+    plan: LinearRequestPlan | None = None,
 ) -> DiagramRequest:
-    """Promote one supported old Session alignment into current typed state."""
+    """Promote one supported old Session alignment into current typed state.
+
+    With the resolved ``plan`` of ``request``, saved feature IDs of displayed
+    (reverse-complemented) records also bind to their source features.
+    """
 
     if not isinstance(request, LinearDiagramRequest):
         return request
@@ -862,6 +906,7 @@ def promote_legacy_session_similarity_alignment_request(
             request,
             session_artifacts,
             target=targets.pop(),
+            plan=plan,
         )
         if request.similarity_alignment != expected_plan or any(
             translation.x != 0.0 or translation.y != 0.0
@@ -886,10 +931,11 @@ def promote_legacy_session_similarity_alignment_request(
             "Legacy Session similarity alignment conflicts with current typed state."
         )
     target = targets.pop()
-    plan = _legacy_similarity_alignment_plan(
+    alignment = _legacy_similarity_alignment_plan(
         request,
         session_artifacts,
         target=target,
+        plan=plan,
     )
     layout = request.layout or LinearMultiRecordOptions()
     promoted = replace(
@@ -902,7 +948,7 @@ def promote_legacy_session_similarity_alignment_request(
                 if record.record_key is not None
             ),
         ),
-        similarity_alignment=plan,
+        similarity_alignment=alignment,
     )
     return _with_legacy_similarity_alignment(
         promoted,
@@ -1031,9 +1077,17 @@ def _replace_plan_request(
         ResolvedRecordCollection(plan.records, plan.provenance),
         request.similarity_alignment,
     )
+    # Promotion adds the record translations of the alignment; keep the
+    # placement rows the plan already resolved.
+    layout = request.layout
+    if layout is not None and plan.layout is not None:
+        layout = replace(
+            layout, multi_record_positions=plan.layout.multi_record_positions
+        )
     return replace(
         plan,
         request=request,
+        layout=layout,
         alignment_anchor_centers=centers,
     )
 
@@ -1081,6 +1135,7 @@ def _adapt_session_plan(
     request = promote_legacy_session_similarity_alignment_request(
         plan.request,
         session_artifacts,
+        plan=plan if isinstance(plan, LinearRequestPlan) else None,
     )
     request = _main_display_frame_rows_to_search_frame(plan, request, session_artifacts)
     if request is not plan.request:
