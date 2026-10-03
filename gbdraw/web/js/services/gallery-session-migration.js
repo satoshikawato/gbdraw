@@ -299,6 +299,12 @@ export const migrateLegacyLinearComparisonDraft = ({
   const rawGlobalSource = config.blastSource ?? config.adv?.blastSource;
   const globalSource = legacyComparisonSource(rawGlobalSource);
   const legacyNone = String(rawGlobalSource || '').trim().toLowerCase() === 'none';
+  // Legacy CLI writers selected LOSATP exactly when --protein_blastp_mode was
+  // not `none`; that run compared adjacent records.
+  const cliProteinMode = String(optionValues(
+    Array.isArray(config.cliOptions?.rawArgs) ? config.cliOptions.rawArgs : [],
+    ['--protein_blastp_mode', '--protein-blastp-mode']
+  ).at(-1) || 'none').trim().toLowerCase();
 
   stripLegacyComparisonConfig(config);
   filesData.linearSeqs = filesData.linearSeqs.map((sequence) => {
@@ -325,8 +331,14 @@ export const migrateLegacyLinearComparisonDraft = ({
   }
 
   if (!hasWebDraft) {
+    // A CLI-only draft gains no synthetic Web comparison (No comparison). Its
+    // own protein comparison is stated as the adjacent LOSATP plan.
     delete config.linearRecordLayout;
-    delete config.linearComparisonPlan;
+    if (cliProteinMode !== 'none') {
+      config.linearComparisonPlan = { mode: 'adjacent', defaultSource: 'losat', edges: [] };
+    } else {
+      delete config.linearComparisonPlan;
+    }
     filesData.linearComparisons = [];
     return { config, filesData };
   }

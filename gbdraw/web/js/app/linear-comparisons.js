@@ -27,9 +27,11 @@ export const plainTextLinearRecordLabel = (value) => {
   return label.replace(/[<>]/g, '').trim() || 'Record';
 };
 
+// An absent or unknown mode is the Web default (No comparison): a plan never
+// starts a comparison its writer did not state (B15).
 const normalizeMode = (value) => {
   const mode = String(value || '').trim().toLowerCase();
-  return VALID_MODES.has(mode) ? mode : LINEAR_COMPARISON_MODES.ADJACENT;
+  return VALID_MODES.has(mode) ? mode : LINEAR_COMPARISON_MODES.NONE;
 };
 
 const normalizeSource = (value, fallback = LINEAR_COMPARISON_SOURCES.LOSAT) => {
