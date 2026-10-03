@@ -1303,7 +1303,8 @@ export const createAppSetup = () => {
     rulePreparation,
     ref, computed, watch,
     nextTick,
-    legendActions
+    legendActions,
+    previewRuntime
   });
   const featureSelection = createFeatureSelection({ state, onMounted, onUnmounted });
   featureActions = createFeatureEditor({
@@ -1334,8 +1335,7 @@ export const createAppSetup = () => {
     openFeatureEditorForFeature: featureActions.openFeatureEditorForFeature
   });
 
-  watch(selectedResultIndex, (newIndex, oldIndex) => {
-    if (newIndex !== oldIndex) previewRuntime.flushActiveResult({ markIncremental: false });
+  watch(selectedResultIndex, () => {
     featureSelection.clearFeatureSelection({ clearStatus: true, syncDom: false });
   });
   const setDiagramMode = (nextMode) => {
@@ -2201,6 +2201,7 @@ export const createAppSetup = () => {
     state,
     legendActions,
     history,
+    previewRuntime,
     similarityAlignmentLifecycle: {
       beforeRecordDrag: () => similarityAlignmentActions?.beforeRecordDrag?.(),
       afterRecordDrag: (options) => similarityAlignmentActions?.afterRecordDrag?.(options)

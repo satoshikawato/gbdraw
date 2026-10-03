@@ -1,11 +1,10 @@
-import { serializeCleanSvg } from '../../services/svg-serialization.js';
 import {
   applyCanvasPaddingToSvg,
   bindCompositionMetadata,
   compositionUserDeltas
 } from './composition-actions.js';
 
-export const createLegendCanvasActions = ({ state }) => {
+export const createLegendCanvasActions = ({ state, previewRuntime = null }) => {
   const {
     svgContainer,
     canvasPadding,
@@ -17,28 +16,10 @@ export const createLegendCanvasActions = ({ state }) => {
     legendCurrentOffset,
     plotTitleAutoTransform,
     plotTitleUserOffset,
-    generatedLegendPosition,
-    selectedResultIndex,
-    results,
-    skipCaptureBaseConfig,
-    skipPositionReapply
+    generatedLegendPosition
   } = state;
 
   const currentSvg = () => svgContainer.value?.querySelector?.('svg') || null;
-
-  const persistCurrentSvg = (svg = currentSvg()) => {
-    const index = selectedResultIndex.value;
-    if (!svg || index < 0 || index >= results.value.length) return false;
-    skipCaptureBaseConfig.value = true;
-    skipPositionReapply.value = true;
-    const nextResults = [...results.value];
-    nextResults[index] = {
-      ...results.value[index],
-      content: serializeCleanSvg(svg)
-    };
-    results.value = nextResults;
-    return true;
-  };
 
   // One canvas padding applies to every Result (D-09, PD-OI-064): Generate
   // applies it before the candidate is published, and a displayed Result
@@ -50,7 +31,7 @@ export const createLegendCanvasActions = ({ state }) => {
     if (!svg) return false;
     bindCompositionMetadata(svg);
     if (!applyCanvasPaddingToSvg(svg, canvasPadding)) return false;
-    return persistCurrentSvg(svg);
+    return Boolean(previewRuntime?.commitActiveResultEdit('canvas-padding'));
   };
 
   const resetCanvasPadding = () => {
@@ -128,7 +109,6 @@ export const createLegendCanvasActions = ({ state }) => {
     applyCanvasPadding,
     captureBaseConfig,
     captureOriginalStroke,
-    persistCurrentSvg,
     resetCanvasPadding
   };
 };

@@ -11,18 +11,20 @@ export const createLegendLayout = ({
   state,
   legendActions,
   history = null,
+  previewRuntime = null,
   similarityAlignmentLifecycle = null
 }) => {
   const diagramActions = createDiagramDragActions({
     state,
     history,
+    previewRuntime,
     similarityAlignmentLifecycle
   });
-  const canvasActions = createLegendCanvasActions({ state });
+  const canvasActions = createLegendCanvasActions({ state, previewRuntime });
   const repositionActions = createLegendRepositionActions({
     state,
     legendActions,
-    diagramActions
+    previewRuntime
   });
 
   const resetAllPositions = () => {
@@ -33,7 +35,7 @@ export const createLegendLayout = ({
     diagramActions.resetLengthBarPosition();
     const binding = resetCompositionUserDeltas(svg);
     repositionActions.syncStateFromComposition(svg, binding);
-    canvasActions.persistCurrentSvg(svg);
+    previewRuntime?.commitActiveResultEdit('layout-position-reset');
   };
 
   const reconcileCompositionUserDeltas = (deltas) => {
@@ -44,7 +46,7 @@ export const createLegendLayout = ({
     const { binding, changed } = applyCompositionUserDeltas(svg, deltas);
     if (!changed) return false;
     repositionActions.syncStateFromComposition(svg, binding);
-    canvasActions.persistCurrentSvg(svg);
+    previewRuntime?.commitActiveResultEdit('layout-composition-reconcile');
     return true;
   };
 

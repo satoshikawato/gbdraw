@@ -1,8 +1,6 @@
 import { normalizeUserFacingError } from '../services/error-normalization.js';
 import {
-  filterFeatureFillTargets,
   getFeatureElementIndex,
-  getFeatureIdentity,
   normalizeFeatureIdentity
 } from './feature-dom.js';
 import {
@@ -728,14 +726,6 @@ export const createPreviewRuntime = ({ state, serializeSvg }) => {
     runtime.lastInvalidationReason = String(reason || 'unknown');
   };
 
-  const markActiveResultDirty = (reason = 'preview-edit') => {
-    const runtime = activeRuntime || ensureRuntimeForCurrentSvg();
-    if (!runtime?.svg) return false;
-    runtime.dirty = true;
-    runtime.dirtyReasons.add(String(reason || 'preview-edit'));
-    return true;
-  };
-
   const flushActiveResult = ({ force = false, markIncremental = true } = {}) => {
     const runtime = activeRuntime || (force ? ensureRuntimeForCurrentSvg() : null);
     if (!runtime?.svg) return false;
@@ -820,25 +810,6 @@ export const createPreviewRuntime = ({ state, serializeSvg }) => {
     return byId ? [byId] : [];
   };
 
-  const applyFeatureFillChanges = (changes, { reason = 'feature-fill' } = {}) => {
-    const normalized = normalizeChanges(changes);
-    if (normalized.length === 0) return false;
-
-    let updated = 0;
-    normalized.forEach((change) => {
-      const color = String(change?.color || '').trim();
-      if (!color) return;
-      filterFeatureFillTargets(getFeatureElements(change.featureId)).forEach((element) => {
-        if (element.getAttribute?.('fill') === color) return;
-        element.setAttribute('fill', color);
-        updated += 1;
-      });
-    });
-
-    if (updated > 0) markActiveResultDirty(reason);
-    return updated > 0;
-  };
-
   const applyFeatureVisibilityChanges = (changes, { reason = 'feature-visibility' } = {}) => {
     const normalized = normalizeChanges(changes);
     if (normalized.length === 0) return false;
@@ -864,9 +835,13 @@ export const createPreviewRuntime = ({ state, serializeSvg }) => {
   };
 
   // R1: the one commit for an editor's edit of the displayed Result's SVG.
-  // Serializes the mounted root into its Result; unchanged content is not written.
+  // Serializes the mounted root into its Result at once, so no edit waits for
+  // a Result switch; unchanged content is not written.
   const commitActiveResultEdit = (reason) => {
-    if (!markActiveResultDirty(reason)) return false;
+    const runtime = activeRuntime || ensureRuntimeForCurrentSvg();
+    if (!runtime?.svg) return false;
+    runtime.dirty = true;
+    runtime.dirtyReasons.add(String(reason || 'preview-edit'));
     return flushActiveResult();
   };
 
@@ -883,38 +858,8 @@ export const createPreviewRuntime = ({ state, serializeSvg }) => {
     return commitActiveResultEdit('editor-intent-display');
   };
 
-  const applyFeatureStrokeChanges = (changes, { reason = 'feature-stroke' } = {}) => {
-    const normalized = normalizeChanges(changes);
-    if (normalized.length === 0) return false;
-
-    let updated = 0;
-    normalized.forEach((change) => {
-      const strokeColor = String(change?.strokeColor || '').trim();
-      const strokeWidth = change?.strokeWidth;
-      const hasStrokeWidth = strokeWidth !== null && strokeWidth !== undefined && strokeWidth !== '';
-      getFeatureElements(change.featureId).forEach((element) => {
-        let changed = false;
-        if (strokeColor && element.getAttribute?.('stroke') !== strokeColor) {
-          element.setAttribute('stroke', strokeColor);
-          changed = true;
-        }
-        const normalizedWidth = hasStrokeWidth ? String(Number(strokeWidth)) : '';
-        if (hasStrokeWidth && element.getAttribute?.('stroke-width') !== normalizedWidth) {
-          element.setAttribute('stroke-width', normalizedWidth);
-          changed = true;
-        }
-        if (changed) updated += 1;
-      });
-    });
-
-    if (updated > 0) markActiveResultDirty(reason);
-    return updated > 0;
-  };
-
   return {
     acceptReadyReceipt,
-    applyFeatureFillChanges,
-    applyFeatureStrokeChanges,
     applyEditorOperations,
     applyFeatureVisibilityChanges,
     bindMountedResult,
@@ -930,7 +875,6 @@ export const createPreviewRuntime = ({ state, serializeSvg }) => {
     invalidateReadyReceipt,
     invalidatePreviewIndexes,
     isActiveResultReady,
-    markActiveResultDirty,
     mountResultSvg,
     registerReadinessExpectation,
     restorePreviousSelectedResult,
