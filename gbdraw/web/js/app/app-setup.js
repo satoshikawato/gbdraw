@@ -152,8 +152,14 @@ import {
   projectLinearComparisonLosatpModeSelection,
   projectLinearComparisonUi
 } from './comparison-ui.js';
-import { circularDiscoveryForInput, discoverGffFastaRecords, discoverSequenceRecords } from './record-discovery.js';
 import {
+  circularDiscoveryForInput,
+  discoverComparisonSequenceRecordLabel,
+  discoverGffFastaRecords,
+  discoverSequenceRecords
+} from './record-discovery.js';
+import {
+  applyComparisonSequenceRecordLabel,
   conservationSourceDescriptors,
   defaultConservationSeriesLabel,
   moveConservationSeriesEntry,
@@ -2081,6 +2087,7 @@ export const createAppSetup = () => {
   const openCircularConservationComparisonFilePicker = () => {
     circularConservationFastaInput.value?.click();
   };
+  const pendingComparisonRecordLabels = new Set();
   const addCircularConservationComparisonFile = (event) => {
     const sessionBusy = sessionOperationAvailability();
     if (sessionBusy) return sessionBusy;
@@ -2092,6 +2099,19 @@ export const createAppSetup = () => {
     losatCacheInfo.value = [];
     syncCircularConservationSeries();
     if (target) target.value = '';
+    // D12: the Python ring reader names a GenBank or DDBJ row after it is added
+    // (a read failure keeps the file-name default; Generate reports it).
+    // Generate waits for these reads before it reads the row labels.
+    const pending = discoverComparisonSequenceRecordLabel({ file: selectedFile })
+      .then((recordLabel) => applyComparisonSequenceRecordLabel({
+        series: circularConservation.series,
+        sourceFiles: getCircularConservationSourceFiles(),
+        file: selectedFile,
+        recordLabel
+      }))
+      .catch(() => false)
+      .finally(() => pendingComparisonRecordLabels.delete(pending));
+    pendingComparisonRecordLabels.add(pending);
   };
   const setCircularConservationCompanionFile = (sourceIndex, event) => {
     const sessionBusy = sessionOperationAvailability();
@@ -2307,6 +2327,7 @@ export const createAppSetup = () => {
   } = createRunAnalysis({
     state,
     rulePreparation,
+    settleComparisonRecordLabels: () => Promise.allSettled([...pendingComparisonRecordLabels]),
     isCurrentFeature: recordDisplayControls.isCurrentFeature,
     serializeCanonicalFiles: (comparisonPlanSnapshot, linearRecordCatalog, runState) => (
       serializeActiveRenderFiles(runState.mode.value, runState, {

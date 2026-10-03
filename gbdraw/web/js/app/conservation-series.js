@@ -173,6 +173,22 @@ export const reconcileConservationSeries = ({
   return nextSeries;
 };
 
+// D12: a row added from a GenBank or DDBJ file takes the label the file names
+// itself (first record's DEFINITION, then organism), read by the Python ring
+// reader. Only the row's file-name default is replaced, so a typed label wins;
+// a FASTA file names no label and keeps the file-name default.
+export const applyComparisonSequenceRecordLabel = ({ series, sourceFiles, file, recordLabel }) => {
+  const label = String(recordLabel ?? '').trim();
+  if (!label || !file || !Array.isArray(series)) return false;
+  const descriptor = conservationSourceDescriptors(sourceFiles).find((candidate) => candidate.file === file);
+  const entry = descriptor
+    ? series.find((candidate) => candidate?.sourceKey === descriptor.sourceKey)
+    : null;
+  if (!entry || String(entry.label ?? '').trim() !== descriptor.defaultLabel) return false;
+  entry.label = label;
+  return true;
+};
+
 export const orderedConservationSources = (sourceFiles, circularConservation) => {
   const descriptors = conservationSourceDescriptors(sourceFiles);
   const legacyLabels = parseConservationLabelText(circularConservation?.labels);

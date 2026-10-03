@@ -595,12 +595,15 @@ comparison uses the displayed Circular record as the search subject and each
 file under **Comparison sequence files** as a query. A comparison file is FASTA,
 GenBank, or DDBJ, and all records of one file are one genome. The diagram worker
 reads it with the reader of `--conservation_sequence`, so a ring has the CLI raw
-cache key for every format and FASTA layout. A new row is labelled with its file
-name without the extension. Without `--conservation_labels`, the CLI labels a
-FASTA ring with its file name and a GenBank or DDBJ ring with its DEFINITION
-(or organism); the Source recipe passes the Web labels explicitly. **Ring
-Width** and **Ring Gap** control the ordered evidence tracks. **Save Raw LOSAT
-TSV** exports generated search rows.
+cache key for every format and FASTA layout. A row added from a GenBank or DDBJ
+file is labelled like the CLI ring without `--conservation_labels`: the first
+record's DEFINITION, or its organism when the DEFINITION is empty. The worker
+reads the label after the row appears, Generate waits for it, and a typed label
+is kept. A FASTA row, or a flat file with neither field, is labelled with its
+file name without the extension; the CLI keeps the extension. A cleared label
+field uses the file name shown as its placeholder. The Source recipe passes the
+Web labels explicitly. **Ring Width** and **Ring Gap** control the ordered
+evidence tracks. **Save Raw LOSAT TSV** exports generated search rows.
 
 See [Comparison programs, thresholds, and result
 semantics](comparison-programs-thresholds-and-results.md) for search boundaries,

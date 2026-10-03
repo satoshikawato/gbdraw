@@ -60,12 +60,68 @@ def test_helper_gives_one_query_for_fasta_genbank_and_ddbj(tmp_path: Path) -> No
     body = fasta.splitlines()[1:]
     assert all(len(line) <= 60 for line in body) and "".join(body).isupper()
     assert [result["recordIds"] for result in results] == [["NC_002333.2"]] * 3
-    # The default label of the shared reader (FASTA: file name; flat file: DEFINITION).
-    assert [result["label"] for result in results] == [
-        "danio-loose.fa",
+    # The label the flat file names (DEFINITION); a FASTA file names none and the
+    # Web keeps its file-name rule (the helper sees only a staged file name).
+    assert [result["recordLabel"] for result in results] == [
+        None,
         "Danio rerio mitochondrion, complete genome",
         "Danio rerio mitochondrion, complete genome",
     ]
+    assert "label" not in results[0]
+
+
+def _flat_file_variant(path: Path, *, definition: str, organism: str | None) -> Path:
+    text = DANIO_GENBANK.read_text(encoding="utf-8")
+    head, _sep, tail = text.partition("DEFINITION")
+    rest = tail.split("\nACCESSION", 1)[1]
+    text = head + f"DEFINITION  {definition}\nACCESSION" + rest
+    if organism is None:
+        # Drop the SOURCE block (SOURCE, ORGANISM and its lineage lines).
+        kept, in_source = [], False
+        for line in text.splitlines():
+            if line.startswith("SOURCE"):
+                in_source = True
+            elif in_source and line[:1] not in (" ", ""):
+                in_source = False
+            if not in_source:
+                kept.append(line)
+        text = "\n".join(kept) + "\n"
+    elif organism != "Danio rerio":
+        text = text.replace("  ORGANISM  Danio rerio", f"  ORGANISM  {organism}", 1)
+    path.write_text(text, encoding="utf-8")
+    return path
+
+
+@pytest.mark.parametrize(
+    ("definition", "organism", "expected"),
+    [
+        ("Danio rerio mitochondrion, complete genome.", "Danio rerio",
+         "Danio rerio mitochondrion, complete genome"),
+        (".", "Danio rerio", "Danio rerio"),
+        (".", "Synthetic organism c", "Synthetic organism c"),
+        (".", None, None),
+    ],
+)
+def test_helper_record_label_is_the_cli_ring_default(
+    tmp_path: Path, definition: str, organism: str | None, expected: str | None
+) -> None:
+    """D12: the Web ring default is the CLI default the flat file names itself."""
+
+    path = _flat_file_variant(tmp_path / "ring.gb", definition=definition, organism=organism)
+    result = json.loads(read_comparison_sequence_json(str(path)))
+    assert result["recordLabel"] == expected
+    cli_label = read_comparison_sequence_file(path).label
+    assert cli_label == (expected if expected is not None else "ring.gb")
+
+
+def test_helper_record_label_reads_the_first_record(tmp_path: Path) -> None:
+    first = _flat_file_variant(tmp_path / "first.gb", definition="First record.", organism="Danio rerio")
+    second = _flat_file_variant(tmp_path / "second.gb", definition="Second record.", organism="Danio rerio")
+    path = tmp_path / "two-records.gb"
+    path.write_text(first.read_text(encoding="utf-8") + second.read_text(encoding="utf-8"), encoding="utf-8")
+    result = json.loads(read_comparison_sequence_json(str(path)))
+    assert len(result["recordIds"]) == 2
+    assert result["recordLabel"] == read_comparison_sequence_file(path).label == "First record"
 
 
 @pytest.mark.circular
