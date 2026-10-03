@@ -88,22 +88,18 @@ export const setupHistoryInputs = ({ root, history, nextTick }) => {
   };
 
   const findControl = (eventTarget) =>
-    eventTarget?.closest?.('input, textarea, select, button, [contenteditable="true"], .upload-zone') || null;
+    eventTarget?.closest?.('input, textarea, select, button, [contenteditable="true"]') || null;
 
   // R11: a discrete control begins in the capture phase of its committing
-  // event (checkbox and radio: change; button: click), so a pointer, its label,
-  // and the keyboard record the same one step. Text-like controls begin on focus.
+  // event (checkbox, radio, and file input: change; button: click), so a
+  // pointer, its label, the keyboard, and a picker opened by another button
+  // record the same one step. Text-like controls begin on focus.
   const onPointerDown = (event) => {
     const target = findControl(event.target);
     if (!target || isIgnoredTarget(target) || target.closest?.('button')) return;
-    if (target.classList?.contains('upload-zone')) {
-      const input = target.querySelector?.('input[type="file"]');
-      if (input) void beginForElement(input);
-      return;
-    }
     const tag = String(target.tagName || '').toLowerCase();
     const type = String(target.type || '').toLowerCase();
-    if (tag === 'select' || type === 'color' || type === 'file') {
+    if (tag === 'select' || type === 'color') {
       void beginForElement(target);
     }
   };
@@ -130,7 +126,7 @@ export const setupHistoryInputs = ({ root, history, nextTick }) => {
     const target = findControl(event.target);
     if (!target || isIgnoredTarget(target)) return;
     const type = String(target.type || '').toLowerCase();
-    if (type === 'checkbox' || type === 'radio') void beginForElement(target);
+    if (type === 'checkbox' || type === 'radio' || type === 'file') void beginForElement(target);
   };
 
   const onChange = (event) => {

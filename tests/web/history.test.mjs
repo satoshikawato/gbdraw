@@ -1512,6 +1512,15 @@ const createLayoutPreferences = () => ({
   assert.equal(Object.prototype.hasOwnProperty.call(intent.files, 'linearCanonicalComparisons'), false);
   assert.equal(Object.prototype.hasOwnProperty.call(intent.files, 'c_conservation_sequence_sources'), false);
   assert.equal(Object.prototype.hasOwnProperty.call(intent.files, 'c_conservation_blasts'), false);
+
+  // B21: with uploaded BLAST rows, the optional comparison sequence is a user
+  // choice, so the intent holds it and Undo restores it.
+  state.files.c_conservation_blasts_source = null;
+  const uploadIntent = await snapshots.buildHistoryIntent();
+  assert.equal(uploadIntent.files.c_conservation_sequence_sources.length, 1);
+  state.files.c_conservation_sequence_sources = [];
+  await snapshots.applyHistoryIntent(uploadIntent, { changes: [{ path: ['files'] }] });
+  assert.deepEqual(state.files.c_conservation_sequence_sources.map((file) => file?.name), ['generated-source.fa']);
 }
 
 {

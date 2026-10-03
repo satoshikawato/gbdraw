@@ -349,9 +349,10 @@ Circular and Linear editors), `tests/web/circular-track-slots.test.mjs`, and
   open intent. `begin`, `beginCheckpoint`, `beginArtifactReplacement`,
   `runUndoableCommand`, `undo`, and `redo` share it.
 - A discrete control begins in the capture phase of the event that commits its
-  value: `change` for a checkbox or radio, `click` for a button. A text control
-  begins on focus. The pointer, the label, and the keyboard record the same one
-  step (`app/history-inputs.js`).
+  value: `change` for a checkbox, radio, or file input, `click` for a button. A
+  text control begins on focus. The pointer, the label, the keyboard, and a file
+  picker opened by another button record the same one step
+  (`app/history-inputs.js`).
 - Undo, Redo, and the header buttons share one reactive availability
   (`historyAvailability`), busy while an artifact replacement or checkpoint is
   open or an action owns the open intent.
