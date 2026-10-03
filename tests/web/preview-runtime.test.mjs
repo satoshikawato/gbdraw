@@ -161,33 +161,27 @@ assert.equal(resultReplacementCount, 2);
 assert.equal(state.results.value[0], resultAfterBulkEdit);
 assert.equal(state.skipCaptureBaseConfig.value, false);
 
-assert.equal(runtime.applyFeatureFillChanges([{ featureId: 'feature-b', color: '#111111' }]), false);
-featureBBlock.setAttribute('stroke', '#222222');
-featureBBlock.setAttribute('stroke-width', '3');
-featureBConnector.setAttribute('stroke', '#222222');
-featureBConnector.setAttribute('stroke-width', '3');
-assert.equal(runtime.applyFeatureStrokeChanges([{
-  featureId: 'feature-b',
-  strokeColor: '#222222',
-  strokeWidth: 3
-}]), false);
+// An editor commit writes at once: the runtime is never left dirty, so a
+// Result switch has nothing left to persist.
 assert.equal(runtime.getActiveRuntime().dirty, false);
 assert.equal(runtime.flushActiveResult(), false);
 assert.equal(serializeCount, 2);
 assert.equal(state.skipCaptureBaseConfig.value, false);
-state.skipCaptureBaseConfig.value = false;
-assert.equal(runtime.flushActiveResult(), false);
-assert.equal(serializeCount, 2);
 
-runtime.applyFeatureFillChanges([{ featureId: 'feature-b', color: '#abcdef' }]);
-assert.equal(featureBBlock.getAttribute('fill'), '#abcdef');
-assert.equal(featureBConnector.getAttribute('fill'), 'none');
+featureBBlock.setAttribute('fill', '#abcdef');
+assert.equal(runtime.commitActiveResultEdit('feature-fill'), true);
+assert.equal(serializeCount, 3);
+assert.equal(resultReplacementCount, 3);
+assert.equal(state.results.value[0].content, '<svg data-count="3" data-elements="3"></svg>');
+assert.equal(state.skipCaptureBaseConfig.value, true);
+assert.equal(runtime.getActiveRuntime().dirty, false);
+state.skipCaptureBaseConfig.value = false;
 runtime.selectResult(1);
 assert.equal(serializeCount, 3);
 assert.equal(resultReplacementCount, 3);
 assert.equal(state.skipCaptureBaseConfig.value, false);
 assert.equal(state.selectedResultIndex.value, 1);
-assert.equal(state.results.value[0].content, '<svg data-count="3" data-elements="3"></svg>');
+assert.equal(runtime.getActiveRuntime(), null);
 
 const legacyConnector = new FakeFeatureElement('feature-c__line1', {
   featureId: '',
@@ -205,10 +199,11 @@ delete legacyBlock.attributes['data-gbdraw-feature-id'];
 delete legacyBlock.attributes['data-gbdraw-feature-part'];
 const legacySvg = makeSvg([legacyConnector, legacyBlock]);
 state.svgContainer.value = { querySelector: (selector) => (selector === 'svg' ? legacySvg : null) };
-runtime.mountResultSvg(1, legacySvg);
-runtime.applyFeatureFillChanges([{ featureId: 'feature-c', color: '#fedcba' }]);
-assert.equal(legacyBlock.getAttribute('fill'), '#fedcba');
-assert.equal(legacyConnector.getAttribute('fill'), 'none');
+assert.equal(runtime.applyFeatureVisibilityChanges([{ featureId: 'feature-c', mode: 'off' }]), true);
+assert.equal(legacyBlock.getAttribute('display'), 'none');
+assert.equal(legacyConnector.getAttribute('display'), 'none');
+assert.equal(runtime.getActiveRuntime().resultIndex, 1);
+assert.equal(state.results.value[1].content, '<svg data-count="4" data-elements="2"></svg>');
 
 const structuralMetrics = [];
 const lifecycleEvents = [];

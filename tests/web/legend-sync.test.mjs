@@ -66,7 +66,7 @@ assert.doesNotMatch(repositionSource, /data-horizontal-viewbox|data-vertical-vie
 assert.doesNotMatch(repositionSource, /0\.025|0\.85|0\.875|0\.75/);
 assert.match(
   legendLayoutSource,
-  /resetAllPositions[\s\S]+resetCompositionUserDeltas[\s\S]+persistCurrentSvg\(svg\)/
+  /resetAllPositions[\s\S]+resetCompositionUserDeltas[\s\S]+commitActiveResultEdit\('layout-position-reset'\)/
 );
 assert.match(entryActionsSource, /setLegendGeometryChangedHandler/);
 assert.ok((entryActionsSource.match(/onLegendGeometryChanged\(\);/g) || []).length >= 4);

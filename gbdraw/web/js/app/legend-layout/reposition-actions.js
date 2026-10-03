@@ -1,4 +1,3 @@
-import { serializeCleanSvg } from '../../services/svg-serialization.js';
 import {
   applyCompositionEdit,
   bindCompositionMetadata,
@@ -23,7 +22,8 @@ const setLegendVariant = (legendGroup, side) => {
 
 export const createLegendRepositionActions = ({
   state,
-  legendActions
+  legendActions,
+  previewRuntime = null
 }) => {
   const {
     svgContent,
@@ -36,30 +36,12 @@ export const createLegendRepositionActions = ({
     legendCurrentOffset,
     plotTitleAutoTransform,
     plotTitleUserOffset,
-    canvasPadding,
-    selectedResultIndex,
-    results,
-    skipCaptureBaseConfig,
-    skipPositionReapply
+    canvasPadding
   } = state;
   const {
     reflowDualLegendLayout,
     reflowSingleLegendLayout
   } = legendActions;
-  const persist = (svg) => {
-    skipCaptureBaseConfig.value = true;
-    skipPositionReapply.value = true;
-    const index = selectedResultIndex.value;
-    if (index >= 0 && index < results.value.length) {
-      const nextResults = [...results.value];
-      nextResults[index] = {
-        ...results.value[index],
-        content: serializeCleanSvg(svg)
-      };
-      results.value = nextResults;
-    }
-  };
-
   const syncStateFromComposition = (svg, binding = bindCompositionMetadata(svg)) => {
     const { metadata } = binding;
     const deltas = compositionUserDeltas(svg);
@@ -136,7 +118,7 @@ export const createLegendRepositionActions = ({
 
     const nextBinding = applyCompositionEdit(svg, { legendSide: newPosition, canvasPadding });
     syncStateFromComposition(svg, nextBinding);
-    persist(svg);
+    previewRuntime?.commitActiveResultEdit('legend-position');
     return true;
   };
 

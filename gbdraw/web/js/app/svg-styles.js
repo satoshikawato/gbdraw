@@ -12,7 +12,6 @@ import {
 } from './feature-editor/svg-actions.js';
 import { isFeatureFillTarget } from './feature-dom.js';
 import { PAIRWISE_LEGEND_SELECTOR, parseTransformXY } from './legend/utils.js';
-import { serializeCleanSvg } from '../services/svg-serialization.js';
 import { getFeatureOverride } from '../services/feature-override-identity.js';
 import { getGroupsByBaseIds } from '../services/svg-result-normalization.js';
 import { resolveTrackSlotSkewColorValue } from './track-slot-colors.js';
@@ -40,7 +39,14 @@ const paletteColorKeysEqual = (left, right, keys) => keys.every(
   (key) => normalizeComparableColor(left?.[key]) === normalizeComparableColor(right?.[key])
 );
 
-export const createSvgStyles = ({ state, watch, nextTick, legendActions, rulePreparation }) => {
+export const createSvgStyles = ({
+  state,
+  watch,
+  nextTick,
+  legendActions,
+  rulePreparation,
+  previewRuntime = null
+}) => {
   const {
     svgContent,
     extractedFeatures,
@@ -50,9 +56,6 @@ export const createSvgStyles = ({ state, watch, nextTick, legendActions, rulePre
     featureColorOverrides,
     legendColorOverrides,
     pairwiseMatchFactors,
-    results,
-    selectedResultIndex,
-    skipCaptureBaseConfig,
     svgContainer,
     adv,
     mode,
@@ -60,16 +63,6 @@ export const createSvgStyles = ({ state, watch, nextTick, legendActions, rulePre
   } = state;
 
   const { getAllFeatureLegendGroups } = legendActions;
-
-  const persistSvgEdit = (svg) => {
-    skipCaptureBaseConfig.value = true;
-    const idx = selectedResultIndex.value;
-    if (idx >= 0 && results.value.length > idx) {
-      const nextResults = [...results.value];
-      nextResults[idx] = { ...results.value[idx], content: serializeCleanSvg(svg) };
-      results.value = nextResults;
-    }
-  };
 
   const updatePairwiseLegendGradientStops = (pairwiseLegend, colors) => {
     let updated = false;
@@ -356,9 +349,7 @@ export const createSvgStyles = ({ state, watch, nextTick, legendActions, rulePre
       });
     }
 
-    if (updatedCount > 0) {
-      persistSvgEdit(svg);
-    }
+    if (updatedCount > 0) previewRuntime?.commitActiveResultEdit('palette');
   };
 
   const applySpecificRulesToSvg = () => {
@@ -395,7 +386,7 @@ export const createSvgStyles = ({ state, watch, nextTick, legendActions, rulePre
     });
 
     if (updatedCount > 0) {
-      persistSvgEdit(svg);
+      previewRuntime?.commitActiveResultEdit('specific-rules');
       console.log(`Applied specific rules: updated ${updatedCount} elements`);
     }
   };
@@ -465,7 +456,7 @@ export const createSvgStyles = ({ state, watch, nextTick, legendActions, rulePre
     }
 
     if (updated) {
-      persistSvgEdit(svg);
+      previewRuntime?.commitActiveResultEdit('track-visibility');
       console.log('Track visibility updated');
     }
   };

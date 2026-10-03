@@ -6,8 +6,9 @@
 // Result's record (FE-05). Scoped color and visibility reach Result 1; label
 // edits stay with their feature (FE-01 to FE-03, PV-09). A Label TSV imported on
 // Result 1 reaches Result 2 the same way, and Undo and Redo reach both Results
-// as one step (B6, R3). The grid and Linear topologies are in
-// live-edit-generate-equivalence (G-A).
+// as one step (B6, R3). Every editor edit kind commits the displayed Result at
+// once, so none waits for a Result switch (R1). The grid and Linear topologies
+// are in live-edit-generate-equivalence (G-A).
 const { test, expect } = require('@playwright/test');
 const { generateAndWaitForResult } = require('./helpers/app-lifecycle.cjs');
 const { editFeature, openBatch, settle } = require('./helpers/audit-browser.cjs');
@@ -239,4 +240,123 @@ test('Circular batch: a Label TSV imported on Result 1 reaches Result 2 live, th
   await generateAndWaitForResult(page);
   await settle(page);
   expect.soft(await labelViolations(page, 'Generate', ids, IMPORTED_LABELS)).toEqual([]);
+});
+
+// R1 (A1): each editor edit kind writes the displayed Result when it is made,
+// so nothing stays pending for a Result switch to persist. Right after the
+// edit, the committed content changed and equals the mounted SVG; after a
+// switch to Result 1 and back, Result 2 is not reverted and still matches its
+// mounted SVG. (Displaying a Result projects the editor intent onto it, D-07,
+// so its bytes may change on the way back.)
+const committed = (page) => page.evaluate(async () => {
+  const { serializeCleanSvg } = await import('/gbdraw/web/js/services/svg-serialization.js');
+  const app = window.__GBDRAW_APP__;
+  const index = app.selectedResultIndex;
+  const content = app.results[index].content;
+  const mounted = serializeCleanSvg(app.svgContainer.querySelector('svg'));
+  return { index, content, mounted, matchesMounted: mounted === content };
+});
+// Where the committed content and the mounted SVG first differ.
+const firstDiff = ({ content, mounted }) => {
+  let at = 0;
+  while (at < content.length && content[at] === mounted[at]) at += 1;
+  return `at ${at}: ${JSON.stringify(content.slice(at, at + 120))} vs ${JSON.stringify(mounted.slice(at, at + 120))}`;
+};
+
+const dragRole = (role, dx, dy) => (page) => page.evaluate(async ({ targetRole, deltaX, deltaY }) => {
+  const app = window.__GBDRAW_APP__;
+  app.layoutRepositionMode = true;
+  await window.Vue.nextTick();
+  const svg = app.svgContainer.querySelector('svg');
+  const candidates = [...svg.querySelectorAll(`[data-gbdraw-composition-role="${targetRole}"]`)];
+  const target = candidates.find((element) => element.id !== 'length_bar') || candidates[0];
+  if (!target) throw new Error(`no ${targetRole} drag target`);
+  const bounds = target.getBoundingClientRect();
+  const x = bounds.left + Math.min(bounds.width / 2, 8);
+  const y = bounds.top + Math.min(bounds.height / 2, 8);
+  const event = (type, clientX, clientY, buttons) => new MouseEvent(type, {
+    bubbles: true, cancelable: true, clientX, clientY, buttons, view: window
+  });
+  const frame = () => new Promise((resolve) => requestAnimationFrame(resolve));
+  target.dispatchEvent(event('mousedown', x, y, 1));
+  await frame();
+  const moveTarget = targetRole === 'legend' ? svg : document;
+  moveTarget.dispatchEvent(event('mousemove', x + deltaX, y + deltaY, 1));
+  await frame();
+  moveTarget.dispatchEvent(event('mouseup', x + deltaX, y + deltaY, 0));
+  await new Promise((resolve) => setTimeout(resolve, 100));
+}, { targetRole: role, deltaX: dx, deltaY: dy });
+
+const onApp = (action, arg = null) => (page) => page.evaluate(action, arg);
+const SWITCH_EDITS = [
+  ['feature fill', (page) => editFeature(page, 'TESTB_0001', { fill: RED })],
+  ['feature stroke', onApp(async () => {
+    const app = window.__GBDRAW_APP__;
+    await app.openFeatureEditorFromList(app.extractedFeatures.find((item) => item.locus_tag === 'TESTB_0002'), null);
+    await app.updateClickedFeatureStroke('#1d3557', 2.5);
+    app.clickedFeature = null;
+  })],
+  ['feature visibility', (page) => editFeature(page, 'TESTB_0004', { visibility: 'off' })],
+  ['label text', (page) => editFeature(page, 'TESTB_0003', { labelText: 'SWITCH_LABEL' })],
+  ['legend entry color', onApp((color) => {
+    const app = window.__GBDRAW_APP__;
+    return app.updateLegendEntryColor(app.legendEntries.findIndex((entry) => entry.caption === 'tRNA'), color);
+  }, TEAL)],
+  ['legend stroke', onApp(() => {
+    const app = window.__GBDRAW_APP__;
+    return app.updateLegendEntryStrokeWidth(app.legendEntries.findIndex((entry) => entry.caption === 'tRNA'), 2);
+  })],
+  ['legend sort', onApp(() => window.__GBDRAW_APP__.sortLegendEntries('desc'))],
+  ['legend drag', dragRole('legend', 30, 20)],
+  ['diagram drag', dragRole('primary', 25, 15)],
+  // A caption change resizes the Legend, which repositions it in place.
+  ['legend rename', onApp(async () => {
+    const app = window.__GBDRAW_APP__;
+    await app.renameLegendEntry(app.legendEntries.findIndex((entry) => entry.caption === 'tRNA'), 'transfer RNA');
+  })],
+  ['reset positions', onApp(() => window.__GBDRAW_APP__.resetAllPositions())],
+  ['canvas padding', onApp(() => { window.__GBDRAW_APP__.canvasPadding.right = 40; })],
+  ['palette color', onApp(() => {
+    const app = window.__GBDRAW_APP__;
+    app.paletteInstantPreviewEnabled = true;
+    app.currentColors.CDS = '#457b9d';
+  })],
+  ['track visibility', onApp(() => { window.__GBDRAW_APP__.form.suppress_gc = true; })]
+];
+
+test('Circular batch: each editor edit kind is committed when made, not by the Result switch', async ({ page }) => {
+  test.setTimeout(600_000);
+  await openBatch(page);
+  await show(page, 1);
+  const failed = [];
+  for (const [name, apply] of SWITCH_EDITS) {
+    await test.step(name, async () => {
+      const before = await committed(page);
+      await apply(page);
+      await settle(page);
+      const edited = await committed(page);
+      if (edited.index !== 1) failed.push(`${name}: displays Result ${edited.index + 1}`);
+      if (edited.content === before.content) failed.push(`${name}: Result 2 content unchanged after the edit`);
+      if (!edited.matchesMounted) failed.push(`${name}: Result 2 content differs from the mounted SVG ${firstDiff(edited)}`);
+      await show(page, 0);
+      await show(page, 1);
+      const back = await committed(page);
+      if (back.content === before.content) failed.push(`${name}: Result 2 reverted by the switch`);
+      if (!back.matchesMounted) failed.push(`${name}: after the switch, Result 2 differs from the mounted SVG ${firstDiff(back)}`);
+    });
+  }
+  expect(failed).toEqual([]);
+
+  // History reconciles the displayed Result in place: an Undo of a Result 2
+  // drag made while Result 1 is shown leaves each Result matching its mounted SVG.
+  await dragRole('primary', -20, 10)(page);
+  await settle(page);
+  await show(page, 0);
+  await page.evaluate(() => window.__GBDRAW_HISTORY__.undo());
+  await settle(page);
+  for (const index of [0, 1]) {
+    await show(page, index);
+    const state = await committed(page);
+    expect.soft(state.matchesMounted, `after Undo, Result ${index + 1}: ${firstDiff(state)}`).toBe(true);
+  }
 });

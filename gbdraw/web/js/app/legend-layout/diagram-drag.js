@@ -9,16 +9,15 @@ import {
   isMultiRecordCanvasSvg,
   isRecordGroup
 } from '../record-groups.js';
-import { serializeCleanSvg, setClassToken } from '../../services/svg-serialization.js';
+import { setClassToken } from '../../services/svg-serialization.js';
 
 export const createDiagramDragActions = ({
   state,
   history = null,
+  previewRuntime = null,
   similarityAlignmentLifecycle = null
 }) => {
   const {
-    results,
-    selectedResultIndex,
     svgContainer,
     diagramElements,
     diagramElementIds,
@@ -35,8 +34,7 @@ export const createDiagramDragActions = ({
     plotTitleAutoTransform,
     plotTitleUserOffset,
     layoutRepositionMode,
-    zoom,
-    skipCaptureBaseConfig
+    zoom
   } = state;
 
   const LEGEND_GROUP_IDS = new Set([
@@ -88,16 +86,6 @@ export const createDiagramDragActions = ({
     diagramDragTxPromise = history?.begin
       ? history.begin(label, { source: 'diagram-drag', owner: Symbol(label) })
       : null;
-  };
-
-  const persistCurrentSvg = () => {
-    const svg = svgContainer.value?.querySelector?.('svg');
-    const idx = selectedResultIndex.value;
-    if (!svg || idx < 0 || results.value.length <= idx) return;
-    skipCaptureBaseConfig.value = true;
-    const nextResults = [...results.value];
-    nextResults[idx] = { ...results.value[idx], content: serializeCleanSvg(svg) };
-    results.value = nextResults;
   };
 
   const isLengthBarGroup = (group) => (group?.id || '') === 'length_bar';
@@ -475,7 +463,7 @@ export const createDiagramDragActions = ({
         moved: Math.abs(deltaX) > 1e-9 || Math.abs(deltaY) > 1e-9
       });
     }
-    persistCurrentSvg();
+    previewRuntime?.commitActiveResultEdit('diagram-drag');
     const tx = diagramDragTxPromise ? await diagramDragTxPromise : null;
     diagramDragTxPromise = null;
     if (tx && history?.commit) await history.commit(tx);
