@@ -348,6 +348,9 @@ CACHE_ARG_GOLDENS = {
     ("tlosatx", LosatSearchArgs(query_gencode=5, db_gencode=2)): [
         "--query-gencode", "5", "--db-gencode", "2",
     ],
+    # The Web passes a translation table only when the record sets one.
+    ("tlosatx", LosatSearchArgs(query_gencode=11)): ["--query-gencode", "11"],
+    ("tlosatx", LosatSearchArgs()): [],
     ("losatp", LosatSearchArgs(max_hsps=1, max_target_seqs=5)): [
         "--max-hsps-per-subject", "1", "--max-target-seqs", "5",
     ],
@@ -365,7 +368,6 @@ def test_cache_args_keep_the_web_v1_form(program: str, options: LosatSearchArgs)
     ("program", "options", "message"),
     [
         ("losatn", LosatSearchArgs(), "requires"),
-        ("tlosatx", LosatSearchArgs(query_gencode=1), "requires"),
         ("losatp", LosatSearchArgs(task="megablast"), "does not apply"),
         ("losatn", LosatSearchArgs(task="megablast", query_gencode=1), "does not apply"),
     ],

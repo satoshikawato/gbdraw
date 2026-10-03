@@ -111,7 +111,8 @@ LOSAT_PROGRAMS: Mapping[str, LosatProgram] = MappingProxyType(
             "translated TBLASTX",
             "translated nucleotide comparison",
             ("query_gencode", "db_gencode"),
-            frozenset({"query_gencode", "db_gencode"}),
+            # An unset table is the runtime default (1), as in the Web (D17).
+            frozenset(),
             ".fna",
         ),
         "losatp": LosatProgram(

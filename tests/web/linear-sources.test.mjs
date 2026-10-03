@@ -12,6 +12,11 @@ import {
   prepareLosatSourceBatches,
   splitLosatSourceResult
 } from '../../gbdraw/web/js/app/linear-sources.js';
+import { readFileSync } from 'node:fs';
+import {
+  buildLosatCachePayload,
+  extractLosatFastaFast
+} from '../../gbdraw/web/js/app/run-analysis.js';
 import {
   adoptCurrentSessionResources,
   createSessionResourceFileView
@@ -290,4 +295,81 @@ test('one-file records never search themselves without a request', async () => {
   }
   const identity = ({ batches }) => batches.map(({ query, subject, searchContext }) => [query.hash, subject.hash, searchContext]);
   assert.deepEqual(identity(oneFile), identity(twoFiles), 'file packaging does not change a two-record search');
+});
+
+// Shared vectors (design 3.6, D15): tests/test_losat_job_plan.py runs the same
+// cases against gbdraw.comparisons.losat_jobs, so the CLI and the Web search
+// the same databases under the same raw keys.
+const sharedVectors = (name) => JSON.parse(
+  readFileSync(new URL(`../fixtures/${name}`, import.meta.url), 'utf8')
+).cases;
+
+test('shared LOSAT FASTA extraction vectors', async () => {
+  for (const vector of sharedVectors('losat_fasta_extraction_cases.json')) {
+    const entry = await extractLosatFastaFast({
+      text: vector.text, fmt: vector.fmt, regionSpec: vector.regionSpec,
+      recordSelector: vector.recordSelector, reverseFlag: '0'
+    });
+    assert.deepEqual({
+      recordId: entry.recordId,
+      canonicalLength: entry.canonicalLength,
+      fasta: entry.fasta,
+      hash: await hashText(entry.fasta)
+    }, vector.expected, vector.name);
+  }
+});
+
+test('shared LOSAT job plan and nucleotide raw-key vectors', async () => {
+  for (const vector of sharedVectors('losat_job_plan_cases.json')) {
+    const files = new Map();
+    const records = vector.records.map((record) => {
+      if (!files.has(record.source)) files.set(record.source, { name: record.source });
+      return { uid: record.uid, gb: files.get(record.source), gff: null, fasta: null, losat_gencode: record.gencode };
+    });
+    // The buildLosatArgs rules of run-analysis.js for one record pair.
+    const buildArgs = (query, subject) => {
+      const args = [];
+      const push = (flag, value) => {
+        if (value !== null && value !== undefined && value !== '') args.push(flag, String(value));
+      };
+      if (vector.program === 'blastn') push('--task', vector.task);
+      else {
+        push('--query-gencode', vector.records[query].gencode);
+        push('--db-gencode', vector.records[subject].gencode);
+      }
+      return args;
+    };
+    const specs = vector.specs.map(([queryIndex, subjectIndex]) => ({ queryIndex, subjectIndex }));
+    const plan = await prepareLosatSourceBatches({
+      sequences: records, specs, getEntry: async (index) => ({ fasta: vector.records[index].fasta }),
+      buildArgs, hashText, protein: false
+    });
+    assert.equal(planLosatSourceJobs({ sequences: records, specs, buildArgs }).jobs.length, plan.batches.length);
+    assert.deepEqual(plan.batches.map((batch) => ({
+      scope: batch.scope,
+      args: batch.args,
+      specs: batch.specs.map((spec) => [spec.queryIndex, spec.subjectIndex]),
+      queryIndexes: batch.query.indexes,
+      subjectIndexes: batch.subject.indexes,
+      queryIds: Object.fromEntries([...batch.query.ids].map(([id, value]) => [id, [value.index, value.originalId]])),
+      subjectIds: Object.fromEntries([...batch.subject.ids].map(([id, value]) => [id, [value.index, value.originalId]])),
+      queryHash: batch.query.hash,
+      subjectHash: batch.subject.hash,
+      searchContext: batch.searchContext
+    })), vector.expected.jobs, vector.name);
+    const rawKeys = [];
+    for (const spec of specs) {
+      const payload = buildLosatCachePayload({
+        identityKind: 'nucleotide',
+        program: vector.program,
+        outfmt: '6',
+        args: buildArgs(spec.queryIndex, spec.subjectIndex),
+        queryCanonicalHash: await hashText(vector.records[spec.queryIndex].fasta),
+        subjectCanonicalHash: await hashText(vector.records[spec.subjectIndex].fasta),
+        searchContext: plan.bySpec.get(spec).searchContext
+      });
+      rawKeys.push([spec.queryIndex, spec.subjectIndex, await hashText(JSON.stringify(payload))]);
+    }
+    assert.deepEqual(rawKeys, vector.expected.rawKeys, vector.name);
+  }
 });
