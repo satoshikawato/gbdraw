@@ -9,10 +9,29 @@ from contextlib import ExitStack, contextmanager
 import gzip
 import math
 from pathlib import Path
+import sys
 from types import ModuleType
 from unittest.mock import patch
 
 from gbdraw.analysis import collinearity as cc, protein_colinearity as pc
+
+
+def _moved_runtime_global(node):
+    """Keep the frozen LOSAT runtime copies runnable.
+
+    The runtime left protein_colinearity for gbdraw.comparisons.losat_runtime
+    after S07.6, so the live module no longer provides its stdlib imports,
+    constants, or runtime class.
+    """
+    if isinstance(node, ast.Import):
+        return all(alias.name.split('.')[0] in sys.stdlib_module_names for alias in node.names)
+    if isinstance(node, ast.ImportFrom):
+        return node.module != '__future__' and (node.module or '').split('.')[0] in sys.stdlib_module_names
+    if isinstance(node, ast.ClassDef):
+        return node.name == 'ProteinBlastpRuntime'
+    return isinstance(node, ast.Assign) and any(
+        getattr(target, 'id', None) in {'_DEFAULT_LOSATP_BIN', '_BUNDLED_LOSATP_DIR'}
+        for target in node.targets)
 
 
 def frozen_module():
@@ -20,7 +39,8 @@ def frozen_module():
     module = ModuleType('protein_colinearity_s076')
     module.__dict__.update(vars(pc))
     tree = ast.parse(source)
-    tree.body = [node for node in tree.body if isinstance(node, ast.FunctionDef)]
+    tree.body = [node for node in tree.body
+                 if isinstance(node, ast.FunctionDef) or _moved_runtime_global(node)]
     exec(compile(tree, 'protein_colinearity_s076.py', 'exec'), module.__dict__)
     return module
 

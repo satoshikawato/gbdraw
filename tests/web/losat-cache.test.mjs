@@ -98,6 +98,25 @@ const legacyProteinEntry = {
 assert.equal(cache.classifyRawLosatCacheEntry(proteinEntry), 'protein-current');
 assert.equal(cache.classifyRawLosatCacheEntry(nucleotideEntry), 'nucleotide-current');
 assert.equal(cache.classifyRawLosatCacheEntry(legacyProteinEntry), 'protein-legacy');
+// The native runtime record (CLI sessions) is a non-key field: it neither
+// changes classification nor blocks a cache hit.
+const runtimeRecord = {
+  kind: 'losat', version: '0.1.0', source: 'bundled',
+  path: 'gbdraw/bin/linux-x86_64/losat', program: 'blastn', cli: 'v1'
+};
+assert.equal(
+  cache.classifyRawLosatCacheEntry({ ...proteinEntry, runtime: { ...runtimeRecord, program: 'blastp' } }),
+  'protein-current'
+);
+assert.equal(
+  cache.classifyRawLosatCacheEntry({ ...nucleotideEntry, runtime: runtimeRecord }),
+  'nucleotide-current'
+);
+assert.ok(cache.getCurrentRawLosatCacheEntry(
+  new Map([['nucleotide-key', { ...nucleotideEntry, runtime: runtimeRecord }]]),
+  'nucleotide-key',
+  { program: 'blastn', outfmt: '6', args: [], queryCanonicalHash: 'q', subjectCanonicalHash: 's' }
+));
 assert.equal(
   cache.classifyRawLosatCacheEntry({ ...proteinEntry, schema: 3 }),
   'invalid',
