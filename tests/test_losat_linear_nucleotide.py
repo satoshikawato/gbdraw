@@ -428,3 +428,11 @@ def test_unresolved_nucleotide_intent_is_never_encoded() -> None:
     )
     with pytest.raises(CanonicalRequestEncodingError, match="losatn search"):
         encode_canonical_request(request)
+
+
+def test_edge_filenames_follow_the_shared_vectors() -> None:
+    from gbdraw.comparisons.linear_losat import losat_edge_filename
+
+    vectors = Path(__file__).parent / "fixtures" / "losat_edge_filename_cases.json"
+    for case in json.loads(vectors.read_text(encoding="utf-8"))["cases"]:
+        assert losat_edge_filename(case["left"], case["right"], case["suffix"]) == case["expected"]

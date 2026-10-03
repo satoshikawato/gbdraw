@@ -259,7 +259,7 @@ def capture_gui_precomputed_circular_rings(
         expect(reference_side).to_have_value("subject")
 
         companion_labels = page.locator("label").filter(
-            has_text="Comparison FASTA (optional)"
+            has_text="Comparison sequence (optional)"
         )
         expect(companion_labels).to_have_count(3)
         for index, (report, label) in enumerate(

@@ -460,8 +460,15 @@ test('neutral cached conservation session regenerates three ordered rings offlin
       generated.metrics.details
         .filter(({ name }) => name === 'resourceTextReadCount')
         .map(({ resourceId }) => resourceId)
+    ).toEqual(['resource-0001']);
+    // Ring files reach the one Python sequence reader as bytes (D12).
+    expect(
+      generated.metrics.details
+        .filter(({ name, resourceId }) => (
+          name === 'resourceByteReadCount' && resourceId.startsWith('conservation-losat-fasta-files-')
+        ))
+        .map(({ resourceId }) => resourceId)
     ).toEqual([
-      'resource-0001',
       'conservation-losat-fasta-files-1',
       'conservation-losat-fasta-files-2',
       'conservation-losat-fasta-files-3'
@@ -495,6 +502,188 @@ test('neutral cached conservation session regenerates three ordered rings offlin
     expect(worker.runs).toBe(1);
     expect(worker.settledInitializations).toBe(1);
     expect(worker.settledRuns).toBe(1);
+  } finally {
+    await context.close();
+  }
+});
+
+test('a GenBank ring file reuses the FASTA ring search, records the Web runtime, and gives a runnable recipe', async ({
+  browser
+}, testInfo) => {
+  test.setTimeout(240_000);
+  const context = await browser.newContext();
+  const page = await context.newPage();
+  try {
+    await page.addInitScript(() => {
+      window.__GBDRAW_RING_PROBE__ = { losatCalls: 0, rows: null };
+      window.__GBDRAW_LOSAT_EXECUTOR__ = async (jobs) => {
+        window.__GBDRAW_RING_PROBE__.losatCalls += 1;
+        const rows = window.__GBDRAW_RING_PROBE__.rows;
+        if (!rows) throw new Error('The cached ring replay must not execute LOSAT.');
+        return jobs.map((job) => ({ cacheKey: job.cacheKey, text: rows[job.cacheKey] }));
+      };
+    });
+    await openInstrumentedApp(page);
+    const accept = await page.locator('input[type="file"][accept*=".ddbj"]').evaluateAll(
+      (inputs) => inputs.map((input) => input.getAttribute('accept'))
+    );
+    const loaded = await evaluateWithRetainedPromise(page, async (sessionText) => {
+      const file = new File([sessionText], 'synthetic_conservation.gbdraw-session.json', {
+        type: 'application/json', lastModified: 0
+      });
+      window.__GBDRAW_LAZY_SESSION_PROBE__.ignoreFile(file);
+      const result = await window.__GBDRAW_APP__.importSession({ target: { files: [file], value: '' } });
+      const app = window.__GBDRAW_APP__;
+      const fastaRun = await app.runAnalysis();
+      return {
+        status: result?.status,
+        fastaRun,
+        content: String(app.results[app.selectedResultIndex]?.content || '')
+      };
+    }, neutralConservationSessionText);
+    expect(loaded.status).toBe('ok');
+    expect(loaded.fastaRun).toEqual({ status: 'ok' });
+
+    const genbank = await evaluateWithRetainedPromise(page, async () => {
+      const { state } = await import('/gbdraw/web/js/state.js');
+      const { readFileText } = await import('/gbdraw/web/js/services/file-content-cache.js');
+      const app = window.__GBDRAW_APP__;
+      const fasta = await readFileText(state.files.c_conservation_fastas[1]);
+      const [header, ...body] = fasta.trim().split(/\r?\n/);
+      const recordId = header.slice(1).split(/\s+/)[0];
+      const sequence = body.join('').toLowerCase();
+      const origin = [];
+      for (let start = 0; start < sequence.length; start += 60) {
+        const chunk = sequence.slice(start, start + 60).match(/.{1,10}/g).join(' ');
+        origin.push(`${String(start + 1).padStart(9)} ${chunk}`);
+      }
+      const flatFile = [
+        `LOCUS       ${recordId.padEnd(16)} ${String(sequence.length).padStart(11)} bp    DNA     linear   UNK 01-JAN-1980`,
+        'DEFINITION  synthetic comparison c.',
+        `ACCESSION   ${recordId}`,
+        `VERSION     ${recordId}`,
+        'FEATURES             Location/Qualifiers',
+        'ORIGIN',
+        ...origin,
+        '//',
+        ''
+      ].join('\n');
+      const files = [...state.files.c_conservation_fastas];
+      files[1] = new File([flatFile], 'comparison-c.gbk', { type: 'text/plain', lastModified: 0 });
+      state.files.c_conservation_fastas = files;
+      const result = await app.runAnalysis();
+      const content = String(app.results[app.selectedResultIndex]?.content || '');
+      const entries = Array.from(state.losatCache.value.entries());
+      return {
+        result,
+        errorLog: app.errorLog,
+        content,
+        losatCalls: window.__GBDRAW_RING_PROBE__.losatCalls,
+        labels: state.circularConservation.series.map(({ label }) => label),
+        rows: Object.fromEntries(entries.map(([key, entry]) => [key, entry.text])),
+        cacheKeys: entries.map(([key]) => key)
+      };
+    });
+    expect(genbank.result, JSON.stringify(genbank.errorLog)).toEqual({ status: 'ok' });
+    expect(genbank.losatCalls).toBe(0);
+    expect(genbank.labels).toEqual(['comparison-b', 'comparison-c', 'comparison-d']);
+    expect(genbank.cacheKeys).toHaveLength(3);
+
+    const compareSvgs = (leftName, left, rightName, right) => {
+      const leftPath = testInfo.outputPath(leftName);
+      const rightPath = testInfo.outputPath(rightName);
+      writeFileSync(leftPath, left, 'utf8');
+      writeFileSync(rightPath, right, 'utf8');
+      return spawnSync(process.env.GBDRAW_PYTHON || 'python', ['-c', [
+        'import sys',
+        'from tests.utils.svg_compare import compare_svgs',
+        'result = compare_svgs(sys.argv[1], sys.argv[2])',
+        'print(result.message)',
+        'print("\\n".join(result.differences))',
+        'raise SystemExit(0 if result.equal else 1)'
+      ].join(';'), leftPath, rightPath], { cwd: repoRoot, encoding: 'utf8' });
+    };
+    const genbankComparison = compareSvgs('fasta-ring.svg', loaded.content, 'genbank-ring.svg', genbank.content);
+    expect(genbankComparison.status, `${genbankComparison.stdout}\n${genbankComparison.stderr}`).toBe(0);
+
+    // A fresh search with the same rows records the Web runtime (D9/D10).
+    await page.evaluate(async (rows) => {
+      const { state } = await import('/gbdraw/web/js/state.js');
+      window.__GBDRAW_RING_PROBE__.rows = rows;
+      state.losat.executionMode = 'serial';
+      state.losatCache.value = new Map();
+      state.losatCacheInfo.value = [];
+      window.__GBDRAW_RING_PROBE__.searchRun = null;
+      window.__GBDRAW_APP__.runAnalysis().then(
+        (result) => { window.__GBDRAW_RING_PROBE__.searchRun = result; },
+        (error) => { window.__GBDRAW_RING_PROBE__.searchRun = { status: 'threw', message: String(error) }; }
+      );
+    }, genbank.rows);
+    await expect.poll(
+      () => page.evaluate(() => window.__GBDRAW_RING_PROBE__.searchRun),
+      { timeout: 120_000 }
+    ).not.toBeNull();
+    const searched = await evaluateWithRetainedPromise(page, async () => {
+      const { state } = await import('/gbdraw/web/js/state.js');
+      const { readFileText } = await import('/gbdraw/web/js/services/file-content-cache.js');
+      const app = window.__GBDRAW_APP__;
+      return {
+        result: window.__GBDRAW_RING_PROBE__.searchRun,
+        errorLog: app.errorLog,
+        content: String(app.results[app.selectedResultIndex]?.content || ''),
+        losatCalls: window.__GBDRAW_RING_PROBE__.losatCalls,
+        runtimes: Array.from(state.losatCache.value.values()).map(({ runtime }) => runtime),
+        runInfo: JSON.parse(JSON.stringify(app.lastRunInfo)),
+        files: {
+          'reference-a.gb': await readFileText(state.files.c_gb),
+          'comparison-b.fasta': await readFileText(state.files.c_conservation_fastas[0]),
+          'comparison-c.gbk': await readFileText(state.files.c_conservation_fastas[1]),
+          'comparison-d.fasta': await readFileText(state.files.c_conservation_fastas[2])
+        },
+        tables: Object.fromEntries(state.losatCacheInfo.value.map(({ key, filename }) => (
+          [filename, state.losatCache.value.get(key)?.text || '']
+        )))
+      };
+    });
+    expect(searched.result, JSON.stringify(searched.errorLog)).toEqual({ status: 'ok' });
+    expect(searched.losatCalls).toBe(1);
+    expect(searched.runtimes).toEqual(Array.from({ length: 3 }, () => (
+      { kind: 'losat', source: 'wasm', version: null, program: 'blastn' }
+    )));
+    expect(searched.runInfo.losatRuntimes.map(({ text }) => text)).toEqual([
+      'blastn: LOSAT, version not recorded (wasm)'
+    ]);
+    await page.getByRole('button', { name: /Run info$/ }).click({ timeout: 15_000 });
+    await expect(page.locator('[data-run-info-search-runtimes] li')).toHaveText([
+      'blastn: LOSAT, version not recorded (wasm)'
+    ]);
+    const searchedComparison = compareSvgs('fasta-ring-2.svg', loaded.content, 'searched-ring.svg', searched.content);
+    expect(searchedComparison.status, `${searchedComparison.stdout}\n${searchedComparison.stderr}`).toBe(0);
+
+    // The Source recipe keeps the table form (D14) and names the GenBank file
+    // with --conservation_sequence; the CLI runs it.
+    const args = searched.runInfo.sourceRecipe.commandArgs;
+    const sequenceIndex = args.indexOf('--conservation_sequence');
+    expect(sequenceIndex).toBeGreaterThan(-1);
+    expect(args.slice(sequenceIndex + 1, sequenceIndex + 4)).toEqual([
+      'comparison-b.fasta', 'comparison-c.gbk', 'comparison-d.fasta'
+    ]);
+    const workDir = testInfo.outputPath('recipe');
+    require('node:fs').mkdirSync(workDir, { recursive: true });
+    Object.entries({ ...searched.files, ...searched.tables }).forEach(([name, text]) => {
+      writeFileSync(join(workDir, name), text, 'utf8');
+    });
+    const recipeArgs = args[0] === 'gbdraw' ? args.slice(1) : args;
+    writeFileSync(join(workDir, 'recipe-args.json'), JSON.stringify(recipeArgs), 'utf8');
+    const recipe = spawnSync(process.env.GBDRAW_PYTHON || 'python', [
+      '-m', 'gbdraw.cli', ...recipeArgs.map(String)
+    ], {
+      cwd: workDir,
+      encoding: 'utf8',
+      timeout: 120_000,
+      env: { ...process.env, PYTHONPATH: repoRoot }
+    });
+    expect(recipe.status, `${JSON.stringify(recipeArgs)}\n${recipe.stdout}\n${recipe.stderr}`).toBe(0);
   } finally {
     await context.close();
   }

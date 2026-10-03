@@ -166,6 +166,7 @@ globalThis.Worker = AuditSimplePathWorker;
 const {
   afterFrame,
   afterPaint,
+  buildLosatCachePayload,
   createRunAnalysis,
   executeCanonicalRenderCandidate
 } = await import('../../gbdraw/web/js/app/run-analysis.js');
@@ -1354,27 +1355,42 @@ test('neutral conservation replay delegates lazy resources to the shared reader'
     ''
   ].join('\n');
   const referenceFasta = '>reference-a\nACGTACGT\n';
+  // The LOSAT query of each ring: the shared Python reader's canonical FASTA.
   const comparisonTexts = [
     '>comparison-b\nTTTTAAAA\n',
     '>comparison-c\nAAAATTTT\n',
     '>comparison-d\nCCCCGGGG\n'
+  ];
+  // Ring files as uploaded: a non-canonical FASTA, a GenBank flat file and a
+  // canonical FASTA. Each gives the same raw key as its canonical FASTA (D12).
+  const comparisonFileTexts = [
+    '>comparison-b first ring\r\nttttaaaa\r\n',
+    [
+      'LOCUS       comparison-c 8 bp DNA',
+      'DEFINITION  comparison c.',
+      'ORIGIN',
+      '        1 aaaatttt',
+      '//',
+      ''
+    ].join('\n'),
+    comparisonTexts[2]
   ];
   const resourceTable = adoptCurrentSessionResources({
     'reference-a': encodedResource('genbank', 'reference-a.gb', referenceText),
     'comparison-b': encodedResource(
       'conservation-fasta-file',
       'comparison-b.fasta',
-      comparisonTexts[0]
+      comparisonFileTexts[0]
     ),
     'comparison-c': encodedResource(
       'conservation-fasta-file',
-      'comparison-c.fasta',
-      comparisonTexts[1]
+      'comparison-c.gbk',
+      comparisonFileTexts[1]
     ),
     'comparison-d': encodedResource(
       'conservation-fasta-file',
       'comparison-d.fasta',
-      comparisonTexts[2]
+      comparisonFileTexts[2]
     )
   });
   const referenceView = createSessionResourceFileView(resourceTable, 'reference-a');
@@ -1521,6 +1537,16 @@ test('neutral conservation replay delegates lazy resources to the shared reader'
 
   try {
     const circularResult = result('lazy-circular.svg', 'lazy-circular');
+    const helperMessageCount = workerMessages.filter(({ type }) => type === 'helper').length;
+    comparisonTexts.forEach((fasta, index) => workerHelperResponses.push({
+      ok: true,
+      result: {
+        fasta,
+        format: index === 1 ? 'genbank' : 'fasta',
+        label: '',
+        recordIds: [fasta.slice(1).split('\n')[0]]
+      }
+    }));
     workerResponses.push(response(circularResult, validCatalog(circularResult.name)));
     assert.deepEqual(
       await runner.runAnalysis(),
@@ -1528,10 +1554,23 @@ test('neutral conservation replay delegates lazy resources to the shared reader'
       JSON.stringify(state.errorLog.value)
     );
     assert.equal(losatCalls, 0, 'verified circular cache entries must prevent LOSAT execution');
+    // Every ring file goes through the one Python reader (no JavaScript reader).
+    assert.deepEqual(
+      workerMessages.filter(({ type }) => type === 'helper').slice(helperMessageCount)
+        .map(({ operation }) => operation),
+      ['readComparisonSequence', 'readComparisonSequence', 'readComparisonSequence']
+    );
+    assert.equal(workerHelperResponses.length, 0);
     assert.deepEqual(
       resourceMetrics.filter(({ name }) => name === 'resourceTextReadCount')
         .map(({ resourceId }) => resourceId),
-      ['reference-a', 'comparison-b', 'comparison-c', 'comparison-d']
+      ['reference-a']
+    );
+    assert.deepEqual(
+      resourceMetrics.filter(({ name }) => name === 'resourceByteReadCount')
+        .map(({ resourceId }) => resourceId)
+        .filter((resourceId) => resourceId.startsWith('comparison-')),
+      ['comparison-b', 'comparison-c', 'comparison-d']
     );
     assert.deepEqual(
       workerMessages.filter(({ type }) => type === 'run').at(-1)
@@ -1693,6 +1732,24 @@ test('neutral conservation replay delegates lazy resources to the shared reader'
     assert.equal(losatCalls, 1);
     assert.ok(capturedSequences.includes('>MIDDLE\nCCCCGGGG\n'));
     assert.ok(capturedSequences.includes('>THIRD\nTTTTAAAA\n'));
+    // D9/D10: each searched raw entry records the Web runtime identity, which
+    // is not part of its key; Run Info lists the runtime of the displayed rows.
+    const searchedEntries = Array.from(state.losatCache.value.entries());
+    assert.ok(searchedEntries.length > 0);
+    for (const [key, entry] of searchedEntries) {
+      assert.deepEqual(entry.runtime, { kind: 'losat', source: 'wasm', version: null, program: 'blastn' });
+      const { runtime: _runtime, ...withoutRuntime } = entry;
+      assert.equal(key, await sha256Text(JSON.stringify(buildLosatCachePayload(withoutRuntime))));
+      assert.equal(key, await sha256Text(JSON.stringify(buildLosatCachePayload(entry))));
+    }
+    assert.deepEqual(state.lastRunInfo.value.losatRuntimes, [{
+      program: 'blastn',
+      kind: 'losat',
+      version: null,
+      source: 'wasm',
+      path: null,
+      text: 'blastn: LOSAT, version not recorded (wasm)'
+    }]);
     // Generated LOSATN rows stay in the search frame; the Python planner
     // projects the reversed record (PD-OI-073), so no Web conversion runs.
     assert.equal(workerMessages.some(({ type, operation }) => (

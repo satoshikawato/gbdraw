@@ -578,8 +578,8 @@ TLOSATX translates each sequence with its selected genetic code. In Linear
 mode, each card's **Gencode (this entry)** control, with accessible name
 **TLOSATX gencode for sequence N**, supplies the code for that endpoint. In
 Circular mode, **Reference gencode** applies to the displayed subject. Each
-comparison-FASTA row's visible **Subject gencode** control applies to that
-comparison sequence, even though the search passes the sequence as its query.
+comparison row's **Comparison gencode** control applies to that comparison
+sequence, which the search passes as its query.
 
 The common Linear filters are **Bitscore**, **E-value**, **Minimum identity**,
 and **Minimum length**. Collinear settings include **Max unit gap**, **Min
@@ -592,8 +592,15 @@ Circular **Pairwise Comparisons** selects **Run LOSAT** or **Upload BLAST**.
 Uploaded evidence uses **BLAST outfmt 6/7 files** and **Reference side**
 (**Auto (...)**, **Query**, or **Subject**). A browser-generated Circular
 comparison uses the displayed Circular record as the search subject and each
-**Comparison FASTA** as a query. **Ring Width** and **Ring Gap** control the
-ordered evidence tracks. **Save Raw LOSAT TSV** exports generated search rows.
+file under **Comparison sequence files** as a query. A comparison file is FASTA,
+GenBank, or DDBJ, and all records of one file are one genome. The diagram worker
+reads it with the reader of `--conservation_sequence`, so a ring has the CLI raw
+cache key for every format and FASTA layout. A new row is labelled with its file
+name without the extension. Without `--conservation_labels`, the CLI labels a
+FASTA ring with its file name and a GenBank or DDBJ ring with its DEFINITION
+(or organism); the Source recipe passes the Web labels explicitly. **Ring
+Width** and **Ring Gap** control the ordered evidence tracks. **Save Raw LOSAT
+TSV** exports generated search rows.
 
 See [Comparison programs, thresholds, and result
 semantics](comparison-programs-thresholds-and-results.md) for search boundaries,
@@ -977,6 +984,10 @@ from original input files and public CLI settings; **Exact replay** uses its
 saved canonical session and analysis artifacts. Both downloads refer to the
 successful Result, even when controls hold a newer draft. An unavailable Source
 recipe includes a reason; it does not silently omit unsupported settings.
+**Search runtime** lists the program and runtime of each displayed LOSAT
+result: the browser WASM (`wasm`; its version is not recorded) or the kind,
+version, source, and path that a CLI Session recorded. A result saved before
+runtimes were recorded shows `runtime not recorded`.
 Source recipe reads each track-slot token back with the CLI split rules, so a
 slot legend label that contains `,` or ` #`, or a slot ID that contains `:`,
 `@` or ` #`, makes the recipe unavailable. A Linear scale font without a

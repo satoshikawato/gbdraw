@@ -312,7 +312,7 @@ test('the operation error panel offers Generate and no Save after a failed Save 
 test('summary shows Sequence, Line, Track row, Depth series, band and setting locators', () => {
   for (const [source, pattern] of [
     [diagnosticError('INPUT_REQUIRED', { inputOrdinal: 2 }), /^Supply GenBank input or matching GFF3 and FASTA inputs\. Sequence 2\.$/],
-    [diagnosticError('COMPARISON_INPUT', { inputOrdinal: 1, reason: 'REQUIRED' }), / Comparison FASTA 1\. Supply the required value\.$/],
+    [diagnosticError('COMPARISON_INPUT', { inputOrdinal: 1, reason: 'REQUIRED' }), / Comparison sequence 1\. Supply the required value\.$/],
     [diagnosticError('DECORATION_CONTINUITY', { inputOrdinal: 3, field: 'scale', reason: 'DECORATION_TARGET' }), / Result 3\. Field: scale\./],
     [diagnosticError('TABLE_INVALID', { row: 3, field: 'color', reason: 'COLOR' }), /^The table is invalid\. Line 3\. Field: color\. Use none/],
     [{ code: 'COMPARISON_INPUT', context: { reason: 'NONNEGATIVE_INTEGER', row: 4, column: 7 } }, / Line 4\. Column 7\. Use an integer of zero or greater\.$/],

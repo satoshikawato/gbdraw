@@ -65,7 +65,7 @@ import {
 import {
   normalizeCollinearSearchScope
 } from './losat-normalization.js';
-import { buildRunInfo, buildSourceRecipe } from './run-info.js';
+import { buildRunInfo, buildSourceRecipe, summarizeLosatRuntimes } from './run-info.js';
 import {
   buildLosatJobSpecs,
   resolveLinearComparisonPlan
@@ -138,7 +138,9 @@ import {
   releaseValidatedProteinIdentityIndex,
   sameLosatArgs,
   transitionLegacyProteinCandidate,
-  validateDerivedProteinReferences
+  losatEdgeFilename,
+  validateDerivedProteinReferences,
+  webLosatRuntimeRecord
 } from './losat-cache.js';
 import { comparisonFiltersForMode, resolveComparisonThresholds } from '../mode-profiles.js';
 import { diagnosticError, liveEditFailure, normalizeUserFacingError } from '../services/error-normalization.js';
@@ -1483,24 +1485,15 @@ export const createRunAnalysis = ({
     return '';
   };
 
-  const normalizeLabel = (label, fallback) => {
-    const base = String(label || '').trim() || String(fallback || '');
-    const dotted = base.replace(/[\\s/]+/g, '.').replace(/\.+/g, '.').replace(/^\.|\.$/g, '');
-    const safe = makeSafeFilename(dotted);
-    return safe || makeSafeFilename(String(fallback || 'losat'));
-  };
-
   const buildLosatSuffix = () => {
     if (losatProgram.value === 'blastn') return 'losatn';
     if (losatProgram.value === 'blastp') return 'losatp';
     return 'tlosatx';
   };
 
-  const buildLosatFilename = (leftLabel, rightLabel) => {
-    const left = normalizeLabel(leftLabel, 'seq_1');
-    const right = normalizeLabel(rightLabel, 'seq_2');
-    return `${left}.${right}.${buildLosatSuffix()}.tsv`;
-  };
+  const buildLosatFilename = (leftLabel, rightLabel) => (
+    losatEdgeFilename(leftLabel, rightLabel, buildLosatSuffix())
+  );
 
   const getResolvedLinearEdge = (edgeKey) => {
     const normalizedKey = String(edgeKey || '').trim();
@@ -2660,10 +2653,14 @@ export const createRunAnalysis = ({
               throwIfGenerationCanceled();
               const comparisonEntry = comparisonEntries[index];
               const fileObj = comparisonEntry?.file || comparisonEntry;
-              const queryFasta = await readFileText(fileObj);
-              if (getFastaSequenceLength(queryFasta) <= 0) {
-                throw new Error(`Pairwise comparison FASTA #${index + 1} has no sequence data.`);
-              }
+              // One sequence reader (D12): the Python helper reads FASTA, GenBank
+              // or DDBJ and returns the query FASTA that the CLI ring hashes.
+              const sequenceResponse = await runDiagramHelperOperation(
+                DIAGRAM_HELPER_OPERATIONS.READ_COMPARISON_SEQUENCE,
+                { files: [{ role: 'source', bytes: await cloneFileBytesForTransfer(fileObj) }] }
+              );
+              if (sequenceResponse.result?.error) throw sequenceResponse.result.error;
+              const queryFasta = String(sequenceResponse.result?.fasta || '');
               const queryHash = await hashText(queryFasta);
               const querySequenceKey = `circular-query:${queryHash}`;
               sequenceEntriesByKey.set(querySequenceKey, queryFasta);
@@ -2748,7 +2745,8 @@ export const createRunAnalysis = ({
                   outfmt: String(losat.outfmt || '6'),
                   args: job?.extraArgs || [],
                   queryCanonicalHash: job?.queryCanonicalHash || '',
-                  subjectCanonicalHash: job?.subjectCanonicalHash || ''
+                  subjectCanonicalHash: job?.subjectCanonicalHash || '',
+                  runtime: webLosatRuntimeRecord(circularLosatProgram)
                 });
               });
             } else {
@@ -2789,7 +2787,7 @@ export const createRunAnalysis = ({
           } else {
             const comparisonFiles = circularConservationSourceFiles;
             if (comparisonFiles.length === 0) {
-              throw new Error('Please upload at least one comparison FASTA file for Pairwise Comparisons.');
+              throw new Error('Please upload at least one comparison sequence file for Pairwise Comparisons.');
             }
             const conservationEntries = orderedConservationSources(comparisonFiles, circularConservation);
             const conservationSeries = buildConservationSeries(comparisonFiles, circularConservation);
@@ -3898,7 +3896,8 @@ export const createRunAnalysis = ({
                   : {
                       queryCanonicalHash: job?.queryCanonicalHash || '',
                       subjectCanonicalHash: job?.subjectCanonicalHash || ''
-                    })
+                    }),
+                runtime: webLosatRuntimeRecord(losatProgram.value)
               };
               cacheMap.set(result.cacheKey, rawEntry);
             });
@@ -4527,7 +4526,11 @@ export const createRunAnalysis = ({
           elapsedMs: getNow() - manualRunStartedAt,
           resultCount: candidateCommit.results.length,
           startedAtIso: manualRunStartedAtIso,
-          losatComparisons: mode.value === 'linear' && activeComparisonPlanSnapshot?.hasLosatIntent === true
+          losatComparisons: mode.value === 'linear' && activeComparisonPlanSnapshot?.hasLosatIntent === true,
+          losatRuntimes: summarizeLosatRuntimes(
+            pendingLosatCacheCommit?.cacheInfo || workingLosatCacheInfo,
+            pendingLosatCacheCommit?.cacheMap || losatCache.value
+          )
         });
         sourceRecipe.generatedFiles.forEach((file) => {
           recordGeneratedCliFile(

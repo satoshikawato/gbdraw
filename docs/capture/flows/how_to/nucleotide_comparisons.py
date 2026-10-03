@@ -921,11 +921,11 @@ def capture_gui_circular_rings(
             )
             ring_label.fill(label)
             expect(ring_label).to_have_value(label)
-            subject_gencode = page.get_by_label(
-                f"Comparison subject gencode {index}", exact=True
+            comparison_gencode = page.get_by_label(
+                f"Comparison gencode {index}", exact=True
             )
-            subject_gencode.fill(str(gencode))
-            expect(subject_gencode).to_have_value(str(gencode))
+            comparison_gencode.fill(str(gencode))
+            expect(comparison_gencode).to_have_value(str(gencode))
 
         for label, value in (
             ("Circular comparison minimum bitscore", "50"),

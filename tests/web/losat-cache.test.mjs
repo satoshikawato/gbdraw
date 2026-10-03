@@ -952,3 +952,11 @@ assert.equal(counted.validateProteinIdentityManifest(manifest), true);
 const aliasOperations = counted.aliasNormalizations - aliasCountBefore;
 console.log(`RW-04: 2 valid feature aliases, ${aliasOperations} NFC/trim operations`);
 assert.equal(aliasOperations, 2, 'one normalization per valid feature alias in each manifest validation');
+
+// PR3-B1: default Linear raw LOSAT TSV names follow the CLI rule.
+const { cases: edgeFilenameCases } = JSON.parse(await readFile(
+  join(repoRoot, 'tests', 'fixtures', 'losat_edge_filename_cases.json'), 'utf8'
+));
+for (const { left, right, suffix, expected } of edgeFilenameCases) {
+  assert.equal(cache.losatEdgeFilename(left, right, suffix), expected, JSON.stringify({ left, right }));
+}

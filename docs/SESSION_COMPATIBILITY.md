@@ -49,7 +49,8 @@ Session version 44 and request schema 8 are unchanged. A Linear run with
 programs) saves what the web app saves: one `nucleotideBlast` resource per
 compared record pair with the raw search-frame rows, and one schema 2
 `losatCache` entry per pair with the web raw key and the non-key `runtime`
-record. The saved request carries the resolved comparisons, not the search
+record. Entries that the web app searches carry `runtime` too, as
+`{kind: "losat", source: "wasm", version: null, program}`. The saved request carries the resolved comparisons, not the search
 intent, so replay needs no LOSAT runtime. A request that still carries the
 search intent cannot be encoded; resolve or render it first.
 
