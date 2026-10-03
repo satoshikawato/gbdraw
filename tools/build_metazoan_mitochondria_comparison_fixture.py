@@ -4,16 +4,25 @@
 from __future__ import annotations
 
 import argparse
+from contextlib import ExitStack
 import hashlib
 import json
 import subprocess
 from collections import Counter
 from dataclasses import dataclass
 from pathlib import Path
-from tempfile import TemporaryDirectory
 from typing import Any
 
 from Bio import SeqIO
+
+from gbdraw.comparisons.losat_runtime import (
+    LosatRuntime,
+    LosatSearchOptions,
+    bundled_losat_runtime,
+    losat_runtime_record,
+    run_losat_search,
+)
+from gbdraw.exceptions import GbdrawError
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -132,10 +141,6 @@ def _render_fasta(spec: RecordSpec) -> bytes:
     return ("\n".join(lines) + "\n").encode("ascii")
 
 
-def _write_fasta(spec: RecordSpec, path: Path) -> None:
-    path.write_bytes(_render_fasta(spec))
-
-
 def _retained(row: tuple[str, ...]) -> bool:
     return (
         float(row[10]) <= THRESHOLDS["evalue"]
@@ -183,55 +188,36 @@ def _summarize(data: bytes, spec: ComparisonSpec) -> dict[str, Any]:
     return summary
 
 
-def _run_once(spec: ComparisonSpec, directory: Path) -> bytes:
-    directory.mkdir(parents=True, exist_ok=True)
-    query_path = directory / "query.fna"
-    subject_path = directory / "subject.fna"
-    output_path = directory / spec.filename
-    _write_fasta(spec.query, query_path)
-    _write_fasta(HUMAN, subject_path)
-    subprocess.run(
-        [
-            str(LOSAT_PATH),
-            "tblastx",
-            "--query",
-            str(query_path),
-            "--subject",
-            str(subject_path),
-            "--query-gencode",
-            str(spec.query.genetic_code),
-            "--db-gencode",
-            str(HUMAN.genetic_code),
-            "--num-threads",
-            "1",
-            "--out",
-            str(output_path),
-        ],
-        check=True,
-        capture_output=True,
-        text=True,
-    )
-    return output_path.read_bytes()
+def _run_once(spec: ComparisonSpec, runtime: LosatRuntime) -> bytes:
+    """Run TLOSATX through the shared LOSAT runtime owner (argv and dialect)."""
+
+    return run_losat_search(
+        "tlosatx",
+        _render_fasta(spec.query).decode("ascii"),
+        _render_fasta(HUMAN).decode("ascii"),
+        options=LosatSearchOptions(
+            query_gencode=spec.query.genetic_code,
+            db_gencode=HUMAN.genetic_code,
+        ),
+        losat_bin=runtime.executable,
+        threads=1,
+    ).encode("utf-8")
 
 
 def build(*, write: bool) -> dict[str, dict[str, Any]]:
-    if _sha256(LOSAT_PATH.read_bytes()) != LOSAT_SHA256:
-        raise ValueError("pinned LOSAT executable checksum changed")
-    version = subprocess.run(
-        [str(LOSAT_PATH), "--version"],
-        check=True,
-        capture_output=True,
-        text=True,
-    ).stdout.strip()
-    if version != "losat 0.1.0":
-        raise ValueError(f"pinned LOSAT version changed: {version}")
-
     summaries: dict[str, dict[str, Any]] = {}
-    with TemporaryDirectory(prefix="gbdraw-mtdna-tlosatx-") as temp_name:
-        temp_root = Path(temp_name)
+    with ExitStack() as stack:
+        runtime = bundled_losat_runtime(stack=stack)
+        if runtime is None or Path(runtime.executable).resolve() != LOSAT_PATH.resolve():
+            raise ValueError(f"bundled LOSAT executable not found: {LOSAT_PATH}")
+        if _sha256(LOSAT_PATH.read_bytes()) != LOSAT_SHA256:
+            raise ValueError("pinned LOSAT executable checksum changed")
+        version = losat_runtime_record(runtime, "tlosatx")["version"]
+        if version != "0.1.0":
+            raise ValueError(f"pinned LOSAT version changed: {version}")
         for spec in COMPARISONS:
-            first = _run_once(spec, temp_root / f"{spec.query.record_id}-1")
-            second = _run_once(spec, temp_root / f"{spec.query.record_id}-2")
+            first = _run_once(spec, runtime)
+            second = _run_once(spec, runtime)
             if first != second:
                 raise ValueError(f"non-deterministic LOSAT output: {spec.filename}")
             summaries[spec.filename] = _summarize(first, spec)
@@ -265,7 +251,7 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
     try:
         summaries = build(write=args.write)
-    except (FileNotFoundError, OSError, subprocess.SubprocessError, ValueError) as error:
+    except (OSError, subprocess.SubprocessError, ValueError, GbdrawError) as error:
         parser.exit(1, f"build failed: {error}\n")
     print(json.dumps(summaries, indent=2, sort_keys=True))
     return 0

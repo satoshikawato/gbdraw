@@ -6,7 +6,6 @@ import {
   isLegendOrderEdited,
   parseTransformXY
 } from './utils.js';
-import { serializeCleanSvg } from '../../services/svg-serialization.js';
 import { parseCompositionMetadata } from '../legend-layout/composition-actions.js';
 import {
   diffLegendIntents,
@@ -96,8 +95,7 @@ export const createLegendEntryActions = ({
     newLegendCaption,
     newLegendColor,
     legendStrokeOverrides,
-    legendColorOverrides,
-    skipCaptureBaseConfig
+    legendColorOverrides
   } = state;
 
   const { updatePairwiseLegendPositions, reflowDualLegendLayout, compactLegendEntries } = layoutActions;
@@ -182,19 +180,7 @@ export const createLegendEntryActions = ({
     return templates.get(targetGroupKey(targetGroup, targetIndex)) || templates.values().next().value || null;
   };
 
-  const persistLegendReconciliation = (svg) => {
-    skipCaptureBaseConfig.value = true;
-    if (previewRuntime?.applyLegendChanges?.([], { reason: 'history-legend-reconcile' })) {
-      previewRuntime.flushActiveResult?.();
-      return;
-    }
-    const idx = selectedResultIndex.value;
-    if (idx >= 0 && results.value.length > idx) {
-      const nextResults = [...results.value];
-      nextResults[idx] = { ...results.value[idx], content: serializeCleanSvg(svg) };
-      results.value = nextResults;
-    }
-  };
+  const persistLegendReconciliation = () => previewRuntime?.commitActiveResultEdit('history-legend-reconcile');
 
   const setLegendGeometryChangedHandler = (handler) => {
     legendGeometryChangedHandler = typeof handler === 'function' ? handler : null;
@@ -499,7 +485,7 @@ export const createLegendEntryActions = ({
       }
 
       if (shouldCommit) {
-        persistLegendReconciliation(svg);
+        persistLegendReconciliation();
       }
 
       return caption;
@@ -540,7 +526,7 @@ export const createLegendEntryActions = ({
     }
 
     if (updated) {
-      if (commit) persistLegendReconciliation(svg);
+      if (commit) persistLegendReconciliation();
       console.log(`Updated legend entry color: "${caption}" to ${color}`);
     }
 
@@ -589,7 +575,7 @@ export const createLegendEntryActions = ({
       compactLegendEntries(svg);
       onLegendGeometryChanged();
 
-      if (commit) persistLegendReconciliation(svg);
+      if (commit) persistLegendReconciliation();
       console.log(`Removed legend entry: "${caption}"`);
     }
 
@@ -739,7 +725,7 @@ export const createLegendEntryActions = ({
     );
     if (hasDualLegends) reflowDualLegendLayout(svg);
     else updatePairwiseLegendPositions(svg);
-    persistLegendReconciliation(svg);
+    persistLegendReconciliation();
     return true;
   };
 
@@ -756,7 +742,6 @@ export const createLegendEntryActions = ({
       });
     }
 
-    const resultIndex = selectedResultIndex.value;
     let measurementHost;
     const provenance = new Map();
     for (const entry of previousFileIntents) {
@@ -852,15 +837,7 @@ export const createLegendEntryActions = ({
         const candidateLegend = svg.getElementById('legend');
         if (mountedLegend && candidateLegend) mountedLegend.replaceWith(candidateLegend);
         onLegendGeometryChanged();
-        skipCaptureBaseConfig.value = true;
-        if (resultIndex >= 0 && results.value.length > resultIndex) {
-          const nextResults = [...results.value];
-          nextResults[resultIndex] = {
-            ...results.value[resultIndex],
-            content: serializeCleanSvg(mountedSvg)
-          };
-          results.value = nextResults;
-        }
+        previewRuntime?.commitActiveResultEdit('legend-file-sync');
         extractLegendEntries();
         return diff;
       });
@@ -1022,7 +999,7 @@ export const createLegendEntryActions = ({
     if (!changed && !stateChanged) return false;
     entry.color = newColor;
     legendColorOverrides[caption] = newColor;
-    if (changed) persistLegendReconciliation(svg);
+    if (changed) persistLegendReconciliation();
     return true;
   };
 
@@ -1075,7 +1052,7 @@ export const createLegendEntryActions = ({
     }
     onLegendGeometryChanged();
 
-    persistLegendReconciliation(svg);
+    persistLegendReconciliation();
     return true;
   };
 

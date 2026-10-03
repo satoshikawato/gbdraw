@@ -97,34 +97,22 @@ const updateLegendEntryColorOptions = [];
 const previewFillColors = new Map();
 const featureElementsById = new Map();
 let previewFillApplyCount = 0;
-let previewFlushCount = 0;
-let previewDirty = false;
+let previewCommitCount = 0;
 const svgContainer = ref(null);
 const clickedFeature = ref(null);
 const originalSvgStroke = ref({ color: null, width: null });
 const featureStrokeOverrides = {};
 const legendStrokeOverrides = {};
+// The rule commit shows its fills itself (svg-styles); the color action
+// commits only its own DOM edits.
+const applyRulePreviewFill = (featureId, color) => {
+  if (previewFillColors.get(featureId) === color) return;
+  previewFillColors.set(featureId, color);
+  previewFillApplyCount += 1;
+};
 const previewRuntime = {
-  applyFeatureFillChanges: (changes) => {
-    let updated = false;
-    for (const change of changes) {
-      if (previewFillColors.get(change.featureId) === change.color) continue;
-      previewFillColors.set(change.featureId, change.color);
-      previewFillApplyCount += 1;
-      updated = true;
-    }
-    if (updated) previewDirty = true;
-    return updated;
-  },
-  flushActiveResult: () => {
-    if (!previewDirty) return false;
-    previewDirty = false;
-    previewFlushCount += 1;
-    return true;
-  },
-  getActiveRuntime: () => ({ dirty: previewDirty }),
-  markActiveResultDirty: () => {
-    previewDirty = true;
+  commitActiveResultEdit: () => {
+    previewCommitCount += 1;
     return true;
   }
 };
@@ -199,7 +187,7 @@ const actions = createFeatureColorActions({
         const rule=firstMatchingRule(feature,manualSpecificRules);
         if(rule) {
           featureColorOverrides[featureOverrideKey(feature)]={color:rule.color,caption:rule.cap};
-          previewRuntime.applyFeatureFillChanges([{featureId:feature.svg_id,color:rule.color}]);
+          applyRulePreviewFill(feature.svg_id, rule.color);
         }else delete featureColorOverrides[featureOverrideKey(feature)];
       }
       applySpecificRulesCount++;
@@ -230,7 +218,6 @@ const actions = createFeatureColorActions({
     }
   },
   featureSvgActions: {
-    applyInstantPreview: () => {},
     getFeatureElements: (_svg, featureId) => featureElementsById.get(featureId) || [],
     getFeatureFillElements: (_svg, featureId) => featureElementsById.get(featureId) || []
   },
@@ -376,14 +363,16 @@ assert.equal(getFeatureGenerationHash(labelFeatureA), 'f11111111');
 
 legendEntries.value = [{ caption: 'single feature', color: '#123456', featureIds: ['f11111111_record_1'] }];
 const noOpFillCount = previewFillApplyCount;
-const noOpFlushCount = previewFlushCount;
+const noOpCommitCount = previewCommitCount;
 assert.equal(await actions.setFeatureColor(labelFeatureA, '#123456', 'single feature'), false);
 assert.equal(previewFillApplyCount, noOpFillCount);
-assert.equal(previewFlushCount, noOpFlushCount);
+assert.equal(previewCommitCount, noOpCommitCount);
 
-const compoundFlushCount = previewFlushCount;
+const compoundCommitCount = previewCommitCount;
+const compoundFillCount = previewFillApplyCount;
 assert.equal(await actions.setFeatureColor(labelFeatureA, '#654321', 'renamed feature'), true);
-assert.equal(previewFlushCount - compoundFlushCount, 1);
+assert.ok(previewFillApplyCount > compoundFillCount);
+assert.equal(previewCommitCount, compoundCommitCount);
 assert.equal(addLegendEntryCount, 0);
 assert.equal(removeLegendEntryOptions.length, 0);
 assert.equal(manualSpecificRules[0].cap, 'renamed feature');
@@ -619,25 +608,25 @@ clickedFeature.value = {
 };
 originalSvgStroke.value = { color: '#111111', width: 1 };
 
-const sameStrokeFlushCount = previewFlushCount;
+const sameStrokeCommitCount = previewCommitCount;
 assert.equal(await actions.updateClickedFeatureStroke('#111111', 1), false);
 assert.equal(strokeMutationCount, 0);
-assert.equal(previewFlushCount, sameStrokeFlushCount);
+assert.equal(previewCommitCount, sameStrokeCommitCount);
 
 assert.equal(await actions.updateClickedFeatureStroke('#222222', 2), true);
 assert.equal(strokeMutationCount, 2);
-assert.equal(previewFlushCount - sameStrokeFlushCount, 1);
-const changedStrokeFlushCount = previewFlushCount;
+assert.equal(previewCommitCount - sameStrokeCommitCount, 1);
+const changedStrokeCommitCount = previewCommitCount;
 assert.equal(await actions.updateClickedFeatureStroke('#222222', 2), false);
 assert.equal(strokeMutationCount, 2);
-assert.equal(previewFlushCount, changedStrokeFlushCount);
+assert.equal(previewCommitCount, changedStrokeCommitCount);
 
 assert.equal(await actions.resetClickedFeatureStroke(), true);
 const resetStrokeMutationCount = strokeMutationCount;
-const resetStrokeFlushCount = previewFlushCount;
+const resetStrokeCommitCount = previewCommitCount;
 assert.equal(await actions.resetClickedFeatureStroke(), false);
 assert.equal(strokeMutationCount, resetStrokeMutationCount);
-assert.equal(previewFlushCount, resetStrokeFlushCount);
+assert.equal(previewCommitCount, resetStrokeCommitCount);
 assert.equal(await actions.applyStrokeToSelectedFeatures([strokeFeature], '#111111', 1), false);
 const siblingStrokeAttributes = [featureB, hashOnlyFeature].map((feature) => {
   const attributes = new Map([
@@ -670,7 +659,7 @@ assert.equal(featureStyleScopeDialog.strokeWidth, 2.5);
 assert.equal(clickedFeature.value, null);
 assert.equal(strokeAttributes.get('stroke'), '#111111');
 assert.equal(strokeAttributes.get('stroke-width'), '1');
-assert.equal(previewFlushCount, resetStrokeFlushCount);
+assert.equal(previewCommitCount, resetStrokeCommitCount);
 assert.equal(await actions.handleFeatureStyleScopeChoice('cancel'), false);
 assert.equal(featureStyleScopeDialog.show, false);
 
@@ -698,7 +687,7 @@ assert.deepEqual(legendStrokeOverrides.Core, {
   strokeColor: '#445566',
   strokeWidth: 1
 });
-assert.equal(previewFlushCount, resetStrokeFlushCount + 1);
+assert.equal(previewCommitCount, resetStrokeCommitCount + 1);
 
 // Rule scope uses Python's wildcard feature type and inline flags too.
 const wildcardRule = { feat: '*', qual: 'gene_kind', val: '(?i)core', color: '#111111', cap: '' };

@@ -9,7 +9,6 @@ import {
   selectStableFeatureKey
 } from './label-override-table.js';
 import { FEATURE_SELECTOR, getFeatureIdentity } from './svg-actions.js';
-import { serializeCleanSvg } from '../../services/svg-serialization.js';
 import { downloadTextFile } from '../../services/text-download.js';
 import { readFileText } from '../../services/file-content-cache.js';
 import { COMPARISON_LEGEND_SELECTOR } from '../legend/utils.js';
@@ -350,7 +349,6 @@ export const createFeatureLabelActions = ({ state, previewRuntime = null, rulePr
     results,
     selectedResultIndex,
     svgContainer,
-    skipCaptureBaseConfig,
     editableLabels,
     extractedFeatures,
     clickedFeature,
@@ -377,21 +375,7 @@ export const createFeatureLabelActions = ({ state, previewRuntime = null, rulePr
     labelOverrideBuildWarning.value = '';
   };
 
-  const serializeCurrentSvg = (svg) => {
-    if (previewRuntime?.markActiveResultDirty?.('feature-label')) {
-      skipCaptureBaseConfig.value = true;
-      previewRuntime.flushActiveResult?.();
-      return;
-    }
-    const index = selectedResultIndex.value;
-    if (index < 0 || index >= results.value.length) return;
-    const serialized = serializeCleanSvg(svg);
-    if (results.value[index]?.content === serialized) return;
-    skipCaptureBaseConfig.value = true;
-    const nextResults = [...results.value];
-    nextResults[index] = { ...results.value[index], content: serialized };
-    results.value = nextResults;
-  };
+  const commitLabelEdit = () => previewRuntime?.commitActiveResultEdit('feature-label');
 
   const queueLabelReflow = (reason, force = false) => {
     labelReflowLastError.value = null;
@@ -722,7 +706,7 @@ export const createFeatureLabelActions = ({ state, previewRuntime = null, rulePr
     refreshEditableList(svg);
     syncClickedFeatureLabelState();
     const changed = textChanged || visibilityProjection.changed;
-    if (changed) serializeCurrentSvg(svg);
+    if (changed) commitLabelEdit();
     if (queueIncompleteVisibility && visibilityProjection.unavailableOverride) {
       queueLabelReflow('label-visibility-binding-refresh', true);
     }
@@ -741,7 +725,7 @@ export const createFeatureLabelActions = ({ state, previewRuntime = null, rulePr
     const svg = svgContainer.value?.querySelector?.('svg');
     if (!svg) return false;
     const projection = applyStoredVisibilityOverridesToSvg(svg);
-    if (projection.changed) serializeCurrentSvg(svg);
+    if (projection.changed) commitLabelEdit();
     if (reflow) queueLabelReflow(reason, projection.unavailableOverride);
     return projection.changed;
   };
@@ -884,7 +868,7 @@ export const createFeatureLabelActions = ({ state, previewRuntime = null, rulePr
       : { available: true, changed: false, svg: null };
     const mutatedSvg = visibilityProjection.svg || textProjection.svg;
     if (mutatedSvg && (textProjection.changed || visibilityProjection.changed)) {
-      serializeCurrentSvg(mutatedSvg);
+      commitLabelEdit();
       syncLabelEditor({ queueIncompleteVisibility: false });
     }
 
@@ -963,7 +947,7 @@ export const createFeatureLabelActions = ({ state, previewRuntime = null, rulePr
       return;
     }
 
-    serializeCurrentSvg(svg);
+    commitLabelEdit();
     closeLabelTextScopeDialog();
     syncLabelEditor();
     queueLabelReflow('apply');
@@ -986,7 +970,7 @@ export const createFeatureLabelActions = ({ state, previewRuntime = null, rulePr
 
     closeLabelTextScopeDialog();
     closeGlobalLabelModeDialog();
-    serializeCurrentSvg(svg);
+    commitLabelEdit();
     syncLabelEditor();
     queueLabelReflow('reset');
   };

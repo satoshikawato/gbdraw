@@ -67,34 +67,21 @@ export const createFeatureColorActions = ({
   const colorsMatch = (left, right) => normalizeColor(left) === normalizeColor(right);
   const isHashSpecificRule = (rule) => String(rule?.qual || '').toLowerCase() === 'hash';
   const hasOwn = (object, key) => Object.prototype.hasOwnProperty.call(object || {}, key);
+  // The DOM edits of one color action reach the Result in one commit, when the
+  // last running color action settles.
   let colorActionDepth = 0;
-  let colorActionChangedPreview = false;
-
-  const markColorPreviewDirty = (reason = 'feature-color') => {
-    const marked = previewRuntime?.markActiveResultDirty?.(reason) === true;
-    colorActionChangedPreview = colorActionChangedPreview || marked;
-    return marked;
-  };
-
+  let pendingCommitReason = '';
 
   const runColorAction = async (action) => {
-    const isOuterAction = colorActionDepth === 0;
-    const wasDirty = Boolean(previewRuntime?.getActiveRuntime?.()?.dirty);
-    if (isOuterAction) colorActionChangedPreview = false;
     colorActionDepth += 1;
-    let completed = false;
     try {
-      const result = await action();
-      completed = true;
-      return result;
+      return await action();
     } finally {
       colorActionDepth -= 1;
-      if (isOuterAction) {
-        const becameDirty = !wasDirty && Boolean(previewRuntime?.getActiveRuntime?.()?.dirty);
-        if (completed && (colorActionChangedPreview || becameDirty) && previewRuntime?.flushActiveResult) {
-          previewRuntime.flushActiveResult();
-        }
-        colorActionChangedPreview = false;
+      if (colorActionDepth === 0 && pendingCommitReason) {
+        const reason = pendingCommitReason;
+        pendingCommitReason = '';
+        previewRuntime?.commitActiveResultEdit(reason);
       }
     }
   };
@@ -314,8 +301,8 @@ export const createFeatureColorActions = ({
   const getCurrentSvg = () => svgContainer.value?.querySelector('svg') || null;
 
   const persistCurrentSvg = (svg = getCurrentSvg(), reason = 'feature-color') => {
-    if (!svg) return false;
-    return markColorPreviewDirty(reason);
+    if (!svg) return;
+    pendingCommitReason ||= reason;
   };
 
   const getLiveLegendColor = (caption) => {

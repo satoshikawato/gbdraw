@@ -1,6 +1,8 @@
 import { createRulePreparation } from '../../../gbdraw/web/js/app/rule-matching.js';
 import { evaluatePythonRules } from './python-rule-evaluator.mjs';
 import { createSvgStyles } from '../../../gbdraw/web/js/app/svg-styles.js';
+import { createPreviewRuntime } from '../../../gbdraw/web/js/app/preview-runtime.js';
+import { serializeCleanSvg } from '../../../gbdraw/web/js/services/svg-serialization.js';
 
 const ref = value => ({ value });
 globalThis.XMLSerializer = class { serializeToString(svg) { return svg.snapshot(); } };
@@ -22,6 +24,9 @@ export const fixture = (colors, rules) => {
     skipCaptureBaseConfig: ref(false), svgContainer: ref({ querySelector: () => svg }), adv: {}, mode: ref('circular'), form: { show_depth: true } };
   const rulePreparation = createRulePreparation({ state, evaluate: evaluatePythonRules });
   const ready = rulePreparation.prepare();
-  const actions = createSvgStyles({ state, rulePreparation, watch() {}, nextTick: fn => fn(), legendActions: { getAllFeatureLegendGroups: () => [] } });
+  // Style edits commit through the app's preview runtime (R1).
+  const previewRuntime = createPreviewRuntime({ state, serializeSvg: serializeCleanSvg });
+  const actions = createSvgStyles({ state, rulePreparation, watch() {}, nextTick: fn => fn(),
+    legendActions: { getAllFeatureLegendGroups: () => [] }, previewRuntime });
   return { actions, state, attrs, depthAttrs, ready };
 };

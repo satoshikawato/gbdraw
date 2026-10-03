@@ -66,7 +66,7 @@ assert.doesNotMatch(repositionSource, /data-horizontal-viewbox|data-vertical-vie
 assert.doesNotMatch(repositionSource, /0\.025|0\.85|0\.875|0\.75/);
 assert.match(
   legendLayoutSource,
-  /resetAllPositions[\s\S]+resetCompositionUserDeltas[\s\S]+persistCurrentSvg\(svg\)/
+  /resetAllPositions[\s\S]+resetCompositionUserDeltas[\s\S]+commitActiveResultEdit\('layout-position-reset'\)/
 );
 assert.match(entryActionsSource, /setLegendGeometryChangedHandler/);
 assert.ok((entryActionsSource.match(/onLegendGeometryChanged\(\);/g) || []).length >= 4);
@@ -221,7 +221,7 @@ const mockLegendEntry = (caption, color, x) => {
       updatePairwiseLegendPositions: () => { layoutRefreshes += 1; }
     },
     previewRuntime: {
-      applyLegendChanges: () => {
+      commitActiveResultEdit: () => {
         dirtyMarks += 1;
         return true;
       }
@@ -315,7 +315,7 @@ const mockLegendEntry = (caption, color, x) => {
   const strokeActions = createLegendStrokeActions({
     state,
     previewRuntime: {
-      markActiveResultDirty: () => {
+      commitActiveResultEdit: () => {
         dirtyMarks += 1;
         return true;
       }
@@ -446,7 +446,7 @@ const mockLegendEntry = (caption, color, x) => {
   const actions = createLegendEntryActions({
     state,
     layoutActions: { compactLegendEntries: () => {}, reflowDualLegendLayout: () => {}, updatePairwiseLegendPositions: () => {} },
-    previewRuntime: { applyLegendChanges: () => true }
+    previewRuntime: { commitActiveResultEdit: () => true }
   });
   const generate = (...rendered) => {
     const replayed = compileDirectEditorMutationPlan({
