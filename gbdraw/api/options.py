@@ -640,9 +640,10 @@ class LinearMultiRecordOptions:
 
 LosatProgram = Literal["losatn", "tlosatx", "losatp"]
 LosatpMode = Literal["similarity_groups", "collinear", "pairwise"]
+LosatnTask = Literal["megablast", "blastn", "dc-megablast"]
 _LOSAT_PROGRAMS: tuple[str, ...] = ("losatn", "tlosatx", "losatp")
-# Programs the CLI and the Python API can run in this release.
-_SUPPORTED_LOSAT_PROGRAMS: tuple[str, ...] = ("losatp",)
+LOSATN_TASKS: tuple[str, ...] = ("megablast", "blastn", "dc-megablast")
+DEFAULT_LOSATN_TASK = "megablast"
 
 # The one table between a typed LOSATP display mode and its persisted
 # ``generatedProteinComparison.mode`` spelling, which is also the protein
@@ -708,17 +709,34 @@ class LosatRuntimeOptions:
 class LosatSearchOptions:
     """One LOSAT comparison search for a diagram.
 
-    ``losatp_mode`` is required for ``losatp``. ``pairs`` lists explicit
-    ``(query, subject)`` record indexes; ``None`` compares adjacent rows.
+    ``losatp_mode`` is required for ``losatp``. ``losatn_task`` applies to
+    ``losatn`` (default ``megablast``). ``record_gencodes`` applies to
+    ``tlosatx``: empty uses the runtime default table (1) for every record, one
+    value applies to every record input, otherwise one value (or ``None``) per
+    record input. ``pairs`` lists explicit ``(query, subject)`` record indexes;
+    ``None`` compares adjacent rows.
     """
 
     program: LosatProgram
     pairs: Sequence[tuple[int, int]] | None = None
     losatp_mode: LosatpMode | Literal["none"] | None = None
+    losatn_task: LosatnTask | None = None
+    record_gencodes: Sequence[int | None] = ()
     losatp_max_hits: int = 5
     losatp_max_target_seqs: int | None = None
     losatp_member_max_hits: int | None = None
     runtime: LosatRuntimeOptions = field(default_factory=LosatRuntimeOptions)
+
+    def _option_program_error(self, field_name: str) -> ValidationError:
+        return ValidationError(
+            f"{field_name} does not apply to LOSAT program {self.program!r}.",
+            diagnostic={
+                "code": "COMPARISON_INPUT",
+                "reason": "LOSAT_OPTION_PROGRAM",
+                "field": field_name,
+                "program": self.program,
+            },
+        )
 
     def __post_init__(self) -> None:
         if self.program not in _LOSAT_PROGRAMS:
@@ -726,12 +744,28 @@ class LosatSearchOptions:
                 "program must be one of: " + ", ".join(_LOSAT_PROGRAMS) + ".",
                 diagnostic={"code": "COMPARISON_INPUT"},
             )
-        if self.program not in _SUPPORTED_LOSAT_PROGRAMS:
+        if self.program == "losatp":
+            self._validate_losatp()
+        else:
+            self._validate_nucleotide()
+        if self.pairs is not None:
+            object.__setattr__(self, "pairs", _normalize_record_pairs(self.pairs))
+            if self.program == "losatp" and self.losatp_mode != "pairwise":
+                raise ValidationError(
+                    "pairs requires losatp_mode 'pairwise'.",
+                    diagnostic={"code": "COMPARISON_INPUT", "reason": "LOSAT_PLAN"},
+                )
+        if not isinstance(self.runtime, LosatRuntimeOptions):
             raise ValidationError(
-                f"LOSAT program {self.program!r} cannot run from the CLI or Python "
-                "API yet; use 'losatp'.",
+                "runtime must be LosatRuntimeOptions.",
                 diagnostic={"code": "COMPARISON_INPUT"},
             )
+
+    def _validate_losatp(self) -> None:
+        for name in ("losatn_task", "record_gencodes"):
+            if getattr(self, name):
+                raise self._option_program_error(name)
+        object.__setattr__(self, "record_gencodes", ())
         if self.losatp_mode is None:
             raise ValidationError(
                 "losatp_mode is required when program is 'losatp'.",
@@ -742,13 +776,6 @@ class LosatSearchOptions:
                 "losatp_mode must be one of: similarity_groups, collinear, pairwise.",
                 diagnostic={"code": "COMPARISON_INPUT"},
             )
-        if self.pairs is not None:
-            object.__setattr__(self, "pairs", _normalize_record_pairs(self.pairs))
-            if self.losatp_mode != "pairwise":
-                raise ValidationError(
-                    "pairs requires losatp_mode 'pairwise'.",
-                    diagnostic={"code": "COMPARISON_INPUT"},
-                )
         object.__setattr__(
             self,
             "losatp_max_hits",
@@ -764,11 +791,47 @@ class LosatSearchOptions:
                     allow_none=True,
                 ),
             )
-        if not isinstance(self.runtime, LosatRuntimeOptions):
+
+    def _validate_nucleotide(self) -> None:
+        if self.losatp_mode is not None:
+            raise self._option_program_error("losatp_mode")
+        for name, default in (
+            ("losatp_max_hits", 5),
+            ("losatp_max_target_seqs", None),
+            ("losatp_member_max_hits", None),
+        ):
+            if getattr(self, name) != default:
+                raise self._option_program_error(name)
+        if self.program == "losatn":
+            if self.record_gencodes:
+                raise self._option_program_error("record_gencodes")
+            task = DEFAULT_LOSATN_TASK if self.losatn_task is None else self.losatn_task
+            if task not in LOSATN_TASKS:
+                raise ValidationError(
+                    "losatn_task must be one of: " + ", ".join(LOSATN_TASKS) + ".",
+                    diagnostic={"code": "COMPARISON_INPUT", "field": "losatn_task"},
+                )
+            object.__setattr__(self, "losatn_task", task)
+            object.__setattr__(self, "record_gencodes", ())
+            return
+        if self.losatn_task is not None:
+            raise self._option_program_error("losatn_task")
+        gencodes = self.record_gencodes
+        if isinstance(gencodes, (str, bytes)) or not isinstance(gencodes, Sequence):
             raise ValidationError(
-                "runtime must be LosatRuntimeOptions.",
-                diagnostic={"code": "COMPARISON_INPUT"},
+                "record_gencodes must be a sequence of positive integers or None.",
+                diagnostic={"code": "COMPARISON_INPUT", "field": "record_gencodes"},
             )
+        object.__setattr__(
+            self,
+            "record_gencodes",
+            tuple(
+                None
+                if value is None
+                else _validate_positive_int(value, field_name="record_gencodes")
+                for value in gencodes
+            ),
+        )
 
 
 def _normalize_record_pairs(

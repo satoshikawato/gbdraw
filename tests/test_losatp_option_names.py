@@ -279,7 +279,6 @@ def test_cli_defaults_keep_current_losatp_behavior(monkeypatch, tmp_path):
     (
         ["--losatp_mode", "pairwise"],
         ["--losat", "losatp", "--losat_bin", "a", "--ncbi_blast_bin", "b"],
-        ["--losat", "losatn"],
         ["--losat", "losatp", "--losatp_mode", "pairwise",
          "--similarity_alignment_feature", "x"],
         ["--losat_output_dir", "raw"],
@@ -333,8 +332,7 @@ def test_losat_search_options_validate_program_and_mode():
     from gbdraw.api.options import LosatRuntimeOptions, LosatSearchOptions
     from gbdraw.exceptions import ValidationError
 
-    with pytest.raises(ValidationError, match="losatn"):
-        LosatSearchOptions(program="losatn")
+    assert LosatSearchOptions(program="losatn").losatn_task == "megablast"
     with pytest.raises(ValidationError, match="losatp_mode"):
         LosatSearchOptions(program="losatp")
     with pytest.raises(ValidationError, match="pairs"):

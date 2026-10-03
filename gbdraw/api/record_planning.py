@@ -552,6 +552,8 @@ class RecordInputManifest:
     record_options: RecordCollectionOptions
     source_paths: tuple[str, ...]
     multi_record_positions: tuple[str, ...] = ()
+    # Records-table ``losat_gencode`` per record input; empty without values.
+    losat_gencodes: tuple[int | None, ...] = ()
 
 
 def _expanded_cli_track_values(
@@ -1196,6 +1198,11 @@ def record_input_manifest_from_table(path: str) -> RecordInputManifest:
         record_options=RecordCollectionOptions(),
         source_paths=tuple(source_paths),
         multi_record_positions=tuple(table.multi_record_positions()),
+        losat_gencodes=(
+            tuple(row.losat_gencode for row in table.rows)
+            if any(row.losat_gencode is not None for row in table.rows)
+            else ()
+        ),
     )
 
 
@@ -1290,6 +1297,7 @@ def resolve_linear_options(
         return options
     table = read_comparisons_table(options.comparison_table_file)
     comparisons: list[LinearComparison] = []
+    losat_pairs: list[tuple[int, int]] = []
     for row in table.rows:
         query_index = _resolve_linear_comparison_selector(
             records,
@@ -1323,6 +1331,9 @@ def resolve_linear_options(
                 f"query row {query_row + 1} and subject row "
                 f"{subject_row + 1} must be in {topology}."
             )
+        if row.source == "losat":
+            losat_pairs.append((query_index, subject_index))
+            continue
         try:
             matches = read_comparison_table(row.blast)
         except ValidationError as exc:
@@ -1332,10 +1343,33 @@ def resolve_linear_options(
         comparisons.append(
             LinearComparison(query_index, subject_index, matches)
         )
+    search = options.losat_search
+    if losat_pairs and search is None:
+        row_number = next(row.row_number for row in table.rows if row.source == "losat")
+        raise ValidationError(
+            f"{table.table_path}: row {row_number} has source=losat; pass --losat "
+            "(Python: losat_search) to run the search.",
+            diagnostic={"code": "COMPARISON_INPUT", "reason": "LOSAT_PLAN", "row": row_number},
+        )
+    if search is not None and not losat_pairs:
+        raise ValidationError(
+            f"{table.table_path}: --losat is set but no comparisons table row has "
+            "source=losat.",
+            diagnostic={"code": "COMPARISON_INPUT", "reason": "LOSAT_PLAN"},
+        )
+    if search is not None and search.pairs is not None:
+        raise ValidationError(
+            "Pass LOSAT record pairs either in the comparisons table or as "
+            "losat_search pairs, not both.",
+            diagnostic={"code": "COMPARISON_INPUT", "reason": "LOSAT_PLAN"},
+        )
     return replace(
         options,
         comparison_table_file=None,
         linear_comparisons=tuple(comparisons),
+        losat_search=(
+            replace(search, pairs=tuple(losat_pairs)) if search is not None else None
+        ),
     )
 
 

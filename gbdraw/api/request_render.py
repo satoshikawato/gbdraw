@@ -41,7 +41,9 @@ from gbdraw.analysis.depth_tracks import (
     normalize_depth_tracks,
 )
 from gbdraw.exceptions import ValidationError
+from gbdraw.comparisons.linear_losat import resolve_linear_nucleotide_losat
 from gbdraw.layout.record_coordinates import RecordDisplayTransform
+from gbdraw.layout.record_placement import resolve_record_row_positions
 from gbdraw.layout.similarity_alignment import (
     SimilarityAlignmentCandidate,
     SimilarityAlignmentPlan,
@@ -903,6 +905,8 @@ class LinearRequestPlan:
     transforms: tuple[RecordDisplayTransform, ...] = ()
     resolved_annotations: ResolvedAnnotationBundle | None = None
     alignment_anchor_centers: tuple[float | None, ...] = ()
+    # Raw cache entries of the LOSATN / TLOSATX searches this plan resolved.
+    losat_cache_entries: tuple[Mapping[str, Any], ...] = ()
 
     def __post_init__(self) -> None:
         if not isinstance(self.request, LinearDiagramRequest):
@@ -1024,7 +1028,7 @@ def _linear_request_uses_comparisons(request: LinearDiagramRequest) -> bool:
         or options.comparison_table_file
         or options.protein_comparisons
         or options.collinearity_blocks
-        or losatp_analysis_mode(options.losat_search) != "none"
+        or options.losat_search is not None
     )
 
 
@@ -1602,6 +1606,9 @@ def plan_linear_request(
             records=collection.records,
             layout=resolved_layout,
         )
+        resolved_options, losat_cache_entries = _resolve_nucleotide_losat(
+            resolved_options, collection, resolved_layout
+        )
         resolved_options = project_source_bound_comparisons(resolved_options, collection)
         materialized_request = (
             unresolved_request
@@ -1625,6 +1632,40 @@ def plan_linear_request(
         displays=collection.displays,
         transforms=collection.transforms,
         alignment_anchor_centers=alignment_anchor_centers,
+        losat_cache_entries=losat_cache_entries,
+    )
+
+
+def _resolve_nucleotide_losat(
+    options: LinearDiagramOptions,
+    collection: ResolvedRecordCollection,
+    layout: LinearMultiRecordOptions | None,
+) -> tuple[LinearDiagramOptions, tuple[Mapping[str, Any], ...]]:
+    """Replace LOSATN / TLOSATX intent with comparisons (design 3.4).
+
+    A source file is one genome; an in-memory record is its own source.
+    """
+
+    if options.losat_search is None or options.losat_search.program == "losatp":
+        return options, ()
+    _ordered, rows_by_record = resolve_record_row_positions(
+        collection.records,
+        layout.multi_record_positions if layout is not None else None,
+    )
+    provenance = collection.provenance
+    return resolve_linear_nucleotide_losat(
+        options,
+        records=collection.records,
+        rows_by_record=rows_by_record,
+        source_ids=[
+            item.source_paths or ("memory", item.input_index) for item in provenance
+        ],
+        record_keys=[item.record_key for item in provenance],
+        record_labels=[
+            item.presentation.label or str(record.id)
+            for item, record in zip(provenance, collection.records, strict=True)
+        ],
+        input_indexes=[item.input_index for item in provenance],
     )
 
 
@@ -2349,9 +2390,17 @@ def build_request_plan_diagram(
                 if linear_artifacts.cache is not None
                 else ()
             )
+            nucleotide_keys = {
+                entry.get("key") for entry in linear_artifacts.nucleotide_entries
+            }
             losat_cache_entries = (
                 *protein_entries,
                 *linear_artifacts.nucleotide_entries,
+                *(
+                    entry
+                    for entry in plan.losat_cache_entries
+                    if entry.get("key") not in nucleotide_keys
+                ),
             )
             losat_derived_cache_entries = _build_current_derived_entries(
                 linear_metadata,

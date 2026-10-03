@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import logging
 import re
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
 from typing import Literal, Sequence
 
 import pandas as pd
@@ -73,11 +73,17 @@ def project_match_endpoints(
 
 @dataclass(frozen=True)
 class LinearComparison:
-    """A comparison result with explicit input-record endpoints."""
+    """A comparison result with explicit input-record endpoints.
+
+    ``search_frame_text`` is the raw BLAST outfmt 6 text in the search frame
+    when the planner produced ``matches`` from a LOSAT search; the Session
+    persists it as a ``nucleotideBlast`` resource, as the Web does.
+    """
 
     query_record_index: int
     subject_record_index: int
     matches: DataFrame
+    search_frame_text: str | None = field(default=None, repr=False, compare=False)
 
     def __post_init__(self) -> None:
         for name in ("query_record_index", "subject_record_index"):

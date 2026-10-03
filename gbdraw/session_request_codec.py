@@ -638,6 +638,9 @@ def _encode_canonical_request(request: DiagramRequest) -> EncodedCanonicalReques
             unresolved_reasons.append("Linear comparison table")
         if isinstance(request.similarity_alignment, SimilarityAlignmentReference):
             unresolved_reasons.append("similarity alignment reference")
+        search = request.options.losat_search
+        if search is not None and search.program != "losatp":
+            unresolved_reasons.append(f"{search.program} search")
         if request._legacy_similarity_alignment is not None:
             raise CanonicalRequestEncodingError(
                 "A legacy similarity alignment must be materialized before current encoding."
@@ -3242,11 +3245,32 @@ def _encode_comparisons(
         )
     result: list[dict[str, Any]] = []
     for index, comparison in enumerate(options.linear_comparisons or (), start=1):
-        comparison = reverse_unbound_endpoint_rows(
-            comparison,
+        endpoint_frames = (
             _record_frame(frames, comparison.query_record_index),
             _record_frame(frames, comparison.subject_record_index),
         )
+        if comparison.search_frame_text is not None:
+            # A planner-resolved LOSAT edge keeps its raw search-frame rows, as
+            # the Web writes them (design 3.7).
+            content = reverse_endpoint_table_text(
+                comparison.search_frame_text, *endpoint_frames
+            )
+            resource_id = resources.add_bytes(
+                _resource_id(f"comparison-losat-{index}"),
+                kind="nucleotide-blast",
+                name=f"comparison-losat-{index}.tsv",
+                content=content.encode("utf-8"),
+            )
+            result.append(
+                {
+                    "kind": "nucleotideBlast",
+                    "resourceId": resource_id,
+                    "queryRecordIndex": comparison.query_record_index,
+                    "subjectRecordIndex": comparison.subject_record_index,
+                }
+            )
+            continue
+        comparison = reverse_unbound_endpoint_rows(comparison, *endpoint_frames)
         ref = _table_ref(
             f"comparison-explicit-{index}", comparison.matches, resources=resources
         )

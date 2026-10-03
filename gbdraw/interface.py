@@ -43,6 +43,7 @@ from gbdraw.api.options import (
     LinearOutputOptions as _LinearOutputOptions,
     LinearRequestTrackOptions as _LinearRequestTrackOptions,
     LosatProgram,
+    LosatnTask,
     LosatRuntimeOptions as _LosatRuntimeOptions,
     LosatSearchOptions as _LosatSearchOptions,
     LosatpMode,
@@ -341,8 +342,13 @@ class LinearComparisonOptions:
     ``similarity_alignment`` takes a resolved ``SimilarityAlignmentPlan`` or a
     ``SimilarityAlignmentReference``, which ``losat="losatp"`` with
     ``losatp_mode="similarity_groups"`` resolves once after its analysis.
-    ``max_hits``, ``max_target_seqs``, ``member_max_hits``, and the runtime
-    fields apply when ``losat`` is set.
+    ``losatn_task`` applies to ``losat="losatn"``. ``gencodes`` applies to
+    ``losat="tlosatx"``: one translation table for every record, or one per
+    record (``None`` uses the runtime default, 1). ``pairs`` lists explicit
+    ``(query, subject)`` record indexes for any program (LOSATP: Pairwise
+    only); without it, records in adjacent rows are compared.
+    ``max_hits``, ``max_target_seqs``, and ``member_max_hits`` apply to
+    LOSATP; the runtime fields apply when ``losat`` is set.
     """
 
     blast_files: Sequence[str] | None = None
@@ -351,6 +357,8 @@ class LinearComparisonOptions:
     orthogroups: OrthogroupResult | OrthogroupGraphResult | None = None
     losat: LosatProgram | None = None
     losatp_mode: LosatpMode = "similarity_groups"
+    losatn_task: LosatnTask = "megablast"
+    gencodes: int | Sequence[int | None] | None = None
     pairs: Sequence[tuple[int, int]] | None = None
     match_style: Literal["ribbon", "curve"] = "ribbon"
     collinearity_blocks: CollinearityResult | Sequence[CollinearityBlock] | None = None
@@ -895,10 +903,23 @@ def _linear_losat_search(
         if comparisons.pairs is not None:
             raise ValidationError("pairs requires losat.", diagnostic={"code": "COMPARISON_INPUT"})
         return None
+    gencodes = comparisons.gencodes
     return _LosatSearchOptions(
         program=comparisons.losat,
         pairs=comparisons.pairs,
         losatp_mode=comparisons.losatp_mode if comparisons.losat == "losatp" else None,
+        losatn_task=(
+            comparisons.losatn_task
+            if comparisons.losat == "losatn" or comparisons.losatn_task != "megablast"
+            else None
+        ),
+        record_gencodes=(
+            ()
+            if gencodes is None
+            else (gencodes,)
+            if isinstance(gencodes, int)
+            else tuple(gencodes)
+        ),
         losatp_max_hits=comparisons.max_hits,
         losatp_max_target_seqs=comparisons.max_target_seqs,
         losatp_member_max_hits=comparisons.member_max_hits,
