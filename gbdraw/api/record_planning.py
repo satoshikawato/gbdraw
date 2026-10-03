@@ -1218,9 +1218,9 @@ def resolve_circular_options(
         options,
         conservation_table_file=None,
         conservation_blast_files=tuple(table.conservation_blast_files),
-        conservation_fasta_files=(
-            tuple(table.comparison_fasta_files)
-            if table.comparison_fasta_files is not None
+        conservation_sequence_files=(
+            tuple(table.comparison_sequence_files)
+            if table.comparison_sequence_files is not None
             else None
         ),
         conservation_labels=(

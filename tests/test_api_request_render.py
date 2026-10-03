@@ -1591,17 +1591,17 @@ def test_render_request_circular_batch_loads_needed_comparison_fasta_once(
     comparison_fasta = tmp_path / "comparison.fna"
     comparison_fasta.write_text(">comparison\nAACCGG\n", encoding="utf-8")
     parse_calls: list[object] = []
-    parse = request_render_module.SeqIO.parse
+    parse = request_render_module.read_comparison_sequence_records
 
-    def counting_parse(source, format_name):
+    def counting_parse(source):
         parse_calls.append(source)
-        return parse(source, format_name)
+        return parse(source)
 
-    monkeypatch.setattr(request_render_module.SeqIO, "parse", counting_parse)
+    monkeypatch.setattr(request_render_module, "read_comparison_sequence_records", counting_parse)
     request = CircularBatchRequest(
         records=(_memory_input("batch-a"), _memory_input("batch-b")),
         options=CircularDiagramOptions(
-            conservation_fasta_files=(str(comparison_fasta),),
+            conservation_sequence_files=(str(comparison_fasta),),
         ),
         outputs=tuple(
             RenderOutputRequest(
@@ -1637,17 +1637,17 @@ def test_prepared_request_memoizes_comparison_fasta_records(
     comparison_fasta = tmp_path / "comparison.fna"
     comparison_fasta.write_text(">comparison\nAACCGG\n", encoding="utf-8")
     parse_calls: list[object] = []
-    parse = request_render_module.SeqIO.parse
+    parse = request_render_module.read_comparison_sequence_records
 
-    def counting_parse(source, format_name):
+    def counting_parse(source):
         parse_calls.append(source)
-        return parse(source, format_name)
+        return parse(source)
 
-    monkeypatch.setattr(request_render_module.SeqIO, "parse", counting_parse)
+    monkeypatch.setattr(request_render_module, "read_comparison_sequence_records", counting_parse)
     request = CircularDiagramRequest(
         records=(_memory_input("record"),),
         options=CircularDiagramOptions(
-            conservation_fasta_files=(str(comparison_fasta),),
+            conservation_sequence_files=(str(comparison_fasta),),
         ),
         output=RenderOutputRequest(formats=("interactive_svg",)),
     )
@@ -1672,7 +1672,7 @@ def test_render_request_only_requires_comparison_fasta_for_interactive_output(
     request = CircularDiagramRequest(
         records=(_memory_input("record"),),
         options=CircularDiagramOptions(
-            conservation_fasta_files=(str(tmp_path / "missing.fna"),),
+            conservation_sequence_files=(str(tmp_path / "missing.fna"),),
         ),
         output=RenderOutputRequest(
             output_prefix="diagram",

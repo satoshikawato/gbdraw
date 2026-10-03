@@ -1095,7 +1095,7 @@ class CircularDiagramOptions(_ModeDiagramOptions):
     tracks: CircularRequestTrackOptions | None = None
     output: CircularOutputOptions | None = None
     conservation_blast_files: Sequence[str] | None = None
-    conservation_fasta_files: Sequence[str | None] | None = None
+    conservation_sequence_files: Sequence[str | None] | None = None
     conservation_dataframes: Sequence[DataFrame] | None = None
     conservation_reference: Literal["query", "subject", "auto"] = "auto"
     conservation_labels: Sequence[str] | None = None
@@ -1146,8 +1146,8 @@ class CircularDiagramOptions(_ModeDiagramOptions):
             element_type=str,
         )
         _validate_sequence_elements(
-            self.conservation_fasta_files,
-            field_name="conservation_fasta_files",
+            self.conservation_sequence_files,
+            field_name="conservation_sequence_files",
             element_type=str,
             allow_none=True,
         )
@@ -1173,7 +1173,7 @@ class CircularDiagramOptions(_ModeDiagramOptions):
                 value is not None
                 for value in (
                     self.conservation_blast_files,
-                    self.conservation_fasta_files,
+                    self.conservation_sequence_files,
                     self.conservation_dataframes,
                     self.conservation_labels,
                     self.conservation_colors,

@@ -37,7 +37,7 @@ class ConservationTableRow:
     blast: str
     label: str
     color: str
-    comparison_fasta: str = ""
+    comparison_sequence: str = ""
 
 
 @dataclass(frozen=True)
@@ -47,7 +47,7 @@ class ConservationTable:
     has_label_column: bool
     has_color_column: bool
     path_dependencies: tuple[TablePathDependency, ...]
-    has_comparison_fasta_column: bool = False
+    has_comparison_sequence_column: bool = False
 
     @property
     def conservation_blast_files(self) -> list[str]:
@@ -66,10 +66,10 @@ class ConservationTable:
         return [row.color for row in self.rows]
 
     @property
-    def comparison_fasta_files(self) -> list[str | None] | None:
-        if not self.has_comparison_fasta_column:
+    def comparison_sequence_files(self) -> list[str | None] | None:
+        if not self.has_comparison_sequence_column:
             return None
-        return [row.comparison_fasta or None for row in self.rows]
+        return [row.comparison_sequence or None for row in self.rows]
 
     @property
     def dependency_paths(self) -> tuple[str, ...]:
@@ -212,7 +212,9 @@ class _TrackRow:
     values: dict[str, str]
 
 
-_CONSERVATION_COLUMNS = frozenset({"blast", "label", "color", "comparison_fasta"})
+_CONSERVATION_COLUMNS = frozenset({"blast", "label", "color", "comparison_sequence"})
+# Retired conservation-table columns (design D18, OD-2) -> replacement.
+_RETIRED_CONSERVATION_COLUMNS = {"comparison_fasta": "comparison_sequence"}
 _COMPARISON_COLUMNS = frozenset({"blast", "query", "subject", "source"})
 _COMPARISON_SOURCES = frozenset({"table", "losat"})
 _CIRCULAR_TRACK_COLUMNS = frozenset(
@@ -279,9 +281,15 @@ _FEATURE_LANE_PARAM_KEYS = frozenset({"lane_direction", "lanes"})
 def read_conservation_table(path: str) -> ConservationTable:
     table_path, header, rows = _read_tsv_table(
         path,
-        allowed_columns=_CONSERVATION_COLUMNS,
+        allowed_columns=_CONSERVATION_COLUMNS | frozenset(_RETIRED_CONSERVATION_COLUMNS),
         table_name="conservation table",
     )
+    for retired, replacement in _RETIRED_CONSERVATION_COLUMNS.items():
+        if retired in header:
+            raise ValidationError(
+                f"{table_path}: conservation table column {retired} was retired; "
+                f"use {replacement} (FASTA, GenBank, or DDBJ)."
+            )
     _require_columns(table_path, header, ("blast",))
     if not rows:
         raise ValidationError(f"{table_path}: conservation table has no data rows.")
@@ -295,10 +303,10 @@ def read_conservation_table(path: str) -> ConservationTable:
                 _cell_error(table_path, row.row_number, "blast", "value is required")
             )
         blast_path = _resolve_table_path(table_path, blast_raw)
-        comparison_fasta_raw = row.values.get("comparison_fasta", "").strip()
-        comparison_fasta_path = (
-            _resolve_table_path(table_path, comparison_fasta_raw)
-            if comparison_fasta_raw
+        comparison_sequence_raw = row.values.get("comparison_sequence", "").strip()
+        comparison_sequence_path = (
+            _resolve_table_path(table_path, comparison_sequence_raw)
+            if comparison_sequence_raw
             else ""
         )
         parsed_rows.append(
@@ -308,7 +316,7 @@ def read_conservation_table(path: str) -> ConservationTable:
                 blast=blast_path,
                 label=row.values.get("label", "").strip(),
                 color=row.values.get("color", "").strip(),
-                comparison_fasta=comparison_fasta_path,
+                comparison_sequence=comparison_sequence_path,
             )
         )
         dependencies.append(
@@ -319,13 +327,13 @@ def read_conservation_table(path: str) -> ConservationTable:
                 path=blast_path,
             )
         )
-        if comparison_fasta_path:
+        if comparison_sequence_path:
             dependencies.append(
                 TablePathDependency(
                     row_index=row.row_index,
                     row_number=row.row_number,
-                    column="comparison_fasta",
-                    path=comparison_fasta_path,
+                    column="comparison_sequence",
+                    path=comparison_sequence_path,
                 )
             )
 
@@ -334,7 +342,7 @@ def read_conservation_table(path: str) -> ConservationTable:
         rows=tuple(parsed_rows),
         has_label_column="label" in header,
         has_color_column="color" in header,
-        has_comparison_fasta_column="comparison_fasta" in header,
+        has_comparison_sequence_column="comparison_sequence" in header,
         path_dependencies=tuple(dependencies),
     )
 

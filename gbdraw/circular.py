@@ -68,6 +68,7 @@ from .cli_utils.common import (
     _add_feature_shape_arg,
     _add_format_arg,
     _add_overwrite_arg,
+    _add_retired_option_args,
     _add_gc_skew_toggle_args,
     _add_gc_content_axis_args,
     _add_legend_size_args,
@@ -263,11 +264,15 @@ def _get_args(
         help='TSV manifest with BLAST files for similarity rings, labels, and colors.',
         type=str)
     parser.add_argument(
-        '--conservation_fasta',
-        metavar='FASTA',
-        help='Optional comparison FASTA source(s), aligned with --conservation_blast for interactive span export.',
+        '--conservation_sequence',
+        metavar='FILE',
+        help=(
+            'Comparison genome sequence file(s) (FASTA, GenBank, or DDBJ; one file is one '
+            'genome), one per --conservation_blast for interactive span export.'
+        ),
         type=str,
         nargs='+')
+    _add_retired_option_args(parser, mode="circular")
     parser.add_argument(
         '--conservation_reference',
         help='BLAST side containing displayed circular reference coordinates.',
@@ -467,8 +472,8 @@ def _get_args(
         parser.error("--records_table cannot be combined with --multi_record_position; use row and column table columns instead.")
     if args.conservation_table and args.conservation_blast:
         parser.error("--conservation_table cannot be combined with --conservation_blast")
-    if args.conservation_table and args.conservation_fasta:
-        parser.error("--conservation_table cannot be combined with --conservation_fasta")
+    if args.conservation_table and args.conservation_sequence:
+        parser.error("--conservation_table cannot be combined with --conservation_sequence")
     if args.conservation_table and args.conservation_labels:
         parser.error("--conservation_table cannot be combined with --conservation_labels")
     if args.conservation_table and args.conservation_colors:
@@ -528,10 +533,10 @@ def _get_args(
         parser.error("--conservation_labels requires --conservation_blast")
     if args.conservation_colors and not args.conservation_blast:
         parser.error("--conservation_colors requires --conservation_blast")
-    if args.conservation_fasta and not args.conservation_blast:
-        parser.error("--conservation_fasta requires --conservation_blast")
-    if args.conservation_fasta and len(args.conservation_fasta) != len(args.conservation_blast):
-        parser.error("--conservation_fasta must provide one source per --conservation_blast")
+    if args.conservation_sequence and not args.conservation_blast:
+        parser.error("--conservation_sequence requires --conservation_blast")
+    if args.conservation_sequence and len(args.conservation_sequence) != len(args.conservation_blast):
+        parser.error("--conservation_sequence must provide one source per --conservation_blast")
     if args.depth_min is not None and args.depth_min < 0:
         parser.error("--depth_min must be >= 0")
     if args.depth_max is not None and args.depth_max < 0:
@@ -740,7 +745,7 @@ def run_circular_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
     depth_small_tick_interval: Optional[float] = args.depth_small_tick_interval
     depth_tick_font_size: Optional[float] = args.depth_tick_font_size
     conservation_blast_files = list(args.conservation_blast or []) or None
-    conservation_sequence_sources = list(args.conservation_fasta or []) or None
+    conservation_sequence_sources = list(args.conservation_sequence or []) or None
     conservation_reference: str = args.conservation_reference
     conservation_labels = list(args.conservation_labels or []) or None
     conservation_colors = list(args.conservation_colors or []) or None
@@ -1065,7 +1070,7 @@ def run_circular_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
         depth_step=depth_step,
         depth_tracks=depth_tracks,
         conservation_blast_files=conservation_blast_files,
-        conservation_fasta_files=conservation_sequence_sources,
+        conservation_sequence_files=conservation_sequence_sources,
         conservation_table_file=args.conservation_table,
         conservation_reference=conservation_reference,
         conservation_labels=conservation_labels,

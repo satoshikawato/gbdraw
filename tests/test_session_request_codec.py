@@ -1663,7 +1663,7 @@ def test_file_backed_options_and_typed_config_round_trip(tmp_path: Path) -> None
             label_override_file=str(table_file),
             depth_track_files=((str(depth_file),),),
             conservation_blast_files=(str(blast_file),),
-            conservation_fasta_files=(None, str(fasta_file)),
+            conservation_sequence_files=(None, str(fasta_file)),
         ),
     )
 
@@ -1688,7 +1688,7 @@ def test_file_backed_options_and_typed_config_round_trip(tmp_path: Path) -> None
     assert decoded.options.depth_tracks[0].source == str(depth_file)
     assert decoded.options.depth_track_files is None
     assert decoded.options.conservation_blast_files == (str(blast_file),)
-    assert decoded.options.conservation_fasta_files == (None, str(fasta_file))
+    assert decoded.options.conservation_sequence_files == (None, str(fasta_file))
     assert encode_canonical_request(decoded).payload == encoded.payload
 
 

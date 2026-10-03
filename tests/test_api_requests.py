@@ -290,7 +290,7 @@ def test_mode_specific_option_fields_do_not_overlap_other_mode_features() -> Non
     assert {"blast_files", "losat_search"}.isdisjoint(circular_fields)
     assert {
         "conservation_blast_files",
-        "conservation_fasta_files",
+        "conservation_sequence_files",
         "conservation_reference",
     }.isdisjoint(linear_fields)
 

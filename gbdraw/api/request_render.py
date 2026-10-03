@@ -22,7 +22,6 @@ from typing import (
     TypeAlias,
 )
 
-from Bio import SeqIO  # type: ignore[reportMissingImports]
 from Bio.SeqRecord import SeqRecord  # type: ignore[reportMissingImports]
 from pandas import DataFrame  # type: ignore[reportMissingImports]
 from svgwrite import Drawing  # type: ignore[reportMissingImports]
@@ -42,6 +41,7 @@ from gbdraw.analysis.depth_tracks import (
 )
 from gbdraw.exceptions import ValidationError
 from gbdraw.comparisons.linear_losat import resolve_linear_nucleotide_losat
+from gbdraw.io.comparison_sequences import read_comparison_sequence_records
 from gbdraw.layout.record_coordinates import RecordDisplayTransform
 from gbdraw.layout.record_placement import resolve_record_row_positions
 from gbdraw.layout.similarity_alignment import (
@@ -328,7 +328,7 @@ def _resolve_request_option_tables(
 
 @dataclass
 class _ComparisonSequenceSources:
-    """Memoized Circular companion FASTA records shared by a request batch."""
+    """Memoized Circular comparison-genome records shared by a request batch."""
 
     paths: tuple[str | None, ...]
     _records: tuple[tuple[SeqRecord, ...], ...] | None = None
@@ -351,7 +351,7 @@ class _ComparisonSequenceSources:
                 None
                 if identity is None
                 else (
-                    ("parsed-source-v1", "comparison-fasta", identity),
+                    ("parsed-source-v1", "comparison-sequence", identity),
                     frozenset({identity}),
                 )
             )
@@ -370,7 +370,7 @@ class _ComparisonSequenceSources:
                     continue
 
                 def parse(path: str = path) -> tuple[SeqRecord, ...]:
-                    return tuple(SeqIO.parse(path, "fasta"))
+                    return read_comparison_sequence_records(path)
 
                 if cache_spec is None:
                     loaded.append(parse())
@@ -1075,10 +1075,10 @@ def _prepare_diagram_inputs(request: DiagramRequest) -> PreparedDiagramInputs:
     )
     comparison_sequences = (
         _ComparisonSequenceSources(
-            tuple(options.conservation_fasta_files or ())
+            tuple(options.conservation_sequence_files or ())
         )
         if isinstance(options, CircularDiagramOptions)
-        and options.conservation_fasta_files
+        and options.conservation_sequence_files
         else None
     )
     return PreparedDiagramInputs(
@@ -2867,8 +2867,8 @@ def _comparison_sequence_records(
 
     def load_unprepared() -> tuple[tuple[SeqRecord, ...], ...]:
         return tuple(
-            tuple(SeqIO.parse(path, "fasta")) if path else ()
-            for path in options.conservation_fasta_files or ()
+            read_comparison_sequence_records(path) if path else ()
+            for path in options.conservation_sequence_files or ()
         )
 
     return require_interactive_svg_metadata(load_unprepared)

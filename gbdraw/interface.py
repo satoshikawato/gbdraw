@@ -11,7 +11,6 @@ from pathlib import Path
 from typing import Literal, Mapping, Sequence, TypeAlias
 
 from Bio.SeqRecord import SeqRecord  # type: ignore[reportMissingImports]
-from Bio import SeqIO  # type: ignore[reportMissingImports]
 from pandas import DataFrame  # type: ignore[reportMissingImports]
 from svgwrite import Drawing  # type: ignore[reportMissingImports]
 
@@ -31,6 +30,7 @@ from gbdraw.analysis.protein_colinearity import (
 )
 from gbdraw.annotations import AnnotationOptions, ResolutionWarning
 from gbdraw.api.io import load_gbks as _load_gbks, load_gff_fasta as _load_gff_fasta
+from gbdraw.io.comparison_sequences import read_comparison_sequence_records
 from gbdraw.api.options import (
     CircularDiagramOptions as _CircularDiagramOptions,
     CircularMultiRecordOptions as _CircularLayout,
@@ -983,7 +983,7 @@ def _interactive_context(
             elif isinstance(source, Sequence) and not isinstance(source, (str, bytes, PathLike)):
                 comparison_sequence_records.append(list(source))
             else:
-                comparison_sequence_records.append(list(SeqIO.parse(str(source), "fasta")))
+                comparison_sequence_records.append(list(read_comparison_sequence_records(source)))
     context = _build_prepared_interactive_context(
         prepared,
         comparison_sequence_records=comparison_sequence_records,
