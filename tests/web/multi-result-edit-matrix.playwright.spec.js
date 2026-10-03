@@ -6,13 +6,15 @@
 // Result's record (FE-05). Scoped color and visibility reach Result 1; label
 // edits stay with their feature (FE-01 to FE-03, PV-09). A Label TSV imported on
 // Result 1 reaches Result 2 the same way, and Undo and Redo reach both Results
-// as one step (B6, R3). Every editor edit kind commits the displayed Result at
-// once, so none waits for a Result switch (R1), and Undo and Redo of a drag
-// restore the Result it was made on while another Result is shown (B17). The
-// grid and Linear topologies are in live-edit-generate-equivalence (G-A).
+// as one step (B6, R3). A Legend sort keeps the entries only one Result draws
+// in place through a Result switch, which records no Undo step (B18). Every
+// editor edit kind commits the displayed Result at once, so none waits for a
+// Result switch (R1), and Undo and Redo of a drag restore the Result it was
+// made on while another Result is shown (B17). The grid and Linear topologies
+// are in live-edit-generate-equivalence (G-A).
 const { test, expect } = require('@playwright/test');
 const { generateAndWaitForResult } = require('./helpers/app-lifecycle.cjs');
-const { editFeature, openBatch, settle } = require('./helpers/audit-browser.cjs');
+const { editFeature, legendCaptions, openBatch, settle } = require('./helpers/audit-browser.cjs');
 const { download, load } = require('./helpers/mode-transition.cjs');
 
 test.describe.configure({ retries: 0 });
@@ -243,6 +245,47 @@ test('Circular batch: a Label TSV imported on Result 1 reaches Result 2 live, th
   expect.soft(await labelViolations(page, 'Generate', ids, IMPORTED_LABELS)).toEqual([]);
 });
 
+// B18 (D-07, D-08, R11): a Legend Sort Z-A made on Result 2 keeps its order on
+// Result 2 through a switch to Result 1 and back, also for the entry only
+// Result 2 draws (the "This feature only" color entry of TESTB_0001), and
+// Generate gives the same order. The Result picker is navigation, so a switch
+// records no Undo step.
+test('Circular batch: a Legend sort on Result 2 keeps its order through a Result switch and Generate', async ({ page }) => {
+  test.setTimeout(300_000);
+  await openBatch(page);
+  await show(page, 1);
+  await editFeature(page, 'TESTB_0001', { fill: RED });
+  await settle(page);
+  const undoCount = () => page.evaluate(() => window.__GBDRAW_HISTORY__.getUndoCount());
+  const edited = await undoCount();
+  await openDrawer(page);
+  await page.locator('.right-drawer').getByRole('button', { name: 'Legend' }).click();
+  await page.locator('.right-drawer').getByTitle('Sort Z-A', { exact: true }).click();
+  await settle(page);
+  const sorted = await legendCaptions(page);
+  expect(sorted).toContain('duplicate protein');
+  expect(sorted.at(-1)).not.toBe('duplicate protein');
+  expect(await legendCaptions(page, { source: 'content' })).toEqual(sorted);
+  expect(await undoCount()).toBe(edited + 1);
+
+  await show(page, 0);
+  expect.soft(await legendCaptions(page), 'Result 1 shows the sort without the Result 2 entry')
+    .toEqual(sorted.filter((caption) => caption !== 'duplicate protein'));
+  expect.soft(await undoCount(), 'showing Result 1 records no Undo step').toBe(edited + 1);
+  await show(page, 1);
+  expect.soft(await legendCaptions(page), 'Result 2 keeps its sorted order').toEqual(sorted);
+  expect.soft(await legendCaptions(page, { source: 'content' }), 'Result 2 content keeps its sorted order').toEqual(sorted);
+  expect.soft(await undoCount(), 'showing Result 2 records no Undo step').toBe(edited + 1);
+
+  // Generate turns the "This feature only" color into a rule and captions the
+  // remaining CDS row "other proteins" (documented), which follows the order.
+  await generateAndWaitForResult(page);
+  await settle(page);
+  await show(page, 1);
+  expect.soft(await legendCaptions(page), 'Generate keeps the sorted order on Result 2')
+    .toEqual(sorted.filter((caption) => caption !== 'CDS').concat('other proteins'));
+});
+
 // R1 (A1): each editor edit kind writes the displayed Result when it is made,
 // so nothing stays pending for a Result switch to persist. Right after the
 // edit, the committed content changed and equals the mounted SVG; after a
@@ -377,8 +420,7 @@ test('Circular batch: each editor edit kind is committed when made, not by the R
 // Result switch records no step. Undo made while Result 1 is shown keeps
 // Result 1 shown and unmoved and restores Result 2's committed content (the
 // Session and export source) at once; Redo drags Result 2 again. Each Result
-// keeps matching its mounted SVG. (After the legend edits of the test above, a
-// Result switch still records a legend-entries step, B18.)
+// keeps matching its mounted SVG.
 test('Circular batch: Undo and Redo of drags on Result 2 restore Result 2 while Result 1 is shown', async ({ page }) => {
   test.setTimeout(300_000);
   await openBatch(page);

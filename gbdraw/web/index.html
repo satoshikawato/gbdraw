@@ -4863,7 +4863,7 @@
                             <span v-if="failedGeneratePreservedResult">Last Successful Result</span>
                             <span v-else-if="results.length === 1">Result Preview</span>
                             <span v-else>
-                                <select :disabled="!semanticMutationAvailable" :value="selectedResultIndex" @change="selectResult($event.target.value)" class="bg-white border border-green-300 text-green-700 text-sm font-bold rounded py-1 px-2 cursor-pointer focus:ring-2 focus:ring-green-500 max-w-full">
+                                <select data-history-ignore :disabled="!semanticMutationAvailable" :value="selectedResultIndex" @change="selectResult($event.target.value)" class="bg-white border border-green-300 text-green-700 text-sm font-bold rounded py-1 px-2 cursor-pointer focus:ring-2 focus:ring-green-500 max-w-full">
                                     <option v-for="(res, idx) in results" :key="idx" :value="idx">Preview: {{ res.name }}</option>
                                 </select>
                             </span>

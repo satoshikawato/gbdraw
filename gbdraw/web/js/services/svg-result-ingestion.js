@@ -393,7 +393,7 @@ const updateLegendCaption = (entry, caption) => {
   if (label) label.textContent = caption;
 };
 
-const applyLegendOperations = (index, operations) => {
+const applyLegendOperations = (index, operations, { displayed = false } = {}) => {
   operations.legendFills.forEach(({ caption, color, allowMissing }) => {
     requireLegendEntries(index, caption, { allowMissing }).forEach((entry) => {
       const swatch = legendSwatch(entry);
@@ -460,8 +460,10 @@ const applyLegendOperations = (index, operations) => {
     });
   });
   // The edited Legend order is replayed last, over the renderer's slots (D-08).
+  // A displayed batch Result that already follows it keeps its order, so the
+  // entries only that Result draws keep their places (B18).
   operations.legendOrder.forEach(({ captions }) => {
-    index.legends().groups.forEach((group) => orderLegendEntries(group, captions));
+    index.legends().groups.forEach((group) => orderLegendEntries(group, captions, { keepFollowed: displayed }));
   });
 };
 
@@ -492,7 +494,7 @@ export const applyEditorOperationsToMountedSvg = (svg, operations, { resultIndex
     legendDeletes: operations.legendDeletes.map(allowMissing),
     legendAdds: operations.legendAdds,
     legendOrder: operations.legendOrder
-  });
+  }, { displayed: true });
 };
 
 const admitCurrentResult = (
