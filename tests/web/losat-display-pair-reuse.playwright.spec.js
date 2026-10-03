@@ -322,5 +322,15 @@ test('The Web reuses every raw LOSATP search of a CLI Session over a multi-recor
   // Nine record-pair entries; the four between the files carry the file database.
   expect(session.losatCache.entries).toHaveLength(9);
   expect(session.losatCache.entries.filter((entry) => entry.searchContext)).toHaveLength(4);
+
+  // Run Info shows the runtime that the CLI recorded (D9/D10), with its path.
+  const recorded = session.losatCache.entries[0].runtime;
+  expect(recorded).toMatchObject({ kind: 'losat', source: 'explicit', program: 'blastp' });
+  const runtimes = await page.evaluate(() => (
+    JSON.parse(JSON.stringify(window.__GBDRAW_APP__.lastRunInfo.losatRuntimes))
+  ));
+  expect(runtimes.map(({ kind, source, path, program }) => ({ kind, source, path, program })))
+    .toEqual([{ kind: 'losat', source: 'explicit', path: recorded.path, program: 'blastp' }]);
+  expect(runtimes[0].text).toContain(recorded.path);
 });
 
