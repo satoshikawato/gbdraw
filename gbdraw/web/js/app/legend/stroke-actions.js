@@ -6,7 +6,6 @@ import {
   getFeatureElements
 } from '../feature-editor/svg-actions.js';
 import { getAllFeatureLegendGroups } from './utils.js';
-import { serializeCleanSvg } from '../../services/svg-serialization.js';
 import {
   featureOverrideKey,
   migrateLegacyFeatureOverrides
@@ -134,9 +133,6 @@ export const createLegendStrokeActions = ({ state, previewRuntime = null }) => {
     legendStrokeOverrides,
     featureStrokeOverrides,
     originalSvgStroke,
-    results,
-    selectedResultIndex,
-    skipCaptureBaseConfig,
     svgContainer,
     manualSpecificRules
   } = state;
@@ -154,22 +150,7 @@ export const createLegendStrokeActions = ({ state, previewRuntime = null }) => {
     };
   };
 
-  const persistStrokeEdit = (svg, reason = 'feature-stroke') => {
-    skipCaptureBaseConfig.value = true;
-    if (previewRuntime?.markActiveResultDirty?.(reason)) {
-      previewRuntime.flushActiveResult?.();
-      return;
-    }
-    const resultIdx = selectedResultIndex.value;
-    if (resultIdx >= 0 && results.value.length > resultIdx) {
-      const nextResults = [...results.value];
-      nextResults[resultIdx] = {
-        ...results.value[resultIdx],
-        content: serializeCleanSvg(svg)
-      };
-      results.value = nextResults;
-    }
-  };
+  const persistStrokeEdit = (reason) => previewRuntime?.commitActiveResultEdit(reason);
 
   const getLegendEntryStrokeColor = (idx) => {
     const entry = legendEntries.value[idx];
@@ -311,7 +292,7 @@ export const createLegendStrokeActions = ({ state, previewRuntime = null }) => {
     if (overrideRemoved) delete legendStrokeOverrides[entry.caption];
 
     if (updatedCount > 0) {
-      persistStrokeEdit(svg, 'reset-legend-stroke');
+      persistStrokeEdit('reset-legend-stroke');
     }
     return updatedCount > 0 || overrideRemoved;
   };
@@ -350,7 +331,7 @@ export const createLegendStrokeActions = ({ state, previewRuntime = null }) => {
     Object.keys(featureStrokeOverrides).forEach((key) => delete featureStrokeOverrides[key]);
 
     if (updatedCount > 0) {
-      persistStrokeEdit(svg, 'reset-all-strokes');
+      persistStrokeEdit('reset-all-strokes');
       console.log(
         `Reset all strokes: updated ${updatedCount} elements to original (color=${originalColor}, width=${originalWidth})`
       );
@@ -503,7 +484,7 @@ export const createLegendStrokeActions = ({ state, previewRuntime = null }) => {
     }
 
     if (updatedCount > 0) {
-      persistStrokeEdit(svg, 'legend-stroke');
+      persistStrokeEdit('legend-stroke');
       console.log(`Applied stroke to ${updatedCount} elements for caption "${caption}"`);
     }
   };
@@ -526,7 +507,7 @@ export const createLegendStrokeActions = ({ state, previewRuntime = null }) => {
     });
 
     if (totalUpdated > 0) {
-      persistStrokeEdit(svg, 'reapply-stroke-overrides');
+      persistStrokeEdit('reapply-stroke-overrides');
     }
     return totalUpdated > 0;
   };
@@ -630,7 +611,7 @@ export const createLegendStrokeActions = ({ state, previewRuntime = null }) => {
     }
 
     const reapplied = reapplyStrokeOverrides();
-    if (changed && !reapplied) persistStrokeEdit(svg, 'history-stroke-reconcile');
+    if (changed && !reapplied) persistStrokeEdit('history-stroke-reconcile');
     return changed || reapplied;
   };
 
