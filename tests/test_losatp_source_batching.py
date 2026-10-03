@@ -15,6 +15,7 @@ import sys
 
 import pytest
 
+import gbdraw.analysis.protein_colinearity as protein_colinearity
 import gbdraw.comparisons.losat_runtime as runtime_module
 from gbdraw.analysis.protein_colinearity import validate_protein_raw_entry_references
 from gbdraw.linear import linear_main
@@ -185,3 +186,43 @@ def test_single_record_files_search_each_pair(tmp_path: Path) -> None:
     entries = _entries_by_pair(session)
     assert len(entries) == 9
     assert not any("searchContext" in entry for entry in entries.values())
+
+
+def _replay(session_path: Path, prefix: Path) -> dict:
+    linear_main(["--session", str(session_path), "-o", str(prefix), "-f", "svg", "--save_session"])
+    return json.loads(prefix.with_suffix(".gbdraw-session.json").read_text(encoding="utf-8"))
+
+
+@pytest.mark.linear
+@pytest.mark.parametrize("mode", ["similarity_groups", "pairwise"])
+def test_cli_session_keeps_one_file_as_one_source_on_replay(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, mode: str
+) -> None:
+    """PR5-B1: a CLI Session stores the records of one file in one resource."""
+
+    table = _inputs(tmp_path)
+    session, _ = _run(tmp_path, mode, ["--records_table", str(table)], mode)
+    assert any(entry.get("searchContext") for entry in session["losatCache"]["entries"])
+
+    def search_attempted(*_args: object, **_kwargs: object) -> object:
+        raise AssertionError("SEARCH ATTEMPTED")
+
+    monkeypatch.setattr(protein_colinearity, "run_losatp_blastp", search_attempted)
+    source = tmp_path / mode / "out"
+    replay = tmp_path / mode / "replay"
+    replayed = _replay(source.with_suffix(".gbdraw-session.json"), replay)
+    assert replay.with_suffix(".svg").read_bytes() == source.with_suffix(".svg").read_bytes()
+
+    # The Web shape: one GenBank resource per source file, `#k` selectors for
+    # the records of a multi-record file, a single-record file unchanged.
+    records = session["renderRequest"]["records"]
+    assert [(record["source"], record["selector"]) for record in records] == [
+        ({"kind": "genbank", "resourceId": "record-1-genbank"}, {"kind": "recordIndex", "index": 0}),
+        ({"kind": "genbank", "resourceId": "record-1-genbank"}, {"kind": "recordIndex", "index": 1}),
+        ({"kind": "genbank", "resourceId": "record-3-genbank"}, None),
+    ]
+    assert sorted(session["resources"]) == ["record-1-genbank", "record-3-genbank"]
+    # A replay writes the same layout and keeps every raw entry.
+    assert replayed["renderRequest"]["records"] == records
+    assert replayed["resources"] == session["resources"]
+    assert replayed["losatCache"] == session["losatCache"]
