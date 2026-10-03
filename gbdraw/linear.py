@@ -1123,7 +1123,8 @@ def _nucleotide_output_files(run_result: DiagramRunResult) -> list[tuple[str, st
     ]
     if not comparisons or len(names) != len(comparisons):
         raise ValidationError(
-            "LOSAT output requested, but no raw nucleotide evidence was produced."
+            "LOSAT output requested, but no raw nucleotide evidence was produced.",
+            diagnostic={"code": "LOSAT_RUNTIME", "reason": "OUTPUT"},
         )
     files: list[tuple[str, str]] = []
     used: set[str] = {LOSAT_COMPARISONS_OUTPUT_NAME}
