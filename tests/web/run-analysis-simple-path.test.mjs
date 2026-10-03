@@ -166,6 +166,7 @@ globalThis.Worker = AuditSimplePathWorker;
 const {
   afterFrame,
   afterPaint,
+  buildLosatCachePayload,
   createRunAnalysis,
   executeCanonicalRenderCandidate
 } = await import('../../gbdraw/web/js/app/run-analysis.js');
@@ -1731,6 +1732,24 @@ test('neutral conservation replay delegates lazy resources to the shared reader'
     assert.equal(losatCalls, 1);
     assert.ok(capturedSequences.includes('>MIDDLE\nCCCCGGGG\n'));
     assert.ok(capturedSequences.includes('>THIRD\nTTTTAAAA\n'));
+    // D9/D10: each searched raw entry records the Web runtime identity, which
+    // is not part of its key; Run Info lists the runtime of the displayed rows.
+    const searchedEntries = Array.from(state.losatCache.value.entries());
+    assert.ok(searchedEntries.length > 0);
+    for (const [key, entry] of searchedEntries) {
+      assert.deepEqual(entry.runtime, { kind: 'losat', source: 'wasm', version: null, program: 'blastn' });
+      const { runtime: _runtime, ...withoutRuntime } = entry;
+      assert.equal(key, await sha256Text(JSON.stringify(buildLosatCachePayload(withoutRuntime))));
+      assert.equal(key, await sha256Text(JSON.stringify(buildLosatCachePayload(entry))));
+    }
+    assert.deepEqual(state.lastRunInfo.value.losatRuntimes, [{
+      program: 'blastn',
+      kind: 'losat',
+      version: null,
+      source: 'wasm',
+      path: null,
+      text: 'blastn: LOSAT, version not recorded (wasm)'
+    }]);
     // Generated LOSATN rows stay in the search frame; the Python planner
     // projects the reversed record (PD-OI-073), so no Web conversion runs.
     assert.equal(workerMessages.some(({ type, operation }) => (

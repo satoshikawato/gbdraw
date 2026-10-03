@@ -1690,6 +1690,40 @@ const finalizeGeneratedRecipeFiles = (generatedFiles, allocatedMetadata) => {
 export const LOSAT_DATABASE_SCOPE_NOTE = 'LOSAT E-values use the subject source file as the search database, '
   + 'without the query record when both records come from the same file.';
 
+const LOSAT_RUNTIME_NAMES = Object.freeze({ losat: 'LOSAT', 'ncbi-blast': 'NCBI BLAST+' });
+
+// One line per search runtime: program, runtime kind, version and source, plus
+// the executable path that CLI Sessions record (design D9/D10).
+export const formatLosatRuntime = ({ program, kind, version, source, path }) => {
+  if (!kind) return `${program}: runtime not recorded`;
+  const name = LOSAT_RUNTIME_NAMES[kind] || kind;
+  const release = version ? ` ${version}` : ', version not recorded';
+  const origin = [source, path].filter(Boolean).join(', ');
+  return `${program}: ${name}${release}${origin ? ` (${origin})` : ''}`;
+};
+
+// The distinct runtimes of the displayed raw LOSAT entries of a run, Web or
+// CLI made. Entries saved before runtimes were recorded show "not recorded".
+export const summarizeLosatRuntimes = (cacheInfo, cacheMap) => {
+  const runtimes = new Map();
+  (Array.isArray(cacheInfo) ? cacheInfo : []).forEach((info) => {
+    if (!info?.key || info.display === false) return;
+    const entry = cacheMap?.get?.(info.key);
+    if (!entry || typeof entry !== 'object') return;
+    const runtime = entry.runtime && typeof entry.runtime === 'object' ? entry.runtime : null;
+    const record = {
+      program: String(runtime?.program || entry.program || ''),
+      kind: runtime ? String(runtime.kind || '') : '',
+      version: runtime?.version == null ? null : String(runtime.version),
+      source: runtime ? String(runtime.source || '') : '',
+      path: runtime?.path ? String(runtime.path) : null
+    };
+    const identity = JSON.stringify(record);
+    if (!runtimes.has(identity)) runtimes.set(identity, { ...record, text: formatLosatRuntime(record) });
+  });
+  return Array.from(runtimes.values());
+};
+
 export const buildRunInfo = ({
   mode,
   args,
@@ -1700,7 +1734,8 @@ export const buildRunInfo = ({
   resultCount,
   startedAtIso,
   generatedBy = 'gbdraw-web',
-  losatComparisons = false
+  losatComparisons = false,
+  losatRuntimes = []
 } = {}) => {
   const normalizedMode = String(mode || '').trim() === 'linear' ? 'linear' : 'circular';
   let sourceAvailable = sourceRecipe?.available !== false;
@@ -1828,6 +1863,7 @@ export const buildRunInfo = ({
     startedAtIso: startedAtIso || new Date().toISOString(),
     elapsedMs: Number.isFinite(Number(elapsedMs)) ? Number(elapsedMs) : 0,
     resultCount: Number.isFinite(Number(resultCount)) ? Number(resultCount) : 0,
+    losatRuntimes: Array.isArray(losatRuntimes) ? losatRuntimes.map((runtime) => ({ ...runtime })) : [],
     command: source.command,
     commandArgs: source.commandArgs,
     sessionCommand: exact?.command || '',

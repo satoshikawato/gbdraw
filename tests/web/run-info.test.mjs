@@ -19,7 +19,8 @@ const {
   buildSourceRecipe,
   isCliInvocationSessionExportable,
   quoteShellArg,
-  reproducibilityLabel
+  reproducibilityLabel,
+  summarizeLosatRuntimes
 } = await import(pathToFileURL(modulePath));
 const { adoptCurrentSessionResources, createSessionResourceFileView } = await import(
   pathToFileURL(join(tempDir, 'js', 'services', 'session-resource-backing.js'))
@@ -1180,4 +1181,40 @@ test('Run Info states the LOSAT search database only when LOSAT comparisons are 
   assert.doesNotMatch(LOSAT_DATABASE_SCOPE_NOTE, /CLI/);
   const without = buildRunInfo({ mode: 'linear', sourceRecipe: recipe });
   assert(!without.reproducibility.notes.includes(LOSAT_DATABASE_SCOPE_NOTE));
+});
+
+test('Run Info lists the search runtime of Web, CLI and unrecorded raw entries (D9/D10)', () => {
+  const cacheMap = new Map([
+    ['web', { program: 'blastn', runtime: { kind: 'losat', source: 'wasm', version: null, program: 'blastn' } }],
+    ['web-copy', { program: 'blastn', runtime: { kind: 'losat', source: 'wasm', version: null, program: 'blastn' } }],
+    ['cli', {
+      program: 'tblastx',
+      runtime: {
+        kind: 'losat', version: '0.1.0', source: 'bundled',
+        path: 'gbdraw/bin/linux-x86_64/losat', program: 'tblastx', cli: 'v1'
+      }
+    }],
+    ['ncbi', { program: 'blastp', runtime: { kind: 'ncbi-blast', version: '2.16.0+', source: 'path', path: '/usr/bin/blastp', program: 'blastp' } }],
+    ['old', { program: 'blastn' }],
+    ['hidden', { program: 'blastp', runtime: { kind: 'losat', source: 'wasm', version: null, program: 'blastp' } }]
+  ]);
+  const info = ['web', 'web-copy', 'cli', 'ncbi', 'old'].map((key) => ({ key, display: true }))
+    .concat([{ key: 'hidden', display: false }, { key: 'missing', display: true }]);
+  assert.deepEqual(summarizeLosatRuntimes(info, cacheMap).map(({ text }) => text), [
+    'blastn: LOSAT, version not recorded (wasm)',
+    'tblastx: LOSAT 0.1.0 (bundled, gbdraw/bin/linux-x86_64/losat)',
+    'blastp: NCBI BLAST+ 2.16.0+ (path, /usr/bin/blastp)',
+    'blastn: runtime not recorded'
+  ]);
+  const runInfo = buildRunInfo({
+    mode: 'linear',
+    sourceRecipe: { available: true, args: ['--gbk', 'a.gb'], generatedFiles: [] },
+    losatRuntimes: summarizeLosatRuntimes(info.slice(2, 3), cacheMap)
+  });
+  assert.deepEqual(runInfo.losatRuntimes, [{
+    program: 'tblastx', kind: 'losat', version: '0.1.0', source: 'bundled',
+    path: 'gbdraw/bin/linux-x86_64/losat',
+    text: 'tblastx: LOSAT 0.1.0 (bundled, gbdraw/bin/linux-x86_64/losat)'
+  }]);
+  assert.deepEqual(buildRunInfo({ mode: 'circular' }).losatRuntimes, []);
 });

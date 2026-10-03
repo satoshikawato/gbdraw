@@ -65,7 +65,7 @@ import {
 import {
   normalizeCollinearSearchScope
 } from './losat-normalization.js';
-import { buildRunInfo, buildSourceRecipe } from './run-info.js';
+import { buildRunInfo, buildSourceRecipe, summarizeLosatRuntimes } from './run-info.js';
 import {
   buildLosatJobSpecs,
   resolveLinearComparisonPlan
@@ -138,7 +138,8 @@ import {
   releaseValidatedProteinIdentityIndex,
   sameLosatArgs,
   transitionLegacyProteinCandidate,
-  validateDerivedProteinReferences
+  validateDerivedProteinReferences,
+  webLosatRuntimeRecord
 } from './losat-cache.js';
 import { comparisonFiltersForMode, resolveComparisonThresholds } from '../mode-profiles.js';
 import { diagnosticError, liveEditFailure, normalizeUserFacingError } from '../services/error-normalization.js';
@@ -2752,7 +2753,8 @@ export const createRunAnalysis = ({
                   outfmt: String(losat.outfmt || '6'),
                   args: job?.extraArgs || [],
                   queryCanonicalHash: job?.queryCanonicalHash || '',
-                  subjectCanonicalHash: job?.subjectCanonicalHash || ''
+                  subjectCanonicalHash: job?.subjectCanonicalHash || '',
+                  runtime: webLosatRuntimeRecord(circularLosatProgram)
                 });
               });
             } else {
@@ -3902,7 +3904,8 @@ export const createRunAnalysis = ({
                   : {
                       queryCanonicalHash: job?.queryCanonicalHash || '',
                       subjectCanonicalHash: job?.subjectCanonicalHash || ''
-                    })
+                    }),
+                runtime: webLosatRuntimeRecord(losatProgram.value)
               };
               cacheMap.set(result.cacheKey, rawEntry);
             });
@@ -4531,7 +4534,11 @@ export const createRunAnalysis = ({
           elapsedMs: getNow() - manualRunStartedAt,
           resultCount: candidateCommit.results.length,
           startedAtIso: manualRunStartedAtIso,
-          losatComparisons: mode.value === 'linear' && activeComparisonPlanSnapshot?.hasLosatIntent === true
+          losatComparisons: mode.value === 'linear' && activeComparisonPlanSnapshot?.hasLosatIntent === true,
+          losatRuntimes: summarizeLosatRuntimes(
+            pendingLosatCacheCommit?.cacheInfo || workingLosatCacheInfo,
+            pendingLosatCacheCommit?.cacheMap || losatCache.value
+          )
         });
         sourceRecipe.generatedFiles.forEach((file) => {
           recordGeneratedCliFile(

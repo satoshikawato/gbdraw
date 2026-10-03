@@ -18,6 +18,17 @@ const MANIFEST_PRESENTATION_IDENTITY_FRAGMENTS = [
   'renderedsvgid'
 ];
 
+// The runtime identity the Web stores beside each raw entry it searches
+// (design D9/D10, the CLI's losat_runtime_record). It is never part of a raw
+// key. The shipped WASM has no build manifest, so its version is not recorded
+// (null), as for a CLI runtime whose version probe fails.
+export const webLosatRuntimeRecord = (program) => ({
+  kind: 'losat',
+  source: 'wasm',
+  version: null,
+  program: String(program || '')
+});
+
 export const isPlainObject = (value) => (
   Boolean(value) && typeof value === 'object' && !Array.isArray(value)
 );
