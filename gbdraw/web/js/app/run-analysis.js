@@ -138,6 +138,7 @@ import {
   releaseValidatedProteinIdentityIndex,
   sameLosatArgs,
   transitionLegacyProteinCandidate,
+  losatEdgeFilename,
   validateDerivedProteinReferences,
   webLosatRuntimeRecord
 } from './losat-cache.js';
@@ -1484,24 +1485,15 @@ export const createRunAnalysis = ({
     return '';
   };
 
-  const normalizeLabel = (label, fallback) => {
-    const base = String(label || '').trim() || String(fallback || '');
-    const dotted = base.replace(/[\\s/]+/g, '.').replace(/\.+/g, '.').replace(/^\.|\.$/g, '');
-    const safe = makeSafeFilename(dotted);
-    return safe || makeSafeFilename(String(fallback || 'losat'));
-  };
-
   const buildLosatSuffix = () => {
     if (losatProgram.value === 'blastn') return 'losatn';
     if (losatProgram.value === 'blastp') return 'losatp';
     return 'tlosatx';
   };
 
-  const buildLosatFilename = (leftLabel, rightLabel) => {
-    const left = normalizeLabel(leftLabel, 'seq_1');
-    const right = normalizeLabel(rightLabel, 'seq_2');
-    return `${left}.${right}.${buildLosatSuffix()}.tsv`;
-  };
+  const buildLosatFilename = (leftLabel, rightLabel) => (
+    losatEdgeFilename(leftLabel, rightLabel, buildLosatSuffix())
+  );
 
   const getResolvedLinearEdge = (edgeKey) => {
     const normalizedKey = String(edgeKey || '').trim();

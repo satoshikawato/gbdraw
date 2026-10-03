@@ -1,0 +1,14 @@
+{
+  "schema": 1,
+  "description": "Default raw LOSAT TSV names of Linear edges. tests/test_losat_linear_nucleotide.py runs gbdraw.comparisons.linear_losat.losat_edge_filename and tests/web/losat-cache.test.mjs runs the Web losatEdgeFilename on every case; both must give the expected name.",
+  "cases": [
+    {"left": "Lambda phages", "right": "contigs", "suffix": "losatn", "expected": "Lambda.phages.contigs.losatn.tsv"},
+    {"left": "Vibrio harveyi", "right": "Vibrio campbellii", "suffix": "tlosatx", "expected": "Vibrio.harveyi.Vibrio.campbellii.tlosatx.tsv"},
+    {"left": "  a / b  ", "right": "s", "suffix": "losatp", "expected": "a.b.s.losatp.tsv"},
+    {"left": "x..y", "right": "p(1)", "suffix": "losatn", "expected": "x.y.p_1.losatn.tsv"},
+    {"left": "", "right": "///", "suffix": "losatn", "expected": "seq_1.seq_2.losatn.tsv"},
+    {"left": "@@@", "right": "Z", "suffix": "losatn", "expected": "seq_1.Z.losatn.tsv"},
+    {"left": "Café strain", "right": "株A", "suffix": "losatn", "expected": "Café.strain.株A.losatn.tsv"},
+    {"left": "back\\slash", "right": "tab\tsep", "suffix": "losatn", "expected": "back_slash.tab.sep.losatn.tsv"}
+  ]
+}

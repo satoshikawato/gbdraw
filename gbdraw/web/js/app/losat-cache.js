@@ -29,6 +29,20 @@ export const webLosatRuntimeRecord = (program) => ({
   program: String(program || '')
 });
 
+// Default raw LOSAT TSV name of a Linear edge; the CLI port is
+// gbdraw.comparisons.linear_losat.losat_edge_filename
+// (tests/fixtures/losat_edge_filename_cases.json).
+const losatFilenameLabel = (label) => String(label ?? '')
+  .replace(/[\s/]+/gu, '.')
+  .replace(/\.+/g, '.')
+  .replace(/^\.+|\.+$/g, '')
+  .replace(/[^\p{L}\p{N}_.-]+/gu, '_')
+  .replace(/^_+|_+$/g, '');
+
+export const losatEdgeFilename = (leftLabel, rightLabel, suffix) => (
+  `${losatFilenameLabel(leftLabel) || 'seq_1'}.${losatFilenameLabel(rightLabel) || 'seq_2'}.${suffix}.tsv`
+);
+
 export const isPlainObject = (value) => (
   Boolean(value) && typeof value === 'object' && !Array.isArray(value)
 );
