@@ -223,7 +223,7 @@ const drainMicrotasks = async () => { for (let index = 0; index < 50; index += 1
 const settleTasks = () => new Promise(resolve => setTimeout(resolve, 5));
 
 const createBoundaryHarness = async () => {
-  const state = { flag: false, choice: 'gb', mode: 'circular', prefix: '', labels: 'out' };
+  const state = { flag: false, choice: 'gb', mode: 'circular', prefix: '', labels: 'out', rings: 0 };
   const history = createHistoryManager({
     buildIntent: () => ({ ...state }),
     applyIntent: (restored) => { Object.assign(state, restored); },
@@ -261,22 +261,25 @@ const createBoundaryHarness = async () => {
     select: control('SELECT', 'select-one'),
     text: control('INPUT', 'text'),
     button: control('BUTTON', 'button'),
+    file: control('INPUT', 'file'),
     label: { tagName: 'LABEL', closest: () => null }
   };
   const cleanup = setupHistoryInputs({ root, history, nextTick: () => Promise.resolve() });
   setupHistoryShortcuts({ history, onMounted: callback => callback(), onUnmounted: () => {} });
   // Capture listeners, then the target-phase owner (for example v-model), then bubble.
-  const dispatch = async (type, target, { atTarget = null, ...init } = {}) => {
+  // A script-dispatched (untrusted) event runs no microtask checkpoint between listeners.
+  const dispatch = async (type, target, { atTarget = null, untrusted = false, ...init } = {}) => {
     const event = { type, target, preventDefault: () => {}, ...init };
+    const checkpoint = untrusted ? () => {} : drainMicrotasks;
     for (const entry of listeners.filter(item => item.type === type && item.capture)) {
       entry.handler(event);
-      await drainMicrotasks();
+      await checkpoint();
     }
     atTarget?.();
-    await drainMicrotasks();
+    await checkpoint();
     for (const entry of listeners.filter(item => item.type === type && !item.capture)) {
       entry.handler(event);
-      await drainMicrotasks();
+      await checkpoint();
     }
     if (type === 'keydown') documentListeners.get('keydown')?.(event);
     await drainMicrotasks();
@@ -367,6 +370,36 @@ for (const [name, act, changed] of [
       await h.history.redo();
       await h.history.redo();
       assert.deepEqual({ ...h.state }, { ...before, prefix: 'audit', ...changed });
+    } finally { h.cleanup(); }
+  });
+}
+
+// B21: a hidden file input, opened by a button or a label, mutates state in its
+// own change handler. The step begins in the change capture phase.
+const addRing = (h, init = {}) => h.dispatch('change', h.controls.file, {
+  ...init, atTarget: () => { h.state.rings += 1; }
+});
+for (const [name, act] of [
+  ['file chosen after its opening button', async (h) => {
+    await h.dispatch('pointerdown', h.controls.button);
+    await h.dispatch('click', h.controls.button);
+    await settleTasks();
+    await addRing(h);
+  }],
+  ['file set directly on the hidden input', (h) => addRing(h)],
+  ['file set by a script-dispatched change', (h) => addRing(h, { untrusted: true })]
+]) {
+  test(`B21: ${name} records exactly one Undo step`, async () => {
+    const h = await createBoundaryHarness();
+    try {
+      await act(h);
+      await settleTasks();
+      assert.deepEqual(h.counts(), [1, 0]);
+      assert.equal(h.history.undoLabel(), 'Change uploaded file');
+      await h.history.undo();
+      assert.equal(h.state.rings, 0);
+      await h.history.redo();
+      assert.equal(h.state.rings, 1);
     } finally { h.cleanup(); }
   });
 }

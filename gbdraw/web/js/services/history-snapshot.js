@@ -524,8 +524,13 @@ const buildIntentFilesData = (state, fileStore) => {
       file: fileStore.describeValue(edge?.file)
     }))
   };
+  // Uploaded BLAST rows and their optional comparison sequences are user
+  // choices; a LOSAT-cache replay holds them as generated artifacts.
   if (state.files?.c_conservation_blasts_source !== 'losat-cache') {
     files.c_conservation_blasts = fileStore.describeValue(state.files?.c_conservation_blasts || []);
+    files.c_conservation_sequence_sources = fileStore.describeValue(
+      state.files?.c_conservation_sequence_sources || []
+    );
   }
   return files;
 };

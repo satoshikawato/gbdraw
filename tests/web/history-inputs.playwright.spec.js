@@ -1,10 +1,11 @@
 const { test, expect } = require('@playwright/test');
-const { readFileSync } = require('node:fs');
+const { readFileSync, writeFileSync } = require('node:fs');
 const { resolve } = require('node:path');
 const { gunzipSync } = require('node:zlib');
 const { openApp, reveal } = require('./helpers/app-lifecycle.cjs');
 
 const seed = resolve('gbdraw/web/gallery/sessions/HmmtDNA_basic_circular.gbdraw-session.json');
+const conservationSession = resolve('tests/fixtures/sessions/synthetic_conservation.gbdraw-session.json.gz');
 const sessionInput = 'input[type="file"][accept^=".json,"]';
 
 const preparePage = async (page) => {
@@ -373,4 +374,82 @@ test('History shortcuts work on a focused select, and a text field keeps native 
   await expect(prefix).not.toHaveValue(`${before}abc`);
   await expect(prefix).toBeFocused();
   expect(await historyCounts(page)).toEqual([baseline, 1]);
+});
+
+// B21 (R11): a file chosen in a hidden input that a button or a label opens
+// records one step, whether the picker, the input, or a script sets the file.
+const ringRows = (page) => page.evaluate(() => ({
+  files: (window.__GBDRAW_APP__.files.c_conservation_fastas || []).map((file) => file?.name || null),
+  rows: window.__GBDRAW_APP__.circularConservation.series.map((entry) => entry.label)
+}));
+const fastaFile = (testInfo, name) => {
+  const path = testInfo.outputPath(name);
+  writeFileSync(path, `>${name}\nACGTACGTACGTACGTACGTACGTACGTACGT\n`);
+  return path;
+};
+
+test('each Circular LOSAT ring file added through Add Seq is one Undo step', async ({ page }, testInfo) => {
+  test.setTimeout(180_000);
+  await preparePage(page);
+  await loadSession(page, conservationSession);
+  const [baseline] = await historyCounts(page);
+  const initial = await ringRows(page);
+  const addSeq = page.locator('button', { hasText: 'Add Seq' });
+  await reveal(addSeq);
+  const ringInput = page.locator('input[type="file"][accept^=".fa,.fas,.fasta,.fna,.ffn,.gb"]');
+  const states = [initial];
+  const expectAdded = async (name) => {
+    states.push({ files: [...states.at(-1).files, name], rows: [...states.at(-1).rows, name.replace(/\.fasta$/, '')] });
+    await expect.poll(() => ringRows(page), { message: name }).toEqual(states.at(-1));
+    await expectHistory(page, baseline + states.length - 1, 0, 'Change uploaded file');
+  };
+
+  const [chooser] = await Promise.all([page.waitForEvent('filechooser'), addSeq.click()]);
+  await chooser.setFiles(fastaFile(testInfo, 'ring-e.fasta'));
+  await expectAdded('ring-e.fasta');
+  await ringInput.setInputFiles(fastaFile(testInfo, 'ring-f.fasta'));
+  await expectAdded('ring-f.fasta');
+  await ringInput.setInputFiles({
+    name: 'ring-g.fasta', mimeType: 'text/plain', buffer: Buffer.from('>ring-g\nACGTACGTACGT\n')
+  });
+  await expectAdded('ring-g.fasta');
+
+  const undo = page.getByRole('button', { name: 'Undo', exact: true });
+  for (let index = states.length - 2; index >= 0; index -= 1) {
+    await undo.click();
+    await expect.poll(() => ringRows(page), { message: `Undo to state ${index}` }).toEqual(states[index]);
+    await expect.poll(() => historyCounts(page)).toEqual([baseline + index, states.length - 1 - index]);
+  }
+  await page.getByRole('button', { name: 'Redo', exact: true }).click();
+  await expect.poll(() => ringRows(page)).toEqual(states[1]);
+  await expectHistory(page, baseline + 1, 2, 'Change uploaded file');
+});
+
+test('an uploaded BLAST row comparison sequence chosen through its label is one Undo step', async ({ page }, testInfo) => {
+  test.setTimeout(120_000);
+  await preparePage(page);
+  const upload = page.locator('input[type="radio"][value="upload"]');
+  await reveal(upload);
+  await upload.check();
+  const blast = testInfo.outputPath('ring-hits.tsv');
+  writeFileSync(blast, 'q1\ts1\t99.0\t100\t1\t0\t1\t100\t1\t100\t1e-50\t200\n');
+  await page.locator('input[type="file"][aria-label="BLAST outfmt 6/7 files"]').setInputFiles(blast);
+  const sequenceSources = () => page.evaluate(() => (
+    window.__GBDRAW_APP__.files.c_conservation_sequence_sources || []
+  ).map((file) => file?.name || null));
+  const companion = page.locator('label', { hasText: 'Comparison sequence (optional)' })
+    .locator('input[type="file"]');
+  await expect(companion).toHaveCount(1);
+  await expect.poll(sequenceSources).toEqual([]);
+  const [baseline] = await historyCounts(page);
+
+  await companion.setInputFiles(fastaFile(testInfo, 'ring-subject.fasta'));
+  await expect.poll(sequenceSources).toEqual(['ring-subject.fasta']);
+  await expectHistory(page, baseline + 1, 0, 'Change uploaded file');
+  await page.getByRole('button', { name: 'Undo', exact: true }).click();
+  await expect.poll(sequenceSources).toEqual([]);
+  await expect.poll(() => historyCounts(page)).toEqual([baseline, 1]);
+  await page.getByRole('button', { name: 'Redo', exact: true }).click();
+  await expect.poll(sequenceSources).toEqual(['ring-subject.fasta']);
+  await expectHistory(page, baseline + 1, 0, 'Change uploaded file');
 });
