@@ -1175,10 +1175,11 @@ export const applyEditorStateData = (
 };
 
 const SESSION_FORMAT_ERROR = () => diagnosticError('INPUT_INVALID', { field: 'schema', reason: 'SESSION_FORMAT' });
+const SESSION_FIELDS_ERROR = () => diagnosticError('INPUT_INVALID', { field: 'schema', reason: 'FIELDS' });
 const validateSessionVersion = version => {
   if (!Number.isInteger(version)) throw SESSION_FORMAT_ERROR();
   if (version > SESSION_VERSION || !SUPPORTED_SESSION_VERSIONS.has(version)) {
-    throw diagnosticError('INPUT_INVALID', { field: 'schema', reason: 'FIELDS' });
+    throw SESSION_FIELDS_ERROR();
   }
 };
 
@@ -1226,35 +1227,27 @@ const migrateLegacyFeatureRenderingConfig = (configData, legacy) => {
 const sessionArtifactEntries = (data, field) => {
   const container = data[field];
   if (container === undefined || container === null) return [];
-  if (!isPlainObject(container)) {
-    throw new Error(`Session ${field} must be an object when present.`);
-  }
+  if (!isPlainObject(container)) throw SESSION_FIELDS_ERROR();
   const entries = Object.prototype.hasOwnProperty.call(container, 'entries')
     ? container.entries
     : [];
-  if (!Array.isArray(entries)) {
-    throw new Error(`Session ${field}.entries must be an array.`);
-  }
+  if (!Array.isArray(entries)) throw SESSION_FIELDS_ERROR();
   return entries;
 };
 
-const rejectInvalidLosatCacheKeys = (entries, owner, { requireKey = false } = {}) => {
+// A raw key names one cache entry; a repeated or missing key is a malformed
+// Session (R6: classified, without document values).
+const rejectInvalidLosatCacheKeys = (entries, { requireKey = false } = {}) => {
   const seen = new Set();
-  for (const [index, entry] of entries.entries()) {
+  for (const entry of entries) {
     const key = isPlainObject(entry) && typeof entry.key === 'string'
       ? entry.key
       : '';
     if (!key) {
-      if (requireKey) {
-        throw new Error(
-          `LOSAT cache entry at losatCache.entries[${index}] requires a key.`
-        );
-      }
+      if (requireKey) throw SESSION_FIELDS_ERROR();
       continue;
     }
-    if (seen.has(key)) {
-      throw new Error(`Duplicate ${owner} cache key: ${JSON.stringify(key)}.`);
-    }
+    if (seen.has(key)) throw SESSION_FIELDS_ERROR();
     seen.add(key);
   }
 };
@@ -1264,26 +1257,20 @@ function* sessionLosatArtifactSteps(data, sourceSessionVersion) {
   const rawEntries = sessionArtifactEntries(data, 'losatCache');
   const derivedEntries = sessionArtifactEntries(data, 'losatDerivedCache');
   const manifest = data.proteinIdentityManifest;
-  rejectInvalidLosatCacheKeys(rawEntries, 'LOSAT', { requireKey: true });
-  rejectInvalidLosatCacheKeys(derivedEntries, 'derived LOSATP');
+  rejectInvalidLosatCacheKeys(rawEntries, { requireKey: true });
+  rejectInvalidLosatCacheKeys(derivedEntries);
 
   if (sourceSessionVersion >= CURRENT_AUTHORITY_SESSION_MIN_VERSION) {
     recordStructuralMetric('currentSessionPreflightProteinManifestValidationCount');
   }
   const identityIndex = buildValidatedProteinIdentityIndex(manifest);
-  if (!identityIndex) {
-    throw new Error(
-      `Session version ${sourceSessionVersion} requires a valid schema-2 protein manifest.`
-    );
-  }
+  if (!identityIndex) throw SESSION_FIELDS_ERROR();
   let invalidDerivedEntry = false;
   try {
     for (const entry of rawEntries) {
       const classification = classifyRawLosatCacheEntry(entry);
       if (!['protein-current', 'nucleotide-current'].includes(classification)) {
-        throw new Error(
-          `Session version ${sourceSessionVersion} contains a non-current raw LOSAT entry.`
-        );
+        throw SESSION_FIELDS_ERROR();
       }
       yield;
       if (classification !== 'protein-current') continue;
@@ -1293,9 +1280,7 @@ function* sessionLosatArtifactSteps(data, sourceSessionVersion) {
       if (
         !validateProteinRawEntryReferences(entry, manifest, { identityIndex })
       ) {
-        throw new Error(
-          `Session version ${sourceSessionVersion} contains an unresolved protein raw entry.`
-        );
+        throw SESSION_FIELDS_ERROR();
       }
     }
     invalidDerivedEntry = derivedEntries.some(
@@ -1304,11 +1289,7 @@ function* sessionLosatArtifactSteps(data, sourceSessionVersion) {
   } finally {
     releaseValidatedProteinIdentityIndex(identityIndex);
   }
-  if (invalidDerivedEntry) {
-    throw new Error(
-      `Session version ${sourceSessionVersion} contains an invalid derived LOSATP entry.`
-    );
-  }
+  if (invalidDerivedEntry) throw SESSION_FIELDS_ERROR();
 };
 
 export const validateSessionLosatArtifacts = (data, sourceSessionVersion) => {
@@ -2603,8 +2584,10 @@ const serializeLosatCache = () => {
     return entry;
   };
 
+  // One entry per raw key: rows that share a key (two rings of one sequence)
+  // keep the first row's filename, as the CLI raw cache does.
   info.forEach((entry, idx) => {
-    if (!entry || !entry.key) return;
+    if (!entry || !entry.key || seen.has(entry.key)) return;
     const cached = cacheMap.get(entry.key);
     if (!isCurrentRawLosatCacheEntry(cached)) return;
     entries.push(buildEntry(entry.key, cached, {

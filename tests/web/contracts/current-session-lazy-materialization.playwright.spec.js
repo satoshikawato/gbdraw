@@ -507,6 +507,158 @@ test('neutral cached conservation session regenerates three ordered rings offlin
   }
 });
 
+// Two rings of one sequence share one raw LOSAT cache key; the saved Session
+// keeps both rings and one entry per raw key (first row's filename, as the CLI
+// cache writes it), restores without LOSAT, and the CLI replays it.
+test('two rings of one sequence save and restore with one cached LOSAT table', async ({
+  browser
+}, testInfo) => {
+  test.setTimeout(240_000);
+  const context = await browser.newContext();
+  const page = await context.newPage();
+  try {
+    await page.addInitScript(() => {
+      const probe = { losatCalls: 0 };
+      probe.read = async () => {
+        const { state } = await import('/gbdraw/web/js/state.js');
+        const app = window.__GBDRAW_APP__;
+        const content = String(app.results[app.selectedResultIndex]?.content || '');
+        const documentRoot = new DOMParser().parseFromString(content, 'image/svg+xml');
+        return {
+          errorLog: app.errorLog ? JSON.parse(JSON.stringify(app.errorLog)) : null,
+          content,
+          comparisonNames: state.files.c_conservation_fastas.map(({ name }) => name),
+          labels: state.circularConservation.series.map(({ label }) => label),
+          cacheKeys: Array.from(state.losatCache.value.keys()),
+          cacheInfo: state.losatCacheInfo.value.map(({ key, filename }) => ({ key, filename })),
+          slots: [...documentRoot.querySelectorAll(
+            '[data-gbdraw-slot-renderer="sequence_conservation"]'
+          )].map((slot) => slot.getAttribute('data-track-label')),
+          losatCalls: probe.losatCalls
+        };
+      };
+      window.__GBDRAW_SHARED_RING_PROBE__ = probe;
+      window.__GBDRAW_LOSAT_EXECUTOR__ = async () => {
+        probe.losatCalls += 1;
+        throw new Error('The cached ring replay must not execute LOSAT.');
+      };
+    });
+    await openInstrumentedApp(page);
+    const generated = await evaluateWithRetainedPromise(page, async (sessionText) => {
+      const file = new File([sessionText], 'synthetic_conservation.gbdraw-session.json', {
+        type: 'application/json', lastModified: 0
+      });
+      window.__GBDRAW_LAZY_SESSION_PROBE__.ignoreFile(file);
+      const app = window.__GBDRAW_APP__;
+      const imported = await app.importSession({ target: { files: [file], value: '' } });
+      const { state } = await import('/gbdraw/web/js/state.js');
+      const { readFileText } = await import('/gbdraw/web/js/services/file-content-cache.js');
+      const copy = new File(
+        [await readFileText(state.files.c_conservation_fastas[1])],
+        'comparison-c-copy.fasta',
+        { type: 'text/plain', lastModified: 0 }
+      );
+      app.addCircularConservationComparisonFile({ target: { files: [copy], value: '' } });
+      const result = await app.runAnalysis();
+      return {
+        imported: imported?.status,
+        result,
+        ...(await window.__GBDRAW_SHARED_RING_PROBE__.read())
+      };
+    }, neutralConservationSessionText);
+    expect(generated.imported).toBe('ok');
+    expect(generated.result, JSON.stringify(generated.errorLog)).toEqual({ status: 'ok' });
+    expect(generated.losatCalls).toBe(0);
+    expect(generated.labels).toEqual([
+      'comparison-b', 'comparison-c', 'comparison-d', 'comparison-c-copy'
+    ]);
+    expect(generated.slots).toEqual(generated.labels);
+    expect(generated.cacheKeys).toHaveLength(3);
+    expect(generated.cacheInfo.map(({ filename }) => filename)).toEqual([
+      'comparison-b.circular_conservation.losatn.tsv',
+      'comparison-c.circular_conservation.losatn.tsv',
+      'comparison-d.circular_conservation.losatn.tsv',
+      'comparison-c-copy.circular_conservation.losatn.tsv'
+    ]);
+    expect(generated.cacheInfo[3].key).toBe(generated.cacheInfo[1].key);
+
+    const downloadPromise = page.waitForEvent('download', { timeout: 120_000 });
+    const saved = await evaluateWithRetainedPromise(page, async () => {
+      const app = window.__GBDRAW_APP__;
+      app.sessionTitle = 'shared-ring-cache';
+      return { result: await app.saveSessionWithTitle(), errorLog: app.errorLog };
+    });
+    expect(saved.result.status, JSON.stringify(saved.errorLog)).toBe('saved');
+    const savedBytes = readFileSync(await (await downloadPromise).path());
+    const savedText = savedBytes[0] === 0x1f
+      ? gunzipSync(savedBytes).toString('utf8')
+      : savedBytes.toString('utf8');
+    const savedPath = testInfo.outputPath('shared-ring-cache.gbdraw-session.json');
+    writeFileSync(savedPath, savedText, 'utf8');
+    const savedRows = generated.cacheInfo.slice(0, 3);
+    expect(JSON.parse(savedText).losatCache.entries.map(({ key, filename }) => ({ key, filename })))
+      .toEqual(savedRows);
+
+    const restored = await evaluateWithRetainedPromise(page, async (sessionText) => {
+      const file = new File([sessionText], 'shared-ring-cache.gbdraw-session.json', {
+        type: 'application/json', lastModified: 0
+      });
+      window.__GBDRAW_LAZY_SESSION_PROBE__.ignoreFile(file);
+      const app = window.__GBDRAW_APP__;
+      const imported = await app.importSession({ target: { files: [file], value: '' } });
+      const afterImport = await window.__GBDRAW_SHARED_RING_PROBE__.read();
+      const result = await app.runAnalysis();
+      return {
+        imported: imported?.status,
+        afterImport,
+        result,
+        ...(await window.__GBDRAW_SHARED_RING_PROBE__.read())
+      };
+    }, savedText);
+    expect(restored.imported, JSON.stringify(restored.afterImport.errorLog)).toBe('ok');
+    expect(restored.afterImport.comparisonNames).toEqual(generated.comparisonNames);
+    expect(restored.afterImport.cacheKeys).toEqual(generated.cacheKeys);
+    expect(restored.afterImport.cacheInfo).toEqual(savedRows);
+    expect(restored.result, JSON.stringify(restored.errorLog)).toEqual({ status: 'ok' });
+    expect(restored.losatCalls).toBe(0);
+    expect(restored.labels).toEqual(generated.labels);
+    expect(restored.slots).toEqual(generated.labels);
+    expect(restored.cacheInfo).toEqual(generated.cacheInfo);
+
+    const generatedPath = testInfo.outputPath('shared-ring-generated.svg');
+    const restoredPath = testInfo.outputPath('shared-ring-restored.svg');
+    writeFileSync(generatedPath, generated.content, 'utf8');
+    writeFileSync(restoredPath, restored.content, 'utf8');
+    const comparison = spawnSync(process.env.GBDRAW_PYTHON || 'python', ['-c', [
+      'import sys',
+      'from tests.utils.svg_compare import compare_svgs',
+      'result = compare_svgs(sys.argv[1], sys.argv[2])',
+      'print(result.message)',
+      'print("\\n".join(result.differences))',
+      'raise SystemExit(0 if result.equal else 1)'
+    ].join(';'), generatedPath, restoredPath], { cwd: repoRoot, encoding: 'utf8' });
+    expect(comparison.status, `${comparison.stdout}\n${comparison.stderr}`).toBe(0);
+
+    const cliDir = testInfo.outputPath('cli');
+    require('node:fs').mkdirSync(cliDir, { recursive: true });
+    const cli = spawnSync(process.env.GBDRAW_PYTHON || 'python', [
+      '-m', 'gbdraw.cli', 'circular', '--session', savedPath, '-o', 'shared-ring', '-f', 'svg'
+    ], {
+      cwd: cliDir,
+      encoding: 'utf8',
+      timeout: 120_000,
+      env: { ...process.env, PYTHONPATH: repoRoot }
+    });
+    expect(cli.status, `${cli.stdout}\n${cli.stderr}`).toBe(0);
+    const cliSvg = readFileSync(join(cliDir, 'shared-ring.svg'), 'utf8');
+    expect([...cliSvg.matchAll(
+      /data-gbdraw-slot-renderer="sequence_conservation"[^>]*data-track-label="([^"]*)"/g
+    )].map((match) => match[1])).toEqual(generated.labels);
+  } finally {
+    await context.close();
+  }
+});
+
 test('a GenBank ring file reuses the FASTA ring search, records the Web runtime, and gives a runnable recipe', async ({
   browser
 }, testInfo) => {

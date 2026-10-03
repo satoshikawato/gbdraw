@@ -1086,6 +1086,43 @@ test('a conflicting restored edge key is not exposed under the wrong endpoints',
   );
 });
 
+// A rejected Session artifact is a classified Session-schema diagnostic (R6).
+const sessionSchemaDiagnostic = (error) => {
+  assert.equal(error.code, 'INPUT_INVALID');
+  assert.deepEqual(error.context, { field: 'schema', reason: 'FIELDS' });
+  return true;
+};
+
+const syntheticConservationSession = () => JSON.parse(gunzipSync(readFileSync(new URL(
+  '../fixtures/sessions/synthetic_conservation.gbdraw-session.json.gz',
+  import.meta.url
+))).toString('utf8'));
+
+test('a Session that repeats a raw LOSAT cache key is rejected with a classified diagnostic', async () => {
+  const valid = syntheticConservationSession();
+  const accepted = await importSession({
+    target: { files: [new Blob([JSON.stringify(valid)], { type: 'application/json' })], value: 'selected' }
+  });
+  assert.equal(accepted.status, 'ok');
+
+  alerts.length = 0;
+  const repeated = syntheticConservationSession();
+  const [, ringC] = repeated.losatCache.entries;
+  repeated.losatCache.entries.push({
+    ...ringC,
+    filename: 'comparison-c-copy.circular_conservation.losatn.tsv'
+  });
+  const event = {
+    target: { files: [new Blob([JSON.stringify(repeated)], { type: 'application/json' })], value: 'selected' }
+  };
+  const result = await importSession(event);
+  assert.equal(result.status, 'error');
+  assert.equal(result.error.code, 'INPUT_INVALID');
+  assert.deepEqual(result.error.context, { field: 'schema', reason: 'FIELDS' });
+  assert.match(result.error.summary, /supported Session file/);
+  assert.deepEqual(alerts, []);
+});
+
 for (const version of [39, 40]) {
   test(`version-${version} import rejects duplicate raw LOSAT cache keys`, () => {
     assert.throws(
@@ -1093,7 +1130,7 @@ for (const version of [39, 40]) {
         session([rawEntry('raw-key'), rawEntry('raw-key')], []),
         version
       ),
-      /Duplicate LOSAT cache key/
+      sessionSchemaDiagnostic
     );
   });
 
@@ -1106,7 +1143,7 @@ for (const version of [39, 40]) {
         ),
         version
       ),
-      /Duplicate derived LOSATP cache key/
+      sessionSchemaDiagnostic
     );
   });
 
@@ -1117,7 +1154,7 @@ for (const version of [39, 40]) {
           session([rawEntry(invalidKey)], []),
           version
         ),
-        /LOSAT cache entry at losatCache\.entries\[0\] requires a key/
+        sessionSchemaDiagnostic
       );
     });
   }
@@ -1128,7 +1165,7 @@ for (const version of [39, 40]) {
         session([proteinRawEntry('')], []),
         version
       ),
-      /LOSAT cache entry at losatCache\.entries\[0\] requires a key/
+      sessionSchemaDiagnostic
     );
   });
 
@@ -1138,7 +1175,7 @@ for (const version of [39, 40]) {
       malformed[field] = [];
       assert.throws(
         () => validateSessionLosatArtifacts(malformed, version),
-        new RegExp(`Session ${field} must be an object when present`)
+        sessionSchemaDiagnostic
       );
     });
 
@@ -1147,7 +1184,7 @@ for (const version of [39, 40]) {
       malformed[field] = { entries: null };
       assert.throws(
         () => validateSessionLosatArtifacts(malformed, version),
-        new RegExp(`Session ${field}\\.entries must be an array`)
+        sessionSchemaDiagnostic
       );
     });
   }
@@ -1155,7 +1192,7 @@ for (const version of [39, 40]) {
     const malformed = session([{ ...proteinRawEntry('raw-key'), schema: 3 }], []);
     assert.throws(
       () => validateSessionLosatArtifacts(malformed, version),
-      new RegExp(`Session version ${version} contains a non-current raw LOSAT entry`)
+      sessionSchemaDiagnostic
     );
   });
 
@@ -1163,7 +1200,7 @@ for (const version of [39, 40]) {
     const malformed = session([], [{ ...derivedEntry('derived-key'), schema: 2 }]);
     assert.throws(
       () => validateSessionLosatArtifacts(malformed, version),
-      new RegExp(`Session version ${version} contains an invalid derived LOSATP entry`)
+      sessionSchemaDiagnostic
     );
   });
 }
