@@ -943,22 +943,18 @@ test('GenBank and DDBJ ring rows added without a label take the CLI default labe
     ];
     expect(run.labels).toEqual(expectedLabels);
 
-    // Session save and restore keep the labels. Only one ring per sequence is
-    // kept: a Session with two rings of one sequence does not restore (bug
-    // FIX-WEB-LABEL-B1, pre-existing).
+    // Session save and restore keep the labels, also for the five rings that
+    // share comparison c's sequence and raw cache key.
     const downloadPromise = page.waitForEvent('download', { timeout: 120_000 });
     const saved = await evaluateWithRetainedPromise(page, async () => {
       const app = window.__GBDRAW_APP__;
-      [6, 5, 4, 1].forEach((index) => app.removeCircularConservationSource(index));
-      const result = await app.runAnalysis();
-      if (result?.status !== 'ok') return { result, errorLog: app.errorLog };
       app.sessionTitle = 'ring-default-labels';
       return {
         result: await app.saveSessionWithTitle(),
         errorLog: app.errorLog
       };
     });
-    const savedLabels = ['comparison-b', 'comparison-d', cliLabels[0]];
+    const savedLabels = expectedLabels;
     expect(saved.result.status, JSON.stringify(saved.errorLog)).toBe('saved');
     const savedPath = await (await downloadPromise).path();
     const savedBytes = readFileSync(savedPath);
