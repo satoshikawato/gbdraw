@@ -66,7 +66,7 @@ scheduling, and thread count when an exact result must be reproduced.
 
 LOSATP Pairwise search keeps at most one HSP for each query-subject protein
 combination in its raw result. The display-stage `max_hits` setting
-(`--protein_blastp_max_hits` on the command line) is a separate limit: it
+(`--losatp_max_hits` on the command line) is a separate limit: it
 defaults to `5` and retains the strongest distinct subject proteins for each
 query protein after the display thresholds are applied. Similarity-group and
 Collinear construction use **Member hits per protein**, a separate limit on
@@ -172,7 +172,7 @@ Inspect warnings and raw evidence before relaxing thresholds.
 
 ## Raw results and cache identity
 
-**Save Raw LOSAT TSV** and `--protein_blastp_output` preserve raw search rows.
+**Save Raw LOSAT TSV** and `--losat_output_dir` preserve raw search rows.
 Generated protein results replace session-only runtime handles with stable
 percent-encoded protein or feature aliases. Export fails if a handle cannot be
 resolved safely. An uploaded comparison table is not rewritten.

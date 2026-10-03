@@ -36,8 +36,8 @@ logger = logging.getLogger(__name__)
 # The string "losat" is the automatic-selection token of the executable option.
 AUTOMATIC_LOSAT_BIN = "losat"
 # Current CLI spellings of the runtime overrides, used in diagnostics.
-LOSAT_BIN_OPTION = "--losatp_bin"
-NCBI_BLAST_BIN_OPTION = "--ncbi_blastp_bin"
+LOSAT_BIN_OPTION = "--losat_bin"
+NCBI_BLAST_BIN_OPTION = "--ncbi_blast_bin"
 _BUNDLED_LOSAT_DIR = "bin"
 _PROBE_TIMEOUT_SECONDS = 30
 
@@ -128,7 +128,7 @@ LOSAT_PROGRAMS: Mapping[str, LosatProgram] = MappingProxyType(
 
 
 @dataclass(frozen=True)
-class LosatSearchOptions:
+class LosatSearchArgs:
     """Program-specific search options; unset options are omitted."""
 
     task: str | None = None
@@ -160,7 +160,7 @@ def losat_program(program: str | LosatProgram) -> LosatProgram:
     return spec
 
 
-def _option_values(spec: LosatProgram, options: LosatSearchOptions) -> list[tuple[str, str]]:
+def _option_values(spec: LosatProgram, options: LosatSearchArgs) -> list[tuple[str, str]]:
     for name in LOSAT_OPTION_FLAGS:
         if name not in spec.options and getattr(options, name) is not None:
             raise ValidationError(
@@ -183,7 +183,7 @@ def _option_values(spec: LosatProgram, options: LosatSearchOptions) -> list[tupl
 
 def losat_cache_args(
     program: str | LosatProgram,
-    options: LosatSearchOptions,
+    options: LosatSearchArgs,
 ) -> list[str]:
     """Return raw-cache key args in the Web v1 form."""
 
@@ -496,7 +496,7 @@ def build_losat_command(
     *,
     query_path: Path,
     subject_path: Path,
-    options: LosatSearchOptions = LosatSearchOptions(),
+    options: LosatSearchArgs = LosatSearchArgs(),
     threads: int | None = None,
     dialect: LosatCliDialect | None = None,
 ) -> list[str]:
@@ -563,7 +563,7 @@ def run_losat_search(
     query_fasta: str,
     subject_fasta: str,
     *,
-    options: LosatSearchOptions = LosatSearchOptions(),
+    options: LosatSearchArgs = LosatSearchArgs(),
     losat_bin: str | None = None,
     ncbi_blast_bin: str | None = None,
     threads: int | None = None,
@@ -721,7 +721,7 @@ __all__ = [
     "LosatProgram",
     "LosatRawCache",
     "LosatRuntime",
-    "LosatSearchOptions",
+    "LosatSearchArgs",
     "NCBI_BLAST_BIN_OPTION",
     "build_losat_command",
     "bundled_losat_runtime",

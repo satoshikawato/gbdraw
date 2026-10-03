@@ -77,7 +77,8 @@ records = read_genbank(
 options = LinearOptions(
     features=FeatureOptions(palette="ajisai"),
     comparisons=LinearComparisonOptions(
-        protein_mode="collinear",
+        losat="losatp",
+        losatp_mode="collinear",
         threads=32,
         match_style="curve",
         collinearity_scope="adjacent",

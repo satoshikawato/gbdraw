@@ -17,6 +17,7 @@ from gbdraw.api import (
     LinearDiagramOptions,
     LinearDiagramRequest,
     LinearMultiRecordOptions,
+    LosatSearchOptions,
     RecordInput,
     read_comparisons_table,
 )
@@ -344,8 +345,11 @@ def test_selected_generated_protein_pairs_keep_explicit_endpoints(monkeypatch) -
                 "canvas.show_skew": False,
             },
         ),
-        protein_blastp_mode="pairwise",
-        protein_comparison_pairs=((0, 2), (1, 3)),
+        losat_search=LosatSearchOptions(
+            program="losatp",
+            losatp_mode="pairwise",
+            pairs=((0, 2), (1, 3)),
+        ),
         layout=LinearMultiRecordOptions(
             multi_record_positions=("#1@1", "#2@1", "#3@2", "#4@2"),
         ),
@@ -390,7 +394,7 @@ def test_collinear_all_scope_renders_every_cross_row_pair(monkeypatch) -> None:
                 "canvas.show_skew": False,
             },
         ),
-        protein_blastp_mode="collinear",
+        losat_search=LosatSearchOptions(program="losatp", losatp_mode="collinear"),
         collinearity_search_scope="all",
         layout=LinearMultiRecordOptions(
             multi_record_positions=("#1@1", "#2@1", "#3@2", "#4@2"),

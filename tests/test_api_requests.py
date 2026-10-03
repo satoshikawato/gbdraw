@@ -15,6 +15,8 @@ from gbdraw.api.options import (
     CircularOutputOptions,
     LinearDiagramOptions,
     LinearOutputOptions,
+    LosatRuntimeOptions,
+    LosatSearchOptions,
 )
 from gbdraw.api.requests import (
     CircularBatchOutputPolicy,
@@ -285,7 +287,7 @@ def test_mode_specific_option_fields_do_not_overlap_other_mode_features() -> Non
     circular_fields = {item.name for item in fields(CircularDiagramOptions)}
     linear_fields = {item.name for item in fields(LinearDiagramOptions)}
 
-    assert {"blast_files", "protein_blastp_mode"}.isdisjoint(circular_fields)
+    assert {"blast_files", "losat_search"}.isdisjoint(circular_fields)
     assert {
         "conservation_blast_files",
         "conservation_fasta_files",
@@ -383,15 +385,13 @@ def test_circular_options_reject_invalid_mode_values(
 @pytest.mark.parametrize(
     "kwargs",
     [
-        {"protein_blastp_mode": "invalid"},
+        {"losat_search": "invalid"},
         {"pairwise_match_style": "invalid"},
         {"collinearity_unit_mode": "invalid"},
         {"collinearity_anchor_mode": "invalid"},
         {"collinearity_search_scope": "invalid"},
         {"collinearity_color_mode": "invalid"},
         {"orthogroup_membership_mode": "invalid"},
-        {"protein_blastp_max_hits": 0},
-        {"losatp_threads": 0},
     ],
 )
 def test_linear_options_reject_invalid_mode_values(
@@ -399,6 +399,28 @@ def test_linear_options_reject_invalid_mode_values(
 ) -> None:
     with pytest.raises(ValidationError):
         LinearDiagramOptions(**kwargs)
+
+
+@pytest.mark.parametrize(
+    ("search_kwargs", "runtime_kwargs"),
+    [
+        ({"losatp_mode": "invalid"}, {}),
+        ({"losatp_max_hits": 0}, {}),
+        ({}, {"threads": 0}),
+    ],
+)
+def test_linear_losat_search_rejects_invalid_values(
+    search_kwargs: dict[str, object],
+    runtime_kwargs: dict[str, object],
+) -> None:
+    with pytest.raises(ValidationError):
+        LinearDiagramOptions(
+            losat_search=LosatSearchOptions(
+                program="losatp",
+                **{"losatp_mode": "similarity_groups", **search_kwargs},
+                runtime=LosatRuntimeOptions(**runtime_kwargs),
+            )
+        )
 
 
 def test_linear_options_normalize_supported_mode_aliases() -> None:
@@ -416,22 +438,32 @@ def test_linear_options_normalize_supported_mode_aliases() -> None:
 def test_linear_protein_option_defaults_match_explicit_typed_values() -> None:
     omitted = LinearDiagramOptions()
     explicit = LinearDiagramOptions(
-        protein_blastp_mode="none",
+        losat_search=None,
         collinearity_unit_mode="auto",
         collinearity_anchor_mode="rbh",
         collinearity_search_scope="adjacent",
         collinearity_color_mode="orientation",
-        losatp_bin="losat",
-        ncbi_blastp_bin=None,
-        losatp_threads=None,
-        protein_blastp_max_hits=5,
-        protein_blastp_candidate_limit=None,
         orthogroup_membership_mode="anchor_core_v1",
-        orthogroup_member_max_hits=None,
         collinear_max_paralog_links_per_orthogroup=2,
     )
 
     assert omitted == explicit
+    assert LosatSearchOptions(
+        program="losatp",
+        losatp_mode="similarity_groups",
+    ) == LosatSearchOptions(
+        program="losatp",
+        pairs=None,
+        losatp_mode="similarity_groups",
+        losatp_max_hits=5,
+        losatp_max_target_seqs=None,
+        losatp_member_max_hits=None,
+        runtime=LosatRuntimeOptions(
+            losat_executable="losat",
+            ncbi_blast_executable=None,
+            threads=None,
+        ),
+    )
     assert LosslessCollinearityParameters() == LosslessCollinearityParameters(
         min_anchors=1,
         max_unit_gap=0,

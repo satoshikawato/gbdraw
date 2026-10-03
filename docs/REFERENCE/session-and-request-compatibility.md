@@ -68,10 +68,10 @@ current schema. A Linear Session without a stored comparison plan loads with
 **No comparison**. A CLI Session written with `-b` therefore offers
 **Replace with current controls** only after a comparison is set up, and starts
 no LOSAT run before that. A CLI Linear Session written without `-b` or
-`--protein_blastp_mode` commits only a disabled protein pipeline (mode `none`,
+`--losat` commits only a disabled protein pipeline (mode `none`,
 no pairs). It loads with **No comparison** and without selecting LOSATP, so
 Generate draws no ribbons and starts no LOSAT run. A CLI Session written with
-`--protein_blastp_mode` and an editable protein pipeline loads with the
+`--losat losatp` and an editable protein pipeline loads with the
 adjacent LOSATP comparison it drew. Without saved
 `ui.layoutPreferences`, the legend and plot-title positions come from the
 committed `diagramOptions.output` for its mode and grouping, so a CLI

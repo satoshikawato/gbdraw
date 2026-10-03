@@ -6,6 +6,7 @@ from dataclasses import dataclass, field, replace
 import math
 from numbers import Integral, Real
 from pathlib import Path
+from types import MappingProxyType
 from typing import Literal, Mapping, Sequence, cast
 
 from pandas import DataFrame  # type: ignore[reportMissingImports]
@@ -34,8 +35,8 @@ from gbdraw.analysis.protein_colinearity import (  # type: ignore[reportMissingI
     OrthogroupResult,
     OrthogroupGraphResult,
     normalize_orthogroup_membership_mode,
-    normalize_protein_blastp_mode,
 )
+from gbdraw.comparisons.losat_runtime import AUTOMATIC_LOSAT_BIN
 from gbdraw.config.models import GbdrawConfig  # type: ignore[reportMissingImports]
 from gbdraw.config.models.objects import (  # type: ignore[reportMissingImports]
     normalize_pairwise_match_style,
@@ -637,6 +638,169 @@ class LinearMultiRecordOptions:
         object.__setattr__(self, "record_translations", translations)
 
 
+LosatProgram = Literal["losatn", "tlosatx", "losatp"]
+LosatpMode = Literal["similarity_groups", "collinear", "pairwise"]
+_LOSAT_PROGRAMS: tuple[str, ...] = ("losatn", "tlosatx", "losatp")
+# Programs the CLI and the Python API can run in this release.
+_SUPPORTED_LOSAT_PROGRAMS: tuple[str, ...] = ("losatp",)
+
+# The one table between a typed LOSATP display mode and its persisted
+# ``generatedProteinComparison.mode`` spelling, which is also the protein
+# analysis spelling (design D3, D6). ``"none"`` keeps the search settings of
+# protein evidence that a request already carries (a resolved request); no
+# search runs.
+LOSATP_MODE_WIRE: Mapping[str, str] = MappingProxyType(
+    {
+        "similarity_groups": "orthogroup",
+        "collinear": "collinear",
+        "pairwise": "pairwise",
+        "none": "none",
+    }
+)
+
+
+@dataclass(frozen=True)
+class LosatRuntimeOptions:
+    """Executable choice and thread count for LOSAT searches.
+
+    ``None`` executables select the runtime automatically. The NCBI BLAST+
+    executable is the one for the selected program.
+    """
+
+    losat_executable: str | None = None
+    ncbi_blast_executable: str | None = None
+    threads: int | None = None
+
+    def __post_init__(self) -> None:
+        for name in ("losat_executable", "ncbi_blast_executable"):
+            value = getattr(self, name)
+            if value is None:
+                continue
+            if not isinstance(value, str) or not value.strip() or "\0" in value:
+                raise ValidationError(
+                    f"{name} must be a non-empty string or None.",
+                    diagnostic={"code": "COMPARISON_INPUT"},
+                )
+            normalized: str | None = value.strip()
+            if name == "losat_executable" and normalized == AUTOMATIC_LOSAT_BIN:
+                normalized = None
+            object.__setattr__(self, name, normalized)
+        if (
+            self.losat_executable is not None
+            and self.ncbi_blast_executable is not None
+        ):
+            raise ValidationError(
+                "Pass either losat_executable or ncbi_blast_executable, not both.",
+                diagnostic={"code": "COMPARISON_INPUT"},
+            )
+        object.__setattr__(
+            self,
+            "threads",
+            _validate_positive_int(
+                self.threads,
+                field_name="threads",
+                allow_none=True,
+            ),
+        )
+
+
+@dataclass(frozen=True)
+class LosatSearchOptions:
+    """One LOSAT comparison search for a diagram.
+
+    ``losatp_mode`` is required for ``losatp``. ``pairs`` lists explicit
+    ``(query, subject)`` record indexes; ``None`` compares adjacent rows.
+    """
+
+    program: LosatProgram
+    pairs: Sequence[tuple[int, int]] | None = None
+    losatp_mode: LosatpMode | Literal["none"] | None = None
+    losatp_max_hits: int = 5
+    losatp_max_target_seqs: int | None = None
+    losatp_member_max_hits: int | None = None
+    runtime: LosatRuntimeOptions = field(default_factory=LosatRuntimeOptions)
+
+    def __post_init__(self) -> None:
+        if self.program not in _LOSAT_PROGRAMS:
+            raise ValidationError(
+                "program must be one of: " + ", ".join(_LOSAT_PROGRAMS) + ".",
+                diagnostic={"code": "COMPARISON_INPUT"},
+            )
+        if self.program not in _SUPPORTED_LOSAT_PROGRAMS:
+            raise ValidationError(
+                f"LOSAT program {self.program!r} cannot run from the CLI or Python "
+                "API yet; use 'losatp'.",
+                diagnostic={"code": "COMPARISON_INPUT"},
+            )
+        if self.losatp_mode is None:
+            raise ValidationError(
+                "losatp_mode is required when program is 'losatp'.",
+                diagnostic={"code": "COMPARISON_INPUT"},
+            )
+        if self.losatp_mode not in LOSATP_MODE_WIRE:
+            raise ValidationError(
+                "losatp_mode must be one of: similarity_groups, collinear, pairwise.",
+                diagnostic={"code": "COMPARISON_INPUT"},
+            )
+        if self.pairs is not None:
+            object.__setattr__(self, "pairs", _normalize_record_pairs(self.pairs))
+            if self.losatp_mode != "pairwise":
+                raise ValidationError(
+                    "pairs requires losatp_mode 'pairwise'.",
+                    diagnostic={"code": "COMPARISON_INPUT"},
+                )
+        object.__setattr__(
+            self,
+            "losatp_max_hits",
+            _validate_positive_int(self.losatp_max_hits, field_name="losatp_max_hits"),
+        )
+        for name in ("losatp_max_target_seqs", "losatp_member_max_hits"):
+            object.__setattr__(
+                self,
+                name,
+                _validate_positive_int(
+                    getattr(self, name),
+                    field_name=name,
+                    allow_none=True,
+                ),
+            )
+        if not isinstance(self.runtime, LosatRuntimeOptions):
+            raise ValidationError(
+                "runtime must be LosatRuntimeOptions.",
+                diagnostic={"code": "COMPARISON_INPUT"},
+            )
+
+
+def _normalize_record_pairs(
+    pairs: object,
+) -> tuple[tuple[int, int], ...]:
+    if isinstance(pairs, (str, bytes)) or not isinstance(pairs, Sequence):
+        raise ValidationError("pairs must contain integer index pairs", diagnostic={"code": "COMPARISON_INPUT"})
+    normalized: list[tuple[int, int]] = []
+    for pair in pairs:
+        if (
+            isinstance(pair, (str, bytes))
+            or not isinstance(pair, Sequence)
+            or len(pair) != 2
+            or any(isinstance(item, bool) or not isinstance(item, Integral) for item in pair)
+            or any(int(item) < 0 for item in pair)
+        ):
+            raise ValidationError("pairs must contain integer index pairs", diagnostic={"code": "COMPARISON_INPUT"})
+        normalized.append((int(pair[0]), int(pair[1])))
+    return tuple(normalized)
+
+
+def losatp_analysis_mode(search: LosatSearchOptions | None) -> str:
+    """Return the protein-analysis mode a LOSAT search requests.
+
+    ``"none"`` means that no LOSATP search runs.
+    """
+
+    if search is None or search.program != "losatp":
+        return "none"
+    return LOSATP_MODE_WIRE[str(search.losatp_mode)]
+
+
 @dataclass(frozen=True)
 class _ModeDiagramOptions:
     """Fields shared by the mode-specific typed request options."""
@@ -988,13 +1152,7 @@ class LinearDiagramOptions(_ModeDiagramOptions):
     linear_comparisons: Sequence[LinearComparison] | None = None
     protein_comparisons: Sequence[DataFrame] | None = None
     orthogroups: OrthogroupResult | OrthogroupGraphResult | None = None
-    protein_blastp_mode: Literal[
-        "none",
-        "pairwise",
-        "orthogroup",
-        "collinear",
-    ] = "none"
-    protein_comparison_pairs: Sequence[tuple[int, int]] | None = None
+    losat_search: LosatSearchOptions | None = None
     pairwise_match_style: Literal["ribbon", "curve"] = "ribbon"
     collinearity_blocks: (
         CollinearityResult | Sequence[CollinearityBlock] | None
@@ -1004,15 +1162,9 @@ class LinearDiagramOptions(_ModeDiagramOptions):
     collinearity_anchor_mode: CollinearityAnchorMode | str = "rbh"
     collinearity_search_scope: CollinearitySearchScope | str = "adjacent"
     collinearity_color_mode: CollinearityColorMode | str = "orientation"
-    losatp_bin: str = "losat"
-    ncbi_blastp_bin: str | None = None
-    losatp_threads: int | None = None
-    protein_blastp_max_hits: int = 5
-    protein_blastp_candidate_limit: int | None = None
     orthogroup_membership_mode: Literal[
         "anchor_core_v1"
     ] | str = "anchor_core_v1"
-    orthogroup_member_max_hits: int | None = None
     collinear_infer_orthogroups: bool = True
     collinear_max_paralog_links_per_orthogroup: int = 2
     comparison_table_file: str | None = None
@@ -1081,11 +1233,14 @@ class LinearDiagramOptions(_ModeDiagramOptions):
             "pairwise_match_style",
             normalize_pairwise_match_style(self.pairwise_match_style),
         )
-        object.__setattr__(
-            self,
-            "protein_blastp_mode",
-            normalize_protein_blastp_mode(self.protein_blastp_mode),
-        )
+        if self.losat_search is not None and not isinstance(
+            self.losat_search,
+            LosatSearchOptions,
+        ):
+            raise ValidationError(
+                "losat_search must be LosatSearchOptions or None.",
+                diagnostic={"code": "COMPARISON_INPUT"},
+            )
         object.__setattr__(
             self,
             "collinearity_unit_mode",
@@ -1117,28 +1272,14 @@ class LinearDiagramOptions(_ModeDiagramOptions):
         )
         if not isinstance(self.collinear_infer_orthogroups, bool):
             raise ValidationError("collinear_infer_orthogroups must be a boolean")
-        for field_name in (
-            "protein_blastp_max_hits",
+        object.__setattr__(
+            self,
             "collinear_max_paralog_links_per_orthogroup",
-        ):
-            object.__setattr__(
-                self,
-                field_name,
-                _validate_positive_int(
-                    getattr(self, field_name),
-                    field_name=field_name,
-                ),
-            )
-        for field_name in ("losatp_threads", "protein_blastp_candidate_limit", "orthogroup_member_max_hits"):
-            object.__setattr__(
-                self,
-                field_name,
-                _validate_positive_int(
-                    getattr(self, field_name),
-                    field_name=field_name,
-                    allow_none=True,
-                ),
-            )
+            _validate_positive_int(
+                self.collinear_max_paralog_links_per_orthogroup,
+                field_name="collinear_max_paralog_links_per_orthogroup",
+            ),
+        )
 
 
 def _resolve_options_for_mode(
@@ -1223,6 +1364,10 @@ __all__ = [
     "LinearOutputOptions",
     "LinearRequestTrackOptions",
     "LinearTrackOptions",
+    "LosatProgram",
+    "LosatRuntimeOptions",
+    "LosatSearchOptions",
+    "LosatpMode",
     "AnnotationOptions",
     "ColorOptions",
     "DepthTrackInput",

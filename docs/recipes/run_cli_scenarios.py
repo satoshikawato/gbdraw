@@ -1168,13 +1168,15 @@ def _assert_bgc_svg(
 
 
 def _assert_pinned_losat(command: list[str], *, scenario_id: str) -> None:
-    mode_index = command.index("--protein_blastp_mode") + 1
-    threads_index = command.index("--losatp_threads") + 1
+    if command[command.index("--losat") + 1] != "losatp":
+        raise RecipeContractError(f"{scenario_id} must run the LOSATP program.")
+    mode_index = command.index("--losatp_mode") + 1
+    threads_index = command.index("--losat_threads") + 1
     expected_mode = {
-        "T-CLI-08": "orthogroup",
+        "T-CLI-08": "similarity_groups",
         "T-CLI-10": "collinear",
         "H-CLI-06": "pairwise",
-        "H-CLI-07": "orthogroup",
+        "H-CLI-07": "similarity_groups",
         "H-CLI-08": "collinear",
     }[scenario_id]
     expected_threads = "32" if scenario_id == "T-CLI-10" else "1"
@@ -1185,7 +1187,7 @@ def _assert_pinned_losat(command: list[str], *, scenario_id: str) -> None:
         raise RecipeContractError(
             f"{scenario_id} must run its documented LOSATP mode and thread count."
         )
-    if "--losatp_bin" in command or "--ncbi_blastp_bin" in command:
+    if "--losat_bin" in command or "--ncbi_blast_bin" in command:
         raise RecipeContractError(
             f"{scenario_id} must exercise automatic bundled-runtime selection."
         )
@@ -2402,7 +2404,7 @@ def run_scenario(
     expected_outputs = chapter["execution"]["expected_outputs"]
     if scenario_id == "H-CLI-06":
         if len(commands) != 1 or expected_outputs != [
-            "cli_losatp_pairwise.tsv",
+            "losatp.raw.tsv",
             "cli_losatp_pairwise.svg",
         ]:
             raise RecipeContractError(
@@ -2645,7 +2647,7 @@ def run_scenario(
             if scenario_id == "H-CLI-06":
                 _assert_pairwise_protein_search(
                     chapter,
-                    tsv_path=workdir / "cli_losatp_pairwise.tsv",
+                    tsv_path=workdir / "losatp.raw.tsv",
                     svg_path=workdir / "cli_losatp_pairwise.svg",
                 )
             elif scenario_id == "H-CLI-07":

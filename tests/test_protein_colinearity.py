@@ -56,7 +56,11 @@ from gbdraw.analysis.protein_colinearity import (
     validate_protein_raw_entry_references,
 )
 from gbdraw.api.diagram import assemble_linear_diagram_from_records
-from gbdraw.api.options import LinearDiagramOptions
+from gbdraw.api.options import (
+    LinearDiagramOptions,
+    LosatRuntimeOptions,
+    LosatSearchOptions,
+)
 from gbdraw.exceptions import ValidationError
 from gbdraw.io.comparisons import COMPARISON_COLUMNS
 from gbdraw.io.genome import load_gff_fasta
@@ -2046,7 +2050,7 @@ def test_run_losatp_blastp_explicit_ncbi_blastp_bypasses_losat_discovery(
 
 @pytest.mark.linear
 def test_run_losatp_blastp_rejects_ambiguous_explicit_runtimes() -> None:
-    with pytest.raises(ValidationError, match="either --losatp_bin or --ncbi_blastp_bin"):
+    with pytest.raises(ValidationError, match="either --losat_bin or --ncbi_blast_bin"):
         protein_colinearity_module.run_losatp_blastp(
             ">query\nM\n",
             ">subject\nM\n",
@@ -2115,7 +2119,7 @@ def test_run_losatp_blastp_missing_runtime_error_is_actionable(
     assert "macos-arm64" in message
     assert "`losat` was not found on PATH" in message
     assert "`blastp` was not found on PATH" in message
-    assert "--ncbi_blastp_bin" in message
+    assert "--ncbi_blast_bin" in message
 
 
 @pytest.mark.linear
@@ -2555,7 +2559,9 @@ def test_linear_cli_save_session_writes_web_losat_cache_entries(
             "--gbk",
             str(input_a),
             str(input_b),
-            "--protein_blastp_mode",
+            "--losat",
+            "losatp",
+            "--losatp_mode",
             "pairwise",
             "-o",
             str(output_prefix),
@@ -2579,7 +2585,9 @@ def test_linear_cli_save_session_writes_web_losat_cache_entries(
     assert payload["proteinIdentityManifest"]["schema"] == 2
     canonical_request = captured["canonical_request"]
     assert isinstance(canonical_request, LinearDiagramRequest)
-    assert canonical_request.options.protein_blastp_mode == "pairwise"
+    assert canonical_request.options.losat_search is not None
+    assert canonical_request.options.losat_search.program == "losatp"
+    assert canonical_request.options.losat_search.losatp_mode == "pairwise"
 
 
 @pytest.mark.linear
@@ -2620,7 +2628,8 @@ def test_linear_cli_writes_hydrated_raw_protein_evidence_and_honors_overwrite(
     input_a.write_text("LOCUS       A\n", encoding="utf-8")
     input_b.write_text("LOCUS       B\n", encoding="utf-8")
     output_prefix = tmp_path / "out"
-    evidence_path = tmp_path / "raw-evidence.tsv"
+    evidence_dir = tmp_path / "raw-evidence"
+    evidence_path = evidence_dir / "losatp.raw.tsv"
     records_by_path = {str(input_a): records[0], str(input_b): records[1]}
 
     monkeypatch.setattr(
@@ -2654,10 +2663,12 @@ def test_linear_cli_writes_hydrated_raw_protein_evidence_and_honors_overwrite(
         "--gbk",
         str(input_a),
         str(input_b),
-        "--protein_blastp_mode",
+        "--losat",
+        "losatp",
+        "--losatp_mode",
         "pairwise",
-        "--protein_blastp_output",
-        str(evidence_path),
+        "--losat_output_dir",
+        str(evidence_dir),
         "-o",
         str(output_prefix),
         "-f",
@@ -2702,36 +2713,26 @@ def test_linear_cli_validates_raw_protein_output_option(
 ) -> None:
     with pytest.raises(SystemExit):
         linear_cli_module._get_args(["--help"])
-    assert "--protein_blastp_output TSV" in capsys.readouterr().out
+    assert "--losat_output_dir DIR" in capsys.readouterr().out
 
     with pytest.raises(SystemExit, match="2"):
         linear_cli_module._get_args(
-            ["--gbk", "a.gb", "b.gb", "--protein_blastp_output", "raw.tsv"]
-        )
-    with pytest.raises(SystemExit, match="2"):
-        linear_cli_module._get_args(
-            [
-                "--gbk",
-                "a.gb",
-                "b.gb",
-                "--protein_blastp_mode",
-                "pairwise",
-                "--protein_blastp_output",
-                "raw.txt",
-            ]
+            ["--gbk", "a.gb", "b.gb", "--losat_output_dir", "raw"]
         )
     parsed = linear_cli_module._get_args(
         [
             "--gbk",
             "a.gb",
             "b.gb",
-            "--protein_blastp_mode",
+            "--losat",
+            "losatp",
+            "--losatp_mode",
             "pairwise",
-            "--protein_blastp_output",
-            "raw.tsv",
+            "--losat_output_dir",
+            "raw",
         ]
     )
-    assert parsed.protein_blastp_output == "raw.tsv"
+    assert parsed.losat_output_dir == "raw"
 
 
 @pytest.mark.linear
@@ -4215,20 +4216,28 @@ def test_build_linear_diagram_forwards_protein_blastp_options(
     canvas = api_diagram_module.build_linear_diagram(
         [_record("record_a"), _record("record_b")],
         options=LinearDiagramOptions(
-            protein_blastp_mode="orthogroup",
-            losatp_bin="custom-losat",
-            losatp_threads=8,
-            protein_blastp_max_hits=7,
-            protein_blastp_candidate_limit=99,
+            losat_search=LosatSearchOptions(
+                program="losatp",
+                losatp_mode="similarity_groups",
+                losatp_max_hits=7,
+                losatp_max_target_seqs=99,
+                runtime=LosatRuntimeOptions(
+                    losat_executable="custom-losat",
+                    threads=8,
+                ),
+            ),
         ),
     )
 
     assert isinstance(canvas, Drawing)
-    assert captured["protein_blastp_mode"] == "orthogroup"
-    assert captured["losatp_bin"] == "custom-losat"
-    assert captured["losatp_threads"] == 8
-    assert captured["protein_blastp_max_hits"] == 7
-    assert captured["protein_blastp_candidate_limit"] == 99
+    search = captured["losat_search"]
+    assert isinstance(search, LosatSearchOptions)
+    assert search.program == "losatp"
+    assert search.losatp_mode == "similarity_groups"
+    assert search.runtime.losat_executable == "custom-losat"
+    assert search.runtime.threads == 8
+    assert search.losatp_max_hits == 7
+    assert search.losatp_max_target_seqs == 99
     assert captured["orthogroup_membership_mode"] == "anchor_core_v1"
     assert captured["similarity_alignment"] is None
 
@@ -4248,14 +4257,21 @@ def test_build_linear_diagram_forwards_ncbi_blastp_bin(
     canvas = api_diagram_module.build_linear_diagram(
         [_record("record_a"), _record("record_b")],
         options=LinearDiagramOptions(
-            protein_blastp_mode="pairwise",
-            ncbi_blastp_bin="/opt/ncbi/bin/blastp",
+            losat_search=LosatSearchOptions(
+                program="losatp",
+                losatp_mode="pairwise",
+                runtime=LosatRuntimeOptions(
+                    ncbi_blast_executable="/opt/ncbi/bin/blastp",
+                ),
+            ),
         ),
     )
 
     assert isinstance(canvas, Drawing)
-    assert captured["protein_blastp_mode"] == "pairwise"
-    assert captured["ncbi_blastp_bin"] == "/opt/ncbi/bin/blastp"
+    search = captured["losat_search"]
+    assert isinstance(search, LosatSearchOptions)
+    assert search.losatp_mode == "pairwise"
+    assert search.runtime.ncbi_blast_executable == "/opt/ncbi/bin/blastp"
 
 
 @pytest.mark.linear
@@ -4269,7 +4285,9 @@ def test_linear_cli_rejects_blast_with_protein_blastp_mode() -> None:
                 "b.gb",
                 "-b",
                 "a_b.tsv",
-                "--protein_blastp_mode",
+                "--losat",
+                "losatp",
+                "--losatp_mode",
                 "pairwise",
             ]
         )
@@ -4288,7 +4306,9 @@ def test_linear_cli_requires_two_records_for_protein_blastp_mode(
             [
                 "--gbk",
                 "dummy.gb",
-                "--protein_blastp_mode",
+                "--losat",
+                "losatp",
+                "--losatp_mode",
                 "pairwise",
                 "--format",
                 "svg",
@@ -4329,15 +4349,17 @@ def test_linear_cli_forwards_protein_blastp_options(
             "--gbk",
             "a.gb",
             "b.gb",
-            "--protein_blastp_mode",
-            "orthogroup",
-            "--losatp_bin",
+            "--losat",
+            "losatp",
+            "--losatp_mode",
+            "similarity_groups",
+            "--losat_bin",
             "custom-losat",
-            "--losatp_threads",
+            "--losat_threads",
             "6",
-            "--protein_blastp_max_hits",
+            "--losatp_max_hits",
             "9",
-            "--protein_blastp_candidate_limit",
+            "--losatp_max_target_seqs",
             "123",
             "--format",
             "svg",
@@ -4349,13 +4371,17 @@ def test_linear_cli_forwards_protein_blastp_options(
     canonical_request = captured["canonical_request"]
     assert isinstance(canonical_request, LinearDiagramRequest)
     options = canonical_request.options
-    assert options.protein_blastp_mode == "orthogroup"
-    assert options.losatp_bin == "custom-losat"
-    assert options.losatp_threads == 6
-    assert options.protein_blastp_max_hits == 9
-    assert options.protein_blastp_candidate_limit == 123
+    search = options.losat_search
+    assert search is not None
+    assert search.program == "losatp"
+    assert search.losatp_mode == "similarity_groups"
+    assert search.runtime.losat_executable == "custom-losat"
+    assert search.runtime.threads == 6
+    assert search.losatp_max_hits == 9
+    assert search.losatp_max_target_seqs == 123
     assert options.orthogroup_membership_mode == "anchor_core_v1"
     assert not hasattr(options, "align_orthogroup_feature")
+    assert not hasattr(options, "similarity_alignment_feature")
 
 
 @pytest.mark.linear
@@ -4391,9 +4417,11 @@ def test_linear_cli_forwards_ncbi_blastp_bin(
             "--gbk",
             "a.gb",
             "b.gb",
-            "--protein_blastp_mode",
+            "--losat",
+            "losatp",
+            "--losatp_mode",
             "pairwise",
-            "--ncbi_blastp_bin",
+            "--ncbi_blast_bin",
             "/opt/ncbi/bin/blastp",
             "--format",
             "svg",
@@ -4405,8 +4433,12 @@ def test_linear_cli_forwards_ncbi_blastp_bin(
     canonical_request = captured["canonical_request"]
     assert isinstance(canonical_request, LinearDiagramRequest)
     options = canonical_request.options
-    assert options.protein_blastp_mode == "pairwise"
-    assert options.ncbi_blastp_bin == "/opt/ncbi/bin/blastp"
+    assert options.losat_search is not None
+    assert options.losat_search.losatp_mode == "pairwise"
+    assert (
+        options.losat_search.runtime.ncbi_blast_executable
+        == "/opt/ncbi/bin/blastp"
+    )
 
 
 @pytest.mark.linear

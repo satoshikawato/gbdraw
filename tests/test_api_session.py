@@ -39,6 +39,7 @@ from gbdraw.api import (
     session_to_request,
     normalize_request_records,
 )
+from gbdraw.api.options import losatp_analysis_mode
 from gbdraw.session_io import CURRENT_SESSION_VERSION
 
 
@@ -483,7 +484,7 @@ def test_web_resolved_protein_writer_preserves_typed_alignment_layout(
         request = session_to_request(materialized)
 
     assert isinstance(request, LinearDiagramRequest)
-    assert request.options.protein_blastp_mode == "none"
+    assert losatp_analysis_mode(request.options.losat_search) == "none"
     assert request.options.linear_comparisons is not None
     assert len(request.options.linear_comparisons) == 1
     assert not hasattr(request.options, "align_orthogroup_feature")

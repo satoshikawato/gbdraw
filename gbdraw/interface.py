@@ -42,6 +42,10 @@ from gbdraw.api.options import (
     LinearRecordTranslation as _LinearRecordTranslation,
     LinearOutputOptions as _LinearOutputOptions,
     LinearRequestTrackOptions as _LinearRequestTrackOptions,
+    LosatProgram,
+    LosatRuntimeOptions as _LosatRuntimeOptions,
+    LosatSearchOptions as _LosatSearchOptions,
+    LosatpMode,
     _validate_center_reserved_radius,
     _validate_track_configuration,
 )
@@ -335,17 +339,18 @@ class LinearComparisonOptions:
     """Precomputed or in-process comparison inputs for a linear diagram.
 
     ``similarity_alignment`` takes a resolved ``SimilarityAlignmentPlan`` or a
-    ``SimilarityAlignmentReference``, which ``protein_mode="orthogroup"``
-    resolves once after its analysis.
+    ``SimilarityAlignmentReference``, which ``losat="losatp"`` with
+    ``losatp_mode="similarity_groups"`` resolves once after its analysis.
+    ``max_hits``, ``max_target_seqs``, ``member_max_hits``, and the runtime
+    fields apply when ``losat`` is set.
     """
 
     blast_files: Sequence[str] | None = None
     comparisons: Sequence[LinearComparison] | None = None
     protein_comparisons: Sequence[DataFrame] | None = None
     orthogroups: OrthogroupResult | OrthogroupGraphResult | None = None
-    protein_mode: Literal["none", "pairwise", "orthogroup", "collinear"] = (
-        _LINEAR_DIAGRAM_DEFAULTS.protein_blastp_mode
-    )
+    losat: LosatProgram | None = None
+    losatp_mode: LosatpMode = "similarity_groups"
     pairs: Sequence[tuple[int, int]] | None = None
     match_style: Literal["ribbon", "curve"] = "ribbon"
     collinearity_blocks: CollinearityResult | Sequence[CollinearityBlock] | None = None
@@ -362,18 +367,14 @@ class LinearComparisonOptions:
     collinearity_color: CollinearityColorMode | str = (
         _LINEAR_DIAGRAM_DEFAULTS.collinearity_color_mode
     )
-    losat_executable: str = _LINEAR_DIAGRAM_DEFAULTS.losatp_bin
-    blastp_executable: str | None = _LINEAR_DIAGRAM_DEFAULTS.ncbi_blastp_bin
-    threads: int | None = _LINEAR_DIAGRAM_DEFAULTS.losatp_threads
-    max_hits: int = _LINEAR_DIAGRAM_DEFAULTS.protein_blastp_max_hits
-    candidate_limit: int | None = (
-        _LINEAR_DIAGRAM_DEFAULTS.protein_blastp_candidate_limit
-    )
+    max_hits: int = 5
+    max_target_seqs: int | None = None
+    member_max_hits: int | None = None
+    losat_executable: str | None = None
+    ncbi_blast_executable: str | None = None
+    threads: int | None = None
     orthogroup_membership: OrthogroupMembershipMode | str = (
         _LINEAR_DIAGRAM_DEFAULTS.orthogroup_membership_mode
-    )
-    orthogroup_member_max_hits: int | None = (
-        _LINEAR_DIAGRAM_DEFAULTS.orthogroup_member_max_hits
     )
     max_paralog_links: int = (
         _LINEAR_DIAGRAM_DEFAULTS.collinear_max_paralog_links_per_orthogroup
@@ -887,6 +888,28 @@ def _circular_options(
     return _CircularDiagramOptions(**values)
 
 
+def _linear_losat_search(
+    comparisons: LinearComparisonOptions,
+) -> _LosatSearchOptions | None:
+    if comparisons.losat is None:
+        if comparisons.pairs is not None:
+            raise ValidationError("pairs requires losat.", diagnostic={"code": "COMPARISON_INPUT"})
+        return None
+    return _LosatSearchOptions(
+        program=comparisons.losat,
+        pairs=comparisons.pairs,
+        losatp_mode=comparisons.losatp_mode if comparisons.losat == "losatp" else None,
+        losatp_max_hits=comparisons.max_hits,
+        losatp_max_target_seqs=comparisons.max_target_seqs,
+        losatp_member_max_hits=comparisons.member_max_hits,
+        runtime=_LosatRuntimeOptions(
+            losat_executable=comparisons.losat_executable,
+            ncbi_blast_executable=comparisons.ncbi_blast_executable,
+            threads=comparisons.threads,
+        ),
+    )
+
+
 def _linear_options(
     options: LinearOptions,
     *,
@@ -907,8 +930,7 @@ def _linear_options(
         linear_comparisons=comparisons.comparisons,
         protein_comparisons=comparisons.protein_comparisons,
         orthogroups=comparisons.orthogroups,
-        protein_blastp_mode=comparisons.protein_mode,
-        protein_comparison_pairs=comparisons.pairs,
+        losat_search=_linear_losat_search(comparisons),
         pairwise_match_style=comparisons.match_style,
         collinearity_blocks=comparisons.collinearity_blocks,
         collinearity_params=comparisons.collinearity_params,
@@ -916,13 +938,7 @@ def _linear_options(
         collinearity_anchor_mode=comparisons.collinearity_anchor,
         collinearity_search_scope=comparisons.collinearity_scope,
         collinearity_color_mode=comparisons.collinearity_color,
-        losatp_bin=comparisons.losat_executable,
-        ncbi_blastp_bin=comparisons.blastp_executable,
-        losatp_threads=comparisons.threads,
-        protein_blastp_max_hits=comparisons.max_hits,
-        protein_blastp_candidate_limit=comparisons.candidate_limit,
         orthogroup_membership_mode=comparisons.orthogroup_membership,
-        orthogroup_member_max_hits=comparisons.orthogroup_member_max_hits,
         collinear_max_paralog_links_per_orthogroup=comparisons.max_paralog_links,
     )
     return _LinearDiagramOptions(**values)

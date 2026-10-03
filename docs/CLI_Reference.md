@@ -656,7 +656,7 @@ Then keep the other Gallery options, but replace `--gbk ...`, repeated `--record
 ```bash
 gbdraw linear \
   --records_table bgc_records.tsv \
-  --protein_blastp_mode orthogroup \
+  --losat losatp --losatp_mode similarity_groups \
   --show_labels first \
   --pairwise_match_style curve \
   -o BGC0000708-BGC0000713 \
@@ -807,7 +807,7 @@ Semantic SVG track hooks identify the renderer and logical slot; internal ID
 spelling is deterministic but is not a cross-version selector contract.
 
 For the exact-reference and non-interactive ambiguity behavior of
-`--align_orthogroup_feature`, see [Strict Similarity Group
+`--similarity_alignment_feature`, see [Strict Similarity Group
 alignment](./REFERENCE/command-line.md#strict-similarity-group-alignment).
 
 ## Linear mode
@@ -822,15 +822,14 @@ usage: gbdraw linear [-h] [--feature_placement_table TSV]
               [--gbk [GBK_FILE ...]] [--gff [GFF3_FILE ...]]
               [--fasta [FASTA_FILE ...]] [--records_table TSV]
               [--multi_record_position SELECTOR@ROW] [--linear_record_gap PX]
-              [--comparisons_table TSV] [-b [BLAST ...]]
-              [--losatp_bin LOSATP_BIN] [--ncbi_blastp_bin NCBI_BLASTP_BIN]
-              [--losatp_threads LOSATP_THREADS]
-              [--protein_blastp_mode {none,pairwise,orthogroup,collinear}]
-              [--protein_blastp_max_hits PROTEIN_BLASTP_MAX_HITS]
-              [--protein_blastp_candidate_limit PROTEIN_BLASTP_CANDIDATE_LIMIT]
-              [--protein_blastp_output TSV]
-              [--align_orthogroup_feature ALIGN_ORTHOGROUP_FEATURE]
+              [--comparisons_table TSV] [-b [BLAST ...]] [--losat {losatp}]
+              [--losatp_mode {similarity_groups,collinear,pairwise}]
+              [--losat_bin PATH | --ncbi_blast_bin PATH] [--losat_threads N]
+              [--losatp_max_hits N] [--losatp_max_target_seqs N]
+              [--losatp_member_max_hits N] [--losat_output_dir DIR]
+              [--similarity_alignment_feature ID]
               [--collinear_search_scope {adjacent,all}]
+              [--collinear_infer_orthogroups {on,off}]
               [--collinear_min_anchors COLLINEAR_MIN_ANCHORS]
               [--collinear_max_unit_gap COLLINEAR_MAX_UNIT_GAP]
               [--collinear_max_diagonal_drift COLLINEAR_MAX_DIAGONAL_DRIFT]
@@ -950,37 +949,41 @@ options:
   -b, --blast [BLAST ...]
                         input BLAST result file in tab-separated format
                         (-outfmt 6 or 7) (optional)
-  --losatp_bin LOSATP_BIN
-                        Native LOSAT executable for --protein_blastp_mode
-                        pairwise/orthogroup/collinear (default: losat).
-  --ncbi_blastp_bin NCBI_BLASTP_BIN
-                        NCBI BLAST+ blastp executable for
-                        --protein_blastp_mode pairwise/orthogroup/collinear
-                        (default: use automatic runtime resolution).
-  --losatp_threads LOSATP_THREADS
-                        Threads passed to the selected protein blastp runtime
-                        for --protein_blastp_mode
-                        pairwise/orthogroup/collinear (default: runtime
-                        default).
-  --protein_blastp_mode {none,pairwise,orthogroup,collinear}
-                        Protein blastp comparison mode: none, pairwise
-                        adjacent ribbons, all-record similarity groups
-                        (orthogroup), or collinear blocks (default: none).
-  --protein_blastp_max_hits PROTEIN_BLASTP_MAX_HITS
-                        Maximum distinct subject protein hits per query
-                        protein for pairwise protein blastp display links
-                        (default: 5).
-  --protein_blastp_candidate_limit PROTEIN_BLASTP_CANDIDATE_LIMIT
-                        Optional protein blastp candidate cap per query; use
-                        'none' for no cap (default: none).
-  --protein_blastp_output TSV
-                        Write the raw protein-search evidence to one
-                        deterministic TSV. Runtime handles are replaced with
-                        user-visible protein IDs; requires
-                        --protein_blastp_mode.
-  --align_orthogroup_feature ALIGN_ORTHOGROUP_FEATURE
+  --losat {losatp}      Run a LOSAT comparison between the records: losatp
+                        compares the CDS proteins (LOSAT blastp). Cannot be
+                        combined with -b/--blast (default: no LOSAT
+                        comparison).
+  --losatp_mode {similarity_groups,collinear,pairwise}
+                        LOSATP display with --losat losatp: similarity_groups
+                        (Similarity groups across all records), collinear
+                        (Collinear blocks), or pairwise (adjacent-record
+                        ribbons) (default: similarity_groups).
+  --losat_bin PATH      Native LOSAT executable for --losat (default:
+                        automatic runtime resolution).
+  --ncbi_blast_bin PATH
+                        NCBI BLAST+ executable of the selected --losat program
+                        (blastp for losatp) (default: automatic runtime
+                        resolution).
+  --losat_threads N     Threads passed to each LOSAT or NCBI BLAST+ job
+                        (default: runtime default).
+  --losatp_max_hits N   Maximum distinct subject proteins per query protein in
+                        --losatp_mode pairwise links (default: 5).
+  --losatp_max_target_seqs N
+                        LOSATP -max_target_seqs per query; 'none' for no cap
+                        (default: none).
+  --losatp_member_max_hits N
+                        Maximum hits per protein used for Similarity group and
+                        Collinear membership; 'none' for no cap (default:
+                        none).
+  --losat_output_dir DIR
+                        Write the raw LOSAT evidence to DIR (LOSATP:
+                        losatp.raw.tsv). Runtime handles are replaced with
+                        user-visible protein IDs; requires --losat.
+  --similarity_alignment_feature ID
                         Align linear records using this exact feature SVG hash
                         or protein ID; Similarity Group IDs are not accepted.
+                        Requires --losat losatp with --losatp_mode
+                        similarity_groups.
   --collinear_search_scope {adjacent,all}
                         Collinear protein blastp scope: adjacent displayed
                         records/rows or all record pairs. With multi-record
@@ -988,6 +991,9 @@ options:
                         between neighboring rows; all uses every pair as
                         grouping evidence but renders only pairs across
                         adjacent rows (default: adjacent).
+  --collinear_infer_orthogroups {on,off}
+                        Infer Similarity groups from the Collinear evidence
+                        and color blocks by group (default: on).
   --collinear_min_anchors COLLINEAR_MIN_ANCHORS
                         Minimum anchors/genes required for a rendered
                         Collinear block; 1 allows singleton links (default:
@@ -1383,13 +1389,13 @@ logical index used by labels, colors, shared axes, and custom track slots. In
 Linear mode the missing cell reserves no vertical geometry, so later numeric
 tracks compact without renumbering the logical series.
 
-For `--protein_blastp_mode`, gbdraw uses a native LOSAT executable when one is
+For `--losat losatp`, gbdraw uses a native LOSAT executable when one is
 available. The PyPI package does not bundle native LOSAT: install the pinned
 release with `gbdraw setup-losat`, or place `losat` on `PATH`. The resolution
 order is in [Command-line reference](./REFERENCE/command-line.md). If no native
 LOSAT executable is available, install NCBI BLAST+ and make `blastp` available
-on `PATH`, or pass it explicitly with `--ncbi_blastp_bin`. You can force a
-native LOSAT executable on any platform with `--losatp_bin`.
+on `PATH`, or pass it explicitly with `--ncbi_blast_bin`. You can force a
+native LOSAT executable on any platform with `--losat_bin`.
 NCBI BLAST+ fallback produces compatible outfmt 6 protein comparisons, but its
 hit set is not guaranteed to be identical to LOSAT.
 

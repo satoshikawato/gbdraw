@@ -2961,6 +2961,97 @@ def get_session_slot(session: Mapping[str, Any], slot: str) -> Any:
     return current
 
 
+@dataclass(frozen=True)
+class RetiredCliOption:
+    """One retired CLI flag (design D4).
+
+    Fresh runs reject the flag and name ``replacement``. Legacy session argv
+    is rewritten before replay: ``renamed_to`` keeps the value, and
+    ``value_rewrites`` replaces flag and value with zero or more tokens. A flag
+    with neither has no legacy rewrite.
+    """
+
+    option: str
+    modes: tuple[Literal["circular", "linear"], ...]
+    replacement: str
+    renamed_to: str | None = None
+    value_rewrites: Mapping[str, tuple[str, ...]] | None = None
+
+    def rewrite(self, value: str) -> tuple[str, ...] | None:
+        if self.renamed_to is not None:
+            return (self.renamed_to, value)
+        if self.value_rewrites is not None:
+            return self.value_rewrites.get(str(value).strip().lower())
+        return None
+
+    def message(self, value: object = None) -> str:
+        replacement = self.replacement
+        if self.value_rewrites is not None and isinstance(value, str):
+            tokens = self.value_rewrites.get(value.strip().lower())
+            if tokens is not None:
+                replacement = (
+                    "use " + " ".join(tokens)
+                    if tokens
+                    else "omit it (no protein comparison)"
+                )
+        return f"{self.option} was retired; {replacement}."
+
+
+def _losatp_mode_rewrites() -> dict[str, tuple[str, ...]]:
+    from gbdraw.api.options import LOSATP_MODE_WIRE
+
+    rewrites: dict[str, tuple[str, ...]] = {"none": ()}
+    for typed_mode, wire_mode in LOSATP_MODE_WIRE.items():
+        if typed_mode != "none":
+            rewrites[wire_mode] = ("--losat", "losatp", "--losatp_mode", typed_mode)
+    return rewrites
+
+
+# The one old -> new table for retired CLI flags (design 3.5). Both the
+# fresh-run rejection and the legacy session argv rewrite read it.
+RETIRED_CLI_OPTIONS: Mapping[str, RetiredCliOption] = {
+    item.option: item
+    for item in (
+        RetiredCliOption(
+            "--protein_blastp_mode",
+            ("linear",),
+            "use --losat losatp --losatp_mode {similarity_groups,collinear,pairwise}",
+            value_rewrites=_losatp_mode_rewrites(),
+        ),
+        RetiredCliOption("--losatp_bin", ("linear",), "use --losat_bin", "--losat_bin"),
+        RetiredCliOption(
+            "--ncbi_blastp_bin", ("linear",), "use --ncbi_blast_bin", "--ncbi_blast_bin"
+        ),
+        RetiredCliOption(
+            "--losatp_threads", ("linear",), "use --losat_threads", "--losat_threads"
+        ),
+        RetiredCliOption(
+            "--protein_blastp_max_hits",
+            ("linear",),
+            "use --losatp_max_hits",
+            "--losatp_max_hits",
+        ),
+        RetiredCliOption(
+            "--protein_blastp_candidate_limit",
+            ("linear",),
+            "use --losatp_max_target_seqs",
+            "--losatp_max_target_seqs",
+        ),
+        RetiredCliOption(
+            "--align_orthogroup_feature",
+            ("linear",),
+            "use --similarity_alignment_feature",
+            "--similarity_alignment_feature",
+        ),
+        RetiredCliOption(
+            "--protein_blastp_output",
+            ("linear",),
+            "use --losat_output_dir DIR, which writes DIR/losatp.raw.tsv",
+        ),
+    )
+}
+
+
 def _canonicalize_legacy_session_cli_args(
     args: Sequence[str],
     *,
@@ -3014,8 +3105,27 @@ def _canonicalize_legacy_session_cli_args(
 
     canonical_args: list[str] = []
     source_to_canonical_index: dict[int, int] = {}
+
+    def extend(option_index: int, value_index: int, tokens: Sequence[str]) -> None:
+        if not tokens:
+            return
+        source_to_canonical_index[option_index] = len(canonical_args)
+        source_to_canonical_index[value_index] = len(canonical_args) + len(tokens) - 1
+        canonical_args.extend(tokens)
+
+    pending_retired: tuple[RetiredCliOption, int] | None = None
     for source_index, raw_token in enumerate(args):
         token = str(raw_token)
+        if pending_retired is not None:
+            retired, option_index = pending_retired
+            pending_retired = None
+            rewritten = retired.rewrite(token)
+            extend(
+                option_index,
+                source_index,
+                (retired.option, token) if rewritten is None else rewritten,
+            )
+            continue
         if token == "--show_depth":
             continue
         option, separator, inline_value = (
@@ -3024,6 +3134,18 @@ def _canonicalize_legacy_session_cli_args(
             else (token, "", "")
         )
         option = replacements.get(option, option)
+        retired_option = RETIRED_CLI_OPTIONS.get(option)
+        if retired_option is not None and mode in retired_option.modes:
+            if not separator:
+                pending_retired = (retired_option, source_index)
+                continue
+            rewritten = retired_option.rewrite(inline_value)
+            if rewritten is None:
+                rewritten = (f"{option}={inline_value}",)
+            elif retired_option.renamed_to is not None:
+                rewritten = (f"{retired_option.renamed_to}={inline_value}",)
+            extend(source_index, source_index, rewritten)
+            continue
         if separator:
             if mode == "circular" and option == "--circular_track_slot":
                 inline_value = _migrate_legacy_circular_slot_cli_value(inline_value)
@@ -3057,6 +3179,10 @@ def _canonicalize_legacy_session_cli_args(
                     token = _migrate_legacy_circular_slot_cli_value(token)
         source_to_canonical_index[source_index] = len(canonical_args)
         canonical_args.append(token)
+    if pending_retired is not None:
+        retired, option_index = pending_retired
+        source_to_canonical_index[option_index] = len(canonical_args)
+        canonical_args.append(retired.option)
     return canonical_args, source_to_canonical_index
 
 
@@ -3081,6 +3207,35 @@ def _migrate_legacy_circular_slot_cli_value(value: str) -> str:
         else:
             migrated.append(part)
     return head if not migrated else f"{head}@{','.join(migrated)}"
+
+
+def canonicalize_cli_invocation(
+    args: Sequence[str],
+    file_bindings: Sequence[SessionFileBinding],
+    *,
+    mode: Literal["circular", "linear"],
+) -> tuple[list[str], list[SessionFileBinding]]:
+    """Rewrite retired CLI flags in a recorded invocation and remap its bindings.
+
+    Legacy session replay and the Gallery session refresh both use this, so a
+    recorded ``cliInvocation`` reaches the current flag names the same way.
+    """
+
+    canonical_args, index_map = _canonicalize_legacy_session_cli_args(args, mode=mode)
+    remapped: list[SessionFileBinding] = []
+    for binding in file_bindings:
+        if binding.argIndex not in index_map:
+            raise ValidationError(
+                "cliInvocation.fileBindings cannot reference a removed legacy CLI flag."
+            )
+        remapped.append(
+            SessionFileBinding(
+                argIndex=index_map[binding.argIndex],
+                slot=binding.slot,
+                name=binding.name,
+            )
+        )
+    return canonical_args, remapped
 
 
 def _session_cli_invocation_to_args(
@@ -3130,24 +3285,11 @@ def _session_cli_invocation_to_args(
 
     if migrate_legacy_cli:
         run_args, _ = _canonicalize_legacy_session_cli_args(run_args, mode=mode)
-        invocation_args, invocation_index_map = _canonicalize_legacy_session_cli_args(
+        invocation_args, file_bindings = canonicalize_cli_invocation(
             invocation_args,
+            file_bindings,
             mode=mode,
         )
-        remapped_bindings: list[SessionFileBinding] = []
-        for binding in file_bindings:
-            if binding.argIndex not in invocation_index_map:
-                raise ValidationError(
-                    "cliInvocation.fileBindings cannot reference a removed legacy CLI flag."
-                )
-            remapped_bindings.append(
-                SessionFileBinding(
-                    argIndex=invocation_index_map[binding.argIndex],
-                    slot=binding.slot,
-                    name=binding.name,
-                )
-            )
-        file_bindings = remapped_bindings
 
     run_args = _apply_option_override(run_args, "-o", "--output", output_override)
     run_args = _apply_option_override(run_args, "-f", "--format", format_override)
@@ -3908,7 +4050,13 @@ def _append_linear_gui_blastp_args(
     mode = str(blastp_cfg.get("mode") or "none").strip().lower()
     if mode not in {"pairwise", "orthogroup", "collinear"}:
         return
-    _append_pair(run_args, invocation_args, "--protein_blastp_mode", mode)
+    _append_pair(run_args, invocation_args, "--losat", "losatp")
+    _append_pair(
+        run_args,
+        invocation_args,
+        "--losatp_mode",
+        _losatp_mode_rewrites()[mode][-1],
+    )
     threads_per_job = str(losat_cfg.get("threadsPerJob") or "auto").strip().lower()
     if threads_per_job != "auto":
         try:
@@ -3916,16 +4064,16 @@ def _append_linear_gui_blastp_args(
         except ValueError:
             parsed_threads = 0
         if parsed_threads >= 1:
-            _append_pair(run_args, invocation_args, "--losatp_threads", str(parsed_threads))
+            _append_pair(run_args, invocation_args, "--losat_threads", str(parsed_threads))
 
     max_hits = blastp_cfg.get("maxHits")
     if max_hits not in (None, "", False):
-        _append_pair(run_args, invocation_args, "--protein_blastp_max_hits", str(max_hits))
+        _append_pair(run_args, invocation_args, "--losatp_max_hits", str(max_hits))
         if mode == "pairwise":
-            _append_pair(run_args, invocation_args, "--protein_blastp_candidate_limit", str(max_hits))
+            _append_pair(run_args, invocation_args, "--losatp_max_target_seqs", str(max_hits))
     candidate_limit = blastp_cfg.get("candidateLimit")
     if mode != "pairwise" and candidate_limit not in (None, "", False):
-        _append_pair(run_args, invocation_args, "--protein_blastp_candidate_limit", str(candidate_limit))
+        _append_pair(run_args, invocation_args, "--losatp_max_target_seqs", str(candidate_limit))
 
     for key, option in (
         ("min_bitscore", "--bitscore"),
@@ -3945,7 +4093,7 @@ def _append_linear_gui_blastp_args(
             else ""
         )
         if selected_target:
-            _append_pair(run_args, invocation_args, "--align_orthogroup_feature", selected_target)
+            _append_pair(run_args, invocation_args, "--similarity_alignment_feature", selected_target)
 
     if mode != "collinear":
         return
@@ -4375,6 +4523,7 @@ __all__ = [
     "SessionFileBinding",
     "SessionRunSpec",
     "build_session_json",
+    "canonicalize_cli_invocation",
     "classify_raw_losat_cache_entry",
     "compact_session_feature_catalog",
     "decode_depth_payload",

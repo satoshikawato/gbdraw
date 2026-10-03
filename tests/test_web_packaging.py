@@ -619,7 +619,7 @@ def test_interactive_gallery_examples_are_wired() -> None:
     collinear = next(
         entry for entry in examples if entry["id"] == "hepatoplasmataceae_collinear"
     )
-    assert collinear["command"].count("--losatp_threads") == 1
+    assert collinear["command"].count("--losat_threads") == 1
 
 
 @pytest.mark.gallery

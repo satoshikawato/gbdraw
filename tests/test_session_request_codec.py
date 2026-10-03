@@ -41,6 +41,8 @@ from gbdraw.api.options import (
     LinearRecordTranslation,
     LinearOutputOptions,
     LinearTrackOptions,
+    LosatRuntimeOptions,
+    LosatSearchOptions,
 )
 from gbdraw.api.config import load_default_config
 from gbdraw.api.request_render import render_request
@@ -1018,7 +1020,11 @@ def test_linear_comparison_kinds_and_payload_round_trip(tmp_path: Path) -> None:
             blast_files=(str(nucleotide),),
             protein_comparisons=(protein_table,),
             orthogroups=orthogroups,
-            protein_blastp_mode="collinear",
+            losat_search=LosatSearchOptions(
+                program="losatp",
+                losatp_mode="collinear",
+                runtime=LosatRuntimeOptions(threads=2),
+            ),
             pairwise_match_style="curve",
             collinearity_blocks=collinearity,
             collinearity_params=LosslessCollinearityParameters(
@@ -1027,7 +1033,6 @@ def test_linear_comparison_kinds_and_payload_round_trip(tmp_path: Path) -> None:
             ),
             collinearity_unit_mode="locus",
             collinearity_search_scope="all",
-            losatp_threads=2,
             output=LinearOutputOptions(
                 legend="bottom",
                 plot_title_position="bottom",
@@ -1097,7 +1102,12 @@ def test_supported_schemas_privately_migrate_standard_collinearity_parameters(
     encoded = encode_canonical_request(
         LinearDiagramRequest(
             records=(RecordInput(source=GenBankInputSource(source)),),
-            options=LinearDiagramOptions(protein_blastp_mode="collinear"),
+            options=LinearDiagramOptions(
+                losat_search=LosatSearchOptions(
+                    program="losatp",
+                    losatp_mode="collinear",
+                )
+            ),
         )
     )
     payload = _payload_for_schema(encoded, schema)
@@ -1148,7 +1158,10 @@ def test_standard_collinearity_embedded_max_paralog_does_not_override_explicit_s
         LinearDiagramRequest(
             records=(RecordInput(source=GenBankInputSource(source)),),
             options=LinearDiagramOptions(
-                protein_blastp_mode="collinear",
+                losat_search=LosatSearchOptions(
+                    program="losatp",
+                    losatp_mode="collinear",
+                ),
                 collinear_max_paralog_links_per_orthogroup=5,
             ),
         )
@@ -1180,7 +1193,12 @@ def test_standard_collinearity_embedded_max_paralog_is_inert_in_orthogroup_mode(
     encoded = encode_canonical_request(
         LinearDiagramRequest(
             records=(RecordInput(source=GenBankInputSource(source)),),
-            options=LinearDiagramOptions(protein_blastp_mode="orthogroup"),
+            options=LinearDiagramOptions(
+                losat_search=LosatSearchOptions(
+                    program="losatp",
+                    losatp_mode="similarity_groups",
+                )
+            ),
         )
     )
     payload = _payload_for_schema(encoded, 2)
@@ -1210,7 +1228,12 @@ def test_current_schema_rejects_standard_collinearity_parameters(
     encoded = encode_canonical_request(
         LinearDiagramRequest(
             records=(RecordInput(source=GenBankInputSource(source)),),
-            options=LinearDiagramOptions(protein_blastp_mode="collinear"),
+            options=LinearDiagramOptions(
+                losat_search=LosatSearchOptions(
+                    program="losatp",
+                    losatp_mode="collinear",
+                )
+            ),
         )
     )
     pipeline = next(
@@ -1590,7 +1613,10 @@ def test_collinear_pipeline_ignores_legacy_derived_comparison_pairs(
             RecordInput(source=GenBankInputSource(gbk_b)),
         ),
         options=LinearDiagramOptions(
-            protein_blastp_mode="collinear",
+            losat_search=LosatSearchOptions(
+                program="losatp",
+                losatp_mode="collinear",
+            ),
             collinearity_search_scope="all",
         ),
     )
@@ -1608,8 +1634,9 @@ def test_collinear_pipeline_ignores_legacy_derived_comparison_pairs(
         output_directory=tmp_path / "replay-legacy",
     )
 
-    assert decoded.options.protein_blastp_mode == "collinear"
-    assert decoded.options.protein_comparison_pairs is None
+    assert decoded.options.losat_search is not None
+    assert decoded.options.losat_search.losatp_mode == "collinear"
+    assert decoded.options.losat_search.pairs is None
     reencoded_pipeline = next(
         item
         for item in encode_canonical_request(decoded).payload["comparisons"]
@@ -2733,7 +2760,10 @@ def test_schema_one_unknown_field_policy_is_explicit() -> None:
 def test_collinear_inference_choice_round_trips_and_omission_preserves_old_sessions(tmp_path, inference):
     encoded = encode_canonical_request(LinearDiagramRequest(
         records=(RecordInput(source=GenBankInputSource(_source_file(tmp_path / "source.gbk"))),),
-        options=LinearDiagramOptions(protein_blastp_mode="collinear", collinear_infer_orthogroups=inference),
+        options=LinearDiagramOptions(
+            losat_search=LosatSearchOptions(program="losatp", losatp_mode="collinear"),
+            collinear_infer_orthogroups=inference,
+        ),
     ))
     resource_paths = _materialize_resources(encoded, tmp_path / "resources")
     settings = encoded.payload["comparisons"][0]["settings"]

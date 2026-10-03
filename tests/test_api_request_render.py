@@ -31,6 +31,7 @@ from gbdraw.api.options import (
     ColorOptions,
     LinearDiagramOptions,
     LinearMultiRecordOptions,
+    LosatSearchOptions,
 )
 from gbdraw.api.request_render import (
     CircularBatchRenderResult,
@@ -316,7 +317,13 @@ def test_omitted_and_explicit_collinearity_defaults_share_derived_identity() -> 
 @pytest.mark.parametrize(
     "changed_options",
     (
-        LinearDiagramOptions(orthogroup_member_max_hits=6),
+        LinearDiagramOptions(
+            losat_search=LosatSearchOptions(
+                program="losatp",
+                losatp_mode="collinear",
+                losatp_member_max_hits=6,
+            )
+        ),
         LinearDiagramOptions(collinearity_unit_mode="cds"),
         LinearDiagramOptions(collinearity_anchor_mode="all"),
         LinearDiagramOptions(collinearity_search_scope="all"),
@@ -389,7 +396,11 @@ def test_derived_identity_excludes_inactive_and_render_only_options(
     collinear = build_entry(LinearDiagramOptions(), "collinear")
     collinear_irrelevant = build_entry(
         LinearDiagramOptions(
-            protein_blastp_max_hits=99,
+            losat_search=LosatSearchOptions(
+                program="losatp",
+                losatp_mode="collinear",
+                losatp_max_hits=99,
+            ),
             pairwise_match_style="curve",
         ),
         "collinear",
@@ -399,7 +410,11 @@ def test_derived_identity_excludes_inactive_and_render_only_options(
     orthogroup = build_entry(LinearDiagramOptions(), "orthogroup")
     orthogroup_irrelevant = build_entry(
         LinearDiagramOptions(
-            protein_blastp_max_hits=99,
+            losat_search=LosatSearchOptions(
+                program="losatp",
+                losatp_mode="similarity_groups",
+                losatp_max_hits=99,
+            ),
             collinearity_unit_mode="cds",
             collinearity_anchor_mode="all",
             collinearity_search_scope="all",
@@ -463,7 +478,14 @@ def test_empty_api_derived_result_passes_current_session_validation(
             )
             for record, record_key in zip(records, record_keys, strict=True)
         ),
-        options=LinearDiagramOptions(protein_blastp_mode=mode),
+        options=LinearDiagramOptions(
+            losat_search=LosatSearchOptions(
+                program="losatp",
+                losatp_mode=(
+                    "similarity_groups" if mode == "orthogroup" else mode
+                ),
+            )
+        ),
     )
     metadata = diagram_module.LinearDiagramMetadata(
         protein_comparisons=(
@@ -1172,7 +1194,12 @@ def test_computed_orthogroups_flow_through_typed_metadata_to_interactive_context
             )
             for index, record in enumerate(records)
         ),
-        options=LinearDiagramOptions(protein_blastp_mode="orthogroup"),
+        options=LinearDiagramOptions(
+            losat_search=LosatSearchOptions(
+                program="losatp",
+                losatp_mode="similarity_groups",
+            )
+        ),
     )
     computed: dict[str, OrthogroupResult] = {}
 

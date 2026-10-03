@@ -216,7 +216,7 @@ def setup_losat() -> Path:
     target = runtime_target()
     lock = read_release_lock()
     if not lock["artifacts"]:
-        raise ValidationError("LOSAT v0.1.0 has no verified public release lock yet. Use --losatp_bin with an explicit executable.")
+        raise ValidationError("LOSAT v0.1.0 has no verified public release lock yet. Use --losat_bin with an explicit executable.")
     identity = _identity(lock, target)
     parent = cache_root() / lock["version"]
     directory = parent / target

@@ -324,16 +324,16 @@ The records table assigns `row` and `column`; the comparisons table declares `bl
 ```bash
 gbdraw linear \
   --gbk genome1.gb genome2.gb genome3.gb \
-  --protein_blastp_mode orthogroup \
+  --losat losatp --losatp_mode similarity_groups \
   --show_labels orthogroup_top \
   --pairwise_match_style curve \
   -o protein_orthogroup \
   -f svg
 ```
 
-Use `--protein_blastp_mode pairwise`, `orthogroup`, or `collinear`. The
-`orthogroup` mode creates gbdraw similarity groups for visualization; it does
-not infer phylogeny-based orthogroups. Do not combine these modes with
+Use `--losatp_mode pairwise`, `similarity_groups`, or `collinear`. The
+`similarity_groups` mode creates gbdraw similarity groups for visualization; it does
+not infer phylogeny-based orthogroups. Do not combine `--losat` with
 `-b/--blast`. The [comparison technical
 documentation](./REFERENCE/comparison-programs-thresholds-and-results.md)
 defines all three modes. Complete projects cover [Similarity

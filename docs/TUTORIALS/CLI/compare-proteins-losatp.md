@@ -99,13 +99,14 @@ gbdraw linear \
   --reverse_complement false \
   --reverse_complement false \
   --reverse_complement true \
-  --protein_blastp_mode orthogroup \
-  --losatp_threads 1 \
+  --losat losatp \
+  --losatp_mode similarity_groups \
+  --losat_threads 1 \
   --bitscore 50 \
   --evalue 0.01 \
   --identity 30 \
   --alignment_length 0 \
-  --align_orthogroup_feature CAG38695.1 \
+  --similarity_alignment_feature CAG38695.1 \
   --palette orange \
   --default_colors BGC0000708-BGC0000713_default_colors.tsv \
   --table BGC0000708-BGC0000713_specific_colors.tsv \
@@ -150,12 +151,12 @@ the browser Tutorial's alignment.
 ## Variant: draw individual Pairwise matches
 
 The same five records can produce individual curves instead of Similarity
-groups. In the command above, change `--protein_blastp_mode orthogroup` to
-`pairwise`, remove `--align_orthogroup_feature CAG38695.1`, and set
-`--protein_blastp_max_hits` to `1`, `--protein_blastp_output` to
-`cli_losatp_pairwise.tsv`, and `--show_labels` to `none`. Use
-`cli_losatp_pairwise` for `-o` and change the title to `LOSATP Pairwise protein
-matches across five BGC records`.
+groups. In the command above, change `--losatp_mode similarity_groups` to
+`pairwise`, remove `--similarity_alignment_feature CAG38695.1`, and set
+`--losatp_max_hits` to `1` and `--show_labels` to `none`. Add
+`--losat_output_dir .` to write the raw search rows to `losatp.raw.tsv` in the
+working directory. Use `cli_losatp_pairwise` for `-o` and change the title to
+`LOSATP Pairwise protein matches across five BGC records`.
 
 Pairwise mode searches four adjacent pairs. It does not run a direct
 `BGC0000708` to `BGC0000713` comparison. With the thresholds in this Tutorial,
