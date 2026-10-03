@@ -65,7 +65,6 @@ export const setupWatchers = ({
     svgContent,
     selectedResultIndex,
     form,
-    generatedLegendPosition,
     generatedMode,
     shouldDeferCircularPreviewUpdates,
     mode,
@@ -73,7 +72,6 @@ export const setupWatchers = ({
     lInputType,
     canvasPadding,
     skipCaptureBaseConfig,
-    skipPositionReapply,
     skipExtractOnSvgChange,
     trustedArtifactRestoreInProgress,
     svgContainer,
@@ -132,7 +130,6 @@ export const setupWatchers = ({
   const { syncLabelEditor } = featureActions;
   const {
     applyCanvasPadding,
-    repositionForLegendChange,
     refreshDiagramDragAffordances
   } = legendLayout;
   const {
@@ -216,30 +213,6 @@ export const setupWatchers = ({
   );
 
   watch(
-    () => form.legend,
-    (newPos, oldPos) => {
-      if (semanticFileWatchersSuppressed.value || state.sessionOperationAvailability?.()) return;
-      if (generatedMode.value !== mode.value) return;
-      // D-30 (PD-OI-084): a Linear legend side applies on Generate. An
-      // in-place move cannot match the renderer, which plans the Legend with
-      // its own text metrics, so the Result stays unchanged until Generate.
-      if (mode.value !== 'circular' || shouldDeferCircularPreviewUpdates.value) return;
-      if (
-        svgContent.value &&
-        oldPos !== undefined &&
-        newPos !== oldPos &&
-        newPos !== generatedLegendPosition.value
-      ) {
-        nextTick(() => {
-          if (semanticFileWatchersSuppressed.value || state.sessionOperationAvailability?.()) return;
-          if (mode.value !== 'circular' || shouldDeferCircularPreviewUpdates.value) return;
-          repositionForLegendChange(newPos, generatedLegendPosition.value);
-        });
-      }
-    }
-  );
-
-  watch(
     () => form.multi_record_canvas,
     (enabled, previousEnabled) => {
       if (mode.value !== 'circular') return;
@@ -269,7 +242,6 @@ export const setupWatchers = ({
   watch([svgContent, svgContainer, () => results.value[selectedResultIndex.value]], () => {
     const isIncrementalEdit = Boolean(skipCaptureBaseConfig.value);
     skipCaptureBaseConfig.value = false;
-    skipPositionReapply.value = false;
 
     nextTick(async () => {
       const root = svgContainer.value?.querySelector('svg') || null;
@@ -311,7 +283,6 @@ export const setupWatchers = ({
       const result = results.value[selectedResultIndex.value];
       if (!isCommittedSvgResultMounted(result)) return;
       skipCaptureBaseConfig.value = false;
-      skipPositionReapply.value = false;
     }
   );
 

@@ -1121,7 +1121,6 @@ export const createRunAnalysis = ({
     zoom,
     canvasPan,
     skipCaptureBaseConfig,
-    skipPositionReapply,
     matchSequenceRegistry,
     featureColorOverrides,
     featureVisibilityOverrides,
@@ -2107,7 +2106,6 @@ export const createRunAnalysis = ({
     resultPanelTab.value = 'preview';
     if (isCurrentAlert()) errorLog.value = null;
     skipCaptureBaseConfig.value = false;
-    skipPositionReapply.value = false;
     resetLabelScopeDialogState();
     window._origPairwiseMin = activeRunColors.pairwise_match_min || '#FFE7E7';
     window._origPairwiseMax = activeRunColors.pairwise_match_max || '#FF7272';
@@ -5270,7 +5268,6 @@ export const createRunAnalysis = ({
     labelReflowLastError.value = null;
     labelOverrideBuildWarning.value = '';
     skipCaptureBaseConfig.value = true;
-    skipPositionReapply.value = true;
     const isCurrent = () => generationToken === latestGenerationToken && requestId === pendingReflowRequestId;
     try {
       let candidateRules = manualSpecificRules;
@@ -5340,7 +5337,6 @@ export const createRunAnalysis = ({
       }
       const previousSelectedResultIndex = selectedResultIndex.value;
       skipCaptureBaseConfig.value = true;
-      skipPositionReapply.value = true;
       results.value = execution.commit.results;
       if (execution.commit.results.length > 0) {
         selectedResultIndex.value = Math.max(

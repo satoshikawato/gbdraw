@@ -135,7 +135,6 @@ export const createLegendRepositionActions = ({
 
   return {
     refreshLegendGeometry,
-    repositionForLegendChange,
     syncStateFromComposition
   };
 };

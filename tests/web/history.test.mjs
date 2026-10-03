@@ -1014,7 +1014,6 @@ const createLayoutPreferences = () => ({
     lastRunInfo: ref(null),
     pairwiseMatchFactors: ref({}),
     skipCaptureBaseConfig: ref(false),
-    skipPositionReapply: ref(false),
     skipExtractOnSvgChange: ref(false)
   };
   const snapshots = createHistorySnapshotService({
@@ -1290,7 +1289,6 @@ const createLayoutPreferences = () => ({
     lastRunInfo: ref(null),
     pairwiseMatchFactors: ref({}),
     skipCaptureBaseConfig: ref(false),
-    skipPositionReapply: ref(false),
     skipExtractOnSvgChange: ref(false)
   };
   const snapshots = createHistorySnapshotService({
@@ -1798,7 +1796,6 @@ const createLayoutPreferences = () => ({
       };
     })(),
     skipCaptureBaseConfig: ref(false),
-    skipPositionReapply: ref(false),
     skipExtractOnSvgChange: ref(false),
     trustedArtifactRestoreInProgress: ref(false),
     semanticFileWatchersSuppressed: ref(false)
