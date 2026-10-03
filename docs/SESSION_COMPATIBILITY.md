@@ -230,8 +230,8 @@ absent legacy layout retains the old adjacent LOSAT/upload behavior, an enabled
 explicit list becomes `selected`, and an authoritative empty explicit list
 becomes `none`. Legacy per-record uploads and custom filenames are attached to
 their original positional gap by stable record UID. CLI-only replay sessions
-do not gain a synthetic Web comparison draft. The accepted session versions
-remain 27–33, 39–42, and 44.
+do not gain a synthetic Web comparison draft: they load with **No comparison**.
+The accepted session versions remain 27–33, 39–42, and 44.
 
 ## Retired inputs
 
