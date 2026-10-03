@@ -253,6 +253,14 @@ def test_cairosvg_rewrite_leaves_handled_text_unchanged() -> None:
         '<path id="p" d="M 0,50 L 200,50"/>'
         '<text><textPath xlink:href="#p" dominant-baseline="auto" font-size="20">label</textPath></text>'
     )
+    # Start-anchored runs, a single anchored run, and runs that position
+    # themselves are drawn by CairoSVG like browsers.
+    body += (
+        '<text x="10" y="50" font-size="20"><tspan font-style="italic">A</tspan><tspan> b</tspan></text>'
+        '<text x="100" y="50" font-size="20" text-anchor="middle"><tspan>One run</tspan></text>'
+        '<text x="100" y="50" font-size="20" text-anchor="middle">'
+        '<tspan x="10">A</tspan><tspan> b</tspan></text>'
+    )
     source = _svg(body)
 
     assert export_module.prepare_svg_for_cairosvg(source) is source
