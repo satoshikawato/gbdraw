@@ -2793,7 +2793,7 @@ export const createRunAnalysis = ({
           } else {
             const comparisonFiles = circularConservationSourceFiles;
             if (comparisonFiles.length === 0) {
-              throw new Error('Please upload at least one comparison FASTA file for Pairwise Comparisons.');
+              throw new Error('Please upload at least one comparison sequence file for Pairwise Comparisons.');
             }
             const conservationEntries = orderedConservationSources(comparisonFiles, circularConservation);
             const conservationSeries = buildConservationSeries(comparisonFiles, circularConservation);

@@ -133,7 +133,7 @@ const DEFINITIONS = Object.freeze({
   REGION_INVALID: ['The region is invalid.', ['edit-region', 'retry']],
   DEPTH_INVALID: ['The depth input or settings are invalid.', ['edit-depth', 'disable-track', 'retry']],
   TABLE_INVALID: ['The table is invalid.', ['edit-table', 'retry']],
-  COMPARISON_INPUT: ['The comparison input is invalid. Supply comparison FASTA or BLAST outfmt 6/7 as required.', ['edit-comparison', 'retry']],
+  COMPARISON_INPUT: ['The comparison input is invalid. Supply a comparison sequence file (FASTA, GenBank, or DDBJ) or BLAST outfmt 6/7 as required.', ['edit-comparison', 'retry']],
   LOSAT_RUNTIME: ['The comparison search could not run or returned unusable output. Check the LOSAT or NCBI BLAST+ runtime, then Generate again.', ['edit-comparison', 'retry']],
   LOSAT_THREADING_UNAVAILABLE: ['Threaded LOSAT execution is unavailable in this browser environment. Select Serial or Auto execution, then Generate again.', ['edit-comparison', 'retry']],
   COMPARISON_IDENTITY: ['Comparison endpoints disagree with the displayed features. Review the comparison inputs and display transforms; save a Session if it continues.', ['edit-comparison', 'retry', 'save-session']],
@@ -176,7 +176,7 @@ const EXCEPTION_TYPES = new Set(`ValidationError ParseError ConfigError ExportEr
 FloatingPointError OverflowError ArithmeticError AssertionError AttributeError IndexError KeyError LookupError
 NotImplementedError RecursionError RuntimeError TypeError UnboundLocalError NameError ValueError Exception`.split(/\s+/));
 // Locators shown in the summary; indexes are zero-based, ordinals one-based.
-const ORDINAL_LABELS = Object.freeze({ DECORATION_CONTINUITY: 'Result', COMPARISON_INPUT: 'Comparison FASTA' });
+const ORDINAL_LABELS = Object.freeze({ DECORATION_CONTINUITY: 'Result', COMPARISON_INPUT: 'Comparison sequence' });
 const CONFIG_PATH = /^[a-z][a-z0-9_]*(?:\.[a-z0-9_]+)+$/;
 
 /**
@@ -208,7 +208,7 @@ for (const [message, code] of [
   ['Please upload a Depth TSV file or disable Show depth track.', 'DEPTH_INVALID'],
   ['Please upload at least one Depth TSV file or disable the depth track.', 'DEPTH_INVALID'],
   ['Please upload at least one BLAST outfmt 6/7 file for Pairwise Comparisons.', 'COMPARISON_INPUT'],
-  ['Please upload at least one comparison FASTA file for Pairwise Comparisons.', 'COMPARISON_INPUT'],
+  ['Please upload at least one comparison sequence file for Pairwise Comparisons.', 'COMPARISON_INPUT'],
   ['No records found', 'NO_RECORDS'], ['No records found for circular conservation reference.', 'NO_RECORDS'],
   ['A resolved Linear comparison plan is required.', 'COMPARISON_INPUT'],
   ['The diagram engine returned an invalid Result list.', 'RESULT_INVALID'],
@@ -340,8 +340,6 @@ const nativeValidation = (message) => {
     [/^Record selector '[\s\S]*' did not match any record ID\.$/, 'NO_MATCH'],
     [/^Record selector '[\s\S]*' matched multiple records\. Use #index to disambiguate\.$/, 'AMBIGUOUS']
   ]) if (template.test(message)) return { code: 'RECORD_SELECTION', stage: 'request-validation', context: { reason } };
-  const emptyFasta = /^Pairwise comparison FASTA #([0-9]+) has no sequence data\.$/.exec(message);
-  if (emptyFasta) return { code: 'COMPARISON_INPUT', stage: 'request-validation', context: { inputOrdinal: Number(emptyFasta[1]), reason: 'REQUIRED' } };
   const glyph = /^PDF fonts do not contain U\+([0-9A-F]{1,6})\. Use SVG to retain this text\.$/.exec(message);
   if (glyph) return { code: 'PDF_GLYPH', operation: 'export-pdf', stage: 'font-validation', context: { codepoint: parseInt(glyph[1], 16) } };
   const labelColumns = /^Invalid label TSV at line ([0-9]+): expected 5 columns, found ([0-9]+)\.$/.exec(message);
