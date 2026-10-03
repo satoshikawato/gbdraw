@@ -61,7 +61,7 @@ for query in ids(args[args.index("-query") + 1]):
 def _fresh_probe_caches(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(runtime_module, "_CLI_DIALECTS", {})
     monkeypatch.setattr(runtime_module, "_RUNTIME_VERSIONS", {})
-    monkeypatch.setattr(runtime_module, "_TASK_VALUES", {})
+    monkeypatch.setattr(runtime_module, "_TASK_VALUES", {}, raising=False)
 
 
 def _fake_losat(tmp_path: Path, *, exit_code: int = 0) -> tuple[str, Path]:
