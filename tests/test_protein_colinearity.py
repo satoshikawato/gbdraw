@@ -20,6 +20,7 @@ from svgwrite import Drawing
 import gbdraw.api.diagram as api_diagram_module
 import gbdraw.api.request_render as request_render_module
 import gbdraw.analysis.protein_colinearity as protein_colinearity_module
+import gbdraw.comparisons.losat_runtime as losat_runtime_module
 import gbdraw.linear as linear_cli_module
 import gbdraw.losat_setup as losat_setup_module
 from gbdraw.api.config import apply_config_overrides
@@ -1659,7 +1660,7 @@ def test_run_losatp_blastp_passes_num_threads(monkeypatch: pytest.MonkeyPatch) -
         captured["kwargs"] = kwargs
         return subprocess.CompletedProcess(command, 0, stdout="", stderr="")
 
-    monkeypatch.setattr(protein_colinearity_module.subprocess, "run", fake_run)
+    monkeypatch.setattr(losat_runtime_module.subprocess, "run", fake_run)
 
     protein_colinearity_module.run_losatp_blastp(
         ">query\nM\n",
@@ -1698,27 +1699,25 @@ def test_conda_losat_precedes_cache_bundled_and_path_without_side_effects(
     original_bytes = candidate.read_bytes()
     original_mode = candidate.stat().st_mode
 
-    monkeypatch.setattr(protein_colinearity_module.sys, "prefix", str(prefix))
+    monkeypatch.setattr(losat_runtime_module.sys, "prefix", str(prefix))
     monkeypatch.setattr(
         losat_setup_module,
         "managed_losat",
         lambda: (_ for _ in ()).throw(AssertionError("managed cache was read")),
     )
     monkeypatch.setattr(
-        protein_colinearity_module,
-        "_bundled_losatp_resource",
+        losat_runtime_module,
+        "_bundled_losat_resource",
         lambda: (_ for _ in ()).throw(AssertionError("bundled discovery ran")),
     )
     monkeypatch.setattr(
-        protein_colinearity_module,
+        losat_runtime_module,
         "_path_executable",
         lambda _name: (_ for _ in ()).throw(AssertionError("PATH discovery ran")),
     )
 
     with ExitStack() as stack:
-        runtime = protein_colinearity_module._resolve_protein_blastp_runtime(
-            "losat", None, stack
-        )
+        runtime = losat_runtime_module.resolve_losat_runtime("losatp", stack=stack)
 
     assert runtime.source == "conda"
     assert runtime.executable == str(candidate)
@@ -1736,14 +1735,12 @@ def test_conda_losat_identity_uses_sys_prefix_not_environment_or_path(
     prefix_b = tmp_path / "conda-b"
     candidate_a = _write_conda_losat(prefix_a)
     candidate_b = _write_conda_losat(prefix_b)
-    monkeypatch.setattr(protein_colinearity_module.sys, "prefix", str(prefix_b))
+    monkeypatch.setattr(losat_runtime_module.sys, "prefix", str(prefix_b))
     monkeypatch.setenv("CONDA_PREFIX", str(prefix_a))
     monkeypatch.setenv("PATH", f"{candidate_a.parent}{os.pathsep}{os.environ.get('PATH', '')}")
 
     with ExitStack() as stack:
-        runtime = protein_colinearity_module._resolve_protein_blastp_runtime(
-            "losat", None, stack
-        )
+        runtime = losat_runtime_module.resolve_losat_runtime("losatp", stack=stack)
 
     assert runtime.source == "conda"
     assert runtime.executable == str(candidate_b)
@@ -1758,20 +1755,18 @@ def test_conda_prefix_without_losat_uses_normal_path_fallback(
     prefix_b = tmp_path / "conda-b"
     candidate_a = _write_conda_losat(prefix_a)
     (prefix_b / "conda-meta").mkdir(parents=True)
-    monkeypatch.setattr(protein_colinearity_module.sys, "prefix", str(prefix_b))
+    monkeypatch.setattr(losat_runtime_module.sys, "prefix", str(prefix_b))
     monkeypatch.setenv("CONDA_PREFIX", str(prefix_a))
     monkeypatch.setattr(losat_setup_module, "managed_losat", lambda: None)
-    monkeypatch.setattr(protein_colinearity_module, "_bundled_losatp_resource", lambda: None)
+    monkeypatch.setattr(losat_runtime_module, "_bundled_losat_resource", lambda: None)
     monkeypatch.setattr(
-        protein_colinearity_module,
+        losat_runtime_module,
         "_path_executable",
         lambda name: str(candidate_a) if name == "losat" else None,
     )
 
     with ExitStack() as stack:
-        runtime = protein_colinearity_module._resolve_protein_blastp_runtime(
-            "losat", None, stack
-        )
+        runtime = losat_runtime_module.resolve_losat_runtime("losatp", stack=stack)
 
     assert runtime.source == "path"
     assert runtime.executable == str(candidate_a)
@@ -1793,21 +1788,19 @@ def test_non_conda_or_venv_prefix_ignores_base_conda_binary(
     if conda_marker_kind == "file":
         (venv_prefix / "conda-meta").write_text("not a directory", encoding="utf-8")
     path_candidate = tmp_path / "path" / "losat"
-    monkeypatch.setattr(protein_colinearity_module.sys, "prefix", str(venv_prefix))
-    monkeypatch.setattr(protein_colinearity_module.sys, "base_prefix", str(base_prefix))
+    monkeypatch.setattr(losat_runtime_module.sys, "prefix", str(venv_prefix))
+    monkeypatch.setattr(losat_runtime_module.sys, "base_prefix", str(base_prefix))
     monkeypatch.setenv("CONDA_PREFIX", str(base_prefix))
     monkeypatch.setattr(losat_setup_module, "managed_losat", lambda: None)
-    monkeypatch.setattr(protein_colinearity_module, "_bundled_losatp_resource", lambda: None)
+    monkeypatch.setattr(losat_runtime_module, "_bundled_losat_resource", lambda: None)
     monkeypatch.setattr(
-        protein_colinearity_module,
+        losat_runtime_module,
         "_path_executable",
         lambda name: str(path_candidate) if name == "losat" else None,
     )
 
     with ExitStack() as stack:
-        runtime = protein_colinearity_module._resolve_protein_blastp_runtime(
-            "losat", None, stack
-        )
+        runtime = losat_runtime_module.resolve_losat_runtime("losatp", stack=stack)
 
     assert runtime.source == "path"
     assert runtime.executable == str(path_candidate)
@@ -1840,22 +1833,20 @@ def test_invalid_conda_losat_stops_at_its_path_without_fallback(
         candidate.write_text("#!/bin/sh\n", encoding="utf-8")
         candidate.chmod(0o644)
 
-    monkeypatch.setattr(protein_colinearity_module.sys, "prefix", str(prefix))
+    monkeypatch.setattr(losat_runtime_module.sys, "prefix", str(prefix))
     monkeypatch.setattr(
         losat_setup_module,
         "managed_losat",
         lambda: (_ for _ in ()).throw(AssertionError("managed fallback ran")),
     )
     monkeypatch.setattr(
-        protein_colinearity_module,
+        losat_runtime_module,
         "_path_executable",
         lambda _name: (_ for _ in ()).throw(AssertionError("PATH fallback ran")),
     )
 
     with ExitStack() as stack, pytest.raises(ValidationError, match=message) as exc_info:
-        protein_colinearity_module._resolve_protein_blastp_runtime(
-            "losat", None, stack
-        )
+        losat_runtime_module.resolve_losat_runtime("losatp", stack=stack)
 
     assert str(candidate.absolute()) in str(exc_info.value)
 
@@ -1867,14 +1858,14 @@ def test_conda_losat_execution_failure_does_not_fall_back(
 ) -> None:
     prefix = tmp_path / "conda"
     candidate = _write_conda_losat(prefix)
-    monkeypatch.setattr(protein_colinearity_module.sys, "prefix", str(prefix))
+    monkeypatch.setattr(losat_runtime_module.sys, "prefix", str(prefix))
     monkeypatch.setattr(
-        protein_colinearity_module,
+        losat_runtime_module,
         "_path_executable",
         lambda _name: (_ for _ in ()).throw(AssertionError("PATH fallback ran")),
     )
     monkeypatch.setattr(
-        protein_colinearity_module.subprocess,
+        losat_runtime_module.subprocess,
         "run",
         lambda *_args, **_kwargs: (_ for _ in ()).throw(OSError("exec format error")),
     )
@@ -1895,9 +1886,9 @@ def test_conda_losat_nonzero_exit_reports_selected_path(
 ) -> None:
     prefix = tmp_path / "conda"
     candidate = _write_conda_losat(prefix)
-    monkeypatch.setattr(protein_colinearity_module.sys, "prefix", str(prefix))
+    monkeypatch.setattr(losat_runtime_module.sys, "prefix", str(prefix))
     monkeypatch.setattr(
-        protein_colinearity_module.subprocess,
+        losat_runtime_module.subprocess,
         "run",
         lambda command, **_kwargs: subprocess.CompletedProcess(
             command, 2, stdout="", stderr="bad subject"
@@ -1928,13 +1919,13 @@ def test_run_losatp_blastp_uses_bundled_binary_by_default(
         return subprocess.CompletedProcess(command, 0, stdout="", stderr="")
 
     monkeypatch.setattr(
-        protein_colinearity_module,
-        "_bundled_losatp_resource",
+        losat_runtime_module,
+        "_bundled_losat_resource",
         lambda: bundled_losat,
     )
-    monkeypatch.setattr(protein_colinearity_module, "_conda_losatp_runtime", lambda: None)
+    monkeypatch.setattr(losat_runtime_module, "_conda_losat_runtime", lambda: None)
     monkeypatch.setattr(losat_setup_module, "managed_losat", lambda: None)
-    monkeypatch.setattr(protein_colinearity_module.subprocess, "run", fake_run)
+    monkeypatch.setattr(losat_runtime_module.subprocess, "run", fake_run)
 
     protein_colinearity_module.run_losatp_blastp(
         ">query\nM\n",
@@ -1959,11 +1950,11 @@ def test_run_losatp_blastp_uses_path_losat_before_blastp(
     def fake_path_executable(name: str) -> str | None:
         return {"losat": "/usr/local/bin/losat", "blastp": "/usr/local/bin/blastp"}.get(name)
 
-    monkeypatch.setattr(protein_colinearity_module, "_bundled_losatp_resource", lambda: None)
-    monkeypatch.setattr(protein_colinearity_module, "_conda_losatp_runtime", lambda: None)
+    monkeypatch.setattr(losat_runtime_module, "_bundled_losat_resource", lambda: None)
+    monkeypatch.setattr(losat_runtime_module, "_conda_losat_runtime", lambda: None)
     monkeypatch.setattr(losat_setup_module, "managed_losat", lambda: None)
-    monkeypatch.setattr(protein_colinearity_module, "_path_executable", fake_path_executable)
-    monkeypatch.setattr(protein_colinearity_module.subprocess, "run", fake_run)
+    monkeypatch.setattr(losat_runtime_module, "_path_executable", fake_path_executable)
+    monkeypatch.setattr(losat_runtime_module.subprocess, "run", fake_run)
 
     protein_colinearity_module.run_losatp_blastp(
         ">query\nM\n",
@@ -1988,11 +1979,11 @@ def test_run_losatp_blastp_falls_back_to_path_ncbi_blastp(
     def fake_path_executable(name: str) -> str | None:
         return "/usr/local/bin/blastp" if name == "blastp" else None
 
-    monkeypatch.setattr(protein_colinearity_module, "_bundled_losatp_resource", lambda: None)
-    monkeypatch.setattr(protein_colinearity_module, "_conda_losatp_runtime", lambda: None)
+    monkeypatch.setattr(losat_runtime_module, "_bundled_losat_resource", lambda: None)
+    monkeypatch.setattr(losat_runtime_module, "_conda_losat_runtime", lambda: None)
     monkeypatch.setattr(losat_setup_module, "managed_losat", lambda: None)
-    monkeypatch.setattr(protein_colinearity_module, "_path_executable", fake_path_executable)
-    monkeypatch.setattr(protein_colinearity_module.subprocess, "run", fake_run)
+    monkeypatch.setattr(losat_runtime_module, "_path_executable", fake_path_executable)
+    monkeypatch.setattr(losat_runtime_module.subprocess, "run", fake_run)
 
     protein_colinearity_module.run_losatp_blastp(
         ">query\nM\n",
@@ -2030,14 +2021,14 @@ def test_run_losatp_blastp_explicit_ncbi_blastp_bypasses_losat_discovery(
         captured["kwargs"] = kwargs
         return subprocess.CompletedProcess(command, 0, stdout="", stderr="")
 
-    monkeypatch.setattr(protein_colinearity_module, "_bundled_losatp_resource", fail_bundled)
+    monkeypatch.setattr(losat_runtime_module, "_bundled_losat_resource", fail_bundled)
     monkeypatch.setattr(
-        protein_colinearity_module,
-        "_conda_losatp_runtime",
+        losat_runtime_module,
+        "_conda_losat_runtime",
         lambda: (_ for _ in ()).throw(AssertionError("conda discovery should not run")),
     )
-    monkeypatch.setattr(protein_colinearity_module, "_path_executable", fail_path)
-    monkeypatch.setattr(protein_colinearity_module.subprocess, "run", fake_run)
+    monkeypatch.setattr(losat_runtime_module, "_path_executable", fail_path)
+    monkeypatch.setattr(losat_runtime_module.subprocess, "run", fake_run)
 
     protein_colinearity_module.run_losatp_blastp(
         ">query\nM\n",
@@ -2081,14 +2072,14 @@ def test_run_losatp_blastp_explicit_losat_bypasses_discovery(
         captured["kwargs"] = kwargs
         return subprocess.CompletedProcess(command, 0, stdout="", stderr="")
 
-    monkeypatch.setattr(protein_colinearity_module, "_bundled_losatp_resource", fail_bundled)
+    monkeypatch.setattr(losat_runtime_module, "_bundled_losat_resource", fail_bundled)
     monkeypatch.setattr(
-        protein_colinearity_module,
-        "_conda_losatp_runtime",
+        losat_runtime_module,
+        "_conda_losat_runtime",
         lambda: (_ for _ in ()).throw(AssertionError("conda discovery should not run")),
     )
-    monkeypatch.setattr(protein_colinearity_module, "_path_executable", fail_path)
-    monkeypatch.setattr(protein_colinearity_module.subprocess, "run", fake_run)
+    monkeypatch.setattr(losat_runtime_module, "_path_executable", fail_path)
+    monkeypatch.setattr(losat_runtime_module.subprocess, "run", fake_run)
 
     protein_colinearity_module.run_losatp_blastp(
         ">query\nM\n",
@@ -2103,13 +2094,13 @@ def test_run_losatp_blastp_explicit_losat_bypasses_discovery(
 def test_run_losatp_blastp_missing_runtime_error_is_actionable(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setattr(protein_colinearity_module, "_bundled_losatp_resource", lambda: None)
-    monkeypatch.setattr(protein_colinearity_module, "_conda_losatp_runtime", lambda: None)
+    monkeypatch.setattr(losat_runtime_module, "_bundled_losat_resource", lambda: None)
+    monkeypatch.setattr(losat_runtime_module, "_conda_losat_runtime", lambda: None)
     monkeypatch.setattr(losat_setup_module, "managed_losat", lambda: None)
-    monkeypatch.setattr(protein_colinearity_module, "_path_executable", lambda _name: None)
+    monkeypatch.setattr(losat_runtime_module, "_path_executable", lambda _name: None)
     monkeypatch.setattr(
-        protein_colinearity_module,
-        "_bundled_losatp_platform_dir",
+        losat_runtime_module,
+        "_bundled_platform_dir",
         lambda: "macos-arm64",
     )
 
@@ -2131,13 +2122,13 @@ def test_run_losatp_blastp_missing_runtime_error_is_actionable(
 def test_bundled_losatp_platform_dir_is_platform_specific(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setattr(protein_colinearity_module.sys, "platform", "linux")
-    monkeypatch.setattr(protein_colinearity_module.platform, "machine", lambda: "x86_64")
-    assert protein_colinearity_module._bundled_losatp_platform_dir() == "linux-x86_64"
+    monkeypatch.setattr(losat_runtime_module.sys, "platform", "linux")
+    monkeypatch.setattr(losat_runtime_module.platform, "machine", lambda: "x86_64")
+    assert losat_runtime_module._bundled_platform_dir() == "linux-x86_64"
 
-    monkeypatch.setattr(protein_colinearity_module.sys, "platform", "darwin")
-    monkeypatch.setattr(protein_colinearity_module.platform, "machine", lambda: "arm64")
-    assert protein_colinearity_module._bundled_losatp_platform_dir() == "macos-arm64"
+    monkeypatch.setattr(losat_runtime_module.sys, "platform", "darwin")
+    monkeypatch.setattr(losat_runtime_module.platform, "machine", lambda: "arm64")
+    assert losat_runtime_module._bundled_platform_dir() == "macos-arm64"
 
 
 @pytest.mark.linear
@@ -2149,7 +2140,7 @@ def test_run_losatp_blastp_omits_hsp_cap_when_requested(monkeypatch: pytest.Monk
         captured["kwargs"] = kwargs
         return subprocess.CompletedProcess(command, 0, stdout="", stderr="")
 
-    monkeypatch.setattr(protein_colinearity_module.subprocess, "run", fake_run)
+    monkeypatch.setattr(losat_runtime_module.subprocess, "run", fake_run)
 
     protein_colinearity_module.run_losatp_blastp(
         ">query\nM\n",
@@ -2162,64 +2153,6 @@ def test_run_losatp_blastp_omits_hsp_cap_when_requested(monkeypatch: pytest.Monk
 
 
 @pytest.mark.linear
-def test_build_losat_blastp_command_uses_losat_flags() -> None:
-    command = protein_colinearity_module._build_losat_blastp_command(
-        executable="losat",
-        query_path=Path("query.faa"),
-        subject_path=Path("subject.faa"),
-        max_hits=5,
-        max_hsps_per_subject=2,
-        threads=4,
-    )
-
-    assert command[:2] == ["losat", "blastp"]
-    assert "-max_hsps" in command
-    assert "-max_target_seqs" in command
-    assert "-num_threads" in command
-
-
-@pytest.mark.linear
-def test_build_ncbi_blastp_command_uses_ncbi_flags() -> None:
-    command = protein_colinearity_module._build_ncbi_blastp_command(
-        executable="blastp",
-        query_path=Path("query.faa"),
-        subject_path=Path("subject.faa"),
-        max_hits=5,
-        max_hsps_per_subject=2,
-        threads=4,
-    )
-
-    assert command[0] == "blastp"
-    assert command[1] == "-query"
-    assert "-max_hsps" in command
-    assert "-max_target_seqs" in command
-    assert "-num_threads" in command
-
-
-@pytest.mark.linear
-def test_build_blastp_commands_omit_hsp_cap_when_requested() -> None:
-    losat_command = protein_colinearity_module._build_losat_blastp_command(
-        executable="losat",
-        query_path=Path("query.faa"),
-        subject_path=Path("subject.faa"),
-        max_hits=None,
-        max_hsps_per_subject=None,
-        threads=None,
-    )
-    ncbi_command = protein_colinearity_module._build_ncbi_blastp_command(
-        executable="blastp",
-        query_path=Path("query.faa"),
-        subject_path=Path("subject.faa"),
-        max_hits=None,
-        max_hsps_per_subject=None,
-        threads=None,
-    )
-
-    assert "-max_hsps" not in losat_command
-    assert "-max_hsps" not in ncbi_command
-
-
-@pytest.mark.linear
 def test_run_losatp_blastp_calls_raw_output_callback_for_ncbi(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -2228,7 +2161,7 @@ def test_run_losatp_blastp_calls_raw_output_callback_for_ncbi(
     def fake_run(command, **kwargs):
         return subprocess.CompletedProcess(command, 0, stdout="q\ts\t100\t1\t0\t0\t1\t1\t1\t1\t0\t10\n", stderr="")
 
-    monkeypatch.setattr(protein_colinearity_module.subprocess, "run", fake_run)
+    monkeypatch.setattr(losat_runtime_module.subprocess, "run", fake_run)
 
     result = protein_colinearity_module.run_losatp_blastp(
         ">query\nM\n",
@@ -2249,7 +2182,7 @@ def test_run_losatp_blastp_ncbi_failure_includes_stderr(
     def fake_run(command, **kwargs):
         return subprocess.CompletedProcess(command, 2, stdout="", stderr="bad subject")
 
-    monkeypatch.setattr(protein_colinearity_module.subprocess, "run", fake_run)
+    monkeypatch.setattr(losat_runtime_module.subprocess, "run", fake_run)
 
     with pytest.raises(ValidationError, match="NCBI BLAST\\+ blastp failed.*bad subject"):
         protein_colinearity_module.run_losatp_blastp(

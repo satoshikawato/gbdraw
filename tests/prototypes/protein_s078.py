@@ -10,6 +10,12 @@ from unittest.mock import patch
 from gbdraw.analysis import collinearity as cc, collinearity_units as cu, protein_colinearity as pc
 
 
+# S07.7 predates the LOSAT runtime owner (gbdraw.comparisons.losat_runtime).
+# The runtime class moved there and the raw-cache manager now extends its
+# store. Neither is part of the frozen collinear algorithm; keep frozen copies.
+RUNTIME_OWNER_CLASSES = frozenset({'ProteinBlastpRuntime', 'LosatpCacheManager'})
+
+
 def load_frozen(current):
     name = current.__name__.rsplit('.', 1)[-1]
     source = gzip.decompress(Path(__file__).with_name(f'{name}_s077.py.gz').read_bytes())
@@ -23,21 +29,9 @@ def load_frozen(current):
     # public classes; private accumulators and their methods remain frozen.
     for node in tree.body:
         if isinstance(node, ast.ClassDef) and not node.name.startswith('_'):
+            if node.name in RUNTIME_OWNER_CLASSES:
+                continue
             live_node = live[node.name]
-            if node.name == 'ProteinBlastpRuntime':
-                # S07.7 predates the managed and conda LOSAT sources. Their
-                # addition expands only this Literal annotation, not the frozen
-                # execution path.
-                live_source = next(
-                    field for field in live_node.body
-                    if isinstance(field, ast.AnnAssign)
-                    and getattr(field.target, 'id', None) == 'source')
-                assert ast.unparse(live_source.annotation) == \
-                       "Literal['explicit', 'conda', 'managed', 'bundled', 'path']"
-                live_source.annotation = next(
-                    field.annotation for field in node.body
-                    if isinstance(field, ast.AnnAssign)
-                    and getattr(field.target, 'id', None) == 'source')
             assert ast.dump(node) == ast.dump(live_node), node.name
             setattr(module, node.name, getattr(current, node.name))
     return module
