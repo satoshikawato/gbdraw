@@ -408,6 +408,24 @@ decisions are in
   still reuses the CLI ribbons. A CLI Session written with
   `--protein_blastp_mode`, including a 0.12 or 0.13 sidecar, keeps the adjacent
   LOSATP comparison it drew.
+- In a Circular batch, **Undo** and **Redo** of a **Layout edit** drag or a
+  position reset restore the Result it was made on, also while another Result is
+  displayed, and keep the displayed Result. Before, the Undo wrote the dragged
+  Result's positions into the displayed Result. Displaying another Result no
+  longer records an **Undo** step (B17, B18).
+- In a Circular batch, a legend entry that only one Result draws (for example a
+  **This feature only** color entry) keeps its place after a legend **Sort** or
+  **Move** when another Result is displayed and that Result is shown again
+  (B18).
+- In a Circular batch, **Undo** and **Redo** of a legend step made on another
+  Result no longer copy a legend entry that only that Result draws into the
+  displayed Result, and the restored legend order reaches each Result when it is
+  displayed. **Sort by default** now also reaches a Result that was shown in an
+  earlier sorted order (B19, B20).
+- Adding a Circular **Pairwise Comparisons** ring file with **Add Seq**, or
+  choosing an uploaded BLAST row's **Comparison sequence (optional)**, is now
+  one **Undo** step. Before, these hidden file inputs recorded no step, so
+  **Undo** could not remove the added file (B21).
 
 <!-- web-gui-audit-20260930 P19 -->
 
