@@ -23,10 +23,6 @@ const runAnalysisUrl = pathToFileURL(runAnalysisPath);
 const identityProbeDir = await mkdtemp(join(tmpdir(), 'gbdraw-raw-identity-'));
 const identityProbePath = join(identityProbeDir, 'run-analysis-identity-probe.mjs');
 const identityProbeSource = (await readFile(runAnalysisPath, 'utf8'))
-  .replace(
-    'const buildLosatCachePayload = ({',
-    'export const buildLosatCachePayload = ({'
-  )
   .replace('const stripRuntimeCacheStats =', 'export const stripRuntimeCacheStats =')
   .replace(/from '(\.\.?\/[^']+)'/g, (_match, specifier) => (
     `from '${new URL(specifier, runAnalysisUrl).href}'`
