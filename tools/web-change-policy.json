@@ -73,8 +73,6 @@
     ],
     "services/svg-serialization.js": [
       "app/app-setup.js",
-      "app/feature-editor/label-actions.js",
-      "app/feature-editor/svg-actions.js",
       "app/feature-search/preview-svg.js",
       "app/feature-selection.js",
       "app/legend-layout/canvas-actions.js",
@@ -130,9 +128,6 @@
     ],
     "Result content commit": [
       "app/app-setup.js",
-      "app/feature-editor/color-actions.js",
-      "app/feature-editor/label-actions.js",
-      "app/feature-editor/svg-actions.js",
       "app/legend-layout/canvas-actions.js",
       "app/legend-layout/diagram-drag.js",
       "app/legend-layout/reposition-actions.js",
@@ -142,8 +137,6 @@
       "services/config.js"
     ],
     "SVG serialization": [
-      "app/feature-editor/label-actions.js",
-      "app/feature-editor/svg-actions.js",
       "app/legend-layout/canvas-actions.js",
       "app/legend-layout/diagram-drag.js",
       "app/legend-layout/reposition-actions.js",
