@@ -70,10 +70,12 @@ and copied.
 
 CairoSVG ignores `dominant-baseline` on curved text, such as circular tick
 labels, and places `hanging` and `middle` text on other baselines than
-browsers. Before conversion, gbdraw gives that text the browser baseline
-offset, computed from the packaged font metrics, so command-line and Python
-PNG, PDF, EPS, and PS text sits where browsers draw the SVG. The SVG file is
-not changed.
+browsers. It also centers or right-aligns each italic or roman part of a
+mixed-style caption on that part's own width, so the parts overlap. Before
+conversion, gbdraw gives that text the browser baseline offset and each
+caption part its browser start, computed from the packaged font metrics, so
+command-line and Python PNG, PDF, EPS, and PS text sits where browsers draw
+the SVG. The SVG file is not changed.
 
 Mixed inline text formatting, such as italic markup inside a species label,
 does not reliably survive conversion to PNG, PDF, EPS, or PS. Keep SVG when
