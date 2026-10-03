@@ -273,10 +273,22 @@ const totalResultReplacementCount = (detected, path) => RESULT_REPLACEMENT_CAPAB
   .reduce((total, capability) => total + resultReplacementCount(detected, path, capability), 0);
 
 // IN-01 and GE-02 (Web GUI audit 2026-09-30, D-04 and D-05) retire the live
-// definition and stroke rewrites. Their operators and imports may shrink or
-// disappear without editing this guard; they may not grow, and no owner is added.
+// definition and stroke rewrites, and A1 of the post-audit follow-ups (W8 G-J)
+// moves the editor Result commits into app/preview-runtime.js. These operators
+// and imports may shrink or disappear without editing this guard; they may not
+// grow, and no owner is added. Each ceiling counts both capabilities together.
 const RETIRING_REPLACEMENT_CEILINGS = Object.freeze({
+  'app/app-setup.js': 1,
+  'app/feature-editor/color-actions.js': 1,
+  'app/feature-editor/label-actions.js': 2,
+  'app/feature-editor/svg-actions.js': 4,
+  'app/legend-layout/canvas-actions.js': 2,
+  'app/legend-layout/diagram-drag.js': 2,
   'app/legend-layout/reposition-actions.js': 2,
+  'app/legend/drag-actions.js': 4,
+  'app/legend/entry-actions.js': 5,
+  'app/legend/sort-actions.js': 2,
+  'app/legend/stroke-actions.js': 2,
   'app/results.js': 4,
   'app/svg-styles.js': 2
 });
@@ -286,22 +298,17 @@ const retiringReplacementOperators = (detected, path, capability) => {
     `${path}: retiring Result replacement may only contract (ceiling ${ceiling})`);
   return resultReplacementOperators(detected, path, capability);
 };
+// The retiring owners that sort before `boundary`, in detector (path) order.
+const retiringOperatorsBefore = (detected, boundary, capability) => Object.keys(
+  RETIRING_REPLACEMENT_CEILINGS
+).filter((path) => path < boundary)
+  .flatMap((path) => retiringReplacementOperators(detected, path, capability));
 const importersWithRetiringOwners = (target, required, retiring) => {
   const actual = importersOf(target);
   const allowed = new Set([...required, ...retiring]);
   assert.deepEqual(actual.filter((path) => !allowed.has(path)), [],
     `${target}: no importer may be added`);
   return [...required, ...retiring.filter((path) => actual.includes(path))].sort();
-};
-
-// A removed replacement is a contraction, not a missing canonical owner.
-// Keep the required operator location and the existing five-operator ceiling.
-const legendReplacementOperators = (detected, capability) => {
-  const path = 'app/legend/entry-actions.js';
-  const total = totalResultReplacementCount(detected, path);
-  assert.ok(total > 0 && total <= 5,
-    'legend replacement owner must remain present without operator growth');
-  return resultReplacementOperators(detected, path, capability);
 };
 
 test('the main application import graph excludes Worker-only modules', () => {
@@ -762,19 +769,7 @@ test('shared privileged detectors preserve the characterized current-source fact
       { path: 'services/history.js', count: 7 }
     ],
     'Result content commit': [
-      { path: 'app/app-setup.js', count: 1 },
-      { path: 'app/feature-editor/color-actions.js', count: 1 },
-      { path: 'app/feature-editor/label-actions.js', count: 1 },
-      { path: 'app/feature-editor/svg-actions.js', count: 2 },
-      { path: 'app/legend-layout/canvas-actions.js', count: 1 },
-      { path: 'app/legend-layout/diagram-drag.js', count: 1 },
-      ...retiringReplacementOperators(
-        detected, 'app/legend-layout/reposition-actions.js', 'Result content commit'
-      ),
-      { path: 'app/legend/drag-actions.js', count: 2 },
-      ...legendReplacementOperators(detected, 'Result content commit'),
-      { path: 'app/legend/sort-actions.js', count: 1 },
-      { path: 'app/legend/stroke-actions.js', count: 1 },
+      ...retiringOperatorsBefore(detected, 'app/preview-runtime.js', 'Result content commit'),
       { path: 'app/preview-runtime.js', count: 4 },
       ...retiringReplacementOperators(detected, 'app/results.js', 'Result content commit'),
       { path: 'app/run-analysis.js', count: 2 },
@@ -782,19 +777,7 @@ test('shared privileged detectors preserve the characterized current-source fact
       { path: 'services/config.js', count: 4 }
     ],
     'SVG serialization': [
-      { path: 'app/feature-editor/label-actions.js', count: 1 },
-      { path: 'app/feature-editor/svg-actions.js', count: 2 },
-      { path: 'app/legend-layout/canvas-actions.js', count: 1 },
-      { path: 'app/legend-layout/diagram-drag.js', count: 1 },
-      ...retiringReplacementOperators(
-        detected, 'app/legend-layout/reposition-actions.js', 'SVG serialization'
-      ),
-      { path: 'app/legend/drag-actions.js', count: 2 },
-      ...legendReplacementOperators(detected, 'SVG serialization'),
-      { path: 'app/legend/sort-actions.js', count: 1 },
-      { path: 'app/legend/stroke-actions.js', count: 1 },
-      ...retiringReplacementOperators(detected, 'app/results.js', 'SVG serialization'),
-      ...retiringReplacementOperators(detected, 'app/svg-styles.js', 'SVG serialization'),
+      ...retiringOperatorsBefore(detected, 'services/config.js', 'SVG serialization'),
       { path: 'services/config.js', count: 1 },
       { path: 'services/history-snapshot.js', count: 1 },
       { path: 'services/svg-result-ingestion.js', count: 1 }
@@ -855,7 +838,7 @@ test('metadata validation callers cannot acquire identity or namespace access', 
   assert.throws(() => assertMetadataImportOwners(new Map([...admission].slice(1))));
 });
 
-test('legend replacement characterization permits contraction but rejects growth or lost ownership', () => {
+test('legend replacement characterization permits contraction but rejects growth', () => {
   const path = 'app/legend/entry-actions.js';
   for (const [commits, serializations] of [[4, 0], [5, 0], [2, 2], [3, 2], [6, 0], [3, 3], [0, 0]]) {
     const code = 'results.value = candidate;\n'.repeat(commits)
@@ -867,11 +850,12 @@ test('legend replacement characterization permits contraction but rejects growth
     assert.deepEqual(detected.operatorMatchesByCapability['SVG serialization'],
       serializations ? [{ path, count: serializations }] : []);
     const total = commits + serializations;
-    if (total > 0 && total <= 5) {
-      assert.deepEqual(legendReplacementOperators(detected, 'Result content commit'),
+    if (total <= 5) {
+      assert.deepEqual(retiringReplacementOperators(detected, path, 'Result content commit'),
         commits ? [{ path, count: commits }] : []);
     } else {
-      assert.throws(() => legendReplacementOperators(detected, 'Result content commit'));
+      assert.throws(() => retiringReplacementOperators(detected, path, 'Result content commit'),
+        /may only contract/);
     }
   }
 });
