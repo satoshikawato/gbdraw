@@ -1,5 +1,6 @@
 import { validateAnnotationWarnings } from '../services/session-feature-metadata.js';
 import { validateComparisonWarnings } from '../services/comparison-warnings.js';
+import { nameFeaturePlacementFailure } from '../services/feature-placement.js';
 import { rekeyOrthogroupOverrides } from '../services/orthogroup-feature-metadata.js';
 import { resolveLinearRegionBounds } from './feature-metadata-extraction.js';
 import { buildSimilarityAlignmentResetReceipt, validateSimilarityAlignmentResetReceipt } from '../services/session-active-config-contract.js';
@@ -4510,7 +4511,9 @@ export const createRunAnalysis = ({
       }
       if (canonicalExecution.status === 'engine-error') {
         logPostGbdrawTimings(postGbdrawTimingEntries);
-        return await failOperation(canonicalExecution.engineError, { handle: committedArtifactHandle,
+        // R6: Python names the failed placement row; the Result still shows its feature.
+        return await failOperation(nameFeaturePlacementFailure(canonicalExecution.engineError,
+          canonical.renderRequest, extractedFeatures.value), { handle: committedArtifactHandle,
           restore: restoreCommittedArtifact, isCurrent: isCurrentAlert, isCurrentOperation });
       }
       const {

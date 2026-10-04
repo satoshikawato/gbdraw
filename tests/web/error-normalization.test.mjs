@@ -367,6 +367,24 @@ test('a Circular placement limited by the center reservation names that cause', 
   }
 });
 
+// OV-09 (R6): Python reports the request row of an unsupported Feature placement
+// lane; the Web adds that feature's caption and the summary names it.
+test('an unsupported Feature placement lane names the feature and the ways out', () => {
+  for (const [reason, pattern] of [['SPLIT_LANES', /or use split feature lanes \(Track Preset Middle\)\.$/],
+    ['OVERLAY_LANES', /or use Track Layout Features on axis with Separate Strands off\.$/]]) {
+    const engine = roundtrip({ code: 'FEATURE_PLACEMENT', operation: 'generate', stage: 'render', context: { reason, placementIndex: 4 } });
+    assert.deepEqual([engine.code, engine.context], ['FEATURE_PLACEMENT', { reason, placementIndex: 4 }]);
+    const named = normalizeUserFacingError({ ...engine, context: { ...engine.context, featureCaption: ' NADH\ndehydrogenase ' } });
+    assert.match(named.summary, /^A Feature placement uses a lane that the current feature track does not have\. Feature: NADH dehydrogenase\. Set that feature's Feature placement to Auto or Main, /);
+    assert.match(named.summary, pattern);
+    assert.deepEqual(normalizeUserFacingError(named), named);
+    assert.deepEqual(named.actions, ['edit-track', 'retry']);
+  }
+  const long = normalizeUserFacingError({ code: 'FEATURE_PLACEMENT', context: { featureCaption: 'x'.repeat(200) } });
+  assert.equal(long.context.featureCaption.length, 80);
+  assert.equal(normalizeUserFacingError({ code: 'FEATURE_PLACEMENT', context: { featureCaption: 7 } }).context.featureCaption, undefined);
+});
+
 // B9 (P07: offer only working actions): an unclassified failure inside the
 // engine's render or result stage repeats for the same inputs. It is reported as
 // a render failure naming the Python exception class, with Save Session and no

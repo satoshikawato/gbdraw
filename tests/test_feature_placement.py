@@ -915,6 +915,39 @@ def test_unsupported_resolved_slot_directions_are_errors(mode, direction, separa
         _planned_layers(plan, mode=mode, direction=direction, separate=separate)
 
 
+@pytest.mark.parametrize("mode,direction,separate,side,reason", [
+    ("circular", "outside", False, "outward", "SPLIT_LANES"),
+    ("circular", "split", True, "inward", None),
+    ("linear", "overlay", True, "above", "OVERLAY_LANES"),
+    ("linear", "below", False, "below", "OVERLAY_LANES"),
+])
+def test_unsupported_lane_diagnostic_names_the_placement_row(mode, direction, separate, side, reason):
+    # OV-09 (R6): the producer names the failure, the request row of the
+    # feature (the Web names that feature), and the lanes that would accept it.
+    from gbdraw.web_support.error_adapter import serialize_web_error
+
+    record = _record()
+    ids = sorted(entry.biological_feature_id for entry in build_source_feature_catalog(record)[1:3])
+    rows = (
+        FeaturePlacementOverride("one", ids[1], FeaturePlacementTarget("lane", side, 1)),
+        FeaturePlacementOverride("one", ids[0], FeaturePlacementTarget("main")),
+    )
+    plan = plan_request(_request(record, mode=mode, feature_placements=rows))
+    if reason is None:
+        _planned_layers(plan, mode=mode, direction=direction, separate=separate)
+        return
+    with pytest.raises(ValidationError, match="unsupported") as caught:
+        _planned_layers(plan, mode=mode, direction=direction, separate=separate)
+    assert f"{ids[1]!r}" in str(caught.value) and "'one'" in str(caught.value)
+    assert caught.value.diagnostic == {
+        "code": "FEATURE_PLACEMENT", "reason": reason, "placementIndex": 1,
+    }
+    assert serialize_web_error(caught.value, operation="generate", stage="render") == {
+        "code": "FEATURE_PLACEMENT", "operation": "generate", "stage": "render",
+        "context": {"reason": reason, "placementIndex": 1},
+    }
+
+
 @pytest.mark.parametrize("resolve", [False, True])
 @pytest.mark.parametrize("placement", ["main", "outward", "inward"])
 @pytest.mark.parametrize("tolerance", [19, 20, 21])

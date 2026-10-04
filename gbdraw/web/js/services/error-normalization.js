@@ -101,6 +101,8 @@ const REASONS = Object.freeze({
   CANNOT_FIT: 'Move the track, reduce widths, disable conflicting labels, or place it outside.',
   DEFINITION_RESERVED: 'The center definition text limits the inside tracks. Shorten Species or Strain, reduce Default font size, set a smaller Center Reserved Radius, or place tracks outside.',
   CENTER_RESERVED: 'The Center Reserved Radius limits the inside tracks. Set a smaller Center Reserved Radius or place tracks outside.',
+  SPLIT_LANES: 'Set that feature\'s Feature placement to Auto or Main, or use split feature lanes (Track Preset Middle).',
+  OVERLAY_LANES: 'Set that feature\'s Feature placement to Auto or Main, or use Track Layout Features on axis with Separate Strands off.',
   THREE_COLUMNS: 'Supply at least three tab-separated columns.',
   POSITIVE_INTEGER_OR_AUTO: 'Use Auto or an integer greater than zero.',
   DINUCLEOTIDE: 'Use two letters from A, C, G, T, and U, for example GC.',
@@ -144,6 +146,7 @@ const DEFINITIONS = Object.freeze({
   ANNOTATION_TARGET: ['The region annotation target is invalid.', ['edit-annotation', 'retry']],
   TRACK_INVALID: ['The track settings are invalid.', ['edit-track', 'retry']],
   TRACK_LAYOUT: ['A circular track does not fit inside.', ['edit-track', 'retry']],
+  FEATURE_PLACEMENT: ['A Feature placement uses a lane that the current feature track does not have.', ['edit-track', 'retry']],
   REGEX_SYNTAX: ['The Python regular expression is invalid.', ['edit-pattern', 'retry']],
   RESOURCE_INVALID: ['Input resource preparation failed. Reselect the input and retry.', ['select-input', 'retry']],
   HELPER_PROTOCOL: ['The helper request is invalid. Retry the operation.', ['retry', 'save-session']],
@@ -407,7 +410,10 @@ const contextFor = (value) => {
   for (const key of ['featureStart', 'featureEnd', 'featureCount']) {
     if (Number.isSafeInteger(value[key]) && value[key] >= 1 && value[key] <= 1e12) context[key] = value[key];
   }
-  for (const key of ['position', 'row', 'column', 'inputOrdinal', 'recordIndex', 'seriesIndex', 'slotIndex', 'recordCount', 'columnCount', 'codepoint', 'innerPx', 'outerPx']) {
+  // The Web names the feature of a reported placement row (nameFeaturePlacementFailure).
+  const caption = typeof value.featureCaption === 'string' ? value.featureCaption.replace(/[\s\u0000-\u001f\u007f]+/g, ' ').trim().slice(0, 80).trimEnd() : '';
+  if (caption) context.featureCaption = caption;
+  for (const key of ['position', 'row', 'column', 'inputOrdinal', 'recordIndex', 'seriesIndex', 'slotIndex', 'recordCount', 'columnCount', 'codepoint', 'innerPx', 'outerPx', 'placementIndex']) {
     if (Number.isSafeInteger(value[key]) && value[key] >= 0 && value[key] <= (key === 'codepoint' ? 0x10ffff : 10000000)) {
       if (key !== 'position' || context.positionUnit === 'python-character') context[key] = value[key];
     }
@@ -434,13 +440,14 @@ export const normalizeUserFacingError = (value, {
     result.secondary.push({ code: 'CLEANUP_FAILED', stage: 'cleanup' });
   }
   const [message, actions] = DEFINITIONS[result.code];
-  const { inputOrdinal, row, column, slotIndex, seriesIndex, innerPx, outerPx, configPath } = result.context;
+  const { inputOrdinal, row, column, slotIndex, seriesIndex, innerPx, outerPx, configPath, featureCaption } = result.context;
   const { featureId, featureType, featureStart, featureEnd, featureCount } = result.context;
   const featureSpan = featureStart !== undefined && featureEnd !== undefined ? `${featureStart}..${featureEnd}` : '';
   const featureName = [[featureType, featureSpan].filter(Boolean).join(' '), featureId !== undefined ? `ID ${featureId}` : '']
     .filter(Boolean).join(', ');
   const locators = [
     inputOrdinal !== undefined ? `${ORDINAL_LABELS[result.code] || 'Sequence'} ${inputOrdinal}.` : '',
+    featureCaption !== undefined ? `Feature: ${featureCaption}.` : '',
     row !== undefined ? `Line ${row}.` : '',
     column !== undefined ? `Column ${column}.` : '',
     slotIndex !== undefined ? `Track row ${slotIndex + 1}.` : '',

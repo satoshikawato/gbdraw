@@ -1,4 +1,4 @@
-import { canonicalFeaturePlacements } from '../../services/feature-placement.js';
+import { canonicalFeaturePlacements, placementAppliesToMode } from '../../services/feature-placement.js';
 import { resolveCircularTrackFeaturePlacement } from '../circular-track-slots.js';
 import { createDefaultLinearTrackSlots, effectiveLinearSlotPlacement } from '../linear-track-slots.js';
 import { validateCustomTrackPlan } from '../track-slot-validation.js';
@@ -63,7 +63,9 @@ export const createFeaturePlacementActions = ({ state, history, getCommittedRequ
     });
   };
   return { choices, setPlacement, valueFor: (feature) => {
-    const target = state.featurePlacementOverrides[keyFor(feature)]?.placement;
+    // The request projection skips another mode's lane; the popup reads it as Auto.
+    const row = state.featurePlacementOverrides[keyFor(feature)];
+    const target = placementAppliesToMode(row, state.mode.value) ? row?.placement : null;
     return target?.kind === 'main' ? 'main' : target?.side || 'auto';
   } };
 };

@@ -136,6 +136,8 @@ class ResolvedFeaturePlacement:
     source_feature_index: int
     target: FeaturePlacementTarget
     status: Literal["foreground", "hidden", "underlay", "crop_excluded"]
+    # Row of the request's canonical feature_placements; a failure names it.
+    placement_index: int
 
 
 @dataclass(frozen=True)
@@ -285,11 +287,11 @@ def resolve_placement_inputs(
                 ) from exc
         exact = normalize_feature_placements(rows)
     by_key = {key: [] for key in record_keys}
-    for item in exact:
+    for placement_index, item in enumerate(exact):
         item.target.validate_mode(mode)
         if item.record_key not in by_key:
             raise ValidationError(f"Unknown placement record key {item.record_key!r}.")
-        by_key[item.record_key].append(item)
+        by_key[item.record_key].append((placement_index, item))
     aligned = []
     for record, key, catalog in zip(records, record_keys, source_catalogs, strict=True):
         known = {entry.biological_feature_id: entry for entry in catalog}
@@ -300,7 +302,7 @@ def resolve_placement_inputs(
             runtime[indexes[id(feature)] if index is None else index] = feature
         foreground_candidates = {id(feature) for feature in record.features}
         resolved = []
-        for item in by_key[key]:
+        for placement_index, item in by_key[key]:
             source = known.get(item.biological_feature_id)
             if source is None:
                 raise ValidationError(
@@ -331,6 +333,7 @@ def resolve_placement_inputs(
                     source.source_feature_index,
                     item.target,
                     status,
+                    placement_index,
                 )
             )
         aligned.append(ResolvedPlacementInputs(key, tuple(resolved)))
@@ -367,12 +370,31 @@ class FeaturePlacementSlot:
                 targets.append({"kind": "lane", "side": side, "level": 1})
         return targets
 
-    def validate_target(self, target: FeaturePlacementTarget) -> None:
+    def validate_target(
+        self, target: FeaturePlacementTarget, *, record_key: str = "",
+        placement: ResolvedFeaturePlacement | None = None,
+    ) -> None:
         target.validate_mode(self.mode)
         if target.kind == "lane" and not self.bidirectional:
+            # R6: name the feature (its request row for the Web) and the lanes
+            # that accept it; Auto and Main remain valid in every slot.
+            feature = (
+                f" for feature {placement.biological_feature_id!r} in record {record_key!r}"
+                if placement is not None else ""
+            )
+            remedy = (
+                "a split feature slot" if self.mode == "circular"
+                else "an overlay feature slot without separate strands"
+            )
             raise ValidationError(
-                f"Directional placement is unsupported in resolved {self.mode} "
-                f"slot {self.direction!r} (separate strands={self.separate_strands})."
+                f"Directional placement {target.side!r}{feature} is unsupported in resolved "
+                f"{self.mode} slot {self.direction!r} (separate strands={self.separate_strands}); "
+                f"use auto or main placement, or {remedy}.",
+                diagnostic={
+                    "code": "FEATURE_PLACEMENT",
+                    "reason": "SPLIT_LANES" if self.mode == "circular" else "OVERLAY_LANES",
+                    **({} if placement is None else {"placementIndex": placement.placement_index}),
+                },
             )
 
 
@@ -442,7 +464,7 @@ def plan_feature_placements(
     tolerance_bp = validate_feature_overlap_tolerance(tolerance_bp)
     overrides = placement_inputs.overrides if placement_inputs is not None else ()
     for item in overrides:
-        slot.validate_target(item.target)
+        slot.validate_target(item.target, record_key=placement_inputs.record_key, placement=item)
     by_source = {feature.source_feature_index: key for key, feature in feature_dict.items()}
     targets = {}
     fixed = {}
