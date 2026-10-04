@@ -39,15 +39,15 @@
       ]
     },
     {
-      "title": "Add all four chromosomes",
-      "body": "Add one Linear input row per chromosome. Reuse each assembly GBFF in the rows listed below, then choose the matching accession in Record. Enter the species markup only on the first chromosome of each row and enter the strain in Subtitle / title; leave both fields empty for the second chromosome.",
+      "title": "Add the two assembly files",
+      "body": "Add each assembly GBFF as its own File: GCF_000196095.1 as File 1 and GCF_000354175.2 as File 2. Each File lists both of its chromosomes as records. Open the first record of each File, enter the species markup in Organism / strain and the strain in Subtitle / title, and leave both fields empty for the second chromosome.",
       "table": {
-        "columns": ["Order", "Species definition", "Strain subtitle", "Record", "Layout row", "Column"],
+        "columns": ["Order", "File", "Species definition", "Strain subtitle", "Record", "Layout row", "Column"],
         "rows": [
-          ["1", "<i>Vibrio parahaemolyticus</i>", "RIMD 2210633", "NC_004603.1", "1", "1"],
-          ["2", "", "", "NC_004605.1", "1", "2"],
-          ["3", "<i>Vibrio alginolyticus</i>", "NBRC 15630", "NC_022349.1", "2", "1"],
-          ["4", "", "", "NC_022359.1", "2", "2"]
+          ["1", "1", "<i>Vibrio parahaemolyticus</i>", "RIMD 2210633", "NC_004603.1", "1", "1"],
+          ["2", "1", "", "", "NC_004605.1", "1", "2"],
+          ["3", "2", "<i>Vibrio alginolyticus</i>", "NBRC 15630", "NC_022349.1", "2", "1"],
+          ["4", "2", "", "", "NC_022359.1", "2", "2"]
         ]
       },
       "note": "Both assemblies contain two chromosomes, and all four chromosomes are included.",
@@ -56,22 +56,25 @@
           "dataDependent": true,
           "media": {
             "src": "./media/vibrio-harveyi-group-collinear/manual-02-01-record-row.webp",
-            "alt": "First Vibrio record card with Record options open, NC_004603.1 selected, Vibrio parahaemolyticus entered, and RIMD 2210633 entered as the subtitle.",
-            "caption": "Upload the RIMD 2210633 GBFF, open Record options, select NC_004603.1, and enter the species and strain text."
+            "alt": "File 1 card with the RIMD 2210633 GBFF, two records, and the first record, NC_004603.1, open with Vibrio parahaemolyticus entered and RIMD 2210633 entered as the subtitle.",
+            "caption": "Upload the RIMD 2210633 GBFF as File 1, open its first record, NC_004603.1, and enter the species and strain text."
           },
           "capture": {
             "source": "webapp",
             "session": "./sessions/vibrio-harveyi-group-collinear.gbdraw-session.json.gz",
-            "viewport": {"width": 1280, "height": 1000},
-            "openDetails": ["Record options"],
+            "viewport": {"width": 1280, "height": 1400},
             "actions": [
+              {
+                "type": "evaluate",
+                "script": "async () => { await window.__GBDRAW_APP__.refreshLinearRecordSelectors(); }"
+              },
               {
                 "type": "waitForFunction",
                 "script": "() => { const select = document.querySelector(\"select[aria-label='Record selector for sequence 1']\"); return select && !select.disabled && [...select.options].some((option) => option.value === 'NC_004603.1'); }"
               },
               {
                 "type": "evaluate",
-                "script": "const app = window.__GBDRAW_APP__; if (!app || app.linearSeqs?.length !== 4) throw new Error('Expected four restored Linear records.'); app.sidebarWidth = 480; const seq = app.linearSeqs[0]; if (!seq?.gb?.name?.includes('GCF_000196095.1_ASM19609v1_genomic.gbff')) throw new Error('First restored GenBank file does not match the tutorial.'); seq.region_record_id = 'NC_004603.1'; seq.definition = '<i>Vibrio parahaemolyticus</i>'; seq.record_subtitle = 'RIMD 2210633'; const row = document.querySelector(`[data-linear-record-card=\"${seq.uid}\"]`); const options = row?.querySelector(`[data-linear-record-options=\"${seq.uid}\"]`); if (!row || !options) throw new Error('First Linear record card is unavailable.'); options.open = true; row.setAttribute('data-capture-tutorial-record-row', 'true'); row.scrollIntoView({ block: 'center' });"
+                "script": "const app = window.__GBDRAW_APP__; if (!app || app.linearSeqs?.length !== 4) throw new Error('Expected four restored Linear records.'); app.sidebarWidth = 480; const seq = app.linearSeqs[0]; if (!seq?.gb?.name?.includes('GCF_000196095.1_ASM19609v1_genomic.gbff')) throw new Error('First restored GenBank file does not match the tutorial.'); if (app.linearSeqs[1]?.gb?.name !== seq.gb.name) throw new Error('First restored File does not hold both chromosomes.'); seq.definition = '<i>Vibrio parahaemolyticus</i>'; seq.record_subtitle = 'RIMD 2210633'; const file = document.querySelector(`[data-linear-source-card=\"${seq.uid}\"]`); const records = file?.querySelector(`[data-linear-source-records=\"${seq.uid}\"]`); const options = file?.querySelector(`[data-linear-record-options=\"${seq.uid}\"]`); if (!file || !records || !options) throw new Error('First Linear File card is unavailable.'); records.open = true; options.open = true; file.setAttribute('data-capture-tutorial-record-row', 'true'); file.scrollIntoView({ block: 'center' });"
               },
               {
                 "type": "waitForFunction",
@@ -79,7 +82,7 @@
               }
             ],
             "selector": "[data-capture-tutorial-record-row='true']",
-            "cropPadding": {"top": 0, "right": 12, "bottom": 12, "left": 12},
+            "cropPadding": {"top": 0, "right": 8, "bottom": 8, "left": 0},
             "assertAppState": {
               "mode": "linear",
               "linearSeqs.length": 4,
@@ -87,7 +90,7 @@
               "linearSeqs.0.definition": "<i>Vibrio parahaemolyticus</i>",
               "linearSeqs.0.record_subtitle": "RIMD 2210633"
             },
-            "visibleText": ["Record options", "Organism / strain (optional)", "Subtitle / title (optional)", "Region (optional)"],
+            "visibleText": ["File 1", "Number of records: 2", "Organism / strain (optional)", "Subtitle / title (optional)", "Region (optional)"],
             "visibleControls": [
               {"selector": "select[aria-label='Record selector for sequence 1']", "value": "NC_004603.1"},
               {"selector": "input[aria-label='Definition for sequence 1']", "value": "<i>Vibrio parahaemolyticus</i>"},
