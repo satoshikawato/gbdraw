@@ -200,10 +200,11 @@ def test_main_web_session_with_a_reversed_record_draws_the_ribbons_main_drew(tmp
 @pytest.mark.parametrize(
     ("fixture", "stored_row"),
     [
-        # Web Save with reversed R3c: the re-saved Session embeds R3c as its
-        # reverse complement, so the converted rows are written in its frame.
-        ("q-frame-main-web-upload.v42", "R2c\tR3c\t100.0\t1000\t0\t0\t2001\t3000\t3000\t2001\t0.0\t1847\n"),
-        ("q-frame-main-web-losatn.v42", "R2c\tR3c\t100.0\t1000\t0\t0\t2001\t3000\t3000\t2001\t0.0\t1847\n"),
+        # Web Save with reversed R3c: the re-saved Session keeps R3c's file
+        # with its reverse complement, so the converted rows stay in the
+        # search frame.
+        ("q-frame-main-web-upload.v42", "R2c\tR3c\t100.0\t1000\t0\t0\t2001\t3000\t1\t1000\t0.0\t1847\n"),
+        ("q-frame-main-web-losatn.v42", "R2c\tR3c\t100.0\t1000\t0\t0\t2001\t3000\t1\t1000\t0.0\t1847\n"),
         # CLI -b sidecar without a reversed record: the table bytes are kept.
         ("se06-main-linear-blast-cli.v42", "R2c\tR3c\t100.000\t1000\t0\t0\t2001\t3000\t1\t1000\t0.0\t1847\n"),
     ],
@@ -284,22 +285,28 @@ def test_table_text_rewrite_maps_reversed_endpoints_only() -> None:
 
 @pytest.mark.linear
 def test_cli_session_output_with_a_reversed_record_replays_the_cli_ribbons(tmp_path: Path) -> None:
-    # The sidecar embeds the reverse-complemented record as a sequence, so the
-    # -b rows (search frame of the source record) are written in its frame.
+    # The sidecar keeps R3's file with its reverse complement, so the -b rows
+    # stay in the search frame of the source record.
+    import base64
+    import json
+
     r2 = _write_record(tmp_path, "R2", _X[:2000] + _Y)
     r3 = _write_record(tmp_path, "R3", _Y + _Z)
     sidecar = tmp_path / "fresh.gbdraw-session.json"
+    row = "R2\tR3\t100\t1000\t0\t0\t2001\t3000\t1\t1000\t0.0\t1847"
     fresh = _render(
-        tmp_path, "fresh", [r2, r3], "R2\tR3\t100\t1000\t0\t0\t2001\t3000\t1\t1000\t0.0\t1847",
+        tmp_path, "fresh", [r2, r3], row,
         "--reverse_complement", "0", "--reverse_complement", "1", "--session_output", str(sidecar),
     )
+    session = json.loads(sidecar.read_text(encoding="utf-8"))
+    comparison = session["renderRequest"]["comparisons"][0]
+    assert comparison["kind"] == "nucleotideBlast"
+    assert base64.b64decode(session["resources"][comparison["resourceId"]]["data"]) == (
+        (tmp_path / "fresh.tsv").read_bytes()
+    )
+    assert session["renderRequest"]["records"][1]["presentation"]["reverseComplement"] is True
     linear_cli.linear_main(["--session", str(sidecar), "-o", str(tmp_path / "replayed"), "-f", "svg"])
     replayed = (tmp_path / "replayed.svg").read_text(encoding="utf-8")
     assert len(fresh) == 1
     assert _ribbon_spans(replayed) == fresh
-    # The replay draws the same SVG; only the record source attributes differ,
-    # because the embedded reversed sequence is the replay's own source (D-22).
-    source_attributes = re.compile(r' data-gbdraw-record-source-(?:start|end|step)="[^"]*"')
-    assert source_attributes.sub("", replayed) == source_attributes.sub(
-        "", (tmp_path / "fresh.svg").read_text(encoding="utf-8")
-    )
+    assert replayed == (tmp_path / "fresh.svg").read_text(encoding="utf-8")

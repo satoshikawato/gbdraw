@@ -291,3 +291,39 @@ test('S04 Linear Generate cancel, stale completion, failure and retry retain the
     expect(page.externalRequests).toEqual([]);
   } finally {await page.context().close();}
 });
+
+
+test('OV-16 a Generate that fails before it replaces the loaded Session Result settles and keeps that Result ready', async ({ browser }, info) => {
+  test.setTimeout(240000);
+  const { load, generate } = require('./helpers/mode-transition.cjs');
+  const page = await load(browser);
+  try {
+    const before = await page.evaluate(() => {
+      window.ov16LoadedResults = window.__GBDRAW_APP__.results;
+      const observe = window.__GBDRAW_TEST_HOOKS__.onSessionLifecycleEvent;
+      // The first Generate step throws once, before any candidate replaces the Result.
+      window.__GBDRAW_TEST_HOOKS__.onSessionLifecycleEvent = (event) => {
+        observe(event);
+        if (event.name !== 'generation-input-resolution-start') return;
+        window.__GBDRAW_TEST_HOOKS__.onSessionLifecycleEvent = observe;
+        throw new Error('OV-16 forced early Generate failure');
+      };
+      return [window.__GBDRAW_HISTORY__.getUndoCount(), window.__GBDRAW_HISTORY__.getRedoCount()];
+    });
+    await page.getByRole('button', { name: 'Generate Diagram', exact: true }).click();
+    await expect.poll(() => page.evaluate(() => window.__GBDRAW_APP__.processing), { timeout: 30000 }).toBe(false);
+    await expect(page.getByRole('alert', { name: 'Generation Error' })).toBeVisible();
+    await expect(page.getByRole('alert', { name: 'Generation Error' })).not.toContainText('OV-16 forced');
+    expect(await page.evaluate(() => window.__GBDRAW_APP__.errorLog)).toMatchObject({ code: 'UNKNOWN', operation: 'generate' });
+    expect(await page.evaluate(() => ({
+      sameResult: window.__GBDRAW_APP__.results === window.ov16LoadedResults,
+      preserved: window.__GBDRAW_APP__.failedGeneratePreservedResult,
+      history: [window.__GBDRAW_HISTORY__.getUndoCount(), window.__GBDRAW_HISTORY__.getRedoCount()],
+      restoring: window.__GBDRAW_HISTORY__.restoring.value,
+      restoredReady: window.__MODE_EVENTS__.some(event => event.name === 'preview.restore-ready-receipt-accepted')
+    }))).toEqual({ sameResult: true, preserved: true, history: before, restoring: false, restoredReady: true });
+    await page.screenshot({ path: info.outputPath('early-generate-failure-settled.png') });
+    await generate(page);
+    expect(page.externalRequests).toEqual([]);
+  } finally { await page.context().close(); }
+});

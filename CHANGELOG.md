@@ -12,6 +12,13 @@ write-up of a release.
 
 ## [Unreleased]
 
+- Linear File order (web app): the File up and down buttons now work when
+  each File uses its own consecutive rows, including a CLI Session that draws
+  each record of a multi-record file on its own row. A move exchanges the
+  File's whole block of rows with the adjacent File's block. Such Sessions no
+  longer show "File order is unavailable because Record Layout is custom";
+  the notice remains for Files that share a row or whose rows are separated by
+  another File's row.
 - Feature popup (web app): record rotation adds **Apply on Generate** next to
   **Apply and regenerate**. It stores the previewed start and orientation for
   the feature's record without redrawing, so rotations of several records are
@@ -57,10 +64,32 @@ write-up of a release.
   of a rewritten copy. After **Load Session**, the feature popup's record
   rotation shows its preview without **Generate Diagram** and no longer says
   "The popup feature source changed after the popup opened." Each such file is
-  stored once. Cropped or reverse-complemented records keep their drawn copy.
-  The *Vibrio harveyi* group and *V. nigripulchritudo* TUMSAT-TG-2018 Gallery
-  Sessions now store their GBFF files byte for byte; their figures are
-  unchanged.
+  stored once. The *Vibrio harveyi* group and *V. nigripulchritudo*
+  TUMSAT-TG-2018 Gallery Sessions now store their GBFF files byte for byte;
+  their figures are unchanged.
+- Sessions (CLI `--session_output`, `gbdraw.api.save_session_document`): a
+  Linear record drawn with `--region`, `--reverse_complement`, or the records
+  table `region` or `reverse_complement` column now also reads its input file,
+  and the request stores the crop (in source coordinates) and the orientation,
+  as Web Save does. After **Load Session** the Linear rows keep the crop and
+  orientation, so **Generate Diagram** draws the record the CLI drew instead of
+  the full forward record, with the same source coordinates. A reversed record
+  rotates without **Generate Diagram**; a cropped record shows "Record rotation
+  is unavailable for a cropped record." A `-b` table that touches a reversed
+  record is stored unchanged, in its search frame. Circular batch and grid
+  records, for which the web app has no per-record crop, and Sessions written
+  before this change keep their drawn copy.
+- Sessions (CLI `--session_output`, `gbdraw.api.save_session_document`): a
+  Linear Session that draws only some records of a multi-record file (for
+  example `--record_id`, or a records table that names some of its records)
+  now reads that file and selects each drawn record by record ID (by `#n` when
+  another record of the file has the same ID), instead of a copy of the drawn
+  records. After **Load Session** the file is one File that draws only those
+  records, so **Generate Diagram** no longer adds the records the CLI did not
+  draw, and record rotation works without **Generate Diagram**. Linear rows of
+  a CLI Session now take the record ID from the request instead of `#n`, so
+  they no longer show "Selected record was not found in the current file."
+  CLI Sessions written before this change load as before.
 
 Fixes from the 2026-09-30 Web GUI audit of `dev`. The plan and the approved
 decisions are in

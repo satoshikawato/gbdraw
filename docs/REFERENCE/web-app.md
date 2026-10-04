@@ -45,11 +45,11 @@ starts with its **GenBank / DDBJ File** uploader, or its matched GFF3 and FASTA
 uploaders, followed by **File defaults (applied to all records)** and a closed
 **Record options** disclosure. Use the up and down buttons in a File header to
 move that source. Every record in a multi-record GenBank or GFF3 + FASTA source
-moves together, while the record order inside the source stays unchanged. In a
-normal row layout, its records stay together in one row and the row positions
-follow the new File order. If a File spans rows or Files share a row, File
-movement is unavailable; use **Record Layout** to edit or normalize that custom
-placement first.
+moves together, while the record order inside the source stays unchanged. When
+each File uses its own consecutive rows, the File moves as one block of rows and
+the row positions follow the new File order. If Files share a row or another
+File's row separates a File's rows, File movement is unavailable; use **Record
+Layout** to edit or normalize that custom placement first.
 Uploading a GenBank file gives each of its records a **Definition** inferred
 from that record's own `/organism` and `/strain` qualifiers, so a File of
 several organisms shows each organism's name. The file default **Organism /
@@ -428,14 +428,17 @@ Turn on **Arrange in rows** to assign records to rows. Record-card order is the
 left-to-right order within a row, and **Record gap (px)** separates records in
 that row. Records that share a row use one bp-per-pixel scale. Row placement is
 independent of the comparison plan: **No comparison** draws the records without
-links. A normal layout gives every File exactly one unshared row. Moving a File
-in that layout reassigns the existing File-owned row positions to follow the new
-File-card order. A custom layout—one File spanning rows or Files sharing a row—
-keeps Record Layout in control and disables File movement rather than discarding
-the custom placement. This rule also applies while **Arrange in rows** is off,
-because its row assignments remain available if the setting is turned on again.
-In a normal layout, moving a File while row arrangement is off updates those
-latent row assignments with the canonical File order. An organism or subtitle shared by every record of a row is drawn once
+links. A normal layout gives each File its own consecutive rows: one row for all
+of its records, or one row per record as a CLI Session loads them. Moving a File
+in that layout exchanges its block of rows with the adjacent File's block, so the
+row positions follow the new File-card order and each record keeps its row
+within its File. A custom layout—Files sharing a row, or a File's rows separated
+by another File's row—keeps Record Layout in control and disables File movement
+rather than discarding the custom placement. This rule also applies while
+**Arrange in rows** is off, because its row assignments remain available if the
+setting is turned on again. In a normal layout, moving a File while row
+arrangement is off updates those latent row assignments with the canonical File
+order. An organism or subtitle shared by every record of a row is drawn once
 beside that row, while a value that varies within the row, such as a per-record
 replicon name, is drawn above its own record; a row whose records disagree on
 the organism gets no row-level text.

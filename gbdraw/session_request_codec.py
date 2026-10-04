@@ -719,11 +719,18 @@ def _encode_canonical_request(request: DiagramRequest) -> EncodedCanonicalReques
         if isinstance(request, (CircularDiagramRequest, CircularBatchRequest))
         else "single"
     )
+    # A Circular batch or grid draft has no per-record selection, crop, or
+    # orientation.
+    records, frames = _encode_records(
+        request.records,
+        resources=resources,
+        per_record=mode == "linear" or grouping == "single",
+    )
     payload = {
         "schema": CANONICAL_REQUEST_SCHEMA,
         "mode": mode,
         "grouping": grouping,
-        "records": _encode_records(request.records, resources=resources),
+        "records": records,
         "diagramOptions": _encode_diagram_options(
             request.options,
             record_count=len(request.records),
@@ -734,7 +741,7 @@ def _encode_canonical_request(request: DiagramRequest) -> EncodedCanonicalReques
             request.options,
             mode=mode,
             resources=resources,
-            frames=_persisted_record_frames(request),
+            frames=frames,
         ),
         "output": (
             [_encode_output(output) for output in request.outputs]
@@ -942,32 +949,84 @@ _SOURCE_FILE_RESOURCES: Mapping[str, tuple[tuple[str, str], ...]] = {
 }
 
 
-def _unchanged_source_file_records(records: Sequence[Any], paths: tuple[str, ...]) -> bool:
-    """Whether the records are every record of their source files, unchanged.
+def _source_file_transform(record: Any) -> tuple[tuple[int, int] | None, bool] | None:
+    """The crop and orientation that redraw ``record`` from its source file record.
+
+    Each crop and reverse complement the planner applies moves the record's
+    coordinate map (the source base of display base 1 and its step), and a
+    crop marks the record; nothing else changes the bases it draws. Returns the
+    cropped source span (``None`` when uncropped) and whether the drawn record
+    is reverse-complemented, or ``None`` when the map is not a span of the
+    source record.
+    """
+
+    annotations = record.annotations
+    base, step = _read_coord_map(record)
+    length = len(record)
+    source_length = annotations.get("gbdraw_source_length", length)
+    first, last = (base, base + length - 1) if step > 0 else (base - length + 1, base)
+    if not isinstance(source_length, int) or not 1 <= first <= last <= source_length:
+        return None
+    if annotations.get("gbdraw_region_applied"):
+        return (first, last), step < 0
+    if (first, last) != (1, source_length):
+        return None
+    return None, step < 0
+
+
+def _source_file_transforms(
+    records: Sequence[Any], paths: tuple[str, ...], *, per_record: bool
+) -> list[tuple[tuple[int, int] | None, bool]] | None:
+    """Each record's crop and orientation when the records are drawn from their files.
 
     The planner annotates each record it reads with its source kind and its
-    index among the file's records. A crop marks the record, and a crop or
-    reverse complement moves its coordinate map off the identity, so such a
-    record is not what the file holds.
+    index among the file's records. Returns ``None`` unless each record of
+    the files is drawn at most once and each is the file's record. Only when
+    ``per_record`` allows it may some records of the files be left undrawn,
+    or a record be cropped or reverse-complemented.
     """
 
     annotations = [record.annotations for record in records]
     kind = annotations[0].get("gbdraw_source_kind")
     count = annotations[0].get("gbdraw_source_record_count")
-    return (
+    indexes = sorted(item.get("gbdraw_source_record_index", -1) for item in annotations)
+    if not (
         len(paths) == len(_SOURCE_FILE_RESOURCES.get(str(kind), ()))
         and isinstance(count, int)
         and all(Path(path).is_file() for path in paths)
-        and sorted(item.get("gbdraw_source_record_index", -1) for item in annotations)
-        == list(range(count))
+        and (indexes == list(range(count)) or (
+            per_record
+            and len(set(indexes)) == len(indexes)
+            and 0 <= indexes[0]
+            and indexes[-1] < count
+        ))
         and all(
             item.get("gbdraw_source_kind") == kind
             and item.get("gbdraw_source_record_count") == count
-            and not item.get("gbdraw_region_applied")
-            and _read_coord_map(record) == (1, 1)
-            and item.get("gbdraw_source_length", len(record)) == len(record)
-            for record, item in zip(records, annotations, strict=True)
+            for item in annotations
         )
+    ):
+        return None
+    found = [_source_file_transform(record) for record in records]
+    if None in found or not (per_record or all(item == (None, False) for item in found)):
+        return None
+    return found  # type: ignore[return-value]
+
+
+def _source_region(
+    span: tuple[int, int], reverse: bool, selector: RecordSelector | None
+) -> RegionSpec:
+    """A source-coordinate crop of the selected record, reverse-complemented when drawn so."""
+
+    coordinates = f"{span[0]}-{span[1]}" + (":rc" if reverse else "")
+    return RegionSpec(
+        raw=f"{selector.raw}:{coordinates}" if selector is not None else coordinates,
+        file_selector=None,
+        record_id=selector.record_id if selector is not None else None,
+        record_index=selector.record_index if selector is not None else None,
+        start=span[0],
+        end=span[1],
+        reverse_complement=reverse,
     )
 
 
@@ -975,20 +1034,32 @@ def _encode_records(
     records: Sequence[RecordInput],
     *,
     resources: _ResourceBuilder,
-) -> list[dict[str, Any]]:
+    per_record: bool,
+) -> tuple[list[dict[str, Any]], tuple[tuple[int, bool], ...]]:
     """Encode records; the in-memory records of one source file share a resource.
 
     The planner projects each displayed record to an in-memory record. When
-    they are every record of their source file, unchanged, that file's own
-    bytes are the resource: the CLI binds the same file for the Web draft, so
-    Session Load sees the request draw from its bound inputs. Other records
-    whose provenance names one source file are written to one GenBank resource
-    named after that file. Records of a multi-record file are selected by
-    record ID (by index when an ID is repeated or unusable), the shape the Web
-    writes for one uploaded multi-record file, so a replay or Web load keeps
-    one file as one File and one LOSAT source
-    (:func:`gbdraw.comparisons.losat_jobs.losat_source_ids`). Any other
-    in-memory record is its own source and keeps its own resource.
+    they are records of their source file, each drawn once, that file's own
+    bytes are the resource, and each record's crop (in source coordinates) and
+    orientation are its region and reverse complement, as the Web writes them:
+    the CLI binds the same file for the Web draft, so Session Load sees the
+    request draw from its bound inputs. ``per_record`` says whether the Web
+    draft selects, crops, and orients each record (every Linear record, and a
+    single Circular record); otherwise only every record of the file, each
+    unchanged, reads the file. Other records whose provenance names one source
+    file are written as drawn to one GenBank resource named after that file.
+    Records of a multi-record file are selected by record ID (by index when an
+    ID is repeated or unusable), the shape the Web writes for the records it
+    draws of one uploaded multi-record file, so a replay or Web load keeps one
+    file as one File and one LOSAT source
+    (:func:`gbdraw.comparisons.losat_jobs.losat_source_ids`) and draws only
+    the selected records. Any other in-memory record is its own source and
+    keeps its own resource.
+
+    Also returns each record's persisted comparison frame ``(L, reversed)``
+    (PD-OI-073): a record written as its reverse-complemented sequence has the
+    displayed search frame, so comparison rows that touch it are written in
+    that frame; a source file with a reverse complement keeps its rows.
     """
 
     groups: dict[tuple[str, ...], list[int]] = {}
@@ -998,10 +1069,12 @@ def _encode_records(
             if paths:
                 groups.setdefault(paths, []).append(position)
     shared: dict[int, tuple[dict[str, Any], RecordSelector | None]] = {}
+    transformed: dict[int, RecordInput] = {}
     for paths, members in groups.items():
         first = members[0] + 1
         members_records = [records[position].source.record for position in members]  # type: ignore[union-attr]
-        if _unchanged_source_file_records(members_records, paths):
+        found = _source_file_transforms(members_records, paths, per_record=per_record)
+        if found is not None:
             file_resources = _SOURCE_FILE_RESOURCES[
                 members_records[0].annotations["gbdraw_source_kind"]
             ]
@@ -1019,6 +1092,10 @@ def _encode_records(
                    for record in members_records]
             record_indexes = [record.annotations["gbdraw_source_record_index"]
                               for record in members_records]
+            # The file's other records may share an ID with a drawn record.
+            unique = [bool(record.annotations.get("gbdraw_source_record_id_unique"))
+                      for record in members_records]
+            single = members_records[0].annotations["gbdraw_source_record_count"] == 1
         elif len(members) > 1:
             source_payload = {"kind": "genbank", "resourceId": resources.add_bytes(
                 f"record-{first}-genbank",
@@ -1032,26 +1109,49 @@ def _encode_records(
             )}
             ids = [str(record.id) for record in members_records]
             record_indexes = list(range(len(members)))
+            unique = [ids.count(record_id) == 1 for record_id in ids]
+            single = False
         else:
             continue
-        for position, record_id, record_index in zip(members, ids, record_indexes, strict=True):
-            shared[position] = (
-                source_payload,
-                None if len(members) == 1 else _shared_record_selector(
-                    record_id,
-                    record_index=record_index,
-                    unique=ids.count(record_id) == 1,
-                ),
+        for offset, (position, record_id, record_index, is_unique) in enumerate(
+            zip(members, ids, record_indexes, unique, strict=True)
+        ):
+            selector = None if single else _shared_record_selector(
+                record_id,
+                record_index=record_index,
+                unique=is_unique,
             )
-    return [
+            if found is not None:
+                span, reverse = found[offset]
+                record = records[position]
+                transformed[position] = replace(
+                    record,
+                    region=None if span is None else _source_region(span, reverse, selector),
+                    presentation=replace(
+                        record.presentation, reverse_complement=reverse and span is None
+                    ),
+                )
+                # A crop names its record in the region, as the Web writes it.
+                selector = selector if span is None else None
+            shared[position] = (source_payload, selector)
+    payloads = [
         _encode_record(
-            record,
+            transformed.get(position, record),
             index=position + 1,
             resources=resources,
             shared_source=shared.get(position),
         )
         for position, record in enumerate(records)
     ]
+    frames = tuple(
+        (len(record.source.record), True)
+        if position not in transformed
+        and isinstance(record.source, InMemoryRecordSource)
+        and _read_coord_map(record.source.record)[1] == -1
+        else (0, False)
+        for position, record in enumerate(records)
+    )
+    return payloads, frames
 
 
 def _encode_record(
@@ -3468,26 +3568,6 @@ def _decode_resource_matrix(
                 )
         result.append(tuple(decoded_row))
     return tuple(result)
-
-
-def _persisted_record_frames(request: Any) -> tuple[tuple[int, bool], ...]:
-    """Return ``(L, reversed)`` of each record as the Session persists it (PD-OI-073).
-
-    A materialized reverse-complemented record is persisted as its reversed
-    sequence, whose search frame is the displayed one, so comparison rows that
-    touch it are written in that frame; a file source with
-    ``reverseComplement`` keeps its rows. Every other record is ``(0, False)``;
-    a Circular request has no comparisons.
-    """
-
-    if not isinstance(getattr(request, "options", None), LinearDiagramOptions):
-        return ()
-    frames = []
-    for record_input in request.records:
-        record = getattr(record_input.source, "record", None)
-        reversed_record = isinstance(record_input.source, InMemoryRecordSource) and _read_coord_map(record)[1] == -1
-        frames.append((len(record), True) if reversed_record else (0, False))
-    return tuple(frames)
 
 
 def _record_frame(frames: tuple[tuple[int, bool], ...], index: int) -> tuple[int, bool]:
