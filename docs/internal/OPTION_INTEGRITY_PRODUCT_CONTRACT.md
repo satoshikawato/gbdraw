@@ -5,7 +5,7 @@ Status: active Product authority
 ## Authority metadata
 
 - Contract ID: `OIPC`
-- Contract revision: `29`
+- Contract revision: `30`
 - Product Decision Owner: `satoshikawato`
 - Decision date: `2026-08-28`
 - Decision source: explicit Product Decision Owner selection of one (`1`) after
@@ -36,7 +36,7 @@ Status: active Product authority
   `PD-OI-066`, `PD-OI-067`, `PD-OI-068`, `PD-OI-069`, `PD-OI-070`,
   `PD-OI-071`, `PD-OI-072`, `PD-OI-073`, `PD-OI-074`, `PD-OI-075`,
   `PD-OI-076`, `PD-OI-077`, `PD-OI-078`, `PD-OI-079`, `PD-OI-080`,
-  `PD-OI-081`, `PD-OI-082`, `PD-OI-083`, and `PD-OI-084`
+  `PD-OI-081`, `PD-OI-082`, `PD-OI-083`, `PD-OI-084`, and `PD-OI-085`
 - Revision 3 addition: `PD-OI-018`, accepted by `satoshikawato` on
   `2026-09-13` after confirming the complete record/search outcome, no feature
   retirement, and the runtime/memory cost of complete comparisons. The initial
@@ -268,6 +268,26 @@ Status: active Product authority
     `D-31`–`D-40` keep current behavior and receive no record. Earlier
     decisions retain their scope. This authority-only amendment contains no
     runtime; dependent implementation requires it merged into its base.
+- Revision 30 changes: `PD-OI-033` is replaced for scenario revision `2` and
+  `PD-OI-085` is added, from the Product Decision Owner `satoshikawato`'s
+  answers of `2026-10-04` recorded in section 1 of
+  [`POPUP_RECORD_ACTIONS_AND_VIBRIO_SESSION_PLAN_2026-10-04.md`](./POPUP_RECORD_ACTIONS_AND_VIBRIO_SESSION_PLAN_2026-10-04.md)
+  and its Appendix A.
+  - The Owner answered the plan's open questions: `OD-1` (move Record actions
+    from the top of the Edit tab into a Layout group): 「移しましょう。」
+    `OD-2` (name the staging button **Apply on Generate**) and `OD-3` (keep
+    **Apply and regenerate** target-only so staged changes on other records
+    stay pending): 「推奨通りでお願いします。」 `OD-4` (proceed):
+    「計画書をまとめた後、実装に移ってください。」
+  - `PD-OI-033` scenario revision `2` (`B / LAYOUT_GROUP_DISCLOSURE`) follows
+    from `OD-1`. `PD-OI-085` (`A / APPLY_ON_GENERATE`) follows from `OD-2` and
+    `OD-3`.
+  - The receipt fields restate those answers and the plan that was presented
+    in the same session. The Owner did not separately review the receipt
+    wording; the Owner's approval covers the answers quoted above and the
+    plan. Earlier decisions, including `PD-OI-032`, retain their scope. This
+    authority-only amendment contains no runtime; dependent runtime requires
+    it merged into its base.
 - Records remaining `EVIDENCE_REQUIRED`: none
 - Excluded records: none
 
@@ -1492,26 +1512,49 @@ Decision date: 2026-09-30
 ### PD-OI-033: Feature-popup record-actions presentation
 
 - Concern key: `web.feature-popup.record-actions-presentation`
-- Scenario revision: `1`
+- Scenario revision: `2`
+- Supersedes: `PD-OI-033`, scenario revision `1` (`A / EDIT_DISCLOSURE`).
 - Status: `ACCEPTED`
-- Selected outcome: `A / EDIT_DISCLOSURE`
-- Normative outcome: exactly the approved `PRODUCT_DECISION` receipt below.
-- Decision source: `satoshikawato` explicitly approved the exact text of all
-  three `PRODUCT_DECISION` receipts presented for issue `#581` on
-  `2026-09-24`. This serialization adds no terms to that approval and cannot
-  authorize dependent runtime until merged into its base.
+- Selected outcome: `B / LAYOUT_GROUP_DISCLOSURE`
+- Normative outcome: exactly the complete approved `PRODUCT_DECISION` receipt
+  and its nine-field JSON representation below.
+- Decision source: the Owner answers of `2026-10-04` quoted verbatim in the
+  Revision 30 entry above (`OD-1`, `OD-4`), and Appendix A of
+  [`POPUP_RECORD_ACTIONS_AND_VIBRIO_SESSION_PLAN_2026-10-04.md`](./POPUP_RECORD_ACTIONS_AND_VIBRIO_SESSION_PLAN_2026-10-04.md).
+  The receipt fields restate those answers and the plan presented in that
+  session; the Owner did not separately review the receipt wording. Dependent
+  runtime requires this authority merged into its base; this amendment supplies
+  no runtime acceptance evidence.
+- Receipt SHA-256 (UTF-8, excluding the final newline):
+  `2abe2f6f57152e61eb0034d77f6f0a9ac734022fb352814e51512db9ecc61a13`.
+- Acceptance contracts: `OIC-021`, `OIC-024`. These obligations and the
+  complete selected outcome are jointly required; their citation does not claim
+  completed dependent-runtime checks.
+
+```text
+PRODUCT_DECISION
+Concern: web.feature-popup.record-actions-presentation
+Scenario revision: 2
+Choice: B / LAYOUT_GROUP_DISCLOSURE
+Rationale: popup の Edit を、現在の Result に反映する Appearance と、Generate で適用する Layout の 2 つに分ける。record 回転は Feature placement と同じ Layout グループの開閉セクションに置く。重複した表示と、同じ理由文の繰り返しをなくし、popup を読みやすくする。
+Must preserve: 開いた feature だけを対象とする回転、既存の anchor・offset・orientation・feature-end 操作、適用前 preview、操作できない理由の表示（1 か所）、rich と simple の両 popup での同じ操作、keyboard と 390 px での到達性、既存 sidebar 操作、成功時の一体的な Result と Undo/Redo、Cancel・失敗時の直前 Result と record transform、Feature placement の次回 Generate 適用、fill color・stroke・label・feature visibility・legend name・similarity group の操作。
+May retire: Edit タブ先頭の Record actions 配置、セクション内の重複見出し・Record と Feature の行・状態バッジ、同じ理由文の複数表示、ヘッダの fill color 入力（Fill Color と重複）、ヘッダの similarity group 行（Similarity group セクションと重複）、タブより上の Feature placement 配置とその個別注記、Edit 上部の「Live edit: …」説明文（グループ見出しで置き換える）。
+Accepted residual risk: record 回転は Edit の上部から下へ移るため、見つけにくくなる。Layout 見出しと開閉ボタンの名前で補い、keyboard と 390 px で到達できることを確認する。
+Owner: satoshikawato
+Decision date: 2026-10-04
+```
 
 ```json
 {
   "concern": "web.feature-popup.record-actions-presentation",
-  "scenarioRevision": 1,
-  "choice": "A / EDIT_DISCLOSURE",
-  "rationale": "通常のfeature確認・編集をすぐ始められる高さに保ちつつ、record回転をpopup内から見つけて使えるようにする。richとsimpleの両popupで同じ操作を提供する。",
-  "mustPreserve": "開いたfeatureだけを対象とする回転、既存のanchor・offset・orientation・feature-end操作、適用前preview、操作できない理由の表示、keyboardと390 pxでの到達性、既存sidebar操作、成功時の一体的なResultとUndo/Redo、Cancel・失敗時の直前Resultとrecord transform。",
-  "mayRetire": "featureを開くたびに回転フォームがタブより上へ自動展開する動作、およびフォーム内Cancelがfeature popup全体を閉じる動作。",
-  "acceptedResidualRisk": "専用Recordタブより操作の分類は目立ちにくい。Editの上部に明確な見出しと開閉ボタンを置き、狭い画面とkeyboardで到達できることを確認する。",
+  "scenarioRevision": 2,
+  "choice": "B / LAYOUT_GROUP_DISCLOSURE",
+  "rationale": "popup の Edit を、現在の Result に反映する Appearance と、Generate で適用する Layout の 2 つに分ける。record 回転は Feature placement と同じ Layout グループの開閉セクションに置く。重複した表示と、同じ理由文の繰り返しをなくし、popup を読みやすくする。",
+  "mustPreserve": "開いた feature だけを対象とする回転、既存の anchor・offset・orientation・feature-end 操作、適用前 preview、操作できない理由の表示（1 か所）、rich と simple の両 popup での同じ操作、keyboard と 390 px での到達性、既存 sidebar 操作、成功時の一体的な Result と Undo/Redo、Cancel・失敗時の直前 Result と record transform、Feature placement の次回 Generate 適用、fill color・stroke・label・feature visibility・legend name・similarity group の操作。",
+  "mayRetire": "Edit タブ先頭の Record actions 配置、セクション内の重複見出し・Record と Feature の行・状態バッジ、同じ理由文の複数表示、ヘッダの fill color 入力（Fill Color と重複）、ヘッダの similarity group 行（Similarity group セクションと重複）、タブより上の Feature placement 配置とその個別注記、Edit 上部の「Live edit: …」説明文（グループ見出しで置き換える）。",
+  "acceptedResidualRisk": "record 回転は Edit の上部から下へ移るため、見つけにくくなる。Layout 見出しと開閉ボタンの名前で補い、keyboard と 390 px で到達できることを確認する。",
   "owner": "satoshikawato",
-  "decisionDate": "2026-09-24"
+  "decisionDate": "2026-10-04"
 }
 ```
 
@@ -3755,6 +3798,55 @@ Decision date: 2026-09-30
   "acceptedResidualRisk": "退役した場合、Linear では side を変えても Generate まで preview が変わらない。",
   "owner": "satoshikawato",
   "decisionDate": "2026-09-30"
+}
+```
+
+### PD-OI-085: Feature-popup record rotation Apply on Generate
+
+- Concern key: `web.feature-popup.record-rotation-apply-on-generate`
+- Scenario revision: `1`
+- Status: `ACCEPTED`
+- Selected outcome: `A / APPLY_ON_GENERATE`
+- Normative outcome: exactly the complete approved `PRODUCT_DECISION` receipt
+  and its nine-field JSON representation below.
+- Decision source: the Owner answers of `2026-10-04` quoted verbatim in the
+  Revision 30 entry above (`OD-2`, `OD-3`, `OD-4`), and Appendix A of
+  [`POPUP_RECORD_ACTIONS_AND_VIBRIO_SESSION_PLAN_2026-10-04.md`](./POPUP_RECORD_ACTIONS_AND_VIBRIO_SESSION_PLAN_2026-10-04.md).
+  The receipt fields restate those answers and the plan presented in that
+  session; the Owner did not separately review the receipt wording. This record
+  does not supersede another decision; `PD-OI-032` retains its scope. Dependent
+  runtime requires this authority merged into its base; this amendment supplies
+  no runtime acceptance evidence.
+- Receipt SHA-256 (UTF-8, excluding the final newline):
+  `38f89876744c098aa5695b570a0250c6f672272594aafc6c1e1e739b69712f40`.
+- Acceptance contracts: `OIC-021`, `OIC-024`. These obligations and the
+  complete selected outcome are jointly required; their citation does not claim
+  completed dependent-runtime checks.
+
+```text
+PRODUCT_DECISION
+Concern: web.feature-popup.record-rotation-apply-on-generate
+Scenario revision: 1
+Choice: A / APPLY_ON_GENERATE
+Rationale: Record actions に Apply on Generate を加える。開いた feature の record の表示開始位置と、指定したときの向きを、sidebar と同じ未適用の record display 設定に書き込むだけで、Result は再生成しない。Generate Diagram を 1 回押すと、予約したすべての record がまとめて描画される。複数 record の回転を予約してから一度に描画したいという要望（画像編集ソフトの「適用」と「OK」の区別）に応える。
+Must preserve: PD-OI-032 の対象特定・anchor・offset・orientation・feature-end・適用前 preview・理由表示。Apply and regenerate は最後の committed request から対象 record だけの candidate を作り、他の record の予約は予約のまま残す（PD-OI-032 item 4）。sidebar の record display 操作とその意味。Generate Diagram による未適用設定の一括適用。同じ record への再予約は後の値が有効。予約は 1 回の Undo/Redo で戻せる。popup を開き直すと予約済みの値が分かる。既存の pending Generate 通知のほかに、Result と Generate への常時 Pending/Applied 表示を加えない（PD-OI-037 revision 2）。
+May retire: none
+Accepted residual risk: 予約したまま Generate しないと、表示中の Result と設定がずれたままになる。既存の pending Generate 通知と popup での予約値表示で補う。
+Owner: satoshikawato
+Decision date: 2026-10-04
+```
+
+```json
+{
+  "concern": "web.feature-popup.record-rotation-apply-on-generate",
+  "scenarioRevision": 1,
+  "choice": "A / APPLY_ON_GENERATE",
+  "rationale": "Record actions に Apply on Generate を加える。開いた feature の record の表示開始位置と、指定したときの向きを、sidebar と同じ未適用の record display 設定に書き込むだけで、Result は再生成しない。Generate Diagram を 1 回押すと、予約したすべての record がまとめて描画される。複数 record の回転を予約してから一度に描画したいという要望（画像編集ソフトの「適用」と「OK」の区別）に応える。",
+  "mustPreserve": "PD-OI-032 の対象特定・anchor・offset・orientation・feature-end・適用前 preview・理由表示。Apply and regenerate は最後の committed request から対象 record だけの candidate を作り、他の record の予約は予約のまま残す（PD-OI-032 item 4）。sidebar の record display 操作とその意味。Generate Diagram による未適用設定の一括適用。同じ record への再予約は後の値が有効。予約は 1 回の Undo/Redo で戻せる。popup を開き直すと予約済みの値が分かる。既存の pending Generate 通知のほかに、Result と Generate への常時 Pending/Applied 表示を加えない（PD-OI-037 revision 2）。",
+  "mayRetire": "none",
+  "acceptedResidualRisk": "予約したまま Generate しないと、表示中の Result と設定がずれたままになる。既存の pending Generate 通知と popup での予約値表示で補う。",
+  "owner": "satoshikawato",
+  "decisionDate": "2026-10-04"
 }
 ```
 
