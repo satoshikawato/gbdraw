@@ -42,6 +42,10 @@ write-up of a release.
   records…** during the read, a failed read shows its own reason, and a reason
   that leaves no placement available (for example, a non-circular record)
   appears once in place of the controls instead of under each control.
+- Gallery: the *Vibrio nigripulchritudo* TUMSAT-TG-2018 Session is now built
+  from its declared command and stores its GBFF file as one GenBank resource
+  whose six records are selected by record ID, instead of one resource per
+  replicon. Load and Save Session keep it as one File; the figure is unchanged.
 
 Fixes from the 2026-09-30 Web GUI audit of `dev`. The plan and the approved
 decisions are in
