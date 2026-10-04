@@ -71,9 +71,7 @@ const buildHarness = ({
     labelOverrideBuildWarning: ref(''),
     autoLabelReflowEnabled: ref(false),
     labelReflowRequestSeq: ref(0),
-    labelReflowRequestReason: ref(''),
     labelReflowForceRequestSeq: ref(0),
-    labelReflowForceRequestReason: ref(''),
     labelReflowLastError: ref(null)
   };
   const actions = createFeatureLabelActions({
@@ -201,7 +199,7 @@ test('a text edit asks whether to show a label only when the feature has none', 
   assert.equal(harness.state.clickedFeature.value.labelVisibility, 'on');
   assert.equal(harness.state.labelTextFeatureOverrides[featureId], 'Renamed again');
   assert.equal(harness.state.labelReflowForceRequestSeq.value, 1);
-  assert.equal(harness.state.labelReflowForceRequestReason.value, 'label-visibility-apply');
+  assert.equal(harness.state.labelReflowRequestSeq.value, 0);
 });
 
 for (const [name, options, labelKey] of [
@@ -222,7 +220,7 @@ for (const [name, options, labelKey] of [
     });
     assert.deepEqual(harness.mutations, { commit: 0 });
     assert.equal(harness.state.labelReflowForceRequestSeq.value, 1);
-    assert.equal(harness.state.labelReflowForceRequestReason.value, 'label-visibility-apply');
+    assert.equal(harness.state.labelReflowRequestSeq.value, 0);
   });
 }
 
@@ -239,10 +237,7 @@ test('stored override on a metadata-free Result fails closed without partial mut
   });
   assert.deepEqual(harness.mutations, { commit: 0 });
   assert.equal(harness.state.labelReflowForceRequestSeq.value, 1);
-  assert.equal(
-    harness.state.labelReflowForceRequestReason.value,
-    'label-visibility-binding-refresh'
-  );
+  assert.equal(harness.state.labelReflowRequestSeq.value, 0);
 });
 
 test('mounting Results with disjoint features keeps every label override (FE-01)', () => {
@@ -302,17 +297,16 @@ test('a feature visibility edit commits its label once and queues the label refl
   const harness = buildHarness();
   harness.state.autoLabelReflowEnabled.value = true;
   harness.state.featureVisibilityOverrides = { [featureId]: 'off' };
-  assert.equal(harness.actions.applyFeatureVisibilityToLabels('feature-visibility'), true);
+  assert.equal(harness.actions.applyFeatureVisibilityToLabels(), true);
   exactParts(harness.svg, featureId).forEach((part) => {
     assert.equal(part.getAttribute('display'), 'none');
   });
   assert.deepEqual(harness.mutations, { commit: 1 });
   assert.equal(harness.state.labelReflowRequestSeq.value, 1);
-  assert.equal(harness.state.labelReflowRequestReason.value, 'feature-visibility');
   assert.equal(harness.state.labelReflowForceRequestSeq.value, 0);
 
   harness.state.featureVisibilityOverrides = {};
-  assert.equal(harness.actions.applyFeatureVisibilityToLabels('feature-visibility', { reflow: false }), true);
+  assert.equal(harness.actions.applyFeatureVisibilityToLabels({ reflow: false }), true);
   exactParts(harness.svg, featureId).forEach((part) => {
     assert.equal(part.getAttribute('display'), null);
   });

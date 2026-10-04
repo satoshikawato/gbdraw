@@ -354,9 +354,7 @@ export const createFeatureLabelActions = ({ state, previewRuntime = null, rulePr
     labelOverrideBuildWarning,
     autoLabelReflowEnabled,
     labelReflowRequestSeq,
-    labelReflowRequestReason,
     labelReflowForceRequestSeq,
-    labelReflowForceRequestReason,
     labelReflowLastError
   } = state;
 
@@ -370,16 +368,13 @@ export const createFeatureLabelActions = ({ state, previewRuntime = null, rulePr
 
   const commitLabelEdit = () => previewRuntime?.commitActiveResultEdit('feature-label');
 
-  const queueLabelReflow = (reason, force = false) => {
+  const queueLabelReflow = (force = false) => {
     labelReflowLastError.value = null;
-    const normalizedReason = String(reason || 'label-edit');
     if (force) {
-      labelReflowForceRequestReason.value = normalizedReason;
       labelReflowForceRequestSeq.value += 1;
       return;
     }
     if (!autoLabelReflowEnabled.value) return;
-    labelReflowRequestReason.value = normalizedReason;
     labelReflowRequestSeq.value += 1;
   };
 
@@ -612,7 +607,7 @@ export const createFeatureLabelActions = ({ state, previewRuntime = null, rulePr
     const changed = textChanged || visibilityProjection.changed;
     if (changed) commitLabelEdit();
     if (queueIncompleteVisibility && visibilityProjection.unavailableOverride) {
-      queueLabelReflow('label-visibility-binding-refresh', true);
+      queueLabelReflow(true);
     }
     return changed;
   };
@@ -624,13 +619,13 @@ export const createFeatureLabelActions = ({ state, previewRuntime = null, rulePr
 
   // A feature visibility edit shows or hides the feature's label in the same
   // action, then Auto Reflow places the labels as Generate does (F-3).
-  const applyFeatureVisibilityToLabels = (reason = 'feature-visibility', { reflow = true } = {}) => {
+  const applyFeatureVisibilityToLabels = ({ reflow = true } = {}) => {
     if (generatedMode.value !== mode.value) return false;
     const svg = svgContainer.value?.querySelector?.('svg');
     if (!svg) return false;
     const projection = applyStoredVisibilityOverridesToSvg(svg);
     if (projection.changed) commitLabelEdit();
-    if (reflow) queueLabelReflow(reason, projection.unavailableOverride);
+    if (reflow) queueLabelReflow(projection.unavailableOverride);
     return projection.changed;
   };
 
@@ -787,12 +782,12 @@ export const createFeatureLabelActions = ({ state, previewRuntime = null, rulePr
     }
 
     if (visibilityChanged || (!clickedFeature.value.hasEditableLabel && textChanged)) {
-      queueLabelReflow('label-visibility-apply', !visibilityProjection.available);
+      queueLabelReflow(!visibilityProjection.available);
       return;
     }
 
     if (textChanged) {
-      queueLabelReflow('apply');
+      queueLabelReflow();
     }
   };
 
@@ -812,7 +807,7 @@ export const createFeatureLabelActions = ({ state, previewRuntime = null, rulePr
     const clickedId = String(clickedFeature.value?.svg_id || clickedFeature.value?.id || '').trim();
     if (clickedId === featureId) clickedFeature.value.labelVisibility = 'on';
     const projection = applyDirectVisibilityToCurrentSvg(featureId, 'on');
-    queueLabelReflow('label-visibility-apply', !projection.available);
+    queueLabelReflow(!projection.available);
   };
 
   const handleLabelTextScopeChoice = (choice) => {
@@ -875,7 +870,7 @@ export const createFeatureLabelActions = ({ state, previewRuntime = null, rulePr
     commitLabelEdit();
     closeLabelTextScopeDialog();
     syncLabelEditor();
-    queueLabelReflow('apply');
+    queueLabelReflow();
   };
 
   const resetAllLabelTextOverrides = () => {
@@ -897,7 +892,7 @@ export const createFeatureLabelActions = ({ state, previewRuntime = null, rulePr
     closeHiddenLabelTextDialog();
     commitLabelEdit();
     syncLabelEditor();
-    queueLabelReflow('reset');
+    queueLabelReflow();
   };
 
   // A Label TSV row selects labels in every Result of a batch. The displayed
@@ -1003,7 +998,7 @@ export const createFeatureLabelActions = ({ state, previewRuntime = null, rulePr
       closeLabelTextScopeDialog();
       closeHiddenLabelTextDialog();
       syncLabelEditor();
-      queueLabelReflow('load');
+      queueLabelReflow();
 
       let message = `Loaded ${rows.length} row(s). Applied to ${appliedCount} label(s).`;
       if (skippedNonTrackableCount > 0) {

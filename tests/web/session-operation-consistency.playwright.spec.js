@@ -226,7 +226,6 @@ test('Generate rejects Save and Load from processing publication through settlem
         };
       } else send.call(this, message, ...args);
     };
-    state.labelReflowForceRequestReason.value = 'session-operation-test';
     state.labelReflowForceRequestSeq.value += 1;
   });
   await page.waitForFunction(() => window.reflowRunHeld);

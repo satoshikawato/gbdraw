@@ -71,8 +71,8 @@ const actions = createFeatureVisibilityActions({
     }
   },
   labelActions: {
-    applyFeatureVisibilityToLabels: (reason, options = {}) => {
-      labelVisibilityCalls.push([reason, options.reflow !== false]);
+    applyFeatureVisibilityToLabels: (options = {}) => {
+      labelVisibilityCalls.push(options.reflow !== false);
       return true;
     }
   },
@@ -101,8 +101,8 @@ assert.equal(await command.revert(), true);
 assert.deepEqual(featureVisibilityOverrides, {});
 assert.equal(appliedPreviewChanges.length, 2);
 assert.deepEqual(labelVisibilityCalls, [
-  ['bulk-feature-visibility-apply', true],
-  ['bulk-feature-visibility-undo', true]
+  true,
+  true
 ]);
 assert.deepEqual(
   appliedPreviewChanges[1].changes.map((change) => [change.featureId, change.mode]),
@@ -115,7 +115,7 @@ assert.equal(actions.setFeatureVisibility(featureA, 'off', {
 }), true);
 assert.equal(featureVisibilityOverrides['feature-a'], 'off');
 assert.equal(appliedPreviewChanges.length, 3);
-assert.deepEqual(labelVisibilityCalls.at(-1), ['feature-visibility', false],
+assert.deepEqual(labelVisibilityCalls.at(-1), false,
   'the label follows the feature even when the caller declines the reflow');
 assert.deepEqual(
   appliedPreviewChanges[2].changes.map((change) => [change.featureId, change.mode]),

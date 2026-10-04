@@ -114,9 +114,7 @@ export const setupWatchers = ({
     linearReorderNotice,
     autoLabelReflowEnabled,
     labelReflowRequestSeq,
-    labelReflowRequestReason,
     labelReflowForceRequestSeq,
-    labelReflowForceRequestReason,
     errorLog
   } = state;
 
@@ -312,7 +310,7 @@ export const setupWatchers = ({
       if (!autoLabelReflowEnabled.value) return;
       if (mode.value === 'circular' && shouldDeferCircularPreviewUpdates.value) return;
       if (typeof runLabelReflow !== 'function') return;
-      await runLabelReflow(labelReflowRequestReason.value || 'label-edit');
+      await runLabelReflow();
     }
   );
 
@@ -322,7 +320,7 @@ export const setupWatchers = ({
       if (nextSeq === prevSeq) return;
       if (mode.value === 'circular' && shouldDeferCircularPreviewUpdates.value) return;
       if (typeof runLabelReflow !== 'function') return;
-      await runLabelReflow(labelReflowForceRequestReason.value || 'label-edit');
+      await runLabelReflow();
     }
   );
 
