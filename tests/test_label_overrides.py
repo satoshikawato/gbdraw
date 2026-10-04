@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import re
+import xml.etree.ElementTree as ET
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
@@ -13,6 +14,7 @@ from Bio.SeqFeature import FeatureLocation, SeqFeature
 from Bio.SeqRecord import SeqRecord
 from svgwrite import Drawing
 
+import gbdraw
 import gbdraw.circular as circular_cli_module
 import gbdraw.linear as linear_cli_module
 import gbdraw.api.request_render as request_render_module
@@ -28,6 +30,7 @@ from gbdraw.io.colors import load_default_colors
 from gbdraw.labels.circular import prepare_label_list
 from gbdraw.labels.filtering import (
     get_label_text,
+    has_forced_label_overrides,
     preprocess_label_filtering,
     read_label_override_file,
 )
@@ -686,3 +689,146 @@ def test_linear_cli_label_table_injects_override_df(
     label_override_table = captured["canonical_request"].options.label_override_table
     assert label_override_table is not None
     pd.testing.assert_frame_equal(label_override_table, override_df)
+
+
+# A per-feature override (a `hash` row) decides one feature's label whatever
+# the label display scope selects: non-empty text shows it, empty text hides it.
+_BGC_INPUTS = Path(__file__).parent / "test_inputs"
+
+
+def _rendered_feature_labels(diagram: Any) -> list[tuple[str, str]]:
+    svg = diagram.to_svg()
+    root = ET.fromstring(svg if isinstance(svg, str) else svg.decode("utf-8"))
+    return [
+        (str(node.get("data-label-feature-id")), "".join(node.itertext()))
+        for node in root.iter("{http://www.w3.org/2000/svg}text")
+        if node.get("data-label-feature-id")
+    ]
+
+
+def _bgc_records_and_neor_hash() -> tuple[list[SeqRecord], str]:
+    records = list(gbdraw.read_genbank([
+        str(_BGC_INPUTS / "BGC0000708.gbk"),
+        str(_BGC_INPUTS / "BGC0000709.gbk"),
+    ]))
+    neor = next(
+        feature for feature in records[1].features
+        if feature.type == "CDS" and feature.qualifiers.get("product") == ["putative regulator, NeoR"]
+    )
+    return records, compute_feature_hash(neor, record_id=records[1].id)
+
+
+def _draw_linear_labels(records: list[SeqRecord], scope: str, rows: list[list[str]] | None):
+    options = gbdraw.LinearOptions(
+        labels=gbdraw.LabelOptions(overrides=_rules_df(rows) if rows else None),
+        config_overrides={"labels.linear.scope": scope},
+    )
+    return _rendered_feature_labels(gbdraw.draw_linear(records, options=options))
+
+
+def test_has_forced_label_overrides_counts_only_hash_rows_with_text() -> None:
+    def forced(rows: list[list[str]]) -> bool:
+        return has_forced_label_overrides(_base_filtering(label_override_df=_rules_df(rows)))
+
+    assert forced([["*", "*", "hash", "^f1$", "Shown"]]) is True
+    assert forced([["*", "*", "hash", "^f1$", ""]]) is False
+    assert forced([["*", "CDS", "gene", "^geneA$", "Renamed"]]) is False
+    assert has_forced_label_overrides(_base_filtering()) is False
+
+
+def test_get_label_text_overrides_only_keeps_per_feature_decisions() -> None:
+    feature = _make_seq_feature()
+    feature_hash = compute_feature_hash(feature, record_id="rec1")
+    filtering = preprocess_label_filtering(
+        _base_filtering(
+            label_override_df=_rules_df([
+                ["*", "CDS", "gene", "^geneA$", "Ordinary override"],
+            ])
+        )
+    )
+    assert get_label_text(feature, filtering, record_id="rec1") == "Ordinary override"
+    assert get_label_text(feature, filtering, record_id="rec1", overrides_only=True) == ""
+
+    forced = preprocess_label_filtering(
+        _base_filtering(
+            label_override_df=_rules_df([
+                ["*", "*", "hash", f"^{re.escape(feature_hash)}$", "Forced"],
+            ])
+        )
+    )
+    assert get_label_text(feature, forced, record_id="rec1", overrides_only=True) == "Forced"
+
+
+@pytest.mark.linear
+@pytest.mark.parametrize("scope", ["first", "none"])
+def test_linear_per_feature_override_shows_label_outside_scope(scope: str) -> None:
+    records, neor_hash = _bgc_records_and_neor_hash()
+    base = _draw_linear_labels(records, scope, None)
+    forced = _draw_linear_labels(
+        records, scope, [[records[1].id, "CDS", "hash", f"^{re.escape(neor_hash)}$", "NeoR"]]
+    )
+
+    assert not any(feature_id.endswith("_record_2") for feature_id, _ in base)
+    assert [label for label in forced if label not in base] == [(f"{neor_hash}_record_2", "NeoR")]
+    assert len(forced) == len(base) + 1
+
+
+@pytest.mark.linear
+def test_linear_override_label_without_scoped_records_uses_all_record_label_size() -> None:
+    records, neor_hash = _bgc_records_and_neor_hash()
+    rows = [[records[1].id, "CDS", "hash", f"^{re.escape(neor_hash)}$", "NeoR"]]
+
+    def neor_font_size(scope: str) -> str:
+        options = gbdraw.LinearOptions(
+            labels=gbdraw.LabelOptions(overrides=_rules_df(rows)),
+            config_overrides={"labels.linear.scope": scope},
+        )
+        svg = gbdraw.draw_linear(records, options=options).to_svg()
+        root = ET.fromstring(svg if isinstance(svg, str) else svg.decode("utf-8"))
+        node = next(
+            node for node in root.iter("{http://www.w3.org/2000/svg}text")
+            if "".join(node.itertext()) == "NeoR"
+        )
+        return str(node.get("font-size"))
+
+    assert neor_font_size("none") == neor_font_size("all")
+
+
+@pytest.mark.linear
+def test_linear_ordinary_override_does_not_extend_label_scope() -> None:
+    records, _neor_hash = _bgc_records_and_neor_hash()
+    base = _draw_linear_labels(records, "first", None)
+    renamed = _draw_linear_labels(records, "first", [[records[1].id, "CDS", "gene", "^neoR$", "NeoR"]])
+
+    assert renamed == base
+
+
+@pytest.mark.linear
+def test_linear_per_feature_override_hides_label_in_scope() -> None:
+    records, _neor_hash = _bgc_records_and_neor_hash()
+    base = _draw_linear_labels(records, "all", None)
+    hidden_id, _text = base[0]
+    feature_hash = hidden_id.rsplit("_record_", 1)[0]
+    record_id = records[int(hidden_id.rsplit("_record_", 1)[1]) - 1].id
+    hidden = _draw_linear_labels(
+        records, "all", [[record_id, "*", "hash", f"^{re.escape(feature_hash)}$", ""]]
+    )
+
+    assert hidden == [label for label in base if label[0] != hidden_id]
+
+
+@pytest.mark.circular
+def test_circular_per_feature_override_shows_only_its_label_when_scope_is_none() -> None:
+    records, neor_hash = _bgc_records_and_neor_hash()
+    record = records[1]
+
+    def labels(rows: list[list[str]] | None) -> list[tuple[str, str]]:
+        options = gbdraw.CircularOptions(
+            labels=gbdraw.LabelOptions(overrides=_rules_df(rows) if rows else None),
+            config_overrides={"labels.circular.scope": "none"},
+        )
+        return _rendered_feature_labels(gbdraw.draw_circular([record], options=options))
+
+    assert labels(None) == []
+    assert labels([[record.id, "CDS", "hash", f"^{re.escape(neor_hash)}$", "NeoR"]]) == [(neor_hash, "NeoR")]
+    assert labels([[record.id, "CDS", "hash", f"^{re.escape(neor_hash)}$", ""]]) == []

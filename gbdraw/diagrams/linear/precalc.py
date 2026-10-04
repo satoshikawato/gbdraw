@@ -46,13 +46,18 @@ def _resolve_linear_diagram_label_font_size(
     canvas_config: LinearCanvasConfigurator,
     profile: LinearRenderProfile,
 ) -> float:
-    """Resolve one readable auto label size for all labels drawn in a linear diagram."""
+    """Resolve one readable auto label size for all labels drawn in a linear diagram.
+
+    The records in the label display scope set the size. With no record in
+    scope, labels shown by per-feature overrides use the size of all records.
+    """
 
     cfg = profile.config
     label_font_sizes: list[float] = []
     threshold = int(cfg.labels.length_threshold.linear)
+    sized_indexes = [index for index in range(len(records)) if profile.labels_in_scope(index)]
     for index, record in enumerate(records):
-        if profile.label_scope == "first" and index > 0:
+        if sized_indexes and index not in sized_indexes:
             continue
         length_param = determine_length_parameter(len(record.seq), threshold)
         label_font_sizes.append(cfg.labels.font_size.linear.for_length_param(length_param))
@@ -111,7 +116,6 @@ def _precalculate_feature_layers(
     """Build feature objects once per record for the linear assembly pipeline."""
 
     cfg = profile.config
-    label_scope = profile.label_scope
     color_table, default_colors = preprocess_color_tables(
         feature_config.color_table,
         feature_config.default_colors,
@@ -120,11 +124,7 @@ def _precalculate_feature_layers(
 
     feature_layers: list[FeatureBuildResult] = []
     for i, record in enumerate(records):
-        compute_label_text = (
-            label_scope == "all"
-            or (label_scope == "first" and i == 0)
-            or label_scope == "orthogroup_top"
-        )
+        compute_label_text = profile.labels_in_scope(i)
         result = create_feature_layers(
             record,
             color_table,
@@ -162,7 +162,7 @@ def _precalculate_label_dimensions(
     cfg = profile.config
     label_scope = profile.label_scope
 
-    if label_scope == "none":
+    if not any(profile.record_has_labels(i) for i in range(len(records))):
         return 0, [[] for _ in records], [0.0 for _ in records]
 
     label_font_size = _resolve_linear_diagram_label_font_size(
@@ -182,7 +182,7 @@ def _precalculate_label_dimensions(
         label_filtering = preprocess_label_filtering(cfg.labels.filtering.as_dict())
 
     for i, record in enumerate(records):
-        if label_scope == "first" and i > 0:
+        if not profile.record_has_labels(i):
             all_labels_by_record.append([])
             record_label_heights.append(0.0)
             continue
@@ -233,6 +233,7 @@ def _precalculate_label_dimensions(
             label_font_size=label_font_size,
             orthogroup_label_member_ids=member_ids,
             orthogroup_label_top_member_ids=top_member_ids,
+            labels_overrides_only=not profile.labels_in_scope(i),
             feature_lane_geometry=(
                 feature_lane_geometries[i]
                 if feature_lane_geometries is not None

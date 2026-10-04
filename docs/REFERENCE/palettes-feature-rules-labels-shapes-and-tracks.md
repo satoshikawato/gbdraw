@@ -155,6 +155,15 @@ label override cannot restore a label removed by the active filter. Exact-match
 regular expressions should be anchored when a broader qualifier match would be
 unsafe.
 
+A per-feature override is a label-override row whose qualifier is `hash`. It
+decides one feature's label before the label filters and the label display
+scope (`--show_labels` or `--labels`, `labels.linear.scope`,
+`labels.circular.scope`): non-empty text shows the label, also on a record or
+with a scope that otherwise draws no labels, and empty text hides it. The Web
+feature popup writes these rows for **Label visibility** **On** and **Off**. A
+label text edit uses `locus_tag`, `gene`, or `record_location` when one of them
+identifies the feature, and falls back to `hash` only when none does.
+
 Feature visibility actions are `show`, `off`, and `exclude_matching`.
 `exclude_matching` keeps the feature visible but removes it from protein-search
 input; `off` removes the glyph, its label, and the search input. The first matching

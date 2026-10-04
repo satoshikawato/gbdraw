@@ -99,7 +99,7 @@ export const setupWatchers = ({
     clickedPairwiseMatch,
     clickedLabel,
     labelTextScopeDialog,
-    globalLabelModeDialog,
+    hiddenLabelTextDialog,
     files,
     currentColors,
     paletteInstantPreviewEnabled,
@@ -373,10 +373,8 @@ export const setupWatchers = ({
       labelTextScopeDialog.sourceText = '';
       labelTextScopeDialog.featureId = '';
       labelTextScopeDialog.matchingCount = 0;
-      globalLabelModeDialog.show = false;
-      globalLabelModeDialog.featureId = '';
-      globalLabelModeDialog.featureType = '';
-      globalLabelModeDialog.resolve = null;
+      hiddenLabelTextDialog.show = false;
+      hiddenLabelTextDialog.featureId = '';
       resetRightDrawer();
       linearReorderNotice.value = '';
     }

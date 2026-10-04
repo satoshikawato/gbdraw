@@ -385,11 +385,16 @@ def prepare_label_list_linear(
     label_font_size: float | None = None,
     orthogroup_label_member_ids: set[str | int] | None = None,
     orthogroup_label_top_member_ids: set[str | int] | None = None,
+    labels_overrides_only: bool = False,
     feature_lane_geometry: LinearFeatureLaneGeometry | None = None,
     record_transform: RecordDisplayTransform | None = None,
 ):
     """
     Prepares a list of labels for linear genome visualization with proper track organization.
+
+    A feature outside the label display scope (``labels_overrides_only``, or
+    not selected by orthogroup eligibility) is labeled only by its per-feature
+    override.
     """
     cfg = profile.config
     embedded_labels = []
@@ -474,13 +479,16 @@ def prepare_label_list_linear(
     # Second pass: Process labels
     max_bbox_height = 0
     for feature_id, feature_object in reversed(list(feature_dict.items())):
-        if not _passes_orthogroup_label_eligibility(
+        overrides_only = labels_overrides_only or not _passes_orthogroup_label_eligibility(
             feature_object,
             orthogroup_label_member_ids,
             orthogroup_label_top_member_ids,
-        ):
+        )
+        if overrides_only and not profile.forced_labels:
             continue
-        feature_label_text = get_label_text(feature_object, label_filtering)
+        feature_label_text = get_label_text(
+            feature_object, label_filtering, overrides_only=overrides_only
+        )
         if not feature_label_text:
             continue
         if feature_id not in feature_track_positions:

@@ -827,9 +827,17 @@ displayed Result, record, or visibility changes. Hiding a feature hides its
 label in the current Result, as Generate does; with **Auto Reflow** on, the
 remaining labels are placed again. After Generate replaces a
 source file, only the edits of features that no longer exist are removed; an
-edit that replaces every label with the same text stays. When labels are off,
-**Whitelist only** or **Show all labels** in **Enable Labels** applies that label
-selection to the current Result with the label rerender.
+edit that replaces every label with the same text stays.
+
+**Label visibility** **On** or **Off** in the feature popup decides that
+feature's label whatever **Show Labels** and the label filters select. With
+**Show Labels** set to **None** or **First Record Only**, **On** shows that label,
+also on a later record, and no other label changes; the label rerender and
+Generate draw the same labels. A label text edit keeps **Default** visibility,
+which follows **Show Labels** and the filters. When the feature has no label in
+the current Result, **Label Not Shown** offers **Show this label**, which sets
+**On**, or **Keep hidden (apply text only)**, which keeps the text for when the
+label is shown.
 
 On a narrow preview, the same **Editor** sits below the canvas.
 Its content scrolls independently, while its header, Close action, and tabs stay

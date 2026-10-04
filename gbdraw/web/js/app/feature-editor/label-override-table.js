@@ -7,6 +7,7 @@ import {
   selectFeatureSelector
 } from '../feature-selector.js';
 import { recordStructuralMetric } from '../../services/runtime-test-hooks.js';
+import { getFeatureGenerationHash } from '../feature-utils.js';
 
 const LABEL_OVERRIDE_COLUMN_COUNT = 5;
 const PRIMARY_HEADER = ['record_id', 'feature_type', 'qualifier', 'value', 'label_text'];
@@ -59,6 +60,11 @@ const normalizeVisibilityOverrides = (visibilityOverrides) => {
 };
 
 const getRegexForFeatureHash = (featureIdRaw) => `^${escapeRegexLiteral(String(featureIdRaw || '').trim())}$`;
+// A `hash` row matches the feature hash that Python computes, without the
+// record suffix of a multi-record Linear rendered ID.
+const getRegexForFeature = (featureIdRaw) => getRegexForFeatureHash(
+  getFeatureGenerationHash({ svg_id: String(featureIdRaw || '').trim() })
+);
 
 const resolveDefaultLabelText = (metadata, editableLabelEntry = null) => {
   const editableText = String(editableLabelEntry?.text || '').trim();
@@ -163,7 +169,7 @@ export const buildLabelOverrideRows = (featureOverrides, bulkOverrides, options 
         );
         nextText = normalizeTsvCell(overrideText || fallbackText || featureIdRaw || featureIdKey);
       }
-      const qualifierRegex = getRegexForFeatureHash(featureIdRaw);
+      const qualifierRegex = getRegexForFeature(featureIdRaw);
       rows.push(
         `${recordId}\t${featureType}\thash\t${qualifierRegex}\t${nextText}`
       );
@@ -194,7 +200,7 @@ export const buildLabelOverrideRows = (featureOverrides, bulkOverrides, options 
     );
     const qualifier = selector.qualifier;
     const qualifierRegex = selector.qualifier === 'hash'
-      ? getRegexForFeatureHash(selector.value || featureId)
+      ? getRegexForFeature(selector.value || featureId)
       : `^${escapeRegexLiteral(selector.value)}$`;
     if (selector.isFallbackHash) {
       fallbackHashCount += 1;
@@ -231,7 +237,7 @@ export const buildLabelOverrideRows = (featureOverrides, bulkOverrides, options 
       );
       const qualifier = selector.qualifier;
       const qualifierRegex = selector.qualifier === 'hash'
-        ? getRegexForFeatureHash(selector.value || metadata?.featureId || '')
+        ? getRegexForFeature(selector.value || metadata?.featureId || '')
         : `^${escapeRegexLiteral(selector.value || '')}$`;
       if (selector.isFallbackHash) {
         fallbackHashCount += 1;

@@ -502,59 +502,116 @@ test('a label reflow leaves Applies on Generate draft settings out of the Result
   }
 });
 
-// N-16 Owner-delegated: Enable Labels keeps its documented live effect. Its
-// label selection is committed with the reflowed Result, so the next label
-// reflow (from the committed Session) keeps the labels.
-test('Enable Labels applies its label selection through the reflow and keeps it', async ({ browser }) => {
+// Owner request (2026-10-04): a Label visibility choice in the feature popup
+// applies whatever Show Labels selects. The live reflow and Generate draw the
+// same labels (N-16, PD-OI-066).
+const labelEditorState = (page, scopePath) => page.evaluate(async (path) => {
+  const { state } = await import('./js/state.js');
+  const { getCommittedCanonicalRenderRequest } = await import('./js/services/config.js');
+  const result = state.results.value[state.selectedResultIndex.value];
+  const root = new DOMParser().parseFromString(result.content, 'image/svg+xml').documentElement;
+  return {
+    processing: state.labelReflowProcessing.value || state.processing.value,
+    reflowError: state.labelReflowLastError.value,
+    error: state.errorLog.value,
+    labels: [...root.querySelectorAll('text[data-label-feature-id]')]
+      .filter((node) => node.getAttribute('display') !== 'none')
+      .map((node) => [node.getAttribute('data-label-feature-id'), node.textContent]),
+    scope: getCommittedCanonicalRenderRequest()?.diagramOptions?.configOverrides?.[path]
+  };
+}, scopePath);
+
+// `choice` answers the Label Not Shown dialog that a text edit on an
+// unlabeled feature opens; `asked` reports whether it opened.
+const applyPopupLabel = (page, featureId, text, visibility, choice = null) => page.evaluate(async (edit) => {
+  const app = window.__GBDRAW_APP__;
+  const feature = app.extractedFeatures.find((item) => item.svg_id === edit.featureId);
+  await app.openFeatureEditorFromList(feature, null);
+  await window.Vue.nextTick();
+  const hint = document.querySelector('.feature-popup')?.textContent
+    .includes('This feature has no label in the current Result.');
+  app.clickedFeature.labelVisibility = edit.visibility;
+  if (edit.text !== null) app.clickedFeature.labelText = edit.text;
+  await app.updateClickedFeatureLabelText();
+  await window.Vue.nextTick();
+  const asked = app.hiddenLabelTextDialog.show
+    && Boolean([...document.querySelectorAll('h3')].find((node) => node.textContent === 'Label Not Shown'));
+  if (asked && edit.choice) await app.handleHiddenLabelTextChoice(edit.choice);
+  app.clickedFeature = null;
+  return { hint, asked };
+}, { featureId, text, visibility, choice });
+
+test('Label visibility On shows only its label under Show Labels None, live and after Generate', async ({ browser }) => {
   test.setTimeout(600_000);
   const page = await load(browser, HMMT_SESSION);
-  const labelState = () => page.evaluate(async () => {
-    const { state } = await import('./js/state.js');
-    const { getCommittedCanonicalRenderRequest } = await import('./js/services/config.js');
-    const result = state.results.value[state.selectedResultIndex.value];
-    const root = new DOMParser().parseFromString(result.content, 'image/svg+xml').documentElement;
-    return {
-      processing: state.labelReflowProcessing.value,
-      error: state.labelReflowLastError.value,
-      labels: [...root.querySelectorAll('text[data-label-feature-id]')].map((node) => node.textContent),
-      scope: getCommittedCanonicalRenderRequest()?.diagramOptions?.configOverrides?.['labels.circular.scope']
-    };
-  });
-  const editLabel = (text) => page.evaluate(async (label) => {
-    const app = window.__GBDRAW_APP__;
-    const feature = app.extractedFeatures.find((item) => item.type === 'CDS');
-    await app.openFeatureEditorFromList(feature, null);
-    app.clickedFeature.labelText = label;
-    const update = app.updateClickedFeatureLabelText();
-    for (let attempt = 0; attempt < 100 && !app.globalLabelModeDialog.show; attempt += 1) {
-      await new Promise((resolve) => setTimeout(resolve, 20));
-    }
-    if (app.globalLabelModeDialog.show) app.handleGlobalLabelModeChoice('show_all');
-    await update;
-    app.clickedFeature = null;
-  }, text);
+  const labelState = () => labelEditorState(page, 'labels.circular.scope');
   try {
     await page.evaluate(() => { window.__GBDRAW_APP__.form.labels_mode = 'none'; });
     await generate(page);
     expect((await labelState()).labels).toEqual([]);
+    const [forced, textOnly, shown] = await page.evaluate(() => window.__GBDRAW_APP__.extractedFeatures
+      .filter((item) => item.type === 'CDS').slice(0, 3).map((item) => item.svg_id));
+    expect(await applyPopupLabel(page, forced, 'FORCED_LABEL', 'on')).toEqual({ hint: true, asked: false });
+    await expect.poll(async () => {
+      const state = await labelState();
+      return state.processing ? null : state.labels;
+    }, { timeout: 300_000 }).toEqual([[forced, 'FORCED_LABEL']]);
+    expect((await labelState()).reflowError).toBeNull();
     expect((await labelState()).scope).toBe('none');
-    await editLabel('ENABLED_LABEL');
+    // Label text alone keeps Default visibility. Keep hidden leaves the feature
+    // unlabeled; Show this label sets On. Generate draws the same labels.
+    expect(await applyPopupLabel(page, textOnly, 'TEXT_ONLY_LABEL', 'default', 'text_only'))
+      .toEqual({ hint: true, asked: true });
+    expect(await applyPopupLabel(page, shown, 'SHOWN_LABEL', 'default', 'show'))
+      .toEqual({ hint: true, asked: true });
+    const expected = [[forced, 'FORCED_LABEL'], [shown, 'SHOWN_LABEL']]
+      .sort(([left], [right]) => left.localeCompare(right));
+    const sortedLabels = (state) => [...state.labels].sort(([left], [right]) => left.localeCompare(right));
     await expect.poll(async () => {
       const state = await labelState();
-      return !state.processing && state.labels.includes('ENABLED_LABEL');
-    }, { timeout: 300_000 }).toBe(true);
-    expect((await labelState()).scope).toBe('outer');
-    const enabledCount = (await labelState()).labels.length;
-    expect(enabledCount).toBeGreaterThan(1);
-    await page.evaluate(() => { window.__GBDRAW_APP__.autoLabelReflowEnabled = true; });
-    await editLabel('SECOND_LABEL');
-    await expect.poll(async () => {
-      const state = await labelState();
-      return !state.processing && state.labels.includes('SECOND_LABEL');
-    }, { timeout: 300_000 }).toBe(true);
+      return state.processing ? null : sortedLabels(state);
+    }, { timeout: 300_000 }).toEqual(expected);
+    await generate(page);
     const after = await labelState();
-    expect(after.error).toBeNull();
-    expect(after.labels.length).toBe(enabledCount);
+    expect(sortedLabels(after)).toEqual(expected);
+    expect(after.scope).toBe('none');
+  } finally {
+    await page.context().close();
+  }
+});
+
+test('Label visibility On and Off apply under First Record Only, live and after Generate', async ({ browser }) => {
+  test.setTimeout(600_000);
+  const page = await load(browser, 'gbdraw/web/gallery/sessions/BGC0000708-BGC0000713.gbdraw-session.json');
+  const labelState = () => labelEditorState(page, 'labels.linear.scope');
+  try {
+    await generate(page);
+    const before = await labelState();
+    expect(before.scope).toBe('first');
+    const neoR = await page.evaluate(() => window.__GBDRAW_APP__.extractedFeatures
+      .find((item) => item.product === 'putative regulator, NeoR')?.svg_id);
+    expect(neoR).toMatch(/_record_2$/);
+    expect(before.labels.some(([featureId]) => featureId === neoR)).toBe(false);
+    const [hidden] = before.labels.find(([featureId]) => /_record_1$/.test(featureId));
+
+    expect(await applyPopupLabel(page, neoR, 'NeoR', 'on')).toEqual({ hint: true, asked: false });
+    await expect.poll(async () => {
+      const state = await labelState();
+      return state.processing ? null : state.labels.filter(([featureId]) => featureId === neoR);
+    }, { timeout: 300_000 }).toEqual([[neoR, 'NeoR']]);
+    expect(await applyPopupLabel(page, hidden, null, 'off')).toEqual({ hint: false, asked: false });
+    await expect.poll(async () => {
+      const state = await labelState();
+      return state.processing ? null : state.labels.some(([featureId]) => featureId === hidden);
+    }, { timeout: 300_000 }).toBe(false);
+    expect((await labelState()).reflowError).toBeNull();
+
+    await generate(page);
+    const after = await labelState();
+    expect(after.scope).toBe('first');
+    expect(after.labels.filter(([featureId]) => featureId === neoR)).toEqual([[neoR, 'NeoR']]);
+    expect(after.labels.some(([featureId]) => featureId === hidden)).toBe(false);
+    expect(after.labels.filter(([featureId]) => !/_record_1$/.test(featureId))).toEqual([[neoR, 'NeoR']]);
   } finally {
     await page.context().close();
   }

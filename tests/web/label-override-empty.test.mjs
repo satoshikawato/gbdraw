@@ -32,3 +32,27 @@ test('a bulk label edit expands to the recorded source of a feature on another R
     'TESTB\tCDS\tlocus_tag\t^TESTB_0006$\tBULK'
   ]);
 });
+
+// A multi-record Linear diagram renders `<hash>_record_<n>`; Python matches a
+// `hash` row against the feature hash, so the rows carry the catalog hash.
+test('hash rows of a multi-record Linear feature carry the catalog hash, not the rendered ID', () => {
+  const feature = (svgId, hash, recordId, qualifiers) => ({
+    svg_id: svgId, record_id: recordId, type: 'CDS', qualifiers,
+    selector: { hash, qualifiers }
+  });
+  const features = [
+    feature('fneo_record_2', 'fneo', 'BGC0000709', { product: ['putative regulator, NeoR'] }),
+    feature('fone_record_1', 'fone', 'BGC0000708', { product: ['transport protein'] }),
+    feature('ftxt_record_1', 'ftxt', 'BGC0000708', { product: ['hypothetical protein'] }),
+    feature('fdup_record_1', 'fdup', 'BGC0000708', { product: ['hypothetical protein'] })
+  ];
+  const { rows } = buildLabelOverrideTsv({ fneo_record_2: 'NeoR', ftxt_record_1: 'Renamed' }, {}, {
+    extractedFeatures: features,
+    visibilityOverrides: { fneo_record_2: 'on', fone_record_1: 'off' }
+  });
+  assert.deepEqual(rows, [
+    'BGC0000709\tCDS\thash\t^fneo$\tNeoR',
+    'BGC0000708\tCDS\thash\t^fone$\t',
+    'BGC0000708\tCDS\thash\t^ftxt$\tRenamed'
+  ]);
+});

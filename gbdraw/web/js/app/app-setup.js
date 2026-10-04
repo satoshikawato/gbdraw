@@ -414,7 +414,7 @@ export const createAppSetup = () => {
     legendRenameDialog,
     resetColorDialog,
     labelTextScopeDialog,
-    globalLabelModeDialog,
+    hiddenLabelTextDialog,
     sidebarWidth,
     isResizing,
     legendEntries,
@@ -2234,7 +2234,6 @@ export const createAppSetup = () => {
     isFeatureDrawerMounted.value
     || Boolean(clickedFeature.value)
     || labelTextScopeDialog.show
-    || globalLabelModeDialog.show
     || Object.keys(labelTextFeatureOverrides).length > 0
     || Object.keys(labelTextBulkOverrides).length > 0
     || Object.keys(labelVisibilityOverrides).length > 0
@@ -2631,7 +2630,7 @@ export const createAppSetup = () => {
     loadLabelOverrideTable,
     updateClickedFeatureLabelText,
     handleLabelTextScopeChoice,
-    handleGlobalLabelModeChoice,
+    handleHiddenLabelTextChoice,
     requestLabelTextChangeByFeatureId,
     requestLabelTextChangeByKey,
     reconcileFeatureVisibility,
@@ -2902,7 +2901,7 @@ export const createAppSetup = () => {
   };
   const updateClickedFeatureLabelTextWithHistory = undoableAction('Change label text', updateClickedFeatureLabelText);
   const handleLabelTextScopeChoiceWithHistory = undoableAction('Change label text', handleLabelTextScopeChoice);
-  const handleGlobalLabelModeChoiceWithHistory = undoableAction('Change label visibility', handleGlobalLabelModeChoice);
+  const handleHiddenLabelTextChoiceWithHistory = undoableAction('Change label visibility', handleHiddenLabelTextChoice);
   const requestLabelTextChangeByFeatureIdWithHistory = undoableAction(
     'Change label text',
     requestLabelTextChangeByFeatureId
@@ -5038,10 +5037,10 @@ export const createAppSetup = () => {
     resetColorDialog,
     handleResetColorChoice: handleResetColorChoiceWithHistory,
     labelTextScopeDialog,
-    globalLabelModeDialog,
+    hiddenLabelTextDialog,
     updateClickedFeatureLabelText: updateClickedFeatureLabelTextWithHistory,
     handleLabelTextScopeChoice: handleLabelTextScopeChoiceWithHistory,
-    handleGlobalLabelModeChoice: handleGlobalLabelModeChoiceWithHistory,
+    handleHiddenLabelTextChoice: handleHiddenLabelTextChoiceWithHistory,
     requestLabelTextChangeByFeatureId: requestLabelTextChangeByFeatureIdWithHistory,
     requestLabelTextChangeByKey: requestLabelTextChangeByKeyWithHistory,
     resetAllLabelTextOverrides: resetAllLabelTextOverridesWithHistory,

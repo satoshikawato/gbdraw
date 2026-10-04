@@ -102,9 +102,6 @@ test('label search includes live edits and reports the initial rendered feature 
   await page.getByRole('button', { name: 'Open active feature', exact: true }).click();
   await page.locator('.feature-popup input[placeholder="Edit label text"]').fill('AUDIT_RENAMED_FEATURE');
   await page.getByRole('button', { name: 'Apply Label', exact: true }).click();
-  if (await page.getByRole('heading', { name: 'Enable Labels', exact: true }).isVisible()) {
-    await page.getByRole('button', { name: /Show all labels/ }).click();
-  }
   await page.waitForFunction(() => !window.__GBDRAW_APP__.labelReflowProcessing && !window.__GBDRAW_APP__.processing);
   await page.getByRole('button', { name: 'Close feature popup', exact: true }).click();
   await page.getByRole('combobox', { name: 'Search field', exact: true }).selectOption('label');

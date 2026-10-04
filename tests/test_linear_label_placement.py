@@ -461,6 +461,57 @@ def test_linear_orthogroup_top_labels_suppress_only_lower_orthogroup_members() -
 
 
 @pytest.mark.linear
+def test_linear_orthogroup_top_labels_respect_per_feature_overrides() -> None:
+    records = [
+        _synthetic_label_record("record_0", 1000, "top_orthogroup_label", "top_non_orthogroup_label"),
+        _synthetic_label_record("record_1", 1000, "lower_orthogroup_label", "lower_non_orthogroup_label"),
+    ]
+    top_feature_id = compute_feature_hash(records[0].features[0], record_id=records[0].id)
+    lower_feature_id = compute_feature_hash(records[1].features[0], record_id=records[1].id)
+    comparisons = [
+        DataFrame(
+            [
+                _comparison_row(
+                    orthogroup_id="og_1",
+                    query_record_index=1,
+                    query_feature_svg_id=lower_feature_id,
+                    subject_record_index=0,
+                    subject_feature_svg_id=top_feature_id,
+                )
+            ]
+        )
+    ]
+    config_dict = modify_config_dict(
+        load_config_toml('gbdraw.data', 'config.toml'),
+        {
+            "labels.linear.scope": 'orthogroup_top',
+            "labels.filtering.blacklist_keywords": [],
+        },
+    )
+    config_dict["labels"]["filtering"]["label_override_df"] = DataFrame(
+        [
+            ["record_1", "CDS", "hash", f"^{lower_feature_id}$", "forced_lower_label"],
+            ["record_0", "CDS", "hash", f"^{top_feature_id}$", ""],
+        ],
+        columns=["record_id", "feature_type", "qualifier", "value", "label_text"],
+    )
+
+    svg_content = assemble_linear_diagram_from_records(
+        records,
+        cfg=GbdrawConfig.from_dict(config_dict),
+        protein_comparisons=comparisons,
+        selected_features_set=["CDS"],
+        legend="none",
+    ).tostring()
+
+    assert "forced_lower_label" in svg_content
+    assert "lower_orthogroup_label" not in svg_content
+    assert "top_orthogroup_label" not in svg_content
+    assert "top_non_orthogroup_label" in svg_content
+    assert "lower_non_orthogroup_label" in svg_content
+
+
+@pytest.mark.linear
 def test_linear_auto_label_font_size_resolves_once_per_diagram() -> None:
     config_dict = modify_config_dict(
         load_config_toml('gbdraw.data', 'config.toml'),

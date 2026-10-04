@@ -101,12 +101,7 @@ const applyVisibilityOverride = (page) => page.evaluate(async () => {
   const feature = app.extractedFeatures.find((candidate) => candidate?.svg_id);
   app.openFeatureEditorFromList(feature, null);
   app.clickedFeature.labelVisibility = 'on';
-  const update = app.updateClickedFeatureLabelText();
-  for (let attempt = 0; attempt < 100 && !app.globalLabelModeDialog?.show; attempt += 1) {
-    await new Promise((resolve) => setTimeout(resolve, 20));
-  }
-  if (app.globalLabelModeDialog?.show) app.handleGlobalLabelModeChoice('show_all');
-  await update;
+  await app.updateClickedFeatureLabelText();
   app.closeRightDrawer();
   return Object.keys(app.labelVisibilityOverrides).length;
 });

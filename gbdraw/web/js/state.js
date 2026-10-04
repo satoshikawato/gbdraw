@@ -555,19 +555,18 @@ const labelTextScopeDialog = reactive({
   matchingCount: 0
 });
 
+// A label text edit on a feature that has no label in the displayed Result.
+const hiddenLabelTextDialog = reactive({
+  show: false,
+  featureId: ''
+});
+
 const featureVisibilityScopeDialog = reactive({
   show: false,
   feat: null,
   mode: 'default',
   previousMode: 'default',
   scopes: []
-});
-
-const globalLabelModeDialog = reactive({
-  show: false,
-  featureId: '',
-  featureType: '',
-  resolve: null
 });
 
 // Sidebar resize state
@@ -1012,7 +1011,7 @@ export const state = {
   legendRenameDialog,
   labelTextScopeDialog,
   featureVisibilityScopeDialog,
-  globalLabelModeDialog,
+  hiddenLabelTextDialog,
   sidebarWidth,
   isResizing,
   legendEntries,

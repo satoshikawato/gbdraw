@@ -4633,20 +4633,20 @@ export const createRunAnalysis = ({
         candidateCommit.mutationPlan?.operationsByResult?.[nextSelectedResultIndex]
         || null
       );
-      const optionalLabelFeatureIds = new Set(
+      // Label visibility On draws the label whatever Show Labels and the label
+      // filters select, so it must bind. Label text alone and Off follow those
+      // settings, which may leave the feature without a label.
+      const labelOperationIds = (operations) => (operations || [])
+        .map((operation) => String(operation?.renderedId || '').trim())
+        .filter(Boolean);
+      const requiredLabelFeatureIds = Object.freeze([...new Set(labelOperationIds(
         (selectedMutationOperations?.labelVisibility || [])
-          .filter((operation) => operation?.mode === 'off')
-          .map((operation) => String(operation?.renderedId || '').trim())
-          .filter(Boolean)
-      );
-      const requiredLabelFeatureIds = Object.freeze([
-        ...new Set([
-          ...(selectedMutationOperations?.labelText || []),
-          ...(selectedMutationOperations?.labelVisibility || [])
-        ].map((operation) => String(operation?.renderedId || '').trim()).filter(
-          (renderedId) => renderedId && !optionalLabelFeatureIds.has(renderedId)
-        ))
-      ]);
+          .filter((operation) => operation?.mode === 'on')
+      ))]);
+      const optionalLabelFeatureIds = new Set(labelOperationIds([
+        ...(selectedMutationOperations?.labelText || []),
+        ...(selectedMutationOperations?.labelVisibility || [])
+      ]).filter((renderedId) => !requiredLabelFeatureIds.includes(renderedId)));
       const candidatePreviewReadiness = previewRuntime.registerReadinessExpectation({
         result: selectedCandidateResult,
         resultIndex: nextSelectedResultIndex,
@@ -5251,8 +5251,7 @@ export const createRunAnalysis = ({
   };
 
   // A label reflow re-renders the committed Session with the current editor
-  // tables (R1(c), N-16): it never reads the settings draft. The Enable Labels
-  // choice also commits its label selection with the reflowed Result.
+  // tables (R1(c), N-16): it never reads the settings draft.
   const runLabelReflowCandidate = async ({ requestId, reason, decorationContinuity }) => {
     if (mode.value === 'circular' && shouldDeferCircularPreviewUpdates.value) {
       return { status: 'skipped' };
@@ -5263,7 +5262,6 @@ export const createRunAnalysis = ({
       return { status: 'skipped' };
     }
     const generationToken = ++latestGenerationToken;
-    const labelSelection = reason === 'global-off-label-apply';
     let colorCandidate = null;
     labelReflowLastError.value = null;
     labelOverrideBuildWarning.value = '';
@@ -5290,7 +5288,6 @@ export const createRunAnalysis = ({
       }
       const canonical = projectCommittedEditorIntent({
         committed,
-        labelSelection,
         promotion: {
           featureCatalog: featureCatalog?.value ?? null,
           legacyOrthogroupState: { groups: cloneJsonData(orthogroups.value || []) }
@@ -5342,9 +5339,6 @@ export const createRunAnalysis = ({
         selectedResultIndex.value = Math.max(
           0, Math.min(previousSelectedResultIndex, execution.commit.results.length - 1)
         );
-      }
-      if (labelSelection && typeof adoptCanonicalRenderArtifacts === 'function') {
-        adoptCanonicalRenderArtifacts(canonical, { adoptOwnedRequest: true });
       }
       logPostGbdrawTimings(timingEntries);
       if (colorCandidate) rulePreparation.notifyChanges(colorCandidate);

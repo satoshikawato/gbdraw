@@ -5,6 +5,7 @@ from typing import Literal
 
 from gbdraw.exceptions import ValidationError
 from gbdraw.labels.circular_types import CircularLabelPlacement
+from gbdraw.labels.filtering import has_forced_label_overrides
 from gbdraw.labels.policy import LabelRenderingPolicy
 
 from .canvas import LinearTrackLayoutMode
@@ -22,6 +23,8 @@ class _RenderProfile:
     resolve_overlaps: bool = field(init=False)
     feature_overlap_tolerance_bp: int = field(init=False)
     label_rendering: LabelRenderingPolicy = field(init=False)
+    # A per-feature override shows its label outside the label display scope.
+    forced_labels: bool = field(init=False)
 
     def __post_init__(self) -> None:
         if not isinstance(self.config, GbdrawConfig):
@@ -34,6 +37,11 @@ class _RenderProfile:
         object.__setattr__(self, "strandedness", bool(canvas.strandedness))
         object.__setattr__(self, "resolve_overlaps", bool(canvas.resolve_overlaps))
         object.__setattr__(self, "label_rendering", self.config.labels.rendering)
+        object.__setattr__(
+            self,
+            "forced_labels",
+            has_forced_label_overrides(self.config.labels.filtering.as_dict()),
+        )
 
 
 @dataclass(frozen=True)
@@ -43,6 +51,8 @@ class CircularRenderProfile(_RenderProfile):
     label_scope: CircularLabelScope = field(init=False)
     label_placement: CircularLabelPlacement = field(init=False)
     labels_enabled: bool = field(init=False)
+    # Only per-feature overrides label features when the scope is "none".
+    labels_overrides_only: bool = field(init=False)
     inner_labels_enabled: bool = field(init=False)
 
     def __post_init__(self) -> None:
@@ -50,7 +60,8 @@ class CircularRenderProfile(_RenderProfile):
         scope = self.config.labels.circular.scope
         object.__setattr__(self, "label_scope", scope)
         object.__setattr__(self, "label_placement", self.config.labels.circular.placement)
-        object.__setattr__(self, "labels_enabled", scope != "none")
+        object.__setattr__(self, "labels_enabled", scope != "none" or self.forced_labels)
+        object.__setattr__(self, "labels_overrides_only", scope == "none")
         object.__setattr__(self, "inner_labels_enabled", scope == "both")
 
 
@@ -73,6 +84,15 @@ class LinearRenderProfile(_RenderProfile):
         object.__setattr__(self, "label_rotation", labels.rotation)
         object.__setattr__(self, "track_layout", canvas.track_layout)
         object.__setattr__(self, "ruler_on_axis", bool(canvas.ruler_on_axis))
+
+    def labels_in_scope(self, record_index: int) -> bool:
+        """Return whether the label display scope selects this record's labels."""
+        scope = self.label_scope
+        return scope in ("all", "orthogroup_top") or (scope == "first" and record_index == 0)
+
+    def record_has_labels(self, record_index: int) -> bool:
+        """Return whether this record can draw labels, in scope or by override."""
+        return self.labels_in_scope(record_index) or self.forced_labels
 
 
 RenderProfile = CircularRenderProfile | LinearRenderProfile
