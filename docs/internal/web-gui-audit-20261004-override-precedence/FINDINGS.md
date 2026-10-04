@@ -23,8 +23,11 @@
 
 ## 要約
 
-不具合は 13 件（図の誤り 4、Generate の失敗 5、無言の no-op 2、文言・状態の不一致 1、検査の抜け 1）。
+不具合は 14 件（図の誤り 5、Generate の失敗 5、無言の no-op 2、文言・状態の不一致 1、検査の抜け 1）。
+OV-15 は修正 PR のレビュー中に見つけた、`dev` に前からある不具合。OV-16 は修正中に見つけた error boundary の潜在的な欠陥で、
+利用者の操作で起きる経路は見つからなかった（件数に含めない）。
 このほか、#757 自身のテスト helper の取り残し 1 件をこのセッションで直した（OV-14）。
+各 OV の修正 PR と残る課題は「修正の状況（2026-10-05）」にまとめた。
 
 | ID | クラス | 重大度 | 症状 | 根本原因 |
 |---|---|---|---|---|
@@ -41,6 +44,8 @@
 | OV-11 | E, C | 無言の no-op | 個別編集のあとで crop や逆相補を変えると、その編集が黙って効かなくなる | RC-5 |
 | OV-12 | B | 状態の不一致 | Linear の record の並べ替えのあと、label を隠した feature の popup が Label visibility を Default と表示する | RC-5 |
 | OV-13 | D | 検査の抜け | `tests/web/error-producer-coverage.test.mjs` が OV-05〜07 の throw を含む 4 つの owner を数えていない | RC-6 |
+| OV-15 | A, B | 図の誤り | feature_type が `*` の色ルールか Feature visibility の行があると、GFF3 の入れ子の feature（gene の下の CDS など）が Generate で描かれない | RC-7 |
+| OV-16 | D | 潜在（Generate の失敗） | Generate が `runAnalysisInternal` の `try` の前で失敗すると、元の Result に戻す処理が終わらず、「Generating Diagram...」のまま止まる | RC-8 |
 
 ## 根本原因
 
@@ -75,6 +80,13 @@
   crop・逆相補・複製のどれでも正しく当たる（`gbdraw/features/placement.py::resolve_placement_inputs`）。
 - **RC-6: 検査の抜け。** `tests/web/error-producer-coverage.test.mjs` は `app/feature-editor/label-actions.js`
   （未分類 1）、`services/svg-result-ingestion.js`（22）、`app/candidate-render.js`（3）、`app/preview-runtime.js`（7）を数えない。
+- **RC-7: GFF3 の「すべての type を読む」が入れ子を平らにしない。** `gbdraw/features/visibility.py::resolve_candidate_feature_types` は、
+  色表か visibility 表に feature_type `*` の行が 1 つでもあると（action に関係なく）すべての type を読むと決める。
+  `gbdraw/io/genome.py::load_gff_fasta` はそのとき BCBio の記録をそのまま返し、Parent でつながる子（gene の下の CDS）は
+  `sub_features` に残る。type で絞る経路だけが `scan_features_recursive` で平らにする。描画は `record.features` しか見ない。
+- **RC-8: 元の Result に戻す処理が、再 mount を待つだけで自分では bind しない。** `app/preview-runtime.js::restorePreviousSelectedResult` は
+  readiness の receipt を待ち、それを作る bind は `app/watchers.js` の mount watcher だけが始める。候補を有効にする前の失敗では、
+  戻す Result が表示中のものと同じなので Vue は再 mount せず、bind が始まらない（R10: watcher の実行を不変条件の仕組みにしない）。
 
 ## 所見の詳細
 
@@ -211,6 +223,40 @@
   次の click を遮った。#757 に `e1b3d701` を足し、Show this label を選ぶようにした（B-06 と
   `mobile-feature-popup` をローカルで確認）。ボタンの accessible name にはアイコン文字が入るので、正規表現で探す。
 
+### OV-15: feature_type `*` の行で、GFF3 の入れ子の feature が描かれない
+
+- 再現（CLI、`dev` `e40e058e`）: `tests/test_inputs/NC_013668.gff3` と `.fasta` を Circular で描く。表がなければ 136 の feature を描く。
+  `--feature_visibility_table` に 1 行（record_id `*`、feature_type `*`、qualifier `product`、value `.*`、action `show`）を足すと
+  2 になり、CDS がすべて消える。警告は出ない。feature_type を `CDS` にした行なら変わらない。色表（`-t`）の feature_type `*` の行でも、
+  Linear でも同じ。Python API の `read_gff()` を `features` なしで呼んだ場合も 2 になる。
+- 再現（Web）: 同じ GFF3 と FASTA で Generate（136）。手入力の Feature visibility 規則を既定の値（record `*`、type `*`、`product`、Off）のまま、
+  どれにも当たらない value で足して Generate すると 2 になる。popup の catalog は入れ子の CDS を持つ（134）ので、popup と図が食い違う。
+  popup の Feature visibility Off は feature 自身の type と record の行を作るので、この不具合に当たらない（136 → 135）。
+  Web の色規則の画面は具体的な type しか選べないが、読み込んだ色の TSV は `*` を持てる。
+- 期待: 受け付けた行はその行の意味どおりに使われ、関係のない feature を消さない（OIPC-C03）。
+- 原因: RC-7。#771 は identity の行についてだけ、すべての type ではなく必要な type を足して読み直すことで避けていた
+  （`gbdraw/api/request_render.py::_load_request_records`）。
+- 修正: すべての type を読むときも、type で絞るときと同じく入れ子を平らにする（#781、IMPLEMENT_EXISTING_AUTHORITY: OIPC-C03）。
+  逆相補した GFF3 の record では popup の catalog の並び（と位置の `id`）が描画の開始位置の順になり、GenBank の record と同じになる。
+  `feature_index`、`svg_id`、selector、hash は変わらない（Owner に委ねられた選択として #781 に記録）。
+
+### OV-16: Generate が早い段階で失敗すると、元の Result に戻す処理が終わらない（潜在）
+
+- 見つけた経緯: #784 の修正中に、古い metadata（`record_key` がない）で `isCurrentFeature` が投げ、Generate が止まった。#784 はその原因を直した。
+- 再現（`dev` `4ae723bd`、fault injection）: 既存の `__GBDRAW_TEST_HOOKS__.onSessionLifecycleEvent` で `generation-input-resolution-start` に
+  1 回だけ例外を投げる。Session の読み込み後でも、普通に Generate した後でも、「Generating Diagram...」のまま止まる。
+  `processing` と History の `restoring` が true のまま、Undo と Save Session は無効、エラーは出ない。Cancel でも終わらない
+  （`cancelRunAnalysis` は Generate 自身の token の expectation だけを拒否する）。trace は `artifact.rollback-started` →
+  `preview.restore-bind-started` で止まる。
+- 利用者の操作で起きる経路: 見つからなかった。`try` より前で投げうる手順（`refreshCircularRecordOrder`、`prepareLinearRecordCatalog`、
+  `validateDepthInputPresence`、`resolveLinearComparisonPlan`、`isCurrentFeature`）を調べ、古い Session の fixture でも試した。
+  "Rotate record to feature" の失敗時の戻しにも同じ欠陥がある。
+- 関連（`dev`、#784 で解消）: v40 より前の Session を読み込むと feature に `record_key` がなく、`isCurrentFeature` が false を返すので、
+  source に結びついた編集があると `sourceReplaced` が true になる。
+- 原因: RC-8。
+- 修正: 戻した後も同じ root が mount されたままで、active な runtime が戻した Result のものなら、戻す処理が自分でその root を bind する
+  （#785、IMPLEMENT_EXISTING_AUTHORITY: R6、R10、PD-OI-055）。失敗は分類したエラーとして表示し、元の Result と History を保ち、再試行できる。
+
 ## 再現しなかった候補
 
 - **Feature visibility On と feature type の除外（A）**: tRNA を Features から外しても、On にした tRNA は描かれる
@@ -255,6 +301,56 @@
 | DOC-1 → PR-9 以降 | OV-01〜04、OV-05 の label、OV-11、OV-12: 個別 override を (`record_key`, 元の feature の ID と instance) で指す設計文書、続いて実装（PR-5 を置き換える） | Owner の決定 Q4 | 設計文書から |
 
 PR-1 と PR-3 は同じ根本原因（RC-4）なので 1 つの PR にまとめる。
+
+## 修正の状況（2026-10-05）
+
+Q4 の設計文書（`DESIGN-Q4-FEATURE-IDENTITY.md`、#763）は、PR-5 と DOC-1 の後の実装を PR-Q4-1〜5 に分けた。
+
+| ID | 状態 | PR |
+|---|---|---|
+| OV-01 | 修正。CLI と Source recipe は `--feature_override_table`、Web は identity の行（request schema 9、Session 45） | #766、#771、#779、#784 |
+| OV-02 | 修正。live の照合を描画した座標の selector（feature catalog 5）で行う | #784 |
+| OV-03 | 修正。選択から作る annotation の対象を identity にする（PR-Q4-5） | #788 |
+| OV-04 | 修正。label と visibility は複製ごと（設計の決定 Q1 = A）。色の「This feature only」は PD-OI-069 のとおり複製で共有 | #771、#784 |
+| OV-05 | 修正。色は #760、失敗の分類は #761、label と visibility は identity の行 | #760、#761、#784 |
+| OV-06、OV-07 | 修正。Apply の時点のダイアログ（Q1）。ダイアログを通らない経路は `LABEL_NOT_DRAWN` | #761、#764 |
+| OV-08 | 修正。request には現在の mode の record の placement だけを載せる | #762 |
+| OV-09 | 修正。Python が `FEATURE_PLACEMENT` の診断を出し、設定を変える時点でダイアログ（Q3） | #762、#768 |
+| OV-10 | 修正。Apply の時点のダイアログ（Q2）と popup の案内 | #764 |
+| OV-11 | 修正。CLI と Source recipe は #779、Web は #784 | #779、#784 |
+| OV-12 | 修正 | #784 |
+| OV-13 | 修正。4 owner を coverage に加えた | #761 |
+| OV-14 | 修正 | #757 |
+| OV-15 | 修正 | #781 |
+| OV-16 | 修正（潜在の欠陥） | #785 |
+| F | `reason` の受け渡しを削除した | #759 |
+
+規則の変更: #771 の承認の手順をきっかけに、Owner が ARCHITECTURE_EXCEPTION の承認を普通の approval にした（#778）。
+
+## 残る課題
+
+修正 PR のレビューと検証で見つけ、それぞれの PR の範囲外にしたもの。
+
+- **mode をまたぐ record key（#762）**: Circular と Linear が同じ record key（Gallery Session の `record-1` など）と同じ feature を持つと、
+  Main の placement の行が両方の mode に当たる。draft の key が mode を持たないため。
+- **Label Not Shown の最初の文（#764）**: Show Labels と filter のことしか書いていない。
+- **TSV の visibility 規則で隠した feature（#764）**: `resolveEffectiveFeatureVisibility` が評価しない規則で隠れた feature に Label On を
+  Apply しても、Q2 のダイアログが出ない。Generate は成功し、label は描かれない。
+- **Keep feature hidden の後（#764、前から）**: 隠れた feature の popup は開けない。
+- **ダイアログを通らない設定変更（#768）**: Use custom stack、preset の Reset、feature の行の削除・無効化・並べ替え、Circular の panel の
+  Separate Strands は Q3 のダイアログを出さない。Generate は #762 の `FEATURE_PLACEMENT` の診断で止まる。
+- **Python の Session と crop（#771、#786 で解消）**: Python の Session の writer は crop した record を crop 後の GenBank として保存していたので、
+  crop した Python の request から保存した identity の行と placement は、描き直すときに解決しなかった。別のセッションの #786 が、
+  入力ファイルと crop・向きを保存するようにした。`dev` `b7911c0f` で確認: `tests/fixtures/b_collide.gb` を Linear で
+  `--region TESTA:201-3800 --reverse_complement 1` と `--feature_override_table`（Off 1 行、label 文字 1 行）で描き、`--session_output` の
+  Session を CLI で描き直すと、SVG が一致し、2 つの編集が残る。
+- **GFF3 の 2 回目の読み込み（#771）**: identity の行が読み込んでいない type の feature を表示にすると、GFF3 をもう一度読む。
+- **Q4-4 の後に続くもの**: Web の "Export / Load feature edits TSV"（`--feature_override_table` の形式）は #789 で足した。
+  Gallery Session は #790 で Session 45 に作り直した。#784 の後、`tools/refresh_gallery_sessions.py` が catalog 5 の `drawnSelector` を
+  生物学的な欄の重複として拒否していたので、#790 で直した。残るのは、architecture ratchet の CW scope に残る
+  "feature-selector metadata and uniqueness index" の行を消す guard の PR。
+- **古い Session の annotation（#788）**: v45 より前の Session の `hash=` で指す annotation は identity に移さない。選択から作った行と
+  手で書いた行を区別できないため。crop などを変えると、それらは今までどおり外れうる。
 
 ## Owner の決定（2026-10-04）
 
