@@ -73,9 +73,7 @@ Every verdict requires E to be an ancestor of H.
 
 The promotion body names E, links E's evidence, and includes the `classify`
 output. Rerun on H the evidence whose verdict is false. The hand audit (step 4)
-names the `dev` SHA it audited and needs no carry rule. Until the planner change
-that adds `classify` merges, compare `git diff --name-status <E> <H>` with the
-verdict sets in `SELECTIVE_CI.md` by hand and include that comparison instead.
+names the `dev` SHA it audited and needs no carry rule.
 
 This rule carries checklist evidence only. `Promotion / gate` still requires
 exact-SHA `Dev staging / gate` and `Gallery readiness / gate` evidence on H.

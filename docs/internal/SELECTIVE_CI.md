@@ -141,12 +141,6 @@ dispatches still cancel the run they supersede.
 
 ### Light-change inheritance
 
-Status: declared policy. A later change implements the identical-tree and
-leaf-test routes, the uninterrupted Gallery publication push runs, and the
-`classify` command in `tools/ci-impact.mjs`, `tools/ci-impact-policy.mjs`,
-`test.yml`, and `gallery-publication.yml`. Until it merges, those pushes run the
-complete tier, and a newer push cancels a running Gallery publication run.
-
 A `dev` push inherits evidence only from its direct parent
 (`github.event.before`), and only when that parent has its own successful
 exact-SHA aggregate for the same workflow: `Dev staging / gate` for `Tests`, and
@@ -207,7 +201,9 @@ Shared test code is never a leaf test: `tests/conftest.py`, `tests/utils/**`,
 `tests/fixtures/**`, `tests/test_inputs/**`, `tests/reference_outputs/**`,
 `tests/web/helpers/**`, `tests/web/fixtures/**`, `*.cjs` and other support
 modules, runners such as `tests/run_*.py`, and Playwright configurations. These
-keep their current routes, which select the complete tier on `dev`.
+keep their current routes, which select the complete tier on `dev`. So does a
+file that meets the three conditions but no row of the job table below, such as
+an unlisted `tests/web/contracts/*.serial.spec.js`, because no job runs it.
 
 An added, deleted, or renamed leaf test (both endpoints of a rename) is a leaf
 change only when no runner list changes with it. pytest collects
@@ -232,10 +228,13 @@ still names it fails in that job.
 | `tests/web/contracts/vibrio-full-generation.serial.spec.js` | Release-only `vibrio-generate-release`, `deploy_web.yml` | None; the plan records it as release-only |
 | `tests/test_*.py` | pytest jobs, selected by marker | `core`, plus `recipes-standard`, `gallery`, and `browser` for each of the `recipe`, `gallery`, and `browser` markers named in the file; all four when the markers cannot be read from the file |
 
-For a restricted functional run, each of the eight shards intersects its list in
-`tests/ci/functional-shards.json` with the changed specs and passes only those
-files to Playwright. A shard with no changed spec succeeds without starting
-Playwright, so the shard matrix and its aggregate stay unchanged.
+For a restricted functional run, each of the eight shards runs
+`node tools/ci-impact.mjs shard-files <shard>`, which intersects its list in
+`tests/ci/functional-shards.json` with the changed specs, and passes only those
+files to Playwright. A shard with no changed spec skips its setup and succeeds,
+so the shard matrix and its aggregate stay unchanged. Every other plan, and a
+pull request plan from a trusted base with an older plan schema, runs the whole
+shard list.
 
 `Gallery publication` runs `browser` (`npm run test:web:gallery-publication`)
 only when a changed leaf test is a spec it runs, which today is only the Gallery
@@ -263,13 +262,15 @@ for a Web test, does not matter.
 | --- | --- | --- |
 | `releaseEvidenceCarries` | Metadata; documentation and policy documentation outside `docs/recipes/` and `docs/capture/`; leaf tests whose tests run only in jobs the dev tier also runs on the same Python versions: `.test.mjs` files, functional and performance specs, the Gallery parity spec (Gallery publication runs it on H), and `tests/test_*.py` files that name none of the `slow`, `recipe`, `gallery`, and `browser` markers | The `Tests` release-tier run |
 | `generatedArtifactChecksCarry` | Metadata; documentation and policy documentation outside `docs/images/`, `docs/capture/`, and `docs/recipes/`; `ci-only` paths; leaf tests | The Gallery refresh, Gallery tutorial media, and docs GUI capture checks, and the Gallery artifact manifest |
-| `localTestEvidenceCarries` | Metadata; documentation and policy documentation outside `docs/recipes/`; leaf tests that the dev tier runs | Recipe runs (`run_cli_scenarios.py` and `run_python_scenarios.py` with `--all --check`), `TestOutputComparison`, the `tools/audit/` sweeps, and the `main`-written Session fixture tests |
+| `localTestEvidenceCarries` | Metadata; documentation and policy documentation outside `docs/recipes/`; leaf tests, except `tests/test_*.py` files with a `slow` marker or unreadable markers | Recipe runs (`run_cli_scenarios.py` and `run_python_scenarios.py` with `--all --check`), `TestOutputComparison`, the `tools/audit/` sweeps, and the `main`-written Session fixture tests |
 
 The release tier runs the Vibrio full-generation spec (`vibrio-generate-release`),
 tests marked `slow` (`slow-main`), and tests marked `recipe`, `gallery`, or
 `browser` on Python 3.10 and 3.12 (`acceptance-supported-main`). The dev tier
 repeats none of these, so changing them does not carry release evidence. When
 the markers of a Python test cannot be read from the file, the verdict is false.
+A changed leaf test that is itself one of the local checks reruns on H in the
+dev tier, unless it is marked `slow`.
 Shared test code feeds the generators, the sweeps, and the local checks, so a
 change to it meets no verdict. `docs/recipes/` and `docs/capture/` hold
 executable scenario runners and expected outputs that recipe and capture tests
@@ -367,7 +368,10 @@ remain stable. `Release / gate` is separate and requires every release-profile
 job, including both exhaustive matrices, plus exact-candidate Gallery readiness.
 A release dispatch cannot emit ordinary `Dev staging / gate` success.
 
-Plans use schema 2 and include the capability union. The active helper validates
+Plans use schema 3 and include the capability union. A leaf-test plan also lists
+each changed leaf test with its kind and jobs (`leafTests`; `null` in every other
+plan), and an identical-tree plan has the single capability `none` and no changed
+path. The active helper validates
 its own exact schema, profile, workflow SHA, required job list, and inherited
 evidence. It rejects missing/skipped/failed/cancelled required jobs and unexpected
 failures in optional/additional jobs. Matrix aggregates must succeed. Workflows

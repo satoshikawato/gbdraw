@@ -631,25 +631,36 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Set up Python 3.11
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.11"
-          cache: pip
-          cache-dependency-path: pyproject.toml
-
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
           node-version: "20"
           cache: npm
 
+      # A leaf-test plan runs only the changed specs; a shard without one skips its setup and
+      # succeeds (docs/internal/SELECTIVE_CI.md "Jobs for changed leaf tests").
+      - name: Select the changed specs of this shard
+        id: shard
+        env:
+          CI_IMPACT_PLAN_JSON: ${{ needs.ci-impact.outputs.plan }}
+        run: node tools/ci-impact.mjs shard-files ${{ matrix.shard }}
+
+      - name: Set up Python 3.11
+        if: steps.shard.outputs.files != ''
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: pyproject.toml
+
       - name: Install Playwright functional dependencies
+        if: steps.shard.outputs.files != ''
         run: |
           python -m pip install -e ".[dev]"
           npm ci
 
       - name: Restore Playwright system packages
+        if: steps.shard.outputs.files != ''
         id: playwright-apt
         uses: actions/cache/restore@v4
         with:
@@ -658,6 +669,7 @@ jobs:
           restore-keys: playwright-apt-v1-${{ runner.os }}-${{ runner.arch }}-
 
       - name: Install Playwright Chromium and system packages
+        if: steps.shard.outputs.files != ''
         id: playwright-install
         run: |
           # Seed apt with cached .deb files; apt checks each against the signed index.
@@ -681,15 +693,18 @@ jobs:
           key: ${{ steps.playwright-install.outputs.apt-cache-key }}
 
       - name: Prepare browser wheel
+        if: steps.shard.outputs.files != ''
         run: python tools/prepare_browser_wheel.py
 
       - name: Run Playwright functional tests
+        if: steps.shard.outputs.files != ''
         env:
           PLAYWRIGHT_JSON_OUTPUT_NAME: test-results/functional-report.json
+          FUNCTIONAL_SPECS: ${{ steps.shard.outputs.files }}
         # Each shard runs the spec files that tests/ci/functional-shards.json assigns
         # to it by measured duration; docs/internal/SELECTIVE_CI.md explains rebalancing.
         run: |
-          files="$(node -p "require('./tests/ci/functional-shards.json').shards[${{ matrix.shard }} - 1].join(' ')")"
+          files="$FUNCTIONAL_SPECS"
           npm run test:web:functional-full -- --reporter=line,github,json $files
 
       - name: Upload Playwright functional traces and report

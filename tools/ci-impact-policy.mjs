@@ -1,10 +1,11 @@
 const freeze = (value) => Object.freeze(value);
 
-export const IMPACT_PLAN_SCHEMA_VERSION = 2;
+export const IMPACT_PLAN_SCHEMA_VERSION = 3;
 
 // Ordered only for the summary label. Routing unions every affected capability.
+// `none` marks an identical tree; no path classifies as `none`.
 export const IMPACT_CLASSES = freeze([
-  'metadata', 'documentation', 'policy-documentation', 'tests-only', 'python-core', 'renderer',
+  'none', 'metadata', 'documentation', 'policy-documentation', 'tests-only', 'python-core', 'renderer',
   'web-runtime', 'session-persistence', 'gallery', 'losat-integration',
   'packaging', 'ci-only', 'full'
 ]);
@@ -12,7 +13,13 @@ export const IMPACT_DECISIONS = freeze(['selective', 'full']);
 export const IMPACT_PLAN_BASES = freeze([
   'FULL_CHANGE', 'UNKNOWN_OR_INVALID_CHANGE', 'MANUAL_FULL_RUN',
   'ARCHITECTURE_CHANGE', 'DOCUMENTATION_ONLY_PR', 'LIGHT_CHANGE_WITH_DIRECT_BASE_EVIDENCE',
-  'LIGHT_CHANGE_WITH_DIRECT_PARENT_EVIDENCE', 'INHERITED_EVIDENCE_UNAVAILABLE'
+  'LIGHT_CHANGE_WITH_DIRECT_PARENT_EVIDENCE', 'INHERITED_EVIDENCE_UNAVAILABLE',
+  'IDENTICAL_TREE_WITH_DIRECT_PARENT_EVIDENCE', 'LEAF_TEST_CHANGE_WITH_DIRECT_PARENT_EVIDENCE'
+]);
+const IDENTICAL_TREE_BASIS = 'IDENTICAL_TREE_WITH_DIRECT_PARENT_EVIDENCE';
+const LEAF_TEST_BASIS = 'LEAF_TEST_CHANGE_WITH_DIRECT_PARENT_EVIDENCE';
+const PARENT_EVIDENCE_BASES = freeze([
+  'LIGHT_CHANGE_WITH_DIRECT_PARENT_EVIDENCE', IDENTICAL_TREE_BASIS, LEAF_TEST_BASIS
 ]);
 
 // The full PR tier. Functional Playwright joins it only through the capabilities below.
@@ -33,6 +40,7 @@ const PROFILE_REQUIRED_JOBS = freeze({
   gallery: freeze(['browser', 'performance'])
 });
 const PR_CAPABILITY_JOBS = freeze({
+  none: freeze([]),
   metadata: freeze([]),
   documentation: freeze(['recipes-standard']),
   'policy-documentation': freeze(['web-change-budget']),
@@ -50,12 +58,15 @@ const PR_CAPABILITY_JOBS = freeze({
 
 // Runtime changes always receive comprehensive integrated-dev/Gallery validation.
 // Control-plane, dependency, and unknown changes cannot inherit a narrower route.
+const LIGHT_CLASSES = freeze(['metadata', 'documentation', 'policy-documentation']);
+// Leaf tests carry the capability of the subject they exercise (or tests-only).
+const LEAF_SUBJECT_CLASSES = freeze(['tests-only', 'web-runtime', 'session-persistence', 'gallery', 'losat-integration']);
 export const requiresFullCoverage = (profile, capabilities) => profile === 'release'
   || capabilities.some((capability) => ['full', 'ci-only', 'packaging', 'tests-only'].includes(capability))
-  || (profile !== 'pr' && capabilities.some((capability) => !['metadata', 'documentation', 'policy-documentation'].includes(capability)));
+  || (profile !== 'pr' && capabilities.some((capability) => !LIGHT_CLASSES.includes(capability)));
 export const isDocumentationOnly = (capabilities) => Array.isArray(capabilities)
   && capabilities.some((capability) => ['documentation', 'policy-documentation'].includes(capability))
-  && capabilities.every((capability) => ['metadata', 'documentation', 'policy-documentation'].includes(capability));
+  && capabilities.every((capability) => LIGHT_CLASSES.includes(capability));
 const orderedCapabilities = (capabilities) => IMPACT_CLASSES.filter((capability) => capabilities.includes(capability));
 const primaryImpact = (capabilities) => capabilities.at(-1);
 const FULL_OBJECT_ID = /^(?:[0-9a-f]{40}|[0-9a-f]{64})$/i;
@@ -89,8 +100,10 @@ const PLAN_KEYS = freeze([
   'workflowSha',
   'requiredJobs',
   'changedPathCount',
-  'inheritedEvidence'
+  'inheritedEvidence',
+  'leafTests'
 ]);
+const LEAF_TEST_KEYS = freeze(['path', 'kind', 'jobs']);
 const EVIDENCE_KEYS = freeze([
   'workflowPath',
   'aggregateName',
@@ -197,6 +210,55 @@ export const classifyPath = (path) => {
   return classified('full', 'FULL_BY_DEFAULT');
 };
 
+// Specs that only a dedicated Playwright configuration runs (SELECTIVE_CI.md "Leaf tests").
+export const GALLERY_PARITY_SPEC = 'tests/web/contracts/gallery-publication-parity.serial.spec.js';
+export const VIBRIO_FULL_GENERATION_SPEC = 'tests/web/contracts/vibrio-full-generation.serial.spec.js';
+export const LEAF_TEST_KINDS = freeze(['python', 'node', 'functional', 'performance', 'gallery-parity', 'release-only']);
+const PYTEST_JOBS = freeze(['core', 'recipes-standard', 'gallery', 'browser']);
+const PYTEST_MARKER_JOBS = freeze({ recipe: 'recipes-standard', gallery: 'gallery', browser: 'browser' });
+const LEAF_KIND_JOBS = freeze({
+  dev: freeze({
+    node: freeze(['browser']),
+    functional: freeze(['playwright-functional']),
+    performance: freeze(['playwright-performance']),
+    'gallery-parity': freeze([]),
+    'release-only': freeze([])
+  }),
+  gallery: freeze({
+    node: freeze([]),
+    functional: freeze([]),
+    performance: freeze([]),
+    'gallery-parity': freeze(['browser']),
+    'release-only': freeze([])
+  })
+});
+
+// The runner kind of a path that may be a leaf test, from its path alone. A functional spec
+// must also be listed in tests/ci/functional-shards.json, and no other file may name it.
+export const leafTestKind = (path) => {
+  if (!isValidRepositoryPath(path) || classifyPath(path).impact === 'ci-only') return null;
+  if (/^tests\/test_[^/]+\.py$/.test(path)) return 'python';
+  if (path === GALLERY_PARITY_SPEC) return 'gallery-parity';
+  if (path === VIBRIO_FULL_GENERATION_SPEC) return 'release-only';
+  if (/^tests\/web\/(?:[^/]+\/)*[^/]*performance\.playwright\.spec\.js$/.test(path)) return 'performance';
+  if (/^tests\/web\/(?:[^/]+\/)*[^/]+\.playwright\.spec\.js$/.test(path)) return 'functional';
+  if (/^tests\/web\/(?:[^/]+\/)*[^/]+\.test\.mjs$/.test(path)) return 'node';
+  return null;
+};
+
+// `markers` lists the selection markers named in a Python test file, or is null when they
+// cannot be read; null selects every pytest job of the dev tier.
+export const leafJobsFor = ({ profile, kind, markers = null }) => {
+  if (!['dev', 'gallery'].includes(profile) || !LEAF_TEST_KINDS.includes(kind)) {
+    fail('INVALID_LEAF_TESTS', 'Leaf tests route only dev and Gallery pushes of known kinds.', { profile, kind });
+  }
+  if (kind !== 'python') return LEAF_KIND_JOBS[profile][kind];
+  if (profile === 'gallery') return freeze([]);
+  if (markers === null) return PYTEST_JOBS;
+  const selected = ['core', ...markers.map((marker) => PYTEST_MARKER_JOBS[marker]).filter(Boolean)];
+  return freeze(PYTEST_JOBS.filter((job) => selected.includes(job)));
+};
+
 const validScoredStatus = (status) => {
   const match = status.match(/^([RC])(\d{1,3})$/);
   return Boolean(match) && Number(match[2]) <= 100;
@@ -256,7 +318,39 @@ export const classifyChanges = (changes) => {
   });
 };
 
-export const requiredJobsFor = ({ profile, impact, decision, capabilities = [impact] }) => {
+const validateLeafTests = ({ profile, capabilities, leafTests }) => {
+  const invalid = (message, details = {}) => fail('INVALID_LEAF_TESTS', message, details);
+  if (!Array.isArray(leafTests) || leafTests.length === 0) invalid('A leaf-test plan lists at least one leaf test.');
+  leafTests.forEach((entry, index) => {
+    if (!sameKeys(entry, LEAF_TEST_KEYS) || leafTestKind(entry.path) === null || entry.kind !== leafTestKind(entry.path)
+        || !Array.isArray(entry.jobs)) {
+      invalid('Leaf test entry has an invalid path, kind, or schema.', { index });
+    }
+    if (index > 0 && leafTests[index - 1].path >= entry.path) invalid('Leaf tests must be unique and sorted.', { index });
+    const expected = entry.kind === 'python' && profile === 'dev'
+      ? PYTEST_JOBS.filter((job) => entry.jobs.includes(job))
+      : leafJobsFor({ profile, kind: entry.kind });
+    if (JSON.stringify(entry.jobs) !== JSON.stringify(expected)
+        || (entry.kind === 'python' && profile === 'dev' && entry.jobs[0] !== 'core')) {
+      invalid('Leaf test jobs do not match its kind.', { path: entry.path, jobs: entry.jobs });
+    }
+  });
+  const leafClasses = leafTests.map(({ path }) => classifyPath(path).impact);
+  if (capabilities.some((capability) => !LIGHT_CLASSES.includes(capability) && !leafClasses.includes(capability))
+      || leafClasses.some((capability) => !capabilities.includes(capability))
+      || capabilities.some((capability) => ![...LIGHT_CLASSES, ...LEAF_SUBJECT_CLASSES].includes(capability))) {
+    invalid('Leaf-test plan capabilities must come from documentation and the listed leaf tests.', { capabilities });
+  }
+};
+
+export const requiredJobsFor = ({
+  profile,
+  impact,
+  decision,
+  capabilities = [impact],
+  basis,
+  leafTests = null
+}) => {
   assertProfile(profile);
   assertImpact(impact);
   if (!IMPACT_DECISIONS.includes(decision)) {
@@ -268,10 +362,22 @@ export const requiredJobsFor = ({ profile, impact, decision, capabilities = [imp
       || primaryImpact(capabilities) !== impact) {
     fail('INVALID_CAPABILITIES', 'Capabilities must be known, ordered, unique, and match the impact.');
   }
+  const all = PROFILE_REQUIRED_JOBS[profile];
+  if (decision === 'selective' && basis === IDENTICAL_TREE_BASIS) return freeze([]);
+  if (decision === 'selective' && basis === LEAF_TEST_BASIS) {
+    validateLeafTests({ profile, capabilities, leafTests });
+    const selected = [
+      ...(profile === 'dev'
+        ? capabilities.filter((capability) => LIGHT_CLASSES.includes(capability))
+          .flatMap((capability) => PR_CAPABILITY_JOBS[capability])
+        : []),
+      ...leafTests.flatMap(({ jobs }) => jobs)
+    ];
+    return freeze(all.filter((job) => selected.includes(job)));
+  }
   if (decision === 'selective' && requiresFullCoverage(profile, capabilities)) {
     fail('INVALID_SELECTIVE_PLAN', 'This impact requires full coverage.');
   }
-  const all = PROFILE_REQUIRED_JOBS[profile];
   if (decision === 'full' && profile !== 'pr') return freeze([...all]);
   const selected = profile === 'pr'
     ? [
@@ -308,22 +414,32 @@ const validateBasis = (plan) => {
   if (!IMPACT_PLAN_BASES.includes(plan.basis)) {
     fail('UNKNOWN_BASIS', 'CI impact basis is not supported.', { basis: plan.basis });
   }
-  const selectiveBasis = plan.profile === 'pr'
-    ? 'LIGHT_CHANGE_WITH_DIRECT_BASE_EVIDENCE'
-    : 'LIGHT_CHANGE_WITH_DIRECT_PARENT_EVIDENCE';
+  const selectiveBases = plan.profile === 'pr'
+    ? ['LIGHT_CHANGE_WITH_DIRECT_BASE_EVIDENCE']
+    : plan.profile === 'release' ? [] : PARENT_EVIDENCE_BASES;
   const documentationOnlyPr = plan.basis === 'DOCUMENTATION_ONLY_PR';
   if (documentationOnlyPr && (plan.profile !== 'pr' || plan.decision !== 'selective'
       || !isDocumentationOnly(plan.capabilities))) {
     fail('BASIS_DECISION_MISMATCH', 'Documentation-only PR basis requires only documentation and metadata.');
   }
-  if (plan.decision === 'selective' && !documentationOnlyPr && plan.basis !== selectiveBasis) {
+  if (plan.decision === 'selective' && !documentationOnlyPr && !selectiveBases.includes(plan.basis)) {
     fail('BASIS_DECISION_MISMATCH', 'Selective decision does not match its evidence basis.');
   }
   if (plan.decision === 'full' && [
     'LIGHT_CHANGE_WITH_DIRECT_BASE_EVIDENCE',
-    'LIGHT_CHANGE_WITH_DIRECT_PARENT_EVIDENCE'
+    ...PARENT_EVIDENCE_BASES
   ].includes(plan.basis)) {
     fail('BASIS_DECISION_MISMATCH', 'Full decision cannot claim inherited evidence.');
+  }
+  const identicalTree = Array.isArray(plan.capabilities) && plan.capabilities.includes('none');
+  if ((plan.basis === IDENTICAL_TREE_BASIS || identicalTree)
+      && (!identicalTree || plan.capabilities.length !== 1 || plan.changedPathCount !== 0
+        || !['dev', 'gallery'].includes(plan.profile)
+        || ![IDENTICAL_TREE_BASIS, 'INHERITED_EVIDENCE_UNAVAILABLE'].includes(plan.basis))) {
+    fail('BASIS_IMPACT_MISMATCH', 'Only a proven identical tree has no changed path.');
+  }
+  if (plan.basis !== LEAF_TEST_BASIS && plan.leafTests !== null) {
+    fail('UNEXPECTED_LEAF_TESTS', 'Only a leaf-test plan lists leaf tests.');
   }
   if (['UNKNOWN_OR_INVALID_CHANGE', 'MANUAL_FULL_RUN'].includes(plan.basis)
       && plan.impact !== 'full') {
@@ -393,6 +509,7 @@ export const validateImpactPlan = (plan, expected = {}) => {
 };
 
 export const createImpactPlan = (fields) => {
+  validateBasis({ ...fields, capabilities: fields.capabilities ?? [fields.impact], leafTests: fields.leafTests ?? null });
   const plan = {
     schemaVersion: IMPACT_PLAN_SCHEMA_VERSION,
     profile: fields.profile,
@@ -405,10 +522,14 @@ export const createImpactPlan = (fields) => {
     workflowSha: fields.workflowSha,
     requiredJobs: requiredJobsFor(fields),
     changedPathCount: fields.changedPathCount,
-    inheritedEvidence: fields.inheritedEvidence
+    inheritedEvidence: fields.inheritedEvidence,
+    leafTests: fields.leafTests ?? null
   };
   validateImpactPlan(plan);
   if (plan.inheritedEvidence !== null) freeze(plan.inheritedEvidence);
+  if (plan.leafTests !== null) {
+    plan.leafTests = freeze(plan.leafTests.map((entry) => freeze({ ...entry, jobs: freeze([...entry.jobs]) })));
+  }
   freeze(plan.requiredJobs);
   return freeze(plan);
 };
@@ -474,5 +595,32 @@ export const validateGateResults = ({
     workflowSha: plan.workflowSha,
     inheritedEvidence: plan.inheritedEvidence !== null,
     jobs: freeze(observed)
+  });
+};
+
+// SELECTIVE_CI.md "Carrying evidence to a later commit". `entries` hold each changed path with
+// its leaf-test facts ({ kind, markers }) or null.
+const DOC_PREFIXES = freeze({
+  release: freeze(['docs/recipes/', 'docs/capture/']),
+  generated: freeze(['docs/images/', 'docs/capture/', 'docs/recipes/']),
+  local: freeze(['docs/recipes/'])
+});
+const DEV_TIER_LEAF_KINDS = freeze(['node', 'functional', 'performance', 'gallery-parity']);
+
+export const carryForwardVerdicts = ({ ancestor, valid, identicalTree, entries }) => {
+  const verdict = (accepts) => Boolean(ancestor) && Boolean(valid)
+    && (Boolean(identicalTree) || (Array.isArray(entries) && entries.length > 0 && entries.every(accepts)));
+  const documentary = ({ path }, prefixes) => LIGHT_CLASSES.includes(classifyPath(path).impact)
+    && !prefixes.some((prefix) => path.startsWith(prefix));
+  const markersKnown = (leaf) => Array.isArray(leaf.markers);
+  return freeze({
+    releaseEvidenceCarries: verdict((entry) => documentary(entry, DOC_PREFIXES.release)
+      || (entry.leaf !== null && (DEV_TIER_LEAF_KINDS.includes(entry.leaf.kind)
+        || (entry.leaf.kind === 'python' && markersKnown(entry.leaf) && entry.leaf.markers.length === 0)))),
+    generatedArtifactChecksCarry: verdict((entry) => documentary(entry, DOC_PREFIXES.generated)
+      || classifyPath(entry.path).impact === 'ci-only' || entry.leaf !== null),
+    localTestEvidenceCarries: verdict((entry) => documentary(entry, DOC_PREFIXES.local)
+      || (entry.leaf !== null && (entry.leaf.kind !== 'python'
+        || (markersKnown(entry.leaf) && !entry.leaf.markers.includes('slow')))))
   });
 };
