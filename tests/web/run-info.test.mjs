@@ -1171,6 +1171,62 @@ test('a Linear scale font without a ruler-label font is not a lossless recipe (G
   }
 });
 
+// Design Q4 (PR-Q4-1): identical features share an original-coordinate hash, so
+// the placement row must name the complete biological feature ID with hash=.
+test('placement recipe names one of two identical features and the CLI replays it', async () => {
+  const genbank = [
+    'LOCUS       dup                      120 bp    DNA     linear   UNK 01-JAN-1980',
+    'DEFINITION  Identical CDS fixture.',
+    'FEATURES             Location/Qualifiers',
+    '     CDS             21..80',
+    '                     /locus_tag="first"',
+    '     CDS             21..80',
+    '                     /locus_tag="second"',
+    'ORIGIN',
+    '        1 atgatgatga tgatgatgat gatgatgatg atgatgatga tgatgatgat gatgatgatg',
+    '       61 atgatgatga tgatgatgat gatgatgatg atgatgatga tgatgatgat gatgatgatg',
+    '//',
+    ''
+  ].join('\n');
+  const catalog = spawnSync(process.env.PYTHON || 'python', ['-c', [
+    'import io, json, sys',
+    'from Bio import SeqIO',
+    'from gbdraw.features.source import build_source_feature_catalog',
+    'record = SeqIO.read(io.StringIO(sys.argv[1]), "genbank")',
+    'print(json.dumps([entry.biological_feature_id for entry in build_source_feature_catalog(record)]))'
+  ].join('\n'), genbank], { cwd: repoRoot, encoding: 'utf8' });
+  assert.equal(catalog.status, 0, catalog.stderr);
+  const [first, second] = JSON.parse(catalog.stdout);
+  assert.equal(first.replace(/~0$/, '~1'), second);
+  const session = canonical({
+    mode: 'circular',
+    records: [{
+      recordKey: 'dup',
+      cardinality: 'exactly_one',
+      source: { kind: 'genbank', resourceId: 'source' },
+      selector: null,
+      region: null,
+      presentation: presentation(),
+      display: { isCircular: null, startCoordinate: null }
+    }],
+    resources: { source: resource('genbank', 'source-dup.gbk', genbank) },
+    webFiles: { resourceOriginalNames: { source: 'dup.gbk' } }
+  });
+  session.renderRequest.schema = 8;
+  session.renderRequest.diagramOptions.featurePlacements = [
+    { recordKey: 'dup', biologicalFeatureId: second, placement: { kind: 'main' } }
+  ];
+  const recipe = await buildSourceRecipe(session);
+  assert.equal(recipe.available, true, recipe.unavailableReason);
+  const table = recipe.generatedFiles.find(
+    ({ slot }) => slot === 'generatedFiles.source_recipe.feature_placements'
+  );
+  assert.match(table.data, new RegExp(`\\n#1\\thash=${second}\\tmain\\t`));
+  await materializeAndRunRecipe(
+    session, recipe, buildRunInfo({ mode: recipe.mode, sourceRecipe: recipe }), 'identical features'
+  );
+});
+
 // PD-OI-018 revision 4 and D-40: Run Info states the LOSAT E-value database.
 test('Run Info states the LOSAT search database only when LOSAT comparisons are present', () => {
   const recipe = { mode: 'linear', available: true, args: ['--gbk', '/a.gb'], fileMetadata: [] };

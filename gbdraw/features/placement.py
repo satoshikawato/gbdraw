@@ -14,16 +14,14 @@ if TYPE_CHECKING:
 
 from pandas import DataFrame, isna
 
-from gbdraw.annotations.models import parse_feature_selector
-from gbdraw.core.record_metadata import (
-    _feature_source_index_map,
-    _iter_source_features,
-    _source_feature_index,
-)
 from gbdraw.exceptions import ValidationError
-from gbdraw.io.record_select import parse_record_selector, select_record
 from .shapes import resolve_feature_rendering
-from .source import SourceFeatureIdentity
+from .source import (
+    FeatureIdentity,
+    SourceFeatureIdentity,
+    resolve_feature_identities,
+    resolve_identity_table_rows,
+)
 from .visibility import should_render_feature
 
 
@@ -85,15 +83,15 @@ class FeaturePlacementOverride:
     target: FeaturePlacementTarget
 
     def __post_init__(self) -> None:
-        for name in ("record_key", "biological_feature_id"):
-            value = getattr(self, name)
-            if not isinstance(value, str) or not value.strip() or "\0" in value:
-                raise ValidationError(
-                    f"{name} must be a non-empty identity without NUL."
-                )
-            object.__setattr__(self, name, value.strip())
+        identity = self.identity
+        object.__setattr__(self, "record_key", identity.record_key)
+        object.__setattr__(self, "biological_feature_id", identity.biological_feature_id)
         if not isinstance(self.target, FeaturePlacementTarget):
             raise ValidationError("target must be FeaturePlacementTarget.")
+
+    @property
+    def identity(self) -> FeatureIdentity:
+        return FeatureIdentity(self.record_key, self.biological_feature_id)
 
     @classmethod
     def from_mapping(cls, value: Mapping[str, object]) -> FeaturePlacementOverride:
@@ -121,9 +119,7 @@ def normalize_feature_placements(
         raise ValidationError(
             "feature_placements must contain FeaturePlacementOverride values."
         )
-    if len({(item.record_key, item.biological_feature_id) for item in values}) != len(
-        values
-    ):
+    if len({item.identity for item in values}) != len(values):
         raise ValidationError("Duplicate feature placement identity.")
     return tuple(
         sorted(values, key=lambda item: (item.record_key, item.biological_feature_id))
@@ -225,119 +221,85 @@ def resolve_placement_inputs(
     feature_shapes: Mapping | None,
 ) -> tuple[tuple[FeaturePlacementOverride, ...], tuple[ResolvedPlacementInputs, ...]]:
     """Materialize exactly-one source selectors and classify present/dormant intent."""
-    if not (
-        len(records)
-        == len(record_keys)
-        == len(source_record_ids)
-        == len(source_catalogs)
-    ):
-        raise ValidationError(
-            "Placement source context must align with records/provenance."
-        )
-    if len(set(record_keys)) != len(record_keys):
-        raise ValidationError("Placement context contains duplicate record keys.")
     exact = normalize_feature_placements(overrides)
     if table is not None:
         if exact:
             raise ValidationError(
                 "Exact placements and placement table inputs are mutually exclusive."
             )
-        rows, seen = [], set()
+        targets, selectors = [], []
         for row_number, row in enumerate(_placement_table_rows(table), start=2):
             try:
-                target = _table_target(row, mode)
-                selector = parse_record_selector(_cell(row.get("record")))
-                selected = select_record(records, selector)
-                if len(selected) != 1:
-                    raise ValidationError(
-                        "Placement record selector must match exactly one record; use #index."
-                    )
-                index = next(
-                    index
-                    for index, record in enumerate(records)
-                    if record is selected[0]
+                targets.append(_table_target(row, mode))
+                selectors.append(
+                    (_cell(row.get("record")), _cell(row.get("feature_selector")))
                 )
-                feature_selector = parse_feature_selector(
-                    _cell(row.get("feature_selector"))
-                )
-                matched = [
-                    entry
-                    for entry in source_catalogs[index]
-                    if entry.matches(
-                        key=feature_selector.key,
-                        value=feature_selector.value,
-                        record_id=source_record_ids[index],
-                    )
-                ]
-                if len(matched) != 1:
-                    raise ValidationError(
-                        f"Feature placement selector must match exactly one source feature; matched {len(matched)}."
-                    )
-                identity = record_keys[index], matched[0].biological_feature_id
-                if identity in seen:
-                    raise ValidationError(
-                        "Duplicate resolved feature placement identity."
-                    )
-                seen.add(identity)
-                if target is not None:
-                    rows.append(FeaturePlacementOverride(*identity, target))
             except (ValueError, ValidationError) as exc:
                 raise ValidationError(
                     f"Feature placement table row {row_number}: {exc}"
                 ) from exc
-        exact = normalize_feature_placements(rows)
-    by_key = {key: [] for key in record_keys}
-    for placement_index, item in enumerate(exact):
+        identities = resolve_identity_table_rows(
+            selectors,
+            table="Feature placement table",
+            records=records,
+            record_keys=record_keys,
+            source_record_ids=source_record_ids,
+            source_catalogs=source_catalogs,
+        )
+        exact = normalize_feature_placements([
+            FeaturePlacementOverride(identity.record_key, identity.biological_feature_id, target)
+            for identity, target in zip(identities, targets, strict=True)
+            if target is not None
+        ])
+    for item in exact:
         item.target.validate_mode(mode)
-        if item.record_key not in by_key:
-            raise ValidationError(f"Unknown placement record key {item.record_key!r}.")
-        by_key[item.record_key].append((placement_index, item))
-    aligned = []
-    for record, key, catalog in zip(records, record_keys, source_catalogs, strict=True):
-        known = {entry.biological_feature_id: entry for entry in catalog}
-        runtime = {}
-        indexes = _feature_source_index_map(record.features)
-        for feature in _iter_source_features(record.features):
-            index = _source_feature_index(feature)
-            runtime[indexes[id(feature)] if index is None else index] = feature
-        foreground_candidates = {id(feature) for feature in record.features}
-        resolved = []
-        for placement_index, item in by_key[key]:
-            source = known.get(item.biological_feature_id)
-            if source is None:
-                raise ValidationError(
-                    f"Unknown/stale placement identity ({key!r}, {item.biological_feature_id!r})."
-                )
-            feature = runtime.get(source.source_feature_index)
-            if feature is None:
-                status = (
-                    "crop_excluded"
-                    if record.annotations.get("gbdraw_region_applied")
-                    else "hidden"
-                )
-            elif id(feature) not in foreground_candidates or not should_render_feature(
-                feature,
-                selected_features,
-                feature_visibility_rules=feature_visibility_rules,
-                record_id=record.id,
-                specific_color_rules=specific_color_rules,
-            ):
-                status = "hidden"
-            elif resolve_feature_rendering(feature.type, feature_shapes) == "underlay":
-                status = "underlay"
-            else:
-                status = "foreground"
-            resolved.append(
-                ResolvedFeaturePlacement(
-                    item.biological_feature_id,
-                    source.source_feature_index,
-                    item.target,
-                    status,
-                    placement_index,
-                )
+    bindings = resolve_feature_identities(
+        records=records,
+        record_keys=record_keys,
+        source_catalogs=source_catalogs,
+        identities=(item.identity for item in exact),
+    )
+    resolved: list[list[ResolvedFeaturePlacement]] = [[] for _ in records]
+    # Nested source features are never foreground placement units.
+    top_level = {
+        index: {id(feature) for feature in records[index].features}
+        for index in {binding.record_index for binding in bindings.values()}
+    }
+    for placement_index, item in enumerate(exact):
+        binding = bindings[item.identity]
+        if binding.status == "unresolved":
+            raise ValidationError(
+                f"Unknown/stale placement identity ({item.record_key!r}, {item.biological_feature_id!r})."
             )
-        aligned.append(ResolvedPlacementInputs(key, tuple(resolved)))
-    return exact, tuple(aligned)
+        record = records[binding.record_index]
+        feature = binding.feature
+        if binding.status != "present":
+            status = "crop_excluded" if binding.status == "crop_excluded" else "hidden"
+        elif id(feature) not in top_level[binding.record_index] or not should_render_feature(
+            feature,
+            selected_features,
+            feature_visibility_rules=feature_visibility_rules,
+            record_id=record.id,
+            specific_color_rules=specific_color_rules,
+        ):
+            status = "hidden"
+        elif resolve_feature_rendering(feature.type, feature_shapes) == "underlay":
+            status = "underlay"
+        else:
+            status = "foreground"
+        resolved[binding.record_index].append(
+            ResolvedFeaturePlacement(
+                item.biological_feature_id,
+                binding.source_feature_index,
+                item.target,
+                status,
+                placement_index,
+            )
+        )
+    return exact, tuple(
+        ResolvedPlacementInputs(key, tuple(items))
+        for key, items in zip(record_keys, resolved, strict=True)
+    )
 
 
 @dataclass(frozen=True)

@@ -1540,7 +1540,8 @@ export const buildSourceRecipe = async ({
       const rows = placements.map((row) => {
         const index = renderRequest.records.findIndex((record) => record.recordKey === row.recordKey);
         if (index < 0) throw new SourceRecipeUnavailable('Source recipe unavailable: unknown placement record identity.');
-        return { record: `#${index + 1}`, feature_selector: row.biologicalFeatureId,
+        // A bare value would match the shared hash of identical features.
+        return { record: `#${index + 1}`, feature_selector: `hash=${row.biologicalFeatureId}`,
           placement: row.placement.kind === 'main' ? 'main' : row.placement.side,
           level: row.placement.kind === 'main' ? '' : row.placement.level };
       });

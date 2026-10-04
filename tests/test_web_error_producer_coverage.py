@@ -84,7 +84,7 @@ UNPROVEN_BASELINE: dict[str, tuple[int, str]] = {
     "gbdraw/diagrams/linear/orthogroup_alignment.py": (5, _COMPARISON),
     "gbdraw/features/factory.py": (1, _FEATURES),
     "gbdraw/features/ids.py": (2, _FEATURES),
-    "gbdraw/features/placement.py": (33, _FEATURES),
+    "gbdraw/features/placement.py": (26, _FEATURES),
     "gbdraw/features/source.py": (1, _FEATURES),
     "gbdraw/features/tracks.py": (4, _FEATURES),
     "gbdraw/interface.py": (34, _TYPED_API),
