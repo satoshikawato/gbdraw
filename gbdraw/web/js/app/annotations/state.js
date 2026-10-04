@@ -1,3 +1,5 @@
+import { recordKeyBelongsToRequest } from '../../services/feature-placement.js';
+
 const DEFAULT_STYLE = Object.freeze({
   stroke: '#404040',
   strokeWidth: 1.5,
@@ -108,4 +110,15 @@ export const uniqueAnnotationSetId = (sets, base = 'annotations') => {
   return id;
 };
 
-export const annotationOptionsPayload = (sets) => ({ sets: normalizeAnnotationSets(sets), table: null, tableFile: null });
+// A selected-feature target names its record by key: a request carries only
+// the targets of its own records, and the others stay in the draft for the
+// records and mode that draw them (design Q4 3.2, R2).
+export const annotationOptionsPayload = (sets, records = []) => ({
+  sets: normalizeAnnotationSets(sets).map((set) => ({
+    ...set,
+    annotations: set.annotations.filter(({ target }) => target.kind !== 'featureIdentity'
+      || recordKeyBelongsToRequest(target.recordKey, records))
+  })),
+  table: null,
+  tableFile: null
+});

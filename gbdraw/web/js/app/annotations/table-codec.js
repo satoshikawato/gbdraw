@@ -159,16 +159,27 @@ export const parseAnnotationTableWithNotice = (text) => {
 
 export const parseAnnotationTable = (text) => parseAnnotationTableWithNotice(text).sets;
 
-// A source-identity target has no annotation-table selector; it is not
-// written (`skippedFeatureIdentityCount`).
-export const encodeAnnotationTableWithNotice = (sets) => {
+// The table has no source-identity selector. A selected-feature target is
+// written in its current placement (design Q4 6.4): `drawnPlacement(target)`
+// gives its drawn record position and drawn hash, written as `record=#<n>` and
+// `feature_selector=hash=<hash>`; a target it does not place is not written.
+export const encodeAnnotationTableWithNotice = (sets, { drawnPlacement = () => null } = {}) => {
   const rows = [COLUMNS.join('\t')];
+  let placedFeatureIdentityCount = 0;
   let skippedFeatureIdentityCount = 0;
   normalizeAnnotationSets(sets).forEach((set) => set.annotations.forEach((annotation) => {
-    const target = annotation.target || {};
+    let target = annotation.target || {};
     if (target.kind === 'featureIdentity') {
-      skippedFeatureIdentityCount += 1;
-      return;
+      const placement = drawnPlacement(target);
+      if (!placement) {
+        skippedFeatureIdentityCount += 1;
+        return;
+      }
+      placedFeatureIdentityCount += 1;
+      target = featureTarget({
+        selector: `hash=${placement.hash}`, recordIndex: placement.recordIndex,
+        extent: target.envelope, circularPath: target.circularPath
+      });
     }
     const coordinate = target.kind === 'coordinateSpan';
     const selectors = Array.isArray(target.selectors) ? target.selectors.map((item) => item.key ? `${item.key}=${item.value}` : item.value).join(';') : '';
@@ -187,7 +198,7 @@ export const encodeAnnotationTableWithNotice = (sets) => {
     };
     rows.push(COLUMNS.map((name) => String(row[name] ?? '').replace(/[\t\r\n]/g, ' ')).join('\t'));
   }));
-  return { text: `${rows.join('\n')}\n`, skippedFeatureIdentityCount };
+  return { text: `${rows.join('\n')}\n`, placedFeatureIdentityCount, skippedFeatureIdentityCount };
 };
 
 export const encodeAnnotationTable = (sets) => encodeAnnotationTableWithNotice(sets).text;

@@ -168,7 +168,13 @@ The file can be loaded with **Import TSV**, Python's `read_annotation_table()`,
 or the CLI's `--annotation_table` option.
 
 The download preserves effective row targets and styles, including explicit
-no-fill, unique record IDs, and one-based `#N` record bindings. A blank `fill`
+no-fill, unique record IDs, and one-based `#N` record bindings. The table has
+no selector for a source feature, so an annotation made from **Selected
+features** is written as the current Result draws it: `record=#<position>` and
+`feature_selector=hash=<drawn hash>`. That row names the same feature only while
+the crop, orientation, and record order stay as drawn, and the download says so.
+If the current Result does not draw the feature, the annotation is not written
+and the download says how many. A blank `fill`
 cell in a styled row means no fill; omitting the column retains the Web import
 default. TSV does not retain empty sets, metadata, or the distinction between
 an inherited set style and a row override. Tabs and line breaks within cells

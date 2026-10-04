@@ -2493,7 +2493,7 @@ const projectCanonicalRenderInput = ({
       : {})
   };
   if (Array.isArray(state.annotationSets) && state.annotationSets.length > 0) {
-    diagramOptions.annotations = annotationOptionsPayload(state.annotationSets);
+    diagramOptions.annotations = annotationOptionsPayload(state.annotationSets, records);
   }
   if (state.mode.value === 'circular') {
     diagramOptions.keepFullDefinitionWithPlotTitle = Boolean(state.adv.keep_full_definition_with_plot_title);

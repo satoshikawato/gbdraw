@@ -5,6 +5,7 @@ import {
   createAnnotationRecordSelector,
   reconcileAnnotationRecordBindings
 } from './annotations/record-selector.js';
+import { getFeatureCaption, getFeatureColorRuleHash } from './feature-utils.js';
 import { readFileText } from '../services/file-content-cache.js';
 import { downloadTextFile } from '../services/text-download.js';
 
@@ -17,6 +18,32 @@ const nextAnnotationId = (annotations, prefix) => {
 
 export const createAnnotationEditor = ({ state, getRecordCatalog, onImportNotice }) => {
   const recordSelector = createAnnotationRecordSelector({ getCatalog: getRecordCatalog });
+  // The catalog feature of a selected-feature target in the current Results:
+  // a drawn feature, or (unless `drawnOnly`) a listed feature they hide. The
+  // lists are replaced on each Generate, so scanning their raw rows tracks only
+  // the lists.
+  const catalogFeature = (target, { drawnOnly = false } = {}) => {
+    const raw = (value) => (globalThis.window?.Vue?.toRaw ? window.Vue.toRaw(value) : value);
+    const lists = [state.extractedFeatures?.value, drawnOnly ? null : state.biologicalFeatures?.value];
+    for (const list of lists.map(raw)) {
+      const feature = (Array.isArray(list) ? list : []).find((item) => item?.record_key === target?.recordKey
+        && item?.biological_feature_id === target?.biologicalFeatureId);
+      if (feature) return feature;
+    }
+    return null;
+  };
+  const featureTargetCaption = (item) => {
+    const feature = catalogFeature(item?.target);
+    return feature ? getFeatureCaption(feature) : `${item?.target?.biologicalFeatureId} (not in the current diagram)`;
+  };
+  // Design Q4 6.4: the drawn record position and drawn hash of a selected
+  // feature (catalog 3 and 4 features carry the drawn hash in their rendered ID).
+  const drawnPlacement = (target) => {
+    const feature = catalogFeature(target, { drawnOnly: true });
+    const hash = feature ? feature.drawnSelector?.hash || getFeatureColorRuleHash(feature) : '';
+    const recordIndex = Number(feature?.record_idx);
+    return hash && Number.isSafeInteger(recordIndex) && recordIndex >= 0 ? { recordIndex, hash } : null;
+  };
   const reconcileRecords = (sets = state.annotationSets) => {
     reconcileAnnotationRecordBindings(sets, getRecordCatalog?.());
     return sets;
@@ -73,13 +100,15 @@ export const createAnnotationEditor = ({ state, getRecordCatalog, onImportNotice
     if (sessionBusy) return sessionBusy;
     if (!set) return [];
     const targets = featureTargetsFromSelection(state.selectedFeatures?.value ?? state.selectedFeatures ?? []);
-    const items = targets.map((target) => {
+    if (!targets) {
+      window.alert('Generate the diagram again to annotate the selected features.');
+      return [];
+    }
+    return targets.map((target) => {
       const item = { id: nextAnnotationId(set.annotations, 'feature'), target, label: '', mark: 'highlight', lane: null, style: null, legendLabel: null, metadata: {} };
       set.annotations.push(item);
       return item;
     });
-    reconcileRecords(items.length ? [{ annotations: items }] : []);
-    return items;
   };
   const removeAnnotation = (set, item) => {
     const sessionBusy = state.sessionOperationAvailability?.();
@@ -124,11 +153,15 @@ export const createAnnotationEditor = ({ state, getRecordCatalog, onImportNotice
   const canDownloadAnnotationTable = () => state.annotationSets.some((set) => set.annotations.length > 0);
   const downloadAnnotationTable = () => {
     if (!canDownloadAnnotationTable()) return;
-    const { text, skippedFeatureIdentityCount } = encodeAnnotationTableWithNotice(state.annotationSets);
+    const { text, placedFeatureIdentityCount: placed, skippedFeatureIdentityCount: skipped } = (
+      encodeAnnotationTableWithNotice(state.annotationSets, { drawnPlacement })
+    );
     downloadTextFile('annotations.tsv', text);
-    if (skippedFeatureIdentityCount > 0) {
-      window.alert(`${skippedFeatureIdentityCount} annotation(s) target a source feature, which the annotation table cannot express; they were not exported.`);
-    }
+    const notice = [
+      placed > 0 ? `${placed} annotation(s) of selected features were written as record=#<position> and feature_selector=hash=<drawn hash>. They name the same features only while the crop, orientation, and record order stay as drawn.` : '',
+      skipped > 0 ? `${skipped} annotation(s) of selected features that the current diagram does not draw were not exported.` : ''
+    ].filter(Boolean).join(' ');
+    if (notice) window.alert(notice);
   };
   const importAnnotationTableFile = async (event) => {
     const sessionBusy = state.sessionOperationAvailability?.();
@@ -164,7 +197,7 @@ export const createAnnotationEditor = ({ state, getRecordCatalog, onImportNotice
     addAnnotationSet, renameAnnotationSet, duplicateAnnotationSet, removeAnnotationSet,
     addCoordinateAnnotation, addSelectedFeatures, removeAnnotation, renameAnnotation, setAnnotationStyle, setAnnotationTargetKind,
     importAnnotationTable, importAnnotationTableFile, replaceAnnotationSets: replaceSets,
-    canDownloadAnnotationTable, downloadAnnotationTable,
+    canDownloadAnnotationTable, downloadAnnotationTable, featureTargetCaption,
     recordOptionsFor: recordSelector.optionsFor,
     recordValueFor: recordSelector.valueFor,
     setRecordValue: (annotation, value) => state.sessionOperationAvailability?.()
