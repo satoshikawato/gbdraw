@@ -289,3 +289,9 @@ Run Info writes one row per edited feature in the `#<index>` and
 `hash=<biologicalFeatureId>` form. An edit or placement whose feature the
 source does not have cannot be written as a table row, so a Result with one has
 no Source recipe; **Exact replay** still reproduces it.
+
+The web app's **Export Feature Edits TSV** writes the same rows, and **Load
+Feature Edits TSV** reads a table with this reader against the records of the
+current diagram. There, a row whose record or feature those records do not
+have is counted and skipped instead of failing; every other error above still
+rejects the table.

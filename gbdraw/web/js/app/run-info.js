@@ -159,6 +159,12 @@ const tsv = (columns, rows) => `${[
   ...rows.map((row) => columns.map((column) => tsvCell(row[column])).join('\t'))
 ].join('\n')}\n`;
 
+// An identity table that cannot carry a row: the Source recipe is unavailable,
+// and Export Feature Edits TSV reports the reason.
+const identityTableUnavailable = (reason) => Object.assign(
+  new SourceRecipeUnavailable(`Source recipe unavailable: ${reason}`), { reason }
+);
+
 // R12: identity-table rows must read back as the same rows through the CLI's one
 // reader (gbdraw/features/source.py::read_identity_table trims every cell except
 // label_text). hash=<biologicalFeatureId> names exactly one source feature; a bare
@@ -167,9 +173,7 @@ const identityTableCells = (renderRequest, row, kind) => {
   const index = renderRequest.records.findIndex((record) => record.recordKey === row.recordKey);
   const id = row.biologicalFeatureId;
   if (index < 0 || typeof id !== 'string' || !id || id !== id.trim() || /[\t\r\n\0]/.test(id)) {
-    throw new SourceRecipeUnavailable(
-      `Source recipe unavailable: a ${kind} names a feature identity that no table row can carry.`
-    );
+    throw identityTableUnavailable(`a ${kind} names a feature identity that no table row can carry.`);
   }
   return { record: `#${index + 1}`, feature_selector: `hash=${id}` };
 };
@@ -184,12 +188,13 @@ const featureOverrideTableRow = (renderRequest, row) => {
   if (![null, 'on', 'off', 'exclude_matching'].includes(feature) || ![null, 'on', 'off'].includes(label)
     || (text !== null && (typeof text !== 'string' || !text.trim() || /[\t\r\n\0]/.test(text)))
     || (feature === null && label === null && text === null)) {
-    throw new SourceRecipeUnavailable(
-      'Source recipe unavailable: a feature edit has a value that the feature override table cannot carry.'
-    );
+    throw identityTableUnavailable('a feature edit has a value that the feature override table cannot carry.');
   }
   return { ...cells, feature_visibility: feature ?? '', label_visibility: label ?? '', label_text: text ?? '' };
 };
+const featureOverrideTable = (renderRequest, rows) => tsv(
+  FEATURE_OVERRIDE_TABLE_COLUMNS, rows.map((row) => featureOverrideTableRow(renderRequest, row))
+);
 
 const collectBindingNameHints = (value, hints) => {
   if (Array.isArray(value)) {
@@ -1548,6 +1553,32 @@ const appendLayoutOptions = (args, request, recordsTableUsed = false) => {
   }
 };
 
+// Identity tables name a record by its #index among the materialized records,
+// which is its request index only when no input expands to several records.
+const requireExactRecords = async (renderRequest, files) => {
+  for (const record of renderRequest.records) {
+    if (record.cardinality === 'exactly_one') continue;
+    const source = sourceSpec(record);
+    if (await files.resourceRecordCount(source.ids.at(-1), source.kind === 'genbank' ? 'genbank' : 'fasta') !== 1) {
+      throw identityTableUnavailable('feature placements and feature edits require exact materialized records.');
+    }
+  }
+};
+
+// Export Feature Edits TSV (design Q4 6.4): request featureOverrides rows as the
+// Source recipe writes its --feature_override_table, or why no table carries them.
+export const buildFeatureOverrideTable = async ({
+  renderRequest, resources, rows, readResourceRecordCount = null
+}) => {
+  try {
+    await requireExactRecords(renderRequest, createRecipeFiles(resources, {}, null, readResourceRecordCount));
+    return { text: featureOverrideTable(renderRequest, rows), reason: '' };
+  } catch (error) {
+    if (error instanceof SourceRecipeUnavailable && error.reason) return { text: '', reason: error.reason };
+    throw error;
+  }
+};
+
 export const buildSourceRecipe = async ({
   renderRequest,
   resources,
@@ -1577,17 +1608,7 @@ export const buildSourceRecipe = async ({
     const recordsTableUsed = await appendInputArgs(args, renderRequest, files);
     const placements = renderRequest.diagramOptions?.featurePlacements || [];
     const featureOverrides = renderRequest.diagramOptions?.featureOverrides || [];
-    if (placements.length || featureOverrides.length) {
-      for (const record of renderRequest.records) {
-        if (record.cardinality === 'exactly_one') continue;
-        const source = sourceSpec(record);
-        if (await files.resourceRecordCount(source.ids.at(-1), source.kind === 'genbank' ? 'genbank' : 'fasta') !== 1) {
-          throw new SourceRecipeUnavailable(
-            'Source recipe unavailable: feature placements and feature edits require exact materialized records.'
-          );
-        }
-      }
-    }
+    if (placements.length || featureOverrides.length) await requireExactRecords(renderRequest, files);
     if (placements.length) {
       const rows = placements.map((row) => ({
         ...identityTableCells(renderRequest, row, 'placement'),
@@ -1598,9 +1619,8 @@ export const buildSourceRecipe = async ({
         tsv(['record', 'feature_selector', 'placement', 'level'], rows), 'generatedFiles.source_recipe.feature_placements'));
     }
     if (featureOverrides.length) {
-      const rows = featureOverrides.map((row) => featureOverrideTableRow(renderRequest, row));
       args.push('--feature_override_table', files.generatedTextPath('feature-overrides.tsv',
-        tsv(FEATURE_OVERRIDE_TABLE_COLUMNS, rows), 'generatedFiles.source_recipe.feature_overrides'));
+        featureOverrideTable(renderRequest, featureOverrides), 'generatedFiles.source_recipe.feature_overrides'));
     }
     appendDiagramOptions(args, renderRequest, files);
     appendConfigOverrides(args, renderRequest);

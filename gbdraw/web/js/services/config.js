@@ -91,7 +91,8 @@ import {
   managedConfigOverridePathsForMode,
   promoteCanonicalRenderRequestToCurrent,
   projectCanonicalSessionRequest,
-  projectSettingsOnlySession
+  projectSettingsOnlySession,
+  readCanonicalResourceRecordCount
 } from './session-request.js';
 import {
   createDefaultLinearComparisonPlan,
@@ -3103,6 +3104,12 @@ export const getCommittedCanonicalRenderRequest = () => (
 );
 
 export const getCommittedCanonicalSession = () => committedCanonicalSession;
+
+// The record count of a committed source, as the Source recipe reads it before
+// it names records by #index (Export Feature Edits TSV).
+export const readCommittedResourceRecordCount = (resourceId, kind) => (
+  readCanonicalResourceRecordCount(committedCanonicalSession?.resources, resourceId, kind)
+);
 
 export const canonicalRenderArtifactOwner = Object.freeze({
   capture: () => Object.freeze({ committedCanonicalSession, activeSessionResourceTable }),

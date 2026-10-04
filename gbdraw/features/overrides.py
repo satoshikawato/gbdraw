@@ -154,11 +154,14 @@ def read_feature_override_table(
     record_keys: Sequence[str],
     source_record_ids: Sequence[str],
     source_catalogs: Sequence[tuple[SourceFeatureIdentity, ...]],
+    unmatched: list[int] | None = None,
 ) -> tuple[FeatureOverride, ...]:
     """Resolve a feature override table to exact rows (the one reader of the format, R9).
 
     Visibility tokens ignore case and a blank cell sets nothing; ``label_text`` is
     kept verbatim, so a table written from rows reads back as the same rows.
+    With ``unmatched``, rows that select no record or feature are left out and
+    their row numbers added there (``resolve_identity_table_rows``).
     """
     rows = read_identity_table(
         table, table_name=_TABLE, columns=FEATURE_OVERRIDE_TABLE_COLUMNS,
@@ -190,10 +193,12 @@ def read_feature_override_table(
         record_keys=record_keys,
         source_record_ids=source_record_ids,
         source_catalogs=source_catalogs,
+        unmatched=unmatched,
     )
     return normalize_feature_overrides([
         FeatureOverride(identity.record_key, identity.biological_feature_id, *values)
         for identity, values in zip(identities, edits, strict=True)
+        if identity is not None
     ])
 
 

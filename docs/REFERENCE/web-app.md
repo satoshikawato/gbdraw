@@ -856,6 +856,17 @@ the annotation and reports it in the annotation notice; the annotation stays.
 A request carries the annotation only while its record is drawn, so drawing
 another record or the other mode keeps it in the draft without drawing it.
 
+**Export Feature Edits TSV** in the Features list writes the feature edits for the
+records of the current diagram in the `--feature_override_table` format that
+the Source recipe uses (`#<index>` of the record and
+`hash=<biologicalFeatureId>`), so the CLI and the Python API read the same
+file. **Load Feature Edits TSV** reads such a table against the records of the
+current diagram and replaces their feature edits as one **Undo** step; edits of
+the other mode's records stay. A row whose record or feature the current
+diagram does not have is counted in the message and not applied. A table with
+any other defect is rejected with the row it names and changes nothing.
+**Export Label TSV** and the Feature visibility **TSV** write rules only.
+
 **Label visibility** **On** or **Off** in the feature popup decides that
 feature's label whatever **Show Labels** and the label filters select. With
 **Show Labels** set to **None** or **First Record Only**, **On** shows that label,

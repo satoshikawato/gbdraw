@@ -4,12 +4,16 @@ import { createFeatureRuleActions } from './feature-editor/rule-actions.js';
 import { createFeatureSvgActions } from './feature-editor/svg-actions.js';
 import { createFeatureVisibilityActions } from './feature-editor/visibility-actions.js';
 import { createFeaturePlacementActions } from './feature-editor/placement-actions.js';
+import { createFeatureEditTableActions } from './feature-editor/feature-edit-table.js';
 
 export const createFeatureEditor = ({
   state,
   rulePreparation,
   history,
   getCommittedRequest,
+  getCommittedSession = () => null,
+  readResourceRecordCount = null,
+  readFeatureOverrideTable = null,
   isCurrentFeature,
   nextTick,
   legendActions,
@@ -51,6 +55,15 @@ export const createFeatureEditor = ({
     featureSvgActions,
     labelActions,
     previewRuntime
+  });
+  // A loaded table shows on the displayed Result as a History apply does (R3).
+  const featureEditTableActions = createFeatureEditTableActions({
+    state, ref, computed, getCommittedSession, readResourceRecordCount, readFeatureOverrideTable,
+    projectFeatureEdits: () => {
+      visibilityActions.reconcileFeatureVisibility();
+      labelActions.reconcileLabelOverrides();
+      labelActions.applyFeatureVisibilityToLabels();
+    }
   });
   const openFeatureEditorForFeature = (feat, eventLike = null) => {
     return featureSvgActions.openFeatureEditorForFeature(feat, eventLike);
@@ -140,6 +153,7 @@ export const createFeatureEditor = ({
     refreshFeatureOverrides: ruleActions.refreshFeatureOverrides,
     getEditableLabelByFeatureId: labelActions.getEditableLabelByFeatureId,
     syncLabelEditor: labelActions.syncLabelEditor,
+    ...featureEditTableActions,
     downloadLabelOverrideTable: labelActions.downloadLabelOverrideTable,
     loadLabelOverrideTable: labelActions.loadLabelOverrideTable,
     canRetryLabelImportFailure: labelActions.canRetryLabelImportFailure,

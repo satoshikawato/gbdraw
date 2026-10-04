@@ -1188,6 +1188,16 @@ def _source_catalogs(
     )
 
 
+def _identity_table_context(collection: ResolvedRecordCollection) -> dict[str, object]:
+    """The records an identity table names: ``#index`` and record IDs select among them."""
+    return {
+        "records": collection.records,
+        "record_keys": tuple(item.record_key for item in collection.provenance),
+        "source_record_ids": tuple(item.source_record_id for item in collection.provenance),
+        "source_catalogs": _source_catalogs(collection),
+    }
+
+
 def _materialize_identity_tables(
     request: DiagramRequest, collection: ResolvedRecordCollection,
 ) -> DiagramRequest:
@@ -1199,12 +1209,7 @@ def _materialize_identity_tables(
                       else options.feature_override_table_file)
     if placement_table is None and override_table is None:
         return request
-    context = {
-        "records": collection.records,
-        "record_keys": tuple(item.record_key for item in collection.provenance),
-        "source_record_ids": tuple(item.source_record_id for item in collection.provenance),
-        "source_catalogs": _source_catalogs(collection),
-    }
+    context = _identity_table_context(collection)
     changes: dict[str, object] = {}
     if placement_table is not None:
         changes.update(
@@ -1221,6 +1226,24 @@ def _materialize_identity_tables(
             feature_override_table=None, feature_override_table_file=None,
         )
     return replace(request, options=replace(options, **changes))
+
+
+def read_request_feature_override_table(
+    request: DiagramRequest,
+    table: DataFrame | str | Path,
+    *,
+    unmatched: list[int],
+) -> tuple[FeatureOverride, ...]:
+    """Resolve a feature override table against the records ``request`` loads.
+
+    The Web's Load Feature Edits TSV reads a table against its committed request
+    (design Q4 6.4). Rows that select no record or no feature are left out and
+    listed in ``unmatched`` (Owner Q3 = A); other defects fail as on the CLI.
+    """
+    collection = _coerce_resolved_collection(
+        request, _normalize_request_records(request, _prepare_diagram_inputs(request)),
+    )
+    return read_feature_override_table(table, **_identity_table_context(collection), unmatched=unmatched)
 
 
 def _load_request_records(
