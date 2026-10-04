@@ -1,5 +1,5 @@
 import { diagnosticError, normalizeUserFacingError } from '../../services/error-normalization.js';
-import { ruleFeaturePayload } from '../rule-matching.js';
+import { DRAWN_SELECTOR_QUALIFIERS, drawnSelectorUnknown, ruleFeaturePayload } from '../rule-matching.js';
 import { getFeatureVisibilityOverride, resolveEffectiveFeatureVisibility } from '../feature-visibility.js';
 import { parseLabelOverrideTsv, serializeLabelOverrideRows } from './label-override-table.js';
 import { escapeRegexLiteral } from '../feature-selector.js';
@@ -1196,6 +1196,21 @@ export const createFeatureLabelActions = ({
         || (svgContainer.value?.querySelector('svg') || null) !== sourceSvg) return;
       if (!svg) {
         window.alert(`Loaded ${rows.length} row(s). No diagram is currently displayed.`);
+        return;
+      }
+      // A `location` or `record_location` row cannot be decided for a label
+      // whose drawn values the Result does not record (feature catalog 3 or 4
+      // on a cropped, reverse-complemented, or rotated record). The import is
+      // declined whole, so the label edits it would replace stay (R4).
+      const undecided = labels.filter(({ feature }) => drawnSelectorUnknown(feature) && rows.some((row) => (
+        DRAWN_SELECTOR_QUALIFIERS.has(row.qualifier.toLowerCase())
+        && (row.recordId === '*' || row.recordId === String(feature.record_id ?? ''))
+        && (row.featureType === '*' || row.featureType === String(feature.type ?? ''))
+      ))).length;
+      if (undecided > 0) {
+        window.alert(`Loaded ${rows.length} row(s). Not applied: location and record_location rows cannot be `
+          + `matched to ${undecided} label(s) on cropped, reverse-complemented, or rotated records until the `
+          + 'diagram records where it drew them. Generate the diagram again, then load the table.');
         return;
       }
 

@@ -42,3 +42,13 @@ test('a catalog before schema 5 sends no coordinates for location rules (R4)', (
   });
   assert.deepEqual(payload.selector, { hash: 'f3b928d8c', location: null, record_location: null });
 });
+
+test('a catalog before schema 5 sends source coordinates where its rendered ID carries the source hash', () => {
+  // The record was drawn with its source coordinates (no crop, reverse
+  // complement, or rotation), so the source values are the drawn ones.
+  const payload = ruleFeaturePayload({
+    type: 'CDS', svg_id: 'ffa1f4c4a_record_1', record_id: 'TESTA', drawnSelector: null, qualifiers: {},
+    selector: { hash: 'ffa1f4c4a', location: '300..600', record_location: 'TESTA:300..600:+', qualifiers: {} }
+  });
+  assert.deepEqual(payload.selector, { hash: 'ffa1f4c4a', location: '300..600', record_location: 'TESTA:300..600:+' });
+});

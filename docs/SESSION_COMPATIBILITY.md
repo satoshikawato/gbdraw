@@ -24,8 +24,12 @@ by identity.
 The feature catalog is schema 5. Each drawn feature records the hash,
 location, and record location it was drawn with (`drawnSelector`), which live
 rule matching uses. A schema 3 or 4 catalog reads as schema 5 with no selector
-values; until the next Generate, live matching then leaves rules on those
-fields to Generate.
+values. Until the next Generate, a feature whose rendered ID carries its source
+hash was drawn with its source coordinates, so live matching and **Load Label
+TSV** use its source values; on other features (cropped, reverse-complemented,
+or rotated records) live matching leaves `location` and `record_location` rules
+to Generate, and **Load Label TSV** declines a table with such rows and says
+why.
 
 Loading a Session 44, or a Web Session 31–33, moves each rendered-ID edit onto
 its feature. In a Session 40–44, a rendered ID in the saved feature catalog

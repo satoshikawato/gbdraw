@@ -29,8 +29,10 @@ remains. A Session before 40 is matched through its GenBank sources read again
 with its crops and orientations (the drawn hash and record position of each
 rendered ID), or, without readable sources, through its saved feature metadata
 for records drawn without a crop or reverse complement. An edit that names no
-feature is dropped, and the Web app reports how many. A catalog of schema 3 or 4 reads as schema 5 without selector values
-until the next Generate.
+feature is dropped, and the Web app reports how many. A catalog of schema 3 or
+4 reads as schema 5 without selector values until the next Generate; a feature
+whose rendered ID carries its source hash was drawn with its source
+coordinates, so its source values serve until then.
 
 Session versions 34–38 and request schemas 3–4 were development-only and are
 rejected. Do not change a version number, resource hash, or runtime binding by

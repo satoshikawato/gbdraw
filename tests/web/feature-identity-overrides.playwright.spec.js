@@ -413,3 +413,55 @@ test('loading an older Session counts only the feature edits it drops', async ({
   ]);
   expect((await featureOverrideRows(page)).length).toBe(4);
 });
+
+const importLabelTsv = (page, text) => page.evaluate(async (tsv) => {
+  await window.__GBDRAW_APP__.loadLabelOverrideTable({
+    target: { files: [new File([tsv], 'labels.tsv')], value: 'labels.tsv' }
+  });
+}, text);
+
+const previewLabelCount = (page, text) => page.locator('.origin-top svg text').filter({ hasText: text }).count();
+
+// A Result of feature catalog 3 or 4 (Session 44, bundled Gallery Sessions) has
+// no drawn selector values. A rendered ID that carries the source hash means
+// the record was drawn with its source coordinates, so a `location` or
+// `record_location` row matches the source values there.
+test('a Label TSV record_location row applies to a catalog 4 Result drawn with source coordinates', async ({ page }) => {
+  test.setTimeout(300_000);
+  const alerts = [];
+  page.on('dialog', (dialog) => alerts.push(dialog.message()));
+  await openFresh(page);
+  await loadSession(page, 'gbdraw/web/gallery/sessions/lambda_basic_linear.gbdraw-session.json');
+  alerts.length = 0;
+  await importLabelTsv(page, 'NC_001416.1\tCDS\trecord_location\t^NC_001416\\.1:190\\.\\.736:\\+$\tTSV_RL\n');
+  await settle(page);
+  expect(alerts).toEqual(['Loaded 1 row(s). Applied to 1 label(s).']);
+  expect(await previewLabelCount(page, /^TSV_RL$/)).toBe(1);
+});
+
+// Where the drawn values are unknown (a cropped or reverse-complemented record
+// of a catalog 4 Result), the import is declined with its reason and keeps the
+// label edits it would have replaced; after Generate it applies.
+test('a Label TSV location row waits for Generate on a catalog 4 Result of cropped records', async ({ page }) => {
+  test.setTimeout(300_000);
+  const alerts = [];
+  page.on('dialog', (dialog) => alerts.push(dialog.message()));
+  await openFresh(page);
+  await loadSession(page, 'tests/fixtures/sessions/feature-edits-crop-rc.v44.gbdraw-session.json.gz');
+  const before = await featureOverrideRows(page);
+  alerts.length = 0;
+  const row = '*\ttRNA\trecord_location\t^TESTA:\tTSV_TRNA\n';
+  await importLabelTsv(page, row);
+  await settle(page);
+  expect(alerts).toHaveLength(1);
+  expect(alerts[0]).toMatch(/^Loaded 1 row\(s\)\. Not applied: .*Generate/);
+  expect(await featureOverrideRows(page)).toEqual(before);
+  expect(await previewLabelCount(page, /^PROBE_A_TRNA$/)).toBe(1);
+  await generateAndWaitForResult(page);
+  await settle(page);
+  alerts.length = 0;
+  await importLabelTsv(page, row);
+  await settle(page);
+  expect(alerts).toEqual(['Loaded 1 row(s). Applied to 1 label(s).']);
+  expect(await previewLabelCount(page, /^TSV_TRNA$/)).toBe(1);
+});

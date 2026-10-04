@@ -14,12 +14,17 @@ export const ruleMatchesFeature = (feature, rule) => {
   if (!rule || (rule.feat !== '*' && rule.feat !== feature?.type)) return false;
   return matchesByFeature.get(feature)?.get(ruleKey(rule))?.matches ?? null;
 };
-// A feature of a catalog before schema 5 has no drawn selector values, so a
-// `location` or `record_location` rule is not matched live (R4: the fast path
-// declines what it cannot read exactly).
-const DRAWN_SELECTOR_QUALIFIERS = new Set(['location', 'record_location']);
-const declinesLiveMatch = (feature, rule) => !feature?.drawnSelector
+// A feature of a catalog before schema 5 has no drawn selector values. Where
+// its rendered ID carries its source hash, its record was drawn with the
+// source's coordinates and the source values are the drawn ones; otherwise (a
+// cropped, reverse-complemented, or rotated record) a `location` or
+// `record_location` rule is not matched live (R4: the fast path declines what
+// it cannot read exactly).
+export const DRAWN_SELECTOR_QUALIFIERS = new Set(['location', 'record_location']);
+export const drawnSelectorUnknown = (feature) => !feature?.drawnSelector
   && Object.prototype.hasOwnProperty.call(feature || {}, 'drawnSelector')
+  && getFeatureColorRuleHash(feature) !== String(feature?.selector?.hash || '');
+const declinesLiveMatch = (feature, rule) => drawnSelectorUnknown(feature)
   && DRAWN_SELECTOR_QUALIFIERS.has(String(rule?.qual || '').toLowerCase());
 export const ruleMatchDeclined = (feature, rules) => rules
   .some((rule) => matchesByFeature.get(feature)?.get(ruleKey(rule))?.declined === true);
@@ -42,7 +47,8 @@ export const ruleMatchesReady = (features, rules) => features.every((feature) =>
 // drawn feature (D-14, PD-OI-069): a cropped or reverse-complemented record
 // draws other coordinates than its source. The catalog gives those drawn
 // values (`drawnSelector`, feature catalog 5, OV-02); a feature of an older
-// catalog sends only the hash its rendered ID carries.
+// catalog sends the hash its rendered ID carries, and its source values only
+// where they are the drawn ones.
 export const ruleFeaturePayload = (feature, label = '') => {
   const metadata = normalizeFeatureSelectorMetadata(feature);
   const qualifiers = Object.fromEntries(Object.entries(feature.selector?.qualifiers || feature.qualifiers || metadata.qualifiers)
@@ -50,7 +56,7 @@ export const ruleFeaturePayload = (feature, label = '') => {
   const drawn = feature?.drawnSelector;
   const selector = drawn
     ? { hash: drawn.hash, location: drawn.location, record_location: drawn.recordLocation }
-    : Object.prototype.hasOwnProperty.call(feature || {}, 'drawnSelector')
+    : drawnSelectorUnknown(feature)
       ? { hash: getFeatureColorRuleHash(feature) || null, location: null, record_location: null }
       : {
           hash: getFeatureColorRuleHash(feature) || metadata.stableFeatureId,
