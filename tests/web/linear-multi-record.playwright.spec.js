@@ -2200,7 +2200,7 @@ test('Candidate render post-processing sanitizes and reapplies stable styles bef
   const outcome = await page.evaluate(async () => {
     const [
       { prepareCandidateRenderCommit },
-      { admitFeatureCatalog },
+      { FEATURE_CATALOG_SCHEMA, admitFeatureCatalog },
       { markCurrentWorkerGenerationResponse }
     ] = await Promise.all([
       import('./js/app/candidate-render.js'),
@@ -2223,8 +2223,10 @@ test('Candidate render post-processing sanitizes and reapplies stable styles bef
         '</svg>'
       ].join('')
     };
+    // A current Worker writes the current catalog schema, whose rendered
+    // features record their drawn selector values.
     const catalog = {
-      schema: 4,
+      schema: FEATURE_CATALOG_SCHEMA,
       items: [{
         resultIndex: 0,
         resultName: 'candidate.svg',
@@ -2232,11 +2234,13 @@ test('Candidate render post-processing sanitizes and reapplies stable styles bef
         features: [{
           svgId: 'rendered-1',
           recordKey: 'record-1',
-          biologicalFeatureId: 'feature-1'
+          biologicalFeatureId: 'feature-1',
+          drawnSelector: { hash: 'stable-feature-1', location: '0..10', recordLocation: 'record-1:0..10:+' }
         }, {
           svgId: 'rendered-2',
           recordKey: 'record-1',
-          biologicalFeatureId: 'feature-2'
+          biologicalFeatureId: 'feature-2',
+          drawnSelector: { hash: 'stable-feature-2', location: '20..30', recordLocation: 'record-1:20..30:+' }
         }],
         biologicalFeatures: [{
           recordKey: 'record-1',

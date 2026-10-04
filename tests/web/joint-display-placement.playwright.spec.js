@@ -331,13 +331,18 @@ for (const mode of ['circular', 'linear']) {
   });
 }
 
-test('paired GFF/FASTA replacement purges source-bound rotation and placement and Undo restores both', async ({ page }) => {
+// Owner decision Q3 = A (design Q4 3.4, 6.3): replacing a source keeps the
+// feature placements; a Generate that replaced the source removes the rows
+// whose feature the new source no longer has and reports how many. The record
+// rotation draft still follows its source.
+test('paired GFF/FASTA replacement keeps placements until Generate removes the ones whose feature is gone', async ({ page }) => {
   test.setTimeout(180000);
   await openApp(page);
   await page.getByRole('radio', { name: 'GFF3 + FASTA', exact: true }).check();
   const gff = '##gff-version 3\n##sequence-region shared 1 360\nshared\t.\tCDS\t21\t105\t.\t+\t0\tID=chosen.full.source;product=chosen protein\n';
   const fasta = '>shared\n' + 'ACGT'.repeat(90) + '\n';
-  await page.getByLabel('GFF3 File', { exact: true }).setInputFiles({ name: 'same.gff', mimeType: 'text/plain', buffer: Buffer.from(gff) });
+  const gffUpload = page.getByLabel('GFF3 File', { exact: true });
+  await gffUpload.setInputFiles({ name: 'same.gff', mimeType: 'text/plain', buffer: Buffer.from(gff) });
   const upload = page.getByLabel('FASTA File', { exact: true });
   await upload.setInputFiles({ name: 'same.fa', mimeType: 'text/plain', buffer: Buffer.from(fasta) });
   const start = page.getByRole('spinbutton', { name: 'Display start shared #1', exact: true });
@@ -350,14 +355,23 @@ test('paired GFF/FASTA replacement purges source-bound rotation and placement an
   await page.getByRole('button', { name: 'Close feature popup', exact: true }).click();
   await page.locator('.drawer-toggle').click();
   await generateFromControl(page);
+  const placements = () => page.evaluate(async () => Object.keys((await import('./js/state.js')).state.featurePlacementOverrides).length);
   const before = await page.evaluate(() => window.__GBDRAW_APP__.results[0].content);
   await upload.setInputFiles({ name: 'same.fa', mimeType: 'text/plain', buffer: Buffer.from(fasta.replace('ACGT', 'TCGT')) });
   await expect(start).toHaveValue('');
-  await expect.poll(() => page.evaluate(async () => Object.keys((await import('./js/state.js')).state.featurePlacementOverrides).length)).toBe(0);
+  expect(await placements()).toBe(1);
   await page.getByRole('button', { name: /^Undo/ }).first().click();
   await expect(start).toHaveValue('71');
-  await expect.poll(() => page.evaluate(async () => Object.keys((await import('./js/state.js')).state.featurePlacementOverrides).length)).toBe(1);
+  expect(await placements()).toBe(1);
   expect(await page.evaluate(() => window.__GBDRAW_APP__.results[0].content)).toBe(before);
+  // The CDS moves, so the placed feature is not in the replacing source.
+  await gffUpload.setInputFiles({ name: 'moved.gff', mimeType: 'text/plain', buffer: Buffer.from(gff.replace('\t21\t105\t', '\t31\t105\t')) });
+  expect(await placements()).toBe(1);
+  await generateFromControl(page);
+  expect(await placements()).toBe(0);
+  await expect(page.getByTestId('feature-identity-notice')).toContainText(
+    'Removed 1 feature edit(s) whose feature the replaced source no longer has.'
+  );
 });
 
 for (const mode of ['circular', 'linear']) for (const intent of ['rotation', 'placement']) {

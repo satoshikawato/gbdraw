@@ -90,7 +90,7 @@ const mountExportFixture = async (page, { interactive = false } = {}) => {
         annotations: [],
         comparisonMatches: []
       }]
-    } : { schema: 4, items: [] };
+    } : { schema: catalogSchema, items: [] };
   }, { interactive, catalogSchema: CURRENT_FEATURE_CATALOG_SCHEMA });
   await expect(page.locator('.origin-top svg')).toBeAttached();
   // The preview binds the mounted root in microtasks; two frames cover it.

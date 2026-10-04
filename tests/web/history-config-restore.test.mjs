@@ -71,14 +71,17 @@ console.log('History restores nullable config values and preserves key guards.')
 // SE-01, N-19, N-20: History checkpoints and the Session rollback hold the
 // admitted feature catalog by reference; state admits no other catalog.
 {
-  const { admitFeatureCatalog, featureStateFromCatalog } = await import('../../gbdraw/web/js/services/feature-catalog.js');
+  const { FEATURE_CATALOG_SCHEMA, admitFeatureCatalog, featureStateFromCatalog } = await import('../../gbdraw/web/js/services/feature-catalog.js');
   const { buildEditorStateData, applyEditorStateData } = await import('../../gbdraw/web/js/services/config.js');
   const marker = 'se01-catalog-payload';
   const catalog = admitFeatureCatalog({
-    schema: 4,
+    schema: FEATURE_CATALOG_SCHEMA,
     items: [{
       resultIndex: 0, resultName: 'diagram.svg', recordKeys: ['record-a'],
-      features: [{ svgId: 'f0001', recordKey: 'record-a', biologicalFeatureId: 'feature-a', fillColor: '#abcdef' }],
+      features: [{
+        svgId: 'f0001', recordKey: 'record-a', biologicalFeatureId: 'feature-a', fillColor: '#abcdef',
+        drawnSelector: { hash: 'stable-a', location: '1..6', recordLocation: 'record-a:1..6:+' }
+      }],
       biologicalFeatures: [{
         recordKey: 'record-a', biologicalFeatureId: 'feature-a', stableFeatureId: 'stable-a', record_idx: 0,
         sourceFeatureIndex: 0, record_id: 'record-a', type: 'CDS', start: 1, end: 6, strand: 1,
