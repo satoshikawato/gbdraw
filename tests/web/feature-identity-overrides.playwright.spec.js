@@ -5,7 +5,8 @@
 // and the Session replays the same diagram on the CLI. FINDINGS OV-01, OV-02,
 // OV-04, OV-05, OV-11, OV-12.
 const { test, expect } = require('@playwright/test');
-const { readFileSync } = require('node:fs');
+const { readFileSync, writeFileSync } = require('node:fs');
+const { gunzipSync } = require('node:zlib');
 const { spawnSync } = require('node:child_process');
 const path = require('node:path');
 const { generateAndWaitForResult } = require('./helpers/app-lifecycle.cjs');
@@ -351,4 +352,64 @@ test('a Session 33 without a feature catalog keeps its feature edits', async ({ 
   expect(features.every((feature) => feature.recordKey === recordKey)).toBe(true);
   // The Session shows no labels (labels_mode none); text alone draws none.
   expect(await labelTextsInResult(page)).not.toContain('V33_LABEL');
+});
+
+const LINEAR_V33 = 'tests/fixtures/sessions/feature-edits-linear-crop-rc.v33.gbdraw-session.json.gz';
+
+const featureOverrideRows = (page) => page.evaluate(async () => {
+  const { state } = await import('/gbdraw/web/js/state.js');
+  return Object.values(state.featureOverrides).map((row) => [row.recordKey, row.biologicalFeatureId,
+    row.featureVisibility, row.labelVisibility, row.labelText]).sort();
+});
+
+const committedRecordKeys = (page) => page.evaluate(async () => {
+  const { getCommittedCanonicalRenderRequest } = await import('/gbdraw/web/js/services/config.js');
+  return getCommittedCanonicalRenderRequest().records.map((record) => record.recordKey);
+});
+
+// A Linear Session 33 keys each edit by `<drawn hash>_record_<n>`, and every
+// input's features have record_idx 0. The edits keep their records, also on a
+// cropped and a reverse-complemented record whose hidden features the Session's
+// metadata no longer lists.
+test('a Linear Session 33 with crop and reverse complement keeps its feature edits', async ({ page }) => {
+  test.setTimeout(300_000);
+  const alerts = [];
+  page.on('dialog', (dialog) => alerts.push(dialog.message()));
+  await openFresh(page);
+  await loadSession(page, LINEAR_V33);
+  const [testa, testb] = await committedRecordKeys(page);
+  expect(alerts).toEqual(['Session loaded successfully!']);
+  expect(await featureOverrideRows(page)).toEqual([
+    [testa, 'fef810304', null, 'off', null],
+    [testa, 'ffa1f4c4a', 'off', null, null],
+    [testb, 'f3f7207f4', 'off', null, null],
+    [testb, 'f88047061', null, null, 'V33_LINEAR_TRNA']
+  ].sort());
+  await generateAndWaitForResult(page);
+  await settle(page);
+  const features = await catalog(page);
+  expect(features.some((feature) => feature.identity === 'ffa1f4c4a')).toBe(false);
+  expect(features.some((feature) => feature.identity === 'f3f7207f4')).toBe(false);
+  const trna = features.find((feature) => feature.recordKey === testb && feature.identity === 'f88047061');
+  const unlabeled = features.find((feature) => feature.recordKey === testa && feature.identity === 'fef810304');
+  const shown = await drawn(page, [trna.svgId, unlabeled.svgId]);
+  expect(shown[trna.svgId].labels).toEqual(['V33_LINEAR_TRNA']);
+  expect(shown[unlabeled.svgId]).toEqual({ drawn: true, labels: [] });
+});
+
+// Design 4.3 rule 3: the Load notice counts exactly the edits it drops.
+test('loading an older Session counts only the feature edits it drops', async ({ page }, testInfo) => {
+  test.setTimeout(300_000);
+  const session = JSON.parse(gunzipSync(readFileSync(LINEAR_V33)));
+  session.features.featureVisibilityOverrides.f00000000_record_2 = 'off';
+  const file = testInfo.outputPath('linear-v33-unmatched-edit.gbdraw-session.json');
+  writeFileSync(file, JSON.stringify(session));
+  const alerts = [];
+  page.on('dialog', (dialog) => alerts.push(dialog.message()));
+  await openFresh(page);
+  await loadSession(page, file);
+  expect(alerts).toEqual([
+    'Session loaded successfully! 1 feature edit(s) from an older Session could not be matched to a feature of its saved diagram and were dropped.'
+  ]);
+  expect((await featureOverrideRows(page)).length).toBe(4);
 });

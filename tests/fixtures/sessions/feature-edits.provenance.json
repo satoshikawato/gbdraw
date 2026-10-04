@@ -56,6 +56,22 @@
       ],
       "sha256": "2748a9a17a5234a33b5474f741e7c4d23fad4011303a793a674204a2db6942fb",
       "decompressedSha256": "01df672fc64c11e0eb5e3658bcdcd2d0a60bf18b1b7077b76fceab9fe49eee4b"
+    },
+    "feature-edits-linear-crop-rc.v33.gbdraw-session.json.gz": {
+      "sourceCommit": "b05a6bb89e65b6a0b211a1ee10c1a3a402c21165",
+      "wheel": "gbdraw-0.14.0b0-py3-none-any.whl",
+      "sessionVersion": 33,
+      "records": "tests/fixtures/web_batch_two_records.gb (sha256 eea3934500b19ca9fca528766ae984577bb132716285e8387c04f5a0e3ce2ae5) split into TESTA and TESTB as two Linear records",
+      "steps": [
+        "Linear; TESTA crop 201..3800; TESTB reverse complement; show_labels_linear = all; Generate",
+        "TESTA_0002 Feature visibility Off; Generate",
+        "TESTB_0002 Feature visibility Off; Generate",
+        "TESTB tRNA label text V33_LINEAR_TRNA (This feature only); Generate",
+        "TESTA_0005 Label visibility Off; Generate",
+        "Save Session"
+      ],
+      "sha256": "6d257070938590e51998087faa87b4657c2334ef282e56f4b0f0781823413f51",
+      "decompressedSha256": "6e46fb36c8b7f0557ab4dce72872e038e964aa7a3e1251ae64b0e254c7af0847"
     }
   }
 }

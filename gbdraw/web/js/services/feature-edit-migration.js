@@ -71,54 +71,99 @@ const catalogIndex = (catalog) => {
   return { renderedById, biological };
 };
 
-// A Session before feature catalogs (31-33, 39 without one) keeps only feature
-// metadata recovered from its sources or saved with it. Its identities are the
-// renderer's: the record key of the request record the feature belongs to, and
-// the stable hash, with `~<source index>` when the record has the hash twice
-// (gbdraw/features/ids.py::disambiguate_feature_ids). Without one record key
-// per exactly-one record input, no key resolves.
-const legacyIndex = (features, records) => {
-  const renderedById = new Map();
-  const biological = [];
-  const recordKeys = (Array.isArray(records) ? records : []).map((record) => (
-    record?.cardinality === 'all' ? '' : text(record?.recordKey)
-  ));
-  if (recordKeys.length === 0 || recordKeys.some((key) => !key)) return { renderedById, biological };
-  const entries = (Array.isArray(features) ? features : []).map((feature) => {
-    const recordIndex = Number(feature?.record_idx ?? feature?.recordIndex);
-    const sourceIndex = [feature?.source_feature_index, feature?.sourceFeatureIndex, feature?.feature_index]
-      .find((value) => Number.isSafeInteger(value) && value >= 0);
+// A Session before feature catalogs (31-33, 39) keys an edit by the rendered ID
+// `<drawn hash>[_record_<n>][__instance_<s>_<digest>]`: the hash of the
+// feature in the drawn (cropped, reverse-complemented) record and the record's
+// position in the Result. `features` are the Session's source features read
+// again with its crops and orientations (each with its drawn hash beside its
+// source hash), or else its saved feature metadata, which has the drawn hash
+// only and so serves records drawn untransformed, where both hashes are equal.
+// A feature's input is its request record (Linear: `fileIdx`; Circular: one
+// file) and `record_idx` its record within that input. Identities are the
+// renderer's: the record key, `<recordKey>:<n>` for each record of an ALL
+// input with several records (gbdraw/api/record_planning.py), and the source
+// hash, `~<source index>` when the record has it twice
+// (gbdraw/features/ids.py::disambiguate_feature_ids).
+const LINEAR_RECORD_SUFFIX = /_record_([1-9]\d*)(?=__|$)/;
+
+const nonnegativeInteger = (value) => (
+  value !== null && value !== '' && Number.isSafeInteger(Number(value)) && Number(value) >= 0 ? Number(value) : null
+);
+
+const legacyIndex = ({ features = [], biologicalFeatures = [], records = [], mode = 'circular' } = {}) => {
+  const linear = mode === 'linear';
+  const requestRecords = Array.isArray(records) ? records : [];
+  const describe = (feature) => {
+    const svgOrdinal = Number(text(feature?.svg_id ?? feature?.svgId).match(LINEAR_RECORD_SUFFIX)?.[1]) || null;
+    const fileIdx = nonnegativeInteger(feature?.fileIdx);
     return {
-      recordKey: Number.isInteger(recordIndex) ? recordKeys[recordIndex] || '' : '',
-      recordOrdinal: Number.isInteger(recordIndex) ? recordIndex + 1 : 0,
-      stableId: text(feature?.stable_feature_id ?? feature?.stableFeatureId ?? feature?.stable_svg_id),
-      sourceIndex: sourceIndex ?? null,
-      svgId: text(feature?.rendered_feature_svg_id ?? feature?.svg_id).replace(RENDERED_PART_SUFFIX, '')
+      input: linear ? fileIdx ?? (svgOrdinal ? svgOrdinal - 1 : null) : 0,
+      recordIndex: linear && fileIdx === null ? 0 : nonnegativeInteger(feature?.record_idx ?? feature?.recordIndex),
+      sourceIndex: [feature?.source_feature_index, feature?.sourceFeatureIndex, feature?.feature_index]
+        .map(nonnegativeInteger).find((value) => value !== null) ?? null,
+      sourceHash: text(feature?.stable_feature_id ?? feature?.stableFeatureId ?? feature?.stable_svg_id),
+      drawnHash: text(feature?.drawn_selector?.hash ?? feature?.drawnSelector?.hash)
     };
-  }).filter((entry) => entry.recordKey && entry.stableId);
-  const counts = new Map();
-  entries.forEach((entry) => {
-    const id = JSON.stringify([entry.recordKey, entry.stableId]);
-    counts.set(id, (counts.get(id) || 0) + 1);
+  };
+  const listed = (Array.isArray(features) ? features : []).map(describe)
+    .filter((entry) => entry.input !== null && entry.recordIndex !== null && entry.sourceHash);
+  const sources = (Array.isArray(biologicalFeatures) && biologicalFeatures.length > 0
+    ? biologicalFeatures.map(describe).filter((entry) => entry.input !== null && entry.recordIndex !== null && entry.sourceHash)
+    : listed);
+  const recordCounts = new Map();
+  [...listed, ...sources].forEach(({ input, recordIndex }) => {
+    recordCounts.set(input, Math.max(recordCounts.get(input) || 1, recordIndex + 1));
   });
-  entries.forEach((entry) => {
-    const duplicated = counts.get(JSON.stringify([entry.recordKey, entry.stableId])) > 1;
+  const recordOf = (input, recordIndex) => (
+    linear ? requestRecords[input] : requestRecords[requestRecords.length > 1 ? recordIndex : 0]
+  );
+  const recordKeyOf = (input, recordIndex) => {
+    const record = recordOf(input, recordIndex);
+    const recordKey = text(record?.recordKey);
+    if (!recordKey) return '';
+    return record.cardinality === 'all' && (linear || requestRecords.length === 1) && recordCounts.get(input) > 1
+      ? `${recordKey}:${recordIndex + 1}`
+      : recordKey;
+  };
+  const offsets = [];
+  for (let input = 0, offset = 0; input < requestRecords.length; input += 1) {
+    offsets[input] = offset;
+    offset += recordCounts.get(input) || 1;
+  }
+  const ordinalOf = (input, recordIndex) => (linear ? (offsets[input] ?? 0) + recordIndex + 1 : recordIndex + 1);
+  const transformed = (input, recordIndex) => {
+    const record = recordOf(input, recordIndex);
+    return Boolean(record?.region || record?.presentation?.reverseComplement
+      || Number.isSafeInteger(record?.display?.startCoordinate));
+  };
+  const hashCounts = new Map();
+  sources.forEach((entry) => {
+    const id = JSON.stringify([recordKeyOf(entry.input, entry.recordIndex), entry.sourceHash]);
+    hashCounts.set(id, (hashCounts.get(id) || 0) + 1);
+  });
+  const biological = [];
+  const seen = new Set();
+  listed.forEach((entry) => {
+    const drawnHash = entry.drawnHash || (transformed(entry.input, entry.recordIndex) ? '' : entry.sourceHash);
+    const recordKey = recordKeyOf(entry.input, entry.recordIndex);
+    if (!drawnHash || !recordKey) return;
+    const duplicated = (hashCounts.get(JSON.stringify([recordKey, entry.sourceHash])) || 0) > 1;
     if (duplicated && entry.sourceIndex === null) return;
-    const key = featureIdentityKey(entry.recordKey, duplicated ? `${entry.stableId}~${entry.sourceIndex}` : entry.stableId);
-    if (!key) return;
-    if (entry.svgId) {
-      if (!renderedById.has(entry.svgId)) renderedById.set(entry.svgId, new Set());
-      renderedById.get(entry.svgId).add(key);
-    }
-    biological.push({ key, stableId: entry.stableId, sourceIndex: entry.sourceIndex, recordOrdinal: entry.recordOrdinal });
+    const key = featureIdentityKey(recordKey, duplicated ? `${entry.sourceHash}~${entry.sourceIndex}` : entry.sourceHash);
+    const recordOrdinal = ordinalOf(entry.input, entry.recordIndex);
+    const once = JSON.stringify([key, drawnHash, recordOrdinal]);
+    if (!key || seen.has(once)) return;
+    seen.add(once);
+    biological.push({ key, stableId: drawnHash, sourceIndex: entry.sourceIndex, recordOrdinal });
   });
-  return { renderedById, biological };
+  return { renderedById: new Map(), biological };
 };
 
 // Rule 1: the old key is a rendered ID of the saved catalog, so it names every
 // identity drawn with that ID (the live projection reached all of them).
-// Rule 2: otherwise it names the one biological feature with its stable hash in
-// the record position (and source index) its suffixes give.
+// Rule 2: otherwise it names the one feature with its hash in the record
+// position (and source index) its suffixes give: the source hash of a catalog
+// feature, the drawn hash of a feature of a Session without a catalog.
 const resolveOldKey = (renderedId, index) => {
   const drawn = index.renderedById.get(text(renderedId).replace(RENDERED_PART_SUFFIX, ''));
   if (drawn?.size) return [...drawn];
@@ -140,9 +185,12 @@ export const hasRenderedIdFeatureEdits = (features) => isObject(features)
 /**
  * Maps the rendered-ID edit maps of a Session older than 45 to draft rows
  * keyed by source identity. `catalog` is the Session's saved feature catalog
- * (schema 3, 4, or 5); a Session without one gives its saved or recovered
- * feature metadata and request records (`legacy`). Returns the rows, the
- * number of dropped edits, and whether the Session had label edits.
+ * (schema 3, 4, or 5); a Session without one gives `legacy`: its mode, request
+ * records, and source features read again (`features` with their drawn hashes,
+ * `biologicalFeatures`) or its saved feature metadata. Returns the rows, the
+ * number of dropped edits (Feature visibility, Label visibility, and label
+ * text entries; a label's source text is not an edit of its own), and whether
+ * the Session had label edits.
  */
 export const migrateRenderedIdFeatureEdits = ({ features, catalog = null, legacy = null }) => {
   const rows = {};
@@ -150,7 +198,7 @@ export const migrateRenderedIdFeatureEdits = ({ features, catalog = null, legacy
   const migratedLabelEdits = ['labelVisibilityOverrides', 'labelTextFeatureOverrides']
     .some((field) => isObject(features?.[field]) && Object.keys(features[field]).length > 0);
   if (!hasRenderedIdFeatureEdits(features)) return { featureOverrides: rows, droppedCount, migratedLabelEdits };
-  const index = catalog ? catalogIndex(catalog) : legacyIndex(legacy?.features, legacy?.records);
+  const index = catalog ? catalogIndex(catalog) : legacyIndex(legacy || {});
   const rowFor = (key) => {
     if (!rows[key]) {
       const [recordKey, biologicalFeatureId] = JSON.parse(key);
@@ -168,7 +216,8 @@ export const migrateRenderedIdFeatureEdits = ({ features, catalog = null, legacy
   const migrateMap = (field, assign) => {
     Object.entries(isObject(features[field]) ? features[field] : {}).forEach(([oldKey, value]) => {
       const keys = resolveOldKey(oldKey, index);
-      if (keys.length === 0 || !keys.every((key) => assign(rowFor(key), value) !== false)) {
+      if ((keys.length === 0 || !keys.every((key) => assign(rowFor(key), value) !== false))
+        && field !== 'labelTextFeatureOverrideSources') {
         droppedCount += 1;
       }
     });

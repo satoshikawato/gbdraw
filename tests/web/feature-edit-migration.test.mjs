@@ -70,7 +70,7 @@ test('v33 Session without a catalog maps its edits through its feature metadata'
   const [recordKey] = session.renderRequest.records.map((record) => record.recordKey);
   const { featureOverrides, droppedCount } = migrateRenderedIdFeatureEdits({
     features: session.features,
-    legacy: { features: session.features.extractedFeatures, records: session.renderRequest.records }
+    legacy: { mode: 'circular', features: session.features.extractedFeatures, records: session.renderRequest.records }
   });
   assert.equal(droppedCount, 0);
   assert.deepEqual(featureOverrides, {
@@ -133,4 +133,78 @@ test('a blank label text hid its label and becomes Label visibility Off', () => 
     catalog: { schema: 4, items: [{ recordKeys: ['r'], features: [{ svgId: 'f2', recordKey: 'r', biologicalFeatureId: 'f2' }], biologicalFeatures: [] }] }
   });
   assert.deepEqual(featureOverrides[key('r', 'f2')], row('r', 'f2', { labelVisibility: 'off' }));
+});
+
+// Sessions 31-33 Linear: each input is one request record (an ALL record
+// without a selector), every input's features have record_idx 0, and the
+// rendered ID `<drawn hash>_record_<n>` gives the record's position.
+const linearRecords = () => [
+  { recordKey: 'seq-a', cardinality: 'exactly_one', region: { selector: null, start: 201, end: 3800, reverseComplement: false },
+    presentation: { reverseComplement: false } },
+  { recordKey: 'seq-b', cardinality: 'all', region: null, presentation: { reverseComplement: true } },
+  { recordKey: 'seq-c', cardinality: 'all', region: null, presentation: { reverseComplement: false } }
+];
+
+test('v31-33 Linear: source features read again name each record by its input and drawn hash', () => {
+  // As the Session's sources read with its crop and orientation give them:
+  // the source hash beside the drawn one, per input (`fileIdx`). Input 3 holds
+  // two records, so its record keys are `seq-c:1` and `seq-c:2`.
+  const source = (fileIdx, recordIdx, featureIndex, stable, drawn) => ({
+    fileIdx, record_idx: recordIdx, feature_index: featureIndex, stable_feature_id: stable,
+    svg_id: stable, drawn_selector: { hash: drawn }
+  });
+  const features = [
+    source(0, 0, 2, 'fsrca2', 'fdrwa2'),
+    source(1, 0, 2, 'fsrcb2', 'fdrwb2'),
+    source(1, 0, 4, 'fsame', 'fdrwb4'),
+    source(2, 0, 1, 'fsame', 'fsame'),
+    source(2, 1, 1, 'fsame', 'fsame'),
+    source(2, 1, 3, 'fdup', 'fdup'),
+    source(2, 1, 5, 'fdup', 'fdup')
+  ];
+  const { featureOverrides, droppedCount } = migrateRenderedIdFeatureEdits({
+    features: {
+      featureVisibilityOverrides: {
+        fdrwa2_record_1: 'off',
+        fdrwb2_record_2: 'off',
+        fsame_record_4: 'exclude_matching',
+        'fdup_record_4__instance_5_0123456789abcdef': 'off'
+      },
+      labelTextFeatureOverrides: { fdrwb4_record_2: 'B_LABEL' },
+      labelVisibilityOverrides: { fsame_record_3: 'off' }
+    },
+    legacy: { mode: 'linear', features, records: linearRecords() }
+  });
+  assert.equal(droppedCount, 0);
+  assert.deepEqual(featureOverrides, {
+    [key('seq-a', 'fsrca2')]: row('seq-a', 'fsrca2', { featureVisibility: 'off' }),
+    [key('seq-b', 'fsrcb2')]: row('seq-b', 'fsrcb2', { featureVisibility: 'off' }),
+    [key('seq-b', 'fsame')]: row('seq-b', 'fsame', { labelText: 'B_LABEL' }),
+    [key('seq-c:1', 'fsame')]: row('seq-c:1', 'fsame', { labelVisibility: 'off' }),
+    [key('seq-c:2', 'fsame')]: row('seq-c:2', 'fsame', { featureVisibility: 'exclude_matching' }),
+    [key('seq-c:2', 'fdup~5')]: row('seq-c:2', 'fdup~5', { featureVisibility: 'off' })
+  });
+});
+
+test('v31-33 Linear: saved metadata names features only of records drawn untransformed', () => {
+  // Saved metadata holds the drawn hash only; it equals the source hash where
+  // the record was neither cropped nor reverse-complemented.
+  const saved = (fileIdx, svgId) => ({
+    fileIdx, record_idx: 0, svg_id: svgId, stable_svg_id: svgId.replace(/_record_\d+$/, ''),
+    stable_feature_id: svgId.replace(/_record_\d+$/, '')
+  });
+  const { featureOverrides, droppedCount } = migrateRenderedIdFeatureEdits({
+    features: {
+      featureVisibilityOverrides: { fdrwa2_record_1: 'off', fdrwb2_record_2: 'off', fplain_record_3: 'off' }
+    },
+    legacy: {
+      mode: 'linear',
+      features: [saved(0, 'fdrwa2_record_1'), saved(1, 'fdrwb2_record_2'), saved(2, 'fplain_record_3')],
+      records: linearRecords()
+    }
+  });
+  assert.equal(droppedCount, 2);
+  assert.deepEqual(featureOverrides, {
+    [key('seq-c', 'fplain')]: row('seq-c', 'fplain', { featureVisibility: 'off' })
+  });
 });

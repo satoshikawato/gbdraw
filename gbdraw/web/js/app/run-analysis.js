@@ -1951,10 +1951,12 @@ export const createRunAnalysis = ({
       || Object.keys(state.featurePlacementOverrides || {}).length > 0
       || Object.keys(legendColorOverrides).length > 0 || Object.keys(legendStrokeOverrides).length > 0
       || legendEntries.value.some(entry => entry.originalCaption && entry.originalCaption !== entry.caption);
-    // The committed records whose source this Generate replaces or drops.
+    // The committed records whose source this Generate replaces or drops. The
+    // metadata of a Session without a feature catalog has no record keys.
     const replacedRecordKeys = hasSourceBoundEditorIntent
-      ? [...new Map((workingBiologicalFeatures || []).map(feature => [feature.record_key, feature])).values()]
-        .filter(feature => !isCurrentFeature(feature)).map((feature) => String(feature.record_key || ''))
+      ? [...new Map((workingBiologicalFeatures || []).filter(feature => feature.record_key)
+        .map(feature => [feature.record_key, feature])).values()]
+        .filter(feature => !isCurrentFeature(feature)).map((feature) => String(feature.record_key))
       : [];
     const sourceReplaced = replacedRecordKeys.length > 0;
     const previousCommittedRequest = typeof getCommittedCanonicalSession === 'function'

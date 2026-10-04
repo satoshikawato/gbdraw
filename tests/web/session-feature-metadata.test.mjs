@@ -607,10 +607,13 @@ for (const invalidRecordIndex of [
     }
   });
   assert.deepEqual(migrated.featureState.featureColorOverrides, { 'new-id': { color: '#111111' } });
-  assert.deepEqual(migrated.featureState.featureVisibilityOverrides, { 'new-svg': 'off' });
-  assert.deepEqual(migrated.featureState.labelTextFeatureOverrides, { 'new-svg': 'renamed' });
-  assert.deepEqual(migrated.featureState.labelTextFeatureOverrideSources, { 'new-id': 'manual' });
-  assert.deepEqual(migrated.featureState.labelVisibilityOverrides, { 'new-svg': 'hidden' });
+  // Rendered-ID Feature visibility and label edits keep their saved keys here:
+  // services/feature-edit-migration.js moves them onto source identities.
+  assert.deepEqual(migrated.featureState.featureVisibilityOverrides, { 'old-svg': 'off' });
+  assert.deepEqual(migrated.featureState.labelTextFeatureOverrides, { 'old-svg': 'renamed' });
+  assert.deepEqual(migrated.featureState.labelTextFeatureOverrideSources, { 'old-id': 'manual' });
+  assert.deepEqual(migrated.featureState.labelVisibilityOverrides, { 'old-svg': 'hidden' });
+  assert.equal(migrated.skippedOverrideCount, 0);
   assert.deepEqual(migrated.editorState.featureStrokes.overrides, {
     'new-svg': { strokeColor: '#222222', strokeWidth: 2 }
   });

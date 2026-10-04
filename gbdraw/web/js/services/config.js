@@ -70,11 +70,13 @@ import { canonicalFeatureOverrides } from './feature-placement.js';
 import {
   FEATURE_EDIT_MIGRATION_WARNING,
   RENDERED_ID_FEATURE_EDIT_FIELDS,
+  hasRenderedIdFeatureEdits,
   migrateSessionFeatureEdits
 } from './feature-edit-migration.js';
 import {
   buildSessionFeatureRecoveryPlan,
   classifyFeatureMetadataState,
+  extractSessionSourceFeatures,
   hasUsableBiologicalFeatureCatalog
 } from '../app/session-feature-metadata.js';
 import {
@@ -4402,16 +4404,17 @@ const importSessionDocument = async (e, options = {}) => {
     recordSessionLifecycleEvent('svg-admission-end');
 
     let legacyFeatureRecoveryPlan = null;
+    const legacyFeatureSnapshot = {
+      mode: candidateMode, cInputType: candidateFiles.cInputType.value,
+      lInputType: candidateInputType, files: candidateFiles.files,
+      linearSeqs: candidateFiles.linearSeqs, results: committedImportedResults,
+      selectedResultIndex: ui.selectedResultIndex || 0,
+      featureState: features, editorState: restoredEditorState
+    };
     if (sourceSessionVersion < CURRENT_AUTHORITY_SESSION_MIN_VERSION) {
       try {
         legacyFeatureRecoveryPlan = await buildSessionFeatureRecoveryPlan({
-          snapshot: {
-            mode: candidateMode, cInputType: candidateFiles.cInputType.value,
-            lInputType: candidateInputType, files: candidateFiles.files,
-            linearSeqs: candidateFiles.linearSeqs, results: committedImportedResults,
-            selectedResultIndex: ui.selectedResultIndex || 0,
-            featureState: features, editorState: restoredEditorState
-          },
+          snapshot: legacyFeatureSnapshot,
           featureVisibilityTsv: serializeFeatureVisibilityRules(
             features.featureVisibilityManualRules || features.featureVisibilityRules || []
           )
@@ -4421,34 +4424,35 @@ const importSessionDocument = async (e, options = {}) => {
       }
     }
     // Session 45 keys per-feature edits by source identity: an older Session's
-    // rendered-ID edits are mapped through its saved catalog, or without one
-    // through its recovered feature metadata, once (design Q4 4.3).
+    // saved rendered-ID edits are mapped through its saved catalog, or without
+    // one through its sources read again with its crops and orientations (the
+    // saved metadata when they cannot be read), once (design Q4 4.3).
     let droppedFeatureEditCount = 0;
     if (sourceSessionVersion < SESSION_VERSION) {
       const recovered = legacyFeatureRecoveryPlan?.recoveredFeatureState;
-      // Recovery realigns the old rendered IDs with the recovered metadata
-      // when it can; a map it could not realign keeps the saved keys.
+      const sourceFeatures = !validatedSessionCatalog && hasRenderedIdFeatureEdits(features)
+        ? await extractSessionSourceFeatures({ snapshot: legacyFeatureSnapshot })
+        : null;
       const migration = migrateSessionFeatureEdits({
-        features: recovered ? {
-          ...features,
-          ...Object.fromEntries(RENDERED_ID_FEATURE_EDIT_FIELDS
-            .filter((field) => Object.keys(recovered[field] || {}).length > 0)
-            .map((field) => [field, recovered[field]]))
-        } : features,
+        features,
         catalog: validatedSessionCatalog,
         legacy: validatedSessionCatalog ? null : {
+          mode: data.renderRequest?.mode || candidateMode,
+          records: data.renderRequest?.records,
           features: [
-            recovered?.biologicalFeatures, recovered?.extractedFeatures,
+            sourceFeatures?.extractedFeatures, recovered?.biologicalFeatures, recovered?.extractedFeatures,
             features.biologicalFeatures, features.extractedFeatures
           ].find((list) => Array.isArray(list) && list.length > 0) || [],
-          records: data.renderRequest?.records
+          biologicalFeatures: sourceFeatures?.biologicalFeatures || []
         }
       });
       features = migration.features;
       droppedFeatureEditCount = migration.droppedCount;
       if (recovered) {
+        const recoveredWithoutRenderedIdEdits = { ...recovered };
+        RENDERED_ID_FEATURE_EDIT_FIELDS.forEach((field) => delete recoveredWithoutRenderedIdEdits[field]);
         legacyFeatureRecoveryPlan.recoveredFeatureState = {
-          ...recovered,
+          ...recoveredWithoutRenderedIdEdits,
           featureOverrides: features.featureOverrides,
           labelOverrideRows: features.labelOverrideRows
         };

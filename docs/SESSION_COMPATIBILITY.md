@@ -28,10 +28,14 @@ values; until the next Generate, live matching then leaves rules on those
 fields to Generate.
 
 Loading a Session 44, or a Web Session 31–33, moves each rendered-ID edit onto
-its feature: a rendered ID in the saved feature catalog names its feature;
-otherwise its `_record_<n>` and `__instance_` suffixes are removed and the edit
-moves only when exactly one feature remains. Other edits are dropped and Load
-reports how many.
+its feature. In a Session 40–44, a rendered ID in the saved feature catalog
+names its feature; otherwise its `_record_<n>` and `__instance_` suffixes are
+removed and the edit moves only when exactly one feature remains. A Session
+before 40 has no catalog that Load reads, so Load reads its GenBank sources
+again with its crops and orientations and matches each rendered ID's drawn
+hash and record position. Without readable sources it uses the saved feature
+metadata, which names only features of records drawn without a crop or
+reverse complement. Other edits are dropped and Load reports how many.
 
 ## Unreleased: request schema 9 and feature identity overrides
 
