@@ -246,12 +246,13 @@ def _normalize_gff3_multipart_features(record: SeqRecord) -> SeqRecord:
 
 
 def scan_features_recursive(
-    features: List[SeqFeature], feature_types_to_keep: Set[str],
+    features: List[SeqFeature], feature_types_to_keep: Set[str] | None,
     source_indexes: dict[int, int] | None = None,
 ) -> List[SeqFeature]:
+    """Flatten nested features in source order; ``None`` keeps every type."""
     filtered_list: list[SeqFeature] = []
     for feature in features:
-        if feature.type in feature_types_to_keep:
+        if feature_types_to_keep is None or feature.type in feature_types_to_keep:
             new_feature = SeqFeature(
                 location=feature.location,
                 type=feature.type,
@@ -273,7 +274,7 @@ def scan_features_recursive(
 
 
 def filter_features_by_type(
-    record: SeqRecord, feature_types_to_keep: Set[str], *, source_indexes: dict[int, int] | None = None,
+    record: SeqRecord, feature_types_to_keep: Set[str] | None, *, source_indexes: dict[int, int] | None = None,
 ) -> SeqRecord:
     new_record = SeqRecord(
         seq=record.seq,
@@ -287,8 +288,9 @@ def filter_features_by_type(
     filtered_features = scan_features_recursive(record.features, feature_types_to_keep, source_indexes)
     new_record.features = filtered_features
 
+    kept_types = "all" if feature_types_to_keep is None else ", ".join(sorted(feature_types_to_keep))
     logger.info(
-        f"INFO: For record {record.id}, filtered to {len(filtered_features)} features of types: {', '.join(feature_types_to_keep)}."
+        f"INFO: For record {record.id}, filtered to {len(filtered_features)} features of types: {kept_types}."
     )
     return new_record
 
@@ -327,16 +329,18 @@ def load_gff_fasta(
                 _normalize_gff3_multipart_features(record) for record in GFF.parse(gff_file)
             ]
             catalogs = tuple(build_source_feature_catalog(record) for record in parsed_gff_records) if source_feature_catalogs is not None else ()
-            if keep_all_features or selected_features_set is None:
-                gff_records = parsed_gff_records
-            else:
-                feature_types_to_keep = set(selected_features_set)
-                gff_records = [
-                    filter_features_by_type(record, feature_types_to_keep,
-                        source_indexes=_feature_source_index_map(record.features)
-                        if source_feature_catalogs is not None else None)
-                    for record in parsed_gff_records
-                ]
+            # The renderer reads record.features only, so Parent-linked children
+            # (CDS under gene) are flattened whether or not types are filtered.
+            feature_types_to_keep = (
+                None if keep_all_features or selected_features_set is None
+                else set(selected_features_set)
+            )
+            gff_records = [
+                filter_features_by_type(record, feature_types_to_keep,
+                    source_indexes=_feature_source_index_map(record.features)
+                    if source_feature_catalogs is not None else None)
+                for record in parsed_gff_records
+            ]
             catalog_by_record = {id(record): catalog for record, catalog in zip(gff_records, catalogs)}
             logger.info("INFO: Loading FASTA file {}".format(fasta_file))
             fasta_records: list[SeqRecord] = list(SeqIO.parse(fasta_file, "fasta"))
