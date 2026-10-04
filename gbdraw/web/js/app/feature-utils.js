@@ -66,24 +66,39 @@ const firstFeatureText = (...values) => {
 };
 
 const LINEAR_RENDERED_RECORD_SUFFIX = /_record_\d+$/i;
+// Python `instance_svg_id` appends `__instance_<instance>_<digest>` to a
+// duplicated record's or feature's rendered id.
+const RENDERED_INSTANCE_SUFFIX = /__instance_.*$/;
+
+const renderedFeatureId = (feature) => firstFeatureText(
+  feature.rendered_svg_id,
+  feature.renderedSvgId,
+  feature.rendered_feature_svg_id,
+  feature.renderedFeatureSvgId,
+  feature.svg_id,
+  feature.svgId
+);
 
 export const getFeatureHashCandidates = (feature) => {
   if (!feature || typeof feature !== 'object') return [];
 
-  const renderedId = firstFeatureText(
-    feature.rendered_svg_id,
-    feature.renderedSvgId,
-    feature.rendered_feature_svg_id,
-    feature.renderedFeatureSvgId,
-    feature.svg_id,
-    feature.svgId
-  );
+  const renderedId = renderedFeatureId(feature);
   const generationId = renderedId.replace(LINEAR_RENDERED_RECORD_SUFFIX, '');
 
   return [...new Set([generationId, renderedId].filter(Boolean))];
 };
 
 export const getFeatureGenerationHash = (feature) => getFeatureHashCandidates(feature)[0] || '';
+
+// The hash Python's color-rule `hash` qualifier matches (`compute_feature_hash`):
+// no record or instance suffix, so duplicates of one record share it (PD-OI-069).
+export const getFeatureColorRuleHash = (feature) => (
+  !feature || typeof feature !== 'object'
+    ? ''
+    : renderedFeatureId(feature)
+      .replace(RENDERED_INSTANCE_SUFFIX, '')
+      .replace(LINEAR_RENDERED_RECORD_SUFFIX, '')
+);
 
 const directFeatureValue = (feature, ...keys) => {
   if (!feature || typeof feature !== 'object') return '';

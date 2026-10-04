@@ -10,6 +10,7 @@ const {
   loadSessionFile,
   openBatch,
   openFresh,
+  openWithGenBank,
   selectResult,
   settle,
   switchMode
@@ -615,4 +616,50 @@ test('Label visibility On and Off apply under First Record Only, live and after 
   } finally {
     await page.context().close();
   }
+});
+
+// FINDINGS OV-05 (color), PD-OI-069: Python matches a `hash` rule by the hash
+// without the `__instance_` suffix, so a This feature only fill on a duplicated
+// record uses that hash and survives Generate on every copy of the record.
+test('a This feature only fill on a duplicated record survives Generate', async ({ page }) => {
+  test.setTimeout(600_000);
+  await openWithGenBank(page, `${__dirname}/../fixtures/b_dup_ids.gb`, () => {
+    Object.assign(window.__GBDRAW_APP__.form, { labels_mode: 'out', multi_record_canvas: true });
+  });
+  await generateAndWaitForResult(page);
+  await settle(page);
+  const copies = await page.evaluate(() => window.__GBDRAW_APP__.extractedFeatures
+    .filter((feature) => feature.type === 'CDS' && feature.locus_tag === 'TESTA_0002')
+    .map((feature) => feature.svg_id).sort());
+  expect(copies).toHaveLength(2);
+  expect(copies[0]).toContain('__instance_');
+  const fills = () => page.evaluate((ids) => {
+    const root = window.__GBDRAW_APP__.svgContainer.querySelector('svg');
+    const hidden = (element) => {
+      for (let node = element; node && node.nodeType === 1; node = node.parentNode) {
+        const style = node.getAttribute('style') || '';
+        if (node.getAttribute('display') === 'none' || /display\s*:\s*none/.test(style)) return true;
+      }
+      return false;
+    };
+    return ids.map((id) => [...root.querySelectorAll(
+      `path[data-gbdraw-feature-id="${CSS.escape(id)}"], path[data-gbdraw-rendered-feature-id="${CSS.escape(id)}"]`
+    )].filter((element) => !hidden(element))
+      .map((element) => element.getAttribute('fill')).find((value) => value && value !== 'none') || null);
+  }, copies);
+  await page.evaluate(async (id) => {
+    const app = window.__GBDRAW_APP__;
+    await app.openFeatureEditorFromList(app.extractedFeatures.find((item) => item.svg_id === id), null);
+    await app.updateClickedFeatureColor('#c83366');
+    if (app.featureStyleScopeDialog.show) await app.handleFeatureStyleScopeChoice('single');
+    app.clickedFeature = null;
+  }, copies[0]);
+  await settle(page);
+  const rules = await page.evaluate(() => window.__GBDRAW_APP__.manualSpecificRules.map((rule) => rule.val));
+  expect(rules).toEqual([copies[0].replace(/__instance_.*$/, '')]);
+  const live = await fills();
+  expect(live[0]).toBe('#c83366');
+  await generateAndWaitForResult(page);
+  await settle(page);
+  expect((await fills())[0]).toBe('#c83366');
 });
