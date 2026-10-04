@@ -1778,7 +1778,7 @@ test('the PR template retains architecture evidence anchors', () => {
     'Semantic owners after',
     'Canonical production paths before',
     'Canonical production paths after',
-    'Maintainer architecture decision comment permalink'
+    'Maintainer approval (review or comment link)'
   ].forEach((anchor) => {
     assert.ok(PULL_REQUEST_TEMPLATE.includes(anchor), `Missing PR template anchor: ${anchor}`);
   });
