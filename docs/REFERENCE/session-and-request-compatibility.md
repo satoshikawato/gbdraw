@@ -58,11 +58,18 @@ request alone does not contain those manual positions.
 
 Fresh CLI sessions omit `config` because they have no independent Web draft.
 Web initializes their settings from `renderRequest` and restores original input
-files from their bindings. When the request draws every record of an input file
-unchanged, its record source names that file's resource, so feature-popup record
-rotation works right after Load. A record drawn cropped or reverse-complemented
-keeps its own drawn copy, as does every record of an older CLI session; rotating
-such a record needs **Generate Diagram** first. A present `config` must contain
+files from their bindings. When the request draws every record of an input file,
+its record source names that file's resource, so feature-popup record rotation
+works right after Load. A Linear record, or the record of a single Circular
+request, that is drawn cropped or reverse-complemented stores its crop in source
+coordinates as `region` and its orientation as `region.reverseComplement` or
+`presentation.reverseComplement`, as Web Save does; a crop taken after
+`--reverse_complement` is written as the same span in source coordinates. Each
+Linear row takes its crop and orientation from the request, so **Generate
+Diagram** draws the record the CLI drew. A cropped or reversed record of a
+Circular batch or grid, the records of a file that is only partly drawn, and
+every record of an older CLI session keep their own drawn copy; rotating such a
+record needs **Generate Diagram** first. A present `config` must contain
 valid `form` and `adv` objects; a partial draft is rejected. CLI replay
 preserves a supplied Web draft.
 A CLI binding uid such as `cli-seq-1` is only an initial value: each Linear

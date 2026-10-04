@@ -18,6 +18,10 @@ const cases = [
   { name: 'original single', mode: 'circular', args: ['--gbk', mito, '--labels', 'out'], sources: [mito] },
   { name: 'composite', mode: 'circular', args: ['--gbk', mito, lambda, '--multi_record_canvas'], sources: [mito, lambda] },
   { name: 'linear', mode: 'linear', args: ['--gbk', mito, lambda], sources: [mito, lambda] },
+  {
+    name: 'linear crop and reverse', mode: 'linear', sources: [mito, lambda],
+    args: ['--gbk', mito, lambda, '--region', '#1:1000-8000', '--reverse_complement', '0', '--reverse_complement', '1']
+  },
   { name: 'gff fasta', mode: 'circular', args: ['--gff', gff, '--fasta', fasta], sources: [gff, fasta] }
 ];
 
@@ -140,6 +144,10 @@ for (const entry of cases) {
         const generatedSvg = await run.page.evaluate(svgSemantics, after.selected);
         expect(generatedSvg.records).toEqual(expectedSvg.records);
         expect(after.request.records).toHaveLength(session.renderRequest.records.length);
+        // Generate keeps each record's crop and orientation.
+        const transform = record => [record.region?.start ?? null, record.region?.end ?? null,
+          Boolean(record.region?.reverseComplement || record.presentation.reverseComplement)];
+        expect(after.request.records.map(transform)).toEqual(session.renderRequest.records.map(transform));
         expect(after.files).toEqual(before.files);
         expect(after.files.flatMap(file => file.parts.map(part => part.sha256))).toEqual(sourceHashes);
         expect(await run.page.evaluate(svgSemantics, after.mounted)).toEqual(generatedSvg);
