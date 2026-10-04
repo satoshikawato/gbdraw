@@ -4,6 +4,7 @@ import { migrateLegacyLinearLabelVisibility } from '../app/linear-label-visibili
 import { migrateLegacyRecordDisplayDrafts } from '../app/record-display-options.js';
 import { migrateLegacyFeatureCatalog } from './feature-catalog.js';
 import { adoptCurrentSessionResources } from './session-resource-backing.js';
+import { defaultFeatureRendering } from '../utils/feature-rendering.js';
 const CURRENT_VERSION = 44, CURRENT_REQUEST_SCHEMA = 9, ACCEPTED_REQUEST_SCHEMAS = new Set([CURRENT_REQUEST_SCHEMA]), HISTORICAL_VERSIONS = new Set([31, 32, 33, 39]), CACHE_LIMIT_BYTES = 64 * 1024 * 1024;
 const ARTIFACT_FIELDS = ['results', 'features', 'editorState', 'orthogroupState', 'runMetadata', 'losatCache', 'losatDerivedCache', 'proteinIdentityManifest'];
 // A published Gallery file carries no draft intent for its unused mode (GUI
@@ -120,8 +121,18 @@ const rebuildIntent = async (session, owners) => {
   if (isObject(session.renderRequest.diagramOptions?.config) && !cliConfig) {
     rebuilt.renderRequest.diagramOptions.config = clone(session.renderRequest.diagramOptions.config); delete rebuilt.renderRequest.diagramOptions.configOverrides;
   }
-  const comparable = (request) => cliConfig ? { ...request, diagramOptions: Object.fromEntries(Object.entries(request.diagramOptions)
-    .filter(([key]) => key !== 'config' && key !== 'configOverrides')) } : request;
+  // The CLI omits feature renderings it leaves at their defaults; the Web
+  // request states them (repeat_region underlay), so defaults compare as absent.
+  const comparable = (request) => {
+    if (!cliConfig) return request;
+    const diagramOptions = Object.fromEntries(Object.entries(request.diagramOptions)
+      .filter(([key]) => key !== 'config' && key !== 'configOverrides'));
+    const featureShapes = Object.fromEntries(Object.entries(diagramOptions.featureShapes || {})
+      .filter(([type, rendering]) => rendering !== defaultFeatureRendering(type)));
+    if (Object.keys(featureShapes).length) diagramOptions.featureShapes = featureShapes;
+    else delete diagramOptions.featureShapes;
+    return { ...request, diagramOptions };
+  };
   return { config, rebuilt, equivalence: await owners.assertRequestsEquivalent({ expectedRequest: comparable(renderRequest),
     expectedResources: session.resources, actualRequest: comparable(rebuilt.renderRequest), actualResources: rebuilt.resources }) };
 };

@@ -5266,32 +5266,12 @@
                             <div class="w-4 h-4 rounded mt-1 shrink-0" :style="{ backgroundColor: clickedFeature.color }"></div>
                             <div class="min-w-0 flex-1">
                                 <div class="text-base font-bold text-slate-700 truncate max-w-[260px]">{{ clickedFeature.label }}</div>
-                                <div class="text-xs text-slate-500 mt-0.5">Location: {{ clickedFeatureLocation }}</div>
-                                <div v-if="clickedFeature.orthogroupId" class="text-xs text-slate-500 mt-0.5">
-                                    <div class="font-medium text-slate-600 truncate max-w-[260px]">
-                                        {{ clickedOrthogroupDetail ? clickedOrthogroupDetail.displayName : clickedFeature.orthogroupId }}
-                                    </div>
-                                    <div>{{ clickedFeature.orthogroupId }} - {{ clickedFeature.orthogroupMemberCount }} members</div>
-                                </div>
+                                <div class="text-xs text-slate-500 mt-0.5 break-all" data-feature-popup-summary>{{ clickedFeatureSummary }}</div>
                             </div>
-                            <input type="color"
-                                   :value="clickedFeature.color || '#cccccc'"
-                                   @change="updateClickedFeatureColor($event.target.value)"
-                                   data-history-managed
-                                   :disabled="!semanticMutationAvailable || (!canEditFeatureColor(clickedFeature.feat))"
-                                   :title="canEditFeatureColor(clickedFeature.feat) ? 'Change fill color' : 'No stable identifier available'"
-                                   aria-label="Feature fill color"
-                                   :class="['w-8 h-8 cursor-pointer border-2 border-slate-200 rounded-lg shrink-0', canEditFeatureColor(clickedFeature.feat) ? '' : 'opacity-50 cursor-not-allowed']">
                             <button @click="closeFeaturePopup" class="text-slate-400 hover:text-slate-600 ml-auto text-xl shrink-0" aria-label="Close feature popup">
                                 <i class="ph ph-x"></i>
                             </button>
                         </div>
-                        <label class="block text-xs mb-2">Feature placement
-                            <select data-history-managed aria-label="Feature placement" :disabled="!semanticMutationAvailable" :value="featurePlacementActions.valueFor(clickedFeature.feat)" @change="featurePlacementActions.setPlacement([clickedFeature.feat], $event.target.value)" class="rounded border p-1 max-w-full">
-                                <option v-for="choice in featurePlacementActions.choices([clickedFeature.feat])" :key="choice.value" :value="choice.value" :disabled="!choice.enabled">{{ choice.label }}{{ choice.reason ? ' — ' + choice.reason : '' }}</option>
-                            </select>
-                            <span class="block text-slate-500">Applied on the next successful Generate.</span>
-                        </label>
                         <div v-if="adv.rich_feature_popup" class="grid grid-cols-4 gap-1 bg-slate-100 rounded-lg p-1 mb-3" data-nodrag="true">
                             <button type="button"
                                     @click="clickedFeature.activeTab = 'edit'"
@@ -5331,129 +5311,293 @@
                             </button>
                         </div>
                         <div class="feature-popup-body custom-scrollbar" data-nodrag="true">
-                        <p v-if="!adv.rich_feature_popup || clickedFeature.activeTab === 'edit'" class="mb-2 text-[10px] text-slate-500">Live edit: feature color, label text, and visibility update the current Result; geometry changes may rerender automatically.</p>
-                        <div v-if="!adv.rich_feature_popup || clickedFeature.activeTab === 'edit'" class="feature-popup-grid">
-                        <div v-if="clickedFeature?.feat" class="col-span-full mb-2" data-nodrag="true">
-                            <button type="button" @click="toggleRecordActions"
+                        <div v-if="!adv.rich_feature_popup || clickedFeature.activeTab === 'edit'" class="space-y-3">
+                        <section aria-labelledby="feature-popup-appearance-heading" data-feature-popup-group="appearance">
+                            <h3 id="feature-popup-appearance-heading" class="mb-2 text-xs font-bold text-slate-600"><span class="uppercase tracking-wider">Appearance</span> <span class="font-normal text-slate-500">· updates the current Result</span></h3>
+                            <div class="feature-popup-grid">
+                        <div>
+                            <label class="text-xs font-medium text-slate-500 block mb-1">Fill Color</label>
+                            <div class="flex items-center gap-4">
+                                <input type="color"
+                                       :value="clickedFeature.color || '#cccccc'"
+                                       @change="updateClickedFeatureColor($event.target.value)"
+                                       data-history-managed
+                                       :disabled="!semanticMutationAvailable || (!canEditFeatureColor(clickedFeature.feat))"
+                                       :title="canEditFeatureColor(clickedFeature.feat) ? 'Change fill color' : 'No stable identifier available'"
+                                       aria-label="Feature fill color"
+                                       :class="['w-12 h-10 cursor-pointer border-2 border-slate-200 rounded-lg', canEditFeatureColor(clickedFeature.feat) ? '' : 'opacity-50 cursor-not-allowed']">
+                                <span class="text-sm font-mono text-slate-600 bg-slate-50 px-3 py-2 rounded-lg">{{ clickedFeature.color }}</span>
+                                <button @click="resetClickedFeatureFillColor"
+                                        data-history-managed
+                                        class="text-slate-400 hover:text-slate-600 p-2 rounded-lg hover:bg-slate-100"
+                                        title="Reset fill color to default" :disabled="!semanticMutationAvailable">
+                                    <i class="ph ph-arrow-counter-clockwise text-lg"></i>
+                                </button>
+                            </div>
+                        </div>
+                        <div>
+                            <label class="text-xs font-medium text-slate-500 block mb-1">Stroke</label>
+                            <div class="flex items-center gap-4">
+                                <color-value-control
+                                    :model-value="getFeatureStrokeColorValue(clickedFeature.feat)"
+                                    :fallback="clickedFeature.strokeColor || '#000000'"
+                                    @update:model-value="setClickedFeatureStrokeColorValue"
+                                    data-history-managed
+                                    aria-label="Feature stroke color"
+                                    class="w-36">
+                                </color-value-control>
+                                <input type="number"
+                                       :value="clickedFeature.strokeWidth"
+                                       @blur="setClickedFeatureStrokeWidthValue($event.target.value)"
+                                       @keydown.enter.prevent="$event.target.blur()"
+                                       data-history-managed
+                                       aria-label="Feature stroke width"
+                                       class="w-20 text-sm border border-slate-200 rounded-lg px-2 py-1.5"
+                                       placeholder="Width"
+                                       step="0.1"
+                                       min="0"
+                                       title="Stroke width">
+                                <button @click="resetClickedFeatureStroke"
+                                        data-history-managed
+                                        class="text-slate-400 hover:text-slate-600 p-2 rounded-lg hover:bg-slate-100"
+                                        title="Reset stroke to default" :disabled="!semanticMutationAvailable">
+                                    <i class="ph ph-arrow-counter-clockwise text-lg"></i>
+                                </button>
+                            </div>
+                        </div>
+                        <div>
+                            <div class="flex items-center justify-between mb-1">
+                                <label class="text-xs font-medium text-slate-500 block">Label text</label>
+                                <span v-if="clickedFeature.hasEditableLabel" class="text-[10px] font-mono text-slate-400">
+                                    {{ clickedFeature.labelKey }}
+                                </span>
+                            </div>
+                            <div class="mb-2">
+                                <label class="text-[10px] font-medium text-slate-500 block mb-1">Label visibility</label>
+                                <select v-model="clickedFeature.labelVisibility"
+                                        class="w-full text-xs border border-slate-200 rounded-lg px-2 py-1.5 focus:outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100" :disabled="!semanticMutationAvailable">
+                                    <option value="default">Default (follow Show Labels and filters)</option>
+                                    <option value="on">On (always show)</option>
+                                    <option value="off">Off (always hide)</option>
+                                </select>
+                                <p class="text-[10px] text-slate-400 mt-1">
+                                    On and Off apply to this feature regardless of Show Labels and label filters.
+                                </p>
+                                <p v-if="clickedFeatureLabelHint" data-label-visibility-hint
+                                   class="text-[10px] text-amber-700 bg-amber-50 border border-amber-200 rounded-md px-2 py-1 mt-1">
+                                    {{ clickedFeatureLabelHint }}
+                                </p>
+                            </div>
+                            <input type="text"
+                                   v-model="clickedFeature.labelText"
+                                   @keydown.enter.prevent="updateClickedFeatureLabelText"
+                                   data-history-managed
+                                   :disabled="!semanticMutationAvailable || (!clickedFeature.hasEditableLabel)"
+                                   :placeholder="clickedFeature.hasEditableLabel ? 'Edit label text' : 'No editable label'"
+                                   :class="[
+                                     'w-full text-sm border rounded-lg px-3 py-2 focus:outline-none',
+                                     clickedFeature.hasEditableLabel
+                                       ? 'border-slate-200 focus:border-blue-400 focus:ring-2 focus:ring-blue-100'
+                                       : 'border-slate-200 bg-slate-100 text-slate-400 cursor-not-allowed'
+                                   ]">
+                            <p v-if="clickedFeature.hasEditableLabel" class="text-[10px] text-slate-400 mt-1">
+                                Source: <span class="font-mono">{{ clickedFeature.labelSourceText }}</span>
+                            </p>
+                            <p v-else class="text-[10px] text-amber-700 bg-amber-50 border border-amber-200 rounded-md px-2 py-1 mt-2">
+                                {{ clickedFeature.labelUnavailableReason }}
+                            </p>
+                            <div class="mt-2 flex justify-end">
+                                <button @click="updateClickedFeatureLabelText"
+                                        data-history-managed
+                                        :disabled="!semanticMutationAvailable || (!clickedFeature.hasEditableLabel)"
+                                        :class="[
+                                          'px-3 py-1.5 text-xs rounded-md',
+                                          clickedFeature.hasEditableLabel
+                                            ? 'bg-blue-600 text-white hover:bg-blue-700'
+                                            : 'bg-slate-200 text-slate-400 cursor-not-allowed'
+                                        ]">
+                                    Apply Label
+                                </button>
+                            </div>
+                        </div>
+                            <div class="space-y-3">
+                        <div>
+                            <label class="text-xs font-medium text-slate-500 block mb-1">Feature visibility</label>
+                            <select v-model="clickedFeature.featureVisibility"
+                                    @change="updateClickedFeatureVisibility(clickedFeature.featureVisibility)"
+                                    data-history-managed
+                                    aria-label="Feature visibility"
+                                    class="w-full text-xs border border-slate-200 rounded-lg px-2 py-1.5 focus:outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100" :disabled="!semanticMutationAvailable">
+                                <option value="default">Default (follow feature filters)</option>
+                                <option value="on">On (force show)</option>
+                                <option value="off">Off (hide and exclude from matching)</option>
+                                <option value="exclude_matching">Exclude from matching (leave visibility unchanged)</option>
+                            </select>
+                            <p class="text-[10px] text-slate-400 mt-1">
+                                Choose a scope when similarity-group, product, or protein ID rules are available.
+                            </p>
+                        </div>
+                        <div>
+                            <label class="text-xs font-medium text-slate-500 block mb-1">Legend name (optional)</label>
+                            <input type="text"
+                                   v-model="clickedFeature.legendName"
+                                   list="specific-rule-legend-name-options"
+                                   @change="handleLegendNameCommit"
+                                   @keydown.enter.prevent="handleLegendNameCommit"
+                                   data-history-managed
+                                   aria-label="Feature legend name"
+                                   :placeholder="clickedFeature.label"
+                                   class="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100" :disabled="!semanticMutationAvailable">
+                            <datalist id="specific-rule-legend-name-options">
+                                <option v-for="entry in specificRuleLegendOptions"
+                                        :key="`specific-rule-cap-${entry.caption}`"
+                                        :value="entry.caption"
+                                        :label="entry.color ? `${entry.caption} (${entry.color})` : entry.caption">
+                                </option>
+                            </datalist>
+                            <div v-if="specificRuleLegendOptions.length > 0" class="mt-1">
+                                <p class="text-[10px] text-slate-400 mb-1">Suggestions from SPECIFIC RULES (-t)</p>
+                                <select :disabled="!semanticMutationAvailable" @change="selectLegendNameOption($event.target.value); $event.target.value = ''"
+                                        class="w-full text-xs border border-slate-200 rounded-md px-2 py-1 bg-slate-50 text-slate-600">
+                                    <option value="">Select legend text...</option>
+                                    <option v-for="entry in specificRuleLegendOptions"
+                                            :key="`specific-rule-select-${entry.caption}`"
+                                            :value="entry.caption">
+                                        {{ entry.caption }}{{ entry.color ? ` (${entry.color})` : '' }}
+                                    </option>
+                                </select>
+                            </div>
+                            <p v-else class="text-[10px] text-slate-400 mt-1">
+                                No SPECIFIC RULES (-t) legend text available yet
+                            </p>
+                        </div>
+                            </div>
+                            </div>
+                        </section>
+                        <section aria-labelledby="feature-popup-layout-heading" class="border-t border-slate-100 pt-3" data-feature-popup-group="layout" data-nodrag="true">
+                            <h3 id="feature-popup-layout-heading" class="mb-2 text-xs font-bold text-slate-600"><span class="uppercase tracking-wider">Layout</span> <span class="font-normal text-slate-500">· applies on Generate</span></h3>
+                            <label class="block text-xs font-medium text-slate-500 mb-2">Feature placement
+                                <select data-history-managed aria-label="Feature placement" :disabled="!semanticMutationAvailable" :value="featurePlacementActions.valueFor(clickedFeature.feat)" @change="featurePlacementActions.setPlacement([clickedFeature.feat], $event.target.value)" class="mt-1 block max-w-full rounded-lg border border-slate-200 px-2 py-1.5 text-xs text-slate-700">
+                                    <option v-for="choice in featurePlacementActions.choices([clickedFeature.feat])" :key="choice.value" :value="choice.value" :disabled="!choice.enabled">{{ choice.label }}{{ choice.reason ? ' — ' + choice.reason : '' }}</option>
+                                </select>
+                            </label>
+                            <button v-if="clickedFeature?.feat" type="button" id="feature-record-actions-toggle" @click="toggleRecordActions"
                                     :aria-expanded="recordActionsExpanded"
                                     aria-controls="feature-record-actions"
                                     class="flex w-full items-center justify-between rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-left text-xs font-semibold text-slate-700 hover:bg-slate-100">
-                                <span>Record actions · Rotate record using this feature</span>
+                                <span>Rotate record using this feature</span>
                                 <i :class="recordActionsExpanded ? 'ph ph-caret-up' : 'ph ph-caret-down'" aria-hidden="true"></i>
                             </button>
-                        </div>
-                        <section id="feature-record-actions" v-if="recordActionsExpanded && featureRecordRotationDraft.active"
-                                 class="col-span-full mb-3 rounded-lg border border-slate-200 bg-slate-50 p-3"
-                                 :aria-busy="featureRecordRotationDraft.reading"
-                                 aria-labelledby="feature-record-actions-heading"
-                                 data-nodrag="true">
-                            <div class="flex flex-wrap items-start justify-between gap-2 mb-2">
-                                <div>
-                                    <h3 id="feature-record-actions-heading" class="text-xs font-bold uppercase tracking-wider text-slate-600">Record actions</h3>
-                                    <p class="text-xs font-medium text-slate-700 mt-0.5">Rotate record using this feature…</p>
+                            <section id="feature-record-actions" v-if="recordActionsExpanded && featureRecordRotationDraft.active"
+                                     class="mt-2 rounded-lg border border-slate-200 bg-slate-50 p-3"
+                                     :aria-busy="featureRecordRotationDraft.reading"
+                                     aria-labelledby="feature-record-actions-toggle">
+                                <template v-if="!featureRecordRotationDraft.targetFailure">
+                                <fieldset class="min-w-0">
+                                    <legend class="mb-1 text-xs font-medium text-slate-600">Put this feature at</legend>
+                                    <div v-for="choice in featureRecordRotationDraft.positionChoices" :key="choice.value"
+                                         class="flex flex-wrap items-baseline gap-x-2 py-0.5">
+                                        <label class="inline-flex items-center gap-2 text-xs" :class="choice.enabled ? 'text-slate-700' : 'text-slate-400'">
+                                            <input type="radio"
+                                                   name="feature-record-rotation-position"
+                                                   :value="choice.value"
+                                                   :checked="featureRecordRotationDraft.position === choice.value"
+                                                   @change="setFeatureRecordRotationPosition(choice.value)"
+                                                   :disabled="!semanticMutationAvailable || !choice.enabled || featureRecordRotationDraft.pending"
+                                                   :aria-describedby="!choice.enabled && choice.message ? `feature-record-rotation-${choice.value}-reason` : null">
+                                            <span>{{ choice.label }}</span>
+                                        </label>
+                                        <span v-if="!choice.enabled && choice.message" :id="`feature-record-rotation-${choice.value}-reason`"
+                                              class="text-[10px] text-amber-700">{{ choice.message }}</span>
+                                    </div>
+                                    <div v-if="featureRecordRotationDraft.position === 'custom'"
+                                         class="mt-1 ml-5 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-slate-600">
+                                        <label for="feature-record-rotation-reference">Record starts at</label>
+                                        <select id="feature-record-rotation-reference"
+                                                :value="featureRecordRotationDraft.reference"
+                                                @change="setFeatureRecordRotationReference($event.target.value)"
+                                                :disabled="!semanticMutationAvailable || featureRecordRotationDraft.pending"
+                                                class="min-w-0 max-w-full rounded-md border border-slate-300 bg-white px-2 py-1 text-xs disabled:bg-slate-100 disabled:text-slate-400">
+                                            <option v-for="choice in featureRecordRotationDraft.referenceChoices"
+                                                    :key="choice.value"
+                                                    :value="choice.value"
+                                                    :disabled="!choice.enabled">{{ choice.label }}{{ choice.message ? ' — ' + choice.message : '' }}</option>
+                                        </select>
+                                        <span class="inline-flex items-center gap-1">
+                                            <label for="feature-record-rotation-offset">shifted by</label>
+                                            <input id="feature-record-rotation-offset"
+                                                   type="text"
+                                                   inputmode="numeric"
+                                                   :value="featureRecordRotationDraft.offsetText"
+                                                   @input="setFeatureRecordRotationOffset($event.target.value)"
+                                                   :disabled="!semanticMutationAvailable || featureRecordRotationDraft.pending"
+                                                   aria-label="Shifted by (bp)"
+                                                   aria-describedby="feature-record-rotation-offset-error feature-record-rotation-offset-help"
+                                                   :aria-invalid="Boolean(featureRecordRotationDraft.offsetError)"
+                                                   class="w-20 rounded-md border border-slate-300 bg-white px-2 py-1 text-xs">
+                                            <span>bp</span>
+                                            <help-tip id="feature-record-rotation-offset-help" label="About the offset"
+                                                      text="The offset counts along this feature’s strand: a positive offset moves the record start downstream (toward the 3′ end), a negative offset upstream. For a feature without a strand it counts along the original record."></help-tip>
+                                        </span>
+                                        <span id="feature-record-rotation-offset-error"
+                                              v-if="featureRecordRotationDraft.offsetError"
+                                              class="basis-full text-[10px] text-red-700">{{ featureRecordRotationDraft.offsetError }}</span>
+                                    </div>
+                                </fieldset>
+                                <div class="mt-3">
+                                    <label class="flex items-start gap-2 text-xs text-slate-700">
+                                        <input type="checkbox"
+                                               :checked="featureRecordRotationDraft.orientForward"
+                                               @change="setFeatureRecordRotationOrientForward($event.target.checked)"
+                                               :disabled="!semanticMutationAvailable || !featureRecordRotationDraft.orientCapability.enabled || featureRecordRotationDraft.pending"
+                                               aria-describedby="feature-record-rotation-orient-note"
+                                               class="mt-0.5 rounded border-slate-300">
+                                        <span>Show this feature on the forward strand</span>
+                                    </label>
+                                    <p id="feature-record-rotation-orient-note" class="ml-5 text-[10px]"
+                                       :class="featureRecordRotationDraft.orientCapability.enabled ? 'text-slate-500' : 'text-amber-700'">{{ featureRecordRotationDraft.orientCapability.enabled ? 'Reverse-complements the record when this feature is on the − strand.' : featureRecordRotationDraft.orientCapability.message }}</p>
                                 </div>
-                                <span class="text-[10px] text-slate-500 rounded bg-white border border-slate-200 px-2 py-1">{{ featureRecordRotationDraft.placementLabel }}</span>
-                            </div>
-                            <template v-if="!featureRecordRotationDraft.targetFailure">
-                            <dl class="grid grid-cols-[max-content_minmax(0,1fr)] gap-x-2 gap-y-1 text-xs mb-3">
-                                <dt class="text-slate-500">Record:</dt>
-                                <dd class="font-mono text-slate-700 break-all">{{ featureRecordRotationDraft.recordLabel || 'Unavailable' }}</dd>
-                                <dt class="text-slate-500">Feature:</dt>
-                                <dd class="font-mono text-slate-700 break-all">{{ featureRecordRotationDraft.featureLabel || featureRecordRotationDraft.identity.biologicalFeatureId || 'Unavailable' }}</dd>
-                            </dl>
-                            <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                                <label class="block text-xs font-medium text-slate-600">Anchor
-                                    <select :value="featureRecordRotationDraft.anchor"
-                                            @change="setFeatureRecordRotationAnchor($event.target.value)"
-                                            :disabled="!semanticMutationAvailable || (featureRecordRotationDraft.placement === 'feature-end')"
-                                            aria-label="Record rotation anchor"
-                                            aria-describedby="feature-record-rotation-reason"
-                                            class="mt-1 w-full rounded-md border border-slate-300 bg-white px-2 py-1.5 text-xs disabled:bg-slate-100 disabled:text-slate-400">
-                                        <option v-for="choice in featureRecordRotationDraft.anchorChoices"
-                                                :key="choice.value"
-                                                :value="choice.value"
-                                                :disabled="!choice.enabled">
-                                            {{ choice.label }}{{ choice.message ? ' — ' + choice.message : '' }}
-                                        </option>
-                                    </select>
-                                </label>
-                                <label class="block text-xs font-medium text-slate-600">Offset
-                                    <span class="relative mt-1 block">
-                                        <input type="text"
-                                               inputmode="numeric"
-                                               :value="featureRecordRotationDraft.offsetText"
-                                               @input="setFeatureRecordRotationOffset($event.target.value)"
-                                               aria-label="Record rotation signed offset"
-                                               aria-describedby="feature-record-rotation-offset-error feature-record-rotation-coordinate-note"
-                                               :aria-invalid="Boolean(featureRecordRotationDraft.offsetError)"
-                                               class="w-full rounded-md border border-slate-300 bg-white pl-2 pr-8 py-1.5 text-xs">
-                                        <span class="absolute right-2 top-1/2 -translate-y-1/2 text-[10px] text-slate-400">bp</span>
-                                    </span>
-                                    <span id="feature-record-rotation-offset-error"
-                                          v-if="featureRecordRotationDraft.offsetError"
-                                          class="block mt-1 text-[10px] text-red-700">{{ featureRecordRotationDraft.offsetError }}</span>
-                                </label>
-                            </div>
-                            <label class="mt-3 flex items-start gap-2 text-xs text-slate-700">
-                                <input type="checkbox"
-                                       :checked="featureRecordRotationDraft.orientForward"
-                                       @change="setFeatureRecordRotationOrientForward($event.target.checked)"
-                                       :disabled="!semanticMutationAvailable || (!featureRecordRotationDraft.orientCapability.enabled)"
-                                       aria-label="Orient this feature forward"
-                                       aria-describedby="feature-record-rotation-orient-reason"
-                                       class="mt-0.5 rounded border-slate-300">
-                                <span>Orient this feature forward</span>
-                            </label>
-                            <p id="feature-record-rotation-orient-reason"
-                               v-if="!featureRecordRotationDraft.orientCapability.enabled && featureRecordRotationDraft.orientCapability.message"
-                               class="mt-1 text-[10px] text-amber-700">{{ featureRecordRotationDraft.orientCapability.message }}</p>
-                            <button type="button"
-                                    @click="placeFeatureAtRecordEnd"
-                                    :disabled="!featureRecordRotationDraft.featureEndCapability.enabled || featureRecordRotationDraft.pending"
-                                    aria-describedby="feature-record-rotation-end-reason"
-                                    class="mt-3 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-xs font-medium text-slate-700 hover:bg-slate-100 disabled:bg-slate-100 disabled:text-slate-400 disabled:cursor-not-allowed">
-                                Place this feature at the end
-                            </button>
-                            <p id="feature-record-rotation-end-reason"
-                               v-if="!featureRecordRotationDraft.featureEndCapability.enabled && featureRecordRotationDraft.featureEndCapability.message"
-                               class="mt-1 text-[10px] text-amber-700">{{ featureRecordRotationDraft.featureEndCapability.message }}</p>
-                            <div class="mt-3 rounded-md border border-slate-200 bg-white px-3 py-2 text-xs">
-                                <div class="flex flex-wrap justify-between gap-x-3 gap-y-1">
-                                    <span class="text-slate-500">New display start:</span>
-                                    <strong class="font-mono text-slate-700">{{ featureRecordRotationDraft.startCoordinate || 'Unavailable' }}</strong>
+                                <p v-if="featureRecordRotationDraft.pendingPreview" id="feature-record-rotation-pending" data-record-rotation-pending
+                                   class="mt-3 rounded-md border border-blue-200 bg-blue-50 px-3 py-2 text-xs text-blue-800 break-words">{{ featureRecordRotationDraft.pendingPreview }}</p>
+                                <p v-if="featureRecordRotationDraft.preview" data-record-rotation-preview
+                                   class="mt-3 flex items-start justify-between gap-2 rounded-md border border-slate-200 bg-white px-3 py-2 text-xs text-slate-700">
+                                    <span id="feature-record-rotation-preview" class="min-w-0 break-words">{{ featureRecordRotationDraft.preview }}</span>
+                                    <help-tip id="feature-record-rotation-coordinate-note" label="About these coordinates"
+                                              text="Coordinates refer to the original record."></help-tip>
+                                </p>
+                                </template>
+                                <p id="feature-record-rotation-reason"
+                                   v-if="featureRecordRotationDraft.disabledReason"
+                                   class="mt-2 rounded-md border border-amber-200 bg-amber-50 px-2 py-1 text-[10px] text-amber-800">{{ featureRecordRotationDraft.disabledReason }}</p>
+                                <p aria-live="polite"
+                                   class="mt-2 min-h-4 text-[10px]"
+                                   :class="featureRecordRotationDraft.statusKind === 'error' ? 'text-red-700' : featureRecordRotationDraft.statusKind === 'success' ? 'text-emerald-700' : 'text-slate-500'">{{ featureRecordRotationDraft.status }}</p>
+                                <div class="mt-3 flex flex-wrap justify-end gap-2">
+                                    <button type="button"
+                                            @click.stop="cancelRecordActions"
+                                            :disabled="featureRecordRotationDraft.pending"
+                                            class="rounded-md border border-slate-300 bg-white px-3 py-2 text-xs font-medium text-slate-700 hover:bg-slate-100 disabled:text-slate-400">Cancel</button>
+                                    <button type="button"
+                                            data-history-managed
+                                            @click="stageFeatureRecordRotation"
+                                            :disabled="!semanticMutationAvailable || (!featureRecordRotationDraft.canApply || featureRecordRotationDraft.pending)"
+                                            aria-describedby="feature-record-rotation-reason feature-record-rotation-pending feature-record-rotation-preview"
+                                            class="rounded-md border border-blue-300 bg-white px-3 py-2 text-xs font-semibold text-blue-700 hover:bg-blue-50 disabled:border-slate-200 disabled:text-slate-400 disabled:cursor-not-allowed">Apply on Generate</button>
+                                    <button type="button"
+                                            @click="applyFeatureRecordRotation"
+                                            :disabled="!semanticMutationAvailable || (!featureRecordRotationDraft.canApply || featureRecordRotationDraft.pending)"
+                                            aria-describedby="feature-record-rotation-reason feature-record-rotation-pending feature-record-rotation-preview"
+                                            class="rounded-md bg-blue-600 px-3 py-2 text-xs font-semibold text-white hover:bg-blue-700 disabled:bg-slate-300 disabled:cursor-not-allowed">
+                                        {{ featureRecordRotationDraft.pending ? 'Regenerating…' : 'Apply and regenerate' }}
+                                    </button>
                                 </div>
-                                <div class="flex flex-wrap justify-between gap-x-3 gap-y-1 mt-1">
-                                    <span class="text-slate-500">Record orientation:</span>
-                                    <strong class="text-slate-700">{{ featureRecordRotationDraft.orientationLabel }}</strong>
-                                </div>
-                                <div v-if="featureRecordRotationDraft.displayedStrandLabel" class="flex flex-wrap justify-between gap-x-3 gap-y-1 mt-1">
-                                    <span class="text-slate-500">Displayed feature strand:</span>
-                                    <strong class="font-mono text-slate-700">{{ featureRecordRotationDraft.displayedStrandLabel }}</strong>
-                                </div>
-                                <p id="feature-record-rotation-coordinate-note" class="mt-2 text-[10px] text-slate-500">Coordinates refer to the original record.</p>
-                            </div>
-                            </template>
-                            <p id="feature-record-rotation-reason"
-                               v-if="featureRecordRotationDraft.disabledReason"
-                               class="mt-2 rounded-md border border-amber-200 bg-amber-50 px-2 py-1 text-[10px] text-amber-800">{{ featureRecordRotationDraft.disabledReason }}</p>
-                            <p aria-live="polite"
-                               class="mt-2 min-h-4 text-[10px]"
-                               :class="featureRecordRotationDraft.statusKind === 'error' ? 'text-red-700' : featureRecordRotationDraft.statusKind === 'success' ? 'text-emerald-700' : 'text-slate-500'">{{ featureRecordRotationDraft.status }}</p>
-                            <div class="mt-3 flex flex-wrap justify-end gap-2">
-                                <button type="button"
-                                        @click.stop="cancelRecordActions"
-                                        :disabled="featureRecordRotationDraft.pending"
-                                        class="rounded-md border border-slate-300 bg-white px-3 py-2 text-xs font-medium text-slate-700 hover:bg-slate-100 disabled:text-slate-400">Cancel</button>
-                                <button type="button"
-                                        @click="applyFeatureRecordRotation"
-                                        :disabled="!semanticMutationAvailable || (!featureRecordRotationDraft.canApply || featureRecordRotationDraft.pending)"
-                                        aria-describedby="feature-record-rotation-reason"
-                                        class="rounded-md bg-blue-600 px-3 py-2 text-xs font-semibold text-white hover:bg-blue-700 disabled:bg-slate-300 disabled:cursor-not-allowed">
-                                    {{ featureRecordRotationDraft.pending ? 'Regenerating…' : 'Apply and regenerate' }}
-                                </button>
-                            </div>
+                            </section>
                         </section>
-                        <div class="space-y-3">
+                        <section v-if="clickedFeature.orthogroupId" aria-labelledby="feature-popup-similarity-heading" class="space-y-3 border-t border-slate-100 pt-3" data-feature-popup-group="similarity">
+                            <div class="flex flex-wrap items-baseline justify-between gap-x-2">
+                                <h3 id="feature-popup-similarity-heading" class="text-xs font-bold text-slate-600 uppercase tracking-wider">Similarity group</h3>
+                                <div class="text-[10px] text-slate-500">{{ clickedFeature.orthogroupId }} · {{ clickedOrthogroupDetail ? clickedOrthogroupDetail.memberCount : clickedFeature.orthogroupMemberCount }} members</div>
+                            </div>
                         <div v-if="canUseClickedOrthogroupActions" class="grid grid-cols-2 gap-2">
                             <button type="button" @click="openClickedOrthogroupInEditor"
                                     class="px-2 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-medium flex items-center justify-center gap-1"
@@ -5492,11 +5636,7 @@
                                           text="Align applies resolved targets immediately; ambiguity opens review. Review alignment options… lets you inspect or change anchors, Skip, and direction before applying."></help-tip>
                             </div>
                         </div>
-                        <div v-if="clickedOrthogroupDetail" class="border-y border-slate-100 py-3">
-                            <div class="flex items-center justify-between mb-2">
-                                <div class="text-xs font-bold text-slate-600 uppercase tracking-wider">Similarity group</div>
-                                <div class="text-[10px] text-slate-500">{{ clickedOrthogroupDetail.id }}</div>
-                            </div>
+                            <div v-if="clickedOrthogroupDetail">
                             <div class="mb-3">
                                 <div class="text-sm font-semibold text-slate-700 truncate">{{ clickedOrthogroupDetail.displayName }}</div>
                                 <div class="text-[10px] text-slate-500">{{ clickedOrthogroupDetail.scopeLabel }}</div>
@@ -5505,10 +5645,6 @@
                                 </div>
                             </div>
                             <div class="grid grid-cols-2 gap-2 text-xs text-slate-600 mb-3">
-                                <div>
-                                    <div class="text-[10px] text-slate-400">Members</div>
-                                    <div class="font-medium">{{ clickedOrthogroupDetail.memberCount }}</div>
-                                </div>
                                 <div>
                                     <div class="text-[10px] text-slate-400">Record coverage</div>
                                     <div class="font-medium">{{ clickedOrthogroupDetail.recordCoverage }}</div>
@@ -5663,165 +5799,8 @@
                                     Clear
                                 </button>
                             </div>
-                        </div>
-                        <div>
-                            <label class="text-xs font-medium text-slate-500 block mb-1">Legend name (optional)</label>
-                            <input type="text"
-                                   v-model="clickedFeature.legendName"
-                                   list="specific-rule-legend-name-options"
-                                   @change="handleLegendNameCommit"
-                                   @keydown.enter.prevent="handleLegendNameCommit"
-                                   data-history-managed
-                                   aria-label="Feature legend name"
-                                   :placeholder="clickedFeature.label"
-                                   class="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100" :disabled="!semanticMutationAvailable">
-                            <datalist id="specific-rule-legend-name-options">
-                                <option v-for="entry in specificRuleLegendOptions"
-                                        :key="`specific-rule-cap-${entry.caption}`"
-                                        :value="entry.caption"
-                                        :label="entry.color ? `${entry.caption} (${entry.color})` : entry.caption">
-                                </option>
-                            </datalist>
-                            <div v-if="specificRuleLegendOptions.length > 0" class="mt-1">
-                                <p class="text-[10px] text-slate-400 mb-1">Suggestions from SPECIFIC RULES (-t)</p>
-                                <select :disabled="!semanticMutationAvailable" @change="selectLegendNameOption($event.target.value); $event.target.value = ''"
-                                        class="w-full text-xs border border-slate-200 rounded-md px-2 py-1 bg-slate-50 text-slate-600">
-                                    <option value="">Select legend text...</option>
-                                    <option v-for="entry in specificRuleLegendOptions"
-                                            :key="`specific-rule-select-${entry.caption}`"
-                                            :value="entry.caption">
-                                        {{ entry.caption }}{{ entry.color ? ` (${entry.color})` : '' }}
-                                    </option>
-                                </select>
                             </div>
-                            <p v-else class="text-[10px] text-slate-400 mt-1">
-                                No SPECIFIC RULES (-t) legend text available yet
-                            </p>
-                        </div>
-                        <div>
-                            <label class="text-xs font-medium text-slate-500 block mb-1">Feature visibility</label>
-                            <select v-model="clickedFeature.featureVisibility"
-                                    @change="updateClickedFeatureVisibility(clickedFeature.featureVisibility)"
-                                    data-history-managed
-                                    aria-label="Feature visibility"
-                                    class="w-full text-xs border border-slate-200 rounded-lg px-2 py-1.5 focus:outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100" :disabled="!semanticMutationAvailable">
-                                <option value="default">Default (follow feature filters)</option>
-                                <option value="on">On (force show)</option>
-                                <option value="off">Off (hide and exclude from matching)</option>
-                                <option value="exclude_matching">Exclude from matching (leave visibility unchanged)</option>
-                            </select>
-                            <p class="text-[10px] text-slate-400 mt-1">
-                                Choose a scope when similarity-group, product, or protein ID rules are available.
-                            </p>
-                        </div>
-                        </div>
-                        <div class="space-y-3">
-                        <div>
-                            <div class="flex items-center justify-between mb-1">
-                                <label class="text-xs font-medium text-slate-500 block">Label text</label>
-                                <span v-if="clickedFeature.hasEditableLabel" class="text-[10px] font-mono text-slate-400">
-                                    {{ clickedFeature.labelKey }}
-                                </span>
-                            </div>
-                            <div class="mb-2">
-                                <label class="text-[10px] font-medium text-slate-500 block mb-1">Label visibility</label>
-                                <select v-model="clickedFeature.labelVisibility"
-                                        class="w-full text-xs border border-slate-200 rounded-lg px-2 py-1.5 focus:outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100" :disabled="!semanticMutationAvailable">
-                                    <option value="default">Default (follow Show Labels and filters)</option>
-                                    <option value="on">On (always show)</option>
-                                    <option value="off">Off (always hide)</option>
-                                </select>
-                                <p class="text-[10px] text-slate-400 mt-1">
-                                    On and Off apply to this feature regardless of Show Labels and label filters.
-                                </p>
-                                <p v-if="clickedFeatureLabelHint" data-label-visibility-hint
-                                   class="text-[10px] text-amber-700 bg-amber-50 border border-amber-200 rounded-md px-2 py-1 mt-1">
-                                    {{ clickedFeatureLabelHint }}
-                                </p>
-                            </div>
-                            <input type="text"
-                                   v-model="clickedFeature.labelText"
-                                   @keydown.enter.prevent="updateClickedFeatureLabelText"
-                                   data-history-managed
-                                   :disabled="!semanticMutationAvailable || (!clickedFeature.hasEditableLabel)"
-                                   :placeholder="clickedFeature.hasEditableLabel ? 'Edit label text' : 'No editable label'"
-                                   :class="[
-                                     'w-full text-sm border rounded-lg px-3 py-2 focus:outline-none',
-                                     clickedFeature.hasEditableLabel
-                                       ? 'border-slate-200 focus:border-blue-400 focus:ring-2 focus:ring-blue-100'
-                                       : 'border-slate-200 bg-slate-100 text-slate-400 cursor-not-allowed'
-                                   ]">
-                            <p v-if="clickedFeature.hasEditableLabel" class="text-[10px] text-slate-400 mt-1">
-                                Source: <span class="font-mono">{{ clickedFeature.labelSourceText }}</span>
-                            </p>
-                            <p v-else class="text-[10px] text-amber-700 bg-amber-50 border border-amber-200 rounded-md px-2 py-1 mt-2">
-                                {{ clickedFeature.labelUnavailableReason }}
-                            </p>
-                            <div class="mt-2 flex justify-end">
-                                <button @click="updateClickedFeatureLabelText"
-                                        data-history-managed
-                                        :disabled="!semanticMutationAvailable || (!clickedFeature.hasEditableLabel)"
-                                        :class="[
-                                          'px-3 py-1.5 text-xs rounded-md',
-                                          clickedFeature.hasEditableLabel
-                                            ? 'bg-blue-600 text-white hover:bg-blue-700'
-                                            : 'bg-slate-200 text-slate-400 cursor-not-allowed'
-                                        ]">
-                                    Apply Label
-                                </button>
-                            </div>
-                        </div>
-                        <div>
-                            <label class="text-xs font-medium text-slate-500 block mb-1">Fill Color</label>
-                            <div class="flex items-center gap-4">
-                                <input type="color"
-                                       :value="clickedFeature.color || '#cccccc'"
-                                       @change="updateClickedFeatureColor($event.target.value)"
-                                       data-history-managed
-                                       :disabled="!semanticMutationAvailable || (!canEditFeatureColor(clickedFeature.feat))"
-                                       :title="canEditFeatureColor(clickedFeature.feat) ? 'Change fill color' : 'No stable identifier available'"
-                                       aria-label="Feature fill color"
-                                       :class="['w-12 h-10 cursor-pointer border-2 border-slate-200 rounded-lg', canEditFeatureColor(clickedFeature.feat) ? '' : 'opacity-50 cursor-not-allowed']">
-                                <span class="text-sm font-mono text-slate-600 bg-slate-50 px-3 py-2 rounded-lg">{{ clickedFeature.color }}</span>
-                                <button @click="resetClickedFeatureFillColor"
-                                        data-history-managed
-                                        class="text-slate-400 hover:text-slate-600 p-2 rounded-lg hover:bg-slate-100"
-                                        title="Reset fill color to default" :disabled="!semanticMutationAvailable">
-                                    <i class="ph ph-arrow-counter-clockwise text-lg"></i>
-                                </button>
-                            </div>
-                        </div>
-                        <div>
-                            <label class="text-xs font-medium text-slate-500 block mb-1">Stroke</label>
-                            <div class="flex items-center gap-4">
-                                <color-value-control
-                                    :model-value="getFeatureStrokeColorValue(clickedFeature.feat)"
-                                    :fallback="clickedFeature.strokeColor || '#000000'"
-                                    @update:model-value="setClickedFeatureStrokeColorValue"
-                                    data-history-managed
-                                    aria-label="Feature stroke color"
-                                    class="w-36">
-                                </color-value-control>
-                                <input type="number"
-                                       :value="clickedFeature.strokeWidth"
-                                       @blur="setClickedFeatureStrokeWidthValue($event.target.value)"
-                                       @keydown.enter.prevent="$event.target.blur()"
-                                       data-history-managed
-                                       aria-label="Feature stroke width"
-                                       class="w-20 text-sm border border-slate-200 rounded-lg px-2 py-1.5"
-                                       placeholder="Width"
-                                       step="0.1"
-                                       min="0"
-                                       title="Stroke width">
-                                <button @click="resetClickedFeatureStroke"
-                                        data-history-managed
-                                        class="text-slate-400 hover:text-slate-600 p-2 rounded-lg hover:bg-slate-100"
-                                        title="Reset stroke to default" :disabled="!semanticMutationAvailable">
-                                    <i class="ph ph-arrow-counter-clockwise text-lg"></i>
-                                </button>
-                            </div>
-                        </div>
-                        </div>
+                        </section>
                         </div>
                         <div v-else-if="adv.rich_feature_popup && clickedFeature.activeTab === 'details'" class="space-y-3" data-nodrag="true">
                             <div class="max-h-[24rem] overflow-auto custom-scrollbar border border-slate-100 rounded-lg">

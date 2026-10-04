@@ -33,6 +33,15 @@ const installDiagramRequestObserver = (page) => page.addInitScript(() => {
   });
 });
 
+const ROTATE_RECORD = 'Rotate record using this feature';
+
+// Custom position: "Record starts at <reference> shifted by <offset> bp".
+const chooseCustomPosition = async (actions, reference, offset) => {
+  await actions.getByRole('radio', { name: 'Custom position', exact: true }).check();
+  await actions.getByLabel('Record starts at', { exact: true }).selectOption(reference);
+  await actions.getByLabel('Shifted by (bp)', { exact: true }).fill(String(offset));
+};
+
 const makeCircularRecord = (recordId, gene, start, end) => `LOCUS       ${recordId.padEnd(24)} 360 bp    DNA     circular UNA 01-JAN-2000
 DEFINITION  feature popup record rotation acceptance.
 ACCESSION   ${recordId}
@@ -103,25 +112,29 @@ test('feature popup record rotation works by pointer and keyboard in rich and si
   await search.fill('tRNA');
   await search.press('Enter');
   await page.getByRole('button', { name: 'Open active feature', exact: true }).click();
-  const disclosure = page.getByRole('button', { name: /Record actions · Rotate record/ });
+  const layout = page.getByRole('region', { name: 'Layout · applies on Generate' });
+  await expect(layout.getByLabel('Feature placement', { exact: true })).toBeVisible();
+  const disclosure = layout.getByRole('button', { name: ROTATE_RECORD, exact: true });
   await expect(disclosure).toHaveAttribute('aria-expanded', 'false');
   await disclosure.click();
-  const actions = page.getByRole('region', { name: 'Record actions' });
+  const actions = page.getByRole('region', { name: ROTATE_RECORD, exact: true });
   await expect(actions).toBeVisible();
-  await expect(actions).toContainText('Coordinates refer to the original record.');
-  await expect(actions.getByLabel('Record rotation anchor')).toHaveValue('five-prime');
-  await expect(actions.getByLabel('Record rotation signed offset')).toHaveValue('0');
+  await expect(actions.getByRole('radio', { name: 'Start of the record', exact: true })).toBeChecked();
+  await expect(actions.getByRole('button', { name: 'About these coordinates', exact: true })).toBeVisible();
+  await expect(actions.locator('[data-record-rotation-preview]'))
+    .toContainText(/^NC_012920\.1 will start at [\d,]+ · orientation unchanged/);
+  await expect(actions.getByLabel('Record starts at', { exact: true })).toHaveCount(0);
 
   expect(await page.evaluate(() => window.__GBDRAW_HISTORY__.getUndoCount()))
     .toBe(before.history);
   expect(await page.evaluate(() => window.__GBDRAW_APP__.svgContent)).toBe(before.svg);
-  await actions.getByLabel('Record rotation anchor').selectOption('midpoint');
-  await actions.getByLabel('Record rotation signed offset').fill('2');
+  await chooseCustomPosition(actions, 'midpoint', 2);
   await disclosure.click();
   await expect(actions).toBeHidden();
   await disclosure.click();
-  await expect(actions.getByLabel('Record rotation anchor')).toHaveValue('midpoint');
-  await expect(actions.getByLabel('Record rotation signed offset')).toHaveValue('2');
+  await expect(actions.getByRole('radio', { name: 'Custom position', exact: true })).toBeChecked();
+  await expect(actions.getByLabel('Record starts at', { exact: true })).toHaveValue('midpoint');
+  await expect(actions.getByLabel('Shifted by (bp)', { exact: true })).toHaveValue('2');
   expect(await page.evaluate(() => window.__GBDRAW_HISTORY__.getUndoCount()))
     .toBe(before.history);
   expect(await page.evaluate(async () => (
@@ -238,22 +251,41 @@ test('feature popup record rotation works by pointer and keyboard in rich and si
   expect(bounds.x).toBeGreaterThanOrEqual(0);
   expect(bounds.x + bounds.width).toBeLessThanOrEqual(390);
 
-  const simpleDisclosure = simplePopup.getByRole('button', { name: /Record actions · Rotate record/ });
+  const simpleDisclosure = simplePopup.getByRole('button', { name: ROTATE_RECORD, exact: true });
   await expect(simpleDisclosure).toHaveAttribute('aria-expanded', 'false');
   await simpleDisclosure.focus();
   await page.keyboard.press('Enter');
-  const simpleActions = simplePopup.getByRole('region', { name: 'Record actions' });
-  const anchor = simpleActions.getByLabel('Record rotation anchor');
-  await anchor.focus();
-  await anchor.press('Enter');
-  await anchor.press('ArrowDown');
-  await anchor.press('Enter');
-  await expect(anchor).toHaveValue('midpoint');
-  const offset = simpleActions.getByLabel('Record rotation signed offset');
-  await offset.focus();
+  const simpleActions = simplePopup.getByRole('region', { name: ROTATE_RECORD, exact: true });
+  // The position radio group: Tab enters at the checked choice, arrows move it.
+  const startChoice = simpleActions.getByRole('radio', { name: 'Start of the record', exact: true });
+  await expect(startChoice).toBeChecked();
+  await simpleDisclosure.focus();
+  await page.keyboard.press('Tab');
+  await expect(startChoice).toBeFocused();
+  await page.keyboard.press('ArrowDown');
+  await expect(simpleActions.getByRole('radio', { name: 'End of the record', exact: true })).toBeChecked();
+  await page.keyboard.press('ArrowDown');
+  await expect(simpleActions.getByRole('radio', { name: 'Custom position', exact: true })).toBeChecked();
+  const reference = simpleActions.getByLabel('Record starts at', { exact: true });
+  await page.keyboard.press('Tab');
+  await expect(reference).toBeFocused();
+  await reference.press('Enter');
+  await reference.press('ArrowDown');
+  await reference.press('Enter');
+  await expect(reference).toHaveValue('midpoint');
+  const offset = simpleActions.getByLabel('Shifted by (bp)', { exact: true });
+  await page.keyboard.press('Tab');
+  await expect(offset).toBeFocused();
   await page.keyboard.press('ControlOrMeta+A');
   await page.keyboard.type('-3');
   await expect(offset).toHaveValue('-3');
+  for (const control of [simpleDisclosure, reference, offset,
+    simpleActions.getByRole('button', { name: 'Apply on Generate', exact: true }),
+    simpleActions.getByRole('button', { name: 'Apply and regenerate', exact: true })]) {
+    const box = await control.boundingBox();
+    expect(box.x).toBeGreaterThanOrEqual(0);
+    expect(box.x + box.width).toBeLessThanOrEqual(390);
+  }
   const cancel = simpleActions.getByRole('button', { name: 'Cancel', exact: true });
   await cancel.focus();
   await page.keyboard.press('Enter');
@@ -262,7 +294,7 @@ test('feature popup record rotation works by pointer and keyboard in rich and si
   await expect(simpleActions).toBeHidden();
   expect(await page.evaluate(() => window.__GBDRAW_APP__.svgContent)).toBe(transformedSvg);
   await simpleDisclosure.click();
-  const staleActions = simplePopup.getByRole('region', { name: 'Record actions' });
+  const staleActions = simplePopup.getByRole('region', { name: ROTATE_RECORD, exact: true });
   const staleBefore = await page.evaluate(async () => {
     const { state } = await import('/gbdraw/web/js/state.js');
     const target = window.__GBDRAW_APP__.featureRecordRotationDraft.identity;
@@ -282,7 +314,11 @@ test('feature popup record rotation works by pointer and keyboard in rich and si
     };
   });
   await staleActions.getByRole('button', { name: 'Apply and regenerate' }).click();
-  await expect(staleActions.locator('[aria-live="polite"]')).toContainText(
+  // One reason source: the reason line states it once; the status line does not repeat it.
+  await expect(staleActions.locator('#feature-record-rotation-reason')).toContainText(
+    'no longer present'
+  );
+  await expect(staleActions.locator('[aria-live="polite"]')).not.toContainText(
     'no longer present'
   );
   expect(await page.evaluate(async () => {
@@ -366,11 +402,10 @@ test('same-file record rotation keeps chromosome targets independent', async ({ 
     await search.fill(query);
     await search.press('Enter');
     await page.getByRole('button', { name: 'Open active feature', exact: true }).click();
-    await page.getByRole('button', { name: /Record actions · Rotate record/ }).click();
-    const actions = page.getByRole('region', { name: 'Record actions' });
+    await page.getByRole('button', { name: ROTATE_RECORD, exact: true }).click();
+    const actions = page.getByRole('region', { name: ROTATE_RECORD, exact: true });
     await expect(actions).toBeVisible();
-    await actions.getByLabel('Record rotation anchor').selectOption(anchor);
-    await actions.getByLabel('Record rotation signed offset').fill(String(offset));
+    await chooseCustomPosition(actions, anchor, offset);
     const draft = await page.evaluate(() => ({
       identity: { ...window.__GBDRAW_APP__.featureRecordRotationDraft.identity },
       startCoordinate: window.__GBDRAW_APP__.featureRecordRotationDraft.startCoordinate
@@ -428,6 +463,150 @@ test('same-file record rotation keeps chromosome targets independent', async ({ 
   expect(chromosomeII.snapshot.biological).toEqual(baseline.biological);
 });
 
+// PD-OI-085: Apply on Generate stages a record rotation in the record display
+// draft; one Generate Diagram applies every staged record, and Apply and
+// regenerate stays target-only (PD-OI-032 item 4).
+test('Apply on Generate stages rotations that one Generate applies together', async ({ page }) => {
+  test.setTimeout(300000);
+  await page.addInitScript(() => {
+    window.__ROTATION_HISTORY_COMMITS__ = [];
+    window.__GBDRAW_TEST_HOOKS__ = {
+      onHistoryDiagnostic: (event) => {
+        if (event.type === 'commit' && event.created) {
+          window.__ROTATION_HISTORY_COMMITS__.push({ scope: event.scope, label: event.label });
+        }
+      }
+    };
+  });
+  await installDiagramRequestObserver(page);
+  await openApp(page);
+  await page.getByLabel('GenBank/DDBJ File', { exact: true }).setInputFiles({
+    name: 'two-chromosomes.gbk',
+    mimeType: 'text/plain',
+    buffer: Buffer.from(
+      makeCircularRecord('chromosome_I', 'dnaA', 21, 105)
+      + makeCircularRecord('chromosome_II', 'parB', 151, 225)
+    )
+  });
+  await generateAndWaitForResult(page);
+  const snapshot = () => page.evaluate(async () => {
+    const { state } = await import('/gbdraw/web/js/state.js');
+    return {
+      runs: window.__GBDRAW_DIAGRAM_RUNS__.length,
+      svg: window.__GBDRAW_APP__.svgContent,
+      history: window.__GBDRAW_HISTORY__.getUndoCount(),
+      drafts: Object.fromEntries(state.recordDisplayDrafts
+        .map(({ recordId, startCoordinate }) => [recordId, startCoordinate]))
+    };
+  });
+  const lastStarts = () => page.evaluate(() => window.__GBDRAW_DIAGRAM_RUNS__.at(-1).records
+    .map((record) => record.display.startCoordinate)
+    .sort((a, b) => a - b));
+  const pendingNotice = page.getByText(
+    'Record rotation, feature placement, or tolerance has changes pending Generate.'
+  );
+  const search = page.getByRole('searchbox', { name: 'Search features', exact: true });
+  const openRotation = async (query) => {
+    await search.fill(query);
+    await search.press('Enter');
+    await page.getByRole('button', { name: 'Open active feature', exact: true }).click();
+    const disclosure = page.getByRole('button', { name: ROTATE_RECORD, exact: true });
+    await expect(disclosure).toHaveAttribute('aria-expanded', 'false');
+    await disclosure.click();
+    const actions = page.getByRole('region', { name: ROTATE_RECORD, exact: true });
+    await expect(actions).toBeVisible();
+    return actions;
+  };
+  const closePopup = () => page.getByRole('button', { name: 'Close feature popup', exact: true }).click();
+  const before = await snapshot();
+  const initialStarts = await lastStarts();
+  expect(initialStarts).toEqual([null, null]);
+  await expect(pendingNotice).toHaveCount(0);
+
+  // Stage chromosome I at the start of dnaA (21) and chromosome II after parB (226).
+  let actions = await openRotation('dnaA');
+  await expect(actions.locator('[data-record-rotation-preview]'))
+    .toHaveText('chromosome_I will start at 21 · orientation unchanged');
+  await actions.getByRole('button', { name: 'Apply on Generate', exact: true }).click();
+  await expect(actions.locator('[aria-live="polite"]'))
+    .toHaveText('Record rotation will apply on the next Generate Diagram.');
+  await expect(actions.locator('[data-record-rotation-pending]'))
+    .toHaveText('Pending for Generate: chromosome_I will start at 21 · orientation unchanged');
+  await expect(actions.locator('[data-record-rotation-preview]')).toHaveCount(0);
+  await closePopup();
+  actions = await openRotation('parB');
+  await expect(actions.locator('[data-record-rotation-pending]')).toHaveCount(0);
+  await actions.getByRole('radio', { name: 'End of the record', exact: true }).check();
+  await actions.getByRole('button', { name: 'Apply on Generate', exact: true }).click();
+  await expect(actions.locator('[data-record-rotation-pending]'))
+    .toHaveText('Pending for Generate: chromosome_II will start at 226 · orientation unchanged');
+  const staged = await snapshot();
+  expect(staged).toMatchObject({ runs: before.runs, svg: before.svg, history: before.history + 2 });
+  expect(staged.drafts).toEqual({ chromosome_I: 21, chromosome_II: 226 });
+  expect(await page.evaluate(() => window.__ROTATION_HISTORY_COMMITS__.slice(-2))).toEqual([
+    { scope: 'intent', label: 'Rotate record to feature on Generate' },
+    { scope: 'intent', label: 'Rotate record to feature on Generate' }
+  ]);
+  await expect(pendingNotice).toBeVisible();
+
+  // One Undo removes only the last staged record; Redo stages it again.
+  // History restore closes the popup; reopening shows the current draft.
+  await actions.getByRole('button', { name: 'Apply on Generate', exact: true }).focus();
+  await page.keyboard.press('ControlOrMeta+z');
+  await expect.poll(async () => (await snapshot()).drafts).toEqual({ chromosome_I: 21 });
+  actions = await openRotation('parB');
+  await expect(actions.locator('[data-record-rotation-pending]')).toHaveCount(0);
+  await expect(actions.locator('[data-record-rotation-preview]'))
+    .toHaveText('chromosome_II will start at 151 · orientation unchanged');
+  await page.keyboard.press('ControlOrMeta+Shift+z');
+  await expect.poll(async () => (await snapshot()).drafts).toEqual(staged.drafts);
+  expect(await snapshot()).toEqual(staged);
+  await page.keyboard.press('Escape');
+  await expect(actions).toBeHidden();
+
+  // Reopening shows the staged values.
+  for (const [query, expected] of [
+    ['dnaA', 'Pending for Generate: chromosome_I will start at 21 · orientation unchanged'],
+    ['parB', 'Pending for Generate: chromosome_II will start at 226 · orientation unchanged']
+  ]) {
+    actions = await openRotation(query);
+    await expect(actions.locator('[data-record-rotation-pending]')).toHaveText(expected);
+    await closePopup();
+  }
+
+  // One Generate Diagram applies both staged records.
+  await generateAndWaitForResult(page);
+  const generated = await snapshot();
+  expect(generated.runs).toBe(before.runs + 1);
+  expect(generated.svg).not.toBe(before.svg);
+  expect(await lastStarts()).toEqual([21, 226]);
+  await expect(pendingNotice).toHaveCount(0);
+  actions = await openRotation('dnaA');
+  await expect(actions.locator('[data-record-rotation-pending]')).toHaveCount(0);
+  await closePopup();
+
+  // Stage chromosome II again, then Apply and regenerate chromosome I only:
+  // the staged chromosome II stays staged and is not drawn.
+  actions = await openRotation('parB');
+  await actions.getByRole('button', { name: 'Apply on Generate', exact: true }).click();
+  await expect(actions.locator('[data-record-rotation-pending]'))
+    .toHaveText('Pending for Generate: chromosome_II will start at 151 · orientation unchanged');
+  await closePopup();
+  actions = await openRotation('dnaA');
+  await actions.getByRole('radio', { name: 'End of the record', exact: true }).check();
+  await actions.getByRole('button', { name: 'Apply and regenerate', exact: true }).click();
+  await expect(actions.locator('[aria-live="polite"]')).toHaveText(
+    'Record rotation applied and regenerated.', { timeout: 240000 }
+  );
+  expect(await lastStarts()).toEqual([106, 226]);
+  expect((await snapshot()).drafts).toEqual({ chromosome_I: 106, chromosome_II: 151 });
+  await expect(pendingNotice).toBeVisible();
+  await closePopup();
+  actions = await openRotation('parB');
+  await expect(actions.locator('[data-record-rotation-pending]'))
+    .toHaveText('Pending for Generate: chromosome_II will start at 151 · orientation unchanged');
+});
+
 test('both modes record rotation resolves the same circular source anchor', async ({ browser }) => {
   test.setTimeout(300000);
   const source = makeCircularRecord('shared_anchor', 'anchor_gene', 41, 125);
@@ -453,10 +632,9 @@ test('both modes record rotation resolves the same circular source anchor', asyn
     await search.fill('anchor_gene');
     await search.press('Enter');
     await page.getByRole('button', { name: 'Open active feature', exact: true }).click();
-    await page.getByRole('button', { name: /Record actions · Rotate record/ }).click();
-    const actions = page.getByRole('region', { name: 'Record actions' });
-    await actions.getByLabel('Record rotation anchor').selectOption('midpoint');
-    await actions.getByLabel('Record rotation signed offset').fill('-11');
+    await page.getByRole('button', { name: ROTATE_RECORD, exact: true }).click();
+    const actions = page.getByRole('region', { name: ROTATE_RECORD, exact: true });
+    await chooseCustomPosition(actions, 'midpoint', -11);
     const expected = await page.evaluate(() => ({
       identity: { ...window.__GBDRAW_APP__.featureRecordRotationDraft.identity },
       startCoordinate: window.__GBDRAW_APP__.featureRecordRotationDraft.startCoordinate
@@ -535,27 +713,30 @@ const openLoadedRecordActions = async (page, { query, recordId }) => {
   await search.fill(query);
   await search.press('Enter');
   await page.getByRole('button', { name: 'Open active feature', exact: true }).click();
-  const disclosure = page.getByRole('button', { name: /Record actions · Rotate record/ });
+  const disclosure = page.getByRole('button', { name: ROTATE_RECORD, exact: true });
   await expect(disclosure).toHaveAttribute('aria-expanded', 'false');
   expect(await recordReads()).toBe(0);
 
   await disclosure.click();
-  const actions = page.getByRole('region', { name: 'Record actions' });
-  await expect(actions.getByText(recordId, { exact: true })).toBeVisible();
+  const actions = page.getByRole('region', { name: ROTATE_RECORD, exact: true });
+  // Start of the record (default) on a forward record: the feature's leftmost
+  // source base becomes display base 1, whatever its strand.
   const expectedStart = await page.evaluate(() => {
-    const [part] = window.__GBDRAW_APP__.featureRecordRotationDraft.feature.location_parts;
-    return String(part.strand === '-' ? part.end : part.start + 1);
+    const parts = window.__GBDRAW_APP__.featureRecordRotationDraft.feature.location_parts;
+    return parts.length === 1 ? parts[0].start + 1 : null;
   });
-  await expect(actions.getByText('New display start:').locator('xpath=following-sibling::strong'))
-    .toHaveText(expectedStart);
+  expect(expectedStart).toBeGreaterThan(0);
+  await expect(actions.locator('[data-record-rotation-preview]')).toHaveText(
+    `${recordId} will start at ${expectedStart.toLocaleString('en-US')} · orientation unchanged`
+  );
   await expect(actions.getByRole('button', { name: 'Apply and regenerate' })).toBeEnabled();
-  await expect(actions.getByRole('button', { name: 'Place this feature at the end' })).toBeEnabled();
+  await expect(actions.getByRole('radio', { name: 'End of the record', exact: true })).toBeEnabled();
   await expect(actions).not.toContainText('stale or ambiguous');
   await expect(actions).not.toContainText('Unavailable');
   expect(await recordReads()).toBe(1);
   expect(await page.evaluate(() => window.__GBDRAW_DIAGRAM_RUNS__.length)).toBe(0);
   expect(await page.evaluate(() => window.__GBDRAW_HISTORY__.getUndoCount())).toBe(undoCount);
-  return { actions, expectedStart: Number(expectedStart) };
+  return { actions, expectedStart };
 };
 
 test('Circular Record actions read a loaded Gallery Session without Generate', async ({ page }) => {

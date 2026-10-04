@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import { resolveFeatureAnchor } from '../../gbdraw/web/js/app/record-display/feature-anchor.js';
+import { validateAnchorIntent } from '../../gbdraw/web/js/app/record-display-options.js';
 
 const identity = { recordKey: 'record-1', biologicalFeatureId: 'feature-1' };
 
@@ -198,4 +199,121 @@ test('resolver does not mutate deeply frozen input and returns deterministic pro
     offsetBp: -4,
     orientForward: true
   });
+});
+
+// Display position (1-based) of a source base after the record display
+// transform: base `startCoordinate` is display base 1 and the display runs
+// forward, or backward when the record is reverse complemented.
+const displayPosition = (base, { startCoordinate, reverseComplement }, recordLength = 100) => {
+  const step = reverseComplement ? startCoordinate - base : base - startCoordinate;
+  return 1 + (((step % recordLength) + recordLength) % recordLength);
+};
+const coveredBases = (parts) => parts.flatMap(({ start, end }) => (
+  Array.from({ length: end - start }, (_, index) => start + index + 1)
+));
+const assertFeatureAtDisplayStart = (options) => {
+  const result = resolve({ ...options, intent: { placement: 'feature-start', anchor: null, ...options.intent } });
+  assert.equal(result.eligibility.enabled, true, result.eligibility.message);
+  const parts = inputFor(options).parts;
+  const positions = coveredBases(parts).map((base) => displayPosition(base, result));
+  assert.equal(Math.min(...positions), 1, 'the feature starts at display base 1');
+  assert.equal(Math.max(...positions), positions.length, 'the feature occupies display bases 1..n');
+  assert.equal(validateAnchorIntent(result.provenance), result.provenance);
+  assert.equal(result.provenance.placement, 'anchor');
+  assert.equal(result.provenance.offsetBp, 0);
+  return result;
+};
+
+test('feature-start puts the feature first in display order for both strands', () => {
+  const plus = assertFeatureAtDisplayStart({});
+  assert.equal(plus.startCoordinate, 11);
+  assert.equal(plus.provenance.anchor, 'five-prime');
+  assert.deepEqual(plus.displayedStrand, { before: '+', after: '+' });
+
+  const minus = assertFeatureAtDisplayStart({ strand: '-' });
+  assert.equal(minus.startCoordinate, 11);
+  assert.equal(minus.provenance.anchor, 'three-prime');
+  assert.equal(minus.reverseComplement, false);
+
+  const minusForward = assertFeatureAtDisplayStart({ strand: '-', intent: { orientForward: true } });
+  assert.equal(minusForward.startCoordinate, 16);
+  assert.equal(minusForward.reverseComplement, true);
+  assert.equal(minusForward.provenance.anchor, 'five-prime');
+  assert.equal(minusForward.provenance.orientForward, true);
+});
+
+test('feature-start follows an already reverse-complemented record', () => {
+  const plusInReversed = assertFeatureAtDisplayStart({ currentReverseComplement: true });
+  assert.equal(plusInReversed.reverseComplement, true);
+  assert.equal(plusInReversed.startCoordinate, 16);
+  assert.equal(plusInReversed.provenance.anchor, 'three-prime');
+
+  const plusRestored = assertFeatureAtDisplayStart({
+    currentReverseComplement: true, intent: { orientForward: true }
+  });
+  assert.equal(plusRestored.reverseComplement, false);
+  assert.equal(plusRestored.startCoordinate, 11);
+  assert.equal(plusRestored.provenance.anchor, 'five-prime');
+
+  const minusInReversed = assertFeatureAtDisplayStart({ strand: '-', currentReverseComplement: true });
+  assert.equal(minusInReversed.startCoordinate, 16);
+  assert.equal(minusInReversed.provenance.anchor, 'five-prime');
+});
+
+test('feature-start covers multipart and origin-spanning features', () => {
+  for (const currentReverseComplement of [false, true]) {
+    for (const orientForward of [false, true]) {
+      assertFeatureAtDisplayStart({
+        currentReverseComplement,
+        intent: { orientForward },
+        parts: [{ start: 90, end: 100, strand: '+' }, { start: 0, end: 5, strand: '+' }]
+      });
+      assertFeatureAtDisplayStart({
+        strand: '-',
+        currentReverseComplement,
+        intent: { orientForward },
+        parts: [{ start: 0, end: 5, strand: '-' }, { start: 90, end: 100, strand: '-' }]
+      });
+    }
+  }
+  const joined = resolve({
+    parts: [{ start: 10, end: 13, strand: '+' }, { start: 20, end: 23, strand: '+' }],
+    intent: { placement: 'feature-start', anchor: null }
+  });
+  assert.equal(joined.startCoordinate, 11);
+  const joinedMinus = resolve({
+    strand: '-',
+    parts: [{ start: 20, end: 23, strand: '-' }, { start: 10, end: 13, strand: '-' }],
+    intent: { placement: 'feature-start', anchor: null }
+  });
+  assert.equal(joinedMinus.startCoordinate, 11);
+  assert.equal(joinedMinus.provenance.anchor, 'three-prime');
+});
+
+test('feature-start needs a known strand and takes no anchor or offset', () => {
+  const unstranded = resolve({
+    strand: 'unstranded',
+    parts: [{ start: 10, end: 16, strand: 'undefined' }],
+    intent: { placement: 'feature-start', anchor: null }
+  });
+  assert.equal(unstranded.capabilities.featureStart.code, 'feature-start-direction-unavailable');
+  assert.equal(unstranded.eligibility.code, 'feature-start-direction-unavailable');
+  assert.equal(unstranded.capabilities.anchors.midpoint.enabled, true);
+
+  assert.equal(resolve({ profile: { precision: 'fuzzy' } }).capabilities.featureStart.code, 'location-fuzzy');
+  assert.equal(resolve({ intent: { placement: 'feature-start', anchor: 'five-prime' } })
+    .eligibility.code, 'anchor-not-applicable');
+  assert.equal(resolve({ intent: { placement: 'feature-start', anchor: null, offsetBp: 2 } })
+    .eligibility.code, 'offset-not-applicable');
+  assert.equal(resolve({}).capabilities.featureStart.enabled, true);
+});
+
+test('feature-end keeps its signed offset along the feature strand', () => {
+  assert.equal(coordinate({ intent: { placement: 'feature-end', anchor: null, offsetBp: 3 } }), 20);
+  assert.equal(coordinate({ intent: { placement: 'feature-end', anchor: null, offsetBp: -3 } }), 14);
+  assert.equal(coordinate({
+    strand: '-', intent: { placement: 'feature-end', anchor: null, offsetBp: 3, orientForward: true }
+  }), 7);
+  const provenance = resolve({ intent: { placement: 'feature-end', anchor: null, offsetBp: 3 } }).provenance;
+  assert.deepEqual([provenance.placement, provenance.anchor, provenance.offsetBp], ['feature-end', null, 3]);
 });

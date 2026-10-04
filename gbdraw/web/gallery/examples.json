@@ -134,7 +134,7 @@
     "featureSources": [
       "GCF_015097735.1_ASM1509773v1_genomic.gbff"
     ],
-    "fileSizeLabel": "26.7 MB",
+    "fileSizeLabel": "26.8 MB",
     "command": "gbdraw circular -o Vnig_TUMSAT-TG-2018 --separate_strands -k CDS,rRNA,tRNA,tmRNA,ncRNA,repeat_region -p orchid --track_type tuckin -l left --plot_title '<i>Vibrio nigripulchritudo</i> TUMSAT-TG-2018, complete genome' --plot_title_position bottom --multi_record_canvas --multi_record_size_mode auto --multi_record_min_radius_ratio 0.55 --multi_record_column_gap_ratio 0.1 --multi_record_row_gap_ratio 0.05 --multi_record_position '#1@1' --multi_record_position '#2@1' --multi_record_position '#3@2' --multi_record_position '#4@2' --multi_record_position '#5@2' --multi_record_position '#6@2' --gbk GCF_015097735.1_ASM1509773v1_genomic.gbff -f interactive_svg",
     "commandKind": "runnable",
     "commandNote": "Download the pinned RefSeq assembly named in Files; no sequence search is required.",

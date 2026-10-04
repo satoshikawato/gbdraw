@@ -431,6 +431,17 @@ export const createRecordDisplayControls = ({ state, computed, watch, linearReco
         (typeof failed.error === 'string' ? failed.error : failed.error?.summary) || RECORD_READ_ERROR_LABEL)
       : recordTargetError(RECORD_TARGET_NOT_DISCOVERED, 'The records of this feature have not been read yet.');
   };
+  // The display start and orientation that Generate would apply from this
+  // committed row's draft, when either differs from the committed request.
+  const pendingTransformFor = (row) => {
+    let requested;
+    try { requested = requestedRecordTransform(row, draftFor(row), row); } catch { return null; }
+    const startCoordinate = requested.display.startCoordinate;
+    return startCoordinate === (row.committedDisplay?.startCoordinate ?? null)
+      && requested.reverseComplement === row.committedReverseComplement
+      ? null
+      : { startCoordinate, reverseComplement: requested.reverseComplement };
+  };
   const targetForFeature = (feature) => {
     refreshCommittedRows();
     const recordKey = String(feature?.record_key || '');
@@ -469,6 +480,7 @@ export const createRecordDisplayControls = ({ state, computed, watch, linearReco
           ?? row.detectedTopology === 'circular',
         cropped: row.committedCropped,
         committedReverseComplement: row.committedReverseComplement,
+        pendingTransform: pendingTransformFor(row),
         members
       }
     };
@@ -530,8 +542,9 @@ export const createRecordDisplayControls = ({ state, computed, watch, linearReco
     setReverseComplement: (row, value) => state.sessionOperationAvailability?.() || edit(row, {
       reverseComplementOverride: requireReverseComplementOverride(value), anchorIntent: null
     }, 'Change record orientation'),
+    // Apply on Generate: one undoable draft step, like the sidebar's edits.
     setResolvedTransform: (row, transform) => history.runUndoable(
-      'Rotate record to feature',
+      'Rotate record to feature on Generate',
       () => writeResolvedTransform(row, transform)
     ),
     commitResolvedTransform: writeResolvedTransform,

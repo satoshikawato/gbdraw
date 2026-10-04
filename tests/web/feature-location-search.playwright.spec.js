@@ -51,7 +51,7 @@ test('feature list, popup, hover, and Location search use 1-based INSDC location
     await app.openFeatureEditorFromList(app.extractedFeatures.find((feature) => feature.svg_id === id), null);
   }, ids.LOC_0002);
   await expect(page.getByRole('dialog', { name: /^Feature details:/ }))
-    .toContainText(`Location: ${SPLIT}`);
+    .toContainText(`LOCTEST: ${SPLIT}`);
   expect(await page.evaluate(() => window.__GBDRAW_APP__.clickedFeature.detailRows
     .find((row) => row.key === 'location').value)).toBe(SPLIT);
   await page.getByRole('button', { name: 'Close feature popup', exact: true }).click();

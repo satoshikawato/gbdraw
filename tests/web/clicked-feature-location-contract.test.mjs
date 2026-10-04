@@ -4,12 +4,13 @@ import test from 'node:test';
 
 const read = (path) => fs.readFileSync(new URL(`../../gbdraw/web/js/${path}`, import.meta.url), 'utf8');
 
-test('clickedFeatureLocation shows only the location the popup payload carries', () => {
+test('clickedFeatureSummary shows only the location the popup payload carries', () => {
   const source = read('app/app-setup.js');
-  const start = source.indexOf('const clickedFeatureLocation = computed(');
+  const start = source.indexOf('const clickedFeatureSummary = computed(');
   assert.notEqual(start, -1);
   const body = source.slice(start, source.indexOf('\n\n', start));
-  assert.match(body, /clickedFeature\.value\?\.location \|\| ''/);
+  assert.match(body, /const cf = clickedFeature\.value;/);
+  assert.match(body, /cf\?\.location \|\| ''/);
   // No envelope fallback that rebuilds start+1..end from cf.feat.
   assert.doesNotMatch(body, /\.feat\b|\.start\b|\.end\b|\.strand\b|\+ 1/);
 });

@@ -770,9 +770,18 @@ both the app and downloaded Interactive SVG. Python-only syntax such as
 explains returning to word search by turning Regex off.
 
 A normal feature click opens its identity, location, strand, qualifiers, and
-available sequence actions. The feature list, feature popup, hover summary,
-and the feature sections of match popups show each part of a split or
-origin-spanning location, and the length is the sum of the parts. Match popups
+available sequence actions. The popup header shows the feature label, its
+`<record ID>: <location>`, and the gene when it differs from the label. **Edit**
+groups controls by when they apply: **Appearance · updates the current Result**
+(**Fill Color**, **Stroke**, **Label text** with **Label visibility** and
+**Apply Label**, **Feature visibility**, **Legend name**) and **Layout ·
+applies on Generate** (**Feature placement** and record rotation), followed by
+the **Similarity group** section when the feature belongs to one. The simple
+popup shows the same controls in the same order without tabs.
+
+The feature list, feature popup, hover summary, and the feature sections of
+match popups show each part of a split or origin-spanning location, and the
+length is the sum of the parts. Match popups
 report endpoints and evidence. A Linear match interval is in input-file
 coordinates, as in the feature popup; for a cropped record the popup also shows
 the **Query table interval** or **Subject table interval** (the search-frame
@@ -995,36 +1004,60 @@ non-circular topology or unknown length disables the start control with a reason
 Turning **Circular record** off retains the inactive start draft; turning it back
 on restores that value.
 
-To rotate a record from a feature, open its popup. Expand **Record actions**
-near the top of **Edit**. The section is closed when the popup opens,
-in both rich and simple layouts. After **Load Session**, which reads no record
-bytes, expanding it reads the source records and shows **Reading records…**
-until the preview is ready; a failed read shows its own reason. Choose the
-feature's 5′ end, midpoint, or 3′ end. Enter a signed offset in source base
-pairs in the feature's biological direction, and optionally orient the feature
-forward. The preview and saved
-transform use the original 1-based source coordinate; reverse complement changes
-display orientation but does not renumber the source sequence.
-**Place this feature at the end** uses the outgoing boundary after the feature;
-it is distinct from placing the feature's 3′ base at the display start. The
-preview reports the new 1-based source coordinate and resulting orientation.
-These actions require a complete record whose effective topology is circular;
-cropped sources and locations whose exact traversal or outgoing boundary cannot
-be established remain unavailable with a reason.
-Select **Apply and regenerate** to update only that feature's record and the
-current Result as one undoable action. Other pending form edits remain pending.
-**Cancel** inside Record actions resets and closes that section while keeping
-the feature popup open. Cancel, a failed render, or a stale/replaced source
-keeps the previous Result and record transform. Undo and Redo restore the
+To rotate a record from a feature, open its popup and expand **Rotate record
+using this feature** in the **Layout** group of **Edit**. The section is closed
+when the popup opens, in both rich and simple layouts. After **Load Session**,
+which reads no record bytes, expanding it reads the source records and shows
+**Reading records…** until the preview is ready; a failed read shows its own
+reason. Under **Put this feature at**, choose:
+
+- **Start of the record** (default): the feature's first base in display order
+  becomes base 1. That is its 5′ end when the feature reads forward in the
+  result and its 3′ end otherwise, so the feature starts the record with or
+  without an orientation change. It needs a known feature strand.
+- **End of the record**: the record starts at the outgoing boundary just after
+  the feature, so the feature ends the record. This is distinct from placing
+  the feature's 3′ base at the display start.
+- **Custom position**: **Record starts at** this feature's 5′ end, midpoint, or
+  3′ end, or just after the feature, **shifted by** a signed offset in base
+  pairs counted along the feature's strand.
+
+**Show this feature on the forward strand** reverse-complements the record when
+the feature is on the − strand; left off, the current orientation is kept. One
+sentence previews the record's new start and orientation, plus the displayed
+feature strand when it changes. The start is an original 1-based source
+coordinate; reverse complement changes display orientation but does not
+renumber the source sequence. These actions require a complete record whose
+effective topology is circular; cropped sources and locations whose exact
+traversal or outgoing boundary cannot be established remain unavailable with a
+reason, and a choice that is unavailable for this feature is disabled with its
+own reason. Two buttons apply the previewed start and orientation:
+
+- **Apply on Generate** writes them to that record's display start and
+  orientation, the same values **Record rotation** in Input Genomes edits, and
+  leaves the current Result unchanged. Repeat it on other records, then select
+  **Generate Diagram** once to draw them all. Applying again to the same record
+  replaces its earlier value. Each use is one Undo step. Until Generate, Input
+  Genomes shows the pending Generate notice, and reopening the rotation section
+  for that record shows **Pending for Generate:** with the staged start and
+  orientation.
+- **Apply and regenerate** updates only that feature's record and the current
+  Result as one undoable action. Other pending form edits, including values
+  that **Apply on Generate** set for other records, remain pending.
+
+**Cancel** inside the section resets and closes it while
+keeping the feature popup open. Cancel, a failed render, or a stale/replaced
+source keeps the previous Result and record transform. Undo and Redo restore the
 Result and record transform together; Save Session and a fresh Load preserve
 the last successful absolute transform and its feature-placement provenance.
 Operation-specific messages explain unavailable actions for non-circular,
 cropped, fuzzy, unordered, mixed-strand, or otherwise unsafe targets. A reason
-that disables every control, such as a non-circular record, is shown once in
-place of the controls.
+that leaves no placement available, such as a non-circular record or fuzzy
+coordinates, is shown once in place of the controls.
 
-Open the feature popup and choose **Feature placement**: Auto, Main, or an
-available directional lane 1. Bulk selection uses **Selected feature placements**.
+Open the feature popup and choose **Feature placement** in its **Layout**
+group: Auto, Main, or an available directional lane 1. Bulk selection uses
+**Selected feature placements**.
 When a change to **Track Preset**, **Track Layout**, **Separate Strands**, or the
 lane or placement of a custom features row would leave placements of the current
 mode without their lane, a dialog asks first. **Reset N placements to Auto**

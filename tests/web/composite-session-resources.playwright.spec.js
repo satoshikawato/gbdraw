@@ -7,9 +7,11 @@ const { promisify } = require('node:util');
 const path = require('node:path');
 const { CURRENT_REQUEST_SCHEMA, openApp, reveal } = require('./helpers/app-lifecycle.cjs');
 
-const seed = 'gbdraw/web/gallery/sessions/Vnig_TUMSAT-TG-2018.gbdraw-session.json.gz';
+// Three single-record GenBank files: Circular binds them as one composite File.
+const seed = 'tests/fixtures/sessions/composite-circular-three-files.v44-schema8.gbdraw-session.json.gz';
+const recordCount = 3;
 const loadTimeout = 300_000;
-const generateTimeout = 1_800_000;
+const generateTimeout = 600_000;
 const hash = bytes => createHash('sha256').update(bytes).digest('hex');
 const resourceIdentity = descriptor => ({
   size: descriptor.size,
@@ -126,55 +128,26 @@ const save = async (page, testInfo, label) => {
   }
 };
 
-const prepareSeed = async (journey, testInfo) => {
+const readSeed = async () => {
   const bytes = await fs.readFile(seed);
-  expect(hash(bytes)).toBe('112c63cd0bb6396a886208b74893879b0800ce50438b9cdd3886b7b6a2e4a0a7');
+  expect(hash(bytes)).toBe('87fef00880b1f9f2cd81851f84049e75076a8be1db2e2d0523dadb592e2e7312');
   const session = JSON.parse(gunzipSync(bytes));
-  if (journey !== 'minimal') return { file: seed, session };
-
-  // Three real plasmids exercise composite ordering and persistence in PR smoke.
-  // Keep the six-replicon Gallery fixture for grid/batch and CLI acceptance.
-  const records = session.renderRequest.records.slice(2, 5)
-    .map((record, index) => ({ ...record, recordKey: `record-${index + 1}` }));
-  const resourceIds = new Set(records.map(record => record.source.resourceId));
-  const title = 'Three Vibrio plasmids';
-  const input = testInfo.outputPath('three-plasmids-input.json');
-  const file = testInfo.outputPath('three-plasmids.gbdraw-session.json.gz');
-  await fs.writeFile(input, JSON.stringify({
-    format: session.format, version: session.version,
-    results: [], editorState: { featureCatalog: null },
-    ui: session.ui,
-    config: { ...session.config,
-      form: { ...session.config.form, plot_title: title },
-      adv: { ...session.config.adv, multi_record_positions: [] } },
-    renderRequest: { ...session.renderRequest, records,
-      layout: { ...session.renderRequest.layout, multiRecordPositions: [] },
-      diagramOptions: { ...session.renderRequest.diagramOptions, plotTitle: title } },
-    resources: Object.fromEntries(Object.entries(session.resources)
-      .filter(([id, resource]) => resource.kind !== 'genbank' || resourceIds.has(id)))
-  }));
-  // Materialize the matching SVG and catalog through the normal CLI writer.
-  const { stdout, stderr } = await promisify(execFile)('python', [
-    '-m', 'gbdraw.cli', 'circular', '--session', input,
-    '-o', testInfo.outputPath('three-plasmids'), '--session_output', file
-  ], { cwd: testInfo.outputDir, env: { ...process.env, PYTHONPATH: process.cwd() },
-    timeout: generateTimeout, maxBuffer: 1_000_000 });
-  await fs.writeFile(testInfo.outputPath('three-plasmids-cli.log'), stdout + stderr);
-  return { file, session: JSON.parse(gunzipSync(await fs.readFile(file))) };
+  const components = session.webFiles.bindings.c_gb.components;
+  expect(components.map(component => component.name))
+    .toEqual(['SARS-CoV-1.gbk', 'SARS-CoV-2.gbk', 'MERS-CoV.gbk']);
+  return { session, componentIds: components.map(component => component.resourceId) };
 };
 
 for (const journey of ['minimal', 'grid-batch-grid']) {
-  test(`Session export Vibrio composite resources survive ${journey} Save, fresh Load and Generate`, async ({ browser }, testInfo) => {
+  test(`Session export composite resources survive ${journey} Save, fresh Load and Generate`, async ({ browser }, testInfo) => {
     test.setTimeout(6 * generateTimeout + 6 * loadTimeout);
     const contexts = [];
     try {
-      const { file, session: seedSession } = await prepareSeed(journey, testInfo);
-      const recordCount = journey === 'minimal' ? 3 : 6;
-      const { page, external } = await load(browser, file, contexts);
+      const { session: seedSession, componentIds: seedIds } = await readSeed();
+      const { page, external } = await load(browser, seed, contexts);
       const original = await snapshot(page);
       expect(original.request.records).toHaveLength(recordCount);
       expect(original.components).toHaveLength(recordCount);
-      const seedIds = [...new Set(seedSession.renderRequest.records.map(r => r.source.resourceId))];
       expect(original.components.map(({ size, sha256 }) => ({ size, sha256 })))
         .toEqual(seedIds.map(id => resourceIdentity(seedSession.resources[id])));
       if (journey === 'minimal') {
@@ -265,10 +238,11 @@ for (const journey of ['minimal', 'grid-batch-grid']) {
   });
 }
 
-test('Session CLI sidecar preserves the six-source draft for fresh Web Load and Generate', async ({ browser }, testInfo) => {
+test('Session CLI sidecar preserves the composite draft for fresh Web Load and Generate', async ({ browser }, testInfo) => {
   test.setTimeout(4 * generateTimeout);
   const contexts = [];
   try {
+    await readSeed();
     const { page } = await load(browser, seed, contexts);
     await generate(page);
     const original = await snapshot(page);
@@ -289,7 +263,7 @@ test('Session CLI sidecar preserves the six-source draft for fresh Web Load and 
     expect([replayed.version, replayed.webFiles.bindings.schema, replayed.renderRequest.schema]).toEqual([44, 2, CURRENT_REQUEST_SCHEMA]);
     const expected = session.webFiles.bindings.c_gb;
     const actual = replayed.webFiles.bindings.c_gb;
-    expect(actual.components).toHaveLength(6);
+    expect(actual.components).toHaveLength(recordCount);
     expect(actual.components.map(({ resourceId, ...metadata }) => metadata))
       .toEqual(expected.components.map(({ resourceId, ...metadata }) => metadata));
     expect(actual.components.map(part => resourceIdentity(replayed.resources[part.resourceId])))
