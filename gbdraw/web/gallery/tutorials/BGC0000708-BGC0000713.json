@@ -756,10 +756,10 @@
               },
               {
                 "type": "evaluate",
-                "script": "const popup = document.querySelector('.feature-popup'); const body = popup?.querySelector('.feature-popup-body'); const actions = body?.querySelector('.feature-popup-grid > .space-y-3 > .grid.grid-cols-2.gap-2'); if (!popup || !actions) throw new Error('Compact Align popup controls not found.'); popup.children[0]?.querySelector('.min-w-0')?.setAttribute('data-capture', 'align-popup-identity'); actions.setAttribute('data-capture', 'align-popup-actions');"
+                "script": "const popup = document.querySelector('.feature-popup'); const similarity = popup?.querySelector('[data-feature-popup-group=\"similarity\"]'); const actions = similarity?.querySelector(':scope > .grid.grid-cols-2'); if (!popup || !similarity || !actions) throw new Error('Compact Align popup controls not found.'); const body = popup.querySelector('.feature-popup-body'); if (body) body.scrollTop += similarity.getBoundingClientRect().top - body.getBoundingClientRect().top; popup.children[0]?.querySelector('.min-w-0')?.setAttribute('data-capture', 'align-popup-identity'); similarity.firstElementChild?.setAttribute('data-capture', 'align-popup-group-heading'); actions.setAttribute('data-capture', 'align-popup-actions');"
               }
             ],
-            "clipSelectors": ["[data-gbdraw-feature-id='fed46a3a6_record_1']", "[data-capture='align-popup-identity']", "[data-capture='align-popup-actions']"],
+            "clipSelectors": ["[data-gbdraw-feature-id='fed46a3a6_record_1']", "[data-capture='align-popup-identity']", "[data-capture='align-popup-group-heading']", "[data-capture='align-popup-actions']"],
             "highlightSelector": "[data-gbdraw-feature-id='fed46a3a6_record_1']",
             "cropPadding": {
               "top": 24,

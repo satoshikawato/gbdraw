@@ -481,7 +481,7 @@
               },
               {
                 "type": "evaluate",
-                "script": "const app = window.__GBDRAW_APP__; const popup = document.querySelector('.feature-popup'); if (!app || !popup) throw new Error('RNR2 feature popup is unavailable.'); if (app.clickedFeature) app.clickedFeature.activeTab = 'details'; popup.style.width = '580px'; if (app.clickedFeaturePos) { app.clickedFeaturePos.x = 12; app.clickedFeaturePos.y = 300; }"
+                "script": "const app = window.__GBDRAW_APP__; const popup = document.querySelector('.feature-popup'); if (!app || !popup) throw new Error('RNR2 feature popup is unavailable.'); if (app.clickedFeature) app.clickedFeature.activeTab = 'details'; popup.style.width = '440px'; if (app.clickedFeaturePos) { app.clickedFeaturePos.x = 12; app.clickedFeaturePos.y = 300; }"
               },
               {
                 "type": "waitForFunction",

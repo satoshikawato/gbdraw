@@ -864,6 +864,13 @@ def _capture_bgc_popups(
                     f"Similarity-group feature popup is missing {token!r}: "
                     f"{group_text!r}"
                 )
+        # The Edit tab lists Appearance and Layout before the Similarity group
+        # section, so bring that section (members, coverage, actions) into view.
+        similarity = group_popup.locator('[data-feature-popup-group="similarity"]')
+        expect(similarity).to_have_count(1)
+        similarity.evaluate("(el) => { const body = el.closest('.feature-popup-body'); if (body) body.scrollTop += el.getBoundingClientRect().top - body.getBoundingClientRect().top; }")
+        expect(similarity).to_contain_text("Record coverage")
+        page.wait_for_timeout(250)
         screenshot_bytes["group-popup.png"] = capture_screenshot(
             page, output_paths["group-popup.png"], "Linear"
         )
