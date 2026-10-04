@@ -46,3 +46,11 @@ session written by first-parent `main` commit
 compressed with `gzip -n -9`. Its decompressed SHA-256 is
 `a885bdad7bf8778c0836c686710111f85871ffecbdd7da3e460b971f8701884a`. It is the
 positive fixture for the retired `--conservation_fasta` flag (design D18).
+
+`composite-circular-three-files.v44-schema8.gbdraw-session.json.gz` is the
+Circular CLI Session for three single-record GenBank files (see its
+`.provenance.json`). Circular has one GenBank File, so the Session binds the
+three files as one composite `c_gb` whose components keep each file's name and
+bytes. `composite-session-resources.playwright.spec.js` loads, saves, regenerates
+and replays it. Its decompressed SHA-256 is
+`9c371d16a5b74bebffd28d9efdff16e8678d0fdecd1bfe1c07a326f33078571b`.
