@@ -68,11 +68,11 @@ Direct `main` hotfixes are unsupported; urgent changes still enter through
 | Hosted bundle construction | `tools/prepare_cloudflare_pages.py` |
 | Production deployment | Cloudflare Workers Builds and `wrangler.toml` |
 
-`tools/check-promotion-readiness.mjs` is the planned checker implementation
-owner. It does not exist yet and must be introduced in a checker-only pull
-request before a later pull request wires it to a workflow or evidence producer.
-The table declares ownership; it does not claim that unwritten or unwired
-behavior is already executable.
+`tools/check-promotion-readiness.mjs` verifies exact-SHA workflow evidence and
+promotion result-tree identity. `Promotion / gate` in `web-base-policy.yml` runs
+it from trusted `main`, and `Release / gate` uses it to require exact-candidate
+Gallery readiness. The table declares ownership; it does not claim that
+unwritten or unwired behavior is already executable.
 
 After the operational protection cutover, the complete required-status set for
 pull requests to `dev` is:
@@ -225,6 +225,20 @@ reclassified as one combined runtime-and-guard implementation. Promotion does
 not weaken that separation: it accepts aggregation only from trusted exact-SHA
 evidence and verified tree identity.
 
+Exact-SHA evidence is a successful `Dev staging / gate` or
+`Gallery readiness / gate` aggregate from the push run for that SHA. The run may
+earn part of it through light-change inheritance: when the push leaves the tree
+unchanged, or changes only metadata, documentation, policy documentation, and
+leaf tests, and the direct parent has its own successful aggregate, the run
+executes only the jobs the change needs and inherits the rest
+([selective CI](./SELECTIVE_CI.md#light-change-inheritance)). Promotion
+checklist evidence outside these aggregates, such as the release-tier run,
+recipe and sweep runs, and generated-artifact checks, may come from an ancestor
+of the promotion head under the
+[carry-forward rule](./WEB_PERIODIC_AUDIT.md#carrying-evidence-forward). Neither
+rule changes `Promotion / gate`, which still requires both aggregates on the
+exact promotion head.
+
 ## Self-authorization separation
 
 Checker implementation consists of:
@@ -271,8 +285,8 @@ The following rules apply:
   evidence producer that invokes or feeds it.
 
 `tools/check-promotion-readiness.mjs` is checker implementation, not authority
-data. Its first implementation therefore belongs in a checker-only pull request;
-workflow wiring follows after that implementation is merged and characterized.
+data. It changes in checker-only pull requests, separately from the workflows
+that invoke it.
 
 ### Current guard scope
 
