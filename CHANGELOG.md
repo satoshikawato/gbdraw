@@ -79,6 +79,15 @@ decisions are in
   label** or **Cancel**). A kept **On** applies when the label can be drawn, and
   Generate no longer fails on it. The feature popup says why a feature has no
   label instead of always suggesting **On**.
+- GFF3: a color-table or feature-visibility-table row whose `feature_type` is
+  `*` no longer removes the CDS and other features linked to a gene by
+  `Parent`. Loading every feature type now flattens those features as a
+  type-filtered load does, so the diagram draws the features the feature popup
+  lists. In the web app, a manual **Feature visibility** rule with the default
+  **Feature Type** `*` removed every such CDS. `read_gff()` without `features`
+  now returns these features at the record level too, so `draw_circular()` and
+  `draw_linear()` draw them. For a reverse-complemented GFF3 record, the
+  feature popup lists features in the drawn start order (OV-15).
 - Feature placement: a lane placement made in one mode no longer breaks
   Generate in the other mode. Each mode keeps its own placements through mode
   switches, Undo/Redo, and Save/Load Session, and they apply again after you

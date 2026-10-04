@@ -1238,7 +1238,7 @@ def _load_request_records(
     if inputs.gff_keep_all_features or shown_types <= set(inputs.gff_candidate_features):
         return request, collection
     # A row can turn on a GFF3 feature whose type the type filter dropped. Load
-    # that type as well; loading every type would leave Parent-linked CDS nested.
+    # that type as well.
     return request, _coerce_resolved_collection(request, _normalize_request_records(request, replace(
         inputs,
         gff_candidate_features=tuple(sorted({*inputs.gff_candidate_features, *shown_types})),
