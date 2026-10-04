@@ -7,6 +7,10 @@ import {
 import { resolveFeatureAnchor } from '../../gbdraw/web/js/app/record-display/feature-anchor.js';
 import { RECORD_TARGET_NOT_DISCOVERED } from '../../gbdraw/web/js/app/record-display-options.js';
 
+// The reason feature-record-rotation.js gives when the feature's input differs
+// from the Result's; the harness action stubs throw it for a stale feature.
+const INPUT_DIFFERS = "This feature's input file differs from the one the current Result was drawn from. "
+  + 'Generate Diagram to use the current file.';
 const feature = {
   record_key: 'record-1',
   biological_feature_id: 'feature-1',
@@ -38,14 +42,14 @@ const createHarness = ({
   const intents = [];
   const action = {
     currentFeature(candidate) {
-      if (!currentFeature) throw new Error('The popup feature source changed.');
+      if (!currentFeature) throw new Error(INPUT_DIFFERS);
       assert.equal(candidate.record_key, currentFeature.record_key);
       return currentFeature;
     },
     resolve({ feature: explicitFeature, intent }) {
       seenFeatures.push(explicitFeature);
       intents.push(intent);
-      if (!currentFeature) throw new Error('The popup feature source changed.');
+      if (!currentFeature) throw new Error(INPUT_DIFFERS);
       return {
         feature: currentFeature,
         row: { key: 'row-1' },
@@ -77,7 +81,7 @@ const createHarness = ({
       applyCount += 1;
       seenFeatures.push(explicitFeature);
       intents.push(intent);
-      if (!currentFeature) throw new Error('The popup feature source changed.');
+      if (!currentFeature) throw new Error(INPUT_DIFFERS);
       if (blockApply) {
         await new Promise((resolve) => { releaseApply = resolve; });
       }
@@ -87,7 +91,7 @@ const createHarness = ({
     async stage({ feature: explicitFeature, intent }) {
       seenFeatures.push(explicitFeature);
       stagedIntents.push(intent);
-      if (!currentFeature) throw new Error('The popup feature source changed.');
+      if (!currentFeature) throw new Error(INPUT_DIFFERS);
       return stageOutcome;
     }
   };
@@ -273,7 +277,7 @@ test('Apply rechecks freshness, suppresses double submit, and rebinds stable ide
   harness.setCurrentFeature(null);
   const stale = await harness.workflow.apply();
   assert.equal(stale.status, 'disabled');
-  assert.match(harness.workflow.draft.disabledReason, /source changed/);
+  assert.match(harness.workflow.draft.disabledReason, /input file differs/);
   // One reason source: the reason line states it; the status line does not repeat it.
   assert.equal(harness.workflow.draft.status, '');
   assert.equal(harness.applyCount(), 1);
@@ -284,12 +288,12 @@ test('a failed Apply and regenerate states its reason once', async () => {
   harness.workflow.open({ feature });
   harness.action.apply = async () => {
     harness.setCurrentFeature(null);
-    throw new Error('The popup feature source changed.');
+    throw new Error(INPUT_DIFFERS);
   };
   const outcome = await harness.workflow.apply();
   const { draft } = harness.workflow;
   assert.equal(outcome.status, 'error');
-  assert.equal(draft.disabledReason, 'The popup feature source changed.');
+  assert.equal(draft.disabledReason, INPUT_DIFFERS);
   assert.equal(draft.status, 'Record rotation failed. The previous Result was kept.');
   assert.equal(draft.statusKind, 'error');
 
@@ -331,7 +335,7 @@ test('Apply on Generate stages the resolved transform with the same validation a
   harness.workflow.setOffset('0');
   harness.setCurrentFeature(null);
   assert.deepEqual(await harness.workflow.stage(), { status: 'disabled' });
-  assert.match(draft.disabledReason, /source changed/);
+  assert.match(draft.disabledReason, /input file differs/);
   assert.equal(draft.status, '');
   assert.equal(harness.stagedIntents.length, 1);
 });

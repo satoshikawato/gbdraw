@@ -22,6 +22,11 @@ write-up of a release.
   while **Apply and regenerate** runs no longer writes its status into the
   next popup, and a target that becomes stale before Apply states its reason
   once.
+- Feature popup (web app): when a feature's input file differs from the one
+  the current Result was drawn from, **Rotate record using this feature** now
+  says so and asks for **Generate Diagram**. It used to say "The popup feature
+  source changed after the popup opened.", which was wrong when the input had
+  changed before the popup opened.
 - Feature popup (web app): **Edit** now groups its controls by when they
   apply. **Appearance · updates the current Result** holds Fill Color, Stroke,
   Label text and visibility, Feature visibility, and Legend name; **Layout ·
