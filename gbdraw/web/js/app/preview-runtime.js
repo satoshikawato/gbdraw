@@ -681,11 +681,33 @@ export const createPreviewRuntime = ({ state, serializeSvg }) => {
       phase,
       resultIndex
     });
+    const rootBeforeRestore = getMountedSvg();
     await restore();
     if (!expectation) {
       clearActiveRuntime();
       recordSessionLifecycleEvent('preview.restore-bind-completed', { phase, resultIndex });
       return null;
+    }
+    // R10: a failure before any candidate replaced the Result restores the
+    // Result that is still mounted. The mount watcher observes no change, so
+    // bind that root here, as the watcher binds a remounted one.
+    const root = getMountedSvg();
+    if (
+      root
+      && root === rootBeforeRestore
+      && activeExpectation === expectation
+      && activeRuntime?.svg === root
+      && activeRuntime.resultIdentity === expectation.resultIdentity
+      && expectation.isCurrent()
+    ) {
+      if (activeRuntime.readyReceipt) invalidateReadyReceipt(activeRuntime.readyReceipt);
+      if (state.skipCaptureBaseConfig) state.skipCaptureBaseConfig.value = false;
+      void bindMountedResult(createMountedResultContext({
+        root,
+        result,
+        resultIndex,
+        catalogState: expectation.catalogState
+      })).catch(() => {});
     }
     const receipt = await expectation.promise;
     recordSessionLifecycleEvent('preview.restore-bind-completed', {

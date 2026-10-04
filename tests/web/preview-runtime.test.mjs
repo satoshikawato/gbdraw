@@ -458,4 +458,74 @@ assert.equal(metricTotal('perFeatureListenerRegistrationCount', 'generate'), 0);
 assert.equal(metricTotal('featureSearchIndexBuildCount', 'generate'), 0);
 assert.ok(lifecycleEvents.some(({ name }) => name === 'preview.ready-receipt-accepted'));
 
+// OV-16: a Generate that fails before it replaces the Result rolls back to the
+// Result that is still mounted. The restore changes nothing the mount watcher
+// observes, so the rollback binds that root itself and settles.
+const keptResult = { name: 'kept.svg', content: '<svg></svg>' };
+const keptRoot = makeSvg([]);
+const keptState = {
+  results: ref([keptResult]),
+  selectedResultIndex: ref(0),
+  skipCaptureBaseConfig: ref(false),
+  featureCatalog: ref(null),
+  svgContainer: ref({
+    querySelector: (selector) => (selector === 'svg' ? keptRoot : null)
+  })
+};
+const keptRuntime = createPreviewRuntime({ state: keptState, serializeSvg: () => '<svg></svg>' });
+let keptBindCount = 0;
+keptRuntime.configureMountedResultBinder({ adoptLegend: () => { keptBindCount += 1; } });
+const keptExpectation = keptRuntime.registerReadinessExpectation({
+  result: keptResult,
+  resultIndex: 0,
+  generationToken: 'generation-kept',
+  phase: 'generate-kept',
+  isCurrent: () => true
+});
+const keptReceipt = await keptRuntime.bindMountedResult(keptRuntime.createMountedResultContext({
+  root: keptRoot,
+  result: keptResult,
+  resultIndex: 0
+}));
+assert.equal(await keptExpectation.promise, keptReceipt);
+const keptHandle = {
+  ownerSet: { results: keptState.results.value },
+  mutableIntent: { ui: { selectedResultIndex: 0 } }
+};
+// The restore owner installs the same Result set and marks the remount as an
+// incremental edit, as restoreGeneratedArtifactHandle does.
+const restoreKept = async () => {
+  keptState.skipCaptureBaseConfig.value = true;
+  keptState.results.value = keptHandle.ownerSet.results;
+};
+const settleWithin = (promise) => {
+  let timer;
+  return Promise.race([
+    promise,
+    new Promise((resolve) => { timer = setTimeout(() => resolve('unsettled'), 1000); })
+  ]).finally(() => clearTimeout(timer));
+};
+// Generate's rollback invalidates the displayed receipt before it restores.
+keptRuntime.invalidateReadyReceipt(keptReceipt, 'History finalization failed.');
+const restoredReceipt = await settleWithin(keptRuntime.restorePreviousSelectedResult({
+  handle: keptHandle,
+  restore: restoreKept
+}));
+assert.notEqual(restoredReceipt, 'unsettled', 'the rollback must settle when the Result stays mounted');
+assert.equal(restoredReceipt.resultIndex, 0);
+assert.equal(restoredReceipt.phase, 'rollback-restoration');
+assert.equal(keptBindCount, 2);
+assert.equal(keptRuntime.isActiveResultReady(), true);
+assert.equal(keptState.skipCaptureBaseConfig.value, false);
+// The target-record rollback restores without invalidating the receipt first.
+const targetReceipt = await settleWithin(keptRuntime.restorePreviousSelectedResult({
+  handle: keptHandle,
+  phase: 'target-history-finalization-rollback',
+  restore: restoreKept
+}));
+assert.notEqual(targetReceipt, 'unsettled', 'the rollback must settle when the receipt is still valid');
+assert.equal(targetReceipt.phase, 'target-history-finalization-rollback');
+assert.equal(keptBindCount, 3);
+assert.equal(keptRuntime.isActiveResultReady(), true);
+
 console.log('preview runtime tests passed');
