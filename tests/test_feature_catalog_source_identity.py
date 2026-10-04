@@ -249,7 +249,7 @@ def test_gff_collision_ids_use_complete_source_order_across_visibility(tmp_path,
         catalog = plan.provenance[0].source_feature_catalog
         assert [item.biological_feature_id for item in catalog][-2:] == list(expected.values())
         manual = plan_linear_request(replace(request, options=replace(request.options, feature_placements=(override,))))
-        bound = manual.inputs.placements[0].foreground
+        bound = manual.inputs.record_features[0].foreground
         assert len(bound) == 1
         assert (bound[0].biological_feature_id, bound[0].source_feature_index) == (expected["alpha"], 2)
         from gbdraw.features.factory import create_feature_layers
@@ -257,7 +257,7 @@ def test_gff_collision_ids_use_complete_source_order_across_visibility(tmp_path,
         layers = create_feature_layers(
             manual.records[0], {}, ["CDS"], {"default": "#999999", "CDS": "#999999"},
             False, True, {}, compute_label_text=False,
-            placement_inputs=manual.inputs.placements[0],
+            record_features=manual.inputs.record_features[0],
             placement_slot=FeaturePlacementSlot("linear", "overlay", False),
         )
         runtime = {feature.source_feature_index: feature for feature in layers.foreground_features.values()}

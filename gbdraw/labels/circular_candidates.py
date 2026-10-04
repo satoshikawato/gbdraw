@@ -59,7 +59,10 @@ def build_circular_label_candidates(
     """
     candidates: list[CircularLabelCandidate] = []
     for input_order, (stable_id, feature) in enumerate(feature_dict.items()):
-        text = get_label_text(feature, label_filtering, overrides_only=overrides_only)
+        text = get_label_text(
+            feature, label_filtering, overrides_only=overrides_only,
+            feature_override=getattr(feature, "feature_override", None),
+        )
         if not text:
             continue
         width_px, height_px = measure_text(text, font_family, font_size)

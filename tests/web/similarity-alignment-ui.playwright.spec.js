@@ -3,7 +3,7 @@ const { execFileSync } = require('node:child_process');
 const { mkdirSync, readFileSync } = require('node:fs');
 const { join } = require('node:path');
 const { gunzipSync } = require('node:zlib');
-const { evaluateWithRetainedPromise } = require('./helpers/app-lifecycle.cjs');
+const { CURRENT_REQUEST_SCHEMA, evaluateWithRetainedPromise } = require('./helpers/app-lifecycle.cjs');
 
 const importSession = async (page, bytes, name) => evaluateWithRetainedPromise(page, async ({ bytes, name }) => {
   const file = new File([new Uint8Array(bytes)], name);
@@ -1134,7 +1134,7 @@ test('released Session 44 schema 7 and catalog 4 load and save through the curre
   await download.saveAs(savedPath);
   const saved = JSON.parse(gunzipSync(readFileSync(savedPath)).toString('utf8'));
   expect(saved.version).toBe(44);
-  expect(saved.renderRequest.schema).toBe(8);
+  expect(saved.renderRequest.schema).toBe(CURRENT_REQUEST_SCHEMA);
   expect(saved.editorState.featureCatalog.schema).toBe(4);
   const previous = JSON.parse(source.toString('utf8'));
   expect(saved.results.map(({ name }) => name)).toEqual(previous.results.map(({ name }) => name));

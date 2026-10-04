@@ -240,9 +240,11 @@ match both a gene annotation and its CDS; a unique protein ID avoids that
 ambiguity. Identical features in one record share a hash, so their biological
 feature IDs add the original-source order (`<hash>~<n>`); `hash=<hash>~<n>`
 names one of them, and `hash=<hash>` matches all of them. Run Info writes
-placement rows in the `hash=<biologicalFeatureId>` form. Unknown/stale
-identities, duplicate resolved targets, extra columns, wrong-mode sides and
-unsupported resolved layouts are errors. GFF duplicate
+placement rows in the `hash=<biologicalFeatureId>` form. Selectors that match
+no feature, duplicate resolved targets, extra columns, wrong-mode sides and
+unsupported resolved layouts are errors. An exact placement in a typed request
+or Session whose identity the source does not have is not an error: the render
+reports it as an `unresolved` feature identity notice. GFF duplicate
 identities use complete original-source order, including features hidden by
 loading or visibility rules. Changing visibility does not renumber them.
 

@@ -43,6 +43,7 @@ const {
   pathToFileURL(join(tempRoot, 'js', 'services', 'gallery-session-publication.js'))
 );
 const {
+  CANONICAL_REQUEST_SCHEMA,
   assertCanonicalRenderRequestsEquivalent,
   buildCanonicalRenderRequest,
   buildCanonicalRequestState,
@@ -152,7 +153,7 @@ const syntheticCliSession = {
 };
 const originalCliRequest = structuredClone(syntheticCliSession.renderRequest);
 const promotedSyntheticCli = promoteGallerySessionToCurrent(syntheticCliSession);
-assert.equal(promotedSyntheticCli.renderRequest.schema, 8);
+assert.equal(promotedSyntheticCli.renderRequest.schema, CANONICAL_REQUEST_SCHEMA);
 assert.equal(promotedSyntheticCli.renderRequest.grouping, 'single');
 assert.deepEqual(promotedSyntheticCli.renderRequest.diagramOptions.output, {
   legend: 'right',
@@ -285,7 +286,7 @@ const syntheticGuiSession = {
 };
 const promotedSyntheticGui = promoteGallerySessionToCurrent(syntheticGuiSession);
 const syntheticGuiOptions = promotedSyntheticGui.renderRequest.diagramOptions;
-assert.equal(promotedSyntheticGui.renderRequest.schema, 8);
+assert.equal(promotedSyntheticGui.renderRequest.schema, CANONICAL_REQUEST_SCHEMA);
 assert.equal(promotedSyntheticGui.renderRequest.grouping, 'single');
 assert.equal(promotedSyntheticGui.renderRequest.output.prefix, 'old');
 assert.equal(promotedSyntheticGui.renderRequest.output.overwrite, false);
@@ -557,7 +558,7 @@ assert.equal(Object.hasOwn(migratedCliOnly.config, 'linearRecordLayout'), false)
 const hmmt = JSON.parse(await readFile(join(repoRoot, 'tests/fixtures/sessions/HmmtDNA_ATskew.v40-schema5.json'), 'utf8'));
 const promotedHmmt = promoteGallerySessionToCurrent({ ...hmmt, version: 39 });
 const hmmtOptions = promotedHmmt.renderRequest.diagramOptions;
-assert.equal(promotedHmmt.renderRequest.schema, 8);
+assert.equal(promotedHmmt.renderRequest.schema, CANONICAL_REQUEST_SCHEMA);
 assert.equal(hmmtOptions.configOverrides['labels.circular.scope'], 'outer');
 assert.equal(hmmtOptions.configOverrides['objects.definition.circular.font_size'], 28);
 assert.equal(hmmtOptions.featureShapes.repeat_region, 'underlay');
@@ -638,7 +639,7 @@ const promotedV39Request = promoteCanonicalRenderRequestToCurrent(
   v39.renderRequest,
   { legacyOrthogroupState: v39.orthogroupState }
 );
-assert.equal(promotedV39Request.schema, 8);
+assert.equal(promotedV39Request.schema, CANONICAL_REQUEST_SCHEMA);
 assert.equal(promotedV39Request.layout.similarityAlignment.groupId, 'og_1');
 assert.deepEqual(
   promotedV39Request.layout.similarityAlignment.records.map(

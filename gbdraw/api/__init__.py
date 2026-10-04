@@ -5,6 +5,7 @@ the typed contracts and explicit render helpers used by pipelines and integratio
 """
 
 from .config import GbdrawConfig, apply_config_overrides, load_default_config
+from gbdraw.features.overrides import FeatureIdentityNotice, FeatureOverride
 from gbdraw.features.placement import FeaturePlacementOverride, FeaturePlacementTarget
 from .io import (
     CircularTrackTable,
@@ -86,6 +87,7 @@ from gbdraw.annotations import (
     AnnotationSet,
     AnnotationTrackParams,
     CoordinateSpan,
+    FeatureIdentitySpan,
     FeatureSelector,
     FeatureSpan,
     HatchStyle,
@@ -193,6 +195,8 @@ from .tracks import (  # type: ignore[reportMissingImports]
 )
 
 __all__ = [
+    "FeatureIdentityNotice",
+    "FeatureOverride",
     "FeaturePlacementOverride",
     "FeaturePlacementTarget",
     # config
@@ -246,6 +250,7 @@ __all__ = [
     "AnnotationSet",
     "AnnotationTrackParams",
     "CoordinateSpan",
+    "FeatureIdentitySpan",
     "FeatureSelector",
     "FeatureSpan",
     "HatchStyle",

@@ -1,7 +1,7 @@
 const { test, expect } = require('@playwright/test');
 const fs = require('node:fs/promises');
 const { gunzipSync } = require('node:zlib');
-const { openApp, assertDiagramWorkerIdle, generateAndWaitForResult, getDiagramWorkerActivity, reveal } = require('./helpers/app-lifecycle.cjs');
+const { CURRENT_REQUEST_SCHEMA, openApp, assertDiagramWorkerIdle, generateAndWaitForResult, getDiagramWorkerActivity, reveal } = require('./helpers/app-lifecycle.cjs');
 const { capture, assertCoherent, settle } = require('./helpers/visual-state.cjs');
 const path = require('node:path');
 
@@ -227,6 +227,9 @@ test('settings-only Load replaces existing work and rejected candidates preserve
     return { annotationWarnings: state.annotationWarnings.value, trackSlotGeometry: state.trackSlotResolvedGeometry.value };
   });
   const committed = (await snapshot(page)).committed.renderRequest;
+  // Save writes the loaded Gallery request (schema 8) in the current schema.
+  const promoted = { ...committed, schema: CURRENT_REQUEST_SCHEMA,
+    diagramOptions: { ...committed.diagramOptions, featureOverrides: [] } };
   await page.getByRole('button', { name: 'Linear', exact: true }).click();
   await settle(page);
   const inactive = await snapshot(page);
@@ -234,7 +237,7 @@ test('settings-only Load replaces existing work and rejected candidates preserve
   expect(inactive.linearSources.flat().some(Boolean)).toBe(false);
   await assertCoherent(await capture(page, testInfo, 'inactive-source'), 'mode switch preserves the full Session');
   const inactiveSave = await save(page, testInfo, 'inactive-source');
-  expect(inactiveSave.document.renderRequest).toEqual({ ...committed, schema: 8 });
+  expect(inactiveSave.document.renderRequest).toEqual(promoted);
   expect(inactiveSave.document.runMetadata).toEqual(runMetadata);
   await loadFile(page, inactiveSave.file);
   expect(await page.evaluate(async () => {
@@ -242,7 +245,7 @@ test('settings-only Load replaces existing work and rejected candidates preserve
     return { annotationWarnings: state.annotationWarnings.value, trackSlotGeometry: state.trackSlotResolvedGeometry.value };
   })).toEqual(runMetadata);
   expect((await snapshot(page)).circularSources[0]).toBe(true);
-  expect((await snapshot(page)).committed.renderRequest).toEqual({ ...committed, schema: 8 });
+  expect((await snapshot(page)).committed.renderRequest).toEqual(promoted);
   const full = await save(page, testInfo, 'full-control');
   const before = await snapshot(page);
   const visual = await capture(page, testInfo, 'before-rejected-loads');

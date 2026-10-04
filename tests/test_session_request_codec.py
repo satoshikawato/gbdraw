@@ -218,6 +218,8 @@ def _payload_for_schema(
 
 
 def _remove_schema6_record_fields(payload: dict[str, Any], schema: int) -> None:
+    if schema < 9:
+        payload["diagramOptions"].pop("featureOverrides", None)
     if schema < 7:
         payload["diagramOptions"].pop("featurePlacements", None)
         for record in payload["records"]:
@@ -323,7 +325,7 @@ def test_schema6_round_trips_unresolved_record_cardinality_and_row(
         )
     )
 
-    assert CANONICAL_REQUEST_SCHEMA == 8
+    assert encoded.payload["schema"] == CANONICAL_REQUEST_SCHEMA
     assert encoded.payload["records"][0]["cardinality"] == "all"
     decoded = decode_canonical_request(
         encoded.payload,
@@ -394,7 +396,7 @@ def test_schema8_round_trips_typed_similarity_alignment_and_translations(
 ) -> None:
     encoded = encode_canonical_request(_aligned_linear_request(tmp_path))
 
-    assert encoded.payload["schema"] == 8
+    assert encoded.payload["schema"] == CANONICAL_REQUEST_SCHEMA
     assert encoded.payload["layout"]["recordTranslations"] == [
         {"recordKey": "record-a", "x": 4.5, "y": -2.0},
         {"recordKey": "record-b", "x": -8.0, "y": 3.25},
@@ -2697,7 +2699,7 @@ def test_current_canonical_schema_uses_underlay_default_and_round_trips_override
 @pytest.mark.parametrize(
     ("mutator", "message"),
     [
-        (lambda payload: payload.update(schema=9), "Unsupported canonical request schema"),
+        (lambda payload: payload.update(schema=CANONICAL_REQUEST_SCHEMA + 1), "Unsupported canonical request schema"),
         (lambda payload: payload.update(mode="radial"), "Unsupported canonical request mode"),
         (lambda payload: payload.pop("output"), "Missing required field"),
         (lambda payload: payload.update(futureField=True), "Unknown field"),
@@ -2859,3 +2861,97 @@ def test_in_memory_records_of_one_source_file_share_one_genbank_resource(
         item.selector.record_index if item.selector is not None else None
         for item in decoded.records
     ] == [0, None, 1, None]
+
+
+def _identity_request(source: Path) -> LinearDiagramRequest:
+    from gbdraw.annotations import FeatureIdentitySpan
+    from gbdraw.features.overrides import FeatureOverride
+
+    return LinearDiagramRequest(
+        records=(RecordInput(source=GenBankInputSource(source), record_key="k"),),
+        options=LinearDiagramOptions(
+            feature_overrides=(
+                FeatureOverride("k", "fbbbbbbbb~1", label_visibility="on", label_text="B"),
+                FeatureOverride("k", "faaaaaaaa", feature_visibility="exclude_matching"),
+            ),
+            annotations=AnnotationOptions(sets=(AnnotationSet(
+                id="marks",
+                annotations=(RegionAnnotation(
+                    id="a", target=FeatureIdentitySpan("k", "faaaaaaaa", envelope="segments"),
+                ),),
+            ),)),
+        ),
+    )
+
+
+def test_schema9_round_trips_feature_overrides_and_identity_annotation_targets(
+    tmp_path: Path,
+) -> None:
+    request = _identity_request(_source_file(tmp_path / "source.gbk"))
+    encoded = encode_canonical_request(request)
+
+    assert encoded.payload["schema"] == CANONICAL_REQUEST_SCHEMA == 9
+    assert encoded.payload["diagramOptions"]["featureOverrides"] == [
+        {"recordKey": "k", "biologicalFeatureId": "faaaaaaaa",
+         "featureVisibility": "exclude_matching", "labelVisibility": None, "labelText": None},
+        {"recordKey": "k", "biologicalFeatureId": "fbbbbbbbb~1",
+         "featureVisibility": None, "labelVisibility": "on", "labelText": "B"},
+    ]
+    target = encoded.payload["diagramOptions"]["annotations"]["sets"][0]["annotations"][0]["target"]
+    assert target == {"kind": "featureIdentity", "recordKey": "k", "biologicalFeatureId": "faaaaaaaa",
+                      "envelope": "segments", "circularPath": "shortest"}
+    decoded = decode_canonical_request(
+        encoded.payload,
+        resource_paths=_materialize_resources(encoded, tmp_path / "resources"),
+        output_directory=tmp_path / "output",
+    )
+    assert decoded.options.feature_overrides == request.options.feature_overrides
+    assert decoded.options.annotations == request.options.annotations
+
+
+def test_schema8_request_reads_without_feature_overrides_and_writes_schema9(
+    tmp_path: Path,
+) -> None:
+    source = _source_file(tmp_path / "source.gbk")
+    encoded = encode_canonical_request(
+        LinearDiagramRequest(records=(RecordInput(source=GenBankInputSource(source)),))
+    )
+    resources = _materialize_resources(encoded, tmp_path / "resources")
+    decoded = decode_canonical_request(
+        _payload_for_schema(encoded, 8), resource_paths=resources, output_directory=tmp_path / "output",
+    )
+    assert decoded.options.feature_overrides == ()
+    promoted = encode_canonical_request(decoded).payload
+    assert promoted["schema"] == 9
+    assert promoted["diagramOptions"]["featureOverrides"] == []
+
+
+@pytest.mark.parametrize(
+    "schema,change,message",
+    [
+        (8, lambda options: options.update(featureOverrides=[]), "Unknown field"),
+        (9, lambda options: options.pop("featureOverrides"), "featureOverrides must be an array"),
+        (9, lambda options: options["featureOverrides"][0].update(extra=1), "feature override fields"),
+        (9, lambda options: options["featureOverrides"][0].update(
+            featureVisibility=None, labelVisibility=None, labelText=None
+        ), "at least one edit"),
+        (9, lambda options: options["featureOverrides"].append(
+            dict(options["featureOverrides"][0], labelText="again")
+        ), "Duplicate feature override identity"),
+        (9, lambda options: options["featureOverrides"][0].update(labelText="a\tb"), "one non-blank line"),
+        (8, lambda options: options.pop("featureOverrides"), "Unsupported annotation target kind"),
+    ],
+)
+def test_feature_overrides_require_schema9_and_the_current_row_shape(
+    tmp_path: Path, schema: int, change, message: str
+) -> None:
+    encoded = encode_canonical_request(_identity_request(_source_file(tmp_path / "source.gbk")))
+    payload = copy.deepcopy(encoded.payload)
+    payload["schema"] = schema
+    change(payload["diagramOptions"])
+    with pytest.raises(CanonicalRequestDecodingError, match=message):
+        decode_canonical_request(
+            payload,
+            resource_paths=_materialize_resources(encoded, tmp_path / "resources"),
+            output_directory=tmp_path / "output",
+        )

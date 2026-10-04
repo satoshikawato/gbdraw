@@ -10,7 +10,6 @@ from typing import Literal
 from Bio.SeqFeature import SeqFeature
 from Bio.SeqRecord import SeqRecord
 
-from gbdraw.annotations.models import parse_feature_selector
 from gbdraw.core.record_metadata import (
     _feature_source_index_map,
     _iter_source_features,
@@ -219,6 +218,9 @@ def resolve_identity_table_rows(
     The record selector must select exactly one record and the feature selector
     exactly one original-source feature of it. Row numbers count the header as 1.
     """
+    # Deferred: the annotations package imports the feature factory, which uses this module.
+    from gbdraw.annotations.models import parse_feature_selector
+
     _record_key_indexes(records, record_keys, source_record_ids, source_catalogs)
     identities: list[FeatureIdentity] = []
     seen: set[FeatureIdentity] = set()

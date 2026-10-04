@@ -168,7 +168,7 @@ test('sessions without per-record values fall back to comparing label and fileDe
           display: { isCircular: null, startCoordinate: null }
         }
       ],
-      diagramOptions: { featurePlacements: [] },
+      diagramOptions: { featurePlacements: [], featureOverrides: [] },
       output: { prefix: 'test' }
     },
     webFiles: {
@@ -221,7 +221,7 @@ test('an explicit override equal to the file default survives a save and reload'
           display: { isCircular: null, startCoordinate: null }
         }
       ],
-      diagramOptions: { featurePlacements: [] },
+      diagramOptions: { featurePlacements: [], featureOverrides: [] },
       output: { prefix: 'test' }
     },
     webFiles: {

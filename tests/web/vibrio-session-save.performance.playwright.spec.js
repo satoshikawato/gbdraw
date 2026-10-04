@@ -5,6 +5,7 @@ const { existsSync, mkdirSync, readFileSync } = require('node:fs');
 const os = require('node:os');
 const { join, resolve } = require('node:path');
 const {
+  CURRENT_REQUEST_SCHEMA,
   evaluateWithRetainedPromise,
   getDiagramWorkerActivity,
   openApp
@@ -120,10 +121,13 @@ const compatibilityCatalog = catalog ? {
 } : catalog;
 const losatEntries = document.losatCache?.entries || [];
 const request = document.renderRequest;
-const legacyRequest = request?.schema === 8
+// Schema 9 adds only diagramOptions.featureOverrides (empty for this Session).
+const legacyRequest = request?.schema >= 8
   ? {
       ...request,
       schema: 7,
+      diagramOptions: Object.fromEntries(Object.entries(request.diagramOptions || {})
+        .filter(([key]) => key !== 'featureOverrides')),
       layout: { recordGapPx: request.layout?.recordGapPx },
       comparisons: request.comparisons.map((comparison) => (
         comparison.kind === 'generatedProteinComparison'
@@ -132,7 +136,7 @@ const legacyRequest = request?.schema === 8
       ))
     }
   : request;
-const schema8LayoutDefaults = request?.schema === 8 &&
+const schema8LayoutDefaults = request?.schema >= 8 &&
   request.layout?.multiRecordPositions === null &&
   request.layout?.similarityAlignment === null &&
   Array.isArray(request.layout?.recordTranslations) &&
@@ -495,7 +499,7 @@ test('Vibrio Session saves once within memory, responsiveness, and compatibility
   expect(savedSummary).toMatchObject({
     format: 'gbdraw-session',
     version: 44,
-    requestSchema: 8,
+    requestSchema: CURRENT_REQUEST_SCHEMA,
     schema8LayoutDefaults: true,
     catalogSchema: 4,
     resourceCount: 4,

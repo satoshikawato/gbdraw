@@ -42,6 +42,7 @@ from gbdraw.analysis.protein_colinearity import (  # type: ignore[reportMissingI
 from gbdraw.config.models import GbdrawConfig  # type: ignore[reportMissingImports]
 from gbdraw.comparisons.losat_jobs import record_source_paths
 from gbdraw.exceptions import ValidationError
+from gbdraw.features.overrides import FeatureOverride
 from gbdraw.features.placement import FeaturePlacementOverride
 from gbdraw.io.record_select import RecordSelector
 from gbdraw.io.regions import RegionSpec
@@ -63,6 +64,7 @@ from gbdraw.annotations import (
     AnnotationOptions,
     AnnotationSet,
     CoordinateSpan,
+    FeatureIdentitySpan,
     FeatureSelector,
     FeatureSpan,
     HatchStyle,
@@ -115,10 +117,11 @@ from .layout.similarity_alignment import (
 )
 
 
-CANONICAL_REQUEST_SCHEMA = 8
+CANONICAL_REQUEST_SCHEMA = 9
 DISPLAY_PLACEMENT_SCHEMA = 7
+FEATURE_OVERRIDE_SCHEMA = 9
 SUPPORTED_CANONICAL_REQUEST_SCHEMAS = frozenset(
-    {1, 2, 5, 6, 7, CANONICAL_REQUEST_SCHEMA}
+    {1, 2, 5, 6, 7, 8, CANONICAL_REQUEST_SCHEMA}
 )
 UNKNOWN_FIELD_POLICY = "reject"
 
@@ -1493,6 +1496,7 @@ def _decode_linear_layout(
 
 _PLACEMENT_INPUT_FIELDS = frozenset({
     "feature_placements", "feature_placement_table", "feature_placement_table_file",
+    "feature_overrides",
 })
 
 
@@ -1528,7 +1532,7 @@ def _encode_diagram_options(
             }),
         }
         for row in options.feature_placements
-    ]}
+    ], "featureOverrides": [row.to_mapping() for row in options.feature_overrides]}
     for item in fields(options):
         name = item.name
         if name in _COMPARISON_FIELDS or name in _ALL_DEPTH_INPUT_FIELDS or name in _PLACEMENT_INPUT_FIELDS:
@@ -1612,6 +1616,11 @@ def _decode_diagram_options(
                            for row in payload.pop("featurePlacements"))
         for row in placements:
             row.target.validate_mode(mode)
+    overrides = ()
+    if schema >= FEATURE_OVERRIDE_SCHEMA:
+        if not isinstance(payload.get("featureOverrides"), list):
+            raise CanonicalRequestDecodingError("diagramOptions.featureOverrides must be an array.")
+        overrides = tuple(FeatureOverride.from_mapping(row) for row in payload.pop("featureOverrides"))
     for name, default in _SHARED_OPTION_WRONG_MODE_DEFAULTS[mode].items():
         key = _option_wire_key(name)
         if key in payload and payload[key] == default:
@@ -1644,6 +1653,7 @@ def _decode_diagram_options(
         for key, raw in payload.items()
     }
     decoded["feature_placements"] = placements
+    decoded["feature_overrides"] = overrides
     if decoded.get("config_overrides") is not None:
         decoded["config_overrides"] = _decode_config_overrides(
             decoded["config_overrides"],
@@ -2487,7 +2497,7 @@ def _decode_option_value(
     if name == "tracks":
         return _decode_tracks(value, mode=mode, schema=schema)
     if name == "annotations":
-        return _decode_annotations(value, resource_paths=resource_paths)
+        return _decode_annotations(value, schema=schema, resource_paths=resource_paths)
     if name == "output":
         return _decode_assembly_output(value, mode=mode, schema=schema)
     if name == "depth_tracks":
@@ -2924,6 +2934,14 @@ def _encode_annotations(value: object, *, resources: _ResourceBuilder) -> dict[s
                     "envelope": target.envelope,
                     "circularPath": target.circular_path,
                 }
+            elif isinstance(target, FeatureIdentitySpan):
+                target_payload = {
+                    "kind": "featureIdentity",
+                    "recordKey": target.record_key,
+                    "biologicalFeatureId": target.biological_feature_id,
+                    "envelope": target.envelope,
+                    "circularPath": target.circular_path,
+                }
             else:  # pragma: no cover - RegionAnnotation validates the union.
                 raise CanonicalRequestEncodingError("Unsupported annotation target.")
             items.append(
@@ -2962,6 +2980,7 @@ def _encode_annotations(value: object, *, resources: _ResourceBuilder) -> dict[s
 def _decode_annotations(
     value: object,
     *,
+    schema: int,
     resource_paths: Mapping[str, str | Path],
 ) -> AnnotationOptions:
     path = "renderRequest.diagramOptions.annotations"
@@ -3014,6 +3033,18 @@ def _decode_annotations(
                 target = FeatureSpan(
                     record=_decode_selector(target_payload["record"], path=f"{item_path}.target.record"),
                     selectors=selectors,
+                    envelope=target_payload["envelope"],
+                    circular_path=target_payload["circularPath"],
+                )
+            elif kind == "featureIdentity" and schema >= FEATURE_OVERRIDE_SCHEMA:
+                _require_exact_fields(
+                    target_payload,
+                    path=f"{item_path}.target",
+                    required={"kind", "recordKey", "biologicalFeatureId", "envelope", "circularPath"},
+                )
+                target = FeatureIdentitySpan(
+                    record_key=target_payload["recordKey"],
+                    biological_feature_id=target_payload["biologicalFeatureId"],
                     envelope=target_payload["envelope"],
                     circular_path=target_payload["circularPath"],
                 )

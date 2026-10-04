@@ -690,7 +690,7 @@ def test_canonical_session_replay_uses_current_overwrite_permission(
         captured["overwrite"] = request.output.overwrite
         captured["include_feature_catalog"] = include_feature_catalog
         assert session_document is not None
-        return object()
+        return SimpleNamespace(feature_identity_notices=())
 
     monkeypatch.setattr(cli_session, "_render_request", fake_render)
 
@@ -751,6 +751,7 @@ def test_legacy_canonical_sidecar_saves_rendered_request_and_migrated_adjunct(
             output_paths=(),
             interactive_context=None,
             losat_derived_cache_entries=({"schema": 3},),
+            feature_identity_notices=(),
         )
 
     def fake_build(request, **kwargs):

@@ -6,6 +6,7 @@ const { tmpdir } = require('node:os');
 const { join, resolve } = require('node:path');
 const { gunzipSync } = require('node:zlib');
 const {
+  CURRENT_REQUEST_SCHEMA,
   evaluateWithRetainedPromise,
   getDiagramWorkerActivity,
   openApp
@@ -263,7 +264,7 @@ const saveCurrentSession = async (page, title) => {
   expect(session).toMatchObject({
     format: 'gbdraw-session',
     version: 44,
-    renderRequest: { schema: 8 }
+    renderRequest: { schema: CURRENT_REQUEST_SCHEMA }
   });
   return { path, session };
 };

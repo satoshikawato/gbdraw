@@ -318,7 +318,17 @@ def should_render_feature(
     feature_visibility_rules: Optional[list[dict[str, Any]]] = None,
     record_id: Optional[str] = None,
     specific_color_rules: Optional[dict] = None,
+    feature_override: Any = None,
 ) -> bool:
+    """Decide whether a feature is drawn.
+
+    A ``feature_override`` (identity row) decides before the table rules: ``on``
+    draws, ``off`` hides, and ``exclude_matching`` skips the rules and keeps the
+    feature-type selection.
+    """
+    mode = getattr(feature_override, "feature_visibility", None)
+    if mode in ("on", "off"):
+        return mode == "on"
     feature_type = get_feature_type(feature)
     selected_set = {str(feature_name) for feature_name in (selected_features_set or [])}
 
@@ -334,7 +344,7 @@ def should_render_feature(
                 record_id=record_id,
             )
 
-    rule = _first_matching_visibility_rule(
+    rule = None if mode == "exclude_matching" else _first_matching_visibility_rule(
         feature,
         feature_visibility_rules,
         record_id=record_id,
@@ -353,7 +363,11 @@ def should_include_feature_in_analysis(
     feature: Any,
     feature_visibility_rules: Optional[list[dict[str, Any]]] = None,
     record_id: Optional[str] = None,
+    feature_override: Any = None,
 ) -> bool:
+    mode = getattr(feature_override, "feature_visibility", None)
+    if mode is not None:
+        return mode == "on"
     rule = _first_matching_visibility_rule(
         feature,
         feature_visibility_rules,

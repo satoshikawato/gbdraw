@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable, Mapping
-from typing import Any, Sequence, TypeVar
+from typing import TYPE_CHECKING, Any, Sequence, TypeVar
 
 from Bio.SeqRecord import SeqRecord  # type: ignore[reportMissingImports]
 from pandas import DataFrame  # type: ignore[reportMissingImports]
@@ -21,6 +21,9 @@ from gbdraw.web_support.orthogroup_metadata import (
     enrich_features_with_orthogroups,
     serialize_orthogroups_payload,
 )
+
+if TYPE_CHECKING:
+    from gbdraw.features.placement import ResolvedRecordFeatureInputs
 
 _MetadataT = TypeVar("_MetadataT")
 
@@ -48,6 +51,7 @@ def build_interactive_svg_context(
     selected_features_set: Sequence[str] | None = None,
     feature_visibility_table: DataFrame | None = None,
     feature_visibility_rules: list[dict[str, Any]] | None = None,
+    record_features: Sequence[ResolvedRecordFeatureInputs] = (),
     color_table: DataFrame | None = None,
     default_colors: DataFrame | None = None,
     specific_color_rules: Mapping[str, Any] | None = None,
@@ -91,6 +95,7 @@ def build_interactive_svg_context(
         record_list,
         selected_features=selected_features_set,
         feature_visibility_rules=resolved_visibility_rules,
+        record_features=record_features,
         specific_color_rules=resolved_color_rules,
         linear_rendered_feature_ids=linear_rendered_feature_ids,
         include_biological_features=True,

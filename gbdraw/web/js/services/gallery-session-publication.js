@@ -3,7 +3,7 @@ import { migrateLegacyLinearLabelVisibility } from '../app/linear-label-visibili
 import { migrateLegacyRecordDisplayDrafts } from '../app/record-display-options.js';
 import { migrateLegacyFeatureCatalog } from './feature-catalog.js';
 import { adoptCurrentSessionResources } from './session-resource-backing.js';
-const CURRENT_VERSION = 44, CURRENT_REQUEST_SCHEMA = 8, ACCEPTED_REQUEST_SCHEMAS = new Set([CURRENT_REQUEST_SCHEMA]), HISTORICAL_VERSIONS = new Set([31, 32, 33, 39]), CACHE_LIMIT_BYTES = 64 * 1024 * 1024;
+const CURRENT_VERSION = 44, CURRENT_REQUEST_SCHEMA = 9, ACCEPTED_REQUEST_SCHEMAS = new Set([CURRENT_REQUEST_SCHEMA]), HISTORICAL_VERSIONS = new Set([31, 32, 33, 39]), CACHE_LIMIT_BYTES = 64 * 1024 * 1024;
 const ARTIFACT_FIELDS = ['results', 'features', 'editorState', 'orthogroupState', 'runMetadata', 'losatCache', 'losatDerivedCache', 'proteinIdentityManifest'];
 // A published Gallery file carries no draft intent for its unused mode (GUI
 // remediation S00 decision 1). These fields, read only by the other mode, are
@@ -33,7 +33,7 @@ export const applyDerivedCachePublicationPolicy = (session, { limitBytes = CACHE
 };
 const validateCurrent = (session) => {
   if (!isObject(session) || session.format !== 'gbdraw-session') throw new Error('Gallery publication requires a gbdraw-session document.'); if (Number(session.version) !== CURRENT_VERSION) throw new Error(`Gallery publication requires session version ${CURRENT_VERSION}.`);
-  if (!isObject(session.renderRequest) || !ACCEPTED_REQUEST_SCHEMAS.has(Number(session.renderRequest.schema))) throw new Error('Gallery publication requires canonical renderRequest schema 8.'); validateCurrentWriterActiveConfig({ mode: session.renderRequest.mode, storedConfig: session.config });
+  if (!isObject(session.renderRequest) || !ACCEPTED_REQUEST_SCHEMAS.has(Number(session.renderRequest.schema))) throw new Error(`Gallery publication requires canonical renderRequest schema ${CURRENT_REQUEST_SCHEMA}.`); validateCurrentWriterActiveConfig({ mode: session.renderRequest.mode, storedConfig: session.config });
   return session;
 };
 const publicationConfig = (session, projection) => {
@@ -147,7 +147,7 @@ export const createGallerySessionPublication = (owners) => {
   const admit = (session) => {
     const version = Number(session?.version);
     if (version === CURRENT_VERSION) {
-      if (Number(session.renderRequest?.schema) === 7) {
+      if ([7, 8].includes(Number(session.renderRequest?.schema))) {
         return validateCurrent({ ...session, renderRequest: publicationCanonicalRequest(
           session.renderRequest,
           owners.promoteRequest,

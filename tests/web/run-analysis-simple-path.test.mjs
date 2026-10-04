@@ -189,6 +189,7 @@ const {
   serializeResults,
   SESSION_VERSION
 } = await import('../../gbdraw/web/js/services/config.js');
+const { CANONICAL_REQUEST_SCHEMA } = await import('../../gbdraw/web/js/services/session-request.js');
 const { createHistoryFileStore } = await import(
   '../../gbdraw/web/js/services/history-files.js'
 );
@@ -740,7 +741,7 @@ test('audit-5 owner: direct simple createRunAnalysis path is worker-only and cat
   const replay = JSON.parse(replayEntry.text);
   assert.equal(replay.format, 'gbdraw-session');
   assert.equal(replay.version, SESSION_VERSION);
-  assert.equal(replay.renderRequest.schema, 8);
+  assert.equal(replay.renderRequest.schema, CANONICAL_REQUEST_SCHEMA);
   assert.ok(Object.keys(replay.resources).length > 0);
 
   const firstRunPayload = workerMessages.find(({ type }) => type === 'run').payload;

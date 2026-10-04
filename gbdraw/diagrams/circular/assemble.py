@@ -2124,7 +2124,7 @@ def add_record_on_circular_canvas(
         profile.resolve_overlaps,
         label_filtering,
         split_overlaps_by_strand=split_overlaps_by_strand,
-        placement_inputs=feature_config.placements[0] if feature_config.placements else None,
+        record_features=feature_config.record_features[0] if feature_config.record_features else None,
         placement_slot=(FeaturePlacementSlot(
             "circular", feature_lane_direction, profile.strandedness,
         ) if feature_slot is not None else None),
@@ -2339,7 +2339,7 @@ def add_record_on_circular_canvas(
                             slot=FeaturePlacementSlot(
                                 "circular", feature_lane_direction, profile.strandedness,
                             ),
-                            placement_inputs=feature_config.placements[0] if feature_config.placements else None,
+                            record_features=feature_config.record_features[0] if feature_config.record_features else None,
                             resolve_overlaps=profile.resolve_overlaps,
                             tolerance_bp=profile.feature_overlap_tolerance_bp,
                             genome_length=len(gb_record.seq),
@@ -2798,6 +2798,7 @@ def build_circular_legend_table(
         feature_config.selected_features_set,
         feature_visibility_rules=feature_config.feature_visibility_rules,
         specific_color_rules=color_map,
+        record_features=feature_config.record_features,
     )
     used_color_rules, default_used_features = precompute_used_color_rules(
         records,
@@ -2805,6 +2806,7 @@ def build_circular_legend_table(
         default_color_map,
         set(feature_config.selected_features_set),
         feature_visibility_rules=feature_config.feature_visibility_rules,
+        record_features=feature_config.record_features,
     )
     singleton_depth = bool(
         profile.show_depth

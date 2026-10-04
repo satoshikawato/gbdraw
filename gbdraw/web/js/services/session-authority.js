@@ -413,7 +413,7 @@ export const validateSessionAuthorityInventory = (sessionData, version) => {
         `Session version ${String(version)} requires editorState.featureCatalog.`
       );
     }
-    if (sessionData.renderRequest?.schema === 8
+    if (sessionData.renderRequest?.schema >= 8
       && sessionData.renderRequest.layout?.similarityAlignment
       && !Object.hasOwn(editorState, 'alignmentResetReceipt')) {
       throw new Error('Current alignment Session requires editorState.alignmentResetReceipt.');

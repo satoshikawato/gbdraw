@@ -1,4 +1,11 @@
+const { readFileSync } = require('node:fs');
+const { join } = require('node:path');
 const { expect } = require('@playwright/test');
+
+// The Web writer's current canonical request schema, read from its owner.
+const CURRENT_REQUEST_SCHEMA = Number(readFileSync(
+  join(__dirname, '..', '..', '..', 'gbdraw', 'web', 'js', 'services', 'session-request.js'), 'utf8'
+).match(/^export const CANONICAL_REQUEST_SCHEMA = (\d+);$/m)[1]);
 
 const DEFAULT_APP_TIMEOUT_MS = 180_000;
 const pageDiagnostics = new WeakMap();
@@ -567,6 +574,7 @@ const assertSingleWorkerRun = async (page) => {
 };
 
 module.exports = {
+  CURRENT_REQUEST_SCHEMA,
   assertDiagramWorkerIdle,
   assertOperationHealth,
   readErrorSignature,

@@ -17,6 +17,7 @@ from .api.request_render import (
     render_request,
 )
 from .api.session_compat import render_session_compatible_request
+from .features.overrides import log_feature_identity_notices
 from .api.record_planning import (
     depth_track_inputs_from_cli,
     record_input_manifest_from_paths,
@@ -1704,6 +1705,7 @@ def run_linear_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
         logger.warning("%s: %s/%s record #%s (%s): %s", warning.code,
             warning.set_id, warning.annotation_id, warning.record_index + 1,
             warning.record_id, warning.message)
+    log_feature_identity_notices(render_result.feature_identity_notices)
     canvas = render_result.drawing
     interactive_context = render_result.interactive_context
     rendered_svg = make_rendered_svg(out_file_prefix, request_path.name)

@@ -2,7 +2,7 @@ const { test, expect } = require('@playwright/test');
 const { readFileSync } = require('node:fs');
 const { join, resolve } = require('node:path');
 const { gunzipSync } = require('node:zlib');
-const { openApp } = require('../helpers/app-lifecycle.cjs');
+const { CURRENT_REQUEST_SCHEMA, openApp } = require('../helpers/app-lifecycle.cjs');
 
 test.describe.configure({ retries: 0 });
 
@@ -262,7 +262,7 @@ test('explicit AT-skew colors survive schema-5 Load, Generate, Save, fresh Load,
 
   const firstGenerate = await generateThroughUi(page);
   expect(requestEvidence(firstGenerate.request)).toEqual({
-    schema: 8,
+    schema: CURRENT_REQUEST_SCHEMA,
     at: {
       id: AT_SLOT_ID,
       renderer: 'dinucleotide_skew',
@@ -283,7 +283,7 @@ test('explicit AT-skew colors survive schema-5 Load, Generate, Save, fresh Load,
   expectRenderedAtColors(paletteGenerate.svg);
 
   const { path: savedPath, saved } = await saveSessionThroughUi(page);
-  expect(saved.renderRequest.schema).toBe(8);
+  expect(saved.renderRequest.schema).toBe(CURRENT_REQUEST_SCHEMA);
   expect(requestEvidence(saved.renderRequest).at.params).toEqual(expectedAtParams);
   expect(
     saved.config.adv.circular_track_slots.find((slot) => slot.id === AT_SLOT_ID).params

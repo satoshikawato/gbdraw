@@ -233,6 +233,17 @@ def _render_canonical_web_request(
         for result_index, item in enumerate(items)
         for warning in item.annotation_warnings
     ]
+    metadata["featureIdentityNotices"] = [
+        {
+            "recordKey": notice.record_key,
+            "biologicalFeatureId": notice.biological_feature_id,
+            "status": notice.status,
+            "kinds": list(notice.kinds),
+            "resultIndex": result_index,
+        }
+        for result_index, item in enumerate(items)
+        for notice in item.feature_identity_notices
+    ]
     # Browser execution discards logging, so table-ID warnings travel as metadata.
     metadata["comparisonWarnings"] = [
         {

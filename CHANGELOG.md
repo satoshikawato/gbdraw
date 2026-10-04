@@ -49,6 +49,17 @@ decisions are in
   **Reset N placements to Auto** applies the change and resets exactly those
   placements in one undoable step; **Cancel change** keeps the setting and the
   placements (OV-09).
+- Typed requests: canonical `renderRequest` schema 9 adds
+  `diagramOptions.featureOverrides`, per-feature Feature visibility, Label
+  visibility and label text addressed by record key and biological feature ID,
+  and the `featureIdentity` annotation target (`FeatureIdentitySpan`). These
+  keep naming the same feature after crop, reverse complement, reordering and
+  record duplication, and decide before the visibility and label tables; text
+  alone never shows a label. Edits whose feature is not drawn, including exact
+  Feature placements whose feature the source does not have, no longer fail the
+  render: they are reported as `feature_identity_notices` (Python API, Web
+  metadata, one CLI log line each). Schema-8 requests remain readable; the Web
+  app writes an empty array until it edits features by identity.
 - Comparison tables: every BLAST outfmt 6/7 reader (CLI `-b` and
   `--comparisons_table`, Web uploads, Circular similarity rings, and the LOSATP
   parser) now reads the first 12 columns by position and validates their types.

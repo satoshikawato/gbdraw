@@ -69,7 +69,7 @@ from gbdraw.features.visibility import (
     resolve_candidate_feature_types,
 )
 from gbdraw.annotations import (
-    AnnotationOptions, ResolvedAnnotationBundle, ResolutionWarning,
+    AnnotationOptions, FeatureIdentitySpan, ResolvedAnnotationBundle, ResolutionWarning,
     read_annotation_table, resolve_annotations,
 )
 from gbdraw.io.comparisons import COMPARISON_COLUMNS
@@ -106,8 +106,16 @@ from .options import (
     LosatSearchOptions,
     losatp_analysis_mode,
 )
-from gbdraw.features.placement import ResolvedPlacementInputs, resolve_placement_inputs
-from gbdraw.features.source import build_source_feature_catalog
+from gbdraw.features.overrides import FeatureIdentityNotice
+from gbdraw.features.placement import (
+    ResolvedRecordFeatureInputs,
+    resolve_record_feature_inputs,
+)
+from gbdraw.features.source import (
+    FeatureIdentity,
+    IdentityBinding,
+    build_source_feature_catalog,
+)
 
 from .prepared import (
     PreparedResourceIdentity,
@@ -408,7 +416,11 @@ class PreparedDiagramInputs:
     gff_candidate_features: tuple[str, ...]
     gff_keep_all_features: bool
     comparison_sequences: _ComparisonSequenceSources | None = None
-    placements: tuple[ResolvedPlacementInputs, ...] = ()
+    # Aligned with the planned records; empty without identity-addressed inputs.
+    record_features: tuple[ResolvedRecordFeatureInputs, ...] = ()
+    feature_identity_notices: tuple[FeatureIdentityNotice, ...] = ()
+    # Annotation featureIdentity targets, keyed by (record key, feature ID).
+    feature_bindings: Mapping[tuple[str, str], IdentityBinding] | None = None
 
 
 def _is_current_nucleotide_losat_entry(entry: Mapping[str, Any]) -> bool:
@@ -579,6 +591,10 @@ class PreparedDiagramRequest:
     def annotation_warnings(self) -> tuple[ResolutionWarning, ...]:
         return self.resolved_annotations.warnings
 
+    @property
+    def feature_identity_notices(self) -> tuple[FeatureIdentityNotice, ...]:
+        return self.inputs.feature_identity_notices if self.inputs is not None else ()
+
 
 @dataclass(frozen=True)
 class RequestRenderResult:
@@ -595,6 +611,7 @@ class RequestRenderResult:
     losat_derived_cache_entries: tuple[Mapping[str, Any], ...] = ()
     protein_identity_manifest: Mapping[str, Any] | None = None
     annotation_warnings: tuple[ResolutionWarning, ...] = ()
+    feature_identity_notices: tuple[FeatureIdentityNotice, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -683,6 +700,7 @@ def _initialize_plan_display_context(plan) -> None:
         object.__setattr__(plan, "resolved_annotations", resolve_annotations(
             plan.request.options.annotations, plan.records,
             mode=plan.mode, record_transforms=plan.transforms,
+            feature_bindings=plan.inputs.feature_bindings if plan.inputs is not None else None,
         ))
 
 
@@ -748,8 +766,8 @@ class CircularRequestPlan:
             if self.inputs is not None
             else {}
         )
-        if self.inputs is not None and self.inputs.placements:
-            shared_kwargs["_resolved_placement_inputs"] = self.inputs.placements
+        if self.inputs is not None and self.inputs.record_features:
+            shared_kwargs["_resolved_record_features"] = self.inputs.record_features
         shared_kwargs["_resolved_annotations"] = self.resolved_annotations
         if self.layout is None:
             depth_kwargs: dict[str, Any] = dict(shared_kwargs)
@@ -866,10 +884,18 @@ class CircularBatchRequestPlan:
                         display=self.request.records[index].display,
                     ),
                 ),
-                options=replace(item_options, feature_placements=tuple(
-                    item for item in item_options.feature_placements
-                    if item.record_key == self.provenance[index].record_key
-                )) if item_options.feature_placements else item_options,
+                options=replace(
+                    item_options,
+                    feature_placements=tuple(
+                        item for item in item_options.feature_placements
+                        if item.record_key == self.provenance[index].record_key
+                    ),
+                    feature_overrides=tuple(
+                        item for item in item_options.feature_overrides
+                        if item.record_key == self.provenance[index].record_key
+                    ),
+                ) if item_options.feature_placements or item_options.feature_overrides
+                else item_options,
                 output=output,
                 grouping="single",
             )
@@ -894,8 +920,16 @@ class CircularBatchRequestPlan:
                     precomputed_depth_track_count=(
                         logical_depth_count if normalized_depth is not None else None
                     ),
-                    inputs=(replace(self.inputs, placements=(self.inputs.placements[index],))
-                            if self.inputs is not None and self.inputs.placements else self.inputs),
+                    inputs=(replace(
+                        self.inputs,
+                        record_features=self.inputs.record_features[index:index + 1],
+                        feature_identity_notices=tuple(
+                            notice for notice in self.inputs.feature_identity_notices
+                            if notice.record_index == index
+                        ),
+                    ) if self.inputs is not None and (
+                        self.inputs.record_features or self.inputs.feature_identity_notices
+                    ) else self.inputs),
                     displays=(self.displays[index],),
                     transforms=(self.transforms[index],),
                     provenance=(
@@ -989,8 +1023,8 @@ class LinearRequestPlan:
             kwargs["protein_extraction"] = protein_extraction
         if self.inputs is not None:
             kwargs["_resolved_feature_inputs"] = self.inputs.features
-            if self.inputs.placements:
-                kwargs["_resolved_placement_inputs"] = self.inputs.placements
+            if self.inputs.record_features:
+                kwargs["_resolved_record_features"] = self.inputs.record_features
         kwargs["_resolved_annotations"] = self.resolved_annotations
         kwargs["_record_transforms"] = self.transforms
         kwargs["similarity_alignment"] = self.request.similarity_alignment
@@ -1089,6 +1123,10 @@ def _prepare_diagram_inputs(request: DiagramRequest) -> PreparedDiagramInputs:
         if has_gff_source
         else (set(options.selected_features_set or DEFAULT_SELECTED_FEATURES), False)
     )
+    # A feature shown by its own edit may have any type, so GFF3 keeps them all.
+    keep_all_features = keep_all_features or (has_gff_source and any(
+        row.feature_visibility == "on" for row in options.feature_overrides
+    ))
     comparison_sequences = (
         _ComparisonSequenceSources(
             tuple(options.conservation_sequence_files or ())
@@ -1430,11 +1468,19 @@ def _linear_layout_with_record_placements(
     return replace(layout, multi_record_positions=positions)
 
 
-def _materialize_placement_inputs(
+def _materialize_feature_inputs(
     request: DiagramRequest, collection: ResolvedRecordCollection, inputs: PreparedDiagramInputs,
 ) -> tuple[DiagramRequest, PreparedDiagramInputs]:
+    """Resolve every identity-addressed input once per Generate (design Q4, 3.1)."""
     options = request.options
-    if (not options.feature_placements and options.feature_placement_table is None
+    targets = tuple(
+        FeatureIdentity(target.record_key, target.biological_feature_id)
+        for annotation_set in (options.annotations.sets if options.annotations else ())
+        for annotation in annotation_set.annotations
+        if isinstance(target := annotation.target, FeatureIdentitySpan)
+    )
+    if (not options.feature_placements and not options.feature_overrides and not targets
+            and options.feature_placement_table is None
             and options.feature_placement_table_file is None):
         return request, inputs
     catalogs = tuple(
@@ -1442,24 +1488,35 @@ def _materialize_placement_inputs(
         else build_source_feature_catalog(record)
         for item, record in zip(collection.provenance, collection.records, strict=True)
     )
-    exact, placements = resolve_placement_inputs(
+    resolution = resolve_record_feature_inputs(
         records=collection.records,
         record_keys=tuple(item.record_key for item in collection.provenance),
         source_record_ids=tuple(item.source_record_id for item in collection.provenance),
-        source_catalogs=catalogs, overrides=options.feature_placements,
+        source_catalogs=catalogs, placements=options.feature_placements,
         mode="linear" if isinstance(request, LinearDiagramRequest) else "circular",
-        table=(options.feature_placement_table if options.feature_placement_table is not None
-               else options.feature_placement_table_file),
+        placement_table=(options.feature_placement_table if options.feature_placement_table is not None
+                         else options.feature_placement_table_file),
+        feature_overrides=options.feature_overrides,
+        target_identities=targets,
         selected_features=options.selected_features_set or DEFAULT_SELECTED_FEATURES,
         feature_visibility_rules=inputs.features.feature_visibility_rules,
         specific_color_rules=inputs.features.specific_color_rules,
         feature_shapes=options.feature_shapes,
     )
+    exact = resolution.feature_placements
     if (exact != options.feature_placements or options.feature_placement_table is not None
             or options.feature_placement_table_file is not None):
         request = replace(request, options=replace(options, feature_placements=exact,
                           feature_placement_table=None, feature_placement_table_file=None))
-    return request, replace(inputs, placements=placements if exact else ())
+    return request, replace(
+        inputs,
+        record_features=resolution.records if exact or options.feature_overrides else (),
+        feature_identity_notices=resolution.notices,
+        feature_bindings={
+            (identity.record_key, identity.biological_feature_id): resolution.bindings[identity]
+            for identity in targets
+        },
+    )
 
 
 def _resolve_ring_losat(
@@ -1513,7 +1570,7 @@ def plan_circular_request(
             _normalize_request_records(unresolved_request, inputs),
         )
     with _request_render_diagnostic_phase("preparation"):
-        unresolved_request, inputs = _materialize_placement_inputs(unresolved_request, collection, inputs)
+        unresolved_request, inputs = _materialize_feature_inputs(unresolved_request, collection, inputs)
         records = collection.records
         projected_request = replace(
             unresolved_request,
@@ -1576,7 +1633,7 @@ def plan_circular_batch_request(
             _normalize_request_records(unresolved_request, inputs),
         )
     with _request_render_diagnostic_phase("preparation"):
-        unresolved_request, inputs = _materialize_placement_inputs(unresolved_request, collection, inputs)
+        unresolved_request, inputs = _materialize_feature_inputs(unresolved_request, collection, inputs)
         records = collection.records
         outputs = (
             unresolved_request.outputs
@@ -1647,7 +1704,7 @@ def plan_linear_request(
             _normalize_request_records(unresolved_request, inputs),
         )
     with _request_render_diagnostic_phase("preparation"):
-        unresolved_request, inputs = _materialize_placement_inputs(unresolved_request, collection, inputs)
+        unresolved_request, inputs = _materialize_feature_inputs(unresolved_request, collection, inputs)
         projected_request = replace(
             unresolved_request,
             records=_materialized_record_inputs(collection),
@@ -1986,6 +2043,7 @@ def _extract_linear_request_proteins(
             for record_input in request.records
         ),
         feature_visibility_rules=inputs.features.feature_visibility_rules,
+        feature_overrides=tuple(item.overrides for item in inputs.record_features) or None,
     )
     if extraction.identity_manifest is None:
         raise ValidationError("Protein extraction did not produce an identity manifest.")
@@ -2558,6 +2616,7 @@ def build_prepared_interactive_context(
             prepared.records,
             selected_features_set=options.selected_features_set,
             feature_visibility_rules=inputs.features.feature_visibility_rules,
+            record_features=inputs.record_features,
             specific_color_rules=inputs.features.specific_color_rules,
             orthogroups=computed_orthogroups,
             linear_rendered_feature_ids=prepared.mode == "linear",
@@ -2638,6 +2697,14 @@ def _annotation_style_context_key(value: object | None) -> Hashable:
 
 
 def _annotation_target_context_key(value: object) -> Hashable:
+    if isinstance(value, FeatureIdentitySpan):
+        return (
+            "feature-identity",
+            value.record_key,
+            value.biological_feature_id,
+            value.envelope,
+            value.circular_path,
+        )
     record = getattr(value, "record", None)
     record_key = _selector_preparation_key(record)
     if hasattr(value, "start") and hasattr(value, "end"):
@@ -2786,6 +2853,7 @@ def _interactive_context_cache_spec(
         membership,
         tuple(options.selected_features_set or DEFAULT_SELECTED_FEATURES),
         visibility_key,
+        options.feature_overrides,
         color_key,
         annotation_key,
         orthogroup_key,
@@ -3031,6 +3099,7 @@ def _render_prepared_request(
         drawing=prepared.drawing,
         output_paths=tuple(Path(path) for path in paths),
         annotation_warnings=prepared.annotation_warnings,
+        feature_identity_notices=prepared.feature_identity_notices,
         interactive_context=interactive_context,
         linear_metadata=prepared.linear_metadata,
         losat_cache_entries=prepared.losat_cache_entries,

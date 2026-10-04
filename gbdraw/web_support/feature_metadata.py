@@ -3,7 +3,7 @@ from __future__ import annotations
 from collections import Counter
 import json
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any, Sequence
 
 from Bio import SeqIO
 
@@ -16,6 +16,7 @@ from gbdraw.core.record_metadata import (
     _source_feature_location_parts,
 )
 from gbdraw.core.sequence import translate_cds
+from gbdraw.features.overrides import feature_override_lookup
 from gbdraw.features.selector_values import build_feature_selector_values
 from gbdraw.features.ids import (
     compute_feature_hash_from_location_parts,
@@ -28,6 +29,9 @@ from gbdraw.features.visibility import (
 )
 from gbdraw.svg.ids import instance_svg_id
 from gbdraw.web_support.error_adapter import serialize_web_error
+
+if TYPE_CHECKING:
+    from gbdraw.features.placement import ResolvedRecordFeatureInputs
 
 
 _NULLISH_TEXT = {"", "none", "null", "jsnull", "undefined", "jsundefined", "-"}
@@ -297,6 +301,7 @@ def extract_features_from_records_payload(
     *,
     selected_features: object | None = None,
     feature_visibility_rules: list[dict[str, Any]] | None = None,
+    record_features: Sequence[ResolvedRecordFeatureInputs] = (),
     specific_color_rules: dict | None = None,
     linear_rendered_feature_ids: bool = False,
     include_biological_features: bool = False,
@@ -332,6 +337,9 @@ def extract_features_from_records_payload(
         record_ids.append(record_id)
         prepared_features = []
         rendered_id_counts: Counter[str] = Counter()
+        override_of = feature_override_lookup(
+            record, record_features[rec_idx].overrides if record_features else None
+        )
         for feature_index, feat in enumerate(_iter_features(record.features)):
             source_feature_index = _source_feature_index(feat)
             is_rendered_feature = should_render_feature(
@@ -340,6 +348,7 @@ def extract_features_from_records_payload(
                 feature_visibility_rules=feature_visibility_rules,
                 record_id=hash_record_id,
                 specific_color_rules=specific_color_rules,
+                feature_override=override_of(feat),
             )
             if not is_rendered_feature and not include_biological_features:
                 continue

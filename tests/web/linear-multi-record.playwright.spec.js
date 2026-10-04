@@ -3,7 +3,7 @@ const { readFileSync, writeFileSync } = require('node:fs');
 const { join, resolve } = require('node:path');
 const { gunzipSync } = require('node:zlib');
 const { createHash } = require('node:crypto');
-const { openApp, waitForAppShell, evaluateWithRetainedPromise } = require('./helpers/app-lifecycle.cjs');
+const { CURRENT_REQUEST_SCHEMA, openApp, waitForAppShell, evaluateWithRetainedPromise } = require('./helpers/app-lifecycle.cjs');
 
 const repoRoot = resolve(process.env.GBDRAW_REPO || process.cwd());
 
@@ -1495,7 +1495,7 @@ test('Automatic Linear renders every record from one GenBank source and survives
     cardCount: 2,
     selector: 'AutomaticA',
     grouping: 'single',
-    schema: 8,
+    schema: CURRENT_REQUEST_SCHEMA,
     cardinalities: ['exactly_one', 'exactly_one'],
     rows: [1, 1],
     selectors: [{ kind: 'recordId', value: 'AutomaticA' }, { kind: 'recordId', value: 'AutomaticB' }],

@@ -155,9 +155,10 @@ import { isCanonicalResourceReferenceField } from './canonical-resource-referenc
 import { recordStructuralMetric } from './runtime-test-hooks.js';
 import { recordDisplayKey, requestedRecordTransform } from '../app/record-display-options.js';
 
-export const CANONICAL_REQUEST_SCHEMA = 8;
+export const CANONICAL_REQUEST_SCHEMA = 9;
+const FEATURE_OVERRIDE_SCHEMA = 9;
 const SUPPORTED_CANONICAL_REQUEST_SCHEMAS = new Set([
-  1, 2, 5, 6, 7, CANONICAL_REQUEST_SCHEMA
+  1, 2, 5, 6, 7, 8, CANONICAL_REQUEST_SCHEMA
 ]);
 
 const requireExactCanonicalKeys = (value, keys, path) => {
@@ -2429,6 +2430,8 @@ const projectCanonicalRenderInput = ({
       );
   const diagramOptions = {
     featurePlacements: requestFeaturePlacements(state.featurePlacementOverrides, state.mode.value, records),
+    // The Web keeps per-feature edits keyed by rendered ID until it writes these rows (design Q4).
+    featureOverrides: [],
     configOverrides: buildConfigOverrides(state, {
       depthRequested: trackPlan.depthRequested,
       hasComparisonIntent: hasLinearComparisonIntent,
@@ -3722,6 +3725,20 @@ export const projectCanonicalSessionRequest = ({
     || Object.hasOwn(renderRequest.diagramOptions || {}, 'featurePlacements')) {
     throw new Error('Record display and feature placements require canonical schema 7.');
   }
+  if ((renderRequest.schema >= FEATURE_OVERRIDE_SCHEMA)
+    !== Array.isArray(renderRequest.diagramOptions?.featureOverrides)) {
+    throw diagnosticError('INPUT_INVALID', { field: 'featureOverrides', reason: 'SESSION_FORMAT' });
+  }
+  // The Web keeps per-feature edits keyed by rendered ID until it can project
+  // these rows into its draft (design Q4); it refuses them rather than drop them.
+  if (renderRequest.diagramOptions?.featureOverrides?.length
+    || (renderRequest.diagramOptions?.annotations?.sets || []).some((set) => (
+      (set?.annotations || []).some((item) => item?.target?.kind === 'featureIdentity')
+    ))) {
+    throw diagnosticError('INPUT_INVALID', {
+      field: 'featureOverrides', reason: 'FEATURE_IDENTITY_EDITS'
+    });
+  }
   const normalizedRecordOrdering = normalizeWebGridColumnOrdering(sourceRecords);
   const records = normalizedRecordOrdering.records;
   const reorderRecordIndexedValues = (values) => (
@@ -4847,15 +4864,23 @@ const firstPublicationDiff = (expected, actual, path = '$') => {
   }
   return null;
 };
-export const promoteCanonicalRenderRequestToCurrent = (
-  request,
-  { featureCatalog = null, legacyOrthogroupState = null } = {}
-) => {
+export const promoteCanonicalRenderRequestToCurrent = (request, promotion = {}) => {
   const promoted = cloneCanonicalJsonValue(request);
   if (promoted.schema === CANONICAL_REQUEST_SCHEMA) return promoted;
-  if (![5, 6, 7].includes(promoted.schema)) {
-    throw new Error('Only canonical renderRequest schemas 5, 6, and 7 can be promoted to schema 8.');
+  if (![5, 6, 7, 8].includes(promoted.schema)) {
+    throw new Error('Only canonical renderRequest schemas 5, 6, 7, and 8 can be promoted to schema 9.');
   }
+  if (promoted.schema < 8) promoteRenderRequestToSchema8(promoted, promotion);
+  // Schema 9 adds per-feature edits by source identity (design Q4).
+  promoted.schema = CANONICAL_REQUEST_SCHEMA;
+  promoted.diagramOptions = { ...promoted.diagramOptions, featureOverrides: [] };
+  return promoted;
+};
+
+const promoteRenderRequestToSchema8 = (
+  promoted,
+  { featureCatalog = null, legacyOrthogroupState = null }
+) => {
   const sourceSchema = promoted.schema;
   const linearRows = promoted.mode === 'linear'
     ? (promoted.layout?.multiRecordPositions || []).map((token) => {
@@ -4863,7 +4888,7 @@ export const promoteCanonicalRenderRequestToCurrent = (
         return Number(String(token).slice(split + 1)) || null;
       })
     : [];
-  promoted.schema = CANONICAL_REQUEST_SCHEMA;
+  promoted.schema = 8;
   (promoted.records || []).forEach((record, index) => {
     if (sourceSchema < 7) record.display = { isCircular: null, startCoordinate: null };
     if (sourceSchema === 5) record.cardinality = promoted.mode === 'linear' &&
@@ -5004,6 +5029,14 @@ const shiftCanonicalComparisonIndexes = (comparisons, recordIndex, expansion) =>
   })
 );
 
+// A schema-8 request has no feature overrides, so a Session saved before schema 9
+// stays usable without Generate (design Q4).
+const withCurrentCommittedRequest = (committed) => (
+  committed?.renderRequest?.schema === 8
+    ? { ...committed, renderRequest: promoteCanonicalRenderRequestToCurrent(committed.renderRequest) }
+    : committed
+);
+
 const requireCurrentCommittedRequest = (committed, request) => {
   if (!request || request.schema !== CANONICAL_REQUEST_SCHEMA
     || !['circular', 'linear'].includes(request.mode)
@@ -5016,7 +5049,8 @@ const requireCurrentCommittedRequest = (committed, request) => {
  * Clone the last committed canonical Session and overlay one record transform.
  * No live form state participates in this projection.
  */
-export const projectCommittedRecordTransform = ({ committed, target, transform }) => {
+export const projectCommittedRecordTransform = ({ committed: source, target, transform }) => {
+  const committed = withCurrentCommittedRequest(source);
   const request = committed?.renderRequest;
   requireCurrentCommittedRequest(committed, request);
   validateRecordTransformTarget(target, transform, request.mode);
@@ -5137,7 +5171,7 @@ export const projectCommittedEditorIntent = ({
 }) => {
   // A Session loaded from an older supported request schema keeps that request
   // until the next Generate; promote it the way Save does before overlaying.
-  const request = [5, 6, 7].includes(committed?.renderRequest?.schema)
+  const request = [5, 6, 7, 8].includes(committed?.renderRequest?.schema)
     ? promoteCanonicalRenderRequestToCurrent(committed.renderRequest, promotion)
     : committed?.renderRequest;
   requireCurrentCommittedRequest(committed, request);
@@ -5177,7 +5211,8 @@ export const projectCommittedEditorIntent = ({
 };
 
 /** Project only alignment-owned fields of the last committed canonical artifact. */
-export const projectCommittedSimilarityAlignment = ({ committed, plan, translations, orientations }) => {
+export const projectCommittedSimilarityAlignment = ({ committed: source, plan, translations, orientations }) => {
+  const committed = withCurrentCommittedRequest(source);
   if (committed?.renderRequest?.schema !== CANONICAL_REQUEST_SCHEMA
     || committed.renderRequest.mode !== 'linear' || !committed.resources) {
     throw new Error('Alignment requires a committed canonical Linear artifact.');
@@ -5199,7 +5234,7 @@ export const projectCommittedSimilarityAlignment = ({ committed, plan, translati
 };
 
 const normalizePublicationRequestAliases = (request) => {
-  const normalized = [5, 6, 7].includes(request?.schema)
+  const normalized = [5, 6, 7, 8].includes(request?.schema)
     ? promoteCanonicalRenderRequestToCurrent(request)
     : cloneCanonicalJsonValue(request);
   for (const comparison of normalized.comparisons || []) {

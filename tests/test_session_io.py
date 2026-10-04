@@ -3458,7 +3458,7 @@ def _replay_cli_sidecar(source, tmp_path, suffix='.json'):
     ])
     assert source_path.read_bytes() == original
     result = load_session_document(sidecar).to_dict()
-    assert (result['version'], result['webFiles']['bindings']['schema'], result['renderRequest']['schema']) == (44, 2, 8)
+    assert (result['version'], result['webFiles']['bindings']['schema'], result['renderRequest']['schema']) == (44, 2, CANONICAL_REQUEST_SCHEMA)
     assert result['renderRequest']['output']['prefix'] == 'replayed'
     assert len(result['renderRequest']['records']) == 1  # Replay consumes committed input.
     assert result['results'][0]['content'] == prefix.with_suffix('.svg').read_text()
