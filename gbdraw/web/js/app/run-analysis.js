@@ -1220,7 +1220,6 @@ export const createRunAnalysis = ({
   };
   let pendingReflowRequestId = 0;
   let activeReflowRequestId = 0;
-  let pendingReflowReason = 'label-edit';
   let featureExtractionRequestId = 0;
   let latestGenerationToken = 0;
   let latestOperationId = 0;
@@ -5252,7 +5251,7 @@ export const createRunAnalysis = ({
 
   // A label reflow re-renders the committed Session with the current editor
   // tables (R1(c), N-16): it never reads the settings draft.
-  const runLabelReflowCandidate = async ({ requestId, reason, decorationContinuity }) => {
+  const runLabelReflowCandidate = async ({ requestId, decorationContinuity }) => {
     if (mode.value === 'circular' && shouldDeferCircularPreviewUpdates.value) {
       return { status: 'skipped' };
     }
@@ -5354,11 +5353,10 @@ export const createRunAnalysis = ({
     }
   };
 
-  const runLabelReflow = async (reason = 'label-edit') => {
+  const runLabelReflow = async () => {
     const sessionBusy = state.sessionOperationAvailability?.();
     if (sessionBusy) return sessionBusy;
     pendingReflowRequestId += 1;
-    pendingReflowReason = String(reason || 'label-edit');
     if (activeReflowRequestId !== 0) return;
 
     labelReflowProcessing.value = true;
@@ -5374,8 +5372,7 @@ export const createRunAnalysis = ({
         }
         await runLabelReflowCandidate({
           decorationContinuity,
-          requestId: activeReflowRequestId,
-          reason: pendingReflowReason
+          requestId: activeReflowRequestId
         });
       }
     } finally {

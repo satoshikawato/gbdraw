@@ -471,9 +471,7 @@ const labelOverrideBuildWarning = ref('');
 const autoLabelReflowEnabled = ref(false);
 const labelReflowProcessing = ref(false);
 const labelReflowRequestSeq = ref(0);
-const labelReflowRequestReason = ref('');
 const labelReflowForceRequestSeq = ref(0);
-const labelReflowForceRequestReason = ref('');
 const labelReflowLastError = ref(null);
 
 // SVG Feature Click state
@@ -987,9 +985,7 @@ export const state = {
   autoLabelReflowEnabled,
   labelReflowProcessing,
   labelReflowRequestSeq,
-  labelReflowRequestReason,
   labelReflowForceRequestSeq,
-  labelReflowForceRequestReason,
   labelReflowLastError,
   svgContainer,
   clickedFeature,

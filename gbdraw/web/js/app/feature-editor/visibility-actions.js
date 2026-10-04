@@ -178,8 +178,8 @@ export const createFeatureVisibilityActions = ({ state, featureSvgActions, label
 
   // The label owner hides a hidden feature's label with it, as Generate does,
   // and queues the label reflow unless the caller declines it (F-3).
-  const applyFeatureVisibilityToLabels = (reason = 'feature-visibility', options = {}) => (
-    labelActions?.applyFeatureVisibilityToLabels?.(reason, options) ?? false
+  const applyFeatureVisibilityToLabels = (options = {}) => (
+    labelActions?.applyFeatureVisibilityToLabels?.(options) ?? false
   );
 
   const boundaryFeatureVisibilityRules = () => (
@@ -304,7 +304,7 @@ export const createFeatureVisibilityActions = ({ state, featureSvgActions, label
       );
       if (!updated && !overrideChanged) return false;
       updateClickedFeatureVisibilityFromRules(affectedFeatureIds);
-      applyFeatureVisibilityToLabels(reason);
+      applyFeatureVisibilityToLabels();
       return true;
     };
 
@@ -379,7 +379,7 @@ export const createFeatureVisibilityActions = ({ state, featureSvgActions, label
     applyFeatureVisibilityScope(feat, nextMode, scope);
 
     if (previousMode !== nextMode) {
-      applyFeatureVisibilityToLabels('feature-visibility', { reflow: triggerReflow });
+      applyFeatureVisibilityToLabels({ reflow: triggerReflow });
     }
 
     return previousMode !== nextMode;
