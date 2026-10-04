@@ -414,8 +414,7 @@ existing operation and source revisions. None of these is a CW-02 duplicate:
 CW-02 does not mean "compute once and never again".
 
 Initial automated scope:
-- values: generated label-override table serialization, and feature-selector
-  metadata and uniqueness index;
+- values: generated label-override table serialization for bulk label edits;
 - operations: comparison switching (No comparison and LOSAT, LOSATN and
   LOSATP), ordinary input (keystroke and blur), and Generate acceptance.
 
