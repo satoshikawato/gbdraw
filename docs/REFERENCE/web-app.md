@@ -1100,7 +1100,7 @@ source identity `protein_id=NP_054479.1`; both exons move together.
 
 ![The NC_001879.2 Records row with display start 5500.](../images/h-gui-16/01-record-start.png)
 
-![The ribosomal protein S16 popup with Outward lane 1 selected and the Generate instruction.](../images/h-gui-16/02-feature-placement.png)
+![The ribosomal protein S16 popup header and Layout group, which applies on Generate, with Outward lane 1 selected.](../images/h-gui-16/02-feature-placement.png)
 
 Close the popup and click **Generate Diagram**, then **Save Session**. Load that
 session to restore the controls and Result. The equivalent complete

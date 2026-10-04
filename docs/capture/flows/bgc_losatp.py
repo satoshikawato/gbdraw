@@ -837,6 +837,13 @@ def capture_bgc_losatp(
                 page, align_orthogroup_id
             )
             alignment_name = screenshot_names["align"]
+            # Appearance and Layout precede the Similarity group section, which
+            # holds Align…; scroll it under the popup header before the capture.
+            similarity = alignment_popup.locator('[data-feature-popup-group="similarity"]')
+            expect(similarity).to_have_count(1)
+            similarity.evaluate("(el) => { const body = el.closest('.feature-popup-body'); if (body) body.scrollTop += el.getBoundingClientRect().top - body.getBoundingClientRect().top; }")
+            expect(similarity.get_by_role("button", name="Align…", exact=True)).to_be_in_viewport()
+            page.wait_for_timeout(250)
             screenshot_bytes[alignment_name] = capture_screenshot(
                 page, output_paths[alignment_name], "Linear"
             )

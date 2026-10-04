@@ -81,12 +81,22 @@ def capture_joint_display_placement(browser_type, base_url, output_paths, downlo
         expect(placement).to_have_value('outward')
         dialog = page.get_by_role('dialog', name='Feature details: ribosomal protein S16', exact=True)
         expect(dialog).to_be_visible()
+        # The header stays fixed while the Edit body scrolls: bring the Layout group
+        # (Feature placement and its "applies on Generate" heading) under the header.
+        layout = dialog.locator('[data-feature-popup-group="layout"]')
+        expect(layout).to_have_count(1)
+        expect(layout.get_by_role('heading', name='Layout · applies on Generate')).to_be_visible()
+        layout.scroll_into_view_if_needed()
+        placement.scroll_into_view_if_needed()
+        page.wait_for_timeout(250)
         box = dialog.bounding_box()
+        layout_box = layout.bounding_box()
         placement_box = placement.bounding_box()
-        assert box and placement_box
-        # Keep the source identity, control and Generate instruction in one operation crop.
-        page.screenshot(path=str(output_paths[NAMES[1]]), clip={
-            **box, 'height': placement_box['y'] + placement_box['height'] + 26 - box['y']})
+        assert box and layout_box and placement_box
+        assert layout_box['y'] >= box['y'] and placement_box['y'] > box['y'] + 40, 'Layout group is not under the popup header'
+        # Keep the header, the Layout heading and Feature placement in one operation crop.
+        clip_bottom = min(layout_box['y'] + layout_box['height'] + 12, box['y'] + box['height'])
+        page.screenshot(path=str(output_paths[NAMES[1]]), clip={**box, 'height': clip_bottom - box['y']})
         page.get_by_role('button', name='Close feature popup', exact=True).click()
         page.locator('.drawer-toggle').click()
         final = generate_and_inspect(page, _inspect_tracks_svg, _assert_safe_svg)
