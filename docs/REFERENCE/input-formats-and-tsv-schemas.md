@@ -237,8 +237,12 @@ resolved record; use a records table for distinct per-record settings.
 
 Selectors must match exactly one original-source feature. A gene qualifier may
 match both a gene annotation and its CDS; a unique protein ID avoids that
-ambiguity. Unknown/stale identities, duplicate resolved targets, extra columns,
-wrong-mode sides and unsupported resolved layouts are errors. GFF duplicate
+ambiguity. Identical features in one record share a hash, so their biological
+feature IDs add the original-source order (`<hash>~<n>`); `hash=<hash>~<n>`
+names one of them, and `hash=<hash>` matches all of them. Run Info writes
+placement rows in the `hash=<biologicalFeatureId>` form. Unknown/stale
+identities, duplicate resolved targets, extra columns, wrong-mode sides and
+unsupported resolved layouts are errors. GFF duplicate
 identities use complete original-source order, including features hidden by
 loading or visibility rules. Changing visibility does not renumber them.
 

@@ -232,6 +232,21 @@ def test_source_selector_zero_and_many_error(selector, count):
         plan_request(_request(feature_placement_table=_table(selector)))
 
 
+def test_hash_selector_names_one_of_identical_source_features():
+    record = _record()
+    alpha, beta = build_source_feature_catalog(record)[1:3]
+    assert alpha.stable_feature_id == beta.stable_feature_id
+    assert beta.biological_feature_id == f"{beta.stable_feature_id}~2"
+    plan = plan_request(
+        _request(record, feature_placement_table=_table(f"hash={beta.biological_feature_id}"))
+    )
+    assert plan.request.options.feature_placements == (_exact(record, 2),)
+    assert plan.inputs.placements[0].foreground[0].source_feature_index == 2
+    # The original-coordinate hash still names both identical features.
+    with pytest.raises(ValidationError, match="matched 2"):
+        plan_request(_request(feature_placement_table=_table(f"hash={beta.stable_feature_id}")))
+
+
 def test_selector_normalizes_auto_removes_table_and_keeps_original_dataframe():
     table = DataFrame(
         [

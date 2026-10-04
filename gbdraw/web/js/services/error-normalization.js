@@ -147,6 +147,7 @@ const DEFINITIONS = Object.freeze({
   TRACK_INVALID: ['The track settings are invalid.', ['edit-track', 'retry']],
   TRACK_LAYOUT: ['A circular track does not fit inside.', ['edit-track', 'retry']],
   FEATURE_PLACEMENT: ['A Feature placement uses a lane that the current feature track does not have.', ['edit-track', 'retry']],
+  FEATURE_IDENTITY: ['A feature edit does not identify a record of the current inputs. Generate again; if it continues, save a Session for investigation.', ['retry', 'save-session']],
   REGEX_SYNTAX: ['The Python regular expression is invalid.', ['edit-pattern', 'retry']],
   RESOURCE_INVALID: ['Input resource preparation failed. Reselect the input and retry.', ['select-input', 'retry']],
   HELPER_PROTOCOL: ['The helper request is invalid. Retry the operation.', ['retry', 'save-session']],
