@@ -471,3 +471,29 @@ test('PR gate requires functional Playwright exactly when the plan selects it', 
     assert.throws(() => validate(impactPlan, needs), { code: 'UNREQUIRED_JOB_FAILED' });
   }
 });
+
+test('dev gate accepts identical-tree and leaf-test plans only when their selected jobs succeed', () => {
+  const identical = devPlan({
+    impact: 'none',
+    capabilities: ['none'],
+    basis: 'IDENTICAL_TREE_WITH_DIRECT_PARENT_EVIDENCE',
+    changedPathCount: 0
+  });
+  assert.deepEqual(identical.requiredJobs, []);
+  assert.equal(validate(identical, needsFor(identical)).ok, true);
+
+  const leaf = devPlan({
+    impact: 'web-runtime',
+    capabilities: ['documentation', 'web-runtime'],
+    basis: 'LEAF_TEST_CHANGE_WITH_DIRECT_PARENT_EVIDENCE',
+    changedPathCount: 2,
+    leafTests: [{ path: 'tests/web/right-drawer.playwright.spec.js', kind: 'functional', jobs: ['playwright-functional'] }]
+  });
+  assert.deepEqual(leaf.requiredJobs, ['recipes-standard', 'playwright-functional']);
+  assert.equal(validate(leaf, needsFor(leaf)).ok, true);
+  assert.throws(() => validate(leaf, { ...needsFor(leaf), 'playwright-functional': { result: 'skipped' } }),
+    { code: 'REQUIRED_JOB_NOT_SUCCESSFUL' });
+  const roundTrip = JSON.parse(JSON.stringify(leaf));
+  assert.equal(validate(roundTrip, needsFor(leaf)).ok, true);
+  assert.throws(() => validate({ ...roundTrip, leafTests: null }, needsFor(leaf)), { code: 'INVALID_LEAF_TESTS' });
+});

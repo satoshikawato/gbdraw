@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 import { spawnSync } from 'node:child_process';
-import { appendFileSync } from 'node:fs';
+import { appendFileSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { TextDecoder } from 'node:util';
 import { pathToFileURL } from 'node:url';
@@ -10,13 +10,19 @@ import {
   verifyWorkflowEvidence
 } from './check-promotion-readiness.mjs';
 import {
+  IMPACT_PLAN_SCHEMA_VERSION,
+  carryForwardVerdicts,
   classifyChanges,
+  classifyPath,
   createImpactPlan,
   isFullObjectId,
   isDocumentationOnly,
   knownJobsFor,
+  leafJobsFor,
+  leafTestKind,
   requiresFullCoverage,
-  validateGateResults
+  validateGateResults,
+  validateImpactPlan
 } from './ci-impact-policy.mjs';
 
 const SUPPORTED_PROFILES = new Set(['pr', 'dev', 'gallery', 'release']);
@@ -167,6 +173,27 @@ export const runGit = (repositoryRoot, args) => spawnSync('git', args, {
   stdio: ['ignore', 'pipe', 'pipe']
 });
 
+const gitText = (runGitImpl, repositoryRoot, args) => {
+  try {
+    const result = runGitImpl(repositoryRoot, args);
+    if (!isPlainObject(result) || !Number.isInteger(result.status)
+        || !(Buffer.isBuffer(result.stdout) || result.stdout instanceof Uint8Array)) {
+      return null;
+    }
+    return { status: result.status, text: Buffer.from(result.stdout).toString('utf8') };
+  } catch (_error) {
+    return null;
+  }
+};
+
+// An empty diff counts only when both tree object IDs are proven equal.
+const sameTrees = ({ runGitImpl, repositoryRoot, baseSha, headSha }) => {
+  const result = gitText(runGitImpl, repositoryRoot, ['rev-parse', `${baseSha}^{tree}`, `${headSha}^{tree}`]);
+  if (result === null || result.status !== 0) return false;
+  const trees = result.text.trim().split('\n');
+  return trees.length === 2 && isFullObjectId(trees[0]) && trees[0] === trees[1];
+};
+
 const readGitChanges = ({ configuration, runGitImpl }) => {
   const range = configuration.profile === 'pr'
     ? [`${configuration.changeBaseSha}...${configuration.changeHeadSha}`]
@@ -203,8 +230,16 @@ const readGitChanges = ({ configuration, runGitImpl }) => {
       diagnostic: boundedText(Buffer.from(result.stderr || '').toString('utf8'))
     });
   }
+  if (result.stdout.length === 0 && configuration.profile !== 'pr' && sameTrees({
+    runGitImpl,
+    repositoryRoot: configuration.repositoryRoot,
+    baseSha: configuration.changeBaseSha,
+    headSha: configuration.changeHeadSha
+  })) {
+    return Object.freeze({ valid: true, identicalTree: true, changes: Object.freeze([]) });
+  }
   try {
-    return Object.freeze({ valid: true, changes: parseNameStatusZ(result.stdout) });
+    return Object.freeze({ valid: true, identicalTree: false, changes: parseNameStatusZ(result.stdout) });
   } catch (error) {
     return Object.freeze({
       valid: false,
@@ -214,7 +249,146 @@ const readGitChanges = ({ configuration, runGitImpl }) => {
   }
 };
 
-const planFields = ({ configuration, classification, decision, basis, inheritedEvidence }) => ({
+const LIGHT_CLASSES = new Set(['metadata', 'documentation', 'policy-documentation']);
+const isLightPath = (path) => LIGHT_CLASSES.has(classifyPath(path).impact);
+const IDENTICAL_TREE_CLASSIFICATION = Object.freeze({
+  impact: 'none',
+  capabilities: Object.freeze(['none']),
+  valid: true,
+  changedPathCount: 0,
+  paths: Object.freeze([]),
+  reason: 'IDENTICAL_TREE'
+});
+const FUNCTIONAL_SHARDS_PATH = 'tests/ci/functional-shards.json';
+// The reference check ignores documentation, metadata, and the runner lists.
+const REFERENCE_SCAN_EXCLUSIONS = Object.freeze([
+  'docs/', '.agents/', '.claude/', '.codex/', '.cursor/', 'tests/ci/', '.github/workflows/'
+].map((path) => `:(exclude)${path}`));
+const isRunnerList = (path) => path.startsWith('tests/ci/') || path.startsWith('.github/workflows/')
+  || /^playwright[^/]*\.config\.js$/.test(path) || path === 'package.json';
+const PYTEST_SELECTION_MARKER = /\bmark\.(recipe|gallery|browser|slow)\b/g;
+const UNREADABLE_PYTEST_MARKER = /getattr\(\s*(?:pytest\.)?mark\b|\bmark\s*\[|add_marker|MarkDecorator/;
+const escapeRegExp = (value) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+const changeEntries = (changes) => changes.flatMap(({ status, paths }) => {
+  if (status === 'D') return [{ path: paths[0], status, present: false }];
+  if (status.startsWith('R')) {
+    return [{ path: paths[0], status, present: false }, { path: paths[1], status, present: true }];
+  }
+  return paths.map((path) => ({ path, status, present: true }));
+});
+
+const readBlob = ({ runGitImpl, repositoryRoot, sha, path }) => {
+  const result = gitText(runGitImpl, repositoryRoot, ['cat-file', 'blob', `${sha}:${path}`]);
+  return result !== null && result.status === 0 ? result.text : null;
+};
+
+const pythonMarkers = (source) => {
+  if (source === null || UNREADABLE_PYTEST_MARKER.test(source)) return null;
+  return Object.freeze([...new Set([...source.matchAll(PYTEST_SELECTION_MARKER)].map((match) => match[1]))].sort());
+};
+
+const referencePatterns = (path) => {
+  const name = path.split('/').pop();
+  const patterns = [new RegExp(`(?:^|[^A-Za-z0-9_.-])${escapeRegExp(name)}(?![A-Za-z0-9_-])`)];
+  if (path.endsWith('.py')) {
+    const module = escapeRegExp(name.slice(0, -3));
+    patterns.push(
+      new RegExp(`(?:^|[^A-Za-z0-9_])tests\\.${module}(?![A-Za-z0-9_])`),
+      new RegExp(`\\bfrom\\s+\\.?${module}\\s+import\\b`),
+      new RegExp(`\\bimport\\s+${module}(?![A-Za-z0-9_])`),
+      new RegExp(`\\bfrom\\s+tests\\s+import\\b[^\\n]*\\b${module}(?![A-Za-z0-9_])`)
+    );
+  }
+  return patterns;
+};
+
+// Returns the candidate paths that another tracked file names, or null when the scan fails.
+const referencedCandidates = ({ runGitImpl, repositoryRoot, headSha, paths }) => {
+  const needles = [...new Set(paths.flatMap((path) => {
+    const name = path.split('/').pop();
+    return path.endsWith('.py') ? [name, name.slice(0, -3)] : [name];
+  }))];
+  const result = gitText(runGitImpl, repositoryRoot, [
+    'grep', '-I', '-z', '-F', ...needles.flatMap((needle) => ['-e', needle]),
+    headSha, '--', '.', ...REFERENCE_SCAN_EXCLUSIONS
+  ]);
+  if (result === null || ![0, 1].includes(result.status)) return null;
+  const prefix = `${headSha}:`;
+  const records = result.status === 0 ? result.text.split('\n').filter(Boolean) : [];
+  const patterns = new Map(paths.map((path) => [path, referencePatterns(path)]));
+  const referenced = new Set();
+  for (const record of records) {
+    const separator = record.indexOf('\0');
+    if (separator < 0) continue;
+    const name = record.slice(0, separator);
+    const file = name.startsWith(prefix) ? name.slice(prefix.length) : name;
+    const line = record.slice(separator + 1);
+    if (isLightPath(file) || isRunnerList(file)) continue;
+    for (const [path, expressions] of patterns) {
+      if (file !== path && expressions.some((expression) => expression.test(line))) referenced.add(path);
+    }
+  }
+  return referenced;
+};
+
+// Leaf-test facts for every changed path whose pattern can be a leaf test (SELECTIVE_CI.md
+// "Leaf tests"): its kind, its pytest markers, and whether it is a leaf test.
+export const inspectLeafTests = ({ runGitImpl, repositoryRoot, headSha, changes }) => {
+  const candidates = new Map();
+  for (const entry of changeEntries(changes)) {
+    if (leafTestKind(entry.path) === null) continue;
+    candidates.set(entry.path, Boolean(candidates.get(entry.path)) || entry.present);
+  }
+  const facts = new Map();
+  if (candidates.size === 0) return facts;
+  const referenced = referencedCandidates({ runGitImpl, repositoryRoot, headSha, paths: [...candidates.keys()] });
+  let shardSpecs = null;
+  if ([...candidates.keys()].some((path) => leafTestKind(path) === 'functional')) {
+    try {
+      const shards = JSON.parse(readBlob({ runGitImpl, repositoryRoot, sha: headSha, path: FUNCTIONAL_SHARDS_PATH }));
+      shardSpecs = new Set(shards.shards.flat());
+    } catch (_error) {
+      shardSpecs = null;
+    }
+  }
+  for (const [path, present] of candidates) {
+    const kind = leafTestKind(path);
+    const markers = kind === 'python' && present
+      ? pythonMarkers(readBlob({ runGitImpl, repositoryRoot, sha: headSha, path }))
+      : null;
+    const leaf = referenced !== null && !referenced.has(path)
+      && (kind !== 'functional' || Boolean(shardSpecs?.has(path)));
+    facts.set(path, Object.freeze({ kind, markers, leaf }));
+  }
+  return facts;
+};
+
+// The leaf tests of a dev or Gallery push that changes only documentation, metadata, policy
+// documentation, and leaf tests; null when any changed path keeps the complete tier.
+const leafTestRoute = ({ configuration, changes, runGitImpl }) => {
+  const entries = changeEntries(changes);
+  if (!entries.some(({ path }) => leafTestKind(path) !== null)
+      || !entries.every(({ path }) => isLightPath(path) || leafTestKind(path) !== null)) {
+    return null;
+  }
+  const facts = inspectLeafTests({
+    runGitImpl,
+    repositoryRoot: configuration.repositoryRoot,
+    headSha: configuration.changeHeadSha,
+    changes
+  });
+  if (entries.some(({ path }) => !isLightPath(path) && !facts.get(path)?.leaf)) return null;
+  return Object.freeze([...facts.entries()]
+    .sort(([left], [right]) => (left < right ? -1 : 1))
+    .map(([path, { kind, markers }]) => Object.freeze({
+      path,
+      kind,
+      jobs: leafJobsFor({ profile: configuration.profile, kind, markers })
+    })));
+};
+
+const planFields = ({ configuration, classification, decision, basis, inheritedEvidence, leafTests = null }) => ({
   profile: configuration.profile,
   impact: classification.impact,
   capabilities: classification.capabilities,
@@ -224,7 +398,8 @@ const planFields = ({ configuration, classification, decision, basis, inheritedE
   changeHeadSha: configuration.changeHeadSha,
   workflowSha: configuration.workflowSha,
   changedPathCount: classification.changedPathCount,
-  inheritedEvidence
+  inheritedEvidence,
+  leafTests
 });
 
 const fullClassification = (reason) => Object.freeze({
@@ -280,9 +455,9 @@ export const buildImpactPlan = async ({
   }
 
   const gitChanges = readGitChanges({ configuration, runGitImpl });
-  const classification = gitChanges.valid
-    ? classifyChanges(gitChanges.changes)
-    : fullClassification(gitChanges.reason);
+  const classification = !gitChanges.valid
+    ? fullClassification(gitChanges.reason)
+    : gitChanges.identicalTree ? IDENTICAL_TREE_CLASSIFICATION : classifyChanges(gitChanges.changes);
 
   if (configuration.architectureChange) {
     return Object.freeze({
@@ -297,7 +472,14 @@ export const buildImpactPlan = async ({
     });
   }
 
-  if (!classification.valid || requiresFullCoverage(configuration.profile, classification.capabilities)) {
+  const parentEvidenceProfile = ['dev', 'gallery'].includes(configuration.profile);
+  const identicalTree = parentEvidenceProfile && classification.reason === 'IDENTICAL_TREE';
+  const leafTests = classification.valid && parentEvidenceProfile && !identicalTree
+      && requiresFullCoverage(configuration.profile, classification.capabilities)
+    ? leafTestRoute({ configuration, changes: gitChanges.changes, runGitImpl })
+    : null;
+  if (!classification.valid || (!identicalTree && leafTests === null
+      && requiresFullCoverage(configuration.profile, classification.capabilities))) {
     return Object.freeze({
       plan: createImpactPlan(planFields({
         configuration,
@@ -366,17 +548,105 @@ export const buildImpactPlan = async ({
     contract,
     configuration.changeBaseSha
   );
+  const basis = configuration.profile === 'pr'
+    ? 'LIGHT_CHANGE_WITH_DIRECT_BASE_EVIDENCE'
+    : identicalTree ? 'IDENTICAL_TREE_WITH_DIRECT_PARENT_EVIDENCE'
+      : leafTests !== null ? 'LEAF_TEST_CHANGE_WITH_DIRECT_PARENT_EVIDENCE'
+        : 'LIGHT_CHANGE_WITH_DIRECT_PARENT_EVIDENCE';
   return Object.freeze({
     plan: createImpactPlan(planFields({
       configuration,
       classification,
       decision: 'selective',
-      basis: configuration.profile === 'pr'
-        ? 'LIGHT_CHANGE_WITH_DIRECT_BASE_EVIDENCE'
-        : 'LIGHT_CHANGE_WITH_DIRECT_PARENT_EVIDENCE',
-      inheritedEvidence
+      basis,
+      inheritedEvidence,
+      leafTests
     })),
     classification
+  });
+};
+
+const validShards = (shards) => Array.isArray(shards) && shards.length > 0
+  && shards.every((paths) => Array.isArray(paths) && paths.every((path) => typeof path === 'string' && /^\S+$/.test(path)));
+
+// SELECTIVE_CI.md "Jobs for changed leaf tests": a leaf-test plan runs only the changed specs
+// assigned to the shard; every other plan runs the whole shard. A pull request runs the
+// trusted base's plan, which may use an older schema; such a plan runs the whole shard.
+export const functionalShardFiles = ({ plan, shards, shard }) => {
+  const currentSchema = isPlainObject(plan) && plan.schemaVersion === IMPACT_PLAN_SCHEMA_VERSION;
+  if (currentSchema) validateImpactPlan(plan);
+  if (!isPlainObject(plan) || !Array.isArray(plan.requiredJobs) || !plan.requiredJobs.includes('playwright-functional')) {
+    fail('FUNCTIONAL_NOT_REQUIRED', 'The plan does not require functional Playwright.');
+  }
+  if (!validShards(shards)) fail('INVALID_SHARD_MAP', 'The functional shard map is invalid.');
+  if (!Number.isInteger(shard) || shard < 1 || shard > shards.length) {
+    fail('INVALID_SHARD', 'The shard number is outside the shard map.', { shard });
+  }
+  const assigned = shards[shard - 1];
+  if (!currentSchema || plan.leafTests === null) return Object.freeze([...assigned]);
+  const changed = new Set(plan.leafTests.filter(({ kind }) => kind === 'functional').map(({ path }) => path));
+  return Object.freeze(assigned.filter((path) => changed.has(path)));
+};
+
+const resolveCommit = ({ runGitImpl, repositoryRoot, revision }) => {
+  const result = gitText(runGitImpl, repositoryRoot, ['rev-parse', '--verify', '--end-of-options', `${revision}^{commit}`]);
+  const sha = result?.status === 0 ? result.text.trim().toLowerCase() : '';
+  if (!isFullObjectId(sha)) fail('UNKNOWN_REVISION', 'Revision does not name a commit.', { revision: boundedText(revision) });
+  return sha;
+};
+
+// `classify --base E --head H`: local Git data only; no workflow evidence.
+export const classifyRange = ({ repositoryRoot, base, head, runGitImpl = runGit }) => {
+  const baseSha = resolveCommit({ runGitImpl, repositoryRoot, revision: base });
+  const headSha = resolveCommit({ runGitImpl, repositoryRoot, revision: head });
+  const ancestry = gitText(runGitImpl, repositoryRoot, ['merge-base', '--is-ancestor', baseSha, headSha]);
+  if (ancestry === null || ![0, 1].includes(ancestry.status)) {
+    fail('ANCESTRY_CHECK_FAILED', 'Git could not decide whether the base is an ancestor of the head.');
+  }
+  const gitChanges = readGitChanges({
+    configuration: { profile: 'dev', repositoryRoot, changeBaseSha: baseSha, changeHeadSha: headSha },
+    runGitImpl
+  });
+  const classification = !gitChanges.valid
+    ? fullClassification(gitChanges.reason)
+    : gitChanges.identicalTree ? IDENTICAL_TREE_CLASSIFICATION : classifyChanges(gitChanges.changes);
+  const facts = gitChanges.valid
+    ? inspectLeafTests({ runGitImpl, repositoryRoot, headSha, changes: gitChanges.changes })
+    : new Map();
+  const statuses = new Map(gitChanges.valid
+    ? changeEntries(gitChanges.changes).map(({ path, status }) => [path, status])
+    : []);
+  const paths = classification.paths.map(({ path, impact, reason }) => {
+    const fact = facts.get(path);
+    return Object.freeze({
+      path,
+      status: statuses.get(path),
+      impact,
+      reason,
+      leaf: fact?.leaf
+        ? Object.freeze({
+          kind: fact.kind,
+          markers: fact.markers,
+          jobs: leafJobsFor({ profile: 'dev', kind: fact.kind, markers: fact.markers })
+        })
+        : null
+    });
+  });
+  return Object.freeze({
+    base: baseSha,
+    head: headSha,
+    ancestor: ancestry.status === 0,
+    identicalTree: classification.reason === 'IDENTICAL_TREE',
+    valid: classification.valid,
+    reason: classification.reason,
+    capabilities: classification.capabilities,
+    paths: Object.freeze(paths),
+    verdicts: carryForwardVerdicts({
+      ancestor: ancestry.status === 0,
+      valid: classification.valid,
+      identicalTree: classification.reason === 'IDENTICAL_TREE',
+      entries: paths
+    })
   });
 };
 
@@ -420,6 +690,13 @@ export const formatPlanSummary = ({ plan, classification, evidenceFailure }) => 
       `- Evidence SHA: \`${plan.inheritedEvidence.headSha}\``,
       ''
     );
+  }
+  if (plan.leafTests) {
+    lines.push('### Leaf tests', '');
+    plan.leafTests.forEach(({ path, kind, jobs }) => {
+      lines.push(`- <code>${html(path)}</code> — \`${kind}\` → ${jobs.length ? jobs.map((job) => `\`${job}\``).join(', ') : 'no job'}`);
+    });
+    lines.push('');
   }
   if (evidenceFailure) {
     lines.push(
@@ -516,6 +793,48 @@ const runGateCommand = ({ env, stdout, appendFileImpl }) => {
   }
 };
 
+const optionValues = (argv, names) => {
+  const values = {};
+  for (let index = 1; index < argv.length; index += 2) {
+    const name = argv[index]?.replace(/^--/, '');
+    if (!argv[index]?.startsWith('--') || !names.includes(name) || Object.hasOwn(values, name)
+        || index + 1 >= argv.length || !argv[index + 1]) {
+      return null;
+    }
+    values[name] = argv[index + 1];
+  }
+  return names.every((name) => Object.hasOwn(values, name)) ? values : null;
+};
+
+const runShardFilesCommand = ({ argv, env, cwd, stdout, appendFileImpl }) => {
+  if (argv.length !== 2 || !/^[1-9][0-9]*$/.test(argv[1])) {
+    fail('INVALID_ARGUMENTS', 'Usage: shard-files <shard number>.');
+  }
+  const plan = parseJsonEnvironment(env, 'CI_IMPACT_PLAN_JSON');
+  const repositoryRoot = resolve(env.CI_IMPACT_REPOSITORY_ROOT || cwd);
+  let shards;
+  try {
+    shards = JSON.parse(readFileSync(resolve(repositoryRoot, FUNCTIONAL_SHARDS_PATH), 'utf8')).shards;
+  } catch (_error) {
+    fail('INVALID_SHARD_MAP', 'The functional shard map could not be read.');
+  }
+  const files = functionalShardFiles({ plan, shards, shard: Number(argv[1]) }).join(' ');
+  stdout.write(`${files}\n`);
+  if (env.GITHUB_OUTPUT) appendOutput(env.GITHUB_OUTPUT, `files=${files}\n`, appendFileImpl);
+};
+
+const runClassifyCommand = ({ argv, env, cwd, stdout, runGitImpl }) => {
+  const options = optionValues(argv, ['base', 'head']);
+  if (!options) fail('INVALID_ARGUMENTS', 'Usage: classify --base <E> --head <H>.');
+  const result = classifyRange({
+    repositoryRoot: resolve(env.CI_IMPACT_REPOSITORY_ROOT || cwd),
+    base: options.base,
+    head: options.head,
+    runGitImpl
+  });
+  stdout.write(`${JSON.stringify(result, null, 2)}\n`);
+};
+
 export const runCiImpactCli = async ({
   argv = process.argv.slice(2),
   env = process.env,
@@ -527,12 +846,18 @@ export const runCiImpactCli = async ({
   verifyWorkflowEvidenceImpl = verifyWorkflowEvidence
 } = {}) => {
   try {
-    if (argv.length !== 1 || !['plan', 'gate'].includes(argv[0])) {
-      fail('INVALID_ARGUMENTS', 'Command must be exactly plan or gate.', {
+    const command = argv[0];
+    if (!['plan', 'gate', 'shard-files', 'classify'].includes(command)
+        || (['plan', 'gate'].includes(command) && argv.length !== 1)) {
+      fail('INVALID_ARGUMENTS', 'Command must be plan, gate, shard-files, or classify.', {
         arguments: argv.map((argument) => boundedText(argument))
       });
     }
-    if (argv[0] === 'plan') {
+    if (command === 'shard-files') {
+      runShardFilesCommand({ argv, env, cwd, stdout, appendFileImpl });
+    } else if (command === 'classify') {
+      runClassifyCommand({ argv, env, cwd, stdout, runGitImpl });
+    } else if (command === 'plan') {
       await runPlanCommand({
         env,
         cwd,

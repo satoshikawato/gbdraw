@@ -1,10 +1,16 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
+  GALLERY_PARITY_SPEC,
+  IMPACT_PLAN_SCHEMA_VERSION,
+  VIBRIO_FULL_GENERATION_SPEC,
+  carryForwardVerdicts,
   classifyChanges,
   classifyPath,
   createImpactPlan,
   knownJobsFor,
+  leafJobsFor,
+  leafTestKind,
   requiredJobsFor,
   validateImpactPlan
 } from '../../tools/ci-impact-policy.mjs';
@@ -413,4 +419,283 @@ test('every selective PR smoke route also requires the Gallery parity owner', ()
       ...candidate, requiredJobs: requiredJobs.filter((job) => job !== 'gallery')
     }), /required jobs/, impact);
   }
+});
+
+
+const parentEvidence = (profile) => ({
+  ...evidence(),
+  ...(profile === 'gallery' ? {
+    workflowPath: '.github/workflows/gallery-publication.yml',
+    aggregateName: 'Gallery readiness / gate'
+  } : {})
+});
+
+const leafPlan = (overrides = {}) => {
+  const profile = overrides.profile ?? 'dev';
+  return createImpactPlan({
+    profile,
+    impact: 'web-runtime',
+    capabilities: ['web-runtime'],
+    decision: 'selective',
+    basis: 'LEAF_TEST_CHANGE_WITH_DIRECT_PARENT_EVIDENCE',
+    changeBaseSha: SHA.base,
+    changeHeadSha: SHA.head,
+    workflowSha: SHA.workflow,
+    changedPathCount: 1,
+    inheritedEvidence: parentEvidence(profile),
+    leafTests: [{ path: 'tests/web/label-editor.test.mjs', kind: 'node', jobs: profile === 'dev' ? ['browser'] : [] }],
+    ...overrides
+  });
+};
+
+const identicalPlan = (overrides = {}) => {
+  const profile = overrides.profile ?? 'dev';
+  return createImpactPlan({
+    profile,
+    impact: 'none',
+    capabilities: ['none'],
+    decision: 'selective',
+    basis: 'IDENTICAL_TREE_WITH_DIRECT_PARENT_EVIDENCE',
+    changeBaseSha: SHA.base,
+    changeHeadSha: SHA.head,
+    workflowSha: SHA.workflow,
+    changedPathCount: 0,
+    inheritedEvidence: parentEvidence(profile),
+    ...overrides
+  });
+};
+
+test('leaf test kinds follow the routing table and exclude shared or control-plane test code', () => {
+  for (const [path, kind] of [
+    ['tests/test_regression.py', 'python'],
+    ['tests/web/label-editor.test.mjs', 'node'],
+    ['tests/web/contracts/vibrio-sequence-source-coverage.test.mjs', 'node'],
+    ['tests/web/right-drawer.playwright.spec.js', 'functional'],
+    ['tests/web/contracts/session-regenerate-intent.playwright.spec.js', 'functional'],
+    ['tests/web/webapp-performance.playwright.spec.js', 'performance'],
+    ['tests/web/vibrio-session-save.performance.playwright.spec.js', 'performance'],
+    [GALLERY_PARITY_SPEC, 'gallery-parity'],
+    [VIBRIO_FULL_GENERATION_SPEC, 'release-only']
+  ]) assert.equal(leafTestKind(path), kind, path);
+  for (const path of [
+    'tests/conftest.py',
+    'tests/utils/svg_compare.py',
+    'tests/fixtures/sessions/example.json',
+    'tests/test_inputs/example.gbk',
+    'tests/reference_outputs/example.svg',
+    'tests/run_losat_cache_browser_acceptance.py',
+    'tests/web/helpers/app-lifecycle.cjs',
+    'tests/web/fixtures/example.json',
+    'tests/web/fake-svg-dom.mjs',
+    'tests/web/decoration-continuity.playwright.py',
+    'tests/web/contracts/unknown.serial.spec.js',
+    'tests/web/architecture-contracts.test.mjs',
+    'tests/web/product-impact-ratchet-fixtures.test.mjs',
+    'tests/web/promotion-readiness.test.mjs',
+    'tests/ci/ci-impact-cli.test.mjs',
+    'tests/nested/test_example.py',
+    'playwright.functional.config.js',
+    'docs/FAQ.md',
+    'gbdraw/web/js/app.js'
+  ]) assert.equal(leafTestKind(path), null, path);
+});
+
+test('the serial spec constants are the specs their Playwright configurations run', async () => {
+  const { readFileSync } = await import('node:fs');
+  const config = (name) => readFileSync(new URL(`../../${name}`, import.meta.url), 'utf8');
+  assert.match(config('playwright.gallery-publication.config.js'),
+    new RegExp(`testMatch: '${GALLERY_PARITY_SPEC.split('/').pop().replaceAll('.', '\\.')}'`));
+  assert.match(config('playwright.vibrio.config.js'),
+    new RegExp(`testMatch: '${VIBRIO_FULL_GENERATION_SPEC.split('/').pop().replaceAll('.', '\\.')}'`));
+});
+
+test('leaf jobs select only the jobs that run the changed test', () => {
+  for (const [kind, dev, gallery] of [
+    ['node', ['browser'], []],
+    ['functional', ['playwright-functional'], []],
+    ['performance', ['playwright-performance'], []],
+    ['gallery-parity', [], ['browser']],
+    ['release-only', [], []]
+  ]) {
+    assert.deepEqual(leafJobsFor({ profile: 'dev', kind }), dev, kind);
+    assert.deepEqual(leafJobsFor({ profile: 'gallery', kind }), gallery, kind);
+  }
+  assert.deepEqual(leafJobsFor({ profile: 'dev', kind: 'python', markers: [] }), ['core']);
+  assert.deepEqual(leafJobsFor({ profile: 'dev', kind: 'python', markers: ['browser', 'recipe'] }),
+    ['core', 'recipes-standard', 'browser']);
+  assert.deepEqual(leafJobsFor({ profile: 'dev', kind: 'python', markers: ['slow', 'gallery'] }),
+    ['core', 'gallery']);
+  assert.deepEqual(leafJobsFor({ profile: 'dev', kind: 'python', markers: null }),
+    ['core', 'recipes-standard', 'gallery', 'browser']);
+  assert.deepEqual(leafJobsFor({ profile: 'gallery', kind: 'python', markers: null }), []);
+});
+
+test('leaf-test plans run documentation jobs plus the jobs of the changed leaf tests', () => {
+  const plan = leafPlan({
+    impact: 'web-runtime',
+    capabilities: ['documentation', 'tests-only', 'web-runtime'],
+    changedPathCount: 4,
+    leafTests: [
+      { path: 'tests/test_regression.py', kind: 'python', jobs: ['core', 'browser'] },
+      { path: 'tests/web/label-editor.test.mjs', kind: 'node', jobs: ['browser'] },
+      { path: 'tests/web/right-drawer.playwright.spec.js', kind: 'functional', jobs: ['playwright-functional'] }
+    ]
+  });
+  assert.equal(plan.schemaVersion, IMPACT_PLAN_SCHEMA_VERSION);
+  assert.deepEqual(plan.requiredJobs, ['core', 'recipes-standard', 'browser', 'playwright-functional']);
+  assert.equal(Object.isFrozen(plan.leafTests), true);
+  assert.equal(validateImpactPlan(plan), true);
+
+  const releaseOnly = leafPlan({
+    impact: 'tests-only',
+    capabilities: ['tests-only'],
+    leafTests: [{ path: VIBRIO_FULL_GENERATION_SPEC, kind: 'release-only', jobs: [] }]
+  });
+  assert.deepEqual(releaseOnly.requiredJobs, []);
+
+  const gallery = leafPlan({
+    profile: 'gallery',
+    impact: 'web-runtime',
+    capabilities: ['documentation', 'tests-only', 'web-runtime'],
+    leafTests: [
+      { path: GALLERY_PARITY_SPEC, kind: 'gallery-parity', jobs: ['browser'] },
+      { path: 'tests/web/label-editor.test.mjs', kind: 'node', jobs: [] }
+    ]
+  });
+  assert.deepEqual(gallery.requiredJobs, ['browser']);
+  assert.deepEqual(leafPlan({ profile: 'gallery' }).requiredJobs, []);
+});
+
+test('the validator accepts test subject capabilities only under a consistent leaf basis', () => {
+  const plan = leafPlan();
+  assert.throws(() => validateImpactPlan({ ...plan, basis: 'LIGHT_CHANGE_WITH_DIRECT_PARENT_EVIDENCE', leafTests: null }),
+    { code: 'INVALID_SELECTIVE_PLAN' });
+  assert.throws(() => validateImpactPlan({ ...plan, basis: 'LIGHT_CHANGE_WITH_DIRECT_PARENT_EVIDENCE' }),
+    { code: 'UNEXPECTED_LEAF_TESTS' });
+  for (const leafTests of [
+    null,
+    [],
+    [{ path: 'tests/web/label-editor.test.mjs', kind: 'functional', jobs: ['playwright-functional'] }],
+    [{ path: 'tests/web/label-editor.test.mjs', kind: 'node', jobs: [] }],
+    [{ path: 'tests/web/label-editor.test.mjs', kind: 'node', jobs: ['browser', 'core'] }],
+    [{ path: 'tests/web/label-editor.test.mjs', kind: 'node' }],
+    [{ path: 'tests/web/helpers/app-lifecycle.cjs', kind: 'node', jobs: ['browser'] }],
+    [{ path: 'tests/test_regression.py', kind: 'python', jobs: ['browser'] }],
+    [{ path: 'tests/test_regression.py', kind: 'python', jobs: ['core', 'lint'] }],
+    [
+      { path: 'tests/web/right-drawer.playwright.spec.js', kind: 'functional', jobs: ['playwright-functional'] },
+      { path: 'tests/web/label-editor.test.mjs', kind: 'node', jobs: ['browser'] }
+    ]
+  ]) {
+    assert.throws(() => validateImpactPlan({ ...plan, leafTests }), { code: 'INVALID_LEAF_TESTS' },
+      JSON.stringify(leafTests));
+  }
+  // Every non-documentation capability must come from a listed leaf test.
+  assert.throws(() => leafPlan({ impact: 'session-persistence', capabilities: ['web-runtime', 'session-persistence'] }),
+    { code: 'INVALID_LEAF_TESTS' });
+  assert.throws(() => leafPlan({ impact: 'ci-only', capabilities: ['web-runtime', 'ci-only'] }),
+    { code: 'INVALID_LEAF_TESTS' });
+  assert.throws(() => leafPlan({ impact: 'documentation', capabilities: ['documentation'] }),
+    { code: 'INVALID_LEAF_TESTS' });
+  assert.throws(() => leafPlan({ profile: 'pr', inheritedEvidence: evidence() }),
+    { code: 'BASIS_DECISION_MISMATCH' });
+  assert.throws(() => leafPlan({ decision: 'full', inheritedEvidence: null }),
+    { code: 'BASIS_DECISION_MISMATCH' });
+  assert.throws(() => leafPlan({ inheritedEvidence: null }), { code: 'INVALID_EVIDENCE_SCHEMA' });
+  assert.throws(() => validateImpactPlan({ ...plan, requiredJobs: [] }), { code: 'REQUIRED_JOBS_MISMATCH' });
+  const { leafTests: _omitted, ...withoutField } = plan;
+  assert.throws(() => validateImpactPlan(withoutField), { code: 'INVALID_PLAN_SCHEMA' });
+});
+
+test('identical-tree plans inherit everything only on dev and Gallery pushes', () => {
+  for (const profile of ['dev', 'gallery']) {
+    const plan = identicalPlan({ profile });
+    assert.deepEqual(plan.requiredJobs, [], profile);
+    assert.equal(plan.leafTests, null, profile);
+    const fallback = createImpactPlan({
+      profile,
+      impact: 'none',
+      capabilities: ['none'],
+      decision: 'full',
+      basis: 'INHERITED_EVIDENCE_UNAVAILABLE',
+      changeBaseSha: SHA.base,
+      changeHeadSha: SHA.head,
+      workflowSha: SHA.workflow,
+      changedPathCount: 0,
+      inheritedEvidence: null
+    });
+    assert.deepEqual(fallback.requiredJobs, knownJobsFor(profile), profile);
+  }
+  assert.throws(() => identicalPlan({ profile: 'pr' }), { code: 'BASIS_DECISION_MISMATCH' });
+  assert.throws(() => identicalPlan({ changedPathCount: 1 }), { code: 'BASIS_IMPACT_MISMATCH' });
+  assert.throws(() => identicalPlan({ impact: 'metadata', capabilities: ['metadata'] }), { code: 'BASIS_IMPACT_MISMATCH' });
+  assert.throws(() => identicalPlan({ inheritedEvidence: null }), { code: 'INVALID_EVIDENCE_SCHEMA' });
+  assert.throws(() => identicalPlan({ decision: 'full', inheritedEvidence: null }), { code: 'BASIS_DECISION_MISMATCH' });
+  assert.throws(() => validateImpactPlan({ ...identicalPlan(), leafTests: [] }), { code: 'UNEXPECTED_LEAF_TESTS' });
+  // 'none' never mixes with a changed path and never reaches pull requests.
+  assert.throws(() => selectivePlan({ impact: 'none', capabilities: ['none'], changedPathCount: 0 }),
+    { code: 'BASIS_IMPACT_MISMATCH' });
+  assert.throws(() => selectivePlan({
+    impact: 'none', capabilities: ['none'], changedPathCount: 0, decision: 'full',
+    basis: 'INHERITED_EVIDENCE_UNAVAILABLE', inheritedEvidence: null
+  }), { code: 'BASIS_IMPACT_MISMATCH' });
+  assert.throws(() => leafPlan({ impact: 'web-runtime', capabilities: ['none', 'web-runtime'] }),
+    { code: 'BASIS_IMPACT_MISMATCH' });
+  assert.equal(classifyChanges([]).valid, false, 'an empty diff alone stays invalid');
+});
+
+const verdictsFor = (paths, overrides = {}) => carryForwardVerdicts({
+  ancestor: true,
+  valid: true,
+  identicalTree: false,
+  entries: paths.map((entry) => (typeof entry === 'string'
+    ? { path: entry, leaf: null }
+    : entry)),
+  ...overrides
+});
+
+test('carry-forward verdicts follow the allowed path sets', () => {
+  const all = { releaseEvidenceCarries: true, generatedArtifactChecksCarry: true, localTestEvidenceCarries: true };
+  const none = { releaseEvidenceCarries: false, generatedArtifactChecksCarry: false, localTestEvidenceCarries: false };
+  // A SESSION_LOG-only move carries everything.
+  assert.deepEqual(verdictsFor(['docs/internal/web-gui-audit-20260930/SESSION_LOG.md']), all);
+  assert.deepEqual(verdictsFor(['.gitignore', 'docs/internal/SELECTIVE_CI.md', 'CHANGELOG.md']), all);
+  // T13: the release-only Vibrio spec does not carry release evidence.
+  assert.deepEqual(verdictsFor([{ path: VIBRIO_FULL_GENERATION_SPEC, leaf: { kind: 'release-only', markers: null } }]), {
+    releaseEvidenceCarries: false, generatedArtifactChecksCarry: true, localTestEvidenceCarries: true
+  });
+  // T11: a Gallery Session and docs screenshots invalidate generated-artifact checks.
+  assert.deepEqual(verdictsFor([
+    'gbdraw/web/gallery/sessions/example.gbdraw-session.json',
+    'docs/images/tutorials/example.png',
+    'docs/internal/web-gui-audit-20260930/SESSION_LOG.md'
+  ]), none);
+  assert.equal(verdictsFor(['docs/images/tutorials/example.png']).generatedArtifactChecksCarry, false);
+  assert.deepEqual(verdictsFor(['docs/images/tutorials/example.png']), {
+    releaseEvidenceCarries: true, generatedArtifactChecksCarry: false, localTestEvidenceCarries: true
+  });
+  assert.deepEqual(verdictsFor(['docs/recipes/run_cli_scenarios.py']), none);
+  assert.deepEqual(verdictsFor(['docs/capture/run_all.py']), {
+    releaseEvidenceCarries: false, generatedArtifactChecksCarry: false, localTestEvidenceCarries: true
+  });
+  for (const [leaf, expected] of [
+    [{ kind: 'node', markers: null }, all],
+    [{ kind: 'functional', markers: null }, all],
+    [{ kind: 'gallery-parity', markers: null }, all],
+    [{ kind: 'python', markers: [] }, all],
+    [{ kind: 'python', markers: ['recipe'] }, { ...all, releaseEvidenceCarries: false }],
+    [{ kind: 'python', markers: ['slow'] }, { ...all, releaseEvidenceCarries: false, localTestEvidenceCarries: false }],
+    [{ kind: 'python', markers: null }, { ...all, releaseEvidenceCarries: false, localTestEvidenceCarries: false }]
+  ]) assert.deepEqual(verdictsFor([{ path: 'tests/test_regression.py', leaf }]), expected, JSON.stringify(leaf));
+  assert.deepEqual(verdictsFor(['.github/workflows/test.yml']), {
+    releaseEvidenceCarries: false, generatedArtifactChecksCarry: true, localTestEvidenceCarries: false
+  });
+  for (const path of ['tests/web/helpers/app-lifecycle.cjs', 'tests/fixtures/sessions/a.json', 'tests/reference_outputs/a.svg',
+    'gbdraw/render/drawers/linear/features.py', 'pyproject.toml', 'tools/audit/parity_replay.py', 'future/unknown.file']) {
+    assert.deepEqual(verdictsFor([path]), none, path);
+  }
+  assert.deepEqual(verdictsFor([], { identicalTree: true }), all);
+  assert.deepEqual(verdictsFor(['docs/FAQ.md'], { ancestor: false }), none);
+  assert.deepEqual(verdictsFor([], { identicalTree: true, ancestor: false }), none);
+  assert.deepEqual(verdictsFor([], { valid: false }), none);
 });

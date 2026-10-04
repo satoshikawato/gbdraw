@@ -1355,6 +1355,12 @@ test('workflow triggers separate dev admission, dev staging, promotion, and depl
 
   assert.deepEqual(triggerBranches(GALLERY_PUBLICATION_WORKFLOW, 'push'), ['dev']);
   assert.doesNotMatch(GALLERY_PUBLICATION_WORKFLOW, /\n  pull_request:\n/);
+  assert.match(
+    GALLERY_PUBLICATION_WORKFLOW,
+    /group: gallery-publication-\$\{\{ github\.event_name \}\}-\$\{\{ github\.ref \}\}/
+  );
+  // Like Tests, a started Gallery push run finishes so its SHA keeps exact evidence.
+  assert.match(GALLERY_PUBLICATION_WORKFLOW, /\n  cancel-in-progress: \$\{\{ github\.event_name != 'push' \}\}\n/);
   assert.match(GALLERY_PUBLICATION_WORKFLOW, /\n  workflow_dispatch:\n/);
 
   assert.deepEqual(triggerBranches(DEPLOY_WORKFLOW, 'push'), ['main']);

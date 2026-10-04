@@ -3,10 +3,18 @@ import { readFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import test from 'node:test';
 import { fileURLToPath } from 'node:url';
-import { classifyPath, knownJobsFor } from '../../tools/ci-impact-policy.mjs';
+import {
+  GALLERY_PARITY_SPEC,
+  IMPACT_PLAN_SCHEMA_VERSION,
+  VIBRIO_FULL_GENERATION_SPEC,
+  classifyPath,
+  createImpactPlan,
+  knownJobsFor
+} from '../../tools/ci-impact-policy.mjs';
 import { PromotionReadinessError } from '../../tools/check-promotion-readiness.mjs';
 import {
   buildImpactPlan,
+  functionalShardFiles,
   parseNameStatusZ,
   readPlanConfiguration,
   runCiImpactCli
@@ -548,7 +556,7 @@ test('plan command writes one compact output line and escapes summary paths', as
   assert.equal(status, 0, stderr.value());
   const output = writes.get('/tmp/ci-impact-output');
   assert.equal(output.split('\n').filter(Boolean).length, 1);
-  assert.match(output, /^plan=\{"schemaVersion":2,/);
+  assert.match(output, new RegExp(`^plan=\\{"schemaVersion":${IMPACT_PLAN_SCHEMA_VERSION},`));
   const summary = writes.get('/tmp/ci-impact-summary');
   assert.match(summary, /docs\/&lt;unsafe&gt;\\nname\.md/);
   assert.doesNotMatch(summary, /docs\/<unsafe>/);
@@ -897,7 +905,7 @@ test('browser jobs seed apt from one verified cache and bound their test steps',
     );
     assert.match(save, /key: \$\{\{ steps\.playwright-install\.outputs\.apt-cache-key \}\}/);
     copies.add([restore, install, save].join('')
-      .replace(/\n {8}if: (?:env\.GBDRAW_GALLERY_PR_PARITY == 'true'|matrix\.surface == 'browser')(?=\n)/g, '')
+      .replace(/\n {8}if: (?:env\.GBDRAW_GALLERY_PR_PARITY == 'true'|matrix\.surface == 'browser'|steps\.shard\.outputs\.files != '')(?=\n)/g, '')
       .replace('python -m playwright', 'npx playwright'));
   }
   assert.equal(copies.size, 1, 'every browser job must use the same cache steps');
@@ -969,4 +977,424 @@ test('aggregate gates and the Gallery planner tolerate a slow checkout', () => {
     planner,
     /uses: actions\/checkout@v4\n {8}with:\n {10}ref: \$\{\{ github\.sha \}\}\n {10}fetch-depth: 0\n(?: {10}#[^\n]*\n)? {10}filter: blob:none\n/
   );
+});
+
+
+const TREE = Object.freeze({ same: 'd'.repeat(40), other: 'e'.repeat(40) });
+const TEST_SHARDS = Object.freeze([
+  ['tests/web/a.playwright.spec.js', 'tests/web/right-drawer.playwright.spec.js'],
+  ['tests/web/contracts/session-regenerate-intent.playwright.spec.js'],
+  [], [], [], [], [], []
+]);
+
+const emptyResult = (status = 0) => ({ status, stdout: Buffer.alloc(0), stderr: Buffer.alloc(0) });
+
+const gitRouter = ({
+  diff = null,
+  trees = [TREE.same, TREE.other],
+  grep = [],
+  grepStatus,
+  blobs = {},
+  ancestor = true,
+  calls = []
+} = {}) => (_root, args) => {
+  calls.push(args);
+  if (args[0] === 'diff') return diff === null ? emptyResult() : gitResult(...diff);
+  if (args[0] === 'rev-parse' && args[1] === '--verify') {
+    return { status: 0, stdout: Buffer.from(`${args.at(-1).replace('^{commit}', '')}\n`), stderr: Buffer.alloc(0) };
+  }
+  if (args[0] === 'rev-parse') {
+    return trees === null ? emptyResult(128) : { status: 0, stdout: Buffer.from(`${trees.join('\n')}\n`), stderr: Buffer.alloc(0) };
+  }
+  if (args[0] === 'merge-base') return emptyResult(ancestor ? 0 : 1);
+  if (args[0] === 'grep') {
+    const head = args[args.indexOf('--') - 1];
+    const output = grep.map(([path, line]) => `${head}:${path}\0${line}\n`).join('');
+    return { status: grepStatus ?? (output ? 0 : 1), stdout: Buffer.from(output), stderr: Buffer.alloc(0) };
+  }
+  if (args[0] === 'cat-file') {
+    const spec = args.at(-1);
+    const path = spec.slice(spec.indexOf(':') + 1);
+    const source = { 'tests/ci/functional-shards.json': JSON.stringify({ minutes: {}, shards: TEST_SHARDS }), ...blobs }[path];
+    return source === undefined
+      ? { status: 128, stdout: Buffer.alloc(0), stderr: Buffer.from(`missing ${path}`) }
+      : { status: 0, stdout: Buffer.from(source), stderr: Buffer.alloc(0) };
+  }
+  throw new Error(`unexpected git ${args.join(' ')}`);
+};
+
+const pushConfiguration = (profile) => configuration({ CI_IMPACT_PROFILE: profile, CI_IMPACT_EVENT_NAME: 'push' });
+const parentEvidence = (profile) => successfulEvidence(profile === 'gallery' ? {
+  workflowPath: '.github/workflows/gallery-publication.yml',
+  aggregateName: 'Gallery readiness / gate'
+} : {});
+
+test('identical trees inherit every job on dev and Gallery pushes with direct-parent evidence', async () => {
+  for (const profile of ['dev', 'gallery']) {
+    const calls = [];
+    let evidenceArguments;
+    const outcome = await buildImpactPlan({
+      configuration: pushConfiguration(profile),
+      token: 'test-token',
+      runGitImpl: gitRouter({ diff: null, trees: [TREE.same, TREE.same], calls }),
+      verifyWorkflowEvidenceImpl: async (args) => {
+        evidenceArguments = args;
+        return parentEvidence(profile);
+      }
+    });
+    assert.deepEqual(calls.find((args) => args[0] === 'rev-parse'),
+      ['rev-parse', `${SHA.base}^{tree}`, `${SHA.head}^{tree}`], profile);
+    assert.equal(evidenceArguments.expectedHeadSha, SHA.base, profile);
+    assert.equal(outcome.plan.decision, 'selective', profile);
+    assert.equal(outcome.plan.basis, 'IDENTICAL_TREE_WITH_DIRECT_PARENT_EVIDENCE', profile);
+    assert.deepEqual(outcome.plan.capabilities, ['none'], profile);
+    assert.equal(outcome.plan.changedPathCount, 0, profile);
+    assert.deepEqual(outcome.plan.requiredJobs, [], profile);
+    assert.equal(outcome.plan.inheritedEvidence.headSha, SHA.base, profile);
+  }
+});
+
+test('identical trees without parent evidence run the complete profile', async () => {
+  for (const profile of ['dev', 'gallery']) {
+    const outcome = await buildImpactPlan({
+      configuration: pushConfiguration(profile),
+      token: 'test-token',
+      runGitImpl: gitRouter({ diff: null, trees: [TREE.same, TREE.same] }),
+      verifyWorkflowEvidenceImpl: async () => {
+        throw new PromotionReadinessError('RUN_NOT_SUCCESSFUL', 'parent failed');
+      }
+    });
+    assert.equal(outcome.plan.decision, 'full', profile);
+    assert.equal(outcome.plan.basis, 'INHERITED_EVIDENCE_UNAVAILABLE', profile);
+    assert.deepEqual(outcome.plan.requiredJobs, knownJobsFor(profile), profile);
+  }
+});
+
+test('an empty diff without a proven identical tree stays invalid', async () => {
+  for (const trees of [[TREE.same, TREE.other], null]) {
+    let evidenceCalls = 0;
+    const outcome = await buildImpactPlan({
+      configuration: pushConfiguration('dev'),
+      token: 'test-token',
+      runGitImpl: gitRouter({ diff: null, trees }),
+      verifyWorkflowEvidenceImpl: async () => { evidenceCalls += 1; }
+    });
+    assert.equal(evidenceCalls, 0);
+    assert.equal(outcome.plan.impact, 'full');
+    assert.equal(outcome.plan.basis, 'UNKNOWN_OR_INVALID_CHANGE');
+  }
+});
+
+const leafOutcome = (profile, gitOptions, evidence = async () => parentEvidence(profile)) => buildImpactPlan({
+  configuration: pushConfiguration(profile),
+  token: 'test-token',
+  runGitImpl: gitRouter(gitOptions),
+  verifyWorkflowEvidenceImpl: evidence
+});
+
+test('dev leaf-test pushes run only the jobs that execute the changed tests', async () => {
+  const allPytest = ['core', 'recipes-standard', 'gallery', 'browser'];
+  for (const [diff, blobs, requiredJobs, leafTests] of [
+    [['M', 'tests/web/label-editor.test.mjs'], {}, ['browser'],
+      [{ path: 'tests/web/label-editor.test.mjs', kind: 'node', jobs: ['browser'] }]],
+    [['M', 'tests/web/right-drawer.playwright.spec.js'], {}, ['playwright-functional'],
+      [{ path: 'tests/web/right-drawer.playwright.spec.js', kind: 'functional', jobs: ['playwright-functional'] }]],
+    [['M', 'tests/web/webapp-performance.playwright.spec.js'], {}, ['playwright-performance'],
+      [{ path: 'tests/web/webapp-performance.playwright.spec.js', kind: 'performance', jobs: ['playwright-performance'] }]],
+    [['M', GALLERY_PARITY_SPEC], {}, [], [{ path: GALLERY_PARITY_SPEC, kind: 'gallery-parity', jobs: [] }]],
+    [['M', VIBRIO_FULL_GENERATION_SPEC], {}, [], [{ path: VIBRIO_FULL_GENERATION_SPEC, kind: 'release-only', jobs: [] }]],
+    [['M', 'tests/test_regression.py'], { 'tests/test_regression.py': 'def test_a():\n    assert True\n' }, ['core'],
+      [{ path: 'tests/test_regression.py', kind: 'python', jobs: ['core'] }]],
+    [['A', 'tests/test_new_browser.py'], { 'tests/test_new_browser.py': 'import pytest\npytestmark = pytest.mark.browser\n' },
+      ['core', 'browser'], [{ path: 'tests/test_new_browser.py', kind: 'python', jobs: ['core', 'browser'] }]],
+    [['M', 'tests/test_dynamic.py'], { 'tests/test_dynamic.py': 'import pytest\nmarker = getattr(pytest.mark, "browser")\n' },
+      allPytest, [{ path: 'tests/test_dynamic.py', kind: 'python', jobs: allPytest }]],
+    [['D', 'tests/test_retired.py'], {}, allPytest, [{ path: 'tests/test_retired.py', kind: 'python', jobs: allPytest }]],
+    [['M', 'docs/FAQ.md', 'M', 'tests/web/label-editor.test.mjs'], {}, ['recipes-standard', 'browser'],
+      [{ path: 'tests/web/label-editor.test.mjs', kind: 'node', jobs: ['browser'] }]],
+    [['M', 'docs/internal/SELECTIVE_CI.md', 'M', '.gitignore', 'D', 'tests/web/retired.test.mjs'], {}, ['web-change-budget', 'browser'],
+      [{ path: 'tests/web/retired.test.mjs', kind: 'node', jobs: ['browser'] }]]
+  ]) {
+    const outcome = await leafOutcome('dev', { diff, blobs });
+    assert.equal(outcome.plan.decision, 'selective', diff.join(' '));
+    assert.equal(outcome.plan.basis, 'LEAF_TEST_CHANGE_WITH_DIRECT_PARENT_EVIDENCE', diff.join(' '));
+    assert.deepEqual(outcome.plan.requiredJobs, requiredJobs, diff.join(' '));
+    assert.deepEqual(outcome.plan.leafTests, leafTests, diff.join(' '));
+  }
+});
+
+test('the reference check names the head tree and skips documentation and runner lists', async () => {
+  const calls = [];
+  const outcome = await leafOutcome('dev', {
+    diff: ['M', 'tests/web/request.test.mjs', 'M', 'tests/test_regression.py'],
+    blobs: { 'tests/test_regression.py': 'def test_a():\n    pass\n' },
+    calls,
+    grep: [
+      ['tests/web/request.test.mjs', "import './request.test.mjs';"],
+      ['tests/test_api_session.py', 'NODE_TEST = "tests/web/session-request.test.mjs"'],
+      ['tests/test_other.py', 'def test_regression_handles_inputs():'],
+      ['README.md', 'Run tests/web/request.test.mjs and tests/test_regression.py'],
+      ['docs/FAQ.md', 'tests/test_regression.py'],
+      ['.github/pull_request_template.md', 'tests/web/request.test.mjs'],
+      ['.github/workflows/test.yml', 'node tests/web/request.test.mjs'],
+      ['tests/ci/functional-shards.json', '"tests/web/request.test.mjs"'],
+      ['playwright.config.js', 'request.test.mjs'],
+      ['package.json', '"x": "node tests/web/request.test.mjs"']
+    ]
+  });
+  const grep = calls.find((args) => args[0] === 'grep');
+  assert.deepEqual(grep.slice(0, 4), ['grep', '-I', '-z', '-F']);
+  assert.ok(grep.includes('request.test.mjs'));
+  assert.ok(grep.includes('test_regression'));
+  assert.equal(grep[grep.indexOf('--') - 1], SHA.head);
+  for (const exclusion of [':(exclude)docs/', ':(exclude)tests/ci/', ':(exclude).github/workflows/']) {
+    assert.ok(grep.includes(exclusion), exclusion);
+  }
+  assert.equal(outcome.plan.basis, 'LEAF_TEST_CHANGE_WITH_DIRECT_PARENT_EVIDENCE');
+  assert.deepEqual(outcome.plan.requiredJobs, ['core', 'browser']);
+});
+
+test('test files that another file uses, shared test code, and unrouted specs keep the complete dev tier', async () => {
+  for (const [label, options] of [
+    ['run by another test', {
+      diff: ['M', 'tests/web/session-request.test.mjs'],
+      grep: [['tests/test_api_session.py', 'NODE_TEST = REPOSITORY / "tests/web/session-request.test.mjs"']]
+    }],
+    ['imported Python module', {
+      diff: ['M', 'tests/test_collinearity_units.py'],
+      blobs: { 'tests/test_collinearity_units.py': 'def _observe():\n    pass\n' },
+      grep: [['tests/test_protein_s078.py', 'from tests.test_collinearity_units import _boundaries']]
+    }],
+    ['named by a tool', {
+      diff: ['M', 'tests/web/feature-catalog.test.mjs'],
+      grep: [['tools/web-product-impact-map.json', '"tests/web/feature-catalog.test.mjs"']]
+    }],
+    ['shared helper', { diff: ['M', 'tests/web/helpers/app-lifecycle.cjs'] }],
+    ['shared input', { diff: ['M', 'tests/test_inputs/example.gbk'] }],
+    ['spec missing from the shard map', { diff: ['A', 'tests/web/new-feature.playwright.spec.js'] }],
+    ['renamed spec without a shard map change', {
+      diff: ['R100', 'tests/web/right-drawer.playwright.spec.js', 'tests/web/right-drawer-renamed.playwright.spec.js']
+    }],
+    ['unrouted contract spec', { diff: ['M', 'tests/web/contracts/unknown.serial.spec.js'] }],
+    ['reference scan failure', { diff: ['M', 'tests/web/label-editor.test.mjs'], grepStatus: 2 }],
+    ['leaf test with runtime source', {
+      diff: ['M', 'tests/web/label-editor.test.mjs', 'M', 'gbdraw/web/js/app/label-editor.js']
+    }]
+  ]) {
+    let evidenceCalls = 0;
+    const outcome = await leafOutcome('dev', options, async () => {
+      evidenceCalls += 1;
+      return parentEvidence('dev');
+    });
+    assert.equal(evidenceCalls, 0, label);
+    assert.equal(outcome.plan.decision, 'full', label);
+    assert.equal(outcome.plan.basis, 'FULL_CHANGE', label);
+    assert.equal(outcome.plan.leafTests, null, label);
+    assert.deepEqual(outcome.plan.requiredJobs, knownJobsFor('dev'), label);
+  }
+});
+
+test('leaf-test pushes without parent evidence run the complete profile', async () => {
+  for (const profile of ['dev', 'gallery']) {
+    const outcome = await leafOutcome(profile, { diff: ['M', 'tests/web/label-editor.test.mjs'] }, async () => {
+      throw new PromotionReadinessError('NO_MATCHING_RUN', 'parent run replaced');
+    });
+    assert.equal(outcome.plan.decision, 'full', profile);
+    assert.equal(outcome.plan.basis, 'INHERITED_EVIDENCE_UNAVAILABLE', profile);
+    assert.equal(outcome.plan.leafTests, null, profile);
+    assert.deepEqual(outcome.plan.requiredJobs, knownJobsFor(profile), profile);
+  }
+});
+
+test('Gallery publication inherits leaf-test changes unless its browser job runs the changed spec', async () => {
+  const other = await leafOutcome('gallery', { diff: ['M', 'tests/web/gallery-session-publication.test.mjs'] });
+  assert.equal(other.plan.basis, 'LEAF_TEST_CHANGE_WITH_DIRECT_PARENT_EVIDENCE');
+  assert.deepEqual(other.plan.requiredJobs, []);
+  const parity = await leafOutcome('gallery', { diff: ['M', 'docs/FAQ.md', 'M', GALLERY_PARITY_SPEC] });
+  assert.equal(parity.plan.basis, 'LEAF_TEST_CHANGE_WITH_DIRECT_PARENT_EVIDENCE');
+  assert.deepEqual(parity.plan.requiredJobs, ['browser']);
+  assert.deepEqual(parity.plan.leafTests, [{ path: GALLERY_PARITY_SPEC, kind: 'gallery-parity', jobs: ['browser'] }]);
+});
+
+test('pull request planning ignores the leaf-test route', async () => {
+  const calls = [];
+  const outcome = await buildImpactPlan({
+    configuration: configuration(),
+    token: 'test-token',
+    runGitImpl: gitRouter({ diff: ['M', 'tests/web/label-editor.test.mjs'], calls }),
+    verifyWorkflowEvidenceImpl: async () => successfulEvidence()
+  });
+  assert.equal(calls.some((args) => args[0] === 'grep'), false);
+  assert.equal(outcome.plan.basis, 'LIGHT_CHANGE_WITH_DIRECT_BASE_EVIDENCE');
+  assert.equal(outcome.plan.leafTests, null);
+  assert.ok(outcome.plan.requiredJobs.includes('playwright-functional'));
+});
+
+const devLeafPlan = (leafTests) => createImpactPlan({
+  profile: 'dev',
+  impact: 'web-runtime',
+  capabilities: ['web-runtime'],
+  decision: 'selective',
+  basis: 'LEAF_TEST_CHANGE_WITH_DIRECT_PARENT_EVIDENCE',
+  changeBaseSha: SHA.base,
+  changeHeadSha: SHA.head,
+  workflowSha: SHA.workflow,
+  changedPathCount: leafTests.length,
+  inheritedEvidence: {
+    workflowPath: '.github/workflows/test.yml',
+    aggregateName: 'Dev staging / gate',
+    headSha: SHA.base,
+    runId: 101,
+    aggregateJobId: 202,
+    runUrl: 'https://github.com/satoshikawato/gbdraw/actions/runs/101',
+    aggregateJobUrl: 'https://github.com/satoshikawato/gbdraw/actions/runs/101/job/202'
+  },
+  leafTests
+});
+
+const fullDevPlan = () => createImpactPlan({
+  profile: 'dev',
+  impact: 'web-runtime',
+  decision: 'full',
+  basis: 'FULL_CHANGE',
+  changeBaseSha: SHA.base,
+  changeHeadSha: SHA.head,
+  workflowSha: SHA.workflow,
+  changedPathCount: 1,
+  inheritedEvidence: null
+});
+
+test('functional shards intersect their assigned specs with the changed leaf specs', () => {
+  const plan = devLeafPlan([
+    { path: 'tests/web/right-drawer.playwright.spec.js', kind: 'functional', jobs: ['playwright-functional'] }
+  ]);
+  assert.deepEqual(functionalShardFiles({ plan, shards: TEST_SHARDS, shard: 1 }), ['tests/web/right-drawer.playwright.spec.js']);
+  assert.deepEqual(functionalShardFiles({ plan, shards: TEST_SHARDS, shard: 2 }), []);
+  assert.deepEqual(functionalShardFiles({ plan: fullDevPlan(), shards: TEST_SHARDS, shard: 1 }), TEST_SHARDS[0]);
+  assert.deepEqual(functionalShardFiles({ plan: fullDevPlan(), shards: TEST_SHARDS, shard: 2 }), TEST_SHARDS[1]);
+  for (const shard of [0, 9, 1.5]) {
+    assert.throws(() => functionalShardFiles({ plan, shards: TEST_SHARDS, shard }), { code: 'INVALID_SHARD' });
+  }
+  // A trusted base plan of another schema runs the whole shard; a malformed current plan fails.
+  const olderSchema = { ...JSON.parse(JSON.stringify(plan)), schemaVersion: IMPACT_PLAN_SCHEMA_VERSION - 1 };
+  delete olderSchema.leafTests;
+  assert.deepEqual(functionalShardFiles({ plan: olderSchema, shards: TEST_SHARDS, shard: 1 }), TEST_SHARDS[0]);
+  assert.throws(() => functionalShardFiles({ plan: { ...plan, leafTests: [] }, shards: TEST_SHARDS, shard: 1 }),
+    { code: 'INVALID_LEAF_TESTS' });
+  const browserOnly = devLeafPlan([{ path: 'tests/web/label-editor.test.mjs', kind: 'node', jobs: ['browser'] }]);
+  assert.throws(() => functionalShardFiles({ plan: browserOnly, shards: TEST_SHARDS, shard: 1 }),
+    { code: 'FUNCTIONAL_NOT_REQUIRED' });
+});
+
+test('shard-files writes the changed specs of one shard from the real shard map', async () => {
+  const shards = JSON.parse(readFileSync(resolve(REPOSITORY_ROOT, 'tests/ci/functional-shards.json'), 'utf8')).shards;
+  const spec = shards[0][0];
+  const plan = devLeafPlan([{ path: spec, kind: 'functional', jobs: ['playwright-functional'] }]);
+  for (const shard of [1, 2]) {
+    const writes = new Map();
+    const stdout = textWriter();
+    const stderr = textWriter();
+    const status = await runCiImpactCli({
+      argv: ['shard-files', String(shard)],
+      env: { CI_IMPACT_PLAN_JSON: JSON.stringify(plan), GITHUB_OUTPUT: '/tmp/shard-output' },
+      cwd: REPOSITORY_ROOT,
+      stdout: stdout.stream,
+      stderr: stderr.stream,
+      appendFileImpl: (path, content) => writes.set(path, (writes.get(path) || '') + content)
+    });
+    assert.equal(status, 0, stderr.value());
+    const files = shard === 1 ? spec : '';
+    assert.equal(writes.get('/tmp/shard-output'), `files=${files}\n`);
+  }
+});
+
+const classifyOutcome = async (gitOptions, argv = ['classify', '--base', SHA.base, '--head', SHA.head]) => {
+  const stdout = textWriter();
+  const stderr = textWriter();
+  const status = await runCiImpactCli({
+    argv,
+    env: {},
+    cwd: REPOSITORY_ROOT,
+    stdout: stdout.stream,
+    stderr: stderr.stream,
+    runGitImpl: gitRouter(gitOptions),
+    verifyWorkflowEvidenceImpl: async () => assert.fail('classify must not query workflow evidence')
+  });
+  return { status, stderr: stderr.value(), result: status === 0 ? JSON.parse(stdout.value()) : null };
+};
+
+test('classify reports carry-forward verdicts from local Git data only', async () => {
+  const all = { releaseEvidenceCarries: true, generatedArtifactChecksCarry: true, localTestEvidenceCarries: true };
+  const sessionLog = await classifyOutcome({ diff: ['M', 'docs/internal/web-gui-audit-20260930/SESSION_LOG.md'] });
+  assert.equal(sessionLog.status, 0, sessionLog.stderr);
+  assert.equal(sessionLog.result.base, SHA.base);
+  assert.equal(sessionLog.result.head, SHA.head);
+  assert.equal(sessionLog.result.ancestor, true);
+  assert.deepEqual(sessionLog.result.capabilities, ['documentation']);
+  assert.deepEqual(sessionLog.result.paths, [{
+    path: 'docs/internal/web-gui-audit-20260930/SESSION_LOG.md', status: 'M', impact: 'documentation',
+    reason: 'DOCUMENTATION_TREE', leaf: null
+  }]);
+  assert.deepEqual(sessionLog.result.verdicts, all);
+
+  const t13 = await classifyOutcome({ diff: ['M', VIBRIO_FULL_GENERATION_SPEC] });
+  assert.deepEqual(t13.result.paths[0].leaf, { kind: 'release-only', markers: null, jobs: [] });
+  assert.deepEqual(t13.result.verdicts, { ...all, releaseEvidenceCarries: false });
+
+  const t11 = await classifyOutcome({ diff: [
+    'M', 'gbdraw/web/gallery/sessions/example.gbdraw-session.json',
+    'M', 'docs/images/tutorials/example.png',
+    'M', 'docs/internal/web-gui-audit-20260930/SESSION_LOG.md'
+  ] });
+  assert.equal(t11.result.verdicts.generatedArtifactChecksCarry, false);
+
+  const python = await classifyOutcome({
+    diff: ['M', 'tests/test_recipe_example.py'],
+    blobs: { 'tests/test_recipe_example.py': 'import pytest\npytestmark = pytest.mark.recipe\n' }
+  });
+  assert.deepEqual(python.result.paths[0].leaf, { kind: 'python', markers: ['recipe'], jobs: ['core', 'recipes-standard'] });
+  assert.deepEqual(python.result.verdicts, { ...all, releaseEvidenceCarries: false });
+
+  const unrelated = await classifyOutcome({ diff: ['M', 'docs/FAQ.md'], ancestor: false });
+  assert.equal(unrelated.result.ancestor, false);
+  assert.deepEqual(unrelated.result.verdicts, {
+    releaseEvidenceCarries: false, generatedArtifactChecksCarry: false, localTestEvidenceCarries: false
+  });
+
+  const identical = await classifyOutcome({ diff: null, trees: [TREE.same, TREE.same] });
+  assert.equal(identical.result.identicalTree, true);
+  assert.deepEqual(identical.result.verdicts, all);
+
+  for (const argv of [['classify'], ['classify', '--base', SHA.base], ['classify', '--head', SHA.head, '--base'],
+    ['classify', '--base', SHA.base, '--head', SHA.head, '--extra', 'x']]) {
+    const invalid = await classifyOutcome({}, argv);
+    assert.equal(invalid.status, 1, argv.join(' '));
+    assert.match(invalid.stderr, /INVALID_ARGUMENTS/);
+  }
+});
+
+test('functional shards skip setup when no changed spec is assigned to them', () => {
+  const workflow = readFileSync(resolve(REPOSITORY_ROOT, '.github/workflows/test.yml'), 'utf8');
+  const job = workflow.match(/\n  playwright-functional:\n[\s\S]*?(?=\n  [a-z0-9-]+:\n|$)/)?.[0] || '';
+  const step = (name) => job.match(new RegExp(`\\n      - name: ${name}\\n[\\s\\S]*?(?=\\n      - |$)`))?.[0] || '';
+  const select = step('Select the changed specs of this shard');
+  assert.match(select, /id: shard/);
+  assert.match(select, /CI_IMPACT_PLAN_JSON: \$\{\{ needs\.ci-impact\.outputs\.plan \}\}/);
+  assert.match(select, /run: node tools\/ci-impact\.mjs shard-files \$\{\{ matrix\.shard \}\}/);
+  assert.ok(job.indexOf(step('Set up Node.js')) < job.indexOf(select));
+  for (const name of [
+    'Set up Python 3.11',
+    'Install Playwright functional dependencies',
+    'Restore Playwright system packages',
+    'Install Playwright Chromium and system packages',
+    'Prepare browser wheel',
+    'Run Playwright functional tests'
+  ]) {
+    assert.ok(job.indexOf(select) < job.indexOf(step(name)), name);
+    assert.match(step(name), /\n        if: steps\.shard\.outputs\.files != ''\n/, name);
+  }
+  const run = step('Run Playwright functional tests');
+  assert.match(run, /FUNCTIONAL_SPECS: \$\{\{ steps\.shard\.outputs\.files \}\}/);
+  assert.match(run, /files="\$FUNCTIONAL_SPECS"/);
+  assert.doesNotMatch(run, /require\('\.\/tests\/ci\/functional-shards\.json'\)/);
 });
