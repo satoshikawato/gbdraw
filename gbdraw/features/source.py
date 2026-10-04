@@ -126,9 +126,11 @@ class FeatureIdentity:
 class IdentityBinding:
     """Where a request identity is in the drawn record of its record instance.
 
-    ``present``: the drawn record has the feature. ``crop_excluded``: the request
-    crop removed it. ``absent``: loading removed it (for example a GFF type
-    filter). ``unresolved``: the original source has no such feature.
+    ``present``: the drawn record has the feature. ``crop_excluded``: the drawn
+    record is cropped and lacks it (outside the crop, or loading removed it).
+    ``absent``: the uncropped drawn record lacks it; loading removed it (for
+    example a GFF type filter). ``unresolved``: the original source has no such
+    feature.
     """
 
     record_index: int

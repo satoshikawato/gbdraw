@@ -1030,7 +1030,9 @@ def _validate_alignment_reset_receipt(session: Mapping[str, Any]) -> None:
     editor = session.get("editorState")
     request = session.get("renderRequest")
     plan = request.get("layout", {}).get("similarityAlignment") if isinstance(request, Mapping) else None
-    if (isinstance(request, Mapping) and request.get("schema") == 8 and plan
+    schema = request.get("schema") if isinstance(request, Mapping) else None
+    # One rule with services/session-authority.js: request schema 8 and later.
+    if (isinstance(schema, int) and not isinstance(schema, bool) and schema >= 8 and plan
             and isinstance(editor, Mapping) and "alignmentResetReceipt" not in editor):
         raise ValidationError("Current alignment Session requires editorState.alignmentResetReceipt.")
     receipt = editor.get("alignmentResetReceipt") if isinstance(editor, Mapping) else None

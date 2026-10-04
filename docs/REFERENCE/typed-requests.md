@@ -190,12 +190,13 @@ the annotation with the `feature_selector_unmatched` warning.
 
 The shared planner materializes tables before rendering or canonical encoding
 and resolves every identity once. A record key outside the request is an error.
-An edit whose feature is outside the crop (`crop_excluded`), removed while
-loading (`absent`, for example by a GFF3 type filter), or not in the source
-(`unresolved`) does not fail the render: the edit stays dormant and is reported
-in `feature_identity_notices` on the render result and on `Diagram`, in the
-Web metadata, and as one CLI log line per notice. Placement applies the same
-rule. A GFF3 input loads every feature type when a row turns a feature `on`.
+An edit whose feature a cropped record does not have (`crop_excluded`: outside
+the crop, or removed while loading), that an uncropped record does not have
+(`absent`, for example removed by a GFF3 type filter), or that is not in the
+source (`unresolved`) does not fail the render: the edit stays dormant and is
+reported in `feature_identity_notices` on the render result and on `Diagram`, in
+the Web metadata, and as one CLI log line per notice. Placement applies the same
+rule. A GFF3 input also loads the type of each feature a row turns `on`.
 Requested placement can be combined with each `RecordInput.display` and the
 `canvas.feature_overlap_tolerance_bp` config override. It does not change source
 coordinates, sequences, or feature identities.

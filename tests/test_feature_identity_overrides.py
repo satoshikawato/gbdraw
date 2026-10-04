@@ -38,12 +38,13 @@ from gbdraw.api.requests import (
     RecordCardinality,
     RecordInput,
 )
-from gbdraw.features.overrides import FeatureOverride
+from gbdraw.features.overrides import FeatureOverride, bind_feature_overrides
 from gbdraw.features.selector_values import get_feature_hash
-from gbdraw.features.source import FeatureIdentity, resolve_feature_identities
+from gbdraw.features.source import FeatureIdentity, IdentityBinding, resolve_feature_identities
 from gbdraw.io.regions import parse_region_spec
 
 FIXTURES = Path(__file__).parent / "fixtures"
+INPUTS = Path(__file__).parent / "test_inputs"
 COLLIDE = FIXTURES / "b_collide.gb"
 TYPES = ("CDS", "tRNA", "misc_feature")
 # b_collide.gb draws feature Y of the 201-4000 crop at the source coordinates
@@ -371,6 +372,74 @@ def test_gff_feature_shown_by_its_edit_is_loaded_and_drawn(tmp_path):
     assert plan.inputs.feature_identity_notices == ()
     assert plan.inputs.record_features[0].overrides
     assert {feature.type for feature in plan.records[0].features} >= {"gene", "CDS"}
+
+
+def _gff(record_key: str = "g", region: str | None = None) -> RecordInput:
+    # NC_013668.gff3 links each CDS to its gene through Parent.
+    return RecordInput(
+        GffFastaInputSource(INPUTS / "NC_013668.gff3", INPUTS / "NC_013668.fasta"),
+        record_key=record_key,
+        region=parse_region_spec(region) if region else None,
+    )
+
+
+@pytest.mark.parametrize(
+    ("request_type", "options_type"),
+    [(LinearDiagramRequest, LinearDiagramOptions), (CircularDiagramRequest, CircularDiagramOptions)],
+)
+def test_gff_gene_shown_by_its_edit_keeps_parent_linked_cds_drawn(request_type, options_type):
+    def request(*rows):
+        return request_type(records=(_gff(),), options=options_type(
+            selected_features_set=("CDS", "tRNA", "rRNA", "repeat_region"), feature_overrides=rows,
+        ))
+
+    def drawn_ids(svg: str) -> set[str]:
+        return set(re.findall(r'data-gbdraw-feature-id="([^"]+)"', svg))
+
+    base = plan_request(request())
+    gene = next(
+        entry.biological_feature_id
+        for entry in base.provenance[0].source_feature_catalog
+        if entry.feature_type == "gene"
+    )
+    shown = request(FeatureOverride("g", gene, feature_visibility="on"))
+    before = drawn_ids(_svg(request()))
+    assert len(before) > 100
+    assert drawn_ids(_svg(shown)) == before | {_drawn_id(plan_request(shown), 0, gene)}
+
+
+def test_crop_notice_message_covers_a_feature_removed_by_the_type_filter_inside_the_crop():
+    gene = _source_id(plan_request(_linear(_gff(), selected_features_set=("CDS",))), 0, "gene", 585)
+    plan = plan_request(_linear(
+        _gff(region="1-50000"),
+        selected_features_set=("CDS",),
+        feature_overrides=(FeatureOverride("g", gene, label_visibility="on"),),
+    ))
+    [notice] = plan.inputs.feature_identity_notices
+    # The gene (585..4171) is inside the crop; the GFF3 type filter removed it.
+    assert notice.status == "crop_excluded"
+    assert "outside the record's crop" not in notice.message
+    assert "loading" in notice.message
+
+
+def test_override_binding_reads_each_record_catalog_once():
+    base = plan_request(_linear(_collide(region=None)))
+    catalog = base.provenance[0].source_feature_catalog
+    passes = []
+
+    class CountingCatalog(tuple):
+        def __iter__(self):
+            passes.append(1)
+            return super().__iter__()
+
+    rows = tuple(FeatureOverride("k", entry.biological_feature_id, label_text="x") for entry in catalog[:3])
+    bindings = {
+        row.identity: IdentityBinding(0, entry.source_feature_index, "present")
+        for row, entry in zip(rows, catalog, strict=False)
+    }
+    [resolved] = bind_feature_overrides(rows, bindings, (CountingCatalog(catalog),))
+    assert sorted(resolved) == sorted(entry.source_feature_index for entry in catalog[:3])
+    assert len(passes) == 1
 
 
 def test_package_api_reports_notices_for_unresolved_placements():

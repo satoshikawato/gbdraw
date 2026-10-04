@@ -135,7 +135,10 @@ class FeatureIdentityNotice:
     @property
     def message(self) -> str:
         return {
-            "crop_excluded": "The feature is outside the record's crop; the edit stays dormant.",
+            "crop_excluded": (
+                "The cropped record does not have the feature: it is outside the crop, or loading"
+                " removed it (for example a GFF3 type filter); the edit stays dormant."
+            ),
             "absent": "Loading removed the feature (for example a GFF3 type filter); the edit stays dormant.",
             "unresolved": "The source record has no such feature; the edit was not applied.",
         }[self.status]
@@ -160,15 +163,18 @@ def bind_feature_overrides(
     resolved: tuple[dict[int, ResolvedFeatureOverride], ...] = tuple(
         {} for _ in source_catalogs
     )
+    # One pass per record catalog, not one per row.
+    entries: dict[int, dict[int, SourceFeatureIdentity]] = {}
     for row in overrides:
         binding = bindings[row.identity]
         if binding.status != "present":
             continue
-        entry = next(
-            item
-            for item in source_catalogs[binding.record_index]
-            if item.source_feature_index == binding.source_feature_index
-        )
+        if binding.record_index not in entries:
+            entries[binding.record_index] = {
+                item.source_feature_index: item
+                for item in source_catalogs[binding.record_index]
+            }
+        entry = entries[binding.record_index][int(binding.source_feature_index)]
         start = min(part[0] for part in entry.location_parts)
         end = max(part[1] for part in entry.location_parts)
         resolved[binding.record_index][int(binding.source_feature_index)] = (

@@ -106,7 +106,7 @@ from .options import (
     LosatSearchOptions,
     losatp_analysis_mode,
 )
-from gbdraw.features.overrides import FeatureIdentityNotice
+from gbdraw.features.overrides import FeatureIdentityNotice, FeatureOverride
 from gbdraw.features.placement import (
     ResolvedRecordFeatureInputs,
     resolve_record_feature_inputs,
@@ -1123,10 +1123,6 @@ def _prepare_diagram_inputs(request: DiagramRequest) -> PreparedDiagramInputs:
         if has_gff_source
         else (set(options.selected_features_set or DEFAULT_SELECTED_FEATURES), False)
     )
-    # A feature shown by its own edit may have any type, so GFF3 keeps them all.
-    keep_all_features = keep_all_features or (has_gff_source and any(
-        row.feature_visibility == "on" for row in options.feature_overrides
-    ))
     comparison_sequences = (
         _ComparisonSequenceSources(
             tuple(options.conservation_sequence_files or ())
@@ -1159,7 +1155,40 @@ def _with_prepared_colors(request: DiagramRequest, inputs: PreparedDiagramInputs
     return replace(request, options=replace(request.options, colors=colors))
 
 
+def _gff_types_shown_by_overrides(
+    rows: Sequence[FeatureOverride], collection: ResolvedRecordCollection,
+) -> set[str]:
+    """Return the types of the GFF3 source features that identity rows turn on."""
+    shown: dict[str, set[str]] = {}
+    for row in rows:
+        if row.feature_visibility == "on":
+            shown.setdefault(row.record_key, set()).add(row.biological_feature_id)
+    return {
+        entry.feature_type
+        for item in collection.provenance
+        if item.source_kind == "gff_fasta" and item.record_key in shown
+        for entry in item.source_feature_catalog or ()
+        if entry.biological_feature_id in shown[item.record_key]
+    } if shown else set()
+
+
 def _normalize_request_records(
+    request: DiagramRequest,
+    inputs: PreparedDiagramInputs,
+) -> ResolvedRecordCollection:
+    collection = _resolve_request_records(request, inputs)
+    shown_types = _gff_types_shown_by_overrides(request.options.feature_overrides, collection)
+    if inputs.gff_keep_all_features or shown_types <= set(inputs.gff_candidate_features):
+        return collection
+    # A row can turn on a GFF3 feature whose type the type filter dropped. Load
+    # that type as well; loading every type would leave Parent-linked CDS nested.
+    return _resolve_request_records(request, replace(
+        inputs,
+        gff_candidate_features=tuple(sorted({*inputs.gff_candidate_features, *shown_types})),
+    ))
+
+
+def _resolve_request_records(
     request: DiagramRequest,
     inputs: PreparedDiagramInputs,
 ) -> ResolvedRecordCollection:
