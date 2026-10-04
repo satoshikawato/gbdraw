@@ -4,6 +4,7 @@ import test from 'node:test';
 
 import { createFeatureRecordRotationAction } from '../../gbdraw/web/js/app/record-display/feature-record-rotation.js';
 import { projectCommittedRecordTransform } from '../../gbdraw/web/js/services/session-request.js';
+import { validateAnchorIntent } from '../../gbdraw/web/js/app/record-display-options.js';
 
 const committed = JSON.parse(await readFile(
   'docs/images/h-cli-12/cli_session.json',
@@ -112,6 +113,43 @@ test('explicit popup feature coordinates resolver, projector, runner, and target
   assert.deepEqual(committedTransform.anchorIntent, outcome.resolved.provenance);
   assert.equal(committedTransform.startCoordinate, outcome.resolved.startCoordinate);
   assert.equal(committedTransform.reverseComplement, outcome.resolved.reverseComplement);
+});
+
+test('Start of the record commits the resolved anchor in the persisted provenance format', async () => {
+  let committedTransform = null;
+  const action = createFeatureRecordRotationAction({
+    recordDisplayControls: {
+      targetForFeature: () => ({ row, target }),
+      captureTargetDraft: () => null,
+      restoreTargetDraft() { throw new Error('unreachable'); },
+      commitResolvedTransform(clickedRow, transform) {
+        committedTransform = structuredClone(transform);
+      }
+    },
+    getCommittedSession: () => committed,
+    projectCommittedRecordTransform,
+    runCommittedCanonicalCandidate: async (options) => {
+      await options.commitIntent();
+      return { status: 'ok' };
+    }
+  });
+  const outcome = await action.apply({
+    feature,
+    intent: { placement: 'feature-start', anchor: null, offsetBp: 0, orientForward: false }
+  });
+  assert.equal(outcome.status, 'ok');
+  assert.equal(committedTransform.startCoordinate, sourceFeature.start + 1);
+  assert.equal(committedTransform.reverseComplement, false);
+  assert.equal(validateAnchorIntent(committedTransform.anchorIntent), committedTransform.anchorIntent);
+  assert.deepEqual(committedTransform.anchorIntent, {
+    schema: 1,
+    recordKey: canonicalRecord.recordKey,
+    biologicalFeatureId: sourceFeature.biologicalFeatureId,
+    placement: 'anchor',
+    anchor: 'five-prime',
+    offsetBp: 0,
+    orientForward: false
+  });
 });
 
 test('disabled source profile rejects before candidate execution', async () => {

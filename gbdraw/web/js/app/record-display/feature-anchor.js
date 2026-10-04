@@ -109,18 +109,21 @@ const baseAtCoveredOffset = (parts, offset, direction) => {
 };
 
 const intentCapability = (intent) => {
-  if (!intent || !['anchor', 'feature-end'].includes(intent.placement)) {
-    return unavailable('placement-invalid', 'Choose an anchor or feature-end placement.');
+  if (!intent || !['feature-start', 'anchor', 'feature-end'].includes(intent.placement)) {
+    return unavailable('placement-invalid', 'Choose a feature-start, anchor, or feature-end placement.');
   }
   if (intent.placement === 'anchor'
     && !['five-prime', 'midpoint', 'three-prime'].includes(intent.anchor)) {
     return unavailable('anchor-invalid', 'Choose a supported feature anchor.');
   }
-  if (intent.placement === 'feature-end' && intent.anchor !== null) {
-    return unavailable('anchor-not-applicable', 'Feature-end placement does not use an anchor.');
+  if (intent.placement !== 'anchor' && intent.anchor !== null) {
+    return unavailable('anchor-not-applicable', 'Feature-start and feature-end placements do not use an anchor.');
   }
   if (!Number.isSafeInteger(intent.offsetBp)) {
     return unavailable('offset-invalid', 'Offset must be a safe integer number of base pairs.');
+  }
+  if (intent.placement === 'feature-start' && intent.offsetBp !== 0) {
+    return unavailable('offset-not-applicable', 'Feature-start placement does not use an offset.');
   }
   if (intent.orientForward !== true && intent.orientForward !== false) {
     return unavailable('orient-forward-invalid', 'Orient-forward intent must be true or false.');
@@ -170,7 +173,14 @@ export const resolveFeatureAnchor = ({
     : profile.strand === 'unstranded' && profile.partOrder !== 'source-forward'
       ? unavailable('feature-end-direction-unavailable', 'Feature-end placement requires a known display traversal path.')
       : available();
+  // The feature's first base in display order is its 5-prime or 3-prime base,
+  // so placing it at the start needs a known strand.
+  const featureStart = !positional.enabled ? positional
+    : !['+', '-'].includes(profile.strand)
+      ? unavailable('feature-start-direction-unavailable', 'Needs a known feature strand.')
+      : available();
   const capabilities = {
+    featureStart,
     anchors: {
       'five-prime': biologicalEnds,
       midpoint,
@@ -187,7 +197,9 @@ export const resolveFeatureAnchor = ({
   if (!eligibility && intent.orientForward) eligibility = firstUnavailable(orientForward);
   if (!eligibility) eligibility = intent.placement === 'feature-end'
     ? firstUnavailable(featureEnd, offset)
-    : firstUnavailable(capabilities.anchors[intent.anchor], offset);
+    : intent.placement === 'feature-start'
+      ? firstUnavailable(featureStart)
+      : firstUnavailable(capabilities.anchors[intent.anchor], offset);
   if (eligibility) {
     return {
       eligibility,
@@ -202,14 +214,22 @@ export const resolveFeatureAnchor = ({
   }
 
   const reverseComplement = intent.orientForward ? profile.strand === '-' : currentReverseComplement;
+  const strandAfter = displayedStrand(profile.strand, reverseComplement);
+  // Feature-start is the anchor whose base comes first in the resulting display
+  // order: the 5-prime base when the feature reads forward there, else the
+  // 3-prime base. It is recorded as that anchor, so provenance keeps its format.
+  const placement = intent.placement === 'feature-start' ? 'anchor' : intent.placement;
+  const anchor = intent.placement === 'feature-start'
+    ? (strandAfter === '+' ? 'five-prime' : 'three-prime')
+    : intent.anchor;
   const direction = profile.strand === '-' ? -1 : 1;
   const coveredLength = parts.reduce((total, part) => total + part.end - part.start, 0);
   let sourceAnchorCoordinate = null;
   let sourceOutgoingBoundary = null;
   let baseCoordinate;
-  if (intent.placement === 'anchor') {
-    const coveredOffset = intent.anchor === 'five-prime' ? 0
-      : intent.anchor === 'midpoint' ? Math.floor((coveredLength - 1) / 2)
+  if (placement === 'anchor') {
+    const coveredOffset = anchor === 'five-prime' ? 0
+      : anchor === 'midpoint' ? Math.floor((coveredLength - 1) / 2)
         : coveredLength - 1;
     sourceAnchorCoordinate = baseAtCoveredOffset(parts, coveredOffset, direction);
     baseCoordinate = sourceAnchorCoordinate;
@@ -236,14 +256,14 @@ export const resolveFeatureAnchor = ({
     sourceOutgoingBoundary,
     displayedStrand: {
       before: displayedStrand(profile.strand, currentReverseComplement),
-      after: displayedStrand(profile.strand, reverseComplement)
+      after: strandAfter
     },
     provenance: {
       schema: 1,
       recordKey: identity.recordKey,
       biologicalFeatureId: identity.biologicalFeatureId,
-      placement: intent.placement,
-      anchor: intent.placement === 'anchor' ? intent.anchor : null,
+      placement,
+      anchor: placement === 'anchor' ? anchor : null,
       offsetBp: intent.offsetBp,
       orientForward: intent.orientForward
     }

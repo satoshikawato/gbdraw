@@ -23,6 +23,27 @@ for (const mode of ['circular', 'linear']) {
         expect(box.x).toBeGreaterThanOrEqual(0);
         expect(box.x + box.width).toBeLessThanOrEqual(390);
       }
+      // The rotation disclosure in the Layout group stays reachable at 390 px.
+      const rotate = page.locator('.feature-popup')
+        .getByRole('button', { name: 'Rotate record using this feature', exact: true });
+      await rotate.scrollIntoViewIfNeeded();
+      await rotate.click();
+      const actions = page.locator('.feature-popup')
+        .getByRole('region', { name: 'Rotate record using this feature', exact: true });
+      // HmmtDNA is circular; the lambda seed is a linear record, whose one
+      // reason replaces the controls.
+      const first = mode === 'circular'
+        ? actions.getByRole('radio', { name: 'Start of the record', exact: true })
+        : actions.getByText('Record rotation requires an effectively circular record.', { exact: true });
+      for (const control of [first, actions.getByRole('button', { name: 'Apply and regenerate', exact: true })]) {
+        await control.scrollIntoViewIfNeeded();
+        await expect(control).toBeVisible();
+        const box = await control.boundingBox();
+        expect(box.x).toBeGreaterThanOrEqual(0);
+        expect(box.x + box.width).toBeLessThanOrEqual(390);
+      }
+      await actions.getByRole('button', { name: 'Cancel', exact: true }).click();
+      await expect(actions).toBeHidden();
       await agree(page, info, 'pointer-label-applied');
       await page.screenshot({ path: info.outputPath('popup-after.png') });
       await closeEditor(page);
