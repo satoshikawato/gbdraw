@@ -935,6 +935,42 @@ def _shared_record_selector(
     )
 
 
+# The resources of a source file read by the planner: (resource kind, source field).
+_SOURCE_FILE_RESOURCES: Mapping[str, tuple[tuple[str, str], ...]] = {
+    "genbank": (("genbank", "resourceId"),),
+    "gff_fasta": (("gff3", "gffResourceId"), ("fasta", "fastaResourceId")),
+}
+
+
+def _unchanged_source_file_records(records: Sequence[Any], paths: tuple[str, ...]) -> bool:
+    """Whether the records are every record of their source files, unchanged.
+
+    The planner annotates each record it reads with its source kind and its
+    index among the file's records. A crop marks the record, and a crop or
+    reverse complement moves its coordinate map off the identity, so such a
+    record is not what the file holds.
+    """
+
+    annotations = [record.annotations for record in records]
+    kind = annotations[0].get("gbdraw_source_kind")
+    count = annotations[0].get("gbdraw_source_record_count")
+    return (
+        len(paths) == len(_SOURCE_FILE_RESOURCES.get(str(kind), ()))
+        and isinstance(count, int)
+        and all(Path(path).is_file() for path in paths)
+        and sorted(item.get("gbdraw_source_record_index", -1) for item in annotations)
+        == list(range(count))
+        and all(
+            item.get("gbdraw_source_kind") == kind
+            and item.get("gbdraw_source_record_count") == count
+            and not item.get("gbdraw_region_applied")
+            and _read_coord_map(record) == (1, 1)
+            and item.get("gbdraw_source_length", len(record)) == len(record)
+            for record, item in zip(records, annotations, strict=True)
+        )
+    )
+
+
 def _encode_records(
     records: Sequence[RecordInput],
     *,
@@ -942,13 +978,17 @@ def _encode_records(
 ) -> list[dict[str, Any]]:
     """Encode records; the in-memory records of one source file share a resource.
 
-    The planner projects each displayed record to an in-memory record. Records
+    The planner projects each displayed record to an in-memory record. When
+    they are every record of their source file, unchanged, that file's own
+    bytes are the resource: the CLI binds the same file for the Web draft, so
+    Session Load sees the request draw from its bound inputs. Other records
     whose provenance names one source file are written to one GenBank resource
-    named after that file and selected by record ID (by index when an ID is
-    repeated or unusable), the shape the Web writes for one uploaded
-    multi-record file, so a replay or Web load keeps one file as one File and
-    one LOSAT source (:func:`gbdraw.comparisons.losat_jobs.losat_source_ids`).
-    Any other in-memory record is its own source and keeps its own resource.
+    named after that file. Records of a multi-record file are selected by
+    record ID (by index when an ID is repeated or unusable), the shape the Web
+    writes for one uploaded multi-record file, so a replay or Web load keeps
+    one file as one File and one LOSAT source
+    (:func:`gbdraw.comparisons.losat_jobs.losat_source_ids`). Any other
+    in-memory record is its own source and keeps its own resource.
     """
 
     groups: dict[tuple[str, ...], list[int]] = {}
@@ -957,27 +997,47 @@ def _encode_records(
             paths = record_source_paths(record.source.record)
             if paths:
                 groups.setdefault(paths, []).append(position)
-    shared: dict[int, tuple[dict[str, Any], RecordSelector]] = {}
+    shared: dict[int, tuple[dict[str, Any], RecordSelector | None]] = {}
     for paths, members in groups.items():
-        if len(members) < 2:
-            continue
         first = members[0] + 1
         members_records = [records[position].source.record for position in members]  # type: ignore[union-attr]
-        resource_id = resources.add_bytes(
-            f"record-{first}-genbank",
-            kind="genbank",
-            name=(
-                Path(paths[0]).name
-                if len(paths) == 1 and Path(paths[0]).name
-                else f"record-{first}.gbk"
-            ),
-            content=_genbank_bytes(members_records, index=first),
-        )
-        ids = [str(record.id) for record in members_records]
-        for record_index, (position, record_id) in enumerate(zip(members, ids, strict=True)):
+        if _unchanged_source_file_records(members_records, paths):
+            file_resources = _SOURCE_FILE_RESOURCES[
+                members_records[0].annotations["gbdraw_source_kind"]
+            ]
+            source_payload: dict[str, Any] = {
+                "kind": "genbank" if len(file_resources) == 1 else "gffFasta"
+            }
+            for path, (kind, field) in zip(paths, file_resources, strict=True):
+                source_payload[field] = resources.add_bytes(
+                    f"record-{first}-{kind}",
+                    kind=kind,
+                    name=Path(path).name,
+                    content=Path(path).read_bytes(),
+                )
+            ids = [str(record.annotations.get("gbdraw_source_record_id", record.id))
+                   for record in members_records]
+            record_indexes = [record.annotations["gbdraw_source_record_index"]
+                              for record in members_records]
+        elif len(members) > 1:
+            source_payload = {"kind": "genbank", "resourceId": resources.add_bytes(
+                f"record-{first}-genbank",
+                kind="genbank",
+                name=(
+                    Path(paths[0]).name
+                    if len(paths) == 1 and Path(paths[0]).name
+                    else f"record-{first}.gbk"
+                ),
+                content=_genbank_bytes(members_records, index=first),
+            )}
+            ids = [str(record.id) for record in members_records]
+            record_indexes = list(range(len(members)))
+        else:
+            continue
+        for position, record_id, record_index in zip(members, ids, record_indexes, strict=True):
             shared[position] = (
-                {"kind": "genbank", "resourceId": resource_id},
-                _shared_record_selector(
+                source_payload,
+                None if len(members) == 1 else _shared_record_selector(
                     record_id,
                     record_index=record_index,
                     unique=ids.count(record_id) == 1,
@@ -999,7 +1059,7 @@ def _encode_record(
     *,
     index: int,
     resources: _ResourceBuilder,
-    shared_source: tuple[dict[str, Any], RecordSelector] | None = None,
+    shared_source: tuple[dict[str, Any], RecordSelector | None] | None = None,
 ) -> dict[str, Any]:
     source = record.source
     selector = record.selector
