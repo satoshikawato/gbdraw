@@ -57,6 +57,32 @@ procedure and the checklist. The admission rules for a `PROMOTION` stay in
    Generate/options, comparisons, Feature editing, legend/Preview/export, and
    tracks/layout. Reproduce each suspected defect on `dev` before you record it.
 
+## Carrying evidence forward
+
+A light change can move `dev` after promotion evidence was collected on an
+earlier commit E. Evidence from E counts for the promotion head H when
+`node tools/ci-impact.mjs classify --base <E> --head <H>` reports the matching
+verdict true ([`SELECTIVE_CI.md`](SELECTIVE_CI.md#carrying-evidence-to-a-later-commit)).
+Every verdict requires E to be an ancestor of H.
+
+| Evidence | Verdict |
+| --- | --- |
+| `Tests` dispatched on `dev` with `tier=release` | `releaseEvidenceCarries` |
+| Gallery refresh, Gallery tutorial media, and docs GUI capture checks, and the Gallery artifact manifest | `generatedArtifactChecksCarry` |
+| Recipe runs (step 2), `TestOutputComparison`, the `tools/audit/` sweeps (step 3), and the `main`-written Session fixture tests | `localTestEvidenceCarries` |
+
+The promotion body names E, links E's evidence, and includes the `classify`
+output. Rerun on H the evidence whose verdict is false. The hand audit (step 4)
+names the `dev` SHA it audited and needs no carry rule. Until the planner change
+that adds `classify` merges, compare `git diff --name-status <E> <H>` with the
+verdict sets in `SELECTIVE_CI.md` by hand and include that comparison instead.
+
+This rule carries checklist evidence only. `Promotion / gate` still requires
+exact-SHA `Dev staging / gate` and `Gallery readiness / gate` evidence on H.
+Each push to `dev` earns that evidence; after a light move, the runs inherit
+their direct parent's evidence and run only the jobs the change needs
+([light-change inheritance](SELECTIVE_CI.md#light-change-inheritance)).
+
 ## Output
 
 Write `docs/internal/web-gui-audit-<date>/README.md` in the same format as
@@ -84,12 +110,14 @@ request and complete them.
   - [ ] Changed areas audited by hand, with the time spent per area
   - [ ] Each confirmed defect class has "guard added" (test, PR) or "no guard" (reason)
   - [ ] Every P1 is fixed, or has an Owner waiver: <links>
+  - [ ] Evidence carried from an ancestor: none, or E <sha>, the `classify --base <E> --head <H>` output, and the verdicts used
 ```
 
 ### First promotion after the 2026-09-30 audit
 
 That promotion carries user-visible changes that the release notes must state.
-Check each one on the promotion head and link the evidence:
+Check each one on the promotion head, or on an ancestor under
+[Carrying evidence forward](#carrying-evidence-forward), and link the evidence:
 
 - [ ] PV-08 and N-01 (D-24): Web-default Circular output changes. Long species
   lines wrap at word boundaries, and the wrap width uses an approximate glyph

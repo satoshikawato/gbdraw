@@ -105,7 +105,9 @@ force a full PR route. Shared fixtures and unclassified tests remain conservativ
 because they can affect several suites. Unknown production roots also remain full;
 recognizing known subsystem owners does not make arbitrary future paths safe.
 Renames/copies classify both endpoints, deletions classify their old path, and
-malformed/empty diffs or missing Git objects fail closed.
+malformed/empty diffs or missing Git objects fail closed. The one exception is a
+`dev` or Gallery push whose tree is proven identical to its evidenced parent
+([Light-change inheritance](#light-change-inheritance)).
 
 ### Evidence required for selection
 
@@ -124,23 +126,156 @@ paths into documentation changes retains those capabilities' required coverage.
 unclassified/shared test inputs, and explicit dispatches require the full tier.
 
 Every runtime/subsystem change runs complete integrated dev and Gallery coverage.
-Metadata, documentation, and policy-documentation can inherit direct-parent
-staging evidence. Metadata runs no test jobs; ordinary documentation runs recipes;
-policy documentation runs Web change budget in `Tests`. When the direct parent has
-no successful `Dev staging / gate` (missing, failed, cancelled, or unfinished), such
-a `dev` push runs the complete dev tier with basis `INHERITED_EVIDENCE_UNAVAILABLE`
-instead of failing its plan. Documentation-only Gallery
-publication skips browser and performance when direct-parent Gallery readiness is
-successful. A missing or unfinished direct-parent result still fails
-documentation-only Gallery planning rather than running the full tier.
+A `dev` push that leaves the tree unchanged, or changes only metadata,
+documentation, policy documentation, and leaf tests, inherits its direct parent's
+evidence and runs only the jobs it needs
+([Light-change inheritance](#light-change-inheritance)).
 
-A later `dev` push does not cancel a running `Tests` run. One run executes, the
-newest later push waits, and GitHub cancels an older waiting run when a newer
-push replaces it. Every started staging run therefore finishes with exact-SHA
-evidence. A SHA whose waiting run was replaced has no evidence of its own; the
-newer run tests a tree that contains it, and a documentation-only push on top of
-it runs the complete dev tier. Pull request runs and manual dispatches still
-cancel the run they supersede.
+A later `dev` push does not cancel a running `Tests` or `Gallery publication`
+run. For each workflow, one run executes, the newest later push waits, and
+GitHub cancels an older waiting run when a newer push replaces it. Every started
+push run therefore finishes with exact-SHA evidence. A SHA whose waiting run was
+replaced has no evidence of its own; the newer run tests a tree that contains
+it, and a light push on top of it inherits nothing. Pull request runs and manual
+dispatches still cancel the run they supersede.
+
+### Light-change inheritance
+
+Status: declared policy. A later change implements the identical-tree and
+leaf-test routes, the uninterrupted Gallery publication push runs, and the
+`classify` command in `tools/ci-impact.mjs`, `tools/ci-impact-policy.mjs`,
+`test.yml`, and `gallery-publication.yml`. Until it merges, those pushes run the
+complete tier, and a newer push cancels a running Gallery publication run.
+
+A `dev` push inherits evidence only from its direct parent
+(`github.event.before`), and only when that parent has its own successful
+exact-SHA aggregate for the same workflow: `Dev staging / gate` for `Tests`, and
+`Gallery readiness / gate` for `Gallery publication`. With that evidence, three
+kinds of push run only these jobs and inherit every other job:
+
+| Push | Basis | `Tests` jobs | `Gallery publication` jobs |
+| --- | --- | --- | --- |
+| Identical tree: `before^{tree}` equals `HEAD^{tree}` | `IDENTICAL_TREE_WITH_DIRECT_PARENT_EVIDENCE` | None | None |
+| Only metadata, documentation, and policy documentation | `LIGHT_CHANGE_WITH_DIRECT_PARENT_EVIDENCE` | `recipes-standard` for documentation, `web-change-budget` for policy documentation, none for metadata | None |
+| Only those paths and leaf tests, with at least one leaf test | `LEAF_TEST_CHANGE_WITH_DIRECT_PARENT_EVIDENCE` | The jobs of the row above for the non-test paths, plus the [jobs that run the changed leaf tests](#jobs-for-changed-leaf-tests) | `browser` when it runs a changed leaf test; otherwise none |
+
+A leaf-test plan lists the changed leaf tests and the jobs they select. Any
+other changed path, such as runtime, a Gallery input, packaging, the control
+plane, shared test code, or an unknown path, keeps the complete tier.
+
+The fail-closed rules stay:
+
+- Without successful direct-parent evidence (missing, failed, cancelled, or
+  unfinished), `Tests` runs the complete dev tier with basis
+  `INHERITED_EVIDENCE_UNAVAILABLE` instead of failing its plan. `Gallery
+  publication` fails the plan of a push that changes only documentation and
+  policy documentation, and runs its complete profile for every other light
+  push, including identical trees and leaf-test changes.
+- The planner proves an identical tree by comparing the two tree object IDs.
+  An empty diff without that proof, a malformed diff, and a missing Git object
+  select the complete tier.
+- Manual dispatches and the release profile always run their complete tier
+  (`MANUAL_FULL_RUN`). Pull requests keep the routes above; the
+  `architecture-change` label still forces their complete tier.
+
+#### Leaf tests
+
+A leaf test is a test module or spec that no other file uses. A changed path is
+a leaf test when all of these hold:
+
+1. It matches `tests/test_*.py`, `tests/web/**/*.test.mjs`,
+   `tests/web/**/*.playwright.spec.js`, or `tests/web/contracts/**/*.spec.js`.
+2. It is not a control-plane test that is already `ci-only`
+   (`tests/web/architecture*.test.mjs`, `tests/web/product-impact*.test.mjs`,
+   `tests/web/promotion-readiness*.test.mjs`).
+3. No other tracked file names it, by file name or, for Python, by module name
+   (`tests.test_<name>`). The check reads the head tree. It ignores metadata,
+   documentation, and policy-documentation paths and the runner lists
+   `tests/ci/**`, `.github/workflows/**`, `playwright*.config.js`, and
+   `package.json`.
+
+Condition 3 makes a test file that another file imports, runs, or reads a
+helper, whatever its name. On `dc255c4a`, 361 of the 404 files that meet
+conditions 1 and 2 are leaf tests. Examples of the other 43:
+`tests/test_protein_s078.py` imports `tests/test_collinearity_units.py`;
+`tests/test_api_session.py` and `tools/measure_gallery_publication_performance.py`
+run `tests/web/session-request.test.mjs`; `tools/web-product-impact-map.json`
+names mapped behavior contracts such as `tests/web/feature-catalog.test.mjs`; and
+`tools/check-web-change-budget.mjs` names `tests/web/web-promotion-context.test.mjs`.
+
+Shared test code is never a leaf test: `tests/conftest.py`, `tests/utils/**`,
+`tests/fixtures/**`, `tests/test_inputs/**`, `tests/reference_outputs/**`,
+`tests/web/helpers/**`, `tests/web/fixtures/**`, `*.cjs` and other support
+modules, runners such as `tests/run_*.py`, and Playwright configurations. These
+keep their current routes, which select the complete tier on `dev`.
+
+An added, deleted, or renamed leaf test (both endpoints of a rename) is a leaf
+change only when no runner list changes with it. pytest collects
+`tests/test_*.py`, the `browser` job finds `tests/web/*.test.mjs`, and the
+performance configuration matches `*performance.playwright.spec.js`, so these
+files can be added or removed as leaf changes. `tests/ci/functional-shards.json`
+lists every functional spec, and a Playwright configuration names the Gallery
+parity and Vibrio specs. Changing such a list is a `ci-only` change, so adding,
+deleting, or renaming one of those specs keeps the complete tier. A stale shard
+list fails `tests/ci/playwright-inventory.test.mjs`, which every plan job runs
+first. A deleted leaf test selects the job that ran it, so a runner list that
+still names it fails in that job.
+
+#### Jobs for changed leaf tests
+
+| Changed leaf test | Runs in | `Tests` job on `dev` |
+| --- | --- | --- |
+| `tests/web/**/*.test.mjs` | `node --test` steps of `browser` | `browser` |
+| A spec listed in `tests/ci/functional-shards.json` | Functional Playwright shards | `playwright-functional`, restricted to the changed specs |
+| `tests/web/*performance.playwright.spec.js` | `npm run test:web:perf-smoke` | `playwright-performance` |
+| `tests/web/contracts/gallery-publication-parity.serial.spec.js` | Gallery publication `browser`, pull request `gallery`, `deploy_web.yml` | None; Gallery publication runs `browser` |
+| `tests/web/contracts/vibrio-full-generation.serial.spec.js` | Release-only `vibrio-generate-release`, `deploy_web.yml` | None; the plan records it as release-only |
+| `tests/test_*.py` | pytest jobs, selected by marker | `core`, plus `recipes-standard`, `gallery`, and `browser` for each of the `recipe`, `gallery`, and `browser` markers named in the file; all four when the markers cannot be read from the file |
+
+For a restricted functional run, each of the eight shards intersects its list in
+`tests/ci/functional-shards.json` with the changed specs and passes only those
+files to Playwright. A shard with no changed spec succeeds without starting
+Playwright, so the shard matrix and its aggregate stay unchanged.
+
+`Gallery publication` runs `browser` (`npm run test:web:gallery-publication`)
+only when a changed leaf test is a spec it runs, which today is only the Gallery
+parity spec. Its `performance` job runs
+`tools/measure_gallery_publication_performance.py`, not a test file, so a
+leaf-test change always inherits it.
+
+Tests marked `slow` run only in the release tier, except the packaging checks
+that `browser` runs from `tests/test_web_packaging.py`, so a leaf-test push does
+not run them on `dev`.
+
+### Carrying evidence to a later commit
+
+`node tools/ci-impact.mjs classify --base <E> --head <H>` reads
+`git diff --name-status -z --find-renames <E> <H>` from the local repository. It
+queries no network service and no workflow evidence. It prints each changed path
+with its capability, reason, and leaf-test jobs, then the capability union and
+three verdicts. A verdict is true only when E is an ancestor of H
+(`git merge-base --is-ancestor`) and every changed path is in the verdict's set
+below. An identical tree meets every verdict; an invalid diff meets none. Test
+paths count only as leaf tests; their subject capability, such as `web-runtime`
+for a Web test, does not matter.
+
+| Verdict | Changed paths allowed | Evidence it carries from E to H |
+| --- | --- | --- |
+| `releaseEvidenceCarries` | Metadata; documentation and policy documentation outside `docs/recipes/` and `docs/capture/`; leaf tests whose tests run only in jobs the dev tier also runs on the same Python versions: `.test.mjs` files, functional and performance specs, the Gallery parity spec (Gallery publication runs it on H), and `tests/test_*.py` files that name none of the `slow`, `recipe`, `gallery`, and `browser` markers | The `Tests` release-tier run |
+| `generatedArtifactChecksCarry` | Metadata; documentation and policy documentation outside `docs/images/`, `docs/capture/`, and `docs/recipes/`; `ci-only` paths; leaf tests | The Gallery refresh, Gallery tutorial media, and docs GUI capture checks, and the Gallery artifact manifest |
+| `localTestEvidenceCarries` | Metadata; documentation and policy documentation outside `docs/recipes/`; leaf tests that the dev tier runs | Recipe runs (`run_cli_scenarios.py` and `run_python_scenarios.py` with `--all --check`), `TestOutputComparison`, the `tools/audit/` sweeps, and the `main`-written Session fixture tests |
+
+The release tier runs the Vibrio full-generation spec (`vibrio-generate-release`),
+tests marked `slow` (`slow-main`), and tests marked `recipe`, `gallery`, or
+`browser` on Python 3.10 and 3.12 (`acceptance-supported-main`). The dev tier
+repeats none of these, so changing them does not carry release evidence. When
+the markers of a Python test cannot be read from the file, the verdict is false.
+Shared test code feeds the generators, the sweeps, and the local checks, so a
+change to it meets no verdict. `docs/recipes/` and `docs/capture/` hold
+executable scenario runners and expected outputs that recipe and capture tests
+read, so the verdicts whose evidence reads them exclude them. The periodic audit
+uses these verdicts for promotion evidence
+([carry-forward rule](WEB_PERIODIC_AUDIT.md#carrying-evidence-forward)).
 
 ## Smoke inventory and regression retention
 
