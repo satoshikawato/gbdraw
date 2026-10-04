@@ -4306,7 +4306,7 @@ export const createAppSetup = () => {
   });
   const linearSourceMoveBlockedReason = computed(() => (
     linearSourceMovePlan(0, 1).reason === 'custom-layout'
-      ? 'File order is unavailable because Record Layout is custom. Use Advanced comparison and layout → Record Layout to restore one row per File with no shared rows.'
+      ? 'File order is unavailable because Record Layout is custom. Use Advanced comparison and layout → Record Layout to give each File its own consecutive rows.'
       : ''
   ));
   const canMoveLinearSource = (sourceIndex, direction) => (

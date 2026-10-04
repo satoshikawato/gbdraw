@@ -49,6 +49,9 @@ export const linearRecordLayoutHasSharedRow = (
   });
 };
 
+// File moves exchange whole row blocks. Each File must use its own
+// consecutive rows (rendered rows are compacted, so empty row numbers between
+// blocks do not count); one row per File is the block size 1 case.
 export const planLinearSourceRowMove = ({
   sourceGroups,
   entries,
@@ -64,18 +67,16 @@ export const planLinearSourceRowMove = ({
   const offset = direction;
 
   const rowByUid = new Map(layout.map((entry) => [entry.uid, entry.row]));
-  const occupiedRows = new Set();
-  const sourceRows = groups.map((group) => {
-    const rows = new Set(
-      group.records.map(({ sequence }) => rowByUid.get(String(sequence?.uid || '')))
-    );
-    if (rows.size !== 1) return null;
-    const row = [...rows][0];
-    if (occupiedRows.has(row)) return null;
-    occupiedRows.add(row);
-    return row;
-  });
-  if (sourceRows.some((row) => row === null)) {
+  const recordUids = (group) => group.records.map(({ sequence }) => String(sequence?.uid || ''));
+  const sourceRows = groups.map((group) => (
+    [...new Set(recordUids(group).map((uid) => rowByUid.get(uid)))].sort((left, right) => left - right)
+  ));
+  const rowSlots = sourceRows.flat().sort((left, right) => left - right);
+  const slotIndex = new Map(rowSlots.map((row, slot) => [row, slot]));
+  const consecutiveBlocks = slotIndex.size === rowSlots.length && sourceRows.every((rows) => (
+    slotIndex.get(rows.at(-1)) - slotIndex.get(rows[0]) === rows.length - 1
+  ));
+  if (!consecutiveBlocks) {
     return { allowed: false, reason: 'custom-layout', rows: layout };
   }
 
@@ -84,15 +85,18 @@ export const planLinearSourceRowMove = ({
       || index < 0 || index >= groups.length || target < 0 || target >= groups.length) {
     return { allowed: false, reason: 'boundary', rows: layout };
   }
-  const reorderedGroups = [...groups];
-  [reorderedGroups[index], reorderedGroups[target]] = [reorderedGroups[target], reorderedGroups[index]];
-  const rowSlots = [...sourceRows].sort((left, right) => left - right);
-  const rows = reorderedGroups.flatMap((group, groupIndex) => (
-    group.records.map(({ sequence }) => ({
-      uid: String(sequence?.uid || ''),
-      row: rowSlots[groupIndex]
-    }))
-  ));
+  const order = groups.map((_, groupIndex) => groupIndex);
+  [order[index], order[target]] = [order[target], order[index]];
+  let nextSlot = 0;
+  const rows = order.flatMap((groupIndex) => {
+    const blockRows = sourceRows[groupIndex];
+    const slots = rowSlots.slice(nextSlot, nextSlot + blockRows.length);
+    nextSlot += blockRows.length;
+    return recordUids(groups[groupIndex]).map((uid) => ({
+      uid,
+      row: slots[blockRows.indexOf(rowByUid.get(uid))]
+    }));
+  });
   return { allowed: true, reason: '', rows };
 };
 

@@ -79,8 +79,12 @@ assert.deepEqual(sourceRows, [
 
 for (const customRows of [
   [
+    { uid: 'a-1', row: 1 }, { uid: 'a-2', row: 3 },
+    { uid: 'b-1', row: 2 }, { uid: 'b-2', row: 2 }, { uid: 'b-3', row: 2 }
+  ],
+  [
     { uid: 'a-1', row: 1 }, { uid: 'a-2', row: 2 },
-    { uid: 'b-1', row: 3 }, { uid: 'b-2', row: 3 }, { uid: 'b-3', row: 3 }
+    { uid: 'b-1', row: 2 }, { uid: 'b-2', row: 3 }, { uid: 'b-3', row: 3 }
   ],
   [
     { uid: 'a-1', row: 1 }, { uid: 'a-2', row: 1 },
@@ -108,3 +112,52 @@ assert.deepEqual(planLinearSourceRowMove({
   reason: 'boundary',
   rows: sourceRows
 }, 'a boundary move does not change the current layout');
+
+// A File may span several consecutive rows. A move exchanges whole row
+// blocks and keeps each record's row relative to its own File.
+const blockGroups = [
+  { records: [{ sequence: { uid: 'one' } }] },
+  { records: [{ sequence: { uid: 'two-b' } }, { sequence: { uid: 'two-a' } }, { sequence: { uid: 'two-c' } }] },
+  { records: [{ sequence: { uid: 'three' } }] }
+];
+const blockRows = [
+  { uid: 'one', row: 1 },
+  { uid: 'two-b', row: 3 }, { uid: 'two-a', row: 2 }, { uid: 'two-c', row: 3 },
+  { uid: 'three', row: 4 }
+];
+assert.deepEqual(planLinearSourceRowMove({
+  sourceGroups: blockGroups, entries: blockRows, sourceIndex: 1, direction: -1
+}), {
+  allowed: true,
+  reason: '',
+  rows: [
+    { uid: 'two-b', row: 2 }, { uid: 'two-a', row: 1 }, { uid: 'two-c', row: 2 },
+    { uid: 'one', row: 3 },
+    { uid: 'three', row: 4 }
+  ]
+}, 'a two-row File moves up as one block');
+assert.deepEqual(planLinearSourceRowMove({
+  sourceGroups: blockGroups, entries: blockRows, sourceIndex: 1, direction: 1
+}), {
+  allowed: true,
+  reason: '',
+  rows: [
+    { uid: 'one', row: 1 },
+    { uid: 'three', row: 2 },
+    { uid: 'two-b', row: 4 }, { uid: 'two-a', row: 3 }, { uid: 'two-c', row: 4 }
+  ]
+}, 'a two-row File moves down as one block');
+
+// A CLI Session draws each record on its own row: File 1 (one record) on
+// row 1 and File 2 (two records) on rows 2 and 3 form consecutive blocks.
+const cliGroups = [
+  { records: [{ sequence: { uid: 'single' } }] },
+  { records: [{ sequence: { uid: 'pair-1' } }, { sequence: { uid: 'pair-2' } }] }
+];
+assert.deepEqual(planLinearSourceRowMove({
+  sourceGroups: cliGroups, entries: [], sourceIndex: 1, direction: -1
+}), {
+  allowed: true,
+  reason: '',
+  rows: [{ uid: 'pair-1', row: 1 }, { uid: 'pair-2', row: 2 }, { uid: 'single', row: 3 }]
+}, 'per-record CLI rows move File blocks');

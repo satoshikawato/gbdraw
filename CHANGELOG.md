@@ -12,6 +12,13 @@ write-up of a release.
 
 ## [Unreleased]
 
+- Linear File order (web app): the File up and down buttons now work when
+  each File uses its own consecutive rows, including a CLI Session that draws
+  each record of a multi-record file on its own row. A move exchanges the
+  File's whole block of rows with the adjacent File's block. Such Sessions no
+  longer show "File order is unavailable because Record Layout is custom";
+  the notice remains for Files that share a row or whose rows are separated by
+  another File's row.
 - Feature popup (web app): record rotation adds **Apply on Generate** next to
   **Apply and regenerate**. It stores the previewed start and orientation for
   the feature's record without redrawing, so rotations of several records are

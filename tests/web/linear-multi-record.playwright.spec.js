@@ -1,5 +1,7 @@
 const { test, expect } = require('@playwright/test');
 const { readFileSync, writeFileSync } = require('node:fs');
+const { execFile } = require('node:child_process');
+const { promisify } = require('node:util');
 const { join, resolve } = require('node:path');
 const { gunzipSync } = require('node:zlib');
 const { createHash } = require('node:crypto');
@@ -3414,6 +3416,48 @@ test('@comparison-contract File source order moves multi-record blocks through p
     };
   });
   expect(customAfter).toEqual(customBefore);
+});
+
+// The CLI draws each record of a multi-record file on its own row, so a CLI
+// Session loads File 2 (two records) on rows 2 and 3. Those are consecutive
+// rows of one File: File order stays available and moves the whole block.
+test('@comparison-contract CLI per-record rows keep File order available and move whole File blocks', async ({ page }, testInfo) => {
+  test.setTimeout(300000);
+  const session = testInfo.outputPath('cli-file-blocks.gbdraw-session.json.gz');
+  await promisify(execFile)('python', [
+    '-m', 'gbdraw.cli', 'linear', '--gbk',
+    join(repoRoot, 'tests/fixtures/regex_rules.gb'),
+    join(repoRoot, 'tests/fixtures/web_batch_two_records.gb'),
+    '-o', testInfo.outputPath('cli-file-blocks'), '--session_output', session
+  ], { cwd: testInfo.outputDir, env: { ...process.env, PYTHONPATH: repoRoot }, timeout: 300000, maxBuffer: 1_000_000 });
+  await openApp(page);
+  await loadDefinitionSession(page, session);
+  await expect.poll(() => page.evaluate(() => !window.__GBDRAW_APP__.sessionImportPending)).toBe(true);
+
+  const sources = page.locator('[data-linear-source-card]');
+  await expect(sources).toHaveCount(2);
+  await expect(sources.nth(1).locator('[data-linear-record-card]')).toHaveCount(2);
+  await expect(page.locator('[data-linear-source-move-blocked]')).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Move File 2 up' })).toBeEnabled();
+
+  await page.getByRole('button', { name: 'Move File 2 up' }).click();
+  await expect(sources.nth(0)).toContainText('web_batch_two_records.gb');
+  await expect(sources.nth(1)).toContainText('regex_rules.gb');
+  await expect(page.locator('[data-linear-source-move-blocked]')).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Move File 2 up' })).toBeEnabled();
+
+  expect(await evaluateWithRetainedPromise(page, () => window.__GBDRAW_APP__.runAnalysis())).toEqual({ status: 'ok' });
+  const drawnOrder = await page.evaluate(() => {
+    const svg = new DOMParser().parseFromString(window.__GBDRAW_APP__.results[0].content, 'image/svg+xml');
+    return [...svg.querySelectorAll('[data-record-key]')]
+      .map((group) => ({
+        y: Number(group.getAttribute('data-record-translation-y')),
+        id: group.querySelector('[data-gbdraw-record-id]')?.getAttribute('data-gbdraw-record-id')
+      }))
+      .sort((left, right) => left.y - right.y)
+      .map(({ id }) => id);
+  });
+  expect(drawnOrder).toEqual(['TESTA', 'TESTB', 'REGEX.1']);
 });
 
 test('@comparison-contract source order survives pending multi-record discovery', async ({ page }) => {
