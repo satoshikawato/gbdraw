@@ -488,7 +488,7 @@ test('Vibrio Session saves once within memory, responsiveness, and compatibility
   expect(sourceSummary).toMatchObject({
     format: 'gbdraw-session',
     version: 44,
-    requestSchema: 8,
+    requestSchema: CURRENT_REQUEST_SCHEMA,
     schema8LayoutDefaults: true,
     catalogSchema: 4,
     resourceCount: 2,

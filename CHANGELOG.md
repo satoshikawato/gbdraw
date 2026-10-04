@@ -53,6 +53,9 @@ write-up of a release.
   rotation shows its preview without **Generate Diagram** and no longer says
   "The popup feature source changed after the popup opened." Each such file is
   stored once. Cropped or reverse-complemented records keep their drawn copy.
+  The *Vibrio harveyi* group and *V. nigripulchritudo* TUMSAT-TG-2018 Gallery
+  Sessions now store their GBFF files byte for byte; their figures are
+  unchanged.
 
 Fixes from the 2026-09-30 Web GUI audit of `dev`. The plan and the approved
 decisions are in
