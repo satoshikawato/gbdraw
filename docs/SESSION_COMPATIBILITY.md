@@ -8,6 +8,42 @@ session files, canonical render requests, and saved LOSAT results. The concise
 documents current support. Tutorials and the FAQ describe what a user should
 do; release notes record when a format changed.
 
+## Unreleased: Session 45 and Web feature edits by source identity
+
+Session version 45 stores the Web app's Feature visibility, Label visibility,
+and label text edits in `features.featureOverrides`: one row per
+original-source feature, named by `recordKey` and `biologicalFeatureId`, with
+the same fields as request `diagramOptions.featureOverrides` and the label's
+original text (`labelSourceText`). The four rendered-ID maps
+(`featureVisibilityOverrides`, `labelTextFeatureOverrides`,
+`labelTextFeatureOverrideSources`, `labelVisibilityOverrides`) are rejected in
+Session 45. The Web app now sends these rows in the request, loads a request
+whose `featureOverrides` array is not empty, and draws them in the live preview
+by identity.
+
+The feature catalog is schema 5. Each drawn feature records the hash,
+location, and record location it was drawn with (`drawnSelector`), which live
+rule matching uses. A schema 3 or 4 catalog reads as schema 5 with no selector
+values. Until the next Generate, a feature whose rendered ID carries its source
+hash was drawn with its source coordinates, so live matching and **Load Label
+TSV** use its source values; on other features (cropped, reverse-complemented,
+or rotated records) live matching leaves `location` and `record_location` rules
+to Generate, and **Load Label TSV** declines a table with such rows and says
+why.
+
+Loading a Session 44, or a Web Session 31–33, moves each rendered-ID edit onto
+its feature. In a Session 40–44, a rendered ID in the saved feature catalog
+names its feature; otherwise its `_record_<n>` and `__instance_` suffixes are
+removed and the edit moves only when exactly one feature remains. A Session
+before 40 has no catalog that Load reads, so Load reads its GenBank sources
+again with its crops and orientations and matches each rendered ID's drawn
+hash and record position. Without readable sources it uses the saved feature
+metadata, which names only features of records drawn without a crop or
+reverse complement. Other edits are dropped and Load reports how many. An older
+Feature visibility edit hid every feature with the same hash, such as each copy
+of a duplicated record; it now applies only to the feature that was edited, and
+Load reports how many edits the next Generate draws differently for this.
+
 ## Unreleased: request schema 9 and feature identity overrides
 
 Session version 44 is unchanged. Canonical request schema 9 adds the required

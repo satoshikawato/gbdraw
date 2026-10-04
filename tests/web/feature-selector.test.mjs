@@ -16,12 +16,9 @@ await writeFile(
 
 const {
   SPECIFIC_COLOR_QUALIFIER_PRESETS,
-  buildFeatureSelectorUniquenessIndex,
-  buildSelectorSafetyUniquenessIndex,
   collectSpecificColorQualifierSuggestions,
   exactRegexValue,
-  resolveFeatureLabelSelector,
-  selectFeatureSelector
+  resolveFeatureLabelSelector
 } = await import(pathToFileURL(join(tempDir, 'feature-selector.js')));
 
 const makeFeature = (overrides = {}) => ({
@@ -38,155 +35,6 @@ const makeFeature = (overrides = {}) => ({
   },
   ...overrides
 });
-
-{
-  const scope = [
-    makeFeature().selector,
-  ].map((selector) => ({ record_id: 'rec1', feature_type: 'CDS', selector }));
-  const index = buildSelectorSafetyUniquenessIndex(scope);
-  const selected = selectFeatureSelector(
-    makeFeature(),
-    index,
-    { priority: ['protein_id', 'locus_tag'], requireSelector: true, requireSafetyScope: true }
-  );
-  assert.deepEqual(selected, { qualifier: 'protein_id', value: 'P1', isFallbackHash: false });
-}
-
-{
-  const feature = makeFeature();
-  const scope = [
-    { record_id: 'rec1', feature_type: 'CDS', selector: feature.selector },
-    {
-      record_id: 'rec1',
-      feature_type: 'CDS',
-      selector: {
-        hash: 'h2',
-        record_location: 'rec1:40..60:+',
-        qualifiers: { protein_id: ['P1'], locus_tag: ['L2'] }
-      }
-    }
-  ];
-  const selected = selectFeatureSelector(
-    feature,
-    buildSelectorSafetyUniquenessIndex(scope),
-    { priority: ['protein_id', 'locus_tag'], requireSelector: true, requireSafetyScope: true }
-  );
-  assert.deepEqual(selected, { qualifier: 'locus_tag', value: 'L1', isFallbackHash: false });
-}
-
-{
-  const feature = makeFeature({
-    selector: {
-      hash: 'h1',
-      record_location: 'rec1:10..30:+',
-      qualifiers: { protein_id: ['P1'] }
-    }
-  });
-  const scope = [
-    { record_id: 'rec1', feature_type: 'CDS', selector: feature.selector },
-    {
-      record_id: 'rec1',
-      feature_type: 'CDS',
-      selector: {
-        hash: 'h2',
-        record_location: 'rec1:40..60:+',
-        qualifiers: { protein_id: ['P1'] }
-      }
-    }
-  ];
-  const selected = selectFeatureSelector(
-    feature,
-    buildSelectorSafetyUniquenessIndex(scope),
-    { priority: ['protein_id', 'locus_tag'], requireSelector: true, requireSafetyScope: true }
-  );
-  assert.deepEqual(selected, {
-    qualifier: 'record_location',
-    value: 'rec1:10..30:+',
-    isFallbackHash: false
-  });
-}
-
-{
-  const selected = selectFeatureSelector(
-    makeFeature(),
-    buildSelectorSafetyUniquenessIndex(null),
-    { priority: ['protein_id'], requireSelector: true, requireSafetyScope: true }
-  );
-  assert.deepEqual(selected, { qualifier: 'hash', value: 'h1', isFallbackHash: true });
-}
-
-{
-  const feature = makeFeature({
-    selector: {
-      hash: 'h1',
-      qualifiers: {
-        product: ['specific product'],
-        gene: ['geneA'],
-        note: ['note A'],
-        id: ['qualifier-id'],
-        name: ['qualifier-name']
-      }
-    }
-  });
-  const scope = [{ record_id: 'rec1', feature_type: 'CDS', selector: feature.selector }];
-  const selected = selectFeatureSelector(
-    feature,
-    buildSelectorSafetyUniquenessIndex(scope),
-    { priority: ['protein_id', 'locus_tag', 'gene_id', 'old_locus_tag'], requireSelector: true, requireSafetyScope: true }
-  );
-  assert.deepEqual(selected, { qualifier: 'hash', value: 'h1', isFallbackHash: true });
-}
-
-{
-  const feature = {
-    svg_id: 'ff51a6081_record_2',
-    stable_svg_id: 'ff51a6081',
-    record_id: 'LC921558.1',
-    type: 'mRNA',
-    selector: {
-      hash: 'ff51a6081',
-      record_location: 'LC921558.1:775..13422:+',
-      qualifiers: { gene: ['penF'] }
-    }
-  };
-  const scope = [
-    { record_id: 'LC921558.1', feature_type: 'mRNA', selector: feature.selector },
-    {
-      record_id: 'LC921558.1',
-      feature_type: 'mRNA',
-      selector: {
-        hash: 'f8468d457',
-        record_location: 'LC921558.1:775..13422:+',
-        qualifiers: { gene: ['penF'] }
-      }
-    }
-  ];
-  const selected = selectFeatureSelector(
-    feature,
-    buildSelectorSafetyUniquenessIndex(scope),
-    { priority: ['protein_id', 'locus_tag'], requireSelector: true, requireSafetyScope: true }
-  );
-  assert.deepEqual(selected, { qualifier: 'hash', value: 'ff51a6081', isFallbackHash: true });
-}
-
-{
-  const feature = makeFeature({
-    selector: {
-      hash: 'h1',
-      record_location: 'rec1:10..30:+',
-      qualifiers: { protein_id: ['P1'], gene: ['geneA'] }
-    }
-  });
-  const index = buildFeatureSelectorUniquenessIndex([feature], { preferSelector: false });
-  assert.equal(
-    selectFeatureSelector(feature, index, { priority: ['gene'], preferSelector: false }).qualifier,
-    'gene'
-  );
-  assert.equal(
-    selectFeatureSelector(feature, index, { priority: ['protein_id'], preferSelector: false }).qualifier,
-    'protein_id'
-  );
-}
 
 assert.equal(exactRegexValue('YP_009725295.1'), '^YP_009725295\\.1$');
 
@@ -242,48 +90,5 @@ assert.equal(exactRegexValue('YP_009725295.1'), '^YP_009725295\\.1$');
   assert.equal(suggestions.filter((value) => value === 'custom_tag').length, 1);
 }
 
-{
-  // G-D: selector uniqueness uses Python's case-insensitive equivalence (FE-08).
-  const { cases } = JSON.parse(await readFile(
-    join(repoRoot, 'tests', 'fixtures', 'selector_case_equivalence_cases.json'),
-    'utf8'
-  ));
-  const { buildLabelOverrideRows } = await import(pathToFileURL(join(
-    repoRoot, 'gbdraw', 'web', 'js', 'app', 'feature-editor', 'label-override-table.js'
-  )));
-  for (const vector of cases) {
-    const features = vector.features.map((feature) => ({
-      svg_id: feature.svg_id,
-      record_id: vector.record_id,
-      type: feature.type,
-      qualifiers: feature.qualifiers,
-      selector: { hash: feature.svg_id, qualifiers: feature.qualifiers }
-    }));
-    const target = features.find((feature) => feature.svg_id === vector.target);
-    const selected = selectFeatureSelector(
-      target,
-      buildFeatureSelectorUniquenessIndex(features),
-      { priority: vector.priority }
-    );
-    assert.deepEqual(
-      { qualifier: selected.qualifier, value: selected.value },
-      vector.expected,
-      vector.id
-    );
-    const { rows } = buildLabelOverrideRows(
-      { [vector.target]: 'EDITED' },
-      {},
-      { extractedFeatures: features }
-    );
-    assert.equal(rows.length, 1, vector.id);
-    vector.rejected.forEach(({ qualifier, value }) => {
-      assert.notEqual(
-        rows[0].split('\t').slice(2, 4).join('\t'),
-        `${qualifier}\t${exactRegexValue(value)}`,
-        `${vector.id}: ${rows[0]}`
-      );
-    });
-  }
-}
 
 console.log('feature selector tests passed');

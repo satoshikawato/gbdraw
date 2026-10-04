@@ -6,7 +6,9 @@ const { promisify } = require('node:util');
 const { gunzipSync } = require('node:zlib');
 const { test, expect } = require('@playwright/test');
 const {
+  CURRENT_FEATURE_CATALOG_SCHEMA,
   CURRENT_REQUEST_SCHEMA,
+  CURRENT_SESSION_VERSION,
   evaluateWithRetainedPromise,
   generateAndWaitForResult,
   openApp,
@@ -346,7 +348,7 @@ test('feature popup record rotation works by pointer and keyboard in rich and si
   });
   const savedPath = await (await pendingSave).path();
   const saved = JSON.parse(gunzipSync(fs.readFileSync(savedPath)));
-  expect(saved.version).toBe(44);
+  expect(saved.version).toBe(CURRENT_SESSION_VERSION);
   expect(saved.renderRequest.schema).toBe(CURRENT_REQUEST_SCHEMA);
   expect(saved.renderRequest.records[0].display.startCoordinate).toBe(expectedStart);
   expect(saved.config.recordDisplayDrafts[0].anchorIntent).toMatchObject({
@@ -971,18 +973,18 @@ test('Linear CLI Session keeps --region and --reverse_complement through Load an
   ]);
 });
 
-test('browser export embeds the exact selected schema-4 item and expands references', async ({
+test('browser export embeds the exact selected current-schema item and expands references', async ({
   page
 }, testInfo) => {
   await page.goto('/');
   const origin = new URL(page.url()).origin;
-  const exported = await page.evaluate(async ({ origin }) => {
+  const exported = await page.evaluate(async ({ origin, catalogSchema }) => {
     const { enrichSvgWithStandaloneInteractivity } = await import(
       `${origin}/gbdraw/web/js/services/standalone-interactivity.js`
     );
     const fullNote = `${'x'.repeat(49)}😀tail`;
     const catalog = {
-      schema: 4,
+      schema: catalogSchema,
       items: [{
         resultIndex: 0,
         resultName: 'diagram.svg',
@@ -1165,10 +1167,10 @@ test('browser export embeds the exact selected schema-4 item and expands referen
       sourceGroup: catalog.items[0].orthogroups[0],
       svgText: new XMLSerializer().serializeToString(svg)
     };
-  }, { origin });
+  }, { origin, catalogSchema: CURRENT_FEATURE_CATALOG_SCHEMA });
 
   expect(exported.enriched).toBe(true);
-  expect(exported.embedded.schema).toBe(4);
+  expect(exported.embedded.schema).toBe(CURRENT_FEATURE_CATALOG_SCHEMA);
   expect(exported.embedded.items).toHaveLength(1);
   expect(exported.embedded.items[0].features[0].displayLabel)
     .toBe('Edited visible label');
@@ -1180,7 +1182,7 @@ test('browser export embeds the exact selected schema-4 item and expands referen
   expect(exported.sourceDisplayLabel).toBeUndefined();
   expect(exported.sourceGroup.display_name).toBeUndefined();
   expect(exported.sourceGroup.description).toBe('Original group description');
-  expect(exported.schema).toBe('4');
+  expect(exported.schema).toBe(String(CURRENT_FEATURE_CATALOG_SCHEMA));
   expect(exported.resultIndex).toBe('0');
   expect(exported.resultName).toBe('diagram.svg');
   expect(exported.svgText.match(/data-gbdraw-interactive-feature="true"/g)).toHaveLength(2);
@@ -1466,12 +1468,12 @@ test('standalone rejects conflicting compact provenance markers', async ({
 }, testInfo) => {
   await page.goto('/');
   const origin = new URL(page.url()).origin;
-  const variants = await page.evaluate(async ({ origin }) => {
+  const variants = await page.evaluate(async ({ origin, catalogSchema }) => {
     const { enrichSvgWithStandaloneInteractivity } = await import(
       `${origin}/gbdraw/web/js/services/standalone-interactivity.js`
     );
     const makeCatalog = () => ({
-      schema: 4,
+      schema: catalogSchema,
       items: [{
         resultIndex: 0,
         resultName: 'invalid.svg',
@@ -1566,7 +1568,7 @@ test('standalone rejects conflicting compact provenance markers', async ({
         svgText: new XMLSerializer().serializeToString(svg)
       };
     });
-  }, { origin });
+  }, { origin, catalogSchema: CURRENT_FEATURE_CATALOG_SCHEMA });
 
   await page.addInitScript(() => {
     window.__expandedInvalidFeature = false;
@@ -1606,7 +1608,7 @@ test('Download Interactive SVG forwards live editor overrides without mutating t
     url: '/gbdraw/web/vendor/dompurify/purify.min.js'
   });
 
-  const exported = await page.evaluate(async ({ origin }) => {
+  const exported = await page.evaluate(async ({ origin, catalogSchema }) => {
     const { state } = await import(`${origin}/gbdraw/web/js/state.js`);
     const { downloadInteractiveSVG } = await import(
       `${origin}/gbdraw/web/js/services/export.js`
@@ -1615,7 +1617,7 @@ test('Download Interactive SVG forwards live editor overrides without mutating t
       `${origin}/gbdraw/web/js/services/svg-serialization.js`
     );
     const catalog = {
-      schema: 4,
+      schema: catalogSchema,
       items: [{
         resultIndex: 0,
         resultName: 'live.svg',
@@ -1659,7 +1661,14 @@ test('Download Interactive SVG forwards live editor overrides without mutating t
     state.selectedResultIndex.value = 0;
     state.svgContainer.value = container;
     state.featureCatalog.value = catalog;
-    state.labelTextFeatureOverrides['rendered-a'] = 'Live feature label';
+    state.featureOverrides[JSON.stringify(['record-a', 'biological-a'])] = {
+      recordKey: 'record-a',
+      biologicalFeatureId: 'biological-a',
+      featureVisibility: null,
+      labelVisibility: null,
+      labelText: 'Live feature label',
+      labelSourceText: null
+    };
     state.orthogroupNameOverrides['group-a'] = 'Live group name';
     state.orthogroupDescriptionOverrides['group-a'] = 'Live description';
 
@@ -1688,7 +1697,7 @@ test('Download Interactive SVG forwards live editor overrides without mutating t
       URL.revokeObjectURL = originalRevokeObjectURL;
       HTMLAnchorElement.prototype.click = originalClick;
     }
-  }, { origin });
+  }, { origin, catalogSchema: CURRENT_FEATURE_CATALOG_SCHEMA });
 
   expect(exported.embedded.items[0].features[0].displayLabel)
     .toBe('Live feature label');

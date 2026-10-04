@@ -1,5 +1,6 @@
 import { createRulePreparation } from './rule-matching.js';
 import { compileDirectEditorMutationPlan } from './candidate-render.js';
+import { countUnresolvedFeatureEdits, removeUnresolvedFeatureEdits } from './feature-visibility.js';
 import { isLegendOrderEdited } from './legend/utils.js';
 import { admitFeatureCatalog } from '../services/feature-catalog.js';
 import { createDefaultLosatpHitLimits } from '../services/session-active-config-contract.js';
@@ -275,6 +276,8 @@ export const createAppSetup = () => {
     resultPanelTab,
     lastRunInfo,
     annotationWarnings,
+    featureIdentityNotices,
+    featureEditRemovalCount,
     comparisonWarnings,
     pairwiseMatchFactors,
     matchSequenceRegistry,
@@ -380,10 +383,7 @@ export const createAppSetup = () => {
     labelSearch,
     editableLabels,
     filteredEditableLabels,
-    labelTextFeatureOverrides,
     labelTextBulkOverrides,
-    labelTextFeatureOverrideSources,
-    labelVisibilityOverrides,
     labelOverrideBuildWarning,
     autoLabelReflowEnabled,
     labelReflowProcessing,
@@ -391,7 +391,7 @@ export const createAppSetup = () => {
     featureColorOverrides,
     featureVisibilityManualRules,
     featureVisibilityRules,
-    featureVisibilityOverrides,
+    featureOverrides,
     featureStrokeOverrides,
     resultGenerationKey,
     svgContainer,
@@ -2235,9 +2235,8 @@ export const createAppSetup = () => {
     isFeatureDrawerMounted.value
     || Boolean(clickedFeature.value)
     || labelTextScopeDialog.show
-    || Object.keys(labelTextFeatureOverrides).length > 0
+    || Object.values(featureOverrides).some((row) => row.labelText !== null || row.labelVisibility !== null)
     || Object.keys(labelTextBulkOverrides).length > 0
-    || Object.keys(labelVisibilityOverrides).length > 0
   );
   // A legacy imported SVG without composition metadata stays unbound: it has
   // no composition to capture and no canvas to pad.
@@ -2724,9 +2723,15 @@ export const createAppSetup = () => {
       toRaw(appliedPaletteColors.value),
       JSON.stringify([manualSpecificRules, featureColorOverrides, legendColorOverrides])
     ],
-    visibility: JSON.stringify([featureVisibilityOverrides, featureVisibilityManualRules]),
+    visibility: JSON.stringify([
+      Object.values(featureOverrides).map((row) => [row.recordKey, row.biologicalFeatureId, row.featureVisibility]),
+      featureVisibilityManualRules
+    ]),
     labels: JSON.stringify([
-      labelTextFeatureOverrides, labelTextBulkOverrides, labelTextFeatureOverrideSources, labelVisibilityOverrides
+      Object.values(featureOverrides).map((row) => [
+        row.recordKey, row.biologicalFeatureId, row.labelVisibility, row.labelText, row.labelSourceText
+      ]),
+      labelTextBulkOverrides
     ]),
     // An edited Legend order, or '' for the default order (D-08).
     legendOrder: isLegendOrderEdited(legendEntries.value, originalLegendOrder.value)
@@ -2752,9 +2757,7 @@ export const createAppSetup = () => {
       catalogAdmission: admitFeatureCatalog(catalog, toRaw(results.value), { mode: state.generatedMode.value }),
       featureColorOverrides,
       featureStrokeOverrides,
-      featureVisibilityOverrides,
-      labelTextFeatureOverrides,
-      labelVisibilityOverrides,
+      featureOverrides,
       legendEntries: legendEntries.value,
       deletedLegendEntries: deletedLegendEntries.value,
       originalLegendOrder: originalLegendOrder.value,
@@ -2823,6 +2826,32 @@ export const createAppSetup = () => {
 
   const { updatePalette, resetColors } = resultsManager;
   const undoableAction = (label, fn) => (...args) => history.runUndoable(label, () => fn(...args));
+  // Python's report of the per-feature edits the Results do not draw (design
+  // Q4 3.4): dormant edits outside the crop or display, edits whose feature
+  // the source does not have, and the edits a source-replacing Generate removed.
+  const featureIdentityNoticeSummary = computed(() => {
+    const notices = Array.isArray(featureIdentityNotices.value) ? featureIdentityNotices.value : [];
+    const summary = {
+      dormant: notices.filter((notice) => notice.status !== 'unresolved').length,
+      unmatched: countUnresolvedFeatureEdits({
+        featureOverrides: state.featureOverrides,
+        featurePlacementOverrides: state.featurePlacementOverrides,
+        notices
+      }),
+      removed: Number(featureEditRemovalCount.value) || 0
+    };
+    return summary.dormant || summary.unmatched || summary.removed ? summary : null;
+  });
+  // An explicit removal of the edits Python reported unresolved (R2).
+  const removeUnmatchedFeatureEdits = undoableAction('Remove unmatched feature edits', () => {
+    const busy = state.sessionOperationAvailability?.();
+    if (busy) return busy;
+    return removeUnresolvedFeatureEdits({
+      featureOverrides: state.featureOverrides,
+      featurePlacementOverrides: state.featurePlacementOverrides,
+      notices: featureIdentityNotices.value
+    }) > 0;
+  });
   const addFeatureVisibilityRuleWithHistory = undoableAction('Add feature visibility rule', addFeatureVisibilityRule);
   const moveFeatureVisibilityRuleDownWithHistory = undoableAction('Move feature visibility rule', moveFeatureVisibilityRuleDown);
   const moveFeatureVisibilityRuleUpWithHistory = undoableAction('Move feature visibility rule', moveFeatureVisibilityRuleUp);
@@ -4450,6 +4479,8 @@ export const createAppSetup = () => {
     resultPanelTab,
     lastRunInfo,
     annotationWarnings,
+    featureIdentityNoticeSummary,
+    removeUnmatchedFeatureEdits,
     comparisonWarnings,
     runInfoCopyStatus,
     exactReplayCopyStatus,
@@ -4967,10 +4998,7 @@ export const createAppSetup = () => {
     labelSearch,
     editableLabels,
     filteredEditableLabels,
-    labelTextFeatureOverrides,
     labelTextBulkOverrides,
-    labelTextFeatureOverrideSources,
-    labelVisibilityOverrides,
     labelOverrideBuildWarning,
     autoLabelReflowEnabled,
     labelReflowProcessing,
@@ -4979,7 +5007,7 @@ export const createAppSetup = () => {
     featureColorOverrides,
     featureVisibilityManualRules,
     featureVisibilityRules,
-    featureVisibilityOverrides,
+    featureOverrides,
     featureStrokeOverrides,
     addFeatureVisibilityRule: addFeatureVisibilityRuleWithHistory,
     downloadFeatureVisibilityRulesTsv,

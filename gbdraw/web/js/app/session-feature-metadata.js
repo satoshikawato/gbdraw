@@ -586,7 +586,6 @@ export const migrateFeatureOverrideState = ({
   const keySets = recoveredKeySets(nextFeatureState.extractedFeatures);
   const skipped = { count: 0 };
   const featureIdMaps = [migration?.featureIdMap || {}];
-  const svgIdMaps = [migration?.svgIdMap || {}];
   const allMaps = [migration?.featureIdMap || {}, migration?.svgIdMap || {}];
 
   nextFeatureState.featureColorOverrides = rewriteOverrideMap(
@@ -595,30 +594,9 @@ export const migrateFeatureOverrideState = ({
     featureIdMaps,
     skipped
   );
-  nextFeatureState.featureVisibilityOverrides = rewriteOverrideMap(
-    nextFeatureState.featureVisibilityOverrides,
-    keySets.svgIds,
-    svgIdMaps,
-    skipped
-  );
-  nextFeatureState.labelTextFeatureOverrides = rewriteOverrideMap(
-    nextFeatureState.labelTextFeatureOverrides,
-    keySets.all,
-    allMaps,
-    skipped
-  );
-  nextFeatureState.labelTextFeatureOverrideSources = rewriteOverrideMap(
-    nextFeatureState.labelTextFeatureOverrideSources,
-    keySets.all,
-    allMaps,
-    skipped
-  );
-  nextFeatureState.labelVisibilityOverrides = rewriteOverrideMap(
-    nextFeatureState.labelVisibilityOverrides,
-    keySets.all,
-    allMaps,
-    skipped
-  );
+  // Rendered-ID Feature visibility and label edits are not realigned here:
+  // services/feature-edit-migration.js moves the saved maps onto source
+  // identities (design Q4 4.3).
 
   if (!nextEditorState.featureStrokes || typeof nextEditorState.featureStrokes !== 'object') {
     nextEditorState.featureStrokes = { overrides: {} };
@@ -662,9 +640,6 @@ const buildRecoveredFeatureState = (snapshot, payload) => ({
   biologicalFeatures: Array.isArray(payload.biologicalFeatures)
     ? payload.biologicalFeatures
     : (Array.isArray(payload.extractedFeatures) ? payload.extractedFeatures : []),
-  featureSelectorSafetyScope: Array.isArray(payload.featureSelectorSafetyScope)
-    ? payload.featureSelectorSafetyScope
-    : [],
   featureRecordIds: Array.isArray(payload.featureRecordIds) ? payload.featureRecordIds : [],
   selectedFeatureRecordIdx: Number.isInteger(payload.selectedFeatureRecordIdx)
     ? payload.selectedFeatureRecordIdx
@@ -729,6 +704,58 @@ export const hasUsableBiologicalFeatureCatalog = (featureState) => {
 const hasMigrationEntries = (migration) =>
   Object.keys(migration?.featureIdMap || {}).length > 0 ||
   Object.keys(migration?.svgIdMap || {}).length > 0;
+
+// Reads the snapshot's GenBank sources with its crops, record selectors, and
+// orientations, as the renderer drew them.
+const extractSnapshotFeatures = (snapshot, {
+  featureVisibilityTsv = '',
+  enrichFeature,
+  readFeatureExtractionDataImpl,
+  extractFeatureMetadataForPreviewImpl = extractFeatureMetadataForPreview
+}) => {
+  const linearContext = snapshot.mode === 'linear' && snapshot.lInputType === 'gb'
+    ? buildLinearRegionExtractionContext(snapshot.linearSeqs, snapshot.lInputType)
+    : { regionSpecs: [], recordSelectors: [], reverseFlags: [] };
+  return extractFeatureMetadataForPreviewImpl({
+    mode: snapshot.mode,
+    cInputType: snapshot.cInputType,
+    lInputType: snapshot.lInputType,
+    circularFile: snapshot.files?.c_gb || null,
+    linearSeqs: snapshot.linearSeqs || [],
+    regionSpecs: linearContext.regionSpecs,
+    recordSelectors: linearContext.recordSelectors,
+    reverseFlags: linearContext.reverseFlags,
+    featureVisibilityTablePath: featureVisibilityTsv ? '/web_feature_visibility_table.tsv' : null,
+    featureVisibilityTsv,
+    ...(enrichFeature ? { enrichFeature } : {}),
+    readFeatureExtractionDataImpl
+  });
+};
+
+/**
+ * Every source feature of a Session without a feature catalog, read again with
+ * its crops and orientations and without visibility rules, so each feature
+ * carries its drawn hash beside its source identity. The rendered-ID edit
+ * migration (services/feature-edit-migration.js) names features through it.
+ * Returns null when the Session has no GenBank sources to read or the read
+ * fails; the migration then uses the saved feature metadata.
+ */
+export const extractSessionSourceFeatures = async ({
+  snapshot,
+  readFeatureExtractionDataImpl,
+  extractFeatureMetadataForPreviewImpl = extractFeatureMetadataForPreview
+}) => {
+  if (!recoverability(snapshot).recoverable) return null;
+  try {
+    const payload = await extractSnapshotFeatures(snapshot, {
+      readFeatureExtractionDataImpl,
+      extractFeatureMetadataForPreviewImpl
+    });
+    return payload?.errors?.length || !Array.isArray(payload?.extractedFeatures) ? null : payload;
+  } catch {
+    return null;
+  }
+};
 
 export const buildSessionFeatureRecoveryPlan = async ({
   snapshot,
@@ -834,26 +861,15 @@ export const buildSessionFeatureRecoveryPlan = async ({
   }
 
   try {
-    const linearContext = snapshot.mode === 'linear' && snapshot.lInputType === 'gb'
-      ? buildLinearRegionExtractionContext(snapshot.linearSeqs, snapshot.lInputType)
-      : { regionSpecs: [], recordSelectors: [], reverseFlags: [] };
-    const payload = await extractFeatureMetadataForPreviewImpl({
-      mode: snapshot.mode,
-      cInputType: snapshot.cInputType,
-      lInputType: snapshot.lInputType,
-      circularFile: snapshot.files?.c_gb || null,
-      linearSeqs: snapshot.linearSeqs || [],
-      regionSpecs: linearContext.regionSpecs,
-      recordSelectors: linearContext.recordSelectors,
-      reverseFlags: linearContext.reverseFlags,
-      featureVisibilityTablePath: featureVisibilityTsv ? '/web_feature_visibility_table.tsv' : null,
+    const payload = await extractSnapshotFeatures(snapshot, {
       featureVisibilityTsv,
       enrichFeature: (feature, recordIndex) => enrichFeatureWithOrthogroup(
         snapshot.orthogroupIndex,
         feature,
         recordIndex
       ),
-      readFeatureExtractionDataImpl
+      readFeatureExtractionDataImpl,
+      extractFeatureMetadataForPreviewImpl
     });
 
     const recoveredFeatureState = buildRecoveredFeatureState(snapshot, payload);

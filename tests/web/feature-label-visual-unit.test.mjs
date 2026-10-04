@@ -9,6 +9,27 @@ globalThis.CSS ||= { escape: (value) => String(value) };
 
 const ref = (value) => ({ value });
 
+// Per-feature label and visibility edits are identity rows (design Q4).
+const featureFor = (featureId, type = 'CDS') => ({
+  svg_id: featureId, type, record_key: 'record-1', biological_feature_id: `bio-${featureId}`
+});
+const keyFor = (featureId) => JSON.stringify(['record-1', `bio-${featureId}`]);
+const rowFor = (featureId, fields = {}) => ({
+  recordKey: 'record-1',
+  biologicalFeatureId: `bio-${featureId}`,
+  featureVisibility: null,
+  labelVisibility: null,
+  labelText: null,
+  labelSourceText: null,
+  ...fields
+});
+const setRow = (state, featureId, fields) => {
+  state.featureOverrides[keyFor(featureId)] = rowFor(featureId, {
+    ...(state.featureOverrides[keyFor(featureId)] || {}), ...fields
+  });
+};
+const rowOf = (state, featureId) => state.featureOverrides[keyFor(featureId)] || null;
+
 const labelSvg = ({
   featureId = 'feature:one/[a]',
   marker = '1',
@@ -54,10 +75,10 @@ const buildHarness = ({
       text: '',
       sourceText: ''
     }]),
-    extractedFeatures: ref([]),
+    extractedFeatures: ref([featureFor(featureId)]),
     clickedFeature: ref({
       svg_id: featureId,
-      feat: { type: 'CDS' },
+      feat: featureFor(featureId),
       labelText: '',
       labelSourceText: '',
       labelVisibility: 'default',
@@ -66,11 +87,10 @@ const buildHarness = ({
     labelTextScopeDialog: { show: false },
     hiddenLabelTextDialog: { show: false, featureId: '' },
     labelOnDialog: { show: false, reason: '', featureType: '' },
-    featureVisibilityOverrides: {},
-    labelTextFeatureOverrides: {},
+    featureOverrides: Object.fromEntries(Object.entries(visibilityOverrides).map(([id, mode]) => [
+      keyFor(id), rowFor(id, { labelVisibility: mode })
+    ])),
     labelTextBulkOverrides: {},
-    labelTextFeatureOverrideSources: {},
-    labelVisibilityOverrides: { ...visibilityOverrides },
     labelOverrideBuildWarning: ref(''),
     autoLabelReflowEnabled: ref(false),
     labelReflowRequestSeq: ref(0),
@@ -188,10 +208,11 @@ test('a text edit asks whether to show a label only when the feature has none', 
   Object.assign(harness.state.clickedFeature.value, { labelText: 'Renamed', labelSourceText: 'Original' });
   await harness.actions.updateClickedFeatureLabelText();
   assert.deepEqual({ ...harness.state.hiddenLabelTextDialog }, { show: true, featureId });
-  assert.equal(harness.state.labelTextFeatureOverrides[featureId], 'Renamed');
+  assert.equal(rowOf(harness.state, featureId).labelText, 'Renamed');
   harness.actions.handleHiddenLabelTextChoice('text_only');
   assert.deepEqual({ ...harness.state.hiddenLabelTextDialog }, { show: false, featureId: '' });
-  assert.deepEqual(harness.state.labelVisibilityOverrides, {});
+  // "Keep hidden (apply text only)" keeps Label visibility unset (design Q4 6.2).
+  assert.equal(rowOf(harness.state, featureId).labelVisibility, null);
   assert.equal(harness.state.labelReflowForceRequestSeq.value, 0);
 
   harness.state.clickedFeature.value.labelText = 'Renamed again';
@@ -199,9 +220,9 @@ test('a text edit asks whether to show a label only when the feature has none', 
   assert.equal(harness.state.hiddenLabelTextDialog.show, true);
   harness.actions.handleHiddenLabelTextChoice('show');
   assert.equal(harness.state.hiddenLabelTextDialog.show, false);
-  assert.deepEqual(harness.state.labelVisibilityOverrides, { [featureId]: 'on' });
+  assert.equal(rowOf(harness.state, featureId).labelVisibility, 'on');
   assert.equal(harness.state.clickedFeature.value.labelVisibility, 'on');
-  assert.equal(harness.state.labelTextFeatureOverrides[featureId], 'Renamed again');
+  assert.equal(rowOf(harness.state, featureId).labelText, 'Renamed again');
   assert.equal(harness.state.labelReflowForceRequestSeq.value, 1);
   assert.equal(harness.state.labelReflowRequestSeq.value, 0);
 });
@@ -225,22 +246,21 @@ test('the popup note names why the diagram draws no label for the feature', () =
   clicked.labelVisibility = 'off';
   assert.equal(hint(), '');
   clicked.labelVisibility = 'on';
-  state.labelVisibilityOverrides[featureId] = 'on';
+  setRow(state, featureId, { labelVisibility: 'on' });
   assert.equal(hint(), `${none}${onDrawable}`);
 
-  clicked.feat = { type: 'repeat_region' };
+  clicked.feat = featureFor(featureId, 'repeat_region');
   assert.equal(hint(), `${none} Labels are not drawn for features drawn as "Underlay".${onDrawable}`);
-  delete state.labelVisibilityOverrides[featureId];
+  delete state.featureOverrides[keyFor(featureId)];
   clicked.labelVisibility = 'default';
   assert.equal(hint(), `${none} Labels are not drawn for features drawn as "Underlay".`);
 
-  clicked.feat = { type: 'CDS' };
+  clicked.feat = featureFor(featureId);
   diagramOptions.configOverrides['labels.rendering'] = 'embedded_only';
   assert.equal(hint(), `${none} With "Label Rendering" = "Embedded Only", a label is drawn only when it fits inside its feature.`);
 
   // A hidden feature hides its label too, so the note shows with a label key.
-  state.featureVisibilityOverrides[featureId] = 'off';
-  state.labelVisibilityOverrides[featureId] = 'on';
+  setRow(state, featureId, { featureVisibility: 'off', labelVisibility: 'on' });
   clicked.labelKey = 'label-1';
   assert.equal(hint(), `${none} The feature is hidden. Its Label visibility "On" applies when the feature is shown.`);
 });
@@ -250,20 +270,24 @@ test('Label visibility On for an underlay feature waits for Keep without label o
   const harness = buildHarness({ diagramOptions: { featureShapes: {}, configOverrides: {} } });
   const { state, actions } = harness;
   harness.state.editableLabels.value = [];
-  Object.assign(state.clickedFeature.value, { feat: { type: 'repeat_region' }, labelVisibility: 'on', labelText: 'RPT' });
+  Object.assign(state.clickedFeature.value, {
+    feat: featureFor(featureId, 'repeat_region'), labelVisibility: 'on', labelText: 'RPT'
+  });
   const canceled = actions.updateClickedFeatureLabelText();
   assert.deepEqual({ ...state.labelOnDialog }, { show: true, reason: 'underlay', featureType: 'repeat_region' });
   actions.handleLabelOnChoice('cancel');
   assert.equal(await canceled, false);
   assert.equal(state.labelOnDialog.show, false);
-  assert.deepEqual([state.labelVisibilityOverrides, state.labelTextFeatureOverrides], [{}, {}]);
+  assert.deepEqual(state.featureOverrides, {});
   assert.equal(state.clickedFeature.value.labelVisibility, 'default');
 
   Object.assign(state.clickedFeature.value, { labelVisibility: 'on', labelText: 'RPT' });
   const kept = actions.updateClickedFeatureLabelText();
   actions.handleLabelOnChoice('keep');
   await kept;
-  assert.deepEqual([state.labelVisibilityOverrides, state.labelTextFeatureOverrides], [{ [featureId]: 'on' }, { [featureId]: 'RPT' }]);
+  assert.deepEqual(state.featureOverrides, {
+    [keyFor(featureId)]: rowFor(featureId, { labelVisibility: 'on', labelText: 'RPT' })
+  });
   assert.equal(state.labelReflowForceRequestSeq.value, 1);
 });
 
@@ -319,21 +343,13 @@ test('mounting Results with disjoint features keeps every label override (FE-01)
   const { state, actions } = harness;
   let mounted = resultA;
   state.svgContainer.value = { querySelector: (selector) => (selector === 'svg' ? mounted : null) };
-  Object.assign(state.labelTextFeatureOverrides, { fb: 'EDITED_B' });
-  Object.assign(state.labelTextFeatureOverrideSources, { fb: 'source' });
+  setRow(state, 'fb', { labelText: 'EDITED_B', labelSourceText: 'source', labelVisibility: 'off' });
   Object.assign(state.labelTextBulkOverrides, { source: 'BULK' });
-  Object.assign(state.labelVisibilityOverrides, { fb: 'off' });
-  const before = JSON.stringify([
-    state.labelTextFeatureOverrides, state.labelTextFeatureOverrideSources,
-    state.labelTextBulkOverrides, state.labelVisibilityOverrides
-  ]);
+  const before = JSON.stringify([state.featureOverrides, state.labelTextBulkOverrides]);
   for (const next of [resultB, resultA, resultB]) {
     mounted = next;
     actions.syncLabelEditor({ queueIncompleteVisibility: false });
-    assert.equal(JSON.stringify([
-      state.labelTextFeatureOverrides, state.labelTextFeatureOverrideSources,
-      state.labelTextBulkOverrides, state.labelVisibilityOverrides
-    ]), before);
+    assert.equal(JSON.stringify([state.featureOverrides, state.labelTextBulkOverrides]), before);
   }
 });
 
@@ -342,7 +358,7 @@ test('mounting Results with disjoint features keeps every label override (FE-01)
 test('a hidden feature hides its label through the stored visibility projection', () => {
   const featureId = 'feature:one/[a]';
   const harness = buildHarness();
-  harness.state.featureVisibilityOverrides = { [featureId]: 'off' };
+  setRow(harness.state, featureId, { featureVisibility: 'off' });
   harness.state.featureVisibilityManualRules = [];
   harness.actions.reconcileLabelOverrides();
   exactParts(harness.svg, featureId).forEach((part) => {
@@ -350,7 +366,7 @@ test('a hidden feature hides its label through the stored visibility projection'
   });
   assert.equal(harness.svg.querySelector('[data-part="unrelated"]').getAttribute('display'), null);
 
-  delete harness.state.featureVisibilityOverrides[featureId];
+  delete harness.state.featureOverrides[keyFor(featureId)];
   harness.actions.reconcileLabelOverrides();
   exactParts(harness.svg, featureId).forEach((part) => {
     assert.equal(part.getAttribute('display'), null);
@@ -361,7 +377,7 @@ test('a feature visibility edit commits its label once and queues the label refl
   const featureId = 'feature:one/[a]';
   const harness = buildHarness();
   harness.state.autoLabelReflowEnabled.value = true;
-  harness.state.featureVisibilityOverrides = { [featureId]: 'off' };
+  setRow(harness.state, featureId, { featureVisibility: 'off' });
   assert.equal(harness.actions.applyFeatureVisibilityToLabels(), true);
   exactParts(harness.svg, featureId).forEach((part) => {
     assert.equal(part.getAttribute('display'), 'none');
@@ -370,7 +386,7 @@ test('a feature visibility edit commits its label once and queues the label refl
   assert.equal(harness.state.labelReflowRequestSeq.value, 1);
   assert.equal(harness.state.labelReflowForceRequestSeq.value, 0);
 
-  harness.state.featureVisibilityOverrides = {};
+  delete harness.state.featureOverrides[keyFor(featureId)];
   assert.equal(harness.actions.applyFeatureVisibilityToLabels({ reflow: false }), true);
   exactParts(harness.svg, featureId).forEach((part) => {
     assert.equal(part.getAttribute('display'), null);
@@ -409,7 +425,25 @@ test('a Label TSV import writes the label intent of every batch Result once (B6)
   });
   const { state, actions } = harness;
   state.errorLog = ref(null);
-  state.results.value = [{ content: '<svg></svg>' }, { content: `<svg>${batchLabel('fb', 'beta')}</svg>` }];
+  state.results.value = [
+    { name: 'a.svg', content: '<svg></svg>' },
+    { name: 'b.svg', content: `<svg>${batchLabel('fb', 'beta')}</svg>` }
+  ];
+  // The other Result's labels reach their features through its catalog item.
+  const item = (resultIndex, featureId) => ({
+    resultIndex,
+    resultName: `${'ab'[resultIndex]}.svg`,
+    recordKeys: ['record-1'],
+    features: [{ svgId: featureId, recordKey: 'record-1', biologicalFeatureId: `bio-${featureId}`, fillColor: '', drawnSelector: null }],
+    biologicalFeatures: [{
+      recordKey: 'record-1', biologicalFeatureId: `bio-${featureId}`, type: 'CDS',
+      anchorProfile: { precision: 'exact', operator: 'single', partOrder: 'biological', strand: '+' }
+    }],
+    orthogroups: [],
+    annotations: [],
+    comparisonMatches: []
+  });
+  state.featureCatalog = ref({ schema: 5, items: [item(0, 'fa'), item(1, 'fb')] });
   const messages = [];
   globalThis.window = { alert: (message) => messages.push(message) };
   try {
@@ -419,9 +453,11 @@ test('a Label TSV import writes the label intent of every batch Result once (B6)
     delete globalThis.window;
   }
   assert.deepEqual(evaluated, [['alpha', 'beta']], 'one evaluation covers the labels of both Results');
-  assert.deepEqual(state.labelTextFeatureOverrides, { fb: 'IMPORTED_B' });
+  assert.deepEqual(state.featureOverrides, {
+    [keyFor('fa')]: rowFor('fa', { labelSourceText: 'alpha' }),
+    [keyFor('fb')]: rowFor('fb', { labelText: 'IMPORTED_B', labelSourceText: 'beta' })
+  });
   assert.deepEqual(state.labelTextBulkOverrides, { alpha: 'BULK_A' });
-  assert.deepEqual(state.labelTextFeatureOverrideSources, { fa: 'alpha', fb: 'beta' });
   assert.equal(displayed.querySelector('text').textContent, 'BULK_A');
   assert.deepEqual(harness.mutations, { commit: 1 });
   assert.deepEqual(messages, ['Loaded 2 row(s). Applied to 2 label(s).']);

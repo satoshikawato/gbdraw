@@ -371,12 +371,6 @@ export const createRecordDisplayControls = ({ state, computed, watch, linearReco
         const next = current.find((entry) => entry.scope === old.scope && entry.sourceUid === old.sourceUid);
         return old.source && (!next || next.source !== old.source || next.paired !== old.paired);
       });
-      Object.entries(state.featurePlacementOverrides).forEach(([key, row]) => {
-        const record = recordForKey(row.recordKey);
-        if (record && replaced.some((source) => recordUsesSource(record, source))) {
-          delete state.featurePlacementOverrides[key];
-        }
-      });
       for (let index = state.recordDisplayDrafts.length - 1; index >= 0; index -= 1) {
         if (replaced.some((source) => source.scope === state.recordDisplayDrafts[index].scope
           && source.sourceUid === state.recordDisplayDrafts[index].sourceUid)) state.recordDisplayDrafts.splice(index, 1);

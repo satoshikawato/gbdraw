@@ -3,6 +3,7 @@ import { readFile } from 'node:fs/promises';
 import test from 'node:test';
 
 import {
+  FEATURE_CATALOG_SCHEMA,
   admitFeatureCatalog,
   biologicalFeatureKey,
   featureStateFromCatalog,
@@ -19,7 +20,7 @@ const featureCatalogSource = await readFile(
 const fullNote = `${'x'.repeat(49)}😀tail`;
 const compactNote = `${'x'.repeat(49)}😀`;
 const catalog = {
-  schema: 4,
+  schema: FEATURE_CATALOG_SCHEMA,
   items: [{
     resultIndex: 0,
     resultName: 'diagram.svg',
@@ -28,7 +29,8 @@ const catalog = {
       svgId: 'f0001',
       recordKey: 'record-instance-a',
       biologicalFeatureId: 'source-feature-a',
-      fillColor: '#abcdef'
+      fillColor: '#abcdef',
+      drawnSelector: { hash: 'f0001', location: '1..5', recordLocation: 'duplicated-accession:1..5:-' }
     }],
     biologicalFeatures: [{
       recordKey: 'record-instance-a',
@@ -122,7 +124,9 @@ test('schema-3 migration proves only exact single-part anchors and disables ambi
   legacy.schema = 3;
   delete legacy.items[0].biologicalFeatures[0].anchorProfile;
   const safe = migrateLegacyFeatureCatalog(legacy);
-  assert.equal(safe.schema, 4);
+  assert.equal(safe.schema, FEATURE_CATALOG_SCHEMA);
+  // Drawn selector values are unknown until the next Generate (design Q4 3.6).
+  assert.equal(safe.items[0].features[0].drawnSelector, null);
   assert.deepEqual(safe.items[0].biologicalFeatures[0].anchorProfile, {
     precision: 'exact', operator: 'single', partOrder: 'biological', strand: '-'
   });
@@ -138,11 +142,25 @@ test('schema-3 migration proves only exact single-part anchors and disables ambi
     { precision: 'unavailable', operator: 'unknown', partOrder: 'ambiguous', strand: '-' }
   );
   for (const invalid of [
-    { ...catalog, schema: 5 },
+    { ...catalog, schema: 6 },
     { ...catalog, schema: 4, items: [{ ...catalog.items[0], biologicalFeatures: [
       { ...catalog.items[0].biologicalFeatures[0], anchorProfile: null }
+    ] }] },
+    // Schema 5 states the drawn selector of every rendered feature.
+    { ...catalog, items: [{ ...catalog.items[0], features: [
+      { ...catalog.items[0].features[0], drawnSelector: undefined }
+    ] }] },
+    { ...catalog, items: [{ ...catalog.items[0], features: [
+      { ...catalog.items[0].features[0], drawnSelector: { hash: 'f0001' } }
     ] }] }
   ]) assert.throws(() => validateFeatureCatalog(invalid, results));
+  // Schema 4 is read with unknown drawn selector values.
+  const anchors = structuredClone(catalog);
+  anchors.schema = 4;
+  delete anchors.items[0].features[0].drawnSelector;
+  const promoted = validateFeatureCatalog(anchors, results);
+  assert.equal(promoted.schema, FEATURE_CATALOG_SCHEMA);
+  assert.equal(promoted.items[0].features[0].drawnSelector, null);
 });
 
 test('duplicate-location source indexes survive catalog validation and expansion', () => {
@@ -157,7 +175,8 @@ test('duplicate-location source indexes survive catalog validation and expansion
     svgId: 'f0002',
     recordKey: 'record-instance-a',
     biologicalFeatureId: 'source-feature-b',
-    fillColor: '#fedcba'
+    fillColor: '#fedcba',
+    drawnSelector: null
   });
   duplicated.items[0].orthogroups[0].members.push({
     recordKey: 'record-instance-a',
@@ -222,7 +241,8 @@ test('orthogroup members do not select one of multiple rendered references', () 
     svgId: 'f0001-alternate',
     recordKey: 'record-instance-a',
     biologicalFeatureId: 'source-feature-a',
-    fillColor: '#fedcba'
+    fillColor: '#fedcba',
+    drawnSelector: null
   });
 
   const state = featureStateFromCatalog(
@@ -264,7 +284,7 @@ test('catalog dual-projects collinear groups into semantic and presentation cata
     }));
     item.features = item.biologicalFeatures.map((feature) => ({
       recordKey: feature.recordKey, biologicalFeatureId: feature.biologicalFeatureId,
-      svgId: feature.stableFeatureId, fillColor: '#abcdef'
+      svgId: feature.stableFeatureId, fillColor: '#abcdef', drawnSelector: null
     }));
     const member = (id, role) => ({
       recordKey: id.startsWith('a') ? 'record_a' : 'record_b',
@@ -372,7 +392,8 @@ test('catalog validates ordered plural comparison endpoint references', () => {
   plural.items[0].features.push({
     svgId: 'f0002',
     recordKey: 'record-instance-a',
-    biologicalFeatureId: 'source-feature-b'
+    biologicalFeatureId: 'source-feature-b',
+    drawnSelector: null
   });
   plural.items[0].biologicalFeatures.push({
     recordKey: 'record-instance-a',
@@ -682,7 +703,8 @@ test('linear catalog state uses global record indexes and matching display label
   multiRecordCatalog.items[0].features.push({
     svgId: 'f0002',
     recordKey: 'record-instance-b',
-    biologicalFeatureId: 'source-feature-b'
+    biologicalFeatureId: 'source-feature-b',
+    drawnSelector: null
   });
   multiRecordCatalog.items[0].biologicalFeatures.push({
     recordKey: 'record-instance-b',
@@ -739,7 +761,8 @@ test('circular batch catalog state rebases item-local record indexes globally', 
     features: [{
       svgId: 'f0002',
       recordKey: 'record-instance-b',
-      biologicalFeatureId: 'source-feature-b'
+      biologicalFeatureId: 'source-feature-b',
+      drawnSelector: null
     }],
     biologicalFeatures: [{
       recordKey: 'record-instance-b',
@@ -834,4 +857,17 @@ test('catalog admission cannot hide bulk post-admission orthogroup enrichment be
   assert.doesNotMatch(featureCatalogSource, /\benrichFeaturesWithOrthogroups\b/);
   assert.match(featureCatalogSource, /orthogroupProjection\.registerFeature\(/);
   assert.match(featureCatalogSource, /orthogroupProjection\.addGroup\(/);
+});
+
+// Design Q4 6.1, 3.6: one admission binds each Result's rendered IDs to their
+// features, which carry the source identity and the drawn selector values.
+test('admission binds each Result rendered ID to its identity and drawn selector', () => {
+  const admission = admitFeatureCatalog(structuredClone(catalog), results, { mode: 'linear' });
+  const feature = admission.renderedFeaturesByResult[0].get('f0001');
+  assert.equal(feature.record_key, 'record-instance-a');
+  assert.equal(feature.biological_feature_id, 'source-feature-a');
+  assert.deepEqual(feature.drawnSelector, {
+    hash: 'f0001', location: '1..5', recordLocation: 'duplicated-accession:1..5:-'
+  });
+  assert.equal(admission.featureState.renderedFeaturesByResult, admission.renderedFeaturesByResult);
 });

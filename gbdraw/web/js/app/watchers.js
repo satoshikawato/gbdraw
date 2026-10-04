@@ -9,10 +9,6 @@ import {
   prepareSpecificColorImport
 } from './specific-color-rules.js';
 import {
-  buildFeatureVisibilitySelectorCache,
-  preserveFeatureVisibilitySelectorCacheForOverrides
-} from './feature-visibility.js';
-import {
   normalizeCircularPlotTitlePosition
 } from './plot-title-position.js';
 import { resolveCircularLayoutPreference } from './layout-preferences.js';
@@ -58,7 +54,6 @@ export const setupWatchers = ({
     manualSpecificRules,
     extractedFeatures,
     biologicalFeatures,
-    featureSelectorSafetyScope,
     layoutRepositionMode,
     editableLabels,
     results,
@@ -79,8 +74,6 @@ export const setupWatchers = ({
     suppressCircularMultiRecordDefaults,
     featureRecordIds,
     selectedFeatureRecordIdx,
-    featureVisibilityOverrides,
-    replaceFeatureVisibilitySelectorCacheOwner,
     featurePanelTab,
     labelSearch,
     orthogroups,
@@ -90,9 +83,7 @@ export const setupWatchers = ({
     selectedOrthogroupId,
     orthogroupSearch,
     labelTextBulkOverrides,
-    labelTextFeatureOverrides,
     canonicalLabelOverrideRows,
-    labelVisibilityOverrides,
     labelOverrideBuildWarning,
     isFeatureDrawerMounted,
     clickedFeature,
@@ -152,26 +143,6 @@ export const setupWatchers = ({
       singleLayout.legend === 'left' ? 'bottom' : singleLayout.legend;
     layoutPreferences.circular.multi.plotTitlePosition =
       singleLayout.plotTitlePosition === 'none' ? 'bottom' : singleLayout.plotTitlePosition;
-  };
-
-  const replacePlainObject = (target, source = {}) => {
-    Object.keys(target || {}).forEach((key) => delete target[key]);
-    Object.entries(source || {}).forEach(([key, value]) => {
-      target[key] = value;
-    });
-  };
-
-  const refreshFeatureVisibilitySelectorCache = () => {
-    const nextCache = preserveFeatureVisibilitySelectorCacheForOverrides(
-      buildFeatureVisibilitySelectorCache(extractedFeatures.value, featureSelectorSafetyScope.value),
-      state.featureVisibilitySelectorCache,
-      featureVisibilityOverrides
-    );
-    if (typeof replaceFeatureVisibilitySelectorCacheOwner === 'function') {
-      replaceFeatureVisibilitySelectorCacheOwner(nextCache);
-    } else {
-      replacePlainObject(state.featureVisibilitySelectorCache, nextCache);
-    }
   };
 
   watch(
@@ -284,18 +255,11 @@ export const setupWatchers = ({
     }
   );
 
-  watch(extractedFeatures, () => {
-    if (semanticFileWatchersSuppressed.value || trustedArtifactRestoreInProgress.value) return;
-    refreshFeatureVisibilitySelectorCache();
-  });
-
-  watch(featureSelectorSafetyScope, () => {
-    if (trustedArtifactRestoreInProgress.value) return;
-    refreshFeatureVisibilitySelectorCache();
-  }, { immediate: true });
-
+  // The saved label table is the rules a loaded Session sent; a bulk label
+  // edit replaces it with the rows the editor builds. Per-feature label edits
+  // are identity rows, which apply before the table (design Q4).
   watch(
-    [labelTextFeatureOverrides, labelTextBulkOverrides, labelVisibilityOverrides],
+    labelTextBulkOverrides,
     () => {
       if (semanticFileWatchersSuppressed.value) return;
       canonicalLabelOverrideRows.value = [];
@@ -343,16 +307,9 @@ export const setupWatchers = ({
         : {};
       extractedFeatures.value = features.extractedFeatures || [];
       if (biologicalFeatures) biologicalFeatures.value = features.biologicalFeatures || [];
-      featureSelectorSafetyScope.value = features.featureSelectorSafetyScope || [];
       featureRecordIds.value = features.featureRecordIds || [];
       selectedFeatureRecordIdx.value = 0;
       // Mode inactivity clears projections, not durable label/visibility intent.
-      // The editor's existing identity reconciliation handles source replacement.
-      if (typeof replaceFeatureVisibilitySelectorCacheOwner === 'function') {
-        replaceFeatureVisibilitySelectorCacheOwner({});
-      } else {
-        replacePlainObject(state.featureVisibilitySelectorCache, {});
-      }
       editableLabels.value = [];
       orthogroups.value = features.orthogroups || [];
       collinearGroups.value = features.collinearGroups || [];

@@ -17,6 +17,7 @@ import pytest
 import gbdraw.web_support.feature_catalog as feature_catalog_module
 from gbdraw.features.ids import compute_feature_hash_from_parts
 from gbdraw.session_io import (
+    CURRENT_FEATURE_CATALOG_SCHEMA,
     CURRENT_SESSION_VERSION,
     LOSAT_DERIVED_CACHE_SCHEMA,
     NUCLEOTIDE_LOSAT_CACHE_SCHEMA,
@@ -66,7 +67,9 @@ from tools.refresh_gallery_sessions import (
 pytestmark = pytest.mark.gallery
 
 BUNDLED_REQUEST_SCHEMAS = frozenset({5, 6, 7, 8, CANONICAL_REQUEST_SCHEMA})
-BUNDLED_SESSION_VERSIONS = frozenset({41, 42, CURRENT_SESSION_VERSION})
+# Session 44 Gallery files stay until the Gallery refresh after the Session 45
+# writer (design Q4 4.4).
+BUNDLED_SESSION_VERSIONS = frozenset({41, 42, 44, CURRENT_SESSION_VERSION})
 
 
 def test_default_refresh_inventory_covers_gallery_and_test_input_sessions() -> None:
@@ -546,7 +549,7 @@ def _staged_geometry_session(
         "results": [{"name": "result", "content": "<svg></svg>"}],
         "editorState": {
             "featureCatalog": {
-                "schema": 4,
+                "schema": CURRENT_FEATURE_CATALOG_SCHEMA,
                 "items": [
                     {
                         "resultIndex": 0,
@@ -1145,7 +1148,7 @@ def test_staged_gallery_validator_accepts_current_artifact_schemas(
         "results": [{"name": "result", "content": "<svg></svg>"}],
         "editorState": {
             "featureCatalog": {
-                "schema": 4,
+                "schema": CURRENT_FEATURE_CATALOG_SCHEMA,
                 "items": [
                     {
                         "resultIndex": 0,
@@ -1815,7 +1818,8 @@ def test_gallery_session_features_seed_biological_catalog() -> None:
         }
     )
 
-    assert list(context.features) == [feature]
+    # A schema-4 catalog reads as schema 5 without drawn selector values.
+    assert list(context.features) == [{**feature, "drawnSelector": None}]
     assert list(context.biological_features) == [biological, hidden]
 
 

@@ -505,6 +505,12 @@ const validateCurrentSemanticCoverage = (request) => {
       'recordKey', 'biologicalFeatureId', 'featureVisibility', 'labelVisibility', 'labelText'
     ]);
   });
+  if ((options.annotations?.sets || []).some((set) => (set?.annotations || [])
+    .some((item) => item?.target?.kind === 'featureIdentity'))) {
+    throw new SourceRecipeUnavailable(
+      'Source recipe unavailable: annotations that name a source feature have no current CLI projection.'
+    );
+  }
   (options.featurePlacements || []).forEach((row, index) => {
     const path = `diagramOptions.featurePlacements[${index}]`;
     coverObject(coverage, row, path, ['recordKey', 'biologicalFeatureId', 'placement']);

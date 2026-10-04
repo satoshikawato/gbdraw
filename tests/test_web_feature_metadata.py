@@ -640,41 +640,33 @@ def test_web_feature_selector_record_location_matches_visibility_rule(
     )
 
 
-def test_web_feature_selector_safety_scope_precedes_visibility_filtering(
+def test_web_feature_payload_records_the_drawn_selector_values(
     tmp_path: Path,
 ) -> None:
-    record = SeqRecord(Seq("A" * 120), id="NC_000006", name="SafetyScope")
-    record.features.extend(
-        [
-            SeqFeature(
-                FeatureLocation(0, 30, strand=1),
-                type="CDS",
-                qualifiers={"locus_tag": ["HIDDEN_0006"], "translation": ["M"]},
-            ),
-            SeqFeature(
-                FeatureLocation(60, 90, strand=-1),
-                type="misc_feature",
-                qualifiers={"note": ["outside selected type"]},
-            ),
-        ]
-    )
-    rules = compile_feature_visibility_rules(
-        pd.DataFrame(
-            [["NC_000006", "CDS", "locus_tag", "^HIDDEN_0006$", "off"]],
-            columns=["record_id", "feature_type", "qualifier", "value", "action"],
+    # Feature catalog 5 (design Q4 OV-02): each rendered feature carries the
+    # selector values of the record it was drawn from; no selector-safety scope
+    # of the whole source is built.
+    record = SeqRecord(Seq("A" * 120), id="NC_000006", name="Drawn")
+    record.features.append(
+        SeqFeature(
+            FeatureLocation(0, 30, strand=1),
+            type="CDS",
+            qualifiers={"locus_tag": ["DRAWN_0006"], "translation": ["M"]},
         )
     )
 
     payload = extract_features_from_genbank_payload(
         _write_genbank(tmp_path, record),
         selected_features=["CDS"],
-        feature_visibility_rules=rules,
     )
 
-    assert payload["features"] == []
-    scope_types = [entry["feature_type"] for entry in payload["selector_safety_scope"]]
-    assert scope_types == ["CDS", "misc_feature"]
-    assert payload["selector_safety_scope"][0]["selector"]["qualifiers"]["locus_tag"] == ["HIDDEN_0006"]
+    assert sorted(payload) == ["features", "record_ids"]
+    [feature] = payload["features"]
+    assert feature["drawn_selector"] == {
+        "hash": feature["selector"]["hash"],
+        "location": "0..30",
+        "recordLocation": "NC_000006:0..30:+",
+    }
 
 
 def test_biological_feature_catalog_keeps_features_excluded_from_rendering() -> None:

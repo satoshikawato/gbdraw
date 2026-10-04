@@ -5,6 +5,19 @@ import { compileDirectEditorMutationPlan } from '../../gbdraw/web/js/app/candida
 import { biologicalFeatureKey } from '../../gbdraw/web/js/services/feature-catalog.js';
 
 const stableKey = biologicalFeatureKey('record-a', 'feature-a');
+// Per-feature visibility and label edits are identity rows (design Q4); each
+// Result reaches them through the rendered targets of their identity.
+const identityRow = (fields, featureId = 'feature-a') => ({
+  [JSON.stringify(['record-a', featureId])]: {
+    recordKey: 'record-a',
+    biologicalFeatureId: featureId,
+    featureVisibility: null,
+    labelVisibility: null,
+    labelText: null,
+    labelSourceText: null,
+    ...fields
+  }
+});
 
 const admission = () => ({
   resultNames: ['diagram.svg'],
@@ -27,12 +40,10 @@ test('empty, default, stale, renderer, manual-rule, and legacy inputs compile to
       stale: { strokeColor: '#223344' },
       [stableKey]: {}
     },
-    featureVisibilityOverrides: {
-      stale: 'off',
-      f0001: 'default'
+    featureOverrides: {
+      ...identityRow({ featureVisibility: 'off', labelText: 'ignored' }, 'stale'),
+      ...identityRow({ featureVisibility: 'exclude_matching', labelSourceText: 'source' })
     },
-    labelTextFeatureOverrides: { stale: 'ignored' },
-    labelVisibilityOverrides: { f0001: 'default' },
     manualSpecificRules: [{ cap: 'manual', color: '#abcdef' }],
     legendEntries: [{ caption: 'file-derived', color: '#abcdef' }],
     originalLegendOrder: ['CDS'],
@@ -69,9 +80,9 @@ test('each direct editor domain and their combination compile to MUTATING', () =
         [stableKey]: { strokeColor: '#223344', strokeWidth: 2 }
       }
     },
-    visibility: { featureVisibilityOverrides: { f0001: 'off' } },
-    labelText: { labelTextFeatureOverrides: { f0001: 'renamed' } },
-    labelVisibility: { labelVisibilityOverrides: { f0001: 'off' } },
+    visibility: { featureOverrides: identityRow({ featureVisibility: 'off' }) },
+    labelText: { featureOverrides: identityRow({ labelText: 'renamed' }) },
+    labelVisibility: { featureOverrides: identityRow({ labelVisibility: 'off' }) },
     legendFill: {
       legendEntries: [{ caption: 'CDS', originalCaption: 'CDS', color: '#334455' }],
       originalLegendOrder: ['CDS'],
@@ -114,9 +125,7 @@ test('each direct editor domain and their combination compile to MUTATING', () =
     catalogAdmission: admission(),
     ...cases.fill,
     ...cases.stroke,
-    ...cases.visibility,
-    ...cases.labelText,
-    ...cases.labelVisibility,
+    featureOverrides: identityRow({ featureVisibility: 'off', labelText: 'renamed', labelVisibility: 'off' }),
     ...cases.legendFill,
     ...cases.legendStroke,
     transformSvg() {}
@@ -234,4 +243,27 @@ test('canvas padding reaches every candidate Result once and is idempotent (D-09
   const plain = parse();
   assert.equal(applyCanvasPaddingToSvg(plain, {}), false);
   assert.equal(plain.getAttribute('data-original-view-box'), null);
+});
+
+// Design Q4 6.2: an identity row reaches each Result through the rendered ID
+// that Result draws it with, not through one rendered ID string.
+test('an identity row projects onto every Result that draws its feature', () => {
+  const plan = compileDirectEditorMutationPlan({
+    catalogAdmission: {
+      resultNames: ['one.svg', 'two.svg'],
+      renderedTargetsByOverrideKey: new Map([[stableKey, [
+        { resultIndex: 0, renderedId: 'f0001_record_1' },
+        { resultIndex: 1, renderedId: 'f0001__instance_record_2_0123456789abcdef' }
+      ]]]),
+      resultIndexesByRenderedId: new Map()
+    },
+    featureOverrides: identityRow({ featureVisibility: 'off', labelText: 'renamed' })
+  });
+  assert.deepEqual(plan.operationsByResult.map((operations) => operations.featureVisibility), [
+    [{ renderedId: 'f0001_record_1', mode: 'off' }],
+    [{ renderedId: 'f0001__instance_record_2_0123456789abcdef', mode: 'off' }]
+  ]);
+  assert.deepEqual(plan.operationsByResult.map((operations) => operations.labelText.map(({ value }) => value)), [
+    ['renamed'], ['renamed']
+  ]);
 });

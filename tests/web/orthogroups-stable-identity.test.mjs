@@ -1015,7 +1015,7 @@ assert.equal(
 const catalogSelectionItem = { resultIndex: 0, resultName: 'result-zero' };
 assert.equal(
   selectStandaloneCatalogItem({
-    featureCatalog: { schema: 4, items: [catalogSelectionItem] },
+    featureCatalog: { schema: 5, items: [catalogSelectionItem] },
     catalogResultIndex: '0',
     catalogResultName: 'result-zero'
   }),
@@ -1029,7 +1029,7 @@ for (const invalidCatalogIndex of [
 ]) {
   assert.equal(
     selectStandaloneCatalogItem({
-      featureCatalog: { schema: 4, items: [catalogSelectionItem] },
+      featureCatalog: { schema: 5, items: [catalogSelectionItem] },
       catalogResultIndex: invalidCatalogIndex,
       catalogResultName: 'result-zero'
     }),

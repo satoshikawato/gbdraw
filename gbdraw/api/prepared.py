@@ -112,7 +112,6 @@ _CACHE_METRICS = (
     "interactiveContextCacheMissCount",
     "interactiveContextBuildCount",
     "interactiveFeatureTraversalCount",
-    "selectorSafetyScopeBuildCount",
     "preparedInputCacheEvictionCount",
     "preparedInputCacheRetainedBytes",
     "preparedInputCacheMutationViolationCount",

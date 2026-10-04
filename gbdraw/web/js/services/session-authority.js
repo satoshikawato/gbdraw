@@ -5,6 +5,14 @@ import { validateWebFileBindings } from './session-resource-backing.js';
 import { validateCurrentWriterActiveConfig, validateAlignmentResetReceiptShape } from './session-active-config-contract.js';
 import { migrateLegacyLinearLabelVisibility } from '../app/linear-label-visibility.js';
 import { migrateLegacyRecordDisplayDrafts } from '../app/record-display-options.js';
+import { canonicalFeatureOverrides, validateFeatureIdentityNotices } from './feature-placement.js';
+import { RENDERED_ID_FEATURE_EDIT_FIELDS } from './feature-edit-migration.js';
+
+// Session 44 introduced the current active-config and record-display draft
+// shapes; Session 45 keys per-feature edits by source identity (design Q4).
+export const TYPED_DRAFT_SESSION_VERSION = 44;
+export const FEATURE_IDENTITY_SESSION_VERSION = 45;
+const FEATURE_CATALOG_SCHEMA_BY_SESSION_VERSION = Object.freeze({ 44: 4, 45: 5 });
 
 export const SESSION_TOP_LEVEL_AUTHORITY = Object.freeze({
   format: 'document',
@@ -64,20 +72,19 @@ const ARTIFACT_UI_FIELDS = Object.freeze([
   'generatedCircularPlotTitlePosition'
 ]);
 
+// Older Sessions' rendered-ID edit maps are read once and migrated to
+// `featureOverrides` (services/feature-edit-migration.js).
 const ARTIFACT_FEATURE_FIELDS = Object.freeze([
   'extractedFeatures',
   'biologicalFeatures',
-  'featureSelectorSafetyScope',
   'featureRecordIds',
   'selectedFeatureRecordIdx',
   'featureColorOverrides',
   'featureVisibilityManualRules',
-  'featureVisibilityOverrides',
-  'labelTextFeatureOverrides',
+  'featureOverrides',
   'labelOverrideRows',
   'labelTextBulkOverrides',
-  'labelTextFeatureOverrideSources',
-  'labelVisibilityOverrides'
+  ...RENDERED_ID_FEATURE_EDIT_FIELDS
 ]);
 
 const isPlainObject = (value) => (
@@ -274,7 +281,7 @@ export const hasBiologicalSessionInputs = (files = {}) => (
   || (files.linearSeqs || []).some(row => ['gb', 'gff', 'fasta'].some(key => hasInput(row[key])))
 );
 
-export const isSettingsOnlySessionDocument = data => [42, 44].includes(data?.version)
+export const isSettingsOnlySessionDocument = data => [42, 44, 45].includes(data?.version)
   && Object.hasOwn(data, 'renderRequest') && data.renderRequest === null;
 
 const validateSettingsOnlyDocument = data => {
@@ -297,13 +304,13 @@ const validateSettingsOnlyDocument = data => {
     || bindings.c_conservation_blasts_source === 'losat-cache') {
     throw new Error('Settings-only Session cannot contain committed render artifacts.');
   }
-  let storedConfig = data.version === 44 || !isPlainObject(data.config?.adv)
+  let storedConfig = data.version >= TYPED_DRAFT_SESSION_VERSION || !isPlainObject(data.config?.adv)
     ? data.config
     : {
         ...data.config,
         adv: migrateLegacyLinearLabelVisibility(data.config.adv)
       };
-  if (data.version < 44 && isPlainObject(storedConfig)
+  if (data.version < TYPED_DRAFT_SESSION_VERSION && isPlainObject(storedConfig)
     && Object.prototype.hasOwnProperty.call(storedConfig, 'recordDisplayDrafts')) {
     storedConfig = {
       ...storedConfig,
@@ -331,8 +338,8 @@ export const validateSessionAuthorityInventory = (sessionData, version) => {
   }
   assertSafeObjectKeys(sessionData, 'Session');
   const bindings = validateWebFileBindings(sessionData.webFiles, sessionData.resources);
-  if (bindings?.schema === 2 && ![41, 42, 44].includes(Number(version))) {
-    throw new Error('Web binding schema 2 requires session version 41, 42, or 44.');
+  if (bindings?.schema === 2 && ![41, 42, 44, 45].includes(Number(version))) {
+    throw new Error('Web binding schema 2 requires session version 41, 42, 44, or 45.');
   }
   if (Number(version) < 31) return;
   if (
@@ -368,6 +375,20 @@ export const validateSessionAuthorityInventory = (sessionData, version) => {
         `Session version ${String(version)} contains branch-only feature field(s): `
         + forbiddenFeatureFields.join(', ')
       );
+    }
+    if (Number(version) >= FEATURE_IDENTITY_SESSION_VERSION) {
+      const retired = RENDERED_ID_FEATURE_EDIT_FIELDS.filter((field) => Object.hasOwn(features, field));
+      if (retired.length > 0) {
+        throw new Error(
+          `Session version ${String(version)} cannot contain rendered-ID feature edits: ${retired.join(', ')}`
+        );
+      }
+      if (Object.hasOwn(features, 'featureOverrides')) {
+        if (!isPlainObject(features.featureOverrides)) {
+          throw new Error('Session features.featureOverrides must be an object.');
+        }
+        canonicalFeatureOverrides(features.featureOverrides);
+      }
     }
     if (
       Object.prototype.hasOwnProperty.call(sessionData, 'orthogroupState')
@@ -420,7 +441,7 @@ export const validateSessionAuthorityInventory = (sessionData, version) => {
     }
     validateAlignmentResetReceiptShape(editorState.alignmentResetReceipt, sessionData.renderRequest);
     const featureCatalog = editorState.featureCatalog;
-    const expectedCatalogSchema = Number(version) === 44 ? 4 : 3;
+    const expectedCatalogSchema = FEATURE_CATALOG_SCHEMA_BY_SESSION_VERSION[Number(version)] ?? 3;
     if (
       featureCatalog !== null
       && (!isPlainObject(featureCatalog) || featureCatalog.schema !== expectedCatalogSchema)
@@ -446,6 +467,7 @@ export const validateSessionAuthorityInventory = (sessionData, version) => {
     throw new Error(`Session contains unclassified top-level field(s): ${unknown.join(', ')}`);
   }
   validateAnnotationWarnings(sessionData.runMetadata?.annotationWarnings, sessionData.results);
+  validateFeatureIdentityNotices(sessionData.runMetadata?.featureIdentityNotices, sessionData.results);
   validateComparisonWarnings(sessionData.runMetadata?.comparisonWarnings, sessionData.results);
   if (isSettingsOnlySessionDocument(sessionData)) validateSettingsOnlyDocument(sessionData);
 };

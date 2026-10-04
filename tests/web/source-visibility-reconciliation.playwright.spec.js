@@ -28,6 +28,11 @@ const hide = async page => {
   await closeEditor(page);
   return target.featureId;
 };
+// The draft key of the feature drawn with this rendered ID (design Q4).
+const identityOf = (page, svgId) => page.evaluate((id) => {
+  const feature = window.__GBDRAW_APP__.extractedFeatures.find((item) => item.svg_id === id);
+  return JSON.stringify([feature.record_key, feature.biological_feature_id]);
+}, svgId);
 const history = async (page, action) => {
   await page.getByRole('button', { name: action, exact: true }).click();
   await expect.poll(() => page.evaluate(() => !window.__GBDRAW_HISTORY__.restoring.value
@@ -41,24 +46,25 @@ test('V1-V5/V8 individual visibility is reconciled on accepted source replacemen
   try {
     await generate(page);
     const id = await hide(page);
+    const key = await identityOf(page, id);
     expect(id).toBe('f24a47546');
     await generate(page);
-    expect((await snapshot(page)).featureVisibility).toEqual({ [id]: 'off' });
+    expect((await snapshot(page)).featureVisibility).toEqual({ [key]: 'off' });
     await switchMode(page, 'linear');
     await switchMode(page, 'circular');
-    expect((await snapshot(page)).featureVisibility).toEqual({ [id]: 'off' });
+    expect((await snapshot(page)).featureVisibility).toEqual({ [key]: 'off' });
     await upload(page, await source(tobacco, 'tobacco.gb'));
     // A remains the current Result until B is admitted.
-    expect((await snapshot(page)).featureVisibility).toEqual({ [id]: 'off' });
+    expect((await snapshot(page)).featureVisibility).toEqual({ [key]: 'off' });
     await generate(page);
     expect((await snapshot(page)).featureVisibility).toEqual({});
     await history(page, 'Undo');
-    expect((await snapshot(page)).featureVisibility).toEqual({ [id]: 'off' });
+    expect((await snapshot(page)).featureVisibility).toEqual({ [key]: 'off' });
     await history(page, 'Redo');
     expect((await snapshot(page)).featureVisibility).toEqual({});
     const file = testInfo.outputPath('source-B.gbdraw-session.json.gz');
     const bytes = await download(page, 'Save Session', file);
-    expect(JSON.parse(gunzipSync(bytes)).features.featureVisibilityOverrides).toEqual({});
+    expect(JSON.parse(gunzipSync(bytes)).features.featureOverrides).toEqual({});
     fresh = await load(browser, file);
     expect((await snapshot(fresh)).featureVisibility).toEqual({});
     await upload(fresh, await source(seed, 'mito-return.gb'));
@@ -80,11 +86,12 @@ test('V6/V7 shared biological targets and manual matchers survive while rejected
   try {
     await generate(page);
     const id = await hide(page);
+    const key = await identityOf(page, id);
     const a = await source(seed, 'renamed.gb');
     const b = await source(lambda, 'lambda.gb');
     await upload(page, { ...a, buffer: Buffer.concat([a.buffer, Buffer.from('\n'), b.buffer]) });
     await generate(page);
-    expect((await snapshot(page)).featureVisibility).toEqual({ [id]: 'off' });
+    expect((await snapshot(page)).featureVisibility).toEqual({ [key]: 'off' });
     // Use the existing manual-rule owner for a type-wide matcher.
     await page.evaluate(() => {
       const app = window.__GBDRAW_APP__;
@@ -132,10 +139,11 @@ test('composite source replacement and Web-CLI-Web replay do not restore discard
   try {
     await generate(page);
     const id = await hide(page);
+    const key = await identityOf(page, id);
     await generate(page);
     await switchMode(page, 'linear');
     await switchMode(page, 'circular');
-    expect((await snapshot(page)).featureVisibility).toEqual({ [id]: 'off' });
+    expect((await snapshot(page)).featureVisibility).toEqual({ [key]: 'off' });
     await upload(page, await source(tobacco, 'tobacco.gb'));
     await generate(page);
     expect((await snapshot(page)).featureVisibility).toEqual({});
@@ -164,14 +172,15 @@ test('repeated generation of an unchanged source preserves hidden duplicate feat
     await upload(page, { ...file, buffer: Buffer.from(text.replace(entry, `${entry}\n${entry}`)) });
     await generate(page);
     const id = await hide(page);
+    const key = await identityOf(page, id);
     expect(id).toContain('__instance_');
     await generate(page);
     await generate(page);
-    expect((await snapshot(page)).featureVisibility).toEqual({ [id]: 'off' });
+    expect((await snapshot(page)).featureVisibility).toEqual({ [key]: 'off' });
     // A new File view with the same supported semantic target is valid too.
     await upload(page, { ...file, name: 'renamed-duplicates.gb', buffer: Buffer.from(text.replace(entry, `${entry}\n${entry}`)) });
     await generate(page);
-    expect((await snapshot(page)).featureVisibility).toEqual({ [id]: 'off' });
+    expect((await snapshot(page)).featureVisibility).toEqual({ [key]: 'off' });
     expect(page.externalRequests).toEqual([]);
   } finally { await page.context().close(); }
 });

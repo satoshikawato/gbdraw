@@ -16,6 +16,7 @@ from pandas import DataFrame
 
 import gbdraw
 import gbdraw.api as api
+from gbdraw.session_io import CURRENT_SESSION_VERSION
 from gbdraw.api.request_render import build_request_diagram, plan_request
 from gbdraw.api.requests import InMemoryRecordSource, RecordInput
 from gbdraw.features.placement import FeaturePlacementOverride, FeaturePlacementTarget
@@ -130,7 +131,7 @@ def test_historical_v40_schema6_typed_promotion_without_render(tmp_path):
         assert all(record.display == api.RecordDisplayOptions() for record in request.records)
         assert not request.options.feature_placements
         promoted = api.build_session_document(request).to_dict()
-    assert promoted["version"] == 44
+    assert promoted["version"] == CURRENT_SESSION_VERSION
     assert promoted["renderRequest"]["schema"] == CANONICAL_REQUEST_SCHEMA
     assert [r["cardinality"] for r in promoted["renderRequest"]["records"]] == [
         r["cardinality"] for r in historical["renderRequest"]["records"]

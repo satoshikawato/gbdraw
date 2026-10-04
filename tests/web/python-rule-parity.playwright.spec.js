@@ -61,10 +61,10 @@ test('Python label TSV syntax is validated before replacing live overrides', asy
   expect(await page.locator('.origin-top svg text').filter({ hasText: /^MATCHED$/ }).count()).toBe(0);
   await page.evaluate(() => window.__GBDRAW_APP__.redoHistory());
   expect(await page.locator('.origin-top svg text').filter({ hasText: /^MATCHED$/ }).count()).toBe(7);
-  const snapshot = await page.evaluate(() => ({ svg: window.__GBDRAW_APP__.svgContent, overrides: JSON.stringify(window.__GBDRAW_APP__.labelTextFeatureOverrides) }));
+  const snapshot = await page.evaluate(() => ({ svg: window.__GBDRAW_APP__.svgContent, overrides: JSON.stringify(window.__GBDRAW_APP__.featureOverrides) }));
   await importLabel('(?<enzyme>NADH)', 'INVALID');
   expect(await page.evaluate(() => window.__GBDRAW_APP__.errorLog)).toMatchObject({code:'REGEX_SYNTAX',context:{reason:'UNKNOWN_EXTENSION'}});
-  expect(await page.evaluate(() => ({ svg: window.__GBDRAW_APP__.svgContent, overrides: JSON.stringify(window.__GBDRAW_APP__.labelTextFeatureOverrides) }))).toEqual(snapshot);
+  expect(await page.evaluate(() => ({ svg: window.__GBDRAW_APP__.svgContent, overrides: JSON.stringify(window.__GBDRAW_APP__.featureOverrides) }))).toEqual(snapshot);
   await generateAndWaitForResult(page);
   expect(await page.locator('.origin-top svg text').filter({ hasText: /^MATCHED$/ }).count()).toBe(7);
 });

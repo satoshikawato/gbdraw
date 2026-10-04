@@ -9,6 +9,7 @@ from Bio.Seq import Seq
 from Bio.SeqFeature import FeatureLocation, SeqFeature
 from Bio.SeqRecord import SeqRecord
 
+from gbdraw.web_support.feature_catalog import FEATURE_CATALOG_SCHEMA
 from gbdraw.analysis.protein_colinearity import (
     OrthogroupMember,
     OrthogroupResult,
@@ -408,7 +409,7 @@ def test_interactive_svg_maps_biological_id_to_actual_reversed_dom_path() -> Non
       fill="#54bcf8" d="M 1 1 L 2 2" /></svg>"""
     enriched = enrich_svg(source, context)
     payload = _metadata(enriched)
-    assert payload["schema"] == 4
+    assert payload["schema"] == FEATURE_CATALOG_SCHEMA
     item = payload["items"][0]
 
     biological = next(

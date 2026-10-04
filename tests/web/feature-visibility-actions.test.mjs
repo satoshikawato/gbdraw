@@ -1,41 +1,16 @@
 import assert from 'node:assert/strict';
-import { mkdir, mkdtemp, readFile, writeFile } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
-import { join } from 'node:path';
-import { pathToFileURL } from 'node:url';
-
-const repoRoot = process.cwd();
-const sourceDir = join(repoRoot, 'gbdraw', 'web', 'js', 'app');
-const tempDir = await mkdtemp(join(tmpdir(), 'gbdraw-feature-visibility-actions-'));
-await writeFile(join(tempDir, 'package.json'), '{"type":"module"}\n', 'utf8');
-await mkdir(join(tempDir, 'app', 'feature-editor'), { recursive: true });
-await mkdir(join(tempDir, 'services'), { recursive: true });
-await writeFile(
-  join(tempDir, 'app', 'feature-editor', 'visibility-actions.js'),
-  await readFile(join(sourceDir, 'feature-editor', 'visibility-actions.js'), 'utf8'),
-  'utf8'
-);
-await writeFile(join(tempDir, 'app', 'feature-visibility.js'), await readFile(join(sourceDir, 'feature-visibility.js'), 'utf8'), 'utf8');
-await writeFile(join(tempDir, 'app', 'feature-selector.js'), await readFile(join(sourceDir, 'feature-selector.js'), 'utf8'), 'utf8');
-await writeFile(join(tempDir, 'app', 'feature-utils.js'), await readFile(join(sourceDir, 'feature-utils.js'), 'utf8'), 'utf8');
-await writeFile(
-  join(tempDir, 'services', 'text-download.js'),
-  await readFile(join(sourceDir, '..', 'services', 'text-download.js'), 'utf8'),
-  'utf8'
-);
-await writeFile(
-  join(tempDir, 'services', 'feature-identity.js'),
-  await readFile(join(sourceDir, '..', 'services', 'feature-identity.js'), 'utf8'),
-  'utf8'
-);
-
-const { createFeatureVisibilityActions } = await import(
-  pathToFileURL(join(tempDir, 'app', 'feature-editor', 'visibility-actions.js'))
-);
+import { createFeatureVisibilityActions } from '../../gbdraw/web/js/app/feature-editor/visibility-actions.js';
+import { setFeatureVisibilityOverride } from '../../gbdraw/web/js/app/feature-visibility.js';
 
 const ref = (value) => ({ value });
-const featureA = { svg_id: 'feature-a', type: 'CDS', label: 'A' };
-const featureB = { svg_id: 'feature-b', type: 'CDS', label: 'B' };
+// Per-feature visibility is the identity row of the feature (design Q4).
+const identity = (id) => ({ record_key: 'record-1', biological_feature_id: `bio-${id}` });
+const modes = (overrides) => Object.fromEntries(Object.values(overrides)
+  .filter((row) => row.featureVisibility !== null)
+  .map((row) => [row.biologicalFeatureId.replace(/^bio-/, ''), row.featureVisibility]));
+const clear = (overrides) => Object.keys(overrides).forEach((key) => delete overrides[key]);
+const featureA = { svg_id: 'feature-a', type: 'CDS', label: 'A', ...identity('feature-a') };
+const featureB = { svg_id: 'feature-b', type: 'CDS', label: 'B', ...identity('feature-b') };
 const extractedFeatures = ref([featureA, featureB]);
 const orthogroups = ref([]);
 const featureVisibilityOverrides = {};
@@ -54,8 +29,7 @@ const actions = createFeatureVisibilityActions({
     orthogroups,
     featureVisibilityManualRules: [],
     featureVisibilityRules: ref([]),
-    featureVisibilityOverrides,
-    featureVisibilitySelectorCache: {},
+    featureOverrides: featureVisibilityOverrides,
     featureVisibilityScopeDialog,
     resultGenerationKey,
     results: ref([{ name: 'one.svg', content: '<svg></svg>' }]),
@@ -87,7 +61,7 @@ const actions = createFeatureVisibilityActions({
 const command = actions.buildSelectedFeaturesVisibilityCommand([featureA, featureB], 'off');
 assert.ok(command);
 assert.equal(await command.apply(), true);
-assert.deepEqual(featureVisibilityOverrides, {
+assert.deepEqual(modes(featureVisibilityOverrides), {
   'feature-a': 'off',
   'feature-b': 'off'
 });
@@ -113,7 +87,7 @@ assert.equal(actions.setFeatureVisibility(featureA, 'off', {
   triggerReflow: false,
   scope: { id: 'feature' }
 }), true);
-assert.equal(featureVisibilityOverrides['feature-a'], 'off');
+assert.equal(modes(featureVisibilityOverrides)['feature-a'], 'off');
 assert.equal(appliedPreviewChanges.length, 3);
 assert.deepEqual(labelVisibilityCalls.at(-1), false,
   'the label follows the feature even when the caller declines the reflow');
@@ -121,7 +95,7 @@ assert.deepEqual(
   appliedPreviewChanges[2].changes.map((change) => [change.featureId, change.mode]),
   [['feature-a', 'off']]
 );
-delete featureVisibilityOverrides['feature-a'];
+clear(featureVisibilityOverrides);
 
 const sourceIdFeature = {
   svg_id: 'feature-source-id',
@@ -156,7 +130,7 @@ clickedFeature.value = {
 featureVisibilityScopeDialog.show = false;
 actions.updateClickedFeatureVisibility('off');
 assert.equal(featureVisibilityScopeDialog.show, false);
-delete featureVisibilityOverrides[runtimeOnlyFeature.svg_id];
+clear(featureVisibilityOverrides);
 
 const reversedFeature = {
   svg_id: 'display-feature_record_3',
@@ -244,7 +218,7 @@ featureVisibilityScopeDialog.show = false;
 featureVisibilityScopeDialog.scopes = [];
 actions.updateClickedFeatureVisibility('off');
 assert.equal(featureVisibilityScopeDialog.show, false);
-delete featureVisibilityOverrides[strictTrigger.svg_id];
+clear(featureVisibilityOverrides);
 
 const duplicateA = {
   svg_id: 'duplicate-rendered',
@@ -265,7 +239,7 @@ featureVisibilityScopeDialog.show = false;
 featureVisibilityScopeDialog.scopes = [];
 actions.updateClickedFeatureVisibility('off');
 assert.equal(featureVisibilityScopeDialog.show, false);
-delete featureVisibilityOverrides[strictTrigger.svg_id];
+clear(featureVisibilityOverrides);
 
 extractedFeatures.value = [strictTrigger, duplicateA];
 orthogroups.value = [orthogroups.value[0], { ...orthogroups.value[0] }];
@@ -273,7 +247,7 @@ featureVisibilityScopeDialog.show = false;
 featureVisibilityScopeDialog.scopes = [];
 actions.updateClickedFeatureVisibility('off');
 assert.equal(featureVisibilityScopeDialog.show, false);
-delete featureVisibilityOverrides[strictTrigger.svg_id];
+clear(featureVisibilityOverrides);
 
 const previewChangeCountBeforeStaleApply = appliedPreviewChanges.length;
 resultGenerationKey.value = 'generation-2';
@@ -285,10 +259,14 @@ assert.equal(appliedPreviewChanges.length, previewChangeCountBeforeStaleApply);
 // reconcile that History runs after Undo/Redo resolves it with the action's
 // matcher (case-insensitive, like Python), so the feature stays hidden.
 {
-  const nd1 = { svg_id: 'nd1', type: 'CDS', qualifiers: { product: ['NADH dehydrogenase subunit 1'] } };
-  const nd1Case = { svg_id: 'nd1-case', type: 'CDS', qualifiers: { product: ['nadh DEHYDROGENASE subunit 1'] } };
-  const nd2 = { svg_id: 'nd2', type: 'CDS', qualifiers: { product: ['NADH dehydrogenase subunit 2'] } };
-  const geneRna = { svg_id: 'nd1-rna', type: 'tRNA', qualifiers: { product: ['NADH dehydrogenase subunit 1'] } };
+  const nd1 = { svg_id: 'nd1', type: 'CDS', qualifiers: { product: ['NADH dehydrogenase subunit 1'] }, ...identity('nd1') };
+  const nd1Case = {
+    svg_id: 'nd1-case', type: 'CDS', qualifiers: { product: ['nadh DEHYDROGENASE subunit 1'] }, ...identity('nd1-case')
+  };
+  const nd2 = { svg_id: 'nd2', type: 'CDS', qualifiers: { product: ['NADH dehydrogenase subunit 2'] }, ...identity('nd2') };
+  const geneRna = {
+    svg_id: 'nd1-rna', type: 'tRNA', qualifiers: { product: ['NADH dehydrogenase subunit 1'] }, ...identity('nd1-rna')
+  };
   const manualRules = [];
   const overrides = {};
   const reconciled = [];
@@ -300,8 +278,7 @@ assert.equal(appliedPreviewChanges.length, previewChangeCountBeforeStaleApply);
       orthogroups: ref([]),
       featureVisibilityManualRules: manualRules,
       featureVisibilityRules: ref([]),
-      featureVisibilityOverrides: overrides,
-      featureVisibilitySelectorCache: {},
+      featureOverrides: overrides,
       featureVisibilityScopeDialog: scopeDialog,
       resultGenerationKey: ref('generation-1'),
       results: ref([{ name: 'one.svg', content: '<svg></svg>' }]),
@@ -323,11 +300,11 @@ assert.equal(appliedPreviewChanges.length, previewChangeCountBeforeStaleApply);
   assert.equal(manualRules.length, 1);
   assert.equal(productActions.reconcileFeatureVisibility(), true);
   assert.deepEqual(reconciled.at(-1), { nd1: 'off', 'nd1-case': 'off', nd2: 'on', 'nd1-rna': 'on' });
-  overrides['nd1-case'] = 'on';
+  setFeatureVisibilityOverride(overrides, nd1Case, 'on');
   productActions.reconcileFeatureVisibility();
   assert.equal(reconciled.at(-1)['nd1-case'], 'on', 'a per-feature override takes precedence');
   manualRules.splice(0, manualRules.length, { ...manualRules[0], source: 'manual' });
-  delete overrides['nd1-case'];
+  clear(overrides);
   productActions.reconcileFeatureVisibility();
   assert.equal(reconciled.at(-1).nd1, 'on', 'a manual product rule applies on Generate only');
 }

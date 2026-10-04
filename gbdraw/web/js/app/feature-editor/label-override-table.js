@@ -1,19 +1,9 @@
-import {
-  buildFeatureMetadataMap,
-  buildFeatureSelectorUniquenessIndex,
-  buildFeatureSelectorUniquenessIndexFromMetadata,
-  escapeRegexLiteral,
-  normalizeFeatureIdKey,
-  selectFeatureSelector
-} from '../feature-selector.js';
+import { escapeRegexLiteral } from '../feature-selector.js';
 import { recordStructuralMetric } from '../../services/runtime-test-hooks.js';
-import { getFeatureGenerationHash } from '../feature-utils.js';
 
 const LABEL_OVERRIDE_COLUMN_COUNT = 5;
 const PRIMARY_HEADER = ['record_id', 'feature_type', 'qualifier', 'value', 'label_text'];
 const LEGACY_HEADER = ['record', 'feature_type', 'qualifier_key', 'qualifier_value_regex', 'label_text'];
-const STABLE_FEATURE_KEY_QUALIFIERS = ['locus_tag', 'gene'];
-const DEFAULT_LABEL_QUALIFIER_PRIORITY = ['product', 'gene', 'locus_tag', 'protein_id', 'old_locus_tag', 'note'];
 
 const normalizeTsvCell = (value) => String(value ?? '').replace(/[\t\r\n]+/g, ' ').trim();
 const toSortedKeys = (obj) =>
@@ -27,259 +17,45 @@ const isHeaderRow = (parts) => {
   return LEGACY_HEADER.every((value, idx) => normalized[idx] === value);
 };
 
-export { buildFeatureMetadataMap };
-
-const buildEditableLabelByFeatureId = (editableLabels) => {
-  const labelsByFeatureId = new Map();
-  if (!Array.isArray(editableLabels)) return labelsByFeatureId;
-
-  editableLabels.forEach((entry) => {
-    const featureIdKey = normalizeFeatureIdKey(entry?.featureId);
-    if (!featureIdKey || labelsByFeatureId.has(featureIdKey)) return;
-    labelsByFeatureId.set(featureIdKey, {
-      text: String(entry?.text ?? ''),
-      sourceText: String(entry?.sourceText ?? '')
-    });
-  });
-  return labelsByFeatureId;
-};
-
-const normalizeVisibilityOverrides = (visibilityOverrides) => {
-  const normalized = new Map();
-  if (!visibilityOverrides || typeof visibilityOverrides !== 'object') return normalized;
-
-  Object.entries(visibilityOverrides).forEach(([featureIdRaw, modeRaw]) => {
-    const featureIdKey = normalizeFeatureIdKey(featureIdRaw);
-    if (!featureIdKey) return;
-    const mode = String(modeRaw || '').trim().toLowerCase();
-    if (mode !== 'on' && mode !== 'off') return;
-    normalized.set(featureIdKey, mode);
-  });
-
-  return normalized;
-};
-
-const getRegexForFeatureHash = (featureIdRaw) => `^${escapeRegexLiteral(String(featureIdRaw || '').trim())}$`;
-// A `hash` row matches the feature hash that Python computes, without the
-// record suffix of a multi-record Linear rendered ID.
-const getRegexForFeature = (featureIdRaw) => getRegexForFeatureHash(
-  getFeatureGenerationHash({ svg_id: String(featureIdRaw || '').trim() })
-);
-
-const resolveDefaultLabelText = (metadata, editableLabelEntry = null) => {
-  const editableText = String(editableLabelEntry?.text || '').trim();
-  if (editableText) return editableText;
-  const sourceText = String(editableLabelEntry?.sourceText || '').trim();
-  if (sourceText) return sourceText;
-
-  if (!metadata) return '';
-  for (const qualifier of DEFAULT_LABEL_QUALIFIER_PRIORITY) {
-    const values = Array.isArray(metadata?.qualifiers?.[qualifier]) ? metadata.qualifiers[qualifier] : [];
-    const first = values.find((value) => String(value || '').trim() !== '');
-    if (first) return String(first);
-  }
-
-  const featureType = String(metadata.featureType || '').trim();
-  const location = String(metadata.location || '').trim();
-  if (featureType && location) return `${featureType} ${location}`;
-  if (featureType) return featureType;
-  if (location) return location;
-  return '';
-};
-
-// The features whose label shows each source text: the displayed labels, and
-// the recorded source of a feature in any Result, so that a bulk label edit
-// reaches every Result of a batch (B6).
-const buildFeatureIdsBySourceText = (editableLabels, featureOverrideSources) => {
-  const featureIdsBySourceText = new Map();
-  const add = (sourceTextRaw, featureIdRaw) => {
-    const sourceText = String(sourceTextRaw || '');
-    const featureIdKey = normalizeFeatureIdKey(featureIdRaw);
-    if (!sourceText || !featureIdKey) return;
-    if (!featureIdsBySourceText.has(sourceText)) {
-      featureIdsBySourceText.set(sourceText, new Set());
-    }
-    featureIdsBySourceText.get(sourceText).add(featureIdKey);
-  };
-  (Array.isArray(editableLabels) ? editableLabels : []).forEach((entry) => add(entry?.sourceText, entry?.featureId));
-  Object.entries(featureOverrideSources || {}).forEach(([featureId, sourceText]) => add(sourceText, featureId));
-  return featureIdsBySourceText;
-};
-
-const buildFeatureUniquenessIndexFromMetadata = buildFeatureSelectorUniquenessIndexFromMetadata;
-
-export const buildFeatureUniquenessIndex = (features) => {
-  return buildFeatureSelectorUniquenessIndex(features);
-};
-
-export const selectStableFeatureKey = (featureMeta, uniquenessIndex) => selectFeatureSelector(
-  featureMeta,
-  uniquenessIndex,
-  { priority: STABLE_FEATURE_KEY_QUALIFIERS, preferSelector: false }
-);
-
-export const buildLabelOverrideRows = (featureOverrides, bulkOverrides, options = {}) => {
+/**
+ * Projects the bulk label edits (`labelTextBulkOverrides`, {sourceText: text})
+ * for one request. Per-feature edits are identity rows (`featureOverrides`,
+ * design Q4); a bulk edit is a source-text rule. It reaches every feature whose
+ * label shows that source text, known from `labelTargets` (the displayed
+ * Result's labels, [{identityKey, sourceText}]) and the label source text the
+ * draft rows recorded (any Result, B6), as those features' `labelText`; a
+ * feature's own text wins. A source text that no known label shows, and a
+ * blank text, stay a `* * label ^text$` row of the label table.
+ */
+export const buildBulkLabelProjection = (bulkOverrides, options = {}) => {
+  const bulkLabelText = {};
   const rows = [];
-  let skippedFeatureCount = 0;
-  let skippedFeatureSourceCount = 0;
-  let skippedMissingSourceCount = 0;
-  let fallbackHashCount = 0;
-  const visibilityOverridesByFeatureId = normalizeVisibilityOverrides(options.visibilityOverrides);
-  if (toSortedKeys(featureOverrides).length === 0 && toSortedKeys(bulkOverrides).length === 0
-    && visibilityOverridesByFeatureId.size === 0) {
-    return { rows, skippedFeatureCount, skippedFeatureSourceCount, skippedMissingSourceCount, fallbackHashCount };
-  }
-  recordStructuralMetric('labelOverrideTableBuildCount', 1, {
-    featureCount: Array.isArray(options.extractedFeatures) ? options.extractedFeatures.length : 0
-  });
-  const featureMetadataById = buildFeatureMetadataMap(options.extractedFeatures);
-  const editableLabelByFeatureId = buildEditableLabelByFeatureId(options.editableLabels);
-  const featureIdsBySourceText = buildFeatureIdsBySourceText(options.editableLabels, options.featureOverrideSources);
-  const featureUniquenessIndex = buildFeatureUniquenessIndexFromMetadata(featureMetadataById);
-  const featureOverrideKeyById = new Map();
-  toSortedKeys(featureOverrides).forEach((featureIdRaw) => {
-    const key = normalizeFeatureIdKey(featureIdRaw);
-    if (!key || featureOverrideKeyById.has(key)) return;
-    featureOverrideKeyById.set(key, featureIdRaw);
-  });
-  const consumedFeatureOverrideKeys = new Set();
-
-  Array.from(visibilityOverridesByFeatureId.keys())
-    .sort((a, b) => a.localeCompare(b))
-    .forEach((featureIdKey) => {
-      const visibilityMode = visibilityOverridesByFeatureId.get(featureIdKey);
-      const metadata = featureMetadataById.get(featureIdKey);
-      const recordId = normalizeTsvCell(metadata?.record || '*') || '*';
-      const featureType = normalizeTsvCell(metadata?.featureType || '*') || '*';
-      const featureOverrideKey = featureOverrideKeyById.get(featureIdKey);
-      const featureIdRaw = String(
-        featureOverrideKey || metadata?.featureId || featureIdKey
-      ).trim() || featureIdKey;
-      if (featureOverrideKey) {
-        consumedFeatureOverrideKeys.add(featureOverrideKey);
-      }
-      let nextText = '';
-      if (visibilityMode === 'on') {
-        const overrideText = featureOverrideKey
-          ? String(featureOverrides[featureOverrideKey] ?? '')
-          : '';
-        const fallbackText = resolveDefaultLabelText(
-          metadata,
-          editableLabelByFeatureId.get(featureIdKey) || null
-        );
-        nextText = normalizeTsvCell(overrideText || fallbackText || featureIdRaw || featureIdKey);
-      }
-      const qualifierRegex = getRegexForFeature(featureIdRaw);
-      rows.push(
-        `${recordId}\t${featureType}\thash\t${qualifierRegex}\t${nextText}`
-      );
-    });
-
-  toSortedKeys(featureOverrides).forEach((featureIdRaw) => {
-    if (consumedFeatureOverrideKeys.has(featureIdRaw)) return;
-    const featureId = String(featureIdRaw || '').trim();
-    const featureIdKey = normalizeFeatureIdKey(featureId);
-    if (!featureId || !featureIdKey) {
-      skippedFeatureCount += 1;
-      return;
-    }
-
-    if (visibilityOverridesByFeatureId.has(featureIdKey)) return;
-    const metadata = featureMetadataById.get(featureIdKey);
-    const recordId = normalizeTsvCell(metadata?.record || '*') || '*';
-    const featureType = normalizeTsvCell(metadata?.featureType || '*') || '*';
-    const selector = selectStableFeatureKey(
-      {
-        featureId,
-        record: metadata?.record || '',
-        featureType: metadata?.featureType || '',
-        position: metadata?.position || '',
-        qualifiers: metadata?.qualifiers || {}
-      },
-      featureUniquenessIndex
-    );
-    const qualifier = selector.qualifier;
-    const qualifierRegex = selector.qualifier === 'hash'
-      ? getRegexForFeature(selector.value || featureId)
-      : `^${escapeRegexLiteral(selector.value)}$`;
-    if (selector.isFallbackHash) {
-      fallbackHashCount += 1;
-    }
-    const nextText = normalizeTsvCell(featureOverrides[featureIdRaw]);
-
-    rows.push(`${recordId}\t${featureType}\t${qualifier}\t${qualifierRegex}\t${nextText}`);
-  });
-
-  toSortedKeys(bulkOverrides).forEach((sourceTextRaw) => {
+  const sourceTexts = toSortedKeys(bulkOverrides);
+  if (sourceTexts.length === 0) return { bulkLabelText, rows };
+  const labelTargets = Array.isArray(options.labelTargets) ? options.labelTargets : [];
+  const featureOverrides = options.featureOverrides || {};
+  recordStructuralMetric('labelOverrideTableBuildCount', 1, { featureCount: labelTargets.length });
+  const identitiesBySourceText = new Map();
+  const add = (sourceText, identityKey) => {
+    if (!sourceText || !identityKey) return;
+    if (!identitiesBySourceText.has(sourceText)) identitiesBySourceText.set(sourceText, new Set());
+    identitiesBySourceText.get(sourceText).add(identityKey);
+  };
+  labelTargets.forEach((entry) => add(String(entry?.sourceText ?? ''), entry?.identityKey));
+  Object.entries(featureOverrides || {}).forEach(([identityKey, row]) => add(row?.labelSourceText, identityKey));
+  sourceTexts.forEach((sourceTextRaw) => {
     const sourceText = String(sourceTextRaw ?? '');
     if (!sourceText) return;
-    const nextText = normalizeTsvCell(bulkOverrides[sourceTextRaw]);
-    const featureIdKeys = Array.from(featureIdsBySourceText.get(sourceText) || []).sort((a, b) =>
-      String(a || '').localeCompare(String(b || ''))
-    );
-    const expandedRows = [];
-    const seen = new Set();
-
-    featureIdKeys.forEach((featureIdKey) => {
-      const metadata = featureMetadataById.get(featureIdKey);
-      if (!metadata) return;
-      const recordId = normalizeTsvCell(metadata?.record || '*') || '*';
-      const featureType = normalizeTsvCell(metadata?.featureType || '*') || '*';
-      const selector = selectStableFeatureKey(
-        {
-          featureId: metadata?.featureId || '',
-          record: metadata?.record || '',
-          featureType: metadata?.featureType || '',
-          position: metadata?.position || '',
-          qualifiers: metadata?.qualifiers || {}
-        },
-        featureUniquenessIndex
-      );
-      const qualifier = selector.qualifier;
-      const qualifierRegex = selector.qualifier === 'hash'
-        ? getRegexForFeature(selector.value || metadata?.featureId || '')
-        : `^${escapeRegexLiteral(selector.value || '')}$`;
-      if (selector.isFallbackHash) {
-        fallbackHashCount += 1;
-      }
-      const row = `${recordId}\t${featureType}\t${qualifier}\t${qualifierRegex}\t${nextText}`;
-      if (seen.has(row)) return;
-      seen.add(row);
-      expandedRows.push(row);
-    });
-
-    if (expandedRows.length > 0) {
-      rows.push(...expandedRows);
+    const text = String(bulkOverrides[sourceTextRaw] ?? '');
+    const identities = identitiesBySourceText.get(sourceText);
+    // A blank text hides the matching labels; only the table rule says that.
+    if (identities?.size && text.trim()) {
+      identities.forEach((identityKey) => { bulkLabelText[identityKey] = text; });
       return;
     }
-
-    rows.push(`*\t*\tlabel\t^${escapeRegexLiteral(sourceText)}$\t${nextText}`);
+    rows.push(`*\t*\tlabel\t^${escapeRegexLiteral(sourceText)}$\t${normalizeTsvCell(text)}`);
   });
-
-  return {
-    rows,
-    skippedFeatureCount,
-    skippedFeatureSourceCount,
-    skippedMissingSourceCount,
-    fallbackHashCount
-  };
-};
-
-export const buildLabelOverrideTsv = (featureOverrides, bulkOverrides, options = {}) => {
-  const { rows, skippedFeatureCount, skippedFeatureSourceCount, skippedMissingSourceCount, fallbackHashCount } = buildLabelOverrideRows(
-    featureOverrides,
-    bulkOverrides,
-    options
-  );
-
-  return {
-    tsv: rows.length > 0 ? `${rows.join('\n')}\n` : '',
-    rows,
-    skippedFeatureCount,
-    skippedFeatureSourceCount,
-    skippedMissingSourceCount,
-    fallbackHashCount
-  };
+  return { bulkLabelText, rows };
 };
 
 export const serializeLabelOverrideRows = (rows) => {

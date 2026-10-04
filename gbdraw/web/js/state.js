@@ -4,7 +4,7 @@ import {
   normalizePaletteDefinitions
 } from './app/color-utils.js';
 import { collectSpecificColorQualifierSuggestions } from './app/feature-selector.js';
-import { deriveFeatureVisibilityRulesForBoundary } from './app/feature-visibility.js';
+import { normalizeFeatureVisibilityRule } from './app/feature-visibility.js';
 import { normalizeCircularPlotTitlePosition } from './app/plot-title-position.js';
 import {
   createDefaultLayoutPreferences,
@@ -34,7 +34,6 @@ import {
 export { createDefaultAdv, createDefaultCircularConservation, createDefaultForm, createDefaultLosat };
 const { ref, reactive, computed } = window.Vue;
 const toRaw = window.Vue.toRaw || ((value) => value);
-const shallowRef = window.Vue.shallowRef || ref;
 
 // System State
 const processing = ref(false);
@@ -58,6 +57,11 @@ const resultPanelTab = ref('preview');
 const lastRunInfo = ref(null);
 const trackSlotResolvedGeometry = ref(null);
 const annotationWarnings = ref([]);
+// Python's report of the identity-addressed edits a Result does not draw
+// (`featureIdentityNotices`, design Q4 3.4); artifact-owned like annotationWarnings.
+const featureIdentityNotices = ref([]);
+// The edits the last source-replacing Generate removed (Q3 = A); a notice only.
+const featureEditRemovalCount = ref(0);
 const comparisonWarnings = ref([]);
 // Store original pairwise match factors for re-interpolation
 const pairwiseMatchFactors = ref({}); // { pathId: factor }
@@ -362,7 +366,6 @@ const featureCatalog = ref(null); // Validated schema-4 metadata for committed R
 const specificRuleQualifierSuggestions = computed(() =>
   collectSpecificColorQualifierSuggestions(extractedFeatures.value, manualSpecificRules)
 );
-const featureSelectorSafetyScope = ref([]); // Python selector scope before feature visibility filtering
 const renderedFeatureSvgId = (feature) => {
   return String(
     feature?.rendered_svg_id ||
@@ -442,31 +445,19 @@ const previewFeatureSearchError = ref('');
 const previewFeatureSearchRenderedCount = ref(0);
 const featureColorOverrides = reactive({}); // {featureKey: color}
 const featureVisibilityManualRules = reactive([]);
-const featureVisibilityOverrides = reactive({}); // {svg_id: 'on' | 'off' | 'exclude_matching'}
-const featureVisibilitySelectorCacheOwner = shallowRef({});
-const captureFeatureVisibilitySelectorCacheOwner = () => (
-  featureVisibilitySelectorCacheOwner.value
-);
-const replaceFeatureVisibilitySelectorCacheOwner = (nextOwner = {}) => {
-  featureVisibilitySelectorCacheOwner.value = (
-    nextOwner && typeof nextOwner === 'object' && !Array.isArray(nextOwner)
-      ? nextOwner
-      : {}
-  );
-};
-const featureVisibilityRules = computed(() => deriveFeatureVisibilityRulesForBoundary(
-  featureVisibilityManualRules,
-  featureVisibilityOverrides,
-  featureVisibilitySelectorCacheOwner.value
-));
+// Per-feature edits keyed by original-source identity (design Q4):
+// {JSON.stringify([recordKey, biologicalFeatureId]): {recordKey,
+// biologicalFeatureId, featureVisibility, labelVisibility, labelText,
+// labelSourceText}} (services/feature-placement.js owns the row shape).
+const featureOverrides = reactive({});
+// The visibility table carries rules only; per-feature edits are featureOverrides.
+const featureVisibilityRules = computed(() => featureVisibilityManualRules
+  .map((rule) => normalizeFeatureVisibilityRule(rule)));
 const featureStrokeOverrides = reactive({}); // {featureKey: { strokeColor, strokeWidth, originalStrokeColor, originalStrokeWidth }}
 const labelSearch = ref('');
 const editableLabels = ref([]); // [{key, text, sourceText, featureId, draftText}]
-const labelTextFeatureOverrides = reactive({}); // { featureId: text }
 const canonicalLabelOverrideRows = ref([]);
 const labelTextBulkOverrides = reactive({}); // { sourceText: text }
-const labelTextFeatureOverrideSources = reactive({}); // { featureId: sourceText }
-const labelVisibilityOverrides = reactive({}); // { featureId: 'on' | 'off' }
 const labelOverrideBuildWarning = ref('');
 const autoLabelReflowEnabled = ref(false);
 const labelReflowProcessing = ref(false);
@@ -848,6 +839,8 @@ export const state = {
   lastRunInfo,
   trackSlotResolvedGeometry,
   annotationWarnings,
+  featureIdentityNotices,
+  featureEditRemovalCount,
   comparisonWarnings,
   pairwiseMatchFactors,
   matchSequenceRegistry,
@@ -935,7 +928,6 @@ export const state = {
   extractedFeatures,
   biologicalFeatures,
   featureCatalog,
-  featureSelectorSafetyScope,
   featuresBySvgId,
   selectedFeatureIds,
   selectedFeatureAnchorId,
@@ -975,20 +967,12 @@ export const state = {
   featureColorOverrides,
   featureVisibilityManualRules,
   featureVisibilityRules,
-  featureVisibilityOverrides,
-  get featureVisibilitySelectorCache() {
-    return featureVisibilitySelectorCacheOwner.value;
-  },
-  captureFeatureVisibilitySelectorCacheOwner,
-  replaceFeatureVisibilitySelectorCacheOwner,
+  featureOverrides,
   featureStrokeOverrides,
   labelSearch,
   editableLabels,
-  labelTextFeatureOverrides,
   canonicalLabelOverrideRows,
   labelTextBulkOverrides,
-  labelTextFeatureOverrideSources,
-  labelVisibilityOverrides,
   labelOverrideBuildWarning,
   autoLabelReflowEnabled,
   labelReflowProcessing,

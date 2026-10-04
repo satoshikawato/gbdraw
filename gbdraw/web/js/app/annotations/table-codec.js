@@ -159,10 +159,17 @@ export const parseAnnotationTableWithNotice = (text) => {
 
 export const parseAnnotationTable = (text) => parseAnnotationTableWithNotice(text).sets;
 
-export const encodeAnnotationTable = (sets) => {
+// A source-identity target has no annotation-table selector; it is not
+// written (`skippedFeatureIdentityCount`).
+export const encodeAnnotationTableWithNotice = (sets) => {
   const rows = [COLUMNS.join('\t')];
+  let skippedFeatureIdentityCount = 0;
   normalizeAnnotationSets(sets).forEach((set) => set.annotations.forEach((annotation) => {
     const target = annotation.target || {};
+    if (target.kind === 'featureIdentity') {
+      skippedFeatureIdentityCount += 1;
+      return;
+    }
     const coordinate = target.kind === 'coordinateSpan';
     const selectors = Array.isArray(target.selectors) ? target.selectors.map((item) => item.key ? `${item.key}=${item.value}` : item.value).join(';') : '';
     const style = annotation.style || set.defaultStyle || {};
@@ -180,5 +187,7 @@ export const encodeAnnotationTable = (sets) => {
     };
     rows.push(COLUMNS.map((name) => String(row[name] ?? '').replace(/[\t\r\n]/g, ' ')).join('\t'));
   }));
-  return `${rows.join('\n')}\n`;
+  return { text: `${rows.join('\n')}\n`, skippedFeatureIdentityCount };
 };
+
+export const encodeAnnotationTable = (sets) => encodeAnnotationTableWithNotice(sets).text;

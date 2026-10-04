@@ -1,5 +1,12 @@
 import { writeCanonicalRecordReverseComplement } from '../app/record-display-options.js';
-import { canonicalFeaturePlacements, requestFeaturePlacements } from './feature-placement.js';
+import {
+  canonicalFeatureOverrides,
+  canonicalFeaturePlacements,
+  featureIdentityKeyOf,
+  requestFeatureOverrides,
+  requestFeaturePlacements
+} from './feature-placement.js';
+import { resultRenderedFeatures } from './feature-catalog.js';
 export { canonicalFeaturePlacements } from './feature-placement.js';
 import { buildDefaultColorOverrideTsv, normalizePaletteColors } from '../app/color-utils.js';
 import {
@@ -10,7 +17,7 @@ import {
   serializeSpecificRules
 } from '../app/file-imports.js';
 import {
-  buildLabelOverrideTsv,
+  buildBulkLabelProjection,
   parseLabelOverrideTsv,
   serializeLabelOverrideRows
 } from '../app/feature-editor/label-override-table.js';
@@ -1281,8 +1288,25 @@ const ALL_GENERATED_TABLES = Object.freeze({
   colors: true, visibility: true, whitelist: true, priority: true, labelOverrides: true
 });
 
+// The label edits a request carries: the bulk label edits projected onto the
+// displayed Result's labels and the recorded label sources, as identity row
+// text, and the `* * label` rows of the rest (CW-02: built once per request).
+export const requestLabelProjection = (state) => {
+  // Generate supplies the projection it already built for this operation.
+  if (state.generatedLabelProjection) return state.generatedLabelProjection;
+  const bulk = state.labelTextBulkOverrides || {};
+  if (Object.keys(bulk).length === 0) return { bulkLabelText: {}, rows: [] };
+  const displayed = resultRenderedFeatures(state);
+  const labelTargets = (state.editableLabels?.value || []).map((entry) => ({
+    identityKey: featureIdentityKeyOf(displayed?.get(String(entry?.featureId || '').trim())),
+    sourceText: entry?.sourceText
+  })).filter((target) => target.identityKey);
+  return buildBulkLabelProjection(bulk, { labelTargets, featureOverrides: state.featureOverrides });
+};
+
 const addGeneratedTableResources = (
-  state, resources, diagramOptions, tables = ALL_GENERATED_TABLES
+  state, resources, diagramOptions, tables = ALL_GENERATED_TABLES,
+  labelProjection = requestLabelProjection(state)
 ) => {
   recordStructuralMetric('generatedTableBuildCount');
   if (tables.colors) addColorTableResources(state, resources, diagramOptions);
@@ -1296,7 +1320,7 @@ const addGeneratedTableResources = (
   }
   if (tables.whitelist) addLabelWhitelistResource(state, resources, diagramOptions);
   if (tables.priority) addQualifierPriorityResource(state, resources, diagramOptions);
-  if (tables.labelOverrides) addLabelOverrideResource(state, resources, diagramOptions);
+  if (tables.labelOverrides) addLabelOverrideResource(state, resources, diagramOptions, labelProjection);
 };
 
 const addColorTableResources = (state, resources, diagramOptions) => {
@@ -1373,20 +1397,15 @@ const addQualifierPriorityResource = (state, resources, diagramOptions) => {
   }
 };
 
-const addLabelOverrideResource = (state, resources, diagramOptions) => {
-  // Generate supplies the table it already built for this operation (CW-02).
-  const labelOverrideTsv = serializeLabelOverrideRows(state.canonicalLabelOverrideRows?.value)
-    || (typeof state.generatedLabelOverrideTsv === 'string' ? state.generatedLabelOverrideTsv
-      : buildLabelOverrideTsv(
-        state.labelTextFeatureOverrides,
-        state.labelTextBulkOverrides,
-        {
-          editableLabels: state.editableLabels?.value || [],
-          extractedFeatures: state.extractedFeatures.value,
-          featureOverrideSources: state.labelTextFeatureOverrideSources,
-          visibilityOverrides: state.labelVisibilityOverrides
-        }
-      ).tsv);
+// The label table carries rules only: a saved table, else the bulk label edits
+// no displayed label resolves. Per-feature label edits are `featureOverrides`.
+export const requestLabelTableTsv = (state, labelProjection = requestLabelProjection(state)) => (
+  serializeLabelOverrideRows(state.canonicalLabelOverrideRows?.value)
+    || (labelProjection.rows.length ? `${labelProjection.rows.join('\n')}\n` : '')
+);
+
+const addLabelOverrideResource = (state, resources, diagramOptions, labelProjection) => {
+  const labelOverrideTsv = requestLabelTableTsv(state, labelProjection);
   if (labelOverrideTsv) {
     diagramOptions.labelOverrideFile = fileRef(resources.addText(
       'label-override-file', 'label-override-file', 'label-overrides.tsv', labelOverrideTsv
@@ -2262,7 +2281,6 @@ export const buildCanonicalRequestState = ({ session, projection, config,
       || projection.semanticFeatureState?.featureVisibilityManualRules || []),
     filterMode: config.filterMode || 'None', manualBlacklist: String(config.blacklistText || ''),
     canonicalLabelOverrideRows: publicationClone(features.labelOverrideRows || []), editableLabels: [],
-    extractedFeatures: features.extractedFeatures || [],
     losatProgram: config.losatProgram || 'blastn',
     linearRecordLayoutEnabled: Boolean(layout.enabled),
     linearRecordGap: layout.recordGap ?? 24,
@@ -2278,8 +2296,8 @@ export const buildCanonicalRequestState = ({ session, projection, config,
     ...Object.fromEntries(Object.entries(refs).map(([key, value]) => [key, publicationRef(value)])),
     form: config.form || {}, adv: config.adv || {}, normalizePaletteColors,
     manualSpecificRules: publicationClone(config.rules || []), manualWhitelist: publicationClone(config.whitelist || []), manualPriorityRules: publicationClone(config.qualifierPriorityRules || []),
-    labelTextFeatureOverrides: publicationClone(features.labelTextFeatureOverrides || {}), labelTextBulkOverrides: publicationClone(features.labelTextBulkOverrides || {}),
-    labelTextFeatureOverrideSources: publicationClone(features.labelTextFeatureOverrideSources || {}), labelVisibilityOverrides: publicationClone(features.labelVisibilityOverrides || {}),
+    featureOverrides: publicationClone(features.featureOverrides || {}),
+    labelTextBulkOverrides: publicationClone(features.labelTextBulkOverrides || {}),
     circularConservation: conservation, losat: publicationClone(config.losat || { blastp: {} }),
     linearRecordRows: publicationClone(layout.rows || []), linearComparisonPlan: normalizeLinearComparisonPlan(config.linearComparisonPlan),
     annotationSets: publicationClone(config.annotationSets || []),
@@ -2437,10 +2455,13 @@ const projectCanonicalRenderInput = ({
     : renderOutputPayload(
         explicitPrefix ?? (state.mode.value === 'circular' ? defaultCircularPrefix : 'out')
       );
+  const labelProjection = requestLabelProjection(state);
   const diagramOptions = {
     featurePlacements: requestFeaturePlacements(state.featurePlacementOverrides, state.mode.value, records),
-    // The Web keeps per-feature edits keyed by rendered ID until it writes these rows (design Q4).
-    featureOverrides: [],
+    // Per-feature edits by source identity (design Q4); other records' rows stay in the draft (R2).
+    featureOverrides: requestFeatureOverrides(state.featureOverrides, records, {
+      bulkLabelText: labelProjection.bulkLabelText
+    }),
     configOverrides: buildConfigOverrides(state, {
       depthRequested: trackPlan.depthRequested,
       hasComparisonIntent: hasLinearComparisonIntent,
@@ -2579,7 +2600,7 @@ const projectCanonicalRenderInput = ({
     diagramOptions.pairwiseMatchStyle = String(state.adv.pairwise_match_style || 'ribbon');
   }
 
-  addGeneratedTableResources(state, resources, diagramOptions);
+  addGeneratedTableResources(state, resources, diagramOptions, ALL_GENERATED_TABLES, labelProjection);
   if (trackPlan.depthRequested) {
     buildDepthResources({
       state,
@@ -3292,13 +3313,20 @@ const resourceTextFromRef = (resources, ref) => (
 // Whether the committed Session drew with the given Feature visibility rules
 // (TSV), compared after normalization. Reusing resolved protein comparisons is
 // valid only when it holds (CO-02); an unreadable committed table declines.
-export const committedFeatureVisibilityMatches = (committedSession, activeRulesTsv) => {
+// Feature visibility decides which proteins LOSATP compares: the rules and the
+// per-feature `featureVisibility` of the request's identity rows (design Q4 3.3).
+const featureVisibilityRowsKey = (rows) => JSON.stringify((Array.isArray(rows) ? rows : [])
+  .filter((row) => row?.featureVisibility)
+  .map((row) => [row.recordKey, row.biologicalFeatureId, row.featureVisibility]));
+export const committedFeatureVisibilityMatches = (committedSession, activeRulesTsv, activeOverrideRows = []) => {
   const normalize = (text) => serializeFeatureVisibilityRules(parseFeatureVisibilityRules(String(text ?? '')).rules);
   try {
     return normalize(resourceTextFromRef(
       committedSession?.resources,
       committedSession?.renderRequest?.diagramOptions?.featureVisibilityTableFile
-    )) === normalize(activeRulesTsv);
+    )) === normalize(activeRulesTsv)
+      && featureVisibilityRowsKey(committedSession?.renderRequest?.diagramOptions?.featureOverrides)
+        === featureVisibilityRowsKey(activeOverrideRows);
   } catch {
     return false;
   }
@@ -3738,16 +3766,9 @@ export const projectCanonicalSessionRequest = ({
     !== Array.isArray(renderRequest.diagramOptions?.featureOverrides)) {
     throw diagnosticError('INPUT_INVALID', { field: 'featureOverrides', reason: 'SESSION_FORMAT' });
   }
-  // The Web keeps per-feature edits keyed by rendered ID until it can project
-  // these rows into its draft (design Q4); it refuses them rather than drop them.
-  if (renderRequest.diagramOptions?.featureOverrides?.length
-    || (renderRequest.diagramOptions?.annotations?.sets || []).some((set) => (
-      (set?.annotations || []).some((item) => item?.target?.kind === 'featureIdentity')
-    ))) {
-    throw diagnosticError('INPUT_INVALID', {
-      field: 'featureOverrides', reason: 'FEATURE_IDENTITY_EDITS'
-    });
-  }
+  const projectedFeatureOverrides = renderRequest.schema >= FEATURE_OVERRIDE_SCHEMA
+    ? canonicalFeatureOverrides(renderRequest.diagramOptions.featureOverrides)
+    : [];
   const normalizedRecordOrdering = normalizeWebGridColumnOrdering(sourceRecords);
   const records = normalizedRecordOrdering.records;
   const reorderRecordIndexedValues = (values) => (
@@ -4790,7 +4811,11 @@ export const projectCanonicalSessionRequest = ({
     },
     semanticFeatureState: {
       featureVisibilityManualRules: projectedFeatureVisibilityRules,
-      featureVisibilityOverrides: {},
+      // A request written without the Web draft (CLI, Python) carries its
+      // per-feature edits only as these rows.
+      featureOverrides: Object.fromEntries(projectedFeatureOverrides.map((row) => [
+        JSON.stringify([row.recordKey, row.biologicalFeatureId]), { ...row, labelSourceText: null }
+      ])),
       labelOverrideRows: projectedLabelOverrideRows
     },
     pipelineState: projectedProteinPipeline
@@ -5213,7 +5238,12 @@ export const projectCommittedEditorIntent = ({
     if (!stillReferenced.has(resourceId)) delete candidate.resources[resourceId];
   });
   const resources = createResourceBuilder();
-  addGeneratedTableResources(state, resources, options, tables);
+  const labelProjection = requestLabelProjection(state);
+  // Per-feature edits are live editor intent too (design Q4).
+  options.featureOverrides = requestFeatureOverrides(state.featureOverrides, candidate.renderRequest.records, {
+    bulkLabelText: labelProjection.bulkLabelText
+  });
+  addGeneratedTableResources(state, resources, options, tables, labelProjection);
   Object.assign(candidate.resources, resources.resources);
   projectCanonicalSessionRequest({
     renderRequest: candidate.renderRequest,

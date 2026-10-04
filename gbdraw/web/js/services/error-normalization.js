@@ -110,7 +110,6 @@ const REASONS = Object.freeze({
   SELECT_RECORD_FOR_REGION: 'Choose a Record before setting a region on a multi-record file.',
   DISCOVERY_PENDING: 'Wait for the record list to finish loading, then retry.',
   SESSION_FORMAT: 'Choose a gbdraw Session file.',
-  FEATURE_IDENTITY_EDITS: 'The Session edits features by source identity, which this Web app cannot load yet. Render it with the gbdraw CLI or Python API.',
   FORMAT: 'Use GenBank or the required GFF3 and FASTA inputs.', NO_PROTEINS: 'Choose input containing CDS proteins.',
   EMPTY_ENDPOINT: 'Check the comparison endpoints.', INDEX_ALIGNMENT: 'Check the comparison endpoints.',
   SOURCE_INDEX: 'Check the comparison endpoints.', SOURCE_VIEW_CONFLICT: 'Check the comparison inputs and display transforms.',

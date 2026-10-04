@@ -62,8 +62,9 @@ for (const [name, gene, action] of cases) {
     }, gene);
     const overrides = () => page.evaluate(async () => {
       const { state } = await import('./js/state.js');
-      return JSON.parse(JSON.stringify({ labels: state.labelTextFeatureOverrides,
-        placements: state.featurePlacementOverrides }));
+      const labels = Object.fromEntries(Object.entries(state.featureOverrides)
+        .filter(([, row]) => row.labelText !== null).map(([key, row]) => [key, row.labelText]));
+      return JSON.parse(JSON.stringify({ labels, placements: state.featurePlacementOverrides }));
     });
     const semantic = (content) => page.evaluate((content) => {
       const svg = new DOMParser().parseFromString(content, 'image/svg+xml');
@@ -117,7 +118,9 @@ for (const [name, gene, action] of cases) {
       await page.getByRole('button', { name: 'Close feature popup', exact: true }).click();
       await expect.poll(() => page.evaluate(() => !window.__GBDRAW_HISTORY__.capturing.value)).toBe(true);
       const intent = await overrides();
-      if (action !== 'placement') expect(intent.labels[feature.svg_id]).toBe(text);
+      if (action !== 'placement') {
+        expect(intent.labels[JSON.stringify([feature.record_key, feature.biological_feature_id])]).toBe(text);
+      }
       await agree('live', action === 'placement' ? gene : text, feature);
       if (action === 'save') {
         const pending = page.waitForEvent('download');

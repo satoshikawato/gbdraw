@@ -5,7 +5,9 @@ const { existsSync, mkdirSync, readFileSync } = require('node:fs');
 const os = require('node:os');
 const { join, resolve } = require('node:path');
 const {
+  CURRENT_FEATURE_CATALOG_SCHEMA,
   CURRENT_REQUEST_SCHEMA,
+  CURRENT_SESSION_VERSION,
   evaluateWithRetainedPromise,
   getDiagramWorkerActivity,
   openApp
@@ -501,10 +503,10 @@ test('Vibrio Session saves once within memory, responsiveness, and compatibility
   });
   expect(savedSummary).toMatchObject({
     format: 'gbdraw-session',
-    version: 44,
+    version: CURRENT_SESSION_VERSION,
     requestSchema: CURRENT_REQUEST_SCHEMA,
     schema8LayoutDefaults: true,
-    catalogSchema: 4,
+    catalogSchema: CURRENT_FEATURE_CATALOG_SCHEMA,
     resourceCount: 2,
     resultCount: 1,
     catalogItems: 1,
@@ -568,7 +570,7 @@ test('Vibrio Session saves once within memory, responsiveness, and compatibility
   await freshContext.close();
 
   const crossSurface = crossSurfaceAcceptance(savedPath, testInfo.outputPath('cross-surface'));
-  expect(crossSurface.reader).toEqual({ version: 44, mode: 'linear', records: 4 });
+  expect(crossSurface.reader).toEqual({ version: CURRENT_SESSION_VERSION, mode: 'linear', records: 4 });
   expect(crossSurface.cliExitCode).toBe(0);
   expect(crossSurface.cliSvgBytes).toBeGreaterThan(0);
 

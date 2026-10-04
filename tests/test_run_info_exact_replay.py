@@ -18,6 +18,7 @@ import zipfile
 
 import pytest
 
+from gbdraw.session_io import CURRENT_SESSION_VERSION
 from gbdraw.session_request_codec import CANONICAL_REQUEST_SCHEMA
 from tests.utils.svg_compare import compare_svgs
 
@@ -151,7 +152,7 @@ def test_downloaded_exact_replay_after_original_history(tmp_path: Path) -> None:
     with zipfile.ZipFile(archive) as bundle:
         assert bundle.namelist() == ["out.gbdraw-session.json"]
         session = json.loads(bundle.read("out.gbdraw-session.json"))
-    assert session["version"] == 44
+    assert session["version"] == CURRENT_SESSION_VERSION
     assert session["renderRequest"]["schema"] == CANONICAL_REQUEST_SCHEMA
     assert session["renderRequest"] == generated["committed"]["renderRequest"]
     assert session["resources"] == generated["committed"]["resources"]

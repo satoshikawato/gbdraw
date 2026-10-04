@@ -38,11 +38,14 @@ if TYPE_CHECKING:
     from .api.requests import DiagramRequest
 
 SESSION_FORMAT = "gbdraw-session"
-CURRENT_SESSION_VERSION = 44
+CURRENT_SESSION_VERSION = 45
+# Version 44 is the first with the current active-config and record-display
+# draft shapes; version 45 keys per-feature edits by source identity.
+TYPED_DRAFT_SESSION_MIN_VERSION = 44
 CURRENT_AUTHORITY_SESSION_MIN_VERSION = 40
 CANONICAL_SESSION_MIN_VERSION = 31
 SUPPORTED_SESSION_VERSIONS = frozenset(
-    {27, 28, 29, 30, 31, 32, 33, 39, 40, 41, 42, CURRENT_SESSION_VERSION}
+    {27, 28, 29, 30, 31, 32, 33, 39, 40, 41, 42, 44, CURRENT_SESSION_VERSION}
 )
 CURRENT_ARTIFACT_SESSION_MIN_VERSION = 39
 PROTEIN_LOSAT_CACHE_SCHEMA = 4
@@ -53,7 +56,9 @@ PROTEIN_IDENTITY_MANIFEST_SCHEMA = 2
 LEGACY_PROTEIN_CANDIDATE_SCHEMA = 1
 FEATURE_CATALOG_SCHEMA = 1
 FEATURE_CATALOG_ENCODING = "biological-authority-v1"
-CURRENT_FEATURE_CATALOG_SCHEMA = 4
+CURRENT_FEATURE_CATALOG_SCHEMA = 5
+# The catalog schema each current-authority Session version writes.
+FEATURE_CATALOG_SCHEMA_BY_SESSION_VERSION = {44: 4, CURRENT_SESSION_VERSION: CURRENT_FEATURE_CATALOG_SCHEMA}
 CURRENT_SESSION_TOP_LEVEL_FIELDS = frozenset(
     {
         "format",
@@ -85,6 +90,26 @@ CURRENT_WRITER_FORBIDDEN_FEATURE_FIELDS = frozenset(
         "featureSelectorSafetyScope",
         "featureRecordIds",
         "featureCatalog",
+    }
+)
+# Version 45 replaces the rendered-ID-keyed per-feature edit maps with
+# features.featureOverrides (design Q4); its writer never stores them.
+RETIRED_RENDERED_ID_FEATURE_FIELDS = frozenset(
+    {
+        "featureVisibilityOverrides",
+        "labelVisibilityOverrides",
+        "labelTextFeatureOverrides",
+        "labelTextFeatureOverrideSources",
+    }
+)
+FEATURE_OVERRIDE_DRAFT_FIELDS = frozenset(
+    {
+        "recordKey",
+        "biologicalFeatureId",
+        "featureVisibility",
+        "labelVisibility",
+        "labelText",
+        "labelSourceText",
     }
 )
 DEPTH_FILE_ENCODING = "gbdraw-depth-table-v1"
@@ -596,13 +621,15 @@ def validate_session(session: Mapping[str, Any]) -> None:
         _validate_alignment_reset_receipt(session)
     if version >= 41:
         _validate_display_placement_drafts(session)
+    if version >= CURRENT_SESSION_VERSION:
+        _validate_feature_override_drafts(session)
     if is_settings_only_session(session):
         _validate_settings_only_session(session)
 
 
 def is_settings_only_session(session: Mapping[str, Any]) -> bool:
     """Recognize the explicit document variant, never a missing-resource error."""
-    return session.get("version") in (42, CURRENT_SESSION_VERSION) and "renderRequest" in session and session["renderRequest"] is None
+    return session.get("version") in (42, 44, CURRENT_SESSION_VERSION) and "renderRequest" in session and session["renderRequest"] is None
 
 
 def _validate_settings_only_session(session: Mapping[str, Any]) -> None:
@@ -663,8 +690,8 @@ def _validate_web_file_bindings(session: Mapping[str, Any]) -> None:
     if isinstance(schema, bool) or schema not in (1, 2):
         raise ValidationError("Unsupported Web file binding schema.")
     current = schema == 2
-    if current and (session.get("version") not in (41, 42, CURRENT_SESSION_VERSION) or "c_gb" not in bindings):
-        raise ValidationError("Web binding schema 2 requires session 41, 42, or 44 and c_gb.")
+    if current and (session.get("version") not in (41, 42, 44, CURRENT_SESSION_VERSION) or "c_gb" not in bindings):
+        raise ValidationError("Web binding schema 2 requires session 41, 42, 44, or 45 and c_gb.")
     resources = session.get("resources", {})
 
     def metadata(value: Mapping[str, Any]) -> None:
@@ -756,7 +783,7 @@ def _validate_display_placement_drafts(session: Mapping[str, Any]) -> None:
     drafts = config.get("recordDisplayDrafts", [])
     if not isinstance(drafts, list):
         raise ValidationError("config.recordDisplayDrafts must be an array.")
-    current = session.get("version") == CURRENT_SESSION_VERSION
+    current = session.get("version") >= TYPED_DRAFT_SESSION_MIN_VERSION
     expected_fields = {
         "scope", "sourceUid", "selector", "recordId", "topologyOverride", "startCoordinate",
     }
@@ -831,6 +858,66 @@ def _validate_display_placement_drafts(session: Mapping[str, Any]) -> None:
     tolerance = adv.get("feature_overlap_tolerance_bp", 0)
     if isinstance(tolerance, bool) or not isinstance(tolerance, int) or tolerance < 0:
         raise ValidationError("Feature overlap tolerance must be a non-negative integer.")
+
+
+def _validate_feature_override_drafts(session: Mapping[str, Any]) -> None:
+    """Validate the version-45 per-feature edit drafts keyed by source identity.
+
+    A draft row is a request ``featureOverrides`` row plus the Web-only
+    ``labelSourceText``; a row may hold only that source text (a bulk label
+    edit's target). The key encodes the identity as a JSON pair, as placement
+    drafts do.
+    """
+    from .features.overrides import FeatureOverride
+
+    invalid = {"code": "INPUT_INVALID", "field": "schema", "reason": "FIELDS"}
+
+    features = session.get("features", {})
+    if not isinstance(features, Mapping):
+        return
+    retired = RETIRED_RENDERED_ID_FEATURE_FIELDS & set(features)
+    if retired:
+        raise ValidationError(
+            f"Session version {session.get('version')} cannot contain rendered-ID "
+            f"feature edits: {', '.join(sorted(retired))}.",
+            diagnostic=invalid,
+        )
+    drafts = features.get("featureOverrides", {})
+    if not isinstance(drafts, Mapping):
+        raise ValidationError("features.featureOverrides must be an object.", diagnostic=invalid)
+    for key, row in drafts.items():
+        if not isinstance(row, Mapping) or set(row) != FEATURE_OVERRIDE_DRAFT_FIELDS:
+            raise ValidationError("Invalid feature override draft fields.", diagnostic=invalid)
+        source_text = row["labelSourceText"]
+        if source_text is not None and (
+            not isinstance(source_text, str) or not source_text or "\0" in source_text
+        ):
+            raise ValidationError(
+                "Feature override labelSourceText must be text or null.", diagnostic=invalid
+            )
+        edits = {name: row[name] for name in ("featureVisibility", "labelVisibility", "labelText")}
+        if any(value is not None for value in edits.values()):
+            override = FeatureOverride.from_mapping(
+                {"recordKey": row["recordKey"], "biologicalFeatureId": row["biologicalFeatureId"], **edits}
+            )
+            identity = (override.record_key, override.biological_feature_id)
+        elif source_text is None:
+            raise ValidationError(
+                "A feature override draft must hold an edit or a label source text.",
+                diagnostic=invalid,
+            )
+        else:
+            identity = (row["recordKey"], row["biologicalFeatureId"])
+            if any(not isinstance(value, str) or not value or "\0" in value for value in identity):
+                raise ValidationError(
+                    "Feature override drafts require a record key and feature ID.",
+                    diagnostic=invalid,
+                )
+        if key != json.dumps(list(identity), ensure_ascii=False, separators=(",", ":")):
+            raise ValidationError(
+                "Feature override draft keys must encode their exact identity as a JSON pair.",
+                diagnostic=invalid,
+            )
 
 
 def _validate_current_retired_active_config_paths(
@@ -1105,11 +1192,7 @@ def _validate_current_feature_catalog_authority(
 ) -> None:
     """Require the version-owned catalog and reject duplicated payloads."""
 
-    catalog_schema = (
-        CURRENT_FEATURE_CATALOG_SCHEMA
-        if session.get("version") == CURRENT_SESSION_VERSION
-        else 3
-    )
+    catalog_schema = FEATURE_CATALOG_SCHEMA_BY_SESSION_VERSION.get(session.get("version"), 3)
 
     unknown_fields = sorted(
         str(field)
@@ -1277,7 +1360,8 @@ def validate_current_session_artifacts(session: Mapping[str, Any]) -> None:
     validate_current_web_state_field_names(
         session.get("config"),
         include_linear_label_visibility=(
-            session_version == CURRENT_SESSION_VERSION
+            isinstance(session_version, int)
+            and session_version >= TYPED_DRAFT_SESSION_MIN_VERSION
         ),
     )
     cache_entries = _artifact_entries(session, "losatCache")
@@ -2784,7 +2868,7 @@ def build_session_json(
 
     features = payload.get("features")
     features = dict(features) if isinstance(features, Mapping) else {}
-    for key in CURRENT_WRITER_FORBIDDEN_FEATURE_FIELDS:
+    for key in CURRENT_WRITER_FORBIDDEN_FEATURE_FIELDS | RETIRED_RENDERED_ID_FEATURE_FIELDS:
         features.pop(key, None)
     payload["features"] = features
 
@@ -4510,6 +4594,7 @@ def _as_list(value: Any) -> list[Any]:
 
 __all__ = [
     "CURRENT_SESSION_VERSION",
+    "RETIRED_RENDERED_ID_FEATURE_FIELDS",
     "CANONICAL_SESSION_MIN_VERSION",
     "DEPTH_FILE_ENCODING",
     "DEPTH_FILE_SCHEMA",

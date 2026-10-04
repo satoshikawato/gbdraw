@@ -35,6 +35,8 @@ export const validateAnnotationRecordTargets = (sets, catalog) => {
 
   const records = Array.isArray(catalog?.records) ? catalog.records : [];
   for (const { annotation } of annotations) {
+    // A source-identity target names its record by key (design Q4).
+    if (annotation.target?.kind === 'featureIdentity') continue;
     if (annotation.target?.kind === 'coordinateSpan' && validateAnnotationCoordinates(annotation.target)) {
       return targetIssue('POSITIVE_INTEGER');
     }

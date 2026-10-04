@@ -25,6 +25,11 @@ const {
 const { promoteGallerySessionToCurrent } = await import(
   '../../gbdraw/web/js/services/gallery-session-migration.js'
 );
+const { FEATURE_CATALOG_SCHEMA } = await import('../../gbdraw/web/js/services/feature-catalog.js');
+// Session 45 keys per-feature edits by source identity (design Q4).
+const { FEATURE_IDENTITY_SESSION_VERSION: CURRENT_SESSION_VERSION } = await import(
+  '../../gbdraw/web/js/services/session-authority.js'
+);
 
 const {
   admitGallerySession,
@@ -62,7 +67,11 @@ for (const name of sessionNames) {
   const source = await loadSession(name);
   const committedBefore = JSON.stringify(source.renderRequest);
   const result = await prepareGallerySessionForPublication(source);
-  assert.equal(result.session.version, 44, name);
+  assert.equal(result.session.version, CURRENT_SESSION_VERSION, name);
+  assert.equal(result.session.editorState.featureCatalog.schema, FEATURE_CATALOG_SCHEMA, name);
+  assert.deepEqual(result.session.features.featureOverrides, {}, name);
+  for (const field of ['featureVisibilityOverrides', 'labelVisibilityOverrides', 'labelTextFeatureOverrides',
+    'labelTextFeatureOverrideSources']) assert.equal(Object.hasOwn(result.session.features, field), false, name);
   assert.equal(result.session.renderRequest.schema, CANONICAL_REQUEST_SCHEMA, name);
   const plan = result.session.renderRequest.layout?.similarityAlignment;
   if (plan) {
@@ -109,8 +118,8 @@ for (const name of sessionNames) {
 
 const lambda = await loadSession('lambda_basic_linear.gbdraw-session.json');
 const admittedLambda = admitGallerySession(lambda);
-assert.equal(admittedLambda.version, 44);
-assert.equal(admittedLambda.editorState.featureCatalog.schema, 4);
+assert.equal(admittedLambda.version, CURRENT_SESSION_VERSION);
+assert.equal(admittedLambda.editorState.featureCatalog.schema, FEATURE_CATALOG_SCHEMA);
 assert.deepEqual(admittedLambda.results, lambda.results);
 assert.equal(lambda.version, 44);
 assert.equal(lambda.editorState.featureCatalog.schema, 4);
@@ -121,7 +130,7 @@ assert.equal(releasedCurrent.editorState.featureCatalog.schema, 4);
 const admittedReleasedCurrent = admitGallerySession(releasedCurrent);
 // Admission promotes the released schema-8 request to the current writer.
 assert.equal(admittedReleasedCurrent.renderRequest.schema, CANONICAL_REQUEST_SCHEMA);
-assert.equal(admittedReleasedCurrent.editorState.featureCatalog.schema, 4);
+assert.equal(admittedReleasedCurrent.editorState.featureCatalog.schema, FEATURE_CATALOG_SCHEMA);
 assert.deepEqual(admittedReleasedCurrent.results, releasedCurrent.results);
 const alteredProvenance = structuredClone(lambda);
 alteredProvenance.cliInvocation = {
@@ -207,7 +216,7 @@ for (const field of ['cli_circular_track_order', 'cli_circular_track_slots']) {
 for (const version of [27, 30, 34, 38, 43]) {
   assert.throws(
     () => admitGallerySession({ ...lambda, version }),
-    /supports current version 44 or historical versions 31-33\/39-42/
+    /supports current version 45 or historical versions 31-33\/39-44/
   );
 }
 

@@ -32,6 +32,7 @@ from gbdraw.session_io import (
     CURRENT_AUTHORITY_SESSION_MIN_VERSION,
     CURRENT_SESSION_VERSION,
     CURRENT_WRITER_FORBIDDEN_FEATURE_FIELDS,
+    RETIRED_RENDERED_ID_FEATURE_FIELDS,
     SessionBuildContext,
     SessionFileBinding,
     _project_web_file_binding,
@@ -342,7 +343,7 @@ def _replace_current_derived_feature_state(
 
     features = payload.get("features")
     features = dict(features) if isinstance(features, Mapping) else {}
-    for key in CURRENT_WRITER_FORBIDDEN_FEATURE_FIELDS:
+    for key in CURRENT_WRITER_FORBIDDEN_FEATURE_FIELDS | RETIRED_RENDERED_ID_FEATURE_FIELDS:
         features.pop(key, None)
     payload["features"] = features
 
@@ -811,6 +812,15 @@ def _project_session_adjunct_for_current_write(
             "files",
         }
     }
+    features = adjunct.get("features")
+    if isinstance(features, Mapping) and RETIRED_RENDERED_ID_FEATURE_FIELDS & set(features):
+        # The CLI cannot map rendered-ID edits to source identities; the
+        # request's tables keep their rows (design Q4, 4.2).
+        adjunct["features"] = {
+            key: value
+            for key, value in features.items()
+            if key not in RETIRED_RENDERED_ID_FEATURE_FIELDS
+        }
     orthogroup_state = adjunct.get("orthogroupState")
     if isinstance(orthogroup_state, Mapping):
         projected_orthogroup_state = dict(orthogroup_state)

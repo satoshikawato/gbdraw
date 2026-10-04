@@ -2,7 +2,7 @@ const { test, expect } = require('@playwright/test');
 const { readFileSync } = require('node:fs');
 const { join, resolve } = require('node:path');
 const { gunzipSync } = require('node:zlib');
-const { CURRENT_REQUEST_SCHEMA, openApp } = require('../helpers/app-lifecycle.cjs');
+const { CURRENT_REQUEST_SCHEMA, CURRENT_SESSION_VERSION, openApp } = require('../helpers/app-lifecycle.cjs');
 
 const repoRoot = resolve(process.env.GBDRAW_REPO || process.cwd());
 const sourceSessionPath = join(
@@ -326,7 +326,7 @@ test.describe('active Result Feature fill transaction', () => {
     const savedSession = readSavedSession(savedSessionPath);
     expect(savedSession).toMatchObject({
       format: 'gbdraw-session',
-      version: 44,
+      version: CURRENT_SESSION_VERSION,
       renderRequest: { schema: CURRENT_REQUEST_SCHEMA },
       editorState: {
         legend: { colorOverrides: { [TARGET_CAPTION]: AFTER_COLOR } }

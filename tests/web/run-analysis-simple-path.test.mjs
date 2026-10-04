@@ -318,7 +318,7 @@ const result = (name, marker) => ({
 });
 
 const validCatalog = (name) => ({
-  schema: 4,
+  schema: 5,
   items: [{
     resultIndex: 0,
     resultName: name,
@@ -327,7 +327,8 @@ const validCatalog = (name) => ({
       svgId: 'rendered-feature-1',
       recordKey: 'record-1',
       biologicalFeatureId: 'biological-feature-1',
-      fillColor: '#abcdef'
+      fillColor: '#abcdef',
+      drawnSelector: { hash: 'rendered-feature-1', location: '0..9', recordLocation: 'record-1:0..9:+' }
     }],
     biologicalFeatures: [{
       recordKey: 'record-1',
@@ -389,7 +390,6 @@ const committedFeatureState = () => structuredClone({
   featureCatalog: state.featureCatalog.value,
   extractedFeatures: state.extractedFeatures.value,
   biologicalFeatures: state.biologicalFeatures.value,
-  featureSelectorSafetyScope: state.featureSelectorSafetyScope.value,
   selectedFeatureIds: [...state.selectedFeatureIds.value],
   selectedFeatureAnchorId: state.selectedFeatureAnchorId.value,
   featureSelectionStatus: state.featureSelectionStatus.value,

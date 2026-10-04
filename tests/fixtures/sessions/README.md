@@ -54,3 +54,16 @@ three files as one composite `c_gb` whose components keep each file's name and
 bytes. `composite-session-resources.playwright.spec.js` loads, saves, regenerates
 and replays it. Its decompressed SHA-256 is
 `9c371d16a5b74bebffd28d9efdff16e8678d0fdecd1bfe1c07a326f33078571b`.
+
+`feature-edits-crop-rc.v44.gbdraw-session.json.gz`,
+`feature-edits-circular-copies.v44.gbdraw-session.json.gz`,
+`feature-edits-circular.v33.gbdraw-session.json.gz`, and
+`feature-edits-linear-crop-rc.v33.gbdraw-session.json.gz` are Web **Save
+Session** downloads, kept unchanged, from first-parent `main` commits
+`fe6861f0` (Session 44) and `b05a6bb8` (Session 33). They hold Feature
+visibility, Label visibility, and label text edits keyed by rendered feature
+ID: a cropped and a reverse-complemented Linear record (Sessions 44 and 33),
+two Circular records with the same ID, and a Circular Session 33. The
+Sessions 33 have no feature catalog. They are the positive fixtures for the
+readers that move those edits onto source identities in Session 45. The steps,
+inputs, and hashes are in `feature-edits.provenance.json`.

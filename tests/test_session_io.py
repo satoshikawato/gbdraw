@@ -54,6 +54,7 @@ from gbdraw.api.requests import (
     RenderOutputRequest,
 )
 from gbdraw.session_io import (
+    CURRENT_FEATURE_CATALOG_SCHEMA,
     CURRENT_SESSION_VERSION,
     DEPTH_FILE_ENCODING,
     LOSAT_DERIVED_CACHE_SCHEMA,
@@ -485,7 +486,7 @@ def test_session_sidecar_saves_complete_orthogroup_state(tmp_path: Path) -> None
     assert payload["features"] == {}
     assert payload["orthogroupState"] == {}
     catalog = payload["editorState"]["featureCatalog"]
-    assert catalog["schema"] == 4
+    assert catalog["schema"] == CURRENT_FEATURE_CATALOG_SCHEMA
     item = catalog["items"][0]
     assert item["resultIndex"] == 0
     assert item["resultName"] == "diagram"
@@ -537,9 +538,9 @@ def test_current_session_version_matches_web_config() -> None:
     if "SESSION_VERSION" in supported_match.group(1):
         web_supported_versions.add(int(match.group(1)))
 
-    assert CURRENT_SESSION_VERSION == 44
+    assert CURRENT_SESSION_VERSION == 45
     assert SUPPORTED_SESSION_VERSIONS == frozenset(
-        {27, 28, 29, 30, 31, 32, 33, 39, 40, 41, 42, CURRENT_SESSION_VERSION}
+        {27, 28, 29, 30, 31, 32, 33, 39, 40, 41, 42, 44, CURRENT_SESSION_VERSION}
     )
     assert int(match.group(1)) == CURRENT_SESSION_VERSION
     assert web_supported_versions == SUPPORTED_SESSION_VERSIONS
@@ -581,7 +582,7 @@ def test_current_session_feature_catalog_is_single_and_lossless(
     tmp_path: Path,
 ) -> None:
     catalog = {
-        "schema": 4,
+        "schema": CURRENT_FEATURE_CATALOG_SCHEMA,
         "items": [
             {
                 "resultIndex": 0,
@@ -593,6 +594,11 @@ def test_current_session_feature_catalog_is_single_and_lossless(
                         "recordKey": "record-key",
                         "biologicalFeatureId": "feature-1",
                         "fillColor": "#123456",
+                        "drawnSelector": {
+                            "hash": "rendered-feature",
+                            "location": "2..3:+",
+                            "recordLocation": "public-record:2..3:+",
+                        },
                     }
                 ],
                 "biologicalFeatures": [
@@ -967,6 +973,60 @@ def test_alignment_session_requires_reset_receipt_for_request_schema_8_and_later
         session_io_module._validate_alignment_reset_receipt(session)
     session["editorState"]["alignmentResetReceipt"] = None
     session_io_module._validate_alignment_reset_receipt(session)
+
+
+def test_session_version_45_keys_feature_edits_by_source_identity() -> None:
+    # Design Q4: Session 45 stores per-feature edits as identity rows and
+    # rejects the retired rendered-ID maps.
+    payload = build_session_json(
+        SessionBuildContext(
+            mode="circular",
+            output_prefix="out",
+            render_formats=("svg",),
+        ),
+        svg_results=(("out", "<svg></svg>"),),
+        embedded_files={},
+        generated_at=datetime(2026, 10, 4),
+        canonical_request=_canonical_request("circular"),
+    )
+    row = {
+        "recordKey": "record-1",
+        "biologicalFeatureId": "feature-1",
+        "featureVisibility": "off",
+        "labelVisibility": None,
+        "labelText": "Edited label",
+        "labelSourceText": "nad1",
+    }
+    source_only = {
+        **row,
+        "biologicalFeatureId": "feature-2",
+        "featureVisibility": None,
+        "labelText": None,
+        "labelSourceText": "nad2",
+    }
+    key = json.dumps(["record-1", "feature-1"], separators=(",", ":"))
+    payload["features"] = {
+        "featureOverrides": {
+            key: row,
+            json.dumps(["record-1", "feature-2"], separators=(",", ":")): source_only,
+        }
+    }
+
+    assert payload["version"] == CURRENT_SESSION_VERSION == 45
+    validate_session(payload)
+
+    for broken_features in (
+        {"featureVisibilityOverrides": {"rendered-1": "off"}},
+        {"featureOverrides": {key: {**row, "recordKey": "record-2"}}},
+        {"featureOverrides": {key: {k: v for k, v in row.items() if k != "labelSourceText"}}},
+        {"featureOverrides": {key: {**row, "featureVisibility": None, "labelText": None,
+                                    "labelSourceText": None}}},
+        {"featureOverrides": {key: {**row, "labelText": "two\nlines"}}},
+    ):
+        broken = copy.deepcopy(payload)
+        broken["features"] = broken_features
+        with pytest.raises(ValidationError):
+            validate_session(broken)
 
 
 def test_session_version_44_validates_record_rotation_draft_and_version_42_shape() -> None:
@@ -1529,7 +1589,7 @@ def test_version_39_writer_promotes_once_and_preserves_web_inventory() -> None:
         assert "blastSource" not in payload["config"]
         assert "comparisons" not in payload["config"]["linearRecordLayout"]
         assert payload["editorState"]["legend"] == source["editorState"]["legend"]
-        assert payload["editorState"]["featureCatalog"]["schema"] == 4
+        assert payload["editorState"]["featureCatalog"]["schema"] == CURRENT_FEATURE_CATALOG_SCHEMA
         assert len(payload["editorState"]["featureCatalog"]["items"]) == 1
         assert payload["features"] == {"selectedFeatureRecordIdx": 0}
         assert (
@@ -3212,7 +3272,7 @@ def test_circular_cli_save_session_round_trip(tmp_path: Path, examples_dir: Path
     assert payload["resources"]["record-1-genbank"]["data"]
     assert "<svg" in payload["results"][0]["content"]
     catalog = payload["editorState"]["featureCatalog"]
-    assert catalog["schema"] == 4
+    assert catalog["schema"] == CURRENT_FEATURE_CATALOG_SCHEMA
     assert len(catalog["items"]) == len(payload["results"]) == 1
     assert catalog["items"][0]["features"]
     assert catalog["items"][0]["biologicalFeatures"]
@@ -3762,13 +3822,13 @@ def _replay_cli_sidecar(source, tmp_path, suffix='.json'):
     ])
     assert source_path.read_bytes() == original
     result = load_session_document(sidecar).to_dict()
-    assert (result['version'], result['webFiles']['bindings']['schema'], result['renderRequest']['schema']) == (44, 2, CANONICAL_REQUEST_SCHEMA)
+    assert (result['version'], result['webFiles']['bindings']['schema'], result['renderRequest']['schema']) == (CURRENT_SESSION_VERSION, 2, CANONICAL_REQUEST_SCHEMA)
     assert result['renderRequest']['output']['prefix'] == 'replayed'
     assert len(result['renderRequest']['records']) == 1  # Replay consumes committed input.
     assert result['results'][0]['content'] == prefix.with_suffix('.svg').read_text()
     assert result['results'] != source['results']
     catalog = result['editorState']['featureCatalog']
-    assert catalog['schema'] == 4 and len(catalog['items']) == 1
+    assert catalog['schema'] == CURRENT_FEATURE_CATALOG_SCHEMA and len(catalog['items']) == 1
     assert catalog['items'][0]['resultName'] == result['results'][0]['name']
     return result
 

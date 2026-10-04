@@ -166,10 +166,21 @@ def _biological_selector_values(
     coord_base: int,
     coord_step: int,
 ) -> tuple[dict[str, object], str, str]:
-    """Return selector values plus biological and processed-record feature IDs."""
+    """Return source selector values, the biological and processed-record
+    feature IDs, and the drawn record's selector values.
+
+    The drawn values are the ones the renderer's rule matching reads from the
+    processed (cropped, reverse-complemented) record (feature catalog 5,
+    ``drawnSelector``).
+    """
 
     selector = build_feature_selector_values(feature, record_id=record_id)
     rendered_feature_id = str(selector.get("hash") or "")
+    drawn_selector = {
+        "hash": rendered_feature_id or None,
+        "location": str(selector.get("location") or "") or None,
+        "recordLocation": str(selector.get("record_location") or "") or None,
+    }
     rendered_parts = _biological_location_parts(
         feature.location,
         coord_base,
@@ -193,7 +204,7 @@ def _biological_selector_values(
             selector["record_location"] = f"{record_id}:{start}..{end}:{strand}"
         else:
             selector.pop("record_location", None)
-    return selector, stable_feature_id, rendered_feature_id
+    return selector, stable_feature_id, rendered_feature_id, drawn_selector
 
 
 
@@ -272,30 +283,6 @@ def _extract_amino_acid_sequence(feature: Any, nucleotide_sequence: str) -> tupl
         return "", warnings
 
 
-def _build_selector_safety_scope(records: list[Any]) -> list[dict[str, object]]:
-    scope: list[dict[str, object]] = []
-    for rec_idx, record in enumerate(records):
-        record_id = record.id or f"Record_{rec_idx}"
-        hash_record_id = record.id
-        coord_base, coord_step = _read_record_coord_map(record)
-        for feat in _iter_features(getattr(record, "features", None)):
-            selector, _, _ = _biological_selector_values(
-                feat,
-                record_id=hash_record_id,
-                coord_base=coord_base,
-                coord_step=coord_step,
-            )
-            scope.append(
-                {
-                    "record_id": record_id,
-                    "record_idx": rec_idx,
-                    "feature_type": str(getattr(feat, "type", "") or ""),
-                    "selector": selector,
-                }
-            )
-    return scope
-
-
 def extract_features_from_records_payload(
     records: Any,
     *,
@@ -305,7 +292,6 @@ def extract_features_from_records_payload(
     specific_color_rules: dict | None = None,
     linear_rendered_feature_ids: bool = False,
     include_biological_features: bool = False,
-    include_selector_safety_scope: bool = True,
 ) -> dict[str, object]:
     """Extract feature metadata from processed records.
 
@@ -321,12 +307,6 @@ def extract_features_from_records_payload(
     features: list[dict[str, object]] = []
     biological_features: list[dict[str, object]] = []
     record_ids: list[str] = []
-    selector_safety_scope: list[dict[str, object]] = []
-    if include_selector_safety_scope:
-        from gbdraw.api.prepared import record_prepared_input_metric
-
-        record_prepared_input_metric("selectorSafetyScopeBuildCount")
-        selector_safety_scope = _build_selector_safety_scope(records)
     idx = 0
     biological_idx = 0
     for rec_idx, record in enumerate(records):
@@ -404,7 +384,7 @@ def extract_features_from_records_payload(
             )
             sequence_warnings.extend(translation_warnings)
 
-            selector, stable_svg_id, rendered_stable_svg_id = selector_values
+            selector, stable_svg_id, rendered_stable_svg_id, drawn_selector = selector_values
 
             qualifiers = {}
             for q_key, q_vals in feat.qualifiers.items():
@@ -461,6 +441,7 @@ def extract_features_from_records_payload(
                 continue
             rendered_feature_payload = dict(feature_payload)
             rendered_feature_payload["id"] = f"f{idx}"
+            rendered_feature_payload["drawn_selector"] = drawn_selector
             rendered_feature_svg_id = rendered_stable_svg_id
             if linear_rendered_feature_ids:
                 rendered_feature_svg_id = (
@@ -493,7 +474,6 @@ def extract_features_from_records_payload(
     payload: dict[str, object] = {
         "features": features,
         "record_ids": record_ids,
-        "selector_safety_scope": selector_safety_scope,
     }
     if include_biological_features:
         payload["biological_features"] = biological_features

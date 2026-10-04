@@ -3,6 +3,7 @@ const { readFileSync } = require('node:fs');
 const { join, resolve } = require('node:path');
 const { gunzipSync } = require('node:zlib');
 const {
+  CURRENT_SESSION_VERSION,
   assertDiagramWorkerIdle,
   assertSingleWorkerRun,
   assertWorkerReuseAcrossHelperAndRender,
@@ -1843,7 +1844,7 @@ ORIGIN
     'circularMultiRecordLegendPosition',
     'circularMultiRecordPlotTitlePosition'
   ];
-  expect(exportedSession.version).toBe(44);
+  expect(exportedSession.version).toBe(CURRENT_SESSION_VERSION);
   expect(exportedSession).not.toHaveProperty('files');
   expect(exportedSession.webFiles).toEqual(expect.any(Object));
   expect(exportedSession.webFiles.bindings.schema).toBe(2);
@@ -2298,7 +2299,7 @@ test('P3 Custom Track drafts survive fresh-page session re-save and Reset histor
   const initialSession = JSON.parse(
     gunzipSync(readFileSync(initialPath)).toString('utf8')
   );
-  expect(initialSession.version).toBe(44);
+  expect(initialSession.version).toBe(CURRENT_SESSION_VERSION);
   const expectedDraft = p3Draft(initialSession);
   expect(expectedDraft.circularEnabled).toBe(true);
   expect(expectedDraft.linearEnabled).toBe(false);

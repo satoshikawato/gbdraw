@@ -1,7 +1,7 @@
 const { test, expect } = require('@playwright/test');
 const fs = require('node:fs/promises');
 const { gunzipSync } = require('node:zlib');
-const { CURRENT_REQUEST_SCHEMA, openApp, assertDiagramWorkerIdle, generateAndWaitForResult, getDiagramWorkerActivity, reveal } = require('./helpers/app-lifecycle.cjs');
+const { CURRENT_REQUEST_SCHEMA, CURRENT_SESSION_VERSION, assertDiagramWorkerIdle, generateAndWaitForResult, getDiagramWorkerActivity, openApp, reveal } = require('./helpers/app-lifecycle.cjs');
 const { capture, assertCoherent, settle } = require('./helpers/visual-state.cjs');
 const path = require('node:path');
 
@@ -147,7 +147,7 @@ test('settings-only Session preserves non-default Circular and Linear profiles t
       state.trackSlotResolvedGeometry.value = { schema: 1, records: [] };
     });
     const saved = await save(page, testInfo, 'first');
-    expect(saved.document.version).toBe(44);
+    expect(saved.document.version).toBe(CURRENT_SESSION_VERSION);
     expect(saved.document).not.toHaveProperty('runMetadata');
     expect(saved.document.config.adv).not.toHaveProperty('linear_show_accession');
     expect(saved.document.config.adv).not.toHaveProperty('linear_show_length');

@@ -154,7 +154,7 @@ class FakeDomParser {
 }
 
 const catalog = () => ({
-  schema: 4,
+  schema: 5,
   items: [{
     resultIndex: 0,
     resultName: 'diagram.svg',
@@ -163,7 +163,8 @@ const catalog = () => ({
       svgId: 'f0001',
       recordKey: 'record-a',
       biologicalFeatureId: 'feature-a',
-      fillColor: '#aaaaaa'
+      fillColor: '#aaaaaa',
+      drawnSelector: { hash: 'f0001', location: '0..3', recordLocation: 'record-a:0..3:+' }
     }],
     biologicalFeatures: [{
       recordKey: 'record-a',
@@ -306,6 +307,18 @@ test('JSON cannot forge current-worker provenance and malformed envelopes fail c
   );
 });
 
+// Per-feature edits are identity rows (design Q4).
+const identityKey = JSON.stringify(['record-a', 'feature-a']);
+const identityRow = (fields) => ({
+  recordKey: 'record-a',
+  biologicalFeatureId: 'feature-a',
+  featureVisibility: null,
+  labelVisibility: null,
+  labelText: null,
+  labelSourceText: null,
+  ...fields
+});
+
 const planOptions = {
   fill: (admission) => ({
     catalogAdmission: admission,
@@ -324,12 +337,11 @@ const planOptions = {
   }),
   visibility: (admission) => ({
     catalogAdmission: admission,
-    featureVisibilityOverrides: { f0001: 'off' }
+    featureOverrides: { [identityKey]: identityRow({ featureVisibility: 'off' }) }
   }),
   Label: (admission) => ({
     catalogAdmission: admission,
-    labelTextFeatureOverrides: { f0001: 'new label' },
-    labelVisibilityOverrides: { f0001: 'off' }
+    featureOverrides: { [identityKey]: identityRow({ labelText: 'new label', labelVisibility: 'off' }) }
   }),
   Legend: (admission) => ({
     catalogAdmission: admission,
@@ -368,9 +380,11 @@ test('combined current mutations share one root/index and serialize once', () =>
   const plan = compileDirectEditorMutationPlan({
     ...planOptions.fill(admission),
     ...planOptions.stroke(admission),
-    ...planOptions.visibility(admission),
-    ...planOptions.Label(admission),
-    ...planOptions.Legend(admission)
+    ...planOptions.Legend(admission),
+    // One identity row carries the feature and label edits.
+    featureOverrides: {
+      [identityKey]: identityRow({ featureVisibility: 'off', labelText: 'new label', labelVisibility: 'off' })
+    }
   });
   const { value: results, metrics } = captureMetrics(() => admitCurrentGeneratedResults(response, {
     catalogAdmission: admission,

@@ -14,6 +14,7 @@ import {
 } from '../pairwise-match-popup.js';
 import { buildFeatureSequenceFastas } from '../feature-sequence-fasta.js';
 import { getFeatureOverride } from '../../services/feature-override-identity.js';
+import { featureIdentityKeyOf, featureOverrideValue } from '../../services/feature-placement.js';
 import { COMPARISON_LEGEND_SELECTOR } from '../legend/utils.js';
 import { recordStructuralMetric } from '../../services/runtime-test-hooks.js';
 import {
@@ -65,7 +66,7 @@ export const createFeatureSvgActions = ({
     biologicalFeatures,
     featuresBySvgId,
     featureColorOverrides,
-    featureVisibilityOverrides,
+    featureOverrides,
     svgContainer,
     clickedFeature,
     clickedFeaturePos,
@@ -337,7 +338,7 @@ export const createFeatureSvgActions = ({
     const currentStrokeWidth = parseFloat(featureElement?.getAttribute('stroke-width')) || 0.5;
 
     const actualSvgId = String(renderedSvgId || renderedFeatureSvgId(feat)).trim();
-    const visibilityMode = normalizeVisibilityMode(featureVisibilityOverrides[actualSvgId]);
+    const visibilityMode = normalizeVisibilityMode(featureOverrideValue(featureOverrides, feat, 'featureVisibility'));
 
     return {
       id: feat.id,
@@ -376,6 +377,8 @@ export const createFeatureSvgActions = ({
       labelSourceText: '',
       labelVisibility: 'default',
       featureVisibility: visibilityMode,
+      // Per-feature edits name the feature by source identity (design Q4).
+      identityEditable: Boolean(featureIdentityKeyOf(feat)),
       proteinId: feat.proteinId || feat.protein_id || '',
       sourceProteinId: feat.sourceProteinId || feat.source_protein_id || '',
       orthogroupId: feat.orthogroupId || '',

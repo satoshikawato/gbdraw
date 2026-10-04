@@ -3,15 +3,31 @@ import {
 } from './specific-color-rules.js';
 import { normalizeFeatureSelectorMetadata } from './feature-selector.js';
 import { getFeatureColorRuleHash } from './feature-utils.js';
+import { featureOverrideValue } from '../services/feature-placement.js';
 
 // Ephemeral Python results belong to feature objects, never a session or a SVG.
-// An absent result is pending, not a non-match.
+// An absent result is pending, not a non-match; a declined one (`matches:
+// null`) is settled but unknown until the next Generate.
 const matchesByFeature = new WeakMap();
 const ruleKey = (rule) => JSON.stringify([rule.feat, rule.qual, rule.val]);
 export const ruleMatchesFeature = (feature, rule) => {
   if (!rule || (rule.feat !== '*' && rule.feat !== feature?.type)) return false;
   return matchesByFeature.get(feature)?.get(ruleKey(rule))?.matches ?? null;
 };
+// A feature of a catalog before schema 5 has no drawn selector values. Where
+// its rendered ID carries its source hash, its record was drawn with the
+// source's coordinates and the source values are the drawn ones; otherwise (a
+// cropped, reverse-complemented, or rotated record) a `location` or
+// `record_location` rule is not matched live (R4: the fast path declines what
+// it cannot read exactly).
+export const DRAWN_SELECTOR_QUALIFIERS = new Set(['location', 'record_location']);
+export const drawnSelectorUnknown = (feature) => !feature?.drawnSelector
+  && Object.prototype.hasOwnProperty.call(feature || {}, 'drawnSelector')
+  && getFeatureColorRuleHash(feature) !== String(feature?.selector?.hash || '');
+const declinesLiveMatch = (feature, rule) => drawnSelectorUnknown(feature)
+  && DRAWN_SELECTOR_QUALIFIERS.has(String(rule?.qual || '').toLowerCase());
+export const ruleMatchDeclined = (feature, rules) => rules
+  .some((rule) => matchesByFeature.get(feature)?.get(ruleKey(rule))?.declined === true);
 export const firstMatchingRule = (feature, rules) => {
   let winner = null;
   let priority = Infinity;
@@ -25,26 +41,29 @@ export const firstMatchingRule = (feature, rules) => {
   return winner;
 };
 export const ruleMatchesReady = (features, rules) => features.every((feature) =>
-  rules.every((rule) => ruleMatchesFeature(feature, rule) !== null)
+  rules.every((rule) => ruleMatchesFeature(feature, rule) !== null || ruleMatchDeclined(feature, [rule]))
 );
-// Generate matches a `hash` rule against the hash of the drawn feature: the
-// rendered id without its `_record_N` instance suffix (D-14, PD-OI-069). A
-// cropped or reverse-complemented record draws other coordinates than its
-// source, so that hash differs from the source identity in `selector.hash`.
+// Generate matches `hash`, `location`, and `record_location` rules against the
+// drawn feature (D-14, PD-OI-069): a cropped or reverse-complemented record
+// draws other coordinates than its source. The catalog gives those drawn
+// values (`drawnSelector`, feature catalog 5, OV-02); a feature of an older
+// catalog sends the hash its rendered ID carries, and its source values only
+// where they are the drawn ones.
 export const ruleFeaturePayload = (feature, label = '') => {
   const metadata = normalizeFeatureSelectorMetadata(feature);
-  return {
-    type: metadata.featureType,
-    record: metadata.record,
-    qualifiers: Object.fromEntries(Object.entries(feature.selector?.qualifiers || feature.qualifiers || metadata.qualifiers)
-      .map(([key, values]) => [key, (Array.isArray(values) ? values : [values]).filter(value => value != null).map(String)])),
-    selector: {
-      hash: getFeatureColorRuleHash(feature) || metadata.stableFeatureId,
-      location: metadata.location,
-      record_location: metadata.recordLocation || `${metadata.record}:${metadata.position}`
-    },
-    label
-  };
+  const qualifiers = Object.fromEntries(Object.entries(feature.selector?.qualifiers || feature.qualifiers || metadata.qualifiers)
+    .map(([key, values]) => [key, (Array.isArray(values) ? values : [values]).filter(value => value != null).map(String)]));
+  const drawn = feature?.drawnSelector;
+  const selector = drawn
+    ? { hash: drawn.hash, location: drawn.location, record_location: drawn.recordLocation }
+    : drawnSelectorUnknown(feature)
+      ? { hash: getFeatureColorRuleHash(feature) || null, location: null, record_location: null }
+      : {
+          hash: getFeatureColorRuleHash(feature) || metadata.stableFeatureId,
+          location: metadata.location,
+          record_location: metadata.recordLocation || `${metadata.record}:${metadata.position}`
+        };
+  return { type: metadata.featureType, record: metadata.record, qualifiers, selector, label };
 };
 
 export const createRulePreparation = ({ state, evaluate, pending = { value: false }, notify = () => {} }) => {
@@ -68,7 +87,8 @@ export const createRulePreparation = ({ state, evaluate, pending = { value: fals
     legendColors: JSON.stringify(state.legendColorOverrides || {}),
     legendStrokes: JSON.stringify(state.legendStrokeOverrides || {}),
     featureColors: JSON.stringify(state.featureColorOverrides || {}),
-    featureVisibility: JSON.stringify(state.featureVisibilityOverrides || {}),
+    featureVisibility: JSON.stringify(Object.values(state.featureOverrides || {})
+      .map((row) => [row.recordKey, row.biologicalFeatureId, row.featureVisibility])),
     // Physical source, palette, and selector inputs retain their identity while
     // request-owned comparison artifacts are published independently.
     inputFiles: [
@@ -106,7 +126,9 @@ export const createRulePreparation = ({ state, evaluate, pending = { value: fals
           const cache = new Map();
           matchesByFeature.set(feature, cache);
           const matches = new Set(result.matches[index]);
-          draft.forEach((rule, ruleIndex) => cache.set(ruleKey(rule), { matches: matches.has(ruleIndex), priority: result.priorities[index][ruleIndex] }));
+          draft.forEach((rule, ruleIndex) => cache.set(ruleKey(rule), declinesLiveMatch(feature, rule)
+            ? { matches: null, declined: true, priority: Infinity }
+            : { matches: matches.has(ruleIndex), priority: result.priorities[index][ruleIndex] }));
         });
         return true;
       }).finally(() => { pending.value = --pendingCount > 0; });
@@ -128,7 +150,7 @@ export const createRulePreparation = ({ state, evaluate, pending = { value: fals
     const normalized = response.rules;
     if (!await prepare(normalized, options) || !isCurrent(before)) return null;
     const rendered = (state.extractedFeatures.value || []).filter(feature =>
-      state.featureVisibilityOverrides?.[feature.svg_id] !== 'off');
+      featureOverrideValue(state.featureOverrides, feature, 'featureVisibility') !== 'off');
     const used = new Set(rendered.map(feature => firstMatchingRule(feature, normalized)).filter(Boolean));
     const current = state.manualSpecificRules || [];
     const rendererRows = rendererLegendRows({

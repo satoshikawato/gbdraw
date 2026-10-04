@@ -38,7 +38,7 @@ def test_schema_three_promotion_only_restores_exact_single_part_anchors() -> Non
     promoted = promote_legacy_feature_catalog(legacy)
 
     assert legacy["schema"] == 3
-    assert promoted["schema"] == 4
+    assert promoted["schema"] == feature_catalog_module.FEATURE_CATALOG_SCHEMA
     exact, compound = promoted["items"][0]["biologicalFeatures"]
     assert exact["anchorProfile"] == {
         "precision": "exact",
@@ -157,6 +157,56 @@ def _combined_catalog_fixture() -> tuple[str, InteractiveSvgContext]:
     return svg, context
 
 
+def test_feature_catalog_records_each_rendered_features_drawn_selector() -> None:
+    # Design Q4 OV-02: live rule matching reads the values the feature was drawn
+    # with, which crop and reverse complement change.
+    svg, context = _combined_catalog_fixture()
+    drawn = {"hash": "fdrawn", "location": "3..9:-", "recordLocation": "record-a:3..9:-"}
+    features = list(context.features)
+    features[0] = {**features[0], "drawn_selector": drawn}
+    context = InteractiveSvgContext(**{**context.__dict__, "features": tuple(features)})
+
+    item = build_feature_catalog_item(svg, context, result_index=0, result_name="drawn.svg")
+    for biological in item["biologicalFeatures"]:
+        biological["anchorProfile"] = {
+            "precision": "unavailable",
+            "operator": "unknown",
+            "partOrder": "ambiguous",
+            "strand": "unstranded",
+        }
+    catalog = {"schema": feature_catalog_module.FEATURE_CATALOG_SCHEMA, "items": [item]}
+
+    assert feature_catalog_module.FEATURE_CATALOG_SCHEMA == 5
+    assert [feature["drawnSelector"] for feature in item["features"]] == [drawn, None, None]
+    assert select_feature_catalog_item(catalog, result_index=0, result_name="drawn.svg") is not None
+    for invalid in ({"hash": "fdrawn"}, {**drawn, "hash": ""}):
+        broken = json.loads(json.dumps(catalog))
+        broken["items"][0]["features"][0]["drawnSelector"] = invalid
+        with pytest.raises(GbdrawError, match="drawn selector"):
+            select_feature_catalog_item(broken, result_index=0, result_name="drawn.svg")
+    missing = json.loads(json.dumps(catalog))
+    del missing["items"][0]["features"][0]["drawnSelector"]
+    with pytest.raises(GbdrawError, match="drawn selector"):
+        select_feature_catalog_item(missing, result_index=0, result_name="drawn.svg")
+
+
+def test_schema_four_promotion_marks_drawn_selectors_unknown() -> None:
+    svg, context = _combined_catalog_fixture()
+    item = build_feature_catalog_item(svg, context, result_index=0, result_name="old.svg")
+    for feature in item["features"]:
+        del feature["drawnSelector"]
+    anchor_catalog = {"schema": 4, "items": [item]}
+
+    promoted = promote_legacy_feature_catalog(anchor_catalog)
+
+    assert "drawnSelector" not in anchor_catalog["items"][0]["features"][0]
+    assert promoted["schema"] == feature_catalog_module.FEATURE_CATALOG_SCHEMA
+    assert [feature["drawnSelector"] for feature in promoted["items"][0]["features"]] == [
+        None, None, None
+    ]
+    assert promoted["items"][0]["biologicalFeatures"] == item["biologicalFeatures"]
+
+
 def test_feature_catalog_uses_one_read_only_svg_index(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -215,18 +265,21 @@ def test_feature_catalog_uses_one_read_only_svg_index(
                 "recordKey": "record-a",
                 "biologicalFeatureId": "multi",
                 "fillColor": "#22aa44",
+                "drawnSelector": None,
             },
             {
                 "svgId": "suffix_record_2",
                 "recordKey": "record-b",
                 "biologicalFeatureId": "suffix",
                 "fillColor": "#3355cc",
+                "drawnSelector": None,
             },
             {
                 "svgId": "fallback_record_2",
                 "recordKey": "record-b",
                 "biologicalFeatureId": "fallback",
                 "fillColor": "#cc7733",
+                "drawnSelector": None,
             },
         ],
         "biologicalFeatures": [
@@ -710,6 +763,7 @@ def test_feature_catalog_normalizes_references_and_sequence_ownership() -> None:
             "recordKey": "stable-record-key",
             "biologicalFeatureId": biological_id,
             "fillColor": "#123456",
+            "drawnSelector": None,
         }
     ]
     group = item["orthogroups"][0]
@@ -1648,7 +1702,7 @@ def test_feature_catalog_references_one_biological_payload_from_many_renderings(
     }
     assert all(
         set(feature)
-        <= {"svgId", "recordKey", "biologicalFeatureId", "fillColor"}
+        <= {"svgId", "recordKey", "biologicalFeatureId", "fillColor", "drawnSelector"}
         for feature in item["features"]
     )
     encoded = json.dumps(item)
