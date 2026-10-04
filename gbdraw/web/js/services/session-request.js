@@ -1,5 +1,5 @@
 import { writeCanonicalRecordReverseComplement } from '../app/record-display-options.js';
-import { canonicalFeaturePlacements } from './feature-placement.js';
+import { canonicalFeaturePlacements, requestFeaturePlacements } from './feature-placement.js';
 export { canonicalFeaturePlacements } from './feature-placement.js';
 import { buildDefaultColorOverrideTsv, normalizePaletteColors } from '../app/color-utils.js';
 import {
@@ -2428,7 +2428,7 @@ const projectCanonicalRenderInput = ({
         explicitPrefix ?? (state.mode.value === 'circular' ? defaultCircularPrefix : 'out')
       );
   const diagramOptions = {
-    featurePlacements: canonicalFeaturePlacements(state.featurePlacementOverrides || {}, state.mode.value),
+    featurePlacements: requestFeaturePlacements(state.featurePlacementOverrides, state.mode.value, records),
     configOverrides: buildConfigOverrides(state, {
       depthRequested: trackPlan.depthRequested,
       hasComparisonIntent: hasLinearComparisonIntent,

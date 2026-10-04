@@ -1,6 +1,8 @@
 const { test, expect } = require('@playwright/test');
 const fs = require('node:fs/promises');
+const { readFileSync } = require('node:fs');
 const { openApp, reveal } = require('./helpers/app-lifecycle.cjs');
+const { load, generate, switchMode, download } = require('./helpers/mode-transition.cjs');
 
 for (const mode of ['circular', 'linear']) {
   test(`${mode} draft placement capability survives history and dirty session restore`, async ({ browser, baseURL }, testInfo) => {
@@ -150,3 +152,97 @@ for (const mode of ['circular', 'linear']) {
     }
   });
 }
+
+// RC-4: Feature placement rows are keyed by mode-specific record keys, so each
+// mode keeps its own rows (R2) and the request carries only its own (OV-08).
+// An unsupported lane is a classified failure that names the feature (OV-09).
+const HMMT_SESSION = 'gbdraw/web/gallery/sessions/HmmtDNA_basic_circular.gbdraw-session.json';
+const placeOutward = (page) => page.evaluate(() => {
+  const app = window.__GBDRAW_APP__;
+  const feature = app.extractedFeatures.find((item) => item.type === 'CDS');
+  app.featurePlacementActions.setPlacement([feature], 'outward');
+  return { key: JSON.stringify([feature.record_key, feature.biological_feature_id]), product: feature.product };
+});
+const placementState = (page, key) => page.evaluate(async (overrideKey) => {
+  const { state } = await import('./js/state.js');
+  const { getCommittedCanonicalRenderRequest } = await import('./js/services/config.js');
+  const app = window.__GBDRAW_APP__;
+  const feature = app.extractedFeatures.find((item) => item.type === 'CDS');
+  return { row: state.featurePlacementOverrides[overrideKey]?.placement?.side || null,
+    committed: getCommittedCanonicalRenderRequest().diagramOptions.featurePlacements.map((row) => row.placement.side || 'main'),
+    pending: app.recordDisplayControls.hasPendingChanges.value,
+    popup: feature ? app.featurePlacementActions.valueFor(feature) : null };
+}, key);
+
+test('a Circular lane placement waits in Circular while Linear generates (OV-08)', async ({ browser }, testInfo) => {
+  test.setTimeout(300000);
+  let page = await load(browser, HMMT_SESSION);
+  try {
+    await generate(page);
+    const { key } = await placeOutward(page);
+    await generate(page);
+    expect(await placementState(page, key)).toEqual({ row: 'outward', committed: ['outward'], pending: false, popup: 'outward' });
+
+    await switchMode(page, 'linear');
+    await page.evaluate(async (text) => {
+      window.__GBDRAW_APP__.setLinearSeqPrimaryFile(0, 'gb', new File([text], 'HmmtDNA.gbk', { type: 'text/plain', lastModified: 1000 }));
+      await window.Vue.nextTick();
+    }, readFileSync('tests/test_inputs/HmmtDNA.gbk', 'utf8'));
+    await generate(page);
+    expect(await placementState(page, key)).toEqual({ row: 'outward', committed: [], pending: false, popup: 'auto' });
+
+    await switchMode(page, 'circular');
+    await generate(page);
+    expect(await placementState(page, key)).toEqual({ row: 'outward', committed: ['outward'], pending: false, popup: 'outward' });
+
+    // A Session saved in Linear keeps the Circular row for a later return.
+    await switchMode(page, 'linear');
+    await generate(page);
+    const saved = testInfo.outputPath('linear-with-circular-placement.gbdraw-session.json');
+    await download(page, 'Save Session', saved);
+    await page.context().close();
+    page = await (await browser.newContext({ viewport: { width: 1600, height: 1000 } })).newPage();
+    await openApp(page);
+    await page.locator('input[accept^=".json,"]').setInputFiles(saved);
+    const loaded = () => page.evaluate(async () => {
+      const { state } = await import('./js/state.js');
+      const app = window.__GBDRAW_APP__;
+      return { done: !app.sessionImportPending && (app.extractedFeatures.length > 0 || Boolean(state.errorLog.value)),
+        error: state.errorLog.value?.summary || null, mode: app.mode };
+    });
+    await expect.poll(async () => (await loaded()).done, { timeout: 180000 }).toBe(true);
+    expect(await loaded()).toEqual({ done: true, error: null, mode: 'linear' });
+    expect((await placementState(page, key)).row).toBe('outward');
+  } finally {
+    await page.context().close();
+  }
+});
+
+test('an unsupported lane after a Track Preset change names the feature (OV-09)', async ({ browser }) => {
+  test.setTimeout(240000);
+  const page = await load(browser, HMMT_SESSION);
+  try {
+    await generate(page);
+    const { product } = await placeOutward(page);
+    await generate(page);
+    const preset = await reveal(page.locator('#circular-track-preset'));
+    await preset.selectOption('spreadout');
+    const before = await page.evaluate(async () => (await import('./js/state.js')).state.resultGenerationKey.value);
+    await page.getByRole('button', { name: 'Generate Diagram', exact: true }).click();
+    await expect.poll(() => page.evaluate(async () => {
+      const { state } = await import('./js/state.js');
+      return !state.processing.value && Boolean(state.errorLog.value);
+    }), { timeout: 180000 }).toBe(true);
+    const error = await page.evaluate(async () => {
+      const { state } = await import('./js/state.js');
+      const { code, context, summary } = state.errorLog.value;
+      return { code, reason: context.reason, summary, generation: state.resultGenerationKey.value };
+    });
+    expect(error).toMatchObject({ code: 'FEATURE_PLACEMENT', reason: 'SPLIT_LANES', generation: before });
+    expect(error.summary).toContain(`Feature: ${product}.`);
+    expect(error.summary).toContain('Feature placement to Auto or Main');
+    await expect(page.getByText(`Feature: ${product}.`, { exact: false }).first()).toBeVisible();
+  } finally {
+    await page.context().close();
+  }
+});

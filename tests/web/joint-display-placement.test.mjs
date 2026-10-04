@@ -11,6 +11,7 @@ import {
   buildRecordDisplayRows, requestedRecordDisplay, validateRecordDisplayDrafts
 } from '../../gbdraw/web/js/app/record-display-options.js';
 import { createFeaturePlacementActions } from '../../gbdraw/web/js/app/feature-editor/placement-actions.js';
+import { nameFeaturePlacementFailure } from '../../gbdraw/web/js/services/feature-placement.js';
 
 import { resolveLinearComparisonPlan } from '../../gbdraw/web/js/app/linear-comparisons.js';
 
@@ -35,8 +36,10 @@ test('schema 7 canonical placement uses code-point ordering and rejects transien
     { kind: 'lane', side: 'outward', level: 1 }, { kind: 'main', feature_track_id: 0 }]) {
     assert.throws(() => canonicalFeaturePlacements([{ ...target(), placement }], 'linear'));
   }
-  assert.throws(() => canonicalFeaturePlacements([target(), target()], 'linear'), /Duplicate/);
-  assert.throws(() => canonicalFeaturePlacements({ 'card\0feature': target() }, 'linear'), /JSON pair/);
+  // A malformed row comes only from a Session file: a typed Session-format diagnostic (R6).
+  const sessionFormat = (error) => error.code === 'INPUT_INVALID' && error.context.field === 'schema';
+  assert.throws(() => canonicalFeaturePlacements([target(), target()], 'linear'), sessionFormat);
+  assert.throws(() => canonicalFeaturePlacements({ 'card\0feature': target() }, 'linear'), sessionFormat);
 });
 
 test('inactive rotation retains raw intent but cannot emit an invalid effective display', () => {
@@ -84,6 +87,40 @@ for (const mode of ['circular', 'linear']) {
     assert.throws(() => projectCanonicalSessionRequest({ ...result, renderRequest: old }), /schema 7/);
   });
 }
+
+// OV-08 (R2): rows are keyed by mode-specific record keys, so the draft keeps
+// both modes' rows and a request carries only the rows of its own records.
+test('a request carries only its records\' placement rows and the draft keeps the other mode', () => {
+  const row = (recordKey, biologicalFeatureId, side) => ({ recordKey, biologicalFeatureId,
+    placement: side ? { kind: 'lane', side, level: 1 } : { kind: 'main' } });
+  const rows = [row('record-1', 'circular', 'outward'), row('card', 'above', 'above'), row('card', 'main'),
+    row('card', 'collision', 'inward'), row('removed', 'gone', 'below')];
+  const overrides = Object.fromEntries(rows.map((entry) => [JSON.stringify([entry.recordKey, entry.biologicalFeatureId]), entry]));
+  assert.equal(canonicalFeaturePlacements(overrides).length, rows.length);
+  assert.throws(() => canonicalFeaturePlacements(overrides, 'linear'),
+    (error) => error.code === 'INPUT_INVALID' && error.context.field === 'schema');
+  const state = stateFor('linear');
+  state.featurePlacementOverrides = overrides;
+  const filesData = { linearSeqs: [{ uid: 'card', gb: file }] };
+  const { renderRequest } = buildCanonicalRenderRequest({ state, filesData, comparisonPlanSnapshot:
+    resolveLinearComparisonPlan({ plan: state.linearComparisonPlan, sequences: filesData.linearSeqs, layout: [], losatProgram: 'blastn', blastpMode: 'orthogroup' }) });
+  assert.deepEqual(renderRequest.diagramOptions.featurePlacements, [rows[1], rows[2]]);
+  assert.equal(Object.keys(state.featurePlacementOverrides).length, rows.length);
+});
+
+test('the Web names the feature of a placement row that Python reports (OV-09)', () => {
+  const request = { mode: 'circular', diagramOptions: { featurePlacements: [
+    { recordKey: 'record-1', biologicalFeatureId: 'b', placement: { kind: 'lane', side: 'outward', level: 1 } },
+    { recordKey: 'record-1', biologicalFeatureId: 'a', placement: { kind: 'main' } }] } };
+  const features = [{ record_key: 'record-1', biological_feature_id: 'b', type: 'CDS', product: 'NADH dehydrogenase subunit 1' }];
+  const error = { code: 'FEATURE_PLACEMENT', context: { reason: 'SPLIT_LANES', placementIndex: 1 } };
+  assert.deepEqual(nameFeaturePlacementFailure(error, request, features).context,
+    { reason: 'SPLIT_LANES', placementIndex: 1, featureCaption: 'NADH dehydrogenase subunit 1' });
+  for (const unnamed of [{ ...error, context: { placementIndex: 2 } }, { ...error, code: 'RENDER_FAILED' }]) {
+    assert.equal(nameFeaturePlacementFailure(unnamed, request, features), unnamed);
+  }
+  assert.equal(nameFeaturePlacementFailure(error, request, []), error);
+});
 
 test('Main, resolved side, bulk Auto and history share one draft owner', async () => {
   const features = ['one', 'two'].map((id) => ({ record_key: 'card', biological_feature_id: id }));

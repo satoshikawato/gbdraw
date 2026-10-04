@@ -34,6 +34,15 @@ decisions are in
   label** or **Cancel**). A kept **On** applies when the label can be drawn, and
   Generate no longer fails on it. The feature popup says why a feature has no
   label instead of always suggesting **On**.
+- Feature placement: a lane placement made in one mode no longer breaks
+  Generate in the other mode. Each mode keeps its own placements through mode
+  switches, Undo/Redo, and Save/Load Session, and they apply again after you
+  switch back. When the current feature slot has no such lane (for example,
+  Outward lane 1 after **Track Preset** Tuckin or Spreadout, or Above lane 1
+  with **Separate Strands**), Generate names the feature and says to set its
+  placement to Auto or Main or to use a slot with that lane, instead of an
+  unclassified render error. The CLI and Python API message names the record
+  key and biological feature ID (OV-08, OV-09).
 - Comparison tables: every BLAST outfmt 6/7 reader (CLI `-b` and
   `--comparisons_table`, Web uploads, Circular similarity rings, and the LOSATP
   parser) now reads the first 12 columns by position and validates their types.

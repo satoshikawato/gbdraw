@@ -214,7 +214,8 @@ when strands are separate, or one lane from the shared Main lane when combined.
 Moving one feature leaves the other features' nominal lanes in place.
 Custom slots determine
 availability from their final geometry; a preset name cannot override that
-geometry. Unsupported directions fail with a reason.
+geometry. An unsupported direction fails with a reason that names the feature
+and the lanes that accept it; Auto and Main are available in every slot.
 
 | Request | Resolver off | Resolver on |
 |---|---|---|
@@ -233,7 +234,9 @@ placements** for a selection. Auto deletes the override; Undo/Redo restores the
 requested state. Apply rotation, placement or tolerance changes with **Generate
 Diagram**. They are drafts until generation succeeds; the previous Result remains
 available. A source replacement invalidates its old binding. Known invisible
-features can be dormant; an unknown or stale feature cannot.
+features can be dormant; an unknown or stale feature cannot. Placements stay
+with the mode in which they were made: a Generate in the other mode ignores
+them, and they apply again after you switch back.
 
 Lane 2 and higher, arbitrary pixel dragging, per-exon placement, annotation-lane
 placement and a general label-collision redesign are outside this feature.

@@ -145,7 +145,7 @@ export const validateCurrentWriterActiveConfig = ({ mode, storedConfig: config }
   if (!isObject(config.form) || !isObject(config.adv)) throw new Error('Current session is missing its active form or advanced settings.');
   validateDomainShapes(config); validateCollections(config); requireCurrentWebStateFieldNames(config);
   if (has(config, 'recordDisplayDrafts')) validateRecordDisplayDrafts(config.recordDisplayDrafts);
-  if (has(config, 'featurePlacementOverrides')) canonicalFeaturePlacements(config.featurePlacementOverrides, mode);
+  if (has(config, 'featurePlacementOverrides')) canonicalFeaturePlacements(config.featurePlacementOverrides);
   if (has(config.adv, 'feature_overlap_tolerance_bp') && (!Number.isSafeInteger(config.adv.feature_overlap_tolerance_bp)
     || config.adv.feature_overlap_tolerance_bp < 0)) throw new Error('Feature overlap tolerance must be a non-negative integer.');
   assertFields(config.form, new Set(CURRENT_WRITER_FORM_FIELDS), 'config.form'); assertFields(config.adv, new Set(CURRENT_WRITER_ADV_FIELDS), 'config.adv');
