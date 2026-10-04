@@ -228,6 +228,13 @@ decisions are in
 - A CLI Session keeps its `--legend` position through loading and the first
   Generate. The legend position was written into the wrong layout slot and
   replaced by the Web default (SE-07).
+- A CLI Session stores the records of one source file as one GenBank resource
+  named after that file and selects them by record ID (by index when an ID
+  repeats), as the Web does for one multi-record File. The *Vibrio
+  parahaemolyticus* and *V. alginolyticus* Gallery Session is now built from its
+  declared command and holds its two GBFF files as two multi-record Files instead
+  of four single-chromosome Files, so loading it no longer reports a custom
+  Record Layout and File order moves are available.
 - **Source recipe** is unavailable, with a reason, when a track slot legend
   label contains `,` or ` #` (the CLI would cut or reject it), and for a Linear
   scale font without a ruler-label font while ruler labels are drawn (the CLI

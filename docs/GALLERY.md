@@ -61,7 +61,7 @@ For zooming, feature popups, match inspection, and downloadable sessions, open t
     <td colspan="2" valign="top">
       <a href="https://gbdraw.app/gallery/#vibrio-harveyi-group-collinear">Open the interactive Gallery example</a><br>
       <strong><em>Vibrio</em> Harveyi group multi-record collinearity</strong><br>
-      Five RefSeq assemblies are arranged as one species per row, retaining all 11 chromosomes and plasmids. LOSATP searches 18 cross-record combinations between adjacent rows.<br><br>
+      Two RefSeq assemblies, <em>V. parahaemolyticus</em> RIMD 2210633 and <em>V. alginolyticus</em> NBRC 15630, are loaded as two multi-record GenBank files and arranged as one species per row, retaining all four chromosomes. LOSATP compares the two files between the adjacent rows.<br><br>
       The blocks are colored by orientation and identity. All features are rectangular; species and strain appear as a two-line left definition. The legend sits below the diagram, which has no plot title.<br><br>
       The Gallery provides an interactive SVG with internally gzip-compressed metadata and a separate gzip-compressed Session JSON. Follow the <a href="https://gbdraw.app/gallery/#vibrio-harveyi-group-collinear">Gallery tutorial</a> to reproduce the workflow.
     </td>

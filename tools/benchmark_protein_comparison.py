@@ -267,19 +267,31 @@ def gallery_input(root, name, pc):
     path = root / f"gbdraw/web/gallery/sessions/{name}.gbdraw-session.json.gz"
     session = json.loads(gzip.decompress(path.read_bytes()))
     specs = session["renderRequest"]["records"]
-    records, source_hashes = [], {}
+    records, source_hashes, parsed_sources = [], {}, {}
     for spec in specs:
         rid = spec["source"]["resourceId"]
-        data = base64.b64decode(session["resources"][rid]["data"], validate=True)
-        source_hashes[rid] = digest(data)
-        # These saved recipes use one already-resolved GenBank record per resource.
-        # Reject different recipes instead of silently selecting their first record.
-        if spec["selector"] is not None or spec.get("region") is not None:
-            raise ValueError("Gallery recipe requires selector/region planning")
-        parsed = list(SeqIO.parse(io.StringIO(data.decode()), "genbank"))
-        if len(parsed) != 1:
+        if rid not in parsed_sources:
+            data = base64.b64decode(session["resources"][rid]["data"], validate=True)
+            source_hashes[rid] = digest(data)
+            parsed_sources[rid] = list(SeqIO.parse(io.StringIO(data.decode()), "genbank"))
+        parsed = parsed_sources[rid]
+        # A recipe selects one record per spec: the sole record of its resource,
+        # or the record its ID or index selector names. Reject any other recipe
+        # instead of silently selecting the first record.
+        selector = spec["selector"]
+        if spec.get("region") is not None:
+            raise ValueError("Gallery recipe requires region planning")
+        if selector is None:
+            selected = parsed
+        elif selector["kind"] == "recordId":
+            selected = [record for record in parsed if record.id == selector["value"]]
+        elif selector["kind"] == "recordIndex":
+            selected = parsed[selector["index"]:selector["index"] + 1]
+        else:
+            raise ValueError("Gallery recipe requires selector planning")
+        if len(selected) != 1:
             raise ValueError("Gallery source cardinality changed; use the record planner")
-        records.extend(parsed)
+        records.extend(selected)
     keys = [x["recordKey"] for x in specs]
     extraction = pc.extract_protein_identity_manifest(records, record_instance_keys=keys)
     manifest = pc.validate_protein_identity_manifest(session["proteinIdentityManifest"])

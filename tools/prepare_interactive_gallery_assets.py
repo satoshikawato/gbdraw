@@ -69,6 +69,9 @@ class GallerySessionExample:
     interactive_step: str = ""
     source_note: str = "Session JSON and generated SVG output are stored with the gallery assets."
     command: str = ""
+    # Refresh builds the Session from ``command`` and its declared inputs
+    # instead of replaying the stored Session.
+    session_from_command: bool = False
 
     @property
     def session_path(self) -> Path:
@@ -273,6 +276,7 @@ EXAMPLES: tuple[GallerySessionExample, ...] = (
         command_kind="runnable",
         command_note="Run from a source checkout so the records table can read the two GBFF files under tests/test_inputs/.",
         command=VIBRIO_HARVEYI_GROUP_COMMAND,
+        session_from_command=True,
         feature_sources=(
             "GCF_000196095.1_ASM19609v1_genomic.gbff",
             "GCF_000354175.2_ASM35417v2_genomic.gbff",
