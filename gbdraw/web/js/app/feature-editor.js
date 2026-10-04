@@ -19,7 +19,7 @@ export const createFeatureEditor = ({
   isPatternEditAvailable = () => true,
   previewTransformInteraction = null
 }) => {
-  const { ref, computed, watch } = window.Vue;
+  const { ref, computed, watch, reactive } = window.Vue;
   const ruleActions = createFeatureRuleActions({ state, nextTick, legendActions, rulePreparation, history, svgActions, ref, computed, isPatternEditAvailable });
   // Show feature and label (Owner Q2) sets Feature visibility through its owner.
   const labelActions = createFeatureLabelActions({
@@ -67,7 +67,7 @@ export const createFeatureEditor = ({
     clearSpecificRulePatternDrafts: ruleActions.clearSpecificRulePatternDrafts,
     captureSpecificRulePatternDrafts: ruleActions.captureSpecificRulePatternDrafts,
     restoreSpecificRulePatternDrafts: ruleActions.restoreSpecificRulePatternDrafts,
-    placementActions: createFeaturePlacementActions({ state, history, getCommittedRequest, isCurrentFeature }),
+    placementActions: createFeaturePlacementActions({ state, history, getCommittedRequest, isCurrentFeature, reactive, nextTick }),
     canRetrySpecificRuleFailure: ruleActions.canRetrySpecificRuleFailure,
     canEditSpecificRuleFailure: ruleActions.canEditSpecificRuleFailure,
     retrySpecificRuleFailure: ruleActions.retrySpecificRuleFailure,

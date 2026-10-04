@@ -1020,6 +1020,13 @@ cropped, fuzzy, unordered, mixed-strand, or otherwise unsafe targets.
 
 Open the feature popup and choose **Feature placement**: Auto, Main, or an
 available directional lane 1. Bulk selection uses **Selected feature placements**.
+When a change to **Track Preset**, **Track Layout**, **Separate Strands**, or the
+lane or placement of a custom features row would leave placements of the current
+mode without their lane, a dialog asks first. **Reset N placements to Auto**
+applies the change and sets exactly those placements to Auto as one undoable
+step; **Cancel change**, Escape, or a click outside keeps the setting and the
+placements. Loading a Session, Undo, and Redo do not ask; if their result has a
+lane the slot cannot draw, Generate names the feature.
 The [resolved-layout and resolver tables](palettes-feature-rules-labels-shapes-and-tracks.md#manual-feature-placement)
 explain availability and conflicts. **Feature overlap tolerance (bp)** defaults
 to 0. Generate applies these drafts together; Undo/Redo and Save/Load retain the

@@ -152,9 +152,14 @@ for (const composite of [false, true]) {
           await page.getByRole('checkbox', { name: 'Separate Strands', exact: true }).setChecked(separate);
           for (const preset of ['tuckin', 'spreadout', 'middle']) {
             await page.locator('#circular-track-preset').selectOption(preset);
+            if (!separate && preset === 'tuckin') {
+              // Q3: leaving Middle asks first, and Reset clears the outward intent (OV-09).
+              await page.getByRole('dialog', { name: 'Reset Feature placements?', exact: true })
+                .getByRole('button', { name: 'Reset 1 placement to Auto', exact: true }).click();
+            }
             const valid = preset === 'middle' ? allPlacements : ['auto', 'main'];
             await check(`P8-${separate}-${preset}-draft`, valid);
-            // Clear the now-unsupported outward intent through the existing Auto action.
+            // The existing Auto action keeps a cleared intent at Auto.
             const control = await open((await features())[0]);
             await control.selectOption('auto');
             await close();
