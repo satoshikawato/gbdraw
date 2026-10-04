@@ -719,11 +719,12 @@ def _encode_canonical_request(request: DiagramRequest) -> EncodedCanonicalReques
         if isinstance(request, (CircularDiagramRequest, CircularBatchRequest))
         else "single"
     )
-    # A Circular batch or grid draft has no per-record crop or orientation.
+    # A Circular batch or grid draft has no per-record selection, crop, or
+    # orientation.
     records, frames = _encode_records(
         request.records,
         resources=resources,
-        transforms=mode == "linear" or grouping == "single",
+        per_record=mode == "linear" or grouping == "single",
     )
     payload = {
         "schema": CANONICAL_REQUEST_SCHEMA,
@@ -974,25 +975,31 @@ def _source_file_transform(record: Any) -> tuple[tuple[int, int] | None, bool] |
 
 
 def _source_file_transforms(
-    records: Sequence[Any], paths: tuple[str, ...], *, transforms: bool
+    records: Sequence[Any], paths: tuple[str, ...], *, per_record: bool
 ) -> list[tuple[tuple[int, int] | None, bool]] | None:
-    """Each record's crop and orientation when the records are every record of their files.
+    """Each record's crop and orientation when the records are drawn from their files.
 
     The planner annotates each record it reads with its source kind and its
-    index among the file's records. Returns ``None`` unless every record of
-    the files is drawn once and each is the file's record, cropped or
-    reverse-complemented only when ``transforms`` allows it.
+    index among the file's records. Returns ``None`` unless each record of
+    the files is drawn at most once and each is the file's record. Only when
+    ``per_record`` allows it may some records of the files be left undrawn,
+    or a record be cropped or reverse-complemented.
     """
 
     annotations = [record.annotations for record in records]
     kind = annotations[0].get("gbdraw_source_kind")
     count = annotations[0].get("gbdraw_source_record_count")
+    indexes = sorted(item.get("gbdraw_source_record_index", -1) for item in annotations)
     if not (
         len(paths) == len(_SOURCE_FILE_RESOURCES.get(str(kind), ()))
         and isinstance(count, int)
         and all(Path(path).is_file() for path in paths)
-        and sorted(item.get("gbdraw_source_record_index", -1) for item in annotations)
-        == list(range(count))
+        and (indexes == list(range(count)) or (
+            per_record
+            and len(set(indexes)) == len(indexes)
+            and 0 <= indexes[0]
+            and indexes[-1] < count
+        ))
         and all(
             item.get("gbdraw_source_kind") == kind
             and item.get("gbdraw_source_record_count") == count
@@ -1001,7 +1008,7 @@ def _source_file_transforms(
     ):
         return None
     found = [_source_file_transform(record) for record in records]
-    if None in found or not (transforms or all(item == (None, False) for item in found)):
+    if None in found or not (per_record or all(item == (None, False) for item in found)):
         return None
     return found  # type: ignore[return-value]
 
@@ -1027,25 +1034,27 @@ def _encode_records(
     records: Sequence[RecordInput],
     *,
     resources: _ResourceBuilder,
-    transforms: bool,
+    per_record: bool,
 ) -> tuple[list[dict[str, Any]], tuple[tuple[int, bool], ...]]:
     """Encode records; the in-memory records of one source file share a resource.
 
     The planner projects each displayed record to an in-memory record. When
-    they are every record of their source file, that file's own bytes are the
-    resource, and each record's crop (in source coordinates) and orientation
-    are its region and reverse complement, as the Web writes them: the CLI
-    binds the same file for the Web draft, so Session Load sees the request
-    draw from its bound inputs. ``transforms`` says whether the Web draft
-    carries a crop and orientation per record (every Linear record, and a
-    single Circular record); otherwise only unchanged records read their file.
-    Other records whose provenance names one source file are written as drawn
-    to one GenBank resource named after that file.
+    they are records of their source file, each drawn once, that file's own
+    bytes are the resource, and each record's crop (in source coordinates) and
+    orientation are its region and reverse complement, as the Web writes them:
+    the CLI binds the same file for the Web draft, so Session Load sees the
+    request draw from its bound inputs. ``per_record`` says whether the Web
+    draft selects, crops, and orients each record (every Linear record, and a
+    single Circular record); otherwise only every record of the file, each
+    unchanged, reads the file. Other records whose provenance names one source
+    file are written as drawn to one GenBank resource named after that file.
     Records of a multi-record file are selected by record ID (by index when an
-    ID is repeated or unusable), the shape the Web writes for one uploaded
-    multi-record file, so a replay or Web load keeps one file as one File and
-    one LOSAT source (:func:`gbdraw.comparisons.losat_jobs.losat_source_ids`).
-    Any other in-memory record is its own source and keeps its own resource.
+    ID is repeated or unusable), the shape the Web writes for the records it
+    draws of one uploaded multi-record file, so a replay or Web load keeps one
+    file as one File and one LOSAT source
+    (:func:`gbdraw.comparisons.losat_jobs.losat_source_ids`) and draws only
+    the selected records. Any other in-memory record is its own source and
+    keeps its own resource.
 
     Also returns each record's persisted comparison frame ``(L, reversed)``
     (PD-OI-073): a record written as its reverse-complemented sequence has the
@@ -1064,7 +1073,7 @@ def _encode_records(
     for paths, members in groups.items():
         first = members[0] + 1
         members_records = [records[position].source.record for position in members]  # type: ignore[union-attr]
-        found = _source_file_transforms(members_records, paths, transforms=transforms)
+        found = _source_file_transforms(members_records, paths, per_record=per_record)
         if found is not None:
             file_resources = _SOURCE_FILE_RESOURCES[
                 members_records[0].annotations["gbdraw_source_kind"]
@@ -1083,6 +1092,10 @@ def _encode_records(
                    for record in members_records]
             record_indexes = [record.annotations["gbdraw_source_record_index"]
                               for record in members_records]
+            # The file's other records may share an ID with a drawn record.
+            unique = [bool(record.annotations.get("gbdraw_source_record_id_unique"))
+                      for record in members_records]
+            single = members_records[0].annotations["gbdraw_source_record_count"] == 1
         elif len(members) > 1:
             source_payload = {"kind": "genbank", "resourceId": resources.add_bytes(
                 f"record-{first}-genbank",
@@ -1096,15 +1109,17 @@ def _encode_records(
             )}
             ids = [str(record.id) for record in members_records]
             record_indexes = list(range(len(members)))
+            unique = [ids.count(record_id) == 1 for record_id in ids]
+            single = False
         else:
             continue
-        for offset, (position, record_id, record_index) in enumerate(
-            zip(members, ids, record_indexes, strict=True)
+        for offset, (position, record_id, record_index, is_unique) in enumerate(
+            zip(members, ids, record_indexes, unique, strict=True)
         ):
-            selector = None if len(members) == 1 else _shared_record_selector(
+            selector = None if single else _shared_record_selector(
                 record_id,
                 record_index=record_index,
-                unique=ids.count(record_id) == 1,
+                unique=is_unique,
             )
             if found is not None:
                 span, reverse = found[offset]

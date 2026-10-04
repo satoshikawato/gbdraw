@@ -60,23 +60,29 @@ Fresh CLI sessions omit `config` because they have no independent Web draft.
 Web initializes their settings from `renderRequest` and restores original input
 files from their bindings. When the request draws every record of an input file,
 its record source names that file's resource, so feature-popup record rotation
-works right after Load. A Linear record, or the record of a single Circular
-request, that is drawn cropped or reverse-complemented stores its crop in source
-coordinates as `region` and its orientation as `region.reverseComplement` or
-`presentation.reverseComplement`, as Web Save does; a crop taken after
+works right after Load. A Linear request, or a single Circular request, that
+draws only some records of a multi-record file (for example with `--record_id`
+or a records table) also reads that file and selects each drawn record by
+record ID, or by `#n` when another record of the file has the same ID; the
+file stays one File that draws only those records. A Linear record, or the
+record of a single Circular request, that is drawn cropped or
+reverse-complemented stores its crop in source coordinates as `region` and its
+orientation as `region.reverseComplement` or `presentation.reverseComplement`,
+as Web Save does; a crop taken after
 `--reverse_complement` is written as the same span in source coordinates. Each
 Linear row takes its crop and orientation from the request, so **Generate
 Diagram** draws the record the CLI drew. A cropped or reversed record of a
-Circular batch or grid, the records of a file that is only partly drawn, and
-every record of an older CLI session keep their own drawn copy; rotating such a
-record needs **Generate Diagram** first. A present `config` must contain
-valid `form` and `adv` objects; a partial draft is rejected. CLI replay
-preserves a supplied Web draft.
+Circular batch or grid, the records of a file that a Circular batch or grid
+draws only partly, and every record of an older CLI session keep their own
+drawn copy; rotating such a record needs **Generate Diagram** first. A present
+`config` must contain valid `form` and `adv` objects; a partial draft is
+rejected. CLI replay preserves a supplied Web draft.
 A CLI binding uid such as `cli-seq-1` is only an initial value: each Linear
 file takes the record identity of `renderRequest.records[].recordKey`. A
 multi-record file, whose records are `record-1:1`, `record-1:2`, and so on,
-becomes one Linear row per record with that recordKey and the `#n` record
-selector, so **Inherit saved comparison** finds every record it names. A CLI
+becomes one Linear row per record with that recordKey and the request's record
+selector (the `#n` of its recordKey when an older CLI session stored no
+selector), so **Inherit saved comparison** finds every record it names. A CLI
 comparison stays read-only in Web; **Inherit saved comparison** reuses it after
 promoting an older committed request, such as a version 42 sidecar, to the
 current schema. A Linear Session without a stored comparison plan loads with

@@ -3417,6 +3417,61 @@ def test_linear_cli_session_records_crop_and_orientation_on_the_unchanged_input_
     assert replay.with_suffix(".svg").read_bytes() == prefix.with_suffix(".svg").read_bytes()
 
 
+@pytest.mark.parametrize("case", ["options", "table"])
+def test_linear_cli_session_selects_the_drawn_records_of_a_partly_drawn_input_file(
+    tmp_path: Path, case: str
+) -> None:
+    """A file of which the CLI draws some records reads the file and selects them.
+
+    The request reads the input file's own bytes and selects each drawn record
+    by its ID, or by its index when another record of the file has the same
+    ID, as the Web writes the records it draws of one multi-record File. The
+    bound File is that same resource, so Web Load draws only those records,
+    and a replay draws the same SVG.
+    """
+
+    single, multi = _cli_session_inputs(tmp_path)
+    session_path = tmp_path / f"{case}.gbdraw-session.json"
+    prefix = tmp_path / case
+    if case == "options":
+        args = ["--gbk", str(single), str(multi), "--record_id", "", "--record_id", "cli_multi_b"]
+        selected = [{"kind": "recordId", "value": "cli_multi_b"}]
+    else:
+        multi.write_text(_circular_genbank(
+            ("twin", "twin_a_gene", "61..150"),
+            ("cli_unique", "unique_gene", "101..200"),
+            ("twin", "twin_c_gene", "201..300"),
+        ))
+        table = tmp_path / "records.tsv"
+        table.write_text(
+            "gbk\trecord_id\nsingle.gbk\t\nmulti.gbk\t#3\nmulti.gbk\tcli_unique\n",
+            encoding="utf-8",
+        )
+        args = ["--records_table", str(table)]
+        # Only one drawn record is "twin", but the file has two.
+        selected = [{"kind": "recordIndex", "index": 2}, {"kind": "recordId", "value": "cli_unique"}]
+    linear_main([*args, "-o", str(prefix), "-f", "svg", "--session_output", str(session_path)])
+
+    session = load_session(session_path)
+    records = session["renderRequest"]["records"]
+    first, second = records[0]["source"]["resourceId"], records[1]["source"]["resourceId"]
+    assert [(record["source"]["resourceId"], record["selector"], record["region"])
+            for record in records] == [
+        (first, None, None), *((second, selector, None) for selector in selected)
+    ]
+    assert sorted(session["resources"]) == sorted({first, second})
+    assert _resource_bytes(session, first) == single.read_bytes()
+    assert _resource_bytes(session, second) == multi.read_bytes()
+    if case == "options":
+        bound = [sequence["gb"]["resourceId"]
+                 for sequence in session["webFiles"]["bindings"]["linearSeqs"]]
+        assert bound == [first, second]
+
+    replay = tmp_path / f"{case}-replay"
+    linear_main(["--session", str(session_path), "-o", str(replay), "-f", "svg"])
+    assert replay.with_suffix(".svg").read_bytes() == prefix.with_suffix(".svg").read_bytes()
+
+
 @pytest.mark.parametrize("canvas", [False, True])
 def test_circular_cli_session_keeps_cropped_and_reversed_records_as_drawn(
     tmp_path: Path, canvas: bool

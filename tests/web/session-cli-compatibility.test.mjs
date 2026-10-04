@@ -185,7 +185,8 @@ await test('a main v42 CLI Linear BLAST sidecar keeps a read-only comparison wit
 
 // B3: one multi-record GenBank file with -b gives records `record-1:1` and
 // `record-1:2`. Each record becomes its own Linear row keyed by that recordKey
-// with its `#n` selector, so Inherit binds the comparison to the named records.
+// with the request's record selector, so Inherit binds the comparison to the
+// named records.
 await test('a multi-record CLI Linear BLAST Session inherits its comparison onto the named records', async () => {
   const directory = await mkdtemp(path.join(tmpdir(), 'gbdraw-cli-web-'));
   try {
@@ -220,14 +221,19 @@ await test('a multi-record CLI Linear BLAST Session inherits its comparison onto
     const [comparison] = candidate.renderRequest.comparisons.filter(item => item.kind === 'nucleotideBlast');
     assert.deepEqual([records[comparison.queryRecordIndex].recordKey, records[comparison.subjectRecordIndex].recordKey],
       ['record-1:1', 'record-1:2']);
-    assert.deepEqual(records.map(record => [record.cardinality, record.selector]), [
-      ['exactly_one', { kind: 'recordIndex', index: 0 }], ['exactly_one', { kind: 'recordIndex', index: 1 }]
-    ]);
-    assert.deepEqual(state.linearSeqs.map(seq => [seq.uid, seq.region_record_id]), [['record-1:1', '#1'], ['record-1:2', '#2']]);
+    assert.deepEqual(records.map(record => [record.cardinality, record.selector]),
+      session.renderRequest.records.map(record => ['exactly_one', record.selector]));
+    assert.deepEqual(state.linearSeqs.map(seq => [seq.uid, seq.region_record_id]), [['record-1:1', 'R2c'], ['record-1:2', 'R3c']]);
     const [first, second] = state.linearSeqs.map(seq => getSessionResourceSource(seq.gb));
     assert.equal(first.resourceId, second.resourceId);
     assert.equal(hash(Buffer.from(first.descriptor.data, 'base64')),
       hash(await readFile(path.join(root, 'tests/fixtures/web_comparison_shared_block.gb'))));
+    // A CLI Session that stored a copy of each drawn record has no selectors;
+    // each row takes the `#n` of its expanded recordKey.
+    const copies = { ...session, renderRequest: { ...session.renderRequest,
+      records: session.renderRequest.records.map(record => ({ ...record, selector: null })) } };
+    assert.equal((await load(JSON.stringify(copies))).status, 'ok');
+    assert.deepEqual(state.linearSeqs.map(seq => [seq.uid, seq.region_record_id]), [['record-1:1', '#1'], ['record-1:2', '#2']]);
   } finally {
     await rm(directory, { recursive: true, force: true });
   }
