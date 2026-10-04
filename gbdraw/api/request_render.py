@@ -106,14 +106,20 @@ from .options import (
     LosatSearchOptions,
     losatp_analysis_mode,
 )
-from gbdraw.features.overrides import FeatureIdentityNotice, FeatureOverride
+from gbdraw.features.overrides import (
+    FeatureIdentityNotice,
+    FeatureOverride,
+    read_feature_override_table,
+)
 from gbdraw.features.placement import (
     ResolvedRecordFeatureInputs,
+    read_feature_placement_table,
     resolve_record_feature_inputs,
 )
 from gbdraw.features.source import (
     FeatureIdentity,
     IdentityBinding,
+    SourceFeatureIdentity,
     build_source_feature_catalog,
 )
 
@@ -1172,23 +1178,74 @@ def _gff_types_shown_by_overrides(
     } if shown else set()
 
 
-def _normalize_request_records(
+def _source_catalogs(
+    collection: ResolvedRecordCollection,
+) -> tuple[tuple[SourceFeatureIdentity, ...], ...]:
+    return tuple(
+        item.source_feature_catalog if item.source_feature_catalog is not None
+        else build_source_feature_catalog(record)
+        for item, record in zip(collection.provenance, collection.records, strict=True)
+    )
+
+
+def _materialize_identity_tables(
+    request: DiagramRequest, collection: ResolvedRecordCollection,
+) -> DiagramRequest:
+    """Replace feature placement and feature override tables with their exact rows."""
+    options = request.options
+    placement_table = (options.feature_placement_table if options.feature_placement_table is not None
+                       else options.feature_placement_table_file)
+    override_table = (options.feature_override_table if options.feature_override_table is not None
+                      else options.feature_override_table_file)
+    if placement_table is None and override_table is None:
+        return request
+    context = {
+        "records": collection.records,
+        "record_keys": tuple(item.record_key for item in collection.provenance),
+        "source_record_ids": tuple(item.source_record_id for item in collection.provenance),
+        "source_catalogs": _source_catalogs(collection),
+    }
+    changes: dict[str, object] = {}
+    if placement_table is not None:
+        changes.update(
+            feature_placements=read_feature_placement_table(
+                placement_table,
+                mode="linear" if isinstance(request, LinearDiagramRequest) else "circular",
+                **context,
+            ),
+            feature_placement_table=None, feature_placement_table_file=None,
+        )
+    if override_table is not None:
+        changes.update(
+            feature_overrides=read_feature_override_table(override_table, **context),
+            feature_override_table=None, feature_override_table_file=None,
+        )
+    return replace(request, options=replace(options, **changes))
+
+
+def _load_request_records(
     request: DiagramRequest,
     inputs: PreparedDiagramInputs,
-) -> ResolvedRecordCollection:
-    collection = _resolve_request_records(request, inputs)
+) -> tuple[DiagramRequest, ResolvedRecordCollection]:
+    """Load the records and turn identity tables into exact rows against them.
+
+    Tables resolve before the GFF3 check below, so a table row and an exact row
+    load the same features.
+    """
+    collection = _coerce_resolved_collection(request, _normalize_request_records(request, inputs))
+    request = _materialize_identity_tables(request, collection)
     shown_types = _gff_types_shown_by_overrides(request.options.feature_overrides, collection)
     if inputs.gff_keep_all_features or shown_types <= set(inputs.gff_candidate_features):
-        return collection
+        return request, collection
     # A row can turn on a GFF3 feature whose type the type filter dropped. Load
     # that type as well; loading every type would leave Parent-linked CDS nested.
-    return _resolve_request_records(request, replace(
+    return request, _coerce_resolved_collection(request, _normalize_request_records(request, replace(
         inputs,
         gff_candidate_features=tuple(sorted({*inputs.gff_candidate_features, *shown_types})),
-    ))
+    )))
 
 
-def _resolve_request_records(
+def _normalize_request_records(
     request: DiagramRequest,
     inputs: PreparedDiagramInputs,
 ) -> ResolvedRecordCollection:
@@ -1356,11 +1413,7 @@ def _coerce_resolved_collection(
 def normalize_request_records(request: DiagramRequest) -> tuple[SeqRecord, ...]:
     """Resolve typed record inputs according to their explicit cardinality."""
 
-    inputs = _prepare_diagram_inputs(request)
-    return _coerce_resolved_collection(
-        request,
-        _normalize_request_records(request, inputs),
-    ).records
+    return _load_request_records(request, _prepare_diagram_inputs(request))[1].records
 
 
 def _materialized_record_inputs(
@@ -1499,8 +1552,11 @@ def _linear_layout_with_record_placements(
 
 def _materialize_feature_inputs(
     request: DiagramRequest, collection: ResolvedRecordCollection, inputs: PreparedDiagramInputs,
-) -> tuple[DiagramRequest, PreparedDiagramInputs]:
-    """Resolve every identity-addressed input once per Generate (design Q4, 3.1)."""
+) -> PreparedDiagramInputs:
+    """Resolve every identity-addressed input once per Generate (design Q4, 3.1).
+
+    ``_load_request_records`` has already turned identity tables into exact rows.
+    """
     options = request.options
     targets = tuple(
         FeatureIdentity(target.record_key, target.biological_feature_id)
@@ -1508,23 +1564,13 @@ def _materialize_feature_inputs(
         for annotation in annotation_set.annotations
         if isinstance(target := annotation.target, FeatureIdentitySpan)
     )
-    if (not options.feature_placements and not options.feature_overrides and not targets
-            and options.feature_placement_table is None
-            and options.feature_placement_table_file is None):
-        return request, inputs
-    catalogs = tuple(
-        item.source_feature_catalog if item.source_feature_catalog is not None
-        else build_source_feature_catalog(record)
-        for item, record in zip(collection.provenance, collection.records, strict=True)
-    )
+    if not options.feature_placements and not options.feature_overrides and not targets:
+        return inputs
     resolution = resolve_record_feature_inputs(
         records=collection.records,
         record_keys=tuple(item.record_key for item in collection.provenance),
-        source_record_ids=tuple(item.source_record_id for item in collection.provenance),
-        source_catalogs=catalogs, placements=options.feature_placements,
+        source_catalogs=_source_catalogs(collection), placements=options.feature_placements,
         mode="linear" if isinstance(request, LinearDiagramRequest) else "circular",
-        placement_table=(options.feature_placement_table if options.feature_placement_table is not None
-                         else options.feature_placement_table_file),
         feature_overrides=options.feature_overrides,
         target_identities=targets,
         selected_features=options.selected_features_set or DEFAULT_SELECTED_FEATURES,
@@ -1532,14 +1578,11 @@ def _materialize_feature_inputs(
         specific_color_rules=inputs.features.specific_color_rules,
         feature_shapes=options.feature_shapes,
     )
-    exact = resolution.feature_placements
-    if (exact != options.feature_placements or options.feature_placement_table is not None
-            or options.feature_placement_table_file is not None):
-        request = replace(request, options=replace(options, feature_placements=exact,
-                          feature_placement_table=None, feature_placement_table_file=None))
-    return request, replace(
+    return replace(
         inputs,
-        record_features=resolution.records if exact or options.feature_overrides else (),
+        record_features=(
+            resolution.records if options.feature_placements or options.feature_overrides else ()
+        ),
         feature_identity_notices=resolution.notices,
         feature_bindings={
             (identity.record_key, identity.biological_feature_id): resolution.bindings[identity]
@@ -1594,12 +1637,9 @@ def plan_circular_request(
         inputs = _prepare_diagram_inputs(unresolved_request)
         unresolved_request = _with_prepared_colors(unresolved_request, inputs)
     with _request_render_diagnostic_phase("recordLoad"):
-        collection = _coerce_resolved_collection(
-            unresolved_request,
-            _normalize_request_records(unresolved_request, inputs),
-        )
+        unresolved_request, collection = _load_request_records(unresolved_request, inputs)
     with _request_render_diagnostic_phase("preparation"):
-        unresolved_request, inputs = _materialize_feature_inputs(unresolved_request, collection, inputs)
+        inputs = _materialize_feature_inputs(unresolved_request, collection, inputs)
         records = collection.records
         projected_request = replace(
             unresolved_request,
@@ -1657,12 +1697,9 @@ def plan_circular_batch_request(
         inputs = _prepare_diagram_inputs(unresolved_request)
         unresolved_request = _with_prepared_colors(unresolved_request, inputs)
     with _request_render_diagnostic_phase("recordLoad"):
-        collection = _coerce_resolved_collection(
-            unresolved_request,
-            _normalize_request_records(unresolved_request, inputs),
-        )
+        unresolved_request, collection = _load_request_records(unresolved_request, inputs)
     with _request_render_diagnostic_phase("preparation"):
-        unresolved_request, inputs = _materialize_feature_inputs(unresolved_request, collection, inputs)
+        inputs = _materialize_feature_inputs(unresolved_request, collection, inputs)
         records = collection.records
         outputs = (
             unresolved_request.outputs
@@ -1728,12 +1765,9 @@ def plan_linear_request(
         inputs = _prepare_diagram_inputs(unresolved_request)
         unresolved_request = _with_prepared_colors(unresolved_request, inputs)
     with _request_render_diagnostic_phase("recordLoad"):
-        collection = _coerce_resolved_collection(
-            unresolved_request,
-            _normalize_request_records(unresolved_request, inputs),
-        )
+        unresolved_request, collection = _load_request_records(unresolved_request, inputs)
     with _request_render_diagnostic_phase("preparation"):
-        unresolved_request, inputs = _materialize_feature_inputs(unresolved_request, collection, inputs)
+        inputs = _materialize_feature_inputs(unresolved_request, collection, inputs)
         projected_request = replace(
             unresolved_request,
             records=_materialized_record_inputs(collection),

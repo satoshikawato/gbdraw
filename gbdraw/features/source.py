@@ -2,13 +2,16 @@
 
 from __future__ import annotations
 
+import csv
 from collections import defaultdict
-from collections.abc import Iterable, Mapping, Sequence
+from collections.abc import Collection, Iterable, Mapping, Sequence
 from dataclasses import dataclass, field, replace
+from pathlib import Path
 from typing import Literal
 
 from Bio.SeqFeature import SeqFeature
 from Bio.SeqRecord import SeqRecord
+from pandas import DataFrame, isna
 
 from gbdraw.core.record_metadata import (
     _feature_source_index_map,
@@ -206,6 +209,61 @@ def resolve_feature_identities(
     return bindings
 
 
+def _identity_table_cell(value: object, *, verbatim: bool) -> str:
+    if value is None or (not isinstance(value, str) and isna(value)):
+        return ""
+    if isinstance(value, float) and value.is_integer():
+        value = int(value)  # pandas promotes an integer column with blank cells to float.
+    return str(value) if verbatim else str(value).strip()
+
+
+def read_identity_table(
+    table: DataFrame | str | Path,
+    *,
+    table_name: str,
+    columns: Sequence[str],
+    required: Collection[str],
+    verbatim: Collection[str] = (),
+) -> list[dict[str, str]]:
+    """Read an identity-addressed table: UTF-8 TSV (BOM allowed) or a DataFrame.
+
+    Every allowed column is present in each row and a blank cell is ``""``. Cells
+    are trimmed except ``verbatim`` columns. Row numbers count the header as 1.
+    """
+    def invalid(message: str, **context: object) -> ValidationError:
+        return ValidationError(message, diagnostic={"code": "TABLE_INVALID", **context})
+
+    if isinstance(table, DataFrame):
+        header = list(table.columns)
+        raw_rows = table.to_dict("records")
+    else:
+        try:
+            with open(table, encoding="utf-8-sig", newline="") as handle:
+                reader = csv.DictReader(handle, delimiter="\t")
+                header = list(reader.fieldnames or [])
+                raw_rows = list(reader)
+        except (OSError, UnicodeDecodeError, csv.Error) as exc:
+            raise invalid(f"Cannot read {table_name}: {exc}") from exc
+    if len(set(header)) != len(header) or set(header) - set(columns):
+        raise invalid(f"{table_name} has duplicate or unknown columns; use {', '.join(columns)}.")
+    missing = sorted(set(required) - set(header))
+    if missing:
+        raise invalid(
+            f"{table_name} requires {' and '.join(missing)} column{'s' if len(missing) > 1 else ''}."
+        )
+    rows = []
+    for row_number, raw in enumerate(raw_rows, start=2):
+        if None in raw:
+            raise invalid(f"{table_name} row {row_number} has more values than columns.", row=row_number)
+        if any(isinstance(value, (Mapping, list, tuple, set)) for value in raw.values()):
+            raise invalid(f"{table_name} row {row_number}: cells must be scalar values.", row=row_number)
+        rows.append({
+            column: _identity_table_cell(raw.get(column), verbatim=column in verbatim)
+            for column in columns
+        })
+    return rows
+
+
 def resolve_identity_table_rows(
     rows: Sequence[tuple[str, str]],
     *,
@@ -226,6 +284,9 @@ def resolve_identity_table_rows(
     _record_key_indexes(records, record_keys, source_record_ids, source_catalogs)
     identities: list[FeatureIdentity] = []
     seen: set[FeatureIdentity] = set()
+    # hash= rows (Run Info writes one per edited feature) look up an index built
+    # once per record instead of scanning the catalog per row; same matches.
+    hash_indexes: dict[int, dict[str, list[SourceFeatureIdentity]]] = {}
     for row_number, (record_cell, selector_cell) in enumerate(rows, start=2):
         try:
             selected = select_record(records, parse_record_selector(record_cell))
@@ -233,13 +294,22 @@ def resolve_identity_table_rows(
                 raise ValueError("Record selector must match exactly one record; use #index.")
             index = next(i for i, record in enumerate(records) if record is selected[0])
             selector = parse_feature_selector(selector_cell)
-            matched = [
-                entry
-                for entry in source_catalogs[index]
-                if entry.matches(
-                    key=selector.key, value=selector.value, record_id=source_record_ids[index]
-                )
-            ]
+            if selector.key is not None and selector.key.lower() == "hash":
+                if index not in hash_indexes:
+                    by_hash: dict[str, list[SourceFeatureIdentity]] = defaultdict(list)
+                    for entry in source_catalogs[index]:
+                        for value in dict.fromkeys((entry.biological_feature_id, entry.stable_feature_id)):
+                            by_hash[value].append(entry)
+                    hash_indexes[index] = by_hash
+                matched = hash_indexes[index].get(selector.value, [])
+            else:
+                matched = [
+                    entry
+                    for entry in source_catalogs[index]
+                    if entry.matches(
+                        key=selector.key, value=selector.value, record_id=source_record_ids[index]
+                    )
+                ]
             if len(matched) != 1:
                 raise ValueError(
                     "Feature selector must match exactly one source feature; "

@@ -165,8 +165,10 @@ const materializeAndRunRecipe = async (session, recipe, info, fixture) => {
   assert.equal(executed.status, 0, `${fixture}: ${executed.stderr || executed.stdout}`);
   const outputIndex = args.indexOf('-o');
   assert.notEqual(outputIndex, -1, `${fixture}: emitted command lacks -o`);
-  const output = await stat(join(runDir, `${args[outputIndex + 1]}.svg`));
+  const outputPath = join(runDir, `${args[outputIndex + 1]}.svg`);
+  const output = await stat(outputPath);
   assert.ok(output.size > 0, `${fixture}: CLI emitted an empty SVG`);
+  return outputPath;
 };
 
 assert.equal(quoteShellArg('simple.tsv'), 'simple.tsv');
@@ -1225,6 +1227,162 @@ test('placement recipe names one of two identical features and the CLI replays i
   await materializeAndRunRecipe(
     session, recipe, buildRunInfo({ mode: recipe.mode, sourceRecipe: recipe }), 'identical features'
   );
+});
+
+// Design Q4 (PR-Q4-3, Owner Q2 = A): per-feature edits by source identity travel
+// as --feature_override_table rows, so the Source recipe draws the Web Result.
+const IDENTITY_GENBANK = [
+  'LOCUS       dup                      120 bp    DNA     linear   UNK 01-JAN-1980',
+  'DEFINITION  Identical CDS fixture.',
+  'FEATURES             Location/Qualifiers',
+  '     CDS             21..80',
+  '                     /locus_tag="first"',
+  '     CDS             21..80',
+  '                     /locus_tag="second"',
+  '     CDS             91..117',
+  '                     /locus_tag="third"',
+  'ORIGIN',
+  '        1 atgatgatga tgatgatgat gatgatgatg atgatgatga tgatgatgat gatgatgatg',
+  '       61 atgatgatga tgatgatgat gatgatgatg atgatgatga tgatgatgat gatgatgatg',
+  '//',
+  ''
+].join('\n');
+const identityIds = () => {
+  const catalog = spawnSync(process.env.PYTHON || 'python', ['-c', [
+    'import io, json, sys',
+    'from Bio import SeqIO',
+    'from gbdraw.features.source import build_source_feature_catalog',
+    'record = SeqIO.read(io.StringIO(sys.argv[1]), "genbank")',
+    'print(json.dumps([entry.biological_feature_id for entry in build_source_feature_catalog(record)]))'
+  ].join('\n'), IDENTITY_GENBANK], { cwd: repoRoot, encoding: 'utf8' });
+  assert.equal(catalog.status, 0, catalog.stderr);
+  return JSON.parse(catalog.stdout);
+};
+const identityEditSession = (mode, featureOverrides) => {
+  const session = canonical({
+    mode,
+    records: [{
+      recordKey: 'dup',
+      cardinality: 'exactly_one',
+      source: { kind: 'genbank', resourceId: 'source' },
+      selector: null,
+      region: null,
+      presentation: presentation(),
+      display: { isCircular: null, startCoordinate: null }
+    }],
+    resources: { source: resource('genbank', 'source-dup.gbk', IDENTITY_GENBANK) },
+    webFiles: { resourceOriginalNames: { source: 'dup.gbk' } }
+  });
+  session.renderRequest.schema = 9;
+  session.renderRequest.diagramOptions.selectedFeaturesSet = ['CDS'];
+  Object.assign(session.renderRequest.diagramOptions, { featurePlacements: [], featureOverrides });
+  return session;
+};
+const edit = (biologicalFeatureId, values) => ({
+  recordKey: 'dup', biologicalFeatureId, featureVisibility: null, labelVisibility: null, labelText: null,
+  ...values
+});
+
+test('feature edit recipe writes --feature_override_table and the CLI draws the Web Result', async () => {
+  const [first, second, third] = identityIds();
+  assert.equal(first.replace(/~0$/, '~1'), second);
+  for (const mode of ['linear', 'circular']) {
+    const session = identityEditSession(mode, [
+      edit(first, { featureVisibility: 'off' }),
+      edit(second, { labelVisibility: 'on', labelText: ' Second "copy" ' }),
+      edit(third, { featureVisibility: 'exclude_matching', labelVisibility: 'off', labelText: 'Third' })
+    ]);
+    const recipe = await buildSourceRecipe(session);
+    assert.equal(recipe.available, true, recipe.unavailableReason);
+    const tableIndex = recipe.args.indexOf('--feature_override_table');
+    assert.notEqual(tableIndex, -1, JSON.stringify(recipe.args));
+    const table = recipe.generatedFiles.find(
+      ({ slot }) => slot === 'generatedFiles.source_recipe.feature_overrides'
+    );
+    assert.equal(table.path, recipe.args[tableIndex + 1]);
+    assert.equal(table.data, [
+      'record\tfeature_selector\tfeature_visibility\tlabel_visibility\tlabel_text',
+      `#1\thash=${first}\toff\t\t`,
+      `#1\thash=${second}\t\ton\t" Second ""copy"" "`,
+      `#1\thash=${third}\texclude_matching\toff\tThird`,
+      ''
+    ].join('\n'));
+    const cliSvg = await materializeAndRunRecipe(
+      session, recipe, buildRunInfo({ mode, sourceRecipe: recipe }), `${mode} feature edits`
+    );
+    // The oracle is the Web renderer on the same request and resources; without
+    // the edits it must differ, so the comparison sees edits that reach the drawing.
+    const compared = spawnSync(process.env.PYTHON || 'python', ['-c', [
+      'import copy, json, sys, tempfile',
+      'from pathlib import Path',
+      'from gbdraw.web_support.request_render import render_embedded_canonical_web_request',
+      'from tests.utils.svg_compare import compare_svgs',
+      'session = json.loads(Path(sys.argv[1]).read_text())',
+      'plain = copy.deepcopy(session["renderRequest"])',
+      'plain["diagramOptions"]["featureOverrides"] = []',
+      'outcome = {}',
+      'with tempfile.TemporaryDirectory() as directory:',
+      '    for name, request in (("edited", session["renderRequest"]), ("plain", plain)):',
+      '        result = render_embedded_canonical_web_request(',
+      '            request, resources=session["resources"], workspace=Path(directory) / name)',
+      '        web = Path(directory) / f"{name}.svg"',
+      '        web.write_text(result["results"][0]["content"], encoding="utf-8")',
+      '        outcome[name] = bool(compare_svgs(web, Path(sys.argv[2])).equal)',
+      'print(json.dumps(outcome))'
+    ].join('\n'), await (async () => {
+      const path = join(tempDir, `${mode}-identity-session.json`);
+      await writeFile(path, JSON.stringify(session), 'utf8');
+      return path;
+    })(), cliSvg], {
+      cwd: repoRoot,
+      encoding: 'utf8',
+      env: { ...process.env, PYTHONPATH: [repoRoot, process.env.PYTHONPATH].filter(Boolean).join(delimiter) }
+    });
+    assert.equal(compared.status, 0, compared.stderr);
+    const outcome = JSON.parse(compared.stdout.trim().split('\n').at(-1));
+    assert.deepEqual(outcome, { edited: true, plain: false }, mode);
+  }
+});
+
+test('feature edit rows that the table cannot read back make the Source recipe unavailable', async () => {
+  const [first] = identityIds();
+  for (const row of [
+    edit(first, { labelText: 'tab\tinside' }),
+    edit(first, { featureVisibility: 'hidden' }),
+    edit(first, {}),
+    { ...edit(first, { labelVisibility: 'on' }), recordKey: 'other' }
+  ]) {
+    const recipe = await buildSourceRecipe(identityEditSession('linear', [row]));
+    assert.equal(recipe.available, false, JSON.stringify(row));
+    assert.match(recipe.unavailableReason, /feature edit/i, JSON.stringify(row));
+  }
+});
+
+test('a feature edit or placement whose feature the source lacks makes the Source recipe unavailable', async () => {
+  const [first, second] = identityIds();
+  const session = identityEditSession('linear', [edit(first, { featureVisibility: 'off' })]);
+  session.renderRequest.diagramOptions.featurePlacements = [
+    { recordKey: 'dup', biologicalFeatureId: second, placement: { kind: 'main' } }
+  ];
+  for (const [kinds, expected] of [
+    [['feature_visibility'], false], [['placement'], false], [null, true]
+  ]) {
+    const recipe = await buildSourceRecipe(session);
+    assert.equal(recipe.available, true, recipe.unavailableReason);
+    const featureIdentityNotices = kinds ? [{
+      recordKey: 'dup', biologicalFeatureId: 'fdeadbeef', status: 'unresolved', kinds, resultIndex: 0
+    }, {
+      recordKey: 'dup', biologicalFeatureId: first, status: 'crop_excluded', kinds: ['label_text'], resultIndex: 0
+    }] : [{
+      recordKey: 'dup', biologicalFeatureId: first, status: 'crop_excluded', kinds: ['label_text'], resultIndex: 0
+    }];
+    const info = buildRunInfo({ mode: 'linear', sourceRecipe: recipe, featureIdentityNotices });
+    assert.equal(info.sourceRecipe.available, expected, JSON.stringify(kinds));
+    if (!expected) {
+      assert.match(info.sourceRecipe.unavailableReason, /source does not have/);
+      assert.equal(info.sourceRecipe.command, '');
+    }
+  }
 });
 
 // PD-OI-018 revision 4 and D-40: Run Info states the LOSAT E-value database.

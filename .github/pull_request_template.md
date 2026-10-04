@@ -119,8 +119,7 @@ The sets and O, T, and P inputs must reproduce every row and total. `<= 0`, `non
 - Best non-exception alternative and why it was not selected:
 - Expiry or measurable removal condition:
 - Persisted-compatibility, deterministic-check, performance, and scientific-output evidence, as applicable:
-- Maintainer architecture decision comment permalink:
-- Reviewed exact head SHA:
+- Maintainer approval (review or comment link):
 
 ### PROMOTION
 

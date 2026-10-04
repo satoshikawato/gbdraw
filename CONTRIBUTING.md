@@ -290,7 +290,7 @@ Select exactly one change class in the pull request template:
 An ordinary architecture-bearing `STANDARD` change supplies concise owner/path
 evidence and removes superseded locations; it does not need an empty OE/PE/CB
 packet or a dedicated approval permalink. Full sets, arithmetic, alternatives,
-removal conditions, and an explicit maintainer decision are reserved for
+removal conditions, and the maintainer's approval are reserved for
 `ARCHITECTURE_EXCEPTION`.
 
 Apply the `architecture-change` label to a Web implementation that changes an

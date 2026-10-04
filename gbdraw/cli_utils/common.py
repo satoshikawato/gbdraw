@@ -65,6 +65,13 @@ def add_input_args(parser: argparse.ArgumentParser) -> None:
         help="Feature placements: record, feature_selector, placement, and optional level columns.",
     )
     parser.add_argument(
+        "--feature_override_table", metavar="TSV", default=None,
+        help=(
+            "Per-feature edits: record, feature_selector, and feature_visibility, "
+            "label_visibility, or label_text columns."
+        ),
+    )
+    parser.add_argument(
         "--feature_overlap_tolerance_bp", metavar="BP", type=int, default=0,
         help="Non-negative permitted feature overlap in base pairs (default: 0).",
     )

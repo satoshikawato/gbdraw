@@ -105,6 +105,18 @@ decisions are in
   render: they are reported as `feature_identity_notices` (Python API, Web
   metadata, one CLI log line each). Schema-8 requests remain readable; the Web
   app writes an empty array until it edits features by identity.
+- CLI and Python API: `gbdraw circular` and `gbdraw linear` accept
+  `--feature_override_table`, and `CircularDiagramOptions` and
+  `LinearDiagramOptions` accept `feature_override_table` (DataFrame) or
+  `feature_override_table_file`. Each row names one original-source feature
+  with an exact `feature_selector` and sets its Feature visibility, Label
+  visibility, or label text, as a `featureOverrides` row does. Run Info's
+  **Source recipe** writes a request's `featureOverrides` as this table instead
+  of being unavailable; it is unavailable when an edit or placement names a
+  feature that the source does not have, which no table row can name.
+  Resolving `hash=` rows of feature placement and feature override tables no
+  longer reads every feature of the record once per row (4,318 rows of
+  `MG1655.gbk`: 145 s to 2.0 s).
 - Comparison tables: every BLAST outfmt 6/7 reader (CLI `-b` and
   `--comparisons_table`, Web uploads, Circular similarity rings, and the LOSATP
   parser) now reads the first 12 columns by position and validates their types.

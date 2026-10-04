@@ -82,6 +82,7 @@ Additional Information:
 
 ```text
 usage: gbdraw circular [-h] [--feature_placement_table TSV]
+              [--feature_override_table TSV]
               [--feature_overlap_tolerance_bp BP]
               [--record_topology {auto,linear,circular}]
               [--display_start_coordinate DISPLAY_START_COORDINATE]
@@ -189,6 +190,10 @@ options:
   --feature_placement_table TSV
                         Feature placements: record, feature_selector,
                         placement, and optional level columns.
+  --feature_override_table TSV
+                        Per-feature edits: record, feature_selector, and
+                        feature_visibility, label_visibility, or label_text
+                        columns.
   --feature_overlap_tolerance_bp BP
                         Non-negative permitted feature overlap in base pairs
                         (default: 0).
@@ -857,6 +862,7 @@ alignment](./REFERENCE/command-line.md#strict-similarity-group-alignment).
 
 ```text
 usage: gbdraw linear [-h] [--feature_placement_table TSV]
+              [--feature_override_table TSV]
               [--feature_overlap_tolerance_bp BP]
               [--record_topology {auto,linear,circular}]
               [--display_start_coordinate DISPLAY_START_COORDINATE]
@@ -965,6 +971,10 @@ options:
   --feature_placement_table TSV
                         Feature placements: record, feature_selector,
                         placement, and optional level columns.
+  --feature_override_table TSV
+                        Per-feature edits: record, feature_selector, and
+                        feature_visibility, label_visibility, or label_text
+                        columns.
   --feature_overlap_tolerance_bp BP
                         Non-negative permitted feature overlap in base pairs
                         (default: 0).

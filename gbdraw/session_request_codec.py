@@ -1574,7 +1574,7 @@ def _decode_linear_layout(
 
 _PLACEMENT_INPUT_FIELDS = frozenset({
     "feature_placements", "feature_placement_table", "feature_placement_table_file",
-    "feature_overrides",
+    "feature_overrides", "feature_override_table", "feature_override_table_file",
 })
 
 
@@ -1596,6 +1596,11 @@ def _encode_diagram_options(
             or options.feature_placement_table_file is not None):
         raise CanonicalRequestEncodingError(
             "Feature placement tables must be materialized before canonical encoding."
+        )
+    if (options.feature_override_table is not None
+            or options.feature_override_table_file is not None):
+        raise CanonicalRequestEncodingError(
+            "Feature override tables must be materialized before canonical encoding."
         )
     depth_tracks = _canonical_depth_tracks_for_encoding(
         options,
