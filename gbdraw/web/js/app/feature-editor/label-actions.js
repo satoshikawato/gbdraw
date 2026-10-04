@@ -2,11 +2,8 @@ import { normalizeUserFacingError } from '../../services/error-normalization.js'
 import { ruleFeaturePayload } from '../rule-matching.js';
 import { resolveEffectiveFeatureVisibility } from '../feature-visibility.js';
 import {
-  buildFeatureMetadataMap,
-  buildFeatureUniquenessIndex,
   buildLabelOverrideRows,
-  parseLabelOverrideTsv,
-  selectStableFeatureKey
+  parseLabelOverrideTsv
 } from './label-override-table.js';
 import { FEATURE_SELECTOR, getFeatureIdentity } from './svg-actions.js';
 import { downloadTextFile } from '../../services/text-download.js';
@@ -58,7 +55,6 @@ const toNumber = (value, fallback = 0) => {
 };
 
 const normalizeKeyToken = (value) => String(value ?? '').trim().toLowerCase();
-const escapeRegexLiteral = (value) => String(value ?? '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 const makeSafeFilename = (name, fallback = 'gbdraw') => {
   const cleaned = String(name || '')
     .replace(/[^\w.-]+/g, '_')
@@ -343,9 +339,6 @@ export const createFeatureLabelActions = ({ state, previewRuntime = null, rulePr
   const {
     mode,
     generatedMode,
-    form,
-    filterMode,
-    manualWhitelist,
     results,
     selectedResultIndex,
     svgContainer,
@@ -353,12 +346,12 @@ export const createFeatureLabelActions = ({ state, previewRuntime = null, rulePr
     extractedFeatures,
     clickedFeature,
     labelTextScopeDialog,
+    hiddenLabelTextDialog,
     labelTextFeatureOverrides,
     labelTextBulkOverrides,
     labelTextFeatureOverrideSources,
     labelVisibilityOverrides,
     labelOverrideBuildWarning,
-    globalLabelModeDialog,
     autoLabelReflowEnabled,
     labelReflowRequestSeq,
     labelReflowRequestReason,
@@ -393,95 +386,6 @@ export const createFeatureLabelActions = ({ state, previewRuntime = null, rulePr
   const normalizeVisibilityMode = (value) => {
     const normalized = String(value || '').trim().toLowerCase();
     return normalized === 'on' || normalized === 'off' ? normalized : 'default';
-  };
-
-  const isGlobalLabelsOff = () => {
-    if (mode.value === 'circular') {
-      const labelsMode = String(form.labels_mode || 'none').trim().toLowerCase();
-      return labelsMode === 'none';
-    }
-    const linearLabels = String(form.show_labels_linear || 'none').trim().toLowerCase();
-    return linearLabels === 'none';
-  };
-
-  const enableGlobalLabels = () => {
-    if (mode.value === 'circular') {
-      form.labels_mode = 'out';
-      return;
-    }
-    form.show_labels_linear = 'all';
-  };
-
-  const closeGlobalLabelModeDialog = () => {
-    globalLabelModeDialog.show = false;
-    globalLabelModeDialog.featureId = '';
-    globalLabelModeDialog.featureType = '';
-    globalLabelModeDialog.resolve = null;
-  };
-
-  const requestGlobalLabelModeChoice = (featureId, featureType) =>
-    new Promise((resolve) => {
-      if (!featureId) {
-        resolve('show_all');
-        return;
-      }
-      globalLabelModeDialog.show = true;
-      globalLabelModeDialog.featureId = String(featureId || '');
-      globalLabelModeDialog.featureType = String(featureType || '');
-      globalLabelModeDialog.resolve = resolve;
-    });
-
-  const handleGlobalLabelModeChoice = (choiceRaw) => {
-    const sessionBusy = state.sessionOperationAvailability?.();
-    if (sessionBusy) return sessionBusy;
-    if (!globalLabelModeDialog.show) return;
-    const resolver = globalLabelModeDialog.resolve;
-    const normalizedChoice = choiceRaw === 'whitelist_only' ? 'whitelist_only' : 'show_all';
-    closeGlobalLabelModeDialog();
-    if (typeof resolver === 'function') {
-      resolver(normalizedChoice);
-    }
-  };
-
-  const ensureWhitelistRuleForFeature = (featureTypeRaw, featureIdRaw) => {
-    const featureType = String(featureTypeRaw || '').trim();
-    const featureId = String(featureIdRaw || '').trim();
-    if (!featureType || !featureId) return;
-    const metadataByFeatureId = buildFeatureMetadataMap(extractedFeatures.value);
-    const metadata = metadataByFeatureId.get(normalizeKeyToken(featureId));
-    const selector = selectStableFeatureKey(
-      {
-        featureId,
-        record: metadata?.record || '',
-        featureType: metadata?.featureType || featureType,
-        position: metadata?.position || '',
-        qualifiers: metadata?.qualifiers || {}
-      },
-      buildFeatureUniquenessIndex(extractedFeatures.value)
-    );
-    const ruleFeatureType = String(metadata?.featureType || featureType).trim();
-    const ruleQualifier = String(selector?.qualifier || 'hash').trim().toLowerCase();
-    const ruleKey = `^${escapeRegexLiteral(String(selector?.value || featureId).trim())}$`;
-    if (!ruleFeatureType || !ruleQualifier || !ruleKey) return;
-    const exists = manualWhitelist.some((rule) => {
-      return (
-        normalizeKeyToken(rule?.feat) === normalizeKeyToken(ruleFeatureType) &&
-        normalizeKeyToken(rule?.qual) === normalizeKeyToken(ruleQualifier) &&
-        normalizeKeyToken(rule?.key) === normalizeKeyToken(ruleKey)
-      );
-    });
-    if (exists) return;
-    manualWhitelist.push({ feat: ruleFeatureType, qual: ruleQualifier, key: ruleKey });
-  };
-
-  const applyGlobalLabelModeChoice = (choice, featureType, featureId) => {
-    if (choice === 'whitelist_only') {
-      filterMode.value = 'Whitelist';
-      ensureWhitelistRuleForFeature(featureType, featureId);
-    } else {
-      filterMode.value = 'None';
-    }
-    enableGlobalLabels();
   };
 
   const resetLabelsToSourceText = (svg) => {
@@ -853,7 +757,6 @@ export const createFeatureLabelActions = ({ state, previewRuntime = null, rulePr
     const featureId = String(clickedFeature.value.svg_id || clickedFeature.value.id || '').trim();
     if (!featureId) return;
 
-    const featureType = String(clickedFeature.value.feat?.type || '').trim();
     const nextText = String(clickedFeature.value.labelText ?? '');
     const sourceText = String(clickedFeature.value.labelSourceText || clickedFeature.value.label || '');
     const baselineText = sourceText;
@@ -872,11 +775,14 @@ export const createFeatureLabelActions = ({ state, previewRuntime = null, rulePr
       syncLabelEditor({ queueIncompleteVisibility: false });
     }
 
-    const requiresGlobalSelection = isGlobalLabelsOff() && (visibilityChanged || textChanged);
-    if (requiresGlobalSelection) {
-      const choice = await requestGlobalLabelModeChoice(featureId, featureType);
-      applyGlobalLabelModeChoice(choice, featureType, featureId);
-      queueLabelReflow('global-off-label-apply', true);
+    // Label text alone keeps Default visibility, which follows Show Labels and
+    // the label filters. When they leave this feature unlabeled, ask whether
+    // to show the label (On) or keep only the text.
+    if (textChanged && !visibilityChanged && nextText.trim()
+      && normalizeVisibilityMode(clickedFeature.value.labelVisibility) === 'default'
+      && !getEditableLabelByFeatureId(featureId)) {
+      hiddenLabelTextDialog.featureId = featureId;
+      hiddenLabelTextDialog.show = true;
       return;
     }
 
@@ -888,6 +794,25 @@ export const createFeatureLabelActions = ({ state, previewRuntime = null, rulePr
     if (textChanged) {
       queueLabelReflow('apply');
     }
+  };
+
+  const closeHiddenLabelTextDialog = () => {
+    hiddenLabelTextDialog.show = false;
+    hiddenLabelTextDialog.featureId = '';
+  };
+
+  const handleHiddenLabelTextChoice = (choice) => {
+    const sessionBusy = state.sessionOperationAvailability?.();
+    if (sessionBusy) return sessionBusy;
+    if (!hiddenLabelTextDialog.show) return;
+    const featureId = hiddenLabelTextDialog.featureId;
+    closeHiddenLabelTextDialog();
+    if (choice !== 'show' || !featureId) return;
+    labelVisibilityOverrides[featureId] = 'on';
+    const clickedId = String(clickedFeature.value?.svg_id || clickedFeature.value?.id || '').trim();
+    if (clickedId === featureId) clickedFeature.value.labelVisibility = 'on';
+    const projection = applyDirectVisibilityToCurrentSvg(featureId, 'on');
+    queueLabelReflow('label-visibility-apply', !projection.available);
   };
 
   const handleLabelTextScopeChoice = (choice) => {
@@ -962,14 +887,14 @@ export const createFeatureLabelActions = ({ state, previewRuntime = null, rulePr
     if (!svgContainer.value) {
       editableLabels.value = [];
       closeLabelTextScopeDialog();
-      closeGlobalLabelModeDialog();
+      closeHiddenLabelTextDialog();
       return;
     }
     if (!svg) return;
     applyStoredVisibilityOverridesToSvg(svg);
 
     closeLabelTextScopeDialog();
-    closeGlobalLabelModeDialog();
+    closeHiddenLabelTextDialog();
     commitLabelEdit();
     syncLabelEditor();
     queueLabelReflow('reset');
@@ -1076,7 +1001,7 @@ export const createFeatureLabelActions = ({ state, previewRuntime = null, rulePr
       });
 
       closeLabelTextScopeDialog();
-      closeGlobalLabelModeDialog();
+      closeHiddenLabelTextDialog();
       syncLabelEditor();
       queueLabelReflow('load');
 
@@ -1155,7 +1080,7 @@ export const createFeatureLabelActions = ({ state, previewRuntime = null, rulePr
     downloadLabelOverrideTable,
     loadLabelOverrideTable, canRetryLabelImportFailure, retryLabelImportFailure, editLabelImportFailure,
     getEditableLabelByFeatureId,
-    handleGlobalLabelModeChoice,
+    handleHiddenLabelTextChoice,
     handleLabelTextScopeChoice,
     requestLabelTextChangeByFeatureId,
     requestLabelTextChangeByKey,

@@ -43,9 +43,6 @@ const buildHarness = ({
   const state = {
     mode: ref('linear'),
     generatedMode: ref('linear'),
-    form: { show_labels_linear: 'all' },
-    filterMode: ref('None'),
-    manualWhitelist: [],
     results: ref([{ content: '<svg></svg>' }]),
     selectedResultIndex: ref(0),
     svgContainer: ref({ querySelector: (selector) => (selector === 'svg' ? svg : null) }),
@@ -66,12 +63,12 @@ const buildHarness = ({
       hasEditableLabel: true
     }),
     labelTextScopeDialog: { show: false },
+    hiddenLabelTextDialog: { show: false, featureId: '' },
     labelTextFeatureOverrides: {},
     labelTextBulkOverrides: {},
     labelTextFeatureOverrideSources: {},
     labelVisibilityOverrides: { ...visibilityOverrides },
     labelOverrideBuildWarning: ref(''),
-    globalLabelModeDialog: { show: false },
     autoLabelReflowEnabled: ref(false),
     labelReflowRequestSeq: ref(0),
     labelReflowRequestReason: ref(''),
@@ -175,6 +172,36 @@ test('one action serializes combined text and visual-unit visibility changes onc
     assert.equal(part.getAttribute('display'), 'none');
   });
   assert.deepEqual(harness.mutations, { commit: 1 });
+});
+
+test('a text edit asks whether to show a label only when the feature has none', async () => {
+  const featureId = 'feature:one/[a]';
+  const labeled = buildHarness();
+  Object.assign(labeled.state.clickedFeature.value, { labelText: 'Renamed', labelSourceText: 'Original' });
+  await labeled.actions.updateClickedFeatureLabelText();
+  assert.equal(labeled.state.hiddenLabelTextDialog.show, false);
+
+  const harness = buildHarness();
+  harness.state.editableLabels.value = [];
+  Object.assign(harness.state.clickedFeature.value, { labelText: 'Renamed', labelSourceText: 'Original' });
+  await harness.actions.updateClickedFeatureLabelText();
+  assert.deepEqual({ ...harness.state.hiddenLabelTextDialog }, { show: true, featureId });
+  assert.equal(harness.state.labelTextFeatureOverrides[featureId], 'Renamed');
+  harness.actions.handleHiddenLabelTextChoice('text_only');
+  assert.deepEqual({ ...harness.state.hiddenLabelTextDialog }, { show: false, featureId: '' });
+  assert.deepEqual(harness.state.labelVisibilityOverrides, {});
+  assert.equal(harness.state.labelReflowForceRequestSeq.value, 0);
+
+  harness.state.clickedFeature.value.labelText = 'Renamed again';
+  await harness.actions.updateClickedFeatureLabelText();
+  assert.equal(harness.state.hiddenLabelTextDialog.show, true);
+  harness.actions.handleHiddenLabelTextChoice('show');
+  assert.equal(harness.state.hiddenLabelTextDialog.show, false);
+  assert.deepEqual(harness.state.labelVisibilityOverrides, { [featureId]: 'on' });
+  assert.equal(harness.state.clickedFeature.value.labelVisibility, 'on');
+  assert.equal(harness.state.labelTextFeatureOverrides[featureId], 'Renamed again');
+  assert.equal(harness.state.labelReflowForceRequestSeq.value, 1);
+  assert.equal(harness.state.labelReflowForceRequestReason.value, 'label-visibility-apply');
 });
 
 for (const [name, options, labelKey] of [

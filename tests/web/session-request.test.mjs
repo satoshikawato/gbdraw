@@ -2182,16 +2182,6 @@ for (const [label, targetPatch, transformPatch, requestPatch] of [
     }
   });
 
-  const enableLabels = projectCommittedEditorIntent({ committed, state: draft, labelSelection: true });
-  const labelOptions = enableLabels.renderRequest.diagramOptions;
-  assert.equal(labelOptions.configOverrides['labels.linear.scope'], 'all');
-  assert.deepEqual(labelOptions.configOverrides['labels.filtering.blacklist_keywords'], []);
-  assert.match(text(enableLabels, labelOptions.labelWhitelistFile), /CDS\tgene\talpha/);
-  assert.equal(
-    labelOptions.configOverrides['objects.features.block_stroke_width'],
-    committedOptions.configOverrides['objects.features.block_stroke_width']
-  );
-
   // A Session loaded from an older request schema keeps its request until the
   // next Generate; the reflow promotes it instead of rejecting it.
   const older = structuredClone(committed);

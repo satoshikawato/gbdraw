@@ -443,7 +443,35 @@ def preprocess_label_filtering(label_filtering: dict):
     return label_filtering
 
 
-def get_label_text(feature: Any, label_filtering: dict, record_id: Optional[str] = None) -> str:
+def has_forced_label_overrides(label_filtering: dict) -> bool:
+    """Return whether a per-feature override can show a label.
+
+    A per-feature override is a label-override row with the ``hash`` qualifier.
+    Non-empty text shows that feature's label, and empty text hides it; either
+    decision takes precedence over label filters and the label display scope.
+    """
+    rules = label_filtering.get("label_override_rules")
+    if rules is None and "label_override_rules" not in label_filtering:
+        override_df = label_filtering.get("label_override_df")
+        rules = _build_label_override_rules(override_df) if isinstance(override_df, DataFrame) else None
+    return any(
+        rule.get("qualifier_normalized") == "hash" and rule.get("label_text")
+        for rule in rules or ()
+    )
+
+
+def get_label_text(
+    feature: Any,
+    label_filtering: dict,
+    record_id: Optional[str] = None,
+    *,
+    overrides_only: bool = False,
+) -> str:
+    """Return the label text for one feature, or an empty string for no label.
+
+    ``overrides_only`` selects a feature outside the label display scope: only
+    its per-feature override can give it a label.
+    """
     feature_type = _get_feature_type(feature)
     qualifiers = _get_feature_qualifiers(feature)
     whitelist_map = label_filtering.get("whitelist_map")
@@ -476,6 +504,9 @@ def get_label_text(feature: Any, label_filtering: dict, record_id: Optional[str]
         )
         if hash_override_text is not None:
             return hash_override_text
+
+    if overrides_only:
+        return ""
 
     if whitelist_map:
         is_eligible = False
@@ -535,6 +566,7 @@ def get_label_text(feature: Any, label_filtering: dict, record_id: Optional[str]
 __all__ = [
     "DERIVED_LABEL_FILTERING_KEYS",
     "get_label_text",
+    "has_forced_label_overrides",
     "preprocess_label_filtering",
     "read_filter_list_file",
     "read_label_override_file",

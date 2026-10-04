@@ -16,6 +16,16 @@ Fixes from the 2026-09-30 Web GUI audit of `dev`. The plan and the approved
 decisions are in
 [`docs/internal/web-gui-audit-20260930/`](./docs/internal/web-gui-audit-20260930/03_IMPLEMENTATION_REFERENCE.md).
 
+- Labels: a per-feature override (a label-override `hash` row) now shows or
+  hides its label whatever the label display scope selects, in Linear
+  (`none`, `first`, `orthogroup_top`) and Circular (`none`) diagrams. In the web
+  app, **Label visibility** **On** in the feature popup shows a label on a later
+  record under **First Record Only**, or alone under **None**; Generate no longer
+  fails with an unclassified render error after such an edit. Multi-record
+  Linear label overrides now match their features in the renderer, so **On**
+  takes effect there. **Enable Labels** is removed: **On** no longer changes
+  **Show Labels** or the label filter. A label text edit on a feature without a
+  label asks whether to show the label (**Label Not Shown**).
 - Comparison tables: every BLAST outfmt 6/7 reader (CLI `-b` and
   `--comparisons_table`, Web uploads, Circular similarity rings, and the LOSATP
   parser) now reads the first 12 columns by position and validates their types.

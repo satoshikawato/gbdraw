@@ -51,11 +51,15 @@ def build_circular_label_candidates(
     font_size: float,
     measure_text,
     record_transform: RecordDisplayTransform | None = None,
+    overrides_only: bool = False,
 ) -> tuple[CircularLabelCandidate, ...]:
-    """Select and measure each circular feature label exactly once."""
+    """Select and measure each circular feature label exactly once.
+
+    ``overrides_only`` keeps only the labels shown by per-feature overrides.
+    """
     candidates: list[CircularLabelCandidate] = []
     for input_order, (stable_id, feature) in enumerate(feature_dict.items()):
-        text = get_label_text(feature, label_filtering)
+        text = get_label_text(feature, label_filtering, overrides_only=overrides_only)
         if not text:
             continue
         width_px, height_px = measure_text(text, font_family, font_size)

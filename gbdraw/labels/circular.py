@@ -4558,6 +4558,7 @@ def prepare_label_list(
                 interval,
             ),
             record_transform=record_transform,
+            overrides_only=profile.labels_overrides_only,
         )
         if _candidate_cache is not None:
             _candidate_cache["candidates"] = candidates

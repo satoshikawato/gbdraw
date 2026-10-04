@@ -87,12 +87,7 @@ class SeqRecordGroup:
         cfg = render_context.profile.config
         self._cfg = cfg
 
-        label_scope = render_context.profile.label_scope
-        self.show_labels = (
-            label_scope == "all"
-            or label_scope == "orthogroup_top"
-            or (label_scope == "first" and self.record_index == 0)
-        )
+        self.show_labels = render_context.profile.record_has_labels(self.record_index)
 
         self.label_stroke_color = cfg.labels.stroke_color.label_stroke_color
         # Keep legacy behavior: linear label leader line width uses the "long" value.
@@ -422,10 +417,13 @@ class SeqRecordGroup:
                     separate_strands,
                     self.track_layout,
                     self.canvas_config.track_axis_gap,
-                    cfg=self._cfg,
+                    profile=self.render_context.profile,
                     label_font_size=self.label_font_size,
                     orthogroup_label_member_ids=self.orthogroup_label_member_ids,
                     orthogroup_label_top_member_ids=self.orthogroup_label_top_member_ids,
+                    labels_overrides_only=not self.render_context.profile.labels_in_scope(
+                        self.record_index
+                    ),
                     feature_lane_geometry=self.feature_lane_geometry,
                     record_transform=self.record_transform,
                 )

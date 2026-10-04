@@ -5128,14 +5128,11 @@ const referencedResourceIds = (value, ids = new Set()) => {
  * Clone the last committed canonical Session and replace only the tables of
  * live editor intent: feature colors (rules and the applied palette), feature
  * visibility, and label overrides. A label reflow renders this request, so no
- * other draft setting reaches the Result before Generate (R1(c), N-16). The
- * Enable Labels choice also carries its label selection: the label scope,
- * blacklist, and whitelist.
+ * other draft setting reaches the Result before Generate (R1(c), N-16).
  */
 export const projectCommittedEditorIntent = ({
   committed,
   state,
-  labelSelection = false,
   promotion = {}
 }) => {
   // A Session loaded from an older supported request schema keeps that request
@@ -5152,7 +5149,7 @@ export const projectCommittedEditorIntent = ({
   const options = candidate.renderRequest.diagramOptions || {};
   candidate.renderRequest.diagramOptions = options;
   const tables = {
-    colors: true, visibility: true, whitelist: labelSelection, priority: false, labelOverrides: true
+    colors: true, visibility: true, whitelist: false, priority: false, labelOverrides: true
   };
   const retired = new Set();
   Object.entries(COMMITTED_EDITOR_TABLE_OPTIONS).forEach(([table, keys]) => {
@@ -5169,14 +5166,6 @@ export const projectCommittedEditorIntent = ({
   const resources = createResourceBuilder();
   addGeneratedTableResources(state, resources, options, tables);
   Object.assign(candidate.resources, resources.resources);
-  if (labelSelection) {
-    const circular = request.mode === 'circular';
-    options.configOverrides = {
-      ...(options.configOverrides || {}),
-      [MODE_LABEL_SCOPE_PATHS[request.mode]]: labelScopeOverride(state.form, circular),
-      [CONFIG_OVERRIDE_PATHS.labelBlacklist]: labelBlacklistOverride(state)
-    };
-  }
   projectCanonicalSessionRequest({
     renderRequest: candidate.renderRequest,
     resources: candidate.resources,

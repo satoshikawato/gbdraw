@@ -80,11 +80,15 @@ const label = async (page, text) => {
   const input = page.locator('.feature-popup input[placeholder="Edit label text"]');
   await input.fill(text);
   await page.getByRole('button', { name: 'Apply Label', exact: true }).click();
-  if (await page.getByRole('heading', { name: 'Enable Labels', exact: true }).isVisible()) {
-    await page.getByRole('button', { name: /Show all labels/ }).click();
+  // Apply records the text and, for a feature the Result leaves unlabeled,
+  // opens Label Not Shown in the same step.
+  await expect.poll(async () => Object.values(await page.evaluate(async () =>
+    (await import('./js/state.js')).state.labelTextFeatureOverrides))).toContain(text);
+  await page.evaluate(() => window.Vue.nextTick());
+  if (await page.getByRole('heading', { name: 'Label Not Shown', exact: true }).isVisible()) {
+    await page.getByRole('button', { name: /Show this label/ }).click();
   }
   await settle(page);
-  expect(Object.values(await page.evaluate(async () => (await import('./js/state.js')).state.labelTextFeatureOverrides))).toContain(text);
 };
 
 module.exports = { semantics, capture, assertCoherent, assertNonTargetsPreserved, load, settle, agree, reveal, check, color, label };

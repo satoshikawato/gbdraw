@@ -5722,10 +5722,17 @@
                                 <label class="text-[10px] font-medium text-slate-500 block mb-1">Label visibility</label>
                                 <select v-model="clickedFeature.labelVisibility"
                                         class="w-full text-xs border border-slate-200 rounded-lg px-2 py-1.5 focus:outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100" :disabled="!semanticMutationAvailable">
-                                    <option value="default">Default (follow filter)</option>
-                                    <option value="on">On (force show, bypass filters)</option>
-                                    <option value="off">Off (force hide, bypass filters)</option>
+                                    <option value="default">Default (follow Show Labels and filters)</option>
+                                    <option value="on">On (always show)</option>
+                                    <option value="off">Off (always hide)</option>
                                 </select>
+                                <p class="text-[10px] text-slate-400 mt-1">
+                                    On and Off apply to this feature regardless of Show Labels and label filters.
+                                </p>
+                                <p v-if="clickedFeature.hasEditableLabel && clickedFeature.labelVisibility === 'default' && !clickedFeature.labelKey"
+                                   class="text-[10px] text-amber-700 bg-amber-50 border border-amber-200 rounded-md px-2 py-1 mt-1">
+                                    This feature has no label in the current Result. Choose On to show it.
+                                </p>
                             </div>
                             <input type="text"
                                    v-model="clickedFeature.labelText"
@@ -6286,26 +6293,26 @@
                         </div>
                     </div>
 
-                    <!-- Global Label Mode Dialog -->
-                    <div v-if="globalLabelModeDialog.show"
+                    <!-- Hidden Label Text Dialog -->
+                    <div v-if="hiddenLabelTextDialog.show"
                          class="fixed inset-0 bg-black/50 z-[70] flex items-center justify-center">
                         <div class="bg-white rounded-xl shadow-2xl p-6 max-w-md mx-4">
-                            <h3 class="text-lg font-bold text-slate-800 mb-2">Enable Labels</h3>
+                            <h3 class="text-lg font-bold text-slate-800 mb-2">Label Not Shown</h3>
                             <p class="text-sm text-slate-600 mb-4">
-                                Labels are currently off. Choose how to show labels for this edit.
+                                This feature has no label in the current Result. With the current Show Labels and label filter settings, the edited text will not appear.
                             </p>
                             <div class="flex flex-col gap-2">
-                                <button @click="handleGlobalLabelModeChoice('whitelist_only')"
-                                        data-history-managed
-                                        class="w-full px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-lg transition-colors text-left flex items-center gap-2" :disabled="!semanticMutationAvailable">
-                                    <i class="ph ph-funnel text-lg"></i>
-                                    <span>Whitelist only</span>
-                                </button>
-                                <button @click="handleGlobalLabelModeChoice('show_all')"
+                                <button @click="handleHiddenLabelTextChoice('show')"
                                         data-history-managed
                                         class="w-full px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-lg transition-colors text-left flex items-center gap-2" :disabled="!semanticMutationAvailable">
-                                    <i class="ph ph-list text-lg"></i>
-                                    <span>Show all labels</span>
+                                    <i class="ph ph-eye text-lg"></i>
+                                    <span>Show this label</span>
+                                </button>
+                                <button @click="handleHiddenLabelTextChoice('text_only')"
+                                        data-history-managed
+                                        class="w-full px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-lg transition-colors text-left flex items-center gap-2" :disabled="!semanticMutationAvailable">
+                                    <i class="ph ph-eye-slash text-lg"></i>
+                                    <span>Keep hidden (apply text only)</span>
                                 </button>
                             </div>
                         </div>

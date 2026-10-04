@@ -277,7 +277,7 @@ const closeTransientState = (state) => {
   if (state.legendRenameDialog) state.legendRenameDialog.show = false;
   if (state.labelTextScopeDialog) state.labelTextScopeDialog.show = false;
   if (state.featureVisibilityScopeDialog) state.featureVisibilityScopeDialog.show = false;
-  if (state.globalLabelModeDialog) state.globalLabelModeDialog.show = false;
+  if (state.hiddenLabelTextDialog) state.hiddenLabelTextDialog.show = false;
   if (state.featurePopupDrag) state.featurePopupDrag.active = false;
   if (state.featurePopupResize) state.featurePopupResize.active = false;
   if (state.pairwiseMatchPopupDrag) state.pairwiseMatchPopupDrag.active = false;
