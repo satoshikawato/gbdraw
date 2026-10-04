@@ -28,10 +28,11 @@ test('v44 Linear crop and reverse complement: rule 1 maps each drawn ID to its f
   const session = fixture('feature-edits-crop-rc.v44.gbdraw-session.json.gz');
   assert.equal(session.version, 44);
   const [testa, testb] = session.renderRequest.records.map((record) => record.recordKey);
-  const { features, droppedCount } = migrateSessionFeatureEdits({
+  const { features, droppedCount, narrowedVisibilityCount } = migrateSessionFeatureEdits({
     features: session.features, catalog: session.editorState.featureCatalog
   });
   assert.equal(droppedCount, 0);
+  assert.equal(narrowedVisibilityCount, 0);
   assert.deepEqual(features.featureOverrides, {
     // OV-01: the cropped record's hidden misc_feature X, by its source identity.
     [key(testa, 'fb5977f81')]: row(testa, 'fb5977f81', { featureVisibility: 'off' }),
@@ -50,10 +51,14 @@ test('v44 Linear crop and reverse complement: rule 1 maps each drawn ID to its f
 
 test('v44 Circular canvas with one record twice: each copy keeps its own edits', () => {
   const session = fixture('feature-edits-circular-copies.v44.gbdraw-session.json.gz');
-  const { features, droppedCount } = migrateSessionFeatureEdits({
+  const { features, droppedCount, narrowedVisibilityCount } = migrateSessionFeatureEdits({
     features: session.features, catalog: session.editorState.featureCatalog
   });
   assert.equal(droppedCount, 0);
+  // Session 44 sent the Feature visibility edit as a `hash` row, which hid the
+  // feature in both copies; it now names copy 1 only (Owner decision Q1 = A),
+  // so Load says that Generate draws copy 2's feature again.
+  assert.equal(narrowedVisibilityCount, 1);
   assert.deepEqual(features.featureOverrides, {
     // Rule 2: the hidden feature is not drawn; `__instance_record_1` names copy 1.
     [key('record-1', 'f3ccacda4')]: row('record-1', 'f3ccacda4', { featureVisibility: 'off' }),

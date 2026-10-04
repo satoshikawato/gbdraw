@@ -39,7 +39,10 @@ before 40 has no catalog that Load reads, so Load reads its GenBank sources
 again with its crops and orientations and matches each rendered ID's drawn
 hash and record position. Without readable sources it uses the saved feature
 metadata, which names only features of records drawn without a crop or
-reverse complement. Other edits are dropped and Load reports how many.
+reverse complement. Other edits are dropped and Load reports how many. An older
+Feature visibility edit hid every feature with the same hash, such as each copy
+of a duplicated record; it now applies only to the feature that was edited, and
+Load reports how many edits the next Generate draws differently for this.
 
 ## Unreleased: request schema 9 and feature identity overrides
 

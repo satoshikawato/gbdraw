@@ -465,3 +465,19 @@ test('a Label TSV location row waits for Generate on a catalog 4 Result of cropp
   expect(alerts).toEqual(['Loaded 1 row(s). Applied to 1 label(s).']);
   expect(await previewLabelCount(page, /^TSV_TRNA$/)).toBe(1);
 });
+
+// Owner decision Q1 = A: a Session 44 Feature visibility edit was a `hash`
+// row that hid the feature in every copy of a duplicated record; it now names
+// the copy that was edited, and Load says the next Generate draws the others.
+test('loading a Session 44 says which Feature visibility edits now apply to one copy', async ({ page }) => {
+  test.setTimeout(300_000);
+  const alerts = [];
+  page.on('dialog', (dialog) => alerts.push(dialog.message()));
+  await openFresh(page);
+  await loadSession(page, 'tests/fixtures/sessions/feature-edits-circular-copies.v44.gbdraw-session.json.gz');
+  expect(alerts).toEqual([
+    'Session loaded successfully! 1 Feature visibility edit(s) from an older Session hid every feature with '
+      + 'the same hash, such as each copy of a duplicated record. Each now applies only to the feature that '
+      + 'was edited, so the next Generate draws the others.'
+  ]);
+});

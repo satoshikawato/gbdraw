@@ -69,6 +69,7 @@ import {
 import { canonicalFeatureOverrides } from './feature-placement.js';
 import {
   FEATURE_EDIT_MIGRATION_WARNING,
+  FEATURE_VISIBILITY_NARROWED_NOTICE,
   RENDERED_ID_FEATURE_EDIT_FIELDS,
   hasRenderedIdFeatureEdits,
   migrateSessionFeatureEdits
@@ -4428,6 +4429,7 @@ const importSessionDocument = async (e, options = {}) => {
     // one through its sources read again with its crops and orientations (the
     // saved metadata when they cannot be read), once (design Q4 4.3).
     let droppedFeatureEditCount = 0;
+    let narrowedFeatureVisibilityCount = 0;
     if (sourceSessionVersion < SESSION_VERSION) {
       const recovered = legacyFeatureRecoveryPlan?.recoveredFeatureState;
       const sourceFeatures = !validatedSessionCatalog && hasRenderedIdFeatureEdits(features)
@@ -4448,6 +4450,7 @@ const importSessionDocument = async (e, options = {}) => {
       });
       features = migration.features;
       droppedFeatureEditCount = migration.droppedCount;
+      narrowedFeatureVisibilityCount = migration.narrowedVisibilityCount;
       if (recovered) {
         const recoveredWithoutRenderedIdEdits = { ...recovered };
         RENDERED_ID_FEATURE_EDIT_FIELDS.forEach((field) => delete recoveredWithoutRenderedIdEdits[field]);
@@ -4706,9 +4709,10 @@ const importSessionDocument = async (e, options = {}) => {
     if (!options.isCurrent()) throw new Error('Session loading was canceled.');
     await options.afterImport?.({ status: 'ok', decompressedCharacters: candidate.characters, isCurrent: options.isCurrent });
     if (!options.isCurrent()) throw new Error('Session loading was canceled.');
-    alert(droppedFeatureEditCount > 0
-      ? `Session loaded successfully! ${FEATURE_EDIT_MIGRATION_WARNING(droppedFeatureEditCount)}`
-      : 'Session loaded successfully!');
+    alert(['Session loaded successfully!',
+      droppedFeatureEditCount > 0 ? FEATURE_EDIT_MIGRATION_WARNING(droppedFeatureEditCount) : '',
+      narrowedFeatureVisibilityCount > 0 ? FEATURE_VISIBILITY_NARROWED_NOTICE(narrowedFeatureVisibilityCount) : ''
+    ].filter(Boolean).join(' '));
     return {
       status: 'ok',
       data,

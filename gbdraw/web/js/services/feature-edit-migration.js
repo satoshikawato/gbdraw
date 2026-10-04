@@ -16,6 +16,11 @@ export const FEATURE_EDIT_MIGRATION_WARNING = (count) => (
   `${count} feature edit(s) from an older Session could not be matched to a feature of its saved diagram and were dropped.`
 );
 
+export const FEATURE_VISIBILITY_NARROWED_NOTICE = (count) => (
+  `${count} Feature visibility edit(s) from an older Session hid every feature with the same hash, such as each copy`
+  + ' of a duplicated record. Each now applies only to the feature that was edited, so the next Generate draws the others.'
+);
+
 const isObject = (value) => value !== null && typeof value === 'object' && !Array.isArray(value);
 const text = (value) => String(value ?? '').trim();
 const RENDERED_PART_SUFFIX = /__(?:part|line)\d+$/;
@@ -175,6 +180,23 @@ const resolveOldKey = (renderedId, index) => {
   return candidates.length === 1 ? [candidates[0].key] : [];
 };
 
+// The identities a Session before 45 reached with the `hash` row it sent for
+// a Feature visibility edit: every feature drawn with, or whose source has,
+// that hash (each copy of a duplicated record, each feature at the same
+// coordinates). Owner decision Q1 = A keeps the edit on the one it named.
+const identitiesWithHash = (index, hash) => {
+  if (!index.byHash) {
+    index.byHash = new Map();
+    const add = (stableId, key) => {
+      if (!index.byHash.has(stableId)) index.byHash.set(stableId, new Set());
+      index.byHash.get(stableId).add(key);
+    };
+    index.renderedById.forEach((keys, svgId) => keys.forEach((key) => add(parseRenderedId(svgId).stableId, key)));
+    index.biological.forEach(({ stableId, key }) => add(stableId, key));
+  }
+  return index.byHash.get(hash) || new Set();
+};
+
 const FEATURE_VISIBILITY_MODES = Object.freeze({
   on: 'on', off: 'off', exclude_matching: 'exclude_matching', suppress: 'exclude_matching'
 });
@@ -189,15 +211,19 @@ export const hasRenderedIdFeatureEdits = (features) => isObject(features)
  * records, and source features read again (`features` with their drawn hashes,
  * `biologicalFeatures`) or its saved feature metadata. Returns the rows, the
  * number of dropped edits (Feature visibility, Label visibility, and label
- * text entries; a label's source text is not an edit of its own), and whether
- * the Session had label edits.
+ * text entries; a label's source text is not an edit of its own), the number
+ * of Feature visibility edits that now reach fewer features than the `hash`
+ * row the Session sent, and whether the Session had label edits.
  */
 export const migrateRenderedIdFeatureEdits = ({ features, catalog = null, legacy = null }) => {
   const rows = {};
   let droppedCount = 0;
+  let narrowedVisibilityCount = 0;
   const migratedLabelEdits = ['labelVisibilityOverrides', 'labelTextFeatureOverrides']
     .some((field) => isObject(features?.[field]) && Object.keys(features[field]).length > 0);
-  if (!hasRenderedIdFeatureEdits(features)) return { featureOverrides: rows, droppedCount, migratedLabelEdits };
+  if (!hasRenderedIdFeatureEdits(features)) {
+    return { featureOverrides: rows, droppedCount, narrowedVisibilityCount, migratedLabelEdits };
+  }
   const index = catalog ? catalogIndex(catalog) : legacyIndex(legacy || {});
   const rowFor = (key) => {
     if (!rows[key]) {
@@ -216,9 +242,11 @@ export const migrateRenderedIdFeatureEdits = ({ features, catalog = null, legacy
   const migrateMap = (field, assign) => {
     Object.entries(isObject(features[field]) ? features[field] : {}).forEach(([oldKey, value]) => {
       const keys = resolveOldKey(oldKey, index);
-      if ((keys.length === 0 || !keys.every((key) => assign(rowFor(key), value) !== false))
-        && field !== 'labelTextFeatureOverrideSources') {
-        droppedCount += 1;
+      if (keys.length === 0 || !keys.every((key) => assign(rowFor(key), value) !== false)) {
+        if (field !== 'labelTextFeatureOverrideSources') droppedCount += 1;
+      } else if (field === 'featureVisibilityOverrides'
+        && [...identitiesWithHash(index, parseRenderedId(oldKey).stableId)].some((key) => !keys.includes(key))) {
+        narrowedVisibilityCount += 1;
       }
     });
   };
@@ -253,7 +281,7 @@ export const migrateRenderedIdFeatureEdits = ({ features, catalog = null, legacy
       delete rows[key];
     }
   });
-  return { featureOverrides: rows, droppedCount, migratedLabelEdits };
+  return { featureOverrides: rows, droppedCount, narrowedVisibilityCount, migratedLabelEdits };
 };
 
 /**
@@ -269,5 +297,9 @@ export const migrateSessionFeatureEdits = ({ features, catalog = null, legacy = 
   RENDERED_ID_FEATURE_EDIT_FIELDS.forEach((field) => delete migrated[field]);
   migrated.featureOverrides = migration.featureOverrides;
   if (migration.migratedLabelEdits) migrated.labelOverrideRows = [];
-  return { features: migrated, droppedCount: migration.droppedCount };
+  return {
+    features: migrated,
+    droppedCount: migration.droppedCount,
+    narrowedVisibilityCount: migration.narrowedVisibilityCount
+  };
 };
