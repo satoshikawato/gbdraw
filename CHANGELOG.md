@@ -46,6 +46,16 @@ write-up of a release.
   from its declared command and stores its GBFF file as one GenBank resource
   whose six records are selected by record ID, instead of one resource per
   replicon. Load and Save Session keep it as one File; the figure is unchanged.
+- Sessions (CLI `--session_output`, `gbdraw.api.save_session_document`): when
+  every record of an input file is drawn unchanged, the request reads that
+  file's own bytes, the same resource the web app's File binding names, instead
+  of a rewritten copy. After **Load Session**, the feature popup's record
+  rotation shows its preview without **Generate Diagram** and no longer says
+  "The popup feature source changed after the popup opened." Each such file is
+  stored once. Cropped or reverse-complemented records keep their drawn copy.
+  The *Vibrio harveyi* group and *V. nigripulchritudo* TUMSAT-TG-2018 Gallery
+  Sessions now store their GBFF files byte for byte; their figures are
+  unchanged.
 
 Fixes from the 2026-09-30 Web GUI audit of `dev`. The plan and the approved
 decisions are in

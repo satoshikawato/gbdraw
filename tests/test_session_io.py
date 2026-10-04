@@ -26,6 +26,7 @@ from gbdraw.analysis.protein_colinearity import (
 from gbdraw.circular import circular_main
 from gbdraw.linear import (
     _get_args as get_linear_args,
+    linear_main,
 )
 from gbdraw.cli_utils.session import (
     DiagramRunResult,
@@ -3240,6 +3241,135 @@ def test_circular_cli_save_session_round_trip(tmp_path: Path, examples_dir: Path
         ]
     )
     assert regenerated_prefix.with_suffix(".svg").exists()
+
+
+def _circular_genbank(*records: tuple[str, str, str]) -> str:
+    """Small circular GenBank records: (record ID, gene, CDS location)."""
+
+    sequence = "".join(
+        f"{index * 60 + 1:>9} {'acgt' * 15}\n" for index in range(6)
+    )
+    return "".join(
+        f"LOCUS       {record_id:<24} 360 bp    DNA     circular UNA 01-JAN-2000\n"
+        "DEFINITION  CLI Session input.\n"
+        f"ACCESSION   {record_id}\nVERSION     {record_id}\nKEYWORDS    .\n"
+        "SOURCE      synthetic construct\n  ORGANISM  synthetic construct\n            .\n"
+        "FEATURES             Location/Qualifiers\n"
+        "     source          1..360\n"
+        f"     CDS             {location}\n"
+        f'                     /gene="{gene}"\n'
+        f'                     /locus_tag="{gene}"\n'
+        '                     /translation="MKKKKKKKKK"\n'
+        f"ORIGIN\n{sequence}//\n"
+        for record_id, gene, location in records
+    )
+
+
+def _cli_session_inputs(tmp_path: Path) -> tuple[Path, Path]:
+    single = tmp_path / "single.gbk"
+    single.write_text(_circular_genbank(("cli_single", "single_gene", "41..125")))
+    multi = tmp_path / "multi.gbk"
+    multi.write_text(_circular_genbank(
+        ("cli_multi_a", "multi_a_gene", "61..150"),
+        ("cli_multi_b", "multi_b_gene", "complement(101..200)"),
+    ))
+    return single, multi
+
+
+def _resource_bytes(session: dict, resource_id: str) -> bytes:
+    return base64.b64decode(session["resources"][resource_id]["data"])
+
+
+@pytest.mark.parametrize("mode", ["circular", "linear"])
+def test_cli_session_binds_each_unmodified_input_file_to_its_records(
+    tmp_path: Path, mode: str
+) -> None:
+    """Web Load sees the request draw its records from the bound input files.
+
+    The CLI binds each input file for the Web draft. When the request draws a
+    file's records unchanged, it reads the same resource, which holds the
+    file's own bytes, so record actions need no Generate after Load.
+    """
+
+    single, multi = _cli_session_inputs(tmp_path)
+    session_path = tmp_path / f"{mode}.gbdraw-session.json"
+    prefix = tmp_path / mode
+    main = circular_main if mode == "circular" else linear_main
+    inputs = [str(single)] if mode == "circular" else [str(single), str(multi)]
+    main(["--gbk", *inputs, "-o", str(prefix), "-f", "svg",
+          "--session_output", str(session_path)])
+
+    session = load_session(session_path)
+    bindings = session["webFiles"]["bindings"]
+    records = session["renderRequest"]["records"]
+    if mode == "circular":
+        assert [record["source"] for record in records] == [
+            {"kind": "genbank", "resourceId": bindings["c_gb"]["resourceId"]}
+        ]
+        assert [record["selector"] for record in records] == [None]
+        files = {bindings["c_gb"]["resourceId"]: single}
+    else:
+        first, second = (sequence["gb"]["resourceId"] for sequence in bindings["linearSeqs"])
+        assert [(record["source"]["resourceId"], record["selector"]) for record in records] == [
+            (first, None),
+            (second, {"kind": "recordId", "value": "cli_multi_a"}),
+            (second, {"kind": "recordId", "value": "cli_multi_b"}),
+        ]
+        files = {first: single, second: multi}
+    assert sorted(session["resources"]) == sorted(files)
+    for resource_id, path in files.items():
+        assert _resource_bytes(session, resource_id) == path.read_bytes()
+        assert session["resources"][resource_id]["name"] == path.name
+
+    replay = tmp_path / f"{mode}-replay"
+    main(["--session", str(session_path), "-o", str(replay), "-f", "svg"])
+    assert replay.with_suffix(".svg").read_bytes() == prefix.with_suffix(".svg").read_bytes()
+
+
+def test_cli_session_binds_unmodified_gff_and_fasta_inputs_to_their_record(
+    tmp_path: Path,
+) -> None:
+    inputs = Path(__file__).parent / "test_inputs"
+    session_path = tmp_path / "gff.gbdraw-session.json"
+    circular_main(["--gff", str(inputs / "NC_013668.gff3"), "--fasta",
+                   str(inputs / "NC_013668.fasta"), "-o", str(tmp_path / "gff"),
+                   "-f", "svg", "--session_output", str(session_path)])
+
+    session = load_session(session_path)
+    bindings = session["webFiles"]["bindings"]
+    assert [record["source"] for record in session["renderRequest"]["records"]] == [{
+        "kind": "gffFasta",
+        "gffResourceId": bindings["c_gff"]["resourceId"],
+        "fastaResourceId": bindings["c_fasta"]["resourceId"],
+    }]
+    assert sorted(session["resources"]) == sorted(
+        [bindings["c_gff"]["resourceId"], bindings["c_fasta"]["resourceId"]]
+    )
+    assert _resource_bytes(session, bindings["c_gff"]["resourceId"]) == (
+        inputs / "NC_013668.gff3"
+    ).read_bytes()
+
+
+def test_cli_session_keeps_a_cropped_or_reversed_record_apart_from_its_input(
+    tmp_path: Path,
+) -> None:
+    """A transformed record is not its input file, so the Web draft differs."""
+
+    single, multi = _cli_session_inputs(tmp_path)
+    session_path = tmp_path / "transformed.gbdraw-session.json"
+    linear_main(["--gbk", str(single), str(multi), "--region", "cli_single:21-300",
+                 "--reverse_complement", "0", "--reverse_complement", "1",
+                 "-o", str(tmp_path / "transformed"), "-f", "svg",
+                 "--session_output", str(session_path)])
+
+    session = load_session(session_path)
+    bound = {sequence["gb"]["resourceId"] for sequence in session["webFiles"]["bindings"]["linearSeqs"]}
+    drawn = {record["source"]["resourceId"] for record in session["renderRequest"]["records"]}
+    assert len(bound) == len(drawn) == 2
+    assert not bound & drawn
+    assert [_resource_bytes(session, resource_id) for resource_id in sorted(bound)] == [
+        single.read_bytes(), multi.read_bytes()
+    ]
 
 
 def test_depth_session_entry_materializes_encoded_payload(tmp_path: Path) -> None:

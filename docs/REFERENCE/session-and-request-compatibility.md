@@ -58,8 +58,13 @@ request alone does not contain those manual positions.
 
 Fresh CLI sessions omit `config` because they have no independent Web draft.
 Web initializes their settings from `renderRequest` and restores original input
-files from their bindings. A present `config` must contain valid `form` and `adv`
-objects; a partial draft is rejected. CLI replay preserves a supplied Web draft.
+files from their bindings. When the request draws every record of an input file
+unchanged, its record source names that file's resource, so feature-popup record
+rotation works right after Load. A record drawn cropped or reverse-complemented
+keeps its own drawn copy, as does every record of an older CLI session; rotating
+such a record needs **Generate Diagram** first. A present `config` must contain
+valid `form` and `adv` objects; a partial draft is rejected. CLI replay
+preserves a supplied Web draft.
 A CLI binding uid such as `cli-seq-1` is only an initial value: each Linear
 file takes the record identity of `renderRequest.records[].recordKey`. A
 multi-record file, whose records are `record-1:1`, `record-1:2`, and so on,

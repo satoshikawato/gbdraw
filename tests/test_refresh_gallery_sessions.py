@@ -5,6 +5,7 @@ from collections import Counter
 from collections.abc import Callable
 import csv
 import gzip
+import hashlib
 import json
 from pathlib import Path
 import shlex
@@ -907,6 +908,63 @@ def test_multi_record_gallery_sessions_are_built_from_their_declared_commands(
     assert inputs
     for value in inputs:
         assert (example.command_cwd / value).is_file(), value
+
+
+def _declared_input_files(example: gallery_assets_module.GallerySessionExample) -> list[Path]:
+    args = shlex.split(example.command)
+    files = []
+    for flag, value in zip(args, args[1:]):
+        if flag in {"--gbk", "--gff", "--fasta"}:
+            files.append(example.command_cwd / value)
+        elif flag == "--records_table":
+            table = example.command_cwd / value
+            with table.open(encoding="utf-8", newline="") as handle:
+                files.extend(
+                    table.parent / row[column]
+                    for row in csv.DictReader(handle, delimiter="\t")
+                    for column in ("gbk", "gff", "fasta")
+                    if row.get(column)
+                )
+    return files
+
+
+@pytest.mark.parametrize(
+    "example",
+    [
+        pytest.param(example, id=example.id)
+        for example in gallery_assets_module.EXAMPLES
+        if example.session_from_command
+    ],
+)
+def test_declared_command_gallery_sessions_store_their_input_files_unchanged(
+    example: gallery_assets_module.GallerySessionExample,
+    load_cached_gallery_session: Callable[[Path], dict[str, object]],
+) -> None:
+    """Each record source holds its declared input file byte for byte.
+
+    The CLI stores an input file whose records it draws unchanged as that
+    file, so Web Load binds the same bytes the Result was drawn from.
+    """
+
+    declared = {
+        hashlib.sha256(path.read_bytes()).hexdigest(): path.name
+        for path in _declared_input_files(example)
+    }
+    session = load_cached_gallery_session(example.session_path)
+    resource_ids = {
+        record["source"][field]
+        for record in session["renderRequest"]["records"]
+        for field in ("resourceId", "gffResourceId", "fastaResourceId")
+        if record["source"].get(field)
+    }
+    stored = {
+        resource_id: declared.get(
+            hashlib.sha256(base64.b64decode(session["resources"][resource_id]["data"])).hexdigest()
+        )
+        for resource_id in resource_ids
+    }
+    assert None not in stored.values(), stored
+    assert sorted(stored.values()) == sorted(set(declared.values()))
 
 
 def test_replayed_gallery_sessions_have_no_declared_command_example() -> None:

@@ -1,6 +1,8 @@
 const fs = require('node:fs');
+const { execFile } = require('node:child_process');
 const { join } = require('node:path');
 const { pathToFileURL } = require('node:url');
+const { promisify } = require('node:util');
 const { gunzipSync } = require('node:zlib');
 const { test, expect } = require('@playwright/test');
 const {
@@ -704,7 +706,7 @@ const loadSessionFile = async (page, sessionPath) => {
     .toBe(false);
 };
 
-const openLoadedRecordActions = async (page, { query, recordId }) => {
+const openLoadedRecordActions = async (page, { query, recordId, reads = 1 }) => {
   const recordReads = () => page.evaluate(() => window.__GBDRAW_RECORD_RESOURCE_READS__);
   const undoCount = await page.evaluate(() => window.__GBDRAW_HISTORY__.getUndoCount());
   expect(await recordReads()).toBe(0);
@@ -733,7 +735,7 @@ const openLoadedRecordActions = async (page, { query, recordId }) => {
   await expect(actions.getByRole('radio', { name: 'End of the record', exact: true })).toBeEnabled();
   await expect(actions).not.toContainText('stale or ambiguous');
   await expect(actions).not.toContainText('Unavailable');
-  expect(await recordReads()).toBe(1);
+  expect(await recordReads()).toBe(reads);
   expect(await page.evaluate(() => window.__GBDRAW_DIAGRAM_RUNS__.length)).toBe(0);
   expect(await page.evaluate(() => window.__GBDRAW_HISTORY__.getUndoCount())).toBe(undoCount);
   return { actions, expectedStart };
@@ -787,6 +789,67 @@ test('Linear Record actions rotate a circular record of a loaded Session without
   const request = await page.evaluate(() => window.__GBDRAW_DIAGRAM_RUNS__.at(-1));
   expect(request.mode).toBe('linear');
   expect(request.records.map((record) => record.display.startCoordinate)).toEqual([expectedStart]);
+});
+
+// `gbdraw ... --session_output` binds its input files for the Web draft, and
+// its request draws unchanged records from those same files.
+const writeCliSession = async (testInfo, mode, inputs) => {
+  const paths = Object.entries(inputs).map(([name, text]) => {
+    const path = testInfo.outputPath(name);
+    fs.writeFileSync(path, text);
+    return path;
+  });
+  const prefix = testInfo.outputPath(`cli-${mode}`);
+  const session = `${prefix}.gbdraw-session.json`;
+  await promisify(execFile)('python', [
+    '-m', 'gbdraw.cli', mode, '--gbk', ...paths, '-o', prefix, '-f', 'svg',
+    '--session_output', session
+  ], { cwd: testInfo.outputDir, env: { ...process.env, PYTHONPATH: process.cwd() }, timeout: 300000 });
+  return session;
+};
+
+test('Circular Record actions read a loaded CLI Session without Generate', async ({
+  page
+}, testInfo) => {
+  test.setTimeout(240000);
+  const session = await writeCliSession(testInfo, 'circular', {
+    'cli-circular.gbk': makeCircularRecord('cli_circular', 'cli_gene', 41, 125)
+  });
+  await installRecordReadCounter(page);
+  await installDiagramRequestObserver(page);
+  await openApp(page);
+  await loadSessionFile(page, session);
+  await openLoadedRecordActions(page, { query: 'cli_gene', recordId: 'cli_circular' });
+});
+
+test('Linear Record actions rotate a multi-record File of a loaded CLI Session without Generate', async ({
+  page
+}, testInfo) => {
+  test.setTimeout(300000);
+  page.on('dialog', (dialog) => {
+    if (dialog.message() !== 'Session loaded successfully!') dialog.dismiss();
+  });
+  const session = await writeCliSession(testInfo, 'linear', {
+    'cli-single.gbk': makeCircularRecord('cli_single', 'single_gene', 41, 125),
+    'cli-multi.gbk': makeCircularRecord('cli_multi_a', 'multi_a_gene', 61, 150)
+      + makeCircularRecord('cli_multi_b', 'multi_b_gene', 101, 200)
+  });
+  await installRecordReadCounter(page);
+  await installDiagramRequestObserver(page);
+  await openApp(page);
+  await loadSessionFile(page, session);
+
+  const { actions, expectedStart } = await openLoadedRecordActions(page, {
+    query: 'multi_b_gene', recordId: 'cli_multi_b', reads: 2
+  });
+  await actions.getByRole('button', { name: 'Apply and regenerate' }).click();
+  await expect(actions.locator('[aria-live="polite"]')).toContainText(
+    'Record rotation applied and regenerated.', { timeout: 240000 }
+  );
+  const request = await page.evaluate(() => window.__GBDRAW_DIAGRAM_RUNS__.at(-1));
+  expect(request.mode).toBe('linear');
+  expect(request.records.map((record) => record.display.startCoordinate))
+    .toEqual([null, null, expectedStart]);
 });
 
 test('browser export embeds the exact selected schema-4 item and expands references', async ({
