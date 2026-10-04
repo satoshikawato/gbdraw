@@ -13,6 +13,7 @@ import { createFeaturePlacementActions } from '../../gbdraw/web/js/app/feature-e
 import { createDefaultForm, createDefaultAdv } from '../../gbdraw/web/js/services/session-active-config-contract.js';
 import { adoptCurrentSessionResources, createCombinedSessionResourceFileView, createSessionResourceFileView } from '../../gbdraw/web/js/services/session-resource-backing.js';
 import { readFileBytes } from '../../gbdraw/web/js/services/file-content-cache.js';
+import { createHistoryManager } from '../../gbdraw/web/js/services/history.js';
 
 const source = {};
 const records = [
@@ -144,7 +145,7 @@ test('shortcuts reject stale, unbound, cross-record, empty, and unknown/mixed-st
 
 const descriptor = (name, text) => ({ kind: 'genbank', name, type: 'text/plain',
   lastModified: 0, size: Buffer.byteLength(text), encoding: 'base64', data: btoa(text) });
-const compositeControls = ({ linear = false, discovered = true } = {}) => {
+const compositeControls = ({ linear = false, discovered = true, createHistory = null } = {}) => {
   const resources = Object.fromEntries(['first', 'second'].map((id) => [id,
     descriptor(`${id}.gb`, `LOCUS       ${id} 100 bp DNA circular\n//\n`)]));
   const table = adoptCurrentSessionResources(resources);
@@ -170,7 +171,7 @@ const compositeControls = ({ linear = false, discovered = true } = {}) => {
     uid:`record-${index+1}`,gb:createSessionResourceFileView(table,resourceId),region_record_id:'',region_reverse:false
   }));
   const getCommittedRequest = () => committed.renderRequest;
-  const history = { runUndoable: (_label, fn) => fn() };
+  const history = createHistory ? createHistory(state) : { runUndoable: (_label, fn) => fn() };
   const linearDiscovery = { status: discovered ? 'ready' : 'loading', error: '' };
   const controls = createRecordDisplayControls({ state, computed: (fn) => ({ get value() { return fn(); } }),
     watch: () => {}, linearRecordSelector: { recordsFor: seq => discovered ? [{selector:'#1',recordId:components[Number(seq.uid.slice(-1))-1].resourceId,recordLength:100,detectedTopology:'circular'}] : [],
@@ -179,7 +180,7 @@ const compositeControls = ({ linear = false, discovered = true } = {}) => {
   const actions = createFeaturePlacementActions({ state, history, getCommittedRequest,
     isCurrentFeature: controls.isCurrentFeature });
   const feature = { record_key: 'record-2', biological_feature_id: 'logical-feature' };
-  return { state, actions, controls, feature, file, makeFile, linearDiscovery,
+  return { state, actions, controls, feature, file, makeFile, linearDiscovery, history,
     enabled: () => actions.choices([feature]).filter((choice) => choice.enabled).map((choice) => choice.value),
     commitCombined: async () => {
       const bytes = await readFileBytes(file);
@@ -285,6 +286,62 @@ test('a Linear rotation writes the File card orientation and leaves no row overr
   assert.deepEqual(model.state.recordDisplayDrafts, []);
   model.controls.setReverseComplement(row, true);
   assert.deepEqual([sequence.region_reverse, model.state.recordDisplayDrafts[0].reverseComplementOverride], [true, null]);
+});
+
+// The real History manager over the intent the app captures for these owners:
+// the record display drafts and the Linear File card orientation.
+const draftHistory = (state) => {
+  const capture = () => ({
+    recordDisplayDrafts: structuredClone(state.recordDisplayDrafts),
+    linearReverse: state.linearSeqs.map((seq) => Boolean(seq.region_reverse))
+  });
+  const restore = (intent) => {
+    state.recordDisplayDrafts.splice(0, state.recordDisplayDrafts.length,
+      ...structuredClone(intent.recordDisplayDrafts));
+    intent.linearReverse.forEach((value, index) => { state.linearSeqs[index].region_reverse = value; });
+  };
+  return createHistoryManager({
+    buildIntent: capture, applyIntent: restore, buildCheckpoint: capture, applyCheckpoint: restore
+  });
+};
+
+test('Apply on Generate is one undoable draft step, and re-staging replaces the draft (PD-OI-085)', async () => {
+  for (const linear of [false, true]) {
+    const model = compositeControls({ linear, createHistory: draftHistory });
+    const pending = () => model.controls.targetForFeature(model.feature).target.pendingTransform;
+    const reverse = () => (linear ? model.state.linearSeqs[1].region_reverse : null);
+    const { row } = model.controls.targetForFeature(model.feature);
+    assert.equal(pending(), null);
+
+    await model.controls.setResolvedTransform(row, {
+      startCoordinate: 25, reverseComplement: true, anchorIntent
+    });
+    assert.equal(model.history.getUndoCount(), 1, 'one History step');
+    assert.equal(model.history.undoLabel(), 'Rotate record to feature on Generate');
+    assert.deepEqual(pending(), { startCoordinate: 25, reverseComplement: true });
+    assert.equal(reverse(), linear ? true : null, 'a single-record Linear card owns the orientation');
+
+    const forwardIntent = { ...anchorIntent, orientForward: false };
+    await model.controls.setResolvedTransform(row, {
+      startCoordinate: 40, reverseComplement: false, anchorIntent: forwardIntent
+    });
+    assert.equal(model.state.recordDisplayDrafts.length, 1, 'the later value replaces the draft');
+    assert.deepEqual(model.state.recordDisplayDrafts[0].anchorIntent, forwardIntent);
+    assert.deepEqual(pending(), { startCoordinate: 40, reverseComplement: false });
+    assert.equal(model.history.getUndoCount(), 2);
+
+    await model.history.undo();
+    assert.deepEqual(pending(), { startCoordinate: 25, reverseComplement: true });
+    assert.deepEqual(model.state.recordDisplayDrafts[0].anchorIntent, anchorIntent);
+    assert.equal(reverse(), linear ? true : null);
+    await model.history.undo();
+    assert.deepEqual(model.state.recordDisplayDrafts, []);
+    assert.equal(pending(), null);
+    assert.equal(reverse(), linear ? false : null);
+    await model.history.redo();
+    assert.deepEqual(pending(), { startCoordinate: 25, reverseComplement: true });
+    assert.equal(reverse(), linear ? true : null);
+  }
 });
 
 test('same-name, same-content source replacement does not retain old feature capability', () => {

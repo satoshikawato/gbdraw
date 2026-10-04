@@ -28,6 +28,12 @@ const createHarness = ({
   let currentFeature = feature;
   let releaseApply = null;
   let blockApply = false;
+  let applyOutcome = { status: 'ok' };
+  // The record display draft that Generate would apply, as targetForFeature
+  // reports it when it differs from the committed request.
+  let pendingTransform = null;
+  let stageOutcome = { status: 'ok' };
+  const stagedIntents = [];
   const seenFeatures = [];
   const intents = [];
   const action = {
@@ -46,7 +52,9 @@ const createHarness = ({
         target: {
           recordId: 'NC_000001.1',
           recordKey: 'record-1',
-          committedReverseComplement
+          recordLength: 9000,
+          committedReverseComplement,
+          pendingTransform
         },
         resolved: resolveFeatureAnchor({
           recordLength: 9000,
@@ -73,8 +81,14 @@ const createHarness = ({
       if (blockApply) {
         await new Promise((resolve) => { releaseApply = resolve; });
       }
-      currentFeature = { ...currentFeature, regenerated: true };
-      return { status: 'ok' };
+      if (applyOutcome.status === 'ok') currentFeature = { ...currentFeature, regenerated: true };
+      return applyOutcome;
+    },
+    async stage({ feature: explicitFeature, intent }) {
+      seenFeatures.push(explicitFeature);
+      stagedIntents.push(intent);
+      if (!currentFeature) throw new Error('The popup feature source changed.');
+      return stageOutcome;
     }
   };
   const rebound = [];
@@ -89,6 +103,10 @@ const createHarness = ({
     seenFeatures,
     lastIntent: () => intents.at(-1),
     applyCount: () => applyCount,
+    stagedIntents,
+    setApplyOutcome: (value) => { applyOutcome = value; },
+    setStageOutcome: (value) => { stageOutcome = value; },
+    setPendingTransform: (value) => { pendingTransform = value; },
     setCurrentFeature: (value) => { currentFeature = value; },
     blockApply: () => { blockApply = true; },
     releaseApply: () => releaseApply?.()
@@ -256,10 +274,138 @@ test('Apply rechecks freshness, suppresses double submit, and rebinds stable ide
   const stale = await harness.workflow.apply();
   assert.equal(stale.status, 'disabled');
   assert.match(harness.workflow.draft.disabledReason, /source changed/);
-  assert.match(harness.workflow.draft.status, /source changed/);
-  assert.equal(harness.workflow.draft.statusKind, 'error');
+  // One reason source: the reason line states it; the status line does not repeat it.
+  assert.equal(harness.workflow.draft.status, '');
   assert.equal(harness.applyCount(), 1);
 });
+
+test('a failed Apply and regenerate states its reason once', async () => {
+  const harness = createHarness();
+  harness.workflow.open({ feature });
+  harness.action.apply = async () => {
+    harness.setCurrentFeature(null);
+    throw new Error('The popup feature source changed.');
+  };
+  const outcome = await harness.workflow.apply();
+  const { draft } = harness.workflow;
+  assert.equal(outcome.status, 'error');
+  assert.equal(draft.disabledReason, 'The popup feature source changed.');
+  assert.equal(draft.status, 'Record rotation failed. The previous Result was kept.');
+  assert.equal(draft.statusKind, 'error');
+
+  const transient = createHarness();
+  transient.workflow.open({ feature });
+  transient.action.apply = async () => { throw new Error('Worker stopped.'); };
+  await transient.workflow.apply();
+  assert.equal(transient.workflow.draft.disabledReason, '');
+  assert.equal(transient.workflow.draft.status, 'Worker stopped. The previous Result was kept.');
+});
+
+test('Apply on Generate stages the resolved transform with the same validation and no candidate', async () => {
+  const harness = createHarness();
+  harness.workflow.open({ feature });
+  const { draft } = harness.workflow;
+  harness.workflow.setPosition('end');
+
+  const outcome = await harness.workflow.stage();
+  assert.equal(outcome.status, 'ok');
+  assert.equal(harness.applyCount(), 0, 'staging runs no candidate');
+  assert.deepEqual(harness.stagedIntents, [{
+    placement: 'feature-end', anchor: null, offsetBp: 0, orientForward: false
+  }]);
+  assert.equal(harness.seenFeatures.at(-1), feature);
+  assert.equal(draft.status, 'Record rotation will apply on the next Generate Diagram.');
+  assert.equal(draft.statusKind, 'success');
+  assert.equal(draft.pending, false);
+  assert.equal(draft.canApply, true);
+
+  // Both apply buttons share canApply: an invalid offset stages nothing.
+  harness.workflow.setPosition('custom');
+  harness.workflow.setOffset('1.5');
+  assert.equal(draft.canApply, false);
+  assert.deepEqual(await harness.workflow.stage(), { status: 'disabled' });
+  assert.equal(harness.stagedIntents.length, 1);
+  assert.equal(draft.status, '', 'the offset error is shown once, next to the field');
+
+  // A target that went stale before the click: one reason, no stage.
+  harness.workflow.setOffset('0');
+  harness.setCurrentFeature(null);
+  assert.deepEqual(await harness.workflow.stage(), { status: 'disabled' });
+  assert.match(draft.disabledReason, /source changed/);
+  assert.equal(draft.status, '');
+  assert.equal(harness.stagedIntents.length, 1);
+});
+
+test('Apply on Generate reports a busy Session and is disabled while regenerating', async () => {
+  const harness = createHarness();
+  harness.workflow.open({ feature });
+  harness.setStageOutcome({ status: 'busy', reason: 'Saving session. Retry after saving finishes.' });
+  assert.equal((await harness.workflow.stage()).status, 'busy');
+  assert.equal(harness.workflow.draft.status, 'Saving session. Retry after saving finishes.');
+  assert.equal(harness.workflow.draft.statusKind, 'error');
+
+  harness.setStageOutcome({ status: 'ok' });
+  harness.blockApply();
+  const regenerating = harness.workflow.apply();
+  assert.equal(harness.workflow.draft.canApply, false);
+  assert.deepEqual(await harness.workflow.stage(), { status: 'pending' });
+  assert.equal(harness.stagedIntents.length, 1);
+  harness.releaseApply();
+  await regenerating;
+});
+
+test('a pending draft for the record is shown when the popup opens', () => {
+  const harness = createHarness();
+  harness.setPendingTransform({ startCoordinate: 4500, reverseComplement: true });
+  harness.workflow.open({ feature });
+  const { draft } = harness.workflow;
+  assert.equal(
+    draft.pendingPreview,
+    'Pending for Generate: NC_000001.1 will start at 4,500 · reverse-complemented'
+  );
+  assert.equal(draft.preview, 'NC_000001.1 will start at 2,000 · orientation unchanged');
+
+  // A pending draft equal to the chosen outcome is stated once.
+  harness.setPendingTransform({ startCoordinate: 2000, reverseComplement: false });
+  harness.workflow.recompute();
+  assert.equal(
+    draft.pendingPreview,
+    'Pending for Generate: NC_000001.1 will start at 2,000 · orientation unchanged'
+  );
+  assert.equal(draft.preview, '');
+  assert.equal(draft.canApply, true);
+
+  // An orientation-only draft starts at the record's default start.
+  harness.setPendingTransform({ startCoordinate: null, reverseComplement: true });
+  harness.workflow.recompute();
+  assert.equal(
+    draft.pendingPreview,
+    'Pending for Generate: NC_000001.1 will start at 9,000 · reverse-complemented'
+  );
+
+  harness.setPendingTransform(null);
+  harness.workflow.recompute();
+  assert.equal(draft.pendingPreview, '');
+  assert.equal(draft.preview, 'NC_000001.1 will start at 2,000 · orientation unchanged');
+});
+
+for (const change of ['close', 'retarget']) {
+  test(`an Apply and regenerate that settles after a popup ${change} writes nothing into the current draft (F7)`, async () => {
+    const harness = createHarness();
+    harness.workflow.open({ feature });
+    harness.blockApply();
+    const regenerating = harness.workflow.apply();
+    harness.workflow.close();
+    if (change === 'retarget') {
+      harness.workflow.open({ feature: { ...feature, biological_feature_id: 'feature-2' } });
+    }
+    const current = JSON.parse(JSON.stringify(harness.workflow.draft));
+    harness.releaseApply();
+    assert.equal((await regenerating).status, 'ok');
+    assert.deepEqual(JSON.parse(JSON.stringify(harness.workflow.draft)), current);
+    assert.deepEqual(harness.rebound, []);
+  });
+}
 
 test('Cancel discards only the ephemeral popup draft', () => {
   const harness = createHarness();
