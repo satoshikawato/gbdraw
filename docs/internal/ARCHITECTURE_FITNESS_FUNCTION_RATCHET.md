@@ -330,7 +330,7 @@ and totals. The declaration includes:
 - an expiry or concrete removal condition;
 - persisted-compatibility, performance, scientific-output, and deterministic
   checker evidence when applicable; and
-- an explicit maintainer decision on the exact proposed head.
+- the maintainer's approval (see [Manual architecture review](#manual-architecture-review)).
 
 Use `none` for an empty exception set. Do not replace complete sets with
 unsupported repository-wide totals. `<= 0`, `non-positive`, or `yes` alone is
@@ -374,8 +374,8 @@ These inequalities define ordinary acceptance, not a mandatory table format.
 Reviewers may ask for more detail when concise evidence does not establish the
 bounds or completeness.
 
-An exception may proceed only with the complete packet and explicit maintainer
-decision described above. Positive debt, a new persisted compatibility path,
+An exception may proceed only with the complete packet and the maintainer's
+approval described in [Manual architecture review](#manual-architecture-review). Positive debt, a new persisted compatibility path,
 retained multiple owners or paths, or an accepted deterministic violation is
 never authorized by a label, a passing size review, incomplete arithmetic, or
 silence. A hard invariant remains Gate-failing until a separately authorized
@@ -819,61 +819,29 @@ bootstrap exception.
 ## Manual architecture review
 
 Ordinary architecture-bearing changes use the concise evidence and normal PR
-review described above. They do not require a separate reviewer-comment
-template or a dedicated approval permalink.
+review described above. They do not require a separate approval.
 
-For an `ARCHITECTURE_EXCEPTION`, the author or automated agent prepares a
-maintainer review packet before requesting a decision. It contains the exact
-head SHA, complete before and after evidence, arithmetic, alternative,
-expiry/removal condition, completed CI results, known limitations, and a fully
-populated, ready-to-post version of the structured comment below. The maintainer
-reviews the packet and then posts, edits, or rejects the comment manually as
-their own decision. Preparing the packet is not approval, and an automated agent
-must not post the decision.
+For an `ARCHITECTURE_EXCEPTION`, the author or automated agent writes the
+exception evidence in the pull request body: the changed-scope rows and totals,
+the superseded sets, the best non-exception alternative, the expiry or removal
+condition, the completed CI results, and known limitations. The maintainer
+reviews it and approves the exception in an ordinary way: a pull request review
+approval, or a comment that says the exception is approved. No structured
+comment is required. Writing the evidence is not approval, and an automated
+agent must not post the approval. If the sole architecture maintainer is also
+the author, that maintainer may approve after reviewing the evidence.
 
-The architecture owner reviews the final exception head and posts this
-structured comment manually:
-
-```markdown
-Architecture decision: APPROVED
-Reviewed head SHA: <full commit SHA>
-Reviewed changed-scope rows:
-- OE row <ID>: owners before <set> -> owners after <set>; O before <integer> -> O after <integer>; T before <integer> -> T after <integer>; OE before <integer> -> OE after <integer>; delta(OE) = <integer>
-- PE row <ID>: paths before <set> -> paths after <set>; P before <integer> -> P after <integer>; PE before <integer> -> PE after <integer>; delta(PE) = <integer>
-- CB row <ID>: stable IDs before <set> -> stable IDs after <set>; CB before <integer> -> CB after <integer>; delta(CB) = <integer>
-Changed-scope totals:
-- OE before <integer> -> OE after <integer>; delta(OE) = <integer>
-- PE before <integer> -> PE after <integer>; delta(PE) = <integer>
-- CB before <integer> -> CB after <integer>; delta(CB) = <integer>
-Superseded semantic owners:
-- <none, or exact set>
-Superseded canonical production paths:
-- <none, or exact set>
-Superseded compatibility paths, with stable IDs:
-- <none, or exact stable-ID set>
-Scope completeness decision:
-- <why the declared changed-scope rows and sets are complete>
-Persisted-compatibility exception:
-- <none, or exact exception and evidence>
-Limitations:
-- <none, or explicit non-authorizing limitation>
-Expiry or removal condition:
-- <date, release, issue, or measurable condition>
-```
-
-The exception section of the PR template stores a permalink to the decision.
-`Reviewed head SHA` must equal the pull request's current head SHA. Any later
-commit invalidates the exception decision and requires a new comment.
-
-An automated agent may prepare evidence but must not post the approval. The
-author declaration cannot substitute for the exception decision. If the sole
-architecture maintainer is also the author, that maintainer may post the
-separate decision after reviewing the final head.
+An approval stays valid for later commits that leave the declared exception
+unchanged: merging or rebasing onto the base branch, resolving conflicts, and
+fixing tests, documentation, or review findings without changing the
+changed-scope rows, totals, superseded sets, persisted-compatibility exception,
+or expiry. A commit that changes any of these updates the evidence in the pull
+request body and needs a new approval.
 
 This is an exception review requirement, not an ordinary CI status. Repository
-tests may protect template anchors, but do not inspect GitHub comments, comment
-authors, or live head SHAs. Workflow presence and branch protection do not prove
-that an exception decision exists or matches the merge candidate.
+tests may protect template anchors, but do not inspect GitHub comments, reviews,
+or their authors. Workflow presence and branch protection do not prove that an
+exception approval exists.
 
 ## External precedents
 
