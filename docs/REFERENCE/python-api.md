@@ -187,8 +187,10 @@ function. Set tolerance through the existing options' `config_overrides`, using
 
 The table columns are `record`, `feature_selector`, `placement`, and `level`.
 `main` and `auto` have no level; a supported directional target uses level 1.
-Auto removes the exact override. Unknown identities, ambiguous selectors,
-duplicate resolved identities and unsupported target directions fail explicitly.
+Auto removes the exact override. Ambiguous selectors, duplicate resolved
+identities and unsupported target directions fail explicitly. An exact
+placement whose feature the source does not have, or that a crop removes, does
+not fail: `Diagram.feature_identity_notices` lists it.
 
 ## Record display start
 

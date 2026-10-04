@@ -948,6 +948,23 @@ def test_released_web_state_field_names_migrate_copy_on_write() -> None:
     validate_current_web_state_field_names(migrated)
 
 
+@pytest.mark.parametrize("schema", [8, CANONICAL_REQUEST_SCHEMA])
+def test_alignment_session_requires_reset_receipt_for_request_schema_8_and_later(schema: int) -> None:
+    # Same rule as services/session-authority.js: renderRequest.schema >= 8.
+    session = {
+        "renderRequest": {
+            "schema": schema,
+            "mode": "linear",
+            "layout": {"similarityAlignment": {"records": [], "reference": {"recordKey": "a"}}},
+        },
+        "editorState": {"featureCatalog": None},
+    }
+    with pytest.raises(ValidationError, match="requires editorState.alignmentResetReceipt"):
+        session_io_module._validate_alignment_reset_receipt(session)
+    session["editorState"]["alignmentResetReceipt"] = None
+    session_io_module._validate_alignment_reset_receipt(session)
+
+
 def test_session_version_44_validates_record_rotation_draft_and_version_42_shape() -> None:
     payload = build_session_json(
         SessionBuildContext(
@@ -3458,7 +3475,7 @@ def _replay_cli_sidecar(source, tmp_path, suffix='.json'):
     ])
     assert source_path.read_bytes() == original
     result = load_session_document(sidecar).to_dict()
-    assert (result['version'], result['webFiles']['bindings']['schema'], result['renderRequest']['schema']) == (44, 2, 8)
+    assert (result['version'], result['webFiles']['bindings']['schema'], result['renderRequest']['schema']) == (44, 2, CANONICAL_REQUEST_SCHEMA)
     assert result['renderRequest']['output']['prefix'] == 'replayed'
     assert len(result['renderRequest']['records']) == 1  # Replay consumes committed input.
     assert result['results'][0]['content'] == prefix.with_suffix('.svg').read_text()

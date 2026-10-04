@@ -487,7 +487,8 @@ def prepare_label_list_linear(
         if overrides_only and not profile.forced_labels:
             continue
         feature_label_text = get_label_text(
-            feature_object, label_filtering, overrides_only=overrides_only
+            feature_object, label_filtering, overrides_only=overrides_only,
+            feature_override=getattr(feature_object, "feature_override", None),
         )
         if not feature_label_text:
             continue

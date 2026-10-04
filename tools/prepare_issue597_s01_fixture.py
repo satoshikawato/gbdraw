@@ -177,7 +177,7 @@ def main():
     assert len(cache) == len(pairs) == 144
     assert len(expanded) <= 512 * 1024 * 1024
     assert fixture.stat().st_size <= 200 * 1024 * 1024
-    assert document["version"] == 44 and document["renderRequest"]["schema"] == 8
+    assert document["version"] == 44 and document["renderRequest"]["schema"] == 9
     manifest.update(
         {
             "fixtureSha256": sha(fixture),

@@ -5,7 +5,7 @@ const { createHash } = require('node:crypto');
 const { gunzipSync } = require('node:zlib');
 const { execFile } = require('node:child_process');
 const { promisify } = require('node:util');
-const { evaluateWithRetainedPromise, openApp, generateAndWaitForResult } = require('./helpers/app-lifecycle.cjs');
+const { CURRENT_REQUEST_SCHEMA, evaluateWithRetainedPromise, openApp, generateAndWaitForResult } = require('./helpers/app-lifecycle.cjs');
 
 const root = process.cwd();
 const mito = path.join(root, 'tests/fixtures/sessions/cli-web-mito.gb');
@@ -110,7 +110,7 @@ for (const entry of cases) {
       if (phase === 'web-cli-replay') file = await cli(entry.mode, ['--session', webFile], testInfo, phase);
       const session = await readSession(file);
       expect(session.version).toBe(44);
-      expect(session.renderRequest.schema).toBe(8);
+      expect(session.renderRequest.schema).toBe(CURRENT_REQUEST_SCHEMA);
       expect(session.webFiles.bindings.schema).toBe(2);
       if (entry.name === 'composite') {
         expect(session.webFiles.bindings.c_gb.kind).toBe('composite');

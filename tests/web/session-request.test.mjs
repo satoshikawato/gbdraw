@@ -13,6 +13,7 @@ await cp(sourceRoot, join(tempRoot, 'js'), { recursive: true });
 await writeFile(join(tempRoot, 'package.json'), '{"type":"module"}', 'utf8');
 
 const {
+  CANONICAL_REQUEST_SCHEMA,
   buildCanonicalRenderRequest: buildCanonicalRenderRequestRaw,
   bindCanonicalTypedResource,
   managedConfigOverridePathsForMode,
@@ -483,7 +484,32 @@ const filesData = { c_gb: genbank, linearSeqs: [] };
 state.form.multi_record_canvas = true;
 const canonical = buildCanonicalRenderRequest({ state, filesData });
 state.form.multi_record_canvas = false;
-assert.equal(canonical.renderRequest.schema, 8);
+assert.equal(canonical.renderRequest.schema, CANONICAL_REQUEST_SCHEMA);
+assert.equal(CANONICAL_REQUEST_SCHEMA, 9);
+// Schema 9 carries per-feature edits by source identity; the Web writes none yet (design Q4).
+assert.deepEqual(canonical.renderRequest.diagramOptions.featureOverrides, []);
+const schema8Canonical = structuredClone(canonical.renderRequest);
+schema8Canonical.schema = 8;
+delete schema8Canonical.diagramOptions.featureOverrides;
+assert.deepEqual(promoteCanonicalRenderRequestToCurrent(schema8Canonical), canonical.renderRequest);
+const withIdentityRows = structuredClone(canonical);
+withIdentityRows.renderRequest.diagramOptions.featureOverrides = [{
+  recordKey: canonical.renderRequest.records[0].recordKey,
+  biologicalFeatureId: 'f1234abcd',
+  featureVisibility: 'off',
+  labelVisibility: null,
+  labelText: null
+}];
+assert.throws(
+  () => projectCanonicalSessionRequest(withIdentityRows),
+  { code: 'INPUT_INVALID', context: { field: 'featureOverrides', reason: 'FEATURE_IDENTITY_EDITS' } }
+);
+const schema8WithRows = structuredClone(canonical);
+schema8WithRows.renderRequest.schema = 8;
+assert.throws(
+  () => projectCanonicalSessionRequest(schema8WithRows),
+  { code: 'INPUT_INVALID', context: { field: 'featureOverrides', reason: 'SESSION_FORMAT' } }
+);
 assert.equal(canonical.renderRequest.mode, 'circular');
 assert.equal(canonical.renderRequest.grouping, 'grid');
 assert.equal(canonical.renderRequest.records[0].source.resourceId, 'record-1-genbank');
@@ -1147,6 +1173,7 @@ state.adv.circular_track_slots = [];
 
 const legacyRepeatCanonical = structuredClone(canonical);
 legacyRepeatCanonical.renderRequest.schema = 2;
+delete legacyRepeatCanonical.renderRequest.diagramOptions.featureOverrides;
 if (2 < 7) {
   delete legacyRepeatCanonical.renderRequest.diagramOptions.featurePlacements;
   legacyRepeatCanonical.renderRequest.records.forEach((record) => delete record.display);
@@ -1659,6 +1686,7 @@ assert.equal(projection.config.adv.identity, 70);
 assert.equal(projection.config.adv.alignment_length, 0);
 const legacyCircularLabelScope = structuredClone(canonical);
 legacyCircularLabelScope.renderRequest.schema = 2;
+delete legacyCircularLabelScope.renderRequest.diagramOptions.featureOverrides;
 if (2 < 7) {
   delete legacyCircularLabelScope.renderRequest.diagramOptions.featurePlacements;
   legacyCircularLabelScope.renderRequest.records.forEach((record) => delete record.display);
@@ -1683,6 +1711,7 @@ assert.equal(
 );
 const legacyOutputCanonical = structuredClone(canonical);
 legacyOutputCanonical.renderRequest.schema = 2;
+delete legacyOutputCanonical.renderRequest.diagramOptions.featureOverrides;
 if (2 < 7) {
   delete legacyOutputCanonical.renderRequest.diagramOptions.featurePlacements;
   legacyOutputCanonical.renderRequest.records.forEach((record) => delete record.display);
@@ -1719,6 +1748,7 @@ assert.throws(
 for (const schema of [1, 2]) {
   const sparseCircularCanonical = structuredClone(canonical);
   sparseCircularCanonical.renderRequest.schema = schema;
+  delete sparseCircularCanonical.renderRequest.diagramOptions.featureOverrides;
   if (schema < 7) {
     delete sparseCircularCanonical.renderRequest.diagramOptions.featurePlacements;
     sparseCircularCanonical.renderRequest.records.forEach((record) => delete record.display);
@@ -1804,6 +1834,7 @@ assert.deepEqual(customTrackProjection.config.adv.circular_track_slots[1], {
 
 const legacyCircularSlotsCanonical = structuredClone(canonical);
 legacyCircularSlotsCanonical.renderRequest.schema = 2;
+delete legacyCircularSlotsCanonical.renderRequest.diagramOptions.featureOverrides;
 if (2 < 7) {
   delete legacyCircularSlotsCanonical.renderRequest.diagramOptions.featurePlacements;
   legacyCircularSlotsCanonical.renderRequest.records.forEach((record) => delete record.display);
@@ -2006,7 +2037,7 @@ const unchangedOneSource = buildCanonicalRenderRequest({
   filesData: oneSourceFilesData,
   comparisonPlanSnapshot: oneSourceSnapshot
 });
-assert.equal(unchangedOneSource.renderRequest.schema, 8);
+assert.equal(unchangedOneSource.renderRequest.schema, CANONICAL_REQUEST_SCHEMA);
 assert.equal(unchangedOneSource.renderRequest.records.length, 1);
 assert.equal(unchangedOneSource.renderRequest.records[0].cardinality, 'all');
 
@@ -2186,9 +2217,10 @@ for (const [label, targetPatch, transformPatch, requestPatch] of [
   // next Generate; the reflow promotes it instead of rejecting it.
   const older = structuredClone(committed);
   older.renderRequest.schema = 7;
+  delete older.renderRequest.diagramOptions.featureOverrides;
   const promoted = projectCommittedEditorIntent({ committed: older, state: draft });
   assert.equal(older.renderRequest.schema, 7, 'the committed Session is not modified');
-  assert.equal(promoted.renderRequest.schema, 8);
+  assert.equal(promoted.renderRequest.schema, CANONICAL_REQUEST_SCHEMA);
   assert.deepEqual(promoted.renderRequest.records, reflow.renderRequest.records);
   assert.deepEqual(promoted.renderRequest.diagramOptions, reflow.renderRequest.diagramOptions);
 }
@@ -2274,6 +2306,7 @@ delete state.adv.ruler_label_font_size;
 delete state.adv.linear_definition_line_styles;
 const legacyLinearOptions = structuredClone(linearCanonical);
 legacyLinearOptions.renderRequest.schema = 2;
+delete legacyLinearOptions.renderRequest.diagramOptions.featureOverrides;
 if (2 < 7) {
   delete legacyLinearOptions.renderRequest.diagramOptions.featurePlacements;
   legacyLinearOptions.renderRequest.records.forEach((record) => delete record.display);
@@ -2498,13 +2531,14 @@ assert.deepEqual(
 );
 const schema5Arranged = structuredClone(arrangedCanonical.renderRequest);
 schema5Arranged.schema = 5;
+delete schema5Arranged.diagramOptions.featureOverrides;
 schema5Arranged.layout.multiRecordPositions = ['#1@1', '#2@1', '#3@2'];
 schema5Arranged.records.forEach((record) => {
   delete record.cardinality;
   record.presentation.gridRow = null;
 });
 const promotedArranged = promoteCanonicalRenderRequestToCurrent(schema5Arranged);
-assert.equal(promotedArranged.schema, 8);
+assert.equal(promotedArranged.schema, CANONICAL_REQUEST_SCHEMA);
 assert.deepEqual(
   promotedArranged.records.map((record) => [
     record.cardinality,
@@ -2745,6 +2779,7 @@ assert.equal(oldGroups[0].members[0].recordKey, undefined);
 
 const legacyAlignmentRequest = structuredClone(losatPairCanonical.renderRequest);
 legacyAlignmentRequest.schema = 7;
+delete legacyAlignmentRequest.diagramOptions.featureOverrides;
 legacyAlignmentRequest.layout = { recordGapPx: 30 };
 const legacyGenerated = legacyAlignmentRequest.comparisons.find(
   (comparison) => comparison.kind === 'generatedProteinComparison'
@@ -2780,7 +2815,7 @@ const promotedLegacyAlignment = promoteCanonicalRenderRequestToCurrent(
   legacyAlignmentRequest,
   { featureCatalog: legacyFeatureCatalog }
 );
-assert.equal(promotedLegacyAlignment.schema, 8);
+assert.equal(promotedLegacyAlignment.schema, CANONICAL_REQUEST_SCHEMA);
 assert.equal(
   Object.hasOwn(
     promotedLegacyAlignment.comparisons.find(
@@ -3111,6 +3146,7 @@ let sparseLinearCanonical;
 for (const schema of [1, 2]) {
   sparseLinearCanonical = structuredClone(linearCanonical);
   sparseLinearCanonical.renderRequest.schema = schema;
+  delete sparseLinearCanonical.renderRequest.diagramOptions.featureOverrides;
   if (schema < 7) {
     delete sparseLinearCanonical.renderRequest.diagramOptions.featurePlacements;
     sparseLinearCanonical.renderRequest.records.forEach((record) => delete record.display);
@@ -5012,7 +5048,7 @@ assert.deepEqual(resolvedProteinMarker.pairs, []);
 
 assert.equal(characterizedRequests.length, 83);
 assert.equal(createHash('sha256').update(JSON.stringify(characterizedRequests)).digest('hex'),
-  '6d8276e6b67c5d00f88c46c9994d1c85c2d1be41e7ef6617672f69f304694d91',
+  '11e0b868a984674442a573877db42bd4e1f83202a44b6c4fe92223d2bdfb4e1c',
   'Extraction preserves the 83 characterized request meanings, including topology, tracks and typed comparisons');
 
 const projectSessionIndex = process.argv.indexOf('--project-session');

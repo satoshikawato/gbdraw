@@ -16,6 +16,8 @@ from .root import GbdrawConfig
 @dataclass(frozen=True)
 class _RenderProfile:
     config: GbdrawConfig
+    # An identity-addressed feature override shows a label (label_visibility "on").
+    identity_label_overrides: bool = False
     show_gc: bool = field(init=False)
     show_skew: bool = field(init=False)
     show_depth: bool = field(init=False)
@@ -40,7 +42,8 @@ class _RenderProfile:
         object.__setattr__(
             self,
             "forced_labels",
-            has_forced_label_overrides(self.config.labels.filtering.as_dict()),
+            self.identity_label_overrides
+            or has_forced_label_overrides(self.config.labels.filtering.as_dict()),
         )
 
 

@@ -582,7 +582,8 @@ const HELPER_OPERATION_SPECS = Object.freeze({
       'recordSelector',
       'reverseFlag',
       'recordIndex',
-      'recordInstanceKey'
+      'recordInstanceKey',
+      'featureOverrides'
     ],
     fileRoles: ['source', 'fasta', 'visibility'],
     run: (pyodide, payload, paths, operation) => {
@@ -600,7 +601,9 @@ const HELPER_OPERATION_SPECS = Object.freeze({
         payload.reverseFlag ? '1' : '0',
         payload.recordIndex ?? null,
         payload.recordInstanceKey ?? null,
-        paths.get('visibility') || null
+        paths.get('visibility') || null,
+        // This record's canonical featureOverrides rows (design Q4, 3.3).
+        payload.featureOverrides == null ? null : JSON.stringify(payload.featureOverrides)
       ]);
     }
   },

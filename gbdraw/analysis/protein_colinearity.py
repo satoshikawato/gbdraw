@@ -1034,6 +1034,7 @@ def extract_web_stable_cds_proteins(
     regions: Sequence[object] | None = None,
     record_index_offset: int = 0,
     feature_visibility_rules: list[dict[str, object]] | None = None,
+    feature_overrides: Sequence[Mapping[int, object]] | None = None,
 ) -> ProteinExtractionResult:
     """Extract CDS proteins with the current manifest and runtime handles."""
 
@@ -1045,6 +1046,7 @@ def extract_web_stable_cds_proteins(
         regions=regions,
         record_index_offset=record_index_offset,
         feature_visibility_rules=feature_visibility_rules,
+        feature_overrides=feature_overrides,
     )
 
 
@@ -1137,6 +1139,7 @@ def extract_protein_identity_manifest(
     regions: Sequence[object] | None = None,
     record_index_offset: int = 0,
     feature_visibility_rules: list[dict[str, object]] | None = None,
+    feature_overrides: Sequence[Mapping[int, object]] | None = None,
 ) -> ProteinExtractionResult:
     """Build the canonical protein manifest and runtime-bound extraction."""
 
@@ -1145,6 +1148,7 @@ def extract_protein_identity_manifest(
         record_index_offset=record_index_offset,
         prefer_source_ids=False,
         feature_visibility_rules=feature_visibility_rules,
+        feature_overrides=feature_overrides,
     )
     instance_values = _per_record_values(
         record_instance_keys,
@@ -2789,11 +2793,14 @@ def extract_cds_proteins(
     record_index_offset: int = 0,
     prefer_source_ids: bool = True,
     feature_visibility_rules: list[dict[str, object]] | None = None,
+    feature_overrides: Sequence[Mapping[int, object]] | None = None,
 ) -> ProteinExtractionResult:
     """Extract CDS proteins using protein IDs where possible and genomic spans.
 
     Coordinates in the returned metadata are Python/Biopython-style 0-based start
-    and 0-based exclusive end values.
+    and 0-based exclusive end values. ``feature_overrides`` holds, per record,
+    the identity-addressed edits by source feature index, aligned with
+    ``records``; they decide before the visibility rules.
     """
 
     candidate_records: list[list[_CdsProteinCandidate]] = []
@@ -2809,6 +2816,7 @@ def extract_cds_proteins(
         cds_count = 0
         feature_items = _iter_record_features(record)
         parent_graph = _build_parent_graph(feature_items)
+        record_overrides = feature_overrides[record_index] if feature_overrides else {}
         for feature_index, feature, ancestors in feature_items:
             if feature.type != "CDS":
                 continue
@@ -2816,6 +2824,7 @@ def extract_cds_proteins(
                 feature,
                 feature_visibility_rules,
                 record_id=record.id,
+                feature_override=record_overrides.get(feature_index),
             ):
                 continue
 

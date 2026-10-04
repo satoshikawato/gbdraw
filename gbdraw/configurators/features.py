@@ -18,7 +18,7 @@ from gbdraw.features.visibility import compile_feature_visibility_rules
 
 
 if TYPE_CHECKING:
-    from gbdraw.features.placement import ResolvedPlacementInputs
+    from gbdraw.features.placement import ResolvedRecordFeatureInputs
 
 
 class FeatureDrawingConfigurator:
@@ -46,7 +46,7 @@ class FeatureDrawingConfigurator:
         feature_visibility_rules: list[dict[str, Any]] | None = None,
         specific_color_rules: Mapping[str, Any] | None = None,
         default_color_map: Mapping[str, str] | None = None,
-        placements: tuple[ResolvedPlacementInputs, ...] = (),
+        record_features: tuple[ResolvedRecordFeatureInputs, ...] = (),
     ) -> None:
         """
         Initializes the FeatureDrawingConfigurator with color settings and feature selection.
@@ -56,7 +56,7 @@ class FeatureDrawingConfigurator:
             default_colors (Optional[DataFrame]): Default colors for features.
             selected_features_set (str): Set identifier for selecting features to display.
         """
-        self.placements = placements
+        self.record_features = record_features
         cfg = profile.config
         self.color_table: Optional[DataFrame] = color_table
         self.feature_table: Optional[DataFrame] = feature_table

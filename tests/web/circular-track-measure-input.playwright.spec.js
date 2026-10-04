@@ -4,6 +4,7 @@ const { resolve } = require('node:path');
 const { gunzipSync } = require('node:zlib');
 const { execFileSync } = require('node:child_process');
 const { openApp, reveal, getDiagramWorkerActivity } = require('./helpers/app-lifecycle.cjs');
+const { promoteRequest } = require('./helpers/request-schema.cjs');
 
 const fixture = resolve('gbdraw/web/gallery/sessions/tobacco-chloroplast.gbdraw-session.json');
 const sessionInput = 'input[type="file"][accept^=".json,"]';
@@ -375,7 +376,7 @@ test('DOM edits Save and fresh Load retain draft apart from committed Result; fa
     await testInfo.attach('fresh-result.svg', { body: await fresh.evaluate(() => window.__GBDRAW_APP__.results[0].content), contentType: 'image/svg+xml' });
     await testInfo.attach('original-result.svg', { body: saved.results[0].content, contentType: 'image/svg+xml' });
     expect(restored.config.adv.circular_track_slots).toEqual(edited.config.adv.circular_track_slots);
-    expect(restored.request).toEqual(before.request);
+    expect(restored.request).toEqual(await promoteRequest(fresh, before.request));
     expect(restored.resultHashes).toEqual(before.resultHashes);
     await expectCounts(fresh, 0);
     const rejected = structuredClone(saved);
@@ -555,7 +556,7 @@ for (const continuation of ['disabled', 'inactive biological']) {
     await freshLoad(browser, testInfo, saved.path, async fresh => {
       const restored = await snapshot(fresh);
       expect(restored.config.adv.circular_track_slots).toEqual(before.config.adv.circular_track_slots);
-      expect(restored.request).toEqual(before.request);
+      expect(restored.request).toEqual(await promoteRequest(fresh, before.request));
       expect(restored.resultHashes).toEqual(before.resultHashes);
       if (continuation === 'inactive biological') {
         await expect(fresh.getByRole('button', { name: 'Linear', exact: true }))

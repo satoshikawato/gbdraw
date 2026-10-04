@@ -2,17 +2,20 @@
 
 # Session and request compatibility
 
-Current writers emit session version 44 and canonical `renderRequest` schema 8.
+Current writers emit session version 44 and canonical `renderRequest` schema 9.
 
 | Persisted format | Current writer | Accepted by current readers |
 |---|---:|---|
 | gbdraw session | 44 | 27–33, 39–42, and 44 |
-| Canonical `renderRequest` | 8 | 1, 2, 5, 6, 7, and 8 |
+| Canonical `renderRequest` | 9 | 1, 2, 5, 6, 7, 8, and 9 |
 | Web file bindings | 2 | 1; 2 in sessions 41–42 and 44 |
 
-Session 44 documents written with canonical request schema 7 remain readable.
-Current saves promote that request to schema 8 while retaining feature
-catalog schema 4 and the saved preview until the next Generate.
+Session 44 documents written with canonical request schema 7 or 8 remain
+readable. Current saves promote that request to schema 9 while retaining feature
+catalog schema 4 and the saved preview until the next Generate. Schema 9 adds
+`diagramOptions.featureOverrides` (see
+[Feature identity overrides](typed-requests.md#feature-identity-overrides));
+a schema-8 request reads as one without overrides.
 
 Session versions 34–38 and request schemas 3–4 were development-only and are
 rejected. Do not change a version number, resource hash, or runtime binding by
@@ -207,14 +210,14 @@ artifacts; use `render_session()` when those artifacts belong in the result.
 
 `render_request()` accepts current typed requests, not historical session
 envelopes. Public typed session conversion accepts full versions 31–33, 39–42, and 44;
-versions 27–30 are CLI replay inputs only. Canonical schema 8 retains schema 7's
+versions 27–30 are CLI replay inputs only. Canonical schema 9 retains schema 7's
 display values and schema 6's input cardinality, including selectorless `all`
 inputs. Resolve a typed request
 before encoding when it still contains deferred paths or collection-level transforms.
 
 ## Similarity alignment request ownership
 
-For Linear requests, `renderRequest` schema 8 stores `recordTranslations` and
+For Linear requests, `renderRequest` schemas 8 and 9 store `recordTranslations` and
 `similarityAlignment` inside `renderRequest.layout`. The nested alignment plan
 is schema 2; this does not change the Session version or request schema. Every
 translation has one stable `recordKey` and finite `x` and `y` values. An active

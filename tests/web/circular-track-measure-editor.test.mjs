@@ -168,6 +168,7 @@ test('current and historical request projection keeps zero pixel gaps separate f
   for (const spacing of [0, '0px', { value: 0, unit: 'px' }, { value: 5, unit: 'px' }]) {
     const historical = structuredClone(tobacco);
     historical.renderRequest.schema = 2;
+    delete historical.renderRequest.diagramOptions.featureOverrides;
     historical.renderRequest.diagramOptions.output.outputPrefix = 'legacy';
     delete historical.renderRequest.diagramOptions.featurePlacements;
     historical.renderRequest.records.forEach(record => delete record.display);

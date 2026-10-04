@@ -65,6 +65,7 @@ from gbdraw.api.requests import (
 )
 from gbdraw.api.render import render_to_bytes
 from gbdraw.exceptions import ExportError, ValidationError
+from gbdraw.features.overrides import FeatureIdentityNotice
 from gbdraw.features.placement import FeaturePlacementOverride
 from gbdraw.linear_comparison import LinearComparison
 from gbdraw.layout.similarity_alignment import (
@@ -583,6 +584,7 @@ class Diagram:
         mode: Literal["circular", "linear"],
         records: Sequence[SeqRecord],
         annotation_warnings: tuple[ResolutionWarning, ...] = (),
+        feature_identity_notices: tuple[FeatureIdentityNotice, ...] = (),
         interactive_context: (
             InteractiveSvgContext
             | Callable[[], InteractiveSvgContext]
@@ -594,11 +596,17 @@ class Diagram:
         self.records = tuple(records)
         self._interactive_context = interactive_context
         self._annotation_warnings = tuple(annotation_warnings)
+        self._feature_identity_notices = tuple(feature_identity_notices)
 
     @property
     def annotation_warnings(self) -> tuple[ResolutionWarning, ...]:
         """Structured notices belonging to this successfully prepared diagram."""
         return self._annotation_warnings
+
+    @property
+    def feature_identity_notices(self) -> tuple[FeatureIdentityNotice, ...]:
+        """Feature edits by source identity that this diagram does not draw."""
+        return self._feature_identity_notices
 
     def _resolve_interactive_context(self) -> InteractiveSvgContext | None:
         if callable(self._interactive_context):
@@ -1133,6 +1141,7 @@ def draw_circular(
     return Diagram(
         prepared.drawing,
         annotation_warnings=prepared.annotation_warnings,
+        feature_identity_notices=prepared.feature_identity_notices,
         mode="circular",
         records=normalized,
         interactive_context=lambda: _interactive_context(
@@ -1181,6 +1190,7 @@ def draw_linear(
     return Diagram(
         prepared.drawing,
         annotation_warnings=prepared.annotation_warnings,
+        feature_identity_notices=prepared.feature_identity_notices,
         mode="linear",
         records=normalized,
         interactive_context=lambda: _interactive_context(

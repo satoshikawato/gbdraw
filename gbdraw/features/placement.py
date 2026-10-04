@@ -3,8 +3,8 @@
 from __future__ import annotations
 
 import csv
-from collections.abc import Mapping, Sequence
-from dataclasses import dataclass
+from collections.abc import Iterable, Mapping, Sequence
+from dataclasses import dataclass, field
 from numbers import Integral, Real
 from pathlib import Path
 from typing import TYPE_CHECKING, Literal
@@ -15,9 +15,17 @@ if TYPE_CHECKING:
 from pandas import DataFrame, isna
 
 from gbdraw.exceptions import ValidationError
+from .overrides import (
+    FeatureIdentityNotice,
+    FeatureOverride,
+    ResolvedFeatureOverride,
+    bind_feature_overrides,
+    normalize_feature_overrides,
+)
 from .shapes import resolve_feature_rendering
 from .source import (
     FeatureIdentity,
+    IdentityBinding,
     SourceFeatureIdentity,
     resolve_feature_identities,
     resolve_identity_table_rows,
@@ -137,15 +145,28 @@ class ResolvedFeaturePlacement:
 
 
 @dataclass(frozen=True)
-class ResolvedPlacementInputs:
-    """Source bindings for one record instance, aligned with records/provenance."""
+class ResolvedRecordFeatureInputs:
+    """Identity-addressed feature inputs of one record instance, aligned with records."""
 
     record_key: str
-    overrides: tuple[ResolvedFeaturePlacement, ...] = ()
+    placements: tuple[ResolvedFeaturePlacement, ...] = ()
+    # Source feature index -> that feature's bound visibility and label edits.
+    overrides: Mapping[int, ResolvedFeatureOverride] = field(default_factory=dict)
 
     @property
     def foreground(self) -> tuple[ResolvedFeaturePlacement, ...]:
-        return tuple(item for item in self.overrides if item.status == "foreground")
+        return tuple(item for item in self.placements if item.status == "foreground")
+
+
+@dataclass(frozen=True)
+class RecordFeatureResolution:
+    """One request's identity-addressed feature inputs, resolved once."""
+
+    feature_placements: tuple[FeaturePlacementOverride, ...]
+    records: tuple[ResolvedRecordFeatureInputs, ...]
+    notices: tuple[FeatureIdentityNotice, ...]
+    # Every requested identity, including annotation targets.
+    bindings: Mapping[FeatureIdentity, IdentityBinding]
 
 
 def _placement_table_rows(table: DataFrame | str | Path) -> list[dict]:
@@ -206,21 +227,16 @@ def _table_target(row: dict, mode: str) -> FeaturePlacementTarget | None:
     return target
 
 
-def resolve_placement_inputs(
+def _materialize_placements(
+    overrides: Sequence[FeaturePlacementOverride],
+    table: DataFrame | str | Path | None,
     *,
+    mode: str,
     records: Sequence,
     record_keys: Sequence[str],
     source_record_ids: Sequence[str],
     source_catalogs: Sequence[tuple[SourceFeatureIdentity, ...]],
-    overrides: Sequence[FeaturePlacementOverride],
-    mode: str,
-    table: DataFrame | str | Path | None = None,
-    selected_features: Sequence[str],
-    feature_visibility_rules: list | None,
-    specific_color_rules: Mapping,
-    feature_shapes: Mapping | None,
-) -> tuple[tuple[FeaturePlacementOverride, ...], tuple[ResolvedPlacementInputs, ...]]:
-    """Materialize exactly-one source selectors and classify present/dormant intent."""
+) -> tuple[FeaturePlacementOverride, ...]:
     exact = normalize_feature_placements(overrides)
     if table is not None:
         if exact:
@@ -253,24 +269,56 @@ def resolve_placement_inputs(
         ])
     for item in exact:
         item.target.validate_mode(mode)
+    return exact
+
+
+def resolve_record_feature_inputs(
+    *,
+    records: Sequence,
+    record_keys: Sequence[str],
+    source_record_ids: Sequence[str],
+    source_catalogs: Sequence[tuple[SourceFeatureIdentity, ...]],
+    placements: Sequence[FeaturePlacementOverride],
+    mode: str,
+    placement_table: DataFrame | str | Path | None = None,
+    feature_overrides: Sequence[FeatureOverride] = (),
+    target_identities: Iterable[FeatureIdentity] = (),
+    selected_features: Sequence[str],
+    feature_visibility_rules: list | None,
+    specific_color_rules: Mapping,
+    feature_shapes: Mapping | None,
+) -> RecordFeatureResolution:
+    """Bind placements, feature overrides and annotation targets in one pass.
+
+    Placement keeps its present/dormant classification; an edit whose identity is
+    not drawn becomes a notice instead of failing the render (Owner Q3 = A).
+    """
+    exact = _materialize_placements(
+        placements, placement_table, mode=mode, records=records, record_keys=record_keys,
+        source_record_ids=source_record_ids, source_catalogs=source_catalogs,
+    )
+    rows = normalize_feature_overrides(feature_overrides)
     bindings = resolve_feature_identities(
         records=records,
         record_keys=record_keys,
         source_catalogs=source_catalogs,
-        identities=(item.identity for item in exact),
+        identities={
+            *(item.identity for item in exact),
+            *(row.identity for row in rows),
+            *target_identities,
+        },
     )
+    overrides = bind_feature_overrides(rows, bindings, source_catalogs)
     resolved: list[list[ResolvedFeaturePlacement]] = [[] for _ in records]
     # Nested source features are never foreground placement units.
     top_level = {
         index: {id(feature) for feature in records[index].features}
-        for index in {binding.record_index for binding in bindings.values()}
+        for index in {bindings[item.identity].record_index for item in exact}
     }
     for placement_index, item in enumerate(exact):
         binding = bindings[item.identity]
         if binding.status == "unresolved":
-            raise ValidationError(
-                f"Unknown/stale placement identity ({item.record_key!r}, {item.biological_feature_id!r})."
-            )
+            continue
         record = records[binding.record_index]
         feature = binding.feature
         if binding.status != "present":
@@ -281,6 +329,7 @@ def resolve_placement_inputs(
             feature_visibility_rules=feature_visibility_rules,
             record_id=record.id,
             specific_color_rules=specific_color_rules,
+            feature_override=overrides[binding.record_index].get(binding.source_feature_index),
         ):
             status = "hidden"
         elif resolve_feature_rendering(feature.type, feature_shapes) == "underlay":
@@ -296,9 +345,32 @@ def resolve_placement_inputs(
                 placement_index,
             )
         )
-    return exact, tuple(
-        ResolvedPlacementInputs(key, tuple(items))
-        for key, items in zip(record_keys, resolved, strict=True)
+    kinds: dict[FeatureIdentity, list[str]] = {}
+    for item in exact:
+        kinds.setdefault(item.identity, []).append("placement")
+    for row in rows:
+        kinds.setdefault(row.identity, []).extend(row.edits)
+    notices = tuple(
+        FeatureIdentityNotice(
+            identity.record_key, identity.biological_feature_id,
+            bindings[identity].status, tuple(edit_kinds), bindings[identity].record_index,
+        )
+        for identity, edit_kinds in sorted(
+            kinds.items(),
+            key=lambda item: (
+                bindings[item[0]].record_index, item[0].biological_feature_id
+            ),
+        )
+        if bindings[identity].status != "present"
+    )
+    return RecordFeatureResolution(
+        exact,
+        tuple(
+            ResolvedRecordFeatureInputs(key, tuple(items), record_overrides)
+            for key, items, record_overrides in zip(record_keys, resolved, overrides, strict=True)
+        ),
+        notices,
+        bindings,
     )
 
 
@@ -410,7 +482,7 @@ def plan_feature_placements(
     feature_dict: dict[str, FeatureObject],
     *,
     slot: FeaturePlacementSlot,
-    placement_inputs: ResolvedPlacementInputs | None = None,
+    record_features: ResolvedRecordFeatureInputs | None = None,
     resolve_overlaps: bool,
     tolerance_bp: int = 0,
     genome_length: int | None = None,
@@ -424,9 +496,9 @@ def plan_feature_placements(
     from .tracks import arrange_feature_tracks, _strand_pool
 
     tolerance_bp = validate_feature_overlap_tolerance(tolerance_bp)
-    overrides = placement_inputs.overrides if placement_inputs is not None else ()
+    overrides = record_features.placements if record_features is not None else ()
     for item in overrides:
-        slot.validate_target(item.target, record_key=placement_inputs.record_key, placement=item)
+        slot.validate_target(item.target, record_key=record_features.record_key, placement=item)
     by_source = {feature.source_feature_index: key for key, feature in feature_dict.items()}
     targets = {}
     fixed = {}

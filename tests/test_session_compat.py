@@ -492,6 +492,7 @@ def _released_canonical_session(
     payload = data["renderRequest"]
     assert isinstance(payload, dict)
     payload["schema"] = request_schema
+    payload["diagramOptions"].pop("featureOverrides", None)
     if request_schema < 7:
         for record in payload["records"]:
             record.pop("display", None)

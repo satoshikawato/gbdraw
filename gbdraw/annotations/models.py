@@ -125,14 +125,41 @@ class FeatureSpan:
         selectors = tuple(parse_feature_selector(item) for item in self.selectors)
         if not selectors:
             raise ValidationError("FeatureSpan requires at least one selector.")
-        if self.envelope not in {"outer_bounds", "segments"}:
-            raise ValidationError("envelope must be 'outer_bounds' or 'segments'.")
-        if self.circular_path not in {"shortest", "forward", "reverse"}:
-            raise ValidationError("circular_path must be 'shortest', 'forward', or 'reverse'.")
+        _validate_feature_envelope(self)
         object.__setattr__(self, "selectors", selectors)
 
 
-RegionTarget: TypeAlias = CoordinateSpan | FeatureSpan
+def _validate_feature_envelope(target: FeatureSpan | FeatureIdentitySpan) -> None:
+    if target.envelope not in {"outer_bounds", "segments"}:
+        raise ValidationError("envelope must be 'outer_bounds' or 'segments'.")
+    if target.circular_path not in {"shortest", "forward", "reverse"}:
+        raise ValidationError("circular_path must be 'shortest', 'forward', or 'reverse'.")
+
+
+@dataclass(frozen=True)
+class FeatureIdentitySpan:
+    """One feature by original-source identity, as in feature overrides (design Q4).
+
+    It keeps naming the same feature after crop, reverse complement, reordering
+    and record duplication. The typed request planner resolves it.
+    """
+
+    record_key: str
+    biological_feature_id: str
+    envelope: Literal["outer_bounds", "segments"] = "outer_bounds"
+    circular_path: Literal["shortest", "forward", "reverse"] = "shortest"
+
+    def __post_init__(self) -> None:
+        # Deferred: gbdraw.features.source imports this package.
+        from gbdraw.features.source import FeatureIdentity
+
+        identity = FeatureIdentity(self.record_key, self.biological_feature_id)
+        object.__setattr__(self, "record_key", identity.record_key)
+        object.__setattr__(self, "biological_feature_id", identity.biological_feature_id)
+        _validate_feature_envelope(self)
+
+
+RegionTarget: TypeAlias = CoordinateSpan | FeatureSpan | FeatureIdentitySpan
 
 
 @dataclass(frozen=True)
@@ -205,8 +232,10 @@ class RegionAnnotation:
         annotation_id = str(self.id).strip()
         if not annotation_id:
             raise ValidationError("Annotation id cannot be empty.")
-        if not isinstance(self.target, (CoordinateSpan, FeatureSpan)):
-            raise ValidationError("Annotation target must be CoordinateSpan or FeatureSpan.")
+        if not isinstance(self.target, (CoordinateSpan, FeatureSpan, FeatureIdentitySpan)):
+            raise ValidationError(
+                "Annotation target must be CoordinateSpan, FeatureSpan or FeatureIdentitySpan."
+            )
         if self.mark not in {"line", "bracket", "band", "highlight"}:
             raise ValidationError(
                 "Annotation mark must be 'line', 'bracket', 'band', or 'highlight'."

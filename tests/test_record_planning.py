@@ -41,7 +41,7 @@ from gbdraw.session import (
     materialize_session,
     session_to_request,
 )
-from gbdraw.session_request_codec import encode_canonical_request
+from gbdraw.session_request_codec import CANONICAL_REQUEST_SCHEMA, encode_canonical_request
 
 
 def _record(record_id: str, sequence: str = "AAACCG") -> SeqRecord:
@@ -406,7 +406,7 @@ def test_current_schema_round_trips_unresolved_then_materializes_session(
     )
 
     unresolved_encoded = encode_canonical_request(unresolved)
-    assert unresolved_encoded.payload["schema"] == 8
+    assert unresolved_encoded.payload["schema"] == CANONICAL_REQUEST_SCHEMA
     assert unresolved_encoded.payload["records"][0]["cardinality"] == "all"
 
     resolved = resolve_request(unresolved)

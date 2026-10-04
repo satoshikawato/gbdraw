@@ -126,7 +126,7 @@ from gbdraw.diagrams.circular.assemble import (  # type: ignore[reportMissingImp
     plan_circular_annotation_slots,
 )
 from gbdraw.diagrams.linear import assemble_linear_diagram  # type: ignore[reportMissingImports]
-from gbdraw.features.placement import ResolvedPlacementInputs
+from gbdraw.features.placement import ResolvedRecordFeatureInputs
 from gbdraw.exceptions import ValidationError  # type: ignore[reportMissingImports]
 from gbdraw.layout.composition import (
     CompositionItem,
@@ -1581,6 +1581,15 @@ def _invoke_protein_analysis_helper(
     raise ValidationError(f"Unsupported protein analysis mode: {mode!r}.")
 
 
+def _shows_identity_labels(record_features: Sequence[ResolvedRecordFeatureInputs]) -> bool:
+    """Whether an identity-addressed edit shows a label outside the display scope."""
+    return any(
+        override.label_visibility == "on"
+        for inputs in record_features
+        for override in inputs.overrides.values()
+    )
+
+
 def assemble_linear_diagram_from_records(
     records: Sequence[SeqRecord],
     *,
@@ -1644,7 +1653,7 @@ def assemble_linear_diagram_from_records(
     identity: float = LINEAR_MODE_PROFILE.comparison.identity,
     alignment_length: int = LINEAR_MODE_PROFILE.comparison.alignment_length,
     _resolved_feature_inputs: ResolvedFeatureInputs | None = None,
-    _resolved_placement_inputs: tuple[ResolvedPlacementInputs, ...] = (),
+    _resolved_record_features: tuple[ResolvedRecordFeatureInputs, ...] = (),
     _return_build_result: bool = False,
     _record_transforms: Sequence[RecordDisplayTransform] | None = None,
     _alignment_anchor_centers: Sequence[float | None] | None = None,
@@ -1841,7 +1850,9 @@ def assemble_linear_diagram_from_records(
             cfg = replace(cfg, canvas=replace(cfg.canvas, show_depth=show_depth))
     _validate_gc_content_config(cfg.objects.gc_content)
     _validate_depth_config(cfg.objects.depth)
-    profile = LinearRenderProfile(cfg)
+    profile = LinearRenderProfile(
+        cfg, identity_label_overrides=_shows_identity_labels(_resolved_record_features)
+    )
 
     if selected_features_set is None:
         selected_features_set = DEFAULT_SELECTED_FEATURES
@@ -2050,7 +2061,7 @@ def assemble_linear_diagram_from_records(
         specific_color_rules=resolved_feature_inputs.specific_color_rules,
         default_color_map=resolved_feature_inputs.default_color_map,
         canvas_config=canvas_config,
-        placements=_resolved_placement_inputs,
+        record_features=_resolved_record_features,
     )
     gc_config = GcContentConfigurator(
         window=window,
@@ -2188,7 +2199,7 @@ def assemble_circular_diagram_from_record(
     _annotation_record_index: int = 0,
     _definition_group_id: str | None = None,
     _resolved_feature_inputs: ResolvedFeatureInputs | None = None,
-    _resolved_placement_inputs: tuple[ResolvedPlacementInputs, ...] = (),
+    _resolved_record_features: tuple[ResolvedRecordFeatureInputs, ...] = (),
     _record_transform: RecordDisplayTransform | None = None,
 ) -> Drawing:
     """Builds and assembles a circular diagram for a single record.
@@ -2336,7 +2347,9 @@ def assemble_circular_diagram_from_record(
         show_skew=bool(show_skew),
     )
     cfg = replace(cfg, canvas=canvas_cfg)
-    profile = CircularRenderProfile(cfg)
+    profile = CircularRenderProfile(
+        cfg, identity_label_overrides=_shows_identity_labels(_resolved_record_features)
+    )
 
     conservation_mode = normalize_conservation_reference(conservation_reference)
     if _precomputed_conservation_tracks is not None:
@@ -2521,7 +2534,7 @@ def assemble_circular_diagram_from_record(
         specific_color_rules=resolved_feature_inputs.specific_color_rules,
         default_color_map=resolved_feature_inputs.default_color_map,
         canvas_config=canvas_config,
-        placements=_resolved_placement_inputs,
+        record_features=_resolved_record_features,
     )
     legend_config = LegendDrawingConfigurator(
         color_table=color_table,
@@ -2648,7 +2661,7 @@ def assemble_circular_diagram_from_records(
     identity: float = CIRCULAR_MODE_PROFILE.comparison.identity,
     alignment_length: int = CIRCULAR_MODE_PROFILE.comparison.alignment_length,
     _resolved_feature_inputs: ResolvedFeatureInputs | None = None,
-    _resolved_placement_inputs: tuple[ResolvedPlacementInputs, ...] = (),
+    _resolved_record_features: tuple[ResolvedRecordFeatureInputs, ...] = (),
     _record_transforms: Sequence[RecordDisplayTransform] | None = None,
     _resolved_annotations: ResolvedAnnotationBundle | None = None,
 ) -> Drawing:
@@ -2821,7 +2834,9 @@ def assemble_circular_diagram_from_records(
         cfg,
         record_lengths=record_lengths,
     )
-    profile = CircularRenderProfile(cfg)
+    profile = CircularRenderProfile(
+        cfg, identity_label_overrides=_shows_identity_labels(_resolved_record_features)
+    )
     conservation_mode = normalize_conservation_reference(conservation_reference)
     conservation_load_result = _load_conservation_result(
         records,
@@ -2999,7 +3014,7 @@ def assemble_circular_diagram_from_records(
             ),
             _precomputed_conservation_tracks=record_conservation_tracks,
             _resolved_feature_inputs=resolved_feature_inputs,
-            _resolved_placement_inputs=(_resolved_placement_inputs[record_index],) if _resolved_placement_inputs else (),
+            _resolved_record_features=(_resolved_record_features[record_index],) if _resolved_record_features else (),
             _record_transform=(_record_transforms[record_index] if _record_transforms is not None else None),
         )
         result = _require_circular_assembly_result(sub_canvas)
@@ -3099,6 +3114,7 @@ def assemble_circular_diagram_from_records(
             specific_color_rules=resolved_feature_inputs.specific_color_rules,
             default_color_map=resolved_feature_inputs.default_color_map,
             canvas_config=legend_canvas_config,
+            record_features=_resolved_record_features,
         )
         legend_slots, legend_annotations = plan_circular_annotation_slots(
             resolved_annotations,
@@ -3305,7 +3321,7 @@ def build_circular_diagram(
     _precomputed_depth_track_specs: Sequence[DepthTrackSpec] | None = None,
     _precomputed_depth_track_count: int | None = None,
     _resolved_feature_inputs: ResolvedFeatureInputs | None = None,
-    _resolved_placement_inputs: tuple[ResolvedPlacementInputs, ...] = (),
+    _resolved_record_features: tuple[ResolvedRecordFeatureInputs, ...] = (),
     _record_transform: RecordDisplayTransform | None = None,
     _resolved_annotations: ResolvedAnnotationBundle | None = None,
 ) -> Drawing:
@@ -3379,7 +3395,7 @@ def build_circular_diagram(
         _precomputed_depth_track_specs=_precomputed_depth_track_specs,
         _precomputed_depth_track_count=_precomputed_depth_track_count,
         _resolved_feature_inputs=_resolved_feature_inputs,
-        _resolved_placement_inputs=_resolved_placement_inputs,
+        _resolved_record_features=_resolved_record_features,
         _record_transform=_record_transform,
     )
 
@@ -3393,7 +3409,7 @@ def _build_linear_diagram(
     losatp_cache: LosatpCacheManager | None = None,
     protein_extraction: ProteinExtractionResult | None = None,
     _resolved_feature_inputs: ResolvedFeatureInputs | None = None,
-    _resolved_placement_inputs: tuple[ResolvedPlacementInputs, ...] = (),
+    _resolved_record_features: tuple[ResolvedRecordFeatureInputs, ...] = (),
     _return_build_result: bool = False,
     _record_transforms: Sequence[RecordDisplayTransform] | None = None,
     _alignment_anchor_centers: Sequence[float | None] | None = None,
@@ -3477,7 +3493,7 @@ def _build_linear_diagram(
         identity=options.identity,
         alignment_length=options.alignment_length,
         _resolved_feature_inputs=_resolved_feature_inputs,
-        _resolved_placement_inputs=_resolved_placement_inputs,
+        _resolved_record_features=_resolved_record_features,
         _record_transforms=_record_transforms,
         _alignment_anchor_centers=_alignment_anchor_centers,
         _return_build_result=_return_build_result,
@@ -3493,7 +3509,7 @@ def build_linear_diagram(
     losatp_cache: LosatpCacheManager | None = None,
     protein_extraction: ProteinExtractionResult | None = None,
     _resolved_feature_inputs: ResolvedFeatureInputs | None = None,
-    _resolved_placement_inputs: tuple[ResolvedPlacementInputs, ...] = (),
+    _resolved_record_features: tuple[ResolvedRecordFeatureInputs, ...] = (),
     _record_transforms: Sequence[RecordDisplayTransform] | None = None,
     _alignment_anchor_centers: Sequence[float | None] | None = None,
     _resolved_annotations: ResolvedAnnotationBundle | None = None,
@@ -3509,7 +3525,7 @@ def build_linear_diagram(
         protein_extraction=protein_extraction,
         _resolved_feature_inputs=_resolved_feature_inputs,
         _resolved_annotations=_resolved_annotations,
-        _resolved_placement_inputs=_resolved_placement_inputs,
+        _resolved_record_features=_resolved_record_features,
         _record_transforms=_record_transforms,
         _alignment_anchor_centers=_alignment_anchor_centers,
     )
@@ -3525,7 +3541,7 @@ def build_linear_diagram_result(
     losatp_cache: LosatpCacheManager | None = None,
     protein_extraction: ProteinExtractionResult | None = None,
     _resolved_feature_inputs: ResolvedFeatureInputs | None = None,
-    _resolved_placement_inputs: tuple[ResolvedPlacementInputs, ...] = (),
+    _resolved_record_features: tuple[ResolvedRecordFeatureInputs, ...] = (),
     _record_transforms: Sequence[RecordDisplayTransform] | None = None,
     _alignment_anchor_centers: Sequence[float | None] | None = None,
     _resolved_annotations: ResolvedAnnotationBundle | None = None,
@@ -3541,7 +3557,7 @@ def build_linear_diagram_result(
         protein_extraction=protein_extraction,
         _resolved_feature_inputs=_resolved_feature_inputs,
         _resolved_annotations=_resolved_annotations,
-        _resolved_placement_inputs=_resolved_placement_inputs,
+        _resolved_record_features=_resolved_record_features,
         _record_transforms=_record_transforms,
         _alignment_anchor_centers=_alignment_anchor_centers,
         _return_build_result=True,
@@ -3557,7 +3573,7 @@ def build_circular_multi_diagram(
     options: CircularDiagramOptions | None = None,
     layout: CircularMultiRecordOptions | None = None,
     _resolved_feature_inputs: ResolvedFeatureInputs | None = None,
-    _resolved_placement_inputs: tuple[ResolvedPlacementInputs, ...] = (),
+    _resolved_record_features: tuple[ResolvedRecordFeatureInputs, ...] = (),
     _record_transforms: Sequence[RecordDisplayTransform] | None = None,
     _resolved_annotations: ResolvedAnnotationBundle | None = None,
 ) -> Drawing:
@@ -3639,7 +3655,7 @@ def build_circular_multi_diagram(
         identity=options.identity,
         alignment_length=options.alignment_length,
         _resolved_feature_inputs=_resolved_feature_inputs,
-        _resolved_placement_inputs=_resolved_placement_inputs,
+        _resolved_record_features=_resolved_record_features,
         _record_transforms=_record_transforms,
     )
 

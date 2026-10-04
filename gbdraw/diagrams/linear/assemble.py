@@ -2107,6 +2107,7 @@ def assemble_linear_diagram(
             feature_config.selected_features_set,
             feature_visibility_rules=feature_config.feature_visibility_rules,
             specific_color_rules=color_map,
+            record_features=feature_config.record_features,
         )
         used_color_rules, default_used_features = precompute_used_color_rules(
             records,
@@ -2114,6 +2115,7 @@ def assemble_linear_diagram(
             default_color_map,
             set(feature_config.selected_features_set),
             feature_visibility_rules=feature_config.feature_visibility_rules,
+            record_features=feature_config.record_features,
         )
         legend_table = prepare_legend_table(
             gc_config, skew_config, feature_config, features_present, blast_config, has_blast,

@@ -33,7 +33,7 @@ const {
   importSession, getCommittedCanonicalRenderRequest, getCommittedCanonicalSession,
   serializeActiveRenderFiles, setUnmanagedConfigOverrideValidator
 } = await import('../../gbdraw/web/js/services/config.js');
-const { buildCanonicalRenderRequest } = await import('../../gbdraw/web/js/services/session-request.js');
+const { CANONICAL_REQUEST_SCHEMA, buildCanonicalRenderRequest } = await import('../../gbdraw/web/js/services/session-request.js');
 const { inheritCommittedComparisonIntent } = await import('../../gbdraw/web/js/services/imported-comparison-intent.js');
 const { resolveLinearComparisonPlan } = await import('../../gbdraw/web/js/app/linear-comparisons.js');
 const { state } = await import('../../gbdraw/web/js/state.js');
@@ -96,7 +96,7 @@ for (const [label, mode, args, sourcePaths, legend] of cases) {
         const bytes = gunzipSync(await readFile(file));
         const session = JSON.parse(bytes);
         assert.equal(session.version, 44);
-        assert.equal(session.renderRequest.schema, 8);
+        assert.equal(session.renderRequest.schema, CANONICAL_REQUEST_SCHEMA);
         assert.equal(Object.hasOwn(session, 'config'), false);
         assert.equal(session.webFiles.bindings.schema, 2);
         const result = await load(bytes);

@@ -466,12 +466,46 @@ def get_label_text(
     record_id: Optional[str] = None,
     *,
     overrides_only: bool = False,
+    feature_override: Any = None,
 ) -> str:
     """Return the label text for one feature, or an empty string for no label.
 
     ``overrides_only`` selects a feature outside the label display scope: only
-    its per-feature override can give it a label.
+    its per-feature override can give it a label. An identity-addressed
+    ``feature_override`` decides before the tables: ``label_visibility="off"``
+    hides the label; ``"on"`` shows its ``label_text``, else the qualifier text
+    with the non-``hash`` rules applied, else its default label, regardless of
+    scope and filters. ``label_text`` alone replaces the text of a label that is
+    shown anyway; it never shows one.
     """
+    visibility = getattr(feature_override, "label_visibility", None)
+    if visibility == "off":
+        return ""
+    text = getattr(feature_override, "label_text", None)
+    if visibility == "on":
+        unfiltered = {
+            **label_filtering,
+            "whitelist_map": None,
+            "blacklist_keywords": (),
+            "label_override_rules": [
+                rule for rule in label_filtering.get("label_override_rules") or ()
+                if rule.get("qualifier_normalized") != "hash"
+            ],
+        }
+        return text or _label_text(feature, unfiltered, record_id) or str(
+            getattr(feature_override, "default_label", "")
+        )
+    label = _label_text(feature, label_filtering, record_id, overrides_only=overrides_only)
+    return text if label and text else label
+
+
+def _label_text(
+    feature: Any,
+    label_filtering: dict,
+    record_id: Optional[str] = None,
+    *,
+    overrides_only: bool = False,
+) -> str:
     feature_type = _get_feature_type(feature)
     qualifiers = _get_feature_qualifiers(feature)
     whitelist_map = label_filtering.get("whitelist_map")

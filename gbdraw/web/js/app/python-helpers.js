@@ -426,8 +426,9 @@ def _web_feature_view_hash_parts(record, source_feature_position):
         (),
     )
 
-def _load_single_linear_record_for_proteins(path, fmt, fasta_path=None, region_spec=None, record_selector=None, reverse_flag=None):
+def _load_single_linear_record_for_proteins(path, fmt, fasta_path=None, region_spec=None, record_selector=None, reverse_flag=None, source_feature_catalogs=None):
     from Bio import SeqIO
+    from gbdraw.features.source import build_source_feature_catalog
     from gbdraw.io.record_select import parse_record_selector, reverse_records, select_record
     from gbdraw.io.regions import apply_region_specs, parse_region_specs
 
@@ -438,6 +439,8 @@ def _load_single_linear_record_for_proteins(path, fmt, fasta_path=None, region_s
         if not records:
             raise ValueError("No records found")
         records = select_record(records, selector) if selector is not None else [records[0]]
+        if source_feature_catalogs is not None:
+            source_feature_catalogs.extend(build_source_feature_catalog(record) for record in records)
         records = reverse_records(records, reverse)
     elif fmt == "gff":
         if not fasta_path:
@@ -450,6 +453,7 @@ def _load_single_linear_record_for_proteins(path, fmt, fasta_path=None, region_s
             keep_all_features=True,
             record_selectors=[_normalize_web_record_selector(record_selector) or ""],
             reverse_flags=[reverse],
+            source_feature_catalogs=source_feature_catalogs,
         )
         records = records[:1]
     else:
@@ -522,8 +526,12 @@ def _serialize_cds_protein(protein, record=None, view_hash_parts_index=None):
         "coord_length": len(record.seq) if record is not None else 0,
     }
 
-def extract_cds_protein_fasta(path, fmt, fasta_path=None, region_spec=None, record_selector=None, reverse_flag=None, record_index=None, record_instance_key=None, feature_visibility_table_path=None):
-    """Extract CDS proteins and coordinate metadata for LOSATP blastp."""
+def extract_cds_protein_fasta(path, fmt, fasta_path=None, region_spec=None, record_selector=None, reverse_flag=None, record_index=None, record_instance_key=None, feature_visibility_table_path=None, feature_overrides_json=None):
+    """Extract CDS proteins and coordinate metadata for LOSATP blastp.
+
+    feature_overrides_json holds this record's canonical featureOverrides rows;
+    the shared resolver binds them as Generate does (R4).
+    """
     try:
         from gbdraw.analysis.protein_colinearity import (
             extract_protein_identity_manifest,
@@ -531,6 +539,8 @@ def extract_cds_protein_fasta(path, fmt, fasta_path=None, region_spec=None, reco
         )
         from gbdraw.features.visibility import compile_feature_visibility_rules, read_feature_visibility_file
 
+        override_rows = [] if _is_blank_or_js_nullish(feature_overrides_json) else json.loads(feature_overrides_json)
+        source_feature_catalogs = [] if override_rows else None
         record = _load_single_linear_record_for_proteins(
             path,
             fmt,
@@ -538,6 +548,7 @@ def extract_cds_protein_fasta(path, fmt, fasta_path=None, region_spec=None, reco
             region_spec=region_spec,
             record_selector=record_selector,
             reverse_flag=reverse_flag,
+            source_feature_catalogs=source_feature_catalogs,
         )
         feature_visibility_rules = None
         if not _is_blank_or_js_nullish(feature_visibility_table_path):
@@ -550,6 +561,25 @@ def extract_cds_protein_fasta(path, fmt, fasta_path=None, region_spec=None, reco
             stable_record_key = f"record-{record_index_offset + 1}"
         normalized_selector = _normalize_web_record_selector(record_selector) or None
         normalized_region = None if _is_blank_or_js_nullish(region_spec) else str(region_spec)
+        feature_overrides = None
+        if override_rows:
+            from gbdraw.features.overrides import FeatureOverride
+            from gbdraw.features.placement import resolve_record_feature_inputs
+
+            resolution = resolve_record_feature_inputs(
+                records=[record],
+                record_keys=[str(stable_record_key)],
+                source_record_ids=[str(record.id)],
+                source_catalogs=source_feature_catalogs[:1],
+                placements=(),
+                mode="linear",
+                feature_overrides=[FeatureOverride.from_mapping(row) for row in override_rows],
+                selected_features=(),
+                feature_visibility_rules=None,
+                specific_color_rules={},
+                feature_shapes=None,
+            )
+            feature_overrides = [resolution.records[0].overrides]
         result = extract_protein_identity_manifest(
             [record],
             record_instance_keys=[str(stable_record_key)],
@@ -558,6 +588,7 @@ def extract_cds_protein_fasta(path, fmt, fasta_path=None, region_spec=None, reco
             regions=[normalized_region],
             record_index_offset=record_index_offset,
             feature_visibility_rules=feature_visibility_rules,
+            feature_overrides=feature_overrides,
         )
         proteins = result.proteins_by_record[0] if result.proteins_by_record else []
         if not proteins:

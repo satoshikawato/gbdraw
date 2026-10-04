@@ -14,6 +14,7 @@ const {
   createGallerySessionPublication
 } = await import('../../gbdraw/web/js/services/gallery-session-publication.js');
 const {
+  CANONICAL_REQUEST_SCHEMA,
   assertCanonicalRenderRequestsEquivalent,
   buildCanonicalRenderRequest,
   buildCanonicalRequestState,
@@ -62,7 +63,7 @@ for (const name of sessionNames) {
   const committedBefore = JSON.stringify(source.renderRequest);
   const result = await prepareGallerySessionForPublication(source);
   assert.equal(result.session.version, 44, name);
-  assert.equal(result.session.renderRequest.schema, 8, name);
+  assert.equal(result.session.renderRequest.schema, CANONICAL_REQUEST_SCHEMA, name);
   const plan = result.session.renderRequest.layout?.similarityAlignment;
   if (plan) {
     assert.equal(plan.schema, 2, name);
@@ -118,7 +119,8 @@ assert.equal(releasedCurrent.version, 44);
 assert.equal(releasedCurrent.renderRequest.schema, 8);
 assert.equal(releasedCurrent.editorState.featureCatalog.schema, 4);
 const admittedReleasedCurrent = admitGallerySession(releasedCurrent);
-assert.equal(admittedReleasedCurrent.renderRequest.schema, 8);
+// Admission promotes the released schema-8 request to the current writer.
+assert.equal(admittedReleasedCurrent.renderRequest.schema, CANONICAL_REQUEST_SCHEMA);
 assert.equal(admittedReleasedCurrent.editorState.featureCatalog.schema, 4);
 assert.deepEqual(admittedReleasedCurrent.results, releasedCurrent.results);
 const alteredProvenance = structuredClone(lambda);

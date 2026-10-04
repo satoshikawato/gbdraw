@@ -133,6 +133,7 @@ def _capture_cli_options(monkeypatch, tmp_path, argv):
             protein_identity_manifest=None,
             request=resolved,
             annotation_warnings=(),
+            feature_identity_notices=(),
         )
 
     monkeypatch.setattr(linear_cli_module, "render_request", fake_render)

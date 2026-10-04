@@ -548,6 +548,10 @@ def render_canonical_session_if_present(
             session_document=document.to_dict(),
             include_feature_catalog=sidecar_path is not None,
         )
+        from gbdraw.features.overrides import log_feature_identity_notices
+
+        for item in getattr(rendered, "items", (rendered,)):
+            log_feature_identity_notices(item.feature_identity_notices)
 
         if sidecar_path is not None:
             assert adjunct is not None

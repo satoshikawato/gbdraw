@@ -8,6 +8,21 @@ session files, canonical render requests, and saved LOSAT results. The concise
 documents current support. Tutorials and the FAQ describe what a user should
 do; release notes record when a format changed.
 
+## Unreleased: request schema 9 and feature identity overrides
+
+Session version 44 is unchanged. Canonical request schema 9 adds the required
+`diagramOptions.featureOverrides` array and the `featureIdentity` annotation
+target. Each override row names one original-source feature by `recordKey` and
+`biologicalFeatureId` and sets its Feature visibility, Label visibility, or
+label text (see
+[Feature identity overrides](./REFERENCE/typed-requests.md#feature-identity-overrides)).
+Schema-8 requests are read as requests without overrides, and current saves
+write schema 9. The Web app writes an empty array and cannot yet load a request
+whose array is not empty or that has a `featureIdentity` target; it reports
+this instead of dropping the edits. An exact Feature placement whose identity
+the source does not have no longer fails the render; it becomes a feature
+identity notice.
+
 ## Unreleased: value checks, derived label maps, and definition spacing
 
 Session version 44 and request schema 8 are unchanged. Replaying a Session, or
@@ -181,11 +196,11 @@ Current writers emit one session and request format:
 | Format | Current writer | Accepted by current readers |
 |---|---:|---|
 | gbdraw session | 44 | 27–33, 39–42, and 44 |
-| Canonical `renderRequest` | 8 | 1, 2, 5, 6, 7, and 8 |
+| Canonical `renderRequest` | 9 | 1, 2, 5, 6, 7, 8, and 9 |
 | Web file bindings | 2 | 1; 2 in sessions 41–42 and 44 |
 
-Previously written Session 44 documents with request schema 7 and feature
-catalog schema 4 remain readable. Current saves write request schema 8;
+Previously written Session 44 documents with request schema 7 or 8 and feature
+catalog schema 4 remain readable. Current saves write request schema 9;
 the saved preview is retained until the next Generate.
 
 Session versions 34–38 and canonical request schemas 3–4 were development-only

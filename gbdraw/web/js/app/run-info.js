@@ -463,7 +463,16 @@ const validateCurrentSemanticCoverage = (request) => {
   });
 
   const options = request.diagramOptions;
-  coverObject(coverage, options, 'diagramOptions', new Set([...DIAGRAM_OPTION_FIELDS, ...(request.schema >= 7 ? ['featurePlacements'] : [])]));
+  coverObject(coverage, options, 'diagramOptions', new Set([
+    ...DIAGRAM_OPTION_FIELDS,
+    ...(request.schema >= 7 ? ['featurePlacements'] : []),
+    ...(request.schema >= 9 ? ['featureOverrides'] : [])
+  ]));
+  if ((options.featureOverrides || []).length) {
+    throw new SourceRecipeUnavailable(
+      'Source recipe unavailable: feature edits by source identity have no current CLI projection.'
+    );
+  }
   (options.featurePlacements || []).forEach((row, index) => {
     const path = `diagramOptions.featurePlacements[${index}]`;
     coverObject(coverage, row, path, ['recordKey', 'biologicalFeatureId', 'placement']);

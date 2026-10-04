@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
+from typing import TYPE_CHECKING
 
 from Bio.SeqFeature import SeqFeature  # type: ignore[reportMissingImports]
 from Bio.SeqRecord import SeqRecord  # type: ignore[reportMissingImports]
@@ -26,12 +27,29 @@ from .models import (
     AnnotationOptions,
     AnnotationSet,
     CoordinateSpan,
+    FeatureIdentitySpan,
     FeatureSelector,
     FeatureSpan,
     ResolvedAnnotationBundle,
     ResolvedRegionAnnotation,
     ResolutionWarning,
 )
+
+if TYPE_CHECKING:
+    from gbdraw.features.source import IdentityBinding
+
+# Planner bindings of FeatureIdentitySpan targets, keyed by (record key, feature ID).
+FeatureBindings = Mapping[tuple[str, str], "IdentityBinding"]
+
+
+def _bind_record_key(records: Sequence[SeqRecord], record_key: str) -> int:
+    for index, record in enumerate(records):
+        if (getattr(record, "annotations", None) or {}).get("gbdraw_record_key") == record_key:
+            return index
+    raise ValidationError(
+        f"Unknown feature identity record key {record_key!r}.",
+        diagnostic={"code": "FEATURE_IDENTITY"},
+    )
 
 
 def _bind_record(records: Sequence[SeqRecord], selector: RecordSelector | None) -> int:
@@ -192,6 +210,29 @@ def _feature_segments(target: FeatureSpan, record: SeqRecord, *, is_circular: bo
         matched.extend(selector_matches)
     if unmatched:
         return _FeatureSegments((), len(unmatched))
+    return _envelope_segments(matched, target, record, is_circular=is_circular)
+
+
+def _identity_segments(
+    target: FeatureIdentitySpan,
+    record: SeqRecord,
+    binding: IdentityBinding | None,
+    *,
+    is_circular: bool,
+) -> _FeatureSegments:
+    """The bound feature's span; a feature that is not drawn is one unmatched selector."""
+    if binding is None or binding.status != "present":
+        return _FeatureSegments((), 1)
+    return _envelope_segments((binding.feature,), target, record, is_circular=is_circular)
+
+
+def _envelope_segments(
+    matched: Sequence[object],
+    target: FeatureSpan | FeatureIdentitySpan,
+    record: SeqRecord,
+    *,
+    is_circular: bool,
+) -> _FeatureSegments:
     segments = merge_annotation_segments(
         [segment for feature in matched for segment in _seqfeature_segments(feature)]
     )
@@ -238,6 +279,7 @@ def resolve_annotation_set(
     *,
     mode: str,
     record_transforms: Sequence[RecordDisplayTransform] | None = None,
+    feature_bindings: FeatureBindings | None = None,
 ) -> ResolvedAnnotationBundle:
     """Resolve one set against already materialized records."""
 
@@ -246,7 +288,17 @@ def resolve_annotation_set(
     resolved: list[ResolvedRegionAnnotation] = []
     warnings: list[ResolutionWarning] = []
     for annotation in annotation_set.annotations:
-        record_index = _bind_record(records, annotation.target.record)
+        target = annotation.target
+        binding = (
+            (feature_bindings or {}).get((target.record_key, target.biological_feature_id))
+            if isinstance(target, FeatureIdentitySpan) else None
+        )
+        record_index = (
+            binding.record_index if binding is not None
+            else _bind_record_key(records, target.record_key)
+            if isinstance(target, FeatureIdentitySpan)
+            else _bind_record(records, target.record)
+        )
         record = records[record_index]
         transform = record_transforms[record_index] if record_transforms is not None else None
         is_circular = (
@@ -285,7 +337,11 @@ def resolve_annotation_set(
                     )
                 )
         else:
-            feature_segments = _feature_segments(annotation.target, record, is_circular=is_circular)
+            feature_segments = (
+                _identity_segments(target, record, binding, is_circular=is_circular)
+                if isinstance(target, FeatureIdentitySpan)
+                else _feature_segments(target, record, is_circular=is_circular)
+            )
             if feature_segments.missing_count:
                 warnings.append(
                     ResolutionWarning(
@@ -354,8 +410,13 @@ def resolve_annotations(
     *,
     mode: str,
     record_transforms: Sequence[RecordDisplayTransform] | None = None,
+    feature_bindings: FeatureBindings | None = None,
 ) -> ResolvedAnnotationBundle:
-    """Resolve all configured sets into one deterministic bundle."""
+    """Resolve all configured sets into one deterministic bundle.
+
+    ``feature_bindings`` are the planner's bindings of FeatureIdentitySpan
+    targets; without one, such a target is skipped as unmatched.
+    """
 
     if annotations is None:
         return ResolvedAnnotationBundle(())
@@ -364,7 +425,13 @@ def resolve_annotations(
         if isinstance(annotations, AnnotationOptions)
         else tuple(annotations)
     )
-    resolved = [resolve_annotation_set(item, records, mode=mode, record_transforms=record_transforms) for item in sets]
+    resolved = [
+        resolve_annotation_set(
+            item, records, mode=mode, record_transforms=record_transforms,
+            feature_bindings=feature_bindings,
+        )
+        for item in sets
+    ]
     return ResolvedAnnotationBundle(
         tuple(annotation for bundle in resolved for annotation in bundle.annotations),
         tuple(warning for bundle in resolved for warning in bundle.warnings),

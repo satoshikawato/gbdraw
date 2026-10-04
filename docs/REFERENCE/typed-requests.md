@@ -155,7 +155,14 @@ perform that resolution automatically.
 - [Input formats and TSV schemas](input-formats-and-tsv-schemas.md)
 - [Output format and export reference](output-formats-and-export.md)
 
-## Feature placement intent
+## Feature identity overrides
+
+Per-feature edits name one original-source feature by its request record key
+and biological feature ID. The ID is the original-coordinate hash, with
+`~<n>` added for identical features of one record, so an edit keeps naming the
+same feature after crop, reverse complement, reordering, and record
+duplication. A record input loaded twice has two record keys, so each copy has
+its own edits.
 
 `CircularDiagramOptions` and `LinearDiagramOptions` accept exactly one of
 `feature_placements`, `feature_placement_table`, and
@@ -165,8 +172,31 @@ perform that resolution automatically.
 `kind="main"`; directional lane 1 uses `kind="lane"` with a mode-compatible
 side and `level=1`. Final feature-slot geometry determines direction support.
 
-The shared planner materializes tables before rendering or canonical encoding.
-Source-known hidden features keep dormant overrides; unknown identities fail.
+`feature_overrides` holds `FeatureOverride(record_key, biological_feature_id,
+feature_visibility=None, label_visibility=None, label_text=None)` rows
+(`diagramOptions.featureOverrides`, request schema 9). `None` keeps the
+rule-based result, a row must set at least one value, and an identity may appear
+once. A row decides before the feature visibility and label tables:
+
+| Field | Values and effect |
+|---|---|
+| `feature_visibility` | `on` draws the feature, `off` hides it, and `exclude_matching` ignores the visibility table and keeps the feature-type selection. `off` and `exclude_matching` also leave LOSATP protein extraction. |
+| `label_visibility` | `off` hides the label. `on` shows it regardless of label scope, whitelist, and blacklist, using `label_text`, else the qualifier text with the non-`hash` label rules applied, else `<type> <start>..<end>`. |
+| `label_text` | One line of text. With `label_visibility` unset, it replaces the text of a label that is shown anyway and never shows a label. |
+
+`FeatureIdentitySpan(record_key, biological_feature_id, envelope, circular_path)`
+is an annotation target for one such feature. A feature that is not drawn skips
+the annotation with the `feature_selector_unmatched` warning.
+
+The shared planner materializes tables before rendering or canonical encoding
+and resolves every identity once. A record key outside the request is an error.
+An edit whose feature a cropped record does not have (`crop_excluded`: outside
+the crop, or removed while loading), that an uncropped record does not have
+(`absent`, for example removed by a GFF3 type filter), or that is not in the
+source (`unresolved`) does not fail the render: the edit stays dormant and is
+reported in `feature_identity_notices` on the render result and on `Diagram`, in
+the Web metadata, and as one CLI log line per notice. Placement applies the same
+rule. A GFF3 input also loads the type of each feature a row turns `on`.
 Requested placement can be combined with each `RecordInput.display` and the
 `canvas.feature_overlap_tolerance_bp` config override. It does not change source
 coordinates, sequences, or feature identities.

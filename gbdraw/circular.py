@@ -50,6 +50,7 @@ from .api.requests import (
 )
 from .config.modify import modify_config_dict  # type: ignore[reportMissingImports]
 from .layout.record_placement import parse_record_row_position
+from .features.overrides import log_feature_identity_notices
 from .features.shapes import parse_feature_shape_overrides
 from .exceptions import ValidationError
 from .mode_profiles import CIRCULAR_MODE_PROFILE, ComparisonThresholds
@@ -1408,6 +1409,7 @@ def run_circular_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
             logger.warning("%s: %s/%s record #%s (%s): %s", warning.code,
                 warning.set_id, warning.annotation_id, warning.record_index + 1,
                 warning.record_id, warning.message)
+        log_feature_identity_notices(rendered_item.feature_identity_notices)
         if not rendered_item.output_paths:
             raise ValidationError("Circular request renderer did not produce an SVG output.")
         svg_path = Path(rendered_item.output_paths[0])

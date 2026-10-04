@@ -5,7 +5,7 @@ const { gunzipSync } = require('node:zlib');
 const { execFile } = require('node:child_process');
 const { promisify } = require('node:util');
 const path = require('node:path');
-const { openApp, reveal } = require('./helpers/app-lifecycle.cjs');
+const { CURRENT_REQUEST_SCHEMA, openApp, reveal } = require('./helpers/app-lifecycle.cjs');
 
 // Three single-record GenBank files: Circular binds them as one composite File.
 const seed = 'tests/fixtures/sessions/composite-circular-three-files.v44-schema8.gbdraw-session.json.gz';
@@ -168,7 +168,7 @@ for (const journey of ['minimal', 'grid-batch-grid']) {
       expect(generated.results).toHaveLength(1);
       expect(generated.components).toEqual(original.components);
       const { saved, session, metrics } = await save(page, testInfo, 'generated');
-      expect([session.version, session.webFiles.bindings.schema, session.renderRequest.schema]).toEqual([44, 2, 8]);
+      expect([session.version, session.webFiles.bindings.schema, session.renderRequest.schema]).toEqual([44, 2, CURRENT_REQUEST_SCHEMA]);
       const composite = session.webFiles.bindings.c_gb;
       expect(composite.kind).toBe('composite');
       expect(composite.components).toHaveLength(recordCount);
@@ -260,7 +260,7 @@ test('Session CLI sidecar preserves the composite draft for fresh Web Load and G
     });
     await fs.writeFile(testInfo.outputPath('cli.log'), stdout + stderr);
     const replayed = JSON.parse(gunzipSync(await fs.readFile(sidecar)));
-    expect([replayed.version, replayed.webFiles.bindings.schema, replayed.renderRequest.schema]).toEqual([44, 2, 8]);
+    expect([replayed.version, replayed.webFiles.bindings.schema, replayed.renderRequest.schema]).toEqual([44, 2, CURRENT_REQUEST_SCHEMA]);
     const expected = session.webFiles.bindings.c_gb;
     const actual = replayed.webFiles.bindings.c_gb;
     expect(actual.components).toHaveLength(recordCount);

@@ -136,7 +136,7 @@ def _precalculate_feature_layers(
             feature_shapes=feature_config.feature_shapes,
             feature_visibility_rules=feature_config.feature_visibility_rules,
             compute_label_text=compute_label_text,
-            placement_inputs=feature_config.placements[i] if feature_config.placements else None,
+            record_features=feature_config.record_features[i] if feature_config.record_features else None,
             placement_slot=placement_slot,
             feature_overlap_tolerance_bp=profile.feature_overlap_tolerance_bp,
             record_transform=(record_transforms[i] if record_transforms is not None else None),

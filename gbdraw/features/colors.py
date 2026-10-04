@@ -141,6 +141,7 @@ def precompute_used_color_rules(
     default_color_map: dict,
     selected_features_set: set,
     feature_visibility_rules: list[dict] | None = None,
+    record_features=(),
 ) -> tuple[set, set]:
     """
     Pre-compute which color rules will be used for a set of records.
@@ -159,13 +160,17 @@ def precompute_used_color_rules(
         default_used_features: Set of feature types that fell back to default color
     """
     from Bio.SeqRecord import SeqRecord
+    from .overrides import feature_override_lookup
     from .visibility import should_render_feature
     if isinstance(records, SeqRecord):
         records = [records]
 
     used_rules: set = set()
     default_used_features: set = set()
-    for record in records:
+    for index, record in enumerate(records):
+        override_of = feature_override_lookup(
+            record, record_features[index].overrides if record_features else None
+        )
         for feature in record.features:
             if not should_render_feature(
                 feature,
@@ -173,6 +178,7 @@ def precompute_used_color_rules(
                 feature_visibility_rules=feature_visibility_rules,
                 record_id=record.id,
                 specific_color_rules=color_map,
+                feature_override=override_of(feature),
             ):
                 continue
             color, caption = get_color_with_info(feature, color_map, default_color_map, record_id=record.id)

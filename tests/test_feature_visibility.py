@@ -768,6 +768,7 @@ def test_linear_cli_feature_visibility_table_is_forwarded(
             losat_derived_cache_entries=(),
             protein_identity_manifest=None,
             annotation_warnings=(),
+            feature_identity_notices=(),
             request=resolved,
         )
 
@@ -874,6 +875,7 @@ def test_linear_gff_loader_uses_candidate_features_when_feature_visibility_table
             losat_derived_cache_entries=(),
             protein_identity_manifest=None,
             annotation_warnings=(),
+            feature_identity_notices=(),
             request=resolved,
         )
 

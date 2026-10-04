@@ -19,7 +19,9 @@ import gbdraw.api as api
 from gbdraw.api.request_render import build_request_diagram, plan_request
 from gbdraw.api.requests import InMemoryRecordSource, RecordInput
 from gbdraw.features.placement import FeaturePlacementOverride, FeaturePlacementTarget
-from gbdraw.session_request_codec import CanonicalRequestDecodingError, encode_canonical_request, decode_canonical_request
+from gbdraw.session_request_codec import (
+    CANONICAL_REQUEST_SCHEMA, CanonicalRequestDecodingError, encode_canonical_request, decode_canonical_request,
+)
 
 
 def source_record():
@@ -99,7 +101,7 @@ def test_joint_canonical_round_trip(mode, tmp_path):
     )
     materialized = plan_request(request).request
     encoded = encode_canonical_request(materialized)
-    assert encoded.payload["schema"] == 8
+    assert encoded.payload["schema"] == CANONICAL_REQUEST_SCHEMA
     assert encoded.payload["records"][0]["display"] == {
         "isCircular": None, "startCoordinate": 1,
     }
@@ -129,7 +131,7 @@ def test_historical_v40_schema6_typed_promotion_without_render(tmp_path):
         assert not request.options.feature_placements
         promoted = api.build_session_document(request).to_dict()
     assert promoted["version"] == 44
-    assert promoted["renderRequest"]["schema"] == 8
+    assert promoted["renderRequest"]["schema"] == CANONICAL_REQUEST_SCHEMA
     assert [r["cardinality"] for r in promoted["renderRequest"]["records"]] == [
         r["cardinality"] for r in historical["renderRequest"]["records"]
     ]

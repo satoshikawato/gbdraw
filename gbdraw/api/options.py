@@ -11,6 +11,7 @@ from typing import Literal, Mapping, Sequence, cast
 
 from pandas import DataFrame  # type: ignore[reportMissingImports]
 
+from gbdraw.features.overrides import FeatureOverride, normalize_feature_overrides
 from gbdraw.features.placement import FeaturePlacementOverride, normalize_feature_placements
 
 from gbdraw.analysis.collinearity import (  # type: ignore[reportMissingImports]
@@ -909,10 +910,14 @@ class _ModeDiagramOptions:
     feature_placements: tuple[FeaturePlacementOverride, ...] = field(default=(), kw_only=True)
     feature_placement_table: DataFrame | None = field(default=None, kw_only=True)
     feature_placement_table_file: str | Path | None = field(default=None, kw_only=True)
+    feature_overrides: tuple[FeatureOverride, ...] = field(default=(), kw_only=True)
 
     def __post_init__(self) -> None:
         placements = normalize_feature_placements(self.feature_placements)
         object.__setattr__(self, "feature_placements", placements)
+        object.__setattr__(
+            self, "feature_overrides", normalize_feature_overrides(self.feature_overrides)
+        )
         if sum((bool(placements), self.feature_placement_table is not None,
                 self.feature_placement_table_file is not None)) > 1:
             raise ValidationError("Feature placement exact/table/file inputs are mutually exclusive.")

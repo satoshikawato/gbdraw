@@ -23,6 +23,7 @@ from ..layout.record_coordinates import DisplayFragment
 
 
 if TYPE_CHECKING:
+    from .overrides import ResolvedFeatureOverride
     from .placement import FeaturePlacementAssignment
 
 
@@ -127,6 +128,8 @@ class FeatureObject:
         self.placement: FeaturePlacementAssignment | None = None
         self.feature_track_id: int = 0
         self.source_feature_index: int | None = None
+        # The identity-addressed edits of this feature (features/overrides.py).
+        self.feature_override: ResolvedFeatureOverride | None = None
         self._feature_type: str = type
         # Frequently used derived attribute (historically added dynamically elsewhere)
         self.strand: Strand = self.location[0].strand if self.location else "undefined"

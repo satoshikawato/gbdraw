@@ -201,7 +201,7 @@ def test_circular_legend_values_cross_current_schema_and_reach_composition(
     encoded, replay = _round_trip_request(request, tmp_path)
 
     assert isinstance(request.options.output, CircularOutputOptions)
-    assert encoded.payload["schema"] == 8
+    assert encoded.payload["schema"] == CANONICAL_REQUEST_SCHEMA
     assert encoded.payload["diagramOptions"]["output"]["legend"] == legend
     assert isinstance(replay.options.output, CircularOutputOptions)
     assert replay.options.output.legend == legend
@@ -223,7 +223,7 @@ def test_linear_legend_values_cross_current_schema_and_reach_composition(
     encoded, replay = _round_trip_request(request, tmp_path)
 
     assert isinstance(request.options.output, LinearOutputOptions)
-    assert encoded.payload["schema"] == 8
+    assert encoded.payload["schema"] == CANONICAL_REQUEST_SCHEMA
     assert encoded.payload["diagramOptions"]["output"]["legend"] == legend
     assert isinstance(replay.options.output, LinearOutputOptions)
     assert replay.options.output.legend == legend
@@ -394,7 +394,7 @@ def test_linear_cli_rejects_circular_corner_legend_before_rendering(
 
 
 def test_current_request_schema_and_session_envelope_versions() -> None:
-    assert CANONICAL_REQUEST_SCHEMA == 8
+    assert CANONICAL_REQUEST_SCHEMA == 9
     assert CURRENT_SESSION_VERSION == 44
 
 
