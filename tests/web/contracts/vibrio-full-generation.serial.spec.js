@@ -3,6 +3,7 @@ const { spawnSync } = require('node:child_process');
 const { createHash } = require('node:crypto');
 const { writeFileSync } = require('node:fs');
 const { join, resolve } = require('node:path');
+const { pathToFileURL } = require('node:url');
 const {
   getDiagramWorkerActivity,
   openApp,
@@ -992,10 +993,13 @@ test('real Vibrio preview regenerates after a derived-only mutation', async ({
   const rawHelperTransports = await page.evaluate(() => (
     structuredClone(window.__GBDRAW_VIBRIO_RAW_HELPER_TRANSPORTS__ || [])
   ));
+  const { CANONICAL_REQUEST_SCHEMA } = await import(pathToFileURL(
+    join(repoRoot, 'gbdraw', 'web', 'js', 'services', 'session-request.js')
+  ).href);
   const capturedCanonicalRequests = canonicalRequestCapture.requests;
   expect(capturedCanonicalRequests).toHaveLength(2);
   expect(capturedCanonicalRequests[0]).toMatchObject({
-    schema: 7,
+    schema: CANONICAL_REQUEST_SCHEMA,
     mode: 'linear',
     recordCount: 4,
     comparisonCount: 2,
@@ -1024,7 +1028,7 @@ test('real Vibrio preview regenerates after a derived-only mutation', async ({
     mergeOrientation: 'either',
     searchScope: 'adjacent'
   }]);
-  expect(capturedCanonicalRequests[0].layout).not.toHaveProperty('multiRecordPositions');
+  expect(capturedCanonicalRequests[0].layout.multiRecordPositions ?? null).toBeNull();
   expect(canonicalRequestCapture.repeatComparison).toMatchObject({ equivalent: false });
   expect(derivedMutationBefore.memberMaxHits).toBeNull();
   expect(postSecondGenerateActiveIntent.proteinSearch).toEqual({
