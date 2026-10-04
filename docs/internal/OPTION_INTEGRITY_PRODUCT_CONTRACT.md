@@ -5,7 +5,7 @@ Status: active Product authority
 ## Authority metadata
 
 - Contract ID: `OIPC`
-- Contract revision: `30`
+- Contract revision: `31`
 - Product Decision Owner: `satoshikawato`
 - Decision date: `2026-08-28`
 - Decision source: explicit Product Decision Owner selection of one (`1`) after
@@ -288,6 +288,19 @@ Status: active Product authority
     plan. Earlier decisions, including `PD-OI-032`, retain their scope. This
     authority-only amendment contains no runtime; dependent runtime requires
     it merged into its base.
+- Revision 31 changes: `PD-OI-018` is replaced for scenario revision `5`, from
+  the Product Decision Owner `satoshikawato`'s answer of `2026-10-04`, given in
+  that session through a multiple-choice question.
+  - The question: 「9/20 に承認した PD-OI-018 には「1つの File が複数の行にまたがるときは File を移動できない（custom layout 扱い）」と書かれています。CLI で書いたセッション（1レコード＝1行）を Load すると、このルールのため警告が出て並べ替えもできません。R9（#780）はルールを「各 File のレコードが連続した行にまとまり、別の File と行を共有していなければ、その行のまとまりごと移動できる」に広げる変更です。どうしますか？」
+  - The Owner selected 「ルールを広げる (Recommended)」, whose option text was: 「PD-OI-018 を revision 5 に改訂する PR を先に出し、そのあと #780 をマージします。CLI セッションでも警告が出ず、File を並べ替えられるようになります。複数の File が1行を共有するレイアウトや、File の行が交互に入り組んだレイアウトは、今までどおり custom 扱いです。」
+  - `PD-OI-018` scenario revision `5` (`C / CONSECUTIVE-FILE-ROW-BLOCKS`)
+    follows from that answer. Pull request `#780`
+    (`fix/web-linear-file-block-moves`) implements it.
+  - The receipt fields restate that answer and the option text. The Owner did
+    not separately review the receipt wording; the Owner's approval covers the
+    answer quoted above. Earlier decisions retain their scope. This
+    authority-only amendment contains no runtime; dependent runtime (`#780`)
+    requires it merged into its base.
 - Records remaining `EVIDENCE_REQUIRED`: none
 - Excluded records: none
 
@@ -754,28 +767,77 @@ corrected. Passing evidence does not make incorrect behavior normative.
 ### PD-OI-018: Complete Linear records, placement, and comparison scope
 
 - Concern key: `diagram-generation.linear-record-universe-and-search-scope`
-- Scenario revision: `4`
-- Supersedes: `PD-OI-018`, scenario revision `3` (`LINEAR-FILE-ROW-BLOCK`).
+- Scenario revision: `5`
+- Supersedes: `PD-OI-018`, scenario revision `4` (`B / FILE-DATABASE-WITHOUT-UNREQUESTED-SELF`).
 - Status: `ACCEPTED`
-- Selected outcome: `B / FILE-DATABASE-WITHOUT-UNREQUESTED-SELF`
-- Normative outcome: exactly the complete approved scenario revision `4`
+- Selected outcome: `C / CONSECUTIVE-FILE-ROW-BLOCKS`
+- Normative outcome: exactly the complete approved scenario revision `5`
+  `PRODUCT_DECISION` receipt and its JSON representation below, together with
+  the scenario revision `4` outcome and the scenario revision `3` outcome
+  retained below. The revision `5` receipt's Must preserve retains the revision
+  `4` receipt and its Must preserve (including items 1–7 of revision `3`). Its
+  May retire narrows revision `3` item 6's custom-layout paragraph and the
+  revision `3` JSON `customLayoutRule` only for a File whose records occupy
+  consecutive rows that no other File shares: such a File moves as one block of
+  rows. A File that shares a row with another File, or whose rows interleave
+  with another File's rows, stays custom and its move stays unavailable. The
+  other revision `3` and `4` terms remain in force.
+- Decision source: `satoshikawato`'s answer of `2026-10-04`, quoted verbatim in
+  the Revision 31 entry above. The receipt and JSON restate that answer and its
+  option text; the Owner did not separately review the receipt wording.
+  Dependent runtime (`#780`) requires this authority merged into its base; this
+  amendment supplies no runtime acceptance evidence.
+- Receipt SHA-256 (UTF-8, excluding the final newline):
+  `ae2b8a91a6c99c0eb2cc4d320bd4d461cbd05c2eb38e5d11c148f52e2702aab4`.
+- Acceptance contracts: `OIC-005`, `OIC-006`, `OIC-007`, `OIC-013`, `OIC-015`,
+  `OIC-018`.
+
+```text
+PRODUCT_DECISION
+Concern: diagram-generation.linear-record-universe-and-search-scope
+Scenario revision: 5
+Supersedes: PD-OI-018, scenario revision 4
+Choice: C / CONSECUTIVE-FILE-ROW-BLOCKS
+Rationale: CLI で書いた Session は 1 record = 1 行で並ぶため、複数 record のファイルが複数の行にまたがり、Web で Load すると File の並べ替えができず custom layout の警告が出る。各 File の record が連続した行にまとまり、別の File と行を共有していなければ、その行のまとまりごと File を移動できるようにする。
+Must preserve: revision 4 の receipt とその Must preserve（revision 3 の item 1〜7 を含む）。File の移動はその File のすべての record を 1 つのまとまりとして動かし、File 内の record の相対的な行・列・順序と record に付いた設定を保つ。移動は 1 回で Undo できる draft 操作である。1 File = 1 行のレイアウトでの動作は変えない。複数の File が 1 行を共有するレイアウトと、File の行が別の File の行と入り組んだレイアウトでは、従来どおり移動できず、Record Layout へ案内する。止めた移動は File の順、行の割り当て、比較、cache、現在の Result を何も変えない。
+May retire: 1 つの File が複数の行にまたがるときは File を移動できないという制限（revision 3 の item 6 と customLayoutRule のうち、その File の行が連続していて別の File と共有されていない場合）。
+Accepted residual risk: 行のまとまりの並びが File カードの順と違うとき、最初の移動で File カードの順に並べ直される。Arrange in rows が OFF のときも、移動は表示されていない行の割り当てを書き換える（既存の動作）。
+Owner: satoshikawato
+Decision date: 2026-10-04
+```
+
+```json
+{
+  "concern": "diagram-generation.linear-record-universe-and-search-scope",
+  "scenarioRevision": 5,
+  "supersedes": "PD-OI-018, scenario revision 4",
+  "choice": "C / CONSECUTIVE-FILE-ROW-BLOCKS",
+  "rationale": "CLI で書いた Session は 1 record = 1 行で並ぶため、複数 record のファイルが複数の行にまたがり、Web で Load すると File の並べ替えができず custom layout の警告が出る。各 File の record が連続した行にまとまり、別の File と行を共有していなければ、その行のまとまりごと File を移動できるようにする。",
+  "mustPreserve": "revision 4 の receipt とその Must preserve（revision 3 の item 1〜7 を含む）。File の移動はその File のすべての record を 1 つのまとまりとして動かし、File 内の record の相対的な行・列・順序と record に付いた設定を保つ。移動は 1 回で Undo できる draft 操作である。1 File = 1 行のレイアウトでの動作は変えない。複数の File が 1 行を共有するレイアウトと、File の行が別の File の行と入り組んだレイアウトでは、従来どおり移動できず、Record Layout へ案内する。止めた移動は File の順、行の割り当て、比較、cache、現在の Result を何も変えない。",
+  "mayRetire": "1 つの File が複数の行にまたがるときは File を移動できないという制限（revision 3 の item 6 と customLayoutRule のうち、その File の行が連続していて別の File と共有されていない場合）。",
+  "acceptedResidualRisk": "行のまとまりの並びが File カードの順と違うとき、最初の移動で File カードの順に並べ直される。Arrange in rows が OFF のときも、移動は表示されていない行の割り当てを書き換える（既存の動作）。",
+  "owner": "satoshikawato",
+  "decisionDate": "2026-10-04"
+}
+```
+
+#### Retained scenario revision `4` outcome
+
+- Scenario revision `4` (`B / FILE-DATABASE-WITHOUT-UNREQUESTED-SELF`)
+  normative outcome, retained: exactly the scenario revision `4`
   `PRODUCT_DECISION` receipt and its JSON representation below, together with
   the scenario revision `3` outcome retained below. The revision `4` receipt's
   Must preserve retains items 1–7 of revision `3`; its May retire removes only
   the limitation of self-search exclusion to Collinear inference OFF and the
-  loss of links when unrequested self-hits fill Max target seqs. The other
-  revision `3` terms remain in force.
-- Decision source: the complete `D-19` receipt in [`02_DECISION_PACK.md`](./web-gui-audit-20260930/02_DECISION_PACK.md) at P00 merge
+  loss of links when unrequested self-hits fill Max target seqs.
+- Decision source (revision `4`): the complete `D-19` receipt in [`02_DECISION_PACK.md`](./web-gui-audit-20260930/02_DECISION_PACK.md) at P00 merge
   commit `e97d90fecfb327135eb50e85cfa9a87be3145823`, approved by `satoshikawato` on `2026-09-30` through
   the two Owner replies quoted verbatim in the Revision 29 entry above. The
   receipt and JSON reproduce all supplied fields without translation or
   additional terms. The CLI LOSAT database scope is unchanged (`D-40` in the
-  same Decision Pack). Dependent runtime requires this authority merged into
-  its base; this amendment supplies no runtime acceptance evidence.
-- Receipt SHA-256 (UTF-8, excluding the final newline):
+  same Decision Pack).
+- Receipt SHA-256 (revision `4`, UTF-8, excluding the final newline):
   `39df7d14e08db9cf2872da02436c49a11bb7e2d2105cf256dfe0a86fd0786dbb`.
-- Acceptance contracts: `OIC-005`, `OIC-006`, `OIC-007`, `OIC-013`, `OIC-015`,
-  `OIC-018`.
 
 ```text
 PRODUCT_DECISION
@@ -845,6 +907,10 @@ Decision date: 2026-09-30
      Record identity, source association, selector, crop, reverse complement,
      definition, subtitle, depth binding, feature state, and within-File
      record order remain attached to the same record.
+
+     Scenario revision `5` narrows the custom-layout paragraph below: a File
+     whose records occupy consecutive rows that no other File shares is
+     movable as one block of rows.
 
      A normal layout has exactly one occupied row per File and no row shared
      by records from another File. When one File spans multiple rows or one row
@@ -938,6 +1004,8 @@ Decision date: 2026-09-30
 - File-row amendment source: The maintainer supplied the complete
   `PRODUCT_DECISION` response reproduced below on `2026-09-20`.
 - Owner and decision date: `satoshikawato`, `2026-09-20`.
+
+Scenario revision `5` narrows the `customLayoutRule` below in the same way: a File whose records occupy consecutive rows that no other File shares is movable as one block of rows.
 
 ```json
 {
