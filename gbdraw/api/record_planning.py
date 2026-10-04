@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import copy
 import logging
+from collections import Counter
 from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Callable, Hashable, Literal, Sequence
@@ -154,6 +155,8 @@ class ResolvedRecordProvenance:
     detected_topology: Literal["circular", "linear", "unknown"] = "unknown"
     is_cropped: bool = False
     has_collection_region: bool = False
+    # No other record of the source has this record's ID, so the ID selects it.
+    source_record_id_unique: bool = True
     resolved_display: ResolvedRecordDisplay | None = None
     source_feature_catalog: tuple[SourceFeatureIdentity, ...] | None = field(default=None, repr=False)
 
@@ -901,6 +904,7 @@ def _apply_provenance_annotations(
             "gbdraw_source_record_index": provenance.source_record_index,
             "gbdraw_source_record_count": provenance.source_record_count,
             "gbdraw_source_record_id": provenance.source_record_id,
+            "gbdraw_source_record_id_unique": provenance.source_record_id_unique,
             "gbdraw_record_key": provenance.record_key,
             "gbdraw_record_cardinality": provenance.cardinality.value,
             "gbdraw_source_kind": provenance.source_kind,
@@ -960,6 +964,7 @@ def resolve_record_inputs(
     if not inputs:
         raise ValidationError("A request requires at least one RecordInput.")
     cache: dict[tuple[object, ...], ParsedRecordInputs] = {}
+    id_counts: dict[tuple[object, ...], Counter[str]] = {}
     records: list[SeqRecord] = []
     provenance: list[ResolvedRecordProvenance] = []
     for input_index, record_input in enumerate(inputs):
@@ -974,6 +979,7 @@ def resolve_record_inputs(
                 gff_loader=gff_loader,
             )
             cache[key] = parsed
+            id_counts[key] = Counter(str(record.id) for record in parsed.records)
         raw_records = parsed.records
         selector = record_input.selector or _selector_from_region(record_input.region)
         source_indexes = _cardinality_indexes(
@@ -1013,6 +1019,9 @@ def resolve_record_inputs(
                 source_record_index=source_record_index,
                 source_record_count=len(raw_records),
                 source_record_id=str(raw_records[source_record_index].id),
+                source_record_id_unique=(
+                    id_counts[key][str(raw_records[source_record_index].id)] == 1
+                ),
                 source_kind=source_kind,
                 source_paths=source_paths,
                 record_key=record_key,

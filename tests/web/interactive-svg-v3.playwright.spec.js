@@ -853,6 +853,54 @@ test('Linear Record actions rotate a multi-record File of a loaded CLI Session w
     .toEqual([null, null, expectedStart]);
 });
 
+// One original file stays one File holding its records; record selection
+// decides what is drawn. A CLI Session that draws some records of a file
+// selects them on the bound file.
+test('Linear CLI Session that draws some records of a file loads and generates only those records', async ({
+  page
+}, testInfo) => {
+  test.setTimeout(300000);
+  page.on('dialog', (dialog) => {
+    if (dialog.message() !== 'Session loaded successfully!') dialog.dismiss();
+  });
+  const session = await writeCliSession(testInfo, 'linear', {
+    'cli-single.gbk': makeCircularRecord('cli_single', 'single_gene', 41, 125),
+    'cli-multi.gbk': makeCircularRecord('cli_multi_a', 'multi_a_gene', 61, 150)
+      + makeCircularRecord('cli_multi_b', 'multi_b_gene', 101, 200)
+  }, ['--record_id', '', '--record_id', 'cli_multi_b']);
+  await installRecordReadCounter(page);
+  await installDiagramRequestObserver(page);
+  await openApp(page);
+  await loadSessionFile(page, session);
+  const linearRows = () => page.evaluate(async () => {
+    const { state } = await import('/gbdraw/web/js/state.js');
+    return state.linearSeqs.map((seq) => [seq.uid, seq.gb?.name, seq.region_record_id]);
+  });
+  await expect(page.locator('[data-linear-source-records]')).toHaveCount(2);
+  expect(await linearRows()).toEqual([
+    ['record-1', 'cli-single.gbk', ''],
+    ['record-2', 'cli-multi.gbk', 'cli_multi_b']
+  ]);
+
+  await openLoadedRecordActions(page, { query: 'multi_b_gene', recordId: 'cli_multi_b', reads: 2 });
+  await page.getByRole('button', { name: 'Close feature popup', exact: true }).click();
+
+  await generateAndWaitForResult(page);
+  const request = await page.evaluate(() => window.__GBDRAW_DIAGRAM_RUNS__.at(-1));
+  expect(request.records.map((record) => [record.recordKey, record.selector])).toEqual([
+    ['record-1', null],
+    ['record-2', { kind: 'recordId', value: 'cli_multi_b' }]
+  ]);
+  expect(await linearRows()).toHaveLength(2);
+  const drawnRecordIds = (content) => [...new Set(
+    [...content.matchAll(/data-gbdraw-record-id="([^"]+)"/g)].map((match) => match[1])
+  )];
+  const cliSvg = fs.readFileSync(testInfo.outputPath('cli-linear.svg'), 'utf8');
+  expect(drawnRecordIds(cliSvg)).toEqual(['cli_single', 'cli_multi_b']);
+  expect(drawnRecordIds(await page.evaluate(() => window.__GBDRAW_APP__.svgContent)))
+    .toEqual(drawnRecordIds(cliSvg));
+});
+
 test('Linear CLI Session keeps --region and --reverse_complement through Load and Generate', async ({
   page
 }, testInfo) => {

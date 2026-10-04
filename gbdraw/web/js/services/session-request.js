@@ -892,8 +892,10 @@ const linearRegionPayload = (seq) => {
   };
 };
 
-// The Linear card fields that hold a request record's crop and orientation.
-const linearSeqCropFields = (record) => ({
+// The Linear card fields that hold a request record's selection, crop, and
+// orientation.
+const linearSeqRecordFields = (record) => ({
+  region_record_id: canonicalRecordSelector(record) || '',
   region_start: record?.region?.start ?? null,
   region_end: record?.region?.end ?? null,
   region_reverse: Boolean(record?.region?.reverseComplement || record?.presentation?.reverseComplement)
@@ -3830,9 +3832,12 @@ export const projectCanonicalSessionRequest = ({
     // A CLI binding uid (`cli-seq-N`) is only an initial value. The committed
     // request owns record identity, so each Linear file takes the recordKey
     // that Inherit matches against. A multi-record file, which Python expands
-    // as `<fileKey>:<n>`, becomes one row per record with the `#n` selector.
-    // The request also owns each record's crop and orientation: the CLI
-    // binds the input file and writes them in the request.
+    // as `<fileKey>:<n>`, becomes one row per record. The request also owns
+    // each record's selection, crop, and orientation: the CLI binds the input
+    // file and writes them in the request, so a file of which the CLI drew
+    // some records stays one File that draws only those records. A record
+    // without a selector (a CLI Session that stored a copy of each drawn
+    // record) takes the `#n` of its expanded recordKey.
     const recordKeysByFile = new Map();
     const recordsByKey = new Map();
     sourceRecords.forEach((record) => {
@@ -3848,14 +3853,17 @@ export const projectCanonicalSessionRequest = ({
       explicitBindings = {
         ...explicitBindings,
         linearSeqs: explicitBindings.linearSeqs.flatMap((sequence, index) => (
-          recordKeysByFile.get(fileRecordKeys[index]).map((uid) => ({
-            ...sequence,
-            uid,
-            ...(uid === fileRecordKeys[index] ? {} : {
-              region_record_id: `#${uid.slice(fileRecordKeys[index].length + 1)}`
-            }),
-            ...linearSeqCropFields(recordsByKey.get(uid))
-          }))
+          recordKeysByFile.get(fileRecordKeys[index]).map((uid) => {
+            const fields = linearSeqRecordFields(recordsByKey.get(uid));
+            return {
+              ...sequence,
+              uid,
+              ...fields,
+              ...(fields.region_record_id || uid === fileRecordKeys[index] ? {} : {
+                region_record_id: `#${uid.slice(fileRecordKeys[index].length + 1)}`
+              })
+            };
+          })
         ))
       };
     }
@@ -3983,8 +3991,6 @@ export const projectCanonicalSessionRequest = ({
   } else {
     files.linearSeqs = records.map((record, index) => {
       const source = record.source || {};
-      const region = record.region || null;
-      const selector = region?.selector || record.selector;
       const sourceIndex = normalizedRecordOrdering.sourceIndexByProjectedIndex[index];
       const savedMetadata = savedLinearRecordMetadataByKey.get(String(record.recordKey || '')) ||
         savedLinearRecordMetadata[sourceIndex] || legacyLinearSequences[sourceIndex] || {};
@@ -4027,8 +4033,7 @@ export const projectCanonicalSessionRequest = ({
         }),
         file_definition: fileDefinition,
         file_subtitle: fileSubtitle,
-        region_record_id: selector?.kind === 'recordId' ? selector.value : (selector?.kind === 'recordIndex' ? `#${selector.index + 1}` : ''),
-        ...linearSeqCropFields(record)
+        ...linearSeqRecordFields(record)
       };
     });
     files.linearComparisons = [];

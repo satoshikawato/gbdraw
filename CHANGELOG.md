@@ -79,6 +79,17 @@ write-up of a release.
   record is stored unchanged, in its search frame. Circular batch and grid
   records, for which the web app has no per-record crop, and Sessions written
   before this change keep their drawn copy.
+- Sessions (CLI `--session_output`, `gbdraw.api.save_session_document`): a
+  Linear Session that draws only some records of a multi-record file (for
+  example `--record_id`, or a records table that names some of its records)
+  now reads that file and selects each drawn record by record ID (by `#n` when
+  another record of the file has the same ID), instead of a copy of the drawn
+  records. After **Load Session** the file is one File that draws only those
+  records, so **Generate Diagram** no longer adds the records the CLI did not
+  draw, and record rotation works without **Generate Diagram**. Linear rows of
+  a CLI Session now take the record ID from the request instead of `#n`, so
+  they no longer show "Selected record was not found in the current file."
+  CLI Sessions written before this change load as before.
 
 Fixes from the 2026-09-30 Web GUI audit of `dev`. The plan and the approved
 decisions are in
