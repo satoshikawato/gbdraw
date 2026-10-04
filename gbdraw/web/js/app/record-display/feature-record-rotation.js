@@ -70,11 +70,22 @@ export const createFeatureRecordRotationAction = ({
     return { feature: resolvedFeature, row, target, resolved };
   };
 
-  const apply = async ({ feature, intent }) => {
-    const { row, target, resolved } = resolve({ feature, intent });
-    if (!resolved.eligibility.enabled) {
-      throw new Error(resolved.eligibility.message);
+  const resolveEligible = ({ feature, intent }) => {
+    const snapshot = resolve({ feature, intent });
+    if (!snapshot.resolved.eligibility.enabled) {
+      throw new Error(snapshot.resolved.eligibility.message);
     }
+    return snapshot;
+  };
+
+  const resolvedTransform = (resolved) => ({
+    startCoordinate: resolved.startCoordinate,
+    reverseComplement: resolved.reverseComplement,
+    anchorIntent: resolved.provenance
+  });
+
+  const apply = async ({ feature, intent }) => {
+    const { row, target, resolved } = resolveEligible({ feature, intent });
     const projection = projectCommittedRecordTransform({
       committed: getCommittedSession(),
       target,
@@ -90,13 +101,21 @@ export const createFeatureRecordRotationAction = ({
       restoreIntentCheckpoint: (checkpoint) => (
         recordDisplayControls.restoreTargetDraft(checkpoint)
       ),
-      commitIntent: () => recordDisplayControls.commitResolvedTransform(row, {
-        startCoordinate: resolved.startCoordinate,
-        reverseComplement: resolved.reverseComplement,
-        anchorIntent: resolved.provenance
-      })
+      commitIntent: () => recordDisplayControls.commitResolvedTransform(
+        row,
+        resolvedTransform(resolved)
+      )
     });
     return { ...outcome, receipt: projection.receipt, resolved };
+  };
+
+  // Apply on Generate (PD-OI-085): the same resolved transform goes into the
+  // record display draft that the sidebar edits and Generate applies, as one
+  // undoable step. No candidate runs and the Result is untouched.
+  const stage = async ({ feature, intent }) => {
+    const { row, resolved } = resolveEligible({ feature, intent });
+    const busy = await recordDisplayControls.setResolvedTransform(row, resolvedTransform(resolved));
+    return busy?.status === 'busy' ? busy : { status: 'ok', resolved };
   };
 
   // The explicit record action that reads records a Session Load left unread.
@@ -104,7 +123,7 @@ export const createFeatureRecordRotationAction = ({
     ? readRecords()
     : { status: 'unavailable', reason: 'Records cannot be read here.' });
 
-  return Object.freeze({ currentFeature, resolve, apply, readRecords: readTargetRecords });
+  return Object.freeze({ currentFeature, resolve, apply, stage, readRecords: readTargetRecords });
 };
 
 const parseSignedOffset = (value) => {
@@ -197,20 +216,42 @@ const intentFor = ({ position, reference, offsetText, orientForward }) => {
 
 const STRAND_SYMBOLS = Object.freeze({ '+': '+', '-': '−' });
 
-const previewFor = ({ recordLabel, resolved, committedReverseComplement }) => {
-  if (!Number.isSafeInteger(resolved.startCoordinate)) return '';
-  const orientation = resolved.reverseComplement === committedReverseComplement
+// "<record> will start at <n> · <orientation>", relative to the Result.
+const startSentence = ({ recordLabel, startCoordinate, reverseComplement, committedReverseComplement }) => {
+  const orientation = reverseComplement === committedReverseComplement
     ? 'orientation unchanged'
-    : resolved.reverseComplement
+    : reverseComplement
       ? 'reverse-complemented'
       : 'no longer reverse-complemented';
+  return `${recordLabel} will start at ${startCoordinate.toLocaleString('en-US')} · ${orientation}`;
+};
+
+const previewFor = ({ recordLabel, resolved, committedReverseComplement }) => {
+  if (!Number.isSafeInteger(resolved.startCoordinate)) return '';
   const before = STRAND_SYMBOLS[resolved.displayedStrand?.before];
   const after = STRAND_SYMBOLS[resolved.displayedStrand?.after];
   const strandChange = before && after && before !== after
     ? ` · feature strand ${before} → ${after}`
     : '';
-  return `${recordLabel} will start at ${resolved.startCoordinate.toLocaleString('en-US')}`
-    + ` · ${orientation}${strandChange}`;
+  return startSentence({
+    recordLabel,
+    startCoordinate: resolved.startCoordinate,
+    reverseComplement: resolved.reverseComplement,
+    committedReverseComplement
+  }) + strandChange;
+};
+
+// The start and orientation staged in the record's draft for Generate, when
+// they differ from the Result. A draft without a start keeps the default start:
+// the record's first base, or its last base when reverse-complemented.
+const pendingStartFor = (target) => {
+  const pending = target.pendingTransform;
+  if (!pending) return null;
+  const startCoordinate = pending.startCoordinate
+    ?? (pending.reverseComplement ? target.recordLength : 1);
+  return Number.isSafeInteger(startCoordinate)
+    ? { startCoordinate, reverseComplement: pending.reverseComplement }
+    : null;
 };
 
 const initialDraft = () => ({
@@ -237,7 +278,9 @@ const initialDraft = () => ({
   status: '',
   statusKind: 'idle',
   startCoordinate: null,
-  preview: ''
+  preview: '',
+  // The record's start and orientation already staged for Generate (PD-OI-085).
+  pendingPreview: ''
 });
 
 /**
@@ -308,11 +351,23 @@ export const createFeatureRecordRotationWorkflow = ({
       draft.disabledReason = targetLimit?.message || (offset.valid ? eligibility.message || '' : '');
       draft.canApply = offset.valid && eligibility.enabled && !draft.pending;
       draft.startCoordinate = snapshot.resolved.startCoordinate;
-      draft.preview = previewFor({
-        recordLabel: draft.recordLabel,
-        resolved: snapshot.resolved,
-        committedReverseComplement: snapshot.target.committedReverseComplement
-      });
+      const { committedReverseComplement } = snapshot.target;
+      const pending = pendingStartFor(snapshot.target);
+      draft.pendingPreview = pending
+        ? `Pending for Generate: ${startSentence({
+          recordLabel: draft.recordLabel, ...pending, committedReverseComplement
+        })}`
+        : '';
+      // A choice that resolves to the staged transform is stated once, by the pending line.
+      draft.preview = pending
+        && pending.startCoordinate === snapshot.resolved.startCoordinate
+        && pending.reverseComplement === snapshot.resolved.reverseComplement
+        ? ''
+        : previewFor({
+          recordLabel: draft.recordLabel,
+          resolved: snapshot.resolved,
+          committedReverseComplement
+        });
       return snapshot;
     } catch (error) {
       // A whole-target failure has one reason; per-control messages are only
@@ -326,6 +381,7 @@ export const createFeatureRecordRotationWorkflow = ({
       draft.canApply = false;
       draft.startCoordinate = null;
       draft.preview = '';
+      draft.pendingPreview = '';
       return null;
     }
   };
@@ -392,46 +448,99 @@ export const createFeatureRecordRotationWorkflow = ({
     recompute();
   };
 
+  // Both apply buttons share this validation (canApply). A failure keeps its
+  // one reason, on the reason line or next to the offset field (F4).
+  const applicableSnapshot = () => {
+    const snapshot = recompute();
+    if (snapshot && draft.canApply) return snapshot;
+    const shown = Boolean(draft.disabledReason || draft.offsetError);
+    draft.status = shown ? '' : 'Record rotation is unavailable.';
+    draft.statusKind = shown ? 'idle' : 'error';
+    return null;
+  };
+
+  // A failure message for the status line, unless the reason line, recomputed
+  // after the action, already states it.
+  const unlessShown = (message, fallback) => (
+    message && message !== draft.disabledReason ? message : fallback
+  );
+
   const apply = async () => {
     if (draft.pending) return { status: 'pending' };
-    const snapshot = recompute();
-    if (!snapshot || !draft.canApply) {
-      draft.status = draft.disabledReason || draft.offsetError || 'Record rotation is unavailable.';
-      draft.statusKind = 'error';
-      return { status: 'disabled' };
-    }
+    const snapshot = applicableSnapshot();
+    if (!snapshot) return { status: 'disabled' };
+    // F7: a popup closed or retargeted meanwhile has a new draft; this run
+    // writes nothing into it.
+    const generation = draftGeneration;
     draft.pending = true;
     draft.canApply = false;
     draft.status = 'Regenerating the target record…';
     draft.statusKind = 'pending';
+    let outcome;
+    let failure = '';
     try {
-      const outcome = await action.apply({
+      outcome = await action.apply({
         feature: snapshot.feature,
         intent: intentFor(draft)
       });
-      if (outcome?.status === 'ok') {
+      if (generation === draftGeneration && outcome?.status === 'ok') {
         const rebound = action.currentFeature(snapshot.feature);
         draft.feature = rebound;
         if (typeof onRebind === 'function') onRebind(rebound, draft.identity);
-        draft.status = 'Record rotation applied and regenerated.';
-        draft.statusKind = 'success';
-      } else if (outcome?.status === 'canceled') {
-        draft.status = 'Record rotation canceled. The previous Result was kept.';
-        draft.statusKind = 'idle';
-      } else {
-        draft.status = 'Record rotation failed. The previous Result was kept.';
-        draft.statusKind = 'error';
       }
-      return outcome;
     } catch (error) {
-      draft.disabledReason = error.message;
-      draft.status = `${error.message} The previous Result was kept.`;
-      draft.statusKind = 'error';
-      return { status: 'error', error };
-    } finally {
-      draft.pending = false;
-      recompute();
+      outcome = { status: 'error', error };
+      failure = error?.message || String(error);
     }
+    if (generation !== draftGeneration) return outcome;
+    draft.pending = false;
+    recompute();
+    const kept = 'The previous Result was kept.';
+    if (outcome?.status === 'ok') {
+      draft.status = 'Record rotation applied and regenerated.';
+      draft.statusKind = 'success';
+    } else if (outcome?.status === 'canceled') {
+      draft.status = `Record rotation canceled. ${kept}`;
+      draft.statusKind = 'idle';
+    } else {
+      draft.status = `${unlessShown(failure, 'Record rotation failed.')} ${kept}`;
+      draft.statusKind = 'error';
+    }
+    return outcome;
+  };
+
+  // Apply on Generate: stage the resolved transform; Generate Diagram applies
+  // every staged record together (PD-OI-085).
+  let staging = false;
+  const stage = async () => {
+    if (draft.pending || staging) return { status: 'pending' };
+    const snapshot = applicableSnapshot();
+    if (!snapshot) return { status: 'disabled' };
+    const generation = draftGeneration;
+    staging = true;
+    let outcome;
+    try {
+      outcome = await action.stage({
+        feature: snapshot.feature,
+        intent: intentFor(draft)
+      });
+    } catch (error) {
+      outcome = { status: 'error', error };
+    } finally {
+      staging = false;
+    }
+    if (generation !== draftGeneration) return outcome;
+    recompute();
+    if (outcome?.status === 'ok') {
+      draft.status = 'Record rotation will apply on the next Generate Diagram.';
+      draft.statusKind = 'success';
+    } else {
+      draft.status = outcome?.status === 'busy'
+        ? outcome.reason
+        : unlessShown(outcome?.error?.message, '');
+      draft.statusKind = draft.status ? 'error' : 'idle';
+    }
+    return outcome;
   };
 
   return Object.freeze({
@@ -445,6 +554,7 @@ export const createFeatureRecordRotationWorkflow = ({
     setReference,
     setOffset,
     setOrientForward,
-    apply
+    apply,
+    stage
   });
 };

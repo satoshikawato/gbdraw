@@ -4408,6 +4408,7 @@ export const createAppSetup = () => {
     setFeatureRecordRotationOffset: featureRecordRotation.setOffset,
     setFeatureRecordRotationOrientForward: featureRecordRotation.setOrientForward,
     applyFeatureRecordRotation: featureRecordRotation.apply,
+    stageFeatureRecordRotation: featureRecordRotation.stage,
     closeFeaturePopup,
     featurePlacementActions: featureActions.placementActions,
     sessionSaveNeedsGenerate,

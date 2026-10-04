@@ -35,7 +35,9 @@ for (const mode of ['circular', 'linear']) {
       const first = mode === 'circular'
         ? actions.getByRole('radio', { name: 'Start of the record', exact: true })
         : actions.getByText('Record rotation requires an effectively circular record.', { exact: true });
-      for (const control of [first, actions.getByRole('button', { name: 'Apply and regenerate', exact: true })]) {
+      for (const control of [first,
+        actions.getByRole('button', { name: 'Apply on Generate', exact: true }),
+        actions.getByRole('button', { name: 'Apply and regenerate', exact: true })]) {
         await control.scrollIntoViewIfNeeded();
         await expect(control).toBeVisible();
         const box = await control.boundingBox();

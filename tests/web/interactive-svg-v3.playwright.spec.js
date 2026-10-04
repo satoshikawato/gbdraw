@@ -279,6 +279,7 @@ test('feature popup record rotation works by pointer and keyboard in rich and si
   await page.keyboard.type('-3');
   await expect(offset).toHaveValue('-3');
   for (const control of [simpleDisclosure, reference, offset,
+    simpleActions.getByRole('button', { name: 'Apply on Generate', exact: true }),
     simpleActions.getByRole('button', { name: 'Apply and regenerate', exact: true })]) {
     const box = await control.boundingBox();
     expect(box.x).toBeGreaterThanOrEqual(0);
@@ -312,7 +313,11 @@ test('feature popup record rotation works by pointer and keyboard in rich and si
     };
   });
   await staleActions.getByRole('button', { name: 'Apply and regenerate' }).click();
-  await expect(staleActions.locator('[aria-live="polite"]')).toContainText(
+  // One reason source: the reason line states it once; the status line does not repeat it.
+  await expect(staleActions.locator('#feature-record-rotation-reason')).toContainText(
+    'no longer present'
+  );
+  await expect(staleActions.locator('[aria-live="polite"]')).not.toContainText(
     'no longer present'
   );
   expect(await page.evaluate(async () => {
@@ -455,6 +460,150 @@ test('same-file record rotation keeps chromosome targets independent', async ({ 
     .toEqual(chromosomeI.snapshot.request.comparisons);
   expect(chromosomeII.snapshot.svg).not.toBe(chromosomeI.snapshot.svg);
   expect(chromosomeII.snapshot.biological).toEqual(baseline.biological);
+});
+
+// PD-OI-085: Apply on Generate stages a record rotation in the record display
+// draft; one Generate Diagram applies every staged record, and Apply and
+// regenerate stays target-only (PD-OI-032 item 4).
+test('Apply on Generate stages rotations that one Generate applies together', async ({ page }) => {
+  test.setTimeout(300000);
+  await page.addInitScript(() => {
+    window.__ROTATION_HISTORY_COMMITS__ = [];
+    window.__GBDRAW_TEST_HOOKS__ = {
+      onHistoryDiagnostic: (event) => {
+        if (event.type === 'commit' && event.created) {
+          window.__ROTATION_HISTORY_COMMITS__.push({ scope: event.scope, label: event.label });
+        }
+      }
+    };
+  });
+  await installDiagramRequestObserver(page);
+  await openApp(page);
+  await page.getByLabel('GenBank/DDBJ File', { exact: true }).setInputFiles({
+    name: 'two-chromosomes.gbk',
+    mimeType: 'text/plain',
+    buffer: Buffer.from(
+      makeCircularRecord('chromosome_I', 'dnaA', 21, 105)
+      + makeCircularRecord('chromosome_II', 'parB', 151, 225)
+    )
+  });
+  await generateAndWaitForResult(page);
+  const snapshot = () => page.evaluate(async () => {
+    const { state } = await import('/gbdraw/web/js/state.js');
+    return {
+      runs: window.__GBDRAW_DIAGRAM_RUNS__.length,
+      svg: window.__GBDRAW_APP__.svgContent,
+      history: window.__GBDRAW_HISTORY__.getUndoCount(),
+      drafts: Object.fromEntries(state.recordDisplayDrafts
+        .map(({ recordId, startCoordinate }) => [recordId, startCoordinate]))
+    };
+  });
+  const lastStarts = () => page.evaluate(() => window.__GBDRAW_DIAGRAM_RUNS__.at(-1).records
+    .map((record) => record.display.startCoordinate)
+    .sort((a, b) => a - b));
+  const pendingNotice = page.getByText(
+    'Record rotation, feature placement, or tolerance has changes pending Generate.'
+  );
+  const search = page.getByRole('searchbox', { name: 'Search features', exact: true });
+  const openRotation = async (query) => {
+    await search.fill(query);
+    await search.press('Enter');
+    await page.getByRole('button', { name: 'Open active feature', exact: true }).click();
+    const disclosure = page.getByRole('button', { name: ROTATE_RECORD, exact: true });
+    await expect(disclosure).toHaveAttribute('aria-expanded', 'false');
+    await disclosure.click();
+    const actions = page.getByRole('region', { name: ROTATE_RECORD, exact: true });
+    await expect(actions).toBeVisible();
+    return actions;
+  };
+  const closePopup = () => page.getByRole('button', { name: 'Close feature popup', exact: true }).click();
+  const before = await snapshot();
+  const initialStarts = await lastStarts();
+  expect(initialStarts).toEqual([null, null]);
+  await expect(pendingNotice).toHaveCount(0);
+
+  // Stage chromosome I at the start of dnaA (21) and chromosome II after parB (226).
+  let actions = await openRotation('dnaA');
+  await expect(actions.locator('[data-record-rotation-preview]'))
+    .toHaveText('chromosome_I will start at 21 · orientation unchanged');
+  await actions.getByRole('button', { name: 'Apply on Generate', exact: true }).click();
+  await expect(actions.locator('[aria-live="polite"]'))
+    .toHaveText('Record rotation will apply on the next Generate Diagram.');
+  await expect(actions.locator('[data-record-rotation-pending]'))
+    .toHaveText('Pending for Generate: chromosome_I will start at 21 · orientation unchanged');
+  await expect(actions.locator('[data-record-rotation-preview]')).toHaveCount(0);
+  await closePopup();
+  actions = await openRotation('parB');
+  await expect(actions.locator('[data-record-rotation-pending]')).toHaveCount(0);
+  await actions.getByRole('radio', { name: 'End of the record', exact: true }).check();
+  await actions.getByRole('button', { name: 'Apply on Generate', exact: true }).click();
+  await expect(actions.locator('[data-record-rotation-pending]'))
+    .toHaveText('Pending for Generate: chromosome_II will start at 226 · orientation unchanged');
+  const staged = await snapshot();
+  expect(staged).toMatchObject({ runs: before.runs, svg: before.svg, history: before.history + 2 });
+  expect(staged.drafts).toEqual({ chromosome_I: 21, chromosome_II: 226 });
+  expect(await page.evaluate(() => window.__ROTATION_HISTORY_COMMITS__.slice(-2))).toEqual([
+    { scope: 'intent', label: 'Rotate record to feature on Generate' },
+    { scope: 'intent', label: 'Rotate record to feature on Generate' }
+  ]);
+  await expect(pendingNotice).toBeVisible();
+
+  // One Undo removes only the last staged record; Redo stages it again.
+  // History restore closes the popup; reopening shows the current draft.
+  await actions.getByRole('button', { name: 'Apply on Generate', exact: true }).focus();
+  await page.keyboard.press('ControlOrMeta+z');
+  await expect.poll(async () => (await snapshot()).drafts).toEqual({ chromosome_I: 21 });
+  actions = await openRotation('parB');
+  await expect(actions.locator('[data-record-rotation-pending]')).toHaveCount(0);
+  await expect(actions.locator('[data-record-rotation-preview]'))
+    .toHaveText('chromosome_II will start at 151 · orientation unchanged');
+  await page.keyboard.press('ControlOrMeta+Shift+z');
+  await expect.poll(async () => (await snapshot()).drafts).toEqual(staged.drafts);
+  expect(await snapshot()).toEqual(staged);
+  await page.keyboard.press('Escape');
+  await expect(actions).toBeHidden();
+
+  // Reopening shows the staged values.
+  for (const [query, expected] of [
+    ['dnaA', 'Pending for Generate: chromosome_I will start at 21 · orientation unchanged'],
+    ['parB', 'Pending for Generate: chromosome_II will start at 226 · orientation unchanged']
+  ]) {
+    actions = await openRotation(query);
+    await expect(actions.locator('[data-record-rotation-pending]')).toHaveText(expected);
+    await closePopup();
+  }
+
+  // One Generate Diagram applies both staged records.
+  await generateAndWaitForResult(page);
+  const generated = await snapshot();
+  expect(generated.runs).toBe(before.runs + 1);
+  expect(generated.svg).not.toBe(before.svg);
+  expect(await lastStarts()).toEqual([21, 226]);
+  await expect(pendingNotice).toHaveCount(0);
+  actions = await openRotation('dnaA');
+  await expect(actions.locator('[data-record-rotation-pending]')).toHaveCount(0);
+  await closePopup();
+
+  // Stage chromosome II again, then Apply and regenerate chromosome I only:
+  // the staged chromosome II stays staged and is not drawn.
+  actions = await openRotation('parB');
+  await actions.getByRole('button', { name: 'Apply on Generate', exact: true }).click();
+  await expect(actions.locator('[data-record-rotation-pending]'))
+    .toHaveText('Pending for Generate: chromosome_II will start at 151 · orientation unchanged');
+  await closePopup();
+  actions = await openRotation('dnaA');
+  await actions.getByRole('radio', { name: 'End of the record', exact: true }).check();
+  await actions.getByRole('button', { name: 'Apply and regenerate', exact: true }).click();
+  await expect(actions.locator('[aria-live="polite"]')).toHaveText(
+    'Record rotation applied and regenerated.', { timeout: 240000 }
+  );
+  expect(await lastStarts()).toEqual([106, 226]);
+  expect((await snapshot()).drafts).toEqual({ chromosome_I: 106, chromosome_II: 151 });
+  await expect(pendingNotice).toBeVisible();
+  await closePopup();
+  actions = await openRotation('parB');
+  await expect(actions.locator('[data-record-rotation-pending]'))
+    .toHaveText('Pending for Generate: chromosome_II will start at 151 · orientation unchanged');
 });
 
 test('both modes record rotation resolves the same circular source anchor', async ({ browser }) => {

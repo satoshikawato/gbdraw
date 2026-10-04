@@ -12,6 +12,16 @@ write-up of a release.
 
 ## [Unreleased]
 
+- Feature popup (web app): record rotation adds **Apply on Generate** next to
+  **Apply and regenerate**. It stores the previewed start and orientation for
+  the feature's record without redrawing, so rotations of several records are
+  drawn together by one **Generate Diagram**; each is one Undo step, and the
+  rotation section shows **Pending for Generate:** with the staged value until
+  then. **Apply and regenerate** still redraws only its own record and leaves
+  values staged for other records pending. Closing or switching the popup
+  while **Apply and regenerate** runs no longer writes its status into the
+  next popup, and a target that becomes stale before Apply states its reason
+  once.
 - Feature popup (web app): **Edit** now groups its controls by when they
   apply. **Appearance · updates the current Result** holds Fill Color, Stroke,
   Label text and visibility, Feature visibility, and Legend name; **Layout ·

@@ -1031,9 +1031,21 @@ renumber the source sequence. These actions require a complete record whose
 effective topology is circular; cropped sources and locations whose exact
 traversal or outgoing boundary cannot be established remain unavailable with a
 reason, and a choice that is unavailable for this feature is disabled with its
-own reason. Select **Apply and regenerate** to update only that feature's
-record and the current Result as one undoable action. Other pending form edits
-remain pending. **Cancel** inside the section resets and closes it while
+own reason. Two buttons apply the previewed start and orientation:
+
+- **Apply on Generate** writes them to that record's display start and
+  orientation, the same values **Record rotation** in Input Genomes edits, and
+  leaves the current Result unchanged. Repeat it on other records, then select
+  **Generate Diagram** once to draw them all. Applying again to the same record
+  replaces its earlier value. Each use is one Undo step. Until Generate, Input
+  Genomes shows the pending Generate notice, and reopening the rotation section
+  for that record shows **Pending for Generate:** with the staged start and
+  orientation.
+- **Apply and regenerate** updates only that feature's record and the current
+  Result as one undoable action. Other pending form edits, including values
+  that **Apply on Generate** set for other records, remain pending.
+
+**Cancel** inside the section resets and closes it while
 keeping the feature popup open. Cancel, a failed render, or a stale/replaced
 source keeps the previous Result and record transform. Undo and Redo restore the
 Result and record transform together; Save Session and a fresh Load preserve
