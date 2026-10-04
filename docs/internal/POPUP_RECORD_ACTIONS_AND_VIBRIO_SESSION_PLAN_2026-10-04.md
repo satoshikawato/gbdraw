@@ -28,6 +28,17 @@ answered the three open questions and approved the plan:
 OD-4 constraint: the Owner's screenshots are never saved as files or committed.
 Evidence images, if needed, are captured fresh from local builds.
 
+After R1 merged, the Owner added a request about the rotation controls
+(OD-5), verbatim:
+
+> Record actionsで、Ｐｌａｃｅ　ｔｈｉｓ　ｆｅａｔｕｒｅ　ａｔ　ｔｈｅ　ｅｎｄがでかすぎませんか？数あるオプションの一つでいいというか、むしろどちらかというとPlace this feature at the start とかのほうが優先されるべきでは？Anchorとの関係性がわかりにくい。ここらへんはもう抜本的にデザインしなおして下さいわかりやすいように。
+
+The Owner delegated the redesign. Section R4 "Rotation controls" records the
+design. It re-presents the operations that `PD-OI-032` item 2 and the
+`PD-OI-033` revision 2 receipt preserve (anchors, signed offset, orientation,
+feature-end placement) and adds a "start of the record" shortcut over the
+existing anchors; it changes no persisted format.
+
 ## 2. Findings
 
 ### F1. The Vibrio Gallery Session stores each chromosome as its own File
@@ -108,6 +119,24 @@ four, plus "Record: Unavailable" and "New display start: Unavailable".
 
 So staging needs no new queue, store, or History engine.
 
+### F8. The rotation controls hide what they do (OD-5)
+
+- Every operation sets one value: which source base becomes the first base of
+  the displayed record. The form does not say so. It shows an Anchor select
+  (5′ end, midpoint, 3′ end), an Offset field, and a separate full-width
+  "Place this feature at the end" button that switches to a different mode
+  (`placement: 'feature-end'`) and disables the Anchor select.
+- The common goal, "put this feature at the start of the record" (for
+  example, dnaA at position 1), has no control. The 5′-end anchor does it
+  only when the feature reads forward in the resulting display. For a
+  minus-strand feature without orientation change, the 5′ end is the
+  feature's rightmost base, so the feature is split between both ends of the
+  display. The display-first base in that case is the 3′ end.
+- `resolveFeatureAnchor` (`app/record-display/feature-anchor.js`) already
+  computes the displayed strand after the operation and the feature-end
+  boundary. The persisted provenance accepts only `placement` `anchor` or
+  `feature-end` (`app/record-display-options.js`, anchor intent validation).
+
 ### F7. Closing the popup during Apply and regenerate leaks state
 
 `closeFeaturePopup` resets the draft without aborting the run; when the
@@ -136,7 +165,7 @@ popup's draft (`feature-record-rotation.js`, `workflow.apply`).
 | R1 | `docs/product-contract-popup-record-actions` | GOVERNANCE | Product Contract revision 30: `PD-OI-033` scenario revision 2 and `PD-OI-085` from Appendix A | R0 |
 | R2 | `fix/web-record-actions-after-session-load` | STANDARD | F3, F4 | none |
 | R3 | `fix/gallery-vibrio-multi-record-files` | STANDARD | F1, F2, recurrence guard | none |
-| R4 | `feat/web-feature-popup-layout-groups` | STANDARD | F5, OD-1 (`PD-OI-033` rev 2) | R1, R2 |
+| R4 | `feat/web-feature-popup-layout-groups` | STANDARD | F5, F8, OD-1 (`PD-OI-033` rev 2), OD-5 | R1, R2 |
 | R5 | `feat/web-record-rotation-apply-on-generate` | STANDARD | OD-2, OD-3 (`PD-OI-085`), F7 | R1, R4 |
 
 R2 and R3 run in parallel. R4 and R5 both edit the popup template and
@@ -233,6 +262,60 @@ tabs):
 - Keep keyboard operation and a 390 px viewport working; update tests that
   depend on the old role names and texts.
 - Docs: `docs/REFERENCE/web-app.md` popup description, `CHANGELOG.md`.
+
+#### Rotation controls (F8, OD-5)
+
+One question, one answer: where does this feature go in the record. The
+presets name outcomes; Custom exposes the raw rule "the record starts at a
+reference point of this feature, shifted by an offset".
+
+```text
+▾ Rotate record using this feature
+  Put this feature at
+    (•) Start of the record
+    ( ) End of the record
+    ( ) Custom position
+          Record starts at [this feature's 5′ end ▾] shifted by [ 0 ] bp
+            reference choices: 5′ end · midpoint · 3′ end · just after the feature
+  [ ] Show this feature on the forward strand
+      (reverse-complements the record when the feature is on the − strand)
+  NC_004603.1 will start at 7,680 · orientation unchanged       (i)
+  [Cancel]                       [Apply and regenerate]   (+ R5 button)
+```
+
+1. The position radio group replaces the Anchor select, the Offset field at
+   the top level, the full-width "Place this feature at the end" button, and
+   the `placementLabel` badge. Default: Start of the record.
+2. Start of the record: the feature's first base in display order becomes
+   base 1. In `resolveFeatureAnchor`, a `feature-start` intent resolves to
+   the five-prime anchor when the feature reads forward in the resulting
+   display (displayed strand after the operation is `+`) and to the
+   three-prime anchor otherwise, with offset 0. Its provenance is recorded as
+   `placement: 'anchor'` with that resolved anchor, so no persisted format
+   changes. Unavailable, with its own reason, for features without a known
+   strand.
+3. End of the record: the existing `feature-end` placement with offset 0.
+4. Custom position: reference select (5′ end, midpoint, 3′ end, just after
+   the feature) plus the signed offset, counted along the feature's strand
+   (help tip). "Just after the feature" is `feature-end` with the offset. This
+   keeps every operation of `PD-OI-032` item 2, including feature-end with an
+   offset.
+5. Orientation checkbox: unchanged meaning, clearer label. Its effect on
+   "Start of the record" is resolved by item 2, so the feature lands at the
+   start with or without it.
+6. Preview: one sentence with the record ID, the new start, and the
+   orientation; the displayed-strand change appears only when it changes.
+   "Coordinates refer to the original record." moves into a help tip.
+7. An unavailable choice is disabled with its own short reason next to it.
+   A whole-target failure shows one reason line (R2) and hides the form.
+8. The domain math stays in `feature-anchor.js`; the workflow in
+   `feature-record-rotation.js` only maps the radio choice to an intent.
+   Remove `placeAtFeatureEnd`, `exactFeatureEnd`, and `placementLabel` when
+   nothing else uses them.
+9. Tests: `feature-start` resolution for +/− strands, with and without
+   orientation change and with an already reversed record (feature occupies
+   display bases 1..n); unstranded is unavailable; Custom covers all four
+   references with offsets; Playwright for keyboard operation and 390 px.
 
 ### R5. Apply on Generate (OD-2, OD-3, F7)
 
