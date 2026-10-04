@@ -19,7 +19,10 @@ original text (`labelSourceText`). The four rendered-ID maps
 `labelTextFeatureOverrideSources`, `labelVisibilityOverrides`) are rejected in
 Session 45. The Web app now sends these rows in the request, loads a request
 whose `featureOverrides` array is not empty, and draws them in the live preview
-by identity.
+by identity. An annotation made from selected features is saved with a
+`featureIdentity` target. Annotation targets of older Sessions, including
+`hash=` feature selectors made from a selection, load unchanged and keep their
+meaning: the hash of the drawn feature.
 
 The feature catalog is schema 5. Each drawn feature records the hash,
 location, and record location it was drawn with (`drawnSelector`), which live

@@ -10,7 +10,7 @@ await cp(join(process.cwd(), 'gbdraw', 'web', 'js'), join(tempRoot, 'js'), { rec
 await writeFile(join(tempRoot, 'package.json'), '{"type":"module"}', 'utf8');
 const load = (path) => import(pathToFileURL(join(tempRoot, 'js', path)));
 
-const { createAnnotationSet, normalizeAnnotationSets } = await load('app/annotations/state.js');
+const { annotationOptionsPayload, createAnnotationSet, normalizeAnnotationSets } = await load('app/annotations/state.js');
 const {
   annotationRecordSelector,
   annotationRecordSelectorFromValue,
@@ -28,7 +28,9 @@ const {
   setAnnotationRecordValue
 } = await load('app/annotations/record-selector.js');
 const { validateAnnotationRecordTargets } = await load('app/annotations/validation.js');
-const { encodeAnnotationTable, parseAnnotationTable, parseAnnotationTableWithNotice } = await load('app/annotations/table-codec.js');
+const {
+  encodeAnnotationTable, encodeAnnotationTableWithNotice, parseAnnotationTable, parseAnnotationTableWithNotice
+} = await load('app/annotations/table-codec.js');
 const { createAnnotationEditor } = await load('app/annotations.js');
 const { buildLinearTrackSlotSpec, normalizeLinearTrackSlots } = await load('app/linear-track-slots.js');
 const { buildCircularTrackSlotSpec, normalizeCircularTrackSlots } = await load('app/circular-track-slots.js');
@@ -184,7 +186,7 @@ const state = {
 };
 const editor = createAnnotationEditor({ state });
 test('delete and re-add keeps coordinate and selected-feature annotation IDs unique', () => {
-  const state = { annotationSets: [], selectedFeatures: { value: [{ selector: { hash: 'f123' } }] } };
+  const state = { annotationSets: [], selectedFeatures: { value: [{ record_key: 'k', biological_feature_id: 'f123' }] } };
   const actions = createAnnotationEditor({ state });
   const set = actions.addAnnotationSet();
   for (let i = 0; i < 3; i += 1) actions.addCoordinateAnnotation(set);
@@ -198,15 +200,76 @@ test('delete and re-add keeps coordinate and selected-feature annotation IDs uni
   assert.deepEqual(normalizeAnnotationSets([set])[0].annotations.map((item) => item.id), ids);
 });
 
-test('selected annotations use stable hashes, including features without named qualifiers', () => {
+// Design Q4 PR-Q4-5 (OV-03): a selected feature is named by its source
+// identity, never by a selector value that a crop or a copy changes.
+test('selected annotations name each feature by its source identity', () => {
   const targets = featureTargetsFromSelection([
-    { type: 'D-loop', record_id: 'mt', selector: { hash: 'fcf4827e2' } },
-    { gene: 'duplicated', record_id: 'mt', selector: { hash: 'f1234' } }
+    { type: 'D-loop', record_key: 'mt', biological_feature_id: 'fcf4827e2', selector: { hash: 'fcf4827e2' } },
+    { gene: 'duplicated', record_key: 'linear-seq-2', biological_feature_id: 'f1234~1', selector: { hash: 'f1234' } }
   ]);
-  assert.deepEqual(targets.map((target) => target.selectors), [
-    [{ key: 'hash', value: 'fcf4827e2' }], [{ key: 'hash', value: 'f1234' }]
+  assert.deepEqual(targets, [
+    { kind: 'featureIdentity', recordKey: 'mt', biologicalFeatureId: 'fcf4827e2', envelope: 'outer_bounds', circularPath: 'shortest' },
+    { kind: 'featureIdentity', recordKey: 'linear-seq-2', biologicalFeatureId: 'f1234~1', envelope: 'outer_bounds', circularPath: 'shortest' }
   ]);
-  assert.throws(() => featureTargetsFromSelection([{}]), /no stable annotation selector/);
+  // A Result without a feature catalog (a Session before 40) has no identities.
+  assert.equal(featureTargetsFromSelection([{ selector: { hash: 'f1234' }, locus_tag: 'A_1' }]), null);
+  const alerts = [];
+  const originalWindow = globalThis.window;
+  globalThis.window = { alert: (message) => alerts.push(message) };
+  try {
+    const legacy = createAnnotationEditor({ state: { annotationSets: [], selectedFeatures: [{ locus_tag: 'A_1' }] } });
+    const set = legacy.addAnnotationSet();
+    assert.deepEqual(legacy.addSelectedFeatures(set), []);
+    assert.deepEqual(set.annotations, []);
+    assert.deepEqual(alerts, ['Generate the diagram again to annotate the selected features.']);
+  } finally {
+    if (originalWindow === undefined) delete globalThis.window;
+    else globalThis.window = originalWindow;
+  }
+});
+
+// Design Q4 6.4: the table writes a selected feature in its current placement.
+test('the TSV writes selected features by drawn record position and drawn hash, and counts the rest', () => {
+  const identity = (recordKey, biologicalFeatureId) => ({
+    kind: 'featureIdentity', recordKey, biologicalFeatureId, envelope: 'segments', circularPath: 'reverse'
+  });
+  const sets = [createAnnotationSet({ id: 'marks', annotations: [
+    { id: 'drawn', target: identity('linear-seq-2', 'fb5977f81'), mark: 'band' },
+    { id: 'cropped', target: identity('linear-seq-2', 'f0000000a'), mark: 'band' }
+  ] })];
+  const drawnPlacement = (target) => (target.biologicalFeatureId === 'fb5977f81' ? { recordIndex: 1, hash: 'f3b928d8c' } : null);
+  const encoded = encodeAnnotationTableWithNotice(sets, { drawnPlacement });
+  assert.equal(encoded.placedFeatureIdentityCount, 1);
+  assert.equal(encoded.skippedFeatureIdentityCount, 1);
+  const [header, row, ...rest] = encoded.text.trim().split('\n').map((line) => line.split('\t'));
+  assert.deepEqual(rest, []);
+  const cell = (name) => row[header.indexOf(name)];
+  assert.deepEqual(['id', 'record', 'feature_selector', 'envelope', 'circular_path'].map(cell),
+    ['drawn', '#2', 'hash=f3b928d8c', 'segments', 'reverse']);
+  assert.deepEqual(parseAnnotationTable(encoded.text)[0].annotations[0].target, {
+    kind: 'featureSpan', record: { kind: 'recordIndex', index: 1 },
+    selectors: [{ key: 'hash', value: 'f3b928d8c' }], envelope: 'segments', circularPath: 'reverse'
+  });
+  // Without a placement (Run Info has none) no selected-feature row is written.
+  assert.equal(encodeAnnotationTableWithNotice(sets).skippedFeatureIdentityCount, 2);
+});
+
+// A request carries the selected-feature targets of its own records only; the
+// draft keeps the others (design Q4 3.2, R2).
+test('the request carries only the selected-feature targets of its records', () => {
+  const sets = [createAnnotationSet({ id: 'marks', annotations: [
+    { id: 'here', target: { kind: 'featureIdentity', recordKey: 'linear-seq-1', biologicalFeatureId: 'fa' }, mark: 'band' },
+    { id: 'expanded', target: { kind: 'featureIdentity', recordKey: 'linear-seq-2:3', biologicalFeatureId: 'fb' }, mark: 'band' },
+    { id: 'circular', target: { kind: 'featureIdentity', recordKey: 'circular-A-#1', biologicalFeatureId: 'fc' }, mark: 'band' },
+    { id: 'coordinates', target: coordinateTarget({ start: 1, end: 5 }), mark: 'band' }
+  ] })];
+  const records = [
+    { recordKey: 'linear-seq-1', cardinality: 'exactly_one' },
+    { recordKey: 'linear-seq-2', cardinality: 'all' }
+  ];
+  const payload = annotationOptionsPayload(sets, records);
+  assert.deepEqual(payload.sets[0].annotations.map((item) => item.id), ['here', 'expanded', 'coordinates']);
+  assert.equal(sets[0].annotations.length, 4);
 });
 const created = editor.addAnnotationSet('review');
 const addedCoordinate = editor.addCoordinateAnnotation(created, { start: 5, end: 8 });

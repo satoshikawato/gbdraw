@@ -2661,13 +2661,11 @@
                                         <input :value="item.id" @change="renameAnnotation(set, item, $event.target.value)" aria-label="Annotation id" class="form-input px-1 py-0.5 text-[10px]" placeholder="annotation_id" :disabled="!semanticMutationAvailable">
                                         <select :value="item.target.kind" @change="setAnnotationTargetKind(item, $event.target.value)" aria-label="Annotation target kind" class="form-input px-1 py-0.5 text-[10px]" :disabled="!semanticMutationAvailable">
                                             <option value="coordinateSpan">Coordinates</option><option value="featureSpan">Feature</option>
-                                            <option v-if="item.target.kind === 'featureIdentity'" value="featureIdentity" disabled>Source feature</option>
+                                            <option v-if="item.target.kind === 'featureIdentity'" value="featureIdentity" disabled>Selected feature</option>
                                         </select>
                                         <button type="button" class="btn btn-danger h-6 w-6 p-0 text-[10px]" @click="removeAnnotation(set, item)" title="Delete annotation" :disabled="!semanticMutationAvailable"><i class="ph ph-trash"></i></button>
                                     </div>
-                                    <p v-if="item.target.kind === 'featureIdentity'" class="text-[10px] text-slate-600" data-annotation-feature-identity>
-                                        Source feature <span class="font-mono">{{ item.target.biologicalFeatureId }}</span> of record <span class="font-mono">{{ item.target.recordKey }}</span>
-                                    </p>
+                                    <p v-if="item.target.kind === 'featureIdentity'" class="text-[10px] text-slate-600 break-words" data-annotation-feature-identity>Selected feature: {{ annotationFeatureCaption(item) }}</p>
                                     <div v-if="item.target.kind !== 'featureIdentity'">
                                         <label class="mb-0.5 flex items-center gap-1 text-[9px] text-slate-500">
                                             Target record

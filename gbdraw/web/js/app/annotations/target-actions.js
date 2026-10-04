@@ -1,4 +1,5 @@
 import { isUnspecifiedRecordSelectorValue } from '../record-options.js';
+import { featureIdentityKeyOf } from '../../services/feature-placement.js';
 
 const cleanNullable = (value) => {
   const text = String(value ?? '').trim();
@@ -88,20 +89,18 @@ export const featureTarget = ({ selector, selectors = null, recordId = null, rec
   circularPath: ['forward', 'reverse'].includes(circularPath) ? circularPath : 'shortest'
 });
 
-export const featureTargetsFromSelection = (features, options = {}) => (
-  (Array.isArray(features) ? features : []).map((feature) => {
-    const qualifier = feature?.qualifiers || {};
-    const first = (value) => Array.isArray(value) ? value[0] : value;
-    const locusTag = first(qualifier.locus_tag ?? feature?.locus_tag);
-    const gene = first(qualifier.gene ?? feature?.gene);
-    const hash = feature?.selector?.hash || feature?.stable_feature_id || feature?.stable_svg_id;
-    const selector = hash ? `hash=${hash}` : (locusTag ? `locus_tag=${locusTag}` : (gene ? `gene=${gene}` : ''));
-    if (!selector) throw new Error('The selected feature has no stable annotation selector.');
-    return featureTarget({
-      ...options,
-      selector,
-      recordId: options.recordId ?? feature?.record_id ?? null,
-      recordIndex: options.recordIndex ?? feature?.record_index ?? feature?.record_idx ?? feature?.fileIdx ?? null
-    });
-  })
-);
+// A selected feature is named by its original-source identity, which Python
+// resolves after crop, reverse complement, reordering, and duplication (design
+// Q4, OV-03). Null when a selected feature has none: a Result without a feature
+// catalog (a Session before 40 until Generate).
+export const featureTargetsFromSelection = (features) => {
+  const selected = Array.isArray(features) ? features : [];
+  if (!selected.every((feature) => featureIdentityKeyOf(feature))) return null;
+  return selected.map((feature) => ({
+    kind: 'featureIdentity',
+    recordKey: feature.record_key ?? feature.recordKey,
+    biologicalFeatureId: feature.biological_feature_id ?? feature.biologicalFeatureId,
+    envelope: 'outer_bounds',
+    circularPath: 'shortest'
+  }));
+};
