@@ -422,7 +422,8 @@ const importLabelTsv = (page, text) => page.evaluate(async (tsv) => {
 
 const previewLabelCount = (page, text) => page.locator('.origin-top svg text').filter({ hasText: text }).count();
 
-// A Result of feature catalog 3 or 4 (Session 44, bundled Gallery Sessions) has
+// A Result of feature catalog 3 or 4 (Session 44, the released Gallery Session
+// fixture) has
 // no drawn selector values. A rendered ID that carries the source hash means
 // the record was drawn with its source coordinates, so a `location` or
 // `record_location` row matches the source values there.
@@ -431,7 +432,7 @@ test('a Label TSV record_location row applies to a catalog 4 Result drawn with s
   const alerts = [];
   page.on('dialog', (dialog) => alerts.push(dialog.message()));
   await openFresh(page);
-  await loadSession(page, 'gbdraw/web/gallery/sessions/lambda_basic_linear.gbdraw-session.json');
+  await loadSession(page, 'tests/fixtures/sessions/lambda_basic_linear.v44-schema8.gbdraw-session.json.gz');
   alerts.length = 0;
   await importLabelTsv(page, 'NC_001416.1\tCDS\trecord_location\t^NC_001416\\.1:190\\.\\.736:\\+$\tTSV_RL\n');
   await settle(page);

@@ -313,7 +313,7 @@ test('Gallery renders the two-species Vibrio multi-record tutorial and media', a
   )?.[1];
   expect(encodedMetadata).toBeTruthy();
   const metadata = JSON.parse(gunzipSync(Buffer.from(encodedMetadata, 'base64')).toString('utf8'));
-  expect(metadata.schema).toBe(4);
+  expect(metadata.schema).toBe(5);
   expect(metadata.items).toHaveLength(1);
   expect(metadata.items[0].features).toHaveLength(9_375);
   // File-level LOSATP databases (PD-OI-018 revision 4) yield 114 blocks.

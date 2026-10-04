@@ -67,3 +67,14 @@ two Circular records with the same ID, and a Circular Session 33. The
 Sessions 33 have no feature catalog. They are the positive fixtures for the
 readers that move those edits onto source identities in Session 45. The steps,
 inputs, and hashes are in `feature-edits.provenance.json`.
+
+`lambda_basic_linear.v44-schema8.gbdraw-session.json.gz` and
+`HmmtDNA_basic_circular.v44-schema8.gbdraw-session.json.gz` preserve the released
+version 44, request schema 8, feature catalog schema 4 Gallery Sessions from
+first-parent `main` commit `fe6861f0`
+(`git show fe6861f0:gbdraw/web/gallery/sessions/<name>.gbdraw-session.json`),
+compressed with `gzip -n -9`, before the Gallery refresh to Session 45. Their
+decompressed SHA-256 values are
+`46d72e44f6f54c0fbf6c9c93c806a2f11570e1d024fa3f7552312042637abbad` (lambda) and
+`e532e83bf78d6ad63cfb228336b7ff3dcb3b82076a399da787e771b69abce649` (HmmtDNA).
+`gallery-session-publication.test.mjs` promotes them to the current writer.
