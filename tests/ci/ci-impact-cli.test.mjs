@@ -788,6 +788,7 @@ test('release dispatch is exhaustive and cannot be inferred from a routine push'
   assert.equal(outcome.plan.basis, 'MANUAL_FULL_RUN');
   assert.ok(outcome.plan.requiredJobs.includes('acceptance-supported-main'));
   assert.ok(outcome.plan.requiredJobs.includes('slow-main'));
+  assert.ok(outcome.plan.requiredJobs.includes('vibrio-generate-release'));
   assert.throws(() => configuration({ CI_IMPACT_PROFILE: 'release', CI_IMPACT_EVENT_NAME: 'push' }), /explicit dispatch/);
 });
 
@@ -797,7 +798,7 @@ test('release workflow binds exhaustive matrices and package/browser contracts t
   const release = job('release-gate');
   assert.match(release, /CI_IMPACT_EXPECTED_PROFILE: release/);
   assert.match(release, /inputs\.tier == 'release'/);
-  for (const id of ['core', 'recipes-standard', 'gallery', 'browser', 'playwright-functional', 'playwright-performance', 'losat-cache-browser-acceptance', 'acceptance-supported-main', 'slow-main']) {
+  for (const id of ['core', 'recipes-standard', 'gallery', 'browser', 'playwright-functional', 'playwright-performance', 'losat-cache-browser-acceptance', 'acceptance-supported-main', 'slow-main', 'vibrio-generate-release']) {
     assert.ok(release.includes(`      - ${id}\n`), `release gate missing ${id}`);
   }
   assert.match(job('core'), /python-version: \["3.10", "3.11", "3.12"\]/);
@@ -805,6 +806,8 @@ test('release workflow binds exhaustive matrices and package/browser contracts t
   assert.match(job('acceptance-supported-main'), /surface: \["recipe", "gallery", "browser"\]/);
   assert.match(job('slow-main'), /python-version: \["3.10", "3.11", "3.12"\]/);
   assert.match(job('slow-main'), /-m "slow and not browser"/);
+  assert.match(job('vibrio-generate-release'), /run: npm run test:web:vibrio-generate\n/);
+  assert.match(job('vibrio-generate-release'), /requiredJobs, 'vibrio-generate-release'/);
   assert.match(job('browser'), /Run package build integration[\s\S]*-m "slow and not browser"/);
   assert.match(job('browser'), /Run offline GUI browser contracts[\s\S]*-m "slow and browser"/);
   assert.match(job('pr-gate'), /sparse-checkout: tools[\s\S]*node \.ci-trusted-base\/tools\/ci-impact.mjs gate/);
@@ -852,6 +855,7 @@ test('browser jobs seed apt from one verified cache and bound their test steps',
     'playwright-functional',
     'playwright-performance',
     'acceptance-supported-main',
+    'vibrio-generate-release',
     'losat-cache-browser-acceptance'
   ]);
 
@@ -910,6 +914,7 @@ test('browser jobs seed apt from one verified cache and bound their test steps',
     'playwright-functional': 45,
     'playwright-performance': 25,
     'acceptance-supported-main': 20,
+    'vibrio-generate-release': 35,
     'losat-cache-browser-acceptance': 20
   });
   const stepTimeouts = {
@@ -922,7 +927,8 @@ test('browser jobs seed apt from one verified cache and bound their test steps',
     },
     'web-contracts-pr': { 'Run fast Web JavaScript contracts': 5, 'Run non-slow Python browser tests': 10 },
     'web-pr-smoke': { 'Run Playwright PR smoke': 10 },
-    'playwright-performance': { 'Run Playwright performance tests': 10 }
+    'playwright-performance': { 'Run Playwright performance tests': 10 },
+    'vibrio-generate-release': { 'Run Vibrio full generation': 25 }
   };
   for (const [id, limits] of Object.entries(stepTimeouts)) {
     for (const [name, minutes] of Object.entries(limits)) {

@@ -907,6 +907,78 @@ jobs:
         if: always()
         run: git diff --exit-code -- tests/reference_outputs/
 
+  vibrio-generate-release:
+    name: Vibrio full generation
+    needs: ci-impact
+    if: >-
+      !cancelled() &&
+      needs.ci-impact.result == 'success' &&
+      contains(fromJSON(needs.ci-impact.outputs.plan).requiredJobs, 'vibrio-generate-release') &&
+      ((github.event_name == 'push' && github.ref == 'refs/heads/dev') ||
+      (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/dev'))
+    runs-on: ubuntu-latest
+    # playwright.vibrio.config.js allows the one long test 20 minutes.
+    timeout-minutes: 35
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: pyproject.toml
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+
+      - name: Install browser dependencies
+        run: |
+          python -m pip install -e ".[dev]"
+          npm ci
+
+      - name: Restore Playwright system packages
+        id: playwright-apt
+        uses: actions/cache/restore@v4
+        with:
+          path: ~/.cache/playwright-apt
+          key: playwright-apt-v1-${{ runner.os }}-${{ runner.arch }}-
+          restore-keys: playwright-apt-v1-${{ runner.os }}-${{ runner.arch }}-
+
+      - name: Install Playwright Chromium and system packages
+        id: playwright-install
+        run: |
+          # Seed apt with cached .deb files; apt checks each against the signed index.
+          sudo cp -t /var/cache/apt/archives/ ~/.cache/playwright-apt/*.deb 2>/dev/null || true
+          npx playwright install --with-deps chromium
+          # Keep the .deb files apt can still download; key the cache by their content.
+          sudo apt-get autoclean -qq || true
+          rm -rf ~/.cache/playwright-apt && mkdir -p ~/.cache/playwright-apt
+          if cp -t ~/.cache/playwright-apt/ /var/cache/apt/archives/*.deb 2>/dev/null; then
+            sum="$(cd ~/.cache/playwright-apt && sha256sum -- *.deb | LC_ALL=C sort | sha256sum | cut -c1-16)"
+            echo "apt-cache-key=playwright-apt-v1-${RUNNER_OS}-${RUNNER_ARCH}-${sum}" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Save Playwright system packages
+        if: >-
+          steps.playwright-install.outputs.apt-cache-key != '' &&
+          steps.playwright-install.outputs.apt-cache-key != steps.playwright-apt.outputs.cache-matched-key
+        uses: actions/cache/save@v4
+        with:
+          path: ~/.cache/playwright-apt
+          key: ${{ steps.playwright-install.outputs.apt-cache-key }}
+
+      - name: Prepare browser wheel
+        run: python tools/prepare_browser_wheel.py
+
+      - name: Run Vibrio full generation
+        timeout-minutes: 25
+        run: npm run test:web:vibrio-generate
+
   lint:
     name: Lint
     needs: ci-impact
@@ -1055,6 +1127,7 @@ jobs:
       - playwright-performance
       - acceptance-supported-main
       - slow-main
+      - vibrio-generate-release
       - lint
       - losat-cache-browser-acceptance
     if: >-
@@ -1092,6 +1165,7 @@ jobs:
       - playwright-performance
       - acceptance-supported-main
       - slow-main
+      - vibrio-generate-release
       - lint
       - losat-cache-browser-acceptance
     if: >-
