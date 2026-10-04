@@ -45,11 +45,13 @@ from gbdraw.api.config import apply_config_overrides
 from gbdraw.api.options import CircularDiagramOptions, LinearDiagramOptions
 from gbdraw.api.requests import (
     CircularDiagramRequest,
+    GenBankInputSource,
     InMemoryRecordSource,
     LinearDiagramRequest,
     RecordCardinality,
     RecordInput,
     RecordPresentation,
+    RenderOutputRequest,
 )
 from gbdraw.session_io import (
     CURRENT_SESSION_VERSION,
@@ -74,7 +76,8 @@ from gbdraw.session_io import (
     write_session_json,
 )
 from gbdraw.session_request_codec import CANONICAL_REQUEST_SCHEMA
-from gbdraw.session import SessionFormatError, load_session_document
+from gbdraw.io.regions import parse_region_spec
+from gbdraw.session import SessionFormatError, build_session_document, load_session_document
 
 
 def _file_entry(name: str, content: bytes) -> dict:
@@ -3350,26 +3353,125 @@ def test_cli_session_binds_unmodified_gff_and_fasta_inputs_to_their_record(
     ).read_bytes()
 
 
-def test_cli_session_keeps_a_cropped_or_reversed_record_apart_from_its_input(
-    tmp_path: Path,
+def _write_records_table(tmp_path: Path) -> Path:
+    table = tmp_path / "records.tsv"
+    table.write_text(
+        "gbk\trecord_id\tregion\treverse_complement\n"
+        "single.gbk\t\t21-300:rc\t0\n"
+        "multi.gbk\tcli_multi_a\t\t1\n"
+        "multi.gbk\tcli_multi_b\t21-300\t1\n",
+        encoding="utf-8",
+    )
+    return table
+
+
+@pytest.mark.parametrize("case", ["options", "table"])
+def test_linear_cli_session_records_crop_and_orientation_on_the_unchanged_input_file(
+    tmp_path: Path, case: str
 ) -> None:
-    """A transformed record is not its input file, so the Web draft differs."""
+    """A cropped or reversed record reads its input file with a region and orientation.
+
+    The request names the crop (in source coordinates) and the orientation, as
+    the Web writes them, instead of a re-serialized copy of the drawn record.
+    The Web draft that loads the bound input file then draws the same record,
+    and a replay draws the same SVG. Orientation applied before a crop (the
+    CLI order) is written as the equivalent source-coordinate crop.
+    """
 
     single, multi = _cli_session_inputs(tmp_path)
-    session_path = tmp_path / "transformed.gbdraw-session.json"
-    linear_main(["--gbk", str(single), str(multi), "--region", "cli_single:21-300",
-                 "--reverse_complement", "0", "--reverse_complement", "1",
-                 "-o", str(tmp_path / "transformed"), "-f", "svg",
-                 "--session_output", str(session_path)])
+    session_path = tmp_path / f"{case}.gbdraw-session.json"
+    prefix = tmp_path / case
+    if case == "options":
+        args = ["--gbk", str(single), str(multi),
+                "--region", "cli_single:21-300", "--region", "cli_multi_b:21-300",
+                "--reverse_complement", "0", "--reverse_complement", "1"]
+        single_region = {"selector": None, "start": 21, "end": 300, "reverseComplement": False}
+    else:
+        args = ["--records_table", str(_write_records_table(tmp_path))]
+        single_region = {"selector": None, "start": 21, "end": 300, "reverseComplement": True}
+    linear_main([*args, "-o", str(prefix), "-f", "svg", "--session_output", str(session_path)])
 
     session = load_session(session_path)
-    bound = {sequence["gb"]["resourceId"] for sequence in session["webFiles"]["bindings"]["linearSeqs"]}
-    drawn = {record["source"]["resourceId"] for record in session["renderRequest"]["records"]}
-    assert len(bound) == len(drawn) == 2
-    assert not bound & drawn
-    assert [_resource_bytes(session, resource_id) for resource_id in sorted(bound)] == [
-        single.read_bytes(), multi.read_bytes()
+    records = session["renderRequest"]["records"]
+    first, second = records[0]["source"]["resourceId"], records[1]["source"]["resourceId"]
+    assert [
+        (record["source"]["resourceId"], record["selector"], record["region"],
+         record["presentation"]["reverseComplement"])
+        for record in records
+    ] == [
+        (first, None, single_region, False),
+        (second, {"kind": "recordId", "value": "cli_multi_a"}, None, True),
+        # Reversed 360 bp record cropped to 21..300 = source 61..340, reversed.
+        (second, None, {"selector": {"kind": "recordId", "value": "cli_multi_b"},
+                        "start": 61, "end": 340, "reverseComplement": True}, False),
     ]
+    assert _resource_bytes(session, first) == single.read_bytes()
+    assert _resource_bytes(session, second) == multi.read_bytes()
+    if case == "options":
+        bound = [sequence["gb"]["resourceId"]
+                 for sequence in session["webFiles"]["bindings"]["linearSeqs"]]
+        assert bound == [first, second]
+
+    replay = tmp_path / f"{case}-replay"
+    linear_main(["--session", str(session_path), "-o", str(replay), "-f", "svg"])
+    assert replay.with_suffix(".svg").read_bytes() == prefix.with_suffix(".svg").read_bytes()
+
+
+@pytest.mark.parametrize("canvas", [False, True])
+def test_circular_cli_session_keeps_cropped_and_reversed_records_as_drawn(
+    tmp_path: Path, canvas: bool
+) -> None:
+    """A Circular batch or grid draft has no per-record crop or orientation.
+
+    So those records keep their drawn copy, which the Web draws as is; only an
+    unchanged record reads its input file.
+    """
+
+    single, multi = _cli_session_inputs(tmp_path)
+    session_path = tmp_path / "circular.gbdraw-session.json"
+    prefix = tmp_path / "circular"
+    args = ["--records_table", str(_write_records_table(tmp_path))]
+    circular_main([*args, *(["--multi_record_canvas"] if canvas else []), "-o", str(prefix),
+                   "-f", "svg", "--session_output", str(session_path)])
+
+    session = load_session(session_path)
+    records = session["renderRequest"]["records"]
+    assert session["renderRequest"]["grouping"] == ("grid" if canvas else "batch")
+    assert [(record["region"], record["presentation"]["reverseComplement"])
+            for record in records] == [(None, False)] * 3
+    assert {
+        _resource_bytes(session, record["source"]["resourceId"]) for record in records
+    }.isdisjoint({single.read_bytes(), multi.read_bytes()})
+
+    replay = tmp_path / "circular-replay"
+    circular_main(["--session", str(session_path), "-o", str(replay), "-f", "svg"])
+    replayed = sorted(tmp_path.glob("circular-replay*.svg"))
+    assert len(replayed) == (1 if canvas else 3)
+    for path in replayed:
+        original = tmp_path / path.name.replace("circular-replay", "circular", 1)
+        assert path.read_bytes() == original.read_bytes()
+
+
+def test_single_circular_session_records_crop_on_the_unchanged_input_file(
+    tmp_path: Path,
+) -> None:
+    """A single Circular request's crop and orientation are the Web form's."""
+
+    single, _multi = _cli_session_inputs(tmp_path)
+    document = build_session_document(CircularDiagramRequest(
+        records=(RecordInput(
+            source=GenBankInputSource(single),
+            region=parse_region_spec("21-300:rc"),
+        ),),
+        output=RenderOutputRequest(output_prefix="single", output_directory=tmp_path),
+        grouping="single",
+    )).to_dict()
+
+    [record] = document["renderRequest"]["records"]
+    assert (record["selector"], record["region"], record["presentation"]["reverseComplement"]) == (
+        None, {"selector": None, "start": 21, "end": 300, "reverseComplement": True}, False
+    )
+    assert _resource_bytes(document, record["source"]["resourceId"]) == single.read_bytes()
 
 
 def test_depth_session_entry_materializes_encoded_payload(tmp_path: Path) -> None:

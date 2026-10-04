@@ -57,10 +57,21 @@ write-up of a release.
   of a rewritten copy. After **Load Session**, the feature popup's record
   rotation shows its preview without **Generate Diagram** and no longer says
   "The popup feature source changed after the popup opened." Each such file is
-  stored once. Cropped or reverse-complemented records keep their drawn copy.
-  The *Vibrio harveyi* group and *V. nigripulchritudo* TUMSAT-TG-2018 Gallery
-  Sessions now store their GBFF files byte for byte; their figures are
-  unchanged.
+  stored once. The *Vibrio harveyi* group and *V. nigripulchritudo*
+  TUMSAT-TG-2018 Gallery Sessions now store their GBFF files byte for byte;
+  their figures are unchanged.
+- Sessions (CLI `--session_output`, `gbdraw.api.save_session_document`): a
+  Linear record drawn with `--region`, `--reverse_complement`, or the records
+  table `region` or `reverse_complement` column now also reads its input file,
+  and the request stores the crop (in source coordinates) and the orientation,
+  as Web Save does. After **Load Session** the Linear rows keep the crop and
+  orientation, so **Generate Diagram** draws the record the CLI drew instead of
+  the full forward record, with the same source coordinates. A reversed record
+  rotates without **Generate Diagram**; a cropped record shows "Record rotation
+  is unavailable for a cropped record." A `-b` table that touches a reversed
+  record is stored unchanged, in its search frame. Circular batch and grid
+  records, for which the web app has no per-record crop, and Sessions written
+  before this change keep their drawn copy.
 
 Fixes from the 2026-09-30 Web GUI audit of `dev`. The plan and the approved
 decisions are in

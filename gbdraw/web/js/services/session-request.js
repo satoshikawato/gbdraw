@@ -892,6 +892,13 @@ const linearRegionPayload = (seq) => {
   };
 };
 
+// The Linear card fields that hold a request record's crop and orientation.
+const linearSeqCropFields = (record) => ({
+  region_start: record?.region?.start ?? null,
+  region_end: record?.region?.end ?? null,
+  region_reverse: Boolean(record?.region?.reverseComplement || record?.presentation?.reverseComplement)
+});
+
 const buildRecords = ({ state, filesData, resources }) => {
   if (state.mode.value === 'linear') {
     const resolvedRows = resolveEffectiveLinearRecordRows(
@@ -3824,11 +3831,15 @@ export const projectCanonicalSessionRequest = ({
     // request owns record identity, so each Linear file takes the recordKey
     // that Inherit matches against. A multi-record file, which Python expands
     // as `<fileKey>:<n>`, becomes one row per record with the `#n` selector.
+    // The request also owns each record's crop and orientation: the CLI
+    // binds the input file and writes them in the request.
     const recordKeysByFile = new Map();
+    const recordsByKey = new Map();
     sourceRecords.forEach((record) => {
       const key = String(record.recordKey || '');
       const fileKey = key.replace(/:[1-9]\d*$/, '');
       recordKeysByFile.set(fileKey, [...(recordKeysByFile.get(fileKey) || []), key]);
+      recordsByKey.set(key, record);
     });
     const fileRecordKeys = [...recordKeysByFile.keys()];
     if (renderRequest.mode === 'linear' && Array.isArray(explicitBindings.linearSeqs)
@@ -3842,7 +3853,8 @@ export const projectCanonicalSessionRequest = ({
             uid,
             ...(uid === fileRecordKeys[index] ? {} : {
               region_record_id: `#${uid.slice(fileRecordKeys[index].length + 1)}`
-            })
+            }),
+            ...linearSeqCropFields(recordsByKey.get(uid))
           }))
         ))
       };
@@ -4016,9 +4028,7 @@ export const projectCanonicalSessionRequest = ({
         file_definition: fileDefinition,
         file_subtitle: fileSubtitle,
         region_record_id: selector?.kind === 'recordId' ? selector.value : (selector?.kind === 'recordIndex' ? `#${selector.index + 1}` : ''),
-        region_start: region?.start ?? null,
-        region_end: region?.end ?? null,
-        region_reverse: Boolean(region?.reverseComplement || record.presentation?.reverseComplement)
+        ...linearSeqCropFields(record)
       };
     });
     files.linearComparisons = [];

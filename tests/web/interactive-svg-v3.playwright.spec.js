@@ -792,8 +792,9 @@ test('Linear Record actions rotate a circular record of a loaded Session without
 });
 
 // `gbdraw ... --session_output` binds its input files for the Web draft, and
-// its request draws unchanged records from those same files.
-const writeCliSession = async (testInfo, mode, inputs) => {
+// its request draws each record from those same files, with its crop and
+// orientation.
+const writeCliSession = async (testInfo, mode, inputs, args = []) => {
   const paths = Object.entries(inputs).map(([name, text]) => {
     const path = testInfo.outputPath(name);
     fs.writeFileSync(path, text);
@@ -802,7 +803,7 @@ const writeCliSession = async (testInfo, mode, inputs) => {
   const prefix = testInfo.outputPath(`cli-${mode}`);
   const session = `${prefix}.gbdraw-session.json`;
   await promisify(execFile)('python', [
-    '-m', 'gbdraw.cli', mode, '--gbk', ...paths, '-o', prefix, '-f', 'svg',
+    '-m', 'gbdraw.cli', mode, '--gbk', ...paths, ...args, '-o', prefix, '-f', 'svg',
     '--session_output', session
   ], { cwd: testInfo.outputDir, env: { ...process.env, PYTHONPATH: process.cwd() }, timeout: 300000 });
   return session;
@@ -850,6 +851,76 @@ test('Linear Record actions rotate a multi-record File of a loaded CLI Session w
   expect(request.mode).toBe('linear');
   expect(request.records.map((record) => record.display.startCoordinate))
     .toEqual([null, null, expectedStart]);
+});
+
+test('Linear CLI Session keeps --region and --reverse_complement through Load and Generate', async ({
+  page
+}, testInfo) => {
+  test.setTimeout(300000);
+  page.on('dialog', (dialog) => {
+    if (dialog.message() !== 'Session loaded successfully!') dialog.dismiss();
+  });
+  const session = await writeCliSession(testInfo, 'linear', {
+    'cli-cropped.gbk': makeCircularRecord('cli_cropped', 'cropped_gene', 61, 150),
+    'cli-reversed.gbk': makeCircularRecord('cli_reversed', 'reversed_gene', 41, 125)
+  }, ['--region', 'cli_cropped:21-300', '--reverse_complement', '0', '--reverse_complement', '1']);
+  await installDiagramRequestObserver(page);
+  await openApp(page);
+  await loadSessionFile(page, session);
+  await page.evaluate(() => { window.__GBDRAW_APP__.adv.rich_feature_popup = true; });
+  const openRecordActions = async (query) => {
+    const search = page.getByRole('searchbox', { name: 'Search features', exact: true });
+    await search.fill(query);
+    await search.press('Enter');
+    await page.getByRole('button', { name: 'Open active feature', exact: true }).click();
+    await page.getByRole('button', { name: ROTATE_RECORD, exact: true }).click();
+    return page.getByRole('region', { name: ROTATE_RECORD, exact: true });
+  };
+  const closePopup = () => page.getByRole('button', { name: 'Close feature popup', exact: true }).click();
+
+  // The reversed record is its bound input file reverse-complemented, so its
+  // rotation is available without Generate.
+  const reversed = await openRecordActions('reversed_gene');
+  await expect(reversed.locator('[data-record-rotation-preview]'))
+    .toContainText('cli_reversed will start at');
+  await expect(reversed.getByRole('button', { name: 'Apply and regenerate' })).toBeEnabled();
+  await closePopup();
+  // A cropped record cannot rotate, and says so (PD-OI-032 item 7).
+  const cropped = await openRecordActions('cropped_gene');
+  await expect(cropped.locator('#feature-record-rotation-reason'))
+    .toHaveText('Record rotation is unavailable for a cropped record.');
+  await expect(cropped.getByRole('button', { name: 'Apply and regenerate' })).toBeDisabled();
+  await closePopup();
+  expect(await page.evaluate(() => window.__GBDRAW_DIAGRAM_RUNS__.length)).toBe(0);
+
+  await generateAndWaitForResult(page);
+  const request = await page.evaluate(() => window.__GBDRAW_DIAGRAM_RUNS__.at(-1));
+  expect(request.records.map((record) => [record.region, record.presentation.reverseComplement]))
+    .toEqual([
+      [{ selector: null, start: 21, end: 300, reverseComplement: false }, false],
+      [null, true]
+    ]);
+  // Generate draws what the CLI drew, with its source coordinates.
+  const semantics = (content) => {
+    const svg = new DOMParser().parseFromString(content, 'image/svg+xml').documentElement;
+    const rounded = (value) => String(value || '').replace(/-?\d+\.\d+/g, (number) => Number(number).toFixed(3));
+    return {
+      records: [...svg.querySelectorAll('[data-gbdraw-record-source-start]')].map((element) => [
+        'record-id', 'record-source-start', 'record-source-end', 'record-source-step'
+      ].map((name) => element.getAttribute(`data-gbdraw-${name}`))),
+      features: [...svg.querySelectorAll('[data-gbdraw-feature-id]')].map((element) => [
+        element.getAttribute('data-gbdraw-feature-id'), rounded(element.getAttribute('d'))
+      ]),
+      text: [...svg.querySelectorAll('text')].map((element) => element.textContent)
+    };
+  };
+  const cliSvg = fs.readFileSync(testInfo.outputPath('cli-linear.svg'), 'utf8');
+  const generated = await page.evaluate(semantics, await page.evaluate(() => window.__GBDRAW_APP__.svgContent));
+  expect(generated).toEqual(await page.evaluate(semantics, cliSvg));
+  expect(generated.records.map((record) => record.slice(1))).toEqual([
+    ['21', '300', '1'],
+    ['1', '360', '-1']
+  ]);
 });
 
 test('browser export embeds the exact selected schema-4 item and expands references', async ({
