@@ -435,24 +435,7 @@ def _record_source_original_names(session: dict[str, object]) -> list[str]:
 
 
 @pytest.mark.parametrize(
-    "entry",
-    [
-        pytest.param(
-            entry,
-            id=entry["id"],
-            marks=(
-                # Follow-up: the Circular multi-record Session still stores one
-                # resource per replicon (a composite File in the Web).
-                pytest.mark.xfail(
-                    strict=True,
-                    reason="Vnig stores one resource per record",
-                )
-                if entry["id"] == "Vnig_TUMSAT-TG-2018"
-                else ()
-            ),
-        )
-        for entry in _GALLERY_ENTRIES
-    ],
+    "entry", [pytest.param(entry, id=entry["id"]) for entry in _GALLERY_ENTRIES]
 )
 def test_gallery_session_record_sources_are_the_declared_input_files(
     entry: dict[str, object],
@@ -893,19 +876,45 @@ def test_refresh_records_resolved_track_geometry(
     assert geometry["records"][0]["axisRadiusPx"] > 0
 
 
-def test_vibrio_gallery_session_is_built_from_its_declared_command() -> None:
-    from tools.prepare_interactive_gallery_assets import (
-        VIBRIO_HARVEYI_GROUP_COMMAND,
-    )
+@pytest.mark.parametrize(
+    "example",
+    [
+        pytest.param(example, id=example.id)
+        for example in gallery_assets_module.EXAMPLES
+        if "Multi-record" in example.tags
+    ],
+)
+def test_multi_record_gallery_sessions_are_built_from_their_declared_commands(
+    example: gallery_assets_module.GallerySessionExample,
+) -> None:
+    """Refresh rebuilds a multi-record example from its command and inputs.
 
-    assert (
-        refresh_gallery_sessions_module._declared_session_command(
-            _session_path("vibrio-harveyi-group-collinear")
-        )
-        == VIBRIO_HARVEYI_GROUP_COMMAND
+    Replaying a stored Session keeps whatever resources it holds, so a Session
+    once split per record would stay split. The declared command reads each
+    input file as one source, and its inputs resolve in ``command_dir``.
+    """
+
+    declared = refresh_gallery_sessions_module._declared_session_example(
+        example.session_path
     )
-    assert not refresh_gallery_sessions_module._declared_session_command(
-        _session_path("lambda_basic_linear")
+    assert declared is example
+    args = shlex.split(example.command)
+    inputs = [
+        value
+        for flag, value in zip(args, args[1:])
+        if flag in {"--gbk", "--gff", "--fasta", "--records_table"}
+    ]
+    assert inputs
+    for value in inputs:
+        assert (example.command_cwd / value).is_file(), value
+
+
+def test_replayed_gallery_sessions_have_no_declared_command_example() -> None:
+    assert (
+        refresh_gallery_sessions_module._declared_session_example(
+            _session_path("lambda_basic_linear")
+        )
+        is None
     )
 
 
@@ -988,6 +997,56 @@ def test_declared_command_refresh_keeps_one_file_as_one_resource(
         if resource["kind"] == "genbank"
     ]
     assert [text.count("\nLOCUS ") + text.startswith("LOCUS ") for text in genbank] == [2, 2]
+
+
+@pytest.mark.circular
+def test_declared_circular_command_refresh_keeps_one_file_as_one_resource(
+    tmp_path: Path,
+) -> None:
+    """The Vnig command builds a Session with one resource for its one file.
+
+    The command names its input by file name, so it runs in the directory that
+    holds the input; the published Session binds both records of the file by
+    record ID and draws the figure of the declared command.
+    """
+
+    from tools.prepare_interactive_gallery_assets import VNIG_COMMAND
+
+    source = Path(__file__).parent / "fixtures" / "web_batch_two_records.gb"
+    (tmp_path / "two-records.gbff").write_bytes(source.read_bytes())
+    argv = shlex.split(VNIG_COMMAND)
+    argv[argv.index("--gbk") + 1] = "two-records.gbff"
+    argv[argv.index("-o") + 1] = "declared"
+    # Keep the positions of the two records the file holds.
+    for position in ("#3@2", "#4@2", "#5@2", "#6@2"):
+        index = argv.index(position)
+        del argv[index - 1 : index + 1]
+    command = shlex.join(argv)
+    declared = tmp_path / "stage" / "declared.gbdraw-session.json"
+    declared.parent.mkdir()
+    destination = tmp_path / "published.gbdraw-session.json"
+
+    refresh_gallery_sessions_module._declared_command_session(
+        command, declared, env=refresh_gallery_sessions_module._cli_env(), cwd=tmp_path
+    )
+    _refresh_one_session(declared, destination_path=destination)
+    refresh_gallery_sessions_module._assert_declared_figure(declared, destination)
+
+    session = load_session(destination)
+    assert session["cliInvocation"]["args"] == argv[2:]
+    assert [
+        (record["source"]["resourceId"], record["selector"])
+        for record in session["renderRequest"]["records"]
+    ] == [
+        ("record-1-genbank", {"kind": "recordId", "value": "TESTA"}),
+        ("record-1-genbank", {"kind": "recordId", "value": "TESTB"}),
+    ]
+    assert _record_source_original_names(session) == ["two-records.gbff"]
+    assert [
+        resource_id
+        for resource_id, resource in session["resources"].items()
+        if resource["kind"] == "genbank"
+    ] == ["record-1-genbank"]
 
 
 def test_linear_schema5_publication_preserves_materialized_cardinality_round_trip(

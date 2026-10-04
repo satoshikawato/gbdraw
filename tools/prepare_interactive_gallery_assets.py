@@ -70,13 +70,20 @@ class GallerySessionExample:
     source_note: str = "Session JSON and generated SVG output are stored with the gallery assets."
     command: str = ""
     # Refresh builds the Session from ``command`` and its declared inputs
-    # instead of replaying the stored Session.
+    # instead of replaying the stored Session. The command runs in
+    # ``command_dir`` (relative to the repository root), where its relative
+    # input paths resolve.
     session_from_command: bool = False
+    command_dir: str = ""
 
     @property
     def session_path(self) -> Path:
         suffix = ".gbdraw-session.json.gz" if self.compressed_session else ".gbdraw-session.json"
         return SESSION_ROOT / f"{self.id}{suffix}"
+
+    @property
+    def command_cwd(self) -> Path:
+        return REPO_ROOT / self.command_dir
 
     @property
     def session_ref(self) -> str:
@@ -172,6 +179,19 @@ BGC_COMMAND = (
     "-l bottom -o BGC0000708-BGC0000713"
 )
 
+VNIG_COMMAND = (
+    "gbdraw circular -o Vnig_TUMSAT-TG-2018 --separate_strands "
+    "-k CDS,rRNA,tRNA,tmRNA,ncRNA,repeat_region -p orchid --track_type tuckin -l left "
+    "--plot_title '<i>Vibrio nigripulchritudo</i> TUMSAT-TG-2018, complete genome' "
+    "--plot_title_position bottom --multi_record_canvas --multi_record_size_mode auto "
+    "--multi_record_min_radius_ratio 0.55 --multi_record_column_gap_ratio 0.1 "
+    "--multi_record_row_gap_ratio 0.05 --multi_record_position '#1@1' "
+    "--multi_record_position '#2@1' --multi_record_position '#3@2' "
+    "--multi_record_position '#4@2' --multi_record_position '#5@2' "
+    "--multi_record_position '#6@2' --gbk GCF_015097735.1_ASM1509773v1_genomic.gbff "
+    "-f interactive_svg"
+)
+
 VIBRIO_HARVEYI_GROUP_COMMAND = (
     "gbdraw linear --records_table examples/vibrio-harveyi-group-linear-records.tsv "
     "--linear_record_gap 48 --track_layout above --scale_style ruler --ruler_on_axis "
@@ -249,6 +269,9 @@ EXAMPLES: tuple[GallerySessionExample, ...] = (
         display_order=50,
         command_kind="runnable",
         command_note="Download the pinned RefSeq assembly named in Files; no sequence search is required.",
+        command=VNIG_COMMAND,
+        session_from_command=True,
+        command_dir="tests/test_inputs",
         compressed_session=True,
         source_note=GZIP_SESSION_SOURCE_NOTE,
     ),

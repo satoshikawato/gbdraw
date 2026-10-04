@@ -20,7 +20,7 @@ import tempfile
 from collections.abc import Mapping
 from contextlib import contextmanager
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 from xml.etree import ElementTree as ET
 
 
@@ -55,6 +55,9 @@ from gbdraw.tracks.circular import (  # noqa: E402
     parse_circular_track_slots,
 )
 from gbdraw.tracks.scalars import ScalarSpec  # noqa: E402
+
+if TYPE_CHECKING:
+    from tools.prepare_interactive_gallery_assets import GallerySessionExample
 
 
 GALLERY_ROOT = REPO_ROOT / "gbdraw" / "web" / "gallery"
@@ -1053,12 +1056,14 @@ def _declared_command_session(
     session_path: Path,
     *,
     env: Mapping[str, str],
+    cwd: Path = REPO_ROOT,
 ) -> None:
     """Write the CLI Session of a declared Gallery command to ``session_path``.
 
-    The command runs from the repository root, so its relative inputs resolve
-    as documented; only the output prefix moves next to ``session_path``. The
-    recorded invocation keeps the declared arguments.
+    The command runs in ``cwd`` (the repository root unless the example names
+    the directory of its inputs), so its relative inputs resolve as documented;
+    only the output prefix moves next to ``session_path``. The recorded
+    invocation keeps the declared arguments.
     """
 
     argv = shlex.split(command)
@@ -1081,7 +1086,7 @@ def _declared_command_session(
             "--session_output",
             str(session_path),
         ],
-        cwd=REPO_ROOT,
+        cwd=cwd,
         env=dict(env),
         check=True,
     )
@@ -1180,19 +1185,19 @@ def _refresh_one_session(
         shutil.move(str(finalized_path), destination_path or session_path)
 
 
-def _declared_session_command(session_path: Path) -> str:
-    """The declared command a Gallery Session is built from, if any."""
+def _declared_session_example(session_path: Path) -> GallerySessionExample | None:
+    """The Gallery example whose declared command builds this Session, if any."""
 
     from tools.prepare_interactive_gallery_assets import EXAMPLES
 
     return next(
         (
-            example.command
+            example
             for example in EXAMPLES
             if example.session_from_command
             and example.session_path.name == session_path.name
         ),
-        "",
+        None,
     )
 
 
@@ -1219,14 +1224,17 @@ def refresh_gallery_sessions(
         for index, session_path in enumerate(session_paths):
             print(f"Refreshing gallery session: {session_path.relative_to(REPO_ROOT)}")
             staged_path = staging_root / f"{index:02d}-{session_path.name}"
-            command = _declared_session_command(session_path)
-            if command:
+            example = _declared_session_example(session_path)
+            if example is not None:
                 with tempfile.TemporaryDirectory(
                     prefix="gbdraw-gallery-command-"
                 ) as command_dir:
                     declared_path = Path(command_dir) / session_path.name
                     _declared_command_session(
-                        command, declared_path, env=_cli_env()
+                        example.command,
+                        declared_path,
+                        env=_cli_env(),
+                        cwd=example.command_cwd,
                     )
                     _refresh_one_session(
                         declared_path, destination_path=staged_path
