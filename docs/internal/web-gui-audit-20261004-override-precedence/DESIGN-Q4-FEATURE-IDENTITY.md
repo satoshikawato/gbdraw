@@ -432,7 +432,18 @@ OV-02 は identity の編集ではない。手入力の色規則（`location` / 
   - Circular と Linear の両方
   - 全部の functional の spec は PR の CI に任せる。
 
-## 8. Owner に決めてほしいこと
+## 8. Owner の決定（2026-10-04）
+
+Owner（satoshikawato）が 2026-10-04 に、下の選択肢から 3 問とも A（推奨）を選んだ。実装はこの決定に従う。
+
+| 質問 | 選択 |
+|---|---|
+| Q1 複製での Feature visibility | A: 複製ごと |
+| Q2 identity の行の表形式 | A: `--feature_override_table` を足す |
+| Q3 解決できなくなった identity | A: Generate を止めずに通知し、placement にも同じ規則を当てる |
+
+### 提示した選択肢
+
 
 ### Q1: 複製した record での Feature visibility の編集は、複製ごとか
 
