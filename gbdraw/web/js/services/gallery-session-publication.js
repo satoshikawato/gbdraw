@@ -1,4 +1,5 @@
 import { createDefaultAdv, createDefaultCircularConservation, createDefaultForm, createDefaultLosat, validateCurrentWriterActiveConfig } from './session-active-config-contract.js';
+import { resolveActiveLayoutPreference } from '../app/layout-preferences.js';
 import { migrateLegacyLinearLabelVisibility } from '../app/linear-label-visibility.js';
 import { migrateLegacyRecordDisplayDrafts } from '../app/record-display-options.js';
 import { migrateLegacyFeatureCatalog } from './feature-catalog.js';
@@ -31,9 +32,17 @@ export const applyDerivedCachePublicationPolicy = (session, { limitBytes = CACHE
   if (!entries?.length || !regenerableProteinCache(session) || new TextEncoder().encode(JSON.stringify(entries)).byteLength <= limitBytes) return session;
   return { ...session, losatDerivedCache: { ...session.losatDerivedCache, entries: [] } };
 };
-const validateCurrent = (session) => {
+// A CLI-written Session has no Web configuration; publication derives it from
+// the request, as Session Load does, so a Gallery Session can be built from its
+// declared command.
+const isCliWritten = (session) => !has(session, 'config') && session?.cliInvocation?.generatedBy === 'gbdraw';
+const validateEnvelope = (session) => {
   if (!isObject(session) || session.format !== 'gbdraw-session') throw new Error('Gallery publication requires a gbdraw-session document.'); if (Number(session.version) !== CURRENT_VERSION) throw new Error(`Gallery publication requires session version ${CURRENT_VERSION}.`);
-  if (!isObject(session.renderRequest) || !ACCEPTED_REQUEST_SCHEMAS.has(Number(session.renderRequest.schema))) throw new Error(`Gallery publication requires canonical renderRequest schema ${CURRENT_REQUEST_SCHEMA}.`); validateCurrentWriterActiveConfig({ mode: session.renderRequest.mode, storedConfig: session.config });
+  if (!isObject(session.renderRequest) || !ACCEPTED_REQUEST_SCHEMAS.has(Number(session.renderRequest.schema))) throw new Error(`Gallery publication requires canonical renderRequest schema ${CURRENT_REQUEST_SCHEMA}.`);
+  return session;
+};
+const validateCurrent = (session) => {
+  validateEnvelope(session); validateCurrentWriterActiveConfig({ mode: session.renderRequest.mode, storedConfig: session.config });
   return session;
 };
 const publicationConfig = (session, projection) => {
@@ -55,6 +64,13 @@ const publicationConfig = (session, projection) => {
   if (!colors?.defaultColors && !colors?.defaultColorsFile) Object.assign(config, { colors: {}, colorsAreOverrides: false });
   for (const key of ['webEdits', 'paletteInstantPreviewEnabled']) if (has(stored, key)) config[key] = clone(stored[key]);
   delete config.blastSource; delete config.adv.losatProgram;
+  if (isCliWritten(session)) {
+    // Legend and plot-title positions are layout preferences of the request.
+    const committedLayout = resolveActiveLayoutPreference(projection.layoutPreferences, projection.mode,
+      Boolean(config.form.multi_record_canvas));
+    Object.assign(config.form, { legend: committedLayout.legend });
+    Object.assign(config.adv, { plot_title_position: committedLayout.plotTitlePosition });
+  }
   const fresh = { form: createDefaultForm(), adv: createDefaultAdv(projection.mode) };
   for (const [domain, fields] of Object.entries(UNUSED_MODE_FRESH_FIELDS[projection.mode]))
     for (const field of fields) config[domain][field] = fresh[domain][field];
@@ -82,6 +98,7 @@ const rebuildIntent = async (session, owners) => {
   );
   const projection = owners.projectRequest({ renderRequest,
     resources: session.resources, webFiles: session.webFiles || {}, legacyFiles: session.files, storedConfig: session.config,
+    initializeCliInputs: isCliWritten(session),
     fileBindings: session.cliInvocation?.fileBindings, sessionResourceTable: adoptCurrentSessionResources(session.resources),
     deferResourceContent: false, adoptCanonicalPayloads: true });
   const config = publicationConfig(session, projection); validateCurrentWriterActiveConfig({ mode: projection.mode, storedConfig: config });
@@ -96,11 +113,17 @@ const rebuildIntent = async (session, owners) => {
   const rebuilt = owners.buildRequest({ state, filesData, comparisonPlanSnapshot: plan });
   if (!isObject(rebuilt.renderRequest.output) || !isObject(session.renderRequest.output)) throw new Error('Gallery publication cannot preserve committed output metadata policy.');
   rebuilt.renderRequest.output.interactiveMetadataPolicy = session.renderRequest.output.interactiveMetadataPolicy;
-  if (isObject(session.renderRequest.diagramOptions?.config)) {
+  // A CLI-written request carries the resolved configuration; publication
+  // writes the Web's own configOverrides, so Session Load needs no Worker. The
+  // refresh tool checks that the replayed figure equals the declared figure.
+  const cliConfig = isCliWritten(session) && isObject(session.renderRequest.diagramOptions?.config);
+  if (isObject(session.renderRequest.diagramOptions?.config) && !cliConfig) {
     rebuilt.renderRequest.diagramOptions.config = clone(session.renderRequest.diagramOptions.config); delete rebuilt.renderRequest.diagramOptions.configOverrides;
   }
-  return { config, rebuilt, equivalence: await owners.assertRequestsEquivalent({ expectedRequest: renderRequest,
-    expectedResources: session.resources, actualRequest: rebuilt.renderRequest, actualResources: rebuilt.resources }) };
+  const comparable = (request) => cliConfig ? { ...request, diagramOptions: Object.fromEntries(Object.entries(request.diagramOptions)
+    .filter(([key]) => key !== 'config' && key !== 'configOverrides')) } : request;
+  return { config, rebuilt, equivalence: await owners.assertRequestsEquivalent({ expectedRequest: comparable(renderRequest),
+    expectedResources: session.resources, actualRequest: comparable(rebuilt.renderRequest), actualResources: rebuilt.resources }) };
 };
 const mergeReplayResources = (prepared, replayed) => {
   for (const [id, expected] of Object.entries(prepared.resources || {})) {
@@ -157,7 +180,7 @@ export const createGallerySessionPublication = (owners) => {
           }
         ) });
       }
-      return validateCurrent(session);
+      return isCliWritten(session) ? validateEnvelope(session) : validateCurrent(session);
     }
     if ([40, 41, 42].includes(version)) return validateCurrent(promoteVisibilityState({ ...session, version: CURRENT_VERSION,
       renderRequest: publicationCanonicalRequest(

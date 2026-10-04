@@ -1,4 +1,5 @@
 import { resolveFeatureAnchor } from './feature-anchor.js';
+import { RECORD_TARGET_NOT_DISCOVERED } from '../record-display-options.js';
 
 const featureIdentity = (feature) => ({
   recordKey: String(feature?.record_key ?? feature?.recordKey ?? ''),
@@ -23,7 +24,8 @@ export const createFeatureRecordRotationAction = ({
   projectCommittedRecordTransform,
   runCommittedCanonicalCandidate,
   resolveCurrentFeature = null,
-  isCurrentFeature = null
+  isCurrentFeature = null,
+  readRecords = null
 }) => {
   if (!recordDisplayControls
     || typeof getCommittedSession !== 'function'
@@ -97,7 +99,12 @@ export const createFeatureRecordRotationAction = ({
     return { ...outcome, receipt: projection.receipt, resolved };
   };
 
-  return Object.freeze({ currentFeature, resolve, apply });
+  // The explicit record action that reads records a Session Load left unread.
+  const readTargetRecords = async () => (typeof readRecords === 'function'
+    ? readRecords()
+    : { status: 'unavailable', reason: 'Records cannot be read here.' });
+
+  return Object.freeze({ currentFeature, resolve, apply, readRecords: readTargetRecords });
 };
 
 const parseSignedOffset = (value) => {
@@ -144,9 +151,14 @@ const initialDraft = () => ({
   orientCapability: emptyCapability(),
   featureEndCapability: emptyCapability(),
   offsetError: '',
+  // '' when the popup feature resolves to one record target that a control can
+  // act on; otherwise the kind of the whole-target failure, whose one reason is
+  // disabledReason and which hides the form.
+  targetFailure: '',
   disabledReason: '',
   canApply: false,
   pending: false,
+  reading: false,
   status: '',
   statusKind: 'idle',
   startCoordinate: null,
@@ -174,6 +186,9 @@ export const createFeatureRecordRotationWorkflow = ({
     throw new Error('Feature record rotation action is unavailable.');
   }
   const draft = makeReactive(initialDraft());
+  // Bumped whenever the draft is reset, so a late record read cannot write
+  // into a closed or retargeted popup.
+  let draftGeneration = 0;
 
   const intent = () => {
     const offset = parseSignedOffset(draft.offsetText);
@@ -194,6 +209,17 @@ export const createFeatureRecordRotationWorkflow = ({
       draft.feature = snapshot.feature;
       draft.identity = featureIdentity(snapshot.feature);
       draft.recordLabel = String(snapshot.target.recordId || snapshot.target.recordKey);
+      const { anchors, orientForward, featureEnd } = snapshot.resolved.capabilities;
+      const controls = [...Object.values(anchors), orientForward, featureEnd];
+      // A limit that disables every control (for example, a linear record) is a
+      // whole-target limit: the reason line states it once (F4).
+      const targetLimit = controls.every((capability) => !capability?.enabled
+        && capability?.code === controls[0]?.code) ? controls[0] : null;
+      draft.targetFailure = targetLimit ? String(targetLimit.code || 'unavailable') : '';
+      const controlCapability = (capability) => ({
+        ...copyCapability(capability),
+        ...(targetLimit ? { message: '' } : {})
+      });
       draft.anchorChoices = [
         ['five-prime', '5′ end'],
         ['midpoint', 'Midpoint'],
@@ -201,11 +227,12 @@ export const createFeatureRecordRotationWorkflow = ({
       ].map(([value, label]) => ({
         value,
         label,
-        ...copyCapability(snapshot.resolved.capabilities.anchors[value])
+        ...controlCapability(anchors[value])
       }));
-      draft.orientCapability = copyCapability(snapshot.resolved.capabilities.orientForward);
-      draft.featureEndCapability = copyCapability(snapshot.resolved.capabilities.featureEnd);
-      draft.disabledReason = offset.message || snapshot.resolved.eligibility.message || '';
+      draft.orientCapability = controlCapability(orientForward);
+      draft.featureEndCapability = controlCapability(featureEnd);
+      draft.disabledReason = targetLimit?.message
+        || offset.message || snapshot.resolved.eligibility.message || '';
       draft.canApply = offset.valid && snapshot.resolved.eligibility.enabled && !draft.pending;
       draft.startCoordinate = snapshot.resolved.startCoordinate;
       draft.orientationLabel = snapshot.resolved.reverseComplement
@@ -226,13 +253,16 @@ export const createFeatureRecordRotationWorkflow = ({
         : 'Custom anchor';
       return snapshot;
     } catch (error) {
+      // A whole-target failure has one reason; per-control messages are only
+      // for control-specific limits of a resolved target.
+      draft.targetFailure = error?.kind || 'unavailable';
       draft.anchorChoices = draft.anchorChoices.map((choice) => ({
         ...choice,
-        ...emptyCapability(error.message)
+        ...emptyCapability()
       }));
-      draft.orientCapability = emptyCapability(error.message);
-      draft.featureEndCapability = emptyCapability(error.message);
-      draft.disabledReason = offset.message || error.message;
+      draft.orientCapability = emptyCapability();
+      draft.featureEndCapability = emptyCapability();
+      draft.disabledReason = error.message;
       draft.canApply = false;
       draft.startCoordinate = null;
       draft.orientationLabel = 'unchanged';
@@ -242,6 +272,7 @@ export const createFeatureRecordRotationWorkflow = ({
   };
 
   const open = ({ feature, featureLabel = '' }) => {
+    draftGeneration += 1;
     Object.assign(draft, initialDraft(), {
       active: true,
       feature,
@@ -253,7 +284,33 @@ export const createFeatureRecordRotationWorkflow = ({
   };
 
   const close = () => {
+    draftGeneration += 1;
     Object.assign(draft, initialDraft());
+  };
+
+  // Opening Record actions is the explicit record action that reads records a
+  // Session Load left unread (776a2f93). It reads once, then recomputes.
+  const readRecords = async () => {
+    if (!draft.active || draft.reading || draft.pending) return null;
+    recompute();
+    if (draft.targetFailure !== RECORD_TARGET_NOT_DISCOVERED) return null;
+    const generation = draftGeneration;
+    Object.assign(draft, {
+      reading: true, disabledReason: '', status: 'Reading records…', statusKind: 'pending'
+    });
+    let outcome;
+    try {
+      outcome = await action.readRecords();
+    } catch (error) {
+      outcome = { status: 'error', reason: error?.message || String(error) };
+    }
+    if (generation !== draftGeneration) return outcome;
+    Object.assign(draft, { reading: false, status: '', statusKind: 'idle' });
+    recompute();
+    if (draft.targetFailure === RECORD_TARGET_NOT_DISCOVERED && outcome?.reason) {
+      draft.disabledReason = outcome.reason;
+    }
+    return outcome;
   };
 
   const setAnchor = (anchor) => {
@@ -330,6 +387,7 @@ export const createFeatureRecordRotationWorkflow = ({
     close,
     cancel: close,
     recompute,
+    readRecords,
     setAnchor,
     setOffset,
     setOrientForward,

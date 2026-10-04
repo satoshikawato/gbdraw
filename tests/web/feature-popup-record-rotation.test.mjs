@@ -4,6 +4,7 @@ import test from 'node:test';
 import {
   createFeatureRecordRotationWorkflow
 } from '../../gbdraw/web/js/app/record-display/feature-record-rotation.js';
+import { RECORD_TARGET_NOT_DISCOVERED } from '../../gbdraw/web/js/app/record-display-options.js';
 
 const feature = {
   record_key: 'record-1',
@@ -203,4 +204,162 @@ test('Cancel discards only the ephemeral popup draft', () => {
   assert.equal(harness.applyCount(), 0);
   assert.deepEqual(committedSidebarState, { startCoordinate: 1, reverseComplement: false });
   assert.deepEqual(currentResult, { name: 'before.svg' });
+});
+
+const targetFailure = (kind, message) => Object.assign(new Error(message), { kind });
+
+const createDiscoveryHarness = ({ readResult = { discovered: true } } = {}) => {
+  let discovered = false;
+  let readError = '';
+  let reads = 0;
+  let releaseRead = null;
+  const action = {
+    currentFeature: (candidate) => candidate,
+    resolve() {
+      if (readError) throw targetFailure('discovery-failed', readError);
+      if (!discovered) {
+        throw targetFailure(RECORD_TARGET_NOT_DISCOVERED, 'Records for this feature are not read yet.');
+      }
+      return {
+        feature,
+        row: { key: 'row-1' },
+        target: { recordId: 'NC_000001.1', recordKey: 'record-1', committedReverseComplement: false },
+        resolved: {
+          capabilities: capabilities(),
+          eligibility: { enabled: true, message: '' },
+          startCoordinate: 11,
+          reverseComplement: false,
+          displayedStrand: { before: '+', after: '+' }
+        }
+      };
+    },
+    async apply() { throw new Error('Apply is not part of record reading.'); },
+    async readRecords() {
+      reads += 1;
+      await new Promise((resolve) => { releaseRead = resolve; });
+      if (readResult.discovered) discovered = true;
+      if (readResult.error) readError = readResult.error;
+      return readResult.outcome;
+    }
+  };
+  const workflow = createFeatureRecordRotationWorkflow({ action });
+  return { workflow, reads: () => reads, releaseRead: () => releaseRead?.() };
+};
+
+test('unread records after Session Load are read once, then the draft is recomputed', async () => {
+  const harness = createDiscoveryHarness();
+  harness.workflow.open({ feature });
+  const { draft } = harness.workflow;
+  assert.equal(draft.targetFailure, RECORD_TARGET_NOT_DISCOVERED);
+  assert.doesNotMatch(draft.disabledReason, /stale|ambiguous/);
+  // A whole-target failure is one reason, not one copy per control (F4).
+  assert.deepEqual(draft.anchorChoices.map(({ message }) => message), ['', '', '']);
+  assert.equal(draft.orientCapability.message, '');
+  assert.equal(draft.featureEndCapability.message, '');
+  assert.equal(draft.canApply, false);
+
+  const reading = harness.workflow.readRecords();
+  assert.equal(draft.reading, true);
+  assert.equal(draft.status, 'Reading records…');
+  assert.equal(draft.disabledReason, '');
+  assert.equal(draft.canApply, false);
+  harness.workflow.readRecords();
+  assert.equal(harness.reads(), 1);
+
+  harness.releaseRead();
+  await reading;
+  assert.equal(draft.reading, false);
+  assert.equal(draft.targetFailure, '');
+  assert.equal(draft.status, '');
+  assert.equal(draft.disabledReason, '');
+  assert.equal(draft.recordLabel, 'NC_000001.1');
+  assert.equal(draft.startCoordinate, 11);
+  assert.equal(draft.canApply, true);
+  await harness.workflow.readRecords();
+  assert.equal(harness.reads(), 1);
+});
+
+test('a failed record read shows its own reason and is not retried automatically', async () => {
+  const harness = createDiscoveryHarness({
+    readResult: { discovered: false, error: 'Records could not be loaded: malformed LOCUS line.' }
+  });
+  harness.workflow.open({ feature });
+  const reading = harness.workflow.readRecords();
+  harness.releaseRead();
+  await reading;
+  const { draft } = harness.workflow;
+  assert.equal(draft.targetFailure, 'discovery-failed');
+  assert.equal(draft.disabledReason, 'Records could not be loaded: malformed LOCUS line.');
+  assert.equal(draft.status, '');
+  await harness.workflow.readRecords();
+  assert.equal(harness.reads(), 1);
+});
+
+test('a busy Session operation leaves records unread with its reason', async () => {
+  const harness = createDiscoveryHarness({
+    readResult: { discovered: false, outcome: { status: 'busy', reason: 'Saving session. Retry after saving finishes.' } }
+  });
+  harness.workflow.open({ feature });
+  const reading = harness.workflow.readRecords();
+  harness.releaseRead();
+  await reading;
+  assert.equal(harness.workflow.draft.targetFailure, RECORD_TARGET_NOT_DISCOVERED);
+  assert.equal(harness.workflow.draft.disabledReason, 'Saving session. Retry after saving finishes.');
+});
+
+test('a record read that settles after the popup closed writes nothing into the next draft', async () => {
+  const harness = createDiscoveryHarness();
+  harness.workflow.open({ feature });
+  const reading = harness.workflow.readRecords();
+  harness.workflow.close();
+  harness.workflow.open({ feature: { ...feature, biological_feature_id: 'feature-2' } });
+  const next = { ...harness.workflow.draft };
+  harness.releaseRead();
+  await reading;
+  assert.equal(harness.workflow.draft.status, next.status);
+  assert.equal(harness.workflow.draft.reading, false);
+  assert.equal(harness.workflow.draft.targetFailure, RECORD_TARGET_NOT_DISCOVERED);
+  assert.equal(harness.workflow.draft.identity.biologicalFeatureId, 'feature-2');
+});
+
+test('a limit that disables every control is one whole-target reason', () => {
+  const limit = {
+    enabled: false,
+    code: 'record-not-circular',
+    message: 'Record rotation requires an effectively circular record.'
+  };
+  const workflow = createFeatureRecordRotationWorkflow({
+    action: {
+      currentFeature: (candidate) => candidate,
+      resolve: () => ({
+        feature,
+        row: { key: 'row-1' },
+        target: { recordId: 'NC_001416.1', recordKey: 'record-1', committedReverseComplement: false },
+        resolved: {
+          capabilities: {
+            anchors: { 'five-prime': limit, midpoint: limit, 'three-prime': limit },
+            offset: limit,
+            orientForward: limit,
+            featureEnd: limit
+          },
+          eligibility: limit,
+          startCoordinate: null,
+          reverseComplement: null,
+          displayedStrand: { before: null, after: null }
+        }
+      }),
+      async apply() { throw new Error('unreachable'); }
+    }
+  });
+  workflow.open({ feature });
+  const { draft } = workflow;
+  assert.equal(draft.targetFailure, 'record-not-circular');
+  assert.equal(draft.recordLabel, 'NC_001416.1');
+  assert.equal(draft.disabledReason, limit.message);
+  workflow.setOffset('x');
+  assert.equal(draft.disabledReason, limit.message, 'the hidden offset field adds no reason');
+  assert.deepEqual(draft.anchorChoices.map(({ enabled, message }) => [enabled, message]),
+    [[false, ''], [false, ''], [false, '']]);
+  assert.deepEqual([draft.orientCapability.message, draft.featureEndCapability.message], ['', '']);
+  assert.equal(draft.canApply, false);
 });

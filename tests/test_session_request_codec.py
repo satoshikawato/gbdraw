@@ -2817,7 +2817,7 @@ def test_collinear_inference_choice_round_trips_and_omission_preserves_old_sessi
 def test_in_memory_records_of_one_source_file_share_one_genbank_resource(
     tmp_path: Path,
 ) -> None:
-    """PR5-B1: the Web shape, so a replay keeps one file as one LOSAT source."""
+    """The Web shape: one file is one resource named after it, records by ID."""
 
     def record(record_id: str, source: str | None) -> SeqRecord:
         annotations: dict[str, Any] = {"molecule_type": "DNA"}
@@ -2826,7 +2826,12 @@ def test_in_memory_records_of_one_source_file_share_one_genbank_resource(
         return SeqRecord(Seq("ATGC"), id=record_id, annotations=annotations)
 
     records = (
-        record("A1", "a.gbk"), record("B1", "b.gbk"), record("A2", "a.gbk"), record("M1", None)
+        record("A1", "in/a.gbk"),
+        record("B1", "in/b.gbk"),
+        record("A2", "in/a.gbk"),
+        record("M1", None),
+        record("D", "in/d.gbk"),
+        record("D", "in/d.gbk"),
     )
     encoded = encode_canonical_request(
         LinearDiagramRequest(
@@ -2834,17 +2839,25 @@ def test_in_memory_records_of_one_source_file_share_one_genbank_resource(
         )
     )
 
+    # Record IDs bind the records of one file; a duplicated ID falls back to
+    # the record index, as the Web does for one uploaded multi-record file.
     assert [
         (item["source"]["resourceId"], item["selector"]) for item in encoded.payload["records"]
     ] == [
-        ("record-1-genbank", {"kind": "recordIndex", "index": 0}),
+        ("record-1-genbank", {"kind": "recordId", "value": "A1"}),
         ("record-2-genbank", None),
-        ("record-1-genbank", {"kind": "recordIndex", "index": 1}),
+        ("record-1-genbank", {"kind": "recordId", "value": "A2"}),
         ("record-4-genbank", None),
+        ("record-5-genbank", {"kind": "recordIndex", "index": 0}),
+        ("record-5-genbank", {"kind": "recordIndex", "index": 1}),
     ]
     resources = {resource.resource_id: resource for resource in encoded.resources}
-    assert sorted(resources) == ["record-1-genbank", "record-2-genbank", "record-4-genbank"]
-    assert resources["record-1-genbank"].name == "record-1.gbk"
+    assert sorted(resources) == [
+        "record-1-genbank", "record-2-genbank", "record-4-genbank", "record-5-genbank"
+    ]
+    assert resources["record-1-genbank"].name == "a.gbk"
+    assert resources["record-2-genbank"].name == "record-2.gbk"
+    assert resources["record-5-genbank"].name == "d.gbk"
     assert [
         line.split()[1]
         for line in (resources["record-1-genbank"].content or b"").decode().splitlines()
@@ -2858,9 +2871,10 @@ def test_in_memory_records_of_one_source_file_share_one_genbank_resource(
     )
     assert decoded.records[0].source == decoded.records[2].source
     assert [
-        item.selector.record_index if item.selector is not None else None
+        (item.selector.record_id, item.selector.record_index)
+        if item.selector is not None else None
         for item in decoded.records
-    ] == [0, None, 1, None]
+    ] == [("A1", None), None, ("A2", None), None, (None, 0), (None, 1)]
 
 
 def _identity_request(source: Path) -> LinearDiagramRequest:

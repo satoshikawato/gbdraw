@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
   buildRecordDisplayRows, createRecordDisplayControls, parseRecordDisplayStart, reconcileRecordDisplayDrafts,
+  RECORD_TARGET_NOT_DISCOVERED,
   effectiveRecordReverseComplement, migrateLegacyRecordDisplayDrafts, recordDisplaySurface,
   requestedRecordTransform, selectedFeatureDisplayStart, validateAnchorIntent,
   validateRecordDisplayDrafts
@@ -157,8 +158,12 @@ const compositeControls = ({ linear = false, discovered = true } = {}) => {
     lInputType: { value: 'gb' }, files: { c_gb: file }, linearSeqs: [],
     form: createDefaultForm(), adv: createDefaultAdv('circular'),
     recordDisplayDrafts: [], featurePlacementOverrides: {},
-    circularRecordList: { value: components.map(({ resourceId }, i) => ({
-      record_id: resourceId, record_length: 100, selector: `#${i + 1}`, detectedTopology: 'circular' })) },
+    circularRecordList: { value: discovered ? components.map(({ resourceId }, i) => ({
+      record_id: resourceId, record_length: 100, selector: `#${i + 1}`, detectedTopology: 'circular' })) : [] },
+    // A loaded Session has read no record bytes, so Circular discovery is not current.
+    circularRecordDiscovery: discovered
+      ? { status: 'ready', error: '', inputType: 'gb', primaryFile: file, pairedFile: null }
+      : { status: 'idle', error: '', inputType: '', primaryFile: null, pairedFile: null },
     featureCatalog: { value: { items: [{ recordKeys: ['record-1', 'record-2'] }] } } };
   state.form.track_type = 'middle';
   if (linear) state.linearSeqs = components.map(({resourceId}, index) => ({
@@ -166,13 +171,15 @@ const compositeControls = ({ linear = false, discovered = true } = {}) => {
   }));
   const getCommittedRequest = () => committed.renderRequest;
   const history = { runUndoable: (_label, fn) => fn() };
+  const linearDiscovery = { status: discovered ? 'ready' : 'loading', error: '' };
   const controls = createRecordDisplayControls({ state, computed: (fn) => ({ get value() { return fn(); } }),
-    watch: () => {}, linearRecordSelector: { recordsFor: seq => discovered ? [{selector:'#1',recordId:components[Number(seq.uid.slice(-1))-1].resourceId,recordLength:100,detectedTopology:'circular'}] : [] }, history,
+    watch: () => {}, linearRecordSelector: { recordsFor: seq => discovered ? [{selector:'#1',recordId:components[Number(seq.uid.slice(-1))-1].resourceId,recordLength:100,detectedTopology:'circular'}] : [],
+      statusFor: () => linearDiscovery.status, errorFor: () => linearDiscovery.error }, history,
     getCommittedRequest, getCommittedSession: () => committed });
   const actions = createFeaturePlacementActions({ state, history, getCommittedRequest,
     isCurrentFeature: controls.isCurrentFeature });
   const feature = { record_key: 'record-2', biological_feature_id: 'logical-feature' };
-  return { state, actions, controls, feature, file, makeFile,
+  return { state, actions, controls, feature, file, makeFile, linearDiscovery,
     enabled: () => actions.choices([feature]).filter((choice) => choice.enabled).map((choice) => choice.value),
     commitCombined: async () => {
       const bytes = await readFileBytes(file);
@@ -233,6 +240,30 @@ test('explicit popup target and its draft checkpoint stay record-bound', () => {
   assert.throws(
     () => model.controls.targetForFeature({ ...model.feature, record_key: 'missing' }),
     /stale or ambiguous/
+  );
+});
+
+test('a popup target whose records are not read yet is not stale (Session Load, 776a2f93)', () => {
+  for (const linear of [false, true]) {
+    const model = compositeControls({ linear, discovered: false });
+    assert.throws(() => model.controls.targetForFeature(model.feature), (error) => {
+      assert.equal(error.kind, RECORD_TARGET_NOT_DISCOVERED);
+      assert.doesNotMatch(error.message, /stale|ambiguous/);
+      return true;
+    });
+  }
+  const failed = compositeControls({ linear: true, discovered: false });
+  failed.linearDiscovery.status = 'error';
+  failed.linearDiscovery.error = 'Records could not be loaded: malformed LOCUS line.';
+  assert.throws(() => failed.controls.targetForFeature(failed.feature), (error) => {
+    assert.notEqual(error.kind, RECORD_TARGET_NOT_DISCOVERED);
+    assert.equal(error.message, 'Records could not be loaded: malformed LOCUS line.');
+    return true;
+  });
+  const discovered = compositeControls({ linear: true });
+  assert.throws(
+    () => discovered.controls.targetForFeature({ ...discovered.feature, record_key: 'missing' }),
+    (error) => error.kind !== RECORD_TARGET_NOT_DISCOVERED && /stale or ambiguous/.test(error.message)
   );
 });
 

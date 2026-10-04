@@ -136,13 +136,16 @@ const legacyRequest = request?.schema >= 8
       ))
     }
   : request;
+// No translation is written as an empty list (CLI) or as zero offsets (Web).
 const schema8LayoutDefaults = request?.schema >= 8 &&
   request.layout?.multiRecordPositions === null &&
   request.layout?.similarityAlignment === null &&
   Array.isArray(request.layout?.recordTranslations) &&
-  request.layout.recordTranslations.length === request.records.length &&
-  request.layout.recordTranslations.every((entry, index) => (
-    entry.recordKey === request.records[index].recordKey && entry.x === 0 && entry.y === 0
+  (request.layout.recordTranslations.length === 0 || (
+    request.layout.recordTranslations.length === request.records.length &&
+    request.layout.recordTranslations.every((entry, index) => (
+      entry.recordKey === request.records[index].recordKey && entry.x === 0 && entry.y === 0
+    ))
   ));
 process.stdout.write(JSON.stringify({
   format: document.format,
@@ -488,7 +491,7 @@ test('Vibrio Session saves once within memory, responsiveness, and compatibility
     requestSchema: 8,
     schema8LayoutDefaults: true,
     catalogSchema: 4,
-    resourceCount: 4,
+    resourceCount: 2,
     resultCount: 1,
     catalogItems: 1,
     catalogBiologicalFeatures: 18_782,
@@ -502,7 +505,7 @@ test('Vibrio Session saves once within memory, responsiveness, and compatibility
     requestSchema: CURRENT_REQUEST_SCHEMA,
     schema8LayoutDefaults: true,
     catalogSchema: 4,
-    resourceCount: 4,
+    resourceCount: 2,
     resultCount: 1,
     catalogItems: 1,
     catalogBiologicalFeatures: 18_782,

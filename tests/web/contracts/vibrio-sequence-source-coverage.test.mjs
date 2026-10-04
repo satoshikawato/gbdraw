@@ -18,6 +18,15 @@ const { analyzeCatalogSequenceSourceCoverage } = await import(
 const { projectCanonicalSessionRequest } = await import(
   pathToFileURL(join(tempRoot, 'js', 'services', 'session-request.js'))
 );
+const { adoptCurrentSessionResources } = await import(
+  pathToFileURL(join(tempRoot, 'js', 'services', 'session-resource-backing.js'))
+);
+const { groupLinearSourceRecords } = await import(
+  pathToFileURL(join(tempRoot, 'js', 'app', 'linear-sources.js'))
+);
+const { planLinearSourceRowMove } = await import(
+  pathToFileURL(join(tempRoot, 'js', 'app', 'linear-record-layout.js'))
+);
 
 const fixturePath = join(
   repoRoot,
@@ -54,14 +63,31 @@ test('real Vibrio session still projects its embedded records and presentation s
     legacyFiles: fixture.files,
     storedConfig: fixture.config,
     fileBindings: fixture.cliInvocation?.fileBindings,
-    linearTrackSlotSchemaVersion: Number(fixture.version) <= 32 ? 1 : 2
+    linearTrackSlotSchemaVersion: Number(fixture.version) <= 32 ? 1 : 2,
+    sessionResourceTable: adoptCurrentSessionResources(fixture.resources)
   });
 
-  assert.equal(projectedSession.files.linearSeqs.length, 4);
-  assert.equal(
-    projectedSession.files.linearSeqs[0].gb.name,
-    'NC_004603.1__GCF_000196095.1_ASM19609v1_genomic.gbff'
+  // Two multi-record GenBank Files, one per row: File order can move and the
+  // Record Layout is not custom.
+  const { linearSeqs } = projectedSession.files;
+  assert.deepEqual(
+    linearSeqs.map((sequence) => [sequence.gb.name, sequence.region_record_id]),
+    [
+      ['GCF_000196095.1_ASM19609v1_genomic.gbff', 'NC_004603.1'],
+      ['GCF_000196095.1_ASM19609v1_genomic.gbff', 'NC_004605.1'],
+      ['GCF_000354175.2_ASM35417v2_genomic.gbff', 'NC_022349.1'],
+      ['GCF_000354175.2_ASM35417v2_genomic.gbff', 'NC_022359.1']
+    ]
   );
+  const sourceGroups = groupLinearSourceRecords(linearSeqs);
+  assert.deepEqual(sourceGroups.map((group) => group.records.length), [2, 2]);
+  const move = planLinearSourceRowMove({
+    sourceGroups,
+    entries: projectedSession.config.linearRecordLayout.rows,
+    sourceIndex: 0,
+    direction: 1
+  });
+  assert.equal(move.allowed, true, move.reason);
   assert.equal(projectedSession.config.adv.block_stroke_width, 0);
   assert.equal(projectedSession.config.adv.line_stroke_width, 1);
   assert.equal(projectedSession.config.adv.axis_stroke_width, 2);

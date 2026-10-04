@@ -53,8 +53,8 @@
       "sha256": "b6ea8e8e89cf00ac7545072b2c18aa4e0482940a58913204249e6ed27d3f5749"
     },
     "gallery/examples/vibrio-harveyi-group-collinear.svg": {
-      "bytes": 14689216,
-      "sha256": "a9ef8bc4a90ef6a869690446f6642b2008cbd506a15606c4a2699c452d6bcedc"
+      "bytes": 14684054,
+      "sha256": "a4995fa0b7e6fd067e5cda6c9dab0d5dc44e08957a0a8cb1e3564632494f5a55"
     },
     "gallery/sessions/BGC0000708-BGC0000713.gbdraw-session.json": {
       "bytes": 2890985,
@@ -93,8 +93,8 @@
       "sha256": "8c23b2a86ed7bb76b297800f466c0b67a331f7d244a6cfea3a465c17c861dc46"
     },
     "gallery/sessions/vibrio-harveyi-group-collinear.gbdraw-session.json.gz": {
-      "bytes": 23739969,
-      "sha256": "a02f1f06b774e736d0d956285f055c54a6e6d8c47d1d08f061dce493f9c4c6c4"
+      "bytes": 22148959,
+      "sha256": "2580eec458d3993b4172596f82bb931670160a24ef339e467c6bebc8d97151ef"
     },
     "gallery/sources/BGC0000708-BGC0000713.svg": {
       "bytes": 245436,
@@ -133,8 +133,8 @@
       "sha256": "8495b05d2122013fc744d57b424ce90de3d2cbc0f7dc6c5d85ad2dcf86e0cd54"
     },
     "gallery/sources/vibrio-harveyi-group-collinear.svg": {
-      "bytes": 5128555,
-      "sha256": "b781d65863040613a07d16b556afd480abf72f5c2afab99e2a8f51f699f162d3"
+      "bytes": 5123399,
+      "sha256": "262895d54c9e44751d2f4427b6d21492e811a8cb3dbedee27cd1af4b371e296f"
     },
     "gallery/thumbnails/BGC0000708-BGC0000713.webp": {
       "bytes": 17932,
@@ -173,8 +173,8 @@
       "sha256": "f6183e463a20c7dd2327df999a5c6a5839c889e4b6dc6afded16adf01ec279fc"
     },
     "gallery/thumbnails/vibrio-harveyi-group-collinear.webp": {
-      "bytes": 8436,
-      "sha256": "d1409761a57c7c0a9973bea7e9f9cd8f1b18fc2cb8e8ba4975239fd9878d53aa"
+      "bytes": 8450,
+      "sha256": "c5ca3c38f95eb9da784082ed21405681efed90c39ad3e5ab234453e3d3d65a8f"
     }
   },
   "inventory": "tools.prepare_interactive_gallery_assets.EXAMPLES",

@@ -213,15 +213,17 @@ def test_cli_session_keeps_one_file_as_one_source_on_replay(
     replayed = _replay(source.with_suffix(".gbdraw-session.json"), replay)
     assert replay.with_suffix(".svg").read_bytes() == source.with_suffix(".svg").read_bytes()
 
-    # The Web shape: one GenBank resource per source file, `#k` selectors for
-    # the records of a multi-record file, a single-record file unchanged.
+    # The Web shape: one GenBank resource per source file, named after it,
+    # record-ID selectors for the records of a multi-record file, a
+    # single-record file unchanged.
     records = session["renderRequest"]["records"]
     assert [(record["source"], record["selector"]) for record in records] == [
-        ({"kind": "genbank", "resourceId": "record-1-genbank"}, {"kind": "recordIndex", "index": 0}),
-        ({"kind": "genbank", "resourceId": "record-1-genbank"}, {"kind": "recordIndex", "index": 1}),
+        ({"kind": "genbank", "resourceId": "record-1-genbank"}, {"kind": "recordId", "value": "BGC0000708"}),
+        ({"kind": "genbank", "resourceId": "record-1-genbank"}, {"kind": "recordId", "value": "BGC0000709"}),
         ({"kind": "genbank", "resourceId": "record-3-genbank"}, None),
     ]
     assert sorted(session["resources"]) == ["record-1-genbank", "record-3-genbank"]
+    assert session["resources"]["record-1-genbank"]["name"] == "two.gbk"
     # A replay writes the same layout and keeps every raw entry.
     assert replayed["renderRequest"]["records"] == records
     assert replayed["resources"] == session["resources"]

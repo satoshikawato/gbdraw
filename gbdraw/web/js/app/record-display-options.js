@@ -4,6 +4,14 @@ import { resolveFeatureAnchor } from './record-display/feature-anchor.js';
 import { matchesSessionResourceDescriptor } from '../services/session-resource-backing.js';
 import { cloneJsonData } from '../services/json-clone.js';
 import { requestFeaturePlacements } from '../services/feature-placement.js';
+import { circularDiscoveryForInput } from './record-discovery.js';
+import { RECORD_READ_ERROR_LABEL } from './linear-record-selector.js';
+
+// Session Load reads no record bytes (776a2f93), so a loaded Result can have a
+// current source whose records are not read yet. That popup target failure is
+// not stale: its kind lets an explicit record action read them.
+export const RECORD_TARGET_NOT_DISCOVERED = 'not-discovered';
+const recordTargetError = (kind, message) => Object.assign(new Error(message), { kind });
 
 export const recordDisplayKey = ({ scope, sourceUid, selector }) => {
   if (!['circular', 'linear'].includes(scope) || !sourceUid || !/^#[1-9]\d*$/.test(selector)) {
@@ -405,11 +413,31 @@ export const createRecordDisplayControls = ({ state, computed, watch, linearReco
       catch { return true; }
     });
   });
+  const discoveryFor = (source) => {
+    if (source.scope === 'circular') return circularDiscoveryForInput(state);
+    const sequence = state.linearSeqs.find((seq) => seq.uid === source.sourceUid);
+    return { status: linearRecordSelector.statusFor(sequence), error: linearRecordSelector.errorFor(sequence) };
+  };
+  // The committed record's current sources have no read records: say whether
+  // the read failed or has not happened, instead of calling the target stale.
+  const unreadRecordsError = (recordKey) => {
+    const record = recordForKey(recordKey);
+    const discoveries = record ? sources.value
+      .filter((source) => source.source && recordUsesSource(record, source)).map(discoveryFor) : [];
+    if (!discoveries.length || discoveries.some(({ status }) => status === 'ready')) return null;
+    const failed = discoveries.find(({ status }) => status === 'error');
+    return failed
+      ? recordTargetError('discovery-failed',
+        (typeof failed.error === 'string' ? failed.error : failed.error?.summary) || RECORD_READ_ERROR_LABEL)
+      : recordTargetError(RECORD_TARGET_NOT_DISCOVERED, 'The records of this feature have not been read yet.');
+  };
   const targetForFeature = (feature) => {
     refreshCommittedRows();
     const recordKey = String(feature?.record_key || '');
     const matches = committedRows.filter((row) => row.recordKey === recordKey);
     if (matches.length !== 1) {
+      const unread = !matches.length && unreadRecordsError(recordKey);
+      if (unread) throw unread;
       throw new Error('The popup feature target is stale or ambiguous.');
     }
     const row = matches[0];

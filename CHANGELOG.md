@@ -12,6 +12,15 @@ write-up of a release.
 
 ## [Unreleased]
 
+- Feature popup (web app): after **Load Session**, expanding **Record actions**
+  reads the feature's source records and shows its record and **New display
+  start**, so a record rotates without **Generate Diagram** first. It no longer
+  says "The popup feature target is stale or ambiguous." Load itself still
+  reads no record bytes. The section shows **Reading records…** during the
+  read, a failed read shows its own reason, and a reason that disables every
+  control (for example, a non-circular record) appears once in place of the
+  controls instead of under each control.
+
 Fixes from the 2026-09-30 Web GUI audit of `dev`. The plan and the approved
 decisions are in
 [`docs/internal/web-gui-audit-20260930/`](./docs/internal/web-gui-audit-20260930/03_IMPLEMENTATION_REFERENCE.md).
@@ -230,6 +239,13 @@ decisions are in
 - A CLI Session keeps its `--legend` position through loading and the first
   Generate. The legend position was written into the wrong layout slot and
   replaced by the Web default (SE-07).
+- A CLI Session stores the records of one source file as one GenBank resource
+  named after that file and selects them by record ID (by index when an ID
+  repeats), as the Web does for one multi-record File. The *Vibrio
+  parahaemolyticus* and *V. alginolyticus* Gallery Session is now built from its
+  declared command and holds its two GBFF files as two multi-record Files instead
+  of four single-chromosome Files, so loading it no longer reports a custom
+  Record Layout and File order moves are available.
 - **Source recipe** is unavailable, with a reason, when a track slot legend
   label contains `,` or ` #` (the CLI would cut or reject it), and for a Linear
   scale font without a ruler-label font while ruler labels are drawn (the CLI
