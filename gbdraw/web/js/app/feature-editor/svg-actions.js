@@ -351,6 +351,7 @@ export const createFeatureSvgActions = ({
       feat,
       activeTab: 'edit',
       recordId: String(feat.record_id || ''),
+      gene: getQualifierFirstValue(feat, 'gene'),
       recordIdx: Number.isInteger(Number(feat.record_idx)) ? Number(feat.record_idx) : null,
       featureType: String(feat.type || ''),
       start: Number.isFinite(Number(feat.start)) ? Number(feat.start) : null,

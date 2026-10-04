@@ -4,6 +4,7 @@ import test from 'node:test';
 import {
   createFeatureRecordRotationWorkflow
 } from '../../gbdraw/web/js/app/record-display/feature-record-rotation.js';
+import { resolveFeatureAnchor } from '../../gbdraw/web/js/app/record-display/feature-anchor.js';
 import { RECORD_TARGET_NOT_DISCOVERED } from '../../gbdraw/web/js/app/record-display-options.js';
 
 const feature = {
@@ -16,32 +17,19 @@ const unrelatedGlobalSelection = [{
   biological_feature_id: 'other-feature'
 }];
 
-const capabilities = ({ stranded = true, available = true } = {}) => ({
-  anchors: {
-    'five-prime': {
-      enabled: available && stranded,
-      message: stranded ? '' : 'Biological ends require a known strand.'
-    },
-    midpoint: { enabled: available, message: available ? '' : 'Location is ambiguous.' },
-    'three-prime': {
-      enabled: available && stranded,
-      message: stranded ? '' : 'Biological ends require a known strand.'
-    }
-  },
-  offset: { enabled: available, message: available ? '' : 'Location is ambiguous.' },
-  orientForward: {
-    enabled: available && stranded,
-    message: stranded ? '' : 'Orient forward requires a known strand.'
-  },
-  featureEnd: { enabled: available, message: available ? '' : 'Traversal is ambiguous.' }
-});
-
-const createHarness = ({ stranded = true, available = true } = {}) => {
+// The harness resolves through the real resolver: a 1,000 bp feature at
+// 2000..2999 on a 9,000 bp circular record.
+const createHarness = ({
+  strand = '+',
+  precision = 'exact',
+  committedReverseComplement = false
+} = {}) => {
   let applyCount = 0;
   let currentFeature = feature;
   let releaseApply = null;
   let blockApply = false;
   const seenFeatures = [];
+  const intents = [];
   const action = {
     currentFeature(candidate) {
       if (!currentFeature) throw new Error('The popup feature source changed.');
@@ -50,39 +38,37 @@ const createHarness = ({ stranded = true, available = true } = {}) => {
     },
     resolve({ feature: explicitFeature, intent }) {
       seenFeatures.push(explicitFeature);
+      intents.push(intent);
       if (!currentFeature) throw new Error('The popup feature source changed.');
-      const offsetValid = Number.isSafeInteger(intent.offsetBp);
-      const allowed = available && offsetValid
-        && (intent.placement === 'feature-end'
-          || intent.anchor === 'midpoint'
-          || stranded);
       return {
         feature: currentFeature,
         row: { key: 'row-1' },
         target: {
           recordId: 'NC_000001.1',
           recordKey: 'record-1',
-          committedReverseComplement: false
+          committedReverseComplement
         },
-        resolved: {
-          capabilities: capabilities({ stranded, available }),
-          eligibility: {
-            enabled: allowed,
-            message: allowed ? ''
-              : !offsetValid ? 'Offset must be an integer.'
-                : stranded ? 'Location is ambiguous.' : 'Biological ends require a known strand.'
+        resolved: resolveFeatureAnchor({
+          recordLength: 9000,
+          effectiveCircular: true,
+          cropped: false,
+          currentReverseComplement: committedReverseComplement,
+          identity: { recordKey: 'record-1', biologicalFeatureId: 'feature-1' },
+          parts: [{ start: 1999, end: 2999, strand: strand === 'unstranded' ? 'undefined' : strand }],
+          profile: {
+            precision,
+            operator: 'single',
+            partOrder: strand === 'unstranded' ? 'source-forward' : 'biological',
+            strand
           },
-          startCoordinate: allowed ? 11 + intent.offsetBp : null,
-          reverseComplement: allowed ? Boolean(intent.orientForward && !stranded) : null,
-          displayedStrand: stranded ? { before: '+', after: '+' } : {
-            before: 'unstranded', after: 'unstranded'
-          }
-        }
+          intent
+        })
       };
     },
-    async apply({ feature: explicitFeature }) {
+    async apply({ feature: explicitFeature, intent }) {
       applyCount += 1;
       seenFeatures.push(explicitFeature);
+      intents.push(intent);
       if (!currentFeature) throw new Error('The popup feature source changed.');
       if (blockApply) {
         await new Promise((resolve) => { releaseApply = resolve; });
@@ -101,6 +87,7 @@ const createHarness = ({ stranded = true, available = true } = {}) => {
     workflow,
     rebound,
     seenFeatures,
+    lastIntent: () => intents.at(-1),
     applyCount: () => applyCount,
     setCurrentFeature: (value) => { currentFeature = value; },
     blockApply: () => { blockApply = true; },
@@ -108,64 +95,147 @@ const createHarness = ({ stranded = true, available = true } = {}) => {
   };
 };
 
-test('popup draft defaults and previews use only the explicitly opened feature', () => {
-  const harness = createHarness();
-  harness.workflow.open({ feature, featureLabel: 'target CDS' });
+const choiceStates = (choices) => choices.map(({ value, enabled, message }) => [value, enabled, message]);
 
-  assert.equal(harness.workflow.draft.anchor, 'five-prime');
-  assert.equal(harness.workflow.draft.offsetText, '0');
-  assert.equal(harness.workflow.draft.orientForward, false);
-  assert.equal(harness.workflow.draft.recordLabel, 'NC_000001.1');
-  assert.equal(harness.workflow.draft.featureLabel, 'target CDS');
-  assert.equal(harness.workflow.draft.startCoordinate, 11);
+test('popup draft defaults to Start of the record for the explicitly opened feature', () => {
+  const harness = createHarness();
+  harness.workflow.open({ feature });
+  const { draft } = harness.workflow;
+
+  assert.equal(draft.position, 'start');
+  assert.equal(draft.reference, 'five-prime');
+  assert.equal(draft.offsetText, '0');
+  assert.equal(draft.orientForward, false);
+  assert.equal(draft.recordLabel, 'NC_000001.1');
+  assert.deepEqual(draft.positionChoices.map(({ value, label }) => [value, label]), [
+    ['start', 'Start of the record'],
+    ['end', 'End of the record'],
+    ['custom', 'Custom position']
+  ]);
+  assert.deepEqual(draft.referenceChoices.map(({ value, label }) => [value, label]), [
+    ['five-prime', 'this feature’s 5′ end'],
+    ['midpoint', 'this feature’s midpoint'],
+    ['three-prime', 'this feature’s 3′ end'],
+    ['feature-end', 'just after the feature']
+  ]);
+  assert.ok(draft.positionChoices.every(({ enabled }) => enabled));
+  assert.deepEqual(harness.lastIntent(), {
+    placement: 'feature-start', anchor: null, offsetBp: 0, orientForward: false
+  });
+  assert.equal(draft.startCoordinate, 2000);
+  assert.equal(draft.preview, 'NC_000001.1 will start at 2,000 · orientation unchanged');
+  assert.equal(draft.canApply, true);
+  assert.equal(draft.disabledReason, '');
   assert.equal(harness.seenFeatures.at(-1), feature);
   assert.notEqual(harness.seenFeatures.at(-1), unrelatedGlobalSelection[0]);
-
-  harness.workflow.setAnchor('midpoint');
-  harness.workflow.setOffset('-4');
-  assert.equal(harness.workflow.draft.startCoordinate, 7);
-  assert.equal(harness.workflow.draft.canApply, true);
-
-  harness.workflow.setOffset('1.5');
-  assert.match(harness.workflow.draft.offsetError, /whole number/);
-  assert.equal(harness.workflow.draft.canApply, false);
-  harness.workflow.setOffset('');
-  assert.match(harness.workflow.draft.offsetError, /Enter/);
-  harness.workflow.setOffset('9007199254740992');
-  assert.match(harness.workflow.draft.offsetError, /supported integer range/);
 });
 
-test('feature-end preset resets offset and later edits become custom placement', () => {
-  const { workflow } = createHarness();
-  workflow.open({ feature });
-  workflow.setOffset('12');
-  workflow.placeAtFeatureEnd();
-  assert.equal(workflow.draft.placement, 'feature-end');
-  assert.equal(workflow.draft.offsetText, '0');
-  assert.equal(workflow.draft.exactFeatureEnd, true);
-  assert.equal(workflow.draft.placementLabel, 'Exactly at feature end');
+test('Start of the record puts a minus-strand feature first with or without orientation', () => {
+  const harness = createHarness({ strand: '-' });
+  harness.workflow.open({ feature });
+  const { draft } = harness.workflow;
+  assert.equal(draft.startCoordinate, 2000);
+  assert.equal(draft.preview, 'NC_000001.1 will start at 2,000 · orientation unchanged');
 
-  workflow.setOffset('3');
-  assert.equal(workflow.draft.exactFeatureEnd, false);
-  assert.equal(workflow.draft.placementLabel, 'Feature end with custom offset');
-});
-
-test('operation capabilities keep safe unstranded midpoint and feature-end choices', () => {
-  const { workflow } = createHarness({ stranded: false });
-  workflow.open({ feature });
-  assert.equal(workflow.draft.canApply, false);
-  assert.match(workflow.draft.disabledReason, /known strand/);
+  harness.workflow.setOrientForward(true);
+  assert.equal(draft.startCoordinate, 2999);
   assert.equal(
-    workflow.draft.anchorChoices.find(({ value }) => value === 'midpoint').enabled,
-    true
+    draft.preview,
+    'NC_000001.1 will start at 2,999 · reverse-complemented · feature strand − → +'
   );
-  assert.equal(workflow.draft.orientCapability.enabled, false);
-  assert.match(workflow.draft.orientCapability.message, /known strand/);
 
-  workflow.setAnchor('midpoint');
+  const reversed = createHarness({ committedReverseComplement: true });
+  reversed.workflow.open({ feature });
+  assert.equal(reversed.workflow.draft.startCoordinate, 2999);
+  assert.equal(reversed.workflow.draft.preview, 'NC_000001.1 will start at 2,999 · orientation unchanged');
+  reversed.workflow.setOrientForward(true);
+  assert.equal(reversed.workflow.draft.startCoordinate, 2000);
+  assert.equal(
+    reversed.workflow.draft.preview,
+    'NC_000001.1 will start at 2,000 · no longer reverse-complemented · feature strand − → +'
+  );
+});
+
+test('End of the record and Custom position map to feature-end and anchor intents', () => {
+  const harness = createHarness();
+  const { workflow } = harness;
+  workflow.open({ feature });
+
+  workflow.setPosition('end');
+  assert.deepEqual(harness.lastIntent(), {
+    placement: 'feature-end', anchor: null, offsetBp: 0, orientForward: false
+  });
+  assert.equal(workflow.draft.startCoordinate, 3000);
+
+  workflow.setPosition('custom');
+  assert.equal(workflow.draft.reference, 'five-prime');
+  for (const [reference, expected] of [
+    ['five-prime', { placement: 'anchor', anchor: 'five-prime' }],
+    ['midpoint', { placement: 'anchor', anchor: 'midpoint' }],
+    ['three-prime', { placement: 'anchor', anchor: 'three-prime' }],
+    ['feature-end', { placement: 'feature-end', anchor: null }]
+  ]) {
+    workflow.setReference(reference);
+    workflow.setOffset('-4');
+    assert.deepEqual(harness.lastIntent(), { ...expected, offsetBp: -4, orientForward: false });
+    assert.equal(workflow.draft.canApply, true, reference);
+  }
+  assert.equal(workflow.draft.startCoordinate, 2996);
+
+  workflow.setOffset('1.5');
+  assert.match(workflow.draft.offsetError, /whole number/);
+  assert.equal(workflow.draft.disabledReason, '', 'the offset error is shown once, next to the field');
+  assert.equal(workflow.draft.preview, '');
+  assert.equal(workflow.draft.canApply, false);
+  workflow.setOffset('');
+  assert.match(workflow.draft.offsetError, /Enter/);
+  workflow.setOffset('9007199254740992');
+  assert.match(workflow.draft.offsetError, /supported integer range/);
+
+  workflow.setPosition('start');
+  assert.equal(workflow.draft.offsetError, '', 'the hidden offset field adds no reason');
   assert.equal(workflow.draft.canApply, true);
-  workflow.placeAtFeatureEnd();
-  assert.equal(workflow.draft.canApply, true);
+  assert.equal(harness.lastIntent().offsetBp, 0);
+});
+
+test('unavailable choices are disabled with their own reason and the selection stays valid', () => {
+  const harness = createHarness({ strand: 'unstranded' });
+  harness.workflow.open({ feature });
+  const { draft } = harness.workflow;
+  assert.equal(draft.targetFailure, '');
+  assert.deepEqual(choiceStates(draft.positionChoices), [
+    ['start', false, 'Needs a known feature strand.'],
+    ['end', true, ''],
+    ['custom', true, '']
+  ]);
+  assert.equal(draft.position, 'end', 'the first available choice replaces an unavailable one');
+  assert.equal(draft.canApply, true);
+  assert.equal(draft.orientCapability.enabled, false);
+  assert.match(draft.orientCapability.message, /known feature strand/);
+  assert.deepEqual(draft.referenceChoices.map(({ value, enabled }) => [value, enabled]), [
+    ['five-prime', false], ['midpoint', true], ['three-prime', false], ['feature-end', true]
+  ]);
+  assert.match(draft.referenceChoices[0].message, /known strand/);
+
+  harness.workflow.setPosition('start');
+  assert.equal(draft.position, 'end');
+  harness.workflow.setPosition('custom');
+  assert.equal(draft.reference, 'midpoint');
+  assert.equal(harness.lastIntent().anchor, 'midpoint');
+  assert.equal(draft.canApply, true);
+});
+
+test('a location limit that disables every placement is one whole-target reason', () => {
+  const harness = createHarness({ precision: 'fuzzy' });
+  harness.workflow.open({ feature });
+  const { draft } = harness.workflow;
+  assert.equal(draft.targetFailure, 'location-fuzzy');
+  assert.equal(draft.disabledReason, 'This operation requires exact feature coordinates.');
+  assert.ok([...draft.positionChoices, ...draft.referenceChoices]
+    .every(({ enabled, message }) => !enabled && message === ''));
+  assert.equal(draft.orientCapability.message, '');
+  assert.equal(draft.canApply, false);
+  assert.equal(draft.preview, '');
 });
 
 test('Apply rechecks freshness, suppresses double submit, and rebinds stable identity', async () => {
@@ -207,6 +277,14 @@ test('Cancel discards only the ephemeral popup draft', () => {
 });
 
 const targetFailure = (kind, message) => Object.assign(new Error(message), { kind });
+const enabled = { enabled: true, code: null, message: '' };
+const availableCapabilities = {
+  featureStart: enabled,
+  anchors: { 'five-prime': enabled, midpoint: enabled, 'three-prime': enabled },
+  offset: enabled,
+  orientForward: enabled,
+  featureEnd: enabled
+};
 
 const createDiscoveryHarness = ({ readResult = { discovered: true } } = {}) => {
   let discovered = false;
@@ -225,7 +303,7 @@ const createDiscoveryHarness = ({ readResult = { discovered: true } } = {}) => {
         row: { key: 'row-1' },
         target: { recordId: 'NC_000001.1', recordKey: 'record-1', committedReverseComplement: false },
         resolved: {
-          capabilities: capabilities(),
+          capabilities: availableCapabilities,
           eligibility: { enabled: true, message: '' },
           startCoordinate: 11,
           reverseComplement: false,
@@ -253,9 +331,9 @@ test('unread records after Session Load are read once, then the draft is recompu
   assert.equal(draft.targetFailure, RECORD_TARGET_NOT_DISCOVERED);
   assert.doesNotMatch(draft.disabledReason, /stale|ambiguous/);
   // A whole-target failure is one reason, not one copy per control (F4).
-  assert.deepEqual(draft.anchorChoices.map(({ message }) => message), ['', '', '']);
+  assert.ok([...draft.positionChoices, ...draft.referenceChoices]
+    .every(({ message }) => message === ''));
   assert.equal(draft.orientCapability.message, '');
-  assert.equal(draft.featureEndCapability.message, '');
   assert.equal(draft.canApply, false);
 
   const reading = harness.workflow.readRecords();
@@ -337,6 +415,7 @@ test('a limit that disables every control is one whole-target reason', () => {
         target: { recordId: 'NC_001416.1', recordKey: 'record-1', committedReverseComplement: false },
         resolved: {
           capabilities: {
+            featureStart: limit,
             anchors: { 'five-prime': limit, midpoint: limit, 'three-prime': limit },
             offset: limit,
             orientForward: limit,
@@ -356,10 +435,13 @@ test('a limit that disables every control is one whole-target reason', () => {
   assert.equal(draft.targetFailure, 'record-not-circular');
   assert.equal(draft.recordLabel, 'NC_001416.1');
   assert.equal(draft.disabledReason, limit.message);
+  workflow.setPosition('custom');
   workflow.setOffset('x');
   assert.equal(draft.disabledReason, limit.message, 'the hidden offset field adds no reason');
-  assert.deepEqual(draft.anchorChoices.map(({ enabled, message }) => [enabled, message]),
-    [[false, ''], [false, ''], [false, '']]);
-  assert.deepEqual([draft.orientCapability.message, draft.featureEndCapability.message], ['', '']);
+  assert.equal(draft.offsetError, '');
+  assert.deepEqual(choiceStates(draft.positionChoices),
+    [['start', false, ''], ['end', false, ''], ['custom', false, '']]);
+  assert.ok(draft.referenceChoices.every(({ enabled, message }) => !enabled && message === ''));
+  assert.equal(draft.orientCapability.message, '');
   assert.equal(draft.canApply, false);
 });

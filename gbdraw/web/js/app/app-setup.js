@@ -2429,10 +2429,7 @@ export const createAppSetup = () => {
   watch(clickedFeature, (popup) => {
     recordActionsExpanded.value = false;
     if (popup?.feat) {
-      featureRecordRotation.open({
-        feature: popup.feat,
-        featureLabel: popup.label
-      });
+      featureRecordRotation.open({ feature: popup.feat });
     } else {
       featureRecordRotation.close();
     }
@@ -2444,10 +2441,7 @@ export const createAppSetup = () => {
   };
   const toggleRecordActions = () => {
     if (!recordActionsExpanded.value && !featureRecordRotation.draft.active && clickedFeature.value?.feat) {
-      featureRecordRotation.open({
-        feature: clickedFeature.value.feat,
-        featureLabel: clickedFeature.value.label
-      });
+      featureRecordRotation.open({ feature: clickedFeature.value.feat });
     }
     recordActionsExpanded.value = !recordActionsExpanded.value;
     if (recordActionsExpanded.value) featureRecordRotation.readRecords();
@@ -3769,7 +3763,13 @@ export const createAppSetup = () => {
     )
   );
 
-  const clickedFeatureLocation = computed(() => clickedFeature.value?.location || '');
+  // Popup header line "<record ID>: <location> · <gene>", from payload fields
+  // only; the gene is shown when it differs from the label above it.
+  const clickedFeatureSummary = computed(() => {
+    const cf = clickedFeature.value;
+    const located = [cf?.recordId, cf?.location || ''].filter(Boolean).join(': ');
+    return cf?.gene && cf.gene !== cf.label ? `${located} · ${cf.gene}` : located;
+  });
 
   const downloadText = (filename, text, type = 'text/plain;charset=utf-8') => {
     const value = String(text ?? '');
@@ -4403,10 +4403,10 @@ export const createAppSetup = () => {
     recordActionsExpanded,
     toggleRecordActions,
     cancelRecordActions,
-    setFeatureRecordRotationAnchor: featureRecordRotation.setAnchor,
+    setFeatureRecordRotationPosition: featureRecordRotation.setPosition,
+    setFeatureRecordRotationReference: featureRecordRotation.setReference,
     setFeatureRecordRotationOffset: featureRecordRotation.setOffset,
     setFeatureRecordRotationOrientForward: featureRecordRotation.setOrientForward,
-    placeFeatureAtRecordEnd: featureRecordRotation.placeAtFeatureEnd,
     applyFeatureRecordRotation: featureRecordRotation.apply,
     closeFeaturePopup,
     featurePlacementActions: featureActions.placementActions,
@@ -5017,7 +5017,7 @@ export const createAppSetup = () => {
     renderedPairwiseMatchSections,
     selectPairwiseBlockOrthogroup,
     openPairwiseFeatureRow,
-    clickedFeatureLocation,
+    clickedFeatureSummary,
       copyText: copyTextToClipboard,
     downloadText,
     canUseClickedOrthogroupActions,

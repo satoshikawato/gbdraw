@@ -3885,10 +3885,11 @@ test('@comparison-contract record rotation adds zero LOSATP source jobs and surv
   await search.fill('UpperA_a');
   await search.press('Enter');
   await page.getByRole('button', { name: 'Open active feature', exact: true }).click();
-  await page.getByRole('button', { name: /Record actions · Rotate record/ }).click();
-  const actions = page.getByRole('region', { name: 'Record actions' });
-  await actions.getByLabel('Record rotation anchor').selectOption('midpoint');
-  await actions.getByLabel('Record rotation signed offset').fill('2');
+  await page.getByRole('button', { name: 'Rotate record using this feature', exact: true }).click();
+  const actions = page.getByRole('region', { name: 'Rotate record using this feature', exact: true });
+  await actions.getByRole('radio', { name: 'Custom position', exact: true }).check();
+  await actions.getByLabel('Record starts at', { exact: true }).selectOption('midpoint');
+  await actions.getByLabel('Shifted by (bp)', { exact: true }).fill('2');
   const popupStart = await page.evaluate(() => (
     window.__GBDRAW_APP__.featureRecordRotationDraft.startCoordinate
   ));

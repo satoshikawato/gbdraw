@@ -12,14 +12,26 @@ write-up of a release.
 
 ## [Unreleased]
 
-- Feature popup (web app): after **Load Session**, expanding **Record actions**
-  reads the feature's source records and shows its record and **New display
-  start**, so a record rotates without **Generate Diagram** first. It no longer
-  says "The popup feature target is stale or ambiguous." Load itself still
-  reads no record bytes. The section shows **Reading records…** during the
-  read, a failed read shows its own reason, and a reason that disables every
-  control (for example, a non-circular record) appears once in place of the
-  controls instead of under each control.
+- Feature popup (web app): **Edit** now groups its controls by when they
+  apply. **Appearance · updates the current Result** holds Fill Color, Stroke,
+  Label text and visibility, Feature visibility, and Legend name; **Layout ·
+  applies on Generate** holds Feature placement and the closed **Rotate record
+  using this feature** section; the Similarity group section follows. The
+  header no longer repeats the fill color input or the similarity group, and
+  shows `<record ID>: <location>`. Record rotation asks **Put this feature
+  at**: **Start of the record** (new default, places the feature first for
+  either strand), **End of the record**, or **Custom position** (5′ end,
+  midpoint, 3′ end, or just after the feature, shifted by a signed offset).
+  **Place this feature at the end** and the Anchor select are replaced; saved
+  Sessions are unchanged.
+- Feature popup (web app): after **Load Session**, expanding the record
+  rotation section reads the feature's source records and shows the preview of
+  the new display start, so a record rotates without **Generate Diagram**
+  first. It no longer says "The popup feature target is stale or ambiguous."
+  Load itself still reads no record bytes. The section shows **Reading
+  records…** during the read, a failed read shows its own reason, and a reason
+  that leaves no placement available (for example, a non-circular record)
+  appears once in place of the controls instead of under each control.
 
 Fixes from the 2026-09-30 Web GUI audit of `dev`. The plan and the approved
 decisions are in

@@ -130,26 +130,101 @@ const parseSignedOffset = (value) => {
   return { valid: true, value: number, message: '' };
 };
 
-const emptyCapability = (message = '') => ({ enabled: false, code: null, message });
+const emptyCapability = () => ({ enabled: false, code: null, message: '' });
+
+const copyCapability = (capability) => ({
+  enabled: Boolean(capability?.enabled),
+  code: capability?.code || null,
+  message: String(capability?.message || '')
+});
+
+// "Put this feature at": each choice names an outcome. Custom exposes the raw
+// rule "the record starts at a reference point of this feature, shifted by an
+// offset"; its references are the existing anchors and the feature-end boundary.
+const POSITION_CHOICES = Object.freeze([
+  ['start', 'Start of the record'],
+  ['end', 'End of the record'],
+  ['custom', 'Custom position']
+]);
+const REFERENCE_CHOICES = Object.freeze([
+  ['five-prime', 'this feature’s 5′ end'],
+  ['midpoint', 'this feature’s midpoint'],
+  ['three-prime', 'this feature’s 3′ end'],
+  ['feature-end', 'just after the feature']
+]);
+
+const choicesFrom = (entries, capabilityFor = () => emptyCapability()) => entries
+  .map(([value, label]) => ({ value, label, ...copyCapability(capabilityFor(value)) }));
+
+const referenceCapability = (capabilities, reference) => (reference === 'feature-end'
+  ? capabilities.featureEnd
+  : capabilities.anchors?.[reference]);
+
+const positionCapability = (capabilities, position) => {
+  if (position === 'start') return capabilities.featureStart;
+  if (position === 'end') return capabilities.featureEnd;
+  const references = REFERENCE_CHOICES.map(([reference]) => (
+    referenceCapability(capabilities, reference)
+  ));
+  return references.find((capability) => capability?.enabled) || references[0];
+};
+
+// A selection stays valid: an unavailable or unknown choice falls back to the
+// first available choice in display order.
+const validChoice = (choices, selected) => (
+  choices.find(({ value }) => value === selected)?.enabled
+    ? selected
+    : choices.find(({ enabled }) => enabled)?.value ?? selected
+);
+
+// The radio choice maps to one resolver intent; the domain math stays in
+// resolveFeatureAnchor.
+const intentFor = ({ position, reference, offsetText, orientForward }) => {
+  const oriented = Boolean(orientForward);
+  if (position !== 'custom') {
+    return {
+      placement: position === 'end' ? 'feature-end' : 'feature-start',
+      anchor: null,
+      offsetBp: 0,
+      orientForward: oriented
+    };
+  }
+  const offsetBp = parseSignedOffset(offsetText).value;
+  return reference === 'feature-end'
+    ? { placement: 'feature-end', anchor: null, offsetBp, orientForward: oriented }
+    : { placement: 'anchor', anchor: reference, offsetBp, orientForward: oriented };
+};
+
+const STRAND_SYMBOLS = Object.freeze({ '+': '+', '-': '−' });
+
+const previewFor = ({ recordLabel, resolved, committedReverseComplement }) => {
+  if (!Number.isSafeInteger(resolved.startCoordinate)) return '';
+  const orientation = resolved.reverseComplement === committedReverseComplement
+    ? 'orientation unchanged'
+    : resolved.reverseComplement
+      ? 'reverse-complemented'
+      : 'no longer reverse-complemented';
+  const before = STRAND_SYMBOLS[resolved.displayedStrand?.before];
+  const after = STRAND_SYMBOLS[resolved.displayedStrand?.after];
+  const strandChange = before && after && before !== after
+    ? ` · feature strand ${before} → ${after}`
+    : '';
+  return `${recordLabel} will start at ${resolved.startCoordinate.toLocaleString('en-US')}`
+    + ` · ${orientation}${strandChange}`;
+};
 
 const initialDraft = () => ({
   active: false,
   feature: null,
-  featureLabel: '',
   identity: { recordKey: '', biologicalFeatureId: '' },
   recordLabel: '',
-  placement: 'anchor',
-  anchor: 'five-prime',
+  position: 'start',
+  reference: 'five-prime',
   offsetText: '0',
   orientForward: false,
-  exactFeatureEnd: false,
-  anchorChoices: [
-    { value: 'five-prime', label: '5′ end', ...emptyCapability() },
-    { value: 'midpoint', label: 'Midpoint', ...emptyCapability() },
-    { value: 'three-prime', label: '3′ end', ...emptyCapability() }
-  ],
+  positionChoices: choicesFrom(POSITION_CHOICES),
+  referenceChoices: choicesFrom(REFERENCE_CHOICES),
   orientCapability: emptyCapability(),
-  featureEndCapability: emptyCapability(),
   offsetError: '',
   // '' when the popup feature resolves to one record target that a control can
   // act on; otherwise the kind of the whole-target failure, whose one reason is
@@ -162,15 +237,7 @@ const initialDraft = () => ({
   status: '',
   statusKind: 'idle',
   startCoordinate: null,
-  orientationLabel: 'unchanged',
-  displayedStrandLabel: '',
-  placementLabel: 'Custom anchor'
-});
-
-const copyCapability = (capability) => ({
-  enabled: Boolean(capability?.enabled),
-  code: capability?.code || null,
-  message: String(capability?.message || '')
+  preview: ''
 });
 
 /**
@@ -190,93 +257,84 @@ export const createFeatureRecordRotationWorkflow = ({
   // into a closed or retargeted popup.
   let draftGeneration = 0;
 
-  const intent = () => {
-    const offset = parseSignedOffset(draft.offsetText);
-    return {
-      placement: draft.placement,
-      anchor: draft.placement === 'anchor' ? draft.anchor : null,
-      offsetBp: offset.value,
-      orientForward: Boolean(draft.orientForward)
-    };
-  };
+  const resolveDraft = () => action.resolve({ feature: draft.feature, intent: intentFor(draft) });
 
   const recompute = () => {
     if (!draft.active || !draft.feature) return null;
-    const offset = parseSignedOffset(draft.offsetText);
-    draft.offsetError = offset.message;
     try {
-      const snapshot = action.resolve({ feature: draft.feature, intent: intent() });
+      let snapshot = resolveDraft();
       draft.feature = snapshot.feature;
       draft.identity = featureIdentity(snapshot.feature);
       draft.recordLabel = String(snapshot.target.recordId || snapshot.target.recordKey);
-      const { anchors, orientForward, featureEnd } = snapshot.resolved.capabilities;
-      const controls = [...Object.values(anchors), orientForward, featureEnd];
-      // A limit that disables every control (for example, a linear record) is a
-      // whole-target limit: the reason line states it once (F4).
-      const targetLimit = controls.every((capability) => !capability?.enabled
-        && capability?.code === controls[0]?.code) ? controls[0] : null;
+      const { capabilities } = snapshot.resolved;
+      const placements = [
+        capabilities.featureStart,
+        ...Object.values(capabilities.anchors || {}),
+        capabilities.featureEnd
+      ];
+      // A limit that disables every placement (for example, a linear record)
+      // is a whole-target limit: the reason line states it once (F4).
+      const targetLimit = placements.every((capability) => !capability?.enabled)
+        ? placements.find((capability) => capability?.message) || placements[0] || emptyCapability()
+        : null;
       draft.targetFailure = targetLimit ? String(targetLimit.code || 'unavailable') : '';
       const controlCapability = (capability) => ({
         ...copyCapability(capability),
         ...(targetLimit ? { message: '' } : {})
       });
-      draft.anchorChoices = [
-        ['five-prime', '5′ end'],
-        ['midpoint', 'Midpoint'],
-        ['three-prime', '3′ end']
-      ].map(([value, label]) => ({
-        value,
-        label,
-        ...controlCapability(anchors[value])
-      }));
-      draft.orientCapability = controlCapability(orientForward);
-      draft.featureEndCapability = controlCapability(featureEnd);
-      draft.disabledReason = targetLimit?.message
-        || offset.message || snapshot.resolved.eligibility.message || '';
-      draft.canApply = offset.valid && snapshot.resolved.eligibility.enabled && !draft.pending;
+      draft.positionChoices = choicesFrom(POSITION_CHOICES, (position) => (
+        controlCapability(positionCapability(capabilities, position))
+      ));
+      draft.referenceChoices = choicesFrom(REFERENCE_CHOICES, (reference) => (
+        controlCapability(referenceCapability(capabilities, reference))
+      ));
+      draft.orientCapability = controlCapability(capabilities.orientForward);
+      if (!targetLimit) {
+        const position = validChoice(draft.positionChoices, draft.position);
+        const reference = validChoice(draft.referenceChoices, draft.reference);
+        const orientForward = draft.orientForward && draft.orientCapability.enabled;
+        if (position !== draft.position || reference !== draft.reference
+          || orientForward !== draft.orientForward) {
+          Object.assign(draft, { position, reference, orientForward });
+          snapshot = resolveDraft();
+        }
+      }
+      // The offset field exists only for Custom; its error is shown next to it.
+      const offset = draft.position === 'custom' && !targetLimit
+        ? parseSignedOffset(draft.offsetText)
+        : { valid: true, message: '' };
+      const { eligibility } = snapshot.resolved;
+      draft.offsetError = offset.message;
+      draft.disabledReason = targetLimit?.message || (offset.valid ? eligibility.message || '' : '');
+      draft.canApply = offset.valid && eligibility.enabled && !draft.pending;
       draft.startCoordinate = snapshot.resolved.startCoordinate;
-      draft.orientationLabel = snapshot.resolved.reverseComplement
-        === snapshot.target.committedReverseComplement
-        ? 'unchanged'
-        : snapshot.resolved.reverseComplement
-          ? 'reverse-complemented'
-          : 'forward';
-      const before = snapshot.resolved.displayedStrand.before;
-      const after = snapshot.resolved.displayedStrand.after;
-      draft.displayedStrandLabel = ['+', '-'].includes(before) && ['+', '-'].includes(after)
-        ? `${before} → ${after}`
-        : '';
-      draft.placementLabel = draft.placement === 'feature-end'
-        ? draft.exactFeatureEnd
-          ? 'Exactly at feature end'
-          : 'Feature end with custom offset'
-        : 'Custom anchor';
+      draft.preview = previewFor({
+        recordLabel: draft.recordLabel,
+        resolved: snapshot.resolved,
+        committedReverseComplement: snapshot.target.committedReverseComplement
+      });
       return snapshot;
     } catch (error) {
       // A whole-target failure has one reason; per-control messages are only
       // for control-specific limits of a resolved target.
       draft.targetFailure = error?.kind || 'unavailable';
-      draft.anchorChoices = draft.anchorChoices.map((choice) => ({
-        ...choice,
-        ...emptyCapability()
-      }));
+      draft.positionChoices = choicesFrom(POSITION_CHOICES);
+      draft.referenceChoices = choicesFrom(REFERENCE_CHOICES);
       draft.orientCapability = emptyCapability();
-      draft.featureEndCapability = emptyCapability();
+      draft.offsetError = '';
       draft.disabledReason = error.message;
       draft.canApply = false;
       draft.startCoordinate = null;
-      draft.orientationLabel = 'unchanged';
-      draft.displayedStrandLabel = '';
+      draft.preview = '';
       return null;
     }
   };
 
-  const open = ({ feature, featureLabel = '' }) => {
+  const open = ({ feature }) => {
     draftGeneration += 1;
     Object.assign(draft, initialDraft(), {
       active: true,
       feature,
-      featureLabel: String(featureLabel || feature?.label || feature?.type || ''),
       identity: featureIdentity(feature)
     });
     recompute();
@@ -288,8 +346,9 @@ export const createFeatureRecordRotationWorkflow = ({
     Object.assign(draft, initialDraft());
   };
 
-  // Opening Record actions is the explicit record action that reads records a
-  // Session Load left unread (776a2f93). It reads once, then recomputes.
+  // Opening the rotation section is the explicit record action that reads
+  // records a Session Load left unread (776a2f93). It reads once, then
+  // recomputes.
   const readRecords = async () => {
     if (!draft.active || draft.reading || draft.pending) return null;
     recompute();
@@ -313,16 +372,18 @@ export const createFeatureRecordRotationWorkflow = ({
     return outcome;
   };
 
-  const setAnchor = (anchor) => {
-    draft.placement = 'anchor';
-    draft.anchor = String(anchor || '');
-    draft.exactFeatureEnd = false;
+  const setPosition = (position) => {
+    draft.position = String(position || '');
+    recompute();
+  };
+
+  const setReference = (reference) => {
+    draft.reference = String(reference || '');
     recompute();
   };
 
   const setOffset = (value) => {
     draft.offsetText = String(value ?? '');
-    if (draft.placement === 'feature-end') draft.exactFeatureEnd = false;
     recompute();
   };
 
@@ -331,19 +392,11 @@ export const createFeatureRecordRotationWorkflow = ({
     recompute();
   };
 
-  const placeAtFeatureEnd = () => {
-    draft.placement = 'feature-end';
-    draft.anchor = null;
-    draft.offsetText = '0';
-    draft.exactFeatureEnd = true;
-    recompute();
-  };
-
   const apply = async () => {
     if (draft.pending) return { status: 'pending' };
     const snapshot = recompute();
     if (!snapshot || !draft.canApply) {
-      draft.status = draft.disabledReason || 'Record rotation is unavailable.';
+      draft.status = draft.disabledReason || draft.offsetError || 'Record rotation is unavailable.';
       draft.statusKind = 'error';
       return { status: 'disabled' };
     }
@@ -354,7 +407,7 @@ export const createFeatureRecordRotationWorkflow = ({
     try {
       const outcome = await action.apply({
         feature: snapshot.feature,
-        intent: intent()
+        intent: intentFor(draft)
       });
       if (outcome?.status === 'ok') {
         const rebound = action.currentFeature(snapshot.feature);
@@ -388,10 +441,10 @@ export const createFeatureRecordRotationWorkflow = ({
     cancel: close,
     recompute,
     readRecords,
-    setAnchor,
+    setPosition,
+    setReference,
     setOffset,
     setOrientForward,
-    placeAtFeatureEnd,
     apply
   });
 };
