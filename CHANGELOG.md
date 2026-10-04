@@ -12,6 +12,15 @@ write-up of a release.
 
 ## [Unreleased]
 
+- Feature popup (web app): after **Load Session**, expanding **Record actions**
+  reads the feature's source records and shows its record and **New display
+  start**, so a record rotates without **Generate Diagram** first. It no longer
+  says "The popup feature target is stale or ambiguous." Load itself still
+  reads no record bytes. The section shows **Reading records…** during the
+  read, a failed read shows its own reason, and a reason that disables every
+  control (for example, a non-circular record) appears once in place of the
+  controls instead of under each control.
+
 Fixes from the 2026-09-30 Web GUI audit of `dev`. The plan and the approved
 decisions are in
 [`docs/internal/web-gui-audit-20260930/`](./docs/internal/web-gui-audit-20260930/03_IMPLEMENTATION_REFERENCE.md).

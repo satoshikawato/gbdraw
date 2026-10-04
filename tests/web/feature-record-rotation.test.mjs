@@ -169,3 +169,20 @@ test('Apply re-resolves the stable popup identity and rejects a stale feature', 
   }), /no longer present/);
   assert.equal(executions, 0);
 });
+
+test('the record read uses the injected mode discovery and has no fallback reader', async () => {
+  let reads = 0;
+  const owners = {
+    recordDisplayControls: { targetForFeature: () => ({ row, target }) },
+    getCommittedSession: () => committed,
+    projectCommittedRecordTransform,
+    runCommittedCanonicalCandidate: async () => ({ status: 'ok' })
+  };
+  const action = createFeatureRecordRotationAction({
+    ...owners,
+    readRecords: async () => { reads += 1; return { status: 'ok' }; }
+  });
+  assert.deepEqual(await action.readRecords(), { status: 'ok' });
+  assert.equal(reads, 1);
+  assert.equal((await createFeatureRecordRotationAction(owners).readRecords()).status, 'unavailable');
+});

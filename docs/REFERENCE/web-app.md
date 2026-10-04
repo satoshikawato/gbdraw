@@ -997,9 +997,12 @@ on restores that value.
 
 To rotate a record from a feature, open its popup. Expand **Record actions**
 near the top of **Edit**. The section is closed when the popup opens,
-in both rich and simple layouts. Choose the feature's 5′ end, midpoint, or 3′
-end. Enter a signed offset in source base pairs in the feature's biological
-direction, and optionally orient the feature forward. The preview and saved
+in both rich and simple layouts. After **Load Session**, which reads no record
+bytes, expanding it reads the source records and shows **Reading records…**
+until the preview is ready; a failed read shows its own reason. Choose the
+feature's 5′ end, midpoint, or 3′ end. Enter a signed offset in source base
+pairs in the feature's biological direction, and optionally orient the feature
+forward. The preview and saved
 transform use the original 1-based source coordinate; reverse complement changes
 display orientation but does not renumber the source sequence.
 **Place this feature at the end** uses the outgoing boundary after the feature;
@@ -1016,7 +1019,9 @@ keeps the previous Result and record transform. Undo and Redo restore the
 Result and record transform together; Save Session and a fresh Load preserve
 the last successful absolute transform and its feature-placement provenance.
 Operation-specific messages explain unavailable actions for non-circular,
-cropped, fuzzy, unordered, mixed-strand, or otherwise unsafe targets.
+cropped, fuzzy, unordered, mixed-strand, or otherwise unsafe targets. A reason
+that disables every control, such as a non-circular record, is shown once in
+place of the controls.
 
 Open the feature popup and choose **Feature placement**: Auto, Main, or an
 available directional lane 1. Bulk selection uses **Selected feature placements**.
